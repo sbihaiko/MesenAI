@@ -513,10 +513,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   unsupported `<system>` (e.g. `gba`) and for a palette hex string of the
   wrong width for the declared system.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
-  tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`) looks up the
+  tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
+  `tiles` and its `aliases[].tiles`) looks up the
   run-time key - `index` on a CHR ROM game, `source` (ADR-0178) or `tile` on
-  a CHR RAM game - with its palette in the pack's own `textures/hires.txt`,
-  lists the cells no `<tile>` line covers and exits 1 when any exist. Stdlib
+  a CHR RAM game - with its palette in the pack's own `textures/hires.txt`
+  (`[condition]<tile>` records included), lists the cells no `<tile>` line
+  covers and exits 1 when any exist. Stdlib
   only, no ROM; `test_sheet_keys_audit.py` covers it on synthetic packs
   (wired into `make doc-checks`). Measured 2026-09-13 on the six per-stage
   golden packs: 8 leftovers before the fix, all tile 0 / blank under the

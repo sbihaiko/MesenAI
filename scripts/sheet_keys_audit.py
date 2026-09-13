@@ -24,9 +24,16 @@ def hires_keys(path):
     keys = set()
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
+            line = line.strip()
+            if line.startswith("["):
+                # [condition]<tile>... - HdPackLoader strips the prefix the same way
+                close = line.find("]")
+                if close < 0:
+                    continue
+                line = line[close + 1:]
             if not line.startswith("<tile>"):
                 continue
-            parts = line[6:].strip().split(",")
+            parts = line[6:].split(",")
             if len(parts) < 3:
                 continue
             key = parts[1].upper()
@@ -44,7 +51,9 @@ def entry_key(tile):
 
 def audit(pack):
     """Return (entries, leftovers); a leftover is
-    (sheet file, cell index, key, palette, tile is all zero)."""
+    (sheet file, cell label, key, palette, tile is all zero). A cell's
+    `aliases[].tiles` (ADR-0153 §3) are audited like its own `tiles`: the
+    rebuilt pack emits them from the same crop."""
     textures = os.path.join(pack, "textures")
     keys = hires_keys(os.path.join(textures, "hires.txt"))
     sheets = sorted(glob.glob(os.path.join(textures, "sheets", "spr[0-9]*.json")))
@@ -55,13 +64,20 @@ def audit(pack):
         with open(sheet, encoding="utf-8") as fh:
             doc = json.load(fh)
         for cell in doc.get("cells", []):
-            for tile in cell.get("tiles", []):
-                entries += 1
-                key = entry_key(tile)
-                palette = str(tile["palette"]).upper()
-                if (key, palette) not in keys:
-                    blank = str(tile.get("tile", "")).strip("0") == ""
-                    leftovers.append((os.path.basename(sheet), cell.get("index"), key, palette, blank))
+            groups = [(str(cell.get("index")), cell.get("tiles"))]
+            for alias in cell.get("aliases") or []:
+                if isinstance(alias, dict):
+                    groups.append((f"{cell.get('index')} alias {alias.get('metatile')}", alias.get("tiles")))
+            for label, tiles in groups:
+                for tile in tiles or []:
+                    if not isinstance(tile, dict) or "palette" not in tile:
+                        continue
+                    entries += 1
+                    key = entry_key(tile)
+                    palette = str(tile["palette"]).upper()
+                    if (key, palette) not in keys:
+                        blank = str(tile.get("tile", "")).strip("0") == ""
+                        leftovers.append((os.path.basename(sheet), label, key, palette, blank))
     return entries, leftovers
 
 
