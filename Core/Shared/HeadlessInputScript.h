@@ -10,7 +10,10 @@
 //  <count>  a positive number
 //  <unit>   'f' (emulated frames) or 's' (seconds, resolved to frames here,
 //           at the region's nominal frame rate, rounded to nearest)
-//  <buttons> a token drawn from UDLRABST (Select / sTart), or "-" for nothing
+//  <buttons> a token drawn from UDLRABST (Select / sTart), or "-" for nothing;
+//           "<port1>|<port2>" holds a second token on port 2 (F9.22 - a
+//           two-player game's second figure is only recorded when someone
+//           moves it). A line without "|" leaves port 2 alone.
 //
 //A bare count with no unit is a parse error - the pre-F9.14 scripts wrote
 //bare numbers meaning seconds, and silently reading one as a frame count
@@ -31,6 +34,9 @@ struct HeadlessInputStep
 	//so one script drives NES, GB and SMS without knowing which is loaded;
 	//a name the loaded device does not expose is simply never applied.
 	vector<string> Buttons;
+
+	//The same, for the device on port 2. Empty on a line without "|".
+	vector<string> Port2Buttons;
 };
 
 class HeadlessInputScript
@@ -53,4 +59,9 @@ public:
 
 	//Total length of the script, in frames (0 when empty).
 	static uint32_t GetFrameCount(const vector<HeadlessInputStep>& steps);
+
+	//True when any step names a port 2 button - the harness plugs a
+	//controller into port 2 only then, so a one-player script keeps producing
+	//the recording it always did.
+	static bool UsesPortTwo(const vector<HeadlessInputStep>& steps);
 };

@@ -5800,6 +5800,34 @@ namespace
 		Check(has(steps[1], "start") && has(steps[1], "pause"), "BlocoQ: \"T\" is \"start\" and the SMS \"pause\"");
 	}
 
+	void TestHeadlessScriptSecondTokenDrivesPortTwo()
+	{
+		std::vector<HeadlessInputStep> steps;
+		std::string error;
+
+		//F9.22: "<port1>|<port2>" - Contra's second player is only recorded when
+		//someone moves it. A line without "|" leaves port 2 empty, so the
+		//harness keeps its one-player recordings byte-identical.
+		Check(HeadlessInputScript::Parse("4f R|-\n4f -|LA\n4f A\n", HeadlessInputScript::NtscFrameRate, steps, error),
+			"BlocoQ: a two-port script parses", error);
+		Check(steps.size() == 3 && steps[0].Buttons.size() == 1 && steps[0].Buttons[0] == "right" && steps[0].Port2Buttons.empty(),
+			"BlocoQ: \"R|-\" is Right on port 1 and nothing on port 2");
+		Check(steps[1].Buttons.empty() && steps[1].Port2Buttons.size() == 3 && steps[1].Port2Buttons[0] == "left" && steps[1].Port2Buttons[1] == "a",
+			"BlocoQ: \"-|LA\" is nothing on port 1 and Left + A (with its SMS alias) on port 2");
+		Check(steps[2].Port2Buttons.empty(), "BlocoQ: a line without \"|\" holds nothing on port 2");
+		Check(HeadlessInputScript::UsesPortTwo(steps), "BlocoQ: the script uses port 2");
+
+		Check(HeadlessInputScript::Parse("4f A\n", HeadlessInputScript::NtscFrameRate, steps, error) && !HeadlessInputScript::UsesPortTwo(steps),
+			"BlocoQ: a one-player script does not use port 2");
+		Check(!HeadlessInputScript::Parse("4f A|\n", HeadlessInputScript::NtscFrameRate, steps, error),
+			"BlocoQ: an empty port 2 field is an error - write \"-\"");
+		Check(error.find("port 2") != std::string::npos, "BlocoQ: the error names the port", error);
+		Check(!HeadlessInputScript::Parse("4f A|B|A\n", HeadlessInputScript::NtscFrameRate, steps, error),
+			"BlocoQ: a third field is an error");
+		Check(!HeadlessInputScript::Parse("4f A|X\n", HeadlessInputScript::NtscFrameRate, steps, error),
+			"BlocoQ: an unknown letter on port 2 is an error");
+	}
+
 	//--- Bloco R: headless input engine (H9, ADR-0127/ADR-0157) --------------
 	//The stateful half of the headless harness, driven against a fake core:
 	//HeadlessInputEngine plus a fake host (the Emulator's frame counter, pause
@@ -6143,7 +6171,7 @@ namespace
 		Check(pad.IsPressed(7) && pad.IsPressed(0), "BlocoR: a button the physical input pressed survives the overlay");
 	}
 
-	void TestHeadlessEngineDrivesPortOneOnly()
+	void TestHeadlessEngineDrivesEachPortFromItsOwnToken()
 	{
 		FakeHeadlessHost host;
 		HeadlessInputEngine engine(&host);
@@ -6151,15 +6179,31 @@ namespace
 		std::string error;
 		engine.LoadScript("4f A\n", HeadlessInputScript::NtscFrameRate, error);
 
+		//A one-player script: the device on port 2 is left alone (F9.14).
 		FakeHeadlessPad pad = MakeFakeNesPad();
 		pad.Port = 1;
 		host.Frame = 0;
 		engine.ApplyFrame(pad);
-		Check(pad.Pressed.empty(), "BlocoR: a device on port 2 is left alone");
+		Check(pad.Pressed.empty(), "BlocoR: under a one-player script a device on port 2 is left alone");
 
 		pad.Port = 0;
 		engine.ApplyFrame(pad);
 		Check(pad.IsPressed(0), "BlocoR: the same device on port 1 gets the step");
+
+		//F9.22: "<port1>|<port2>" - each port reads its own token, a third
+		//port reads nothing.
+		engine.LoadScript("4f R|LA\n", HeadlessInputScript::NtscFrameRate, error);
+		FakeHeadlessPad one = MakeFakeNesPad();
+		engine.ApplyFrame(one);
+		Check(one.Signature() == "right", "BlocoR: port 1 takes the first token", one.Signature());
+		FakeHeadlessPad two = MakeFakeNesPad();
+		two.Port = 1;
+		engine.ApplyFrame(two);
+		Check(two.Signature() == "a+left", "BlocoR: port 2 takes the token after \"|\"", two.Signature());
+		FakeHeadlessPad three = MakeFakeNesPad();
+		three.Port = 2;
+		engine.ApplyFrame(three);
+		Check(three.Pressed.empty(), "BlocoR: a device on port 3 is left alone");
 	}
 
 	void TestHeadlessEngineResolvesButtonsByName()
@@ -6664,11 +6708,12 @@ int main()
 	TestHeadlessScriptStepsAreAbsoluteAndContiguous();
 	TestHeadlessScriptResolvesTheFrameBoundary();
 	TestHeadlessScriptButtonNamesCoverEveryConsole();
+	TestHeadlessScriptSecondTokenDrivesPortTwo();
 
 	TestHeadlessEngineStepOwnsItsStartFrameAndIsGoneAtItsEnd();
 	TestHeadlessEngineScriptStartsAtTheStateFrame();
 	TestHeadlessEngineOverlaysRatherThanReplaces();
-	TestHeadlessEngineDrivesPortOneOnly();
+	TestHeadlessEngineDrivesEachPortFromItsOwnToken();
 	TestHeadlessEngineResolvesButtonsByName();
 	TestHeadlessEngineStopsOnExactlyTheStopFrame();
 	TestHeadlessEngineStopSurvivesASkippedFrame();

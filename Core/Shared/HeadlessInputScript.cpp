@@ -119,8 +119,22 @@ bool HeadlessInputScript::Parse(const string& text, double frameRate, vector<Hea
 		step.EndFrame = nextFrame + frames;
 		nextFrame = step.EndFrame;
 
-		if(buttons != "-") {
-			for(char c : buttons) {
+		//"<port1>|<port2>": one token per port, either of them "-".
+		size_t bar = buttons.find('|');
+		if(buttons.find('|', bar == string::npos ? buttons.size() : bar + 1) != string::npos) {
+			return fail("at most one \"|\" - the buttons field is \"<port1>|<port2>\"");
+		}
+		string portTokens[2] = { Trim(buttons.substr(0, bar)), bar == string::npos ? "-" : Trim(buttons.substr(bar + 1)) };
+		vector<string>* portButtons[2] = { &step.Buttons, &step.Port2Buttons };
+		for(int port = 0; port < 2; port++) {
+			const string& token = portTokens[port];
+			if(token.empty()) {
+				return fail(string("port ") + (char)('1' + port) + " has no buttons field - write \"-\" for nothing held");
+			}
+			if(token == "-") {
+				continue;
+			}
+			for(char c : token) {
 				const ButtonAlias* alias = nullptr;
 				for(const ButtonAlias& candidate : kButtonAliases) {
 					if(candidate.Letter == c) {
@@ -133,7 +147,7 @@ bool HeadlessInputScript::Parse(const string& text, double frameRate, vector<Hea
 				}
 				for(const char* name : alias->Names) {
 					if(name) {
-						step.Buttons.push_back(name);
+						portButtons[port]->push_back(name);
 					}
 				}
 			}
@@ -162,4 +176,14 @@ const HeadlessInputStep* HeadlessInputScript::GetStep(const vector<HeadlessInput
 uint32_t HeadlessInputScript::GetFrameCount(const vector<HeadlessInputStep>& steps)
 {
 	return steps.empty() ? 0 : steps[steps.size() - 1].EndFrame;
+}
+
+bool HeadlessInputScript::UsesPortTwo(const vector<HeadlessInputStep>& steps)
+{
+	for(const HeadlessInputStep& step : steps) {
+		if(!step.Port2Buttons.empty()) {
+			return true;
+		}
+	}
+	return false;
 }

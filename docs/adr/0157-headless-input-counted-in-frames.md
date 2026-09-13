@@ -91,6 +91,16 @@ rounded to the nearest frame. After parsing, the harness knows only frames, so
 a script's meaning never depends on host load regardless of which unit it was
 written in.
 
+*Amended 2026-09-13 (F9.22):* the `<buttons>` field may be `<port1>|<port2>`,
+one token per port, either of them `-`. A line without `|` holds nothing on
+port 2, and the harness plugs a controller into port 2 only when some line
+names one (`HeadlessInputScript::UsesPortTwo`), so every one-player script
+keeps producing the recording it always did. The engine applies port 1's
+token to the device on port 1 and port 2's to port 2; any other port is
+untouched. Needed because a two-player game's second figure exists only
+while someone moves it, and ADR-0181 §3's `port2` attribution had no
+recording to be measured on.
+
 **2. The script is resolved from inside the frame, and the run ends on an
 absolute frame count.** A `HeadlessInputProvider` — an `IInputProvider` plus an
 `INotificationListener` — holds the parsed script and is registered on the
