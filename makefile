@@ -318,6 +318,9 @@ doc-checks: check-manifest
 	#F9.13: the "did this recording reach gameplay?" criterion, on synthetic
 	#packs written to a temp dir -- no emulator, no ROM, no recorded library.
 	python3 scripts/test_gameplay_probe.py
+	#Issue #183: sheet cells must name (key, palette) pairs the pack's own
+	#hires.txt emits; the audit tool's test runs on synthetic packs.
+	python3 scripts/test_sheet_keys_audit.py
 	#F5.5 golden refresh: the MEP/MEI goldens under docs/specs/golden/ must stay
 	#in sync with the emit code and the specs, or these gates fail.
 	python3 scripts/validate-specs.py

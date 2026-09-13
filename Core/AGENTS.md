@@ -29,6 +29,14 @@ needs no local rules beyond the root DOX.
   supplies 0. The bytes ride on the retained `MesenSheets::OamFrame`
   (`Buttons[2]`) and are **not** part of frame identity: a repeated frame
   keeps the buttons of its first occurrence (ADR-0181 §1).
+- **OAM capture is gated on PPUMASK sprites-enabled.** `HdBuilderPpu::OnBeforeSendFrame`
+  snapshots OAM into the sheet stream only on frames where sprites are
+  enabled (#183). A frame with rendering off (power-on, some transitions)
+  draws nothing, so `DrawPixel` never records a `<tile>` for it; capturing it
+  put tile 0 under the boot palette `FF013403` on every golden sheet, a key
+  the pack never emits. `scripts/sheet_keys_audit.py <pack>...` is the check:
+  every sprite-sheet cell's `(index | source | tile, palette)` must resolve to
+  a `<tile>` line of the pack's own `hires.txt`.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
   from `PoseStats` and nothing in it is computed at serialisation time.
   Optional fields a reader must tolerate being absent: per entry

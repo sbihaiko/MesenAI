@@ -31,9 +31,17 @@ public:
 	//game *placed*, not the pixels that survived the 8-sprite limit and the
 	//background priority bit. Runs once a frame, before NesConsole closes the
 	//frame on the builder, and is a no-op unless screen capture is on.
+	//Only while sprites are enabled (#183): with PPUMASK sprites off nothing in
+	//OAM is drawn, so DrawPixel never records a <tile> for it and a sheet cell
+	//taken from it would name a key the pack never emits. The case that showed
+	//it is power-on - OAM all zero, palette RAM at its boot values (sprite
+	//palette 0 = 01 34 03), rendering still disabled - which put tile 0 under
+	//palette FF013403 on every golden sheet.
 	void* OnBeforeSendFrame()
 	{
-		CaptureOam();
+		if(_mask.SpritesEnabled) {
+			CaptureOam();
+		}
 		return nullptr;
 	}
 
