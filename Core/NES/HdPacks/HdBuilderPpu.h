@@ -13,6 +13,9 @@ class HdBuilderPpu final : public NesPpu<HdBuilderPpu>
 private:
 	HdPackBuilder* _hdPackBuilder = nullptr;
 	bool _needChrHash = false;
+	//#183: set when PPUMASK had sprites on at any pixel of the frame being
+	//drawn; the OAM snapshot is taken only for such a frame (see OnBeforeSendFrame).
+	bool _spritesEnabledThisFrame = false;
 	uint32_t _chrRamBankSize = 0;
 	uint32_t _chrRamIndexMask = 0;
 	vector<uint32_t> _bankHashes;
@@ -31,9 +34,21 @@ public:
 	//game *placed*, not the pixels that survived the 8-sprite limit and the
 	//background priority bit. Runs once a frame, before NesConsole closes the
 	//frame on the builder, and is a no-op unless screen capture is on.
+	//Only for a frame that drew with sprites enabled (#183): with PPUMASK
+	//sprites off nothing in OAM is drawn, so DrawPixel never records a <tile>
+	//for it and a sheet cell taken from it would name a key the pack never
+	//emits. The case that showed it is power-on - OAM all zero, palette RAM at
+	//its boot values (sprite palette 0 = 01 34 03), rendering still disabled -
+	//which put tile 0 under palette FF013403 on every golden sheet. The bit is
+	//sampled per drawn pixel, not here at frame end, because a game may flip
+	//PPUMASK mid-frame: enabling sprites in the last hblank must not admit a
+	//frame that drew none, and disabling them late must not drop one that did.
 	void* OnBeforeSendFrame()
 	{
-		CaptureOam();
+		if(_spritesEnabledThisFrame) {
+			CaptureOam();
+		}
+		_spritesEnabledThisFrame = false;
 		return nullptr;
 	}
 
@@ -72,6 +87,7 @@ public:
 
 	void DrawPixel()
 	{
+		_spritesEnabledThisFrame |= _mask.SpritesEnabled;
 		if(IsRenderingEnabled() || ((_videoRamAddr & 0x3F00) != 0x3F00)) {
 			BaseMapper* mapper = _console->GetMapper();
 			bool isChrRam = !mapper->HasChrRom();
