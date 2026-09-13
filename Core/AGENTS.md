@@ -47,8 +47,13 @@ needs no local rules beyond the root DOX.
   `fusionOf[]`, `next[]`, `variantOf`; top-level `cycles[]`, `sequences[]`
   (ADR-0179) and `input {frames, ports, held{}, never[]}` (ADR-0181 §2,
   written only when some button was ever held; `never` lists buttons and
-  direction+action pairs no single port ever held at once). Consumers:
-  `scripts/compose_engine.py` (`Poses`, `PoseInput`).
+  direction+action pairs no single port ever held at once); per `cycles[]`
+  entry `driver: "port1"|"port2"` (ADR-0181 §3, F9.23) when the
+  interruption rule fired — `PoseRun::Windows`/`Stops[2]`/`Driver` hold the
+  judgement, constants `kDriverMinWindows`, `kDriverStopLag`,
+  `kDriverStopShareNum/Den` in `TileSheetTypes.h`; absent means not
+  classified. Consumers: `scripts/compose_engine.py` (`Poses`, `PoseInput`,
+  `PoseRun.driver`).
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP`, `MESEN_OAM_STREAM_DUMP` (per retained frame:
   index, repeat count, port 1 and 2 button bytes, then `node,x,y` per

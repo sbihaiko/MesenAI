@@ -6,6 +6,12 @@ folder per golden game. Two kinds:
 - `mint-<stage>.txt` — plays from power-on to the start of a stage. Run with
   `save-state=<stages-dir>/<stage>.mss` to mint the state that stage's
   recording starts from.
+- `<stage>-probe.txt` — a *probe* (F9.23, ADR-0181 §3): from the stage's
+  state, hold one direction for at least two turns of the figure's cycle
+  plus a phase, release, idle, and repeat, without scrolling the screen. It
+  is the run the recorder can read a cycle's `driver` off; the stage and
+  entry scripts hold one button most of the time and attribute nothing. Run
+  it with the stage state copied beside it as `<stage>-probe.mss`.
 - `<stage>.txt` — plays *from* the state for <= 60 s (<= 3600 frames, the
   batch's default duration; a longer script is cut where the run ends), holding a direction long
   enough for every loop to complete two turns on one track (ADR-0179 §3 needs
@@ -68,6 +74,32 @@ script that wants them has to press them. Two env-gated save-time dumps back
 a measurement: `MESEN_OAM_STREAM_DUMP` (retained frame, repeat, port 1 and 2
 button bytes, then `node,x,y` per sprite) and `MESEN_POSE_TRACK_DUMP` (one
 ADR-0179 track per line as `frame:pose:held`).
+
+## Probing which cycle answers the pad (F9.23)
+
+`stage1-probe.txt` per game, 60 s from `stage1-run.mss` (2026-09-13), read
+with the interruption rule (>= 4 windows, >= 2/3 stopping within 12 frames
+of a release on the port): Zelda `60f D / 30f - / 60f R / 30f - / 60f U /
+30f - / 60f L / 30f -` — Link's four walks `port1` (10/10, 10/10, 9/10,
+10/10 windows). Mega Man 3 `100f R / 30f - / 100f L / 30f -` — the run
+`port1` (12/13); two fast 9-tile enemy cycles 0/13 and 2/13, none.
+Excitebike `120f A / 60f -` — the wheels 3/18, none, as the rule must (a
+release of A does not stop them). Contra `104f R / 30f - / 104f L / 30f -`
+from the stage-1 start — the player's run right and left `port1` (12/12
+each), the soldier's run 1 window, none.
+
+What the Contra probe took six shapes to learn: a turn of the run is 6 x 8
+frames and a window needs two turns plus the partial first phase, so 40 f
+and 96 f holds yield no window and 104 f does; walking Right 120 f from
+the start scrolls the screen and every scroll brings soldiers that fuse
+with the figure and end its track (one or two windows in twenty holds),
+while 104 f Right then 104 f Left oscillates on the first screen with
+nobody in the way; Left from the start (x = 48) drops Bill in the water,
+where he does not animate; and a "clean" screen reached by letting the
+soldiers kill him is the title screen. The rule itself needed one fix
+from the measurement: a window stops at its last advance plus that phase's
+median hold, because Link parks on a walk frame and the run's own held
+frames would put the stop 30 f after the release.
 
 A run from a state counts its <seconds> and its script from the state's
 frame (`headless_record` prints both); before 2026-09-12 both were absolute

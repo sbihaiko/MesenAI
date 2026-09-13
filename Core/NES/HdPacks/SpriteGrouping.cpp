@@ -527,13 +527,39 @@ namespace MesenSheets
 
 		//ADR-0179 §3: cycles by period repetition on each track, then
 		//sequences by identical occurrence on what the cycles left uncovered.
-		void FindPoseRuns(const std::vector<std::vector<TrackRun>>& tracks, PoseStats& stats)
+		void FindPoseRuns(const std::vector<std::vector<TrackRun>>& tracks, const std::vector<OamFrame>& frames, PoseStats& stats)
 		{
 			struct Occurrences
 			{
 				uint32_t Repeats = 0;
 				std::vector<std::vector<uint32_t>> Holds; //per position
+				//ADR-0181 §3: one entry per window - the emulated frame it began
+				//on, the one its last phase advance began on, and that phase's
+				//canonical position, so the stop frame can be read once the
+				//median holds are known.
+				struct Window
+				{
+					uint32_t Start = 0;
+					uint32_t LastAdvance = 0;
+					size_t Phase = 0;
+				};
+				std::vector<Window> Windows;
 			};
+			//Emulated frame each retained frame begins on (RepeatCount summed),
+			//and the frames on which a port released some button - the byte lost
+			//a bit against the previous retained frame (ADR-0181 §1).
+			std::vector<uint32_t> frameStart(frames.size() + 1, 0);
+			for(size_t i = 0; i < frames.size(); i++) {
+				frameStart[i + 1] = frameStart[i] + std::max<uint32_t>(1, frames[i].RepeatCount);
+			}
+			std::vector<uint32_t> releases[2];
+			for(size_t i = 1; i < frames.size(); i++) {
+				for(size_t port = 0; port < 2; port++) {
+					if(frames[i - 1].Buttons[port] & ~frames[i].Buttons[port]) {
+						releases[port].push_back(frameStart[i]);
+					}
+				}
+			}
 			std::map<std::vector<uint32_t>, Occurrences> cycles;
 			std::map<std::vector<uint32_t>, Occurrences> sequences;
 
@@ -579,6 +605,11 @@ namespace MesenSheets
 						while(end < n && track[end].Pose == block[(end - start) % p]) {
 							end++;
 						}
+						Occurrences::Window window;
+						window.Start = frameStart[std::min<size_t>(track[start].Frame, frames.size())];
+						window.LastAdvance = frameStart[std::min<size_t>(track[end - 1].Frame, frames.size())];
+						window.Phase = (end - 1 - start + p - shift) % p;
+						occ.Windows.push_back(window);
 						for(size_t k = start; k < end; k++) {
 							covered[k] = true;
 						}
@@ -632,6 +663,28 @@ namespace MesenSheets
 				for(const std::vector<uint32_t>& holds : cycle.second.Holds) {
 					run.Hold.push_back(MedianOf(holds));
 				}
+				//ADR-0181 §3: a window stops when the next advance was due and did
+				//not come - last advance + that phase's median hold. It answers a
+				//port when a release on it happened while the window was live and
+				//within kDriverStopLag frames before the stop; a release before the
+				//window began cannot have interrupted it.
+				run.Windows = (uint32_t)cycle.second.Windows.size();
+				for(const Occurrences::Window& window : cycle.second.Windows) {
+					uint32_t stop = window.LastAdvance + run.Hold[window.Phase];
+					for(size_t port = 0; port < 2; port++) {
+						for(uint32_t release : releases[port]) {
+							if(release >= window.Start && release <= stop && stop - release <= kDriverStopLag) {
+								run.Stops[port]++;
+								break;
+							}
+						}
+					}
+				}
+				bool passes[2];
+				for(size_t port = 0; port < 2; port++) {
+					passes[port] = run.Windows >= kDriverMinWindows && run.Stops[port] * kDriverStopShareDen >= run.Windows * kDriverStopShareNum;
+				}
+				run.Driver = passes[0] && !passes[1] ? 1 : passes[1] && !passes[0] ? 2 : 0;
 				stats.Cycles.push_back(run);
 			}
 			//Longest first, then most repeated: a window inside an accepted
@@ -1026,7 +1079,7 @@ namespace MesenSheets
 		LabelPoseVariants(kept);
 		std::vector<std::vector<TrackRun>> tracks = LinkPoseTracks(frames, vocab, kept);
 		stats.Poses = kept;
-		FindPoseRuns(tracks, stats);
+		FindPoseRuns(tracks, frames, stats);
 		stats.Input = BuildInputStats(frames);
 		stats.TrackRuns = tracks;
 		return stats;

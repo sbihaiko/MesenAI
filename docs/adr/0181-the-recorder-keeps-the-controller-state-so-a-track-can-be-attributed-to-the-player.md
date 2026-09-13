@@ -2,11 +2,12 @@
 
 - Status: accepted (2026-09-12, by the user) — §1 and §2 implemented the
   same day (the retained frame carries the two port bytes, `poses.json`
-  writes the `input` block; PRD §3 record under F9.22). §3 is decided on
+  writes the `input` block; PRD §3 record under F9.22). §3 was decided on
   the first kit measurement (`runs/golden-20260912/spike-pose-driver.md`):
-  the rule is **interruption**, and it ships as Phase 9 slice **F9.23** in
-  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` once the probe
-  scripts §3 requires exist to measure it against.
+  the rule is **interruption**, and it shipped on 2026-09-13 as Phase 9
+  slice **F9.23** in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`,
+  measured on the per-game probe scripts of `scripts/stages/<game>/stage1-probe.txt`
+  (§4 records the numbers).
 - Date: 2026-09-12
 - Related: ADR-0179 (tracks, `cycles[]` and `sequences[]` — this attributes
   them and depends on its §1 linker; F9.20), F9.22 (per-stage recording —
@@ -132,13 +133,24 @@ recorder under `MESEN_POSE_TRACK_DUMP`, the buttons ride on
   the only one that says what "you control it" means. **This is the rule.**
 
 The rule: over the *windows* of a cycle (maximal stretches of one track
-matching the cycle around the loop for >= 2 periods), a port is the
-cycle's `driver` when at least `kDriverMinWindows` windows exist, at least
-`kDriverStopShare` of their ends follow a release of some button on that
-port within `kDriverStopLag` frames, and the other port does not pass the
-same test. A cycle that fails any clause gets no `driver`. Excitebike's
-wheels are the counter-case the rule must fail on: releasing A does not
-stop them, so they never earn a `driver`, rival or player alike.
+matching the cycle around the loop for >= 2 periods — exactly the
+occurrences ADR-0179 §3 counts `repeats` over), a port is the cycle's
+`driver` when at least `kDriverMinWindows` windows exist, at least
+`kDriverStopShare` of them **stop** within `kDriverStopLag` frames after a
+release of some button on that port, and the other port does not pass the
+same test. A window *stops* at its last phase advance plus that phase's
+median hold — the frame the next advance was due and did not come — not at
+the end of its last run: a figure parked on a cycle pose (Link stands on a
+walk frame) would otherwise push the stop to the end of the idle. A release
+is a retained frame whose port byte lost a bit against the previous one
+(§1), at that frame's first emulated frame, and it counts for a window only
+if it fell while the window was live (between its start and its stop): a
+release before the window began cannot have interrupted it. A cycle that fails any clause
+gets no `driver`; sequences are not judged (no window of a non-looping run
+has a "next advance due"), so a `sequences[]` entry never carries one until
+a rule for it is measured. Excitebike's wheels are the counter-case the
+rule must fail on: releasing A does not stop them, so they never earn a
+`driver`, rival or player alike.
 
 **Precondition.** Interruption is measurable only where the run releases
 buttons. A script that holds Right 87 % of the time (Contra `stage1-run`)
@@ -156,13 +168,40 @@ jumping and prone-shooting states ADR-0179 could only assert were absent.
 
 ### 4. Thresholds
 
-Beside the other pose constants in `TileSheetTypes.h`, to be set by the
-F9.23 measurement and moved as a recording change, not a format change.
-Starting values, from the spike: `kDriverMinWindows` = 4 (below that a
-single fusion decides the share), `kDriverStopLag` = 12 frames (the
-longest release-to-stop distance seen on Zelda's walks was under 8),
-`kDriverStopShare` = 2/3 (Zelda's Down walk scored 1.00, the confounded
-attributions 0.00–0.20).
+Beside the other pose constants in `TileSheetTypes.h`, set by the F9.23
+measurement and moved as a recording change, not a format change:
+`kDriverMinWindows` = 4 (below that a single fusion decides the share),
+`kDriverStopLag` = 12 frames, `kDriverStopShare` = 2/3
+(`kDriverStopShareNum`/`Den`). The spike's starting values survived the
+measurement unchanged.
+
+**Measured 2026-09-13** on one probe script per golden game (hold a
+direction for >= 2 turns, release, idle; `scripts/stages/<game>/stage1-probe.txt`,
+60 s from the stage-1 state), windows stopping within 12 f of a port-1
+release / windows:
+
+| game | cycle | windows | stops | `driver` |
+|---|---|---|---|---|
+| Zelda 1 | Link's four walks (period 2) | 10 each | 10, 10, 9, 10 | `port1` x 4 |
+| Mega Man 3 | the run (`001 002 001 005`, hold 7) | 13 | 12 | `port1` |
+| Mega Man 3 | two 9-tile period-4 enemy cycles (hold 3) | 13 each | 0, 2 | none |
+| Contra | the player's run right and left (period 6, 10 tiles) | 12 each | 12, 12 | `port1` x 2 |
+| Contra | the soldier's run (period 6, 8 tiles) | 1 | 0 | none |
+| Excitebike | the wheels (period 2, 469 repeats) | 18 | 3 | none |
+| Excitebike | six 1–4-window cycles | < 4 | — | none |
+
+The stop-share margins are 0.90–1.00 for the player's cycles against
+0.00–0.17 for everything else; the enemy cycles that share the player's
+windows count (Mega Man 3) are separated by the stop, not by the count,
+which is what the rule is for. What the probes had to learn to say this:
+a hold must last two full turns of the cycle *plus* a phase (Contra's
+period-6 run at 8 f a phase needs >= 104 f; 40 f and 96 f holds produced
+no window at all), the screen must not scroll (on Contra every scroll
+brings soldiers that fuse with the figure and end its track — 120 f of
+Right from the stage-1 start yielded one or two windows in twenty holds,
+104 f of Right then 104 f of Left, oscillating on the first screen,
+twelve), and the first screen has water to the left of the start (a Left
+hold from x = 48 drops the player in and he stops animating).
 
 ### 5. Label, do not delete
 
@@ -198,6 +237,14 @@ attributed cycles first, which is a view decision and F9.18's business.
   cycle.
 - It depends on ADR-0179's §1 linker. §1 and §2 shipped on their own
   (2026-09-12) and are useful without §3 — the `never` list needs no
-  tracks; §3 is F9.23.
+  tracks; §3 shipped as F9.23 on 2026-09-13. The recorder's save line
+  reports `N cycles (k with a driver)`.
+- **A `driver` is only as good as the probe.** On the entry scripts and the
+  F9.22 stage scripts nothing is attributed (one window per cycle per
+  minute, ending on fusions) and that is correct: the rule says "not
+  classified", never "not the player's". A pack whose cycles should be
+  attributed is recorded from a probe script, and the probe's quality is
+  legible in the file — `input.held` shows the alternation, `repeats`
+  shows the windows.
 - Two bytes per retained frame on a 4096-frame cap is 8 KB of recorder
   memory, and nothing on disk beyond the block above.

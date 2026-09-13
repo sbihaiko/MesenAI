@@ -619,7 +619,13 @@ namespace MesenSheets
 			for(size_t k = 0; k < run.Hold.size(); k++) {
 				json << (k ? ", " : "") << run.Hold[k];
 			}
-			json << "] }";
+			json << "]";
+			//ADR-0181 §3: present only when the interruption rule fired; absent
+			//means not classified, never "not the player's" (§5).
+			if(run.Driver == 1 || run.Driver == 2) {
+				json << ", \"driver\": \"port" << (int)run.Driver << "\"";
+			}
+			json << " }";
 		}
 		json << "\n  ]";
 	}

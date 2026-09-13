@@ -1387,7 +1387,9 @@ void HdPackBuilder::WritePoseFile(const string& folder, const MesenSheets::Vocab
 		//that showed a loop means the linker lost the figure, not that the
 		//game has no animation.
 		std::to_string(stats.Tracks) + " tracks, " +
-		std::to_string(stats.Cycles.size()) + " cycles, " +
+		std::to_string(stats.Cycles.size()) + " cycles (" +
+		//ADR-0181 §3: how many cycles a port's releases were seen to stop.
+		std::to_string(std::count_if(stats.Cycles.begin(), stats.Cycles.end(), [](const MesenSheets::PoseRun& c) { return c.Driver != 0; })) + " with a driver), " +
 		std::to_string(stats.Sequences.size()) + " sequences" +
 		" -> textures/sheets/poses.json");
 }
