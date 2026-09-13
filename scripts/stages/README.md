@@ -235,6 +235,31 @@ the camera as period-3 cycles of 7–8-tile poses (37 and 23 repeats) and a
 attributes nothing: in a base Bill walks sideways facing the screen, and
 that walk comes out as period-5 cycles of 16-tile poses with irregular
 holds and 4 repeats, under the rule's 4-window floor. The soldiers' run,
-at 37 repeats, correctly has no driver. The stage-4 boss and stages 5–8
-are open; the base solver applies unchanged (its stage check is now
-relative to the state it starts from).
+at 37 repeats, correctly has no driver. The base solver applies to the
+second base unchanged except for its stage check, now relative to the
+state it starts from, and three things this base taught: the bullets
+converge toward the vanishing point, so a core off the centre is hit
+prone from a lane 24–48 px farther out than the core itself (a core at
+x = 104 falls to a prone burst from x = 56–80, one at 152 from 184–216); a
+core's HP nibble regenerates between bursts, so only the cores-left
+counter `$0086` is monotone and the search no longer asks HP to fall; and
+a wall's core (type 20) may appear only after its cannons (type 19) die,
+so the target list is re-read from every state instead of fixed per
+screen. Two screens the search could not clear on its own (a soldier
+throwing grenades from the wall, a hot lane at the entry) were passed by
+probing a handful of hand-written windows and continuing the search from
+the survivor. Eight screens later the chain enters the boss room, which is
+`stage4-boss.mss`: `stage4-boss.txt` (the stage-3 boss script: Up+B
+bursts, diagonals, a prone burst) gives 181 poses and 12 cycles there, the
+probe 189 poses and 7 cycles, and neither attributes a driver — the room
+throws debris and soldiers across Bill for the whole 40 s, so his walk
+never stays a clean track for four windows. The boss itself is not beaten:
+with the pods (type 10, HP 10) and the eye (slot 12, type 8, HP 8) added
+to the targets the search killed both without losing a life, `$0086`
+dropped to 1, and then no third target appeared within 360 idle frames
+while the search ran out its depth budget; the head's slot and type on
+this base are unread. Stages 5–8 are not planned (ADR-0182): the states
+exist to measure the pack format, and two bases, the waterfall and its
+boss already show every mechanism the format has to carry. The chain from
+`stage4-base.mss` to the boss room is `stage4-base-to-stage4-boss.chain.txt`
+(169 steps, 18 957 frames), traced and verified like the two before it.
