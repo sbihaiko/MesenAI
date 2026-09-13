@@ -143,7 +143,9 @@ median hold — the frame the next advance was due and did not come — not at
 the end of its last run: a figure parked on a cycle pose (Link stands on a
 walk frame) would otherwise push the stop to the end of the idle. A release
 is a retained frame whose port byte lost a bit against the previous one
-(§1), at that frame's first emulated frame. A cycle that fails any clause
+(§1), at that frame's first emulated frame, and it counts for a window only
+if it fell while the window was live (between its start and its stop): a
+release before the window began cannot have interrupted it. A cycle that fails any clause
 gets no `driver`; sequences are not judged (no window of a non-looping run
 has a "next advance due"), so a `sequences[]` entry never carries one until
 a rule for it is measured. Excitebike's wheels are the counter-case the

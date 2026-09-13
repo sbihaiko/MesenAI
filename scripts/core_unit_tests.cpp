@@ -6023,6 +6023,34 @@ namespace
 				stats.Cycles.empty() ? "no cycle" : "windows=" + std::to_string(stats.Cycles[0].Windows) + " driver=" + std::to_string(stats.Cycles[0].Driver));
 		}
 		{
+			//Right is released one frame before a fast window begins and the
+			//window stops 4 frames later: inside the lag, but the release could
+			//not have interrupted a window that had not started.
+			std::vector<OamFrame> frames;
+			uint32_t n = 0;
+			auto push = [&](ShapeId shape, uint32_t repeat, bool held) {
+				OamFrame frame;
+				frame.FrameNumber = n++;
+				frame.RepeatCount = repeat;
+				frame.Buttons[0] = held ? 0x80 : 0;
+				PushFigure(frame, shape, 100, 100);
+				frames.push_back(frame);
+			};
+			for(uint32_t w = 0; w < 5; w++) {
+				push(61 + 10 * w, 29, true);
+				push(61 + 10 * w, 1, false);
+				for(uint32_t k = 0; k < 4; k++) {
+					push(k % 2 ? 51 : 41, 1, false);
+				}
+			}
+			push(111, 30, false);
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			Check(stats.Cycles.size() == 1 && stats.Cycles[0].Windows == 5 && stats.Cycles[0].Stops[0] == 0 && stats.Cycles[0].Driver == 0,
+				"BlocoP: a release before the window began is not its interruption",
+				stats.Cycles.empty() ? "no cycle" : "windows=" + std::to_string(stats.Cycles[0].Windows) + " stops=" + std::to_string(stats.Cycles[0].Stops[0]) + " driver=" + std::to_string(stats.Cycles[0].Driver));
+		}
+		{
 			//Both ports release together: neither is singled out.
 			std::vector<OamFrame> frames = DriverStream(5, 0, true);
 			Vocabulary vocab = BuildSpriteVocabulary(frames);

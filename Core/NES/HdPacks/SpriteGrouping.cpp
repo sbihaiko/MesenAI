@@ -533,10 +533,17 @@ namespace MesenSheets
 			{
 				uint32_t Repeats = 0;
 				std::vector<std::vector<uint32_t>> Holds; //per position
-				//ADR-0181 §3: one entry per window - the emulated frame its last
-				//phase advance began on, and that phase's canonical position, so
-				//the stop frame can be read once the median holds are known.
-				std::vector<std::pair<uint32_t, size_t>> WindowEnds;
+				//ADR-0181 §3: one entry per window - the emulated frame it began
+				//on, the one its last phase advance began on, and that phase's
+				//canonical position, so the stop frame can be read once the
+				//median holds are known.
+				struct Window
+				{
+					uint32_t Start = 0;
+					uint32_t LastAdvance = 0;
+					size_t Phase = 0;
+				};
+				std::vector<Window> Windows;
 			};
 			//Emulated frame each retained frame begins on (RepeatCount summed),
 			//and the frames on which a port released some button - the byte lost
@@ -598,8 +605,11 @@ namespace MesenSheets
 						while(end < n && track[end].Pose == block[(end - start) % p]) {
 							end++;
 						}
-						uint32_t lastFrame = track[end - 1].Frame;
-						occ.WindowEnds.push_back({ frameStart[std::min<size_t>(lastFrame, frames.size())], (end - 1 - start + p - shift) % p });
+						Occurrences::Window window;
+						window.Start = frameStart[std::min<size_t>(track[start].Frame, frames.size())];
+						window.LastAdvance = frameStart[std::min<size_t>(track[end - 1].Frame, frames.size())];
+						window.Phase = (end - 1 - start + p - shift) % p;
+						occ.Windows.push_back(window);
 						for(size_t k = start; k < end; k++) {
 							covered[k] = true;
 						}
@@ -655,14 +665,15 @@ namespace MesenSheets
 				}
 				//ADR-0181 §3: a window stops when the next advance was due and did
 				//not come - last advance + that phase's median hold. It answers a
-				//port when a release on it happened within kDriverStopLag frames
-				//before the stop.
-				run.Windows = (uint32_t)cycle.second.WindowEnds.size();
-				for(const std::pair<uint32_t, size_t>& windowEnd : cycle.second.WindowEnds) {
-					uint32_t stop = windowEnd.first + run.Hold[windowEnd.second];
+				//port when a release on it happened while the window was live and
+				//within kDriverStopLag frames before the stop; a release before the
+				//window began cannot have interrupted it.
+				run.Windows = (uint32_t)cycle.second.Windows.size();
+				for(const Occurrences::Window& window : cycle.second.Windows) {
+					uint32_t stop = window.LastAdvance + run.Hold[window.Phase];
 					for(size_t port = 0; port < 2; port++) {
 						for(uint32_t release : releases[port]) {
-							if(release <= stop && stop - release <= kDriverStopLag) {
+							if(release >= window.Start && release <= stop && stop - release <= kDriverStopLag) {
 								run.Stops[port]++;
 								break;
 							}
