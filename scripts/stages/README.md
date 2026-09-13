@@ -24,7 +24,10 @@ folder per golden game. Four kinds:
   `scripts/replay_chain.sh <rom> <a>.mss <chain> <b>.mss`; the state it
   writes is byte-identical to the one the chain minted, which is how the
   states below `stage3-waterfall` are reproduced from a checkout that has
-  the `.mss` files of its predecessors.
+  the `.mss` files of its predecessors. `record_stages.sh` skips these and
+  the `mint-*.txt` files, so a game folder can be copied wholesale into a
+  stages dir. A chain step may be `Ns`; the helper converts it the way the
+  script parser does (`round(N * 60.0988)`).
 
 Mint, then batch:
 

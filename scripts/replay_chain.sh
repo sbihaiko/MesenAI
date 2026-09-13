@@ -14,8 +14,18 @@ set -eu
 [ $# -eq 4 ] || { echo "usage: $0 <rom> <from.mss> <chain.txt> <to.mss>" >&2; exit 2; }
 rom=$1; from=$2; chain=$3; to=$4
 here=$(cd "$(dirname "$0")" && pwd)
-frames=$(awk '!/^#/ && NF { s += substr($1, 1, length($1) - 1) } END { print s - 1 }' "$chain")
-seconds=$(awk -v f="$frames" 'BEGIN { printf "%.6f", f / 60.0988 }')
+# Same arithmetic as HeadlessInputScript::Parse: "Nf" is N frames, "Ns" is
+# round(N * fps) frames, at the NES's 60.0988 fps; a bare number is an error.
+fps=60.0988
+frames=$(awk -v fps="$fps" '
+  !/^#/ && NF {
+    unit = substr($1, length($1)); n = substr($1, 1, length($1) - 1)
+    if(unit == "f") s += n
+    else if(unit == "s") s += int(n * fps + 0.5)
+    else { print "replay_chain: bad duration \"" $1 "\" - write <count>f or <count>s" > "/dev/stderr"; exit 3 }
+  }
+  END { print s - 1 }' "$chain") || exit 3
+seconds=$(awk -v f="$frames" -v fps="$fps" 'BEGIN { printf "%.6f", f / fps }')
 work=$(mktemp -d "${TMPDIR:-/tmp}/replay_chain.XXXXXX")
 "$here/headless_record" "$rom" "$seconds" "$work/run" hdpack-off "input=$chain" "state=$from" "save-state=$to"
 rm -rf "$work"
