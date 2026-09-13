@@ -12,7 +12,9 @@
 #
 # <stages-dir> holds pairs <stage>.mss + <stage>.txt (a save state and the
 # input script that plays from it). A <stage>.txt with no .mss starts from
-# power-on (the entry script itself). Each stage runs
+# power-on (the entry script itself); `mint-*.txt` and `<a>-to-<b>.chain.txt`
+# beside them are skipped - the first mints a state, the second is a
+# transition for replay_chain.sh, neither is a stage. Each stage runs
 #   headless_record <out>/<stage>/<rom name> <seconds> <out>/<stage>/rec bootstrap hdpack-off state=<stage>.mss input=<stage>.txt
 # so the bootstrap builder writes <out>/<stage>/<rom stem>/auto/ - one pack per
 # stage, nothing merged. The ROM is hard-linked (or copied) into each stage
@@ -40,7 +42,13 @@ record="$here/headless_record"
 
 romName="$(basename "$rom")"
 shopt -s nullglob
-scripts=("$stages"/*.txt)
+scripts=()
+for script in "$stages"/*.txt; do
+  # <a>-to-<b>.chain.txt is a state-to-state transition for replay_chain.sh,
+  # not a stage to record; a mint-*.txt plays from power-on and is not one either.
+  case "$(basename "$script")" in *.chain.txt|mint-*.txt) continue ;; esac
+  scripts+=("$script")
+done
 [ ${#scripts[@]} -gt 0 ] || { echo "no <stage>.txt in $stages" >&2; exit 1; }
 
 status=0
