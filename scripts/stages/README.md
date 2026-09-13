@@ -258,8 +258,8 @@ with the pods (type 10, HP 10) and the eye (slot 12, type 8, HP 8) added
 to the targets the search killed both without losing a life, `$0086`
 dropped to 1, and then no third target appeared within 360 idle frames
 while the search ran out its depth budget; the head's slot and type on
-this base are unread. Stages 5–8 are not planned: the states exist to
-measure the pack format, and two bases, the waterfall and its boss
-already show every mechanism the format has to carry. The chain from
+this base are unread. Stages 5–8 are not planned (ADR-0182): the states
+exist to measure the pack format, and two bases, the waterfall and its
+boss already show every mechanism the format has to carry. The chain from
 `stage4-base.mss` to the boss room is `stage4-base-to-stage4-boss.chain.txt`
 (169 steps, 18 957 frames), traced and verified like the two before it.
