@@ -138,3 +138,71 @@ shape produced no port-2 window at all.
 A run from a state counts its <seconds> and its script from the state's
 frame (`headless_record` prints both); before 2026-09-12 both were absolute
 emulator frames, so a state older than the run ended it on the spot.
+
+## The base, the waterfall and its boss (F9.22, 2026-09-13)
+
+Stages 2 and 3 were beaten headlessly the same way stage 1 was — chains of
+short `headless_record` runs steered by RAM — and three more states came
+out of it: `stage3-waterfall` (the vertical stage, 17 lives), `stage3-boss`
+(the alien face at its top, arms active) and `stage4-base` (the second
+base, 15 lives). The chain and every intermediate state live under
+`runs/golden-20260913-f922/contra/` (unversioned).
+
+**The base (stage 2).** Its RAM: `$0086` wall cores remaining, `$0037`
+screen cleared (bit 7 set once the fence is gone — hold Up for 300 f to
+walk in), `$003b` boss defeated, sixteen enemy slots with type at
+`$0528+i`, HP at `$0578+i` (a value >= 0xF0 is a phase flag, the low
+nibble is the HP), X at `$033e+i`, Y at `$0324+i`. The targets are the
+static slots: cannons type 19 (HP 4) and the core type 20 (HP 8, 16 on the
+fourth screen). Bullets travel into the screen from wherever Bill stands,
+so the search walks to the target's lane (1 px per frame) and shoots
+standing or prone; from x = 80 a burst also reaches the core. The boss room
+has four pods (type 10, HP 10), then two eyes (type 8, hit with Up+B from
+below at x = 176 and x = 80), then the head (slot 15, type 16, Up+B from any
+central lane). Soldiers kill Bill, so the depth-first search keeps survival
+as a constraint and spends a death budget only when no surviving window
+progresses; a long Up+B run at the head also killed him, so windows stay at
+60 f. Two things the RAM taught: a slot is reused by transient enemies, so
+a target is (slot, type), not a slot; and the head's HP nibble is not
+monotone, so the search reads `$003b` for the win.
+
+**The waterfall (stage 3).** Vertical (`$0041` = 1): progress is
+`$0064 * 256 + $0065`, screen and pixels climbed. The camera catches up
+only after Bill lands, so every candidate window ends with 40 idle frames
+or the next window's input is read against the wrong frame. A greedy
+explorer over jump-and-hold windows (`20f RA / 40f R`, the mirror, a
+straight jump, each after 0–56 f of walking) climbs seven screens on its
+own and stalls once, on the screen whose exit is up and to the left of a
+platform that is *lower* than Bill: the greedy rule (highest camera, then
+highest Bill) refuses to descend. Four chained jumps left, then the
+explorer again, reached the top. The versioned `stage3-waterfall.txt`
+holds the start of that climb for 60 s (jumps in both directions, aim up,
+prone, drop) and yields 252 poses and 12 cycles; `stage3-waterfall-probe`
+(`104f R / 30f - / 104f L / 30f -`) reads Bill's run both ways as `port1`
+(28 and 26 repeats).
+
+**The stage-3 boss.** Slots 5 and 6 are the two sweeping arms (type 21,
+HP 16 each, active ~180 f after the room is entered); `$0085` counts the
+arms destroyed. The core is slot 13 (type 20): its `$0585` reads 32 while
+the mouth is open and 0xF1 while it is shut, and the *lasting* HP is the
+second table, `$05c5` (32 at the start, 0 at the win). Only Up+B from
+x = 100–128, or Right+Up+B from x = 100, lands, and only while the mouth
+is open; the search on `$05c5` with survival first took 105 windows of
+60 f and no death from arms-dead to `$003b` set. `stage3-boss.txt` (Up+B
+bursts from the left and centre lanes, diagonals, a prone burst) records
+that room (517 poses, 12 cycles, 355 sequences — the arms' sweep is
+not periodic); `stage3-boss-probe` (the stage-1 probe from the same state)
+reads Bill's run both ways as `port1` at 8 repeats each, the room being
+one screen wide; the state is the arms-active one.
+
+**The second base (stage 4).** `stage4-base.txt` is the stage-2 script
+(runs along the corridor, jumps, aim up, prone) and its 60 s from the
+minted state give 291 poses and 17 cycles — the base soldiers' run toward
+the camera as period-3 cycles of 7–8-tile poses (37 and 23 repeats) and a
+28–30-tile fused trio. `stage4-base-probe.txt` is the stage-1 probe and
+attributes nothing: in a base Bill walks sideways facing the screen, and
+that walk comes out as period-5 cycles of 16-tile poses with irregular
+holds and 4 repeats, under the rule's 4-window floor. The soldiers' run,
+at 37 repeats, correctly has no driver. The stage-4 boss and stages 5–8
+are open; the base solver applies unchanged (its stage check is now
+relative to the state it starts from).
