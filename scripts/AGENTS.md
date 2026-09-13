@@ -520,6 +520,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   (`nes, gb, gbc, sms`) before any per-tile decode work, both for an
   unsupported `<system>` (e.g. `gba`) and for a palette hex string of the
   wrong width for the declared system.
+- `artist_cover.py <artist hires.txt> <pack auto/ dir>...` (ADR-0182 §3) -
+  which of an artist HD pack's tiles the recorded states put on screen:
+  unit is `tileData` (a stage's other palette is another key, so keys
+  undercount repainted figures); an artist image is sprite / background by
+  the majority of its seen tiles on the packs' `sheets/spr*.json`, unseen
+  when none; `[cond]` prefixes are read only for `memoryCheckConstant` on
+  `$30` (Contra's stage byte) and reported as the image's stage gate (a
+  repaint marker, not exclusivity). Prints totals, a per-image table and a
+  per-state table with the tiles only that state exhibited. Stdlib only,
+  no ROM. First run 2026-09-13 (Contra80s 1.1 vs fifteen Contra packs) is
+  summarised in ADR-0182.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

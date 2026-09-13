@@ -68,8 +68,12 @@ one; it does not change what F9.22 recorded or how.
    entries and deletes its row from the pending table; open item 3b names
    this ADR.
 
-**Measured 2026-09-13** (`runs/golden-20260913-f922/contra/artist-cover.md`,
-not versioned): of the 3 404 distinct tiles the Contra80s 1.1 pack paints,
+**Measured 2026-09-13** with `scripts/artist_cover.py <artist hires.txt>
+<recorded pack auto/ dir>...` (versioned, stdlib only; run over Contra80s
+1.1 and the fifteen Contra packs of the 120 s golden run and the per-stage
+recordings, with probes; the full tables are its output, the prose reading
+is `runs/golden-20260913-f922/contra/artist-cover.md`, unversioned like the
+earlier spikes): of the 3 404 distinct tiles the Contra80s 1.1 pack paints,
 1 597 (47 %) were on screen in some recorded state; Bill 126 / 235, Lance
 110 / 137, the soldier and enemy pages 80–85 %. The unseen half is at least
 one whole later-stage tileset (PRG page `$15xxx`), the Snow Field tanks,
