@@ -729,7 +729,14 @@ does not exist.
   a two-window lookahead and a three-window beam did not find it either,
   four chained jumps left did. The base probe is the first that attributes
   nothing to the player: Bill's sideways walk there is a short irregular
-  cycle (period 5, 4 repeats), under the 4-window floor.
+  cycle (period 5, 4 repeats), under the 4-window floor. Reproducibility,
+  on review: a save-state boundary is input-neutral once each run's six
+  idle tail frames are kept, which retracts the 2026-09-12 "a chain
+  reproduces only as a chain" — the chains from `stage3-waterfall` to
+  `stage3-boss` and on to `stage4-base` are versioned as flat
+  `.chain.txt` scripts (`scripts/replay_chain.sh`) that replay byte for
+  byte; `stage3-waterfall.mss` itself is archived only, its hand-stitched
+  chain not recoverable from disk.
 
 - **`driver` by interruption** (2026-09-13, ADR-0181 §3, F9.23):
   `FindPoseRuns` reads each cycle occurrence as a window that stops at its

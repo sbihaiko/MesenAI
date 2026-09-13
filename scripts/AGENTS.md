@@ -77,8 +77,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   **headlessly**: short runs chained state to state, steered by RAM read off
   the `.mss` with `mss_ram.py <f.mss> [addr…] | --diff <other.mss>` (header
   version aware: format 3 carries a 40-byte SHA-1 the loader skips). A
-  save-state boundary is not input-neutral, so a chain reproduces only as a
-  chain. `stage1-probe.txt` (F9.23, ADR-0181 §3) is the per-game *probe*:
+  save-state boundary is input-neutral once the six idle frames each run
+  adds past its script are kept, so a chain flattens into one
+  `<a>-to-<b>.chain.txt` that `replay_chain.sh <rom> <a>.mss <chain>
+  <b>.mss` replays to the same state byte for byte. `stage1-probe.txt` (F9.23, ADR-0181 §3) is the per-game *probe*:
   hold a direction for >= 2 turns of the cycle plus a phase, release, idle,
   without scrolling, so the recorder can attribute a cycle's `driver`; run
   it with the stage state copied as `stage1-probe.mss`. Workflow, RAM

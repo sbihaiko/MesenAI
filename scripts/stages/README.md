@@ -2,7 +2,7 @@
 
 Input scripts for `scripts/headless_record` (`<count>f <buttons>` lines, or
 `<count>f <port1>|<port2>` when the second player has to move — F9.22), one
-folder per golden game. Three kinds:
+folder per golden game. Four kinds:
 
 - `mint-<stage>.txt` — plays from power-on to the start of a stage. Run with
   `save-state=<stages-dir>/<stage>.mss` to mint the state that stage's
@@ -18,6 +18,13 @@ folder per golden game. Three kinds:
   enough for every loop to complete two turns on one track (ADR-0179 §3 needs
   `repeats >= 2`; a Contra turn is 6 x 8 frames, so `90f R` is 1.9 turns and
   `240f R` is 5).
+- `<a>-to-<b>.chain.txt` — the headless chain that produced state `<b>`
+  from state `<a>`, flattened into one script (every step's input, then the
+  idle frames its run added past the script). Replay it with
+  `scripts/replay_chain.sh <rom> <a>.mss <chain> <b>.mss`; the state it
+  writes is byte-identical to the one the chain minted, which is how the
+  states below `stage3-waterfall` are reproduced from a checkout that has
+  the `.mss` files of its predecessors.
 
 Mint, then batch:
 
@@ -51,9 +58,15 @@ the platform and below it from the ground. The chain and every intermediate
 state live under `runs/golden-20260912/contra/play/` (unversioned); the
 minted states are `stages/stage1-boss.mss` (the wall, with Bill respawning on
 the top-left platform) and `stages/stage2-base.mss` (the corridor, Bill
-spawning). A save-state boundary is not input-neutral: the same 600 f prone
-script run in one piece and in ten 60 f pieces diverged after ~100 f, so a
-chain is reproducible only as a chain, not as one concatenated script.
+spawning). A save-state boundary *is* input-neutral, but a run is longer
+than its script: the recorder rounds the frame target up (`(F + 2) / fps +
+0.05 s` in the solvers, five frames) and overshoots it by one, so every
+step leaves six idle frames the next state carries. The 2026-09-12 test
+that ran a 600 f prone script in one piece and in ten 60 f pieces and saw
+them diverge after ~100 f was missing those frames; with them written into
+the flat script (`Nf -` after each step), a 287-step chain of 33 020 frames
+replays to the same RAM byte for byte (2026-09-13, both `.chain.txt` files
+below, `scripts/mss_ram.py --diff` empty).
 
 Measured 2026-09-12 (60 s from each stage-1 state): Contra 2 cycles (the
 player's period-6 run on 10-tile poses and the soldier's on 8-tile ones),
@@ -194,6 +207,22 @@ that room (517 poses, 12 cycles, 355 sequences — the arms' sweep is
 not periodic); `stage3-boss-probe` (the stage-1 probe from the same state)
 reads Bill's run both ways as `port1` at 8 repeats each, the room being
 one screen wide; the state is the arms-active one.
+
+**Reproducing the states.** `stage3-waterfall-to-stage3-boss.chain.txt`
+(99 steps, 11 402 frames) and `stage3-boss-to-stage4-base.chain.txt` (188
+steps, 21 618 frames) are the chains above, reconstructed from the
+solvers' `(txt, mss)` pairs by walking the save states' frame counters
+backwards and verifying every step by replay; two steps whose scripts a
+later branch of the search had overwritten were regenerated from the
+parent's RAM with the solver's own candidate rule. `stage3-waterfall.mss`
+itself is the end of a hand-stitched chain (stage 1 explorer, wall search,
+base search across several solver generations with states copied by hand
+between them) whose intermediate scripts were partly overwritten; it could
+not be rebuilt from what is on disk and is archived under `runs/` only, so
+a fresh checkout reproduces the stage-1 states from power-on
+(`mint-*.txt`), replays stage 3 → boss → stage 4 from `stage3-waterfall.mss`,
+and cannot re-mint that one state. The next chains are written as chain
+files from the start.
 
 **The second base (stage 4).** `stage4-base.txt` is the stage-2 script
 (runs along the corridor, jumps, aim up, prone) and its 60 s from the
