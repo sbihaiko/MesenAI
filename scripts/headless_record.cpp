@@ -294,9 +294,11 @@ namespace
 	}
 }
 
-//F9.22: does any non-comment line of the script hold a port 2 token? Mirrors
-//HeadlessInputScript::UsesPortTwo, which the tool cannot call before the
-//console config - and the config is what plugs the pad in.
+//F9.22: does any non-comment line of the script name a port 2 button? The
+//token after "|" has to be something other than "-": "120f R|-" is an idle
+//port 2, not a second pad. Mirrors HeadlessInputScript::UsesPortTwo, which
+//the tool cannot call before the console config - and the config is what
+//plugs the pad in.
 static bool ScriptUsesPortTwo(const std::string& text)
 {
 	size_t pos = 0;
@@ -305,7 +307,20 @@ static bool ScriptUsesPortTwo(const std::string& text)
 		std::string line = text.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
 		pos = end == std::string::npos ? text.size() : end + 1;
 		size_t first = line.find_first_not_of(" \t\r");
-		if(first != std::string::npos && line[first] != '#' && line.find('|') != std::string::npos) {
+		if(first == std::string::npos || line[first] == '#') {
+			continue;
+		}
+		size_t bar = line.find('|');
+		if(bar == std::string::npos) {
+			continue;
+		}
+		size_t tokenStart = line.find_first_not_of(" \t\r", bar + 1);
+		if(tokenStart == std::string::npos) {
+			continue;
+		}
+		size_t tokenEnd = line.find_last_not_of(" \t\r");
+		std::string token = line.substr(tokenStart, tokenEnd - tokenStart + 1);
+		if(token != "-") {
 			return true;
 		}
 	}
@@ -621,7 +636,7 @@ int main(int argc, char** argv)
 			fprintf(stderr, "%s: %s\n", inputScriptPath.c_str(), scriptError);
 			return 1;
 		}
-		printf("input script: %s (%u frames)\n", inputScriptPath.c_str(), HeadlessGetScriptFrameCount());
+		printf("input script: %s (%u frames%s)\n", inputScriptPath.c_str(), HeadlessGetScriptFrameCount(), portTwo ? ", drives port 2" : "");
 	}
 
 	//Freeze the run on its first frame, so what the recorders are started on

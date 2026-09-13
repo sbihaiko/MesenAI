@@ -105,8 +105,9 @@ frames would put the stop 30 f after the release.
 ## Water and the second player (F9.22, 2026-09-13)
 
 Two more stage-1 states, both minted headlessly from `stage1-run.mss` or
-from power-on: `stage1-water` (`mint-stage1-water.txt` = `60f L` from the
-stage-1 start; Bill drops into the water at x = 25, y = 212) and
+from power-on: `stage1-water` (`mint-stage1-water.txt` = the stage-1 entry of
+`mint-stage1.txt` then `60f L`, self-contained from power-on; Bill drops
+into the water at x = 25, y = 212) and
 `stage1-2p` (`mint-stage1-2p.txt` = the 30-lives code, then Select for
 "2 players", then Start; both figures alive, Bill at x = 48 and Lance at
 x = 32). The second player is the reason the input script grammar gained a
