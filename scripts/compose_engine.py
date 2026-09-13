@@ -323,16 +323,20 @@ class Pose:
 class PoseRun:
     """One `cycles[]` or `sequences[]` entry (ADR-0179 §3): pose ids in phase
     order, the median frames each phase was held, and how many times the run
-    was seen. `period` is set for cycles only; a sequence does not loop."""
+    was seen. `period` is set for cycles only; a sequence does not loop.
+    `driver` (ADR-0181 §3) is "port1"/"port2" when a release on that port was
+    seen to stop the cycle, else None - not classified, never "not the
+    player's" (§5): no consumer drops a run for lacking one."""
 
-    __slots__ = ("id", "poses", "hold", "repeats", "period")
+    __slots__ = ("id", "poses", "hold", "repeats", "period", "driver")
 
-    def __init__(self, run_id, poses, hold, repeats, period=None):
+    def __init__(self, run_id, poses, hold, repeats, period=None, driver=None):
         self.id = run_id
         self.poses = tuple(poses)
         self.hold = tuple(hold)
         self.repeats = repeats
         self.period = period
+        self.driver = driver if driver in ("port1", "port2") else None
 
     @property
     def cyclic(self) -> bool:
@@ -482,7 +486,8 @@ class Poses:
                 repeats = int(entry.get("repeats") or 0)
             except (TypeError, ValueError):
                 repeats = 0
-            out.append(PoseRun(run_id, poses, hold, repeats, len(poses) if cyclic else None))
+            out.append(PoseRun(run_id, poses, hold, repeats, len(poses) if cyclic else None,
+                               entry.get("driver")))
         return out
 
     def runs(self) -> list:

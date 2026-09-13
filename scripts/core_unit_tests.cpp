@@ -5948,6 +5948,91 @@ namespace
 	//--- ADR-0181 §1-§2: the controller state rides on the retained frame and
 	//poses.json reports what the run exercised - RepeatCount-weighted, union
 	//of both ports, with the buttons and direction+action pairs never held.
+	//ADR-0181 §3 (F9.23): a two-pose cycle held while port 1 holds Right,
+	//parked on a standing pose outside the cycle when Right is released (a
+	//park on a cycle pose would only lengthen that phase). `windows` occurrences;
+	//`releaseLead` frames between the release and the park (0 = the same
+	//frame); `bothPorts` makes port 2 release at the same moments.
+	std::vector<OamFrame> DriverStream(uint32_t windows, uint32_t releaseLead, bool bothPorts)
+	{
+		std::vector<OamFrame> frames;
+		uint32_t n = 0;
+		auto push = [&](ShapeId shape, uint32_t repeat, bool held) {
+			OamFrame frame;
+			frame.FrameNumber = n++;
+			frame.RepeatCount = repeat;
+			frame.Buttons[0] = held ? 0x80 : 0;
+			frame.Buttons[1] = (held && bothPorts) ? 0x80 : 0;
+			PushFigure(frame, shape, 100, 100);
+			frames.push_back(frame);
+		};
+		for(uint32_t w = 0; w < windows; w++) {
+			//Three turns of P Q, 4 frames a phase; the release may come early,
+			//in which case the last `releaseLead` frames alternate unheld.
+			uint32_t alternating = 6 * 4;
+			for(uint32_t k = 0; k < 6; k++) {
+				uint32_t from = k * 4;
+				bool held = from + 4 <= alternating - releaseLead;
+				push(k % 2 ? 51 : 41, 4, held);
+			}
+			//Parked, nothing held - on a different standing pose each time, or
+			//"run, park, run, park" would itself be a period-7 cycle (ADR-0179 §3
+			//finds it, correctly) and the test would be judging two cycles.
+			push(61 + 10 * w, 30, false);
+		}
+		return frames;
+	}
+
+	void TestACycleThatStopsOnAReleaseIsDrivenByThatPort()
+	{
+		{
+			std::vector<OamFrame> frames = DriverStream(5, 0, false);
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			Check(stats.Cycles.size() == 1 && stats.Tracks == 1,
+				"BlocoP: one cycle on one track", "cycles=" + std::to_string(stats.Cycles.size()) + " tracks=" + std::to_string(stats.Tracks));
+			if(stats.Cycles.size() != 1) {
+				return;
+			}
+			const PoseRun& cycle = stats.Cycles[0];
+			Check(cycle.Windows == 5 && cycle.Stops[0] == 5 && cycle.Stops[1] == 0,
+				"BlocoP: five windows, all five stop within kDriverStopLag of a port-1 release",
+				"windows=" + std::to_string(cycle.Windows) + " stops=" + std::to_string(cycle.Stops[0]) + "/" + std::to_string(cycle.Stops[1]));
+			Check(cycle.Driver == 1, "BlocoP: the cycle is driven by port 1", "driver=" + std::to_string(cycle.Driver));
+			std::string json = SerializePoses(vocab, stats);
+			Check(json.find("\"driver\": \"port1\"") != std::string::npos, "BlocoP: cycles[] writes driver", "");
+		}
+		{
+			//Released 20 frames before the figure parks: the stop is not the release's.
+			std::vector<OamFrame> frames = DriverStream(5, 20, false);
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			Check(stats.Cycles.size() == 1 && stats.Cycles[0].Windows == 5 && stats.Cycles[0].Stops[0] == 0 && stats.Cycles[0].Driver == 0,
+				"BlocoP: a stop 20 frames after the release is not attributed",
+				stats.Cycles.empty() ? "no cycle" : "stops=" + std::to_string(stats.Cycles[0].Stops[0]) + " driver=" + std::to_string(stats.Cycles[0].Driver));
+			std::string json = SerializePoses(vocab, stats);
+			Check(json.find("\"driver\"") == std::string::npos, "BlocoP: no driver key when the rule does not fire", "");
+		}
+		{
+			//Three windows: below kDriverMinWindows, however cleanly they stop.
+			std::vector<OamFrame> frames = DriverStream(3, 0, false);
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			Check(stats.Cycles.size() == 1 && stats.Cycles[0].Windows == 3 && stats.Cycles[0].Stops[0] == 3 && stats.Cycles[0].Driver == 0,
+				"BlocoP: fewer than kDriverMinWindows windows earn no driver",
+				stats.Cycles.empty() ? "no cycle" : "windows=" + std::to_string(stats.Cycles[0].Windows) + " driver=" + std::to_string(stats.Cycles[0].Driver));
+		}
+		{
+			//Both ports release together: neither is singled out.
+			std::vector<OamFrame> frames = DriverStream(5, 0, true);
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			Check(stats.Cycles.size() == 1 && stats.Cycles[0].Stops[0] == 5 && stats.Cycles[0].Stops[1] == 5 && stats.Cycles[0].Driver == 0,
+				"BlocoP: two ports passing the same test cancel out",
+				stats.Cycles.empty() ? "no cycle" : "driver=" + std::to_string(stats.Cycles[0].Driver));
+		}
+	}
+
 	void TestInputBlockCountsHeldButtonsAndNamesWhatWasNeverPressed()
 	{
 		std::vector<OamFrame> frames = WalkingFigureFrames(3, 6);
@@ -6541,6 +6626,7 @@ int main()
 	TestTwoIdenticalRunsAreOneSequence();
 	TestAPosePlusASatelliteIsAVariantNotAFusion();
 	TestInputBlockCountsHeldButtonsAndNamesWhatWasNeverPressed();
+	TestACycleThatStopsOnAReleaseIsDrivenByThatPort();
 	TestSpriteSheetNamesThePosesItsCellsBelongTo();
 	TestSpriteSheetPoseRefsAreWrittenAsPoseIds();
 	TestGroupSheetStatesItsDeliberateBlanks();

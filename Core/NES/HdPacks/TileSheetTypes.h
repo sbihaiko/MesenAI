@@ -92,6 +92,22 @@ namespace MesenSheets
 	//kPoseCycleMinRepeats times; windows longer than the max are not tried.
 	constexpr uint32_t kPoseSequenceMinLength = 3;
 	constexpr uint32_t kPoseSequenceMaxLength = 32;
+	//---- ADR-0181 §3 (F9.23): `driver` by interruption ----------------------
+	//
+	//A window is one occurrence of a cycle on a track (>= kPoseCycleMinRepeats
+	//turns); it stops at its last phase advance plus that phase's median hold
+	//- not at the end of the last run, which swallows the idle a figure spends
+	//parked on a cycle pose (Link stands on a walk frame). A port drives the
+	//cycle when at least kDriverMinWindows windows exist and at least
+	//kDriverStopShareNum/Den of them stop within kDriverStopLag frames after
+	//a release of some button on that port, and the other port does not pass
+	//the same test. Set from the 2026-09-13 probe measurement (Zelda's walks
+	//10/10, Mega Man 3's run 12/13, Contra's run 3/3 stop within 12 f; the
+	//enemy cycles 0-2/13, Excitebike's wheels 3/18).
+	constexpr uint32_t kDriverMinWindows = 4;
+	constexpr uint32_t kDriverStopLag = 12;
+	constexpr uint32_t kDriverStopShareNum = 2;
+	constexpr uint32_t kDriverStopShareDen = 3;
 	//---- ADR-0174 (issue #174): the sheet -> pose cross-reference ---------
 	//
 	//A group sheet names the poses its cells belong to, most-covered first. A
@@ -590,6 +606,12 @@ namespace MesenSheets
 		//Cycle: consecutive repetitions of the period on tracks, summed over
 		//tracks. Sequence: identical occurrences.
 		uint32_t Repeats = 0;
+		//ADR-0181 §3 (cycles only): windows the rule judged, how many stopped
+		//within kDriverStopLag of a release on each port, and the verdict -
+		//0 = no driver written, 1 = "port1", 2 = "port2". A sequence keeps 0.
+		uint32_t Windows = 0;
+		uint32_t Stops[2] = {};
+		uint8_t Driver = 0;
 	};
 
 	//What BuildPoses found, with the counts a reader needs to judge

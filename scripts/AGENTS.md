@@ -78,7 +78,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the `.mss` with `mss_ram.py <f.mss> [addr…] | --diff <other.mss>` (header
   version aware: format 3 carries a 40-byte SHA-1 the loader skips). A
   save-state boundary is not input-neutral, so a chain reproduces only as a
-  chain. Workflow, RAM addresses and measured results: `stages/README.md`.
+  chain. `stage1-probe.txt` (F9.23, ADR-0181 §3) is the per-game *probe*:
+  hold a direction for >= 2 turns of the cycle plus a phase, release, idle,
+  without scrolling, so the recorder can attribute a cycle's `driver`; run
+  it with the stage state copied as `stage1-probe.mss`. Workflow, RAM
+  addresses and measured results: `stages/README.md`.
   `.mss` files are not versioned (CHR-RAM states carry ROM graphics); they
   live under `runs/`. The consumer side of the recorder's `poses.json`
   (`compose_engine.Poses`: entries, `cycles`/`sequences`, and `input` as
