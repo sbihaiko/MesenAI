@@ -37,9 +37,9 @@ uint32_t HeadlessInputEngine::GetScriptFrameCount()
 	return HeadlessInputScript::GetFrameCount(_steps);
 }
 
-void HeadlessInputEngine::ApplyToTarget(IHeadlessInputTarget& target, const HeadlessInputStep& step)
+void HeadlessInputEngine::ApplyToTarget(IHeadlessInputTarget& target, const vector<string>& buttons)
 {
-	if(step.Buttons.empty()) {
+	if(buttons.empty()) {
 		return;
 	}
 
@@ -50,7 +50,7 @@ void HeadlessInputEngine::ApplyToTarget(IHeadlessInputTarget& target, const Head
 		if(button.IsNumeric) {
 			continue;
 		}
-		for(const string& name : step.Buttons) {
+		for(const string& name : buttons) {
 			if(name == button.Name) {
 				target.PressButton(button.ButtonId);
 				break;
@@ -65,12 +65,15 @@ bool HeadlessInputEngine::ApplyFrame(IHeadlessInputTarget& target)
 
 	auto lock = _lock.AcquireSafe();
 
-	//The harness drives port 1 only (it forces a standard controller there -
-	//without a control device the whole provider chain is never consulted).
-	if(target.GetPort() == 0 && frame >= _scriptStartFrame) {
+	//Port 1 takes the line's first token, port 2 the token after "|" (F9.22);
+	//a device on any other port, or on port 2 under a one-player script, is
+	//left alone. The harness plugs a controller into port 2 only when the
+	//script names one (HeadlessInputScript::UsesPortTwo).
+	uint8_t port = target.GetPort();
+	if(port < 2 && frame >= _scriptStartFrame) {
 		const HeadlessInputStep* step = HeadlessInputScript::GetStep(_steps, frame - _scriptStartFrame);
 		if(step) {
-			ApplyToTarget(target, *step);
+			ApplyToTarget(target, port == 0 ? step->Buttons : step->Port2Buttons);
 		}
 	}
 

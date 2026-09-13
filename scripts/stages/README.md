@@ -1,7 +1,8 @@
 # Per-stage recording scripts (F9.22)
 
-Input scripts for `scripts/headless_record` (`<count>f <buttons>` lines), one
-folder per golden game. Two kinds:
+Input scripts for `scripts/headless_record` (`<count>f <buttons>` lines, or
+`<count>f <port1>|<port2>` when the second player has to move — F9.22), one
+folder per golden game. Three kinds:
 
 - `mint-<stage>.txt` — plays from power-on to the start of a stage. Run with
   `save-state=<stages-dir>/<stage>.mss` to mint the state that stage's
@@ -100,6 +101,38 @@ soldiers kill him is the title screen. The rule itself needed one fix
 from the measurement: a window stops at its last advance plus that phase's
 median hold, because Link parks on a walk frame and the run's own held
 frames would put the stop 30 f after the release.
+
+## Water and the second player (F9.22, 2026-09-13)
+
+Two more stage-1 states, both minted headlessly from `stage1-run.mss` or
+from power-on: `stage1-water` (`mint-stage1-water.txt` = `60f L` from the
+stage-1 start; Bill drops into the water at x = 25, y = 212) and
+`stage1-2p` (`mint-stage1-2p.txt` = the 30-lives code, then Select for
+"2 players", then Start; both figures alive, Bill at x = 48 and Lance at
+x = 32). The second player is the reason the input script grammar gained a
+port-2 token — `<count>f <port1>|<port2>` — and `headless_record` plugs a
+pad into port 2 only when a line names one (ADR-0157, amended).
+
+Measured, 60 s each: `stage1-water` 13 poses, no cycle (Bill swims and
+shoots without animating — a swim, a submerged and an aim-up pose and their
+shot variants); `stage1-2p` 311 poses and 11 cycles, none with a driver
+(both pads hold Right), among them two period-6 cycles of 20-tile poses
+that are the two figures running side by side as one fused pose (ADR-0177),
+and 58 poses of 22 tiles that are the pair standing adjacent at the spawn.
+
+`stage1-2p-probe.txt` — `120f R|-` once, then `104f -|R / 30f - / 104f -|L
+/ 30f -` — reads Lance's run right and left as `port2` (13/14 and 12/12
+windows). Two lessons behind that shape. **Bill and Lance share every
+pose**: the vocabulary is shape-keyed and the two differ by palette only,
+so their runs are one cycle, and a probe that moves both in turn reports
+7/13 port 1 and 6/13 port 2 — no driver, which is what the rule says about
+a cycle two pads drive. The versioned probe therefore parks Bill out of the
+way (x = 168, no scroll: the screen holds until at least x = 168 in two-
+player mode) and moves only Lance, so `port2` is measured end to end.
+**The figures must not cross**: Lance spawns left of Bill, and running him
+right through Bill fused the pair for the first 40 frames of every hold,
+leaving 64 clean frames — under the two turns a window needs — so the first
+shape produced no port-2 window at all.
 
 A run from a state counts its <seconds> and its script from the state's
 frame (`headless_record` prints both); before 2026-09-12 both were absolute

@@ -86,7 +86,7 @@ private:
 	//shift the script by that frame or it has already ended before it starts.
 	uint32_t _scriptStartFrame = 0;
 
-	void ApplyToTarget(IHeadlessInputTarget& target, const HeadlessInputStep& step);
+	void ApplyToTarget(IHeadlessInputTarget& target, const vector<string>& buttons);
 
 public:
 	HeadlessInputEngine(IHeadlessInputHost* host);

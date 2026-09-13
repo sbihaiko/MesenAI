@@ -93,7 +93,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   seconds (ADR-0157/F9.14). Its `<seconds>` argument keeps its meaning and is
   converted to a frame count at startup; an `input=<script>` line is
   `<count>f <buttons>` or `<count>s <buttons>` and a bare count is a parse
-  error. The script itself is parsed and played core-side
+  error; `<buttons>` may be `<port1>|<port2>` (F9.22 — a controller is
+  plugged into port 2 only when a line names one, so one-player scripts
+  record exactly as before). The script itself is parsed and played core-side
   (`Core/Shared/HeadlessInputScript`, `Core/Shared/HeadlessInputProvider`),
   which is why `core_unit_tests` Bloco Q can cover the parser without an
   emulator. The frame limiter is off by default (pass `realtime` to keep it)

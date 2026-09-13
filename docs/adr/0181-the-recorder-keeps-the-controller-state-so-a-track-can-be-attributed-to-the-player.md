@@ -246,5 +246,12 @@ attributed cycles first, which is a view decision and F9.18's business.
   attributed is recorded from a probe script, and the probe's quality is
   legible in the file — `input.held` shows the alternation, `repeats`
   shows the windows.
+- **A figure two pads share has no driver.** Contra's Bill and Lance differ
+  by palette only and the vocabulary is shape-keyed, so their runs are one
+  cycle; a probe that moves them in turn stops 7/13 windows on port 1 and
+  6/13 on port 2 and the cycle stays unclassified, which is the rule
+  answering honestly. `port2` was measured on 2026-09-13 with a probe that
+  moves only the second player (`scripts/stages/contra/stage1-2p-probe.txt`:
+  13/14 and 12/12 windows).
 - Two bytes per retained frame on a 4096-frame cap is 8 KB of recorder
   memory, and nothing on disk beyond the block above.

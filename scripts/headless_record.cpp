@@ -294,6 +294,24 @@ namespace
 	}
 }
 
+//F9.22: does any non-comment line of the script hold a port 2 token? Mirrors
+//HeadlessInputScript::UsesPortTwo, which the tool cannot call before the
+//console config - and the config is what plugs the pad in.
+static bool ScriptUsesPortTwo(const std::string& text)
+{
+	size_t pos = 0;
+	while(pos < text.size()) {
+		size_t end = text.find('\n', pos);
+		std::string line = text.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+		pos = end == std::string::npos ? text.size() : end + 1;
+		size_t first = line.find_first_not_of(" \t\r");
+		if(first != std::string::npos && line[first] != '#' && line.find('|') != std::string::npos) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int main(int argc, char** argv)
 {
 	if(argc < 4) {
@@ -505,6 +523,12 @@ int main(int argc, char** argv)
 	//overrides (SetInputOverrides, used by "input=<script>") are dropped on the
 	//floor because NesDebugger/SmsDebugger only write into a device that exists.
 	sms.Port1.Type = ControllerType::SmsController;
+	//F9.22: a second pad only when the script names one ("<port1>|<port2>"),
+	//so a one-player script keeps producing the recording it always did.
+	bool portTwo = ScriptUsesPortTwo(inputScriptText);
+	if(portTwo) {
+		sms.Port2.Type = ControllerType::SmsController;
+	}
 	//Power-on RAM defaults to RamState::Random, which is a second source of
 	//run-to-run variation on top of the one F9.14 removed: a game that reads
 	//uninitialised RAM takes a different path, and the recording differs even
@@ -539,6 +563,9 @@ int main(int argc, char** argv)
 	//See the SmsConfig note above: without a standard controller in port 1 an
 	//input script has nothing to drive.
 	nes.Port1.Type = ControllerType::NesController;
+	if(portTwo) {
+		nes.Port2.Type = ControllerType::NesController; //see the SmsConfig note above
+	}
 	nes.RamPowerOnState = RamState::AllZeros; //see the SmsConfig note above
 	if(hdPackOff) {
 		nes.EnableHdPacks = false; //see the "hdpack-off" argument above
