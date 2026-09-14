@@ -6,7 +6,7 @@
 //
 //Build:   make capture-tool
 //Usage:   scripts/headless_record <rom> <seconds> <output_prefix> [pal] [hdpack] [screenshot] [log] [hdpack-off|mep-off|mep-notextures|mep-nosynth|mep-disable=<container>] [romtiles] [filter=<name>] [live=<ms>]
-//         [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [cheat=AAAA:VV[:CC]]
+//         [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [movie=<file.bk2|file.mmo>] [cheat=AAAA:VV[:CC]]
 //
 //ADR-0184: "cheat=" takes a RAM-address code only - the AAAA:VV[:CC] form with
 //AAAA below $0800. A Game Genie letter code is refused, because it is a PRG
@@ -18,6 +18,25 @@
 //when the run reaches its frame target (never on an INCOMPLETE run). Together
 //they chain: entry script -> stage-1 state -> a <= 60 s run per stage, each
 //into its own pack folder (scripts/record_stages.sh).
+//
+//"movie=" replays a recorded movie through the Core's own movie player instead
+//of running an input script, so a pack can be recorded off a real playthrough
+//rather than a blind scripted one. It is mutually exclusive with "input=" (two
+//players fighting over the same pad) and with "state=" (a movie carries its own
+//start state and power cycles the console itself). The Core recognises exactly
+//two containers, by content and not by extension (MovieManager::Play): a zip
+//holding "Input Log.txt" is a BizHawk .bk2, one holding "GameSettings.txt" is a
+//Mesen .mmo. There is no .fm2 reader. Anything else is dropped without a word -
+//no player, no message - which is why the run refuses to continue when
+//MoviePlaying() reads false right after MoviePlay(): a silent refusal otherwise
+//records the title screen and calls it a success.
+//A .mmo also *overwrites* the emulation-affecting settings this tool pushes
+//before LoadRom with the movie's own (MesenMovie::ApplySettings streams
+//EmuSettings::Serialize's subset: controller types, RamPowerOnState, Region,
+//console type and the per-console quirk flags), restoring them when it stops;
+//the palette, channel volumes, EmulationSpeed, video filter and the HD/MEP-pack
+//flags are outside that subset and survive. BizHawkMovie::ApplySettings is a
+//stub returning true, so a .bk2 clobbers nothing.
 //
 //F9.14 (ADR-0157): a run is a number of *emulated frames*, never a number of
 //host seconds. <seconds> keeps its name and its meaning for the caller, but is
@@ -216,6 +235,15 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	void VgmRecord(char* filename);
 	void VgmStop();
 	bool VgmIsRecording();
+	//InteropDLL/RecordApiWrapper.cpp - already exported by the linked core
+	//dylib, so "movie=" needs nothing but these declarations. MoviePlay returns
+	//void: MoviePlaying() is the only way to learn whether the Core accepted the
+	//file (see the "movie=" note at the top of this file).
+	void MoviePlay(char* filename);
+	bool MoviePlaying();
+	//InteropDLL/EmuApiWrapper.cpp - the run's end in movie mode, see the
+	//pauseOnBudget comment in the recording wait below.
+	void Pause();
 	bool IsRunning();
 	void Resume();
 	bool IsPaused();
@@ -413,6 +441,7 @@ int main(int argc, char** argv)
 			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [mep-off]\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
+			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
 			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>]\n", argv[0]);
 		return 1;
@@ -442,6 +471,11 @@ int main(int argc, char** argv)
 	//also what scripts/core_unit_tests.cpp covers.
 	std::string inputScriptText;
 	std::string inputScriptPath;
+	//"movie=": a recorded playthrough replayed by the Core's own movie player
+	//(MovieManager::Play), in place of an input script. See the "movie=" note at
+	//the top of this file for the two containers the Core accepts and for what a
+	//.mmo does to the settings pushed below.
+	std::string moviePath;
 	bool realtime = false;
 	//ADR-0169: live=<ms> publishing interval in wall-clock milliseconds (0=off);
 	//the publish lambda below and the scratch folder <prefix>-live/ it writes.
@@ -541,6 +575,8 @@ int main(int argc, char** argv)
 				inputScriptText.append(buffer, read);
 			}
 			fclose(f);
+		} else if(strncmp(argv[i], "movie=", 6) == 0) {
+			moviePath = argv[i] + 6;
 		} else if(strcmp(argv[i], "realtime") == 0) {
 			realtime = true;
 		} else if(strncmp(argv[i], "mep-disable=", 12) == 0) {
@@ -563,6 +599,20 @@ int main(int argc, char** argv)
 				return 1;
 			}
 		}
+	}
+
+	//Refused, not warned about: a movie drives the same pad an input script
+	//drives and resets the poll counter for its own input rows, and it carries
+	//its own start state and power cycles the console itself - so either
+	//combination silently records something other than what was asked for.
+	//Checked after the loop so the order the flags were typed in never matters.
+	if(!moviePath.empty() && !inputScriptPath.empty()) {
+		fprintf(stderr, "refused: movie=%s and input=%s cannot be combined - a movie drives the pad itself\n", moviePath.c_str(), inputScriptPath.c_str());
+		return 1;
+	}
+	if(!moviePath.empty() && !stateFile.empty()) {
+		fprintf(stderr, "refused: movie=%s and state=%s cannot be combined - a movie carries its own start state and power cycles the console\n", moviePath.c_str(), stateFile.c_str());
+		return 1;
 	}
 
 	std::filesystem::path outDir = std::filesystem::absolute(prefix).parent_path();
@@ -803,6 +853,30 @@ int main(int argc, char** argv)
 		printf("state loaded: %s (at frame %u; the run ends at frame %u)\n", stateFile.c_str(), stateFrame, totalFrames);
 	}
 
+	if(!moviePath.empty()) {
+		//Same ordering the Core's own headless replay uses (RecordedRomTest::Run:
+		//LoadRom, then GetMovieManager()->Play) - MesenMovie::Play power cycles
+		//the console itself, which resets the frame counter, so the run's frame
+		//budget below counts from the movie's first frame with nothing to add.
+		MoviePlay((char*)moviePath.c_str());
+		//MovieManager::Play drops a file it does not recognise on the floor: no
+		//player is constructed, no message is shown, and MoviePlay returns void.
+		//The refusal is synchronous and happens on this thread, so the poll below
+		//is a fact and not a race - _player is either set or empty by the time
+		//MoviePlay returns. Without this check a mistyped or unconvertible file
+		//records the title screen and the run still exits 0.
+		if(!MoviePlaying()) {
+			fprintf(stderr, "refused movie \"%s\": the Core would not play it. It accepts only a zip containing \"Input Log.txt\" (BizHawk .bk2) or \"GameSettings.txt\" (Mesen .mmo) - there is no .fm2 reader\n", moviePath.c_str());
+			//Unlike the failure paths above this one, the ROM is loaded and the
+			//emulation thread is alive: returning straight out of main leaves it
+			//running through the process' static teardown, which segfaults.
+			Stop();
+			Release();
+			return 1;
+		}
+		printf("movie playing: %s\n", moviePath.c_str());
+	}
+
 	//ADR-0184 - after LoadRom and after any state, because Emulator::LoadRom
 	//clears the cheat list: applied before either, this would silently do
 	//nothing and the run would look like a normal one.
@@ -917,11 +991,49 @@ int main(int argc, char** argv)
 		liveNextWall = 0.0; //publish on the first tick of the recording wait
 	}
 
+	//Movie mode's two per-tick duties, on top of the live publish. There is no
+	//end-of-movie callback anywhere in the Core - MesenMovie::SetInput calls
+	//MovieManager::Stop() when it runs out of input rows - so polling
+	//MoviePlaying() is the only observable, and it is polled here rather than
+	//waited on: the frame budget stays the authority over the run's length, and
+	//a movie that ends early only prints where it ended.
+	uint32_t movieEndFrame = 0;
+	bool pauseOnBudget = false;
+	auto onTick = [&]() {
+		publishLive();
+		if(moviePath.empty()) {
+			return;
+		}
+		if(movieEndFrame == 0 && !MoviePlaying()) {
+			movieEndFrame = HeadlessGetFrameCount();
+			printf("movie ended at frame %u of %u - the run continues to its frame budget\n", movieEndFrame, totalFrames);
+			fflush(stdout);
+		}
+		//The run's end has to come from this thread while a movie plays.
+		//BaseControlManager::UpdateInputState stops at the first input provider
+		//whose SetInput returns true, and the movie's provider registers on
+		//AfterInitConsole while HeadlessInputProvider re-registers on the later
+		//GameLoaded (Emulator.cpp) - so the movie is always ahead of it in the
+		//list and always returns true, and the in-frame pause of ADR-0157 never
+		//runs. A host-side Pause() lands a few frames past the target instead of
+		//exactly on it; that is the one property movie mode gives up, and the
+		//"capture finished" line below reports the frame actually reached.
+		//Measured on an M-series host, Zelda: with this guard a 300-frame budget
+		//parks at 301, exactly like a scripted run; with it removed the same run
+		//ran to 602 - the frame the movie's input ran out and its provider
+		//unregistered, which is the first frame the in-frame pause could fire.
+		if(!pauseOnBudget && HeadlessGetFrameCount() >= totalFrames) {
+			pauseOnBudget = true;
+			Pause();
+		}
+	};
+
 	//The run itself: resume, and let the provider stop it from inside the
-	//frame it was told to stop on. Nothing here decides how many frames run.
+	//frame it was told to stop on. Nothing here decides how many frames run
+	//(except in movie mode - see onTick above).
 	HeadlessSetPauseFrame(totalFrames);
 	Resume();
-	bool reachedTarget = waitForPause("recording", publishLive);
+	bool reachedTarget = waitForPause("recording", onTick);
 
 	//ADR-0169: one final status so the viewer can show "done" rather than stale
 	//- the run stops being published the moment it parks on its target frame.
