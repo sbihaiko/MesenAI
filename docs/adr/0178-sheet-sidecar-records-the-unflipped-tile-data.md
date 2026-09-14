@@ -101,8 +101,9 @@ this is the CHR RAM half.
    are untouched: the index already serves both directions.
 
 6. A pack recorded before this ADR is **detected, not repaired**. When a
-   data-keyed pack has crops whose key is absent from the key source while an
-   un-flip of that key is present, the build fails:
+   data-keyed **sprite** sheet (`kind` `sprite` or `sprites`) has crops whose
+   key is absent from the key source while an un-flip of that key is present,
+   the build fails:
 
    ```
    error: spr014.png: 12 crop(s) carry a flip-baked tile key the run time never
@@ -113,6 +114,14 @@ this is the CHR RAM half.
    It is an error for ADR-0172's reason: a cell that cannot match is not a
    degraded cell, it is a cell that does nothing. The un-flip here is used only
    to *recognise* the condition, never to emit a key from it.
+
+   The scope is sprite sheets because they are the only ones a flip can have
+   been baked into: `HdPackBuilder::WriteSpriteSheets` builds them from the OAM
+   vocabulary, and OAM is where the flip bits live. `metatiles`, `object`,
+   `map`, `hud`, `font` and `misc` come from the background vocabulary, where
+   the NES has no per-tile flip bit, so an un-flip that matches there is a
+   bitmap coincidence and not evidence of anything (scope narrowed 2026-09-13,
+   issue #196; measured below, and it costs no genuine detection).
 
 7. Two sheet cells may now emit the same key: a mirrored cell and the twin it
    mirrors. The existing per-sheet collision rule decides, unchanged — a
@@ -151,3 +160,41 @@ this is the CHR RAM half.
   this pack actually apply". It reports *background* tiles, so it will not move
   when this lands — the regression test for this ADR is the key-coverage count
   in the table above, not the log line.
+
+## Measured 2026-09-13
+
+The third Consequences bullet above — "a shape whose flipped bitmap happens to
+equal another CHR tile's unflipped bitmap […] measured zero times across the
+four golden packs, and not worth a rule" — is now **measured non-zero**, on
+Contra's base stages, and §6's detector was reading the coincidence as a
+pre-ADR pack (issue #196). The rebuild of three correct packs failed with the
+re-record message, which is advice that cannot help: re-recording them on a
+binary carrying this ADR reproduced the same sheets and the same crop counts
+(`runs/golden-20260913-f922/contra-rerecord-2026-09-13.md`).
+
+Replaying §6's test over all 136 recorded packs under `runs/`: 25 packs flag
+2448 crops across 304 sheets. Split by sheet kind, `sprite` 1101 and `sprites`
+1180 (2281 crops, 276 sheets, 17 packs — every one of them a sidecar with zero
+`source` fields, i.e. genuinely pre-ADR-0178), against `metatiles` 118,
+`object` 46 and `map` 3 (167 crops, 28 sheets, 9 packs). The two candidate
+scopings measure as follows:
+
+- **Crops whose entry carries `mirror`** keeps 0 of the 2448 and drops all of
+  them. `mirror` is written only beside `source`, and the detector is reached
+  only when `source` is absent — across the 136 packs, `mirror`-without-`source`
+  occurs 0 times. The rule would never fire, and would miss all 17 genuine
+  pre-ADR-0178 packs.
+- **Sprite sheets only** keeps 2281 crops / 276 sheets / 17 packs and drops
+  167 crops / 28 sheets. Every pre-ADR-0178 pack still errors on its sprite
+  sheets; the eight packs that lose their only errors are the ADR-0178-era
+  Contra base stages (`stage2-base`, `stage4-base`, `stage4-base-probe` and
+  their copies), whose sidecars carry 234–430 `source` entries each.
+
+`mep_build.py` therefore scopes the §6 detector to `kind` `sprite` and
+`sprites` — the only sheets `HdPackBuilder::WriteSpriteSheets` builds from the
+OAM vocabulary, and so the only ones into which a flip could have been baked.
+`metatiles`, `object`, `map`, `hud`, `font` and `misc` come from the background
+vocabulary, where the NES has no per-tile flip bit. The exempt crops emit their
+own keys unchanged; §6's error, message and exit code are otherwise untouched,
+and `scripts/test_mep_build.py` asserts both halves. §6 above carries the
+scope; this section is the evidence for it.

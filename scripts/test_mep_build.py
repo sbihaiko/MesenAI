@@ -311,14 +311,16 @@ def parse_hires(path: Path):
 
 def make_sheet_folder(root: Path, name: str, scale: int = 1, chr_rom: bool = False,
                       sidecar_index: bool = True, flip_baked: bool = False,
-                      sidecar_source: bool = True):
+                      sidecar_source: bool = True, sprite_sheet: bool = False):
     """An ADR-0153 author folder: a metatile vocabulary of 6 cells, a stitched
     map over cells 0..3, and an object over cells 0..1.
 
     `chr_rom` writes the key source in the index form a CHR ROM game's
     manifest uses (ADR-0172); `sidecar_index` is what the sheet sidecars
     record, so the two can be set apart to reproduce a pack recorded before
-    that ADR."""
+    that ADR. `sprite_sheet` adds a `"kind": "sprite"` sheet beside the
+    background ones — the only kind whose crops can carry a baked OAM flip
+    (issue #196)."""
     global EMIT_TILE_INDEX, EMIT_FLIP_SOURCE, EMIT_FLIP_BAKED
     EMIT_TILE_INDEX = chr_rom and sidecar_index
     # ADR-0178: `flip_baked` bakes a horizontal flip into every sidecar key;
@@ -358,6 +360,15 @@ def make_sheet_folder(root: Path, name: str, scale: int = 1, chr_rom: bool = Fal
     (sheets / "obj000.json").write_text(
         serialize_sheet("object", unit, gutter, 2, "obj000.png", "obj000.orig.png", obj_cells),
         encoding="utf-8")
+
+    if sprite_sheet:
+        # HdPackBuilder::WriteSpriteSheets — the OAM half of the pack. Same
+        # geometry as the object sheet, so the two differ only in `kind`.
+        spr_cells, spr_pixels = contact_sheet(unit, gutter, 2, vocab[:2])
+        write_pair(sheets, "spr000", spr_pixels, scale)
+        (sheets / "spr000.json").write_text(
+            serialize_sheet("sprite", unit, gutter, 2, "spr000.png", "spr000.orig.png", spr_cells),
+            encoding="utf-8")
 
     # Key source: only cells 0..1 are known keys, and tile 0 carries
     # non-default brightness/defaultTile that the build must carry over.
@@ -760,14 +771,44 @@ def flip_baked_key_tests(root: Path):
 
     # A pack recorded before the ADR has no `source`. Its baked keys are
     # recognised by the un-flip test and the build fails rather than emitting
-    # cells that would render nothing.
+    # cells that would render nothing. Only a sprite sheet can carry a baked
+    # flip, so that is where the detector has to keep firing.
     legacy, _v, _c = make_sheet_folder(root, "flip-baked-legacy", flip_baked=True,
-                                       sidecar_source=False)
+                                       sidecar_source=False, sprite_sheet=True)
     out = run("build", str(legacy), expect=2)
     if out is not None and "flip-baked tile key" in out and "re-record" in out:
         ok("ADR-0178: a pack whose sidecars predate the ADR fails the build, naming the fix")
     else:
         fail(f"pre-ADR-0178 pack did not fail with the re-record message: {out}")
+    named = sorted(line.split(":")[1].strip() for line in (out or "").splitlines()
+                   if "flip-baked tile key" in line)
+    if named == ["spr000.png"]:
+        ok("issue #196: the flip-baked error names the sprite sheet and only the sprite sheet")
+    else:
+        fail(f"flip-baked error was not scoped to the sprite sheet, named {named}: {out}")
+
+    # Issue #196: the same coincidence on a background sheet is not a baked
+    # flip. The NES background has no per-tile flip bit, so a background crop
+    # whose mirror happens to be another real tile of the game is ADR-0178's
+    # third Consequences bullet — harmless — and must not fail a build that
+    # re-recording cannot fix. Measured non-zero on Contra's base stages
+    # (`runs/golden-20260913-f922/contra-rerecord-2026-09-13.md`).
+    bg, _v, _c = make_sheet_folder(root, "flip-baked-background", flip_baked=True,
+                                   sidecar_source=False)
+    out = run("build", str(bg))
+    if out is not None and "flip-baked tile key" not in out:
+        ok("issue #196: a background sheet whose key mirrors a real tile builds clean")
+    else:
+        fail(f"background sheet still raises the ADR-0178 flip error: {out}")
+    if out is not None:
+        _imgs, bg_tiles = parse_hires(bg / "textures" / "hires.txt")
+        want = {flip_hex(tile_hex(s)) for s in range(20)}
+        got = {k for k, _p in bg_tiles}
+        if got == want:
+            ok("issue #196: the exempt background crops still emit their own keys, none dropped")
+        else:
+            fail(f"background exemption changed the emitted keys: missing {sorted(want - got)[:3]}, "
+                 f"unexpected {sorted(got - want)[:3]}")
 
 
 def chr_rom_key_tests(root: Path):

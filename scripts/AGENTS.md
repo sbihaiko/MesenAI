@@ -335,8 +335,15 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   every tile key of the baseline manifest must still resolve to a crop
   inside a sheet that exists and the F5.4d tiles-with-art count over those
   keys must be unchanged — pixels are never compared, so a skin passes and
-  a pack that lost a key fails. `scripts/test_mep_build.py` is the
-  acceptance test wired into `make doc-checks`.
+  a pack that lost a key fails. ADR-0178 §6's pre-ADR detector — a crop
+  whose key is absent from the key source while its un-flip is present
+  fails the build — applies to **sprite sheets only** (`kind` `sprite` or
+  `sprites`); background-vocabulary sheets (`metatiles`, `object`, `map`,
+  `hud`, `font`, `misc`) are exempt, because the NES has no per-tile flip
+  bit there and a matching un-flip is a bitmap coincidence (issue #196;
+  measured over 136 packs in ADR-0178's "Measured 2026-09-13"). Do not
+  widen it back without re-measuring. `scripts/test_mep_build.py` is the
+  acceptance test wired into `make doc-checks`, and asserts both halves.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a

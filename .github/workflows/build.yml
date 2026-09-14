@@ -4,9 +4,14 @@ on:
   push:
     branches:
       - 'main'
-  pull_request:
-    branches:
-      - 'main'
+  # TEMPORARY (2026-09-13): the `pull_request` trigger is disabled so the
+  # artist-kit slices land without waiting ~14 binary builds per push. `main`
+  # is still compiled on every merge, and any pull request can be built on
+  # demand with `gh workflow run build.yml --ref <branch>`. Restore the
+  # trigger once the F9.24 series is merged.
+  # pull_request:
+  #   branches:
+  #     - 'main'
   workflow_dispatch:
 
 # Every job used to carry
