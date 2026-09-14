@@ -131,6 +131,18 @@ def test_the_ips_reader_recovers_the_header_bytes_a_patch_writes():
           f"got {w}")
 
 
+def test_the_ips_reader_finds_a_header_record_that_comes_after_a_body_record():
+    # IPS records are not required to be ordered by offset: the emulator's own
+    # patcher collects them all and applies them in stream order
+    # (IpsPatcher::PatchBuffer). Stopping at the first offset past the header
+    # window would report "no header evidence" for a patch that does write one.
+    with tempfile.TemporaryDirectory() as d:
+        p = ips(Path(d) / "unsorted.ips", [(0x1234, b"\xEA" * 8), (4, b"\x10\x10\x13")])
+        w = C.ips_header_writes(p)
+    check(w == {4: 0x10, 5: 0x10, 6: 0x13},
+          "a header record after a body record is still read", f"got {w}")
+
+
 def test_the_ips_reader_handles_an_rle_record_and_rejects_a_non_ips():
     with tempfile.TemporaryDirectory() as d:
         p = ips(Path(d) / "rle.ips", [(5, 2, 0x20)])
@@ -217,6 +229,23 @@ def test_a_declared_patch_that_cannot_be_read_is_reported_as_such():
     check(rc != 0, "an unreadable patch does not turn the refusal off")
     check("could not read" in err, "the message says the patch was unreadable, and claims no bytes",
           err[:300])
+
+
+def test_a_readable_patch_that_leaves_the_header_alone_is_not_called_unreadable():
+    # The Zelda II "Revamp" shape (#231): a real patch we parse fine whose 267
+    # records all start past byte 16. Saying "we could not read it" would be a
+    # false claim about a file we just read.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        ref = d / "ref" / "hires.txt"
+        manifest(ref, [("a.png", [index(1)])], patches=[("revamp.ips", "08fa60f2")])
+        ips(d / "ref" / "revamp.ips", [(0x0DE4, b"\xEA" * 4), (0x1234, b"\x00" * 3)])
+        rec = recorded(d / "rec" / "auto", [pattern(1)])
+        rc, _out, err = run([ref, rec])
+    check(rc != 0, "the refusal still happens")
+    check("could not read" not in err, "it does not claim a patch it read was unreadable", err[:300])
+    check("revamp.ips" in err and "does not rewrite the iNES header" in err,
+          "it names the patch and says what it actually does", err[:300])
 
 
 def test_the_mirror_case_is_refused_too():
@@ -386,12 +415,14 @@ def main():
     tests = [
         test_shape_follows_the_emulators_own_width_rule,
         test_the_ips_reader_recovers_the_header_bytes_a_patch_writes,
+        test_the_ips_reader_finds_a_header_record_that_comes_after_a_body_record,
         test_the_ips_reader_handles_an_rle_record_and_rejects_a_non_ips,
         test_a_patch_that_misses_the_header_yields_no_header_evidence,
         test_the_patch_directive_parser_reads_file_and_target_sha1,
         test_a_patch_bearing_reference_against_a_chr_ram_recording_is_refused,
         test_a_foreign_namespace_is_refused_even_without_a_readable_patch,
         test_a_declared_patch_that_cannot_be_read_is_reported_as_such,
+        test_a_readable_patch_that_leaves_the_header_alone_is_not_called_unreadable,
         test_the_mirror_case_is_refused_too,
         test_an_empty_side_is_refused_with_its_own_message,
         test_a_normal_chr_ram_reference_measures_and_does_not_regress,

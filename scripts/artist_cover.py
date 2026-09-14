@@ -74,7 +74,8 @@ def ips_header_writes(path):
     """Bytes an IPS patch writes into the first 16 bytes of its target.
 
     Returns {offset: byte}, or None when the file is not an IPS we can read.
-    Only the iNES header window matters here, so we stop once past it.
+    Only the iNES header window is collected; every other record is skipped
+    over, not skipped past — see the ordering note below.
     """
     try:
         blob = open(path, "rb").read()
@@ -99,8 +100,12 @@ def ips_header_writes(path):
                 return None
             run = int.from_bytes(blob[i:i + 2], "big")
             chunk, i = bytes([blob[i + 2]]) * run, i + 3
-        if off >= 16:
-            break  # records are ordered by offset; the header is behind us
+        # Records are NOT required to be ordered by offset: the emulator's own
+        # patcher reads them all and applies them in stream order
+        # (IpsPatcher::PatchBuffer, Utilities/Patches/IpsPatcher.cpp), so a
+        # header record can follow a body record. Skipping the rest of the file
+        # at the first offset past the window would then miss a header write
+        # the emulator does perform.
         for n, b in enumerate(chunk):
             if off + n < 16:
                 out[off + n] = b
@@ -138,14 +143,24 @@ def namespace_report(artist_path, a_data, seen_data, pack_paths):
 
     # One <patch> file is usually declared once per supported ROM sha1, so
     # group by file: the header bytes it writes are the same every time.
-    found, shas = {}, collections.defaultdict(list)
+    # Three outcomes matter and they are not the same claim: a patch that
+    # rewrites the header (evidence we can quote), one that reads fine and
+    # leaves the header alone (its edits are in the PRG/CHR body), and one we
+    # could not open at all. Only the first is evidence for the key-shape
+    # split; the other two are both "built for a different build".
+    found, silent, unreadable, shas = {}, [], [], collections.defaultdict(list)
     for name, sha1 in patches(artist_path):
         shas[name].append(sha1)
-        if name not in found:
-            ips = os.path.join(os.path.dirname(os.path.abspath(artist_path)), name)
-            writes = ips_header_writes(ips)
-            if writes:
-                found[name] = writes
+        if name in found or name in silent or name in unreadable:
+            continue
+        ips = os.path.join(os.path.dirname(os.path.abspath(artist_path)), name)
+        writes = ips_header_writes(ips)
+        if writes is None:
+            unreadable.append(name)
+        elif writes:
+            found[name] = writes
+        else:
+            silent.append(name)
     if found:
         lines.append("       The reference pack ships a <patch>, and it rewrites the iNES header:")
         for name, writes in found.items():
@@ -162,9 +177,15 @@ def namespace_report(artist_path, a_data, seen_data, pack_paths):
                 "ROM: the patched build is a CHR ROM game, so its tiles have bank indices. The "
                 "stock ROM we recorded has CHR RAM (byte 5 = 0), whose tiles have no index at "
                 "all and are keyed by pattern.")
-    elif patches(artist_path):
+    elif unreadable:
         lines.append("       The reference pack declares a <patch> we could not read next to "
                      f"{artist_path} — it is built for a patched ROM, not the stock one.")
+
+    if silent:
+        lines.append(f"       The reference pack ships a <patch> ({', '.join(sorted(set(silent)))}) "
+                     "that does not rewrite the iNES header, so what it changes is in the PRG/CHR "
+                     "body. Either way the pack is built for a different build than the one you "
+                     "recorded.")
 
     lines += [
         "       What to do: this reference pack is not measurable against a recording of the "
