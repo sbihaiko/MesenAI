@@ -134,6 +134,19 @@ Current limits: the `audio` layer is applied on NES only (GB/SMS wait for the hi
 
 **Legal footing:** the project ships tools, mappings and specs — never other people's game assets. Extraction happens on your machine and stays there.
 
+## Remastering a game's art
+
+Redrawing a game the way the Contra80s pack does starts from a **recording of the game**, not from tracing screenshots. The whole base material is generated:
+
+1. **Record** the game doing everything it can do. Four drivers feed one builder: a scripted route, a published **TAS movie** (`.bk2`), a **RAM-only cheat** to warp to later stages, or a **save state** to start mid-game. The recorder writes what the game drew, frame by frame.
+2. **Unpack** the recording into a **kit** — sprite figures with their animation cycles, background objects, the whole stage stitched into a scrolling panorama, and completed CHR pattern pages — each with a sidecar saying what every cell will become.
+3. **Paint** the PNGs in your editor. Cells are the deliverable; the pack's `hires.txt` is generated from them.
+4. **Verify** mechanically: `scripts/mep_build.py build` and `scripts/mep_lint.py` both exit 0, and each generator's `--verify` round-trips with **0 tile keys lost or invented**.
+
+Coverage is a measured quantity, not a hope: `scripts/artist_cover.py` reports which of a reference pack's tiles your recordings actually put on screen, per recording, so you know which stage to play again.
+
+Step by step, with every command: **[docs/remastering-a-game.md](docs/remastering-a-game.md)**.
+
 ## Community packs
 
 Packs stay with their authors — this project only **validates and catalogs** them, so players have one trustworthy list to browse and pack makers get their work found.
@@ -147,7 +160,7 @@ Packs stay with their authors — this project only **validates and catalogs** t
 3. The Issue gets **labeled** — `pack:valid` or `pack:invalid`, plus what's inside (`assets:textures`, `assets:audio`, `patch:ips`/`patch:bps`, `console:*`) — with a comment citing the exact section of [MEP v1](docs/specs/MEP-v1.md) behind the verdict.
 4. Valid packs land in the **catalog** on the next refresh. Updated the pack? Comment `/revalidate` on the Issue; a daily check also re-runs when the link's content changes.
 
-Both formats are welcome: a plain **Mesen `hires.txt` HD pack** (all the existing NES community work) or a **full MEP `pack.json`** with textures, audio and synth presets. Making one? Start with the [pack authoring guide](docs/hd-pack-authoring.md).
+Both formats are welcome: a plain **Mesen `hires.txt` HD pack** (all the existing NES community work) or a **full MEP `pack.json`** with textures, audio and synth presets. Making one? Generate the base material with the [remastering guide](docs/remastering-a-game.md), then get it listed with the [pack authoring guide](docs/hd-pack-authoring.md).
 
 ## Built to stay correct
 
