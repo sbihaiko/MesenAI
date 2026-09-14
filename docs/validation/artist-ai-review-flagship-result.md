@@ -29,14 +29,21 @@ its number since that ADR isn't on `main` yet.)
 | --- | --- |
 | `correct` | 24 |
 | `wrong` | 7 |
-| `abstained` | 18 |
+| `abstained` | 3 |
 | `confidently_wrong` | **0** |
-| `unscored` (no ground truth for that ask) | 8 |
+| `unscored` (no label of this kind, or none at all) | 23 |
 | `scorable_asks` | 34 |
 
 Accuracy on non-abstained, scored answers: 24/31 = 77.4%. Abstention rate:
-18/49 = 36.7%. The deciding number is `confidently_wrong`: **zero**, out of
+3/34 = 8.8%. The deciding number is `confidently_wrong`: **zero**, out of
 every answer the reviewer gave a `high` confidence to.
+
+(The `abstained` count above was first measured as 18, and `unscored` as 8 —
+`score()` had a bug that folded any ask with no figure-kind label into
+`abstained` whether the reviewer had actually declined it or the ask was
+simply outside `--kind figure`'s scope, e.g. object/page/screen questions the
+reviewer answered normally. 15 of the 18 were the latter. Fixed on the same
+branch; the numbers here are post-fix.)
 
 All 7 wrong answers are the same shape: a `mixed` box (two fused figures —
 player and enemy sprites the recorder's adjacency grouping joined into one
