@@ -21,14 +21,36 @@ answer:
 - what that figure is;
 - which of the shapes on a page are art and which are HUD, fade steps or noise.
 
-Mesen's answer is a human. Its PPU viewer lets a person shift+right-click and
-copy every on-screen tile with its position, and `mkwong98`'s external editor
-turns that selection into an object and then into `hires.txt` rules. That works
-and it does not scale: on romhacking.net thread 30535 (April 2020) the artist
-given that tool and a purpose-written tutorial replied that he "couldn't really
-manage to do much with it" and that it "seems a bit overwhelming for starters".
-A capable tool nobody can drive is the failure mode this project is closest to
-repeating.
+Mesen's answer is a human, and the community's answer is a text editor.
+
+`mkwong98`'s external editor is the one serious attempt at automating the
+judgement, and it failed in the market. Measured across eight years and six
+forum threads: **six named people ever ran it, two ever completed a pack with
+it**, 451 total release-asset downloads, and a GitHub-wide search for its
+project format returns zero hits. On romhacking.net thread 30535 (April 2020)
+the artist handed that tool *and* a purpose-written tutorial replied that he
+"couldn't really manage to do much with it"; he never reported back, and went
+on to ship five packs by hand-writing `hires.txt`, crediting the editor in
+none of them. The three most prolific pack authors all knew about it and all
+stayed on text editors — the most prolific of them, in January 2024: "I keep
+using the old school approach... Over time, I have learned **Excel** can be
+extremely useful", and his Metroid pack ships that spreadsheet in the public
+download.
+
+Two things follow, and they are the design constraints of this ADR.
+
+**We are not competing with that editor. We are competing with Notepad and
+Excel.** A tool displaces a spreadsheet only by being faster on day one. This
+one was not, despite a better data model.
+
+**And it lost partly because the step before it was never solved.** The
+bottleneck the artists actually name is *recording*, not mapping: "they turned
+into a garbled mess... I don't even know how I would begin unscrambling them";
+and in 2024, unanswered, "I sometimes have to make several passes over a scene
+to get it to record all the sprites/tiles". A competent mapping tool fed
+garbled input is still useless. That second quote is also, independently, the
+per-stage/per-boss coverage finding of ADR-0182 and ADR-0184 §4 arriving from
+a user who had no way to act on it.
 
 Our own answer so far has been an AI acting as proxy for human vision — which
 is what the session's standing goal asks for — but ad hoc, unmeasured and
