@@ -309,7 +309,11 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		candidates.push_back(adjacency);
 	}
 
-	int edgeIndex = (int)MesenSheets::NextNameIndex(loadedConditionNames, "obj_nearby");
+	//uint32_t, not int: the counter no longer starts at 0, it starts wherever the
+	//loaded pack left off. Narrowing that to int would turn NextNameIndex's clamp
+	//into a negative index - and the name it guarantees is free into one that may
+	//not be - and would make incrementing past INT_MAX undefined.
+	uint32_t edgeIndex = MesenSheets::NextNameIndex(loadedConditionNames, "obj_nearby");
 	for(size_t index : MesenSheets::SelectTileNearby(candidates, kTileNearbyMinFrames, kTileNearbyMinProbability)) {
 		const MesenSheets::TileAdjacency& edge = candidates[index];
 		uint32_t a = edge.A, b = edge.B;
