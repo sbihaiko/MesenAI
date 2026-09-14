@@ -627,6 +627,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   golden packs). Stdlib only, no ROM; `test_artist_bg_kit.py` covers it on a
   synthetic pack of its own - `test_compose_engine.make_pack` paints every
   cell one flat colour, which is precisely the input this tool rejects.
+- **`artist_map.py` needs `--scale` set to the pack's own scale.** It
+  defaults to 1 and the mismatch is not caught until the acceptance test,
+  where `mep_build` hard-errors `painted at 1x while metatiles.png is at 4x -
+  all sheets of a pack share one <scale>`. Measured 2026-09-14 on the Zelda
+  TAS kit: with the default the round-trip fails outright; with `--scale 4` it
+  passes. Read the pack's `<scale>` and pass it.
 - `artist_map.py --out DIR --stage N --dump GRID.TXT --pack DIR [--scale N]
   [--names F] [--verify]` / `--slice PAINTED.PNG --map MAP.JSON` (F9.24,
   ADR-0183 §2.3) - the kit's **stage** half: the whole scrolling stage as one
@@ -740,6 +746,28 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   (wired into `make doc-checks`). Measured 2026-09-13 on the six per-stage
   golden packs: 8 leftovers before the fix, all tile 0 / blank under the
   boot palette `FF013403`; 0 after.
+- `cdl_tool.py report|union|regions|strip` - reads Mesen's Code/Data Logger
+  files (`.cdl`) for NES ROMs so a disassembly can cover only the bytes a run
+  actually used. The format is read off the Core, never assumed: `"CDLv2"` + a
+  little-endian PRG CRC32 + one flag byte per ROM byte
+  (`CodeDataLogger::HeaderSize`), a header-less older file loaded as-is with a
+  warning the way `LoadCdlFile` does, and for the NES a **PRG block followed by
+  a CHR ROM block** whose split comes from the ROM's own iNES header - a CHR
+  RAM game has no CHR block at all (`NesCodeDataLogger::InternalSaveCdlFile`).
+  Flags carried: Code/Data/JumpTarget/SubEntryPoint plus the NES-only
+  `NesCdlFlags::PcmData`; in the CHR block `Code` means the PPU drew the byte.
+  `report` prints PRG code/data/both/untouched with shares, the jump-target and
+  sub-entry-point counts, drawn-vs-total CHR bytes, and a per-16KB-bank table
+  that names the banks a run never entered. `union` is a bitwise OR across runs
+  (coverage here is always a union, never a maximum) and refuses two files
+  whose CRC32 headers disagree, naming both. `regions` coalesces contiguous
+  runs of one classification (`code`/`data`/`code+data`/`unused`) and floats
+  the biggest data-only runs to the top as **candidate** asset tables - the
+  output states in prose that classification is evidence of access, not of
+  meaning, and the tool names nothing (ADR-0183). `strip --keep used|unused`
+  mirrors `CodeDataLogger::StripData`'s `StripUnused`/`StripUsed`, writing
+  PRG+CHR without the iNES header. Stdlib only, no emulator and no ROM beyond
+  its header; `test_cdl_tool.py` covers it on programmatically built fixtures.
 - `validate_palette_variants.py` (F5.4b) - builds `headless_record` via
   `make capture-tool` if missing, records `roms/Zelda.nes` with the `hdpack`
   flag, and checks that `HdPackBuilder::ProcessTile` captures more than one
@@ -921,6 +949,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   shapes, `required_mei_pack_fields`/`mei_entry_conforms` per kind,
   `resolve_kind`'s mep-meta-first / Status-fallback / None-when-unmapped
   precedence; PASS/FAIL per check, exit 0 only if all pass.
+- `python3 scripts/test_cdl_tool.py` - `cdl_tool.py` on fixtures built in
+  memory (no ROM, no committed binary): CDLv2 header parse and the rejection
+  of an empty/truncated file, the legacy CRC-less path, a trainer shifting the
+  PRG window, the CHR split for both a CHR ROM and a CHR RAM ROM, a CRC
+  mismatch refusing the union and writing nothing, region coalescing at both
+  boundaries, and both strip directions including the CHR block; PASS/FAIL per
+  check, exit 0 only if all pass.
 - `python3 scripts/test_mep_recipe.py` - MEP Recipe v1 interpreter
   (unknown op / escaping path rejected; synthetic split-pack dry-run is
   `mep_lint`-clean) plus `assemble-sources` (absent/present/refused per
