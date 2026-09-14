@@ -189,11 +189,34 @@ numbers are believed.
 | `0032:99` + `00B0:FE` (barrier) | 4096 | **2512x240** |
 
 Lives alone buy survival and no extra ground: a blind "hold right" script dies
-against the same obstacle, and more lives only grant more attempts at it. The
-barrier adds 208 px and 780 cells. That is real and it is 9% of the distance to
-the reference pack's 3348 px — the rest is a gameplay-search problem, as F9.22
-was, and not a cheat problem. §3's ranking holds: the cheapest cheat is tried
-first, and it is measured rather than assumed to help.
+against the same obstacle, and more lives only grant more attempts at it.
+
+**And the barrier's 208 px were not the barrier's.** Contra's `stage1-run.txt`
+is 3300 frames — 55 s of input inside a 300 s run, so for 82% of the recording
+nothing was pressed and the player simply stood. Repeating the script's body to
+cover the whole run reaches **the same 2512x240, with no cheat at all**:
+
+| run | input | cheat | panorama |
+|---|---|---|---|
+| clean | 55 s | none | 2304x240 |
+| coverage | 55 s | lives | 2304x240 |
+| coverage | 55 s | lives + barrier | 2512x240 |
+| **clean** | **659 s** | **none** | **2512x240** |
+| coverage | 659 s | lives | 2512x240 |
+
+Two unrelated configurations landing on exactly 2512x240 / 9420 cells says 2512
+is a wall the blind script cannot pass, whatever keeps it alive. Reaching it is
+a matter of *effective input time* — either press buttons for the whole run, or
+survive long enough for the buttons you do press to count. The first costs
+nothing and changes nothing the game draws, so §3's ranking holds harder than
+it was written: the cheapest lever is not the cheapest **cheat**, it is no
+cheat.
+
+What the barrier does buy, measured separately, is **variety**: 2349
+`(tileData, palette)` keys against the clean run's 2299, because a run that
+survives sees more of what it walks past. It does not buy CHR completeness —
+93% clean against 92% with the barrier, the clean run slightly ahead because
+dying loads banks an immortal run never sees (§4, now a number).
 
 **§2 confirmed by eye.** Figure grids generated from the barrier run show a
 running cycle whose every phase carries a large pale ellipse fused into the
