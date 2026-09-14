@@ -73,7 +73,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   runs one bootstrap record per `<stage>.mss`+`<stage>.txt` pair into its
   own pack folder. `headless_record` flags: `state=<f.mss>` (the run and its
   script count from the state's frame), `save-state=<f.mss>` (written only
-  when the run reached its frame target). Later stages are reached
+  when the run reached its frame target), `cheat=AAAA:VV[:CC]` (repeatable;
+  ADR-0184 — **RAM addresses `$0000-$07FF` only**, the `NesCustom` form; a
+  Game Genie letter code or a PRG address ends the run rather than warning,
+  because a PRG patch on a CHR RAM game can reach the tile bytes we record as
+  the game's art. Applied after `LoadRom` and after any state, since
+  `Emulator::LoadRom` clears the cheat list. Only a kit's **background**
+  surfaces — stage maps, pattern pages — may be built from a cheated run: the
+  barrier sprite and the swapped palette land in the figure grids. ⚠️
+  `CheatCodeAbi` mirrors `CheatCode`; `CheatType` is one byte, and the
+  `static_assert` on `sizeof == 17` is there because a wrong mirror made
+  `AddCheat` refuse every code in silence). Later stages are reached
   **headlessly**: short runs chained state to state, steered by RAM read off
   the `.mss` with `mss_ram.py <f.mss> [addr…] | --diff <other.mss>` (header
   version aware: format 3 carries a 40-byte SHA-1 the loader skips). A
