@@ -201,6 +201,15 @@ roms/**
 runs
 runs/*
 runs/**
+# `out/` is the output directory every example in
+# docs/remastering-a-game.md writes to: recorded packs, the kit, the
+# mesen-home sandbox, grid dumps and, beside them, a copy of the ROM and the
+# `.mss` save states. None of that is ever versioned (`.mss` is a save state
+# and the ROM is the ROM), so a reader who follows the guide and runs
+# `git add -A` must not be able to commit it by accident.
+out
+out/*
+out/**
 claudei.sh
 
 

@@ -164,6 +164,25 @@ scripts/headless_record roms/Contra.nes 60 out/mint \
 `.mss` files are **never versioned** — a CHR-RAM state carries the game's
 graphics. Keep them in your working directory.
 
+### Check the route before you trust the recording
+
+A route is a blind script, and a blind script dies. When it does, the run keeps
+going and records the death animation, the game-over card and the title screen
+instead of the stage — a recording that looks healthy by file count and holds
+almost none of the art you wanted. Verify with the `screenshot` flag before you
+spend a `bootstrap` run on the route:
+
+```sh
+scripts/headless_record roms/Metroid.nes 60 out/probe screenshot hdpack-off \
+  input=scripts/stages/metroid/stage1-run.txt
+```
+
+It runs the route and saves the **final** frame to
+`<dir of output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png`. Look at it.
+A frame reading `GAME OVER` or `PASS WORD` means the route died before its
+budget; shorten the run to the part that survives, or fix the route. Repeat at a
+few different `<seconds>` values to find where it dies.
+
 ### Two flags worth knowing before you record
 
 - `MESEN_SHEET_GRID_DUMP=<file>` (environment variable) writes the grid stream
@@ -216,6 +235,19 @@ state with the tiles **only that state** exhibited. An artist image counts as
 *sprite* when at least half its seen tiles land on one of the recorded packs'
 sprite sheets, *background* otherwise, and *unseen* when nothing of it was on
 screen. The per-state table is the one that tells you which stage to play again.
+
+**A reference pack that patches the ROM is not comparable to a recording of the
+stock ROM.** `artist_cover.py` matches on the tileData string, and a pack
+shipping a `<patch>` directive keys its art against the *patched* game. The
+community Metroid pack is the worked example: it declares the stock
+`<supportedRom>` SHA1, then applies `mmm.ips`. Stock Metroid (USA) is mapper 1
+with **CHR RAM**, so a recording keys every tile by its 32-hex-character pattern
+(`<tile>0,3E7FFF7007FFFC1E00061F000007D01E,...`), while the patched ROM has CHR
+ROM and the artist keys by index (`<tile>0,00,...`). The two namespaces cannot
+intersect, and today the tool reports that as a flat `0/1465` with no warning —
+see issue #225. Check the reference for `<patch>` lines and compare a couple of
+`<tile>` rows from each file before you believe a coverage number, in either
+direction.
 
 Measured on Contra against the Contra80s reference: blind route recording
 reached **53.8%**, adding eleven per-stage and per-boss sessions took it to
@@ -413,6 +445,8 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A movie-driven run aborts immediately | `.fm2` (unsupported) or an unrecognised container. Convert with `fm2_to_bk2.py`; the Core reads `.bk2`/`.mmo` by content, not extension. |
 | A movie-driven run fails with a `sync-watch` finding | The movie desynced from your ROM revision. That is the gate working; get a movie for your revision. |
 | A recording has almost no sprites | Frames after the retained-stream cap are dropped. Use several shorter runs (`record_stages.sh`) instead of one long one. |
+| A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
+| `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
 | The sprite sheet's top rows are wrong | HUD runs along a fixed row and is excluded; if your game puts HUD elsewhere, check the band before trusting those cells. |
 | A figure is two figures fused together | Sprite grouping is by adjacency, so two bodies that touch become one box. Mark it `multiple` in a review, or split it by hand — the kit's box is a grouping, not a truth. |
