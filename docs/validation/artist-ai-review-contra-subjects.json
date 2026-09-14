@@ -1,0 +1,61 @@
+{
+  "_comment": "Ground-truth subject map for scoring an AI kit review of Contra stage 1 (scripts/artist_ai_review.py truth --subjects). Each key is a subject; each value lists the files a hand-made reference HD pack gives that subject. Only the reference pack's hires.txt is read - its PNGs are never opened, copied or sent anywhere. Files left out on purpose: Chr_N.png and WIP*.png are whole-pattern-page replacements that cover every tile in the game and so name nothing, and magenta.png is a debug fill.",
+  "_reference": "roms/spike-contra80s/mesen-home/HdPacks/Contra (USA)/hires.txt",
+  "player": [
+    "BillRizer.png",
+    "BillRizerPantsGlitchFix.png",
+    "LanceBeanPants.png",
+    "Ash1.png",
+    "AshRed1.png",
+    "Norris.png"
+  ],
+  "enemy": [
+    "Enemies.png",
+    "Enemies_old.png",
+    "Enemies_storm.png",
+    "Enemies_Terminator.png",
+    "Enemies_Gunner.png",
+    "Enemies_xeno_runner2.png",
+    "Enemies-Running_Soldier-1.png",
+    "xenomorph.png",
+    "xenomorph_white.png"
+  ],
+  "tank": [
+    "LargeTank1.png",
+    "LargeTank2.png",
+    "LargeTank3.png"
+  ],
+  "door": [
+    "Stage1BaseDoor1.png",
+    "Stage1BaseDoor2.png",
+    "Stage1BaseDoor3.png"
+  ],
+  "bridge": [
+    "StageBridge1.png",
+    "StageBridge2.png",
+    "StageBridge3.png"
+  ],
+  "water": [
+    "WaterFrame1.png",
+    "WaterFrame2.png",
+    "WaterFrame3.png",
+    "WaterFrame4.png"
+  ],
+  "boss": [
+    "L6-Boss-1.png",
+    "L6-Boss-1a.png",
+    "L6-Boss-1b.png"
+  ],
+  "title": [
+    "Level-TitleScreens-1.png",
+    "Level-TitleScreens-2.png",
+    "Level-TitleScreens-3.png",
+    "Level-TitleScreens-4.png",
+    "Level-TitleScreens-5.png",
+    "Level-TitleScreens-6.png",
+    "Level-TitleScreens-7.png",
+    "GameOver1.png",
+    "GameOver2.png",
+    "GameOver1and2.png"
+  ]
+}
