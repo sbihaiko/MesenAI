@@ -112,6 +112,23 @@
 //is scripts/record_viewer.py. Publishing is lossy-latest on purpose (a slow
 //viewer must skip, never block the run) and off by default; if the folder
 //cannot be written the run logs one line and continues.
+//With "cdl=<file.cdl>" the run also emits the Code/Data Logger state: the map
+//of which ROM bytes the run executed as code and which it read as data. This
+//needs the emulator's Debugger attached (the CDL feeders live in NesDebugger/
+//GbDebugger/SmsDebugger and only run while one exists), so the flag calls
+//InitializeDebugger before the run - see the "cdl=" block in main(). An
+//existing file at <file.cdl> is loaded first, so coverage accumulates across
+//runs as a union, never a maximum. The run fails (non-zero exit) if the CDL
+//came back with zero code bytes, rather than quietly writing an empty map.
+//One consequence: HeadlessInputEngine refuses to park the run from inside the
+//frame while a debugger is attached (Emulator::Pause() would step the debugger
+//from the emulation thread, which deadlocks on DebugBreakHelper), and logs
+//"the debugger is attached - not pausing". A "cdl=" run therefore stops from
+//this thread instead, the instant the core's frame counter reaches the target
+//- the same counter, one poll later. It lands on the target frame or the one
+//after it, exactly like a plain run, but that is a poll and not the in-frame
+//guarantee of ADR-0157: read the "capture finished" line for the frame the run
+//actually ended on rather than assuming it.
 //A scratch home folder is created next to the output; the NES game database
 //is copied into it automatically when the tool runs from the repo root.
 #include "Core/Shared/SettingTypes.h"
@@ -128,6 +145,9 @@
 //rules can be trusted to fail a run and which one only names a window.
 #include "Shared/MovieSyncGate.h"
 #include "Utilities/LiveRecordFormat.h"
+//"cdl=" - the CDL exports take the Core's own MemoryType enum; that header is
+//a bare enum with no further dependency, so it is included rather than mirrored.
+#include "Core/Shared/MemoryType.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -195,6 +215,25 @@ static const uint8_t CheatTypeNesCustom = 2;
 //register, and a cheat there could change bytes the game unpacks into CHR RAM
 //- on Contra that is the tile data we record as the game's own art.
 static const uint32_t NesInternalRamEnd = 0x0800;
+
+//Same ABI as CdlStatistics in Core/Debugger/DebugTypes.h (see the TimingInfoAbi
+//note above about why these are mirrored locally). DebugTypes.h itself pulls in
+//DisassemblyInfo.h and the rest of the debugger headers, which this harness has
+//no business compiling against.
+struct CdlStatisticsAbi
+{
+	uint32_t CodeBytes;
+	uint32_t DataBytes;
+	uint32_t TotalBytes;
+
+	uint32_t JumpTargetCount;
+	uint32_t FunctionCount;
+
+	//CHR ROM (NES-specific)
+	uint32_t DrawnChrBytes;
+	uint32_t TotalChrBytes;
+};
+static_assert(sizeof(CdlStatisticsAbi) == 28, "CdlStatisticsAbi must match CdlStatistics in Core/Debugger/DebugTypes.h");
 
 extern "C"
 {
@@ -291,7 +330,22 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	bool IsRunning();
 	void Resume();
 	bool IsPaused();
+	//"cdl=" - see the stop-the-run block in waitForPause below.
+	void Pause();
 	void GetLog(char* outBuffer, uint32_t maxLength);
+	//"cdl=" - InteropDLL/DebugApiWrapper.cpp. The CDL is only fed while a
+	//Debugger exists, so InitializeDebugger is what turns the capture on;
+	//ResumeExecution releases the break the Debugger's constructor takes when
+	//it is created while the emulator is paused - which is exactly the state a
+	//headless run is in before Resume().
+	void InitializeDebugger();
+	bool IsDebuggerRunning();
+	void ResumeExecution();
+	CdlStatisticsAbi GetCdlStatistics(MemoryType memoryType);
+	uint32_t GetCdlFunctions(MemoryType memoryType, uint32_t functions[], uint32_t maxSize);
+	void ResetCdl(MemoryType memoryType);
+	void LoadCdlFile(MemoryType memoryType, char* cdlFile);
+	void SaveCdlFile(MemoryType memoryType, char* cdlFile);
 	void Stop();
 	void Release();
 }
@@ -316,6 +370,46 @@ namespace
 			return kCpuTypeGameboy;
 		}
 		return kCpuTypeSms; //.sms/.gg/.sg/.col
+	}
+
+	//"cdl=" - the ROM memory region the Code/Data Logger covers, per console.
+	//There is one CDL per ROM memory type; on the NES the CHR-ROM one is owned
+	//by the PRG-ROM logger (NesCodeDataLogger) and is written into the same
+	//file, so NesPrgRom is the only handle this tool needs.
+	MemoryType CdlMemoryTypeFor(uint8_t cpuType)
+	{
+		switch(cpuType) {
+			case kCpuTypeGameboy: return MemoryType::GbPrgRom;
+			case kCpuTypeSms: return MemoryType::SmsPrgRom;
+			default: return MemoryType::NesPrgRom;
+		}
+	}
+
+	//GetStatistics() fills CodeBytes/DataBytes/TotalBytes (and, on the NES, the
+	//CHR pair); FunctionCount is left at zero there, so the number of
+	//discovered subroutine entry points is counted from GetCdlFunctions - the
+	//CdlFlags::SubEntryPoint bytes.
+	uint32_t CountCdlFunctions(MemoryType memType)
+	{
+		//One entry per PRG byte is the hard ceiling; 64K covers any NES/GB/SMS
+		//ROM's realistic function count without a second call.
+		std::vector<uint32_t> functions(65536);
+		return GetCdlFunctions(memType, functions.data(), (uint32_t)functions.size());
+	}
+
+	void PrintCdlStatistics(const char* label, const CdlStatisticsAbi& stats, uint32_t functionCount)
+	{
+		//DataBytes already excludes bytes that are both code and data, so the
+		//three buckets partition the ROM and "untouched" is the remainder.
+		uint32_t untouched = stats.TotalBytes - stats.CodeBytes - stats.DataBytes;
+		printf("cdl %s: prg total=%u code=%u data=%u untouched=%u (%.1f%% touched) functions=%u\n",
+			label, stats.TotalBytes, stats.CodeBytes, stats.DataBytes, untouched,
+			stats.TotalBytes ? 100.0 * (stats.CodeBytes + stats.DataBytes) / stats.TotalBytes : 0.0,
+			functionCount);
+		if(stats.TotalChrBytes > 0) {
+			printf("cdl %s: chr drawn=%u total=%u (%.1f%% drawn)\n", label,
+				stats.DrawnChrBytes, stats.TotalChrBytes, 100.0 * stats.DrawnChrBytes / stats.TotalChrBytes);
+		}
 	}
 
 	//LiveSnapshot and the ComposePpm/ComposeSpritesJson/ComposeStatusJson/
@@ -489,7 +583,7 @@ int main(int argc, char** argv)
 			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
-			"       [hud-message=<title>|<msg>] [live=<ms>]\n", argv[0]);
+			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n", argv[0]);
 		return 1;
 	}
 	std::string rom = argv[1];
@@ -507,6 +601,7 @@ int main(int argc, char** argv)
 	mep.BootstrapEnhancementFolder = false; //opt-in headless ("bootstrap" flag) - it writes beside the ROM
 	std::string mepDisable;
 	std::string stateFile;
+	std::string cdlPath; //"cdl=" - see the Code/Data Logger block below
 	//F9.22: written when the run reaches its frame target, so a stage reached
 	//by one scripted run is the start of the next - a per-stage recording
 	//roadmap needs states minted by the same tool that consumes them.
@@ -616,6 +711,8 @@ int main(int argc, char** argv)
 				return 1;
 			}
 			cheats.push_back(cheat);
+		} else if(strncmp(argv[i], "cdl=", 4) == 0) {
+			cdlPath = argv[i] + 4;
 		} else if(strncmp(argv[i], "state=", 6) == 0) {
 			stateFile = argv[i] + 6;
 		} else if(strncmp(argv[i], "save-state=", 11) == 0) {
@@ -905,6 +1002,14 @@ int main(int argc, char** argv)
 				return false;
 			}
 			uint32_t frame = HeadlessGetFrameCount();
+			//"cdl=" - with a debugger attached the run will not park itself
+			//(HeadlessInputEngine::ApplyFrame logs "the debugger is attached -
+			//not pausing"), so the stop is issued from here. Pause() routes
+			//through Debugger::Step, which is safe on this thread and not on
+			//the emulation one.
+			if(!cdlPath.empty() && frame >= totalFrames) {
+				Pause();
+			}
 			if(frame != lastFrame) {
 				lastFrame = frame;
 				lastProgress = elapsed();
@@ -971,6 +1076,38 @@ int main(int argc, char** argv)
 			printf("cheat applied: %s (RAM address, ADR-0184)\n", c.Code);
 		}
 	}
+	//"cdl=" - Code/Data Logger capture. The CDL is fed from the Debugger's
+	//instruction/read hooks (NesDebugger::ProcessInstruction / ProcessRead and
+	//the GB/SMS equivalents), which exist only while a Debugger is attached, so
+	//nothing is logged unless InitializeDebugger is called here - before the
+	//run, and after LoadRom/state, since a Debugger is built around the loaded
+	//console. An existing file is loaded first so coverage is the union of
+	//every run that wrote to this path (LoadCdlFile with autoResetCdl=false:
+	//it seeds the map, and the run ORs its own flags on top).
+	MemoryType cdlMemType = CdlMemoryTypeFor(CpuTypeFromExtension(rom));
+	if(!cdlPath.empty()) {
+		InitializeDebugger();
+		if(!IsDebuggerRunning()) {
+			fprintf(stderr, "cdl: the debugger did not start - no CDL would be recorded\n");
+			return 1;
+		}
+		if(std::filesystem::exists(cdlPath)) {
+			LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
+			CdlStatisticsAbi seed = GetCdlStatistics(cdlMemType);
+			printf("cdl seeded from %s: code=%u data=%u of %u prg bytes\n",
+				cdlPath.c_str(), seed.CodeBytes, seed.DataBytes, seed.TotalBytes);
+		} else {
+			//NesDebugger's constructor has just auto-loaded <home>/Debugger/
+			//<rom>.cdl, and its destructor writes that file back at teardown -
+			//so without this reset a second run in the same scratch home would
+			//silently start from the first run's coverage, and a "new" map
+			//would not be new. The seed is the file named by "cdl=", or
+			//nothing; never the debugger folder's own copy.
+			ResetCdl(cdlMemType);
+			printf("cdl: new map at %s (no existing file to accumulate onto)\n", cdlPath.c_str());
+		}
+	}
+
 	TimingInfoAbi timing = GetTimingInfo(CpuTypeFromExtension(rom));
 	printf("ROM loaded: %s%s\n", rom.c_str(), pal ? " [region forced: PAL]" : "");
 	printf("emulated fps: %.3f (master clock %u Hz)\n", timing.Fps, timing.MasterClockRate);
@@ -1154,6 +1291,13 @@ int main(int argc, char** argv)
 	//(except in movie mode - see onTick above).
 	HeadlessSetPauseFrame(totalFrames);
 	Resume();
+	if(!cdlPath.empty()) {
+		//The Debugger was constructed while the emulator was paused, and
+		//Debugger::Debugger takes a one-instruction break in that case. Release
+		//it, or the run parks on its first instruction and never reaches its
+		//frame target.
+		ResumeExecution();
+	}
 	bool reachedTarget = waitForPause("recording", onTick);
 
 	//ADR-0169: one final status so the viewer can show "done" rather than stale
@@ -1348,6 +1492,42 @@ int main(int argc, char** argv)
 			printf("state NOT saved (run incomplete): %s\n", saveStateFile.c_str());
 		}
 	}
+	//"cdl=" - write the map, then prove it is not empty and that it reads back
+	//as what was written. A capture that silently records nothing has cost this
+	//project days twice (a cheat ABI mismatch, a movie that played unsynced),
+	//so an all-zero CDL fails the run instead of leaving a plausible file on
+	//disk.
+	bool cdlFailed = false;
+	if(!cdlPath.empty()) {
+		CdlStatisticsAbi stats = GetCdlStatistics(cdlMemType);
+		uint32_t functionCount = CountCdlFunctions(cdlMemType);
+		PrintCdlStatistics("recorded", stats, functionCount);
+		if(stats.TotalBytes == 0) {
+			fprintf(stderr, "cdl: no PRG ROM memory region for this ROM - nothing to log\n");
+			cdlFailed = true;
+		} else if(stats.CodeBytes == 0) {
+			fprintf(stderr, "cdl: zero code bytes after %u frames - the debugger was attached but nothing was logged\n", HeadlessGetFrameCount());
+			cdlFailed = true;
+		} else {
+			SaveCdlFile(cdlMemType, (char*)cdlPath.c_str());
+			//Round-trip: reload what was just written and require identical
+			//statistics. This catches a truncated write and, on the NES, a CHR
+			//block that did not survive the append/split in NesCodeDataLogger.
+			LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
+			CdlStatisticsAbi reread = GetCdlStatistics(cdlMemType);
+			uint32_t rereadFunctions = CountCdlFunctions(cdlMemType);
+			bool sameStats = reread.CodeBytes == stats.CodeBytes && reread.DataBytes == stats.DataBytes &&
+				reread.TotalBytes == stats.TotalBytes && reread.DrawnChrBytes == stats.DrawnChrBytes &&
+				reread.TotalChrBytes == stats.TotalChrBytes && rereadFunctions == functionCount;
+			if(sameStats) {
+				printf("cdl written: %s (round-trip verified)\n", cdlPath.c_str());
+			} else {
+				PrintCdlStatistics("reloaded", reread, rereadFunctions);
+				fprintf(stderr, "cdl: %s does not read back as what was written\n", cdlPath.c_str());
+				cdlFailed = true;
+			}
+		}
+	}
 	if(dumpLog) {
 		std::string log(65536, '\0');
 		GetLog(log.data(), (uint32_t)log.size());
@@ -1361,5 +1541,5 @@ int main(int argc, char** argv)
 	//A run the sync gate failed is a corrupt recording, not a short one: its
 	//art comes from a playthrough nobody intended (ADR-0185 sec. 4 as amended,
 	//issue #201), so it must never be archived as if it were the movie's.
-	return reachedTarget && !captureFailed && !syncGateFailed ? 0 : 1;
+	return reachedTarget && !captureFailed && !syncGateFailed && !cdlFailed ? 0 : 1;
 }
