@@ -141,6 +141,29 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   stops at the first provider that returns true — so the run's end is a
   host-side `Pause()` from the poll loop and lands a frame or two past the
   target instead of exactly on it.
+- `headless_record cdl=<file.cdl>` writes the run's **Code/Data Logger** map:
+  which ROM bytes were executed as code and which were read as data, in the
+  Core's own `CDLv2` format (`Core/Debugger/CodeDataLogger.cpp`; on the NES the
+  CHR-ROM map is appended to the PRG one in the same file). The CDL is only fed
+  while a `Debugger` exists, so the flag calls `InitializeDebugger` before the
+  run — which costs about **1.7x** the wall clock of the same run without it
+  (measured 2026-09-14, 3606 frames: Zelda 7.5s → 12.5s, Mega Man 3 7.5s →
+  12.6s). Three traps the flag already handles, and that anything reading a
+  `.cdl` must keep in mind:
+  - `HeadlessInputEngine::ApplyFrame` refuses to park the run from inside the
+    frame while a debugger is attached, so a `cdl=` run is stopped from the
+    host thread the moment the core's frame counter reaches the target. It
+    lands on the target frame (measured) rather than target+1, but that is a
+    2 ms poll and not ADR-0157's in-frame guarantee — read the `capture
+    finished` line for the frame the run actually ended on.
+  - `NesDebugger`'s constructor auto-loads `<home>/Debugger/<rom>.cdl` and its
+    destructor writes it back, so consecutive runs sharing a scratch home would
+    accumulate invisibly. The flag resets the map when `<file.cdl>` does not
+    exist: the seed is the file named by `cdl=`, or nothing.
+  - Coverage is a **union**, never a maximum: an existing `<file.cdl>` is
+    loaded first and the run ORs its flags on top. The run fails loudly
+    (non-zero exit, no file written) when the map comes back with zero code
+    bytes, and it reloads what it wrote and requires identical statistics.
 - `accuracy_compare.py` (H10, ADR-0162) is the self-comparative accuracy
   harness: it runs an accuracy suite against **one** binary in several arms
   (vanilla, HD Pack Builder recording, a loose HD pack, a MEP container) and

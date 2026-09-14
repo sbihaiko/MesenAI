@@ -1,9 +1,11 @@
 # ADR-0186: A recording also yields a code/data map, and the only ROM we disassemble is the part we executed
 
 - Status: accepted (2026-09-14, at the user's direction: "inclua sua
-  recomendação no goal e construa em paralelo"; the harness flag and the
-  offline tool are being built as slice F9.27 of
-  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`)
+  recomendação no goal e construa em paralelo"; shipped as slice F9.27 of
+  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`). **Amended the same
+  day** — the Context's art-coverage justification was withdrawn after
+  measuring how the reference pack was actually built; see "Amended
+  2026-09-14" below. The Decision is unchanged.
 - Date: 2026-09-14
 - Related: ADR-0183 (the artist kit — §3 "evidence and inference are never
   confused" and the rule that no generator invents a name both carry over
@@ -131,3 +133,58 @@ object, and the only one this project has standing to produce.
   total CHR bytes is measured at the ROM, where ADR-0182's coverage is measured
   at the recorder. Two measurements of the same thing from different ends is
   how the barrier-cheat mistake was caught, and it is worth having again.
+
+## Amended 2026-09-14: the coverage justification is withdrawn
+
+A teardown of `Contra80s` — the reference pack this whole effort measures
+itself against — establishes that its author never had the problem this ADR's
+Context opens with, and did not solve coverage with anything resembling
+analysis.
+
+**What the evidence says.** The shipped release carries 336 PNGs and no source
+of any kind: no layered file, no palette, no script, no `.cdl`, no
+disassembly, and nothing anywhere in the repo, the release, the 1822 comment
+lines inside `hires.txt` or the linked threads suggesting awareness that Contra
+(USA) keeps its CHR RLE-compressed in PRG. Coverage was reached by **ten
+separate Pack Builder recording sessions**, one per stage plus dedicated ones
+for the stage-2 and stage-4 bosses, distinguishable in the shipped `hires.txt`
+by section headers ("WIP5 - Stage 2 Boss", "Stage 4a - Boss", "Stage 7 -
+Tiles") and by a per-session filename prefix on each session's pattern pages.
+
+**Why that defeats the argument.** The emulator hands over the *decompressed*
+pattern page at the moment the game assembles it, already in the palette the
+game used. Recovering the compressed blob from PRG buys tiles the game never
+assembles — and a tile with no screen, no palette and no trigger is not
+remastering material. The route from 53.8% to full coverage is to record again
+from a different entry point, not to read further into the ROM.
+
+**What is withdrawn.** The Context's framing of this ADR as the answer to "the
+328 Contra tiles no run unpacks" and to the colour gap. Neither is a code/data
+map's job. That framing also travelled into the F9.27 slice row and into the
+session's goal note, and is corrected in both.
+
+**What stands, and why this ADR is not superseded.** The Decision is unchanged
+and every clause of it is still earned:
+
+- §1 and §2 give a per-run, unioned record of **what code ran and what it
+  touched**, which is the only artifact we have that answers questions about
+  the game's behaviour rather than its output. `SubEntryPoint` marking makes
+  function discovery a side effect of playing.
+- The CHR logger's drawn-vs-total byte count is a coverage measurement taken
+  **at the ROM**, where every other number we have is taken at the recorder.
+  Two independent measurements of the same quantity is exactly how ADR-0184's
+  barrier-cheat error was caught, and the per-stage recording campaign this
+  amendment endorses is precisely the thing that needs an independent check.
+- §3's loud-failure gate and §4's access-is-not-meaning rule are general and
+  cost nothing.
+
+So: this is a **program-analysis** tool that a recording produces for free, not
+an art-extraction tool. Stated that way it is worth its 1.67x run cost. Stated
+the other way it was going to send us reading PRG for tiles no artist could
+use, and it is better to lose the justification now than to spend a week
+proving it empirically.
+
+**Method note, which is the part worth keeping.** The finding came from asking
+how somebody who already succeeded did it, before spending more effort on our
+own theory. That question cost one agent and returned a route we can act on
+this week; the theory it displaced had already cost days.
