@@ -2,6 +2,7 @@
 """artist_chr_kit — complete a recorded pack's CHR pages from the ROM (PRD F9.24).
 
     scripts/artist_chr_kit.py <recorded pack dir> --rom <path.nes> [--out DIR]
+                              [--also <other recorded pack dir>]...
                               [--names names.json] [--fill-rules none|observed|all]
                               [--verify] [--quiet]
 
@@ -34,12 +35,36 @@ Per bank kind:
   scan it already writes (`HdPackBuilder::AddPrgScanTiles`, bank ids
   `0x504247xx`) and its blank-tile bucket (`Chr_FFFFFFFF_*`).
 
+A stage is recorded more than once (ADR-0184 §2: a clean pass and a coverage pass
+under a RAM-only cheat), and neither run dominates the other — an immortal run
+travels further, a mortal one sees the banks that death, respawn and GAME OVER
+load. `--also <pack>` therefore takes **another recording of the same ROM as
+additional evidence**. It is evidence, not a second source of truth (ADR-0183
+§1): the pack named on the command line stays the pack the kit is for, its own
+recorded cells always win, and a donated cell only ever fills a hole.
+
+**Order of preference per cell of a bank's rank-0 page**, in this order and no
+other (`write_bank` implements it as one if/elif chain):
+
+1. this pack's own cell recorded on this page — `evidence`;
+2. a cell this bank recorded on a lower-ranked page — `borrowed`, still this
+   pack's evidence, another palette rank of it;
+3. a cell another recording of the same ROM recorded — `donated`, `seen: true`
+   because a real run really drew it, but not this pack's own evidence, so the
+   sidecar names the run it came from and the legend gives it its own colour;
+4. a cell read statically out of the ROM — `fill`, `seen: false`;
+5. nothing — `empty`, a hole this tool refuses to paint.
+
 Honesty rules this tool keeps:
 
 * a cell the recording put on this page is copied **byte for byte** from the
   recorded page, so a rebuilt pack renders exactly what it rendered before;
 * a cell this bank recorded on a lower-ranked page is moved up onto the rank-0
   page — real evidence under another palette, marked `borrowed`;
+* a cell another recording of the same ROM recorded is pasted from that run's
+  own page, marked `donated`, blue in the legend, and carries the donor's path,
+  page and slot in `Chr_<n>.json`; a donor is refused unless its
+  `<supportedRom>` sha1 is present and equal to this pack's;
 * a cell filled from the ROM is rendered nearest-neighbour (the recorder's own
   pages go through a smoothing filter, so the fill is visibly crisper) and is
   marked `seen: false` in `Chr_<n>.json`, amber in `Chr_<n>.legend.png`, and
@@ -95,6 +120,9 @@ DEFAULT_PALETTE_ARGB = [
 # Legend washes, RGBA. Painted over the page at 40 % so the art stays readable.
 LEGEND_EVIDENCE = (0x2E, 0xA0, 0x43, 0xFF)
 LEGEND_BORROWED = (0x8A, 0xA0, 0x26, 0xFF)
+# A donated cell is evidence, but not this pack's: blue reads as neither the
+# green/olive family (this pack saw it) nor the amber one (nobody saw it).
+LEGEND_DONATED = (0x2F, 0x81, 0xF7, 0xFF)
 LEGEND_FILL = (0xE3, 0x9A, 0x0B, 0xFF)
 LEGEND_EMPTY = (0xC4, 0x28, 0x28, 0xFF)
 
@@ -362,6 +390,13 @@ class Bank:
         for page in self.pages:
             for slot in page.rows:
                 self.art.setdefault(page.index_of_slot(slot), (page, slot))
+        # index -> donation dict, from a second recording of the same ROM. Only
+        # ever set for an index this pack's own `art` does not hold.
+        self.donated: dict[int, dict] = {}
+        # False when the pack records no CHR bank hash and the partition was
+        # recovered structurally: two such banks of two different recordings
+        # cannot be matched to each other, so they are never donated to.
+        self.identity_known = True
         self.fills: dict[int, dict] = {}
         self.notes: list[str] = []
         self.transparent_rgba = None    # RGBA of colour 0 on a sprite bank
@@ -442,6 +477,7 @@ def collect_banks(pack: Pack, pages: list[Page]) -> list[Bank]:
         banks.append(Bank(v[0].chr_bank_id if isinstance(k, str) else k, v))
     for v in _regroup_without_hashes(homeless):
         bank = Bank(0, v)
+        bank.identity_known = False
         bank.notes.append(
             "this pack records no CHR bank hash (an older recorder); this bank is "
             "the largest set of pages that never disagree about a tile index, "
@@ -516,8 +552,15 @@ def _pattern(row: TileRow):
 
 
 def pattern_of(bank: Bank, index: int, rom: Rom):
-    """The 16 pattern bytes of this bank's tile `index`, when they are known."""
+    """The 16 pattern bytes of this bank's tile `index`, when they are known.
+
+    Falls back to a donated cell (`--also`): a second run of the same ROM having
+    drawn that index is evidence about this bank's contents just as much as this
+    run's own cell is, so it may anchor a PRG block like any other."""
     hit = bank.art.get(index)
+    if hit is None:
+        donation = bank.donated.get(index)
+        hit = (donation["page"], donation["slot"]) if donation else None
     if hit is not None:
         page, slot = hit
         row = page.rows[slot]
@@ -567,6 +610,108 @@ def learn_palette(banks, images, rom: Rom) -> PaletteTable:
     return table
 
 
+# --- second recordings (--also) ---------------------------------------------
+
+
+def _real_sha1(h) -> bool:
+    """A `<supportedRom>` that actually identifies a ROM. A pack recorded before
+    the builder filled the field in carries 40 zeros, which identifies nothing."""
+    return bool(h) and len(h) == 40 and set(h) != {"0"}
+
+
+class Donor:
+    """A second recording of the same ROM, read only as evidence for holes.
+
+    Never a second source of truth (ADR-0183 §1): a donor is not merged into the
+    pack, contributes no `hires.txt` rule, and cannot displace a cell the primary
+    pack recorded itself. It is refused outright unless it is provably the same
+    game — the same check the ROM itself gets, applied between the two packs."""
+
+    def __init__(self, path: Path, primary: Pack, primary_path: Path):
+        self.path = path
+        self.label = str(path)
+        if path == primary_path:
+            raise ChrKitError(f"--also {path}: that is the pack itself, not a second "
+                              "recording of it")
+        self.pack = Pack(path)
+        if not _real_sha1(primary.rom_sha1) or not _real_sha1(self.pack.rom_sha1) \
+                or primary.rom_sha1 != self.pack.rom_sha1:
+            raise ChrKitError(
+                f"--also {path}: recorded from sha1 "
+                f"{(self.pack.rom_sha1 or '(none)').upper()}, while {primary_path} was "
+                f"recorded from sha1 {(primary.rom_sha1 or '(none)').upper()} — a second "
+                "recording is only evidence about this pack when it is provably the same "
+                "ROM, and a pack with no <supportedRom> proves nothing")
+        if self.pack.scale != primary.scale:
+            raise ChrKitError(
+                f"--also {path}: recorded at scale {self.pack.scale}, this pack at scale "
+                f"{primary.scale} — a donated cell is pasted from the donor's own page, so "
+                "the two must share a cell size")
+        self.pages = collect_pages(self.pack)
+        self.banks = collect_banks(self.pack, self.pages)
+        self.by_id = {}
+        for b in self.banks:
+            if b.kind in ("chrRom", "chrRam") and b.identity_known and b.id is not None:
+                self.by_id.setdefault(b.id, b)
+        self.cells = 0
+        self._images = {}
+
+    def image(self, page: Page, which: str):
+        key = (page.name, which)
+        if key not in self._images:
+            if which == "hd":
+                self._images[key] = read_png(page.path)
+            else:
+                ref = page.path.parent / (page.name + ".orig.png")
+                self._images[key] = read_png(ref) if ref.is_file() else None
+        return self._images[key]
+
+
+def attach_donors(banks: list[Bank], donors: list[Donor]) -> list[str]:
+    """Fill each real bank's holes with cells a donor run recorded for the same
+    CHR bank.
+
+    Banks are paired by their CHR bank id, which is a content hash of the bank on
+    a CHR RAM game and the bank number on a CHR ROM one — either way it is a
+    property of the ROM, so it is the same id in every recording of it. A bank
+    whose identity the pack does not record (all-zero hashes, partition recovered
+    structurally) is never paired: two structurally-recovered groups of two
+    different runs are not known to be the same pattern table.
+
+    The first `--also` that has a cell wins, so donor order on the command line
+    is the donor precedence. Nothing here can touch an index `bank.art` holds."""
+    notes = []
+    paired = set()
+    for bank in banks:
+        if bank.kind not in ("chrRom", "chrRam"):
+            continue
+        if not bank.identity_known or bank.id is None:
+            if donors:
+                bank.notes.append(
+                    "this bank's identity is not recorded, so no --also recording could "
+                    "be paired with it — a donated cell needs a bank both runs agree on")
+            continue
+        for donor in donors:
+            src = donor.by_id.get(bank.id)
+            if src is None or src.is_chr_ram != bank.is_chr_ram:
+                continue
+            paired.add((donor.label, bank.id))
+            for index in sorted(src.art):
+                if index in bank.art or index in bank.donated:
+                    continue
+                page, slot = src.art[index]
+                bank.donated[index] = {"donor": donor, "page": page, "slot": slot}
+                donor.cells += 1
+    for donor in donors:
+        missing = sorted(bid for bid in donor.by_id if (donor.label, bid) not in paired)
+        if missing:
+            notes.append(
+                f"{donor.label}: {len(missing)} CHR bank(s) of that recording "
+                f"({', '.join(str(b) for b in missing)}) have no counterpart in this pack "
+                "and were ignored — it visited pattern tables this run never loaded")
+    return notes
+
+
 # --- fill sources -----------------------------------------------------------
 
 
@@ -580,7 +725,7 @@ def fill_from_chr_rom(bank: Bank, rom: Rom):
     """CHR ROM: the bank *is* 4 KB of the file, so every index is readable."""
     base = bank.id * 256
     for index in range(256):
-        if index in bank.art:
+        if index in bank.art or index in bank.donated:
             continue
         data = rom.chr_tile(base + index)
         if data is None:
@@ -604,7 +749,7 @@ def fill_from_prg(bank: Bank, rom: Rom, stats):
     Where a game *unpacks* its graphics, no base reaches the threshold and the
     bank stays mostly empty. That is the honest answer, not a failure to try."""
     seen = {}
-    for index in bank.art:
+    for index in list(bank.art) + list(bank.donated):
         data = pattern_of(bank, index, rom)
         if data:
             seen[index] = data
@@ -639,7 +784,7 @@ def fill_from_prg(bank: Bank, rom: Rom, stats):
         return
 
     for j in range(256):
-        if j in bank.art:
+        if j in bank.art or j in bank.donated:
             continue
         best = None
         for b, support in trusted:
@@ -689,12 +834,14 @@ def render_cell(data: bytes, palette_hex: str, table: PaletteTable,
 
 
 def legend_image(page: Page, states: dict) -> Image:
-    """A drop-behind overlay: green over a recorded cell, amber over a ROM fill,
-    red over a hole. One file per page so an artist can toggle it as a layer."""
+    """A drop-behind overlay: green over a recorded cell, olive over one moved up
+    from a lower-ranked page, blue over one donated by another recording, amber
+    over a ROM fill, red over a hole. One file per page so an artist can toggle
+    it as a layer."""
     n = page.cell_px
     img = Image(16 * n, 16 * n)
     colour = {"evidence": LEGEND_EVIDENCE, "borrowed": LEGEND_BORROWED,
-              "fill": LEGEND_FILL, "empty": LEGEND_EMPTY}
+              "donated": LEGEND_DONATED, "fill": LEGEND_FILL, "empty": LEGEND_EMPTY}
     for slot in range(256):
         rgba = colour[states.get(slot, "empty")]
         x, y = page.xy(slot)
@@ -723,12 +870,16 @@ def _fill_rule(page: Page, index: int, palette: str, data: bytes,
 
 
 def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
-               names, pack_keys, fill_rules, rom):
+               names, pack_keys, fill_rules, rom, donors=()):
     """Write every page of the bank: the rank-0 page completed, the rest copied
     through unchanged so `<out>/chr/` is a drop-in for `textures/chr/`."""
     entries, rules = [], []
     palette = bank.fill_palette()
     primary = bank.primary
+    # The `donated` counters are only emitted when the run was given a second
+    # recording at all, so a run without `--also` writes exactly the bytes it
+    # wrote before this feature existed.
+    with_donors = bool(donors)
 
     for page in bank.pages:
         hd = images[page.name]["hd"].clone()
@@ -738,6 +889,10 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
         cells = []
         guessed = 0
 
+        # ADR-0183 §3, in one chain and in this order: this pack's own recorded
+        # cell, then a cell this bank recorded on a lower-ranked page, then a
+        # cell another recording of the same ROM recorded, then a ROM fill, then
+        # nothing. Evidence before inference, and this pack's evidence first.
         for slot in range(256):
             index = page.index_of_slot(slot)
             x, y = page.xy(slot)
@@ -767,6 +922,28 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
                 else:
                     entry["tileIndex"] = row.tile_index
                 states[slot] = "borrowed"
+            elif page is primary and index in bank.donated:
+                # Another recording of the same ROM drew this tile. A real run
+                # really rendered it, so `seen` stays true — but it is not this
+                # pack's evidence, so the donor is named here and the cell gets
+                # its own legend colour.
+                donation = bank.donated[index]
+                donor, src_page, src_slot = (donation["donor"], donation["page"],
+                                             donation["slot"])
+                sx, sy = src_page.xy(src_slot)
+                hd.paste(donor.image(src_page, "hd").crop(sx, sy, page.cell_px, page.cell_px), x, y)
+                src_orig = donor.image(src_page, "orig")
+                if orig is not None and src_orig is not None:
+                    orig.paste(src_orig.crop(sx, sy, page.cell_px, page.cell_px), x, y)
+                row = src_page.rows[src_slot]
+                entry.update(state="donated", seen=True, palette=row.palette,
+                             sourcePack=donor.label, sourcePage=src_page.name,
+                             sourceSlot=src_slot)
+                if row.tile_data:
+                    entry["tileData"] = row.tile_data
+                else:
+                    entry["tileIndex"] = row.tile_index
+                states[slot] = "donated"
             elif page is primary and index in bank.fills:
                 fill = bank.fills[index]
                 data = fill["data"]
@@ -805,6 +982,10 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
         write_png(out_chr / f"{page.name}.legend.png", legend_image(page, states))
 
         counts = collections.Counter(c["state"] for c in cells)
+        cell_counts = {"evidence": counts["evidence"], "borrowed": counts["borrowed"],
+                       "fill": counts["fill"], "empty": counts["empty"]}
+        if with_donors:
+            cell_counts["donated"] = counts["donated"]
         sidecar = {
             "version": 1, "kind": "chr", "generator": "scripts/artist_chr_kit.py",
             "gridUnit": 8, "cell": {"w": 8, "h": 8}, "columns": 16, "rows": 16,
@@ -813,12 +994,11 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
             "legend": f"{page.name}.legend.png",
             "bankKind": bank.kind, "chrBankId": bank.id,
             "variantRank": bank.pages.index(page),
-            "completed": page is primary and bool(bank.fills or
-                                                  counts["borrowed"]),
+            "completed": page is primary and bool(bank.fills or counts["borrowed"]
+                                                  or counts["donated"]),
             "layout": page.layout, "fillPalette": palette,
             "spriteTransparency": transparent_rgba is not None,
-            "counts": {"evidence": counts["evidence"], "borrowed": counts["borrowed"],
-                       "fill": counts["fill"], "empty": counts["empty"]},
+            "counts": cell_counts,
             "paletteGuessed": guessed,
             "notes": list(bank.notes) if page is primary else [],
             "cells": cells,
@@ -830,15 +1010,18 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
         if not title:
             bank_label = "blank-tile bucket" if bank.kind == "blankBucket" else (
                 "PRG scan page" if bank.kind == "prgScan" else f"CHR bank {bank.id}")
+            donated_label = f"{counts['donated']} donated / " if counts["donated"] else ""
             title = (f"{page.name} — {bank_label}, variant rank "
                      f"{bank.pages.index(page)}, palette {page.palette}; "
                      f"{counts['evidence'] + counts['borrowed']} recorded / "
-                     f"{counts['fill']} ROM fill / {counts['empty']} empty")
+                     f"{donated_label}{counts['fill']} ROM fill / {counts['empty']} empty")
+        entry_extra = {"donated": counts["donated"]} if with_donors else {}
         entries.append({
             "path": f"chr/{page.name}.png", "title": title, "unit": "page",
             "rows": 16, "columns": 16, "cells": 256,
             "evidence": counts["evidence"] + counts["borrowed"],
             "fill": counts["fill"], "empty": counts["empty"],
+            **entry_extra,
             "seen": counts["fill"] == 0,
             "reference": f"chr/{page.name}.orig.png",
             "legend": f"chr/{page.name}.legend.png",
@@ -976,7 +1159,7 @@ _PASSTHROUGH_WHY = {
 
 
 def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
-        do_verify, quiet):
+        do_verify, quiet, also=()):
     pack = Pack(pack_dir)
     rom = Rom(rom_path)
     names = load_names(names_path)
@@ -1008,6 +1191,10 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                 f"{'CHR RAM' if b.is_chr_ram else 'CHR ROM'} but {rom_path.name} has "
                 f"{'no ' if expect_ram else ''}CHR ROM — wrong ROM for this pack?")
 
+    # Second recordings of the same ROM, as evidence for this pack's holes only.
+    donors = [Donor(Path(p).resolve(), pack, pack_dir) for p in also]
+    donor_notes = attach_donors(banks, donors)
+
     images = {p.name: {"hd": read_png(p.path),
                        "orig": (read_png(p.path.parent / (p.name + ".orig.png"))
                                 if (p.path.parent / (p.name + ".orig.png")).is_file() else None)}
@@ -1028,7 +1215,8 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     files, rules, dropped, passthrough = [], [], [], []
     for b in banks:
         entries, bank_rules = write_bank(b, images, table, b.transparent_rgba,
-                                         out_chr, names, pack_keys, fill_rules, rom)
+                                         out_chr, names, pack_keys, fill_rules, rom,
+                                         donors)
         files += entries
         rules += bank_rules
         # These pages are in the kit, copied through untouched — they are not
@@ -1052,18 +1240,22 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     real = [b for b in banks if b.kind in ("chrRom", "chrRam")]
     real_cells = 256 * len(real)
     recorded = sum(len(b.art) for b in real)
+    donated = sum(len(b.donated) for b in real)
     filled = sum(len(b.fills) for b in real)
     guessed = sum(f["paletteGuessed"] for f in files)
     total = collections.Counter()
     for f in files:
         total["evidence"] += f["evidence"]
+        total["donated"] += f.get("donated", 0)
         total["fill"] += f["fill"]
         total["empty"] += f["empty"]
 
+    donated_clause = (f"{donated} donated by {len(donors)} other recording(s), "
+                      if donors else "")
     notes = [
         f"{len(real)} real CHR bank(s) of 256 tiles each ({real_cells} tiles): "
-        f"{recorded} recorded by the run, {filled} filled from {rom_path.name}, "
-        f"{real_cells - recorded - filled} still empty.",
+        f"{recorded} recorded by the run, {donated_clause}{filled} filled from "
+        f"{rom_path.name}, {real_cells - recorded - donated - filled} still empty.",
         "A page is a *variant rank* of a CHR bank, not a palette: the recorder "
         "spreads each tile's palette variants across the bank's pages by usage. "
         "Only the rank-0 page of each bank is completed — it is the page an "
@@ -1086,6 +1278,21 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "filtered art, and a sprite/background misread would punch a transparent "
         "hole — so hires.txt is left exactly as recorded.",
     ]
+    if donors:
+        notes.append(
+            "Blue in Chr_<n>.legend.png is a cell **another recording of this ROM** "
+            "drew and this one never did. It is `seen: true` — a real run really "
+            "rendered it — but it is not this pack's own evidence, so its cell in "
+            "Chr_<n>.json names the recording, page and slot it was taken from. This "
+            "pack stays the pack the kit is for: a donated cell only ever fills a hole "
+            "and never displaces a cell this run recorded (ADR-0183 §1/§3).")
+        for d in donors:
+            notes.append(
+                f"Second recording: {d.label} — {d.cells} cell(s) of this kit come from "
+                f"it. Same ROM (sha1 {d.pack.rom_sha1.upper()}), banks paired by CHR bank "
+                "id. It contributes no <tile> rule: its cells are evidence about the ROM, "
+                "not keys this pack ever rendered.")
+        notes.extend(donor_notes)
     if not rom.has_chr_rom:
         notes.append(
             "This is a CHR RAM game: the pattern tables are built at run time "
@@ -1120,14 +1327,20 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "totals": {
             "pages": len(files), "banks": len(banks), "realBanks": len(real),
             "realBankTiles": real_cells, "recorded": recorded, "filled": filled,
-            "unrecoverable": real_cells - recorded - filled,
+            "unrecoverable": real_cells - recorded - donated - filled,
+            **({"donated": donated} if donors else {}),
             "cells": 256 * len(files), "evidence": total["evidence"],
+            **({"donatedCells": total["donated"]} if donors else {}),
             "fill": total["fill"], "empty": total["empty"],
             "paletteGuessed": guessed,
             "rulesSafe": filled - guessed, "rulesPermissive": filled,
             "rulesEmitted": len(rules), "fillRules": fill_rules,
         },
         "files": files,
+        # Only present when the run was given one, so a run without `--also`
+        # writes the same bytes it wrote before this feature existed.
+        **({"donors": [{"pack": d.label, "romSha1": d.pack.rom_sha1.upper(),
+                        "cells": d.cells} for d in donors]} if donors else {}),
         "dropped": dropped,
         "notes": notes,
         "verify": {"ran": False},
@@ -1140,12 +1353,16 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
     if not quiet:
         pct = 100.0 * recorded / real_cells if real_cells else 0.0
-        done = 100.0 * (recorded + filled) / real_cells if real_cells else 0.0
+        done = 100.0 * (recorded + donated + filled) / real_cells if real_cells else 0.0
         print(f"{pack_dir}")
         print(f"  {len(files)} page(s) in {len(banks)} bank(s) -> {out_chr}")
+        donated_clause = f"donated {donated}, " if donors else ""
         print(f"  real CHR banks: {len(real)} x 256 = {real_cells} tiles — "
-              f"recorded {recorded} ({pct:.0f}%), ROM fill {filled}, "
-              f"unrecoverable {real_cells - recorded - filled} -> {done:.0f}% complete")
+              f"recorded {recorded} ({pct:.0f}%), {donated_clause}ROM fill {filled}, "
+              f"unrecoverable {real_cells - recorded - donated - filled} -> "
+              f"{done:.0f}% complete")
+        for d in donors:
+            print(f"  --also {d.label}: {d.cells} cell(s) donated")
         print(f"  <tile> rules: safe {filled - guessed}, permissive {filled}, "
               f"emitted {len(rules)} (--fill-rules={fill_rules}); "
               f"palette guessed on {guessed} filled cell(s)")
@@ -1159,6 +1376,13 @@ def main(argv=None):
                     help="the .nes file the pack was recorded from")
     ap.add_argument("--out", type=Path, default=None,
                     help="kit folder (default: kit/ beside the recorded pack)")
+    # `--also` and not `--secondary`/`--merge`: it reads at the call site as
+    # "this pack, and also that recording", it is repeatable without implying a
+    # rank, and it does not suggest a union pack — which ADR-0183 §1 forbids.
+    ap.add_argument("--also", action="append", default=[], metavar="PACK",
+                    help="another recorded pack of the SAME ROM, used as evidence for "
+                         "cells this pack never recorded (repeatable; first one wins). "
+                         "Its cells never displace this pack's own.")
     ap.add_argument("--names", default=None, help="optional titles, shared kit schema")
     ap.add_argument("--fill-rules", choices=("none", "observed", "all"), default="none",
                     help="emit a <tile> rule for a filled cell: never / only when the "
@@ -1175,7 +1399,7 @@ def main(argv=None):
         raise SystemExit("error: --out must not be inside the recorded pack")
     try:
         run(pack_dir, args.rom.resolve(), out_dir, args.names, args.fill_rules,
-            args.verify, args.quiet)
+            args.verify, args.quiet, args.also)
     except ChrKitError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
