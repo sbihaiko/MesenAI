@@ -30,6 +30,16 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   `docs/hd-pack-authoring.md`. The 2026-08-30 agent intake brief
   (`community-pack-intake-handoff.md`) was consumed and deleted 2026-09-03;
   its full text lives in git history — do not revive it as a task.
+- `remastering-a-game.md` - **the artist's entry point**, and the only
+  top-level doc written for someone who wants to *redraw a game's art* rather
+  than browse, play, or submit. Task-ordered: record (the four drivers -
+  `input=`, `movie=`, `cheat=`, `state=`), measure with `artist_cover.py`,
+  unpack into a kit (the four generators + the assembler), paint, build and
+  verify, optionally run the AI proposer, ship. It exists because the pipeline
+  was reachable only through the ADRs, which is the failure
+  [ADR-0182](../docs/adr/)–0189's own motivation names: a tool nobody can find
+  is not a tool. Keep it that way - every command in it is meant to be
+  copy-pasteable, and a command that drifts is worse than no doc.
 - `hd-pack-authoring.md` - human-facing guide for community HD/MEP pack
   submissions, linked from `.github/ISSUE_TEMPLATE/community-pack.yml`;
   summarizes the "Aceito (MEP completo)" vs. "Aceito parcial (HD Mesen)" vs.
@@ -44,6 +54,12 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 - ADRs: `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) — every cited `ADR-NNNN` resolves to a file.
 - Upstream coexistence (ADR-0163): tiers = `scripts/upstream_tiers.py`; `Upstream-Delta:` trailer check = `scripts/checks/verify_upstream_delta.py`; sync = `scripts/sync-upstream.sh` (local, merge on `main`) + `.github/workflows/sync-upstream.yml` (scheduled PR when upstream moves).
 - `hd-pack-authoring.md`: `./scripts/checks/verify_hd_pack_authoring_doc.sh`.
+- `remastering-a-game.md`: `python3 scripts/checks/verify_remastering_guide.py`
+  (also in `make doc-checks`) — every local link resolves, and every flag the
+  guide prints on a harness or generator it documents is a flag that script
+  actually accepts. A guide whose commands have silently rotted is the exact
+  discoverability failure it was written to fix, so it is checked rather than
+  trusted.
 - Plans have no automated check.
 
 ## Child DOX Index
