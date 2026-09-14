@@ -202,6 +202,13 @@ _SHEET_RANK = {
     "font": 5,
 }
 _SHEET_VERSION = 1
+# ADR-0178 §6: only a sprite sheet can carry a flip-baked tile key. The
+# recorder bakes a sprite's OAM flip bits into the shape it records, and
+# `sprites`/`sprite` sheets are the only ones built from the OAM vocabulary
+# (HdPackBuilder::WriteSpriteSheets). `metatiles`, `object`, `map`, `hud`,
+# `font` and `misc` come from the background vocabulary, and the NES
+# background has no per-tile flip bit, so nothing was ever baked into them.
+_FLIPPABLE_SHEET_KINDS = frozenset({"sprite", "sprites"})
 _HEX_TILE_RE = re.compile(r"^[0-9A-F]{32}$")
 
 
@@ -1028,10 +1035,16 @@ def cmd_build(args) -> int:
                 # the replacement art itself. On a data-keyed (CHR RAM) game the
                 # baked form is a key nothing ever looks up.
                 data = unflipped
-            elif (data, pal) not in keysrc_attrs and any(
-                    (u, pal) in keysrc_attrs for u in _unflips(data)):
+            elif (sd.kind in _FLIPPABLE_SHEET_KINDS
+                  and (data, pal) not in keysrc_attrs
+                  and any((u, pal) in keysrc_attrs for u in _unflips(data))):
                 # No `source`, yet an un-flip of this key is one the game really
                 # has: the sidecar predates ADR-0178 and this crop would be inert.
+                # Background sheets are exempt (issue #196): a background tile
+                # whose mirror happens to be another real tile of the same game
+                # is the harmless coincidence of ADR-0178's third Consequences
+                # bullet, not a baked flip, and erroring on it fails packs that
+                # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
             cond, rest = keysrc_attrs.get((data, pal), ("", ["1", "N"]))
