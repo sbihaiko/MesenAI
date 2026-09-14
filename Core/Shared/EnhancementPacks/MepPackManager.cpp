@@ -198,14 +198,27 @@ void MepPackManager::StartBootstrapIfNeeded()
 	}
 
 	//Something already dresses this ROM: the bootstrap is only a first draft
-	bool needTextures = !GetPackForSection(MepSectionType::Textures);
+	const MepPack* texturesPack = GetPackForSection(MepSectionType::Textures);
+	bool needTextures = texturesPack == nullptr;
 	std::error_code ec;
-	if(fs::exists(fs::u8path(FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::GetHdPackFolder(), _romName), "hires.txt")), ec)) {
+	string existingManifest = FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::GetHdPackFolder(), _romName), "hires.txt");
+	if(fs::exists(fs::u8path(existingManifest), ec)) {
 		needTextures = false;
 	}
 	//Audio fingerprints (ADR-0047) are NES-only for now (ADR-0041 scope)
 	bool needAudio = type == ConsoleType::Nes && !GetPackForSection(MepSectionType::Audio);
 	if(!needTextures && !needAudio) {
+		//Declining is the point: this is a first draft, not an override of a pack
+		//someone already has. Declining *silently* was not the point. The run
+		//exits 0, writes no tile and leaves the pack's mtime alone, so a second
+		//recording that recorded nothing is indistinguishable from one that
+		//worked - and it was caught the expensive way, by a probe run whose
+		//numbers were the previous run's (#229). A quiet wrong answer is the
+		//failure mode this whole pipeline exists to remove; say it out loud.
+		Log("bootstrap: nothing was recorded - '" + (texturesPack ? texturesPack->ContainerName : existingManifest) +
+			"' already dresses this ROM, so the bootstrap kept it as it was. The pack is unchanged and this run still exits 0.");
+		Log("bootstrap: to record a fresh one, delete that pack (and the sibling .bootstrap stamp) or record into an empty "
+			"directory - scripts/record_stages.sh gives every stage its own directory and does exactly that.");
 		return;
 	}
 
@@ -245,6 +258,12 @@ void MepPackManager::StartBootstrapIfNeeded()
 		}
 	}
 	if(!needTextures) {
+		//Reached when the audio section was still missing and got recorded above.
+		//The tile half is skipped for the same reason as the early return, and a
+		//bootstrap that comes back with audio and no tiles has to say which half
+		//it did - otherwise "the run finished" reads as "the recording is there".
+		Log("bootstrap: no tiles were recorded - '" + (texturesPack ? texturesPack->ContainerName : existingManifest) +
+			"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
 		return;
 	}
 
