@@ -66,6 +66,38 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `roles_probe.cpp` / `headless_record.cpp` / `spike_sound_driver.cpp` run
   the emulator headless against a real ROM; they link `InteropDLL`'s shared
   lib and need `make core` first.
+- **Navigation sweep (ADR-0184, amended 2026-09-14)** —
+  `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
+  --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
+  [--reference <ref hires.txt>] [--baseline <pack hires.txt>]...` turns the
+  amendment's eleven hand-typed sessions into one command. The profile is
+  **data**: a second game is a second `navigation.json`, never a code change.
+  It declares the navigation address, its admissible values with a citation
+  (`$0030` = Contra's current level, DataCrystal's published map — ADR-0184 §5
+  forbids inventing one), the entry + body input scripts, and the `rooms[]` a
+  selector cannot reach. A selector picks a *level*, not a room inside it, so
+  Contra's three boss rooms are separate no-cheat sessions entered from their
+  F9.22 `.mss` states. Cheats are validated against §1 at plan time, before any
+  process starts. Each session gets its own directory, ROM hard link,
+  `mesen-home` and pack, which is what makes `--jobs` safe; the body script is
+  repeated to cover the whole run, because ADR-0184 measured effective input
+  time, not the cheat, as the lever. Every session emits a `notes[]` line
+  quoting its cheat verbatim with its address and source (ADR-0183 §3), and
+  `--reference` prints `artist_cover.py`'s own metric — distinct `tileData`
+  against the reference pack — per session and for the union.
+  Measured 2026-09-14 on Contra, 11 sessions × 300 s, `--jobs 4`, ~7 min of
+  wall clock: sweep union **56.6%** (1928/3404) against the amendment's 58.9%,
+  the 72 archived recordings **53.8%** (1831 — the amendment's number exactly),
+  union **63.7%** against its 64.6%, +339 tiles the archive never held.
+  No shared-folder union is offered: `HdPackBuilder` does accumulate from its
+  save folder (`HdPackBuilder.cpp:46-49`), but
+  `MepPackManager::StartBootstrapIfNeeded` (`MepPackManager.cpp:200-210`)
+  refuses to bootstrap a ROM something already dresses, so the second session
+  into one folder records nothing and says nothing (measured: 7.1 s against
+  16.7 s, tile count unmoved). Union across sessions is
+  `artist_chr_kit.py --also` and the coverage set union.
+  `test_record_navigation_sweep.py` pins the §1 refusals, the script
+  arithmetic, the plan and the `notes[]` obligation (28 checks).
 - **Per-stage recording (F9.22)** — `stages/<game>/` holds
   `mint-<stage>.txt` (power-on to a stage; run with `save-state=<f.mss>`)
   and `<stage>.txt` (a run *from* that state, <= 3600 frames so it fits the

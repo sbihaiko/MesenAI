@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "Navigation sweep profile for Contra (ADR-0184, amended 2026-09-14: 'a",
+    "navigation cheat is a third pass, and it feeds every surface').",
+    "",
+    "This file is data. A second game is a second file beside this one - no code",
+    "change - as long as its navigation address is read off a published RAM map",
+    "or the vendored cheat database (ADR-0184 s5: no code is invented).",
+    "",
+    "Read by scripts/record_navigation_sweep.py."
+  ],
+
+  "game": "Contra",
+  "rom": "Contra (1988) (Konami).nes",
+  "romSha1": "C9EA66BB7CB30AD5343F1721B1D4D3219859319B",
+
+  "navigation": {
+    "address": "0030",
+    "label": "current level",
+    "source": "DataCrystal, Contra (NES) RAM map: $0030 holds the current level, 0x00-0x07 = stages 1-8, 0x09 = game over. Published map, cited per ADR-0184 s5.",
+    "values": [
+      { "value": "00", "name": "stage1", "title": "Jungle" },
+      { "value": "01", "name": "stage2", "title": "Base 1 (3D corridor)" },
+      { "value": "02", "name": "stage3", "title": "Waterfall" },
+      { "value": "03", "name": "stage4", "title": "Base 2 (3D corridor)" },
+      { "value": "04", "name": "stage5", "title": "Snowfield" },
+      { "value": "05", "name": "stage6", "title": "Energy zone" },
+      { "value": "06", "name": "stage7", "title": "Hangar" },
+      { "value": "07", "name": "stage8", "title": "Alien's lair" }
+    ]
+  },
+
+  "_defaultsComment": [
+    "The entry script types the Konami code at the title screen (30 lives).",
+    "ADR-0184 s3 ranks that first and it is not a cheat at all: it writes the",
+    "game's own variable through the game's own routine. Measured 2026-09-14:",
+    "the plain mint (3 lives) reaches GAME OVER inside 40 s on stages 1 and 4,",
+    "so a blind warp with 3 lives records the game-over screen and little else.",
+    "",
+    "The body is repeated by record_navigation_sweep.py until it covers the",
+    "whole run: ADR-0184's measurement found stage1-run.txt leaves 82% of a",
+    "300 s recording with nothing pressed, and effective input time is what",
+    "moved the panorama, not the cheat."
+  ],
+  "defaults": {
+    "seconds": 300,
+    "entry": "mint-stage1-30lives.txt",
+    "body": "stage1-run.txt"
+  },
+
+  "_roomsComment": [
+    "$0030 selects a *level*, not a room inside one: pinned for the run the game",
+    "loads the start of that stage and never observes the stage advancing, so a",
+    "boss room is unreachable by any value of it (the map declares 0x00-0x07 and",
+    "0x09 = game over, and nothing else). A boss is therefore its own session,",
+    "entered from the save state that is already in its room and played by the",
+    "input script minted beside it (F9.22, scripts/stages/README.md). Those",
+    "sessions carry no cheat at all, so they are ADR-0184 s2 'clean' passes and",
+    "every surface may read them for that reason instead.",
+    "",
+    "The three states are unversioned (a CHR RAM state carries the game's art).",
+    "Pass --states <dir> pointing at the folder that holds them; a room whose",
+    "state is missing is skipped with a line saying so, never silently."
+  ],
+  "rooms": [
+    { "name": "stage1-boss", "state": "stage1-boss.mss", "input": "stage1-boss.txt", "title": "Stage 1 wall core" },
+    { "name": "stage3-boss", "state": "stage3-boss.mss", "input": "stage3-boss.txt", "title": "Stage 3 wall core" },
+    { "name": "stage4-boss", "state": "stage4-boss.mss", "input": "stage4-boss.txt", "title": "Stage 4 corridor core" }
+  ]
+}
