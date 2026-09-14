@@ -1,53 +1,52 @@
 name: Build Mesen
 
 on:
-  push:
-    branches:
-      - 'main'
-  # Restored 2026-09-14: the F9.24 artist-kit series is merged (#213, #214,
-  # #215), which is the condition the 2026-09-13 suspension named.
-  pull_request:
-    branches:
-      - 'main'
+  # TEMPORARY (2026-09-14): `push` and `pull_request` were REMOVED, so the
+  # matrix below runs only when someone dispatches it:
+  #   gh workflow run build.yml --repo sbihaiko/MesenCE --ref <branch>
+  #
+  # The reason is the same one that suspended the `pull_request` trigger on
+  # 2026-09-13: the matrix is 14 jobs (two Windows publish profiles, six
+  # Linux/AppImage compiler×arch legs, four macOS legs with a codesign step),
+  # each a full LTO/AOT build, and a branch that lands three commits in an
+  # afternoon queues more runner time than the work in the commits.
+  #
+  # The always-on gate did NOT go away with the triggers — it moved to
+  # `checks.yml`, which runs on every push and pull request. It had to move to
+  # another file rather than becoming a job here, for two reasons that are both
+  # about this file's identity:
+  #   1. nightly.link resolves the README's download links against the NEWEST
+  #      run of THIS workflow on `main`. A push to `main` that ran an
+  #      artifact-less job here would become that newest run and the links would
+  #      stop serving the binaries until the next dispatch.
+  #   2. `cancel-in-progress` below is keyed on the workflow and the ref. A push
+  #      to `main` while a dispatched build was running would cancel the only
+  #      artifact-producing run for that ref.
+  # With the triggers gone, every run of this file is a build, so neither can
+  # happen.
+  #
+  # TO RESTORE THE BINARY BUILDS: put the `push`/`pull_request` blocks back
+  # under `on:` (and, if `checks.yml` is no longer wanted, delete that file).
+  # No job below is aware of the gate — there is no `if:` to remove.
   workflow_dispatch:
-
-# TEMPORARY (2026-09-14): every job below that links a distributable binary is
-# gated on `github.event_name == 'workflow_dispatch'`, so a push or a pull
-# request runs the `checks` job alone. The reason is the same one that
-# suspended the `pull_request` trigger on 2026-09-13: the matrix is 14 jobs
-# (two Windows publish profiles, six Linux/AppImage compiler×arch legs, four
-# macOS legs with a codesign step), each one a full LTO/AOT build, and a
-# branch that lands three commits in an afternoon queues more runner time than
-# the work in the commits. Nothing was deleted: the four jobs are intact and
-# `checks` still gates every push and PR, so a regression is caught by the
-# docs/structure suite plus the F6.6 headless smoke (which builds the core).
-#
-# TO RESTORE THE BINARY BUILDS: delete the `if: github.event_name ==
-# 'workflow_dispatch'` line from each of `windows`, `linux`, `appimage` and
-# `macos`. That is the whole change — no other line in this file is aware of
-# the gate.
-#
-# UNTIL THEN, a branch is built on demand with:
-#   gh workflow run build.yml --repo sbihaiko/MesenCE --ref <branch>
-# and its artifacts are downloaded from that run. A merge to `main` no longer
-# produces artifacts on its own; run the command above against `main` when a
-# release artifact is needed.
 
 # Every job used to carry
 #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 # to avoid building one commit twice. That guard assumes `push` fires for the
 # branch a pull request comes from — true upstream, where contributors push
-# branches to the repo itself, and false here: `push` above is restricted to
-# `main`, and a pull request's head branch is never `main`. The two triggers
-# therefore cannot overlap, and the guard only had the effect of skipping every
+# branches to the repo itself, and false here: `push` was restricted to `main`,
+# and a pull request's head branch is never `main`. The two triggers therefore
+# could not overlap, and the guard only had the effect of skipping every
 # internal pull request — including each `sync/upstream/<date>` branch the
 # upstream-sync workflow opens, which reached `main` never having been compiled
-# (#178). Removed. If `push` is ever widened beyond `main`, restore a guard
-# keyed on the branch, not on the head repository.
+# (#178). Removed, and moot while the only trigger is `workflow_dispatch`. If
+# `push` is ever restored, key any guard on the branch, not on the head
+# repository.
 
-# A newer push/PR-update on the same ref cancels whatever this workflow was
-# still building for the previous commit — no point finishing a build for a
-# revision that's already superseded.
+# A second dispatch for the same ref cancels the first — no point finishing a
+# build for a revision someone else is already superseding by hand. This cannot
+# fire in response to a push any more, because a push does not trigger this
+# workflow at all.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -57,34 +56,7 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
-  # The only job that runs on a push or a pull request while the binary builds
-  # above are gated off. It is `doc-checks` and nothing else, deliberately: that
-  # target is the repo's own acceptance suite (structure guardrails, ADR
-  # reference integrity, the whole artist-kit script suite) and it is the gate
-  # the 2026-09-13 suspension removed by accident, along with the build. It
-  # does compile — `verify_smoke_pack_headless.sh` builds `scripts/headless_record`
-  # and FAILs in CI if it cannot — but that is the core-only tool, not the
-  # GUI/LTO/AOT artifact the four gated jobs produce.
-  checks:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qy
-          sudo apt-get install -qy libsdl2-dev # scripts/headless_record (built by doc-checks) links the core, which needs SDL2
-          python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners) # doc-checks verify scripts need PyYAML/Pillow/numpy (not preinstalled everywhere)
-
-      - name: Run doc checks
-        run: make doc-checks
-
   windows:
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         platform: [
@@ -132,7 +104,6 @@ jobs:
 
 
   linux:
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         compiler: [gcc, clang, clang_aot]
@@ -190,7 +161,6 @@ jobs:
           path: bin/linux-${{ matrix.platform.path }}/Release/linux-${{ matrix.platform.path }}/publish/Mesen
 
   appimage:
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         compiler: [clang_appimage]
@@ -235,7 +205,6 @@ jobs:
 
 
   macos:
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         compiler: [clang, clang_aot]

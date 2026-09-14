@@ -31,7 +31,7 @@ Underneath it all is [MesenCE](https://github.com/nesdev-org/MesenCE) / [Mesen2]
 
 The newest build of `main` that passed CI — no installer, unzip and run.
 
-> **The binaries are currently built on demand, not on every push.** The 14-job matrix is gated off (see [Built to stay correct](#built-to-stay-correct)) so a merge does not queue an hour of runner time; the links below keep serving the last build that was triggered. To produce a fresh one:
+> **The binaries are currently built on demand, not on every push.** The 14-job matrix is dispatch-only (see [Built to stay correct](#built-to-stay-correct)) so a merge does not queue an hour of runner time. The links below resolve against the newest *build* run on `main`, which is now always a real build, so they keep serving the last one that was triggered. To produce a fresh one:
 >
 > ```sh
 > gh workflow run build.yml --repo sbihaiko/MesenCE --ref main
@@ -172,16 +172,16 @@ Both formats are welcome: a plain **Mesen `hires.txt` HD pack** (all the existin
 
 ## Built to stay correct
 
-Every push and PR runs [`build.yml`](.github/workflows/build.yml)'s `checks` job — `make doc-checks`, the repo's own structural suite: the guardrails that fail a PR on drift (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline verifiers, and the script suites for the HD-pack and artist-kit tooling. It also boots the real core headless against synthetic ROM and pack fixtures, so the acceptance gate is mechanical rather than "it compiled".
+Every push and PR runs [`checks.yml`](.github/workflows/checks.yml) — `make doc-checks`, the repo's own structural suite: the guardrails that fail a PR on drift (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline verifiers, and the script suites for the HD-pack and artist-kit tooling. It also boots the real core headless against synthetic ROM and pack fixtures, so the acceptance gate is mechanical rather than "it compiled".
 
-Two suites exist beyond that gate and are run by hand while the binary matrix is off:
+Two suites exist beyond that gate and are run by hand while the binary matrix is dispatch-only:
 
 - **`core-unit-tests`** — dependency-free C++ harness (`scripts/core_unit_tests.cpp`, `make core-unit-tests`) for core logic: Enhanced Audio channel-role classifier, MEP parsing, and other logic deliberately factored out so it can be tested without a ROM or GUI.
 - **`UI.Tests`** — C# xUnit suite (`UI.Tests/`) for the host layer: cheat parsing, pack-list handling, MEP parser and zip validator.
 
 No SDL2, no full core: the C++ harness compiles one object per source and links, so `make -j` runs all 771 cases in about ten seconds from cold. It's not full-core coverage — it's real, growing coverage of what this fork adds and changes, so regressions get caught before they ship.
 
-> **Temporarily, this job is the only thing CI runs.** The 14-job binary matrix in `build.yml` and both suites in [`unit-tests.yml`](.github/workflows/unit-tests.yml) are gated off (2026-09-14) to keep a push from queueing ~14 full builds; `unit-tests.yml` has additionally been disabled in the repo's Actions settings since 2026-08-29, so the two bullets above are **not gating** today. Run them locally with `make core-unit-tests` and `dotnet test UI.Tests/UI.Tests.csproj`. The note at the top of `build.yml` says how to restore the matrix.
+> **Temporarily, `checks.yml` is the only thing CI runs.** The 14-job binary matrix in `build.yml` is dispatch-only as of 2026-09-14 and both suites in [`unit-tests.yml`](.github/workflows/unit-tests.yml) are gated off to keep a push from queueing ~14 full builds; `unit-tests.yml` has additionally been disabled in the repo's Actions settings since 2026-08-29, so the two bullets above are **not gating** today. Run them locally with `make core-unit-tests` and `dotnet test UI.Tests/UI.Tests.csproj`. The note at the top of `build.yml` says how to restore the matrix.
 
 ## Why this fork
 
