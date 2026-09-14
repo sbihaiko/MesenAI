@@ -350,6 +350,48 @@ def test_the_reviewer_own_vocabulary_is_mapped_rather_than_required():
               "a reviewer may invent its own subject keys", json.dumps(result["counts"]))
 
 
+def test_an_ask_the_truth_cannot_label_never_reaches_abstained():
+    """A reference pack that replaces whole pattern pages names no scenery, so
+    its truth file has no `object` label for a scenery ask, and none at all for
+    the ask kinds it never covers. Declining those is not the reviewer being
+    careful about a hard case - there is no case. Counting them as abstentions
+    would inflate the one bucket that is supposed to say "it knew it did not
+    know", and on a real Contra kit that inflation is 15 asks against 3."""
+    with tempfile.TemporaryDirectory() as td:
+        packet = R.build_packet(_sprite_kit(Path(td)))
+        a = packet["asks"][0]["ask"]
+        doc = _doc(packet,
+                   _answer(packet, 0, abstain=True, why="cannot tell"),
+                   {"ask": "usr009#page000", "abstain": True, "why": "a pattern page"})
+        result = R.score(doc, _truth(**{a: "enemy"}))
+        check(result["counts"] == {"correct": 0, "wrong": 0, "abstained": 1,
+                                   "confidently_wrong": 0, "unscored": 1,
+                                   "scorable_asks": 1},
+              "an unlabelled ask is unscored, whether it was answered or declined",
+              json.dumps(result["counts"]))
+        check(result["unscored"][0]["reason"] == "no label of this kind",
+              "and the reason it is unscored travels with it",
+              json.dumps(result["unscored"]))
+
+
+def test_an_ask_of_a_kind_this_run_was_told_not_to_score_is_dropped():
+    with tempfile.TemporaryDirectory() as td:
+        packet = R.build_packet(_sprite_kit(Path(td)))
+        a = packet["asks"][0]["ask"]
+        truth = {"version": 1, "labels": {
+            a: {"kind": "figure", "subject": "player"},
+            "usr009#obj000": {"kind": "object", "subject": "mountain"}}}
+        doc = _doc(packet, _answer(packet, 0),
+                   {"ask": "usr009#obj000", "subject": "mountain",
+                    "confidence": "high", "why": "snow cap"})
+        result = R.score(doc, truth, kinds={"figure"})
+        check(result["counts"] == {"correct": 1, "wrong": 0, "abstained": 0,
+                                   "confidently_wrong": 0, "unscored": 0,
+                                   "scorable_asks": 1},
+              "a scenery answer is neither measured nor complained about",
+              json.dumps(result["counts"]))
+
+
 # ---- promotion -------------------------------------------------------------
 
 def test_only_ticked_proposals_reach_the_names_file():

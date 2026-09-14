@@ -743,22 +743,37 @@ def score(proposals: dict, truth: dict, alias=None, kinds=None) -> dict:
     answer and the point of measuring is to find out whether the reviewer knows
     when it does not know."""
     alias = alias or {}
-    labels = {k: v for k, v in (truth.get("labels") or {}).items()
+    all_labels = truth.get("labels") or {}
+    labels = {k: v for k, v in all_labels.items()
               if not kinds or v.get("kind") in kinds}
     buckets = {"correct": [], "wrong": [], "abstained": [], "unscored": []}
     confidently_wrong = []
     for entry in proposals.get("proposals") or []:
         ask_id = entry.get("ask")
-        if ask_id not in labels and (truth.get("labels") or {}).get(ask_id):
-            continue                        # a kind this run was told not to score
         label = labels.get(ask_id)
+        if label is None:
+            # The truth file says nothing about this ask. Either it held a
+            # label of a kind this run was told not to score, or it never had
+            # one at all - a kind the reference pack cannot label (Contra's
+            # backgrounds are replaced page by page, so its named files carry
+            # almost no scenery evidence). Neither is a measurement, and an
+            # abstention on an ask with no ground truth behind it must not
+            # reach `abstained`: it would read as caution the reviewer never
+            # exercised, and inflate the one count that is supposed to mean
+            # "declined a hard case it could have got wrong".
+            if ask_id in all_labels:
+                continue                    # a kind this run was told not to score
+            buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject"),
+                                        "reason": "no label of this kind"})
+            continue
         if entry.get("abstain"):
             buckets["abstained"].append({"ask": ask_id,
-                                         "truth": (label or {}).get("subject"),
+                                         "truth": label.get("subject"),
                                          "why": entry.get("why", "")})
             continue
-        if not label or label.get("subject") is None:
-            buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject")})
+        if label.get("subject") is None:
+            buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject"),
+                                        "reason": "no subject reached dominance"})
             continue
         expected = label["subject"]
         said = alias.get(entry.get("subject"), entry.get("subject"))
