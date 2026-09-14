@@ -1,5 +1,5 @@
 {
-  "_comment": "Hosts the community-pack-validate.yml workflow is allowed to download pack_url from. Adding a host here is a trust-boundary decision (see scripts/fetch_pack.py for the enforcement it gets), not a mechanical edit -- review it like the workflow YAML itself. 'kind': 'direct' is a plain HTTPS GET with redirect re-validation; 'google-drive' additionally runs the two-step confirm-token dance Google Drive requires for files too large to virus-scan; 'mediafire' fetches the share page then the downloadN.mediafire.com CDN hop. Match is exact 'host' and/or 'host_ends_with' (first matching entry wins).",
+  "_comment": "Hosts the community-pack-validate.yml workflow is allowed to download pack_url from. Adding a host here is a trust-boundary decision (see scripts/fetch_pack.py for the enforcement it gets), not a mechanical edit -- review it like the workflow YAML itself. 'kind': 'direct' is a plain HTTPS GET with redirect re-validation; 'google-drive' additionally runs the two-step confirm-token dance Google Drive requires for files too large to virus-scan; 'mediafire' fetches the share page then the downloadN.mediafire.com CDN hop; 'dropbox' rewrites the share link's dl flag to dl=1 and follows the CDN redirects; 'mega' derives an AES-CTR key from the URL fragment, asks the MEGA API for a download URL and decrypts the stream (ADR-0187). Match is exact 'host' and/or 'host_ends_with' (first matching entry wins).",
   "hosts": [
     {"host": "github.com", "path_contains_any": ["/releases/", "/archive/"], "kind": "direct"},
     {"host": "codeload.github.com", "kind": "direct"},
@@ -11,6 +11,12 @@
     {"host": "drive.usercontent.google.com", "kind": "google-drive"},
     {"host": "www.mediafire.com", "path_contains_any": ["/file/"], "kind": "mediafire"},
     {"host": "mediafire.com", "path_contains_any": ["/file/"], "kind": "mediafire"},
-    {"host_ends_with": ".mediafire.com", "kind": "direct"}
+    {"host_ends_with": ".mediafire.com", "kind": "direct"},
+    {"host": "www.dropbox.com", "path_contains_any": ["/s/", "/scl/fi/"], "kind": "dropbox"},
+    {"host": "dropbox.com", "path_contains_any": ["/s/", "/scl/fi/"], "kind": "dropbox"},
+    {"host_ends_with": ".dropboxusercontent.com", "kind": "direct"},
+    {"host": "mega.nz", "path_contains_any": ["/file/"], "kind": "mega"},
+    {"host": "g.api.mega.co.nz", "kind": "direct"},
+    {"host_ends_with": ".userstorage.mega.co.nz", "kind": "direct"}
   ]
 }

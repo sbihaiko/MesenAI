@@ -160,7 +160,9 @@ namespace Mesen.Logic
 		public List<string>? PathContainsAny { get; init; }
 
 		//"direct" (plain HTTPS GET), "google-drive" (two-step confirm-token
-		//dance), or "mediafire" (share page then CDN hop) - see fetch_pack.py.
+		//dance), "mediafire" (share page then CDN hop), "dropbox" (dl=1
+		//rewrite then CDN redirects) or "mega" (API call + AES-CTR decrypt,
+		//ADR-0187) - see fetch_pack.py.
 		[JsonPropertyName("kind")]
 		public string Kind { get; init; } = "";
 	}
