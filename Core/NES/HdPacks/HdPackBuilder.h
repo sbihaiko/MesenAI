@@ -129,32 +129,81 @@ private:
 	vector<PendingScreen> _pendingScreens;
 	void FinalizeScreenAnchors();
 
-	//F5.4e co-occurrence graph, kept only for the "# inferred" tileNearby
-	//comments. During screen capture the per-frame background tile grid
-	//(_frameTileGrid/_frameTileSet) accumulates, in _coOccurrence, how often
-	//two tile shapes appear exactly 8 px apart (E/S neighbours; B at A + (8,0)
-	//or A + (0,8)). Keys are shape hashes (GetKey(true): palette wildcarded),
-	//so every palette variant of a tile collapses into one shape; a rare 32-bit
-	//CHR-RAM hash collision only merges two shapes, acceptable for a heuristic.
+	//F5.4e co-occurrence graph, now the evidence behind the tileNearby
+	//conditions BuildObjectSheets attaches (ADR-0190). During screen capture the
+	//per-frame background tile grid (_frameTileGrid/_frameTileSet) accumulates,
+	//in _coOccurrence, how often one tile shape appears exactly one cell east or
+	//south of another. Shape ids are hash codes of GetKey(true) (palette
+	//wildcarded), so every palette variant of a tile collapses into one shape; a
+	//rare 32-bit CHR-RAM hash collision only merges two shapes, acceptable for a
+	//heuristic.
 	//The F5.4e clustering (union-find over edges seen >= 2x) and its
 	//textures/sheets/object<NNN>.png output were retired by ADR-0153: objects
 	//now come from the metatile pipeline (BuildSheets / WriteObjectSheets ->
-	//sheets/objNNN.png). BuildObjectSheets only emits, for pairs inside one of
-	//those objects, "# inferred" tileNearby condition candidates - inert
-	//definitions the artist can wire to a <tile> by hand, never auto-attached,
-	//so a wrong inference can never make a tile fail to render.
+	//sheets/objNNN.png). What survives is the pair table, restricted to pairs
+	//inside one of those objects.
+	//
+	//The key is ORDERED and carries the direction, and that is load-bearing.
+	//Until ADR-0190 it was {min(a,b), max(a,b)} with an ECount/SCount pair
+	//inside, which throws away *which* of the two shapes was the left/top one:
+	//the table could say "these two are horizontally adjacent" but the emitted
+	//condition, which has to say "the target sits 8 px east of me", then got its
+	//sign from hash ordering. Roughly half of them pointed the wrong way. The
+	//conflation of E and S into one bucket had the same shape of problem - two
+	//different statements sharing one tally, resolved by a majority vote.
+	struct HdPackCoOccurrenceKey
+	{
+		uint32_t A = 0;    //the left/top cell - the shape the condition is attached to
+		uint32_t B = 0;    //the cell one step away - the shape the condition requires
+		bool South = false; //false: B is one cell east of A. true: one cell south.
+
+		bool operator<(const HdPackCoOccurrenceKey& o) const
+		{
+			if(A != o.A) { return A < o.A; }
+			if(B != o.B) { return B < o.B; }
+			return South < o.South;
+		}
+	};
 	struct HdPackCoOccurrenceEdge
 	{
-		uint32_t ECount = 0; //times the second shape was seen 8 px east of the first
-		uint32_t SCount = 0; //times it was seen 8 px south
-		uint32_t Count() const { return ECount + SCount; }
+		//A *cell* tally: one accumulated frame of a static screen can raise it by
+		//30 on its own, so the historical "Count() >= 3" test was not the ">= 3
+		//frames" spriteNearby means by the same words - measured on Contra it
+		//rejected nothing at all. Frames is the frame-level tally, incremented at
+		//most once per accumulated frame, and is what the thresholds read.
+		uint32_t Count = 0;
+		uint32_t Frames = 0;
+		uint32_t LastFrame = 0xFFFFFFFF; //dedupes Frames within one frame
 	};
 	HdTileKey _frameTileGrid[30][32];
 	uint8_t _frameTileSet[30][32] = {}; //source of truth for which grid cells were drawn
-	std::map<std::pair<uint32_t, uint32_t>, HdPackCoOccurrenceEdge> _coOccurrence;
+	std::map<HdPackCoOccurrenceKey, HdPackCoOccurrenceEdge> _coOccurrence;
+	//Frames each shape was on screen in, over the same accumulated frames, so an
+	//edge's support reads as a conditional probability both ways
+	//(Frames/framesA, Frames/framesB) instead of only as a raw tally.
+	std::map<uint32_t, uint32_t> _shapeFrames;
+	uint32_t _coOccurrenceFrames = 0; //accumulated frames (AccumulateCoOccurrence calls)
 	bool _objectsBuilt = false; //guard: emit the inferred conditions once per session
 	void AccumulateCoOccurrence();
 	void BuildObjectSheets(stringstream& tileRows);
+	//Measurement-only: dumps the whole co-occurrence table with its frame-level
+	//support to the path in MESEN_TILENEARBY_EVIDENCE, if that variable is set.
+	//No effect on the pack. This is how the thresholds below were chosen, and it
+	//is how they are re-checked on a new game without a rebuild.
+	void DumpCoOccurrenceEvidence();
+	//ADR-0190. An edge is serialized as a tileNearby only when it held over at
+	//least this many accumulated frames AND accounted for at least this share of
+	//the frames each of its two shapes appeared in. Measured on Contra (7212
+	//frames): the raw table is 989 edges, 365 survive the "both shapes inside an
+	//inferred object" restriction, and their both-ways probability is sharply
+	//bimodal - 178 of them sit in [0.95, 1.00] and the next-highest bucket holds
+	//4. The probability gate is the one that does the work; the frame floor is a
+	//cheap guard against a pair seen once on a transition screen and never
+	//subsumes it (every survivor at 0.80 already had >= 60 frames).
+	static constexpr uint32_t kTileNearbyMinFrames = 3;
+	static constexpr double kTileNearbyMinProbability = 0.80;
+	uint32_t _tileNearbyConditions = 0; //emitted conditions
+	uint32_t _tileNearbyTiles = 0;      //distinct tiles that gained one
 
 	//F9.1-F9.3 (ADR-0153): artist-legible sheets. While recording, OnFrameEnd
 	//turns each frame's background runs into a compact MesenSheets::GridFrame

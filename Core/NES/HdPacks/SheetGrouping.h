@@ -68,4 +68,28 @@ namespace MesenSheets
 	//an artist cannot tell a deliberate blank from a subject the recorder
 	//failed to place, which is exactly what issue #175 reported.
 	std::vector<SheetSlot> EmptyGroupSlots(const SheetGroup& group);
+
+	//ADR-0190: one observed background adjacency, as HdPackBuilder's
+	//co-occurrence table holds it. Ordered and direction-carrying - "B sat one
+	//cell east (or south) of A" - because the tileNearby it may become has to
+	//state an offset with a sign.
+	struct TileAdjacency
+	{
+		uint32_t A = 0;
+		uint32_t B = 0;
+		bool South = false;
+		uint32_t Frames = 0;     //accumulated frames the adjacency held in
+		uint32_t FramesA = 0;    //frames A was on screen in at all
+		uint32_t FramesB = 0;    //frames B was on screen in at all
+		bool InObject = false;   //both shapes belong to an inferred object
+	};
+
+	//The half of the tileNearby decision that does not touch emulator state, so
+	//it can be tested without one (ADR-0127). Keeps an adjacency when both its
+	//shapes are inside an inferred object, it held over at least minFrames
+	//accumulated frames, and it accounts for at least minProb of the frames each
+	//of its two shapes appeared in - read in BOTH directions, so a merely common
+	//shape never becomes everyone's neighbour. Returns indexes into `edges`, in
+	//input order.
+	std::vector<size_t> SelectTileNearby(const std::vector<TileAdjacency>& edges, uint32_t minFrames, double minProb);
 }

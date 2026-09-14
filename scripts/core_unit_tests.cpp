@@ -4041,6 +4041,82 @@ namespace
 		}
 	}
 
+	//---- ADR-0190: tileNearby selection from the background pair table -------
+	//The gate SelectTileNearby applies is the whole reason a tileNearby may be
+	//auto-attached at all, so it is tested away from the emulator. The numbers
+	//it is set to are measured in docs/validation/tilenearby-evidence-study.md.
+
+	static TileAdjacency Adjacency(uint32_t a, uint32_t b, uint32_t frames, uint32_t framesA, uint32_t framesB)
+	{
+		TileAdjacency edge;
+		edge.A = a;
+		edge.B = b;
+		edge.South = false;
+		edge.Frames = frames;
+		edge.FramesA = framesA;
+		edge.FramesB = framesB;
+		edge.InObject = true;
+		return edge;
+	}
+
+	void TestTileNearbySelectionReadsTheProbabilityBothWays()
+	{
+		std::vector<TileAdjacency> edges;
+		//Two halves of one object: always together, whoever is on screen.
+		edges.push_back(Adjacency(1, 2, 900, 900, 910));
+		//A rare shape that only ever appears next to a very common one. One way
+		//round it looks perfect (900/900); the other way it is noise (900/9000),
+		//and that is exactly the sky/floor case the gate exists to reject.
+		edges.push_back(Adjacency(3, 4, 900, 900, 9000));
+		std::vector<size_t> kept = SelectTileNearby(edges, 3, 0.8);
+		Check(kept.size() == 1 && kept[0] == 0,
+			"BlocoP: ADR-0190 - a pair is kept only when it predicts both ways",
+			"kept=" + std::to_string(kept.size()));
+	}
+
+	void TestTileNearbySelectionNeedsObjectMembershipAndFrames()
+	{
+		std::vector<TileAdjacency> edges;
+		TileAdjacency outside = Adjacency(1, 2, 900, 900, 900);
+		outside.InObject = false;
+		edges.push_back(outside);
+		//Held perfectly, but only over two frames: a transition screen, not a
+		//structure. The frame floor is what keeps it out.
+		edges.push_back(Adjacency(5, 6, 2, 2, 2));
+		//A shape that was never counted on screen at all cannot support a
+		//probability, and must not divide by zero either.
+		edges.push_back(Adjacency(7, 8, 5, 0, 5));
+		Check(SelectTileNearby(edges, 3, 0.8).empty(),
+			"BlocoP: ADR-0190 - outside an object, under the frame floor, or with no frames of its own: no condition");
+	}
+
+	void TestTileNearbySelectionRejectsASelfEdge()
+	{
+		std::vector<TileAdjacency> edges;
+		//A run of one floor tile is adjacent to a copy of itself in every frame
+		//it appears in, so it scores 100% both ways while saying nothing about
+		//where anything is.
+		edges.push_back(Adjacency(9, 9, 900, 900, 900));
+		Check(SelectTileNearby(edges, 3, 0.8).empty(),
+			"BlocoP: ADR-0190 - a shape next to a copy of itself is not evidence of position");
+	}
+
+	//The direction is part of the key, and the selector must not merge the two
+	//statements: "B is east of A" and "B is south of A" can have very different
+	//support, and only the supported one may be emitted.
+	void TestTileNearbySelectionKeepsTheTwoDirectionsApart()
+	{
+		std::vector<TileAdjacency> edges;
+		edges.push_back(Adjacency(1, 2, 900, 900, 900));
+		TileAdjacency south = Adjacency(1, 2, 20, 900, 900);
+		south.South = true;
+		edges.push_back(south);
+		std::vector<size_t> kept = SelectTileNearby(edges, 3, 0.8);
+		Check(kept.size() == 1 && kept[0] == 0 && !edges[kept[0]].South,
+			"BlocoP: ADR-0190 - east and south are separate claims, judged separately",
+			"kept=" + std::to_string(kept.size()));
+	}
+
 	void TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame()
 	{
 		std::vector<OamFrame> frames = RepeatedGlyphFrames(12);
@@ -7022,6 +7098,10 @@ int main()
 	TestSpriteNearbyPlanIsASpanningTreeFromTheMostSeenCell();
 	TestSpriteNearbyPlanNeedsTwoPlacedCellsAndAnEdge();
 	TestSpriteNearbyPlanCoversEveryNonRootCellOnce();
+	TestTileNearbySelectionReadsTheProbabilityBothWays();
+	TestTileNearbySelectionNeedsObjectMembershipAndFrames();
+	TestTileNearbySelectionRejectsASelfEdge();
+	TestTileNearbySelectionKeepsTheTwoDirectionsApart();
 	TestSpriteOffsetTallyRisesOncePerFrame();
 	TestSpriteGroupIsLaidOutAtItsOamOffsets();
 	TestSpriteVocabularySheetListsEveryShape();

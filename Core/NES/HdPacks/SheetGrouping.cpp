@@ -316,4 +316,28 @@ namespace MesenSheets
 		}
 		return empty;
 	}
+
+	std::vector<size_t> SelectTileNearby(const std::vector<TileAdjacency>& edges, uint32_t minFrames, double minProb)
+	{
+		std::vector<size_t> kept;
+		for(size_t i = 0; i < edges.size(); i++) {
+			const TileAdjacency& edge = edges[i];
+			if(!edge.InObject || edge.Frames < minFrames) {
+				continue;
+			}
+			//A shape with no frames of its own cannot support a probability; a
+			//self-edge (a tile next to a copy of itself, e.g. a run of floor)
+			//would read as 100% both ways while saying nothing about position.
+			if(!edge.FramesA || !edge.FramesB || edge.A == edge.B) {
+				continue;
+			}
+			double probA = (double)edge.Frames / edge.FramesA;
+			double probB = (double)edge.Frames / edge.FramesB;
+			if(probA < minProb || probB < minProb) {
+				continue;
+			}
+			kept.push_back(i);
+		}
+		return kept;
+	}
 }
