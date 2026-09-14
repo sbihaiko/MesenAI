@@ -279,10 +279,11 @@ doc-checks: check-manifest
 	./scripts/checks/verify_claude_md_section.sh
 	./scripts/checks/verify_community_packs_catalog_doc.sh
 	./scripts/checks/verify_hd_pack_authoring_doc.sh
-	#The artist's entry point (docs/remastering-a-game.md): its links resolve and
-	#every --flag it prints is one the script it is printed for accepts. A guide
+	#The artist-facing docs (docs/remastering-a-game.md, ai-kit-review.md,
+	#hd-pack-authoring.md): their links resolve, the scripts they name exist, and
+	#every --flag they print is one the script it is printed for accepts. A guide
 	#whose commands rotted is the discoverability failure it was written to fix.
-	python3 scripts/checks/verify_remastering_guide.py
+	python3 scripts/checks/verify_artist_docs.py
 	./scripts/checks/verify_mep_fallback_adr_provenance.sh
 	./scripts/checks/verify_mep_fallback_adr.sh
 	./scripts/checks/verify_mep_fallback_authoring_doc.sh
