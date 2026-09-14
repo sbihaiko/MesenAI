@@ -6,7 +6,8 @@ extracted pack — discover_game_roots must enumerate the nested game zips as
 one root per game, so a single repo link can split into N packs + N sibling
 issues. Also verifies the fail-closed edges: unrelated zips (docs, bonus,
 HTML) and non-pack zips do not count, a single nested zip does not split,
-and a container that already resolves by subfolder keeps its behavior.
+and a container that already resolves by subfolder keeps its behavior
+(with an image beside each manifest, per #161/ADR-0121).
 
 Usage: python3 scripts/test_mep_nested_zip.py
 """
@@ -44,6 +45,8 @@ def make_zip(entries: dict) -> bytes:
 
 HIRES_AUDIO = b"<ver>105\n<bgm>0,1,Stage 1.ogg\n"
 HIRES_TEX = b"<ver>105\n<img>0,0,Chr_00_0.png\n"
+# Not a decodable image; discovery only looks at the file extension.
+PNG = b"\x89PNG\r\n\x1a\n"
 
 
 def check_repo_like():
@@ -144,10 +147,18 @@ def check_single_nested_zip_not_split():
 def check_subfolder_behavior_unchanged():
     """AC-5: a container that already resolves by direct subfolder candidates
     (extracted packs) keeps enumerating those — nested-zip scanning is only a
-    last resort after the direct paths found nothing."""
+    last resort after the direct paths found nothing.
+
+    Each folder carries a PNG beside its manifest: since #161 (ADR-0121, "a
+    bare hires.txt is a pack root only with a sibling image") the bare-basename
+    shape is the one candidate shape with no structural evidence of its own, so
+    a manifest with nothing to draw beside it is a variant manifest rather than
+    a root. That rule is asserted on its own below."""
     entries = {
         "1942/hires.txt": HIRES_AUDIO,
+        "1942/Chr_00_0.png": PNG,
         "Dr_Mario/hires.txt": HIRES_AUDIO,
+        "Dr_Mario/Chr_00_0.png": PNG,
     }
     src = mep_lint.Source.from_zip_bytes(make_zip(entries), label="extracted.zip")
     roots = mep_lint.discover_game_roots(src, "UNKNOWN")
@@ -157,12 +168,31 @@ def check_subfolder_behavior_unchanged():
     ok("direct subfolder candidates still win (nested scanning is last-resort)")
 
 
+def check_bare_manifest_folder_is_not_a_root():
+    """#161 / ADR-0121: a subfolder holding only a `hires.txt` (a variant
+    manifest next to a patch, issue #138's shape) is not a fallback candidate
+    root — only a folder that directly holds an image is. Without this the
+    four-variant pack presented five candidates and failed closed."""
+    entries = {
+        "Customization/Patch - Music A/hires.txt": HIRES_TEX,
+        "Customization/Patch - Music A/patch.ips": b"PATCH",
+        "Customization/Patch - Music B/hires.txt": HIRES_TEX,
+        "Customization/Patch - Music B/patch.ips": b"PATCH",
+    }
+    candidates = mep_lint.find_fallback_subfolder_candidates(list(entries))
+    if candidates:
+        fail(f"bare-manifest folders must not be candidate roots: {candidates!r}")
+        return
+    ok("a subfolder with a bare hires.txt and no image is not a root (#161)")
+
+
 def main():
     check_repo_like()
     check_unrelated_zips_excluded()
     check_pack_json_nested()
     check_single_nested_zip_not_split()
     check_subfolder_behavior_unchanged()
+    check_bare_manifest_folder_is_not_a_root()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")

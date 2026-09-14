@@ -26,6 +26,33 @@ what CI actually runs; this doc records why they're split the way they are.
   the downloadable build, and `cancel-in-progress` (grouped on workflow+ref)
   would let a push cancel a dispatched build. `checks.yml` also compiles
   `scripts/headless_record`, so it needs SDL2.
+  Since Phase 11 C.1 (2026-09-14) the file holds **three** jobs, run in
+  parallel so a red one names which contract broke:
+  - `checks` — `make doc-checks`, as above.
+  - `python-tests` — `make python-tests`, i.e.
+    `scripts/checks/run_python_tests.sh`: every `scripts/test_*.py` as its own
+    process, exit non-zero on any file's failure. A loop over the files, never
+    `python3 -m unittest discover`, because most of them carry a hand-written
+    `main()` runner printing "ok"/"N/N passed" instead of `unittest.TestCase`
+    subclasses — discovery collected roughly 40 of ~290 cases. The runner's
+    skip list is for tests that cannot run without a display and must stay
+    empty whenever the test can skip itself instead (as
+    `test_compose_editor_gui.py` does for its four windowed cases); every entry
+    carries its reason. Same Python deps as `checks`, plus `python3-tk` (that
+    test imports tkinter at module scope, and the runner image ships without
+    it) and no SDL2.
+  - `core-unit-tests` — `make core-unit-tests`, the PR gate's only compile of
+    `Core/`. Same host-free invariants as `unit-tests.yml`'s step of the same
+    name (no `InteropDLL`/`MesenCore`, no SDL2, no SDK, no ROM), and since C.1
+    the makefile's `CUTFLAGS` carry `-Wall -Werror` instead of `-w`.
+    `-Wno-deprecated-declarations` is the one blanket exception, for inherited
+    upstream code (`Utilities/UTF8Util.cpp`'s `std::wstring_convert` /
+    `std::codecvt_utf8_utf16`, deprecated in C++17); measured 2026-09-14 those
+    were the only two warnings `-Wall` produced over the whole `CUTSRC` list.
+  These jobs exist here, and not by re-enabling `unit-tests.yml`/`tests.yml`,
+  because both of those workflows are `disabled_manually` on this repo
+  (`gh workflow list --repo sbihaiko/MesenCE --all`) and have produced no run
+  since; requiring their check names on `main` would block every merge.
 - `workflows/clang-format-check.yml` — C++ formatting gate (`clang-format` 20,
   `check-path: ./`). Runs on push to `main` (the product branch) and on
   every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
@@ -262,6 +289,24 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Work Guidance
 
+- **The PR gate's invariants (Phase 11 C.1, 2026-09-14 — amends the CI
+  contract of ADR-0131).** Every pull request into `main` must, without a
+  `workflow_dispatch`:
+  1. compile the `Core/`/`Utilities/` sources on `CUTSRC` with warnings as
+     errors (`checks.yml`'s `core-unit-tests` job) and run the framework-free
+     harness;
+  2. run **every** `scripts/test_*.py`, not a hand-picked subset
+     (`checks.yml`'s `python-tests` job). Adding a test file must require no
+     edit to a workflow or to the makefile;
+  3. report the three check runs `checks`, `python-tests` and
+     `core-unit-tests`, which are the required status checks of the `main`
+     ruleset (`gh api repos/sbihaiko/MesenCE/rulesets`). Renaming a job here
+     renames a required check: update the ruleset in the same PR, or `main`
+     blocks on a name that never reports.
+  Adding a fourth required check is fine; removing one of the three, or
+  letting a compile or a Python test leave the gate, is not — that is the
+  state #230 left behind and C.1 was written to end. Binaries stay on
+  `workflow_dispatch` (#230 stands); none of this re-enables them.
 - `unit-tests.yml` must never link `InteropDLL`/`MesenCore`, never require
   SDL2, and never require a platform SDK or ROM corpus. A self-contained
   compile of explicitly listed `Core/`/`Utilities/` sources (as
@@ -295,6 +340,11 @@ what CI actually runs; this doc records why they're split the way they are.
   .github/workflows/build.yml .github/workflows/dotnet-format-check.yml`
 - `grep -E "ADR-0131" .github/AGENTS.md` (this file's own invariant
   section cites the ADR; the workflow file does not need to)
+- `grep -E "^  (checks|python-tests|core-unit-tests):" .github/workflows/checks.yml`
+  (expected: the three jobs the `main` ruleset requires)
+- `grep -E "Werror" makefile` (the `CUTFLAGS` line; `-w` must not come back)
+- `./scripts/checks/run_python_tests.sh` (38 files, ~25 s as of 2026-09-14)
+- `gh api repos/sbihaiko/MesenCE/rulesets --jq '.[].name'`
 - `grep -E "exclude-regex" .github/workflows/clang-format-check.yml`
 - `python3 scripts/checks/verify_community_pack_issue_template.py`
 - `python3 scripts/checks/verify_community_pack_submitted_workflow.py`
