@@ -73,7 +73,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   runs one bootstrap record per `<stage>.mss`+`<stage>.txt` pair into its
   own pack folder. `headless_record` flags: `state=<f.mss>` (the run and its
   script count from the state's frame), `save-state=<f.mss>` (written only
-  when the run reached its frame target). Later stages are reached
+  when the run reached its frame target), `cheat=AAAA:VV[:CC]` (repeatable;
+  ADR-0184 — **RAM addresses `$0000-$07FF` only**, the `NesCustom` form; a
+  Game Genie letter code or a PRG address ends the run rather than warning,
+  because a PRG patch on a CHR RAM game can reach the tile bytes we record as
+  the game's art. Applied after `LoadRom` and after any state, since
+  `Emulator::LoadRom` clears the cheat list. Only a kit's **background**
+  surfaces — stage maps, pattern pages — may be built from a cheated run: the
+  barrier sprite and the swapped palette land in the figure grids. ⚠️
+  `CheatCodeAbi` mirrors `CheatCode`; `CheatType` is one byte, and the
+  `static_assert` on `sizeof == 17` is there because a wrong mirror made
+  `AddCheat` refuse every code in silence). Later stages are reached
   **headlessly**: short runs chained state to state, steered by RAM read off
   the `.mss` with `mss_ram.py <f.mss> [addr…] | --diff <other.mss>` (header
   version aware: format 3 carries a 40-byte SHA-1 the loader skips). A
@@ -538,6 +548,134 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   per-state table with the tiles only that state exhibited. Stdlib only,
   no ROM. First run 2026-09-13 (Contra80s 1.1 vs fifteen Contra packs) is
   summarised in ADR-0182.
+- `artist_kit.py <recorded pack> [--out DIR] [--names F] [--verify]` (F9.18) -
+  the **sprites** part of the shared artist kit
+  (`runs/golden-20260913-f922/artist-kit-contract.md`): lays `sheets/poses.json`
+  out as grids of whole figures - one grid per ADR-0179 `cycles[]` entry (the
+  row *is* the loop, its columns the phases in order), one per `sequences[]`
+  entry the cycles did not already cover, then the remainder wrapped at
+  `--columns`. A variant (ADR-0179 §4) is the column after the figure it
+  varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why. A
+  figure is laid out once, so a row can be shorter than its animation. A sheet
+  is captioned by the run's own `--names` entry, failing that by the
+  **subjects** its poses are filed under in that file (most cells first, the
+  key humanised - the `subjects` prose goes to `notes[]` once), and failing
+  that by the run/pose id plus the measured counts; a subject is never read
+  off a palette, a size or a thumbnail. Cells
+  are padded to **their own row's** figure box (the rest grid bins figures by
+  box, so a boss never sets the cell size for a pickup), centred and
+  bottom-aligned on the **tile** box (a pose's fully transparent OAM tiles
+  count, so ink can sit above the line). A pose whose every member is a
+  screen-pinned node (ADR-0173) is HUD, not a figure, and is dropped; a pack
+  recorded before that ADR carries no `screenFixed` at all and the kit says in
+  `notes[]` that it cannot tell HUD from figures rather than guessing - as it
+  does when the recorder found no cycle to make a row out of. `usrNNN` names
+  are claimed by creating the sidecar (`O_EXCL`), so two generators writing
+  into one `<kit>/sheets/` cannot be handed the same number. Writes ADR-0153
+  composed sheets through
+  `compose_engine.Pack.export` into `<out>/sheets/`, never into the recording
+  unless `--in-place`, plus the fragment `kit-part-sprites.json` - no
+  `kit.json`/`ARTIST.md`, the assembler merges those. `--verify` rebuilds a
+  throwaway copy with and without the kit and asserts the `(tileData, palette)`
+  key set is unchanged; when the recording already fails `build` on its own it
+  reports BLOCKED rather than a false FAIL. Stdlib only, no ROM;
+  `test_artist_kit.py` covers it on the synthetic pack of
+  `test_compose_engine.make_pack`.
+- `artist_bg_kit.py <pack-dir> [--out DIR] [--names F] [--verify]` (F9.24,
+  ADR-0183 §2.2) - the kit's **scenery** half, the background counterpart of
+  `artist_kit.py`. Drops the cells that are one flat colour (no art to
+  repaint) and, when that empties an `objNNN`, the whole group, each with its
+  count in the fragment's `dropped[]`; keeps the rest at the offsets
+  ADR-0168's `evidence[]` walk recovers; recovers elements no `objNNN` groups
+  by clustering `adjacency.json` on edges that are deterministic in both
+  directions (p = 1.0, count >= 2) and merging clusters that share a footprint
+  and the cells attached to it - that is how Contra's base door sensor, split
+  across four blink phases by the recorder's count >= 3 grouping floor, comes
+  out as one file. Whole-screen captures are copied untouched into
+  `<out>/scene/`. Writes `<out>/sheets/` plus the fragment
+  `kit-part-background.json`, never into the recording. `--verify` rebuilds a
+  throwaway copy with and without the kit and asserts no new build error and
+  no `(tileData, palette)` key lost or added. The thresholds and the numbers
+  behind them are in `runs/golden-20260913-f922/background-objects.md` (14
+  golden packs). Stdlib only, no ROM; `test_artist_bg_kit.py` covers it on a
+  synthetic pack of its own - `test_compose_engine.make_pack` paints every
+  cell one flat colour, which is precisely the input this tool rejects.
+- `artist_map.py --out DIR --stage N --dump GRID.TXT --pack DIR [--scale N]
+  [--names F] [--verify]` / `--slice PAINTED.PNG --map MAP.JSON` (F9.24,
+  ADR-0183 §2.3) - the kit's **stage** half: the whole scrolling stage as one
+  image, the surface a fan remaster hand-builds (`Contra80s 1.1` ships
+  `Stage1a.png` at 6696x480 and `Stage3-Ground-v1b3.png` at 512x4360) and the
+  one a recorded pack has nothing of - it emits a handful of 256x240
+  `backgrounds/screenNNN.png` and no more. No nametable dump exists and none
+  is needed: the recorder already keeps the on-screen 32x30 grid of 8x8 cells
+  per retained frame (ADR-0153 §5) and `MESEN_SHEET_GRID_DUMP=<file>` writes
+  that stream out, cells aligned to the frame's fine x scroll so they sit on
+  the world's tile lattice. What the dump does not carry is where the camera
+  was; that is recovered the way `ScreenStitcher.cpp` recovers it, as the best
+  whole-cell shift between consecutive frames, accumulated - exact on Contra,
+  whose camera moves 1 px per frame. De-duplication is by **world position**,
+  never by frame, so a stretch walked twice is written once and a position
+  re-seen *differently* is tallied rather than overwritten: what the panorama
+  keeps is the variant that position was seen with **most often** (ties to the
+  first sighting), because on a scrolling stage the frame that first covers a
+  world position is almost always a transitional one - measured on Contra's
+  waterfall, the first variant holds for a median 0.02 of a position's
+  sightings and the most-seen one for 0.98. Every disagreeing sighting is
+  counted and reported. A step that cannot beat the ADR-0153 §6 cut bar starts a new region; a
+  region that never scrolled past one screen is refused, since the recorder's
+  own screen capture already is it (Contra's base stages 2 and 4 are like
+  this). Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
+  being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
+  position and `(tileData, palette)` key - so the panorama is addressable *and*
+  a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
+  `--slice` cuts a painted strip back into that sheet: one key sits at many
+  positions and a pack holds one art per key, so **first occurrence in (y, x)
+  order wins** and every disagreeing position is printed, split into "both
+  painted differently" and "only one instance painted". Two limits, both
+  reported and never hidden: a dump written before F9.24 carries no palette
+  plane, so its cells fall back to the shape's first-seen colours and each
+  fall-back whose tile data has rival palettes carries `paletteAttributed` and
+  makes its file `seen: false` (F9.24 added the plane to `WriteGridDump`, so a
+  fresh dump resolves this and the count drops to zero); and a CHR ROM game -
+  whose `hires.txt` keys by index (ADR-0172) - is refused outright rather than
+  served a panorama that matches nothing. Measured 2026-09-13 on Contra: stage 1 2304x240 (the fan pack's own
+  strip is 3348x240 logical), the stage-3 waterfall 256x2176 (fan pack
+  256x2180), 17344/17344 cells byte-identical to the pack's own tile art, 0
+  errors and 0 keys lost or added through `mep_build.py build`. Stdlib only,
+  no ROM at generate time; `test_artist_map.py` covers it on a synthetic
+  recording.
+- `artist_chr_kit.py <recorded pack> --rom <path.nes> [--out DIR] [--names F]
+  [--fill-rules none|observed|all] [--verify]` (F9.24, ADR-0183 §2.4) - the
+  kit's **pattern-page** half: `textures/chr/Chr_*.png` completed from the ROM
+  where the recording saw nothing. A page is not a palette but a *variant rank*
+  of a CHR bank (`SaveHdPack` spreads each tile's palette variants across the
+  bank's pages by usage), so the unit of completeness is the bank and only its
+  rank-0 page is completed: a cell recorded on a lower-ranked page is moved up
+  (`borrowed`, still `seen: true`, naming its source page), a cell neither page
+  has is filled from the ROM (`seen: false`). A **CHR ROM** bank is exact - it
+  *is* 4 KB of the file. A **CHR RAM** bank is only recoverable where its
+  recorded tiles pin down a contiguous PRG block (`offset = base + 16*index`,
+  >= 3 agreeing non-degenerate tiles, hole within 16 indices of one of them);
+  where the game unpacks its graphics nothing pins down and the hole stays.
+  The recorder's own synthetic pages are recognised and copied through
+  untouched: the PRG scan it already writes (`AddPrgScanTiles`, bank ids
+  `0x504247xx`) and the blank-tile bucket (`Chr_FFFFFFFF_*`). Packs recorded
+  before the builder filled in the CHR bank hash carry 0 on every page; their
+  banks are recovered as the largest sets of pages that never disagree about a
+  tile index. Palette RGBA is read off the pack's own reference pages rather
+  than assumed, so a custom palette completes correctly; a fill is rendered
+  nearest-neighbour (the recorder smooths its own cells) under the bank's
+  most-recorded palette, which is a guess and says so. Writes
+  `<out>/chr/Chr_<n>.png` + `.orig.png` + `.legend.png` (green recorded, olive
+  moved up, amber ROM fill, red hole) + `.json` (every cell's state, `seen`,
+  origin and PRG offset), plus the `kit-part-chr.json` fragment. `hires.txt` is
+  never touched: `--fill-rules` writes its rows to `chr/fill-rules.hires.txt`
+  and defaults to `none`, because a rule for a filled cell either never matches
+  (harmless) or re-binds a key the pack already owns. Measured 2026-09-13:
+  Excitebike 512/512 tiles and Mega Man 3 8192/8192 complete; Contra
+  stage2-base 247 recorded + 102 filled of 512 (packed CHR RAM), Zelda 1 508 +
+  453 of 1536 (linear CHR RAM). Stdlib only; `test_artist_chr_kit.py` covers it
+  on a synthetic iNES image and pack.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

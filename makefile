@@ -321,6 +321,28 @@ doc-checks: check-manifest
 	#Issue #183: sheet cells must name (key, palette) pairs the pack's own
 	#hires.txt emits; the audit tool's test runs on synthetic packs.
 	python3 scripts/test_sheet_keys_audit.py
+	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
+	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
+	python3 scripts/test_artist_kit_assemble.py
+	#F9.24 (ADR-0183 §2.1): the kit's sprite half -- cycle phase order, a
+	#variant beside its base, fusions excluded, one baseline per row, and a
+	#legal composed sheet. Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_artist_kit.py
+	#F9.24 (ADR-0183 §2.2): the kit's scenery half -- inkless groups dropped
+	#with their count, an element recovered from adjacency.json across its
+	#animation phases, and a round-trip that loses no (tileData, palette)
+	#key. Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_artist_bg_kit.py
+	#F9.24 (ADR-0183 §2.3): the kit's stage half -- the camera position
+	#recovered from the recorded grid stream, de-duplication by world position,
+	#the cut rule, the HUD band, and a panorama that slices back into a pack
+	#sheet. Synthetic recording in a temp dir; no emulator, no ROM.
+	python3 scripts/test_artist_map.py
+	#F9.24 (ADR-0183 §2.4): the kit's pattern-page half -- a CHR ROM bank
+	#completed to all 256 tiles, a CHR RAM bank filled only where a PRG block
+	#explains it, evidence never repainted, and hires.txt left untouched.
+	#Synthetic iNES image and pack in a temp dir; no emulator, no ROM library.
+	python3 scripts/test_artist_chr_kit.py
 	#F5.5 golden refresh: the MEP/MEI goldens under docs/specs/golden/ must stay
 	#in sync with the emit code and the specs, or these gates fail.
 	python3 scripts/validate-specs.py

@@ -1229,7 +1229,8 @@ class Pack:
         return canvas, cells, columns, unit
 
     def export(self, kind: str, nodes: list, seed, locked: list, band=None,
-               to_dir: Path = None, placements: list = None):
+               to_dir: Path = None, placements: list = None, poses: list = None,
+               name: str = None):
         """Write a composed sheet (`usrNNN`) to `to_dir` (default the pack's own
         sheets dir). `kind` is `object` or `sprite`; `nodes` are the kept node
         ids in sheet order; `band` is the quantised bottom for a sprite band.
@@ -1239,7 +1240,17 @@ class Pack:
         sheets of a pack share one <scale>"), so writing the twin's size here
         would break `mep_build.py build` for the whole pack. The artist paints
         `usrNNN.png` in an image editor and `mep_build.py` fans the painted
-        cells back out, as for any sheet."""
+        cells back out, as for any sheet.
+
+        `poses` is the ADR-0174 §1 cross-reference: the `poses.json` ids this
+        sheet's cells belong to, written only when non-empty — a caller that
+        passes nothing (the editor) produces exactly the sidecar it always
+        did, byte for byte.
+
+        `name` is the `usrNNN` stem to write, for a caller that already claimed
+        one (by creating the file) so two writers into one `to_dir` cannot be
+        handed the same number; without it the stem is the first free one, as
+        it always was."""
         if kind not in ("object", "sprite"):
             raise ComposeError(f"composed kind {kind!r} must be 'object' or 'sprite'")
         if not nodes:
@@ -1251,7 +1262,7 @@ class Pack:
         scale = self.scale
         painted = (self.compose_sheet(kind, nodes, placements, scale=scale)[0]
                    if scale > 1 else canvas.clone())
-        name = self.next_free_name(to_dir)
+        name = name or self.next_free_name(to_dir)
         sheet_repaint.write_png(to_dir / f"{name}.png", painted)
         sheet_repaint.write_png(to_dir / f"{name}.orig.png", canvas)
         doc = {
@@ -1267,6 +1278,10 @@ class Pack:
             "locked": list(locked),
             "cells": cells,
         }
+        if poses:
+            # ADR-0174 §1: ids, not an agreement about array order, and the
+            # key is absent rather than empty when there is nothing to say.
+            doc["poses"] = [str(p) for p in poses]
         if band is not None:
             doc["band"] = {"bottom": int(band), "tolerance": BAND_QUANTUM}
         (to_dir / f"{name}.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")

@@ -6,7 +6,13 @@
 //
 //Build:   make capture-tool
 //Usage:   scripts/headless_record <rom> <seconds> <output_prefix> [pal] [hdpack] [screenshot] [log] [hdpack-off|mep-off|mep-notextures|mep-nosynth|mep-disable=<container>] [romtiles] [filter=<name>] [live=<ms>]
-//         [state=<file.mss>] [save-state=<file.mss>] [input=<script>]
+//         [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [cheat=AAAA:VV[:CC]]
+//
+//ADR-0184: "cheat=" takes a RAM-address code only - the AAAA:VV[:CC] form with
+//AAAA below $0800. A Game Genie letter code is refused, because it is a PRG
+//patch by construction and a game that unpacks its tiles out of PRG (Contra,
+//Zelda 1) would then record altered bytes as if they were its own art. A run
+//that carries a cheat feeds only the background surfaces of an artist kit.
 //
 //F9.22: "state=" starts the run from a save state, "save-state=" writes one
 //when the run reaches its frame target (never on an INCOMPLETE run). Together
@@ -109,8 +115,35 @@ struct ExecuteShortcutParamsAbi
 	void* ParamPtr;
 };
 
+//Same ABI as CheatCode in Core/Shared/CheatManager.h (see the TimingInfoAbi
+//note above about why these are mirrored locally). Only NesCustom is ever
+//sent - see ADR-0184 and parseRamCheat() below.
+struct CheatCodeAbi
+{
+	//CheatType is `enum class CheatType : uint8_t` - one byte, not four. A
+	//uint32_t here makes the struct 20 bytes against the Core's 17, so both
+	//the array stride and the offset of Code[] come out wrong and every cheat
+	//is silently refused by AddCheat. Measured: three runs whose grid dumps
+	//were byte-identical to an uncheated one.
+	uint8_t Type;
+	char Code[16];
+};
+static_assert(sizeof(CheatCodeAbi) == 17, "CheatCodeAbi must match CheatCode in Core/Shared/CheatManager.h");
+
+//ADR-0184 - the only cheat type a recording may carry. CheatType::NesCustom
+//is the AAAA:VV[:CC] form CheatManager::ConvertFromNesCustomCode stores with
+//the address taken verbatim; NesGameGenie and NesProActionRocky both force
+//the decoded address into PRG space (+0x8000), so neither can ever satisfy
+//the rule and neither is accepted here.
+static const uint8_t CheatTypeNesCustom = 2;
+//The NES's internal RAM. An address at or above this is PRG space or a
+//register, and a cheat there could change bytes the game unpacks into CHR RAM
+//- on Contra that is the tile data we record as the game's own art.
+static const uint32_t NesInternalRamEnd = 0x0800;
+
 extern "C"
 {
+	void SetCheats(CheatCodeAbi codes[], uint32_t length);
 	void LoadStateFile(char* filepath);
 	void SaveStateFile(char* filepath);
 	TimingInfoAbi GetTimingInfo(uint8_t cpuType);
@@ -327,6 +360,52 @@ static bool ScriptUsesPortTwo(const std::string& text)
 	return false;
 }
 
+//ADR-0184 §1 - a recording may carry a cheat only as a RAM-address code, and
+//the rule is enforced by the parser rather than by discipline. Accepts the
+//`AAAA:VV` / `AAAA:VV:CC` form only, and only with AAAA below 0x0800.
+//
+//Rejecting the type and rejecting the address are two separate checks and both
+//have to be here: a letter code is refused because it is not this form at all,
+//and a NesCustom code may still carry a PRG address.
+//
+//Returns false and fills `error` - the caller refuses the run rather than
+//warning, because a run recorded under a PRG patch is evidence nobody can
+//tell apart from the real thing afterwards.
+static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::string& error)
+{
+	if(code.size() > 15) {
+		error = "too long to be an AAAA:VV[:CC] code";
+		return false;
+	}
+	size_t colon = code.find(':');
+	if(colon != 4 || (code.size() != 7 && code.size() != 10)) {
+		error = "not an AAAA:VV[:CC] RAM code - a Game Genie letter code is a PRG patch and is refused (ADR-0184)";
+		return false;
+	}
+	for(size_t i = 0; i < code.size(); i++) {
+		bool wantColon = (i == 4 || i == 7);
+		if(wantColon != (code[i] == ':') || (!wantColon && !isxdigit((unsigned char)code[i]))) {
+			error = "not an AAAA:VV[:CC] RAM code";
+			return false;
+		}
+	}
+	uint32_t address = (uint32_t)strtoul(code.substr(0, 4).c_str(), nullptr, 16);
+	if(address >= NesInternalRamEnd) {
+		char buf[256];
+		snprintf(buf, sizeof(buf),
+			"address $%04X is outside the NES's internal RAM ($0000-$07FF) - a cheat above it can "
+			"reach PRG, and a game that unpacks its tiles out of PRG would record altered art (ADR-0184)",
+			address);
+		error = buf;
+		return false;
+	}
+	out = {};
+	out.Type = CheatTypeNesCustom;
+	memcpy(out.Code, code.c_str(), code.size());
+	return true;
+}
+
+
 int main(int argc, char** argv)
 {
 	if(argc < 4) {
@@ -334,6 +413,7 @@ int main(int argc, char** argv)
 			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [mep-off]\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
+			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>]\n", argv[0]);
 		return 1;
 	}
@@ -378,6 +458,9 @@ int main(int argc, char** argv)
 	//the first '|' (neither Localize()'d key needs one).
 	std::string hudMessageTitle;
 	std::string hudMessageText;
+	//ADR-0184 - RAM-address cheats, validated by parseRamCheat() as they are
+	//parsed and applied after the ROM (and any state) is loaded.
+	std::vector<CheatCodeAbi> cheats;
 	for(int i = 4; i < argc; i++) {
 		if(strcmp(argv[i], "pal") == 0) {
 			pal = true;
@@ -433,6 +516,14 @@ int main(int argc, char** argv)
 			mep.BootstrapEnhancementFolder = true;
 		} else if(strcmp(argv[i], "mep-forcepatch") == 0) {
 			mep.ApplyPatchOnHashMismatch = true;
+		} else if(strncmp(argv[i], "cheat=", 6) == 0) {
+			CheatCodeAbi cheat;
+			std::string why;
+			if(!parseRamCheat(argv[i] + 6, cheat, why)) {
+				fprintf(stderr, "refused cheat \"%s\": %s\n", argv[i] + 6, why.c_str());
+				return 1;
+			}
+			cheats.push_back(cheat);
 		} else if(strncmp(argv[i], "state=", 6) == 0) {
 			stateFile = argv[i] + 6;
 		} else if(strncmp(argv[i], "save-state=", 11) == 0) {
@@ -710,6 +801,16 @@ int main(int argc, char** argv)
 		//state's frame, or the whole script lands before the run begins.
 		HeadlessSetScriptStartFrame(stateFrame);
 		printf("state loaded: %s (at frame %u; the run ends at frame %u)\n", stateFile.c_str(), stateFrame, totalFrames);
+	}
+
+	//ADR-0184 - after LoadRom and after any state, because Emulator::LoadRom
+	//clears the cheat list: applied before either, this would silently do
+	//nothing and the run would look like a normal one.
+	if(!cheats.empty()) {
+		SetCheats(cheats.data(), (uint32_t)cheats.size());
+		for(const CheatCodeAbi& c : cheats) {
+			printf("cheat applied: %s (RAM address, ADR-0184)\n", c.Code);
+		}
 	}
 	TimingInfoAbi timing = GetTimingInfo(CpuTypeFromExtension(rom));
 	printf("ROM loaded: %s%s\n", rom.c_str(), pal ? " [region forced: PAL]" : "");
