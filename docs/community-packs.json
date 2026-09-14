@@ -371,6 +371,26 @@
       "validated_at": "2026-09-14T12:42:46Z",
       "verdict": "accepted",
       "votes": 1
+    },
+    {
+      "content_id": "a87e837c7dd06c1e82ed5a4d8de25e4340221538f52c7253e5061da13cdac636",
+      "game": "Donkey Kong Jr. (Japan)",
+      "issue": 208,
+      "kind": "hd-legacy",
+      "labels": [
+        "pack:valid",
+        "assets:textures"
+      ],
+      "license": "unknown",
+      "name": "Donkey Kong Jr. (Japan) \u2014 community submission",
+      "pack_id": "issue-208",
+      "rom": {},
+      "sha256": "943231b84b237c1df1a46b7a1e6b1f378219530c8ff7fd836055a7fc86055f3c",
+      "system": "nes",
+      "url": "https://www.dropbox.com/s/znz4fnmbk07xv1v/Donkey%20Kong%20Jr.%20%28Japan%29.zip?dl=0",
+      "validated_at": "2026-09-14T13:23:06Z",
+      "verdict": "accepted",
+      "votes": 1
     }
   ],
   "updated": "2026-09-14"
