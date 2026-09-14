@@ -238,6 +238,168 @@ def states(doc):
     return {c["slot"]: c["state"] for c in doc["cells"]}
 
 
+
+# --- palette folding --------------------------------------------------------
+#
+# The rule is decided off the NES palette, so these cases are about the rule
+# itself rather than about pixels: real palette pairs lifted out of the Zelda
+# TAS recording (`runs/tas-zelda-20260914/kit4`), and the two classes of false
+# positive the 2026-09-14 corpus measurement turned up.
+
+# A pattern that paints all four palette indices (pixel values 3,3,2,2,1,1,0,0
+# per row), so nothing folds through an entry the tile never draws.
+FOLD_TILE = "CC" * 8 + "F0" * 8
+# The shape Zelda's fade rides on: `7F80808080808080FFFFFFFFFFFFFFFF` paints
+# only colours 2 and 3, which is why its 30 palettes collapse to ~7 cells.
+RAMP_TILE = "7F80808080808080" + "FFFFFFFFFFFFFFFF"
+
+
+def _fold(base: str, other: str, tile: str = FOLD_TILE):
+    """("inert"|"fade"|None, brightness, drift) — the same two passes, in the
+    same order, that `compute_folds` runs."""
+    used = K.painted_indices(tile)
+    b, o = K.palette_entries(base), K.palette_entries(other)
+    if all(K._nes_rgb(b[k]) == K._nes_rgb(o[k]) for k in used):
+        return "inert", 1.0, 0.0
+    if not K.fade_related(b, o, used):
+        return None, None, None
+    brightness, drift = K.fold_measure(b, o, used)
+    if drift > K.HUE_DRIFT_GATE_DEG:
+        return None, brightness, drift
+    return "fade", brightness, drift
+
+
+def test_a_fade_step_of_one_ramp_folds_onto_the_step_above_it():
+    # Zelda's most-repeated patterns carry ~7 hue families, each a short ramp;
+    # these three are verbatim from `runs/tas-zelda-20260914/kit4`, on the shape
+    # they ride on. The expected Brightness and drift are measured, not chosen:
+    # five of the six real steps fold, and the sixth is refused by the gate,
+    # which is what the gate is for.
+    expect = [
+        ("olive $x8", "0F081828", "0F080818", "fade", 0.549, 0.6),
+        ("olive $x8", "0F081828", "0F020808", "fade", 0.326, 0.8),
+        ("green $xB", "0F0B1B2B", "0F0B0B1B", "fade", 0.530, 18.4),
+        # $2B (45E082) to $0B (004F08) is a real saturation swing on the 2C02,
+        # not just a dimming, so the deepest green step stays its own cell.
+        ("green $xB", "0F0B1B2B", "0F0F0B0B", None, 0.321, 28.3),
+        ("cyan  $xC", "0F0C1C2C", "0F0C0C1C", "fade", 0.573, 13.5),
+        ("cyan  $xC", "0F0C1C2C", "0F0F0C0C", "fade", 0.372, 13.7),
+    ]
+    for name, base, step, want, brightness, drift in expect:
+        kind, b, d = _fold(base, step, RAMP_TILE)
+        verb = "folds onto" if want else "is refused over the gate against"
+        check(kind == want and abs(b - brightness) < 0.002 and abs(d - drift) < 0.05,
+              f"{name}: {step} {verb} {base}",
+              f"kind={kind} b={b} drift={d}")
+        check(want is None or 0.0 <= b < 1.0,
+              f"{name}: {step} is darker than {base}, so Brightness < 1", str(b))
+
+
+def test_a_fully_faded_palette_folds_at_brightness_zero():
+    # The last step of a fade-out paints the tile black. Brightness 0 is the
+    # honest reconstruction, not a degenerate one: AdjustBrightness renders it
+    # black, which is what the game drew.
+    kind, brightness, drift = _fold("0F081828", "0F0F0F0F", RAMP_TILE)
+    check(kind == "fade" and brightness == 0.0 and drift == 0.0,
+          "an all-black palette folds at Brightness 0",
+          f"kind={kind} b={brightness} drift={drift}")
+
+
+def test_two_colourways_of_one_pattern_are_never_folded():
+    # The whole point. A green and a red wearing the same pattern are two
+    # pictures, and folding them would destroy evidence (ADR-0183 §3).
+    for a, b in (("0F0B1B2B", "0F171626"),   # green vs red
+                 ("0F0C1C2C", "0F021222"),   # cyan  vs blue
+                 ("0F081828", "0F0B1B2B")):  # olive vs green
+        kind, _b, _d = _fold(a, b, RAMP_TILE)
+        check(kind is None, f"{b} is a different colourway from {a}, not a fade",
+              str(kind))
+        kind, _b, _d = _fold(b, a, RAMP_TILE)
+        check(kind is None, "and it does not fold the other way round either",
+              str(kind))
+
+
+def test_a_rotated_ramp_is_not_a_fade():
+    # FP class 1 of the corpus measurement: every entry keeps hue 0, so the
+    # structural rule fires, but the grey ramp is permuted rather than scaled.
+    # A multiplier preserves the ratios between a tile's colours; a rotation
+    # does not, and the drift gate is what catches it.
+    kind, _b, drift = _fold("0F001030", "3F103000")
+    check(kind is None,
+          "a rotated grey ramp is refused, not folded", f"kind={kind} drift={drift}")
+
+
+def test_one_entry_moving_while_the_others_hold_is_left_to_the_gate():
+    # FP class 2 of the corpus measurement: a highlight pulse, where only one
+    # painted entry walks its ramp and the others hold. It is a false positive
+    # of the fade *story*, not of the Brightness *field* — the relation on that
+    # entry really is a brightness one — so the drift gate decides it rather
+    # than a "every entry must move" rule. Measured: requiring every entry to
+    # move is perfect on Contra (0 bad folds of 50) but costs Zelda 340 cells
+    # and Gauntlet 1387, which is the bulk of what the fold is for.
+    kind, brightness, drift = _fold("3F293717", "3F292717", RAMP_TILE)
+    check(kind == "fade" and 20.0 < drift < 22.0,
+          "a one-entry move inside the gate folds, and the gate is what decided",
+          f"kind={kind} b={brightness} drift={drift}")
+    # The same shape of change, but far enough round the wheel, is refused —
+    # which is the point of gating on drift rather than on the story.
+    kind, _b, drift = _fold("0F303030", "0F301030", RAMP_TILE)
+    check(kind is None or drift <= K.HUE_DRIFT_GATE_DEG,
+          "and the gate, not the rule, is the only thing that refuses it",
+          f"kind={kind} drift={drift}")
+
+
+def test_a_palette_that_gets_brighter_is_never_a_fade_downwards():
+    # The relation is directional: the base is the brightest member, and the
+    # greedy in compute_folds relies on that to pick the cell to paint.
+    used = K.painted_indices(FOLD_TILE)
+    dark, bright = K.palette_entries("0F0F0B0B"), K.palette_entries("0F0B1B2B")
+    check(not K.fade_related(dark, bright, used),
+          "a brighter palette is not a fade of a darker one")
+    check(K.fade_related(bright, dark, used),
+          "but the darker one is a fade of the brighter one")
+
+
+def test_only_the_indices_the_pattern_paints_are_compared():
+    # A pattern that paints colours 0 and 1 does not care what 2 and 3 hold,
+    # and two palettes that differ only there are the same picture.
+    flat = "F000F000F000F000" + "0000000000000000"   # paints colours 0 and 1
+    check(K.painted_indices(flat) == [0, 1],
+          "painted_indices reads the pattern, not the palette",
+          str(K.painted_indices(flat)))
+    kind, brightness, drift = _fold("0F162B2B", "0F161222", flat)
+    check(kind == "inert" and brightness == 1.0 and drift == 0.0,
+          "palettes differing only outside the painted indices fold inertly",
+          f"kind={kind} b={brightness} drift={drift}")
+    # And the same two palettes on a pattern that DOES paint 2 and 3 are two
+    # different pictures, so nothing folds.
+    kind, _b, _d = _fold("0F162B2B", "0F161222", FOLD_TILE)
+    check(kind is None,
+          "while the same pair on a pattern that paints them is left alone",
+          str(kind))
+
+
+def test_the_fold_is_reported_per_page_and_per_pack_and_changes_no_pixel():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = chr_rom_fixture(td)
+        K.run(pack, rom, td / "kit", None, "none", False, True)
+        frag = json.loads((td / "kit" / "kit-part-chr.json").read_text())
+        check("fold" in frag and frag["fold"]["gateDegrees"] == K.HUE_DRIFT_GATE_DEG,
+              "the fragment states the gate the fold ran under")
+        for key in ("foldedAway", "inert", "fade", "cellsToPaint",
+                    "refusedOverGate", "driftHistogram"):
+            check(key in frag["fold"], f"the fragment's fold block carries {key}")
+        doc = sidecar(td / "kit", "Chr_00_0")
+        check("fold" in doc and "driftHistogram" in doc["fold"],
+              "and every page carries its own drift histogram, so a loose game "
+              "is visible where the kit is opened")
+        check(all(c["state"] != "folded" or
+                  {"kind", "brightness", "drift", "basePage", "baseSlot"} <= set(c)
+                  for c in doc["cells"]),
+              "a folded cell names what it folds into and what that costs")
+
+
 # --- cases ------------------------------------------------------------------
 
 
@@ -576,8 +738,8 @@ def test_the_order_of_preference_is_own_evidence_then_donor_then_rom():
               "a lower-ranked page of this pack still outranks a donor")
         check(all(st[i] == "donated" for i in DONOR_ONLY),
               "an index only the donor recorded is donated, not filled from the ROM")
-        check(doc["counts"] == {"evidence": 100, "borrowed": 10, "fill": 126,
-                               "empty": 0, "donated": 20},
+        check(doc["counts"] == {"evidence": 100, "borrowed": 10, "folded": 0,
+                               "fill": 126, "empty": 0, "donated": 20},
               "and the counts add up to the whole bank", str(doc["counts"]))
 
 
@@ -623,8 +785,8 @@ def test_the_legend_gives_a_donated_cell_its_own_colour():
         st = states(doc)
         legend = read_png(td / "kit" / "chr" / "Chr_00_0.legend.png")
         check(len({K.LEGEND_EVIDENCE, K.LEGEND_BORROWED, K.LEGEND_DONATED,
-                   K.LEGEND_FILL, K.LEGEND_EMPTY}) == 5,
-              "the five cell states have five distinct legend colours")
+                   K.LEGEND_FOLDED, K.LEGEND_FILL, K.LEGEND_EMPTY}) == 6,
+              "the six cell states have six distinct legend colours")
         ok = True
         for state, rgba in (("evidence", K.LEGEND_EVIDENCE),
                             ("borrowed", K.LEGEND_BORROWED),
@@ -729,6 +891,14 @@ def main():
         test_provenance_travels_into_the_fragment_and_its_notes,
         test_a_donated_cell_never_becomes_a_hires_rule,
         test_without_also_the_run_leaves_no_trace_of_the_feature,
+        test_a_fade_step_of_one_ramp_folds_onto_the_step_above_it,
+        test_a_fully_faded_palette_folds_at_brightness_zero,
+        test_two_colourways_of_one_pattern_are_never_folded,
+        test_a_rotated_ramp_is_not_a_fade,
+        test_one_entry_moving_while_the_others_hold_is_left_to_the_gate,
+        test_a_palette_that_gets_brighter_is_never_a_fade_downwards,
+        test_only_the_indices_the_pattern_paints_are_compared,
+        test_the_fold_is_reported_per_page_and_per_pack_and_changes_no_pixel,
     ]
     for t in tests:
         t()
