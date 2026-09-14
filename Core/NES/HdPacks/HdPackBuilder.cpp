@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <queue>
+#include <set>
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/BaseMapper.h"
@@ -124,26 +125,84 @@ void HdPackBuilder::AccumulateCoOccurrence()
 {
 	//The grid holds the background tile shape (palette-wildcarded key) per 8x8
 	//cell of the last drawn frame; only E and S neighbors are examined so every
-	//adjacent pair is counted once (B at A + (8,0) => ECount, A + (0,8) => SCount).
-	//Runs only while capture is enabled (the grid is only filled then), so object
+	//adjacent pair is counted once, as the ordered edge A -> B at +(8,0) or
+	//+(0,8). Runs only while capture is enabled (the grid is only filled then), so object
 	//inference reflects what the captured screens actually showed.
+	uint32_t frameIndex = _coOccurrenceFrames++;
+	std::set<uint32_t> shapesThisFrame;
+	//a is always the left/top cell and b the one a step east or south of it, so
+	//the key states a direction the emitted condition can be built from without
+	//a second guess (ADR-0190).
+	auto bump = [this, frameIndex](uint32_t a, uint32_t b, bool south) {
+		HdPackCoOccurrenceEdge& edge = _coOccurrence[HdPackCoOccurrenceKey{ a, b, south }];
+		edge.Count++;
+		if(edge.LastFrame != frameIndex) {
+			edge.LastFrame = frameIndex;
+			edge.Frames++;
+		}
+	};
 	for(int row = 0; row < 30; row++) {
 		for(int col = 0; col < 32; col++) {
 			if(!_frameTileSet[row][col]) {
 				continue;
 			}
 			uint32_t a = _frameTileGrid[row][col].GetKey(true).GetHashCode();
+			shapesThisFrame.insert(a);
 			if(col + 1 < 32 && _frameTileSet[row][col + 1]) {
-				uint32_t b = _frameTileGrid[row][col + 1].GetKey(true).GetHashCode();
-				_coOccurrence[{std::min(a, b), std::max(a, b)}].ECount++;
+				bump(a, _frameTileGrid[row][col + 1].GetKey(true).GetHashCode(), false);
 			}
 			if(row + 1 < 30 && _frameTileSet[row + 1][col]) {
-				uint32_t b = _frameTileGrid[row + 1][col].GetKey(true).GetHashCode();
-				_coOccurrence[{std::min(a, b), std::max(a, b)}].SCount++;
+				bump(a, _frameTileGrid[row + 1][col].GetKey(true).GetHashCode(), true);
 			}
 		}
 	}
+	for(uint32_t shape : shapesThisFrame) {
+		_shapeFrames[shape]++;
+	}
 	std::memset(_frameTileSet, 0, sizeof(_frameTileSet));
+}
+
+//Measurement-only, and deliberately inert: when MESEN_TILENEARBY_EVIDENCE names
+//a path, the whole co-occurrence table is written there as CSV before
+//BuildObjectSheets applies any threshold, so the candidate population can be
+//studied offline. Writes nothing when the variable is unset.
+void HdPackBuilder::DumpCoOccurrenceEvidence()
+{
+	if(_evidenceDumped) {
+		//BuildObjectSheets is called once per session today, but the dump now
+		//sits ahead of its guard, so "once" has to be enforced here rather than
+		//borrowed from that guard.
+		return;
+	}
+	#ifdef _MSC_VER
+	#pragma warning(push)
+	#pragma warning(disable : 4996)  //getenv is deprecated on MSVC; _dupenv_s is the secure form but getenv is fine here
+	#endif
+	const char* path = std::getenv("MESEN_TILENEARBY_EVIDENCE");
+	#ifdef _MSC_VER
+	#pragma warning(pop)
+	#endif
+	if(!path || !path[0]) {
+		return;
+	}
+	ofstream out(path, ios::out | ios::binary);
+	if(!out) {
+		return;
+	}
+	_evidenceDumped = true;
+	out << "# frames=" << _coOccurrenceFrames << " edges=" << _coOccurrence.size()
+	    << " objectShapes=" << _sheetObjectShapes.size() << '\n';
+	out << "a,b,dir,count,frames,framesA,framesB,aIsObject,bIsObject\n";
+	for(const auto& edge : _coOccurrence) {
+		uint32_t a = edge.first.A, b = edge.first.B;
+		auto fa = _shapeFrames.find(a), fb = _shapeFrames.find(b);
+		out << a << ',' << b << ',' << (edge.first.South ? 'S' : 'E') << ','
+		    << edge.second.Count << ',' << edge.second.Frames << ','
+		    << (fa == _shapeFrames.end() ? 0 : fa->second) << ','
+		    << (fb == _shapeFrames.end() ? 0 : fb->second) << ','
+		    << (_sheetObjectShapes.count(a) ? 1 : 0) << ','
+		    << (_sheetObjectShapes.count(b) ? 1 : 0) << '\n';
+	}
 }
 
 HdPackTileInfo* HdPackBuilder::FindObjectArt(uint32_t shapeHash, std::map<uint32_t, HdPackTileInfo*>& bestByShape)
@@ -155,12 +214,36 @@ HdPackTileInfo* HdPackBuilder::FindObjectArt(uint32_t shapeHash, std::map<uint32
 //ADR-0153 retires F5.4e's clustering (union-find over pairs seen adjacent >= 2
 //times): on every real game it collapsed the whole scene into one component,
 //so no object sheet was ever emitted. The sheets now come from the metatile
-//pipeline (BuildSheets / WriteObjectSheets). What survives here, unchanged, is
-//F5.4e's *inert* contract: for a pair of shapes that a real object is made of,
-//define a tileNearby condition the artist may wire to a <tile> by hand. Never
-//auto-attached - a wrong inference must not make a tile fail to render.
+//pipeline (BuildSheets / WriteObjectSheets). What survives here is F5.4e's pair
+//table: for two shapes a real object is made of, a tileNearby condition saying
+//"the other half of me sits one cell east/south".
+//
+//ADR-0190 attaches them. The old contract was "never auto-attached - a wrong
+//inference must not make a tile fail to render", and the second half of that
+//sentence is still the rule; what changed is that ADR-0189 gave us a way to
+//keep it while attaching, and a measurement replaced the guess behind the
+//first half:
+// - A wrong tileNearby is provably free. The conditioned line is emitted with
+//   a byte-identical bare twin right behind it (the _tileGateConditions path),
+//   and HdNesPack::GetMatchingTile walks a key's entries in file order, so a
+//   failing condition costs one predicate evaluation and then renders exactly
+//   what the bare line renders. Unlike spriteNearby it does not even cost the
+//   tile cache: HdPackLoader only sets ForceDisableCache for a tileNearby whose
+//   offset is off the 8 px grid, and every offset here is (8,0) or (0,8).
+// - The evidence is not the weak thing the old comment assumed. It was *stated*
+//   weakly - see HdPackCoOccurrenceKey on the orientation the old key threw
+//   away, and kTileNearbyMinFrames on what the old ">= 3" actually counted.
+//   Measured on Contra, the both-ways support of the candidates is sharply
+//   bimodal, and the gate below keeps the near-deterministic mode.
+//Full numbers and method: docs/validation/tilenearby-evidence-study.md.
 void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 {
+	//Before the guard below, not after it: one of the three early-outs is
+	//"no object shapes were inferred", which is precisely the recording whose
+	//whole co-occurrence table is worth studying offline. Behind the guard the
+	//dump produced no file at all on exactly those games and routes.
+	DumpCoOccurrenceEvidence();
+
 	if(_objectsBuilt || _coOccurrence.empty() || _sheetObjectShapes.empty()) {
 		return;
 	}
@@ -174,11 +257,18 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		return usage == _tileUsageCount.end() ? 0 : usage->second;
 	};
 	std::map<uint32_t, HdPackTileInfo*> bestByShape;
+	//_coOccurrence speaks in shape hash codes and _paletteVariantsByShape is
+	//keyed by the HdTileKey those hashes came from, so the attach step needs the
+	//way back. Built here rather than kept as a member: it is only meaningful
+	//once _hdData.Tiles is final, which is exactly now.
+	std::map<uint32_t, HdTileKey> shapeKeys;
 	for(unique_ptr<HdPackTileInfo>& tile : _hdData.Tiles) {
 		if(!tile || tile->DefaultTile) {
 			continue;
 		}
-		uint32_t shape = tile->GetKey(true).GetHashCode();
+		HdTileKey shapeKey = tile->GetKey(true);
+		uint32_t shape = shapeKey.GetHashCode();
+		shapeKeys.emplace(shape, shapeKey);
 		auto it = bestByShape.find(shape);
 		if(it == bestByShape.end() || usageOf(tile.get()) > usageOf(it->second)) {
 			bestByShape[shape] = tile.get();
@@ -193,18 +283,46 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 
 	tileRows << '\n' << "# inferred " << _sheetObjectCount << " object sheet(s) -> sheets/objNNN.png" << '\n';
 
+	//The selection itself is host-free and unit-tested (MesenSheets::
+	//SelectTileNearby); this class only turns the table into its input and the
+	//survivors into bytes, per ADR-0127.
+	vector<MesenSheets::TileAdjacency> candidates;
+	candidates.reserve(_coOccurrence.size());
+	for(const auto& entry : _coOccurrence) {
+		MesenSheets::TileAdjacency adjacency;
+		adjacency.A = entry.first.A;
+		adjacency.B = entry.first.B;
+		adjacency.South = entry.first.South;
+		adjacency.Frames = entry.second.Frames;
+		auto framesA = _shapeFrames.find(adjacency.A), framesB = _shapeFrames.find(adjacency.B);
+		adjacency.FramesA = framesA == _shapeFrames.end() ? 0 : framesA->second;
+		adjacency.FramesB = framesB == _shapeFrames.end() ? 0 : framesB->second;
+		adjacency.InObject = _sheetObjectShapes.count(adjacency.A) && _sheetObjectShapes.count(adjacency.B);
+		candidates.push_back(adjacency);
+	}
+
 	int edgeIndex = 0;
-	for(const auto& edge : _coOccurrence) {
-		uint32_t lo = edge.first.first, hi = edge.first.second;
-		if(edge.second.Count() < 3) {
+	for(size_t index : MesenSheets::SelectTileNearby(candidates, kTileNearbyMinFrames, kTileNearbyMinProbability)) {
+		const MesenSheets::TileAdjacency& edge = candidates[index];
+		uint32_t a = edge.A, b = edge.B;
+		double probA = (double)edge.Frames / edge.FramesA;
+		double probB = (double)edge.Frames / edge.FramesB;
+
+		HdPackTileInfo* target = FindObjectArt(b, bestByShape);
+		if(!target) {
 			continue;
 		}
-		if(_sheetObjectShapes.find(lo) == _sheetObjectShapes.end() || _sheetObjectShapes.find(hi) == _sheetObjectShapes.end()) {
+		//The tiles the condition is attached to: every palette variant of shape
+		//a that is real art. _paletteVariantsByShape is keyed by GetKey(true),
+		//the same wildcarded key the shape hash was taken from - going through
+		//bestByShape instead would gate one variant and silently leave the
+		//others un-gated.
+		auto sourceArt = shapeKeys.find(a);
+		if(sourceArt == shapeKeys.end()) {
 			continue;
 		}
-		HdPackTileInfo* source = FindObjectArt(lo, bestByShape);
-		HdPackTileInfo* target = FindObjectArt(hi, bestByShape);
-		if(!source || !target) {
+		auto variants = _paletteVariantsByShape.find(sourceArt->second);
+		if(variants == _paletteVariantsByShape.end() || variants->second.empty()) {
 			continue;
 		}
 
@@ -213,25 +331,48 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 			continue;
 		}
 
-		bool east = edge.second.ECount >= edge.second.SCount;
+		bool south = edge.South;
 		HdPackTileNearbyCondition* cond = new HdPackTileNearbyCondition();
 		cond->Name = condName;
 		string tileData;
 		int32_t tileIndex = -1;
-		bool ignorePalette = false;
 		if(target->IsChrRamTile) {
 			for(int i = 0; i < 16; i++) {
 				tileData += HexUtilities::ToHex(target->TileData[i]);
 			}
-			ignorePalette = true;
 		} else {
 			tileIndex = target->TileIndex;
+			if(tileIndex < 0) {
+				continue;
+			}
 		}
-		cond->Initialize(east ? 8 : 0, east ? 0 : 8, target->PaletteColors, tileIndex, tileData, ignorePalette);
+		//ignorePalette, always: a shape id is GetKey(true), so the evidence is
+		//palette-wildcarded and the condition has to be too, or the pair would
+		//stop matching itself the moment the game recoloured it. HD Pack
+		//version 108+, which this builder writes.
+		cond->Initialize(south ? 0 : 8, south ? 8 : 0, target->PaletteColors, tileIndex, tileData, true);
 		_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
+		_tileNearbyConditions++;
 
-		tileRows << "# inferred   tileNearby: attach [" << condName << "] to tile " << HexUtilities::ToHex(source->TileIndex)
-		         << " to require tile " << HexUtilities::ToHex(target->TileIndex) << " " << (east ? "8px east" : "8px south") << '\n';
+		//ADR-0189 sec. 5: a condition ships with the evidence it was derived
+		//from, never with a claim about what either shape means.
+		tileRows << "# inferred   tileNearby [" << condName << "] requires tile "
+		         << HexUtilities::ToHex(target->TileIndex) << " " << (south ? "8px south" : "8px east")
+		         << " - held in " << edge.Frames << " frames, "
+		         << (int)(probA * 100 + 0.5) << "% / " << (int)(probB * 100 + 0.5) << "% both ways" << '\n';
+
+		for(HdPackTileInfo* tile : variants->second) {
+			if(!tile || tile->DefaultTile) {
+				//A neutral-ramp placeholder is not art anyone painted; gating it
+				//would only duplicate a line nobody wants twice.
+				continue;
+			}
+			vector<HdPackCondition*>& gates = _tileGateConditions[tile];
+			if(gates.empty()) {
+				_tileNearbyTiles++;
+			}
+			gates.push_back(cond);
+		}
 	}
 }
 
@@ -1847,6 +1988,13 @@ void HdPackBuilder::SaveHdPack()
 			" spriteNearby condition(s) on " + std::to_string(_spriteNearbyTiles) +
 			" tile(s); each gates an extra copy of its tile line, never the only one." +
 			" Those tiles load with the tile cache disabled (spriteNearby forces it).");
+	}
+
+	if(_tileNearbyConditions > 0) {
+		MessageManager::Log("[HD Pack Builder] " + std::to_string(_tileNearbyConditions) +
+			" tileNearby condition(s) on " + std::to_string(_tileNearbyTiles) +
+			" tile(s); each gates an extra copy of its tile line, never the only one." +
+			" Cell-aligned, so unlike spriteNearby they keep the tile cache on.");
 	}
 
 	for(unique_ptr<HdPackCondition>& condition : _hdData.Conditions) {
