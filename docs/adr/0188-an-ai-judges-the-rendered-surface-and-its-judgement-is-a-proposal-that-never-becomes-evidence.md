@@ -1,8 +1,11 @@
 # ADR-0188: An AI judges the rendered surface, and its judgement is a proposal that never becomes evidence
 
 - Status: accepted (2026-09-14, at the user's direction: "quero uma AI no loop
-  para automatizar"; being implemented as slice F9.28 of
-  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`)
+  para automatizar"; shipped 2026-09-14 in `43eaab04` (#215): the
+  `packet`/`check`/`promote`/`truth`/`score` protocol of
+  `scripts/artist_ai_review.py`, with `promote` the only door from a proposal
+  into the generators' `--names` file. The ADR was written against PRD Part A
+  slice F9.28; the commit that landed it is filed under F9.24)
 - Date: 2026-09-14
 - Related: ADR-0183 (the artist kit — §3 "evidence and inference are never
   confused" and "no generator invents a name" are the constraints this ADR

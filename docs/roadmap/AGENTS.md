@@ -51,9 +51,19 @@ Owned with `docs/` (see parent `docs/AGENTS.md`). Does not own specs
   run — slice it and settle the slice's ADRs first.
 - Prose is en-US (CLAUDE.md); quoted GitHub Project Status option names
   stay verbatim.
+- The "delete the row when it ships" rule above is enforced:
+  `python3 scripts/checks/verify_prd_live_rows.py` (wired into
+  `make doc-checks`) reads every slice table under Part A §4 and Part B §8
+  and fails when a row's Decision cell declares the slice shipped — the cell
+  is split on `;`, `,` and a spaced em dash, and a fragment that *starts
+  with* `shipped` is the offence. A cell that merely mentions the word
+  mid-sentence, or that still owes work, passes.
 
 ## Verification
 
-Plans have no automated check. Specs used by a plan: `python3 scripts/validate-specs.py`.
+`python3 scripts/checks/verify_prd_live_rows.py` — no shipped row in a
+live slice table (see Local Contracts above). Specs used by a plan:
+`python3 scripts/validate-specs.py`. Nothing else about a plan is checked
+automatically.
 
 ## Child DOX Index

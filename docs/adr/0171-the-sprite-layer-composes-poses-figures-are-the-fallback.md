@@ -1,7 +1,9 @@
 # ADR-0171: The sprite layer composes poses; the `sprNNN` figure is the fallback unit
 
-- Status: accepted (2026-09-11, by the user) — not yet in the editor; the
-  implementing slice is PRD Part A §4 Phase 9 (F9.18's sprite layer)
+- Status: accepted (2026-09-11, by the user) — shipped the same day as PRD
+  Part A slice **F9.18** in `5eec2061`: the sprite layer composes poses
+  (`pose_for_anchor`/`pose_band_members` in `scripts/compose_engine.py`), with
+  the `sprNNN` walk kept as the fallback.
 - Date: 2026-09-11
 - Related: ADR-0164 (§5 the sprite layer and its Y-band criterion, §3 the
   `usrNNN` export contract), ADR-0165 (the editor is an external stdlib

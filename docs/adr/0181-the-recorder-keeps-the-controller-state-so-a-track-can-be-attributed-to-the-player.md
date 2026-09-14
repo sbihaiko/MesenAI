@@ -12,7 +12,7 @@
 - Related: ADR-0179 (tracks, `cycles[]` and `sequences[]` — this attributes
   them and depends on its §1 linker; F9.20), F9.22 (per-stage recording —
   the tooling that *improves* coverage, where §2 below only *reports* it),
-  ADR-0180 (parts; `proposed`),
+  ADR-0180 (parts; `superseded` 2026-09-12 by ADR-0179 §4),
   ADR-0170 (the pose sidecar), ADR-0171 (the pose as the unit), ADR-0173
   (the "recorder classifies and labels, consumer filters" rule this follows),
   ADR-0177 (`fusionOf`), ADR-0164 (`adjacency.json`)

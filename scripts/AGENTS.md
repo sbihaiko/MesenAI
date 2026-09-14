@@ -1025,6 +1025,14 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any
   `AGENTS.md` resolves to `docs/adr/NNNN-*.md`.
+- `python3 scripts/checks/verify_prd_live_rows.py` (PRD slice C.2, also in
+  `make doc-checks`) - no row of a *live* slice table in
+  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A section 4,
+  Part B section 8) may declare its slice shipped: the Decision cell is split
+  on `;`, `,` and a spaced em dash, emphasis is stripped, and a fragment that
+  starts with the word `shipped` fails the row. A shipped slice loses its row
+  and gains one line in the Part's shipped record (`docs/roadmap/AGENTS.md`).
+  Its own fixtures live in `python3 scripts/test_verify_prd_live_rows.py`.
 - `python3 scripts/test_mei_rules.py` (F6.3b) - `mei_rules.py` leaf: constant
   shapes, `required_mei_pack_fields`/`mei_entry_conforms` per kind,
   `resolve_kind`'s mep-meta-first / Status-fallback / None-when-unmapped
