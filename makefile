@@ -299,6 +299,10 @@ doc-checks: check-manifest
 	./scripts/checks/verify_mep_nested_zip_fallback.sh
 	./scripts/checks/verify_status_kind_parity.sh
 	./scripts/checks/verify_synthetic_nrom.sh
+	#ADR-0191: CI compiles Linux only, the macOS release is built locally by
+	#`make release-macos`, and Windows is retired from CI. The ADR was accepted
+	#and implemented in the same change, so this grep suite is its unit test.
+	./scripts/checks/verify_ci_linux_only.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py

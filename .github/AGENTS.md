@@ -12,12 +12,16 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Local Contracts
 
-- `workflows/build.yml` — full native + UI release build. **Temporarily
-  (2026-09-14) its `push` and `pull_request` triggers are gone** and all 14
-  jobs run only on `workflow_dispatch`
-  (`gh workflow run build.yml --ref <branch>`). Restoring it is putting the
-  two trigger blocks back under `on:`; the rationale is in the file's header
-  comment.
+- `workflows/build.yml` — native + UI release build, **Linux only** since
+  ADR-0191 (2026-09-14). The two Windows publish jobs and the four macOS legs
+  were deleted from the file (history keeps them); what is left is the
+  six-leg Linux matrix and the two AppImage legs, and neither consumed an
+  artifact of a removed job. Its `push` and `pull_request` triggers are still
+  gone (#230), so it runs only on `workflow_dispatch`
+  (`gh workflow run build.yml --ref <branch>`). Restoring the triggers is
+  putting the two blocks back under `on:`; restoring a platform is a revert of
+  the ADR-0191 commit plus a line in that ADR. The rationale for both is in
+  the file's header comment.
 - `workflows/checks.yml` — `make doc-checks` on every push and pull request.
   This is the repo's always-on gate, moved out of `build.yml` when that file
   became dispatch-only. It is a separate file, not a job, because
@@ -26,8 +30,10 @@ what CI actually runs; this doc records why they're split the way they are.
   the downloadable build, and `cancel-in-progress` (grouped on workflow+ref)
   would let a push cancel a dispatched build. `checks.yml` also compiles
   `scripts/headless_record`, so it needs SDL2.
-  Since Phase 11 C.1 (2026-09-14) the file holds **three** jobs, run in
-  parallel so a red one names which contract broke:
+  Since Phase 11 C.1 (2026-09-14) it holds the whole gate, run in parallel so
+  a red job names which contract broke. ADR-0191, later the same day, folded
+  `unit-tests.yml`'s two jobs in here and deleted that file, so the count is
+  **five**:
   - `checks` — `make doc-checks`, as above.
   - `python-tests` — `make python-tests`, i.e.
     `scripts/checks/run_python_tests.sh`: every `scripts/test_*.py` as its own
@@ -49,37 +55,56 @@ what CI actually runs; this doc records why they're split the way they are.
     upstream code (`Utilities/UTF8Util.cpp`'s `std::wstring_convert` /
     `std::codecvt_utf8_utf16`, deprecated in C++17); measured 2026-09-14 those
     were the only two warnings `-Wall` produced over the whole `CUTSRC` list.
-  These jobs exist here, and not by re-enabling `unit-tests.yml`/`tests.yml`,
-  because both of those workflows are `disabled_manually` on this repo
-  (`gh workflow list --repo sbihaiko/MesenCE --all`) and have produced no run
-  since; requiring their check names on `main` would block every merge.
+  - `ui-tests` — `./scripts/verify-ui-logic-firewall.sh` (ADR-0123 H5, the
+    fast pre-check; the dual-compile is the authoritative gate) then
+    `dotnet test UI.Tests/UI.Tests.csproj`. Moved here from `unit-tests.yml`
+    by ADR-0191, minus that job's `make core-unit-tests` step: the
+    `core-unit-tests` job above already compiles and runs the harness, and
+    duplicating it would pay for the same compile twice and leave two check
+    runs that fail for one reason. The job id now means exactly what it says
+    (ADR-0131's note about it covering the C++ suite too is withdrawn).
+  - `headless-ui-tests` — `dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj
+    -p:RuntimeIdentifier=linux-x64` (ADR-0150). Its own job, never a step of
+    `ui-tests`, so a headless-host failure cannot red the cheap host-free leg.
+    No `MesenCore` is built, so the MainWindow-backed cases self-skip with a
+    reason via `NativeCore.cs`; the core-free wiring cases run. The RID
+    override is needed because `UI/UI.csproj` hardcodes `win-x64`, and it is
+    the cross-RID `obj/` trap: a local restore for `osx-arm64` leaves
+    artefacts a `linux-x64` restore trips over — a clean checkout (CI) or
+    `rm -rf UI.HeadlessTests/obj` is what reconciles them.
+  These five jobs live here, and not in `unit-tests.yml`/`tests.yml`, because
+  both of those workflows were `disabled_manually` on this repo and had
+  produced no run since — a check name that never reports cannot be required
+  on `main`. ADR-0191 deleted them both.
 - `workflows/clang-format-check.yml` — C++ formatting gate (`clang-format` 20,
-  `check-path: ./`). Runs on push to `main` (the product branch) and on
-  every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
+  `check-path: ./`), **`disabled_manually`**; left disabled by ADR-0191, which
+  did not decide its fate. Its triggers, if it is ever enabled again, are push
+  to `main` (the product branch) and every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
   that header is also wrapped in `clang-format off/on`.
   `master` is a frozen full-console snapshot and is not gated here.
 - `workflows/dotnet-format-check.yml` — `dotnet format --verify-no-changes`
-  against `Mesen.sln` (Windows). Only touches projects that are members of
-  the `.sln`.
-- `workflows/tests.yml` — Windows-only ROM regression suite (PGOHelper +
-  the private `MesenTests` repo). Requires a full native + UI build. Not
-  touched by the unit-tests workflow below.
-- `workflows/unit-tests.yml` — Fase 0 of the now-completed unit-test plan
-  (see git history for `docs/roadmap/plano-testes-unitarios.md`):
-  `ubuntu-latest` job that runs
-  `./scripts/verify-ui-logic-firewall.sh` (ADR-0123, H5 — the fast
-  pre-check; the dual-compile is the authoritative gate), then
-  `dotnet test UI.Tests/UI.Tests.csproj` and then `make core-unit-tests`
-  (the framework-free C++ harness in
-  `scripts/core_unit_tests.cpp`). Deliberately independent of `tests.yml`:
-  no native build, no SDL2, no `MesenCore`, so it stays fast and runs on
-  every push/PR regardless of the Windows ROM suite's state. `UI.Tests.csproj`
-  is intentionally NOT a member of `Mesen.sln`, so this workflow does not go
-  through `dotnet-format-check.yml` or `build.yml`'s restore/publish flow
-  either. This file's Work Guidance section (ADR-0131) is the normative
-  contract for the job's invariants and toolchain/version policy — the
-  workflow file itself carries no restatement of them, so read them here,
-  not there, and keep this doc in sync when either side changes.
+  against `Mesen.sln` (Windows), **`disabled_manually`**. Only touches
+  projects that are members of the `.sln`. This is the one file allowed to
+  name a Windows runner under ADR-0191: it compiles nothing and produces no
+  binary, and `verify_ci_linux_only.sh` lists it by name so that enabling it
+  is a deliberate edit rather than silent drift.
+- `workflows/tests.yml` — **deleted** by ADR-0191 (2026-09-14). It was the
+  Windows-only ROM regression suite (MSBuild `PGOHelper` + the private
+  `nesdev-org/MesenTests` corpus, run as `PGOHelper.exe … citests`) and the
+  last Windows compilation in CI. That coverage is not reproducible on Linux
+  here — `PGOHelper.exe` is an MSBuild target of `Mesen.sln` producing a
+  Windows executable — so it comes back only when Windows does. ADR-0162
+  already recorded the accuracy suite as "not in CI by decision".
+- `workflows/unit-tests.yml` — **deleted** by ADR-0191 (2026-09-14). Its two
+  jobs, `ui-tests` and `headless-ui-tests`, are now jobs of `checks.yml`
+  (above), which is where their contract is documented. ADR-0131 remains the
+  normative statement of the invariants — never link `InteropDLL`/`MesenCore`,
+  never require SDL2, never require a platform SDK or a ROM corpus, pin
+  `dotnet-version: 10.x` — and those invariants now bind the two `checks.yml`
+  jobs. `UI.Tests.csproj` is still intentionally NOT a member of `Mesen.sln`,
+  so it goes through neither `dotnet-format-check.yml` nor `build.yml`'s
+  restore/publish flow.
+
 - `ISSUE_TEMPLATE/community-pack.yml` — GitHub Issue Form for community
   HD/MEP pack submissions (not a free-text issue). Deliberately minimal:
   pack link, target game/ROM + region and a console dropdown, all
@@ -322,59 +347,90 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Work Guidance
 
+- **CI compiles Linux only (ADR-0191, 2026-09-14).** Every binary build is
+  macOS Apple Silicon only for now, and CI is not where it happens: no
+  workflow in this repository may declare `runs-on:` naming a `macos-*` or a
+  `windows-*` runner. The single exception is the `disabled_manually`
+  `dotnet-format-check.yml`, listed by name in
+  `scripts/checks/verify_ci_linux_only.sh`. The macOS release is built
+  **locally** by `make release-macos` (Phase 11 C.4), whose hash check — not
+  CI — is what verifies the `.app`. Windows is retired from CI until the user
+  lifts the rule, and with it the upstream ROM accuracy suite; the practical
+  cost is that MSVC-only breakage (`/W4 /WX`, e.g. the `getenv` C4996 trap)
+  is caught only when Windows returns. Do not add a macOS or Windows job, and
+  do not re-create `tests.yml`/`unit-tests.yml`, without amending ADR-0191.
 - **The PR gate's invariants (Phase 11 C.1, 2026-09-14 — amends the CI
-  contract of ADR-0131).** Every pull request into `main` must, without a
-  `workflow_dispatch`:
+  contract of ADR-0131; extended by ADR-0191 the same day).** Every pull
+  request into `main` must, without a `workflow_dispatch`:
   1. compile the `Core/`/`Utilities/` sources on `CUTSRC` with warnings as
      errors (`checks.yml`'s `core-unit-tests` job) and run the framework-free
      harness;
   2. run **every** `scripts/test_*.py`, not a hand-picked subset
      (`checks.yml`'s `python-tests` job). Adding a test file must require no
      edit to a workflow or to the makefile;
-  3. report the three check runs `checks`, `python-tests` and
-     `core-unit-tests`, which are the required status checks of the `main`
-     ruleset (`gh api repos/sbihaiko/MesenCE/rulesets`). Renaming a job here
-     renames a required check: update the ruleset in the same PR, or `main`
-     blocks on a name that never reports.
-  Adding a fourth required check is fine; removing one of the three, or
-  letting a compile or a Python test leave the gate, is not — that is the
-  state #230 left behind and C.1 was written to end. Binaries stay on
+  3. run the C# `UI.Tests` suite behind the UI/Logic firewall pre-check and
+     the `UI.HeadlessTests` Avalonia wiring suite (ADR-0150), as
+     `checks.yml`'s `ui-tests` and `headless-ui-tests` jobs (ADR-0191);
+  4. report the five check runs `checks`, `python-tests`, `core-unit-tests`,
+     `ui-tests` and `headless-ui-tests`, which are the required status checks
+     of the `main` ruleset (`gh api repos/sbihaiko/MesenCE/rulesets`).
+     Renaming a job here renames a required check: update the ruleset in the
+     same PR, or `main` blocks on a name that never reports.
+  Adding a sixth required check is fine; removing one of the five, or letting
+  a compile or a Python test leave the gate, is not — that is the state #230
+  left behind and C.1 was written to end. Binaries stay on
   `workflow_dispatch` (#230 stands); none of this re-enables them.
-- `unit-tests.yml` must never link `InteropDLL`/`MesenCore`, never require
-  SDL2, and never require a platform SDK or ROM corpus. A self-contained
-  compile of explicitly listed `Core/`/`Utilities/` sources (as
-  `make core-unit-tests` does) is in scope; anything that needs the `core`
-  makefile target belongs in `build.yml`/`tests.yml`.
-- The `ui-tests` job id now covers both the C# and the C++ host-free
-  suites (steps `Run unit tests` and `Run core unit tests`), so a later
-  rename (e.g. to something like `host-free-tests`) is a known, deliberate
-  option, not a surprise — see ADR-0131 for why it isn't done now.
-- `make core-unit-tests` in this workflow is intentionally clang-only
-  (makefile default `CXX := clang++`) for cheapness; gcc and arm64
-  coverage of the `Core/` sources it compiles is `build.yml`'s job via
-  `CORESRC`. Only `scripts/core_unit_tests.cpp` itself is clang-gated.
-- `actions/setup-dotnet`'s `dotnet-version` pins `10.x` in
-  `unit-tests.yml`, matching `build.yml`'s `10.x`; `dotnet-format-check.yml`
-  pins `10.0.x` for its own, separate Windows-only `dotnet format` check.
-  These are two independent pins, not one tracking the other — keep
-  `unit-tests.yml` aligned with `build.yml`'s `10.x`, not with
-  `dotnet-format-check.yml` (ADR-0131 item 4, option A: the doc matches the
-  files as they are).
+- The `checks.yml` jobs `ui-tests` and `headless-ui-tests` must never link
+  `InteropDLL`/`MesenCore`, never require SDL2, and never require a platform
+  SDK or ROM corpus (ADR-0131's invariants, inherited from the deleted
+  `unit-tests.yml`). A self-contained compile of explicitly listed
+  `Core/`/`Utilities/` sources (as `make core-unit-tests` does) is in scope
+  and lives in the `core-unit-tests` job; anything that needs the `core`
+  makefile target belongs in `build.yml`. The `checks` job is the one
+  exception that installs SDL2, because `verify_smoke_pack_headless.sh`
+  builds `scripts/headless_record`.
+- The `ui-tests` job id now covers the C# suite only: ADR-0191 dropped the
+  `make core-unit-tests` step when the job moved, because the
+  `core-unit-tests` job already runs it. ADR-0131's "a later rename to
+  something like `host-free-tests`" note is therefore moot, and a rename
+  would churn a required check name for nothing.
+- `make core-unit-tests` is intentionally clang-only (makefile default
+  `CXX := clang++`) for cheapness; gcc and arm64 coverage of the `Core/`
+  sources it compiles is `build.yml`'s job via `CORESRC` — on Linux only
+  since ADR-0191. Only `scripts/core_unit_tests.cpp` itself is clang-gated.
+- `actions/setup-dotnet`'s `dotnet-version` pins `10.x` in both `checks.yml`
+  dotnet jobs, matching `build.yml`'s `10.x`; `dotnet-format-check.yml` pins
+  `10.0.x` for its own, separate Windows-only `dotnet format` check. These
+  are two independent pins, not one tracking the other — keep `checks.yml`
+  aligned with `build.yml`'s `10.x`, not with `dotnet-format-check.yml`
+  (ADR-0131 item 4, option A: the doc matches the files as they are).
 
 ## Verification
 
-- `grep -E "dotnet test" .github/workflows/unit-tests.yml`
-- `grep -E "verify-ui-logic-firewall" .github/workflows/unit-tests.yml`
+- `./scripts/checks/verify_ci_linux_only.sh` — ADR-0191's own test, wired into
+  `make doc-checks`. It subsumes the greps below; run it first.
+- `! grep -l "windows-latest" .github/workflows/*.yml` (no Windows runner by
+  that name; the verifier above also rejects `windows-2025-vs2026` and every
+  other `windows-*`, outside the `dotnet-format-check.yml` exception)
+- `! grep -l "macos-" .github/workflows/*.yml` (no macOS runner anywhere —
+  the macOS release is `make release-macos`, locally)
+- `test ! -e .github/workflows/tests.yml` (deleted with Windows)
+- `test ! -e .github/workflows/unit-tests.yml` (folded into `checks.yml`)
+- `grep -E "dotnet test" .github/workflows/checks.yml` (both suites)
+- `grep -E "verify-ui-logic-firewall" .github/workflows/checks.yml`
   (the step must precede "Run unit tests")
-- `grep -E "make core-unit-tests" .github/workflows/unit-tests.yml`
-- `grep -cE "InteropDLL|SDL2" .github/workflows/unit-tests.yml` (expected: 1,
-  the explanatory comment line only — 0 actual build/link steps)
-- `grep -E "dotnet-version: 10" .github/workflows/unit-tests.yml
+- `grep -E "make core-unit-tests" makefile` (the harness is invoked by the
+  `core-unit-tests` job, which runs `make -j$(nproc) core-unit-tests`)
+- `grep -vE "^\s*#" .github/workflows/checks.yml | grep -cE "InteropDLL|MesenCore"`
+  (expected: 0 — the names may appear in a comment explaining the invariant,
+  never in a step that runs)
+- `grep -E "dotnet-version: 10" .github/workflows/checks.yml
   .github/workflows/build.yml .github/workflows/dotnet-format-check.yml`
-- `grep -E "ADR-0131" .github/AGENTS.md` (this file's own invariant
-  section cites the ADR; the workflow file does not need to)
-- `grep -E "^  (checks|python-tests|core-unit-tests):" .github/workflows/checks.yml`
-  (expected: the three jobs the `main` ruleset requires)
+- `grep -E "ADR-0131|ADR-0191" .github/AGENTS.md` (this file's own invariant
+  section cites both ADRs; the workflow files carry the policy in a header
+  comment)
+- `grep -E "^  (checks|python-tests|core-unit-tests|ui-tests|headless-ui-tests):" .github/workflows/checks.yml`
+  (expected: the five jobs the `main` ruleset requires)
 - `grep -E "Werror" makefile` (the `CUTFLAGS` line; `-w` must not come back)
 - `./scripts/checks/run_python_tests.sh` (38 files, ~25 s as of 2026-09-14)
 - `gh api repos/sbihaiko/MesenCE/rulesets --jq '.[].name'`
@@ -388,7 +444,8 @@ what CI actually runs; this doc records why they're split the way they are.
 - `grep -c "verify_community_pack_validate_workflow" makefile` — the
   community-pack verifiers and pipeline unit tests are wired into
   `make doc-checks` (2026-08-29), so CI runs them as a gate — the Linux/macOS
-  build jobs until 2026-09-14, the `checks` job since; the ROM-dependent validators
+  build jobs until 2026-09-14, the `checks` job since (and there is no macOS
+  build job any more, ADR-0191); the ROM-dependent validators
   (`validate_palette_variants.py`, `validate_hdpack_dump.py`) stay manual
   because they need a real ROM + `make core`.
 
