@@ -228,6 +228,19 @@ With `bootstrap`, the pack builder writes **beside the ROM**:
 That folder is what every step below consumes. It is also a working pack — you
 can load it in the emulator as-is and see what you have.
 
+**Delete it before you record the same ROM again.** Once `<rom stem>/auto/`
+exists it is discovered as a pack that already dresses this ROM, so the next
+`bootstrap` run declines to record and leaves the old pack untouched — the run
+still exits 0 and says nothing, so a second recording that overwrote nothing
+looks exactly like one that worked. Either `rm -rf <rom dir>/<rom stem> <rom
+dir>/.bootstrap` first, or record through `scripts/record_stages.sh`, which
+gives every run its own directory with a hard link to the ROM and clears any
+pack left there.
+
+Silence is the defect, not the decline — a run that recorded nothing should
+say so. Tracked as issue #229; the workaround above stays valid until it
+lands.
+
 ---
 
 ## 2. Measure before you paint
@@ -282,6 +295,23 @@ targets and measure against that, or to pick a reference pack built for the ROM
 you actually recorded. A partial mismatch still measures, with a warning saying
 how much of the reference the recording could never have held.
 
+### And when it does not refuse, and the number is still not yours
+
+The refusal above catches one shape: the two sides keying tiles in *different*
+namespaces. A `<patch>` can also leave both sides in the same namespace and
+still make the comparison meaningless — a CHR ROM game whose patch rewrites the
+PRG/CHR body rather than the board type keys its tiles by index on both sides,
+so every key is the right shape and the intersection is a real one, just between
+two different builds.
+
+Nothing in the output says so today. Measured on the Zelda II "Revamp" pack,
+whose `hires.txt` line 4 is a `<patch>`: the table looks plausible and is not —
+`Characters/hero_Normal.png` classified as *background*, `blank.png` with 30
+cells seen. **Open the reference's `hires.txt` and look for a `<patch>` line
+before steering by the percentages.** It is not automatically fatal (a patch
+that only touches audio leaves the tiles alone), but it is never visible, and it
+is tracked as issue #231.
+
 ---
 
 ## 3. Unpack the recording into a kit
@@ -310,7 +340,7 @@ The last line writes **`<kit>/ARTIST.md` — the page you open first** — plus
 |---|---|---|
 | `artist_kit.py` | `<kit>/sheets/` | sprite figures on grids, animation cycles in phase order, variants beside their base |
 | `artist_bg_kit.py` | `<kit>/` object sheets | background elements recovered across their animation phases |
-| `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually travelled, so a short recording gives a short strip |
+| `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually travelled, so a short recording gives a short strip. **CHR RAM games only** — see below |
 | `artist_chr_kit.py` | `<kit>/chr/Chr_*.png` | complete pattern pages — every tile of a CHR bank, in ROM order |
 
 A measured 60-second stage-1 recording yields, for scale: 4 parts, 43 files,
@@ -324,6 +354,22 @@ Each writes a `.legend.png` / sidecar next to the PNG naming what it holds.
 in and asserts no `(tileData, palette)` key changed. It is the acceptance test —
 run it every time, and treat a failure as "the kit is wrong", never as "the
 verify is wrong".
+
+### The panorama is a CHR RAM surface
+
+On a CHR ROM game (Zelda II, Mega Man 3) the recorder keys every tile by its
+CHR index rather than by its 32-hex bitmap (ADR-0043, ADR-0172), and the grid
+dump carries no index, so nothing in the panorama could be matched back to a
+key. `artist_map.py` says so and stops:
+
+```
+error: <stage>: <pack>: this pack keys its tiles by CHR index (ADR-0172) and the
+grid dump carries no index — a panorama built from it would match nothing.
+```
+
+That is the tool refusing to write a surface it cannot verify, not a broken
+run. On such a game the kit is the other three surfaces; the stage's
+backgrounds are still in `textures/backgrounds/screenNNN.png`.
 
 ### Filling a bank from evidence rather than from nothing
 
@@ -480,6 +526,8 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A recording has almost no sprites | Frames after the retained-stream cap are dropped. Use several shorter runs (`record_stages.sh`) instead of one long one. |
 | A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
 | `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
+| A second `bootstrap` run changes nothing in the pack | `<rom stem>/auto/` already exists, so the bootstrap declines and keeps it. Delete the folder (and the sibling `.bootstrap` stamp) or record through `record_stages.sh`. The run should say so and does not — issue #229. |
+| `artist_map.py` refuses: "keys its tiles by CHR index" | A CHR ROM game; there is no panorama for it yet. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
 | `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
 | The sprite sheet's top rows are wrong | HUD runs along a fixed row and is excluded; if your game puts HUD elsewhere, check the band before trusting those cells. |

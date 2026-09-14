@@ -275,3 +275,41 @@ exist to measure the pack format, and two bases, the waterfall and its
 boss already show every mechanism the format has to carry. The chain from
 `stage4-base.mss` to the boss room is `stage4-base-to-stage4-boss.chain.txt`
 (169 steps, 18 957 frames), traced and verified like the two before it.
+
+## Zelda II: the menu is the hard part (2026-09-14)
+
+`zelda2/` was authored from scratch as a pilot of `docs/remastering-a-game.md`
+on a game the project had never recorded. `mint-field.txt` plays from power-on
+to the North Castle throne room — where the run starts — and the whole of it is
+menu:
+
+```
+Start at the title -> SELECT screen, cursor parked on "REGISTER YOUR NAME"
+Start             -> the register screen
+A                 -> types one letter ("A") into file 1
+Select x3         -> moves the file cursor 1 -> 2 -> 3 -> END
+Start             -> back to SELECT, now with file 1 named and selectable
+Start, Start      -> the game
+```
+
+Four of those steps are not guessable and cost one screenshot run each. An
+**unnamed file cannot be selected** — Up on the SELECT screen does not move the
+cursor off "REGISTER YOUR NAME", so a route that tries to start a blank file
+never leaves the menu. On the register screen **Start does not accept the name**
+(it does nothing) and **Up wraps the letter grid** from the `A` row to the `0`
+row, so the obvious "Up, A" types `A0`; `END` is reached only by cycling the
+file cursor with Select, and only Start commits there. Nine screenshot runs of
+12 s each settled the sequence.
+
+`field.txt` (4420 f, 74 s from `field.mss`) leaves the castle, walks the road
+east and then alternates: wander D/U on grass until a random encounter starts,
+one sword swing, a step, a jump attack and a crouch stab, then hold Right for
+260 f to walk off the right edge and end the encounter. The walking-out is what
+makes it survivable: the first draft, which stood and fought for ~15 s per
+encounter, died at ~50 s at LIFE-1 and recorded the death screen.
+
+`field-probe.txt` (`104f R / 30f - / 104f L / 30f -` x13, from the throne room,
+where the screen does not scroll) reads Link's walk cleanly — 9 poses, 2 cycles,
+period 3, hold [4,4,4], 117 repeats each — but **attributes no driver**, and the
+60 f-hold shape (x20, 100 repeats) does not either. On this game the probe is
+worth running as a clean-cycle measurement; it answered nothing about the pad.
