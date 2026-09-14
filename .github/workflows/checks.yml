@@ -14,6 +14,16 @@ name: Checks
 # split: `cancel-in-progress` groups on workflow+ref, so a push to `main` during
 # a dispatched build would have cancelled it.
 #
+# Phase 11 C.1 (2026-09-14) added the two jobs below `checks`. With the binary
+# matrix on `workflow_dispatch`, nothing on a pull request compiled `Core/` any
+# more (and `/W4 /WX` + `-Werror` there had caught the tileNearby bug twice on
+# the very day the matrix was switched off), and nothing had ever run the
+# `scripts/test_*.py` suite. They are separate jobs, not extra steps in
+# `checks`, so the three run in parallel and a red one names which of the three
+# contracts broke. `unit-tests.yml` and `tests.yml` are not used for this:
+# both workflows are `disabled_manually` on this repo and have not produced a
+# run since, so requiring their check names would block every merge forever.
+#
 # `make doc-checks` is the repo's own acceptance suite: the drift guardrails
 # (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline
 # verifiers, and the HD-pack and artist-kit script suites. It also compiles —
@@ -56,3 +66,38 @@ jobs:
 
       - name: Run doc checks
         run: make doc-checks
+
+  # Every `scripts/test_*.py`, one process per file. Most of them carry their
+  # own `main()` runner rather than `unittest.TestCase` subclasses, so
+  # `unittest discover` collects a small fraction of the cases; the runner
+  # loops over the files instead. Same Python deps as the `checks` job, minus
+  # SDL2 (no compilation here). Measured 2026-09-14: 38 files, ~25 s.
+  python-tests:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
+
+      - name: Run the Python suite
+        run: make python-tests
+
+  # The PR gate's compile of `Core/`. `make core-unit-tests` builds the listed
+  # Core/Utilities translation units standalone (no InteropDLL, no MesenCore,
+  # no SDL2, no ROM - the ADR-0131 invariants) with `-Wall -Werror`, then runs
+  # the framework-free harness. A PR that breaks compilation, or introduces a
+  # warning in a file on the CUTSRC list, fails here. Measured 2026-09-14:
+  # ~13 s with -j8 locally, 771/771 cases.
+  core-unit-tests:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Compile and run the core unit tests
+        run: make -j$(nproc) core-unit-tests

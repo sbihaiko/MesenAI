@@ -389,7 +389,17 @@ core: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 #(the single-command form was serial, and no -j could help it), and so a one-file
 #edit relinks instead of recompiling all of them. Header deps come from -MMD -MP,
 #the same mechanism ADR-0155 put on the core build.
-CUTFLAGS := -std=c++17 -O2 -w -I . -I Core -I Utilities
+#Warnings are errors here (Phase 11 C.1). Until 2026-09-14 this target built
+#with -w: the fourteen binary builds of build.yml were the only thing that
+#compiled Core/ on a PR, and /W4 /WX + -Werror there caught the tileNearby bug
+#twice on the very day those builds were switched to workflow_dispatch (#230).
+#With them off, this target is the PR gate's only compile of Core/ sources, so
+#it carries the diagnostics. -Wno-deprecated-declarations is the one blanket
+#exception, for inherited upstream code: Utilities/UTF8Util.cpp uses
+#std::wstring_convert/std::codecvt_utf8_utf16, deprecated in C++17 with no
+#standard replacement. Measured 2026-09-14: those are the only two warnings
+#-Wall produces across the whole CUTSRC list.
+CUTFLAGS := -std=c++17 -O2 -Wall -Werror -Wno-deprecated-declarations -I . -I Core -I Utilities
 CUTSRC := \
   scripts/core_unit_tests.cpp \
   Core/Shared/Audio/ChannelRoleClassifier.cpp \
@@ -432,6 +442,13 @@ scripts/core_unit_tests: $(CUTOBJ)
 
 core-unit-tests: scripts/core_unit_tests
 	scripts/core_unit_tests
+
+#Phase 11 C.1: every scripts/test_*.py, one process per file. `doc-checks`
+#above names a hand-picked subset file by file (it predates this target and
+#stays as it is, so a doc-checks run keeps its own explicit list); this target
+#is the whole suite and picks up a new test file with no edit anywhere.
+python-tests:
+	./scripts/checks/run_python_tests.sh
 
 #F5.4g level-2 validation harness (channel roles / SFX classifier) - see scripts/roles_probe.cpp
 roles-probe: core
