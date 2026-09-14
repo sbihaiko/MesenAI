@@ -712,7 +712,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   counted and reported. A step that cannot beat the ADR-0153 §6 cut bar starts a new region; a
   region that never scrolled past one screen is refused, since the recorder's
   own screen capture already is it (Contra's base stages 2 and 4 are like
-  this). Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
+  this). A screen-fixed band is kept **out** of the panorama: each row is
+  judged fixed or moving by scoring consecutive frames' cells under every
+  candidate shift, and the band runs over the leading rows that voted fixed.
+  A row where every drawn cell is the same shape **abstains** instead of
+  voting - a blank margin matches itself under any shift, and the 1/32-cell
+  edge artifact that produced used to misvote it as moving, which zeroed the
+  band before it reached a HUD sitting below the margin (#221, Castlevania).
+  An abstention bridges the band but cannot end it: the band closes on a row
+  that voted fixed, and a tied row is an abstention rather than a "moving"
+  vote. Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
   being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
   position and `(tileData, palette)` key - so the panorama is addressable *and*
   a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
