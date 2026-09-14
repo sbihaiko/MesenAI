@@ -29,6 +29,18 @@ folder per golden game. Four kinds:
   stages dir. A chain step may be `Ns`; the helper converts it the way the
   script parser does (`round(N * 60.0988)`).
 
+A game folder may also hold one **profile**:
+
+- `navigation.json` — the navigation sweep of ADR-0184's 2026-09-14 amendment,
+  as data: the RAM address that selects a level, its admissible values with the
+  published map they come from, which entry and body scripts play each warp,
+  and the `rooms[]` the selector cannot reach (a level selector picks a level,
+  not a room inside one, so Contra's bosses stay save-state sessions with no
+  cheat at all). `scripts/record_navigation_sweep.py` runs the whole profile as
+  one parallel command and prints the `notes[]` that carry each cheat, verbatim
+  and with its address, into the kit. Adding a second game is adding a second
+  `navigation.json`; nothing in the script knows about Contra.
+
 Mint, then batch:
 
 ```sh
