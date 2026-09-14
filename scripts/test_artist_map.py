@@ -343,6 +343,104 @@ def test_the_hud_band_is_found_and_kept_out_of_the_panorama():
               str(len(hud_keys & on_map)))
 
 
+BLANK = 8000
+
+
+def write_blank_margin_dump(path: Path, camera, *, blank_rows, hud_rows, drop_last_col_on_odd):
+    """A dump shaped like Castlevania's (issue #221): a margin of the blank tile
+    on top, the status bar right below it, the stage under both.
+
+    The blank tile is a shape like any other - `BLANK` here, shape id 0 in the
+    real dump - never the EMPTY sentinel, which only ever means "no cell was
+    recorded here". `drop_last_col_on_odd` reproduces the recorded asymmetry the
+    issue measured: when one side of a comparison is missing its rightmost
+    column, a fully blank row scores 31/32 unshifted against a perfect 1.0
+    shifted, and used to vote "moving" off that single cell."""
+    lines = []
+    emitted = set()
+    for frame, (ox, oy) in enumerate(camera):
+        lines.append(f"F {frame}")
+        cols = M.COLS - 1 if (drop_last_col_on_odd and frame % 2) else M.COLS
+        for row in range(M.ROWS):
+            for col in range(cols):
+                if row in blank_rows:
+                    sid = BLANK
+                elif row in hud_rows:
+                    sid = 9000 + col
+                else:
+                    sid = world_shape(ox + col, oy + row)
+                if sid not in emitted:
+                    emitted.add(sid)
+                    lines.append(f"K {sid} {tile_hex(sid)} {palette_hex(sid)}")
+                    lines.append(f"P {palette_id(sid)} {palette_hex(sid)}")
+                lines.append(f"{col * 8} {row * 8} {sid} {palette_id(sid)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_a_blank_row_abstains_and_a_hud_below_it_is_still_found():
+    """Issue #221, on Castlevania: two rows of the blank tile sit above a
+    three-row status bar. A uniformly blank row says nothing about whether it
+    scrolled - it matches itself under every shift - so the only thing left to
+    separate the unshifted from the shifted comparison is a one-cell edge
+    artifact. That artifact voted "moving", and since only a band contiguous
+    from row 0 is honoured, the real HUD underneath was never reached and got
+    smeared across the panorama."""
+    # The root cause, in the two calls hud_bands makes: `a` has all 32 columns
+    # of a blank row, `b` is missing the rightmost one.
+    a, b = M.GridFrame(0), M.GridFrame(1)
+    a.rows[0] = [BLANK] * M.COLS
+    b.rows[0] = [BLANK] * (M.COLS - 1) + [M.EMPTY]
+    s0, t0 = M.score_shift(a, b, 0, 0, (0,))
+    sd, td = M.score_shift(a, b, 1, 0, (0,))
+    check((s0, t0) == (31 / 32, 32) and (sd, td) == (1.0, 31),
+          "a blank row's shifted comparison beats its unshifted one by one edge cell",
+          f"s0={s0} t0={t0} sd={sd} td={td}")
+
+    camera = walk(1, 0, 30)
+    for drop in (False, True):
+        with tempfile.TemporaryDirectory() as td_:
+            p = Path(td_) / "grid.txt"
+            write_blank_margin_dump(p, camera, blank_rows={0, 1}, hud_rows={2, 3, 4},
+                                    drop_last_col_on_odd=drop)
+            frames, shapes, palettes = M.parse_grid_dump(p)
+            top, bottom = M.hud_bands(frames, tuple(range(M.ROWS)))
+            check((top, bottom) == (5, 0),
+                  f"a HUD under a blank margin is found, whole (edge artifact: {drop})",
+                  f"{top},{bottom}")
+            if (top, bottom) != (5, 0):
+                continue
+            regions = M.stitch(frames, top, bottom)
+            keys = {(tile_hex(9000 + c), palette_hex(9000 + c)) for c in range(M.COLS)}
+            keys |= {(tile_hex(BLANK), palette_hex(BLANK))}
+            for ox, oy in camera:
+                for row in range(5, M.ROWS):
+                    for col in range(M.COLS):
+                        sid = world_shape(ox + col, oy + row)
+                        keys.add((tile_hex(sid), palette_hex(sid)))
+            _img, orig, cells, _stats = M.build_panorama(regions[0], shapes, palettes,
+                                                         FakePack(keys), 1)
+            check(orig.height == (M.ROWS - 5) * 8,
+                  "and neither the margin nor the bar is painted into the panorama",
+                  str(orig.height))
+            on_map = {(c["tiles"][0]["tile"], c["tiles"][0]["palette"]) for c in cells}
+            check(not (on_map & {(tile_hex(9000 + c), palette_hex(9000 + c)) for c in range(M.COLS)}),
+                  "no status-bar tile key reaches the sidecar")
+
+
+def test_a_blank_margin_with_nothing_fixed_under_it_stays_in_the_panorama():
+    """The other half of the abstention rule: a row with no evidence must not
+    invent a band. Blank rows above a stage that has no HUD at all are world,
+    and an artist needs them on the strip."""
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "grid.txt"
+        write_blank_margin_dump(p, walk(1, 0, 30), blank_rows={0, 1}, hud_rows=set(),
+                                drop_last_col_on_odd=True)
+        frames, _shapes, _palettes = M.parse_grid_dump(p)
+        top, bottom = M.hud_bands(frames, tuple(range(M.ROWS)))
+        check((top, bottom) == (0, 0), "a blank margin over open stage is not a HUD band",
+              f"{top},{bottom}")
+
+
 def test_one_shape_under_two_palettes_keeps_both_colours():
     """The reason the palette plane exists (F9.24). The grid stream interns a
     shape palette-agnostically, so without the plane a tile a bank switch
@@ -605,6 +703,8 @@ def main():
         test_a_tie_between_two_drawings_goes_to_the_first_sighting,
         test_a_jump_to_an_unrelated_place_cuts_the_region,
         test_the_hud_band_is_found_and_kept_out_of_the_panorama,
+        test_a_blank_row_abstains_and_a_hud_below_it_is_still_found,
+        test_a_blank_margin_with_nothing_fixed_under_it_stays_in_the_panorama,
         test_one_shape_under_two_palettes_keeps_both_colours,
         test_a_dump_without_the_palette_plane_still_parses_and_says_so,
         test_the_sidecar_addresses_every_cell_and_the_slicer_round_trips_it,

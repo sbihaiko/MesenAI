@@ -277,6 +277,44 @@ def best_shift(a: GridFrame, b: GridFrame, rows, prev_dx=0, prev_dy=0):
     return best
 
 
+def _row_is_flat(frame: GridFrame, r: int) -> bool:
+    """True when row `r` carries no directional evidence at all: every drawn
+    cell in it is the same shape (the common case is a row of the blank tile,
+    which is a shape like any other — only an undrawn cell is EMPTY).
+
+    Such a row matches itself under *every* shift, so the unshifted and the
+    shifted comparison can only be separated by where the drawn/EMPTY boundary
+    falls. On a 32-column row that is worth one cell out of 32, which is how
+    Castlevania's blank margin above its status bar scored 31/32 unshifted
+    against a perfect 1.0 shifted and voted "moving" (issue #221)."""
+    seen = None
+    for v in frame.rows[r]:
+        if v == EMPTY:
+            continue
+        if seen is None:
+            seen = v
+        elif v != seen:
+            return False
+    return True
+
+
+def _leading_band(verdict):
+    """How many rows the screen-fixed band at the start of `verdict` covers.
+
+    The band runs over rows that voted "fixed" *and* over rows that abstained
+    (`None`), but it always ends on a fixed row. So a blank margin is absorbed
+    into a HUD that sits below it, and is left in the panorama when there is no
+    such HUD underneath — a row with no evidence never invents a band, it only
+    stops breaking one."""
+    n = 0
+    end = 0
+    while n < len(verdict) and verdict[n] is not False:
+        n += 1
+        if verdict[n - 1]:
+            end = n
+    return end
+
+
 def hud_bands(frames, rows_all):
     """(top, bottom): the screen-fixed row bands, found by asking each row
     whether it agrees better with "the camera did not move" than with the shift
@@ -285,7 +323,10 @@ def hud_bands(frames, rows_all):
 
     Only a *contiguous* band at the top and at the bottom is honoured, the same
     shape the recorder's own `HudRows`/`HudBottomRows` have, so a row of sky
-    that happens to be uniform never punches a hole in the middle of a stage."""
+    that happens to be uniform never punches a hole in the middle of a stage.
+    A row that answered neither way — it abstained on every step, or its votes
+    tied — is contiguous with either side rather than "moving" (see
+    `_leading_band`)."""
     fixed = [0] * ROWS
     moving = [0] * ROWS
     steps = 0
@@ -299,6 +340,8 @@ def hud_bands(frames, rows_all):
         if steps > 400:
             break
         for r in range(ROWS):
+            if _row_is_flat(frames[i - 1], r) and _row_is_flat(frames[i], r):
+                continue
             s0, t0 = score_shift(frames[i - 1], frames[i], 0, 0, (r,))
             sd, td = score_shift(frames[i - 1], frames[i], dx, 0, (r,))
             if t0 < 4 or td < 4:
@@ -309,13 +352,12 @@ def hud_bands(frames, rows_all):
                 moving[r] += 1
     if not steps:
         return 0, 0
-    verdict = [fixed[r] > moving[r] for r in range(ROWS)]
-    top = 0
-    while top < ROWS and verdict[top]:
-        top += 1
-    bottom = 0
-    while bottom < ROWS - top and verdict[ROWS - 1 - bottom]:
-        bottom += 1
+    # Tri-state: a row only votes when it saw evidence, so a tie — including
+    # the 0-0 of a row that abstained on every step — is `None`, "no answer",
+    # and not the "moving" the two-way test used to read it as.
+    verdict = [None if fixed[r] == moving[r] else fixed[r] > moving[r] for r in range(ROWS)]
+    top = _leading_band(verdict)
+    bottom = _leading_band(verdict[::-1][:ROWS - top])
     return top, bottom
 
 
