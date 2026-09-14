@@ -114,6 +114,33 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   and power-on RAM is zeroed: two runs of the same ROM, script and binary
   must produce byte-identical output. `write_play_scripts.py` and
   `bootstrap_auto_packs.sh` emit frame-counted scripts.
+- `movie=<file.bk2|file.mmo>` replays a recorded playthrough through the
+  Core's own movie player (`MovieManager::Play`) instead of running a script,
+  so a pack can be recorded off a real playthrough. It **excludes**
+  `input=` (both drive the same pad) and `state=` (a movie carries its own
+  start state and power cycles the console itself) — either combination ends
+  the run naming both flags rather than warning. The Core recognises exactly
+  two containers, by content and not by extension: a zip holding
+  `Input Log.txt` (BizHawk `.bk2`) or one holding `GameSettings.txt` (Mesen
+  `.mmo`). **There is no `.fm2` reader** — convert first. Anything else is
+  dropped in silence (no player, no message, and `MoviePlay` returns void),
+  so the run polls `MoviePlaying()` right after and refuses when it reads
+  false; without that check a mistyped file records the title screen and
+  still exits 0. Asymmetry worth knowing: `MesenMovie::ApplySettings`
+  overwrites the emulation-affecting settings the tool pushed before
+  `LoadRom` with the movie's own (`EmuSettings::Serialize`'s subset —
+  controller types, `RamPowerOnState`, `Region`, console type, the quirk
+  flags), restoring them on stop, while the palette, channel volumes,
+  `EmulationSpeed`, video filter and HD/MEP flags are outside that subset and
+  survive; `BizHawkMovie::ApplySettings` is a stub returning true, so a
+  `.bk2` clobbers nothing. The frame budget stays the authority: a movie that
+  runs out logs `movie ended at frame N` and the run continues. ⚠️ While a
+  movie plays the ADR-0157 in-frame pause cannot fire — the movie's input
+  provider registers on `AfterInitConsole`, ahead of `HeadlessInputProvider`'s
+  `GameLoaded` re-registration, and `BaseControlManager::UpdateInputState`
+  stops at the first provider that returns true — so the run's end is a
+  host-side `Pause()` from the poll loop and lands a frame or two past the
+  target instead of exactly on it.
 - `accuracy_compare.py` (H10, ADR-0162) is the self-comparative accuracy
   harness: it runs an accuracy suite against **one** binary in several arms
   (vanilla, HD Pack Builder recording, a loose HD pack, a MEP container) and
