@@ -56,20 +56,22 @@ pack   writes `pack.json` at the folder root from the folder tree and the
        pattern. `targets` come from `--rom` (No-Intro sha1), explicit
        `--system/--sha1`, or an existing `pack.json`. The zip is linted too.
 
-check-coverage  compares a rebuilt `textures/hires.txt` against the manifest
-       its keys came from (the recorder's): every baseline tile key must
-       still resolve to a crop inside a sheet that exists, and the F5.4d
-       tiles-with-art count over those keys must be unchanged. Pixels are
-       never compared, so a repainted ("skinned") pack passes and a pack
-       that lost a key fails (PRD Phase 10 S10.d).
+check-coverage  compares a rebuilt `textures/hires.txt` against an earlier
+       *sheets-derived* manifest of the same pack — one `build` wrote: every
+       baseline tile key must still resolve to a crop inside a sheet that
+       exists, and the F5.4d tiles-with-art count over those keys must be
+       unchanged. Pixels are never compared, so a repainted ("skinned") pack
+       passes and a pack that lost a key fails (PRD Phase 10 S10.d).
 
        `<folder>` is the pack itself — the folder holding `textures/`, the
        same argument `build` takes. Candidate: `<folder>/textures/hires.txt`.
-       Baseline: `--baseline`, else `<folder>/auto/textures/hires.txt`, the
-       nested bootstrap that is also `build`'s second key source. A pack
-       built in place over its own recorder manifest has no such nested copy
-       — pass `--baseline` a copy taken before `build` ran; comparing the
-       rebuild with itself is refused rather than passed (#172).
+       Baseline: `--baseline`, else `<folder>/auto/textures/hires.txt`. Only
+       the baseline keys whose `<img>` is a `sheets/` image are compared —
+       `build` re-derives the sheets and nothing else, so a `chr/` or
+       `backgrounds/` key it was never asked to carry is not a drop (#218).
+       A baseline with no `sheets/` key at all (the raw recorder manifest) is
+       refused, not silently reported as a loss. Comparing the rebuild with
+       itself is refused too (#172).
 
 rename-audio-id  renames an enumerated `trackNN`/`sfxNN` audio id across
        `audio/fingerprints.json` (the `id` and `midi` fields), the physical
@@ -1426,20 +1428,31 @@ def cmd_rename_audio_id(args) -> int:
     return 0
 
 
-def _manifest_keys(hires: Path):
+def _is_sheet_img(rel: str) -> bool:
+    """Whether a manifest `<img>` is one of the author sheets `build`
+    regenerates. `cmd_build` emits `sheets/<name>` and nothing else, so this
+    is also the test for "this manifest was written by `build`" (#218)."""
+    return rel.replace("\\", "/").lower().startswith("sheets/")
+
+
+def _manifest_keys(hires: Path, root: Path | None = None):
     """Reads a textures manifest back as (keys, unresolved).
+
+    `root` is the directory the `<img>` paths are relative to; it defaults to
+    the manifest's own folder, and is passed explicitly only to read a
+    manifest copied away from the pack it describes (#218).
 
     `keys` maps (tileData, palette) -> (img path, has_art) for every <tile>
     whose crop actually lands inside the sheet it points at; `has_art` is the
     `defaultTile` flag being off, i.e. HdPackCoverageReport::TilesWithArt's
     "a real (non-defaultTile) art entry" (F5.4d). `unresolved` lists
-    (key, reason) for the <tile> entries whose sheet is missing or whose crop
+    (key, reason, img) for the <tile> entries whose sheet is missing or whose crop
     falls outside it — a key the host would render nothing for.
 
     Pixels are never read: a repaint changes them by definition, so the
     coverage rule is about keys resolving, not about crops matching
     (PRD Phase 10 S10.d)."""
-    base = hires.parent
+    base = root if root is not None else hires.parent
     scale = 1  # a manifest with no <scale> is read at 1 by the host and lint
     imgs = []
     keys = {}
@@ -1468,21 +1481,21 @@ def _manifest_keys(hires: Path):
         try:
             index, x, y = int(f[0]), int(f[3]), int(f[4])
         except ValueError:
-            unresolved.append((key, f"non-numeric <tile> fields: {m.group(2)}"))
+            unresolved.append((key, f"non-numeric <tile> fields: {m.group(2)}", ""))
             continue
         if index >= len(imgs):
-            unresolved.append((key, f"<tile> points at img {index}, only {len(imgs)} declared"))
+            unresolved.append((key, f"<tile> points at img {index}, only {len(imgs)} declared", ""))
             continue
         rel = imgs[index]
         if rel not in sizes:
             sizes[rel] = _png_size(base / rel)
         size = sizes[rel]
         if size is None:
-            unresolved.append((key, f"{rel} is missing or not a valid PNG"))
+            unresolved.append((key, f"{rel} is missing or not a valid PNG", rel))
             continue
         span = 8 * scale
         if x < 0 or y < 0 or x + span > size[0] or y + span > size[1]:
-            unresolved.append((key, f"crop ({x},{y},{span}px) falls outside {rel} ({size[0]}x{size[1]})"))
+            unresolved.append((key, f"crop ({x},{y},{span}px) falls outside {rel} ({size[0]}x{size[1]})", rel))
             continue
         keys[key] = (rel, len(f) < 7 or f[6].upper() != "Y")
     return keys, unresolved
@@ -1513,10 +1526,11 @@ def cmd_check_coverage(args) -> int:
     baseline = Path(args.baseline).resolve() if args.baseline else folder / "auto" / "textures" / "hires.txt"
     if not baseline.is_file():
         print(f"error: no baseline manifest to compare against.\n"
-              f"       The baseline is the recorder's textures/hires.txt as it stood BEFORE the "
-              f"rebuild.\n"
+              f"       The baseline is a sheet-derived textures/hires.txt — one `build` wrote — as "
+              f"it stood BEFORE the repaint (the recorder's own manifest is not one: #218).\n"
               f"       Looked for a nested bootstrap copy at {baseline} — not there.\n"
-              f"       Pass --baseline <a copy of textures/hires.txt taken before `build` ran>.",
+              f"       Pass --baseline <a copy of an earlier build's textures/hires.txt, taken "
+              f"before `build` ran over the repaint>.",
               file=sys.stderr)
         return 2
     # `build` writes textures/hires.txt in place, so on a bootstrap pack built
@@ -1532,12 +1546,93 @@ def cmd_check_coverage(args) -> int:
         return 2
 
     base_keys, base_unresolved = _manifest_keys(baseline)
+    # A baseline kept outside the pack — the natural "copy the manifest aside
+    # before painting" move — has none of the PNGs next to it, so every key
+    # resolved against its own folder and the check passed over an empty
+    # baseline (#218). Re-read it against the pack under test, which is the
+    # tree the question is about anyway: does this key still resolve *here*.
+    detached = False
+    if not base_keys and base_unresolved and baseline.parent != candidate.parent:
+        alt_keys, alt_unresolved = _manifest_keys(baseline, root=candidate.parent)
+        # Detached is a property of what the baseline *declares*, not of what
+        # happens to resolve: a kept-aside manifest whose every sheet was since
+        # deleted resolves nothing here either, and that is the maximal
+        # coverage loss, not an unusable baseline. Testing `alt_keys` alone let
+        # total deletion fall through to the empty-baseline refusal below,
+        # which answers with "relocate the baseline" and exit 2 instead of
+        # reporting the loss (review on #223).
+        declared_sheets = {rel for _key, _reason, rel in alt_unresolved
+                           if rel and _is_sheet_img(rel)}
+        if alt_keys or declared_sheets:
+            print(f"info: the baseline is a copy kept outside the pack; its <img> paths were "
+                  f"resolved against {candidate.parent} instead of {baseline.parent}")
+            base_keys, base_unresolved, detached = alt_keys, alt_unresolved, True
     cand_keys, cand_unresolved = _manifest_keys(candidate)
-    for key, reason in base_unresolved:
+
+    # #218: compare like with like. `build` regenerates `textures/sheets/` and
+    # nothing else — the keys it re-derives are exactly the ones its sheet
+    # cells claim — while the recorder's own manifest also keys art out of
+    # `textures/chr/` and `textures/backgrounds/` (ADR-0043: every CHR tile,
+    # as a palette-agnostic defaultTile). Counting those as coverage made an
+    # untouched rebuild of a bootstrap pack report a drop of art no repaint
+    # ever touched (ADR-0189, Consequences). Only the baseline's sheet-derived
+    # keys are the rebuild's responsibility, so only those are compared.
+    off_sheet = {k: rel for k, (rel, _art) in base_keys.items()
+                 if not _is_sheet_img(rel)}
+    base_keys = {k: v for k, v in base_keys.items() if k not in off_sheet}
+    if not base_keys and detached:
+        # Every sheet-derived key the baseline declared is gone from the pack
+        # under test. That is the loss this gate exists to catch, so it falls
+        # through to the `gone` block below, which reports it as exit 1 with
+        # the keys named - not to the refusal, whose advice ("keep the baseline
+        # beside the pack it describes") would send the reader the wrong way.
+        pass
+    elif not base_keys:
+        if not off_sheet:
+            print(f"error: not one tile key of {baseline} resolves, so nothing was compared — the "
+                  f"images it declares are missing both next to it and in {candidate.parent}.\n"
+                  f"       Keep the baseline manifest with the pack it describes, or point "
+                  f"--baseline at a copy whose <img> paths still reach the sheets.",
+                  file=sys.stderr)
+            return 2
+        where = ", ".join(sorted({rel.replace("\\", "/").rsplit("/", 1)[0] or "." for rel in off_sheet.values()}))
+        print(f"error: this baseline is not sheet-derived — all {len(off_sheet)} of its resolved tile "
+              f"key(s) come from textures/{where}/, none from a textures/sheets/ image, so nothing "
+              f"was compared.\n"
+              f"       {baseline} is the recorder's own manifest: it keys every CHR tile it saw "
+              f"(ADR-0043), while `build` re-derives only what the sheets claim. Comparing the two "
+              f"can only report a loss that never happened (#218).\n"
+              f"       Take the baseline from a `build` of the pack *before* the repaint:\n"
+              f"         mep_build.py build <pack> && cp <pack>/textures/hires.txt <kept>/hires.txt\n"
+              f"         # paint textures/sheets/, then\n"
+              f"         mep_build.py build <pack> && mep_build.py check-coverage <pack> "
+              f"--baseline <kept>/hires.txt",
+              file=sys.stderr)
+        return 2
+    if off_sheet:
+        where = sorted({rel.replace("\\", "/").rsplit("/", 1)[0] or "." for rel in off_sheet.values()})
+        print(f"info: {len(off_sheet)} baseline key(s) are keyed out of {', '.join(where)}/, not out of "
+              f"textures/sheets/ — `build` never re-derives those, so they are not part of this "
+              f"comparison (#218)")
+    # A baseline whose own images are missing carries keys nobody can judge —
+    # an info line, historically. But when the baseline was read against the
+    # candidate's own tree (`detached`), "does not resolve" means the image is
+    # gone from the pack under test, which is exactly the loss this gate
+    # exists to catch: deleting a sheet must not become invisible just because
+    # the artist kept the manifest alone rather than a whole pack copy.
+    gone = []
+    for key, reason, rel in base_unresolved:
+        # Only the sheet-derived half of the baseline is under comparison
+        # (above), so only its unresolved keys are worth a line.
+        if rel and not _is_sheet_img(rel):
+            continue
+        if detached:
+            gone.append((key, reason))
+            continue
         print(f"info: baseline key {key[0]}/{key[1]} does not resolve either — {reason}")
 
     dropped = sorted(k for k in base_keys if k not in cand_keys)
-    lost = [(k, r) for k, r in cand_unresolved if k in base_keys]
+    lost = [(k, r) for k, r, _rel in cand_unresolved if k in base_keys] + gone
     base_art = sum(1 for k, (_rel, art) in base_keys.items() if art)
     cand_art = sum(1 for k, (_rel, art) in cand_keys.items() if art and k in base_keys)
     added = len(set(cand_keys) - set(base_keys))
@@ -1553,9 +1648,13 @@ def cmd_check_coverage(args) -> int:
             print(f"  - {data}/{pal} (was {base_keys[(data, pal)][0]})", file=sys.stderr)
         if len(dropped) > 20:
             print(f"  ... and {len(dropped) - 20} more", file=sys.stderr)
-    for key, reason in lost:
+    if lost:
         rc = 1
-        print(f"error: baseline tile key {key[0]}/{key[1]} is declared but unresolved — {reason}", file=sys.stderr)
+        for key, reason in lost[:20]:
+            print(f"error: baseline tile key {key[0]}/{key[1]} is declared but unresolved — {reason}",
+                  file=sys.stderr)
+        if len(lost) > 20:
+            print(f"  ... and {len(lost) - 20} more unresolved baseline key(s)", file=sys.stderr)
     if cand_art != base_art:
         rc = 1
         print(f"error: F5.4d tiles-with-art count changed over the baseline's keys: "
@@ -1646,8 +1745,8 @@ def main(argv=None) -> int:
     ra.set_defaults(func=cmd_rename_audio_id)
     cc = sub.add_parser("check-coverage", help="a repainted pack keeps every baseline tile key and its tiles-with-art count")
     cc.add_argument("folder", help="the pack folder (the one holding textures/), same as `build`")
-    cc.add_argument("--baseline", help="the recorder manifest the keys came from, as it was before the "
-                                       "rebuild (default: <folder>/auto/textures/hires.txt)")
+    cc.add_argument("--baseline", help="a sheet-derived manifest of this pack — one `build` wrote — as it "
+                                       "was before the repaint (default: <folder>/auto/textures/hires.txt)")
     cc.set_defaults(func=cmd_check_coverage)
 
     args = p.parse_args(argv)

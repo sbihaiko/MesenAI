@@ -408,15 +408,21 @@ That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and
 a failure means the kit is wrong — never that the check is wrong.
 
-Do **not** reach for `mep_build.py check-coverage` here. Its `--baseline` wants
-the manifest the keys came from, and on a pack that came out of the recorder
-that comparison is not meaningful yet: the recorder keys 2102 `<tile>` rules
-covering `textures/chr/` and `textures/backgrounds/` as well, while `build`
-re-derives only the keys its sheets claim — 228 on the same pack. Pointing
-`--baseline` at the recorder's manifest therefore reports a 381 → 228 drop on an
-**unmodified** copy, and pointing it at the post-build manifest resolves 0 keys
-and passes vacuously. Use the `--verify` round trip instead; it compares like
-with like.
+`mep_build.py check-coverage` answers a different question — "did this repaint
+lose a tile the previous build carried?" — and its `--baseline` has to be a
+manifest **`build` itself wrote**, never the recorder's: the recorder keys every
+CHR tile it saw out of `textures/chr/` and `textures/backgrounds/`, which `build`
+was never asked to re-derive. Pointed at the recorder's manifest it now refuses
+("this baseline is not sheet-derived") instead of reporting a loss that never
+happened (#218). To use it, keep the manifest of a build taken *before* you
+paint:
+
+```sh
+scripts/mep_build.py build out/painted
+cp out/painted/textures/hires.txt out/baseline-hires.txt   # before painting
+# ... drop the painted files in, rebuild ...
+scripts/mep_build.py check-coverage out/painted --baseline out/baseline-hires.txt
+```
 
 If you want the audio layer too, the recording's own fingerprints seed it:
 
@@ -478,7 +484,7 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
 | The sprite sheet's top rows are wrong | HUD runs along a fixed row and is excluded; if your game puts HUD elsewhere, check the band before trusting those cells. |
 | A figure is two figures fused together | Sprite grouping is by adjacency, so two bodies that touch become one box. Mark it `multiple` in a review, or split it by hand — the kit's box is a grouping, not a truth. |
-| `check-coverage` says your repaint dropped art | On a bootstrap-originated pack it says that about an untouched rebuild too — see step 5. Use the generators' `--verify`. |
+| `check-coverage` refuses your baseline as "not sheet-derived" | You pointed it at the recorder's manifest. Its baseline must be a manifest `build` wrote, taken before the repaint — see step 5. |
 | `error: stage1-000.png: painted at 1x while metatiles.png is at 4x` | Every sheet in a pack shares one `<scale>`. Give `artist_map.py --scale N` the same N the recording's `textures/hires.txt` declares under `<scale>` (4 for the NES bootstrap packs here). |
 
 ## Related

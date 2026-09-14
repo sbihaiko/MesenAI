@@ -139,6 +139,15 @@ condition ships with its own evidence.
   repaint against a recorder baseline while a first sheets-only `build`
   legitimately carries only routed keys. Not a gate this decision can pass or
   fail; noted so it is not read as a regression.
+  *Closed 2026-09-14 (#218, PR #223):* the diagnosed cause was right and the
+  remedy was not a matter for this ADR. The check resolved every `<tile>` key of
+  its baseline, while `build` re-derives only the keys a `textures/sheets/` cell
+  claims — so the recorder manifest, which also keys every CHR tile it saw out
+  of `textures/chr/` (ADR-0043), was compared against a universe it was never
+  part of. It now narrows the baseline to sheet-derived keys, refuses one that
+  has none, and reads a baseline kept outside the pack against the pack under
+  test. The limitation above is no longer live; the paragraph is left in place
+  because the decision it was recorded under is unchanged.
 - **Builder ordering changed.** `FinalizeScreenAnchors`, `BuildSheets` and
   `BuildObjectSheets` now run *before* the tile-serialization loop, because they
   must run before the lines they annotate. Nothing they read comes from that
