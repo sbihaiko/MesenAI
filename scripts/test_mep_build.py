@@ -35,6 +35,12 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
     rule (the argument is the pack folder, as for `build`), says how to
     obtain a baseline when there is none, and refuses to compare the
     rebuilt manifest against itself;
+  * #218: `check-coverage` only compares the half of a baseline that `build`
+    re-derives — the keys a `textures/sheets/` image claims. A raw recorder
+    manifest (every key pointed at `textures/chr/`) is refused instead of
+    reported as a drop, a sheet-derived manifest kept outside the pack is
+    read against the pack instead of resolving nothing, and a sheet deleted
+    from the pack still fails against such a detached baseline;
   * #173: `build` reports its key count as a delta against the key source,
     says why dropping keys is the designed outcome and where the
     screen-owned cells are repainted, and groups the lint warnings about
@@ -1037,6 +1043,64 @@ def coverage_preservation_tests(root: Path):
         ok("S10.d: a key whose sheet is missing fails as unresolved, not as a pass")
 
 
+def check_coverage_baseline_universe_tests(root: Path):
+    """#218: the baseline and the rebuild have to describe the same universe.
+
+    `build` re-derives exactly the keys a `textures/sheets/` image claims,
+    while the recorder's own manifest keys every CHR tile it saw out of
+    `textures/chr/` (ADR-0043). Comparing the two reported a drop on an
+    untouched rebuild of a bootstrap pack, and a copy of the post-build
+    manifest kept outside the pack resolved nothing and passed vacuously
+    (ADR-0189, Consequences). Three arms: the recorder manifest is refused,
+    a detached sheet-derived baseline is read against the pack and passes on
+    a repaint, and the same detached baseline still fails a deleted sheet —
+    the protection this gate exists for."""
+    pack, _v, _c = make_sheet_folder(root, "cc-218")
+    if run("build", str(pack)) is None:
+        return
+
+    # --- the recorder's manifest: every key out of textures/chr/ ---
+    rec = root / "cc-218-recorder"
+    (rec / "textures" / "chr").mkdir(parents=True)
+    (rec / "textures" / "chr" / "Chr_0.png").write_bytes(png(128, 128))
+    lines = ["<ver>107", "<scale>1", "<system>nes", "<img>chr/Chr_0.png"]
+    lines += [f"<tile>0,{tile_hex(shape)},{PAL_HEX},0,0,1,N" for shape in range(20)]
+    (rec / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out = run("check-coverage", str(pack), "--baseline", str(rec / "textures" / "hires.txt"), expect=2)
+    if out is None:
+        return
+    if "not sheet-derived" not in out:
+        fail(f"#218: the recorder's manifest was not refused as a baseline:\n{out}")
+    elif "tiles-with-art count changed" in out or "coverage not preserved" in out:
+        fail(f"#218: a non-sheet baseline still reported a drop on an untouched pack:\n{out}")
+    else:
+        ok("#218: a raw recorder manifest is refused as a baseline, not reported as a drop")
+
+    # --- a sheet-derived baseline kept outside the pack, then a repaint ---
+    detached = root / "cc-218-baseline-hires.txt"
+    detached.write_bytes((pack / "textures" / "hires.txt").read_bytes())
+    skin(pack)
+    if run("build", str(pack)) is None:
+        return
+    out = run("check-coverage", str(pack), "--baseline", str(detached))
+    if out is None:
+        return
+    if "unchanged (19)" not in out or "baseline 20 resolved key(s)" not in out:
+        fail(f"#218: a baseline kept outside the pack did not compare its 20 keys:\n{out}")
+    else:
+        ok("#218: a sheet-derived baseline kept outside the pack is read against the pack, not vacuously")
+
+    # --- and it still catches a real loss: the sheet is gone ---
+    (pack / "textures" / "sheets" / "metatiles.png").unlink()
+    out = run("check-coverage", str(pack), "--baseline", str(detached), expect=1)
+    if out is None:
+        return
+    if "declared but unresolved" not in out or "metatiles.png" not in out:
+        fail(f"#218: a deleted sheet passed against a detached baseline:\n{out}")
+    else:
+        ok("#218: a deleted sheet still fails against a detached baseline")
+
+
 def check_coverage_layout_tests(root: Path):
     """#172: `check-coverage` resolves both of its paths from one rule — the
     argument is the pack folder, exactly the one `build` takes — and it never
@@ -1325,6 +1389,8 @@ def main() -> int:
         # panel hit — a coverage check that could not be pointed anywhere, and
         # a build summary that read as damage ---
         check_coverage_layout_tests(root)
+        # --- #218: the baseline universe (only what `build` re-derives) ---
+        check_coverage_baseline_universe_tests(root)
         build_summary_tests(root)
 
         # --- F5.4g item 12: audio_cleanup_suggest reads the probe's log ---

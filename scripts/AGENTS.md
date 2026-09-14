@@ -427,7 +427,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   every tile key of the baseline manifest must still resolve to a crop
   inside a sheet that exists and the F5.4d tiles-with-art count over those
   keys must be unchanged — pixels are never compared, so a skin passes and
-  a pack that lost a key fails. ADR-0178 §6's pre-ADR detector — a crop
+  a pack that lost a key fails. Only the baseline keys that come from a
+  `textures/sheets/` image are compared, because those are the only ones
+  `build` re-derives; a baseline with none of them (the recorder's own
+  manifest, which keys every CHR tile out of `textures/chr/`) is refused
+  rather than reported as a loss, and a sheet-derived baseline kept outside
+  the pack is resolved against the pack under test — where an image it
+  declares that is missing is an error, not an ignorable key (#218). ADR-0178 §6's pre-ADR detector — a crop
   whose key is absent from the key source while its un-flip is present
   fails the build — applies to **sprite sheets only** (`kind` `sprite` or
   `sprites`); background-vocabulary sheets (`metatiles`, `object`, `map`,
