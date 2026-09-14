@@ -17,6 +17,7 @@ under `runs/` is touched.
 Run:  python3 scripts/test_artist_chr_kit.py
 """
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -115,12 +116,16 @@ def ines(prg: bytes, chr_rom: bytes) -> bytes:
     return bytes(header) + prg + chr_rom
 
 
-def write_pack(root: Path, scale: int, images, rows):
+def write_pack(root: Path, scale: int, images, rows, rom_sha1="0" * 40):
     """`images` is [(name, {slot: (data, palette, tile_index_or_None)})] in
-    `<img>` order; `rows` builds the `<tile>` text for each."""
+    `<img>` order; `rows` builds the `<tile>` text for each.
+
+    `rom_sha1` defaults to the 40 zeros a pre-ADR-0003 recording carries, which
+    identifies no ROM; a fixture that has to be paired with another recording
+    passes the real one."""
     chr_dir = root / "textures" / "chr"
     chr_dir.mkdir(parents=True, exist_ok=True)
-    lines = ["<ver>109", f"<scale>{scale}", "<supportedRom>" + "0" * 40]
+    lines = ["<ver>109", f"<scale>{scale}", "<supportedRom>" + rom_sha1]
     lines += [f"<img>chr/{name}.png" for name, _ in images]
     for i, (name, cells) in enumerate(images):
         page = blank_page()
@@ -191,6 +196,38 @@ def chr_ram_fixture(td: Path):
         lines += chr_ram_rows_for(bank)(i, cells)
     (pack / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return pack, rom
+
+
+def chr_rom_pair_fixture(td: Path):
+    """Two recordings of the same CHR ROM game (ADR-0184 §2's clean pass and
+    coverage pass, in miniature).
+
+    The primary recorded indices 0..99 of bank 0 on its rank-0 page and 200..209
+    on a rank-1 page. The second recording saw 0..9 again — so the primary's own
+    cell has something to win against — plus 120..139 the primary never saw, plus
+    a whole bank 1 (indices 256..275) the primary never loaded at all."""
+    chr_rom = b"".join(tile_bytes(i) for i in range(512))
+    rom = td / "game.nes"
+    rom.write_bytes(ines(lcg(16384, 7), chr_rom))
+    sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+
+    primary = td / "pack"
+    write_pack(primary, SCALE,
+               [("Chr_00_0", {i: (tile_bytes(i), PAL_A, i) for i in range(100)}),
+                ("Chr_00_1", {i: (tile_bytes(i), PAL_B, i) for i in range(200, 210)})],
+               chr_rom_rows, sha1)
+
+    donor = td / "donor"
+    shared = {i: (tile_bytes(i), PAL_B, i) for i in range(10)}
+    only = {i: (tile_bytes(i), PAL_B, i) for i in range(120, 140)}
+    other_bank = {i - 256: (tile_bytes(i), PAL_B, i) for i in range(256, 276)}
+    write_pack(donor, SCALE,
+               [("Chr_00_9", {**shared, **only}), ("Chr_01_9", other_bank)],
+               chr_rom_rows, sha1)
+    return primary, donor, rom
+
+
+DONOR_ONLY = set(range(120, 140))
 
 
 def sidecar(out: Path, name: str):
@@ -492,6 +529,181 @@ def test_out_inside_the_recorded_pack_is_refused():
               "the tool refuses to write inside the recorded pack", str(rc))
 
 
+def test_a_second_recording_fills_a_hole_the_primary_never_recorded():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        K.run(pack, rom, td / "kit", None, "none", False, True, [str(donor)])
+        doc = sidecar(td / "kit", "Chr_00_0")
+        donated = [c for c in doc["cells"] if c["state"] == "donated"]
+        check({c["index"] for c in donated} == DONOR_ONLY,
+              "exactly the indices only the second recording saw are donated",
+              str(sorted(c["index"] for c in donated)))
+        check(all(c["seen"] is True for c in donated),
+              "a donated cell is seen: true — a real run really drew it")
+        # `--also` resolves its path, so the sidecar names the real location.
+        check(all(c["sourcePack"] == str(donor.resolve())
+                  and c["sourcePage"] == "Chr_00_9" for c in donated),
+              "a donated cell names the recording and the page it came from",
+              str(donated[0]))
+        check(all(c["palette"] == PAL_B for c in donated),
+              "it keeps the palette the donor recorded it under")
+        # and its pixels really are the donor's, not a re-render
+        page = read_png(td / "kit" / "chr" / "Chr_00_0.png")
+        src = read_png(donor / "textures" / "chr" / "Chr_00_9.png")
+        c = donated[0]
+        check(page.crop(c["x"], c["y"], CELL, CELL).px
+              == src.crop(c["x"], c["y"], CELL, CELL).px,
+              "the donated pixels are copied from the donor's own page")
+
+
+def test_the_order_of_preference_is_own_evidence_then_donor_then_rom():
+    # ADR-0183 §1: the primary pack is the pack the kit is for, so its own
+    # recorded cell wins even against a donor that also has the index; and
+    # evidence beats inference, so a donated cell wins against a ROM fill.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        K.run(pack, rom, td / "kit", None, "none", False, True, [str(donor)])
+        doc = sidecar(td / "kit", "Chr_00_0")
+        st = states(doc)
+        by_index = {c["index"]: c for c in doc["cells"]}
+        check(all(st[i] == "evidence" and by_index[i]["palette"] == PAL_A
+                  for i in range(10)),
+              "an index both runs recorded stays this pack's own evidence",
+              str([(i, st[i]) for i in range(10)]))
+        check(all(st[i] == "borrowed" for i in range(200, 210)),
+              "a lower-ranked page of this pack still outranks a donor")
+        check(all(st[i] == "donated" for i in DONOR_ONLY),
+              "an index only the donor recorded is donated, not filled from the ROM")
+        check(doc["counts"] == {"evidence": 100, "borrowed": 10, "fill": 126,
+                               "empty": 0, "donated": 20},
+              "and the counts add up to the whole bank", str(doc["counts"]))
+
+
+def test_a_donor_recorded_from_another_rom_is_refused_by_name_and_hash():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        other = td / "other.nes"
+        other.write_bytes(ines(lcg(16384, 3), b"".join(tile_bytes(i) for i in range(512))))
+        other_sha1 = hashlib.sha1(other.read_bytes()).hexdigest().upper()
+        stranger = td / "stranger"
+        write_pack(stranger, SCALE,
+                   [("Chr_00_0", {i: (tile_bytes(i), PAL_A, i) for i in range(10)})],
+                   chr_rom_rows, other_sha1)
+        try:
+            K.run(pack, rom, td / "kit", None, "none", False, True, [str(stranger)])
+            check(False, "a donor recorded from another ROM is refused")
+        except K.ChrKitError as e:
+            msg = str(e)
+            check(str(stranger) in msg and other_sha1 in msg
+                  and hashlib.sha1(rom.read_bytes()).hexdigest().upper() in msg,
+                  "a donor recorded from another ROM is refused, by name and both hashes",
+                  msg)
+        # 40 zeros identify no ROM, so an old recording cannot be paired either
+        nameless = td / "nameless"
+        write_pack(nameless, SCALE,
+                   [("Chr_00_0", {i: (tile_bytes(i), PAL_A, i) for i in range(10)})],
+                   chr_rom_rows)
+        try:
+            K.run(pack, rom, td / "kit", None, "none", False, True, [str(nameless)])
+            check(False, "a donor with no <supportedRom> is refused")
+        except K.ChrKitError as e:
+            check("proves nothing" in str(e),
+                  "a donor with no <supportedRom> is refused", str(e))
+
+
+def test_the_legend_gives_a_donated_cell_its_own_colour():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        K.run(pack, rom, td / "kit", None, "none", False, True, [str(donor)])
+        doc = sidecar(td / "kit", "Chr_00_0")
+        st = states(doc)
+        legend = read_png(td / "kit" / "chr" / "Chr_00_0.legend.png")
+        check(len({K.LEGEND_EVIDENCE, K.LEGEND_BORROWED, K.LEGEND_DONATED,
+                   K.LEGEND_FILL, K.LEGEND_EMPTY}) == 5,
+              "the five cell states have five distinct legend colours")
+        ok = True
+        for state, rgba in (("evidence", K.LEGEND_EVIDENCE),
+                            ("borrowed", K.LEGEND_BORROWED),
+                            ("donated", K.LEGEND_DONATED),
+                            ("fill", K.LEGEND_FILL)):
+            slot = next(s for s, v in st.items() if v == state)
+            ok = ok and legend.get((slot % 16) * CELL, (slot // 16) * CELL) == rgba
+        check(ok, "a donated cell is painted its own colour, not green or amber")
+
+
+def test_provenance_travels_into_the_fragment_and_its_notes():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        frag = K.run(pack, rom, td / "kit", None, "none", False, True, [str(donor)])
+        check(frag["donors"] == [{"pack": str(donor.resolve()),
+                                  "romSha1": hashlib.sha1(rom.read_bytes()).hexdigest().upper(),
+                                  "cells": 20}],
+              "the fragment names the second recording and what it contributed",
+              str(frag.get("donors")))
+        check(frag["totals"]["donated"] == 20
+              and frag["totals"]["unrecoverable"] == 0,
+              "the totals count donated cells apart from recorded and filled",
+              str(frag["totals"]))
+        notes = " ".join(frag["notes"])
+        check(str(donor.resolve()) in notes and "20 cell(s) of this kit come from it" in notes,
+              "notes[] names the recording and how many cells came from it — this is "
+              "what a reader of ARTIST.md sees", notes[:400])
+        check("no counterpart in this pack" in notes and "1" in notes,
+              "a donor bank this pack never loaded is reported, not silently dropped",
+              notes[:400])
+
+
+def test_a_donated_cell_never_becomes_a_hires_rule():
+    # A donated cell's (pattern, palette) key was observed by the *donor*, not by
+    # this pack. Emitting a rule for it would add a key this pack never rendered,
+    # which is exactly what ADR-0183 §4's round trip forbids.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        frag = K.run(pack, rom, td / "kit", None, "all", False, True, [str(donor)])
+        rows = [ln for ln in (td / "kit" / "chr" / "fill-rules.hires.txt").read_text()
+                .splitlines() if ln.startswith("<tile>")]
+        check(len(rows) == frag["totals"]["filled"] == 126,
+              "--fill-rules=all writes one row per ROM fill and no more", str(len(rows)))
+        doc = sidecar(td / "kit", "Chr_00_0")
+        donated_x = {(c["x"], c["y"]) for c in doc["cells"] if c["state"] == "donated"}
+        check(not any((int(r.split(",")[3]), int(r.split(",")[4])) in donated_x
+                      for r in rows),
+              "no rule is emitted for a donated cell")
+        result = K.verify(K.Pack(pack), td / "kit" / "chr", quiet=True)
+        check(result["lost"] == 0 and result["errors"] == 0,
+              "and the completed pages still round-trip", str(result))
+
+
+def test_without_also_the_run_leaves_no_trace_of_the_feature():
+    # The guard that keeps a plain run byte-identical to what the tool wrote
+    # before `--also` existed: no donation counter, no donors[], no note.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        frag = K.run(pack, rom, td / "kit", None, "none", False, True)
+        check("donors" not in frag and "donated" not in frag["totals"]
+              and "donatedCells" not in frag["totals"],
+              "a run with no --also emits no donation field", str(sorted(frag["totals"])))
+        check(all("donated" not in f for f in frag["files"]),
+              "nor on a file entry")
+        doc = sidecar(td / "kit", "Chr_00_0")
+        check("donated" not in doc["counts"], "nor in a page sidecar's counts",
+              str(doc["counts"]))
+        check(not any("recording" in n and "Second" in n for n in frag["notes"]),
+              "nor a note about a second recording")
+        # and the same run *with* a donor does emit all four
+        frag2 = K.run(pack, rom, td / "kit2", None, "none", False, True, [str(donor)])
+        check("donors" in frag2 and "donated" in frag2["totals"]
+              and "donated" in sidecar(td / "kit2", "Chr_00_0")["counts"],
+              "which is a real difference, not an absent code path")
+
+
 def main():
     tests = [
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
@@ -510,6 +722,13 @@ def main():
         test_verify_proves_the_pages_are_a_drop_in,
         test_verify_catches_a_page_that_changed_a_recorded_cell,
         test_out_inside_the_recorded_pack_is_refused,
+        test_a_second_recording_fills_a_hole_the_primary_never_recorded,
+        test_the_order_of_preference_is_own_evidence_then_donor_then_rom,
+        test_a_donor_recorded_from_another_rom_is_refused_by_name_and_hash,
+        test_the_legend_gives_a_donated_cell_its_own_colour,
+        test_provenance_travels_into_the_fragment_and_its_notes,
+        test_a_donated_cell_never_becomes_a_hires_rule,
+        test_without_also_the_run_leaves_no_trace_of_the_feature,
     ]
     for t in tests:
         t()

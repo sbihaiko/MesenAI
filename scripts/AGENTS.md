@@ -645,7 +645,8 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   no ROM at generate time; `test_artist_map.py` covers it on a synthetic
   recording.
 - `artist_chr_kit.py <recorded pack> --rom <path.nes> [--out DIR] [--names F]
-  [--fill-rules none|observed|all] [--verify]` (F9.24, ADR-0183 §2.4) - the
+  [--also <pack>]... [--fill-rules none|observed|all] [--verify]` (F9.24,
+  ADR-0183 §2.4) - the
   kit's **pattern-page** half: `textures/chr/Chr_*.png` completed from the ROM
   where the recording saw nothing. A page is not a palette but a *variant rank*
   of a CHR bank (`SaveHdPack` spreads each tile's palette variants across the
@@ -671,7 +672,32 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   origin and PRG offset), plus the `kit-part-chr.json` fragment. `hires.txt` is
   never touched: `--fill-rules` writes its rows to `chr/fill-rules.hires.txt`
   and defaults to `none`, because a rule for a filled cell either never matches
-  (harmless) or re-binds a key the pack already owns. Measured 2026-09-13:
+  (harmless) or re-binds a key the pack already owns. `--also <other recorded
+  pack>` (repeatable) takes **a second recording of the same ROM as additional
+  evidence** (ADR-0184 §2 records a stage twice and neither pass dominates the
+  other): banks are paired by CHR bank id - a content hash on CHR RAM, the bank
+  number on CHR ROM, so it is the same id in every recording of that ROM - and a
+  cell only the other run recorded is pasted from its page as `donated`,
+  `seen: true`, blue in the legend, naming the run/page/slot in the sidecar and
+  the run plus its cell count in `notes[]` (which is what reaches `ARTIST.md`).
+  The order of preference, stated in `write_bank` as one if/elif chain: this
+  pack's own recorded cell -> a cell this bank recorded on a lower-ranked page ->
+  a cell another recording of the same ROM recorded -> a ROM fill ->
+  unrecoverable. A donor is refused unless its `<supportedRom>` sha1 is present
+  and equal to this pack's (the message names both packs and both hashes) and
+  its `<scale>` matches; a bank whose identity the pack does not record is never
+  paired. A donated cell contributes no `<tile>` rule - its key was observed by
+  the donor, not by this pack - and every donation field is omitted from the
+  output when no `--also` was given, so a plain run is byte-for-byte what it was
+  before the flag existed (re-verified on the Contra stage-1 pack). Measured
+  2026-09-14 on Contra stage 1 (clean pass + the `0032:99`/`00B0:FE` coverage
+  pass): 29 cells donated, of which only **2** closed a real hole - 27 replaced
+  a PRG-based ROM fill, and 10 of those 27 fills were **wrong** (the donated
+  pattern disagrees with what the PRG scan had guessed). Completeness moved
+  93 % -> 94 % (476 -> 480 of 512, holes 36 -> 32, the last 2 from donated tiles
+  anchoring two more PRG blocks); real evidence moved 393 -> 422 of 512
+  (77 % -> 82 %). The gain is in evidence quality, not in the completeness
+  percentage. Measured 2026-09-13:
   Excitebike 512/512 tiles and Mega Man 3 8192/8192 complete; Contra
   stage2-base 247 recorded + 102 filled of 512 (packed CHR RAM), Zelda 1 508 +
   453 of 1536 (linear CHR RAM). Stdlib only; `test_artist_chr_kit.py` covers it
