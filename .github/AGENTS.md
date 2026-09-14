@@ -38,7 +38,9 @@ what CI actually runs; this doc records why they're split the way they are.
     skip list is for tests that cannot run without a display and must stay
     empty whenever the test can skip itself instead (as
     `test_compose_editor_gui.py` does for its four windowed cases); every entry
-    carries its reason. Same Python deps as `checks`, no SDL2.
+    carries its reason. Same Python deps as `checks`, plus `python3-tk` (that
+    test imports tkinter at module scope, and the runner image ships without
+    it) and no SDL2.
   - `core-unit-tests` — `make core-unit-tests`, the PR gate's only compile of
     `Core/`. Same host-free invariants as `unit-tests.yml`'s step of the same
     name (no `InteropDLL`/`MesenCore`, no SDL2, no SDK, no ROM), and since C.1

@@ -81,6 +81,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update -qy
+          sudo apt-get install -qy python3-tk # scripts/test_compose_editor_gui.py imports tkinter at module scope; without a DISPLAY it skips only its four windowed cases, but a missing module fails the import
           python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
 
       - name: Run the Python suite
