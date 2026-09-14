@@ -103,4 +103,26 @@ namespace MesenSheets
 	//re-point live art at different evidence) nor deleted (use-after-free) - the
 	//counter has to number past it, or the edge is dropped in silence.
 	uint32_t NextNameIndex(const std::vector<std::string>& names, const std::string& prefix);
+
+	//Issue #239: one `<tile>` line of a hires.txt the builder is re-opening.
+	//`Cell` is everything the *bare* line would print, plus the PNG it points
+	//into - so ADR-0189 §3's two twins, the conditioned line and the
+	//byte-identical bare one right behind it, share it exactly, and two lines
+	//that name different art never do. `Conditioned` says whether the line
+	//carried a `[name]` prefix.
+	struct LoadedTileLine
+	{
+		std::string Cell;
+		bool Conditioned = false;
+	};
+
+	//Which of a pack's loaded `<tile>` lines owns the one slot the builder
+	//keeps per PNG cell, given the lines in file order. Returns, per line, the
+	//index of its owner: the group's first bare line when it has one, its first
+	//line otherwise. A line that does not own its slot must not reach the slot
+	//map a second time - the twin that lost is what used to overwrite the
+	//conditioned one - and its conditions belong to the owner instead, which is
+	//how the pair is written back out unchanged. Deciding this is a rule, so it
+	//lives here and not in the emulator-bound builder (ADR-0127).
+	std::vector<size_t> PlanTwinOwners(const std::vector<LoadedTileLine>& lines);
 }
