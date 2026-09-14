@@ -2,10 +2,11 @@
 
 The command-line tools [`docs/remastering-a-game.md`](docs/remastering-a-game.md)
 uses, packaged for someone who downloaded a MesenCE binary instead of building
-the repository. The version this copy was cut from is in `VERSION`.
+the repository. The release and the exact commit it was cut from are in
+`VERSION` and `COMMIT`.
 
 *(This file is `docs/releases/tools-zip-README.md` in the repository;
-`build.yml`'s `tools` job copies it in as the zip's `README.md`.)*
+`scripts/release_macos.sh` copies it in as the zip's `README.md`.)*
 
 ## Install
 
@@ -34,19 +35,16 @@ format and why the project ships tools and never game files.
 ## `headless_record` — stage 1 of the guide
 
 Stage 1 is a compiled C++ tool, not a Python one, because it drives the
-emulator core directly.
+emulator core directly, so it does not travel in this zip.
 
-- **Linux and macOS**: it ships in a separate
-  `mesence-tools-native-<version>-<os>-<arch>.zip`. Unpack that *into this
-  folder* so that `scripts/headless_record` sits beside the core library that
-  came with it, and the guide's commands read literally.
-- **Windows**: there is no build. `headless_record` is a `make` target and the
-  Windows binary is built with MSBuild, which has no equivalent target. Build
-  it from a repository checkout (`make core && make capture-tool`), or run the
-  recording stage under WSL. Every other stage of the guide is Python and runs
-  on Windows unchanged.
+- **macOS (Apple Silicon)**: it ships inside
+  `MesenCE-<version>-macos-arm64.zip`, beside `Mesen.app`, with the core
+  library it links against. Keep the two together and run it from there.
+- **Every other platform**: there is no build in this release. Build it from a
+  repository checkout with `make core && make capture-tool`. Every other stage
+  of the pipeline is Python and runs anywhere Python does.
 
-The native zip also needs **SDL2** on the host, the same requirement the
+`headless_record` also needs **SDL2** on the host, the same requirement the
 emulator itself has: `brew install sdl2` on macOS,
 `sudo apt install libsdl2-2.0-0` on Debian/Ubuntu.
 

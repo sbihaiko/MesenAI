@@ -1,4 +1,4 @@
-# The Python tools that ship in mesence-tools-<version>.zip (build.yml, `tools` job).
+# The Python tools that ship in mesence-tools-<version>.zip (scripts/release_macos.sh).
 #
 # One module per line, no path, comments and blank lines ignored. This is the
 # transitive import closure of the tools named by docs/remastering-a-game.md and

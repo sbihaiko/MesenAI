@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard for the release tools zip (Phase 11 C.4).
 
-`build.yml`'s `tools` job builds `mesence-tools-<version>.zip` from the file
+`scripts/release_macos.sh` builds `mesence-tools-<version>.zip` from the file
 list in `scripts/tools-zip-manifest.txt`. That list is the transitive local
 import closure of the tools `docs/remastering-a-game.md` and
 `docs/hd-pack-authoring.md` tell a pack author to run.
@@ -147,7 +147,7 @@ def main() -> int:
             file=sys.stderr,
         )
         print(
-            "       add the pin in build.yml's `tools` job and to "
+            "       add the pin in scripts/release_macos.sh and to "
             "ALLOWED_THIRD_PARTY here, or drop the import.",
             file=sys.stderr,
         )
