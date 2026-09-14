@@ -168,10 +168,14 @@ void HdPackBuilder::AccumulateCoOccurrence()
 //studied offline. Writes nothing when the variable is unset.
 void HdPackBuilder::DumpCoOccurrenceEvidence()
 {
+	#ifdef _MSC_VER
 	#pragma warning(push)
 	#pragma warning(disable : 4996)  //getenv is deprecated on MSVC; _dupenv_s is the secure form but getenv is fine here
+	#endif
 	const char* path = std::getenv("MESEN_TILENEARBY_EVIDENCE");
+	#ifdef _MSC_VER
 	#pragma warning(pop)
+	#endif
 	if(!path || !path[0]) {
 		return;
 	}
