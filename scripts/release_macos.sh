@@ -171,7 +171,10 @@ echo "ok: the signed .app carries build $BUILT_UUID"
 # core on first run. The loose file above shadows it, but a stale member is
 # still worth naming out loud - it is the same staleness, one layer down.
 if [[ -f "$ROOT/UI/Dependencies.zip" ]]; then
-	if unzip -l "$ROOT/UI/Dependencies.zip" | grep -q "[[:space:]]$SHAREDLIB$"; then
+	# `grep -q` would exit on the first match, SIGPIPE the producer and, under
+	# `set -o pipefail`, make the whole pipeline look like a failure. Every grep
+	# in this script therefore reads its input to the end.
+	if unzip -l "$ROOT/UI/Dependencies.zip" | grep "[[:space:]]$SHAREDLIB$" >/dev/null; then
 		TMP_ZIP_LIB="$(mktemp -t mesencore)"
 		unzip -p "$ROOT/UI/Dependencies.zip" "$SHAREDLIB" > "$TMP_ZIP_LIB"
 		ZIP_UUID="$(macho_uuid "$TMP_ZIP_LIB")"
@@ -209,7 +212,7 @@ codesign -f -s - "$APP_STAGE/$SHAREDLIB"
 
 # `tail -n +2` drops otool's echo of the file's own path - the staged copy
 # lives under out/, which is inside $ROOT, and would match on its own name.
-if "$OTOOL" -L "$APP_STAGE/headless_record" | tail -n +2 | grep -q "$ROOT"; then
+if "$OTOOL" -L "$APP_STAGE/headless_record" | tail -n +2 | grep "$ROOT" >/dev/null; then
 	echo "error: headless_record still references the build workspace:" >&2
 	"$OTOOL" -L "$APP_STAGE/headless_record" >&2
 	exit 1
