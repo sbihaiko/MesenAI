@@ -309,7 +309,47 @@
       "validated_at": "2026-09-06T09:43:36Z",
       "verdict": "accepted",
       "votes": 1
+    },
+    {
+      "content_id": "4876d0e0129b8ee376d568250b07f85c9dc801589469c94514448e89b40234f9",
+      "game": "Little Nemo - The Dream Master (USA)",
+      "issue": 210,
+      "kind": "hd-legacy",
+      "labels": [
+        "pack:valid",
+        "assets:textures"
+      ],
+      "license": "unknown",
+      "name": "Little Nemo - The Dream Master (USA) \u2014 community submission",
+      "pack_id": "issue-210",
+      "rom": {},
+      "sha256": "22b60a9da81f8db21dd6e24b5462fbb923c4217757de758aee754e6b24e6b963",
+      "system": "nes",
+      "url": "https://www.dropbox.com/s/kc6sttyluyvuljc/Little%20Nemo.zip?dl=0",
+      "validated_at": "2026-09-14T12:42:14Z",
+      "verdict": "accepted",
+      "votes": 1
+    },
+    {
+      "content_id": "ed372a3d0f93fa2720e203b170e0e82afee12ff355b7dcd93bf1dd467f4da5d8",
+      "game": "Bomberman (USA)",
+      "issue": 207,
+      "kind": "hd-legacy",
+      "labels": [
+        "pack:valid",
+        "assets:textures"
+      ],
+      "license": "unknown",
+      "name": "Bomberman (USA) \u2014 community submission",
+      "pack_id": "issue-207",
+      "rom": {},
+      "sha256": "f048920df018f1eccd3a7b0469bfb9cb9e3cd56d064cf0ac30c413643ec87765",
+      "system": "nes",
+      "url": "https://www.dropbox.com/s/qgp2oq7o3f3u4l3/Bomberman%20%28USA%29.zip?dl=0",
+      "validated_at": "2026-09-14T12:42:23Z",
+      "verdict": "accepted",
+      "votes": 1
     }
   ],
-  "updated": "2026-09-06"
+  "updated": "2026-09-14"
 }

@@ -18,6 +18,8 @@ overwritten by `.github/workflows/community-pack-catalog.yml`.
 | Mega Man (USA) | NES | AxlRocks | 2026-08-29 | [👍 1](https://github.com/sbihaiko/MesenCE/issues/138) | — |
 | Pac-Man (Namco, US, 1993) | NES | ? | 2026-08-29 | [👍 1](https://github.com/sbihaiko/MesenCE/issues/140) | — |
 | Zelda II: The Adventure of Link (USA) | NES | ? | 2026-08-29 | [👍 1](https://github.com/sbihaiko/MesenCE/issues/141) | — |
+| Little Nemo - The Dream Master (USA) | NES | ? | 2026-09-14 | [👍 1](https://github.com/sbihaiko/MesenCE/issues/210) | — |
+| Bomberman (USA) | NES | ? | 2026-09-14 | [👍 1](https://github.com/sbihaiko/MesenCE/issues/207) | — |
 
 † This pack references one or more files it does not ship. The gap was
 checked and declared by MesenCE validation — **not by the pack's author** —
