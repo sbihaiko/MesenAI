@@ -19,6 +19,15 @@ name: Community pack catalog
 # This secret is not created by this workflow nor by any automation.
 on:
   workflow_dispatch:
+  # Safety net for the two cases the per-verdict dispatch above cannot
+  # cover: a dispatched run that died (the push-retry loop below failed on
+  # 2026-09-14, run 34844891828) and a board Status changed BY HAND, which
+  # no workflow observes — the ADR-0148 de-listings of 2026-08-31 were hand
+  # moves. Regeneration reads the live board and is idempotent, so a run
+  # with nothing to do commits nothing. Offset from the drift check's
+  # '17 4 * * *' so the two never start together.
+  schedule:
+    - cron: '47 4 * * *'
 
 # Every "Aceito*" verdict dispatches this workflow, so revalidating several
 # packs at once used to start one run per pack, each checking out main,
@@ -62,15 +71,35 @@ jobs:
           git commit -m "chore: regenerate docs/community-packs.md and docs/community-packs.json"
           # The concurrency group above keeps this workflow from racing
           # itself; this loop covers the remaining case of someone pushing
-          # to main while the catalog was being generated. Rebase rather
-          # than merge: the commit only ever touches the two generated
-          # files, so it replays cleanly onto whatever landed meanwhile.
+          # to main while the catalog was being generated.
+          #
+          # It used to `git pull --rebase` here, on the theory that a commit
+          # touching only two generated files replays cleanly. It does not:
+          # if what landed meanwhile is another regeneration of the same two
+          # files, every hunk conflicts, the rebase stops half-applied, and
+          # attempts 2 and 3 run against a repository in the middle of a
+          # rebase (run 34844891828, 2026-09-14). Regeneration reads the live
+          # board, so the right move is to drop our commit, take the new main
+          # verbatim and regenerate on top of it — which also picks up
+          # whatever board change the other run saw.
           for attempt in 1 2 3; do
             if git push; then
               exit 0
             fi
-            echo "push rejected (attempt $attempt) - rebasing onto the new main and retrying"
-            git pull --rebase --no-edit origin main
+            echo "push rejected (attempt $attempt) - regenerating on top of the new main and retrying"
+            git rebase --abort 2>/dev/null || true
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/generate_community_pack_catalog.py
+            git add -- docs/community-packs.md
+            if [ -f docs/community-packs.json ]; then
+              git add -- docs/community-packs.json
+            fi
+            if git diff --cached --quiet; then
+              echo "the newer main already carries this regeneration, nothing to commit."
+              exit 0
+            fi
+            git commit -m "chore: regenerate docs/community-packs.md and docs/community-packs.json"
           done
           echo "push still rejected after 3 attempts" >&2
           exit 1

@@ -57,6 +57,7 @@ jobs:
       REPO: sbihaiko/MesenCE
       STATUS_ACCEPTED_PARTIAL: "Aceito parcial (HD Mesen)"
       STATUS_ACCEPTED_FULL: "Aceito (MEP completo)"
+      STATUS_INVALID: "Inválido"
       MAX_PACK_BYTES: 314572800 # 300MB, same cap as community-pack-validate.yml
     steps:
       - name: Checkout repo
@@ -68,6 +69,45 @@ jobs:
         run: |
           set -euo pipefail
           gh project item-list 3 --owner sbihaiko --format json > items.json
+
+      # `pack:valid` and `pack:invalid` are mutually exclusive. Every verdict
+      # path in community-pack-validate.yml already enforces that (the three
+      # early rejections and `apply-verdict` all do
+      # `--add-label <verdict> --remove-label <stale>`, #159), so the
+      # pipeline's own moves are consistent. What nothing observed until now
+      # is a Status moved BY HAND: the ADR-0148 de-listing of 2026-08-31
+      # pushed #128-#131 and #133-#136 into "Inválido" without touching their
+      # labels, leaving 8 issues carrying `pack:valid` in the invalid column
+      # and zero `pack:invalid` anywhere on the board.
+      #
+      # The board Status is the source of truth for the verdict, so reconcile
+      # the labels from it once a day. Adding a label that is already there,
+      # or removing one that is not, is a no-op, and an item still in "Novo
+      # envio"/"Em validação" carries no verdict yet and is skipped. This step
+      # never moves an item and never comments — it only mirrors a decision
+      # that has already been made.
+      - name: Reconcile verdict labels with the board Status
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r item; do
+            status=$(jq -r '.status // .["Status"] // empty' <<<"$item")
+            issue_number=$(jq -r '.content.number // .number // empty' <<<"$item")
+            [ -n "$issue_number" ] || continue
+            case "$status" in
+              "$STATUS_ACCEPTED_PARTIAL"|"$STATUS_ACCEPTED_FULL") want="pack:valid"; stale="pack:invalid" ;;
+              "$STATUS_INVALID") want="pack:invalid"; stale="pack:valid" ;;
+              *) continue ;;
+            esac
+            has_want=$(jq -r --arg l "$want" '((.labels // []) | index($l)) != null' <<<"$item")
+            has_stale=$(jq -r --arg l "$stale" '((.labels // []) | index($l)) != null' <<<"$item")
+            if [ "$has_want" = "true" ] && [ "$has_stale" = "false" ]; then
+              continue
+            fi
+            echo "issue #$issue_number: board Status '$status' - applying $want, dropping $stale"
+            gh issue edit "$issue_number" --repo "$REPO" --add-label "$want" --remove-label "$stale"
+          done < <(jq -c '.items[]' items.json)
 
       - name: Recompute hash and diff against Pack Hash (fetch_pack.py + sha256sum only)
         id: diff

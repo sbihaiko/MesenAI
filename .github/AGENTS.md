@@ -140,6 +140,39 @@ what CI actually runs; this doc records why they're split the way they are.
   workflow only documents those names, never creates them. See
   `scripts/checks/verify_community_pack_validate_workflow.py` for its
   structural contract.
+- `workflows/community-pack-catalog.yml` — regenerates
+  `docs/community-packs.md` and `docs/community-packs.json` from the board
+  by running `scripts/generate_community_pack_catalog.py`, then commits and
+  pushes to `main` as `github-actions[bot]`. Two triggers, and the file
+  declares only these two: `workflow_dispatch` (the per-verdict dispatch in
+  `community-pack-validate.yml` uses it) and a daily `schedule` at
+  `'47 4 * * *'`. The schedule is a **safety net, not the mechanism** — it
+  exists for the two cases a dispatch cannot cover: a dispatched run that
+  died, and a Status changed by hand on the board, which no workflow
+  observes (Phase 11 C.3, 2026-09-14). Regeneration reads the live board and
+  is idempotent, so a run with nothing to do commits nothing. On a rejected
+  push the retry loop **regenerates on top of the new `main`** (drop the
+  commit, `reset --hard origin/main`, re-run the generator) rather than
+  rebasing: a rebase of one regeneration of the two generated files onto
+  another conflicts on every hunk and leaves the repo mid-rebase, which is
+  how run 34844891828 failed. Checked by
+  `scripts/checks/verify_community_pack_catalog.py` (which asserts the
+  `workflow_dispatch` trigger and never opens the validate workflow).
+- `workflows/community-pack-drift-check.yml` — daily (`'17 4 * * *'`) hash
+  drift check over the board's accepted items, calling the reusable validate
+  workflow with `mode: revalidate` only for items whose content hash moved.
+  Since Phase 11 C.3 it also carries a **"Reconcile verdict labels with the
+  board Status"** step: `pack:valid` and `pack:invalid` are mutually
+  exclusive, and while every verdict path inside
+  `community-pack-validate.yml` already enforces that (#159), a Status moved
+  **by hand** bypasses all of them — the ADR-0148 de-listing of 2026-08-31
+  left #128–#131 and #133–#136 in "Inválido" still labelled `pack:valid`,
+  with zero `pack:invalid` on the whole board. The step treats the board
+  Status as the source of truth for the verdict, skips items still in "Novo
+  envio"/"Em validação" (no verdict yet), and only edits labels: it never
+  moves an item, never comments, and is a no-op when the labels already
+  agree. Checked by
+  `scripts/checks/verify_community_pack_drift_check_workflow.py`.
 - **Recipe handoff (ADR-0138 §13, amends §9; F6.2b complete).**
   The "Classify pack" step's `--json-schema` now carries an OPTIONAL
   nested `recipe` property (`ops`/`deps`/`pack`, per
