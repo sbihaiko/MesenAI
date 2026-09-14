@@ -16,14 +16,184 @@ image's stage gate - a gate marks a stage-specific repaint, not a
 stage-exclusive tile.
 
 Prints three markdown tables: totals, per artist image, per recorded
-state (with the tiles only that state exhibited). This is the measurement
+state (with the tiles only that state exhibited; a state is named for the
+folder two levels above `auto/`, extended leftwards when two runs of the
+same state would otherwise share a row). This is the measurement
 ADR-0182 §3 asks for before a further stage is played; the 2026-09-13 run
 over Contra80s 1.1 and the fifteen Contra packs is summarised in that ADR.
+
+The measurement is a set intersection, so it is only meaningful when both
+sides key their tiles the same way. A `hires.txt` names a tile either by
+its CHR ROM bank index or by the 16 bytes of its CHR RAM pattern, and the
+emulator tells the two apart by width alone (`HdPackLoader::ReadTileData`:
+`tileData.size() >= 32` is a CHR RAM tile, anything shorter is an index).
+A reference pack built for a ROM whose mapper was changed by a `<patch>`
+therefore keys tiles in a namespace our recording of the stock ROM cannot
+contain: the intersection is empty by construction, not by under-recording.
+We refuse that comparison instead of printing 0% (#225).
 """
 import collections, glob, json, os, re, sys
 
 TILE = re.compile(r"(?:\[([^\]]*)\])?<tile>(\d+),([0-9A-Fa-f]+),([0-9A-Fa-f]+),")
 COND = re.compile(r"<condition>([^,]+),memoryCheckConstant,([0-9A-Fa-f]+),==,([0-9A-Fa-f]+)")
+PATCH = re.compile(r"<patch>([^,]+),([0-9A-Fa-f]+)")
+
+# iNES header fields an IPS record can land on, by offset. Byte 5 is the one
+# that decides the namespace: 0 means the board has CHR RAM (patterns), any
+# other value is that many 8 KB banks of CHR ROM (indices).
+INES_FIELD = {
+    4: "PRG ROM size, 16 KB units",
+    5: "CHR ROM size, 8 KB units (0 = CHR RAM)",
+    6: "flags 6 (mapper low nibble, mirroring)",
+    7: "flags 7 (mapper high nibble)",
+}
+
+
+def shape(data):
+    """Which namespace a `tileData` field is in, by the emulator's own rule."""
+    return "chr-ram-pattern" if len(data) >= 32 else "chr-rom-index"
+
+
+SHAPE_TEXT = {
+    "chr-ram-pattern": "CHR RAM pattern (32 hex chars, the tile's 16 bytes)",
+    "chr-rom-index": "CHR ROM bank index (short hex, the tile's number)",
+}
+
+
+def patches(path):
+    """`<patch>` directives of a manifest, as (file name, target sha1)."""
+    out = []
+    for line in open(path, encoding="utf-8", errors="replace"):
+        m = PATCH.match(line.strip())
+        if m:
+            out.append((m.group(1), m.group(2).lower()))
+    return out
+
+
+def ips_header_writes(path):
+    """Bytes an IPS patch writes into the first 16 bytes of its target.
+
+    Returns {offset: byte}, or None when the file is not an IPS we can read.
+    Only the iNES header window is collected; every other record is skipped
+    over, not skipped past — see the ordering note below.
+    """
+    try:
+        blob = open(path, "rb").read()
+    except OSError:
+        return None
+    if not blob.startswith(b"PATCH"):
+        return None
+    out, i = {}, 5
+    while i + 3 <= len(blob):
+        if blob[i:i + 3] == b"EOF":
+            break
+        off = int.from_bytes(blob[i:i + 3], "big")
+        i += 3
+        if i + 2 > len(blob):
+            return None
+        size = int.from_bytes(blob[i:i + 2], "big")
+        i += 2
+        if size:
+            chunk, i = blob[i:i + size], i + size
+        else:  # RLE record: run length, then the repeated byte
+            if i + 3 > len(blob):
+                return None
+            run = int.from_bytes(blob[i:i + 2], "big")
+            chunk, i = bytes([blob[i + 2]]) * run, i + 3
+        # Records are NOT required to be ordered by offset: the emulator's own
+        # patcher reads them all and applies them in stream order
+        # (IpsPatcher::PatchBuffer, Utilities/Patches/IpsPatcher.cpp), so a
+        # header record can follow a body record. Skipping the rest of the file
+        # at the first offset past the window would then miss a header write
+        # the emulator does perform.
+        for n, b in enumerate(chunk):
+            if off + n < 16:
+                out[off + n] = b
+    return out
+
+
+def namespace_report(artist_path, a_data, seen_data, pack_paths):
+    """None when the two sides can intersect, else the refusal message."""
+    a_shapes = {shape(d) for d in a_data}
+    s_shapes = {shape(d) for d in seen_data}
+    if not a_data:
+        return (f"error: {artist_path} declares no <tile> rules — nothing to measure.\n"
+                f"       Point this at the reference pack's textures/hires.txt (or the pack's "
+                f"hires.txt for a plain HD Mesen pack).")
+    if not seen_data:
+        return ("error: the recorded pack(s) declare no <tile> rules — nothing to measure "
+                "against:\n" + "".join(f"         {p}\n" for p in pack_paths) +
+                "       Each argument must be a recorder `auto/` folder, the one holding "
+                "textures/hires.txt.")
+    if a_shapes & s_shapes:
+        return None
+
+    lines = [
+        "error: the reference pack and the recording key their tiles in different namespaces, "
+        "so this measurement cannot be made.",
+        f"       reference {artist_path}",
+        f"         {len(a_data)} distinct tileData, all {', '.join(SHAPE_TEXT[s] for s in sorted(a_shapes))}",
+        f"       recording {', '.join(pack_paths)}",
+        f"         {len(seen_data)} distinct tileData, all {', '.join(SHAPE_TEXT[s] for s in sorted(s_shapes))}",
+        "       The emulator itself splits these by width alone (HdPackLoader::ReadTileData: a "
+        "tileData of 32+ hex chars is a CHR RAM pattern, anything shorter is a CHR ROM bank "
+        "index), so no key of one kind can ever equal a key of the other. The intersection is "
+        "empty by construction — it is not a coverage of 0%.",
+    ]
+
+    # One <patch> file is usually declared once per supported ROM sha1, so
+    # group by file: the header bytes it writes are the same every time.
+    # Three outcomes matter and they are not the same claim: a patch that
+    # rewrites the header (evidence we can quote), one that reads fine and
+    # leaves the header alone (its edits are in the PRG/CHR body), and one we
+    # could not open at all. Only the first is evidence for the key-shape
+    # split; the other two are both "built for a different build".
+    found, silent, unreadable, shas = {}, [], [], collections.defaultdict(list)
+    for name, sha1 in patches(artist_path):
+        shas[name].append(sha1)
+        if name in found or name in silent or name in unreadable:
+            continue
+        ips = os.path.join(os.path.dirname(os.path.abspath(artist_path)), name)
+        writes = ips_header_writes(ips)
+        if writes is None:
+            unreadable.append(name)
+        elif writes:
+            found[name] = writes
+        else:
+            silent.append(name)
+    if found:
+        lines.append("       The reference pack ships a <patch>, and it rewrites the iNES header:")
+        for name, writes in found.items():
+            targets = shas[name]
+            lines.append(f"         {name} (targets {len(targets)} ROM sha1(s), first "
+                         f"{targets[0]}) writes into the header:")
+            for off in sorted(writes):
+                field = INES_FIELD.get(off, f"byte {off}")
+                lines.append(f"           offset {off} = 0x{writes[off]:02X}  ({field})")
+        chr_rom = [w[5] for w in found.values() if w.get(5)]
+        if chr_rom:
+            lines.append(
+                f"       Header byte 5 becomes 0x{chr_rom[0]:02X}, i.e. {chr_rom[0] * 8} KB of CHR "
+                "ROM: the patched build is a CHR ROM game, so its tiles have bank indices. The "
+                "stock ROM we recorded has CHR RAM (byte 5 = 0), whose tiles have no index at "
+                "all and are keyed by pattern.")
+    elif unreadable:
+        lines.append("       The reference pack declares a <patch> we could not read next to "
+                     f"{artist_path} — it is built for a patched ROM, not the stock one.")
+
+    if silent:
+        lines.append(f"       The reference pack ships a <patch> ({', '.join(sorted(set(silent)))}) "
+                     "that does not rewrite the iNES header, so what it changes is in the PRG/CHR "
+                     "body. Either way the pack is built for a different build than the one you "
+                     "recorded.")
+
+    lines += [
+        "       What to do: this reference pack is not measurable against a recording of the "
+        "stock ROM. Either record the patched ROM the pack targets (apply its <patch>, then "
+        "`headless_record` that build) and measure against that, or pick a reference pack that "
+        "targets the same ROM you recorded.",
+    ]
+    return "\n".join(lines)
 
 
 def parse(path):
@@ -49,6 +219,25 @@ def parse(path):
     return out
 
 
+def state_labels(roots):
+    """A distinct per-state label for each recorded pack dir, shortest first.
+
+    The state name is the folder two levels above `auto/` (`.../<state>/<rom
+    name>/auto`), which is short and is what the per-state table wants. Two
+    runs of the same state under different run folders share it, though, and
+    keying the table on it silently collapsed them into one row and made "only
+    this state" wrong. Extend leftwards until the labels are distinct.
+    """
+    parts = [os.path.abspath(r.rstrip("/")).split(os.sep) for r in roots]
+    depth = 3  # <state>/<rom name>/auto
+    while depth <= max(len(p) for p in parts):
+        out = [os.sep.join(p[-depth:-2]) or p[-1] for p in parts]
+        if len(set(out)) == len(out):
+            return out
+        depth += 1
+    return [os.sep.join(p) for p in parts]
+
+
 def main(argv):
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
@@ -63,8 +252,7 @@ def main(argv):
     all_data = set().union(*a_data.values())
 
     per, seen, sprite = {}, set(), set()
-    for root in argv[2:]:
-        name = os.path.basename(os.path.dirname(os.path.dirname(root.rstrip("/")))) or root
+    for root, name in zip(argv[2:], state_labels(argv[2:])):
         rules = parse(os.path.join(root, "textures", "hires.txt"))
         keys = {(d, p) for _, d, p, _ in rules}
         per[name] = keys
@@ -74,6 +262,21 @@ def main(argv):
                 for t in cell.get("tiles", []):
                     sprite.add(t["tile"].upper())
     seen_data = {d for d, _ in seen}
+
+    # Refuse before printing anything: a namespace mismatch makes every number
+    # below a confident zero, which reads as "record more" and is not (#225).
+    refusal = namespace_report(argv[1], all_data, seen_data, list(argv[2:]))
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+    # Partial mismatch still measures, but say how much of the reference is
+    # unreachable for the same reason rather than letting it read as unseen.
+    s_shapes = {shape(d) for d in seen_data}
+    foreign = {d for d in all_data if shape(d) not in s_shapes}
+    if foreign:
+        kinds = ", ".join(SHAPE_TEXT[s] for s in sorted({shape(d) for d in foreign}))
+        print(f"warning: {len(foreign)}/{len(all_data)} reference tileData are {kinds}, which the "
+              f"recording never produces — they can only count as unseen", file=sys.stderr)
 
     rows = []
     for name in a_keys:
