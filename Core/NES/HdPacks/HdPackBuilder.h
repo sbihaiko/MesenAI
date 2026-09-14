@@ -226,7 +226,13 @@ private:
 	//sheets/sprNNN.png at save time.
 	vector<MesenSheets::OamFrame> _oamFrames;
 	MesenSheets::OamFrame _frameOam;
+	//Issue #237: the *next* sprNNN stem to hand out, not a count - WriteSpriteSheets
+	//seeds it past the stems the loaded pack's condition names already use, so a
+	//re-record into a folder that already holds a pack never re-emits a
+	//`sprNNN_nN` name that is already defined. _spriteGroupCount is what the save
+	//log means when it says "sprite groups".
 	uint32_t _spriteSheetCount = 0;
+	uint32_t _spriteGroupCount = 0;
 	//ADR-0174 (issue #174): the poses, segmented once. WriteSpriteSheets needs
 	//them before it names a sprNNN sheet (each one cites the figures its cells
 	//belong to) and WritePoseFile serialises the same table, so the O(n^2)

@@ -4041,6 +4041,58 @@ namespace
 		}
 	}
 
+	//---- Issue #237: a re-record must not re-define a spriteNearby name -----
+	//WriteSpriteSheets restarts its sprNNN counter on every save while the
+	//builder merges with the pack it loaded, so both sessions named their
+	//conditions sprNNN_nN from 0 and the manifest ended up with one name carrying
+	//two definitions (HdPackLoader's name table is last-wins, so the older
+	//`<tile>` lines silently bound to the newer evidence). Only the naming rule
+	//is tested here; that the builder feeds the loaded names in and starts its
+	//stem counter there is one line in HdPackBuilder.
+	void TestNextStemIndexStartsAfterTheHighestStemInUse()
+	{
+		Check(NextStemIndex({}, "spr", "_n") == 0,
+			"BlocoP: issue #237 - an empty pack starts its stems at 0");
+		Check(NextStemIndex({ "spr000_n0", "spr000_n1", "spr001_n0" }, "spr", "_n") == 2,
+			"BlocoP: issue #237 - a re-record numbers its stems past the loaded pack's");
+		//Highest + 1, not the first free stem: a gap only exists because an
+		//earlier session was interrupted or its group emitted no condition, and
+		//filling it would also overwrite the sprNNN.png those names still cite.
+		Check(NextStemIndex({ "spr000_n0", "spr007_n3" }, "spr", "_n") == 8,
+			"BlocoP: issue #237 - the counter clears the highest stem, gap or no gap");
+		//A bare stem is what a sheet file is called; numbering past it costs
+		//nothing and keeps us off a name an older builder may have written.
+		Check(NextStemIndex({ "spr004" }, "spr", "_n") == 5,
+			"BlocoP: issue #237 - a bare stem with no suffix still reserves its number");
+		//Neither is a stem of ours: one belongs to another kind of condition, one
+		//is the prefix and nothing else, one has no number at all.
+		Check(NextStemIndex({ "spriteNearby4", "obj_nearby9", "spr", "sprX_n0" }, "spr", "_n") == 0,
+			"BlocoP: issue #237 - only a digit run under this prefix is a stem of ours");
+	}
+
+	void TestNextStemIndexNeverHandsBackANameInUse()
+	{
+		std::vector<std::string> names;
+		for(uint32_t stem = 0; stem < 4; stem++) {
+			for(uint32_t suffix = 0; suffix < 3; suffix++) {
+				names.push_back("spr" + std::to_string(stem * 2) + "_n" + std::to_string(suffix));
+			}
+		}
+		uint32_t next = NextStemIndex(names, "spr", "_n");
+		//The whole point: every name the next session can build off this stem -
+		//its own per-group suffix still restarts at 0 - is free.
+		bool collided = false;
+		for(uint32_t suffix = 0; suffix < 16; suffix++) {
+			std::string candidate = "spr" + std::to_string(next) + "_n" + std::to_string(suffix);
+			if(std::find(names.begin(), names.end(), candidate) != names.end()) {
+				collided = true;
+			}
+		}
+		Check(!collided,
+			"BlocoP: issue #237 - no name the seeded stem can produce is already defined",
+			"stem=spr" + std::to_string(next));
+	}
+
 	//---- ADR-0190: tileNearby selection from the background pair table -------
 	//The gate SelectTileNearby applies is the whole reason a tileNearby may be
 	//auto-attached at all, so it is tested away from the emulator. The numbers
@@ -7196,6 +7248,8 @@ int main()
 	TestSpriteNearbyPlanIsASpanningTreeFromTheMostSeenCell();
 	TestSpriteNearbyPlanNeedsTwoPlacedCellsAndAnEdge();
 	TestSpriteNearbyPlanCoversEveryNonRootCellOnce();
+	TestNextStemIndexStartsAfterTheHighestStemInUse();
+	TestNextStemIndexNeverHandsBackANameInUse();
 	TestTileNearbySelectionReadsTheProbabilityBothWays();
 	TestTileNearbySelectionNeedsObjectMembershipAndFrames();
 	TestTileNearbySelectionRejectsASelfEdge();
