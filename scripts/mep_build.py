@@ -1554,7 +1554,16 @@ def cmd_check_coverage(args) -> int:
     detached = False
     if not base_keys and base_unresolved and baseline.parent != candidate.parent:
         alt_keys, alt_unresolved = _manifest_keys(baseline, root=candidate.parent)
-        if alt_keys:
+        # Detached is a property of what the baseline *declares*, not of what
+        # happens to resolve: a kept-aside manifest whose every sheet was since
+        # deleted resolves nothing here either, and that is the maximal
+        # coverage loss, not an unusable baseline. Testing `alt_keys` alone let
+        # total deletion fall through to the empty-baseline refusal below,
+        # which answers with "relocate the baseline" and exit 2 instead of
+        # reporting the loss (review on #223).
+        declared_sheets = {rel for _key, _reason, rel in alt_unresolved
+                           if rel and _is_sheet_img(rel)}
+        if alt_keys or declared_sheets:
             print(f"info: the baseline is a copy kept outside the pack; its <img> paths were "
                   f"resolved against {candidate.parent} instead of {baseline.parent}")
             base_keys, base_unresolved, detached = alt_keys, alt_unresolved, True
@@ -1571,7 +1580,14 @@ def cmd_check_coverage(args) -> int:
     off_sheet = {k: rel for k, (rel, _art) in base_keys.items()
                  if not _is_sheet_img(rel)}
     base_keys = {k: v for k, v in base_keys.items() if k not in off_sheet}
-    if not base_keys:
+    if not base_keys and detached:
+        # Every sheet-derived key the baseline declared is gone from the pack
+        # under test. That is the loss this gate exists to catch, so it falls
+        # through to the `gone` block below, which reports it as exit 1 with
+        # the keys named - not to the refusal, whose advice ("keep the baseline
+        # beside the pack it describes") would send the reader the wrong way.
+        pass
+    elif not base_keys:
         if not off_sheet:
             print(f"error: not one tile key of {baseline} resolves, so nothing was compared — the "
                   f"images it declares are missing both next to it and in {candidate.parent}.\n"

@@ -1054,7 +1054,9 @@ def check_coverage_baseline_universe_tests(root: Path):
     (ADR-0189, Consequences). Three arms: the recorder manifest is refused,
     a detached sheet-derived baseline is read against the pack and passes on
     a repaint, and the same detached baseline still fails a deleted sheet —
-    the protection this gate exists for."""
+    the protection this gate exists for. A fourth arm deletes *every* sheet:
+    the diagnosis must stay "the art is gone" (exit 1) and not become "this
+    baseline is unusable" (exit 2), which is a different, wrong answer."""
     pack, _v, _c = make_sheet_folder(root, "cc-218")
     if run("build", str(pack)) is None:
         return
@@ -1099,6 +1101,24 @@ def check_coverage_baseline_universe_tests(root: Path):
         fail(f"#218: a deleted sheet passed against a detached baseline:\n{out}")
     else:
         ok("#218: a deleted sheet still fails against a detached baseline")
+
+    # --- total deletion is the same loss, not a different diagnosis ---
+    # Review on #223: `detached` used to be decided by whether any key still
+    # resolved, so deleting *every* sheet dropped the baseline into the
+    # "nothing was compared" refusal (exit 2, "keep the baseline beside the
+    # pack it describes") instead of reporting the loss as exit 1.
+    for sheet in sorted((pack / "textures" / "sheets").glob("*.png")):
+        sheet.unlink()
+    out = run("check-coverage", str(pack), "--baseline", str(detached), expect=1)
+    if out is None:
+        return
+    if "declared but unresolved" not in out:
+        fail(f"#218: deleting every sheet did not report the loss:\n{out}")
+    elif "not one tile key of" in out or "Keep the baseline manifest with the pack" in out:
+        fail(f"#218: deleting every sheet answered with 'relocate the baseline' (exit 2), "
+             f"not the coverage loss:\n{out}")
+    else:
+        ok("#218: deleting every sheet is reported as the coverage loss, not as an unusable baseline")
 
 
 def check_coverage_layout_tests(root: Path):

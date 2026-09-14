@@ -593,6 +593,20 @@ does not exist.
     `build` had overwritten be compared against itself. The issue's own
     diagnosis — two incompatible layouts — was wrong; `cmd_build` reads both
     shapes under one rule. The fix is the messages plus a `samefile` refusal.
+  - **#218** (fixed, 2026-09-14): the same command reported a drop on an
+    *untouched* bootstrap pack. It resolved every `<tile>` key of the
+    baseline, while `build` re-derives only the keys a `textures/sheets/`
+    cell claims — the recorder's manifest also keys every CHR tile it saw out
+    of `textures/chr/` (ADR-0043), so art nothing had repainted counted as
+    lost. The other half of the defect was the mirror image: a copy of the
+    manifest kept *outside* the pack resolved zero images and passed
+    vacuously. ADR-0189's "Consequences" already named the first as a known
+    limitation. The check now narrows the baseline to sheet-derived keys,
+    refuses a baseline that has none (naming the recorder manifest and the
+    two commands that produce a real one), and re-resolves a detached
+    baseline against the pack under test, where an unresolved image is an
+    error rather than an info line. S10.d above was reconciled in the same
+    change.
   - **#173** (fixed): `build` announced 644 surviving keys of 10057 as good
     news. It now reports a key-by-key delta (which surfaces the 1 key the
     sheets *add*, invisible to a subtraction), states that dropping keys is
@@ -1124,7 +1138,7 @@ preservation, per-model rate limits.
 | S10.a | **Can poses be separated from a recorded pack?** Run the ADR-0168 walk on fresh Mega Man 3 and Contra recordings; count poses recovered as distinct figures against poses visible in `sprites.png`. If the walk fails, prototype recording OAM co-occurrence per frame in the bootstrap and re-measure | ≥ 80 % of a main character's poses as distinct figures, HUD excluded — else the recorder change is the prerequisite and goes first | ADR-0168 (accept / supersede); a recorder ADR if pose membership is needed — **measured 2026-09-09: FAIL.** Fresh 300 s recordings of both games, poses counted off ADR-0169's live OAM channel: 1/15 Mega Man poses and 6/57 Contra poses recovered as distinct figures (6.7 % / 10.5 %), and 0/15 resp. 3/57 poses fit entirely inside one `sprNNN`. The cause is not the cross-pose stacking ADR-0168 §3 blames (its guard fires on 1 of 45 groups) but **under-grouping**: ADR-0153 §2's 0.80 test drops every edge from a tile that moves between poses. ADR-0168 amended in place with the evidence (still `proposed`); the recorder change is the prerequisite and is written up as `proposed` ADR-0170 — the OAM stream is already in memory at save time (`_oamFrames`), so it costs one sidecar, no new capture. Evidence: `runs/s10a-shared/S10a-summary.json`. **Re-measured 2026-09-11 on the F9.19 binary: PASS at 100 %** (25 of 25 of the main character's poses present in `poses.json`, 68 of 72 of every ground-truth pose), so the prerequisite this row asked for exists and the spike's question is answered — evidence `runs/s10a-rerun/S10a-rerun-summary.json` |
 | S10.b | **Does a hosted image model preserve a contact sheet?** One subject sheet on a chroma backdrop, 1K and 2K, three prompts; measure per-cell displacement, gutter ink, whether alpha comes back, silhouette growth, cost, latency. **Run by hand, by the user, from their own account**, with the files to be sent listed before sending; nothing in the repo automates it | cells within ±1 px at 1x and gutters clean on ≥ 2 of 3 runs — else per-cell or per-row generation is the only path and the cost model changes | the BYOK/egress ADR (amends ADR-0154 §2/§4, or declines to) |
 | S10.c | **Keep `generated`, keep local data out.** `mep_build.py pack` carries the root `generated` object across a rebuild; a fixture with a non-pack subfolder shows what the zip contains | `test_mep_build.py` cases, one per behavior | `mep_build.py` fix — do now, needed by F9.6 too — **done 2026-09-09** (§3); the exclusion half is documented, not implemented: it would be new policy, and the PRD's own rule (studio data outside the pack folder) is the fix |
-| S10.d | **Coverage-preservation check for a painted pack.** Every tile key of the recorder's `hires.txt` still resolves after a repaint; F5.4d count unchanged | a `test_mep_build.py` / `headless_record` case a skinned pack passes and a pack with a dropped key fails | the validation rule for any generated pack (F9.6 test 8 too) — **done 2026-09-09** (§3) as `mep_build.py check-coverage`; strictness open (equality vs. "must not shrink") for the ADR this feeds |
+| S10.d | **Coverage-preservation check for a painted pack.** Every tile key of the pack's own post-`build` `hires.txt` still resolves after a repaint; F5.4d count unchanged | a `test_mep_build.py` / `headless_record` case a skinned pack passes and a pack with a dropped key fails | the validation rule for any generated pack (F9.6 test 8 too) — **done 2026-09-09** (§3) as `mep_build.py check-coverage`; strictness open (equality vs. "must not shrink") for the ADR this feeds. **Baseline narrowed 2026-09-14 (#218):** the check compares only the keys `build` re-derives, i.e. those a `textures/sheets/` image claims, so the *recorder's* raw `hires.txt` — which keys every CHR tile it saw out of `textures/chr/` (ADR-0043) — is refused rather than reported as a drop on an untouched pack. The baseline is a copy of the manifest taken after a `build` and before the repaint |
 
 **After the spikes.** If S10.a and S10.b pass, write the ADRs — one
 decision each, by hand, via `/adr`: (i) whether and how a player's own key
