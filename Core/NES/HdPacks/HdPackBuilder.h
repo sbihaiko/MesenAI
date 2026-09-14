@@ -265,9 +265,22 @@ private:
 	//before the slice. A wrong condition therefore degrades to today's output
 	//and never to a hole in the screen. Do not "simplify" this into gating the
 	//single existing line - that is the failure mode, not the redundancy.
-	unordered_map<HdPackTileInfo*, vector<HdPackCondition*>> _tileGateConditions;
+	//One entry per *line*: the inner vector is a conjunction, written as
+	//[a&b], because that is how HdPackTileInfo::ToString prints a tile's own
+	//conditions and how HdPackLoader reads them back. Every condition this
+	//builder attaches stands alone, so it arrives as a group of one; a pack
+	//loaded from disk (issue #239) can carry a real conjunction, and flattening
+	//it here would turn "a AND b" into two independent chances to match.
+	unordered_map<HdPackTileInfo*, vector<vector<HdPackCondition*>>> _tileGateConditions;
 	uint32_t _spriteNearbyConditions = 0; //emitted conditions (ForceDisableCache cost below)
 	uint32_t _spriteNearbyTiles = 0;      //distinct tiles that gained one
+	//The tiles the counters above and below have already counted. Not
+	//"_tileGateConditions[tile] is empty": since issue #239 that map is seeded
+	//with the gates a loaded pack already carried, and the two kinds are
+	//attached one after the other, so emptiness stopped meaning "this session
+	//has gated nothing here yet" for either of them.
+	unordered_set<HdPackTileInfo*> _spriteNearbyGated;
+	unordered_set<HdPackTileInfo*> _tileNearbyGated;
 	//F9.17 (ADR-0164): writes textures/sheets/adjacency.json next to the other
 	//sheets whenever the sheet pipeline runs. The serializer lives in SheetRender
 	//(host-free, unit-tested); this class only accumulates the sprite far-field

@@ -362,4 +362,33 @@ namespace MesenSheets
 		}
 		return next;
 	}
+
+	std::vector<size_t> PlanTwinOwners(const std::vector<LoadedTileLine>& lines)
+	{
+		//Two passes, because the owner of a group is decided by the whole group
+		//and not by the line that happens to come first: ADR-0189 §3 puts the
+		//conditioned line ahead of its bare twin, and it is the *bare* one that
+		//has to keep the slot. It is the line the builder will print last, so
+		//the conditions folded onto it are printed above it, in the order they
+		//were read - exactly the file that was loaded.
+		std::map<std::string, size_t> firstBare;
+		std::map<std::string, size_t> firstAny;
+		for(size_t i = 0; i < lines.size(); i++) {
+			firstAny.insert(std::make_pair(lines[i].Cell, i));
+			if(!lines[i].Conditioned) {
+				firstBare.insert(std::make_pair(lines[i].Cell, i));
+			}
+		}
+
+		std::vector<size_t> owners(lines.size(), 0);
+		for(size_t i = 0; i < lines.size(); i++) {
+			std::map<std::string, size_t>::const_iterator bare = firstBare.find(lines[i].Cell);
+			//No bare twin at all - a hand-written pack, or one this builder
+			//never wrote. The conditioned line keeps the slot and gains the twin
+			//it was missing when it is written back out, which is the policy,
+			//not a change of meaning: both lines name the same cell.
+			owners[i] = bare != firstBare.end() ? bare->second : firstAny[lines[i].Cell];
+		}
+		return owners;
+	}
 }

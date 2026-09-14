@@ -32,6 +32,27 @@
 //<img> line carries, so packs written before this still load from the root.
 static constexpr const char* kChrFolder = "chr";
 
+//Issue #239: what makes two loaded <tile> lines twins under ADR-0189 §3 -
+//everything the *bare* line prints, plus the PNG the cell lives in. The
+//condition prefix is deliberately not part of it: the whole point of the pair
+//is that the conditioned line and the bare one behind it name the same art, so
+//they have to collide here, while two lines pointing at different cells never
+//may. Lives beside the builder rather than in SheetGrouping because it reads
+//HdPackTileInfo; the decision made out of it is host-free
+//(MesenSheets::PlanTwinOwners) and unit-tested.
+static string TileCellIdentity(HdPackTileInfo& tile)
+{
+	stringstream out;
+	out << tile.BitmapIndex << ',' << tile.X << ',' << tile.Y << ',' << tile.Width << ',' << tile.Height
+		<< ',' << tile.Brightness << ',' << (tile.DefaultTile ? 'Y' : 'N')
+		<< ',' << tile.ChrBankId << ',' << tile.TileIndex << ',' << tile.PaletteColors
+		<< ',' << (tile.IsChrRamTile ? 'R' : 'O') << ',';
+	for(int i = 0; i < 16; i++) {
+		out << HexUtilities::ToHex(tile.TileData[i]);
+	}
+	return out.str();
+}
+
 HdPackBuilder::HdPackBuilder(Emulator* emu, PpuModel ppuModel, bool isChrRam, HdPackBuilderOptions options)
 {
 	_emu = emu;
@@ -52,19 +73,74 @@ HdPackBuilder::HdPackBuilder(Emulator* emu, PpuModel ppuModel, bool isChrRam, Hd
 			tile->Init();
 		}
 
-		for(unique_ptr<HdPackTileInfo>& tile : _hdData.Tiles) {
-			//Mark the tiles in the first PNGs as higher usage (preserves order when adding new tiles to an existing set)
-			AddTile(tile.get(), 0xFFFFFFFF - tile->BitmapIndex);
+		//Issue #239: ADR-0189 §3 writes a conditioned <tile> as two lines - the
+		//conditioned one, then a byte-identical bare twin. On a CHR ROM pack
+		//both twins carry the same palette and the same TileIndex, so AddTile
+		//sends them to the same paletteMap slot, and the bare one, which comes
+		//second by the policy's own ordering, used to overwrite the conditioned
+		//one. SaveHdPack serializes those slots, so re-saving dropped every gate
+		//an earlier session had attached while still re-emitting its <condition>
+		//definitions from _hdData.Conditions: a re-record silently un-gated the
+		//whole pack and left the definitions orphaned behind it.
+		//
+		//So the twins are folded back together before anything else reads them.
+		//One line owns the slot - the bare one when the pair is complete - and
+		//the conditions its twin carried move to _tileGateConditions, the same
+		//place a gate attached this session goes. SaveHdPack then prints the
+		//conditioned line(s) above the bare one, which is byte for byte the file
+		//that was loaded. The twin that lost the slot stays alive in
+		//_hdData.Tiles and keeps pointing at its conditions: _hdData.Conditions
+		//owns those, they are re-serialized from there, and deleting either side
+		//would leave the loaded tiles holding dangling pointers.
+		vector<MesenSheets::LoadedTileLine> tileLines;
+		tileLines.reserve(_hdData.Tiles.size());
+		for(size_t i = 0; i < _hdData.Tiles.size(); i++) {
+			HdPackTileInfo* tile = _hdData.Tiles[i].get();
+			MesenSheets::LoadedTileLine line;
+			//A missing entry is nobody's twin, so give it an identity no real
+			//line can share (a real one always starts with a digit).
+			line.Cell = tile ? TileCellIdentity(*tile) : "#" + std::to_string(i);
+			line.Conditioned = tile && !tile->Conditions.empty();
+			tileLines.push_back(line);
 		}
+		vector<size_t> tileOwners = MesenSheets::PlanTwinOwners(tileLines);
 
-		for(unique_ptr<HdPackTileInfo>& tile : _hdData.Tiles) {
+		for(size_t i = 0; i < _hdData.Tiles.size(); i++) {
+			HdPackTileInfo* tile = _hdData.Tiles[i].get();
+			if(!tile) {
+				continue;
+			}
+			HdPackTileInfo* owner = _hdData.Tiles[tileOwners[i]].get();
+			if(!tile->Conditions.empty()) {
+				//One group, not one per condition: the line was written [a&b] and
+				//has to come back as [a&b]. Split into two lines it would stop
+				//meaning "a AND b" and start meaning "either will do".
+				_tileGateConditions[owner].push_back(tile->Conditions);
+				if(owner == tile) {
+					//From here on the gate map is the only place a condition may
+					//live: HdPackTileInfo::ToString() prints its own Conditions as
+					//a prefix, so leaving them there would put the prefix on the
+					//bare twin too and cost the pack its fallback line.
+					tile->Conditions.clear();
+				}
+			}
+			if(owner != tile) {
+				continue;
+			}
+			//Mark the tiles in the first PNGs as higher usage (preserves order when adding new tiles to an existing set)
+			AddTile(tile, 0xFFFFFFFF - tile->BitmapIndex);
+
 			//F5.4b follow-up (b) (ADR-0132): seed the per-shape palette-variant map
 			//from the on-disk pack, so the cap is a per-shape total across sessions.
 			//DefaultTile neutral-ramp placeholders are excluded - they are waiting
 			//for art, not real PaletteColors variants (the loader ignores their
 			//PaletteColors).
-			if(tile && !tile->DefaultTile) {
-				_paletteVariantsByShape[tile->GetKey(true)].push_back(tile.get());
+			//Only slot owners are listed: a gate this session attaches goes to
+			//every variant it finds here, and a twin that owns no slot is never
+			//serialized, so gating it would compute the condition and drop it
+			//(issue #239's second symptom).
+			if(!tile->DefaultTile) {
+				_paletteVariantsByShape[tile->GetKey(true)].push_back(tile);
 			}
 		}
 
@@ -381,11 +457,12 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 				//would only duplicate a line nobody wants twice.
 				continue;
 			}
-			vector<HdPackCondition*>& gates = _tileGateConditions[tile];
-			if(gates.empty()) {
+			vector<vector<HdPackCondition*>>& gates = _tileGateConditions[tile];
+			if(_tileNearbyGated.insert(tile).second) {
 				_tileNearbyTiles++;
 			}
-			gates.push_back(cond);
+			//A group of one: this condition gates a line by itself.
+			gates.push_back(vector<HdPackCondition*>{ cond });
 		}
 	}
 }
@@ -1563,11 +1640,12 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 				//would only duplicate a line nobody wants twice.
 				continue;
 			}
-			vector<HdPackCondition*>& gates = _tileGateConditions[tile];
-			if(gates.empty()) {
+			vector<vector<HdPackCondition*>>& gates = _tileGateConditions[tile];
+			if(_spriteNearbyGated.insert(tile).second) {
 				_spriteNearbyTiles++;
 			}
-			gates.push_back(cond);
+			//A group of one: this condition gates a line by itself.
+			gates.push_back(vector<HdPackCondition*>{ cond });
 		}
 	}
 }
@@ -1974,8 +2052,15 @@ void HdPackBuilder::SaveHdPack()
 					//this ordering exists to prevent, not redundancy to remove.
 					auto gates = _tileGateConditions.find(tileInfo);
 					if(gates != _tileGateConditions.end()) {
-						for(HdPackCondition* cond : gates->second) {
-							pngRows << "[" << cond->Name << "]" << tileInfo->ToString(pngIndex) << std::endl;
+						for(const vector<HdPackCondition*>& gate : gates->second) {
+							pngRows << "[";
+							for(size_t g = 0; g < gate.size(); g++) {
+								if(g > 0) {
+									pngRows << "&";
+								}
+								pngRows << gate[g]->Name;
+							}
+							pngRows << "]" << tileInfo->ToString(pngIndex) << std::endl;
 						}
 					}
 					pngRows << tileInfo->ToString(pngIndex) << std::endl;

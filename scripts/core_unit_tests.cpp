@@ -4152,6 +4152,69 @@ namespace
 			"next=" + candidate);
 	}
 
+	//---- issue #239: the builder has to survive its own output format --------
+	//ADR-0189 §3 makes a conditioned <tile> two lines, and re-opening the pack
+	//used to send both to the same slot, where the bare twin - second, by the
+	//policy's own ordering - overwrote the conditioned one. Which line keeps
+	//the slot is the rule, so it is decided here and tested away from the
+	//emulator (ADR-0127).
+
+	static LoadedTileLine TileLine(const std::string& cell, bool conditioned)
+	{
+		LoadedTileLine line;
+		line.Cell = cell;
+		line.Conditioned = conditioned;
+		return line;
+	}
+
+	void TestTwinOwnerIsTheBareLineOfThePair()
+	{
+		std::vector<LoadedTileLine> lines;
+		lines.push_back(TileLine("cellA", true));
+		lines.push_back(TileLine("cellA", false));
+		std::vector<size_t> owners = PlanTwinOwners(lines);
+		Check(owners.size() == 2 && owners[0] == 1 && owners[1] == 1,
+			"BlocoP: issue #239 - a conditioned line and its bare twin share one slot, owned by the bare one",
+			"owners=" + std::to_string(owners.size()));
+	}
+
+	void TestTwinOwnerCollectsEveryConditionedCopy()
+	{
+		std::vector<LoadedTileLine> lines;
+		//Two gates on one tile: the builder writes one conditioned line each,
+		//then the single bare twin. All three have to come back as one slot, or
+		//the second gate is the one that overwrites the first.
+		lines.push_back(TileLine("cellA", true));
+		lines.push_back(TileLine("cellA", true));
+		lines.push_back(TileLine("cellA", false));
+		std::vector<size_t> owners = PlanTwinOwners(lines);
+		Check(owners.size() == 3 && owners[0] == 2 && owners[1] == 2 && owners[2] == 2,
+			"BlocoP: issue #239 - every conditioned copy of a cell folds onto the one bare twin");
+	}
+
+	void TestTwinOwnerKeepsAConditionedLineThatHasNoTwin()
+	{
+		std::vector<LoadedTileLine> lines;
+		//A hand-written pack, or one this builder never wrote. Dropping the line
+		//because it is conditioned would lose the art, so it owns its own slot
+		//and gains the bare twin ADR-0189 §3 asks for when it is written back.
+		lines.push_back(TileLine("cellA", true));
+		std::vector<size_t> owners = PlanTwinOwners(lines);
+		Check(owners.size() == 1 && owners[0] == 0,
+			"BlocoP: issue #239 - a conditioned line with no bare twin keeps its own slot");
+	}
+
+	void TestTwinOwnerNeverMergesDifferentCells()
+	{
+		std::vector<LoadedTileLine> lines;
+		lines.push_back(TileLine("cellA", true));
+		lines.push_back(TileLine("cellB", false));
+		lines.push_back(TileLine("cellA", false));
+		std::vector<size_t> owners = PlanTwinOwners(lines);
+		Check(owners.size() == 3 && owners[0] == 2 && owners[1] == 1 && owners[2] == 2,
+			"BlocoP: issue #239 - only lines naming the same cell are twins");
+	}
+
 	void TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame()
 	{
 		std::vector<OamFrame> frames = RepeatedGlyphFrames(12);
@@ -7139,6 +7202,10 @@ int main()
 	TestTileNearbySelectionKeepsTheTwoDirectionsApart();
 	TestNextNameIndexStartsAfterTheHighestExisting();
 	TestNextNameIndexNeverHandsBackADefinedName();
+	TestTwinOwnerIsTheBareLineOfThePair();
+	TestTwinOwnerCollectsEveryConditionedCopy();
+	TestTwinOwnerKeepsAConditionedLineThatHasNoTwin();
+	TestTwinOwnerNeverMergesDifferentCells();
 	TestSpriteOffsetTallyRisesOncePerFrame();
 	TestSpriteGroupIsLaidOutAtItsOamOffsets();
 	TestSpriteVocabularySheetListsEveryShape();
