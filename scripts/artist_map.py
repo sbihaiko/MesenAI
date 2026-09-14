@@ -617,7 +617,8 @@ def build_panorama(region: Region, shapes, palettes, pack: Pack, scale: int):
     return painted, orig, cells, stats
 
 
-def sidecar(name: str, cells, columns: int, scale: int, mode: str, stats, region: Region):
+def sidecar(name: str, cells, columns: int, scale: int, mode: str, stats, region: Region,
+            pack_scale: int = 1):
     return {
         "version": 1,
         # An ADR-0153 v1 sheet kind mep_build.py already slices through
@@ -638,6 +639,10 @@ def sidecar(name: str, cells, columns: int, scale: int, mode: str, stats, region
         "panorama": {
             "generator": "scripts/artist_map.py",
             "scale": scale,
+            # The pack's own <scale>. Every sheet of a pack shares one
+            # (MEP-v1 2.1), so a sliced panorama must come out at this size
+            # whatever size the artist chose to paint at. --slice reads it.
+            "packScale": pack_scale,
             "orientation": mode,
             "framesStitched": region.frames,
             "positionsConfirmed": region.agreements,
@@ -699,7 +704,23 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
             f"{painted_png}: {painted.width}x{painted.height} is not a whole-factor upscale of the "
             f"{orig.width}x{orig.height} panorama — resize by 1x, 2x, 3x, ...")
     n = painted.width // orig.width
-    span = CELL * n
+
+    # Every sheet of a pack shares one <scale> (MEP-v1 2.1), so the sheet this
+    # writes has to come out at the pack's scale whatever scale the artist
+    # chose to paint at. The panorama is emitted at 1x on purpose - it is a
+    # picture of a stage, and an artist wants to paint it at its own size -
+    # so painting it at 1x and dropping the result into a 4x pack used to fail
+    # the build with "painted at 1x while metatiles.png is at 4x". Measured by
+    # following ARTIST.md literally; the instructions were not wrong about what
+    # to run, they were wrong that any whole multiple would do.
+    pack_scale = int((doc.get("panorama") or {}).get("packScale") or n)
+    if pack_scale % n:
+        raise MapError(
+            f"{painted_png}: painted at {n}x, but the pack this panorama came from is at "
+            f"{pack_scale}x and {n} does not divide {pack_scale} — paint at 1x, or at a "
+            f"whole factor of {pack_scale}x")
+    grow = pack_scale // n
+    span = CELL * pack_scale
 
     winners = {}
     order = []
@@ -711,7 +732,7 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
             continue
         key = (str(tiles[0].get("tile", "")).upper(), str(tiles[0].get("palette", "")).upper())
         x, y = int(c["x"]), int(c["y"])
-        art = painted.crop(x * n, y * n, span, span)
+        art = painted.crop(x * n, y * n, CELL * n, CELL * n)
         ref = orig.crop(x, y, CELL, CELL).upscale(n)
         touched = art.px != ref.px
         if not touched:
@@ -738,7 +759,7 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
     for i, key in enumerate(order):
         art, ref, _where, _touched = winners[key]
         cx, cy = (i % columns) * span, (i // columns) * span
-        sheet.paste(art, cx, cy)
+        sheet.paste(art.upscale(grow) if grow > 1 else art, cx, cy)
         small = Image(CELL, CELL)
         for j in range(CELL):
             for k in range(CELL):
@@ -762,7 +783,9 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
     }, indent=1) + "\n", encoding="utf-8")
 
     if not quiet:
-        print(f"slice: {len(order)} distinct tile key(s) from {len(cells)} panorama cell(s) at {n}x")
+        grown = f", written at the pack's {pack_scale}x" if grow > 1 else ""
+        print(f"slice: {len(order)} distinct tile key(s) from {len(cells)} panorama cell(s) "
+              f"at {n}x{grown}")
         print(f"slice: {unpainted} cell(s) still match the reference (never painted)")
         both = sum(1 for c in conflicts if c["bothPainted"])
         print(f"slice: {len(conflicts)} position(s) disagree with the first occurrence of their key "
@@ -914,7 +937,8 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
         write_png(map_dir / f"{name}.png", painted)
         write_png(map_dir / f"{name}.orig.png", orig)
         columns = orig.width // CELL
-        doc = sidecar(name, cells, columns, scale, orientation_of(region), stats, region)
+        doc = sidecar(name, cells, columns, scale, orientation_of(region), stats, region,
+                      pack.scale)
         (map_dir / f"{name}.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
         files.append({
             "path": f"map/{name}.png",
@@ -1039,10 +1063,11 @@ def main(argv=None) -> int:
             f"The panorama covers {stats['covered']} of the pack's {stats['packKeys']} tile keys; "
             f"{stats['notInPack']} key(s) it shows are not in the pack at all.")
     notes.append(
-        "Paint a panorama in any editor at 1x or any whole multiple, keeping its size a whole "
-        "factor of the .orig.png twin, then run "
+        "Paint a panorama in any editor at its own 1x size, or at any whole multiple of it that "
+        "divides the pack's scale, then run "
         "`scripts/artist_map.py --slice <painted>.png --map map/<name>.json --out <kit>` — "
-        "it cuts the strip back into a textures/sheets/ drop-in. One tile key sits at many "
+        "it cuts the strip back into a textures/sheets/ drop-in, written at the pack's own scale "
+        "whatever size you painted at, because every sheet of a pack shares one. One tile key sits at many "
         "panorama positions and the pack can hold one art per key: the first occurrence in "
         "(y, x) order wins and every disagreeing position is printed.")
     notes.append(

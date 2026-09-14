@@ -546,6 +546,53 @@ def test_a_painted_panorama_may_be_any_whole_upscale():
             check("whole-factor" in str(e), "a panorama at a fractional scale is refused", str(e))
 
 
+def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
+    # A panorama is written at 1x on purpose - it is a picture of a stage and
+    # an artist wants it at its own size - but every sheet of a pack shares one
+    # <scale> (MEP-v1 2.1). Slicing a 1x painting into a 4x pack used to emit a
+    # 1x sheet and fail the build with "painted at 1x while metatiles.png is at
+    # 4x". The sidecar carries the pack's scale and the slicer honours it.
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "kit"
+        map_dir = out / "map"
+        map_dir.mkdir(parents=True)
+        key = (tile_hex(5), palette_hex(5))
+        orig = M.Image(8, 8)
+        orig.paste(M.render_tile(*key), 0, 0)
+        M.write_png(map_dir / "s-000.orig.png", orig)
+        M.write_png(map_dir / "s-000.png", orig)
+        doc = {
+            "version": 1, "kind": "misc", "gridUnit": 8, "gutter": 0, "columns": 1,
+            "sheet": "s-000.png", "reference": "s-000.orig.png",
+            "cells": [{"index": 0, "x": 0, "y": 0, "tiles": [{"tile": key[0], "palette": key[1]}]}],
+            "panorama": {"scale": 1, "packScale": 4},
+        }
+        (map_dir / "s-000.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        M.cut_painted(map_dir / "s-000.json", map_dir / "s-000.png", out, quiet=True)
+        art = M.read_png(out / "sheets" / "pano-s-000.png")
+        check(art.width == 16 * 32 and art.height == 32,
+              "a 1x painting is written at the pack's 4x", f"{art.width}x{art.height}")
+
+        # A painted scale that does not divide the pack's is refused by name,
+        # not silently resampled.
+        M.write_png(map_dir / "three.png", orig.upscale(3))
+        try:
+            M.cut_painted(map_dir / "s-000.json", map_dir / "three.png", out, quiet=True)
+            check(False, "a painted scale that does not divide the pack's is refused")
+        except M.MapError as e:
+            check("does not divide" in str(e),
+                  "a painted scale that does not divide the pack's is refused", str(e))
+
+        # No packScale (a sidecar written before this) keeps the old behaviour.
+        del doc["panorama"]["packScale"]
+        (map_dir / "s-000.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        M.cut_painted(map_dir / "s-000.json", map_dir / "s-000.png", out, quiet=True)
+        art = M.read_png(out / "sheets" / "pano-s-000.png")
+        check(art.width == 16 * 8 and art.height == 8,
+              "a sidecar with no packScale still slices at the painted scale",
+              f"{art.width}x{art.height}")
+
+
 def main():
     tests = [
         test_dump_parser_recovers_frames_shapes_and_collapsed_repeats,
@@ -563,6 +610,7 @@ def main():
         test_the_sidecar_addresses_every_cell_and_the_slicer_round_trips_it,
         test_one_key_painted_two_ways_resolves_first_occurrence_and_reports_the_rest,
         test_a_painted_panorama_may_be_any_whole_upscale,
+        test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one,
     ]
     for t in tests:
         t()
