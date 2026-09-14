@@ -1248,7 +1248,7 @@ void HdPackBuilder::BuildSheets()
 		", consistency " + std::to_string(vocab.Grid.ChosenConsistency) + " vs 8x8 " + std::to_string(vocab.Grid.Alt8x8) +
 		"), " + std::to_string(vocab.Entries.size()) + " metatiles from " + std::to_string(vocab.DistinctScreens) +
 		" distinct screens, HUD rows " + std::to_string(vocab.HudRows) + "/" + std::to_string(vocab.HudBottomRows) +
-		", " + std::to_string(_spriteSheetCount) + " sprite groups from " + std::to_string(_oamFrames.size()) + " OAM frames" +
+		", " + std::to_string(_spriteGroupCount) + " sprite groups from " + std::to_string(_oamFrames.size()) + " OAM frames" +
 		//F9.9: say which of the three zeroes this is - nothing to route, a
 		//recording that never reached gameplay, or a sample too thin to trust.
 		", " + (vocab.Withheld == MesenSheets::RoutingWithhold::NotGameplay
@@ -1434,7 +1434,27 @@ void HdPackBuilder::WriteObjectSheets(const string& folder, const MesenSheets::V
 //(F9.17, ADR-0164) must address the same indexes.
 MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, const MesenSheets::TileLookup& lookup)
 {
-	_spriteSheetCount = 0;
+	//Issue #237: the stem counter starts where the loaded pack left off, not at 0.
+	//The builder *merges* with the hires.txt it read at construction, and this
+	//function runs on every save, so restarting at spr000 made the second session
+	//emit `spr000_n0` next to the `spr000_n0` the first one had already defined.
+	//SaveHdPack serializes every entry of _hdData.Conditions, so both reached the
+	//manifest, and HdPackLoader's name table is last-wins - every surviving
+	//`[spr000_n0]<tile>` line from session 1 would silently bind to session 2's
+	//evidence. The name can neither be reused for that reason nor dropped: the
+	//loaded tiles in _hdData.Tiles hold raw pointers to those HdPackCondition
+	//objects, so deleting one is a use-after-free. Numbering past them is the only
+	//answer, and it is the stem - not just the `_n` suffix - that has to move,
+	//because the suffix restarts per group. Seeding the stem keeps a condition
+	//named after the sheet that shows its figure (see the loop below) and stops
+	//session 2 from overwriting a sprNNN.png that session 1's names still cite.
+	vector<string> loadedConditionNames;
+	loadedConditionNames.reserve(_hdData.Conditions.size());
+	for(unique_ptr<HdPackCondition>& existing : _hdData.Conditions) {
+		loadedConditionNames.push_back(existing->Name);
+	}
+	_spriteSheetCount = MesenSheets::NextStemIndex(loadedConditionNames, "spr", "_n");
+	_spriteGroupCount = 0;
 	_poseStats = MesenSheets::PoseStats();
 	if(_oamFrames.empty()) {
 		return MesenSheets::Vocabulary();
@@ -1539,6 +1559,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 		}
 		char buf[32];
 		snprintf(buf, sizeof(buf), "spr%03u", _spriteSheetCount++);
+		_spriteGroupCount++;
 		doc.Kind = "sprite";
 		doc.Grid = vocab.Grid;
 		doc.CellWidth = doc.CellHeight = vocab.Grid.Unit;

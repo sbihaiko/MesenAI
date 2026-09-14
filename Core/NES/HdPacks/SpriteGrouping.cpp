@@ -1209,4 +1209,37 @@ namespace MesenSheets
 		}
 		return plans;
 	}
+
+	uint32_t NextStemIndex(const std::vector<std::string>& names, const std::string& prefix, const std::string& separator)
+	{
+		uint32_t next = 0;
+		for(const std::string& name : names) {
+			if(name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) {
+				continue;
+			}
+			size_t end = prefix.size();
+			while(end < name.size() && name[end] >= '0' && name[end] <= '9') {
+				end++;
+			}
+			if(end == prefix.size()) {
+				//Something else entirely under the same first letters.
+				continue;
+			}
+			//The stem either ends the name or is followed by the separator our
+			//own names use. A bare `spr003` is counted too: it is what a sheet
+			//file is called, and numbering past it costs nothing, while reusing
+			//it could collide with a condition an older builder wrote.
+			if(end != name.size() && name.compare(end, separator.size(), separator) != 0) {
+				continue;
+			}
+			//Clamped one below the top of uint32_t so that "highest + 1" below
+			//cannot wrap to 0 and hand back a stem that is already in use. Only
+			//a hand-edited name can reach the clamp; this builder's own stems
+			//are the number of sprite groups in one recording.
+			uint32_t index = (uint32_t)std::min<uint64_t>(
+				std::strtoull(name.substr(prefix.size(), end - prefix.size()).c_str(), nullptr, 10), 0xFFFFFFFEull);
+			next = std::max(next, index + 1);
+		}
+		return next;
+	}
 }

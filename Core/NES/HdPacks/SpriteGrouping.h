@@ -108,4 +108,22 @@ namespace MesenSheets
 	//id), so the first entry is the most complete figure this sheet is part of.
 	//Capped at kSheetMaxPoseRefs. Empty when no cell belongs to a pose.
 	std::vector<uint32_t> PosesForCells(const PoseStats& stats, const std::vector<SheetCell>& cells);
+
+	//Issue #237: the index a new `<prefix>N` sheet stem must start at, given the
+	//condition names a pack already defines - highest N seen, plus one; 0 when
+	//none match. A name counts when the prefix is followed by at least one digit
+	//and then either nothing at all (`spr003`) or `separator` (`spr003_n7`), so a
+	//name that merely starts with the prefix (`spriteNearby4`) is never mistaken
+	//for a stem of ours, while anything that could collide is counted.
+	//
+	//Pure, so it is unit-tested here rather than through the builder (ADR-0127).
+	//It exists because HdPackBuilder *merges* with the pack it loaded at
+	//construction: WriteSpriteSheets restarts its sheet counter at 0 on every
+	//save, so a re-record re-emits `sprNNN_nN` names the loaded pack already
+	//defines. Those names can neither be reused - HdPackLoader's name table is
+	//last-wins, so the earlier session's `<tile>` lines would silently bind to
+	//the new recording's evidence - nor dropped, since the loaded tiles in
+	//_hdData.Tiles hold raw pointers to the HdPackCondition objects. Numbering
+	//the stem past them is the only answer.
+	uint32_t NextStemIndex(const std::vector<std::string>& names, const std::string& prefix, const std::string& separator);
 }
