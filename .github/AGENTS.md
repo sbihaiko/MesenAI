@@ -12,7 +12,15 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Local Contracts
 
-- `workflows/build.yml` — full native + UI release build.
+- `workflows/build.yml` — full native + UI release build, plus the `checks`
+  job. **Temporarily (2026-09-14) only `checks` runs on a push or a pull
+  request**: the four binary jobs carry
+  `if: github.event_name == 'workflow_dispatch'` and are built on demand with
+  `gh workflow run build.yml --ref <branch>`. `checks` is `make doc-checks`,
+  which is the gate that actually ran before — it used to run as a step inside
+  the Linux and macOS build jobs. Restoring the matrix is deleting that one
+  `if:` line from each of `windows`, `linux`, `appimage` and `macos`; the
+  rationale and the restore recipe are also in the file's own header comment.
 - `workflows/clang-format-check.yml` — C++ formatting gate (`clang-format` 20,
   `check-path: ./`). Runs on push to `main` (the product branch) and on
   every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
@@ -291,8 +299,8 @@ what CI actually runs; this doc records why they're split the way they are.
 - `./scripts/checks/verify_agents_md_recipe_handoff.sh`
 - `grep -c "verify_community_pack_validate_workflow" makefile` — the
   community-pack verifiers and pipeline unit tests are wired into
-  `make doc-checks` (2026-08-29), so the Linux/macOS build jobs run them
-  as a CI gate; the ROM-dependent validators
+  `make doc-checks` (2026-08-29), so CI runs them as a gate — the Linux/macOS
+  build jobs until 2026-09-14, the `checks` job since; the ROM-dependent validators
   (`validate_palette_variants.py`, `validate_hdpack_dump.py`) stay manual
   because they need a real ROM + `make core`.
 
