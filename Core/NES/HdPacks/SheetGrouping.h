@@ -92,4 +92,15 @@ namespace MesenSheets
 	//shape never becomes everyone's neighbour. Returns indexes into `edges`, in
 	//input order.
 	std::vector<size_t> SelectTileNearby(const std::vector<TileAdjacency>& edges, uint32_t minFrames, double minProb);
+
+	//Issue #232: the index a new `<prefix>N` name must start at, given the names
+	//already defined - highest N seen, plus one; 0 when none match. Only a suffix
+	//of digits counts, so a name that merely starts with the prefix is not
+	//mistaken for a numbered one. Pure, so it is unit-tested here rather than
+	//through the builder (ADR-0127): HdPackBuilder merges with the pack it loaded,
+	//whose tiles hold raw pointers to its HdPackCondition objects, so a
+	//`tileNearby` name from an earlier session can neither be reused (it would
+	//re-point live art at different evidence) nor deleted (use-after-free) - the
+	//counter has to number past it, or the edge is dropped in silence.
+	uint32_t NextNameIndex(const std::vector<std::string>& names, const std::string& prefix);
 }

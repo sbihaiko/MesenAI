@@ -4117,6 +4117,41 @@ namespace
 			"kept=" + std::to_string(kept.size()));
 	}
 
+	//Issue #232: a re-record into a folder that already holds a pack must number
+	//its tileNearby conditions past the names the loaded pack defines, or the
+	//first N edges collide with the previous session's names and attach nothing.
+	//Only the suffix rules of the name are tested here; that the builder feeds the
+	//loaded names in and starts its counter there is one line in HdPackBuilder.
+	void TestNextNameIndexStartsAfterTheHighestExisting()
+	{
+		Check(NextNameIndex({}, "obj_nearby") == 0,
+			"BlocoP: issue #232 - no names, the counter starts at 0");
+		Check(NextNameIndex({ "obj_nearby0", "obj_nearby1", "obj_nearby2" }, "obj_nearby") == 3,
+			"BlocoP: issue #232 - a contiguous run is numbered past its end");
+		//Highest + 1, not the first free slot: reusing a gap would put two
+		//definitions with different evidence under adjacent numbers, and the
+		//gaps only exist because earlier sessions were interrupted.
+		Check(NextNameIndex({ "obj_nearby0", "obj_nearby7" }, "obj_nearby") == 8,
+			"BlocoP: issue #232 - the counter clears the highest name, gap or no gap");
+		//The name belongs to another kind of condition, or is the prefix and
+		//nothing else; neither is one of ours to count.
+		Check(NextNameIndex({ "spriteNearby4", "hmirror", "obj_nearby", "obj_nearbyX" }, "obj_nearby") == 0,
+			"BlocoP: issue #232 - only a digit suffix under this prefix is a name of ours");
+	}
+
+	void TestNextNameIndexNeverHandsBackADefinedName()
+	{
+		std::vector<std::string> names;
+		for(uint32_t i = 0; i < 5; i++) {
+			names.push_back("obj_nearby" + std::to_string(i * 3));
+		}
+		uint32_t next = NextNameIndex(names, "obj_nearby");
+		std::string candidate = "obj_nearby" + std::to_string(next);
+		Check(std::find(names.begin(), names.end(), candidate) == names.end(),
+			"BlocoP: issue #232 - the seeded counter's first name is never one already defined",
+			"next=" + candidate);
+	}
+
 	void TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame()
 	{
 		std::vector<OamFrame> frames = RepeatedGlyphFrames(12);
@@ -7102,6 +7137,8 @@ int main()
 	TestTileNearbySelectionNeedsObjectMembershipAndFrames();
 	TestTileNearbySelectionRejectsASelfEdge();
 	TestTileNearbySelectionKeepsTheTwoDirectionsApart();
+	TestNextNameIndexStartsAfterTheHighestExisting();
+	TestNextNameIndexNeverHandsBackADefinedName();
 	TestSpriteOffsetTallyRisesOncePerFrame();
 	TestSpriteGroupIsLaidOutAtItsOamOffsets();
 	TestSpriteVocabularySheetListsEveryShape();

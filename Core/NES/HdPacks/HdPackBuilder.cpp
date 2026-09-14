@@ -275,10 +275,18 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		}
 	}
 
-	//Condition names already in the pack, once - not a scan per edge
-	unordered_set<string> definedConditions;
+	//Issue #232: the names this pack already defines, collected once - not a scan
+	//per edge. The builder *merges* with the pack it loaded at construction: those
+	//tiles stay in _hdData.Tiles and hold raw pointers to their HdPackCondition
+	//objects, so the condition counter has to start past the names an earlier
+	//session left behind. Reusing the name would silently re-point live art at
+	//different evidence; deleting the old definitions first would be a
+	//use-after-free. Numbering past them is the only answer, and it is what keeps
+	//the attach below from ever being skipped.
+	vector<string> loadedConditionNames;
+	loadedConditionNames.reserve(_hdData.Conditions.size());
 	for(unique_ptr<HdPackCondition>& existing : _hdData.Conditions) {
-		definedConditions.insert(existing->Name);
+		loadedConditionNames.push_back(existing->Name);
 	}
 
 	tileRows << '\n' << "# inferred " << _sheetObjectCount << " object sheet(s) -> sheets/objNNN.png" << '\n';
@@ -301,7 +309,7 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		candidates.push_back(adjacency);
 	}
 
-	int edgeIndex = 0;
+	int edgeIndex = (int)MesenSheets::NextNameIndex(loadedConditionNames, "obj_nearby");
 	for(size_t index : MesenSheets::SelectTileNearby(candidates, kTileNearbyMinFrames, kTileNearbyMinProbability)) {
 		const MesenSheets::TileAdjacency& edge = candidates[index];
 		uint32_t a = edge.A, b = edge.B;
@@ -327,9 +335,6 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		}
 
 		string condName = "obj_nearby" + std::to_string(edgeIndex++);
-		if(definedConditions.count(condName)) {
-			continue;
-		}
 
 		bool south = edge.South;
 		HdPackTileNearbyCondition* cond = new HdPackTileNearbyCondition();
