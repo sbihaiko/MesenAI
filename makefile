@@ -355,6 +355,8 @@ doc-checks: check-manifest
 	#Issue #225: the coverage measurement is a set intersection, so it must
 	#refuse a reference pack keyed in a namespace the recording cannot hold
 	#(a <patch> that turns CHR RAM into CHR ROM) instead of printing 0%.
+	#Issue #231: a <patch> whose keys share the recording's shape measures, but
+	#the patch and its header writes are named in a caveat above the tables.
 	#Synthetic packs and IPS files in a temp dir; no emulator, no ROM.
 	python3 scripts/test_artist_cover.py
 	#F5.5 golden refresh: the MEP/MEI goldens under docs/specs/golden/ must stay
