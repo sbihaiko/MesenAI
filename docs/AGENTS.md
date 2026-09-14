@@ -54,12 +54,16 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 - ADRs: `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) — every cited `ADR-NNNN` resolves to a file.
 - Upstream coexistence (ADR-0163): tiers = `scripts/upstream_tiers.py`; `Upstream-Delta:` trailer check = `scripts/checks/verify_upstream_delta.py`; sync = `scripts/sync-upstream.sh` (local, merge on `main`) + `.github/workflows/sync-upstream.yml` (scheduled PR when upstream moves).
 - `hd-pack-authoring.md`: `./scripts/checks/verify_hd_pack_authoring_doc.sh`.
-- `remastering-a-game.md`: `python3 scripts/checks/verify_remastering_guide.py`
-  (also in `make doc-checks`) — every local link resolves, and every flag the
-  guide prints on a harness or generator it documents is a flag that script
-  actually accepts. A guide whose commands have silently rotted is the exact
-  discoverability failure it was written to fix, so it is checked rather than
-  trusted.
+- The artist-facing docs — `remastering-a-game.md`, `ai-kit-review.md`,
+  `hd-pack-authoring.md` — `python3 scripts/checks/verify_artist_docs.py`
+  (also in `make doc-checks`) — every local link resolves, every `scripts/`
+  path named exists, and every flag a doc prints on a script it documents is a
+  flag that script actually accepts. A doc whose commands have silently rotted
+  is the exact discoverability failure the guide was written to fix, so it is
+  checked rather than trusted. A script's accepted flags are read from its
+  `add_argument` calls *and* from the usage block it states about itself: a CLI
+  that hand-parses argv publishes its flags only there, and reading just
+  `add_argument` reported a correct doc as broken.
 - Plans have no automated check.
 
 ## Child DOX Index
