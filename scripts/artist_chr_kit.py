@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import os
 import re
@@ -984,6 +985,20 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     if not pages:
         raise ChrKitError(f"{pack_dir}: textures/hires.txt references no chr/ page")
     banks = collect_banks(pack, pages)
+
+    # A pack's <supportedRom> is the whole file's SHA-1 (ADR-0003/ADR-0039).
+    # Without this check, another game of the same broad kind - CHR ROM against
+    # CHR ROM - passes the shape test below and every unrecorded cell is filled
+    # with that game's graphics, then reported as an exact ROM fill. The fill
+    # is the one place a wrong input produces confident, plausible, wrong art,
+    # so the ROM is pinned to the recording rather than merely type-checked.
+    if pack.rom_sha1 and set(pack.rom_sha1) != {"0"}:
+        actual = hashlib.sha1(rom_path.read_bytes()).hexdigest().lower()
+        if actual != pack.rom_sha1:
+            raise ChrKitError(
+                f"{rom_path.name}: sha1 {actual.upper()} is not the ROM this pack was recorded "
+                f"from ({pack.rom_sha1.upper()}) — filling from another game would write its "
+                f"graphics into this one and report them as exact")
 
     expect_ram = not rom.has_chr_rom
     for b in banks:

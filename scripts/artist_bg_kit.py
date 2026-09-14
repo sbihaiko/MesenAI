@@ -56,6 +56,7 @@ it may never lose a rule or invent one.
 import argparse
 import collections
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -420,10 +421,32 @@ def _title(names, ids, fallback):
 
 # ---- writing the kit ------------------------------------------------------
 
+def _claim_name(pack: E.Pack, out_dir: Path) -> str:
+    """Reserve the next free `usrNNN` stem by *creating* its sidecar, empty.
+
+    `Pack.next_free_name` only looks. The sprite and background generators are
+    documented as running in parallel into one `<kit>/sheets/`, so both would
+    be handed the same number between the scan and the write and one surface
+    would vanish under the other. Creating the file with O_EXCL makes the claim
+    the same act as the check - the same rule `artist_kit.claim_name` follows,
+    and the two are compatible because they claim through the same file."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for _attempt in range(1000):
+        name = pack.next_free_name(out_dir)
+        try:
+            fd = os.open(out_dir / f"{name}.json", os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            continue   # somebody else took it between the scan and the create
+        os.close(fd)
+        return name
+    raise KitError(f"{out_dir}: no free usrNNN name")
+
+
 def _export(pack: E.Pack, out_dir: Path, placements):
     nodes = [n for n, _x, _y in placements]
     return pack.export("object", nodes, seed=nodes[0], locked=nodes,
-                       to_dir=out_dir, placements=placements)
+                       to_dir=out_dir, placements=placements,
+                       name=_claim_name(pack, out_dir))
 
 
 def _geometry(placements):

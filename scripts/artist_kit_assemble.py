@@ -99,9 +99,20 @@ def _verify_line(fragment: dict) -> str:
     before, after = v.get("keys_before"), v.get("keys_after")
     lost, added = v.get("lost", 0), v.get("added", 0)
     errors = v.get("errors", 0)
-    state = "passed" if errors == 0 and not lost else "FAILED"
+    # A key the rebuild gained is only harmless when it is a key the pack's own
+    # manifest already held and the surface merely routed to art for the first
+    # time — which is what a stage panorama does, and it says so with
+    # `addedAreFromSource`. A gained key from anywhere else is a key the pack
+    # did not have, and calling that "passed" would hand the artist a green
+    # line over invented art.
+    from_source = bool(v.get("addedAreFromSource"))
+    ok = errors == 0 and not lost and (not added or from_source)
+    state = "passed" if ok else "FAILED"
+    tail = ""
+    if added and from_source:
+        tail = " (each already in the pack's own manifest, newly routed to art)"
     return (f"{state}: rebuild reported {errors} error(s), "
-            f"{before} tile keys before, {after} after, {lost} lost, {added} added")
+            f"{before} tile keys before, {after} after, {lost} lost, {added} added{tail}")
 
 
 def build_kit(kit_dir: Path, title: str = "") -> dict:

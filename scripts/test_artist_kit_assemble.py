@@ -119,6 +119,31 @@ def test_a_failed_or_missing_rebuild_is_never_reported_as_passed():
               "nothing unverified is dressed up as passed")
 
 
+def test_a_gained_key_is_only_passed_when_it_came_from_the_pack():
+    # A surface that *invents* a key must never read as passed - the artist
+    # would see a green line over art the pack cannot place. A stage panorama
+    # legitimately gains keys the pack's own manifest already held and merely
+    # routed to art for the first time; it says so with addedAreFromSource,
+    # and only then is the gain reported rather than failed.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("map", verify={
+            "ran": True, "errors": 0, "keys_before": 350, "keys_after": 396,
+            "lost": 0, "added": 46, "addedAreFromSource": True}))
+        text = A.render_markdown(A.build_kit(root))
+        check("passed" in text, "a panorama's gained keys still pass")
+        check("newly routed to art" in text,
+              "and the line says where the gained keys came from")
+
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("background", verify={
+            "ran": True, "errors": 0, "keys_before": 350, "keys_after": 396,
+            "lost": 0, "added": 46}))
+        text = A.render_markdown(A.build_kit(root))
+        check("FAILED" in text, "a gained key with no provenance reads as failed")
+        check("passed" not in text.replace("not verified", ""),
+              "and is not dressed up as passed")
+
+
 def test_an_empty_or_broken_kit_fails_loudly():
     with tempfile.TemporaryDirectory() as td:
         try:
@@ -154,6 +179,7 @@ def main():
         test_inferred_art_is_marked_in_the_page_an_artist_reads,
         test_a_dropped_surface_keeps_its_reason,
         test_a_failed_or_missing_rebuild_is_never_reported_as_passed,
+        test_a_gained_key_is_only_passed_when_it_came_from_the_pack,
         test_an_empty_or_broken_kit_fails_loudly,
         test_writing_the_kit_produces_both_files,
     ]

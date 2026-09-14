@@ -894,6 +894,13 @@ def verify(pack_dir: Path, map_dir: Path, stems, quiet=False):
         "keys_after": len(after),
         "lost": len(lost),
         "added": len(added),
+        # A panorama routes keys the pack's own manifest already holds to art
+        # for the first time, so `added` here is a gain rather than an
+        # invention - `notInPack` is what would catch an invented one, and it
+        # is reported separately per stage. The assembler needs to know that,
+        # or it would have to call every map fragment FAILED or call every
+        # invented key "passed".
+        "addedAreFromSource": all(k in pack.keys for k in added),
     }
     if not quiet:
         print(f"verify: {matched}/{checked} panorama cell(s) byte-identical to the pack's own tile art")
@@ -985,6 +992,7 @@ def _merge_verify(checks):
     for field in ("errors", "cellsChecked", "cellsByteIdentical", "keys_source",
                   "keys_before", "keys_after", "lost", "added"):
         out[field] = sum(c.get(field, 0) for c in checks)
+    out["addedAreFromSource"] = all(c.get("addedAreFromSource", False) for c in checks)
     return out
 
 
@@ -1099,6 +1107,23 @@ def main(argv=None) -> int:
     (out_dir / "kit-part-map.json").write_text(json.dumps(fragment, indent=1) + "\n", encoding="utf-8")
     if not args.quiet:
         print(f"wrote {out_dir / 'kit-part-map.json'} ({len(files)} panorama(s))")
+
+    # --verify is the acceptance gate, so its result has to reach the exit
+    # code: a rebuild error, a lost key or a cell that stopped matching the
+    # pack's own art used to be printed and then exit 0, which automation
+    # cannot enforce. An *added* key is not a failure here - the panorama
+    # routes keys the pack's manifest already holds to art for the first time,
+    # and `notInPack` is what would catch an invented one.
+    v = fragment["verify"]
+    if v.get("ran"):
+        bad = (v.get("errors", 0) or v.get("lost", 0)
+               or v.get("cellsChecked", 0) != v.get("cellsByteIdentical", 0))
+        if bad:
+            print(f"verify: FAILED - {v.get('errors', 0)} rebuild error(s), "
+                  f"{v.get('lost', 0)} key(s) lost, "
+                  f"{v.get('cellsChecked', 0) - v.get('cellsByteIdentical', 0)} cell(s) no longer "
+                  "byte-identical to the pack's art", file=sys.stderr)
+            return 1
     return 0
 
 
