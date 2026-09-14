@@ -6,8 +6,9 @@ The fork's planning lives in one consolidated PRD under this folder:
 
 - `PRD-mesence-enhancement-ecosystem.md` — the single roadmap, organised
   as two Parts. Part A is the pack/core roadmap (vision, legal principles,
-  standards, shipped record, Phase 5/6 slices, input tester, Phase 8
-  border layer). Part B is the default-GUI roadmap (player chrome,
+  standards, shipped record, and the live slices: Phase 9 artist kit and
+  panel, Phase 10 spikes, Phase 11 consolidation — gate, register,
+  release, first external artist). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
   quick-enhancements panel). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that

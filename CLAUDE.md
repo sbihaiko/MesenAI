@@ -55,7 +55,10 @@ Two exceptions:
   ADR's Status line says which. An ADR whose Decision is still an open
   question or an either/or stays `proposed` until a human picks. Accepting
   one is a request for work, not a note — say so and get a go-ahead before
-  implementing it in the same turn it is accepted.
+  implementing it. Implementing in the **same turn** it is accepted is
+  allowed only when both hold (user's decision, 2026-09-14): the change
+  ships with unit tests that cover the decision, and the go-ahead is quoted
+  verbatim in the ADR's Status line **and** in the PR body. Otherwise wait.
 - ADR ids are never reused (ADR-0035): 0009–0010, 0015–0020 and 0022–0032 are
   permanently retired.
 - Machine-generated review findings are not decisions. One ADR per decision,
