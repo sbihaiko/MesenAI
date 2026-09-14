@@ -265,6 +265,23 @@ reached **53.8%**, adding eleven per-stage and per-boss sessions took it to
 had never held. That is the shape of the payoff: the last few percent is exactly
 the part no single playthrough contains.
 
+### When it refuses instead of measuring
+
+The number is a set intersection, so it only means anything when both sides name
+their tiles the same way. A `hires.txt` keys a tile either by its CHR ROM bank
+index (`A55`) or by the 32 hex characters of its CHR RAM pattern, and the
+emulator tells the two apart by width alone. A reference pack built for a ROM
+that a `<patch>` turned from a CHR RAM board into a CHR ROM one keys its tiles in
+a namespace your recording of the stock ROM can never contain — every key differs,
+and a plain intersection would report that as a confident **0%** you would read as
+"record more".
+
+It does not. It exits non-zero and names the cause, the patch and the iNES header
+bytes that patch writes. Your options are to record the *patched* ROM the pack
+targets and measure against that, or to pick a reference pack built for the ROM
+you actually recorded. A partial mismatch still measures, with a warning saying
+how much of the reference the recording could never have held.
+
 ---
 
 ## 3. Unpack the recording into a kit
@@ -458,6 +475,7 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
 | `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
+| `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
 | The sprite sheet's top rows are wrong | HUD runs along a fixed row and is excluded; if your game puts HUD elsewhere, check the band before trusting those cells. |
 | A figure is two figures fused together | Sprite grouping is by adjacency, so two bodies that touch become one box. Mark it `multiple` in a review, or split it by hand — the kit's box is a grouping, not a truth. |
 | `check-coverage` says your repaint dropped art | On a bootstrap-originated pack it says that about an untouched rebuild too — see step 5. Use the generators' `--verify`. |

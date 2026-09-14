@@ -629,7 +629,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   repaint marker, not exclusivity). Prints totals, a per-image table and a
   per-state table with the tiles only that state exhibited. Stdlib only,
   no ROM. First run 2026-09-13 (Contra80s 1.1 vs fifteen Contra packs) is
-  summarised in ADR-0182.
+  summarised in ADR-0182. Refuses (exit 1, #225) when the reference's
+  `tileData` keys and the recording's cannot intersect by shape — the
+  emulator splits CHR RAM patterns (32+ hex chars) from CHR ROM bank
+  indices by width alone (`HdPackLoader::ReadTileData`), so a reference
+  built for a `<patch>`ed ROM that changed the board would otherwise print
+  a confident 0%. The refusal quotes the iNES header bytes the pack's own
+  IPS writes; the key shape is the trigger, the patch only the
+  explanation. A recorded state is labelled by the folder two levels above
+  `auto/`, extended leftwards on a collision — two runs of the same state
+  used to overwrite each other's row and under-report the pack count.
+  Tests: `test_artist_cover.py`.
 - `artist_kit.py <recorded pack> [--out DIR] [--names F] [--verify]` (F9.18) -
   the **sprites** part of the shared artist kit
   (`runs/golden-20260913-f922/artist-kit-contract.md`): lays `sheets/poses.json`

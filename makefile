@@ -352,6 +352,11 @@ doc-checks: check-manifest
 	#explains it, evidence never repainted, and hires.txt left untouched.
 	#Synthetic iNES image and pack in a temp dir; no emulator, no ROM library.
 	python3 scripts/test_artist_chr_kit.py
+	#Issue #225: the coverage measurement is a set intersection, so it must
+	#refuse a reference pack keyed in a namespace the recording cannot hold
+	#(a <patch> that turns CHR RAM into CHR ROM) instead of printing 0%.
+	#Synthetic packs and IPS files in a temp dir; no emulator, no ROM.
+	python3 scripts/test_artist_cover.py
 	#F5.5 golden refresh: the MEP/MEI goldens under docs/specs/golden/ must stay
 	#in sync with the emit code and the specs, or these gates fail.
 	python3 scripts/validate-specs.py
