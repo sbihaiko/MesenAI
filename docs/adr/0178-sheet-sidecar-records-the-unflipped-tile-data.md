@@ -101,8 +101,9 @@ this is the CHR RAM half.
    are untouched: the index already serves both directions.
 
 6. A pack recorded before this ADR is **detected, not repaired**. When a
-   data-keyed pack has crops whose key is absent from the key source while an
-   un-flip of that key is present, the build fails:
+   data-keyed **sprite** sheet (`kind` `sprite` or `sprites`) has crops whose
+   key is absent from the key source while an un-flip of that key is present,
+   the build fails:
 
    ```
    error: spr014.png: 12 crop(s) carry a flip-baked tile key the run time never
@@ -113,6 +114,14 @@ this is the CHR RAM half.
    It is an error for ADR-0172's reason: a cell that cannot match is not a
    degraded cell, it is a cell that does nothing. The un-flip here is used only
    to *recognise* the condition, never to emit a key from it.
+
+   The scope is sprite sheets because they are the only ones a flip can have
+   been baked into: `HdPackBuilder::WriteSpriteSheets` builds them from the OAM
+   vocabulary, and OAM is where the flip bits live. `metatiles`, `object`,
+   `map`, `hud`, `font` and `misc` come from the background vocabulary, where
+   the NES has no per-tile flip bit, so an un-flip that matches there is a
+   bitmap coincidence and not evidence of anything (scope narrowed 2026-09-13,
+   issue #196; measured below, and it costs no genuine detection).
 
 7. Two sheet cells may now emit the same key: a mirrored cell and the twin it
    mirrors. The existing per-sheet collision rule decides, unchanged — a
@@ -187,5 +196,5 @@ OAM vocabulary, and so the only ones into which a flip could have been baked.
 `metatiles`, `object`, `map`, `hud`, `font` and `misc` come from the background
 vocabulary, where the NES has no per-tile flip bit. The exempt crops emit their
 own keys unchanged; §6's error, message and exit code are otherwise untouched,
-and `scripts/test_mep_build.py` asserts both halves. Evidence for §6's scope,
-not a change to the Decision.
+and `scripts/test_mep_build.py` asserts both halves. §6 above carries the
+scope; this section is the evidence for it.
