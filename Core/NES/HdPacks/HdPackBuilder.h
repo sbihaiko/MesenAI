@@ -227,7 +227,14 @@ private:
 	void WriteSheetFiles(const string& folder, const string& baseName, const MesenSheets::SheetImage& image, MesenSheets::SheetJsonDoc& doc, const MesenSheets::TileLookup& lookup);
 	//Debug flag (ADR-0153 §7): MESEN_SHEET_GRID_DUMP=<file> writes the recorded
 	//grid stream in the format scripts/spike_tile_sheets.py parses, once, at
-	//save time - the hot path keeps no dump code.
+	//save time - the hot path keeps no dump code. Line kinds: "F <n>" opens a
+	//frame (repeated once per collapsed duplicate), "K <shape> <32 hex tile
+	//data> <8 hex palette>" interns a shape, "P <id> <8 hex palette>" interns a
+	//palette word, and "<x> <y> <shape> <palette id>" places a cell. The fourth
+	//cell field and the "P" lines are the per-cell palette plane (F9.24): the
+	//shape ids wildcard the palette, so without it a recoloured tile reads as
+	//the colours it was *first* seen with. A reader that predates them parses
+	//the first three fields unchanged.
 	void WriteGridDump(const string& path) const;
 	HdPackTileInfo* FindObjectArt(uint32_t shapeHash, std::map<uint32_t, HdPackTileInfo*>& bestByShape);
 

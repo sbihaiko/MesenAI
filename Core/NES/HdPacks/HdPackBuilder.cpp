@@ -887,6 +887,21 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 		return;
 	}
 	std::vector<bool> emitted(_shapeTiles.size(), false);
+	//The shape ids above wildcard the palette on purpose (GetKey(true)), so a
+	//"K" line can only name the *first* colours a shape was ever drawn with. A
+	//consumer that has to place the cell under the colours it really had - a
+	//stage panorama, where a tile recoloured by a bank switch is a different
+	//piece of scenery - needs the per-cell palette plane the GridFrame already
+	//carries (ADR-0159 amendment). It is written here, as a fourth field on the
+	//cell line plus a "P" line interning each palette word on first sight; a
+	//reader that predates this still parses the first three fields.
+	std::vector<uint32_t> paletteColors(MesenSheets::kUnknownPalette, 0);
+	for(const auto& entry : _paletteIds) {
+		if(entry.second < paletteColors.size()) {
+			paletteColors[entry.second] = entry.first;
+		}
+	}
+	std::vector<bool> paletteEmitted(paletteColors.size(), false);
 	for(const MesenSheets::GridFrame& frame : _gridFrames) {
 		for(uint32_t repeat = 0; repeat < frame.RepeatCount; repeat++) {
 			dump << "F " << frame.FrameNumber << '\n';
@@ -904,7 +919,15 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 						}
 						dump << " " << HexUtilities::ToHex(_shapeTiles[id].PaletteColors) << '\n';
 					}
-					dump << (col * 8 + frame.FineX) << " " << (row * 8) << " " << id << '\n';
+					//kUnknownPalette is "no evidence" (the id space ran out); it
+					//gets no "P" line and the reader falls back to the shape's.
+					MesenSheets::PaletteId pal = frame.Palettes[row][col];
+					if(pal < paletteEmitted.size() && !paletteEmitted[pal]) {
+						paletteEmitted[pal] = true;
+						dump << "P " << (uint32_t)pal << " " << HexUtilities::ToHex(paletteColors[pal]) << '\n';
+					}
+					dump << (col * 8 + frame.FineX) << " " << (row * 8) << " " << id
+						<< " " << (uint32_t)pal << '\n';
 				}
 			}
 		}

@@ -55,7 +55,10 @@ needs no local rules beyond the root DOX.
   classified. Consumers: `scripts/compose_engine.py` (`Poses`, `PoseInput`,
   `PoseRun.driver`).
 - **Save-time debug dumps**, env-gated, never pack files:
-  `MESEN_SHEET_GRID_DUMP`, `MESEN_OAM_STREAM_DUMP` (per retained frame:
+  `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
+  shape and a palette word, then `x y shape palette` per cell - the palette
+  field and the `P` lines are F9.24's per-cell palette plane, since the shape
+  ids wildcard the palette), `MESEN_OAM_STREAM_DUMP` (per retained frame:
   index, repeat count, port 1 and 2 button bytes, then `node,x,y` per
   sprite) and `MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as
   `frame:pose:held` triples in retained-frame indexes).
