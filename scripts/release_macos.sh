@@ -134,6 +134,20 @@ fi
 [[ -d "$PUBLISH_APP" ]] || { echo "error: no app bundle at $PUBLISH_APP" >&2; exit 1; }
 [[ -f "$RECORDER" ]] || { echo "error: no headless_record at $RECORDER" >&2; exit 1; }
 
+# `make capture-tool` runs its install_name_tool and codesign steps through
+# `2>/dev/null || true`, and on a machine that only has the Command Line Tools
+# the /usr/bin copies of both are xcrun shims that fail the Xcode-licence check.
+# The tool is then left with a bare `MesenCore.dylib` install name and aborts at
+# startup with a dyld error - which also breaks the pack smoke tests in
+# `make doc-checks`. Repair the checkout copy here, with the CLT binaries, so a
+# release build does not leave the working tree worse than it found it.
+RECORDER_REF="$("$OTOOL" -L "$RECORDER" | tail -n +2 | awk -v lib="$SHAREDLIB" '$1 ~ lib { print $1 }' | head -n 1)"
+if [[ -n "$RECORDER_REF" && "$RECORDER_REF" != "$CORE_DYLIB" ]]; then
+	echo "==> repairing the checkout's headless_record (install name was \"$RECORDER_REF\")"
+	"$INSTALL_NAME_TOOL" -change "$RECORDER_REF" "$CORE_DYLIB" "$RECORDER"
+	codesign -f -s - "$RECORDER"
+fi
+
 # --------------------------------------------------------------------------
 # 2. Inject the freshly built core, sign, and PROVE the bundle carries it
 # --------------------------------------------------------------------------
