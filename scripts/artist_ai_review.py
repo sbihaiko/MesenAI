@@ -766,14 +766,23 @@ def score(proposals: dict, truth: dict, alias=None, kinds=None) -> dict:
             buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject"),
                                         "reason": "no label of this kind"})
             continue
+        if label.get("subject") is None:
+            # A label exists (right kind, in scope) but no subject reached the
+            # dominance threshold - there is nothing to be right, wrong, or
+            # honest about not knowing. This has to be checked before the
+            # abstain branch: an abstention here is not the reviewer declining
+            # a knowable answer, it is agreeing with a box the truth file
+            # itself could not call either, and folding it into `abstained`
+            # would credit caution that was never exercised - same failure
+            # this whole branch already fixed once for a differently-shaped
+            # case, one condition too narrow.
+            buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject"),
+                                        "reason": "no subject reached dominance"})
+            continue
         if entry.get("abstain"):
             buckets["abstained"].append({"ask": ask_id,
                                          "truth": label.get("subject"),
                                          "why": entry.get("why", "")})
-            continue
-        if label.get("subject") is None:
-            buckets["unscored"].append({"ask": ask_id, "said": entry.get("subject"),
-                                        "reason": "no subject reached dominance"})
             continue
         expected = label["subject"]
         said = alias.get(entry.get("subject"), entry.get("subject"))

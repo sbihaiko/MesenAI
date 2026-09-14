@@ -339,6 +339,22 @@ def test_an_ask_with_no_ground_truth_is_unscored_not_wrong():
               "nothing to measure against is its own bucket", json.dumps(result["counts"]))
 
 
+def test_abstaining_on_a_subject_that_never_reached_dominance_is_also_unscored():
+    """The same failure the two tests above fix, one condition too narrow: an
+    abstention checked before the subject-is-None guard reads as the reviewer
+    declining a knowable answer, when the truth file itself never called this
+    box either. Order matters here, not just presence of the check."""
+    with tempfile.TemporaryDirectory() as td:
+        packet = R.build_packet(_sprite_kit(Path(td)))
+        a = packet["asks"][0]["ask"]
+        entry = _answer(packet, 0, abstain=True, why="cannot tell")
+        result = R.score(_doc(packet, entry),
+                         {"version": 1, "labels": {a: {"kind": "figure", "subject": None}}})
+        check(result["counts"]["abstained"] == 0 and result["counts"]["unscored"] == 1,
+              "an abstention on an unlabelled box is unscored, not credited caution",
+              json.dumps(result["counts"]))
+
+
 def test_the_reviewer_own_vocabulary_is_mapped_rather_than_required():
     with tempfile.TemporaryDirectory() as td:
         packet = R.build_packet(_sprite_kit(Path(td)))
