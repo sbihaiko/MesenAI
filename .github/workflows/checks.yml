@@ -1,0 +1,58 @@
+name: Checks
+
+# The always-on gate, split out of `build.yml` on 2026-09-14 (PR #230) when that
+# file's `push`/`pull_request` triggers were removed and its 14-job binary
+# matrix became dispatch-only.
+#
+# It is a separate workflow file rather than a job in `build.yml` on purpose.
+# `build.yml`'s identity to the outside world is "the workflow whose newest run
+# on `main` carries the downloadable binaries": the README's nightly.link URLs
+# resolve against exactly that run. A push to `main` that ran an artifact-less
+# job there would become the newest run and the download links would stop
+# serving binaries until the next dispatch. Keeping artifact-free work in
+# another file keeps that run a build. Same reason for the second half of the
+# split: `cancel-in-progress` groups on workflow+ref, so a push to `main` during
+# a dispatched build would have cancelled it.
+#
+# `make doc-checks` is the repo's own acceptance suite: the drift guardrails
+# (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline
+# verifiers, and the HD-pack and artist-kit script suites. It also compiles —
+# `verify_smoke_pack_headless.sh` builds `scripts/headless_record` and FAILs here
+# if it cannot — which is why the job installs SDL2. That is the core-only
+# helper, not the GUI/LTO/AOT artifact `build.yml` produces.
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  checks:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qy
+          sudo apt-get install -qy libsdl2-dev # scripts/headless_record (built by doc-checks) links the core, which needs SDL2
+          python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners) # doc-checks verify scripts need PyYAML/Pillow/numpy (not preinstalled everywhere)
+
+      - name: Run doc checks
+        run: make doc-checks

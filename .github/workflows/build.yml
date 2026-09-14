@@ -1,34 +1,52 @@
 name: Build Mesen
 
 on:
-  push:
-    branches:
-      - 'main'
-  # Restored 2026-09-14: the F9.24 artist-kit series is merged (#213, #214,
-  # #215), which is the condition the 2026-09-13 suspension named. The trigger
-  # was suspended then because a 14-build matrix per push made the slices wait
-  # on CI to land; a pull request can still be built on demand with
-  # `gh workflow run build.yml --ref <branch>`.
-  pull_request:
-    branches:
-      - 'main'
+  # TEMPORARY (2026-09-14): `push` and `pull_request` were REMOVED, so the
+  # matrix below runs only when someone dispatches it:
+  #   gh workflow run build.yml --repo sbihaiko/MesenCE --ref <branch>
+  #
+  # The reason is the same one that suspended the `pull_request` trigger on
+  # 2026-09-13: the matrix is 14 jobs (two Windows publish profiles, six
+  # Linux/AppImage compiler×arch legs, four macOS legs with a codesign step),
+  # each a full LTO/AOT build, and a branch that lands three commits in an
+  # afternoon queues more runner time than the work in the commits.
+  #
+  # The always-on gate did NOT go away with the triggers — it moved to
+  # `checks.yml`, which runs on every push and pull request. It had to move to
+  # another file rather than becoming a job here, for two reasons that are both
+  # about this file's identity:
+  #   1. nightly.link resolves the README's download links against the NEWEST
+  #      run of THIS workflow on `main`. A push to `main` that ran an
+  #      artifact-less job here would become that newest run and the links would
+  #      stop serving the binaries until the next dispatch.
+  #   2. `cancel-in-progress` below is keyed on the workflow and the ref. A push
+  #      to `main` while a dispatched build was running would cancel the only
+  #      artifact-producing run for that ref.
+  # With the triggers gone, every run of this file is a build, so neither can
+  # happen.
+  #
+  # TO RESTORE THE BINARY BUILDS: put the `push`/`pull_request` blocks back
+  # under `on:` (and, if `checks.yml` is no longer wanted, delete that file).
+  # No job below is aware of the gate — there is no `if:` to remove.
   workflow_dispatch:
 
 # Every job used to carry
 #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 # to avoid building one commit twice. That guard assumes `push` fires for the
 # branch a pull request comes from — true upstream, where contributors push
-# branches to the repo itself, and false here: `push` above is restricted to
-# `main`, and a pull request's head branch is never `main`. The two triggers
-# therefore cannot overlap, and the guard only had the effect of skipping every
+# branches to the repo itself, and false here: `push` was restricted to `main`,
+# and a pull request's head branch is never `main`. The two triggers therefore
+# could not overlap, and the guard only had the effect of skipping every
 # internal pull request — including each `sync/upstream/<date>` branch the
 # upstream-sync workflow opens, which reached `main` never having been compiled
-# (#178). Removed. If `push` is ever widened beyond `main`, restore a guard
-# keyed on the branch, not on the head repository.
+# (#178). Removed, and moot while the only trigger is `workflow_dispatch`. If
+# `push` is ever restored, key any guard on the branch, not on the head
+# repository.
 
-# A newer push/PR-update on the same ref cancels whatever this workflow was
-# still building for the previous commit — no point finishing a build for a
-# revision that's already superseded.
+# A second dispatch for the same ref cancels the first — no point finishing a
+# build for a revision someone else is already superseding by hand. This cannot
+# fire in response to a push any more, because a push does not trigger this
+# workflow at all.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

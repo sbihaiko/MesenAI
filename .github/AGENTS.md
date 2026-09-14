@@ -12,7 +12,20 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Local Contracts
 
-- `workflows/build.yml` — full native + UI release build.
+- `workflows/build.yml` — full native + UI release build. **Temporarily
+  (2026-09-14) its `push` and `pull_request` triggers are gone** and all 14
+  jobs run only on `workflow_dispatch`
+  (`gh workflow run build.yml --ref <branch>`). Restoring it is putting the
+  two trigger blocks back under `on:`; the rationale is in the file's header
+  comment.
+- `workflows/checks.yml` — `make doc-checks` on every push and pull request.
+  This is the repo's always-on gate, moved out of `build.yml` when that file
+  became dispatch-only. It is a separate file, not a job, because
+  `build.yml`'s newest run on `main` is what the README's nightly.link
+  download links resolve against: an artifact-less job there would supersede
+  the downloadable build, and `cancel-in-progress` (grouped on workflow+ref)
+  would let a push cancel a dispatched build. `checks.yml` also compiles
+  `scripts/headless_record`, so it needs SDL2.
 - `workflows/clang-format-check.yml` — C++ formatting gate (`clang-format` 20,
   `check-path: ./`). Runs on push to `main` (the product branch) and on
   every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
@@ -291,8 +304,8 @@ what CI actually runs; this doc records why they're split the way they are.
 - `./scripts/checks/verify_agents_md_recipe_handoff.sh`
 - `grep -c "verify_community_pack_validate_workflow" makefile` — the
   community-pack verifiers and pipeline unit tests are wired into
-  `make doc-checks` (2026-08-29), so the Linux/macOS build jobs run them
-  as a CI gate; the ROM-dependent validators
+  `make doc-checks` (2026-08-29), so CI runs them as a gate — the Linux/macOS
+  build jobs until 2026-09-14, the `checks` job since; the ROM-dependent validators
   (`validate_palette_variants.py`, `validate_hdpack_dump.py`) stay manual
   because they need a real ROM + `make core`.
 

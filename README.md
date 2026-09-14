@@ -23,13 +23,21 @@ Most emulators stop at *faithful*. This one starts there and keeps going — and
 - **HD art on three console families, not one.** Mesen's proven NES HD Pack pipeline now covers **Game Boy/GBC and Master System/Game Gear** too. No pack for your game yet? The emulator **starts building one while you play** — upscaled tiles, static screens and extracted music, ready for an artist to finish.
 - **One pack, every layer.** Textures, music and synth presets ship together in a hash-matched [MEP](#enhancement-packs-mep) pack. Drop a folder or `.zip` next to the ROM and it's found automatically; toggle each layer independently.
 - **Know a great HD pack? [Submit the link](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml).** Opening a pre-filled GitHub Issue is all it takes: a bot downloads the pack, validates it, labels it and adds it to the [public catalog](docs/community-packs.md). Classic Mesen `hires.txt` packs and full MEP `pack.json` packs both qualify — years of existing community work, one ecosystem. Details in [Community packs](#community-packs).
-- **Built to stay reliable.** CI-gated unit tests on every push — not just *"it compiled."*
+- **Built to stay reliable.** A CI gate on every push that is not just *"it compiled"* — the structural suite plus a headless boot of the real core against synthetic ROM and pack fixtures.
 
 Underneath it all is [MesenCE](https://github.com/nesdev-org/MesenCE) / [Mesen2](https://github.com/SourMesen/Mesen2), so you keep Mesen's accuracy, debugger, netplay, shaders, run-ahead and rewind. Upstream fixes are ported in regularly.
 
 ## Download
 
-The newest build of `main` that passed CI — no installer, unzip and run:
+The newest build of `main` that passed CI — no installer, unzip and run.
+
+> **The binaries are currently built on demand, not on every push.** The 14-job matrix is dispatch-only (see [Built to stay correct](#built-to-stay-correct)) so a merge does not queue an hour of runner time. The links below resolve against the newest *build* run on `main`, which is now always a real build, so they keep serving the last one that was triggered. To produce a fresh one:
+>
+> ```sh
+> gh workflow run build.yml --repo sbihaiko/MesenCE --ref main
+> ```
+>
+> Then download from that run's Summary page — or use the links below once it finishes.
 
 | Platform | Build | Notes |
 |---|---|---|
@@ -91,7 +99,7 @@ This fork takes that pipeline to **Game Boy and Master System**, bundles it with
 | **Finding packs** | Forum threads | **Validated [community catalog](docs/community-packs.md)** — every entry lint-checked, hash-tracked, labeled by content |
 | **Music export** | — | **Record Music (MIDI/VGM)** while you play |
 | **Player mode** | — | **Couch-friendly shell on a fresh install**: menu hidden, one overlay (resume / save / load / pack chip / settings / quit), recent-games home, pack picker when packs compete |
-| **Correctness** | Build check | **CI-gated unit tests** on every push |
+| **Correctness** | Build check | **Structural gate on every push** — guardrails, ADR integrity, pack-pipeline suites, headless core smoke ([details](#built-to-stay-correct)) |
 | **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist ([why](#why-this-fork)) |
 
 ### What it runs
@@ -164,12 +172,16 @@ Both formats are welcome: a plain **Mesen `hires.txt` HD pack** (all the existin
 
 ## Built to stay correct
 
-Every push and PR runs [`unit-tests.yml`](.github/workflows/unit-tests.yml) in addition to the native build:
+Every push and PR runs [`checks.yml`](.github/workflows/checks.yml) — `make doc-checks`, the repo's own structural suite: the guardrails that fail a PR on drift (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline verifiers, and the script suites for the HD-pack and artist-kit tooling. It also boots the real core headless against synthetic ROM and pack fixtures, so the acceptance gate is mechanical rather than "it compiled".
+
+Two suites exist beyond that gate and are run by hand while the binary matrix is dispatch-only:
 
 - **`core-unit-tests`** — dependency-free C++ harness (`scripts/core_unit_tests.cpp`, `make core-unit-tests`) for core logic: Enhanced Audio channel-role classifier, MEP parsing, and other logic deliberately factored out so it can be tested without a ROM or GUI.
 - **`UI.Tests`** — C# xUnit suite (`UI.Tests/`) for the host layer: cheat parsing, pack-list handling, MEP parser and zip validator.
 
-No SDL2, no full core: the C++ harness compiles one object per source and links, so `make -j` runs all 491 cases in about ten seconds from cold. It's not full-core coverage — it's real, growing coverage of what this fork adds and changes, so regressions get caught before they ship.
+No SDL2, no full core: the C++ harness compiles one object per source and links, so `make -j` runs all 771 cases in about ten seconds from cold. It's not full-core coverage — it's real, growing coverage of what this fork adds and changes, so regressions get caught before they ship.
+
+> **Temporarily, `checks.yml` is the only thing CI runs.** The 14-job binary matrix in `build.yml` is dispatch-only as of 2026-09-14 and both suites in [`unit-tests.yml`](.github/workflows/unit-tests.yml) are gated off to keep a push from queueing ~14 full builds; `unit-tests.yml` has additionally been disabled in the repo's Actions settings since 2026-08-29, so the two bullets above are **not gating** today. Run them locally with `make core-unit-tests` and `dotnet test UI.Tests/UI.Tests.csproj`. The note at the top of `build.yml` says how to restore the matrix.
 
 ## Why this fork
 
