@@ -18,7 +18,11 @@ What the suite pins down (#225):
   * that the refusal does *not* fire on a legitimate low-but-nonzero coverage,
     nor on a normal reference, which must still measure exactly as before;
   * the partial-mismatch warning, which keeps unreachable reference tiles from
-    reading as merely unseen.
+    reading as merely unseen;
+  * the <patch> caveat (#231): a reference built for a patched ROM whose keys
+    share the recording's shape is *measured*, not refused, but the patch and
+    its target sha1 are named above the tables and the summary line carries the
+    caveat — and a patch-less reference gets no such warning at all.
 
 Standard library only, no pytest, no emulator.
 """
@@ -378,6 +382,86 @@ def test_a_partly_foreign_reference_measures_but_says_what_is_unreachable():
     check("in some state: 2/10" in out, "the printed number is unchanged", out[:300])
 
 
+# --- the <patch> caveat (#231) ----------------------------------------------
+#
+# A <patch> that survives the namespace check (its keys share the recording's
+# shape) is not a refusal, but the pack is still built for a patched ROM. The
+# tool must say so above the tables and on the summary line rather than letting
+# the figures read as coverage — and must stay silent when there is no patch.
+
+
+def test_a_patch_bearing_reference_that_shares_the_shape_warns_and_still_measures():
+    # Zelda II / Revamp (#231): a CHR ROM reference whose keys are the same
+    # shape as a CHR ROM recording's passes the namespace check, so the numbers
+    # ship. They compare two builds, and the patch that causes it must be named.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        ref = d / "ref" / "hires.txt"
+        manifest(ref, [("a.png", [index(n) for n in range(4)])],
+                 patches=[("revamp.ips", "08fa60f2")])
+        ips(d / "ref" / "revamp.ips", [(4, b"\x10\x10\x13")])
+        rec = recorded(d / "rec" / "auto", [index(0), index(1)])
+        rc, out, err = run([ref, rec])
+    check(rc == 0, "a same-shape patch-bearing reference still measures", f"rc={rc}")
+    check("warning:" in err and "revamp.ips" in err and "08fa60f2" in err,
+          "the caveat names the patch and its target sha1", err[:400])
+    check("built for a patched ROM" in err, "and says the reference targets a patched ROM")
+    check("128 KB of CHR ROM" in err and "byte 5" in err,
+          "and decodes the header byte the patch rewrites", err[:500])
+    check("[caveat:" in out and "not coverage" in out,
+          "the summary line carries the caveat, not a bare number", out[:400])
+    check("artist tileData on screen in some state: 2/4" in out,
+          "the measurement itself is unchanged", out[:400])
+
+
+def test_a_patch_that_leaves_the_header_alone_does_not_claim_it_changed():
+    # The Zelda II Revamp shape for real: a patch we read fine whose records all
+    # start past the header. It is still a caveat, but claiming byte 5 moved (or
+    # that the namespaces provably differ) would be a false statement.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        ref = d / "ref" / "hires.txt"
+        manifest(ref, [("a.png", [index(n) for n in range(4)])],
+                 patches=[("tweak.ips", "abc123")])
+        ips(d / "ref" / "tweak.ips", [(0x40, b"\xEA\xEA")])
+        rec = recorded(d / "rec" / "auto", [index(0)])
+        rc, out, err = run([ref, rec])
+    check(rc == 0, "it still measures", f"rc={rc}")
+    check("does not rewrite the iNES header" in err and "byte 5 is unchanged" in err,
+          "it says the header was left alone and byte 5 is unchanged", err[:400])
+    check("provably" not in err, "it claims no namespace divergence it did not see", err[:400])
+    check("[caveat:" in out, "the summary still carries the caveat", out[:400])
+
+
+def test_a_reference_without_a_patch_gets_no_caveat():
+    # The honesty half: the caveat must fire on <patch> alone, never on a normal
+    # reference, or "this compares two builds" would be noise the artist learns
+    # to ignore.
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        ref = d / "ref" / "hires.txt"
+        manifest(ref, [("a.png", [index(n) for n in range(4)])])
+        rec = recorded(d / "rec" / "auto", [index(0)])
+        rc, out, err = run([ref, rec])
+    check(rc == 0, "a patch-less reference measures", f"rc={rc}")
+    check(err.strip() == "", "and prints no warning at all", err[:300])
+    check("[caveat:" not in out, "and its summary line is a bare measurement", out[:400])
+
+
+def test_a_declared_patch_we_cannot_read_still_warns_before_measuring():
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        ref = d / "ref" / "hires.txt"
+        manifest(ref, [("a.png", [index(n) for n in range(4)])],
+                 patches=[("gone.ips", "deadbeef")])
+        rec = recorded(d / "rec" / "auto", [index(0)])
+        rc, out, err = run([ref, rec])
+    check(rc == 0, "an unreadable patch does not refuse when the shapes match", f"rc={rc}")
+    check("gone.ips" in err and "could not be read" in err,
+          "the caveat says the patch is unreadable", err[:400])
+    check("[caveat:" in out, "the summary still carries the caveat", out[:400])
+
+
 # --- the per-state table's labels -------------------------------------------
 
 
@@ -431,6 +515,10 @@ def main():
         test_a_legitimately_low_coverage_is_reported_not_refused,
         test_one_shared_tile_is_enough_to_measure,
         test_a_partly_foreign_reference_measures_but_says_what_is_unreachable,
+        test_a_patch_bearing_reference_that_shares_the_shape_warns_and_still_measures,
+        test_a_patch_that_leaves_the_header_alone_does_not_claim_it_changed,
+        test_a_reference_without_a_patch_gets_no_caveat,
+        test_a_declared_patch_we_cannot_read_still_warns_before_measuring,
         test_the_state_label_is_the_folder_two_levels_above_auto,
         test_two_runs_of_the_same_state_get_distinct_labels,
         test_two_same_named_states_both_reach_the_per_state_table,

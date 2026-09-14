@@ -31,6 +31,14 @@ A reference pack built for a ROM whose mapper was changed by a `<patch>`
 therefore keys tiles in a namespace our recording of the stock ROM cannot
 contain: the intersection is empty by construction, not by under-recording.
 We refuse that comparison instead of printing 0% (#225).
+
+A `<patch>` whose keys happen to share the recording's *shape* passes that
+check, yet the pack is still built for a patched ROM. That is undecidable
+from the pack alone — an audio-only patch leaves the tiles valid, a mapper
+patch does not — so we do not refuse it. Instead a caveat is printed above
+the tables (on stderr) naming the patch and its target sha1 and quoting the
+header bytes the patch writes, and the summary line carries the same caveat,
+so the figures never read as plain coverage (#231).
 """
 import collections, glob, json, os, re, sys
 
@@ -112,6 +120,32 @@ def ips_header_writes(path):
     return out
 
 
+def patch_evidence(artist_path):
+    """Classify every `<patch>` a manifest declares, by what it writes.
+
+    Returns `(found, silent, unreadable, shas)`: the bytes each readable patch
+    writes into the first 16 bytes of its target, keyed by file name; the file
+    names that read fine but leave the header alone; the ones we could not open
+    at all; and every declared target sha1 keyed by file name (one `<patch>`
+    line is usually declared once per supported ROM sha1).
+    """
+    found, silent, unreadable = {}, [], []
+    shas = collections.defaultdict(list)
+    for name, sha1 in patches(artist_path):
+        shas[name].append(sha1)
+        if name in found or name in silent or name in unreadable:
+            continue
+        ips = os.path.join(os.path.dirname(os.path.abspath(artist_path)), name)
+        writes = ips_header_writes(ips)
+        if writes is None:
+            unreadable.append(name)
+        elif writes:
+            found[name] = writes
+        else:
+            silent.append(name)
+    return found, silent, unreadable, shas
+
+
 def namespace_report(artist_path, a_data, seen_data, pack_paths):
     """None when the two sides can intersect, else the refusal message."""
     a_shapes = {shape(d) for d in a_data}
@@ -148,19 +182,7 @@ def namespace_report(artist_path, a_data, seen_data, pack_paths):
     # leaves the header alone (its edits are in the PRG/CHR body), and one we
     # could not open at all. Only the first is evidence for the key-shape
     # split; the other two are both "built for a different build".
-    found, silent, unreadable, shas = {}, [], [], collections.defaultdict(list)
-    for name, sha1 in patches(artist_path):
-        shas[name].append(sha1)
-        if name in found or name in silent or name in unreadable:
-            continue
-        ips = os.path.join(os.path.dirname(os.path.abspath(artist_path)), name)
-        writes = ips_header_writes(ips)
-        if writes is None:
-            unreadable.append(name)
-        elif writes:
-            found[name] = writes
-        else:
-            silent.append(name)
+    found, silent, unreadable, shas = patch_evidence(artist_path)
     if found:
         lines.append("       The reference pack ships a <patch>, and it rewrites the iNES header:")
         for name, writes in found.items():
@@ -193,6 +215,57 @@ def namespace_report(artist_path, a_data, seen_data, pack_paths):
         "`headless_record` that build) and measure against that, or pick a reference pack that "
         "targets the same ROM you recorded.",
     ]
+    return "\n".join(lines)
+
+
+def patch_caveat(artist_path):
+    """The caveat to print when the reference declares a `<patch>`, else None.
+
+    A `<patch>` line means the reference pack was built for a patched ROM, so
+    the intersection below compares two builds. Whether that invalidates the
+    tile keys cannot be decided from the pack alone (#231): a patch that leaves
+    PRG/CHR where it is (audio, say) leaves the keys valid, a mapper patch does
+    not. Refusing would delete the only measurement half the installed
+    reference packs can give, so we keep measuring and say out loud what the
+    pack declares — the silence is the one answer that is always wrong.
+    """
+    declared = patches(artist_path)
+    if not declared:
+        return None
+    found, silent, unreadable, shas = patch_evidence(artist_path)
+    lines = [
+        f"warning: {artist_path} declares a <patch> — the reference pack is built for a "
+        "patched ROM, so every figure below compares two builds. This is not automatically "
+        "fatal (a patch that leaves PRG/CHR alone, e.g. audio-only, leaves the tile keys "
+        "valid) but it is never visible any other way.",
+        "         patches declared:",
+    ]
+    for name, sha1s in shas.items():
+        lines.append(f"           {name}, target sha1 {', '.join(sha1s)}")
+    for name, writes in found.items():
+        lines.append(f"         {name} rewrites the iNES header:")
+        for off in sorted(writes):
+            field = INES_FIELD.get(off, f"byte {off}")
+            lines.append(f"           offset {off} = 0x{writes[off]:02X}  ({field})")
+        if 5 in writes:
+            byte5 = writes[5]
+            lines.append(
+                f"         byte 5 becomes 0x{byte5:02X} = {byte5 * 8} KB of CHR ROM. Byte 5 is "
+                "the field that decides the tile namespace (0 = CHR RAM, tiles keyed by 16-byte "
+                "pattern; any other value = that many 8 KB banks of CHR ROM, tiles keyed by bank "
+                "index), so a patch that rewrites it is the case where the two builds provably do "
+                "not address CHR the same way — read the numbers below as indicative, not "
+                "coverage.")
+        else:
+            lines.append("         it leaves byte 5 — the field that decides the tile namespace "
+                         "(CHR RAM vs CHR ROM) — at its original value.")
+    if silent:
+        lines.append(f"         {', '.join(sorted(set(silent)))} reads fine and does not rewrite "
+                     "the iNES header, so its edits are in the PRG/CHR body: they may or may not "
+                     "move the tiles, and byte 5 is unchanged.")
+    if unreadable:
+        lines.append(f"         {', '.join(sorted(set(unreadable)))} could not be read, so how it "
+                     "affects the tiles is unknown.")
     return "\n".join(lines)
 
 
@@ -269,6 +342,12 @@ def main(argv):
     if refusal:
         print(refusal, file=sys.stderr)
         return 1
+    # A <patch> that survives that check is not a refusal (its keys share the
+    # recording's shape), but the pack is still built for a patched ROM. Say so
+    # above the tables rather than letting the figures read as plain coverage.
+    caveat = patch_caveat(argv[1])
+    if caveat:
+        print(caveat, file=sys.stderr)
     # Partial mismatch still measures, but say how much of the reference is
     # unreachable for the same reason rather than letting it read as unseen.
     s_shapes = {shape(d) for d in seen_data}
@@ -288,7 +367,14 @@ def main(argv):
 
     print(f"artist: {len(a_keys)} images, {len(artist)} tile rules, {len(all_keys)} keys (tileData+palette), {len(all_data)} distinct tileData")
     print(f"recorded: {len(per)} packs, {len(seen)} keys, {len(seen_data)} tileData, {len(sprite)} sprite tileData on sheets")
-    print(f"artist tileData on screen in some state: {len(all_data & seen_data)}/{len(all_data)}; exact keys {len(all_keys & seen)}/{len(all_keys)}")
+    coverage = (f"artist tileData on screen in some state: {len(all_data & seen_data)}/{len(all_data)}; "
+                f"exact keys {len(all_keys & seen)}/{len(all_keys)}")
+    if caveat:
+        # A reader who sees only this line must not take it for coverage.
+        names = ", ".join(sorted({n for n, _ in patches(argv[1])}))
+        coverage += (f"  [caveat: the reference declares <patch> ({names}) and is built for a "
+                     "patched ROM, so this compares two builds — not coverage]")
+    print(coverage)
     for kind in ("sprite", "background", "unseen"):
         r = [x for x in rows if x[1] == kind]
         print(f"  {kind:10s} images {len(r):3d}  tileData {sum(x[4] for x in r):5d}  seen {sum(x[5] for x in r):5d}")
