@@ -3,6 +3,7 @@
 #include "NES/HdPacks/SheetGrouping.h"
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -1134,5 +1135,78 @@ namespace MesenSheets
 			refs.push_back(scored[i].second);
 		}
 		return refs;
+	}
+
+	//See SpriteGrouping.h for why this is a spanning tree and not the pair table.
+	std::vector<SpriteNearbyPlan> PlanSpriteNearby(const SheetGroup& group)
+	{
+		std::vector<SpriteNearbyPlan> plans;
+		if(group.Cells.size() < 2 || group.Edges.empty()) {
+			return plans;
+		}
+
+		//Only nodes the group actually placed can carry, or be named by, a
+		//condition: a cell that is not on the sheet has no <tile> line to gate.
+		std::map<uint32_t, uint32_t> countByNode;
+		for(const SheetCell& cell : group.Cells) {
+			if(cell.Metatile >= 0) {
+				countByNode[(uint32_t)cell.Metatile] = cell.Count;
+			}
+		}
+		if(countByNode.size() < 2) {
+			return plans;
+		}
+
+		//Root: the most-seen cell, ties broken by the lower vocabulary index
+		//(std::map iterates ascending), so one recording always roots one tree.
+		uint32_t root = countByNode.begin()->first;
+		uint32_t best = countByNode.begin()->second;
+		for(const std::pair<const uint32_t, uint32_t>& entry : countByNode) {
+			if(entry.second > best) {
+				root = entry.first;
+				best = entry.second;
+			}
+		}
+
+		std::map<uint32_t, std::vector<const GroupEdge*>> byNode;
+		for(const GroupEdge& edge : group.Edges) {
+			if(edge.A == edge.B || !countByNode.count(edge.A) || !countByNode.count(edge.B)) {
+				continue;
+			}
+			byNode[edge.A].push_back(&edge);
+			byNode[edge.B].push_back(&edge);
+		}
+
+		std::set<uint32_t> seen;
+		seen.insert(root);
+		std::vector<uint32_t> queue;
+		queue.push_back(root);
+		for(size_t head = 0; head < queue.size(); head++) {
+			uint32_t parent = queue[head];
+			std::map<uint32_t, std::vector<const GroupEdge*>>::const_iterator it = byNode.find(parent);
+			if(it == byNode.end()) {
+				continue;
+			}
+			for(const GroupEdge* edge : it->second) {
+				uint32_t child = edge->A == parent ? edge->B : edge->A;
+				if(!seen.insert(child).second) {
+					continue;
+				}
+				SpriteNearbyPlan plan;
+				plan.Node = child;
+				plan.Target = parent;
+				//A GroupEdge reads "B sits at (Dx, Dy) from A". Seen from the
+				//child, the parent sits at that same offset when the child is A,
+				//and at its negation when the child is B.
+				plan.Dx = child == edge->A ? edge->Dx : -edge->Dx;
+				plan.Dy = child == edge->A ? edge->Dy : -edge->Dy;
+				plan.Count = edge->Count;
+				plan.ProbAB = edge->ProbAB;
+				plan.ProbBA = edge->ProbBA;
+				plans.push_back(plan);
+				queue.push_back(child);
+			}
+		}
+		return plans;
 	}
 }

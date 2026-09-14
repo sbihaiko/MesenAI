@@ -936,6 +936,29 @@ namespace MesenSheets
 		double ProbBA = 0;
 	};
 
+	//One `spriteNearby` a group's own edges support: "the shape at Target sits
+	//at (Dx, Dy) cells from me". Attached to Node's <tile> lines, it is the
+	//machine form of the idiom a human HD pack uses to say *which cell of a
+	//metasprite this is* - Contra80s' predcloaked1/2/3 are three tiles of one
+	//picture, each gated on the same anchor sprite at a different offset.
+	//
+	//Count/ProbAB/ProbBA are copied off the GroupEdge that justified it, so the
+	//emitted condition carries its own evidence: the two shapes held this exact
+	//offset on Count retained frames, and that accounted for ProbAB/ProbBA of
+	//the frames each of them appeared in at all. Nothing here is inferred from
+	//meaning - it is the observation SelectSpriteEdges already made, re-read as
+	//a condition (ADR-0183 §3).
+	struct SpriteNearbyPlan
+	{
+		uint32_t Node = 0;   //sprite-vocabulary index the condition is attached to
+		uint32_t Target = 0; //sprite-vocabulary index the condition looks for
+		int32_t Dx = 0;      //where Target sits relative to Node, in cells
+		int32_t Dy = 0;
+		uint32_t Count = 0;
+		double ProbAB = 0;
+		double ProbBA = 0;
+	};
+
 	//ADR-0175 (issue #175): one slot of a group sheet's grid that the layout
 	//deliberately left blank. Col/Row are in cells, the same units SheetGroup
 	//lays its members out in, so a consumer reaches the sheet pixels with the

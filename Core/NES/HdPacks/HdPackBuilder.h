@@ -183,6 +183,38 @@ private:
 	//Returns the sprite vocabulary it built, so BuildSheets can persist the
 	//adjacency statistics over the same vocabulary the sheets cite.
 	MesenSheets::Vocabulary WriteSpriteSheets(const string& folder, const MesenSheets::TileLookup& lookup);
+
+	//F9.28: the first condition this builder ever attaches to a <tile> line.
+	//For each sprNNN group, SpriteGrouping::PlanSpriteNearby walks a spanning
+	//tree over the group's own edges and returns one `spriteNearby` per
+	//non-root cell ("the anchor shape sits at (dx, dy) from me"); this method
+	//only resolves a vocabulary node back to the tiles the recorder captured
+	//for it and registers the pair, per ADR-0127 - the analysis is host-free
+	//and unit-tested, this class holds state and writes bytes.
+	//
+	//The conditions are *additional* lines, never a replacement: see
+	//_tileGateConditions.
+	void AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& group, const MesenSheets::Vocabulary& vocab, const string& baseName);
+	//The key _paletteVariantsByShape / _tilesByKey were filled with for a
+	//sprite-vocabulary shape. Not the shape's own TileData: the OAM recorder
+	//bakes the flip bits in (ADR-0178) and neither ProcessTile nor the run time
+	//does, so the lookup has to go through SourceTileData.
+	HdTileKey ShapeLookupKey(MesenSheets::ShapeId shape) const;
+
+	//F9.28 dual emission, and the property the whole slice rests on: a tile
+	//that carries conditions is written *twice* - once prefixed with the
+	//condition, then once bare - and both lines name the same PNG cell.
+	//HdNesPack::GetMatchingTile walks TileByKey in file order and takes the
+	//first entry whose conditions pass, so the conditioned line is only ever
+	//an opportunity: when the condition is wrong, or the run time simply never
+	//sees that sprite (OAM evidence includes entries the 8-sprite limit hides),
+	//the bare twin right behind it renders exactly what this pack rendered
+	//before the slice. A wrong condition therefore degrades to today's output
+	//and never to a hole in the screen. Do not "simplify" this into gating the
+	//single existing line - that is the failure mode, not the redundancy.
+	unordered_map<HdPackTileInfo*, vector<HdPackCondition*>> _tileGateConditions;
+	uint32_t _spriteNearbyConditions = 0; //emitted conditions (ForceDisableCache cost below)
+	uint32_t _spriteNearbyTiles = 0;      //distinct tiles that gained one
 	//F9.17 (ADR-0164): writes textures/sheets/adjacency.json next to the other
 	//sheets whenever the sheet pipeline runs. The serializer lives in SheetRender
 	//(host-free, unit-tested); this class only accumulates the sprite far-field

@@ -1107,7 +1107,17 @@ def cmd_build(args) -> int:
             winner[key] = (order, pos, score)
     kept = {(o, p) for o, p, _s in winner.values()}
 
-    out_lines = list(out_header)
+    # HdPackLoader resolves a "[name]" prefix at the moment it reads the line
+    # (ParseConditionString), so every <condition> has to stand above the first
+    # <tile> that names one. The recorder writes them that way; this rebuild used
+    # to append the whole body after the tiles, which silently dropped every tile
+    # condition on the round-trip - the definitions were all still in the file,
+    # just too late to bind. Backgrounds keep their place at the end: they only
+    # ever cite conditions, never define them.
+    condition_defs = [b for b in body if b.startswith("<condition>")]
+    body = [b for b in body if not b.startswith("<condition>")]
+
+    out_lines = list(out_header) + condition_defs
     img_index = 0
     emitted = 0
     rebuilt_keys = set()
