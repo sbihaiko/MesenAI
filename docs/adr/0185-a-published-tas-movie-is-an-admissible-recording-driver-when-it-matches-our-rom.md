@@ -198,7 +198,10 @@ variants, and read what a publication says it skips before using it.
   the pair of emulators, not of the movie.** §4's comparative test is what
   caught it; see "Measured 2026-09-14". Any future converter for another source
   format must establish its own offset the same way, by bisection against a
-  visible in-game event, and must not assume this one's answer.
+  visible in-game event, and must not assume this one's answer. Measured
+  2026-09-14, below: a `.bk2` needs 0 and an `.fm2` needs -1, both against real
+  movies. An earlier reading of the Castlevania desync as a harness defect was
+  wrong and is corrected there.
 - **We now depend on an external archive for material.** A publication can be
   obsoleted and its file moved. `.cache/tas/` is a cache, not an archive: a kit
   built from a movie records the publication URL in `notes[]`, which is what
@@ -262,3 +265,52 @@ never draws** — the title screen and the story scroll a speedrun crosses at
 speed — against the TAS's 532 exclusive ones. This is ADR-0184 §4's finding in
 a second game and a different cause: coverage is a union, not a maximum, which
 is exactly what ADR-0183's kit needs `--also` for.
+
+## Measured 2026-09-14, second pass: the offset is not ours, and a partial desync is real
+
+The "sync is a standing risk we cannot detect in-band" consequence above was
+written as a prediction. It is now an observation, and the investigation that
+produced it also overturned a claim made earlier in this session.
+
+**The claim that was wrong.** A native BizHawk Castlevania `.bk2` desyncs in
+our Core, and that was read as proof that the one-frame offset was a defect in
+our harness's `LoadRom` -> `MoviePlay` sequence rather than a property of the
+`.fm2` format. It is not. Three independent measurements:
+
+- **Poll accounting.** The prime poll inside the movie's own `PowerCycle`
+  consumes row 0 before a scanline is drawn; from there it is exactly one poll
+  per frame, with no accumulating drift. A 36788-row `.bk2` runs dry at frame
+  36790.
+- **Harness ordering is not the defect.** Forcing `RecordedRomTest`'s exact
+  ordering -- `MoviePlay` immediately after `LoadRom`, before the first frame
+  -- yields a **byte-identical** 300 s screenshot. `BizHawkMovie::Play`
+  power-cycles the console itself, erasing the frame the harness ran first.
+  Nothing in `scripts/headless_record.cpp` needs to change.
+- **The `.bk2`'s alignment is already 1:1.** Its first non-blank row is 12
+  (`START`) and its first directional row is 583; frame 583 is the first
+  controllable frame. At shift -1 the row-12 `START` misses and the console
+  never leaves the attract demo. A sweep of -3..+2 fails at every value.
+
+Conversely, regenerating the Zelda movie with `FM2_POWER_ON_ROWS = 0` leaves
+the run stuck on "REGISTER YOUR NAME", where the drop reaches the Level 4
+dungeon with the sword. So the drop is required and stays. **A `.bk2` needs 0
+and an `.fm2` needs -1** -- a converter-level fact, established per format by
+measurement, exactly as this ADR's consequence requires.
+
+**What the Castlevania movie actually does** is diverge *during play*: correct
+at frame 3607 (full health, P-03, stage 01), a life lost by frame 4807, GAME
+OVER by 300 s. A run that starts perfectly aligned and dies a minute in is an
+emulation difference between NESHawk and our Core, not a timing offset, and it
+is tracked as issue #201.
+
+That is the partial desync this ADR predicted, and Sec. 4's comparative test
+does not catch it: such a run records more keys than the movie-less baseline
+and fewer than the movie, so it passes the gate while archiving a playthrough
+nobody intended. Until #201 is understood, a long movie-driven recording must
+be checked against a mid-run screenshot, not against its key count alone.
+
+Also ruled out, each byte-identical or still broken: `RamPowerOnState`
+AllZeros vs AllOnes, `InputScanline` 0 and -1, port 2 unplugged. Worth
+recording separately: NESHawk's default RAM power-on pattern is FCEUX's
+`(i & 4) ? 0xFF : 0x00`, which Mesen's three-value `RamState` cannot express.
+It does not change this result, but it is a real representational gap.

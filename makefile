@@ -321,6 +321,10 @@ doc-checks: check-manifest
 	#Issue #183: sheet cells must name (key, palette) pairs the pack's own
 	#hires.txt emits; the audit tool's test runs on synthetic packs.
 	python3 scripts/test_sheet_keys_audit.py
+	#The CDL reader: the CDLv2 header, the PRG/CHR split taken from the iNES
+	#header, the union's CRC gate, region coalescing and both strip
+	#directions. Fixtures built in memory; no emulator, no ROM.
+	python3 scripts/test_cdl_tool.py
 	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
 	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
 	python3 scripts/test_artist_kit_assemble.py
