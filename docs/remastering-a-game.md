@@ -79,20 +79,30 @@ and `scripts/stages/` ships working sets for Contra, Zelda, Mega Man 3 and
 Excitebike.
 
 ```sh
+# `scripts/stages/` ships the routes (`.txt`) and never the states (`.mss`):
+# a state carries the game's graphics, so it is not versioned. Mint one into
+# your own working directory first (Driver D below), then replay it.
+scripts/headless_record roms/Contra.nes 60 out/mint bootstrap hdpack-off \
+  input=scripts/stages/contra/mint-stage1.txt save-state=out/stages/stage1-run.mss
 scripts/headless_record roms/Contra.nes 60 out/rec bootstrap hdpack-off \
-  input=scripts/stages/contra/stage1-run.txt state=scripts/stages/contra/stage1-run.mss
+  input=scripts/stages/contra/stage1-run.txt state=out/stages/stage1-run.mss
 ```
 
 To record every stage of a game in one command, put `<stage>.mss` +
-`<stage>.txt` pairs in a folder and batch them:
+`<stage>.txt` pairs in one folder and batch them. Copy the shipped routes into
+your working directory and mint the states beside them:
 
 ```sh
-scripts/record_stages.sh roms/Contra.nes scripts/stages/contra out/by-stage 60
+cp -R scripts/stages/contra out/stages
+# mint into out/stages/<stage>.mss the stages you have a mint-*.txt for
+scripts/record_stages.sh roms/Contra.nes out/stages out/by-stage 60
 ```
 
 That writes one recorded pack per stage under `out/by-stage/<stage>/<rom name>/auto/`.
 Nothing is merged — you judge them as a union, and a stage that came out thin is
-the stage you record again.
+the stage you record again. A `<stage>.txt` whose `<stage>.mss` is not there
+yet is **replayed from power-on instead**, which is not the same recording:
+check that the state exists before you batch.
 
 ### Driver B — a published TAS movie (`movie=`)
 

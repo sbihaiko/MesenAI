@@ -39,8 +39,9 @@ HARNESS = "scripts/headless_record"
 
 MIN_LINES = 100
 
-#Built by `make capture-tool`; never versioned, so "missing" is its normal state.
-BUILD_ARTIFACTS = {HARNESS}
+#Built by `make capture-tool` / `make spike-sound-driver`; gitignored, so
+#"missing" is their normal state and neither may be reported as a broken path.
+BUILD_ARTIFACTS = {HARNESS, "scripts/spike_sound_driver"}
 
 #Every doc an artist is expected to read, and the terms that must survive a
 #rewrite of the one whose job is to carry them (the others are free prose).
@@ -161,6 +162,12 @@ def script_flags(relative: str) -> set[str] | None:
     stay falsifiable. Both sources are unioned rather than short-circuited,
     because a script may use argparse for most of its surface and hand-parse
     the rest.
+
+    This is the whole-script union, which is the right answer only for a script
+    with a single command line. A script with subparsers needs
+    `script_subcommands` as well: `--truth` belongs to `score` and `--accepted`
+    to `promote`, and argparse rejects either on the other, so validating
+    against the union would pass a doc that cannot run.
     """
     path = REPO_ROOT / relative
     if not path.is_file():
@@ -169,6 +176,52 @@ def script_flags(relative: str) -> set[str] | None:
     flags = set(re.findall(r"""add_argument\(\s*["'](-{1,2}[A-Za-z0-9_-]+)["']""", source))
     flags |= set(re.findall(r"--[A-Za-z][A-Za-z0-9-]*", usage_block(source)))
     return flags
+
+
+def script_subcommands(relative: str) -> dict[str, set[str]]:
+    """Flags per argparse subcommand: `{subcommand name: flags}`, `{}` if none.
+
+    `artist_ai_review.py` registers `packet`, `check`, `truth`, `score` and
+    `promote` as subparsers, each with its own arguments. Slicing the source at
+    every `add_parser("name")` gives the flags that belong to each, so a doc
+    line running `score` can be checked against `score` rather than against
+    every flag in the file.
+    """
+    path = REPO_ROOT / relative
+    if not path.is_file():
+        return {}
+    source = path.read_text(encoding="utf-8", errors="replace")
+    #split() interleaves: [prologue, name1, body1, name2, body2, ...]
+    parts = re.split(r"add_parser\(\s*[\"']([A-Za-z0-9_-]+)[\"']", source)
+    if len(parts) < 3:
+        return {}
+    groups: dict[str, set[str]] = {}
+    for index in range(1, len(parts) - 1, 2):
+        body = parts[index + 1]
+        #A subparser's body ends at the next `add_parser` because split() already
+        #cut there, so anything `add_argument`-ed in it belongs to this name.
+        groups[parts[index]] = set(
+            re.findall(r"""add_argument\(\s*["'](--[A-Za-z0-9_-]+)["']""", body)
+        )
+    return groups
+
+
+def accepted_flags(relative: str, command: str, union: set[str]) -> set[str]:
+    """Flags legitimately available to `command`, subcommand-aware.
+
+    When exactly one subcommand name appears in the command line, its group is
+    the contract. When none does (a doc invoking a subcommand script without
+    naming one) or the text is ambiguous, the union is returned rather than a
+    guess: the check must never fail a correct doc.
+    """
+    groups = script_subcommands(relative)
+    if not groups:
+        return union
+    tokens = set(re.findall(r"(?<![\w-])([A-Za-z][A-Za-z0-9_-]*)", command))
+    named = [name for name in groups if name in tokens]
+    if len(named) == 1:
+        return groups[named[0]]
+    return union
 
 
 def harness_tokens() -> set[str]:
@@ -196,9 +249,30 @@ def check_links(doc: Path, text: str) -> None:
     check(not broken, f"{doc.name}: every relative link resolves ({len(links)} checked)" + (f" - broken: {broken}" if broken else ""))
 
 
+def fenced_script_names(text: str) -> set[str]:
+    """Command words in fenced blocks, extension or not.
+
+    The whole-text scan above only sees a path when it ends in `.py`/`.sh`/
+    `.md`; an extensionless command (`scripts/spike_sound_driver`) was
+    recognized only inside inline backticks, so a fenced command typo'd into a
+    name that does not exist stayed green. A token is taken only when it is a
+    bare command word: no glob (`scripts/artist_kit*.py` names a family, not a
+    file) and no trailing slash (that is a directory being referred to).
+    """
+    names: set[str] = set()
+    for _lineno, body in fenced_blocks(text):
+        for command in joined_commands(body):
+            for token in re.findall(r"(?<![\w./-])(scripts/[A-Za-z0-9_./-]+)", command):
+                if token.endswith("/") or "*" in token:
+                    continue
+                names.add(token)
+    return names
+
+
 def check_script_paths(text: str, label: str) -> None:
     named = set(re.findall(r"scripts/[A-Za-z0-9_./-]+\.(?:py|sh|md)", text))
     named |= {m for m in re.findall(r"`(scripts/[A-Za-z0-9_./-]+)`", text) if "." not in Path(m).name}
+    named |= fenced_script_names(text)
     missing = sorted(
         name
         for name in named
@@ -235,7 +309,8 @@ def check_commands(text: str, label: str) -> None:
                 if accepted is None:
                     continue
                 scripts_checked.add(relative)
-                bad_flags += [f"{relative} {f}" for f in sorted(flags) if f not in accepted]
+                available = accepted_flags(relative, command, accepted)
+                bad_flags += [f"{relative} {f}" for f in sorted(flags) if f not in available]
 
     check(
         not bad_flags,
