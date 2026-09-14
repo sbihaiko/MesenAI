@@ -67,13 +67,70 @@ the majority figure in a box it should have flagged as `multiple`" — worth a
 follow-up nudge to the reviewer protocol (spell out `multiple` more
 insistently for boxes with two disjoint colour schemes), not a blocker.
 
+## Round 2 — the sheet-only variant (rule 1's own test)
+
+Rule 1 exists because "naming figures from 8px thumbnails put three green
+enemies on the player's sheet" — the claim is that resolution changes the
+verdict. The first round only exercised `--crops` (nearest-neighbour
+enlargements, 2x the sheet's own scale). This round answers the same 36
+figure asks from the kit's own sheet PNGs, cropped to the ask's `rect` at
+**native scale, no enlargement** — half the linear resolution of a crop, the
+actual "16x32 vs 128x256" comparison the rule names. `reviewer: "sheet"`.
+
+| count | crops (round 1) | sheet, native (round 2) |
+| --- | --- | --- |
+| `correct` | 24 | 22 |
+| `wrong` | 7 | 7 |
+| `abstained` | 3 | 5 |
+| `confidently_wrong` | **0** | **0** |
+| `unscored` | 23 | 2 |
+| `scorable_asks` | 34 | 34 |
+
+(`unscored` differs because the sheet-only pass only ever answered the 36
+figure asks, so 34 of them land on a figure-kind label and the other 2 are
+the `usr004` capsule shape neither pass could place — no scenery/page/screen
+asks were answered at all in this pass, unlike `--crops`'s 74.)
+
+Accuracy on non-abstained answers: 22/29 = 75.9% (crops: 77.4%). Abstention:
+5/34 = 14.7% (crops: 8.8%).
+
+**Confidently wrong stayed at zero in both.** For this kit, resolution changed
+caution and marginal accuracy, not safety: without enlargement, two more
+boxes (`usr003#pose007`, `usr003#pose019`, `usr003#pose032` — three, not two)
+were honestly declined instead of guessed, because their fragments could not
+be told apart at native scale. The failure mode that did survive resolution
+is exactly round 1's: a `mixed` box (two fused figures) read as one coherent
+silhouette and named as a single figure instead of flagged `multiple` —
+`usr002#pose029`/`pose021` and `usr003#pose026`/`pose049`/`pose039`/`pose050`
+were called this way in *both* passes, at *both* resolutions. Contra's sprite
+art is chunky and low-detail enough that the palette blocks read the same
+whether upscaled or not; the ambiguity in a fused box is structural (the two
+figures really do share a silhouette), not a detail an enlargement recovers.
+
+**One high-confidence pair moved with resolution**, and it is informative
+about what the ceiling of confidence is measuring. `usr003#pose003` and
+`pose013` (a clean, unambiguous red soldier, arms and legs fully separated
+from the background) were called `high` confidence in *both* rounds and
+scored correct in both, once the `red-soldier`→`enemy` alias is applied —
+they did not need enlargement because nothing about them was ambiguous at
+either scale. No figure flipped from `high`-confident-correct at one
+resolution to `high`-confident-wrong at the other in this run; the two
+passes disagree on `medium` calls and on what to abstain from, never on what
+to be certain about. That is a single data point, not a general result — a
+kit with finer detail (a game with anti-aliased or higher-resolution art)
+is the harder test rule 1 was really written for.
+
+Second `score()` bug found while running this: an abstention on an ask whose
+truth label has no subject (the dominance threshold was never reached, e.g.
+the `usr004` capsule) was still counted in `abstained` rather than
+`unscored`, for the same reason as the first bug — the abstain branch ran
+before the subject-is-None check. Fixed on the same branch
+(`f1a04c96`); this table is post-fix.
+
 ## What this run does not cover
 
-- Only the `--crops` reviewer variant was exercised. A "sheet only" (no
-  enlargement) counterpart, which rule 1 was written to distinguish
-  ("the same figure judged at 16x32 and at 128x256 is not the same
-  judgement"), was not produced in this pass — there is no `proposals-sheet.json`
-  to compare against. Running one and diffing its `confidently_wrong` rate
-  against this file's is the natural next measurement.
 - `object`/`panorama`/`screen`/`page` kinds were not scored (`--kind figure`),
   per `docs/ai-kit-review.md`'s documented reason.
+- Only one kit (Contra stage 1) and one game's art density. The
+  resolution-independence found here is a property of this kit's chunky,
+  low-detail sprites, not a general claim about the protocol.
