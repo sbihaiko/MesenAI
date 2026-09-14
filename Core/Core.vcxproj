@@ -648,6 +648,7 @@
     <ClInclude Include="Shared\KeyManager.h" />
     <ClInclude Include="Debugger\MemoryDumper.h" />
     <ClInclude Include="Shared\MessageManager.h" />
+    <ClInclude Include="Shared\MovieSyncGate.h" />
     <ClInclude Include="Shared\NotificationManager.h" />
     <ClInclude Include="Shared\RewindData.h" />
     <ClInclude Include="Shared\RewindManager.h" />
@@ -893,6 +894,7 @@
     <ClCompile Include="Debugger\MemoryDumper.cpp" />
     <ClCompile Include="Shared\Movies\MesenMovie.cpp" />
     <ClCompile Include="Shared\MessageManager.cpp" />
+    <ClCompile Include="Shared\MovieSyncGate.cpp" />
     <ClCompile Include="Shared\Movies\MovieManager.cpp" />
     <ClCompile Include="Shared\Movies\MovieRecorder.cpp" />
     <ClCompile Include="Shared\NotificationManager.cpp" />

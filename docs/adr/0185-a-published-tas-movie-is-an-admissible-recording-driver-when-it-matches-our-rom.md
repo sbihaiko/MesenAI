@@ -314,3 +314,105 @@ AllZeros vs AllOnes, `InputScanline` 0 and -1, port 2 unplugged. Worth
 recording separately: NESHawk's default RAM power-on pattern is FCEUX's
 `(i & 4) ? 0xFF : 0x00`, which Mesen's three-value `RamState` cannot express.
 It does not change this result, but it is a real representational gap.
+
+## Amended 2026-09-14: the gate is three rules, and only a declared invariant fails a run (issue #201)
+
+Section 4 above is a single comparison of two totals, and the section right
+before this one says what it cannot do: a partial desync "records more keys
+than the movie-less baseline and fewer than the movie, so it passes the gate
+while archiving a playthrough nobody intended". That was left as a warning to
+the reader. It is now a gate, because a warning in a document does not stop a
+corrupt recording from reaching an artist kit.
+
+**What replaces it.** `Core/Shared/MovieSyncGate.{h,cpp}` — host-free, no
+Emulator, no filesystem, unit-tested as Bloco T of `scripts/core_unit_tests.cpp`.
+Every `hdpack` run of `scripts/headless_record` now writes
+`<prefix>-synctrace.csv`: one row per emulated second holding the builder's own
+coverage counters (`GetHdPackCoverageReport`, F5.4d), whether the movie player
+was still running, and one byte per declared watch. A movie-less run therefore
+mints the baseline the next movie-driven run is judged against at no extra
+cost. Three rules read those traces:
+
+1. **A declared RAM invariant** — `sync-watch=AAAA:<rule>[=<n>][:<label>]`,
+   repeatable, rules `never-decreases`, `never-increases`, `never-below=<n>`,
+   `never-equals=<n>`, checked only while the movie is driving the pad. Address
+   below `$0800` for ADR-0184's reason, read through a new
+   `HeadlessReadNesRam` export off `NesMemoryManager::GetInternalRam()` — not
+   `DebugRead`, which overlays the CheatManager and would report a cheated
+   value instead of the byte the game keeps. **This is the only rule that fails
+   a run**, and it is the one that catches issue #201. "The emulator diverged"
+   is not observable from inside the emulator; its consequence in the game is.
+   It is falsifiable by construction: a wrong address fires on a good run, so
+   an address is only trustworthy once a positive control has been run against
+   it.
+2. **Movie exhaustion** — `sync-movie-frames=<n>`, the frame the movie's own
+   row count says its input runs dry on (rows + 2 for a `.bk2`). A player that
+   stopped earlier was stopped by something other than running out of input.
+   Exact and free; blind to issue #201, which plays every row.
+3. **The comparison against the movie-less baseline, asked at every sampled
+   frame instead of only at the last one** — `sync-baseline=<trace.csv>`. Same
+   two runs, same counter, read 600 times instead of once. The total is the
+   END of the curve; a partial desync is visible in the curve's SHAPE, because
+   the shapes the good prefix banked stay in the total forever. Reported as
+   `prefix-stall` (consecutive 3600-frame windows in which the run drew nothing
+   it had not already seen) and `lead-peaked-early` (the frame the run's lead
+   over the baseline was largest, against the frame the movie stopped).
+   **Never fatal.** A good long run also stops learning once it has seen the
+   game's whole vocabulary, and a gate that failed those would be switched off
+   within a week, which is worse than having none. These name a window; rule 1
+   decides.
+
+**The counter is distinct tile shapes, not `(tileData, palette)` keys**, and
+that is a correction to section 4 rather than a detail. Measured below: on both
+games the movie-less attract loop holds MORE keys than a good 600 s
+movie-driven run, so section 4's literal rule — "strictly more keys than the
+movie-less run" — fails a run that is in sync throughout. The original gate was
+not only blind in one direction; it cried wolf in the other.
+
+### Measured 2026-09-14
+
+Castlevania (`challanger,eien86`, 36788 rows, expected dry at frame 36790) and
+Zelda 1 "all items" (4767M, converted, 114912 rows), both against the same
+binary, one sample per 60 frames.
+
+| run | length | shapes: movie / movie-less | hires.txt keys: movie / movie-less | gate |
+|---|---|---|---|---|
+| Castlevania TAS (issue #201) | 18031 f | 557 / 611 | 712 / 754 | **FAIL** — `watch-violated` at **frame 4141**, `$002A` 4 -> 3 |
+| Castlevania TAS, full movie | 36791 f | 559 / 611 | 743 / 754 | **FAIL** — same frame, same byte |
+| Castlevania TAS, stopped at 3607 | 3608 f | 547 / 532 | 619 / 632 | clean, **no finding at all** |
+| Zelda 1 "all items" TAS | 36060 f | 599 / 276 | 2162 / 2371 | clean, **no finding at all** |
+
+The divergence frame is **4141**, inside the 3607–4807 window the second
+measured pass had bracketed by screenshot, and the gate now names it to the
+second instead of leaving a 1200-frame bracket. It fails the run 32650 frames
+before the run ends.
+
+The two known-good controls are the falsification. The third row is the
+strongest of them: the same ROM, the same movie, the same watch, the same
+binary — only stopped before the divergence — and the gate says nothing. The
+fourth is a different game, a different movie and ten emulated minutes, also
+silent. False positives measured: 0 of 2.
+
+Two claims from the section above did not survive contact with the numbers, and
+are corrected here rather than quietly left standing:
+
+- **The Castlevania partial desync does not in fact pass the old total.** 557
+  shapes against the baseline's 611, and 712 keys against 754 — it fails. The
+  prediction that a partial desync passes is still right as a mechanism, and
+  Bloco T's `TestSyncGateTotalComparisonMissesThePartialDesync` holds a run
+  that does pass it, but on this ROM the attract loop happens to be richer than
+  a dead playthrough and the old rule catches it by luck. What the old rule
+  never gave, on any ROM, is **where**.
+- **Keys are the wrong counter** (above).
+
+`lead-peaked-early` needed a warm-up guard to be worth reading. A movie
+power-cycles the console, so the movie-driven trace starts at frame 1 and the
+movie-less one at frame 3, and over the first seconds — when both counters
+climb by hundreds — that two-frame lag reads as a lead of 243 that is nothing
+but the lag. The lead is therefore not read before frame 3600. Measured on the
+Castlevania run: the peak sits at frame 61 without the guard and at frame 3601
+with it, which is the window the run actually diverged in.
+
+Not verified: any console other than the NES (`HeadlessReadNesRam` returns
+false elsewhere and a watch then reads a constant 0, which no rule treats as a
+violation), and the gate under `cheat=` in the same run.

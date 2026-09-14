@@ -392,6 +392,7 @@ CUTSRC := \
   Core/Shared/HeadlessInputScript.cpp \
   Core/Shared/HeadlessInputEngine.cpp \
   Core/Shared/MessageManager.cpp \
+  Core/Shared/MovieSyncGate.cpp \
   Core/Shared/Video/BorderLayout.cpp \
   Core/Shared/Video/FrameCapture.cpp \
   Core/NES/HdPacks/OggMixer.cpp \
@@ -428,7 +429,7 @@ roles-probe: core
 
 #Headless MIDI/VGM capture harness (F1 regression tool) - see scripts/headless_record.cpp
 capture-tool: core
-	$(CXX) -std=c++17 -O2 -I . -I Core -Wl,-headerpad_max_install_names scripts/headless_record.cpp Core/Shared/Video/FrameCapture.cpp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) -o scripts/headless_record
+	$(CXX) -std=c++17 -O2 -I . -I Core -Wl,-headerpad_max_install_names scripts/headless_record.cpp Core/Shared/Video/FrameCapture.cpp Core/Shared/MovieSyncGate.cpp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) -o scripts/headless_record
 	install_name_tool -change $(SHAREDLIB) $(CURDIR)/InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) scripts/headless_record 2>/dev/null || true
 	codesign -f -s - scripts/headless_record 2>/dev/null || true
 

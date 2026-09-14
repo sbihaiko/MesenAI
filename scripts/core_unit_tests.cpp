@@ -54,6 +54,7 @@
 #include "Shared/Video/AspectRatioMath.h"
 #include "Shared/HeadlessInputEngine.h"
 #include "Shared/HeadlessInputScript.h"
+#include "Shared/MovieSyncGate.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
@@ -6543,6 +6544,260 @@ void TestScreenshotCaptureReportsItsOwnEmptiness()
 		std::to_string(capture.FrameNumber));
 }
 
+//--- Bloco T: MovieSyncGate (ADR-0185 sec. 4 as amended, issue #201) --------
+//The gate that decides whether a movie-driven recording is the playthrough its
+//movie describes. Everything here is host-free: two traces in, findings out.
+//The cases are built to be defect-probes rather than confirmations - the two
+//that matter most are "a partial desync fails" and "a good run does not", and
+//both are written against the shape the real Castlevania and Zelda runs have.
+
+MovieSyncSample MakeSample(uint32_t frame, bool playing, uint32_t tilesSeen, std::vector<uint8_t> watches = {})
+{
+	MovieSyncSample sample;
+	sample.Frame = frame;
+	sample.MoviePlaying = playing;
+	sample.TilesSeen = tilesSeen;
+	sample.WatchValues = std::move(watches);
+	return sample;
+}
+
+bool HasFinding(const std::vector<MovieSyncFinding>& findings, const std::string& code, bool fatal)
+{
+	for(const MovieSyncFinding& finding : findings) {
+		if(finding.Code == code && finding.Fatal == fatal) {
+			return true;
+		}
+	}
+	return false;
+}
+
+uint32_t FindingFrame(const std::vector<MovieSyncFinding>& findings, const std::string& code)
+{
+	for(const MovieSyncFinding& finding : findings) {
+		if(finding.Code == code) {
+			return finding.Frame;
+		}
+	}
+	return 0xFFFFFFFF;
+}
+
+void TestSyncWatchSpecParsing()
+{
+	MovieSyncWatch watch;
+	std::string error;
+	Check(MovieSyncGate::ParseWatch("002A:never-decreases:lives", watch, error) &&
+		watch.Address == 0x002A && watch.Rule == MovieSyncRule::NeverDecreases && watch.Label == "lives",
+		"BlocoT: a watch spec parses into address, rule and label", error);
+
+	Check(MovieSyncGate::ParseWatch("71:never-below=1", watch, error) &&
+		watch.Address == 0x0071 && watch.Rule == MovieSyncRule::NeverBelow && watch.Operand == 1 &&
+		watch.Label == "ram0071",
+		"BlocoT: an operand rule keeps its operand and gets a label from its address", error);
+
+	//ADR-0184's boundary, for its reason: above $0800 is not the game's RAM.
+	Check(!MovieSyncGate::ParseWatch("0800:never-decreases", watch, error) && !error.empty(),
+		"BlocoT: an address at $0800 is refused, not clamped", error);
+	Check(!MovieSyncGate::ParseWatch("002A:never-shrinks", watch, error),
+		"BlocoT: an unknown rule name is refused rather than defaulted");
+	Check(!MovieSyncGate::ParseWatch("002A:never-below", watch, error),
+		"BlocoT: never-below without an operand is refused");
+	Check(!MovieSyncGate::ParseWatch("002A:never-decreases=3", watch, error),
+		"BlocoT: an operand on a rule that takes none is refused");
+}
+
+void TestSyncTraceRoundTrips()
+{
+	std::vector<MovieSyncWatch> watches(1);
+	watches[0].Label = "lives";
+	std::string text = MovieSyncGate::FormatTraceHeader(watches);
+	text += MovieSyncGate::FormatTraceRow(MakeSample(60, true, 12, { 3 }));
+	text += MovieSyncGate::FormatTraceRow(MakeSample(120, false, 19, { 2 }));
+
+	std::vector<MovieSyncSample> samples;
+	std::vector<std::string> labels;
+	std::string error;
+	Check(MovieSyncGate::ParseTrace(text, samples, labels, error) && samples.size() == 2 &&
+		labels.size() == 1 && labels[0] == "lives" && samples[0].MoviePlaying && !samples[1].MoviePlaying &&
+		samples[1].TilesSeen == 19 && samples[0].WatchValues.size() == 1 && samples[0].WatchValues[0] == 3,
+		"BlocoT: a trace written by the harness parses back to the same samples", error);
+
+	Check(!MovieSyncGate::ParseTrace("frame,moviePlaying,tilesSeen,tilesWithArt,screensSeen\n120,1,5,0,0\n60,1,6,0,0\n",
+		samples, labels, error),
+		"BlocoT: a trace whose frames go backwards is refused - it is not one run");
+	Check(!MovieSyncGate::ParseTrace("60,1,5,0,0\n", samples, labels, error),
+		"BlocoT: a trace with no header is refused");
+}
+
+//The defect this whole block exists for. The run is shaped like the issue #201
+//Castlevania one: it tracks the movie for the first ~3600 frames, then the
+//player dies (the life byte drops) and the console spends the rest of the
+//movie in GAME OVER and the attract loop, learning nothing the movie-less
+//baseline had not already shown.
+std::vector<MovieSyncSample> MakePartiallyDesyncedRun()
+{
+	std::vector<MovieSyncSample> run;
+	uint32_t tiles = 0;
+	for(uint32_t frame = 60; frame <= 3600; frame += 60) {
+		tiles += 6; //real play: new material every second
+		run.push_back(MakeSample(frame, true, tiles, { 3 }));
+	}
+	//The divergence window: a life is lost under movie control.
+	for(uint32_t frame = 3660; frame <= 36780; frame += 60) {
+		run.push_back(MakeSample(frame, true, tiles, { 2 }));
+	}
+	return run;
+}
+
+//The same length, the same sampling, a run that keeps playing.
+std::vector<MovieSyncSample> MakeGoodRun()
+{
+	std::vector<MovieSyncSample> run;
+	uint32_t tiles = 0;
+	for(uint32_t frame = 60; frame <= 36780; frame += 60) {
+		tiles += 6;
+		run.push_back(MakeSample(frame, true, tiles, { 3 }));
+	}
+	return run;
+}
+
+//Attract mode: it cycles real art of its own for a while and then repeats
+//itself, which is exactly what makes it a baseline and not a null control
+//(ADR-0185, "Measured 2026-09-14").
+std::vector<MovieSyncSample> MakeBaseline()
+{
+	std::vector<MovieSyncSample> run;
+	uint32_t tiles = 0;
+	for(uint32_t frame = 60; frame <= 36780; frame += 60) {
+		if(frame <= 1800) {
+			tiles += 4;
+		}
+		run.push_back(MakeSample(frame, false, tiles));
+	}
+	return run;
+}
+
+void TestSyncGatePartialDesyncFailsOnTheDeclaredInvariant()
+{
+	std::vector<MovieSyncWatch> watches(1);
+	watches[0].Address = 0x002A;
+	watches[0].Rule = MovieSyncRule::NeverDecreases;
+	watches[0].Label = "lives";
+
+	std::vector<MovieSyncFinding> findings =
+		MovieSyncGate::Evaluate(MakePartiallyDesyncedRun(), MakeBaseline(), watches, MovieSyncParams());
+
+	Check(HasFinding(findings, "watch-violated", true),
+		"BlocoT: a life lost while the movie drives the pad fails the run");
+	Check(FindingFrame(findings, "watch-violated") == 3660,
+		"BlocoT: the finding names the first frame the invariant broke, not the end of the run",
+		std::to_string(FindingFrame(findings, "watch-violated")));
+	Check(MovieSyncGate::IsFatal(findings),
+		"BlocoT: the harness's exit code sees the partial desync");
+}
+
+//The heart of the amendment: the SAME run, judged by the old rule alone.
+void TestSyncGateTotalComparisonMissesThePartialDesync()
+{
+	std::vector<MovieSyncSample> run = MakePartiallyDesyncedRun();
+	std::vector<MovieSyncSample> baseline = MakeBaseline();
+	//No watch declared - only the comparative rules run, as before the amendment.
+	std::vector<MovieSyncFinding> findings =
+		MovieSyncGate::Evaluate(run, baseline, {}, MovieSyncParams());
+
+	Check(run.back().TilesSeen > baseline.back().TilesSeen,
+		"BlocoT: the diverged run still ends above the movie-less baseline - the total sees nothing",
+		std::to_string(run.back().TilesSeen) + " > " + std::to_string(baseline.back().TilesSeen));
+	Check(!HasFinding(findings, "no-gain-over-baseline", true),
+		"BlocoT: the original total rule passes the diverged run, which is the defect in issue #201");
+	//...and the prefix form of the same comparison localises it instead.
+	Check(HasFinding(findings, "prefix-stall", false),
+		"BlocoT: the prefix comparison reports the stall the total cannot see");
+	Check(FindingFrame(findings, "prefix-stall") >= 3600 && FindingFrame(findings, "prefix-stall") <= 7260,
+		"BlocoT: the stall is reported at the window the run stopped tracking the movie",
+		std::to_string(FindingFrame(findings, "prefix-stall")));
+	Check(!MovieSyncGate::IsFatal(findings),
+		"BlocoT: a prefix stall alone never fails a run - a gate that cries wolf gets disabled");
+}
+
+void TestSyncGateStaysQuietOnAGoodRun()
+{
+	std::vector<MovieSyncWatch> watches(1);
+	watches[0].Address = 0x002A;
+	watches[0].Rule = MovieSyncRule::NeverDecreases;
+	watches[0].Label = "lives";
+
+	MovieSyncParams params;
+	params.ExpectedMovieEndFrame = 36790;
+	std::vector<MovieSyncFinding> findings =
+		MovieSyncGate::Evaluate(MakeGoodRun(), MakeBaseline(), watches, params);
+
+	Check(findings.empty(), "BlocoT: a run that tracks its movie throughout produces no finding at all",
+		findings.empty() ? "" : findings[0].Code + ": " + findings[0].Detail);
+}
+
+void TestSyncGateStillCatchesATotalDesync()
+{
+	//The Zelda "REGISTER YOUR NAME" failure: the movie plays every row and the
+	//game is not playing it, so the run ends level with the baseline.
+	std::vector<MovieSyncSample> run;
+	std::vector<MovieSyncSample> baseline = MakeBaseline();
+	for(const MovieSyncSample& sample : baseline) {
+		run.push_back(MakeSample(sample.Frame, true, sample.TilesSeen));
+	}
+	std::vector<MovieSyncFinding> findings = MovieSyncGate::Evaluate(run, baseline, {}, MovieSyncParams());
+	Check(HasFinding(findings, "no-gain-over-baseline", true),
+		"BlocoT: the original total rule still fails a total desync");
+}
+
+void TestSyncGateCatchesAMovieThatStoppedEarly()
+{
+	std::vector<MovieSyncSample> run = MakeGoodRun();
+	for(MovieSyncSample& sample : run) {
+		if(sample.Frame > 12000) {
+			sample.MoviePlaying = false;
+		}
+	}
+	MovieSyncParams params;
+	params.ExpectedMovieEndFrame = 36790;
+	std::vector<MovieSyncFinding> findings = MovieSyncGate::Evaluate(run, MakeBaseline(), {}, params);
+	Check(HasFinding(findings, "movie-stopped-early", true),
+		"BlocoT: a movie that stopped before its own row count says it runs dry fails the run");
+	Check(FindingFrame(findings, "movie-stopped-early") == 12060,
+		"BlocoT: the finding names the frame the movie stopped on",
+		std::to_string(FindingFrame(findings, "movie-stopped-early")));
+}
+
+void TestSyncGateSaysSoWhenItHadNoBaseline()
+{
+	std::vector<MovieSyncFinding> findings = MovieSyncGate::Evaluate(MakeGoodRun(), {}, {}, MovieSyncParams());
+	Check(HasFinding(findings, "no-baseline", false) && !MovieSyncGate::IsFatal(findings),
+		"BlocoT: a run with no baseline is told so out loud instead of reading as a pass");
+}
+
+void TestSyncGateIgnoresWhatHappensAfterTheMovieEnds()
+{
+	//The movie's input runs out at frame 12000; the console then plays on under
+	//nobody's control and loses a life. That is not a desync.
+	std::vector<MovieSyncWatch> watches(1);
+	watches[0].Address = 0x002A;
+	watches[0].Rule = MovieSyncRule::NeverDecreases;
+	watches[0].Label = "lives";
+
+	std::vector<MovieSyncSample> run;
+	uint32_t tiles = 0;
+	for(uint32_t frame = 60; frame <= 24000; frame += 60) {
+		tiles += 6;
+		bool playing = frame <= 12000;
+		run.push_back(MakeSample(frame, playing, tiles, { (uint8_t)(playing ? 3 : 1) }));
+	}
+	MovieSyncParams params;
+	params.ExpectedMovieEndFrame = 12000;
+	std::vector<MovieSyncFinding> findings = MovieSyncGate::Evaluate(run, MakeBaseline(), watches, params);
+	Check(!MovieSyncGate::IsFatal(findings),
+		"BlocoT: a life lost after the movie's input ran out proves nothing and fails nothing",
+		findings.empty() ? "" : findings[0].Code);
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -6735,6 +6990,16 @@ int main()
 	TestBordersHandleAnEmptyFrame();
 	TestCaptureChecksumSeparatesFrames();
 	TestScreenshotCaptureReportsItsOwnEmptiness();
+
+	TestSyncWatchSpecParsing();
+	TestSyncTraceRoundTrips();
+	TestSyncGatePartialDesyncFailsOnTheDeclaredInvariant();
+	TestSyncGateTotalComparisonMissesThePartialDesync();
+	TestSyncGateStaysQuietOnAGoodRun();
+	TestSyncGateStillCatchesATotalDesync();
+	TestSyncGateCatchesAMovieThatStoppedEarly();
+	TestSyncGateSaysSoWhenItHadNoBaseline();
+	TestSyncGateIgnoresWhatHappensAfterTheMovieEnds();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
