@@ -2,7 +2,10 @@
 
 - Status: accepted (2026-09-13, at the user's direction: "só cheat de RAM,
   nunca patch de PRG"; §1 is implemented as `scripts/headless_record`'s
-  `cheat=` flag and §2 is measured, see "Measured 2026-09-13" below)
+  `cheat=` flag and §2 is measured, see "Measured 2026-09-13" below.
+  **Amended 2026-09-14**: §2's table gains a third row, so the title's "only the
+  background surfaces" now describes the *coverage* pass alone — see "Amended
+  2026-09-14" below. The file name is kept for stable links.)
 - Date: 2026-09-13
 - Related: ADR-0183 (the artist kit — §3 "evidence and inference are never
   confused" is what this protects), ADR-0182 (recording coverage), ADR-0178
@@ -225,3 +228,86 @@ to 115, because the shield touches everything and the recorder reads it as two
 figures that met. The panorama from the same run is clean. The split is not a
 precaution; it is the difference between a usable figure sheet and an unusable
 one.
+
+## Amended 2026-09-14: a navigation cheat is a third pass, and it feeds every surface
+
+§2's table gains a row. The amendment is measured, not argued.
+
+### What forced it
+
+Contra's `$30` holds the current level (`0x00`–`0x07` = stages 1–8, `0x09` =
+game over), from DataCrystal's published RAM map — §5-admissible, invented by
+nobody. Pinned for a run, it warps the game to a stage. That reaches material no
+amount of surviving reaches: eleven fresh sessions, one per stage plus three
+bosses, about an hour of wall clock, cover **58.9%** of the reference pack's
+tiles against the 53.8% of 77 accumulated recordings, and the union of the two
+reaches **64.6%** — 367 tiles the archive never held.
+
+The question this ADR had to answer is whether such a run may feed the figure
+surfaces, which §2 reserves for a clean pass.
+
+### It may, and the reason is mechanical
+
+**§2's split derives from a mechanism `$30` does not have.** The barrier
+(`$00B0`) earns its restriction because the game *draws* the barrier's sprites
+and cycles the player's palette while it runs: the cheat changes what is in the
+frame. `$30` changes *where the game is*, not what it draws in the frame it is
+in. Nothing is added to OAM, no palette is swapped.
+
+Measured three ways, on 300 s / 20821-frame runs:
+
+1. **The mechanism is inert.** `0030:00` is the warp value equal to the stage
+   the game already loads. Its recording is **byte-identical** to the uncheated
+   control — `diff -rq` reports no difference across the whole `textures/` tree,
+   same input script, same duration. Pinning the address on the read bus injects
+   no sprite, no palette change, no OAM node.
+2. **The pose grids are clean, by eye.** Across `w4` (`0030:03`) and `w7`
+   (`0030:06`): no foreign overlay fused into any silhouette, no halo, no
+   ellipse; the player carries the game's own per-stage palette, consistent
+   across the whole sheet rather than cycling; rows are recognisable animation
+   cycles. The one large red dotted ring present in both is laid out as its own
+   figure with its own phases — in-game art, never merged into the player.
+3. **The positive control reproduces the defect on demand.** Same stage, same
+   harness, `0030:00` **plus** `00B0:FE`: the player's running loop is drawn
+   red/orange in *every* phase, where the identical cycle without the barrier is
+   the normal blue-trousered player. ADR-0184's palette-cycling defect,
+   reproduced, and absent from every warp-only run.
+
+Mechanical acceptance on the `w4` kit: build exit 0, **0 keys lost, 0
+invented**, 216 files added, `verify: PASS`.
+
+### The amended table
+
+| pass | cheat | which of ADR-0183's four surfaces may be built from it |
+|---|---|---|
+| **clean** | none | figures (`sheets/usr*.png`), scenery (`sheets/`, `scene/`) |
+| **coverage** | a timer or state the game *draws*, per §1 | stage maps (`map/`), pattern pages (`chr/`) |
+| **navigation** | a level/room selector read off a published RAM map, pinned for the run, per §1 | **all four** |
+
+A navigation pass is §3 rank 2 in spirit — it changes no drawn pixel — but it is
+its own rank, because a lives counter buys attempts while a selector buys
+*places*. Its `notes[]` obligation is unchanged and absolute: the code travels
+with the art, verbatim and with its address.
+
+### What a navigation pass does not record
+
+The selector is pinned for the whole run, so the game never observes the stage
+advancing: **the stage-clear transition, and any figure that exists only in it,
+is never recorded.** That is an omission, not a contamination — it belongs to
+§4's concern, not §2's. Deaths and respawns *are* still recorded, so §4's other
+half is satisfied. End-of-stage material must be sourced from a run that reaches
+the end of a stage.
+
+### A correction to "Measured 2026-09-13": the fused-pose count is a weak detector
+
+That section reports the barrier raising fused poses from 14 to 115. At 300 s
+run lengths the signal does not reproduce **in either direction** — the barrier
+runs have *fewer* fusions than their clean twins (`0030:00`: 83 clean vs 69 with
+the barrier; `0030:03`: 90 vs 80). The 14 and 115 came from a shorter run pair
+and are not commensurable with these.
+
+The Decision is unaffected: §2's split still holds, and the barrier defect is
+still real — it is visible in the palette and the silhouette, which is what
+discriminated in all three measurements above. But the fused-pose count MUST NOT
+be used as an automatic gate for detecting a contaminating cheat. It would not
+have caught the barrier here.

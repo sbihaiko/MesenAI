@@ -55,10 +55,24 @@ other (`write_bank` implements it as one if/elif chain):
 4. a cell read statically out of the ROM — `fill`, `seen: false`;
 5. nothing — `empty`, a hole this tool refuses to paint.
 
+A recorded pack keys a cell by (pattern, palette), so one drawing comes back
+once per palette the run saw it wearing — and a screen fade gives every tile on
+screen a key per step of the fade. Where two of those keys are the same picture
+at another brightness, the kit **folds** one onto the other: the artist paints
+one cell, the renderer rebuilds the rest from the `<tile>` row's Brightness
+column, and the recording keeps every key it had. Folding is a statement about
+colour only, decided off the NES palette (`compute_folds`), and a palette that
+changes any painted entry's hue is never folded — two colourways of one enemy
+are two pictures, not one (ADR-0183 §3).
+
 Honesty rules this tool keeps:
 
 * a cell the recording put on this page is copied **byte for byte** from the
   recorded page, so a rebuilt pack renders exactly what it rendered before;
+* a cell folded onto another is still that byte-for-byte copy — folding changes
+  what the kit *says* about a cell, never its pixels — and its sidecar entry
+  names the cell it folds into, the Brightness that rebuilds it and the hue
+  drift that costs;
 * a cell this bank recorded on a lower-ranked page is moved up onto the rank-0
   page — real evidence under another palette, marked `borrowed`;
 * a cell another recording of the same ROM recorded is pasted from that run's
@@ -86,6 +100,7 @@ import argparse
 import collections
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -123,6 +138,9 @@ LEGEND_BORROWED = (0x8A, 0xA0, 0x26, 0xFF)
 # A donated cell is evidence, but not this pack's: blue reads as neither the
 # green/olive family (this pack saw it) nor the amber one (nobody saw it).
 LEGEND_DONATED = (0x2F, 0x81, 0xF7, 0xFF)
+# A folded cell is evidence the artist does not have to paint: the same
+# picture at another brightness, reconstructed from the cell it folds into.
+LEGEND_FOLDED = (0x6E, 0x40, 0xC9, 0xFF)
 LEGEND_FILL = (0xE3, 0x9A, 0x0B, 0xFF)
 LEGEND_EMPTY = (0xC4, 0x28, 0x28, 0xFF)
 
@@ -835,13 +853,15 @@ def render_cell(data: bytes, palette_hex: str, table: PaletteTable,
 
 def legend_image(page: Page, states: dict) -> Image:
     """A drop-behind overlay: green over a recorded cell, olive over one moved up
-    from a lower-ranked page, blue over one donated by another recording, amber
-    over a ROM fill, red over a hole. One file per page so an artist can toggle
-    it as a layer."""
+    from a lower-ranked page, blue over one donated by another recording, violet
+    over one folded onto another cell (same picture, another brightness - do not
+    paint it), amber over a ROM fill, red over a hole. One file per page so an
+    artist can toggle it as a layer."""
     n = page.cell_px
     img = Image(16 * n, 16 * n)
     colour = {"evidence": LEGEND_EVIDENCE, "borrowed": LEGEND_BORROWED,
-              "donated": LEGEND_DONATED, "fill": LEGEND_FILL, "empty": LEGEND_EMPTY}
+              "donated": LEGEND_DONATED, "folded": LEGEND_FOLDED,
+              "fill": LEGEND_FILL, "empty": LEGEND_EMPTY}
     for slot in range(256):
         rgba = colour[states.get(slot, "empty")]
         x, y = page.xy(slot)
@@ -850,6 +870,247 @@ def legend_image(page: Page, states: dict) -> Image:
                 edge = (xx - x < 2 or yy - y < 2 or x + n - xx <= 2 or y + n - yy <= 2)
                 img.set(xx, yy, rgba if edge else (rgba[0], rgba[1], rgba[2], 0x40))
     return img
+
+
+# --- palette folding (F9.27 follow-up) --------------------------------------
+
+# A recorded pack keys a cell by (pattern, palette), so one drawing comes back
+# once per palette the run saw it wearing. On the TAS Zelda recording that is
+# 4712 cells for 1642 distinct patterns, because a screen fade gives every tile
+# on screen a key per step of the fade.
+#
+# `HdPackLoader` has carried a per-`<tile>` **Brightness** since version 105
+# (`HdPackLoader.cpp:513`, applied by `HdNesPack::AdjustBrightness`), and the
+# builder has never written anything but 255 (`HdPackBuilder.cpp:337/391/464`).
+# So the renderer can already reconstruct a fade step from one painted cell,
+# and this module decides which cells that is true of.
+#
+# THE RULE, read off the NES palette and never off the picture:
+#
+#   NES colour byte c: row = c >> 4, hue = c & 0x0F. The four rows of one hue
+#   column ARE the console's brightness ramp for that colour
+#   ($2C -> $1C -> $0C -> $0F). Ten indices render pure black in the 2C02 table
+#   ($0D-$0F, $1D-$1F, $2E, $2F, $3E, $3F); a black entry carries no hue and is
+#   a wildcard.
+#
+#   Only the palette indices the tile ACTUALLY PAINTS are compared - a pattern
+#   that paints colours 0 and 3 does not care what 1 and 2 hold.
+#
+#   INERT  - the two palettes render the pattern to identical RGB. No judgement
+#            at all; the cells are the same picture.
+#   FADE   - every painted entry keeps its hue and none gets brighter, i.e. the
+#            game moved those colours down their own ramps.
+#   Neither - a painted entry changed hue. A different picture. Collapsing a
+#            green enemy onto a red one would destroy evidence (ADR-0183 3),
+#            so it is never folded, however close the two happen to render.
+#
+# The rule is a precondition, not the decision. `AdjustBrightness` is a single
+# RGB multiplier, and the one thing a multiplier can never do is change hue, so
+# each candidate is also measured: the least-squares multiplier that takes the
+# base to the variant, and the largest hue angle between them. Anything past
+# HUE_DRIFT_GATE_DEG is left as its own cell. Both numbers are written into the
+# cell's sidecar entry, and the per-page distribution into `fold.driftHistogram`,
+# so the gate is retunable from the data a kit already carries rather than from
+# another recording run.
+#
+# Measured on the corpus (2026-09-14), fraction of the rows-over-patterns gap
+# this removes: Contra 77 %, Mega Man 3 58 %, Gauntlet 57 %, Ninja Gaiden 53 %,
+# Zelda TAS 44 %, Castlevania 17 %. Zelda TAS: 4712 cells -> 3372, and the
+# deepest CHR slot goes from 35 variants to 16.
+#
+# What this does NOT do is collapse a pattern to one cell. 1642 is Zelda's
+# *pattern* count, not its picture count: its most-repeated patterns carry ~7
+# hue families (grey, olive $x8, green $xB, cyan $xC, red $x6, blue $x2, brown
+# $x7), each a 3-5 step ramp. 30 keys become 7 cells, not 1.
+
+HUE_DRIFT_GATE_DEG = 25.0
+
+
+def _nes_rgb(c):
+    v = DEFAULT_PALETTE_ARGB[c & 0x3F]
+    return ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+
+
+def _is_black(c):
+    return _nes_rgb(c) == (0, 0, 0)
+
+
+def _hue(c):
+    return c & 0x0F
+
+
+def _level(c):
+    """0 for black, else the palette row + 1 - the rung of the hue's ramp."""
+    return 0 if _is_black(c) else (c >> 4) + 1
+
+
+def _luma(c):
+    r, g, b = _nes_rgb(c)
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def palette_entries(palette: str):
+    """`"0F0B1B2B"` -> the four NES colour indices, colour 0 first."""
+    v = int(palette, 16)
+    return [(v >> ((3 - k) * 8)) & 0x3F for k in range(4)]
+
+
+def painted_indices(tile_data: str):
+    """Which of the four palette indices the 8x8 pattern actually paints.
+
+    `tile_data` is the 32 hex characters a CHR RAM `<tile>` row carries. A CHR
+    ROM row carries only an index, and then the caller has to assume all four -
+    which is the conservative direction: more entries have to agree on hue, so
+    fewer cells fold."""
+    d = [int(tile_data[i * 2:i * 2 + 2], 16) for i in range(16)]
+    used = set()
+    for i in range(8):
+        lo, hi = d[i], d[i + 8]
+        for j in range(8):
+            used.add(((lo >> (7 - j)) & 1) | (((hi >> (7 - j)) & 1) << 1))
+    return sorted(used)
+
+
+def fade_related(base, other, used) -> bool:
+    """`other` is `base` further down the same ramps: no painted entry changed
+    hue, none got brighter, and at least one moved."""
+    moved = False
+    for k in used:
+        a, b = base[k], other[k]
+        if _is_black(a) and _is_black(b):
+            continue
+        if _is_black(a) or _is_black(b):
+            moved = True
+            continue
+        if _hue(a) != _hue(b):
+            return False
+        if _level(b) > _level(a):
+            return False
+        if _level(b) < _level(a):
+            moved = True
+    return moved
+
+
+def fold_measure(base, other, used):
+    """(brightness, max hue drift in degrees) for folding `other` onto `base`.
+
+    `brightness` is the least-squares single multiplier, in the 0..1 units the
+    `<tile>` column uses (1 = the loader's 255). The drift is the largest angle
+    between a painted entry's two RGB vectors - the part of the residual a
+    multiplier can never remove. Black entries carry no direction and are
+    skipped."""
+    num = den = 0.0
+    for k in used:
+        a, b = _nes_rgb(base[k]), _nes_rgb(other[k])
+        for i in range(3):
+            num += a[i] * b[i]
+            den += a[i] * a[i]
+    brightness = 0.0 if den == 0 else num / den
+    drift = 0.0
+    for k in used:
+        a, b = _nes_rgb(base[k]), _nes_rgb(other[k])
+        na = math.sqrt(sum(x * x for x in a))
+        nb = math.sqrt(sum(x * x for x in b))
+        if na == 0 or nb == 0:
+            continue
+        cos = sum(x * y for x, y in zip(a, b)) / (na * nb)
+        drift = max(drift, math.degrees(math.acos(max(-1.0, min(1.0, cos)))))
+    return max(0.0, min(4.0, brightness)), drift
+
+
+def compute_folds(pages, gate: float = HUE_DRIFT_GATE_DEG):
+    """Fold every page's palette variants of one pattern onto one painted cell.
+
+    Pack-wide, not per bank: a pack whose CHR bank hashes are all zero has its
+    pages regrouped structurally (`_regroup_without_hashes`), so the variants of
+    one pattern routinely sit in different Bank objects. The key this folds is
+    (pattern, palette), which is global.
+
+    Returns `(folded, bases, stats)`:
+      folded[(page name, slot)] = {"kind", "brightness", "drift", "base*"}
+      bases[(page name, slot)]  = [that cell's folded entries]
+    """
+    groups = collections.defaultdict(list)
+    for page in pages:
+        for slot, row in page.rows.items():
+            ident = row.tile_data or f"#{page.index_of_slot(slot)}"
+            groups[ident].append((page, slot, row))
+
+    folded, bases = {}, collections.defaultdict(list)
+    stats = {"inert": 0, "fade": 0, "kept": 0, "refused": 0,
+             "driftHistogram": collections.Counter()}
+
+    for ident, members in groups.items():
+        data = members[0][2].tile_data
+        used = painted_indices(data) if data else [0, 1, 2, 3]
+        if not used:
+            used = [0]
+        # One member per palette, brightest first; a member of the fullest page
+        # wins a tie, so the cell an artist opens first tends to be the base.
+        by_palette = {}
+        for page, slot, row in members:
+            by_palette.setdefault(row.palette, (page, slot, row))
+        order = sorted(
+            by_palette.values(),
+            key=lambda m: (-sum(_luma(palette_entries(m[2].palette)[k]) for k in used),
+                           -len(m[0].rows), m[0].name, m[1]))
+        if len(order) < 2:
+            stats["kept"] += 1
+            continue
+
+        # INERT first: palettes that render this pattern to identical RGB are
+        # the same picture, and folding them is not a judgement.
+        reps, inert_of = [], collections.defaultdict(list)
+        seen = {}
+        for m in order:
+            sig = tuple(_nes_rgb(palette_entries(m[2].palette)[k]) for k in used)
+            at = seen.get(sig)
+            if at is None:
+                seen[sig] = len(reps)
+                reps.append(m)
+            else:
+                inert_of[at].append(m)
+
+        # FADE: greedy from the brightest representative.
+        taken = [False] * len(reps)
+        for i, base in enumerate(reps):
+            if taken[i]:
+                continue
+            taken[i] = True
+            stats["kept"] += 1
+            bkey = (base[0].name, base[1])
+            base_pal = palette_entries(base[2].palette)
+
+            def _fold(member, kind, brightness, drift):
+                entry = {"kind": kind, "palette": member[2].palette,
+                         "brightness": round(brightness, 4), "drift": round(drift, 1),
+                         "basePage": base[0].name, "baseSlot": base[1],
+                         "basePalette": base[2].palette}
+                folded[(member[0].name, member[1])] = entry
+                bases[bkey].append(entry)
+                stats[kind] += 1
+                stats["driftHistogram"][int(drift) // 5 * 5] += 1
+
+            for m in inert_of[i]:
+                _fold(m, "inert", 1.0, 0.0)
+            for j in range(i + 1, len(reps)):
+                if taken[j]:
+                    continue
+                other = reps[j]
+                other_pal = palette_entries(other[2].palette)
+                if not fade_related(base_pal, other_pal, used):
+                    continue
+                brightness, drift = fold_measure(base_pal, other_pal, used)
+                if drift > gate:
+                    # Same ramps, but too much of the residual is hue for a
+                    # multiplier to carry. Left as its own cell, and counted.
+                    stats["refused"] += 1
+                    continue
+                taken[j] = True
+                _fold(other, "fade", brightness, drift)
+                for m in inert_of[j]:
+                    _fold(m, "inert", brightness, drift)
+    return folded, bases, stats
 
 
 # --- writing ----------------------------------------------------------------
@@ -869,8 +1130,31 @@ def _fill_rule(page: Page, index: int, palette: str, data: bytes,
             f"{x},{y},1,Y")
 
 
+def _fold_block(cells):
+    """What this page's folds did, in the page's own sidecar.
+
+    The drift histogram is per page rather than only per pack on purpose: how
+    loose the fold got is a property of the game (measured worst drift is 0 deg
+    on Contra and 45 deg on Gauntlet), so whoever opens a Gauntlet kit sees it
+    there instead of inferring it from a global constant."""
+    folded = [c for c in cells if c["state"] == "folded"]
+    absorbed = [f for c in cells for f in c.get("folds") or []]
+    hist = collections.Counter()
+    for f in folded:
+        hist[int(f["drift"]) // 5 * 5] += 1
+    return {
+        "gateDegrees": HUE_DRIFT_GATE_DEG,
+        "foldedAway": len(folded),
+        "inert": sum(1 for f in folded if f["kind"] == "inert"),
+        "fade": sum(1 for f in folded if f["kind"] == "fade"),
+        "absorbedHere": len(absorbed),
+        "maxDrift": max((f["drift"] for f in folded), default=0.0),
+        "driftHistogram": {str(k): v for k, v in sorted(hist.items())},
+    }
+
+
 def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
-               names, pack_keys, fill_rules, rom, donors=()):
+               names, pack_keys, fill_rules, rom, donors=(), folds=None):
     """Write every page of the bank: the rank-0 page completed, the rest copied
     through unchanged so `<out>/chr/` is a drop-in for `textures/chr/`."""
     entries, rules = [], []
@@ -880,6 +1164,9 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
     # recording at all, so a run without `--also` writes exactly the bytes it
     # wrote before this feature existed.
     with_donors = bool(donors)
+    # (pattern, palette) cells this pack folds onto another cell, and the folds
+    # each surviving cell absorbed - computed pack-wide by `compute_folds`.
+    folded_cells, fold_bases = folds if folds else ({}, {})
 
     for page in bank.pages:
         hd = images[page.name]["hd"].clone()
@@ -905,6 +1192,18 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
                 else:
                     entry["tileIndex"] = row.tile_index
                 states[slot] = "evidence"
+                fold = folded_cells.get((page.name, slot))
+                if fold is not None:
+                    # Still this pack's evidence, and its pixels are untouched:
+                    # what changes is that the artist does not have to paint it.
+                    # The cell it folds into carries the picture, and the
+                    # renderer rebuilds this one with Brightness (ADR-0183 3:
+                    # the recording keeps every key either way).
+                    entry.update(state="folded", **fold)
+                    states[slot] = "folded"
+                absorbed = fold_bases.get((page.name, slot))
+                if absorbed:
+                    entry["folds"] = absorbed
             elif page is primary and index in bank.art:
                 # Recorded art of this very bank and index, sitting on a
                 # lower-ranked page under another palette. Real evidence, moved
@@ -983,6 +1282,7 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
 
         counts = collections.Counter(c["state"] for c in cells)
         cell_counts = {"evidence": counts["evidence"], "borrowed": counts["borrowed"],
+                       "folded": counts["folded"],
                        "fill": counts["fill"], "empty": counts["empty"]}
         if with_donors:
             cell_counts["donated"] = counts["donated"]
@@ -999,6 +1299,7 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
             "layout": page.layout, "fillPalette": palette,
             "spriteTransparency": transparent_rgba is not None,
             "counts": cell_counts,
+            "fold": _fold_block(cells),
             "paletteGuessed": guessed,
             "notes": list(bank.notes) if page is primary else [],
             "cells": cells,
@@ -1011,11 +1312,16 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
             bank_label = "blank-tile bucket" if bank.kind == "blankBucket" else (
                 "PRG scan page" if bank.kind == "prgScan" else f"CHR bank {bank.id}")
             donated_label = f"{counts['donated']} donated / " if counts["donated"] else ""
+            folded_label = (f"{counts['folded']} folded onto another cell / "
+                            if counts["folded"] else "")
             title = (f"{page.name} — {bank_label}, variant rank "
                      f"{bank.pages.index(page)}, palette {page.palette}; "
-                     f"{counts['evidence'] + counts['borrowed']} recorded / "
-                     f"{donated_label}{counts['fill']} ROM fill / {counts['empty']} empty")
+                     f"{counts['evidence'] + counts['borrowed']} to paint / "
+                     f"{folded_label}{donated_label}{counts['fill']} ROM fill / "
+                     f"{counts['empty']} empty")
         entry_extra = {"donated": counts["donated"]} if with_donors else {}
+        if counts["folded"]:
+            entry_extra["folded"] = counts["folded"]
         entries.append({
             "path": f"chr/{page.name}.png", "title": title, "unit": "page",
             "rows": 16, "columns": 16, "cells": 256,
@@ -1046,7 +1352,9 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
 
     1. every recorded cell of every emitted page is byte-identical to the
        recorded page — that is what makes the pack's existing `<tile>` rules
-       render exactly what they rendered before;
+       render exactly what they rendered before. A folded cell is checked the
+       same way: folding changes what the kit *says* about a cell, never its
+       pixels, so a pack rebuilt from an unpainted kit is unchanged;
     2. the patched pack's key set is a superset of the original's, nothing lost,
        every added key one of the `--fill-rules` rows;
     3. `mep_build build` runs on the patched copy with 0 errors;
@@ -1072,7 +1380,7 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
             sidecar = json.loads((out_chr / (png.name[:-4] + ".json")).read_text())
             n = sidecar["scale"] * 8
             for cell in sidecar["cells"]:
-                if cell["state"] != "evidence":
+                if cell["state"] not in ("evidence", "folded"):
                     continue
                 result["cells_checked"] += 1
                 x, y = cell["x"], cell["y"]
@@ -1212,11 +1520,16 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     out_chr.mkdir(parents=True, exist_ok=True)
     pack_keys = pack.key_set()
 
+    # Pack-wide, before any page is written: the variants of one pattern sit in
+    # different Bank objects whenever the pack's CHR bank hashes are all zero.
+    fold_map, fold_bases, fold_stats = compute_folds(pages)
+    folds = (fold_map, fold_bases)
+
     files, rules, dropped, passthrough = [], [], [], []
     for b in banks:
         entries, bank_rules = write_bank(b, images, table, b.transparent_rgba,
                                          out_chr, names, pack_keys, fill_rules, rom,
-                                         donors)
+                                         donors, folds)
         files += entries
         rules += bank_rules
         # These pages are in the kit, copied through untouched — they are not
@@ -1247,6 +1560,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     for f in files:
         total["evidence"] += f["evidence"]
         total["donated"] += f.get("donated", 0)
+        total["folded"] += f.get("folded", 0)
         total["fill"] += f["fill"]
         total["empty"] += f["empty"]
 
@@ -1262,7 +1576,8 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "artist opens, and completing the lower ranks would only repeat it.",
         "Green in Chr_<n>.legend.png is a cell the run recorded on this page; "
         "olive is a cell this bank recorded on a lower-ranked page, moved up "
-        "(same pattern, another palette — still evidence); amber is a ROM fill; "
+        "(same pattern, another palette — still evidence); violet is a cell "
+        "folded onto another cell, which is the one to paint; amber is a ROM fill; "
         "red is a cell nothing could fill. Every non-green cell is spelled out "
         "in Chr_<n>.json, and a ROM fill is `seen: false` there.",
         "A ROM fill is rendered nearest-neighbour under the bank's most-recorded "
@@ -1293,6 +1608,29 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                 "id. It contributes no <tile> rule: its cells are evidence about the ROM, "
                 "not keys this pack ever rendered.")
         notes.extend(donor_notes)
+    if fold_stats["inert"] + fold_stats["fade"]:
+        notes.append(
+            f"{fold_stats['inert'] + fold_stats['fade']} cell(s) are violet in the "
+            "legend: **do not paint them**. A recorded pack keys a cell by "
+            "(pattern, palette), so one drawing comes back once per palette the run "
+            "saw it wearing — and a screen fade gives every tile on screen a key per "
+            "step of the fade. Where two keys are the same picture at another "
+            f"brightness, the kit folds one onto the other: {fold_stats['inert']} "
+            "render identically and "
+            f"{fold_stats['fade']} are steps of the same ramp, leaving "
+            f"{fold_stats['kept']} cell(s) to paint. Each folded cell names the cell "
+            "it folds into, the Brightness that rebuilds it and the hue drift that "
+            "costs, in its Chr_<n>.json entry.")
+        notes.append(
+            "A fold is only ever a *brightness* relation, decided off the NES "
+            "palette: every painted entry keeps its hue column and none gets "
+            "brighter. A palette that changes any painted entry's hue is a "
+            f"different picture and is never folded, and {fold_stats['refused']} "
+            "candidate(s) that did keep their hues were still refused because more "
+            f"than {HUE_DRIFT_GATE_DEG:.0f} deg of the residual was hue, which a "
+            "single multiplier cannot carry. Two colourways of one enemy stay two "
+            "cells (ADR-0183 §3); nothing is folded that the renderer cannot "
+            "reconstruct.")
     if not rom.has_chr_rom:
         notes.append(
             "This is a CHR RAM game: the pattern tables are built at run time "
@@ -1332,9 +1670,23 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
             "cells": 256 * len(files), "evidence": total["evidence"],
             **({"donatedCells": total["donated"]} if donors else {}),
             "fill": total["fill"], "empty": total["empty"],
+            "folded": total["folded"],
             "paletteGuessed": guessed,
             "rulesSafe": filled - guessed, "rulesPermissive": filled,
             "rulesEmitted": len(rules), "fillRules": fill_rules,
+        },
+        "fold": {
+            # Counted over the cells that sit on this pack's chr/ pages - the
+            # surface this tool owns - not over every key in the manifest, so
+            # `cellsOnChrPages == foldedAway + cellsToPaint` always holds.
+            "gateDegrees": HUE_DRIFT_GATE_DEG,
+            "cellsOnChrPages": fold_stats["inert"] + fold_stats["fade"] + fold_stats["kept"],
+            "foldedAway": fold_stats["inert"] + fold_stats["fade"],
+            "inert": fold_stats["inert"], "fade": fold_stats["fade"],
+            "cellsToPaint": fold_stats["kept"],
+            "refusedOverGate": fold_stats["refused"],
+            "driftHistogram": {str(k): v for k, v in
+                               sorted(fold_stats["driftHistogram"].items())},
         },
         "files": files,
         # Only present when the run was given one, so a run without `--also`
