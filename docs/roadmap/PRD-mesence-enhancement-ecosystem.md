@@ -1322,14 +1322,73 @@ user (C.4–C.6). No new emulator feature ships under this phase.
 | C.2 | **Register and roadmap say what shipped.** One pass over ADR Status lines (0169, 0170, 0171, 0186 at minimum; grep for `uncommitted`, `not yet in`, `being built`, `awaits`) and over `Related:` lines still calling 0168/0180 `proposed`; `docs/roadmap/AGENTS.md` describes Phases 9–11; a `scripts/checks/` script in `make doc-checks` fails when a live slice-table row's Decision cell contains `shipped` (a shipped row is deleted, per this folder's contract) | accepted 2026-09-14; Status-line edits on accepted ADRs are the user's call — list them in the PR, do not silently rewrite |
 | C.3 | **Boards and catalog agree.** Run `community-pack-catalog.yml` (or schedule it after each accepted verdict) so #207–#211 appear; `community-pack-validate.yml` applies `pack:invalid` when it moves an item to "Inválido" (today 8 items, 0 labels); bug-board hygiene: #196 → Done, #238/#239 added, Size set on open items | accepted 2026-09-14; no ADR |
 | C.4 | **A binary release of the fork.** One `build.yml` dispatch tagged `mesence-v0.1.0` with macOS/Windows/Linux artifacts (the `.app` gets its fresh `MesenCore.dylib` injected and codesigned — the BundleApp staleness is a known trap), release notes that link `docs/remastering-a-game.md` and `docs/enhancement-ecosystem.md`; `README.md` links the release and the guide above the fold | accepted 2026-09-14; the version scheme is a one-line decision to record in the release notes, not an ADR |
-| C.5 | **The first external artist, timed.** One person who has never seen the code runs `docs/remastering-a-game.md` from a release binary on a game of their choice: record → cover → kit → paint one figure → build → play. Log elapsed time per stage, every point where they stopped to ask, and the Phase 9 panel sections 2–3. The log goes to `docs/validation/` with no ROM-derived art in it. Pass: a lint-clean pack with one repainted figure on screen in **under one hour** (Phase 5's criterion, finally measured), and the artist says they would use it over their spreadsheet | accepted 2026-09-14; depends on C.4; this is the measurement the meta-goal has been missing and it gates further F9.x work |
+| C.5 | **The first outside artist, timed — Fable as the artist.** A Claude Fable 5.1 session with **no prior context** stands in for the external artist (user's decision 2026-09-14, in line with the standing goal "use Fable to proxy human decision and vision"). It runs `docs/remastering-a-game.md` from a release binary on a game it picks from the local ROM library: record → cover → kit → repaint one figure → build → play. Profile, sandbox, prompt and log format: "The C.5 evaluator" below. Pass: a lint-clean pack with one repainted figure on screen in **under one hour** of wall clock, zero reads outside the guide, and the evaluator's own verdict that it would choose this over hand-editing `hires.txt`. Run on **two games**, one CHR RAM and one CHR ROM | accepted 2026-09-14; depends on C.4; a run by a human artist stays a non-goal until the user reopens it — the §7 row records the trade-off |
 | C.6 | **A second reference pack.** Pick one community pack other than Contra80s with a rich hand-made `hires.txt` (the 260 146-line Metroid pack and Zelda II ModernRetroDesign are on hand), run `artist_cover.py` and the F9.29 condition emitters against it, and log the same four numbers as Contra (coverage, conditions emitted vs hand-written, palette inflation, keys round-tripped) as a §3 line. Purpose: stop tuning to one author's habits | accepted 2026-09-14; no ADR unless a number forces a rule change |
 | C.7 | **The size guard ratchets.** `check-file-loc.sh` gains the six files above at their current line count as a ceiling (a PR may shrink them, never grow them), and `scripts/requirements.txt` pins Pillow/numpy/PyYAML where `checks.yml` does today | accepted 2026-09-14; amends ADR-0137's file list |
 | C.8 | **Close the debts ADRs left open.** ADR-0154: run the `diffusion` backend once or supersede Option A (it has never executed; PRD test 8 has never run); ADR-0186: publish the debugger slowdown as a number; ADR-0187: a `doc-checks` script that diffs the host allow-list between `fetch_pack.py`, `CommunityPackDownloader.cs` and `community-pack-validate.yml`; ADR-0171 → 0170: the "loosen pose identity" revisit (223 poses on a 300 s run) | accepted 2026-09-14; each item is its own PR; 0154's outcome is an ADR either way |
 
+**The C.5 evaluator — profile, sandbox, prompt, log.**
+
+*Profile the session plays.* A NES pixel artist who has shipped two HD
+packs by hand-editing `hires.txt` next to a spreadsheet, owns the ROMs, has
+never seen this fork, and gives up on a tool that is slower than the
+spreadsheet on day one. Not a programmer: reading source code to get
+unstuck counts as a failure of the guide, and is logged as such.
+
+*Sandbox — what the session may see.* Exactly: the release binary from
+C.4 (unpacked, not built), `docs/remastering-a-game.md`,
+`docs/hd-pack-authoring.md`, `docs/enhancement-ecosystem.md`, the ROM
+library, and a paint tool. **Not**: the repository checkout, `docs/adr/`,
+this PRD, `scripts/*.py` source (the scripts ship with the release and are
+run, never read), the memory directory, or any session transcript. The
+run is dispatched as a fresh agent (`Agent`, `subagent_type` other than
+`fork`, model `fable`) so no conversation context leaks in; the prompt below
+is the whole briefing. Reading anything outside the sandbox is allowed but
+is logged as a **stop**, with the question the guide failed to answer.
+
+*The "paint" step.* The evaluator cannot draw. It applies one visible,
+deterministic edit to one figure's PNG with the paint tool the release
+documents (a hue shift or an outline on a single pose is enough); what is
+being measured is whether the surface tells it *which* PNG and *where*,
+and whether the edit comes back on screen through `build` and a play run —
+not the art.
+
+*Games.* Two runs. One CHR RAM game (Contra, Zelda, Metroid) so the stage
+panorama is exercised, one CHR ROM game (Mega Man 3, Zelda II) so the
+guide's "what a CHR ROM game cannot do" line is tested cold. The evaluator
+picks within each class.
+
+*Prompt (verbatim, en-US, the entire briefing):*
+
+> You are a NES pixel artist. You have shipped two HD packs by hand-editing
+> `hires.txt` with a spreadsheet beside you, and you are trying MesenCE for
+> the first time. In the folder `<release>` is the emulator and its tools;
+> `<docs>` holds three guides — start with `remastering-a-game.md`. Your
+> ROMs are in `<roms>`. Goal: within one hour, record `<game>`, find one
+> figure you recognize, repaint it in a visible way, build the pack, and
+> see it on screen. Keep a log as you go, one line per step with the clock
+> time: what you ran, what you saw, every time you had to stop and look for
+> an answer the guide did not give (say where you looked). Do not read the
+> tools' source code; if you feel you must, log it as a stop and then do it.
+> At the end write, in five lines: elapsed time per stage of the guide's
+> table, the number of stops, whether the repainted figure appeared, and
+> whether you would use this over your spreadsheet — and why, in one
+> sentence.
+
+*Log.* `docs/validation/c5-fable-artist-run-<game>-<date>.md`: the
+evaluator's log verbatim, the six stage times, the stop list, sections 2
+and 3 of the Phase 9 panel filled from the log by the dispatcher, the
+verdict, and a "defects filed" list (each stop becomes an issue or a guide
+fix in the same PR). No ROM-derived image in the repo; screenshots stay in
+`runs/`.
+
+*Pass.* Both games: pack lint-clean, figure on screen, under one hour,
+verdict "yes". One game failing is a C.5 **fail** and reopens the guide,
+not the criterion. The two logs become one §3 line.
+
 **Non-goals.** New recorder drivers, new sidecar fields, new condition
 types, Phase 10 product work. Telemetry stays out (§7 "Scope explosion");
-C.5's log is written by hand by the person running it.
+C.5's log is the evaluator's own words, edited only for the ROM-art rule.
 
 ### 5. Order of execution
 
@@ -1348,9 +1407,12 @@ and in git history.
    current binary) and **F9.25** per-stage second passes. F9.18 is the only
    Phase 9 item that needs a person; schedule it with C.5 if the same
    person can do both.
-4. **Phase 11 C.4 → C.5 → C.6**: release, one external artist timed, a
-   second reference pack. **Until C.5 has a logged number, no new F9.x
-   slice is opened** — the meta-goal is measured there or nowhere.
+4. **Phase 11 C.4 → C.5 → C.6**: release, the Fable artist run on two
+   games, a second reference pack. **Until C.5 has a logged number, no new
+   F9.x slice is opened** — the meta-goal is measured there or nowhere.
+   C.1, C.2, C.3 and the C.4 preparation run **in parallel** as isolated
+   worktrees driven by Opus sessions, one PR each (user's direction,
+   2026-09-14); C.5 waits for C.4's binary.
 5. **Phase 10 S10.b**, by the user, from their own account; then the
    BYOK/egress ADR it feeds, or a line here saying the spike declined it.
 6. **Phase 11 C.7, C.8** and the manual/hardware residue, opportunistically:
@@ -1416,7 +1478,7 @@ files and in §3.
 | The PR gate does not compile the Core or run the Python suite; `main` has no branch protection (#230, 2026-09-14) | Phase 11 C.1; until it lands, every PR that touches `Core/` or `scripts/*.py` states in its body which suites the author ran locally, with the counts |
 | The roadmap and the ADR Status lines drift behind `main` (three shipped rows in a live table, four "not yet in code" ADRs for shipped code, ADR ids missing from §6 — all found 2026-09-14) | Phase 11 C.2: a `doc-checks` script fails on a `shipped` row in a live table; ADR Status-line edits listed per PR; this file's header date is part of "done" (§ Process) |
 | An ADR is accepted and implemented in the same turn (ADR-0189, ADR-0190) | Rule relaxed by the user on 2026-09-14 and written into `CLAUDE.md`: same-turn implementation is allowed when the change ships with unit tests covering the decision and the go-ahead is quoted in the ADR Status line **and** the PR body; otherwise accepting stays a request for work |
-| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 (a binary anyone can run) then C.5 (one artist, one hour, one log); no new F9.x slice until C.5 reports a number |
+| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 (a binary anyone can run) then C.5 (one hour, one log, two games). **Trade-off taken 2026-09-14:** the C.5 artist is a fresh Fable session, not a person — faster and repeatable, and still a proxy. What makes it more than the earlier proxies is the sandbox (no code, no ADRs, no context) and the stop rule; what it cannot measure is taste, fatigue, or whether a human would come back tomorrow. A human run stays a non-goal until the user reopens it |
 | Everything is tuned to one reference pack (Contra80s: 864 conditions, one author's habits) | Phase 11 C.6: a second hand-made pack measured with the same four numbers before any grouping or condition rule is tightened again |
 | Parallel sessions on one machine: a checkout falls behind `origin/main` and re-does merged work (this checkout was 22 commits behind with a stale duplicate of three merged PRs on 2026-09-14) | check `origin/main` before dispatching or editing; the memory note `feedback_check_main_before_dispatch` is the standing rule; a stale dirty tree is stashed, never committed |
 
