@@ -503,6 +503,12 @@
     <ClInclude Include="Shared\MessageManager.h">
       <Filter>Shared</Filter>
     </ClInclude>
+    <ClCompile Include="Shared\MovieSyncGate.cpp">
+      <Filter>Shared</Filter>
+    </ClCompile>
+    <ClInclude Include="Shared\MovieSyncGate.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
     <ClCompile Include="Shared\NotificationManager.cpp">
       <Filter>Shared</Filter>
     </ClCompile>

@@ -38,6 +38,25 @@
 //flags are outside that subset and survive. BizHawkMovie::ApplySettings is a
 //stub returning true, so a .bk2 clobbers nothing.
 //
+//ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): every "hdpack" run writes
+//<output_prefix>-synctrace.csv - one row per emulated second with the builder's
+//coverage counters, whether the movie was still playing and one byte per
+//declared watch - so a movie-less run mints the baseline the next movie-driven
+//run is judged against for free. On a movie-driven run the gate then reads:
+//  sync-watch=AAAA:<rule>[=<n>][:<label>]  a RAM invariant the movie's
+//      playthrough keeps (never-decreases|never-increases|never-below=<n>|
+//      never-equals=<n>), checked only while the movie drives the pad. Address
+//      below $0800 (ADR-0184). THE ONLY RULE THAT FAILS THE RUN: a life lost
+//      under movie control is the cheapest decisive evidence that the run
+//      stopped being the playthrough the movie describes. Repeatable.
+//  sync-baseline=<trace.csv>  the movie-less run's trace.
+//  sync-movie-frames=<n>  the frame the movie's own row count says its input
+//      runs dry on - rows + 2 for a .bk2.
+//  sync-sample=<frames>  sampling interval, default 60 (one emulated second).
+//A failed gate is a non-zero exit, exactly like an incomplete capture: the
+//recording is not short, it is a different playthrough. The rules live in
+//Core/Shared/MovieSyncGate.h, which is also where the reasoning is.
+//
 //F9.14 (ADR-0157): a run is a number of *emulated frames*, never a number of
 //host seconds. <seconds> keeps its name and its meaning for the caller, but is
 //converted to a frame count here, at the region's nominal frame rate, and the
@@ -102,6 +121,12 @@
 //HeadlessCaptureNesSpriteLayer, and the $2000 sprite-control bits come back in
 //a NesPpuState. NesTypes.h keeps the ABI the exact one the core was built with.
 #include "NES/NesTypes.h"
+//ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate's rules
+//live in Core/Shared/MovieSyncGate.{h,cpp} - host-free, no Emulator, no
+//filesystem - so this file only samples the trace and reports the verdict.
+//Read that header before changing anything below; it says which of the three
+//rules can be trusted to fail a run and which one only names a window.
+#include "Shared/MovieSyncGate.h"
 #include "Utilities/LiveRecordFormat.h"
 #include <algorithm>
 #include <cstdio>
@@ -123,6 +148,17 @@ struct TimingInfoAbi
 	uint32_t ScanlineCount;
 	int32_t FirstScanline;
 	uint32_t CycleCount;
+};
+
+//Same ABI as InteropHdPackCoverageReport in InteropDLL/EmuApiWrapper.cpp (see
+//the TimingInfoAbi note above about why these are mirrored locally). Four
+//uint32_t, IsChrRam as 0/1 rather than a bool.
+struct InteropHdPackCoverageReportAbi
+{
+	uint32_t TilesSeen;
+	uint32_t TilesWithArt;
+	uint32_t ScreensSeen;
+	uint32_t IsChrRam;
 };
 
 //Same ABI as Core/Shared/Interfaces/INotificationListener.h (see the
@@ -241,6 +277,14 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//file (see the "movie=" note at the top of this file).
 	void MoviePlay(char* filename);
 	bool MoviePlaying();
+	//InteropDLL/EmuApiWrapper.cpp - F5.4d's builder-window counters, polled
+	//here once per sync sample so a movie-driven run carries its own evidence
+	//instead of being judged only by the one number it ends on (ADR-0185 sec. 4
+	//as amended, issue #201).
+	void GetHdPackCoverageReport(InteropHdPackCoverageReportAbi& report);
+	//InteropDLL/EmuApiWrapperHeadless.cpp - the NES internal RAM, for the
+	//declared invariant of a "sync-watch=".
+	bool HeadlessReadNesRam(uint16_t start, uint32_t length, uint8_t* out);
 	//InteropDLL/EmuApiWrapper.cpp - the run's end in movie mode, see the
 	//pauseOnBudget comment in the recording wait below.
 	void Pause();
@@ -443,6 +487,8 @@ int main(int argc, char** argv)
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
 			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
 			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
+			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
+			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>]\n", argv[0]);
 		return 1;
 	}
@@ -476,6 +522,18 @@ int main(int argc, char** argv)
 	//the top of this file for the two containers the Core accepts and for what a
 	//.mmo does to the settings pushed below.
 	std::string moviePath;
+	//ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate. Any
+	//hdpack recording writes <prefix>-synctrace.csv - one row per sample of the
+	//builder's own counters, the movie player's state and every declared watch
+	//byte - so a movie-less run is a usable baseline for the next movie run at
+	//no extra cost. The rules are in Core/Shared/MovieSyncGate.h.
+	std::vector<MovieSyncWatch> syncWatches;
+	std::string syncBaselinePath;
+	MovieSyncParams syncParams;
+	//60 frames = one emulated second. The sample costs a lock and a walk of the
+	//builder's tile map; once a second is far below the noise of the recording
+	//itself and fine enough to place a divergence inside a second.
+	uint32_t syncSampleFrames = 60;
 	bool realtime = false;
 	//ADR-0169: live=<ms> publishing interval in wall-clock milliseconds (0=off);
 	//the publish lambda below and the scratch folder <prefix>-live/ it writes.
@@ -577,6 +635,33 @@ int main(int argc, char** argv)
 			fclose(f);
 		} else if(strncmp(argv[i], "movie=", 6) == 0) {
 			moviePath = argv[i] + 6;
+		} else if(strncmp(argv[i], "sync-watch=", 11) == 0) {
+			//ADR-0185 sec. 4 as amended (issue #201). Refused, not warned
+			//about, for the reason every other parser here refuses: a watch
+			//the harness silently dropped is a gate that reports "clean" on a
+			//run nobody checked, which is the exact failure this gate exists
+			//to end.
+			MovieSyncWatch watch;
+			std::string error;
+			if(!MovieSyncGate::ParseWatch(argv[i] + 11, watch, error)) {
+				fprintf(stderr, "refused sync-watch: %s\n", error.c_str());
+				return 1;
+			}
+			syncWatches.push_back(watch);
+		} else if(strncmp(argv[i], "sync-baseline=", 14) == 0) {
+			syncBaselinePath = argv[i] + 14;
+		} else if(strncmp(argv[i], "sync-movie-frames=", 18) == 0) {
+			//The frame the movie's own row count says its input runs dry on -
+			//rows + 2 for a .bk2 (ADR-0185's second measured pass). The caller
+			//computes it because only the caller has the movie file open.
+			syncParams.ExpectedMovieEndFrame = (uint32_t)atoi(argv[i] + 18);
+		} else if(strncmp(argv[i], "sync-sample=", 12) == 0) {
+			int sample = atoi(argv[i] + 12);
+			if(sample < 1) {
+				fprintf(stderr, "sync-sample= needs a positive number of frames: %s\n", argv[i]);
+				return 1;
+			}
+			syncSampleFrames = (uint32_t)sample;
 		} else if(strcmp(argv[i], "realtime") == 0) {
 			realtime = true;
 		} else if(strncmp(argv[i], "mep-disable=", 12) == 0) {
@@ -999,8 +1084,44 @@ int main(int argc, char** argv)
 	//a movie that ends early only prints where it ended.
 	uint32_t movieEndFrame = 0;
 	bool pauseOnBudget = false;
+
+	//ADR-0185 sec. 4 as amended (issue #201). Sampled from this thread, on the
+	//frame counter and not on wall clock, so two runs of the same length sample
+	//the same frames however fast the host is - the matched-frame comparison in
+	//MovieSyncGate depends on that and on nothing else.
+	std::vector<MovieSyncSample> syncTrace;
+	uint32_t syncNextFrame = 0;
+	auto sampleSync = [&]() {
+		if(!hdPack) {
+			return; //no builder, no counters to sample
+		}
+		uint32_t frame = HeadlessGetFrameCount();
+		if(frame < syncNextFrame) {
+			return;
+		}
+		syncNextFrame = frame + syncSampleFrames;
+		MovieSyncSample sample;
+		sample.Frame = frame;
+		sample.MoviePlaying = !moviePath.empty() && MoviePlaying();
+		InteropHdPackCoverageReportAbi coverage = {};
+		GetHdPackCoverageReport(coverage);
+		sample.TilesSeen = coverage.TilesSeen;
+		sample.TilesWithArt = coverage.TilesWithArt;
+		sample.ScreensSeen = coverage.ScreensSeen;
+		for(const MovieSyncWatch& watch : syncWatches) {
+			uint8_t value = 0;
+			//A non-NES console has no internal RAM to read; the byte stays 0
+			//and the watch then only ever sees a constant, which no rule reads
+			//as a violation.
+			HeadlessReadNesRam(watch.Address, 1, &value);
+			sample.WatchValues.push_back(value);
+		}
+		syncTrace.push_back(sample);
+	};
+
 	auto onTick = [&]() {
 		publishLive();
+		sampleSync();
 		if(moviePath.empty()) {
 			return;
 		}
@@ -1145,6 +1266,11 @@ int main(int argc, char** argv)
 		}
 	}
 
+	//One last sample on the frame the run actually parked on, so the trace's
+	//final row is the number the old total-only gate would have compared.
+	syncNextFrame = 0;
+	sampleSync();
+
 	if(hdPack) {
 		ExecuteShortcut({ EmulatorShortcut::StopRecordHdPack, 0, nullptr });
 	} else if(!screenshot && !capture) {
@@ -1152,6 +1278,66 @@ int main(int argc, char** argv)
 		VgmStop();
 	}
 	printf("capture finished: %u frames (target %u), %.1fs of wall clock%s\n", HeadlessGetFrameCount(), totalFrames, elapsed(), reachedTarget ? "" : " - INCOMPLETE");
+
+	//--- ADR-0185 sec. 4, amended 2026-09-14 (issue #201): the desync gate ---
+	//The trace is written for every hdpack run, movie or not: a movie-less run
+	//is the baseline the next movie-driven run of the same ROM and length is
+	//compared against, and it costs nothing to have already recorded it. The
+	//verdict is only computed for a movie-driven run - a run with no movie
+	//cannot desync from one.
+	bool syncGateFailed = false;
+	if(hdPack && !syncTrace.empty()) {
+		std::string tracePath = prefix + "-synctrace.csv";
+		FILE* trace = fopen(tracePath.c_str(), "w");
+		if(!trace) {
+			fprintf(stderr, "could not write the sync trace to %s\n", tracePath.c_str());
+			syncGateFailed = true;
+		} else {
+			std::string text = MovieSyncGate::FormatTraceHeader(syncWatches);
+			for(const MovieSyncSample& sample : syncTrace) {
+				text += MovieSyncGate::FormatTraceRow(sample);
+			}
+			fwrite(text.data(), 1, text.size(), trace);
+			fclose(trace);
+			printf("sync trace: %s (%zu samples, every %u frames)\n", tracePath.c_str(), syncTrace.size(), syncSampleFrames);
+		}
+	}
+	if(!moviePath.empty() && hdPack) {
+		std::vector<MovieSyncSample> baseline;
+		if(!syncBaselinePath.empty()) {
+			FILE* f = fopen(syncBaselinePath.c_str(), "r");
+			if(!f) {
+				fprintf(stderr, "sync gate: could not read the baseline trace %s\n", syncBaselinePath.c_str());
+				syncGateFailed = true;
+			} else {
+				std::string text;
+				char buffer[4096];
+				size_t read;
+				while((read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+					text.append(buffer, read);
+				}
+				fclose(f);
+				std::vector<std::string> labels;
+				std::string error;
+				if(!MovieSyncGate::ParseTrace(text, baseline, labels, error)) {
+					fprintf(stderr, "sync gate: %s is not a usable trace: %s\n", syncBaselinePath.c_str(), error.c_str());
+					syncGateFailed = true;
+					baseline.clear();
+				}
+			}
+		}
+		std::vector<MovieSyncFinding> findings = MovieSyncGate::Evaluate(syncTrace, baseline, syncWatches, syncParams);
+		for(const MovieSyncFinding& finding : findings) {
+			fprintf(finding.Fatal ? stderr : stdout, "sync gate [%s] %s: %s\n",
+				finding.Fatal ? "FAIL" : "note", finding.Code.c_str(), finding.Detail.c_str());
+		}
+		if(MovieSyncGate::IsFatal(findings)) {
+			syncGateFailed = true;
+		} else {
+			printf("sync gate: no fatal finding\n");
+		}
+		fflush(stdout);
+	}
 	if(!saveStateFile.empty()) {
 		//Only a run that reached its target parks on a frame worth keeping; a
 		//state from an INCOMPLETE run would silently move the stage.
@@ -1172,5 +1358,8 @@ int main(int argc, char** argv)
 	Release();
 	//A run that did not reach its frame target is a failed capture, not a
 	//short one - the caller (bootstrap_auto_packs.sh) must see it.
-	return reachedTarget && !captureFailed ? 0 : 1;
+	//A run the sync gate failed is a corrupt recording, not a short one: its
+	//art comes from a playthrough nobody intended (ADR-0185 sec. 4 as amended,
+	//issue #201), so it must never be archived as if it were the movie's.
+	return reachedTarget && !captureFailed && !syncGateFailed ? 0 : 1;
 }

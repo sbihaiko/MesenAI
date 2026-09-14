@@ -8,6 +8,7 @@
 #include "Core/NES/NesConsole.h"
 #include "Core/NES/BaseNesPpu.h"
 #include "Core/NES/BaseMapper.h"
+#include "Core/NES/NesMemoryManager.h"
 #include "Core/NES/NesTypes.h"
 #include "Utilities/StringUtilities.h"
 
@@ -197,6 +198,34 @@ extern "C"
 	{
 		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
 		return nes ? nes->IsHdPackVideoActive() : false;
+	}
+
+	//ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): read bytes of the NES
+	//internal RAM so a movie-driven run can check a declared game invariant
+	//while it runs - "the life counter never decreases while the movie is
+	//driving the pad" is the cheapest decisive evidence that the run stopped
+	//being the playthrough the movie describes. Core/Shared/MovieSyncGate.h
+	//explains why that is the signal worth having.
+	//GetInternalRam(), not NesMemoryManager::DebugRead: the latter overlays the
+	//CheatManager (NesMemoryManager.cpp), so under ADR-0184's "cheat=" a watch
+	//would read the cheated value instead of the byte the game keeps. It also
+	//avoids the read handlers entirely, so nothing observable changes.
+	//Confined to $0000-$07FF for ADR-0184's reason: above it is a mirror, a
+	//register or the cartridge, and a "counter" read there is not the game's.
+	//Lock() as in the sprite-layer read below: one consistent end-of-frame state.
+	DllExport bool __stdcall HeadlessReadNesRam(uint16_t start, uint32_t length, uint8_t* out)
+	{
+		if(!out || length == 0 || start >= 0x0800 || (uint32_t)start + length > 0x0800) {
+			return false;
+		}
+		_emu->Lock();
+		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
+		uint8_t* ram = nes && nes->GetMemoryManager() ? nes->GetMemoryManager()->GetInternalRam() : nullptr;
+		if(ram) {
+			memcpy(out, ram + start, length);
+		}
+		_emu->Unlock();
+		return ram != nullptr;
 	}
 
 	//ADR-0169: read a NES run's sprite layer straight off the console - OAM and
