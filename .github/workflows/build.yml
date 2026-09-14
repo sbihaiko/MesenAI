@@ -28,7 +28,22 @@ on:
   # TO RESTORE THE BINARY BUILDS: put the `push`/`pull_request` blocks back
   # under `on:` (and, if `checks.yml` is no longer wanted, delete that file).
   # No job below is aware of the gate — there is no `if:` to remove.
+  #
+  # `version` names what a run produces. It deliberately names the *files*
+  # inside the artifacts and the two tools artifacts — never the emulator
+  # artifact names themselves, for reason 1 above: nightly.link resolves the
+  # README's download links against the newest run of this workflow on `main`
+  # *by artifact name*, so a release dispatch that renamed `Mesen (macOS -
+  # macos-15 - clang_aot)` would 404 every link in the README until someone
+  # dispatched an unversioned run. The tools artifacts are new names, so they
+  # cost the links nothing.
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version that names the release files, e.g. v0.1.0 (leave as `dev` for a plain build)'
+        required: false
+        default: dev
+        type: string
 
 # Every job used to carry
 #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
@@ -54,6 +69,9 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  # `inputs.version` is only defined for a `workflow_dispatch`; the fallback
+  # keeps the expression valid if a trigger is ever restored (see the top).
+  MESENCE_VERSION: ${{ inputs.version || 'dev' }}
 
 jobs:
   windows:
@@ -160,6 +178,54 @@ jobs:
           name: Mesen (Linux - ${{ matrix.platform.os }} - ${{ matrix.compiler }})
           path: bin/linux-${{ matrix.platform.path }}/Release/linux-${{ matrix.platform.path }}/publish/Mesen
 
+      # Stage 1 of docs/remastering-a-game.md is `scripts/headless_record`, a
+      # compiled tool. A release that ships the Python half of the guide and
+      # not this one stops the reader at the first command, so build it here.
+      # One leg per architecture is enough — the tool is the same code under
+      # every compiler flavour, and `clang` is the plain one.
+      - name: Build headless_record (capture tool)
+        if: matrix.compiler == 'clang'
+        run: make capture-tool
+
+      # The Makefile links the tool for use *from a checkout*: it names the
+      # core library by the relative path it was linked against, which only
+      # resolves when the tool is run from the repository root. A downloaded
+      # zip has no repository root, so re-point the DT_NEEDED entry at a bare
+      # name and give the binary an $ORIGIN rpath — then the tool and the
+      # library travel together in one folder.
+      - name: Stage the native tools
+        if: matrix.compiler == 'clang'
+        run: |
+          set -euo pipefail
+          sudo apt-get install -qy patchelf
+          OUT="mesence-tools-native-${MESENCE_VERSION}-linux-${{ matrix.platform.path }}"
+          mkdir -p "$OUT/scripts"
+          cp scripts/headless_record "$OUT/scripts/headless_record"
+          cp "InteropDLL/obj.linux-${{ matrix.platform.path }}/MesenCore.so" "$OUT/scripts/MesenCore.so"
+          NEEDED=$(patchelf --print-needed "$OUT/scripts/headless_record" | grep 'MesenCore\.so$')
+          echo "linked against: $NEEDED"
+          if [ "$NEEDED" != "MesenCore.so" ]; then
+            patchelf --replace-needed "$NEEDED" MesenCore.so "$OUT/scripts/headless_record"
+          fi
+          patchelf --set-rpath '$ORIGIN' "$OUT/scripts/headless_record"
+          # A check, not a hope: if the relocation did not take, the tool would
+          # fail on a user's machine with a link error nobody can diagnose.
+          ldd "$OUT/scripts/headless_record"
+          if ldd "$OUT/scripts/headless_record" | grep -q 'not found'; then
+            echo "error: headless_record has unresolved libraries after relocation" >&2
+            exit 1
+          fi
+          cp docs/releases/native-tools-README.md "$OUT/README.md"
+          echo "$MESENCE_VERSION" > "$OUT/VERSION"
+          zip -q -r "$OUT.zip" "$OUT"
+
+      - name: Upload the native tools
+        if: matrix.compiler == 'clang'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MesenCE tools native (${{ env.MESENCE_VERSION }} - linux-${{ matrix.platform.path }})
+          path: mesence-tools-native-${{ env.MESENCE_VERSION }}-linux-${{ matrix.platform.path }}.zip
+
   appimage:
     strategy:
       matrix:
@@ -258,6 +324,91 @@ jobs:
         run: |
           ${{ matrix.make_flags }} make -j$(sysctl -n hw.logicalcpu)
 
+      # The known trap: `dotnet publish -t:BundleApp` copies MesenCore.dylib
+      # into the bundle as part of the C# build, and skips that copy when the
+      # C# build is already up to date. Locally that ships a .app carrying an
+      # old core (scripts/build_app_macos.sh exists to work around it). CI is
+      # believed to be immune because it builds from a clean tree — but
+      # "believed" is not a property a release can rest on, so: copy the freshly
+      # built dylib in, then compare hashes and fail the job if they differ.
+      #
+      # This runs *before* the signing step on purpose: overwriting a file
+      # inside a signed bundle invalidates the signature.
+      - name: Put the freshly built MesenCore.dylib in the .app (and check it)
+        run: |
+          set -euo pipefail
+          APP="bin/osx-${{ matrix.platform.arch }}/Release/osx-${{ matrix.platform.arch }}/publish/Mesen.app"
+          BUILT="InteropDLL/obj.osx-${{ matrix.platform.arch }}/MesenCore.dylib"
+          INSIDE="$APP/Contents/MacOS/MesenCore.dylib"
+
+          test -f "$BUILT"  || { echo "error: no freshly built dylib at $BUILT" >&2; exit 1; }
+          # If this is missing, BundleApp's layout changed and a plain `cp`
+          # would drop a stray file while the real one stayed stale.
+          test -f "$INSIDE" || { echo "error: no dylib at $INSIDE — bundle layout changed" >&2; exit 1; }
+
+          BEFORE=$(shasum -a 256 "$INSIDE" | cut -d' ' -f1)
+          BUILT_SUM=$(shasum -a 256 "$BUILT" | cut -d' ' -f1)
+          if [ "$BEFORE" = "$BUILT_SUM" ]; then
+            echo "bundle already carried the freshly built dylib ($BUILT_SUM)"
+          else
+            echo "::warning::the bundled dylib was stale ($BEFORE) — injecting the built one ($BUILT_SUM)"
+          fi
+
+          cp -f "$BUILT" "$INSIDE"
+
+          cmp "$BUILT" "$INSIDE"
+          AFTER=$(shasum -a 256 "$INSIDE" | cut -d' ' -f1)
+          if [ "$AFTER" != "$BUILT_SUM" ]; then
+            echo "error: the dylib inside the .app ($AFTER) is not the built one ($BUILT_SUM)" >&2
+            exit 1
+          fi
+          echo "ok: $INSIDE == $BUILT ($BUILT_SUM)"
+
+      # Same reason as the Linux job: stage 1 of docs/remastering-a-game.md is
+      # a compiled tool, and a release without it stops the reader at the first
+      # command. One leg per architecture; `clang` is the plain one.
+      - name: Build headless_record (capture tool)
+        if: matrix.compiler == 'clang'
+        run: make capture-tool
+
+      # The Makefile points the tool at an absolute $(CURDIR) path inside the
+      # runner's workspace, which exists on no other machine. Re-point it at
+      # @executable_path and ship the library beside the binary.
+      - name: Stage the native tools
+        if: matrix.compiler == 'clang'
+        run: |
+          set -euo pipefail
+          ARCH="${{ matrix.platform.arch }}"
+          OUT="mesence-tools-native-${MESENCE_VERSION}-macos-${ARCH}"
+          mkdir -p "$OUT/scripts"
+          cp scripts/headless_record "$OUT/scripts/headless_record"
+          cp "InteropDLL/obj.osx-${ARCH}/MesenCore.dylib" "$OUT/scripts/MesenCore.dylib"
+
+          CURRENT=$(otool -L "$OUT/scripts/headless_record" | awk '/MesenCore\.dylib/{print $1}')
+          echo "linked against: $CURRENT"
+          install_name_tool -change "$CURRENT" "@executable_path/MesenCore.dylib" "$OUT/scripts/headless_record"
+          codesign -f -s - "$OUT/scripts/headless_record"
+          codesign -f -s - "$OUT/scripts/MesenCore.dylib"
+
+          # A check, not a hope: any absolute path left pointing into the
+          # runner's workspace would be a tool that only runs on the runner.
+          otool -L "$OUT/scripts/headless_record"
+          if otool -L "$OUT/scripts/headless_record" | grep -q "$PWD"; then
+            echo "error: headless_record still references the build workspace" >&2
+            exit 1
+          fi
+
+          cp docs/releases/native-tools-README.md "$OUT/README.md"
+          echo "$MESENCE_VERSION" > "$OUT/VERSION"
+          ditto -c -k --sequesterRsrc --keepParent "$OUT" "$OUT.zip"
+
+      - name: Upload the native tools
+        if: matrix.compiler == 'clang'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MesenCE tools native (${{ env.MESENCE_VERSION }} - macos-${{ matrix.platform.arch }})
+          path: mesence-tools-native-${{ env.MESENCE_VERSION }}-macos-${{ matrix.platform.arch }}.zip
+
       - name: Sign binary
         if: github.event_name != 'pull_request'
         env:
@@ -295,3 +446,74 @@ jobs:
         with:
           name: Mesen (macOS - ${{ matrix.platform.os }} - ${{ matrix.compiler }})
           path: bin/osx-${{ matrix.platform.arch }}/Release/Mesen.app.zip
+
+
+  # ---------------------------------------------------------------------------
+  # The tools a release ships beside the emulator.
+  #
+  # `docs/remastering-a-game.md` is the guide a pack author follows, and every
+  # stage of it runs a tool from `scripts/`. Someone who downloads a binary
+  # instead of cloning the repository has none of them, so a release carries a
+  # `mesence-tools-<version>.zip`: the Python tools the guide names, their
+  # transitive local imports, the shipped `scripts/stages/` routes, the three
+  # guides themselves, and a `requirements.txt`.
+  #
+  # The file list is explicit rather than `scripts/*.py` on purpose: `scripts/`
+  # also holds 36 test files, the community-pack CI helpers and maintainer-only
+  # scripts that need the `gh` CLI, none of which belong in a player's download.
+  # It lives in `scripts/tools-zip-manifest.txt` and was computed as the
+  # transitive import closure of the tools `remastering-a-game.md` and
+  # `hd-pack-authoring.md` name; `scripts/check_tools_zip_closure.py` recomputes
+  # the closure and fails this job when the manifest disagrees, so a new import
+  # cannot silently ship a zip that dies on `ModuleNotFoundError`.
+  #
+  # Pillow and numpy are the only non-stdlib imports in that closure; the pins
+  # match the ones the Linux and macOS jobs above install.
+  tools:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Verify the manifest still matches the import closure
+        run: python3 scripts/check_tools_zip_closure.py
+
+      - name: Assemble the tools tree
+        run: |
+          set -euo pipefail
+          ROOT="mesence-tools-${MESENCE_VERSION}"
+          mkdir -p "$ROOT/scripts" "$ROOT/docs"
+
+          while read -r f; do
+            case "$f" in ''|'#'*) continue ;; esac
+            cp "scripts/$f" "$ROOT/scripts/$f"
+          done < scripts/tools-zip-manifest.txt
+
+          cp -R scripts/stages "$ROOT/scripts/stages"
+          cp scripts/record_stages.sh "$ROOT/scripts/record_stages.sh"
+          chmod +x "$ROOT/scripts/record_stages.sh"
+
+          cp docs/remastering-a-game.md docs/hd-pack-authoring.md \
+             docs/enhancement-ecosystem.md "$ROOT/docs/"
+
+          printf 'Pillow==12.3.0\nnumpy==2.2.6\n' > "$ROOT/requirements.txt"
+          cp docs/releases/tools-zip-README.md "$ROOT/README.md"
+          echo "$MESENCE_VERSION" > "$ROOT/VERSION"
+
+      - name: Byte-compile every tool in the zip
+        # A tool that does not compile is a tool nobody can run; the cheapest
+        # gate that catches a truncated or mis-copied file.
+        run: python3 -m compileall -q "mesence-tools-${MESENCE_VERSION}/scripts"
+
+      - name: Zip the tools
+        run: |
+          set -euo pipefail
+          find "mesence-tools-${MESENCE_VERSION}" -name __pycache__ -type d -exec rm -rf {} +
+          zip -q -r "mesence-tools-${MESENCE_VERSION}.zip" "mesence-tools-${MESENCE_VERSION}"
+          unzip -l "mesence-tools-${MESENCE_VERSION}.zip"
+
+      - name: Upload the tools
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MesenCE tools (${{ env.MESENCE_VERSION }})
+          path: mesence-tools-${{ env.MESENCE_VERSION }}.zip

@@ -284,6 +284,11 @@ doc-checks: check-manifest
 	#every --flag they print is one the script it is printed for accepts. A guide
 	#whose commands rotted is the discoverability failure it was written to fix.
 	python3 scripts/checks/verify_artist_docs.py
+	#Phase 11 C.4: the release tools zip is built from an explicit file list
+	#(scripts/tools-zip-manifest.txt). build.yml runs this too, but build.yml is
+	#dispatch-only, so the manifest would rot between releases and the rot would
+	#only show up as a ModuleNotFoundError on a pack author's machine.
+	python3 scripts/check_tools_zip_closure.py
 	./scripts/checks/verify_mep_fallback_adr_provenance.sh
 	./scripts/checks/verify_mep_fallback_adr.sh
 	./scripts/checks/verify_mep_fallback_authoring_doc.sh
