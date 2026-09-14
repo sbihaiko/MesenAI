@@ -1,5 +1,6 @@
 #include "NES/HdPacks/SheetGrouping.h"
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <limits>
 #include <set>
@@ -339,5 +340,26 @@ namespace MesenSheets
 			kept.push_back(i);
 		}
 		return kept;
+	}
+
+	uint32_t NextNameIndex(const std::vector<std::string>& names, const std::string& prefix)
+	{
+		uint32_t next = 0;
+		for(const std::string& name : names) {
+			if(name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) {
+				continue;
+			}
+			std::string suffix = name.substr(prefix.size());
+			if(suffix.find_first_not_of("0123456789") != std::string::npos) {
+				continue;
+			}
+			//Clamped one below the top of uint32_t so that "highest + 1" below
+			//cannot wrap to 0 and hand back a name that is already defined. Only
+			//a hand-edited name can reach the clamp; this builder's own count is
+			//the number of edges in one recording.
+			uint32_t index = (uint32_t)std::min<uint64_t>(std::strtoull(suffix.c_str(), nullptr, 10), 0xFFFFFFFEull);
+			next = std::max(next, index + 1);
+		}
+		return next;
 	}
 }
