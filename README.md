@@ -10,9 +10,30 @@
 [![Community packs](https://img.shields.io/badge/community%20packs-catalog-2ea043.svg)](docs/community-packs.md)
 [![Submit a pack](https://img.shields.io/badge/submit-a%20pack-orange.svg)](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml)
 
-**[⬇ Download](#download)** · [Hear it](#hear-it) · [See it](#see-it) · [Features](#what-you-get) · [Quick start](#quick-start) · [Packs](#enhancement-packs-mep) · [Community packs](#community-packs) · [Why this fork](#why-this-fork) · [FAQ](#faq)<br/>
+**[⬇ Download](https://github.com/sbihaiko/MesenCE/releases/latest)** · [Remaster a game](docs/remastering-a-game.md) · [Hear it](#hear-it) · [See it](#see-it) · [Features](#what-you-get) · [Quick start](#quick-start) · [Packs](#enhancement-packs-mep) · [Community packs](#community-packs) · [Why this fork](#why-this-fork) · [FAQ](#faq)<br/>
 
 </div><br/>
+
+**What is MesenCE?** An accuracy-first emulator for NES, Game Boy/GBC, Master
+System/Game Gear and GBA — Mesen's core, unchanged — that also **enhances every
+game it runs**: modern instruments re-voicing the sound chip in real time, HD
+texture packs on three console families, and a starter pack it builds for you
+while you play.
+It is also a **platform for making those packs**: record a game you own, get its
+art back as PNGs laid out to paint, and build a pack from them — the project
+ships the tools and the open specs, never anyone's game files.
+
+### Download / Get started
+
+1. **[Download a build](https://github.com/sbihaiko/MesenCE/releases/latest)** — the first release is **macOS Apple Silicon** only; every other platform builds from source, or uses the on-demand CI builds in [Download](#download) below. No installer: unzip and run. macOS needs SDL2 (`brew install sdl2`) and the app is ad-hoc signed, so allow it the first time.
+2. **Open a ROM.** Enhanced Audio is already on; a starter enhancement pack is written beside the ROM while you play. That is the whole [quick start](#quick-start).
+3. **Want to redraw a game?** **[docs/remastering-a-game.md](docs/remastering-a-game.md)** takes you from a recording to a pack you can paint — and the release ships every tool it uses, so you do not need a checkout.
+
+Looking for packs other people made? The validated catalog is
+**[docs/community-packs.md](docs/community-packs.md)**.
+
+Want something newer than the last tag? [Download](#download) below explains the
+on-demand build channel.
 
 ## Your NES, Game Boy, Master System and GBA games — faithful, then enhanced
 
@@ -29,7 +50,14 @@ Underneath it all is [MesenCE](https://github.com/nesdev-org/MesenCE) / [Mesen2]
 
 ## Download
 
-The newest build of `main` that passed CI — no installer, unzip and run.
+**Tagged releases are on the [Releases page](https://github.com/sbihaiko/MesenCE/releases/latest)** —
+the emulator plus `mesence-tools-<version>.zip`, the command-line tools
+[the remastering guide](docs/remastering-a-game.md) uses. `v0.1.0` is macOS
+Apple Silicon only, cut locally from a tagged commit; other platforms follow.
+
+The table below is the other channel, and today the only one for Windows and
+Linux: the newest build of `main` that passed CI — no installer, unzip and
+run.
 
 > **The binaries are currently built on demand, not on every push.** The 14-job matrix is dispatch-only (see [Built to stay correct](#built-to-stay-correct)) so a merge does not queue an hour of runner time. The links below resolve against the newest *build* run on `main`, which is now always a real build, so they keep serving the last one that was triggered. To produce a fresh one:
 >

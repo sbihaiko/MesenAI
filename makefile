@@ -284,6 +284,11 @@ doc-checks: check-manifest
 	#every --flag they print is one the script it is printed for accepts. A guide
 	#whose commands rotted is the discoverability failure it was written to fix.
 	python3 scripts/checks/verify_artist_docs.py
+	#Phase 11 C.4: the release tools zip is built from an explicit file list
+	#(scripts/tools-zip-manifest.txt). `make release-macos` runs this too, but a
+	#release is cut rarely, so the manifest would rot between releases and the
+	#rot would only show up as a ModuleNotFoundError on a pack author's machine.
+	python3 scripts/check_tools_zip_closure.py
 	./scripts/checks/verify_mep_fallback_adr_provenance.sh
 	./scripts/checks/verify_mep_fallback_adr.sh
 	./scripts/checks/verify_mep_fallback_authoring_doc.sh
@@ -507,6 +512,16 @@ pgo:
 
 run:
 	$(OUTFOLDER)/$(MESENPLATFORM)/publish/Mesen
+
+#Phase 11 C.4: cut the macOS Apple Silicon release from this working tree into
+#out/release/ - the .app with the freshly built core injected and ad-hoc signed
+#(BundleApp does not refresh it on its own), headless_record relocated to run
+#from a download, the Python tools the remastering guide uses, and SHA256SUMS.
+#The whole thing is one command on purpose: a release nobody can rebuild is a
+#release nobody can check. Override the version with VERSION=vX.Y.Z.
+VERSION ?= v0.1.0
+release-macos:
+	VERSION=$(VERSION) MAKE_BIN=$(MAKE) scripts/release_macos.sh
 
 clean:
 	rm -r -f $(ALLOBJ:.o=.d)

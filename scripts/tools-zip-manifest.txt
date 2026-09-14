@@ -1,0 +1,38 @@
+# The Python tools that ship in mesence-tools-<version>.zip (scripts/release_macos.sh).
+#
+# One module per line, no path, comments and blank lines ignored. This is the
+# transitive import closure of the tools named by docs/remastering-a-game.md and
+# docs/hd-pack-authoring.md, plus the ones those tools shell out to. It is a
+# hand-kept list rather than `scripts/*.py` because scripts/ also holds the test
+# suites, the community-pack CI helpers and maintainer scripts that need `gh`,
+# and none of those belong in a pack author's download.
+#
+# scripts/check_tools_zip_closure.py recomputes the closure from the entry
+# points below and fails when this file and the closure disagree — so a tool
+# that grows a new import cannot ship a zip that dies on ModuleNotFoundError.
+#
+# Entry points (the tools a reader of the guides actually types):
+#   artist_ai_review artist_bg_kit artist_chr_kit artist_cover artist_kit
+#   artist_kit_assemble artist_map audio_cleanup_suggest cdl_tool fm2_to_bk2
+#   mep_build mep_compare mep_lint mep_render_audio sheet_repaint
+
+artist_ai_review.py
+artist_bg_kit.py
+artist_chr_kit.py
+artist_cover.py
+artist_kit.py
+artist_kit_assemble.py
+artist_map.py
+audio_cleanup_suggest.py
+cdl_tool.py
+compose_engine.py
+fm2_to_bk2.py
+mep_build.py
+mep_compare.py
+mep_content_id.py
+mep_errata.py
+mep_lint.py
+mep_recipe_common.py
+mep_render_audio.py
+pack_id_rules.py
+sheet_repaint.py
