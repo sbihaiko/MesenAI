@@ -18,7 +18,15 @@ env:
 
 jobs:
   windows:
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    # No `head.repo.full_name != github.repository` guard here. It was the
+    # guard `build.yml` carried until #178 and removed for the reason recorded
+    # there: `push` above is restricted to `main`, and a pull request's head
+    # branch is never `main`, so the two triggers cannot overlap and the guard
+    # only had the effect of skipping every internal pull request. A PR in this
+    # fork is always internal (its branch lives in this repository), so the
+    # guard made this whole workflow dead on `pull_request` — the accuracy
+    # suite never gated a PR, and never gated the `sync/upstream/<date>`
+    # branches before they reached `main`. Removed 2026-09-14.
     strategy:
       matrix:
         platform: [
