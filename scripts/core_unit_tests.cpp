@@ -3946,6 +3946,101 @@ namespace
 		return out;
 	}
 
+
+	//---- F9.28: spriteNearby conditions from a group's own edges ------------
+	//The shape of the evidence, not of the art: a group is a spanning tree of
+	//observed constant offsets, and Policy D emits one condition per non-root
+	//cell. Measured alternatives (whole pair table: 35 256 conditions on Contra;
+	//re-thresholded pair table: ~2 000) are why this is a tree.
+	SheetGroup ChainGroup()
+	{
+		//Three cells of one figure: 7 is the most-seen (the root), 8 sits one
+		//cell south of it, 9 one cell east of 8. No edge ever joins 7 to 9.
+		SheetGroup group;
+		SheetCell a; a.Index = 0; a.Metatile = 7; a.Count = 900; group.Cells.push_back(a);
+		SheetCell b; b.Index = 1; b.Metatile = 8; b.Count = 400; group.Cells.push_back(b);
+		SheetCell c; c.Index = 2; c.Metatile = 9; c.Count = 100; group.Cells.push_back(c);
+
+		GroupEdge ab; ab.A = 7; ab.B = 8; ab.Dir = 'S'; ab.Dx = 0; ab.Dy = 1;
+		ab.Count = 300; ab.ProbAB = 1.0; ab.ProbBA = 1.0; group.Edges.push_back(ab);
+		//Reversed on purpose: the child is this edge's A, so the parent sits at
+		//+Dx/+Dy from it and the plan must NOT negate.
+		GroupEdge cb; cb.A = 9; cb.B = 8; cb.Dir = 'W'; cb.Dx = -1; cb.Dy = 0;
+		cb.Count = 90; cb.ProbAB = 0.95; cb.ProbBA = 0.9; group.Edges.push_back(cb);
+		return group;
+	}
+
+	void TestSpriteNearbyPlanIsASpanningTreeFromTheMostSeenCell()
+	{
+		std::vector<SpriteNearbyPlan> plans = PlanSpriteNearby(ChainGroup());
+		Check(plans.size() == 2, "BlocoP: F9.28 - a 3-cell group yields cells-1 conditions",
+			"plans=" + std::to_string(plans.size()));
+		if(plans.size() != 2) {
+			return;
+		}
+		//Root is 7 (Count 900), so nothing is attached to it.
+		bool rootGated = false;
+		for(const SpriteNearbyPlan& plan : plans) {
+			rootGated = rootGated || plan.Node == 7;
+		}
+		Check(!rootGated, "BlocoP: F9.28 - the most-seen cell is the anchor, never a gated cell");
+
+		Check(plans[0].Node == 8 && plans[0].Target == 7 && plans[0].Dx == 0 && plans[0].Dy == -1,
+			"BlocoP: F9.28 - B sits south of A, so from B the anchor is one cell north",
+			"node=" + std::to_string(plans[0].Node) + " d=" + std::to_string(plans[0].Dx) + "," + std::to_string(plans[0].Dy));
+		//9 hangs off 8, not off the root: the offset is the edge's own, never the
+		//composed 7->9 offset nobody ever observed.
+		Check(plans[1].Node == 9 && plans[1].Target == 8 && plans[1].Dx == -1 && plans[1].Dy == 0,
+			"BlocoP: F9.28 - an offset is never composed transitively",
+			"node=" + std::to_string(plans[1].Node) + " target=" + std::to_string(plans[1].Target) +
+			" d=" + std::to_string(plans[1].Dx) + "," + std::to_string(plans[1].Dy));
+		Check(plans[1].Count == 90 && plans[1].ProbAB > 0.94 && plans[1].ProbBA > 0.89,
+			"BlocoP: F9.28 - each plan carries the evidence of the edge that justified it",
+			"count=" + std::to_string(plans[1].Count));
+	}
+
+	void TestSpriteNearbyPlanNeedsTwoPlacedCellsAndAnEdge()
+	{
+		SheetGroup lone;
+		SheetCell only; only.Metatile = 3; only.Count = 10; lone.Cells.push_back(only);
+		Check(PlanSpriteNearby(lone).empty(), "BlocoP: F9.28 - a single cell gates nothing");
+
+		SheetGroup edgeless = ChainGroup();
+		edgeless.Edges.clear();
+		Check(PlanSpriteNearby(edgeless).empty(), "BlocoP: F9.28 - no edge, no condition");
+
+		//An edge naming a cell the group never placed cannot be emitted: there is
+		//no <tile> line on the other end of it.
+		SheetGroup stray = ChainGroup();
+		stray.Edges[1].A = 44;
+		std::vector<SpriteNearbyPlan> plans = PlanSpriteNearby(stray);
+		Check(plans.size() == 1, "BlocoP: F9.28 - an edge to an unplaced cell is dropped",
+			"plans=" + std::to_string(plans.size()));
+	}
+
+	//A real group, straight out of BuildSprites, has to produce exactly
+	//cells-1 plans and never name a node twice - that is what bounds the
+	//emission at kSheetMaxObjectCells x groups instead of at vocabulary size.
+	void TestSpriteNearbyPlanCoversEveryNonRootCellOnce()
+	{
+		std::vector<OamFrame> frames = RepeatedGlyphFrames(12);
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		std::vector<SheetGroup> groups = BuildSprites(frames, vocab);
+		Check(!groups.empty(), "BlocoP: F9.28 - the fixture still forms a group");
+		if(groups.empty()) {
+			return;
+		}
+		std::vector<SpriteNearbyPlan> plans = PlanSpriteNearby(groups[0]);
+		Check(plans.size() == groups[0].Cells.size() - 1,
+			"BlocoP: F9.28 - Policy D emits exactly one condition per non-root cell",
+			"plans=" + std::to_string(plans.size()) + " cells=" + std::to_string(groups[0].Cells.size()));
+		std::map<uint32_t, bool> gated;
+		for(const SpriteNearbyPlan& plan : plans) {
+			Check(gated.insert(std::make_pair(plan.Node, true)).second, "BlocoP: F9.28 - no cell is gated twice");
+			Check(plan.Node != plan.Target, "BlocoP: F9.28 - a cell is never its own anchor");
+		}
+	}
+
 	void TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame()
 	{
 		std::vector<OamFrame> frames = RepeatedGlyphFrames(12);
@@ -6924,6 +7019,9 @@ int main()
 	TestSheetJsonCarriesTheGridDecision();
 	TestSpriteOffsetGroupingRejectsADrifter();
 	TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame();
+	TestSpriteNearbyPlanIsASpanningTreeFromTheMostSeenCell();
+	TestSpriteNearbyPlanNeedsTwoPlacedCellsAndAnEdge();
+	TestSpriteNearbyPlanCoversEveryNonRootCellOnce();
 	TestSpriteOffsetTallyRisesOncePerFrame();
 	TestSpriteGroupIsLaidOutAtItsOamOffsets();
 	TestSpriteVocabularySheetListsEveryShape();

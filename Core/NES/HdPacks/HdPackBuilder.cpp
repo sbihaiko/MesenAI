@@ -1318,8 +1318,103 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 		//pose in the pack and say nothing.
 		doc.Poses = MesenSheets::PosesForCells(_poseStats, doc.Cells);
 		WriteSheetFiles(folder, buf, image, doc, lookup);
+		//F9.28: the same group, read as conditions. Inside this loop so a
+		//condition's name carries the sprNNN stem of the sheet that shows the
+		//figure it belongs to - the artist opens sprNNN.png and finds the
+		//conditions named after it in hires.txt.
+		AttachSpriteNearbyConditions(group, vocab, buf);
 	}
 	return vocab;
+}
+
+HdTileKey HdPackBuilder::ShapeLookupKey(MesenSheets::ShapeId shape) const
+{
+	HdTileKey key = {};
+	key.IsChrRamTile = _isChrRam;
+	//ADR-0178: SourceTileData is the shape as the PPU fetched it. ProcessTile
+	//is handed exactly that (HdBuilderPpu applies the OAM flips only on the
+	//RecordSprite path), and so is the run time, so this - not TileData - is
+	//the key _paletteVariantsByShape and hires.txt are built on.
+	memcpy(key.TileData, _shapeTiles[shape].SourceTileData, 16);
+	key.TileIndex = _isChrRam ? -1 : _shapeTiles[shape].TileIndex;
+	//GetKey(true)'s sentinel: the vocabulary is palette-wildcarded, so the
+	//lookup has to be too. Ignored by operator== on a CHR ROM game, where
+	//identity is the tile index.
+	key.PaletteColors = 0xFFFFFFFF;
+	return key;
+}
+
+//F9.28 - see HdPackBuilder.h. ADR-0183 §3: everything written here is an
+//observation, never a reading. The condition says "this shape was seen at this
+//offset from that shape", which is what SelectSpriteEdges measured; it does not
+//say what either shape means. Nothing derived from memory is emitted - the
+//recorder retains no RAM stream at all, so a memoryCheck would have to be
+//invented rather than observed.
+void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& group, const MesenSheets::Vocabulary& vocab, const string& baseName)
+{
+	vector<MesenSheets::SpriteNearbyPlan> plans = MesenSheets::PlanSpriteNearby(group);
+	if(plans.empty()) {
+		return;
+	}
+	uint32_t unit = vocab.Grid.Unit ? vocab.Grid.Unit : 8;
+
+	uint32_t index = 0;
+	for(const MesenSheets::SpriteNearbyPlan& plan : plans) {
+		if(plan.Node >= vocab.Entries.size() || plan.Target >= vocab.Entries.size()) {
+			continue;
+		}
+		//A sprite vocabulary entry is one shape at grid unit 8 (BuildSpriteVocabulary).
+		MesenSheets::ShapeId nodeShape = vocab.Entries[plan.Node].Key.Tiles[0];
+		MesenSheets::ShapeId targetShape = vocab.Entries[plan.Target].Key.Tiles[0];
+		if(nodeShape >= _shapeTiles.size() || targetShape >= _shapeTiles.size()) {
+			continue;
+		}
+
+		auto variants = _paletteVariantsByShape.find(ShapeLookupKey(nodeShape));
+		if(variants == _paletteVariantsByShape.end() || variants->second.empty()) {
+			//The shape reached OAM but never reached a <tile> line (the palette
+			//variant cap, or a tile AddTile could not place). Nothing to gate.
+			continue;
+		}
+
+		const MesenSheets::SheetTileKey& target = _shapeTiles[targetShape];
+		string tileData;
+		int32_t tileIndex = -1;
+		if(_isChrRam) {
+			for(int i = 0; i < 16; i++) {
+				tileData += HexUtilities::ToHex(target.SourceTileData[i]);
+			}
+		} else {
+			tileIndex = target.TileIndex;
+			if(tileIndex < 0) {
+				continue;
+			}
+		}
+
+		HdPackSpriteNearbyCondition* cond = new HdPackSpriteNearbyCondition();
+		cond->Name = baseName + "_n" + std::to_string(index++);
+		//ignorePalette: the evidence is palette-wildcarded (a shape id is
+		//GetKey(true)), so the condition has to be as well, or a figure would
+		//stop matching itself the moment the game recoloured it. Requires HD
+		//Pack version 108+; the builder writes CurrentVersion.
+		cond->Initialize((int32_t)(plan.Dx * (int32_t)unit), (int32_t)(plan.Dy * (int32_t)unit),
+			target.PaletteColors, tileIndex, tileData, true);
+		_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
+		_spriteNearbyConditions++;
+
+		for(HdPackTileInfo* tile : variants->second) {
+			if(!tile || tile->DefaultTile) {
+				//A neutral-ramp placeholder is not art anyone painted; gating it
+				//would only duplicate a line nobody wants twice.
+				continue;
+			}
+			vector<HdPackCondition*>& gates = _tileGateConditions[tile];
+			if(gates.empty()) {
+				_spriteNearbyTiles++;
+			}
+			gates.push_back(cond);
+		}
+	}
 }
 
 //F9.17 (ADR-0164): the adjacency statistics the sheet inference measured,
@@ -1651,6 +1746,24 @@ void HdPackBuilder::SaveHdPack()
 		}
 	};
 
+	//Issue #164: the captured screens' tileAtPosition conditions, chosen now
+	//that the whole grid stream is known.
+	FinalizeScreenAnchors();
+
+	//F9.1-F9.3 (ADR-0153): metatile vocabulary, stitched maps and objects, all
+	//written under textures/sheets/ - the artist surface this pack is edited
+	//from. F9.28 moved this ahead of the tile loop below, which used to follow
+	//it: WriteSpriteSheets now also attaches spriteNearby conditions to tiles
+	//(_tileGateConditions), and the loop is what serializes those tiles. None of
+	//this reads anything the loop produces - the sheets are built from the
+	//retained grid/OAM streams and _hdData.Tiles, not from the CHR page layout -
+	//so the only visible effect of the move is that BuildObjectSheets' "# inferred"
+	//comments now head the tile section instead of trailing it.
+	BuildSheets();
+
+	//F5.4e: "# inferred" tileNearby candidates from the co-occurrence graph.
+	BuildObjectSheets(tileRows);
+
 	for(std::pair<const uint32_t, std::map<uint32_t, vector<HdPackTileInfo*>>>& kvp : _tilesByChrBankByPalette) {
 		if(_options.SortByUsageFrequency) {
 			for(int i = 0; i < 256; i++) {
@@ -1694,6 +1807,22 @@ void HdPackBuilder::SaveHdPack()
 				if(tileInfo) {
 					DrawTile(tileInfo, i, pngBuffer, pageNumber, spritesOnly);
 
+					//F9.28 dual emission. The conditioned copies go FIRST and the
+					//bare line LAST, because HdNesPack::GetMatchingTile returns the
+					//first entry in TileByKey order whose conditions pass. Both name
+					//the same PNG cell, so until an artist repaints one of them they
+					//draw identically - which is the point: a condition that is
+					//wrong, or that the run time cannot see (OAM evidence includes
+					//sprites the 8-per-scanline limit hid), falls through to the
+					//bare twin and the pack renders exactly as it did before this
+					//slice. Collapsing these into one gated line is the failure mode
+					//this ordering exists to prevent, not redundancy to remove.
+					auto gates = _tileGateConditions.find(tileInfo);
+					if(gates != _tileGateConditions.end()) {
+						for(HdPackCondition* cond : gates->second) {
+							pngRows << "[" << cond->Name << "]" << tileInfo->ToString(pngIndex) << std::endl;
+						}
+					}
 					pngRows << tileInfo->ToString(pngIndex) << std::endl;
 
 					pageEmpty = false;
@@ -1713,20 +1842,12 @@ void HdPackBuilder::SaveHdPack()
 	}
 	savePng(-1);
 
-	//Issue #164: the captured screens' tileAtPosition conditions, chosen now
-	//that the whole grid stream is known. Runs before BuildSheets so the
-	//<background> lines are serialized in screen order, exactly where the
-	//capture-time pick used to put them.
-	FinalizeScreenAnchors();
-
-	//F9.1-F9.3 (ADR-0153): metatile vocabulary, stitched maps and objects, all
-	//written under textures/sheets/ - the artist surface this pack is edited from.
-	BuildSheets();
-
-	//F5.4e: cluster the co-occurrence graph into per-object editable sheets and
-	//emit "# inferred" tileNearby candidates. Runs before the conditions loop so
-	//the inferred condition definitions serialize ahead of every <tile> line.
-	BuildObjectSheets(tileRows);
+	if(_spriteNearbyConditions > 0) {
+		MessageManager::Log("[HD Pack Builder] " + std::to_string(_spriteNearbyConditions) +
+			" spriteNearby condition(s) on " + std::to_string(_spriteNearbyTiles) +
+			" tile(s); each gates an extra copy of its tile line, never the only one." +
+			" Those tiles load with the tile cache disabled (spriteNearby forces it).");
+	}
 
 	for(unique_ptr<HdPackCondition>& condition : _hdData.Conditions) {
 		if(!condition->IsExcludedFromFile()) {

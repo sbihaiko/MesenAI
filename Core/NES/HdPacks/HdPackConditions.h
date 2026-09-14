@@ -46,6 +46,14 @@ struct HdPackBaseTileCondition : public HdPackCondition
 			out << ","; //tileData and palette are separate fields (the loader splits on ',')
 		}
 		out << HexUtilities::ToHex(PaletteColors, true);
+		//The optional 7th field (HD Pack version 108+). Without it a condition
+		//built with IgnorePalette silently lost the flag on save and came back
+		//palette-strict on the next load - so a saved pack did not mean what the
+		//pack that wrote it meant. Only written when set, so every condition that
+		//does not use it serializes byte for byte as before.
+		if(IgnorePalette) {
+			out << ",Y";
+		}
 
 		return out.str();
 	}

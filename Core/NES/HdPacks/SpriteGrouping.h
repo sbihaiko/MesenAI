@@ -76,6 +76,22 @@ namespace MesenSheets
 	//read it without the pose pass.
 	InputStats BuildInputStats(const std::vector<OamFrame>& frames);
 
+	//Policy D of the F9.28 measurement: one `spriteNearby` per non-root cell of
+	//a group - a spanning tree over the group's own Edges, rooted at its
+	//most-seen cell - and never the full pair table. Measured on four unlike
+	//recordings: the spanning tree emits 51-165 conditions per pack (Contra 165,
+	//Mega Man 3 162, Excitebike 161, Zelda 51), the same order as the 277 a
+	//human wrote by hand for Contra80s, because it is bounded by
+	//kSheetMaxObjectCells x groups rather than by vocabulary size. Emitting every
+	//kept offset of adjacency.json instead would be 35 256 for Contra and 52 730
+	//for Mega Man 3; re-applying the grouping thresholds to that whole table is
+	//still ~1-2k. Only what BuildSprites already kept is small enough to read.
+	//
+	//Each plan cites exactly one real edge, so no offset is ever composed
+	//transitively - a chain A-B-C yields "B at dB from A" and "C at dC from B",
+	//never a synthesized A-to-C offset nobody observed.
+	std::vector<SpriteNearbyPlan> PlanSpriteNearby(const SheetGroup& group);
+
 	//ADR-0174 (issue #174): the join from a sprNNN group sheet to the whole
 	//figures its cells are part of. ADR-0153 §2's criterion cuts a character
 	//into always-together fragments - measured on Contra, 35 sprite pairs that
