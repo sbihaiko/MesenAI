@@ -1,10 +1,10 @@
 # ADR-0169: The recorder publishes its frames one way, and the live viewer never blocks the run
 
-- Status: accepted — implemented (uncommitted): the `live=<ms>` tap and the
-  sprite-layer record in `scripts/headless_record.cpp`, the viewer
+- Status: accepted — shipped 2026-09-08 in `e652f83f`: the `live=<ms>` tap and
+  the sprite-layer record in `scripts/headless_record.cpp`, the viewer
   `scripts/record_viewer.py`, and the interactive producer
-  `Core/Shared/LiveFrameRecorder` + the Tools-menu toggle (section 4). The
-  commit awaits human review.
+  `Core/Shared/LiveFrameRecorder` + the Tools-menu toggle (section 4) are all
+  on `main`.
 - Date: 2026-09-08
 - Updated: 2026-09-08 — the sprite-layer read channel switched from the
   debugger-based `GetMemoryState` to direct console exports under
@@ -215,7 +215,7 @@
 - Related: ADR-0050 (bootstrap screen backgrounds), ADR-0157 (headless input in
   emulated frames), ADR-0164 (adjacency sidecar), ADR-0165 (the composition
   editor is an external stdlib Python tool), ADR-0167 (HUD-only capture seam),
-  ADR-0168 (proposed: the sprite composition unit)
+  ADR-0168 (the sprite composition unit; `superseded` 2026-09-11 by ADR-0171)
 
 ## Context
 

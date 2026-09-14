@@ -297,6 +297,11 @@ doc-checks: check-manifest
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
+	#Roadmap freshness (PRD slice C.2): a slice that has shipped loses its row
+	#in the PRD's live tables and gains one line in the shipped record, so a
+	#live row whose Decision cell opens with "shipped" is a contract breach.
+	python3 scripts/checks/verify_prd_live_rows.py
+	python3 scripts/test_verify_prd_live_rows.py
 	#Unit tests for the community-pack pipeline's leaf modules (stdlib-only,
 	#no network/PAT/ROM): the MEI/recipe/content-id/identity/meta/rules
 	#interpreters and dispatch keep their own golden/PASS-style checks.

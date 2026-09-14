@@ -1,9 +1,8 @@
 # ADR-0170: The recorder writes a pose sidecar from the OAM frame stream it already holds
 
-- Status: accepted (2026-09-11, by the user) — not yet in the code;
-  delivery is scheduled as **Phase 9 debt** (the F9.18 sprite layer composes
-  fragments today), not as a Phase 10 prerequisite: PRD Part A §4 Phase 9 /
-  §5 order of execution
+- Status: accepted (2026-09-11, by the user) — shipped the same day as PRD
+  Part A slice **F9.19** in `2477b1ec`: the recorder writes
+  `sheets/poses.json` from the OAM frame stream.
 - Date: 2026-09-09 (accepted 2026-09-11)
 - Related: ADR-0153 (§2 the mutual-predictability grouping criterion, §5 the
   retained-stream cap), ADR-0164 (§1 `sheets/adjacency.json`, §5 the sprite

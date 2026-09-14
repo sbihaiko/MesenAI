@@ -110,7 +110,7 @@ part's tiles live on (ADR-0174 already provides the join). A pose with
 ADR-0179 §5 this is the artist's grid: rows from cycles, columns from
 phases, cells decomposed into the parts that are actually stored.
 
-### 4. Open points that keep this `proposed`
+### 4. The open points that were never closed before this was superseded
 
 - **Cover algorithm.** Greedy-by-size is what the spike ran; it is not
   obviously what a human calls torso and legs. Alternatives to measure on

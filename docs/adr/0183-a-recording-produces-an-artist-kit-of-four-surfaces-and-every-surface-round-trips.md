@@ -2,8 +2,9 @@
 
 - Status: accepted (2026-09-13, by the user: "garanta que o artista terá um
   material fácil de trabalhar para remasterizar o jogo, na linha do contra80,
-  gerando a base do material pela gravação e análise do jogo") — being
-  implemented as PRD Part A slice F9.24.
+  gerando a base do material pela gravação e análise do jogo") — shipped as
+  PRD Part A slice **F9.24**: the four surfaces in `2858ff53` (#198,
+  2026-09-13), the second-recording CHR donation in `20257b09` (#199).
 - Date: 2026-09-13
 - Related: ADR-0153 (sheet slicing; §3 `sprites.png` is the raw OAM
   vocabulary, not a painting surface), ADR-0160 (`textures/chr/` CHR-order
