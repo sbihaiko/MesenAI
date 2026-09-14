@@ -341,8 +341,6 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		string condName = "obj_nearby" + std::to_string(edgeIndex++);
 
 		bool south = edge.South;
-		HdPackTileNearbyCondition* cond = new HdPackTileNearbyCondition();
-		cond->Name = condName;
 		string tileData;
 		int32_t tileIndex = -1;
 		if(target->IsChrRamTile) {
@@ -355,6 +353,13 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 				continue;
 			}
 		}
+		//Issue #238: allocated below the last path that can still give up on this
+		//edge, the way the sprite twin already does (AttachSpriteNearbyConditions
+		//checks tileIndex before it allocates). _hdData.Conditions is what owns a
+		//condition, and an edge abandoned above never reaches the push_back - so
+		//allocating before the check leaked one object per abandoned edge.
+		HdPackTileNearbyCondition* cond = new HdPackTileNearbyCondition();
+		cond->Name = condName;
 		//ignorePalette, always: a shape id is GetKey(true), so the evidence is
 		//palette-wildcarded and the condition has to be too, or the pair would
 		//stop matching itself the moment the game recoloured it. HD Pack
