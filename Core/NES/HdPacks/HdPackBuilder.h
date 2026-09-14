@@ -184,12 +184,16 @@ private:
 	std::map<uint32_t, uint32_t> _shapeFrames;
 	uint32_t _coOccurrenceFrames = 0; //accumulated frames (AccumulateCoOccurrence calls)
 	bool _objectsBuilt = false; //guard: emit the inferred conditions once per session
+	bool _evidenceDumped = false; //guard: write the measurement CSV once per session
 	void AccumulateCoOccurrence();
 	void BuildObjectSheets(stringstream& tileRows);
 	//Measurement-only: dumps the whole co-occurrence table with its frame-level
 	//support to the path in MESEN_TILENEARBY_EVIDENCE, if that variable is set.
 	//No effect on the pack. This is how the thresholds below were chosen, and it
 	//is how they are re-checked on a new game without a rebuild.
+	//Called from BuildObjectSheets *before* its early-outs, because the case it
+	//exists to explain - a recording with a populated table but no inferred
+	//objects - is one of them.
 	void DumpCoOccurrenceEvidence();
 	//ADR-0190. An edge is serialized as a tileNearby only when it held over at
 	//least this many accumulated frames AND accounted for at least this share of

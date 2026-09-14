@@ -168,6 +168,12 @@ void HdPackBuilder::AccumulateCoOccurrence()
 //studied offline. Writes nothing when the variable is unset.
 void HdPackBuilder::DumpCoOccurrenceEvidence()
 {
+	if(_evidenceDumped) {
+		//BuildObjectSheets is called once per session today, but the dump now
+		//sits ahead of its guard, so "once" has to be enforced here rather than
+		//borrowed from that guard.
+		return;
+	}
 	#ifdef _MSC_VER
 	#pragma warning(push)
 	#pragma warning(disable : 4996)  //getenv is deprecated on MSVC; _dupenv_s is the secure form but getenv is fine here
@@ -183,6 +189,7 @@ void HdPackBuilder::DumpCoOccurrenceEvidence()
 	if(!out) {
 		return;
 	}
+	_evidenceDumped = true;
 	out << "# frames=" << _coOccurrenceFrames << " edges=" << _coOccurrence.size()
 	    << " objectShapes=" << _sheetObjectShapes.size() << '\n';
 	out << "a,b,dir,count,frames,framesA,framesB,aIsObject,bIsObject\n";
@@ -231,12 +238,16 @@ HdPackTileInfo* HdPackBuilder::FindObjectArt(uint32_t shapeHash, std::map<uint32
 //Full numbers and method: docs/validation/tilenearby-evidence-study.md.
 void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 {
+	//Before the guard below, not after it: one of the three early-outs is
+	//"no object shapes were inferred", which is precisely the recording whose
+	//whole co-occurrence table is worth studying offline. Behind the guard the
+	//dump produced no file at all on exactly those games and routes.
+	DumpCoOccurrenceEvidence();
+
 	if(_objectsBuilt || _coOccurrence.empty() || _sheetObjectShapes.empty()) {
 		return;
 	}
 	_objectsBuilt = true;
-
-	DumpCoOccurrenceEvidence();
 
 	//Most-used non-default art per shape, the tileNearby target data. A read
 	//through find(): operator[] would insert a zero entry for every tile that
