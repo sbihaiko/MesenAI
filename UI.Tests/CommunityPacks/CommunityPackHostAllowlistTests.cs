@@ -32,10 +32,38 @@ namespace Mesen.Tests.CommunityPacks
 				AppContext.BaseDirectory);
 		}
 
+		//A tripwire, not a fact worth knowing: adding a host is a trust-boundary
+		//decision (ADR-0138 §41), so it should not be possible to slip one in
+		//without a test failing. 11 -> 17 when Dropbox and MEGA were added
+		//(ADR-0187).
 		[Fact]
-		public void LoadFromFile_RealAllowlist_HasExactlyElevenEntries()
+		public void LoadFromFile_RealAllowlist_HasExactlySeventeenEntries()
 		{
-			Assert.Equal(11, LoadRealAllowlist().Count);
+			Assert.Equal(17, LoadRealAllowlist().Count);
+		}
+
+		//Each new kind needs a fetch branch on both sides (fetch_pack.py and
+		//CommunityPackDownloader); an unknown kind silently falls through to a
+		//plain GET, which for MEGA would write encrypted bytes to disk.
+		[Theory]
+		[InlineData("www.dropbox.com", "dropbox")]
+		[InlineData("mega.nz", "mega")]
+		[InlineData("g.api.mega.co.nz", "direct")]
+		public void LoadFromFile_RealAllowlist_NewHostsCarryTheirKind(string host, string kind)
+		{
+			CommunityPackHostEntry entry = Assert.Single(LoadRealAllowlist(), h => h.Host == host);
+
+			Assert.Equal(kind, entry.Kind);
+		}
+
+		[Theory]
+		[InlineData(".dropboxusercontent.com")]
+		[InlineData(".userstorage.mega.co.nz")]
+		public void LoadFromFile_RealAllowlist_CdnHopsAreSuffixMatchedAndDirect(string suffix)
+		{
+			CommunityPackHostEntry entry = Assert.Single(LoadRealAllowlist(), h => h.HostEndsWith == suffix);
+
+			Assert.Equal("direct", entry.Kind);
 		}
 
 		[Fact]

@@ -217,10 +217,13 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           set -euo pipefail
+          # h.get(...), not h['host']: entries keyed only by host_ends_with
+          # (the MediaFire CDN, the Dropbox/MEGA CDNs -- ADR-0187 §6) have no
+          # 'host' key and used to make this message step KeyError.
           ACCEPTED=$(python3 -c "
           import json
           hosts = json.load(open('scripts/pack_host_allowlist.json'))['hosts']
-          print(', '.join(h['host'] for h in hosts))
+          print(', '.join(h.get('host') or h.get('host_ends_with', '') for h in hosts))
           ")
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
             "Host not allowed for pack_url. Accepted hosts: $ACCEPTED."
@@ -243,6 +246,10 @@ jobs:
           PACK_URL: ${{ inputs.pack_url }}
         run: |
           set -euo pipefail
+          # MEGA packs arrive AES-CTR encrypted (ADR-0187 §3/§5); fetch_pack.py
+          # imports cryptography lazily, so every other host still downloads
+          # if this install fails.
+          python3 -m pip install --quiet --disable-pip-version-check cryptography || true
           python3 scripts/fetch_pack.py "$PACK_URL" pack_download.bin \
             --max-bytes "$MAX_PACK_BYTES" --allowlist scripts/pack_host_allowlist.json
       - name: Reject oversized/failed download

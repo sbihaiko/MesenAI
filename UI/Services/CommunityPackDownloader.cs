@@ -24,6 +24,11 @@ namespace Mesen.Services
 	//drive.usercontent.google.com confirm hop when the first response is the virus-scan
 	//HTML page) - a plain GET on a large Drive file returns that HTML, so the sha256
 	//verification would never match. Both hops are still allow-listed and capped.
+	//"mediafire", "dropbox" and "mega" are the same idea (ADR-0187): each is the
+	//shape its host needs before the bytes are the pack's bytes. Every branch is a
+	//mirror of the same-named function in scripts/fetch_pack.py - the CI validator
+	//and this client must agree on what a given URL downloads to, or a pack passes
+	//validation and then fails to auto-install (ADR-0146).
 	public static class CommunityPackDownloader
 	{
 		public const int MaxRedirects = 5;
@@ -57,7 +62,7 @@ namespace Mesen.Services
 			CancellationToken ct = cts.Token;
 			CommunityPackHostEntry? matched = CommunityPackHostAllowlist.MatchHost(url, allowedHosts);
 			if(matched == null) {
-				EmuApi.WriteLogEntry("[CommunityPackDownloader] REJECTED (host not allow-listed): " + url);
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] REJECTED (host not allow-listed): " + CommunityPackMega.Scrub(url));
 				return null;
 			}
 			if(string.Equals(matched.Kind, "google-drive", StringComparison.OrdinalIgnoreCase)) {
@@ -65,6 +70,12 @@ namespace Mesen.Services
 			}
 			if(string.Equals(matched.Kind, "mediafire", StringComparison.OrdinalIgnoreCase)) {
 				return await GetMediaFireAsync(url, allowedHosts, maxBytes, ifNoneMatchETag, ct);
+			}
+			if(string.Equals(matched.Kind, "dropbox", StringComparison.OrdinalIgnoreCase)) {
+				return await GetDropboxAsync(url, allowedHosts, maxBytes, ifNoneMatchETag, ct);
+			}
+			if(string.Equals(matched.Kind, "mega", StringComparison.OrdinalIgnoreCase)) {
+				return await GetMegaAsync(url, allowedHosts, maxBytes, ct);
 			}
 			return await GetDirectAsync(url, allowedHosts, maxBytes, ifNoneMatchETag, ct);
 		}
@@ -124,6 +135,83 @@ namespace Mesen.Services
 			}
 			FetchResult? second = await FetchAsync(href, allowedHosts, maxBytes, ifNoneMatchETag, ct);
 			return second == null ? null : new Response(second.StatusCode, second.ETag, second.Body);
+		}
+
+		//Mirror of scripts/fetch_pack.py::fetch_dropbox: a share link renders
+		//an HTML preview unless dl=1 is set, after which the usual redirect
+		//chain ends on *.dl.dropboxusercontent.com. HTML on the final hop is a
+		//login wall or a dead link, not a pack - returning it would be
+		//reported downstream as a corrupt zip.
+		private static async Task<Response?> GetDropboxAsync(string url, IReadOnlyList<CommunityPackHostEntry> allowedHosts, long maxBytes, string? ifNoneMatchETag, CancellationToken ct)
+		{
+			FetchResult? result = await FetchAsync(CommunityPackDropbox.ForceDownload(url), allowedHosts, maxBytes, ifNoneMatchETag, ct);
+			if(result == null) {
+				return null;
+			}
+			if((result.ContentType ?? "").Contains("text/html", StringComparison.OrdinalIgnoreCase)) {
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] dropbox link served HTML, not a file (deleted or access-restricted?)");
+				return null;
+			}
+			return new Response(result.StatusCode, result.ETag, result.Body);
+		}
+
+		//Mirror of scripts/fetch_pack.py::fetch_mega (ADR-0187 §3): the key is
+		//split off the URL fragment locally and never sent; the API is asked
+		//(POST, ssl=1 so the answer is https) for a short-lived download URL;
+		//the body arrives AES-CTR encrypted and is decrypted here. No ETag -
+		//the download URL is regenerated per request, so conditional requests
+		//would be meaningless.
+		private static async Task<Response?> GetMegaAsync(string url, IReadOnlyList<CommunityPackHostEntry> allowedHosts, long maxBytes, CancellationToken ct)
+		{
+			CommunityPackMega.FileRef? file = CommunityPackMega.Parse(url);
+			if(file == null) {
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] not a usable MEGA file link: " + CommunityPackMega.Scrub(url));
+				return null;
+			}
+			string? downloadUrl = await RequestMegaDownloadUrlAsync(file.Handle, allowedHosts, ct);
+			if(downloadUrl == null) {
+				return null;
+			}
+			FetchResult? result = await FetchAsync(downloadUrl, allowedHosts, maxBytes, null, ct);
+			if(result == null || result.Body == null) {
+				return null;
+			}
+			CommunityPackMega.DecryptCtr(file.AesKey, file.Nonce, result.Body);
+			return new Response(result.StatusCode, null, result.Body);
+		}
+
+		private static async Task<string?> RequestMegaDownloadUrlAsync(string handle, IReadOnlyList<CommunityPackHostEntry> allowedHosts, CancellationToken ct)
+		{
+			const string api = "https://g.api.mega.co.nz/cs?id=0";
+			if(CommunityPackHostAllowlist.MatchHost(api, allowedHosts) == null) {
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] MEGA API host not allow-listed");
+				return null;
+			}
+			try {
+				using HttpRequestMessage request = new(HttpMethod.Post, api) {
+					Content = new StringContent(CommunityPackMega.RequestBody(handle), System.Text.Encoding.UTF8, "application/json")
+				};
+				using HttpResponseMessage response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+				if((int)response.StatusCode != (int)HttpStatusCode.OK) {
+					EmuApi.WriteLogEntry("[CommunityPackDownloader] MEGA API returned " + (int)response.StatusCode);
+					return null;
+				}
+				byte[]? body = await ReadCappedAsync(response, 64 * 1024, ct);
+				if(body == null) {
+					return null;
+				}
+				string? g = CommunityPackMega.ExtractDownloadUrl(System.Text.Encoding.UTF8.GetString(body));
+				if(g == null) {
+					EmuApi.WriteLogEntry("[CommunityPackDownloader] MEGA API response carried no download URL");
+				}
+				return g;
+			} catch(OperationCanceledException) {
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] MEGA API timed out");
+				return null;
+			} catch(Exception ex) {
+				EmuApi.WriteLogEntry("[CommunityPackDownloader] MEGA API threw: " + CommunityPackMega.Scrub(ex.ToString()));
+				return null;
+			}
 		}
 
 		private sealed record FetchResult(int StatusCode, string? ContentType, string? ETag, byte[]? Body);

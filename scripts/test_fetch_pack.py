@@ -10,6 +10,12 @@ What is covered, and how the loopback constraint is handled:
   host, `path_contains_any` honoured, suffix (`host_ends_with`) entries.
 * `extract_drive_id` -- the `?id=` value is held to the same charset as the
   `/d/<id>` form.
+* Dropbox and MEGA (ADR-0187) -- `force_dropbox_download`'s dl=1 rewrite,
+  `parse_mega_url`'s key derivation pinned against a known vector, `scrub`
+  proving a MEGA fragment never survives into a message, the MEGA API
+  request shape (ssl=1), and the new allow-list entries resolving to their
+  kinds. The MEGA API call is exercised against a stubbed `open_validated`;
+  no network.
 * `_NoRedirect` -- against a real `http.server` on 127.0.0.1 that answers
   302: the fetcher's opener surfaces the 3xx as an HTTPError while urllib's
   default opener follows it, proving the manual hop loop is the only path a
@@ -27,7 +33,11 @@ Usage: python3 scripts/test_fetch_pack.py
 """
 from __future__ import annotations
 
+import base64
 import http.server
+import io
+import json
+import struct
 import sys
 import threading
 import urllib.error
@@ -307,9 +317,160 @@ def check_redirect_loop_capped(lb: _Loopback):
     ok(f"redirect loop stops after MAX_REDIRECTS={fetch_pack.MAX_REDIRECTS}; 3xx without Location is an error")
 
 
+def check_dropbox_dl_rewrite():
+    """dl=1 replaces any dl the link carried, and rlkey survives -- the
+    /scl/fi/ links 404 without it (ADR-0187 section 2)."""
+    cases = [
+        ("https://www.dropbox.com/s/abc/Pack.zip?dl=0", "dl=1", []),
+        ("https://www.dropbox.com/s/abc/Pack.zip", "dl=1", []),
+        ("https://www.dropbox.com/scl/fi/x/P.zip?rlkey=k1&dl=0", "dl=1", ["rlkey=k1"]),
+        ("https://www.dropbox.com/scl/fi/x/P.zip?dl=1&st=s", "dl=1", ["st=s"]),
+    ]
+    for url, expected, must_keep in cases:
+        out = fetch_pack.force_dropbox_download(url)
+        query = urllib.parse.urlparse(out).query
+        pairs = query.split("&")
+        if pairs.count(expected) != 1 or any(p.startswith("dl=") and p != expected for p in pairs):
+            fail(f"force_dropbox_download({url}) gave {out!r}, expected exactly one {expected}")
+            return
+        for keep in must_keep:
+            if keep not in pairs:
+                fail(f"force_dropbox_download({url}) dropped {keep!r}: {out!r}")
+                return
+    ok("force_dropbox_download: dl=1 replaces any dl value and other params (rlkey) survive")
+
+
+def check_mega_url_parsing():
+    """The key derivation is pinned against a vector: a bug here yields
+    plausible garbage rather than an error (ADR-0187 Consequences)."""
+    key = bytes(range(32))
+    fragment = base64.urlsafe_b64encode(key).rstrip(b"=").decode()
+    handle, aes_key, nonce = fetch_pack.parse_mega_url(f"https://mega.nz/file/AbCd1234#{fragment}")
+    if handle != "AbCd1234":
+        fail(f"parse_mega_url returned handle {handle!r}")
+        return
+    words = struct.unpack(">8I", key)
+    want_key = struct.pack(">4I", *(words[i] ^ words[i + 4] for i in range(4)))
+    if aes_key != want_key:
+        fail(f"parse_mega_url derived AES key {aes_key.hex()}, expected {want_key.hex()}")
+        return
+    if nonce != struct.pack(">2I", words[4], words[5]) + b"\0" * 8:
+        fail(f"parse_mega_url derived nonce {nonce.hex()}")
+        return
+    # A folder-link fragment is "<key>!<handle>!<key>"; only the leading key is ours.
+    _h, aes2, _n = fetch_pack.parse_mega_url(f"https://mega.nz/file/AbCd1234#{fragment}!x!y")
+    if aes2 != want_key:
+        fail("parse_mega_url did not stop at the '!' in a folder-style fragment")
+        return
+    for bad, why in [
+        ("https://mega.nz/file/AbCd1234", "no fragment"),
+        ("https://mega.nz/file/AbCd1234#short", "wrong key length"),
+        ("https://mega.nz/notafile#" + fragment, "no handle"),
+    ]:
+        try:
+            fetch_pack.parse_mega_url(bad)
+        except ValueError:
+            continue
+        fail(f"parse_mega_url accepted a URL with {why}: {bad}")
+        return
+    ok("parse_mega_url: key/nonce derivation pinned; missing or malformed fragments rejected")
+
+
+def check_mega_key_is_never_printed():
+    """A MEGA fragment is a decryption key; scrub() runs on whole messages
+    because urllib embeds URLs in its own error strings (ADR-0187 section 3)."""
+    secret = "zVnPz7NURkiwlODHLRtd3C1Oe1nhcwg7C_6vXbL8kyM"
+    text = f"<urlopen error timed out> for https://mega.nz/file/yVsRmCiS#{secret} (retrying)"
+    scrubbed = fetch_pack.scrub(text)
+    if secret in scrubbed:
+        fail(f"scrub() left the key in: {scrubbed}")
+        return
+    if "mega.nz/file/yVsRmCiS" not in scrubbed:
+        fail(f"scrub() removed the handle too, losing the diagnostic: {scrubbed}")
+        return
+    unrelated = "download failed: host not allow-listed: example.com"
+    if fetch_pack.scrub(unrelated) != unrelated:
+        fail("scrub() altered a message with no MEGA link in it")
+        return
+    ok("scrub: a MEGA key never survives into a message, the handle does")
+
+
+def check_mega_api_request_shape():
+    """ssl=1 is what keeps the API from answering with an http:// URL that
+    validate_url_shape would (correctly) refuse."""
+    captured = {}
+
+    def fake_open_validated(url, hosts, data=None, content_type=None, **kwargs):
+        captured["url"] = url
+        captured["data"] = data
+        captured["content_type"] = content_type
+        return io.BytesIO(json.dumps([{"s": 123, "g": "https://gfs1.userstorage.mega.co.nz/dl/x"}]).encode()), {}
+
+    real = fetch_pack.open_validated
+    fetch_pack.open_validated = fake_open_validated
+    try:
+        url, size = fetch_pack.request_mega_download_url("AbCd1234", [])
+    finally:
+        fetch_pack.open_validated = real
+    body = json.loads(captured["data"])
+    if body != [{"a": "g", "g": 1, "ssl": 1, "p": "AbCd1234"}]:
+        fail(f"MEGA API body was {body}")
+        return
+    if captured["content_type"] != "application/json":
+        fail(f"MEGA API request content type was {captured['content_type']!r}")
+        return
+    if url != "https://gfs1.userstorage.mega.co.nz/dl/x" or size != 123:
+        fail(f"request_mega_download_url returned {url!r}, {size!r}")
+        return
+
+    def erroring_open(url, hosts, data=None, content_type=None, **kwargs):
+        return io.BytesIO(b"-9"), {}
+
+    fetch_pack.open_validated = erroring_open
+    try:
+        fetch_pack.request_mega_download_url("AbCd1234", [])
+    except ValueError as exc:
+        if "MEGA API" not in str(exc):
+            fail(f"MEGA API error surfaced as: {exc}")
+            return
+    else:
+        fail("a MEGA API error code was not surfaced")
+        return
+    finally:
+        fetch_pack.open_validated = real
+    ok("request_mega_download_url: POSTs ssl=1, reads 'g', surfaces API error codes")
+
+
+def check_new_hosts_are_allow_listed():
+    hosts = fetch_pack.load_allowlist(str(SCRIPTS / "pack_host_allowlist.json"))
+    expected = {
+        "https://www.dropbox.com/s/abc/Pack.zip?dl=0": "dropbox",
+        "https://www.dropbox.com/scl/fi/x/P.zip?rlkey=k": "dropbox",
+        "https://uc1.dl.dropboxusercontent.com/cd/0/get/x/file": "direct",
+        "https://mega.nz/file/AbCd1234#key": "mega",
+        "https://g.api.mega.co.nz/cs?id=0": "direct",
+        "https://gfs302n298.userstorage.mega.co.nz/dl/x": "direct",
+    }
+    for url, kind in expected.items():
+        entry = fetch_pack.match_host(url, hosts)
+        if entry is None or entry["kind"] != kind:
+            fail(f"{url} matched {entry and entry['kind']!r}, expected {kind!r}")
+            return
+    # A dropbox host outside the share-path shapes stays off the list.
+    if fetch_pack.match_host("https://www.dropbox.com/home", hosts) is not None:
+        fail("a non-share dropbox.com path was allow-listed")
+        return
+    ok("allow-list: dropbox/mega share URLs and their CDN hops resolve to the right kind")
+
+
 def main() -> int:
     check_url_shape_and_match_host()
     check_drive_id()
+    check_dropbox_dl_rewrite()
+    check_mega_url_parsing()
+    check_mega_key_is_never_printed()
+    check_mega_api_request_shape()
+    check_new_hosts_are_allow_listed()
     with _Loopback() as lb:
         check_no_redirect_handler(lb)
         check_redirect_to_off_list_host_refused(lb)

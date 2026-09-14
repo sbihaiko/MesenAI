@@ -34,6 +34,17 @@ MediaFire (`kind: "mediafire"`) is the same shape: the /file/ share URL
 is an HTML page, and the zip is on downloadN.mediafire.com (matched via
 `host_ends_with: ".mediafire.com"`).
 
+Dropbox (`kind: "dropbox"`) needs no extra request, only the right query:
+a share link renders an HTML preview unless `dl=1` is set, after which the
+usual redirect chain ends on `*.dl.dropboxusercontent.com` (ADR-0187 §2).
+
+MEGA (`kind: "mega"`) is the one host whose bytes arrive encrypted. The
+decryption key lives in the URL fragment and is never sent anywhere: we
+split it off locally, ask the API (a POST, hence `open_validated`'s
+optional `data`) for a download URL with `ssl: 1` so it comes back https,
+and decrypt AES-CTR while streaming (ADR-0187 §3). No message printed by
+this module ever includes a MEGA fragment.
+
 Usage:
   python3 scripts/fetch_pack.py <url> <out-path> --max-bytes N
       [--allowlist scripts/pack_host_allowlist.json]
@@ -43,11 +54,13 @@ any rejection (disallowed host, private-IP target, over the size cap,
 malformed Drive link) -- the workflow step treats any non-zero exit as a
 download failure, same as a network error.
 """
+import base64
 import html as htmlmod
 import ipaddress
 import json
 import re
 import socket
+import struct
 import sys
 import urllib.error
 import urllib.parse
@@ -140,19 +153,27 @@ def assert_public_host(host):
             raise ValueError(f"host {host!r} resolved to non-public address {ip}")
 
 
-def open_validated(url, hosts, max_redirects=MAX_REDIRECTS, opener=None):
+def open_validated(url, hosts, max_redirects=MAX_REDIRECTS, opener=None, data=None, content_type=None):
     """Follows redirects manually, re-checking the allow-list and DNS on
     every hop, instead of trusting urllib's/curl's built-in follower. The
     opener never follows a 3xx itself (`_NoRedirect`), which is what makes
-    this loop the only redirect path; `opener` is injectable for tests."""
+    this loop the only redirect path; `opener` is injectable for tests.
+
+    `data` makes the first request a POST (MEGA's API is POST-only); it is
+    dropped on any redirect hop, because re-POSTing a body to a
+    redirect target is exactly the kind of thing this loop exists to not
+    do silently."""
     opener = opener or _OPENER
+    headers = {"User-Agent": USER_AGENT}
+    if content_type:
+        headers["Content-Type"] = content_type
     for _ in range(max_redirects + 1):
         hostname = validate_url_shape(url)
         entry = match_host(url, hosts)
         if entry is None:
             raise ValueError(f"host not allow-listed: {hostname}")
         assert_public_host(hostname)
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - https + allow-list + DNS checked above
+        req = urllib.request.Request(url, data=data, headers=headers)  # noqa: S310 - https + allow-list + DNS checked above
         try:
             resp = opener.open(req, timeout=30)
         except urllib.error.HTTPError as e:
@@ -161,6 +182,8 @@ def open_validated(url, hosts, max_redirects=MAX_REDIRECTS, opener=None):
                 if not location:
                     raise ValueError(f"redirect ({e.code}) with no Location header") from e
                 url = urllib.parse.urljoin(url, location)
+                data = None
+                headers.pop("Content-Type", None)
                 continue
             raise
         return resp, entry
@@ -262,6 +285,113 @@ def fetch_mediafire(url, hosts, out_path, max_bytes):
     return stream_to_file(resp2, out_path, max_bytes)
 
 
+def force_dropbox_download(url):
+    """`dl=1` replaces whatever `dl` the share link carried (a preview link
+    says `dl=0`), and every other parameter survives -- `rlkey` in
+    particular, without which the newer /scl/fi/ links 404."""
+    parsed = urllib.parse.urlparse(url)
+    params = [(k, v) for k, v in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True) if k != "dl"]
+    params.append(("dl", "1"))
+    return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(params)))
+
+
+def fetch_dropbox(url, hosts, out_path, max_bytes):
+    resp, _ = open_validated(force_dropbox_download(url), hosts)
+    if "text/html" in resp.headers.get("Content-Type", "").lower():
+        # A login wall or a dead share link, not a pack. Without this the
+        # HTML lands on disk and gets reported as a corrupt zip instead.
+        raise ValueError("dropbox link served an HTML page, not a file (deleted or access-restricted?)")
+    return stream_to_file(resp, out_path, max_bytes)
+
+
+MEGA_API = "https://g.api.mega.co.nz/cs?id=0"
+MEGA_HANDLE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _b64url_decode(value):
+    value = value.replace("-", "+").replace("_", "/")
+    return base64.b64decode(value + "=" * ((4 - len(value) % 4) % 4))
+
+
+def parse_mega_url(url):
+    """(handle, aes_key, counter_nonce) from `https://mega.nz/file/<h>#<k>`.
+
+    `<k>` is 32 base64url bytes = eight big-endian 32-bit words. The AES key
+    is the first four XORed with the last four; the CTR nonce is words 4-5
+    followed by the eight zero bytes MEGA starts every file's counter at."""
+    parsed = urllib.parse.urlparse(url)
+    m = re.search(r"/file/([a-zA-Z0-9_-]+)", parsed.path)
+    if not m:
+        raise ValueError("could not extract a file handle from the MEGA URL")
+    handle = m.group(1)
+    if not parsed.fragment:
+        raise ValueError("MEGA URL has no key fragment (the '#...' part carries the decryption key)")
+    try:
+        key = _b64url_decode(parsed.fragment.split("!")[0])
+    except (ValueError, base64.binascii.Error) as e:
+        raise ValueError("MEGA URL key fragment is not valid base64url") from e
+    if len(key) != 32:
+        raise ValueError(f"MEGA URL key fragment decodes to {len(key)} bytes, expected 32")
+    w = struct.unpack(">8I", key)
+    aes_key = struct.pack(">4I", w[0] ^ w[4], w[1] ^ w[5], w[2] ^ w[6], w[3] ^ w[7])
+    nonce = struct.pack(">2I", w[4], w[5]) + b"\0" * 8
+    return handle, aes_key, nonce
+
+
+def request_mega_download_url(handle, hosts):
+    """`ssl: 1` is not optional: without it the API answers with an http://
+    URL, which validate_url_shape rejects on principle."""
+    body = json.dumps([{"a": "g", "g": 1, "ssl": 1, "p": handle}]).encode()
+    resp, _ = open_validated(MEGA_API, hosts, data=body, content_type="application/json")
+    payload = json.loads(resp.read(64 * 1024).decode("utf-8", errors="replace"))
+    if isinstance(payload, int):
+        raise ValueError(f"MEGA API rejected the request (error {payload})")
+    info = payload[0]
+    if isinstance(info, int):
+        raise ValueError(f"MEGA API has no such file (error {info})")
+    if "g" not in info:
+        raise ValueError("MEGA API response carried no download URL")
+    return info["g"], info.get("s")
+
+
+def fetch_mega(url, hosts, out_path, max_bytes):
+    handle, aes_key, nonce = parse_mega_url(url)
+    if not MEGA_HANDLE.match(handle):
+        raise ValueError("MEGA file handle has unexpected characters")
+    download_url, declared_size = request_mega_download_url(handle, hosts)
+    if declared_size is not None and int(declared_size) > max_bytes:
+        raise ValueError(f"MEGA declares {declared_size} bytes, over the {max_bytes}-byte cap")
+    # Imported here, not at module scope, so a runner without `cryptography`
+    # still downloads packs from every other host (ADR-0187 §5).
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    decryptor = Cipher(algorithms.AES(aes_key), modes.CTR(nonce)).decryptor()
+    resp, _ = open_validated(download_url, hosts)
+    written = 0
+    with open(out_path, "wb") as f:
+        while True:
+            chunk = resp.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                raise ValueError(f"download exceeded the {max_bytes}-byte cap mid-transfer")
+            f.write(decryptor.update(chunk))
+        f.write(decryptor.finalize())
+    return written
+
+
+MEGA_KEY_IN_TEXT = re.compile(r"(mega\.nz/file/[a-zA-Z0-9_-]+)#\S*")
+
+
+def scrub(text):
+    """A MEGA fragment is the file's decryption key -- it must not reach a
+    log line, a workflow annotation or an issue comment. Applied to whole
+    messages, not just URLs, because urllib embeds the URL in some of its
+    own error strings."""
+    return MEGA_KEY_IN_TEXT.sub(r"\1#<redacted>", text)
+
+
 def main(argv):
     if len(argv) < 3:
         print(__doc__)
@@ -302,10 +432,19 @@ def main(argv):
             written = fetch_google_drive(url, hosts, out_path, max_bytes)
         elif entry["kind"] == "mediafire":
             written = fetch_mediafire(url, hosts, out_path, max_bytes)
+        elif entry["kind"] == "dropbox":
+            written = fetch_dropbox(url, hosts, out_path, max_bytes)
+        elif entry["kind"] == "mega":
+            written = fetch_mega(url, hosts, out_path, max_bytes)
         else:
             written = fetch_direct(url, hosts, out_path, max_bytes)
+    except ImportError as e:
+        print(f"download failed: missing dependency ({e})", file=sys.stderr)
+        return 1
     except (ValueError, urllib.error.URLError, OSError) as e:
-        print(f"download failed: {e}", file=sys.stderr)
+        # scrub(), not str(e) alone: a MEGA URL carries its decryption key
+        # in the fragment and urllib puts the URL in some of its messages.
+        print(f"download failed: {scrub(str(e))}", file=sys.stderr)
         return 1
 
     print(f"wrote {out_path} ({written} bytes)")
