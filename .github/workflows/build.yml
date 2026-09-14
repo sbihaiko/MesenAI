@@ -1,15 +1,36 @@
 name: Build Mesen
 
+# LINUX ONLY (ADR-0191, 2026-09-14). The user's policy, that day, in two
+# sentences: every *binary* build is macOS Apple Silicon only for now, and CI
+# compiles Linux only while the macOS build is made locally when it is needed.
+# The two Windows publish jobs and the four macOS legs were therefore DELETED
+# from this file - they are not commented out, not `if: false`. The revision
+# history is where they live: `git log -p -- .github/workflows/build.yml`, or
+# `git show 109c1a6f:.github/workflows/build.yml` for the last 14-job version.
+# What is left is the six-leg Linux matrix and the two AppImage legs, and
+# neither needed an artifact from a removed job.
+#
+# The macOS release is built LOCALLY by `make release-macos` (Phase 11 C.4),
+# which injects the fresh `MesenCore.dylib` into the bundle, codesigns ad hoc
+# and fails on a hash mismatch. There is no macOS runner in this repository to
+# compare it against, by decision.
+#
+# Windows is retired from CI until the user lifts the rule. Restoring either
+# platform is a revert of the commit that landed ADR-0191, plus a line in that
+# ADR saying why.
+
 on:
   # TEMPORARY (2026-09-14): `push` and `pull_request` were REMOVED, so the
   # matrix below runs only when someone dispatches it:
   #   gh workflow run build.yml --repo sbihaiko/MesenCE --ref <branch>
   #
   # The reason is the same one that suspended the `pull_request` trigger on
-  # 2026-09-13: the matrix is 14 jobs (two Windows publish profiles, six
+  # 2026-09-13: the matrix was 14 jobs (two Windows publish profiles, six
   # Linux/AppImage compiler×arch legs, four macOS legs with a codesign step),
   # each a full LTO/AOT build, and a branch that lands three commits in an
-  # afternoon queues more runner time than the work in the commits.
+  # afternoon queues more runner time than the work in the commits. ADR-0191
+  # then cut it to the eight Linux legs below; the trigger stays
+  # `workflow_dispatch` regardless.
   #
   # The always-on gate did NOT go away with the triggers — it moved to
   # `checks.yml`, which runs on every push and pull request. It had to move to
@@ -56,53 +77,6 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
-  windows:
-    strategy:
-      matrix:
-        platform: [
-          {netversion: 10.x, targetframework: net10.0, aot: false, singleFile: true, aotString: ""},
-          {netversion: 10.x, targetframework: net10.0, aot: true, singleFile: false, aotString: " - AoT"}
-        ]
-      fail-fast: false
-    runs-on: windows-2025-vs2026
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Install .NET Core
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-        with:
-          dotnet-version: ${{ matrix.platform.netversion }}
-
-      - name: Setup MSBuild.exe
-        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
-        with:
-          msbuild-architecture: x64
-
-      - name: Restore packages
-        run: dotnet restore -p:TargetFramework="${{ matrix.platform.targetframework }}" -r win-x64 -p:PublishAot="${{ matrix.platform.aot }}" -p:BuildWithNetFrameworkHostedCompiler=true
-
-      - name: Write commit SHA1 to file
-        uses: ./.github/actions/build-sha1-action
-
-      - name: Build Mesen
-        run: msbuild -nologo -v:d -clp:ForceConsoleColor -m -p:Configuration=Release -p:Platform=x64 -t:Clean,UI -p:TargetFramework="${{ matrix.platform.targetframework }}" -p:OptimizeUi="true"
-
-      - name: Publish Mesen
-        run: dotnet publish --no-restore -c Release -p:PublishAot="${{ matrix.platform.aot }}" -p:SelfContained="${{ matrix.platform.aot }}" -p:PublishSingleFile="${{ matrix.platform.singleFile }}" -p:OptimizeUi="true" -p:Platform="Any CPU" -p:TargetFramework="${{ matrix.platform.targetframework }}" -r win-x64 Mesen.sln /p:PublishProfile=UI\Properties\PublishProfiles\Release.pubxml
-
-      - name: Upload Mesen
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: github.event_name != 'pull_request'
-        with:
-          name: Mesen (Windows - ${{ matrix.platform.targetframework }}${{ matrix.platform.aotString }})
-          path: |
-            build/TmpReleaseBuild/Mesen.exe
-
-
   linux:
     strategy:
       matrix:
@@ -202,96 +176,3 @@ jobs:
         with:
           name: Mesen (Linux ${{ matrix.platform.name }} - AppImage)
           path: Mesen.AppImage
-
-
-  macos:
-    strategy:
-      matrix:
-        compiler: [clang, clang_aot]
-        platform: [
-          {os: macos-15-intel, arch: x64},
-          {os: macos-15, arch: arm64}
-        ]
-        include:
-          - compiler: clang
-            make_flags: ""
-          - compiler: clang_aot
-            make_flags: "USE_AOT=true"
-      fail-fast: false
-    runs-on: ${{ matrix.platform.os }}
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Install .NET Core
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-        with:
-          dotnet-version: 10.x
-
-      - name: Install dependencies
-        run: |
-          brew install sdl2 ccache
-          # Homebrew python is externally-managed (PEP 668): --break-system-packages is required.
-          python3 -m pip install --user --break-system-packages PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
-
-      - name: Get brew prefix
-        run: |
-          echo "brewPrefix=$(brew --prefix)" >> "$GITHUB_ENV"
-
-      - name: Setup CCache
-        uses: ./.github/actions/setup-ccache-action
-        with:
-          ccache-path: '${{ env.brewPrefix }}/opt/ccache/libexec'
-
-      - name: Write commit SHA1 to file
-        uses: ./.github/actions/build-sha1-action
-
-      - name: Run doc checks
-        run: make doc-checks
-
-      # stderr is not detected as a TTY, so diagnostics are by default printed without colours;
-      # forcing colours makes the log a little nicer to read.
-      - name: Build Mesen
-        run: |
-          ${{ matrix.make_flags }} make -j$(sysctl -n hw.logicalcpu)
-
-      - name: Sign binary
-        if: github.event_name != 'pull_request'
-        env:
-          APP_NAME: bin/osx-${{ matrix.platform.arch }}/Release/osx-${{ matrix.platform.arch }}/publish/Mesen.app
-          CERT_DATA: ${{ secrets.MACOS_CERTIFICATE }}
-          CERT_PASS: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          ENTITLEMENTS: UI/Mesen.entitlements
-          SIGNING_IDENTITY: Mesen
-        run: |
-          # Export certs
-          echo "$CERT_DATA" | base64 --decode > /tmp/certs.p12
-          # Create keychain
-          security create-keychain -p actions macos-build.keychain
-          security default-keychain -s macos-build.keychain
-          security unlock-keychain -p actions macos-build.keychain
-          security set-keychain-settings -t 3600 -u macos-build.keychain
-          # Import certs to keychain
-          security import /tmp/certs.p12 -k ~/Library/Keychains/macos-build.keychain -P "$CERT_PASS" -T /usr/bin/codesign -T /usr/bin/productsign
-          # Key signing
-          security set-key-partition-list -S apple-tool:,apple: -s -k actions macos-build.keychain
-          # print identities
-          security find-identity -v macos-build.keychain
-
-          echo "[INFO] Signing app file"
-          codesign --force --deep --timestamp --keychain macos-build.keychain --options=runtime --entitlements "$ENTITLEMENTS" --sign "$SIGNING_IDENTITY" "$APP_NAME"
-
-      - name: Zip Mesen.app
-        if: github.event_name != 'pull_request'
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent bin/osx-${{ matrix.platform.arch }}/Release/osx-${{ matrix.platform.arch }}/publish/Mesen.app bin/osx-${{ matrix.platform.arch }}/Release/Mesen.app.zip
-
-      - name: Upload Mesen
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: github.event_name != 'pull_request'
-        with:
-          name: Mesen (macOS - ${{ matrix.platform.os }} - ${{ matrix.compiler }})
-          path: bin/osx-${{ matrix.platform.arch }}/Release/Mesen.app.zip

@@ -19,10 +19,19 @@ name: Checks
 # more (and `/W4 /WX` + `-Werror` there had caught the tileNearby bug twice on
 # the very day the matrix was switched off), and nothing had ever run the
 # `scripts/test_*.py` suite. They are separate jobs, not extra steps in
-# `checks`, so the three run in parallel and a red one names which of the three
-# contracts broke. `unit-tests.yml` and `tests.yml` are not used for this:
-# both workflows are `disabled_manually` on this repo and have not produced a
-# run since, so requiring their check names would block every merge forever.
+# `checks`, so the jobs run in parallel and a red one names which contract
+# broke.
+#
+# ADR-0191 (2026-09-14) folded `unit-tests.yml`'s two jobs in here as
+# `ui-tests` and `headless-ui-tests` and deleted that file, along with
+# `tests.yml`. Both were `disabled_manually` on this repo and had produced no
+# run since, so requiring their check names would have blocked every merge
+# forever; as jobs of the always-on gate they report on every pull request.
+# `tests.yml` was the Windows MSBuild + `PGOHelper citests` accuracy suite and
+# has no Linux equivalent here - that coverage is gone until Windows returns to
+# CI. Per the same ADR, CI compiles Linux only: the macOS release is built
+# locally with `make release-macos`, and no job in this repository compiles C++
+# on macOS or Windows.
 #
 # `make doc-checks` is the repo's own acceptance suite: the drift guardrails
 # (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline
@@ -103,3 +112,63 @@ jobs:
 
       - name: Compile and run the core unit tests
         run: make -j$(nproc) core-unit-tests
+
+  # ADR-0191 (2026-09-14): folded in from the deleted `unit-tests.yml`, whose
+  # two jobs were `disabled_manually` and therefore could never be required on
+  # `main`. The invariants of ADR-0131 come with them unchanged: never link
+  # `InteropDLL`/`MesenCore`, never require SDL2, never require a platform SDK
+  # or a ROM corpus, and keep the `dotnet-version` pin at `10.x` (the same pin
+  # `build.yml` uses; `dotnet-format-check.yml`'s `10.0.x` is a separate,
+  # independent pin and is not tracked here).
+  #
+  # `make core-unit-tests` is NOT a step of this job: the `core-unit-tests` job
+  # above already compiles and runs it, and duplicating it would pay for the
+  # same compile twice and leave two check runs that fail for the same reason.
+  ui-tests:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.x
+
+      - name: Verify UI/Logic firewall
+        # ADR-0123 (H5): fast pre-check naming the offending file/dependency;
+        # the dual-compile below is still the authoritative gate.
+        run: ./scripts/verify-ui-logic-firewall.sh
+
+      - name: Run unit tests
+        run: dotnet test UI.Tests/UI.Tests.csproj --nologo
+
+  # ADR-0150 (accepted 2026-09-03): headless Avalonia XAML-wiring tests in a
+  # separate project that references UI/UI.csproj. Kept as its own job - NOT a
+  # step appended to ui-tests - so a headless-host failure never reds the cheap
+  # host-free leg (ADR-0131's invariants for that job stay readable).
+  # No MesenCore is built here (ADR-0131), so the MainWindow-backed cases
+  # self-skip with an explicit reason via NativeCore.cs (Assert.SkipWhen); the
+  # core-free wiring cases (PlayerSettingsTabs, ControllerHighlight) run. Run
+  # `make core && make headless-ui-tests` locally to exercise all of them.
+  # The RID is overridden from the command line because UI/UI.csproj hardcodes
+  # <RuntimeIdentifier>win-x64</RuntimeIdentifier> (a global property wins over
+  # the csproj assignment); linux-x64 matches the runner. That override is also
+  # the known cross-RID `obj/` trap: a local run that built for osx-arm64
+  # leaves artefacts a linux-x64 restore trips over, so a clean checkout (as
+  # here) or `rm -rf UI.HeadlessTests/obj` is what makes the two agree.
+  headless-ui-tests:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.x
+
+      - name: Run headless UI wiring tests
+        run: dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj -p:RuntimeIdentifier=linux-x64 --nologo
