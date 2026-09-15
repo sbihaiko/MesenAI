@@ -10,10 +10,8 @@ work lives in Part A, player-shell/chrome work lives in Part B — it is now
 expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
-the shipped record, and the pending slices (Phase 9 F9.18-V — first re-run
-recorded 2026-09-15, two runtime checks still open — F9.18 and F9.25, the
-Phase 10 spike S10.b, plus the manual/hardware-gated residue of the shipped
-phases). Phase 11 consolidation is complete. Part B is the
+the shipped record, and the pending slices (Phase 9 F9.18, the Phase 10 spike
+S10.b, plus the manual/hardware-gated residue of the shipped phases). Phase 11 consolidation is complete. Part B is the
 default-GUI roadmap: player
 chrome, Advanced GUI, pack identity (`pack_id`/`content_id`/version),
 duplicates, the pack picker, and the quick-enhancements panel. The two
@@ -127,7 +125,11 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **F9.20 / F9.21** — pose succession/cycles/variants delivered; rigid parts withdrawn on measurement (ADR-0179/0180).
 - **F9.22 / F9.23** — per-state recording, two-port input and interruption-based driver attribution (ADR-0181/0182); Contra mechanisms covered through stage4-boss, not all stages.
 - **F9.24** — four artist-kit surfaces, assembler and coverage tools (ADR-0183); portability exercised on Contra, Castlevania, Metroid and Zelda II.
-- **F9.25 tooling** — RAM-cheat and navigation drivers (ADR-0184); bounded second-pass evidence remains in §4.
+- **F9.25 tooling and evidence** — RAM-cheat and navigation drivers (ADR-0184);
+  the bounded second-pass matrix was recorded 2026-09-15: nine rows, each with a
+  hash-identified clean control, four measured second passes, five named
+  reasons, and a union rebuild that passes structural validation.
+  [Log](../validation/f925-contra-matrix-2026-09-15.md).
 - **F9.26** — FM2 conversion and movie recording (ADR-0185); increased coverage measured, synchronization not established by key count (#201).
 - **F9.27** — CDL analysis and recording (ADR-0186); measured cost approximately 1.9× on the logged Zelda run.
 - **F9.28 / F9.29** — AI review as human-promoted proposal and emitted nearby conditions with fallback (ADR-0188/0189/0190).
@@ -137,13 +139,14 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **C.5 experiment completed** — two independent agent runs took 12/11 minutes and found visible edits, but required `hires.txt` diagnosis and exposed incomplete painting; product acceptance remains unproven. [Zelda log](../validation/c5-fable-artist-run-zelda-2026-09-14.md), [Mega Man 3 log](../validation/c5-fable-artist-run-mega-man-3-2026-09-14.md). Findings #253/#255/#256 require current-binary verification under F9.18-V, regardless of issue closure.
 - **C.6** — second reference measured: Zelda II 165/874 tile shapes, 28/3301 exact keys, 670 emitted versus 4679 authored conditions, 3.78× palette inflation; lint success was not a runtime round-trip proof.
 - **C.7/C.8** — file ceilings, dependency pins and ADR debts closed (ADR-0137/0192; 2026-09-15).
-- **F9.18-V, first re-run** (2026-09-15) — with a binary rebuilt at `main`
+- **F9.18-V** (2026-09-15) — with a binary rebuilt at `main`
   `04d7fc63`, the structural gate and the paint-application gate pass on both
   golden games: Mega Man 3 (CHR ROM) diffs only inside the edit's bounding box,
   Contra (CHR RAM) shows every differing pixel magenta. #253 passes structurally
-  and visually, #256 structurally, #255 structurally only. A runtime
-  condition-miss frame and a live mirrored-instance screenshot remain open,
-  both blocked on a per-frame key/`[condition]` introspection tool. [Log](../validation/f918v-current-binary-painting-2026-09-15.md).
+  and visually, #256 and #255 structurally; the runtime condition-miss and live
+  mirrored-instance checks left open by the first re-run were closed the same day
+  with a negative-control pack replayed on the same binary (no `Core/` change).
+  [Log](../validation/f918v-current-binary-painting-2026-09-15.md).
 - **ADR-0193** — PR and main-push CI triggers retained; workflow details live in `.github/` and the ADR.
 
 
@@ -236,11 +239,11 @@ default viewport, letterbox inside the viewport, lint the bare root
 #### Phase 9 — Artist-legible texture sheets (bootstrap output redesign)
 
 **Status.** Implementation through F9.29 is recorded in §3, with F9.21
-withdrawn. Open work: F9.18-V (current-binary painting verification), F9.18
-(independent human panel) and F9.25 (bounded second-pass evidence). The first
-F9.18-V re-run landed 2026-09-15 on both golden games — structural and
-paint-application gates pass with pixel-exact runtime evidence, two runtime
-checks stay open (§3). C.5 was
+withdrawn. Open work: F9.18 (independent human panel). F9.18-V landed
+2026-09-15 on both golden games — structural and paint-application gates pass
+with pixel-exact runtime evidence, and the two runtime checks of its first
+re-run were closed the same day (§3) — and F9.25's bounded second-pass matrix
+was recorded the same day (§3). C.5 was
 an independent agent experiment; it neither satisfies the human panel nor
 proves the promise of a publishable pack in under one hour.
 
@@ -298,7 +301,7 @@ F9.6 and Phase 10).
 |---|---|---|
 | F9.18-V | Re-run the painting workflow on one CHR RAM game and one CHR ROM game using a named current binary and unmodified documented tools. Exercise shared sheet keys, mirrored cells and a condition that does not match. Record structural, untouched-image and painted-image results separately under the protocol below. | Re-run recorded 2026-09-15 ([log](../validation/f918v-current-binary-painting-2026-09-15.md)): structural gate and paint application pass on both games on a binary rebuilt at current `main`; shared keys (#253), condition fallback (#256) and mirror (#255) confirmed structurally and at run time — the last two via a negative-control pack replayed on the same binary (log §4): a condition miss rendered the painted bare twin beside live hits, and the same `mirror: "HV"` key rendered flipped and un-flipped on the same route. Runtime evidence for #255/#256 is Contra-only. No `Core/` change was needed. Pass only when the intended complete figure appears without reading/editing `hires.txt`; issue closure and unit-test success alone do not close this row. |
 | F9.18 | Human acceptance of the composition editor over ADR-0170/0171 pose data, with ADR-0165/0166 background sources and exports. | Engine/GUI implemented; waiting for F9.18-V, then a person who did not build the feature. Log tests 1–7 where applicable on the golden set; missing evidence is not a pass. Include native window interaction. |
-| F9.25 | Complete the bounded Contra second-pass evidence matrix below, preserving ADR-0184 clean/coverage/navigation separation. | Tooling exists; evidence reconciliation and any missing runs remain open. No target of beating every stage or reaching 100% art coverage. |
+| F9.25 | Complete the bounded Contra second-pass evidence matrix below, preserving ADR-0184 clean/coverage/navigation separation. | Recorded 2026-09-15 ([log](../validation/f925-contra-matrix-2026-09-15.md)): nine rows, each with a hash-identified clean control on one binary; four with a measured second pass — `stage1-run` by coverage (`0032:99`, and `+00B0:FE`), `stage2-base` / `stage3-waterfall` / `stage4-base` by navigation (`0030:01/02/03`); five with a named reason (`stage1-water`, `stage1-2p` and the three boss rooms, whose sessions carry no cheat and so are clean passes feeding all four surfaces). The union rebuild passes structural validation: every generator's `--verify` 0 lost / 0 invented, the CHR union takes 142 donated cells from the other 21 recordings, and the painted pack builds and lints with 0 errors. No target of beating every stage or reaching 100% art coverage. |
 
 **F9.25 scope and stop rule.** Inventory the nine existing Contra states:
 `stage1-run`, `stage1-water`, `stage1-2p`, `stage1-boss`, `stage2-base`,
@@ -318,6 +321,14 @@ are identifiable. Missing archived states are blocked rows, never successes.
 Stop when every row has evidence or an explicit not-applicable reason and the
 union rebuild passes structural validation. A zero-gain run is a valid measured
 result; do not keep searching for a higher percentage without a new scoped task.
+
+**Recorded 2026-09-15** ([log](../validation/f925-contra-matrix-2026-09-15.md)):
+the inventory, the four measured second passes, the five named reasons, the
+panorama extents per session and the union validation. Two results there are
+worth reading before re-deriving anything: at 300 s of effective input the
+coverage cheat buys no map extent (all three stage-1 variants stitch the
+identical 2512×240), and the navigation passes are one screen deep because the
+sweep's body script is the stage-1 route.
 
 **Validation — qualitative and intuitive.** The deliverable is legibility,
 which no pixel metric captures, so each slice is judged by a fixed panel
@@ -394,8 +405,9 @@ local artifact hashes and one delivery-record line after acceptance passes.
      key instances to remain unchanged. No source or `hires.txt` diagnosis is
      allowed in the successful user path; a workaround is a failed trial.
    Existing key checks cover only the first gate. Runtime evidence for the
-   other two is required by F9.18-V; this PRD does not claim that an automated
-   implementation of the complete protocol already exists.
+   other two was required by F9.18-V and is recorded in §3; this PRD does not
+   claim that an automated implementation of the complete protocol already
+   exists.
 
 7. **Noise budget** (F9.1, F9.3). Count cells with count = 1 or flagged
    "unaligned"; pass when they sit in a separate `misc` sheet and make
@@ -557,31 +569,28 @@ not that human usability or the full painting promise passed.
 The two preserved C.5 logs are the experiment's evidence. Both skipped reference
 coverage measurement; both found a visible edit within one hour, but the
 painting workflow required manifest diagnosis and exposed incomplete output.
-Their original verdicts remain historical observations. F9.18-V owns current-
-binary verification of those findings, and F9.18 owns human acceptance.
+Their original verdicts remain historical observations. F9.18-V owned current-
+binary verification of those findings and closed 2026-09-15 (§3); F9.18 owns
+human acceptance.
 No completed C.* execution plan remains here; its briefing and history are
 available in git and the logs.
 
 ### 5. Order of execution
 
-1. **F9.18-V:** finish the row. The 2026-09-15 re-run established current-binary
-   correctness of the documented painting path on CHR RAM and CHR ROM, with
-   pixel-exact evidence on both (§3); what remains is a runtime condition-miss
-   frame and a live mirrored-instance screenshot, both blocked on a per-frame
-   key/`[condition]` introspection tool. Should a defect reproduce instead, fix
-   it in a separately scoped task before rerunning the affected criterion, and do
-   not reopen fixed issues on the strength of the old C.5 logs alone.
-2. **F9.18:** after F9.18-V passes, run the independent human panel and record
-   all applicable criteria. C.5's agent runs cannot satisfy this gate.
-3. **F9.25:** reconcile the bounded Contra matrix; perform only missing runs.
-   This can proceed independently of the panel, but its artifacts must identify
-   the binary used and the allowed donor surfaces.
-4. **Part B P.1-local:** complete the accepted local identity requirement with
+1. **F9.18:** F9.18-V closed on 2026-09-15 — current-binary correctness of the
+   documented painting path is established on CHR RAM and CHR ROM, with
+   pixel-exact evidence on both, including the runtime condition-miss and
+   mirrored-instance checks (§3). The independent human panel now runs and
+   records all applicable criteria. C.5's agent runs cannot satisfy this gate.
+   Should a defect reproduce instead, fix it in a separately scoped task before
+   rerunning the affected criterion, and do not reopen fixed issues on the
+   strength of the old C.5 logs alone.
+2. **Part B P.1-local:** complete the accepted local identity requirement with
    cache invalidation and local/catalog deduplication acceptance.
-5. **S10.b:** the user runs the scoped hosted-model experiment; its results feed
+3. **S10.b:** the user runs the scoped hosted-model experiment; its results feed
    an egress/provider ADR or a recorded decision to defer. Whole-subject product
    work additionally depends on Phase 9 selection/export/paint evidence.
-6. **Manual/hardware residue:** native picker, audio listening, physical input
+4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
 
 One implementation slice per task; architecture changes still require their
