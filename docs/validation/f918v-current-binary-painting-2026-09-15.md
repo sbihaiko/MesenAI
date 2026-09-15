@@ -134,6 +134,85 @@ exactly pure magenta on the painted side, zero exceptions**. No pixel
 differs for any reason other than the declared edit; the rest of the frame
 (both player characters, rocks, water, mountains) is untouched.
 
+## 4. Runtime control run — the two open checks (same day, second pass)
+
+The two checks left open above were closed without touching `Core/`: the
+same binary (`scripts/headless_record` sha256 `511ba70f…`, `MesenCore.dylib`
+`9c44d01f…`; no `Core/`/`InteropDLL/` commit between `04d7fc63` and HEAD
+`1f6190cc`), the same ROM, minted state and route, replayed against a
+**negative-control pack** derived from `painted-full`.
+
+**Why a control pack and not a screenshot sweep.** A condition miss is
+invisible by construction: the builder emits the gated line and its bare
+twin pointing at the *same* PNG cell (`HdPackBuilder.cpp`, F9.28 dual
+emission), so hit and miss draw identical pixels. The runtime does expose
+the decision, though — `HdNesPack::GetMatchingTile` returns the first entry
+in file order whose conditions pass — so re-pointing each *line class* at an
+unmistakable cell turns the decision into a colour. This is a validator
+artifact: it edits a copy of the built pack for measurement, never the
+artist's path (gate 6.3 forbids `hires.txt` diagnosis on the *user's*
+success path). The generator is
+`scripts/validation/f918v-control/make_control_pack.py` (versioned after the
+run; the run used the same logic with the four mirror keys listed by hand,
+the versioned script reads them from the kit's `usr*.json` sidecars and so
+marks all seven `usr000.json` flags); the pack is `runs/f918v-20260915/contra/control-2c/`,
+`textures/hires.txt` sha256 `73010de3…`, `mep_lint.py` **0 errors** (the
+same 14 sheet-size warnings as `painted-full`).
+
+| Line class in `hires.txt` | Rendered as | Meaning at run time |
+|---|---|---|
+| `[cond]<tile>` (142 gated lines) | Y(8) \| **cyan**(16) \| B(8) cell | the gated rule matched live |
+| bare twin of a gated line (65) | its sheet cell, sheets repainted Y \| **magenta** \| B over opaque px | every gate for that key missed; the bare twin rendered |
+| bare line with no gated sibling (274) | Y \| **orange** \| B cell | key outside both checks |
+| the 4 keys `kit/sheets/usr000.json` flags `"mirror": "HV"` (10 lines, any class) | one **solid four-quadrant** cell: TL red, TR green, BL blue, BR white | quadrant order reads the flip; no transparency involved |
+
+Runs: `scripts/headless_record runs/f918v-20260915/contra/Contra.nes <s>
+<prefix> screenshot state=runs/f918v-20260915/contra/stage1.mss
+input=scripts/stages/contra/stage1-run.txt`, the control installed as
+`Contra/mep/textures` for the duration of the sweep and `painted-full`
+restored afterwards (`cmp` identical). Note `hdpack` is the builder's
+*recording* flag and disables pack rendering — the first attempt with it
+produced native 256×240 frames; the runs below omit it, as the sweeps in §3
+did. Every run logged `[MEP] textures: loaded NES HD pack from
+'…/Contra/mep/textures'`. Screenshots and per-run logs:
+`runs/f918v-20260915/contra/control-sweep/` (1–17 s, 0.25 s step, 65
+frames) and `control-sweep-jump/` (8.40–10.60 s, 0.02 s step, 111 frames).
+Census/orientation scripts: `scripts/validation/f918v-control/analyze_control.py`
+and `find_mirror_marker.py` (usage in that folder's `README.md`).
+
+**Condition fallback (#256) — runtime PASS.** In every one of the 65 frames
+the two outcomes coexist: cyan (gated rule matched) and Y|magenta|B twin
+cells (gated rule missed, bare twin drawn), with zero orange in the frames
+below, so every magenta is a twin. Examples, `Contra_c10.png` (frame 4208,
+sha256 `e14f21b4…`): cyan 233 313 px, magenta 2 432 px, 92 twin rows, 0
+mirrored; `Contra_c12.png` (frame 4328, sha256 `6059c809…`): cyan 232 004,
+magenta 51 200 — a scroll-transition frame where the `tileNearby` gates on
+the canopy fail wholesale and the painted twin carries the whole row. The
+claim under test — a miss never costs the paint — is now observed live, not
+inferred from the file: the fallback target is the painted bare line,
+exactly as §3 read it off `hires.txt`.
+
+**Mirror (#255) — runtime PASS.** The four marked `mirror: "HV"` keys (of
+the seven `usr000.json` flags, all `HV`) are the player's somersault tiles. Sampling the jump at 0.02 s: the marker renders
+with **quadrant order HV-flipped** (white|blue over green|red) at 9.04 s
+(frame 4150, `Contra_c9.04.png` sha256 `67daf835…`), 9.30 s (4166,
+`Contra_c9.3.png` `b99a38bd…`), 9.34 s (4168) and 9.36 s (4170), and
+**un-flipped** (red|green over blue|white) at 9.14 s (4156), 9.16, 9.20,
+9.46, 9.50 s (4178, `Contra_c9.5.png` `e2786c1a…`) and 9.54 s — the same
+key, same route, both orientations, 2 784–2 928 marker px per instance
+(about three cells). This is the live pair the un-bake of ADR-0178 predicts:
+one stored un-flipped cell, `DrawTile` applying the OAM flip at draw time.
+The Y|mid|B census had earlier flagged 4–12-row "mirrored" slivers in
+sprite-over-background regions; those are artifacts of painting opaque
+pixels only (a transparent yellow band exposes the background's colours) and
+are why the mirror check uses the solid marker instead.
+
+Observations outside the checks: frames ≥ 17 s of this route are the Game
+Over screen, whose blank background tile resolves to a painted `usr` key and
+renders the whole screen magenta — the §3 sweep's "magenta in every frame"
+past 20 s was this screen, not scenery. `artist_map.py`/`MESEN_SHEET_GRID_DUMP`
+for Contra (§1) stays a gap.
+
 ## Verdict
 
 **Structural gate: PASS on both games** (kit `--verify` ×6, `build`,
@@ -145,23 +224,14 @@ differs for any reason other than the declared edit; the rest of the frame
   scenery tiling, every differing pixel provably magenta).
 - Shared-key ownership (#253): **PASS**, structural (0 errors on both
   packs) + visual (fully painted, no dilution, on both).
-- Condition fallback (#256): **structural PASS** (paired conditional/bare
-  lines carry identical, correctly-painted tile data) — runtime
-  condition-miss frame not isolated.
-- Mirror (#255): **structural PASS only** — no live mirrored-instance
-  screenshot obtained on either game.
+- Condition fallback (#256): **PASS**, structural (§3) + runtime (§4: hit
+  and miss rendered side by side in the same frame, the miss landing on the
+  painted twin).
+- Mirror (#255): **PASS**, structural (§2) + runtime (§4: the same
+  `mirror: "HV"` key drawn flipped at frames 4150/4166/4168/4170 and
+  un-flipped at 4156/4178 of the same route).
 
-The row's core evidence gap from C.5 — "does the painted figure actually
-appear, and does nothing else change" — is now closed with pixel-exact
-proof on both the CHR RAM and CHR ROM golden games, not inference from file
-counts. What remains before the row is fully closed: a runtime
-condition-miss frame and a live mirrored-pair screenshot. Both need a frame/
-condition introspection tool this session did not build; recorded here as
-explicit open debt rather than pursued further.
-
-## Next step, if resumed
-
-Build a small tool that reports, per frame of a recording, which `hires.txt`
-keys and which `[condition]` labels were active — turning "find the frame
-where X renders" from a screenshot sweep into a lookup. Without it, the
-mirror-live and condition-miss checks stay a matter of chance sampling.
+Runtime evidence for #255 and #256 is Contra-only (the CHR RAM game); Mega
+Man 3's §3 evidence stands as recorded. No `Core/` change, no new tool in
+the product: the introspection the first pass asked for turned out to be
+unnecessary once the decision was made visible from the pack side.
