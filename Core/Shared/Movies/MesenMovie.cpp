@@ -65,7 +65,17 @@ bool MesenMovie::SetInput(BaseControlDevice* device)
 
 	if(_lastPollCounter != inputRowIndex) {
 		_lastPollCounter = inputRowIndex;
-		assert(_deviceIndex == 0);
+		//A native Mesen recording always has exactly one array element per
+		//registered device, so this used to assert(_deviceIndex == 0) here as
+		//a sanity check. A BizHawk .bk2's row width instead reflects what its
+		//own LogKey declares, which does not have to match how many devices
+		//NES/SmsConsole::InitializeInputDevices auto-configures for this ROM
+		//(e.g. it defaults both controller ports on, even for a single-player
+		//recording) - so a row can end with a leftover element nothing consumed,
+		//or run out before every registered device took its turn. Resetting
+		//unconditionally tolerates both: a leftover element is dropped, a
+		//missing one leaves that device's state unchanged for the row instead
+		//of aborting the whole run.
 		_deviceIndex = 0;
 	}
 
