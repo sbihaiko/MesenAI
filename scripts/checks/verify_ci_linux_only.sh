@@ -3,6 +3,10 @@
 # `make release-macos`, and Windows is retired from CI until the user lifts
 # the rule.
 #
+# ADR-0193 (2026-09-15) extends it with the gate's trigger contract:
+# `checks.yml` keeps `pull_request` on `main` and `workflow_dispatch`. The
+# `push` trigger is not asserted on purpose - see section 6.
+#
 # The ADR was accepted and implemented in the same change, so per CLAUDE.md
 # these greps ARE its unit tests: they fail the moment a workflow reintroduces
 # a macOS or Windows runner, or the moment one of the two deleted workflows
@@ -82,8 +86,28 @@ if ! grep -q "ADR-0191" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml's header no longer states the ADR-0191 policy"
 fi
 
+# 6. ADR-0193: the gate keeps its pre-merge trigger and its dispatch escape.
+#    The trigger deleted in a future "cut the redundant run" edit is the push
+#    one, so it is deliberately NOT asserted here - ADR-0193 §5 lists the
+#    conditions that would let it go, and a guard against its removal would
+#    freeze a decision that is meant to be revisitable. What is frozen is the
+#    half the ruleset depends on: without `pull_request` on `main`, the five
+#    required checks never report and every merge blocks on a name that never
+#    arrives.
+if ! grep -qE "^  pull_request:$" "$WORKFLOWS/checks.yml"; then
+  fail "$WORKFLOWS/checks.yml has no pull_request trigger; the five required checks would never report on a PR and the main ruleset would block every merge (ADR-0193)"
+fi
+if ! grep -qE "^  workflow_dispatch:$" "$WORKFLOWS/checks.yml"; then
+  fail "$WORKFLOWS/checks.yml lost its workflow_dispatch trigger; per ADR-0193 §3 that is the hand-run path for a red main"
+fi
+# The branch filter is part of the contract: a filter-less pull_request widens
+# the gate to every branch of every fork.
+if [ "$(grep -A2 '^  pull_request:$' "$WORKFLOWS/checks.yml" | grep -c -- "- 'main'")" -eq 0 ]; then
+  fail "$WORKFLOWS/checks.yml's pull_request trigger no longer names 'main' in its branches list (ADR-0193)"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS: ADR-0191 (CI compiles Linux only; no macOS/Windows compilation job; checks.yml holds the five gate jobs)"
+echo "PASS: ADR-0191 (CI compiles Linux only; no macOS/Windows compilation job; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch)"
