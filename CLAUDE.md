@@ -160,7 +160,12 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   console on `main`, see `docs/roadmap/AGENTS.md`).
 - Commenting `/revalidate`, or the daily
   `.github/workflows/community-pack-drift-check.yml`, re-runs validation when
-  the link's hash changed since the last pass.
+  the link's hash changed since the last pass. The daily schedule is
+  currently `disabled_manually` by the user's decision (2026-09-14), so Pack
+  Hash, label reconciliation and catalog updates happen only on
+  `/revalidate` or a manual `gh workflow run
+  community-pack-drift-check.yml`; re-enabling it is `gh workflow enable
+  community-pack-drift-check.yml`.
 - `scripts/generate_community_pack_catalog.py` generates
   `docs/community-packs.md` from the board's accepted items
   (game/console/author/date/👍), the 👍 cell linking to the submission issue

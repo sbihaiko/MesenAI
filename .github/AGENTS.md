@@ -82,12 +82,15 @@ what CI actually runs; this doc records why they're split the way they are.
   to `main` (the product branch) and every PR. Excludes vendored `Utilities/Audio/tsf.h` (TinySoundFont);
   that header is also wrapped in `clang-format off/on`.
   `master` is a frozen full-console snapshot and is not gated here.
-- `workflows/dotnet-format-check.yml` — `dotnet format --verify-no-changes`
-  against `Mesen.sln` (Windows), **`disabled_manually`**. Only touches
-  projects that are members of the `.sln`. This is the one file allowed to
-  name a Windows runner under ADR-0191: it compiles nothing and produces no
-  binary, and `verify_ci_linux_only.sh` lists it by name so that enabling it
-  is a deliberate edit rather than silent drift.
+- `workflows/dotnet-format-check.yml` — **deleted** by the user's decision
+  (2026-09-14). It ran `dotnet format --verify-no-changes` against
+  `Mesen.sln` on a Windows runner, `disabled_manually`; it had been the one
+  file ADR-0191 allowed to name a Windows runner, since it compiled nothing
+  and produced no binary. Rather than keep a dead, Windows-only exception
+  around, it was removed outright and `verify_ci_linux_only.sh` no longer
+  carries the exception. A changed-files-only format check may return as a
+  separate PR — on Linux, since ADR-0191 forbids a Windows runner for
+  anything now.
 - `workflows/tests.yml` — **deleted** by ADR-0191 (2026-09-14). It was the
   Windows-only ROM regression suite (MSBuild `PGOHelper` + the private
   `nesdev-org/MesenTests` corpus, run as `PGOHelper.exe … citests`) and the
@@ -102,8 +105,9 @@ what CI actually runs; this doc records why they're split the way they are.
   never require SDL2, never require a platform SDK or a ROM corpus, pin
   `dotnet-version: 10.x` — and those invariants now bind the two `checks.yml`
   jobs. `UI.Tests.csproj` is still intentionally NOT a member of `Mesen.sln`,
-  so it goes through neither `dotnet-format-check.yml` nor `build.yml`'s
-  restore/publish flow.
+  so it goes through neither `build.yml`'s restore/publish flow nor a format
+  check against the `.sln` (`dotnet-format-check.yml`, the workflow that ran
+  that check, was itself deleted 2026-09-14).
 
 - `ISSUE_TEMPLATE/community-pack.yml` — GitHub Issue Form for community
   HD/MEP pack submissions (not a free-text issue). Deliberately minimal:
@@ -186,6 +190,10 @@ what CI actually runs; this doc records why they're split the way they are.
 - `workflows/community-pack-drift-check.yml` — daily (`'17 4 * * *'`) hash
   drift check over the board's accepted items, calling the reusable validate
   workflow with `mode: revalidate` only for items whose content hash moved.
+  `disabled_manually` by the user's decision (2026-09-14): Pack Hash, label
+  reconciliation and catalog updates currently happen only via `/revalidate`
+  or a manual `gh workflow run community-pack-drift-check.yml`; re-enabling
+  the daily schedule is `gh workflow enable community-pack-drift-check.yml`.
   Since Phase 11 C.3 it also carries a **"Reconcile verdict labels with the
   board Status"** step: `pack:valid` and `pack:invalid` are mutually
   exclusive, and while every verdict path inside
@@ -350,10 +358,11 @@ what CI actually runs; this doc records why they're split the way they are.
 - **CI compiles Linux only (ADR-0191, 2026-09-14).** Every binary build is
   macOS Apple Silicon only for now, and CI is not where it happens: no
   workflow in this repository may declare `runs-on:` naming a `macos-*` or a
-  `windows-*` runner. The single exception is the `disabled_manually`
-  `dotnet-format-check.yml`, listed by name in
-  `scripts/checks/verify_ci_linux_only.sh`. The macOS release is built
-  **locally** by `make release-macos` (Phase 11 C.4), whose hash check — not
+  `windows-*` runner. There is no exception left: `dotnet-format-check.yml`,
+  the one file `scripts/checks/verify_ci_linux_only.sh` used to allow to name
+  a Windows runner, was itself deleted (2026-09-14, the user's decision) — a
+  dead, Windows-only exception was not worth keeping. The macOS release is
+  built **locally** by `make release-macos` (Phase 11 C.4), whose hash check — not
   CI — is what verifies the `.app`. Windows is retired from CI until the user
   lifts the rule, and with it the upstream ROM accuracy suite; the practical
   cost is that MSVC-only breakage (`/W4 /WX`, e.g. the `getenv` C4996 trap)
@@ -399,11 +408,12 @@ what CI actually runs; this doc records why they're split the way they are.
   sources it compiles is `build.yml`'s job via `CORESRC` — on Linux only
   since ADR-0191. Only `scripts/core_unit_tests.cpp` itself is clang-gated.
 - `actions/setup-dotnet`'s `dotnet-version` pins `10.x` in both `checks.yml`
-  dotnet jobs, matching `build.yml`'s `10.x`; `dotnet-format-check.yml` pins
-  `10.0.x` for its own, separate Windows-only `dotnet format` check. These
-  are two independent pins, not one tracking the other — keep `checks.yml`
-  aligned with `build.yml`'s `10.x`, not with `dotnet-format-check.yml`
-  (ADR-0131 item 4, option A: the doc matches the files as they are).
+  dotnet jobs, matching `build.yml`'s `10.x`. Before 2026-09-14 this was one
+  of two independent pins — `dotnet-format-check.yml` pinned its own,
+  separate `10.0.x` for its Windows-only `dotnet format` check — but that
+  workflow was deleted, so `build.yml`/`checks.yml`'s `10.x` is now the
+  single source (ADR-0131 item 4, option A: the doc matches the files as
+  they are).
 
 ## Verification
 
@@ -411,7 +421,8 @@ what CI actually runs; this doc records why they're split the way they are.
   `make doc-checks`. It subsumes the greps below; run it first.
 - `! grep -l "windows-latest" .github/workflows/*.yml` (no Windows runner by
   that name; the verifier above also rejects `windows-2025-vs2026` and every
-  other `windows-*`, outside the `dotnet-format-check.yml` exception)
+  other `windows-*` — there is no exception left, `dotnet-format-check.yml`
+  was deleted 2026-09-14)
 - `! grep -l "macos-" .github/workflows/*.yml` (no macOS runner anywhere —
   the macOS release is `make release-macos`, locally)
 - `test ! -e .github/workflows/tests.yml` (deleted with Windows)
@@ -425,7 +436,8 @@ what CI actually runs; this doc records why they're split the way they are.
   (expected: 0 — the names may appear in a comment explaining the invariant,
   never in a step that runs)
 - `grep -E "dotnet-version: 10" .github/workflows/checks.yml
-  .github/workflows/build.yml .github/workflows/dotnet-format-check.yml`
+  .github/workflows/build.yml` (the single source of the `10.x` pin since
+  `dotnet-format-check.yml` was deleted 2026-09-14)
 - `grep -E "ADR-0131|ADR-0191" .github/AGENTS.md` (this file's own invariant
   section cites both ADRs; the workflow files carry the policy in a header
   comment)
