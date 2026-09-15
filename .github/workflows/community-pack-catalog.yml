@@ -11,28 +11,29 @@ name: Community pack catalog
 #
 # `gh project item-list` (used by scripts/generate_community_pack_catalog.py)
 # requires Projects v2 read; the default GITHUB_TOKEN can't see Projects v2 in
-# a personal repo, so this job needs a classic PAT with `repo` + `project` +
-# `read:org` scopes (`read:org` is also required by `gh project` commands to
-# resolve the owner type even for a personal project — confirmed live via an
-# "unknown owner type" failure without it) configured manually as a repo
-# secret (exact name: `PROJECT_PAT`).
+# a personal repo, so the generate step needs a classic PAT with `repo` +
+# `project` + `read:org` scopes (`read:org` is also required by `gh project`
+# commands to resolve the owner type even for a personal project — confirmed
+# live via an "unknown owner type" failure without it) configured manually as
+# a repo secret (exact name: `PROJECT_PAT`).
 # This secret is not created by this workflow nor by any automation.
+#
+# Landing: `main` requires a pull request (ruleset). This job therefore pushes
+# a dedicated branch and opens/updates a PR; it never pushes to `main`
+# directly (run 34953429060 failed on GH013 for that reason).
 on:
   workflow_dispatch:
   # Safety net for the two cases the per-verdict dispatch above cannot
-  # cover: a dispatched run that died (the push-retry loop below failed on
-  # 2026-09-14, run 34844891828) and a board Status changed BY HAND, which
-  # no workflow observes — the ADR-0148 de-listings of 2026-08-31 were hand
-  # moves. Regeneration reads the live board and is idempotent, so a run
-  # with nothing to do commits nothing. Offset from the drift check's
+  # cover: a dispatched run that died and a board Status changed BY HAND,
+  # which no workflow observes — the ADR-0148 de-listings of 2026-08-31 were
+  # hand moves. Regeneration reads the live board and is idempotent, so a
+  # run with nothing to do opens no PR. Offset from the drift check's
   # '17 4 * * *' so the two never start together.
   schedule:
     - cron: '47 4 * * *'
 
 # Every "Aceito*" verdict dispatches this workflow, so revalidating several
-# packs at once used to start one run per pack, each checking out main,
-# committing and pushing. On 2026-09-06 three such runs raced and the last
-# one died on a non-fast-forward push. Serialize them instead; regeneration
+# packs at once used to start one run per pack. Serialize them; regeneration
 # reads the live board and is idempotent, so a queued run that GitHub drops
 # in favour of a newer one loses nothing.
 concurrency:
@@ -41,65 +42,85 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   generate-catalog:
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+      # Board reads need PROJECT_PAT; git push / gh pr use GITHUB_TOKEN below.
+      PROJECT_PAT: ${{ secrets.PROJECT_PAT }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Generate community-packs.md and community-packs.json
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
         run: python3 scripts/generate_community_pack_catalog.py
 
-      - name: Commit regenerated catalog
+      - name: Open or update catalog PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git add -- docs/community-packs.md
-          if [ -f docs/community-packs.json ]; then
-            git add -- docs/community-packs.json
-          fi
-          if git diff --cached --quiet; then
-            echo "docs/community-packs.md and docs/community-packs.json unchanged, nothing to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: regenerate docs/community-packs.md and docs/community-packs.json"
-          # The concurrency group above keeps this workflow from racing
-          # itself; this loop covers the remaining case of someone pushing
-          # to main while the catalog was being generated.
-          #
-          # It used to `git pull --rebase` here, on the theory that a commit
-          # touching only two generated files replays cleanly. It does not:
-          # if what landed meanwhile is another regeneration of the same two
-          # files, every hunk conflicts, the rebase stops half-applied, and
-          # attempts 2 and 3 run against a repository in the middle of a
-          # rebase (run 34844891828, 2026-09-14). Regeneration reads the live
-          # board, so the right move is to drop our commit, take the new main
-          # verbatim and regenerate on top of it — which also picks up
-          # whatever board change the other run saw.
-          for attempt in 1 2 3; do
-            if git push; then
-              exit 0
-            fi
-            echo "push rejected (attempt $attempt) - regenerating on top of the new main and retrying"
-            git rebase --abort 2>/dev/null || true
-            git fetch origin main
-            git reset --hard origin/main
-            python3 scripts/generate_community_pack_catalog.py
+          BRANCH=chore/community-pack-catalog
+
+          stage_catalog() {
             git add -- docs/community-packs.md
             if [ -f docs/community-packs.json ]; then
               git add -- docs/community-packs.json
             fi
+          }
+
+          regenerate() {
+            GH_TOKEN="$PROJECT_PAT" python3 scripts/generate_community_pack_catalog.py
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          stage_catalog
+          if git diff --cached --quiet; then
+            echo "docs/community-packs.md and docs/community-packs.json unchanged, nothing to commit."
+            if gh pr view "$BRANCH" --json number -q .number >/dev/null 2>&1; then
+              echo "closing stale catalog PR (no diff against main after regeneration)."
+              gh pr close "$BRANCH" --comment "Catalog regeneration produced no diff against main; closing." || true
+            fi
+            exit 0
+          fi
+
+          # Dedicated branch — never push to main (ruleset requires a PR).
+          git fetch origin main
+          git checkout -B "$BRANCH"
+          # checkout -B keeps the index; re-stage in case the switch cleared it.
+          stage_catalog
+          git commit -m "chore: regenerate docs/community-packs.md and docs/community-packs.json"
+
+          # Force-with-lease: this branch is owned by this workflow alone
+          # (concurrency group above). A rejected lease means another run
+          # just updated the tip; regenerate once more on the new main.
+          if ! git push -u origin "HEAD:refs/heads/$BRANCH" --force-with-lease; then
+            echo "force-with-lease rejected — regenerating on the latest main tip"
+            git fetch origin main
+            git reset --hard origin/main
+            regenerate
+            stage_catalog
             if git diff --cached --quiet; then
               echo "the newer main already carries this regeneration, nothing to commit."
               exit 0
             fi
             git commit -m "chore: regenerate docs/community-packs.md and docs/community-packs.json"
-          done
-          echo "push still rejected after 3 attempts" >&2
-          exit 1
+            git push -u origin "HEAD:refs/heads/$BRANCH" --force
+          fi
+
+          if gh pr view "$BRANCH" --json number -q .number >/dev/null 2>&1; then
+            echo "catalog PR already open for $BRANCH"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore: regenerate community pack catalog" \
+              --body "Automated regeneration of \`docs/community-packs.md\` and \`docs/community-packs.json\` from the Community Packs board (Project 3). Triggered by schedule or an accepted-pack verdict."
+          fi
+          # Queue merge once the required status checks pass (ruleset).
+          gh pr merge "$BRANCH" --auto --squash || true

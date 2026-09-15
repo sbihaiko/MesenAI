@@ -42,6 +42,39 @@ def check_workflow(failures):
     # AC-6 is the responsibility of the reusable workflow's own checker. An
     # explanatory comment in community-pack-catalog.yml may mention that
     # file name in prose without violating this scope.
+    # main is PR-gated (ruleset). A direct `git push` to main fails with
+    # GH013 (run 34953429060); the job must open/update a PR instead.
+    if "gh pr create" not in text:
+        failures.append(
+            "community-pack-catalog.yml must open a PR (gh pr create) — "
+            "main rejects direct pushes"
+        )
+    # Reject a bare `git push` / `git push origin main` that targets main.
+    # Allow `git push ... HEAD:refs/heads/$BRANCH` / force-with-lease to the
+    # catalog branch.
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("git push"):
+            continue
+        if "HEAD:refs/heads/" in stripped or "$BRANCH" in stripped or '"$BRANCH"' in stripped:
+            continue
+        if "origin main" in stripped or " origin main" in stripped:
+            failures.append(
+                "community-pack-catalog.yml must not `git push` to main; "
+                f"found: {stripped}"
+            )
+            break
+        # `git push` with no refspec pushes the current branch — only safe
+        # when the job already checked out $BRANCH, which we still forbid
+        # as the historical failure mode.
+        if stripped in ("git push", "git push;", "if git push; then") or stripped.startswith(
+            "if git push"
+        ):
+            failures.append(
+                "community-pack-catalog.yml must not `git push` the current "
+                f"branch to origin (use an explicit catalog branch); found: {stripped}"
+            )
+            break
 
 
 def check_columns(failures, text):
