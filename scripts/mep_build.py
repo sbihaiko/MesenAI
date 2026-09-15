@@ -301,6 +301,48 @@ def _unflip_sheet_crops(png_path: Path, crops: list, scale: int) -> int:
     return len(crops)
 
 
+def _sidecar_drop_mirrors(json_path: Path) -> int:
+    """After un-baking mirror crops into the sheet PNG, rewrite the sidecar so
+    a second `build` does not flip again (#255 idempotency). Each tile entry
+    that carried `source` + `mirror` becomes a plain unflipped entry: `tile`
+    is replaced by `source`, and both optional fields are removed."""
+    try:
+        doc = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(doc, dict):
+        return 0
+    n = 0
+
+    def fix_tiles(tiles):
+        nonlocal n
+        if not isinstance(tiles, list):
+            return
+        for entry in tiles:
+            if not isinstance(entry, dict):
+                continue
+            src = str(entry.get("source") or "").strip().upper()
+            mir = str(entry.get("mirror") or "").strip().upper()
+            if not src or mir not in ("H", "V", "HV") or not _HEX_TILE_RE.match(src):
+                continue
+            entry["tile"] = src
+            entry.pop("source", None)
+            entry.pop("mirror", None)
+            n += 1
+
+    for cell in doc.get("cells") or []:
+        if not isinstance(cell, dict):
+            continue
+        fix_tiles(cell.get("tiles"))
+        for alias in cell.get("aliases") or []:
+            if isinstance(alias, dict):
+                fix_tiles(alias.get("tiles"))
+    if not n:
+        return 0
+    json_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    return n
+
+
 def _index_token(index: int) -> str:
     """The index in the width HexUtilities::ToHex writes it — 2, 4, 6 or 8
     digits. The loader parses any width, but matching the emulator's own form
@@ -1162,8 +1204,12 @@ def cmd_build(args) -> int:
         if pending_unflips:
             n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale)
             if n:
+                # Drop source/mirror from the sidecar so a second build does not
+                # un-bake the already-corrected pixels again (#255 idempotency).
+                dropped = _sidecar_drop_mirrors(sd.json_path)
                 print(f"info: {sd.name}: un-baked {n} mirror crop(s) so the source "
-                      f"key stores the pixels the run time will mirror")
+                      f"key stores the pixels the run time will mirror"
+                      + (f"; cleared {dropped} sidecar mirror field(s)" if dropped else ""))
         if repeats:
             print(f"info: {sd.name}: {repeats} crop(s) repeat a tile key already taken by an earlier crop of the same sheet")
         rel = f"sheets/{sd.name}"
