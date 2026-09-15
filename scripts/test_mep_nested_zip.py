@@ -13,8 +13,10 @@ Usage: python3 scripts/test_mep_nested_zip.py
 """
 from __future__ import annotations
 
+import contextlib
 import io
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -144,6 +146,49 @@ def check_single_nested_zip_not_split():
     ok("a single nested game zip stays a single root (no split)")
 
 
+def check_named_nested_game_lint():
+    """A split sibling revalidation must select only its named inner game zip.
+
+    The source URL remains the complete multi-game repository archive, so the
+    normal lint invocation receives the outer zip plus the sibling's Issue Form
+    game. The requested spelling matches the actual #132 revalidation command,
+    while the archive also contains the distinct VS sibling.
+    """
+    entries = {
+        "HDnes-main/Ice_Climber/IceClimber.zip": make_zip({"hires.txt": b"<ver>105\n"}),
+        # The real HDnes archive also carries this distinct sibling. Its
+        # parenthetical suffix must not be discarded before matching #132.
+        "HDnes-main/Ice_Climber_(VS)/IceClimberVS.zip": make_zip({"hires.txt": b"<ver>105\n"}),
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        outer = Path(tmp) / "HDnes.zip"
+        outer.write_bytes(make_zip(entries))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            rc = mep_lint.main(["mep_lint.py", str(outer), "Ice_Climber"])
+        content_output = io.StringIO()
+        with contextlib.redirect_stdout(content_output):
+            content_rc = mep_lint.main(["mep_lint.py", "--content-id", str(outer), "Ice_Climber"])
+    text = output.getvalue()
+    content_id = content_output.getvalue().strip()
+    if rc != 0:
+        fail(f"named nested game lint returned {rc}: {text!r}")
+        return
+    if content_rc != 0 or len(content_id) != 64:
+        fail(f"named nested game content_id did not resolve the sibling: rc={content_rc}, output={content_id!r}")
+        return
+    if "Ice_Climber/IceClimber.zip" not in text:
+        fail(f"named nested game lint did not select Ice Climber: {text!r}")
+        return
+    if "Ice_Climber_(VS)" in text:
+        fail(f"named nested game lint included the distinct VS sibling: {text!r}")
+        return
+    if "no section found" in text:
+        fail(f"named nested game lint searched the container instead of the sibling: {text!r}")
+        return
+    ok("named nested game lint selects only the Ice Climber sibling pack")
+
+
 def check_subfolder_behavior_unchanged():
     """AC-5: a container that already resolves by direct subfolder candidates
     (extracted packs) keeps enumerating those — nested-zip scanning is only a
@@ -191,6 +236,7 @@ def main():
     check_unrelated_zips_excluded()
     check_pack_json_nested()
     check_single_nested_zip_not_split()
+    check_named_nested_game_lint()
     check_subfolder_behavior_unchanged()
     check_bare_manifest_folder_is_not_a_root()
 

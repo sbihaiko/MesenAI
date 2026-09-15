@@ -603,6 +603,43 @@ def find_nested_game_zips(src: Source):
     return list(by_subfolder.values())
 
 
+def find_nested_game_zip_by_name(src: Source, rom_name):
+    """Returns the one nested game zip that matches ``rom_name``, if any.
+
+    This is the single-game revalidation counterpart to ``--list-games``:
+    a split sibling still downloads the original multi-game container, but
+    must lint only its own nested pack. Prefer exact and separator-folded names
+    before the existing region-tag normalization, so ``Ice Climber`` cannot
+    accidentally also select the distinct ``Ice Climber (VS)`` sibling.
+    More than one match at any priority fails closed.
+    """
+    rom_name = rom_name or ""
+    roots = find_nested_game_zips(src)
+
+    exact = [prefix for prefix, game in roots if game and game.casefold() == rom_name.casefold()]
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        return None
+
+    def fold_separators(name):
+        return _WHITESPACE_RE.sub(" ", _SEPARATOR_RE.sub(" ", name)).strip().casefold()
+
+    folded_rom_name = fold_separators(rom_name)
+    folded = [prefix for prefix, game in roots if game and fold_separators(game) == folded_rom_name]
+    if len(folded) == 1:
+        return folded[0]
+    if folded:
+        return None
+
+    normalized_rom_name = normalize_rom_core_name(rom_name)
+    if len(normalized_rom_name) < 2:
+        return None
+    matches = [prefix for prefix, game in roots
+               if game and normalize_rom_core_name(game) == normalized_rom_name]
+    return matches[0] if len(matches) == 1 else None
+
+
 def discover_game_roots(src: Source, rom_name):
     """The distinct game pack roots the container holds (ADR-0143): one
     ("", game) entry when the container root is itself a pack, else one
@@ -1359,6 +1396,30 @@ def main(argv):
             sections = discover_scoped(src, rep, root_prefix)
         else:
             sections = discover_sections(src, rep, rom_name)
+
+            if not sections:
+                # A split sibling retains the original multi-game container as
+                # its source URL. Select exactly the nested game that matches
+                # the sibling's submitted ROM name, then run normal discovery
+                # against that inner zip. No name match leaves existing
+                # fallbacks untouched; an ambiguous match is rejected.
+                nested_game_name = find_nested_game_zip_by_name(src, rom_name)
+                if nested_game_name:
+                    try:
+                        nested_src = Source.from_zip_bytes(
+                            src.read(nested_game_name), label=f"{target}!{nested_game_name}")
+                    except zipfile.BadZipFile as exc:
+                        rep.info(
+                            nested_game_name,
+                            f"matching nested game zip could not be opened as a zip ({exc}) — "
+                            "skipping nested-game fallback")
+                    else:
+                        rep.info(
+                            nested_game_name,
+                            "nested-game fallback (ADR-0143): re-running discovery inside the zip "
+                            "matching the submitted ROM name")
+                        src = nested_src
+                        sections = discover_sections(src, rep, rom_name)
 
             if not sections:
                 # Issue #19: absolute last resort, tried only once every convention

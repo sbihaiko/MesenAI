@@ -272,6 +272,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `FALLBACK_MAX_DEPTH`/`FALLBACK_MAX_ENTRIES` (reusing `PROBES`/
   `AUDIO_ALT_PROBE`); it fires only when the root-level convention scan
   found no section, and emits an info line naming the discovered path/depth.
+  For an ADR-0143 split sibling that still references the original multi-game
+  archive, ordinary lint with the sibling's declared game name selects exactly
+  one matching nested game zip (preferring exact/space-underscore matches over
+  trailing region-tag normalization); no match or ambiguity leaves the existing
+  fallbacks in place.
   Every candidate entry is run through `safe_rel` before it can become the
   discovered prefix — a zip-slip-shaped entry (a `..` segment) is skipped,
   never treated as a valid pack root, matching the traversal guards
