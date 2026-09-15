@@ -156,7 +156,8 @@ the file. `mep_build.py` needs no change, and `seed`/`locked` keep naming
   projectile one cell away is a different pose (223 poses on a 300 s Mega
   Man 3 run, 25 of them the main character's). The `budget` argument of
   `sprite_rank` already caps what reaches the artist; loosening pose
-  identity is ADR-0170's decision to revisit, not this one's.
+  identity was ADR-0170's open revisit — **closed 2026-09-15 (Phase 11 C.8)
+  without loosening**; see ADR-0170 Consequences.
 - Two layout paths live in the engine indefinitely — pose and walk — because
   a pack recorded before ADR-0170 is a legitimate input forever. The walk is
   not dead code, and ADR-0168 stays readable in the register for that

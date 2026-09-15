@@ -923,6 +923,21 @@ does not exist.
   47% / 864 conditions / ~2.3× — a second author's habits are not the same
   shape, so grouping and condition rules must not be retuned to Contra alone.
 
+- **C.7 — size guard + pins** (2026-09-15, #261/#262): `make doc-checks`
+  ceilings `HdPackBuilder.cpp` 2246, `artist_chr_kit.py` 1762, `mep_build.py`
+  1932, `sheet_repaint.py` 1591, `core_unit_tests.cpp` 7342 (shrink ok, grow
+  fails); `scripts/requirements.txt` pins PyYAML/Pillow/numpy to `checks.yml`.
+  Amends ADR-0137. (PRD said six files, listed five — those five are the
+  contract.)
+
+- **C.8 — ADR debts closed** (2026-09-15): (a) ADR-0154 Option A superseded by
+  **ADR-0192** — generative diffusion retired until a measured run; (b)
+  ADR-0186 `cdl=` cost published — **≈1.9×** wall clock on a 30 s Zelda run
+  (2.7 s → 5.1 s); (c) `verify_pack_host_allowlist_drift.py` fails when
+  fetch_pack / CommunityPackDownloader / validate.yml drift (#263); (d)
+  ADR-0170 pose-identity revisit closed — keep sets-equal, do not loosen.
+  Phase 11 live table empty of C.* rows.
+
 ### 4. Roadmap — pending work, by slice
 
 #### Phase 6 — Community pack auto-install (MEP Recipe v1)
@@ -1327,10 +1342,11 @@ harness problem, solved several ways, in readable code.
 **Status:** proposed 2026-09-14 by the roadmap review of the same day,
 **accepted 2026-09-14 by the user, all eight slices** ("me ajude a decidir"
 → C.1–C.8 selected), in the order §5 gives: C.1 → C.3 → C.2, then C.4 →
-C.5, with C.6–C.8 after C.5 reports. **C.1–C.6 shipped 2026-09-14/15** (record
-in §3); live table holds C.7–C.8. No ADR is needed for C.2, C.3 and C.4;
-C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`), C.7 amends the
-LOC guard (ADR-0137), and C.8 closes debts other ADRs left open.
+C.5, with C.6–C.8 after C.5 reports. **C.1–C.8 shipped 2026-09-14/15** (record
+in §3); Phase 11 live table has no remaining C.* rows. No ADR is needed for
+C.2, C.3 and C.4; C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`),
+C.7 amends the LOC guard (ADR-0137), and C.8 closes debts other ADRs left
+open (ADR-0192 supersedes 0154 §2 Option A).
 
 **Problem — measured on 2026-09-14.** The fork carries 653 commits and
 +111 k lines against the frozen `master`, 98 ADRs and 96 slice ids in
@@ -1377,10 +1393,9 @@ their own thesis); the *documents* and the *gate* did not:
 either cheap and mechanical (C.1–C.3, C.7) or the first contact with a real
 user (C.4–C.6). No new emulator feature ships under this phase.
 
-| Slice | Deliverable | Decision |
-|---|---|---|
-| C.7 | **The size guard ratchets.** `check-file-loc.sh` gains the six files above at their current line count as a ceiling (a PR may shrink them, never grow them), and `scripts/requirements.txt` pins Pillow/numpy/PyYAML where `checks.yml` does today | accepted 2026-09-14; amends ADR-0137's file list |
-| C.8 | **Close the debts ADRs left open.** ADR-0154: run the `diffusion` backend once or supersede Option A (it has never executed; PRD test 8 has never run); ADR-0186: publish the debugger slowdown as a number; ADR-0187: a `doc-checks` script that diffs the host allow-list between `fetch_pack.py`, `CommunityPackDownloader.cs` and `community-pack-validate.yml`; ADR-0171 → 0170: the "loosen pose identity" revisit (223 poses on a 300 s run) | accepted 2026-09-14; each item is its own PR; 0154's outcome is an ADR either way |
+Phase 11 consolidation is complete: every C.1–C.8 row has been deleted into
+§3. What remains of the broader roadmap outside this phase is unchanged
+(F9.18 human panel, F9.25 second-pass recordings, S10.b, Part B).
 
 **The C.5 evaluator — profile, sandbox, prompt, log.**
 
@@ -1511,7 +1526,8 @@ files and in §3.
 | 0184 | accepted (2026-09-13) | a recording may carry a cheat only as a **RAM-address** code (`NesCustom`, address below `$0800`), never a PRG patch — a Game Genie code is PRG-space by construction and a CHR RAM game unpacks its tiles out of PRG; a cheated run is a second pass that feeds only the background surfaces (stage maps, pattern pages), because the barrier sprite and the swapped palette reach the figure grids and not the panorama |
 | 0185 | accepted (2026-09-14); shipped | a **published TAS movie** is an admissible recording driver when it matches our ROM byte for byte: it is input, never evidence, so a movie-driven run is a *clean* run for all four kit surfaces. `.fm2` is converted outside the Core by `scripts/fm2_to_bk2.py` (the Core keeps `.bk2`/`.mmo` and has no `.fm2` reader); the harness refuses a movie the Core silently dropped; sync is proven only by recording strictly more keys than the movie-less run. Contra is the one game it does not help — every modern publication runs the Japanese VRC2 cartridge. |
 | 0186 | accepted (2026-09-14) | a recording also yields a **code/data map**, and the only ROM we disassemble is the part we executed. The CPU performs the code/data separation and the offset is absolute, so two of static analysis's three walls fall by construction; the third, naming, stays human. Coverage accumulates by union and a run that logs nothing fails loudly. §4 is the load-bearing clause: access is not meaning, so a large untouched-by-code data run is reported as a *candidate* with offset and bank and never with a name. Amended the same day: the art-coverage justification is withdrawn; this is program analysis. | F9.27 |
-| 0187 | accepted (2026-09-14); shipped | Dropbox and MEGA are allow-listed pack hosts, each with its own fetch kind (amends 0138 §41); the five-way host-list mirror has no drift check yet (Phase 11 C.8) |
+| 0187 | accepted (2026-09-14); shipped | Dropbox and MEGA are allow-listed pack hosts, each with its own fetch kind (amends 0138 §41); five-way mirror drift check shipped as Phase 11 C.8 (`verify_pack_host_allowlist_drift.py`) |
+| 0192 | accepted (2026-09-15); shipped | Generative repaint backend retired until measured (supersedes 0154 §2 Option A; Phase 11 C.8) |
 | 0188 | accepted (2026-09-14); shipped as F9.28 | an AI judges a rendered surface; its judgement is a **proposal** that becomes evidence only through a human `promote` — the judging half of AI in this project, ADR-0170 being the generative half |
 | 0189 | accepted (2026-09-14); implemented in the same change | a sprite-group edge is serialized as a `spriteNearby` condition and a conditioned tile always keeps a bare twin; defers `frameRange`, `tileAtPosition`, `memoryCheckConstant` |
 | 0190 | accepted (2026-09-14); implemented in the same change | `tileNearby` auto-attached from a directed co-occurrence table gated on both-ways frame support; removes `tileNearby` from 0189 §4's deferrals |

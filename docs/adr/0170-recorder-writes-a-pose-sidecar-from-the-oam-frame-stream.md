@@ -2,7 +2,9 @@
 
 - Status: accepted (2026-09-11, by the user) — shipped the same day as PRD
   Part A slice **F9.19** in `2477b1ec`: the recorder writes
-  `sheets/poses.json` from the OAM frame stream.
+  `sheets/poses.json` from the OAM frame stream. **Amended 2026-09-15
+  (Phase 11 C.8):** the "loosen pose identity" revisit is closed — keep
+  sets-equal identity; see Consequences.
 - Date: 2026-09-09 (accepted 2026-09-11)
 - Related: ADR-0153 (§2 the mutual-predictability grouping criterion, §5 the
   retained-stream cap), ADR-0164 (§1 `sheets/adjacency.json`, §5 the sprite
@@ -166,7 +168,13 @@ than a fragment.
   identity (ignore members below a frequency, or cluster by Jaccard) is a
   decision this ADR declines to take without a measurement, because
   loosening it can merge two real poses and that failure is invisible in the
-  file.
+  file. **Closed 2026-09-15 (Phase 11 C.8 / ADR-0171 Consequences):** do
+  **not** loosen. The 2026-09-11 Mega Man 3 pack carried 223 poses with
+  fusion labelling (`fusionOf`); ADR-0171 already treats over-large units as
+  labelled fusions rather than as a reason to weaken identity. Loosening
+  would hide real pose splits inside the file with no consumer-visible
+  signal. Revisit only with a measurement that names a false-merge rate on
+  a labelled set — not as an open debt.
 - Contact between actors merges them: in Contra, an enemy touching Bill is
   one cluster, so a "pose" can be two characters. Connectivity is the only
   signal the OAM stream carries; separating actors needs identity, which the

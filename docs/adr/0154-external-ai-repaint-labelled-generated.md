@@ -1,13 +1,14 @@
 # ADR-0154: The optional AI repaint is an external, backend-pluggable script whose output lands in `auto/`, is labelled `generated` in `pack.json`, and is never eligible for the community catalog
 
-- Status: accepted (2026-09-05, by the user, after §2 was settled on Option A — reflected in `scripts/sheet_repaint.py`; PRD Part A slice F9.6)
+- Status: accepted (2026-09-05, by the user, after §2 was settled on Option A — reflected in `scripts/sheet_repaint.py`; PRD Part A slice F9.6). **§2 Option A superseded 2026-09-15 by ADR-0192** (Phase 11 C.8): generative diffusion is retired as a project commitment until a measured run exists; `passthrough`/`classical` remain the supported backends. The `generated` label and the rest of this ADR stand.
 - Date: 2026-09-05
 - Related: PRD Part A §4 "Phase 9" (slice F9.6 and validation test 8),
   ADR-0153, ADR-0049, ADR-0147, ADR-0050, ADR-0005, ADR-0140, ADR-0152,
-  ADR-0148, ADR-0138 §41, MEP-v1 §3.1/§3.2, CLAUDE.md "Community HD/MEP Pack
+  ADR-0148, ADR-0138 §41, ADR-0192, MEP-v1 §3.1/§3.2, CLAUDE.md "Community HD/MEP Pack
   triage"
 - Supersedes / amends: nothing. ADR-0153's non-goal ("AI generation inside the
   emulator — F9.6 stays an external script under its own ADR") is this ADR.
+- Superseded by: ADR-0192 for §2 Option A only
 
 **This ADR is `accepted`.** It was written `proposed` because §2 was a genuine
 either/or; the user picked **Option A** (local diffusion + ControlNet) on
@@ -437,7 +438,9 @@ deliberate loss of expressiveness in exchange for a guarantee.
   written, its unavailable path is tested, and its generation path has no
   coverage at all because running it needs weights and a GPU this project
   does not provide. Nobody should read a green test suite as evidence that it
-  produces an image.
+  produces an image. **Closed 2026-09-15 (ADR-0192 / Phase 11 C.8):** Option A
+  is superseded; diffusion is not a project commitment until a measured run
+  reopens it.
 - The two-step build (`mep_build build <Game>/auto/repaint --source
   <Game>/auto/textures/hires.txt`) is a papercut. It exists because `auto/`
   carries no `hires.txt` of its own outside `auto/textures`, and hiding it

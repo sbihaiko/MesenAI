@@ -5,7 +5,9 @@
   `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`). **Amended the same
   day** — the Context's art-coverage justification was withdrawn after
   measuring how the reference pack was actually built; see "Amended
-  2026-09-14" below. The Decision is unchanged.
+  2026-09-14" below. The Decision is unchanged. **Amended 2026-09-15
+  (Phase 11 C.8):** the debugger/`cdl=` wall-clock cost is published below
+  under Consequences.
 - Date: 2026-09-14
 - Related: ADR-0183 (the artist kit — §3 "evidence and inference are never
   confused" and the rule that no generator invents a name both carry over
@@ -118,6 +120,13 @@ object, and the only one this project has standing to produce.
   the cost must be published as a measured number rather than a caveat. A
   1920-emulated-second TAS run currently takes ~5 minutes of wall clock, and
   the honest question is what multiple of that the map costs.
+  **Measured 2026-09-15 (Phase 11 C.8):** Zelda (USA), 30 emulated seconds
+  (1803 frames), `hdpack-off`, same binary — without `cdl=` wall clock
+  **2.7 s** (`time` real 2.85 s); with `cdl=<path>` wall clock **5.1 s**
+  (`time` real 5.19 s). Ratio **≈ 1.9×** wall clock (1.82× by `time` real).
+  Emulated fps stayed 60.099 both ways; the cost is wall time, not a drop in
+  the emulator's master-clock accounting. Scaling the ~5 min TAS figure by
+  1.9× puts a CDL-on map run near **~9.5 min** wall for the same movie.
 - **A `.cdl` is per-ROM and permanent.** It is keyed by ROM CRC32, accumulates
   forever, and is worth keeping between sessions — unlike a recording, it does
   not go stale when a generator changes. It is unversioned like `runs/`, but it
