@@ -253,6 +253,21 @@ uint8_t NesControlManager::ReadRam(uint16_t addr)
 
 	_prevReadAddr = addr;
 
+	//TEMPORARY INVESTIGATION INSTRUMENTATION (issue #201) - not for commit
+	{
+		static FILE* padTrace = nullptr;
+		static bool padTraceTried = false;
+		if(!padTraceTried) {
+			padTraceTried = true;
+			const char* path = getenv("MESENCE_PADTRACE");
+			if(path) { padTrace = fopen(path, "w"); }
+		}
+		if(padTrace) {
+			fprintf(padTrace, "%u %llu %04X %02X\n", _emu->GetFrameCount(),
+				(unsigned long long)_console->GetMasterClock(), addr, value);
+		}
+	}
+
 	return value;
 }
 
