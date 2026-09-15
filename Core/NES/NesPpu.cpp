@@ -352,6 +352,20 @@ template<class T> uint8_t NesPpu<T>::ReadRam(uint16_t addr)
 				((uint8_t)_statusFlags.Sprite0Hit << 6) |
 				((uint8_t)_statusFlags.VerticalBlank << 7);
 
+			//TEMPORARY INVESTIGATION INSTRUMENTATION (issue #201) - not for commit
+			{
+				static FILE* ppuTrace = nullptr;
+				static bool ppuTraceTried = false;
+				if(!ppuTraceTried) {
+					ppuTraceTried = true;
+					const char* path = getenv("MESENCE_PPUTRACE");
+					if(path) { ppuTrace = fopen(path, "w"); }
+				}
+				if(ppuTrace) {
+					fprintf(ppuTrace, "%u %d %u %u\n", _emu->GetFrameCount(), (int)_scanline, _cycle, (unsigned)_statusFlags.Sprite0Hit);
+				}
+			}
+
 			UpdateStatusFlag();
 			openBusMask = 0x1F;
 
