@@ -37,6 +37,7 @@ public:
 	virtual ~NesControlManager();
 
 	virtual uint8_t GetOpenBusMask(uint8_t port);
+	void ExtendDmcRead(uint16_t addr);
 
 	void UpdateControlDevices() override;
 	void UpdateInputState() override;
