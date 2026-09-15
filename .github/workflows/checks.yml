@@ -33,6 +33,28 @@ name: Checks
 # locally with `make release-macos`, and no job in this repository compiles C++
 # on macOS or Windows.
 #
+# The trigger pair below is deliberate and was measured (ADR-0193, 2026-09-15).
+# `pull_request` is the gate: it reports the five checks the `main` ruleset
+# requires before the code can land. The `push` on `main` is NOT a duplicate of
+# it - it is the only gate for what bypasses the PR path entirely:
+#
+#   - a direct push. The ruleset's `bypass_actors` lets an admin token through,
+#     which is how a hand fix lands. (`community-pack-catalog.yml` used to
+#     push this way; since #266 it opens a PR on chore/community-pack-catalog
+#     instead — run 34953429060 showed PROJECT_PAT is not a bypass actor.)
+#   - a merge-commit or rebase-merge onto a `main` that moved. That tree was
+#     never the head `pull_request` tested, because the ruleset's
+#     `strict_required_status_checks_policy` is false.
+#
+# Measured over the last 60 commits on `main`: 49 squash-merges, 7 PRs via
+# merge-commit/rebase, 4 pushed straight to `main` with no PR at all. Removing
+# this trigger to "cut the duplicate run" opens those 4 - none of them
+# reviewed - plus every merge-commit tree, and the run costs nothing: the
+# repository is public, so standard-runner minutes are not billed. Runs are two
+# per merged PR, and during a burst of merges most of the `push` ones end
+# `cancelled` (the concurrency group below is workflow+ref). Reopen the
+# question only when one of those two paths stops existing (ADR-0193 §5).
+#
 # `make doc-checks` is the repo's own acceptance suite: the drift guardrails
 # (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline
 # verifiers, and the HD-pack and artist-kit script suites. It also compiles —
@@ -41,10 +63,14 @@ name: Checks
 # helper, not the GUI/LTO/AOT artifact `build.yml` produces.
 
 on:
-  push:
+  # The gate. Reports the five required checks of the `main` ruleset.
+  pull_request:
     branches:
       - 'main'
-  pull_request:
+  # Not a duplicate of the above, and not to be removed to save a run: the
+  # only gate for a direct push to `main` (admin bypass) and for a
+  # merge-commit/rebase tree the PR never tested. See the header (ADR-0193).
+  push:
     branches:
       - 'main'
   workflow_dispatch:

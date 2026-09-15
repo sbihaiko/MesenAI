@@ -22,7 +22,18 @@ what CI actually runs; this doc records why they're split the way they are.
   putting the two blocks back under `on:`; restoring a platform is a revert of
   the ADR-0191 commit plus a line in that ADR. The rationale for both is in
   the file's header comment.
-- `workflows/checks.yml` — `make doc-checks` on every push and pull request.
+- `workflows/checks.yml` — `make doc-checks` on every pull request into
+  `main`, on every push to `main`, and on dispatch. The two triggers are not
+  duplicates, and the `push` one is not removable as an optimization
+  (**ADR-0193**, 2026-09-15): `pull_request` is what reports the five required
+  checks before the code can land, and `push` on `main` is the *only* gate for
+  what bypasses that path — a direct push (the ruleset's `bypass_actors` lets
+  an admin token through, which is how a hand fix lands; catalog regenerations
+  open a PR since #266) and a merge-commit/rebase-merge onto
+  a `main` that moved, whose tree the PR never tested
+  (`strict_required_status_checks_policy` is false). Measured over the last 60
+  commits on `main`: 49 squash-merges, 7 PRs via merge-commit/rebase, 4 pushed
+  straight to `main`. Runs are free — the repository is public.
   This is the repo's always-on gate, moved out of `build.yml` when that file
   became dispatch-only. It is a separate file, not a job, because
   `build.yml`'s newest run on `main` is what the README's nightly.link
@@ -389,6 +400,13 @@ what CI actually runs; this doc records why they're split the way they are.
   a compile or a Python test leave the gate, is not — that is the state #230
   left behind and C.1 was written to end. Binaries stay on
   `workflow_dispatch` (#230 stands); none of this re-enables them.
+  **Trigger half (ADR-0193, 2026-09-15):** the invariant above binds what a
+  pull request *must* report, and that is the trigger the gate cannot lose —
+  drop `pull_request` from `checks.yml` and the five checks never report, so
+  every merge blocks on a name that never arrives. The `push` on `main` is a
+  separate trigger with a separate job (the bypass paths in the `checks.yml`
+  bullet above) and is revisitable on the terms ADR-0193 §5 gives; do not read
+  "the gate is the pull request" as "the push trigger is dead weight".
 - The `checks.yml` jobs `ui-tests` and `headless-ui-tests` must never link
   `InteropDLL`/`MesenCore`, never require SDL2, and never require a platform
   SDK or ROM corpus (ADR-0131's invariants, inherited from the deleted
@@ -417,8 +435,14 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Verification
 
-- `./scripts/checks/verify_ci_linux_only.sh` — ADR-0191's own test, wired into
-  `make doc-checks`. It subsumes the greps below; run it first.
+- `./scripts/checks/verify_ci_linux_only.sh` — ADR-0191's own test plus
+  ADR-0193's trigger contract, wired into `make doc-checks`. It subsumes the
+  greps below; run it first.
+- `grep -E "^  (pull_request|workflow_dispatch):" .github/workflows/checks.yml`
+  (expected: both — ADR-0193; the `push` trigger is intentionally absent from
+  this grep and from the verifier, see ADR-0193 §4)
+- `grep -A2 "^  pull_request:" .github/workflows/checks.yml` (expected: the
+  `branches:` filter naming `main`)
 - `! grep -l "windows-latest" .github/workflows/*.yml` (no Windows runner by
   that name; the verifier above also rejects `windows-2025-vs2026` and every
   other `windows-*` — there is no exception left, `dotnet-format-check.yml`
