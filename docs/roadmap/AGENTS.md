@@ -6,11 +6,12 @@ The fork's planning lives in one consolidated PRD under this folder:
 
 - `PRD-mesence-enhancement-ecosystem.md` — the single roadmap, organised
   as two Parts. Part A is the pack/core roadmap (vision, legal principles,
-  standards, shipped record, and the live slices: Phase 9 artist kit and
-  panel, Phase 10 spikes, Phase 11 consolidation — gate, register,
-  release, first external artist). Part B is the default-GUI roadmap (player chrome,
+  standards, compact delivery record, and remaining work: Phase 9 painting
+  verification, human panel and bounded coverage; Phase 10 feasibility.
+  Phase 11 consolidation is complete; its proxy experiment is not human
+  product acceptance). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
-  quick-enhancements panel). Each Part carries its own header `Status`,
+  quick-enhancements panel, with P.1-local identity integration still open). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface.
 
@@ -49,6 +50,16 @@ Owned with `docs/` (see parent `docs/AGENTS.md`). Does not own specs
   points at it.
 - One slice per task; never hand a whole phase or the whole PRD to a single
   run — slice it and settle the slice's ADRs first.
+- Acceptance distinguishes structural integrity, runtime visual correctness,
+  independent agent workflow trials and human usability. Completion of an
+  experiment does not certify the product promise. Missing evidence is recorded
+  as not evaluated, never as a pass. Text summaries identify binary/input hashes
+  and live in `docs/validation/`; ROM-derived artifacts remain local.
+- Live slices state bounded inputs, prerequisites and a stop rule. Completed
+  spikes leave the live table; implementation debts remain visible even when
+  the surrounding phase has shipped. Reconcile duplicated status text in the
+  same change. A documentation review may cover the entire PRD; the one-slice
+  limit applies to implementation tasks.
 - Prose is en-US (CLAUDE.md); quoted GitHub Project Status option names
   stay verbatim.
 - The "delete the row when it ships" rule above is enforced:
