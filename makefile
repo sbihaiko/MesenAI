@@ -256,6 +256,14 @@ doc-checks: check-manifest
 	./scripts/check-file-loc.sh scripts/gameplay_screen_metrics.py 200
 	./scripts/check-file-loc.sh scripts/sheet_report.py 200
 	./scripts/check-file-loc.sh scripts/bootstrap_auto_packs.sh 200
+	# Phase 11 C.7: ceilings = line count at the C.7 commit (shrink ok, grow fails).
+	# Amends ADR-0137's guarded-file list. PRD named five files with counts
+	# (said "six"); those five are the contract.
+	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2246
+	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1762
+	./scripts/check-file-loc.sh scripts/mep_build.py 1932
+	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
+	./scripts/check-file-loc.sh scripts/core_unit_tests.cpp 7342
 	./scripts/checks/verify_pack_host_allowlist_embed.sh
 	./scripts/checks/verify_core_no_http_client.sh
 	./scripts/checks/verify_fetcher_no_filesystem_allowlist_load.sh
