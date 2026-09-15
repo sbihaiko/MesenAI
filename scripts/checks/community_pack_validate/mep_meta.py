@@ -120,6 +120,89 @@ def check_mep_meta_fence_not_hardcoded(text):
         fail("Upsert mep-meta comment step never calls choose_fence() to size its JSON fence")
 
 
+def check_mep_meta_records_split_game_identity(text):
+    # ADR-0143: a split submission's per-game identity lives only in this
+    # comment, and the write is wholesale (§5). So the step must read the
+    # identity back before rewriting it, and re-emit it: `game` (which
+    # `resolve_pack_id` turns into `{origin}:{game}`) and the primary's
+    # `siblings`. Reading the prior body has to happen BEFORE the PATCH,
+    # and `meta["game"]` has to be set BEFORE `resolve_pack_id` runs, or the
+    # id degrades to the bare origin. The label read is what scopes this to
+    # split issues only, so no existing non-split row re-keys.
+    block = _mep_meta_block(text)
+    if block is None:
+        return
+    if "--json labels" not in block or "pack:split" not in block:
+        fail(
+            "Upsert mep-meta comment step does not read the issue's labels to "
+            "recognize a split submission (ADR-0143)"
+        )
+    if "parse_mep_meta" not in block or "mep_meta_parser" not in block:
+        fail(
+            "Upsert mep-meta comment step does not parse the prior comment body "
+            "with the shared mep_meta_parser leaf"
+        )
+    if 'meta["game"]' not in block:
+        fail("Upsert mep-meta comment step never re-emits the ADR-0143 `game` field")
+    if 'meta["siblings"]' not in block:
+        fail("Upsert mep-meta comment step never re-emits a split primary's `siblings` list")
+    # Ordering, not just presence: a substring check alone passes on code
+    # that reads the identity one line too late — which is exactly how the
+    # regression this covers behaves (the field is dropped rather than
+    # mis-set, so only the order distinguishes the two).
+    prior_read_at = block.find('-q .body >"$PRIOR_META_PATH"')
+    if prior_read_at == -1:
+        fail("Upsert mep-meta comment step never stores the prior comment body")
+    patch_at = block.find("--method PATCH")
+    if prior_read_at != -1 and patch_at != -1 and prior_read_at > patch_at:
+        fail(
+            "Upsert mep-meta comment step PATCHes the comment before reading the "
+            "prior identity out of it (ADR-0143 identity would be lost)"
+        )
+    body = _mep_meta_python(block)
+    if body is None:
+        return
+    # Anchors first: an ordering assertion between two `find()` calls that
+    # both return -1 passes vacuously, which would make this whole check a
+    # no-op the moment the step's Python is renamed.
+    game_at = body.find('meta["game"]')
+    resolve_at = body.find("resolve_pack_id(")
+    prior_at = body.find("parse_mep_meta(")
+    for name, at in (('meta["game"]', game_at), ("resolve_pack_id(", resolve_at),
+                     ("parse_mep_meta(", prior_at)):
+        if at == -1:
+            fail(f"Upsert mep-meta comment step's Python never mentions {name}")
+            return
+    if game_at > resolve_at:
+        fail(
+            "Upsert mep-meta comment step sets `game` after resolve_pack_id — "
+            "the ADR-0143 pack_id would resolve to the bare origin"
+        )
+    if prior_at > game_at:
+        fail(
+            "Upsert mep-meta comment step uses the prior identity before "
+            "parsing it out of the comment body"
+        )
+
+
+def _mep_meta_python(block):
+    """The Python heredoc inside the step, so the ordering of its statements
+    can be asserted (see the caller). The opener is matched with its trailing
+    newline and the closer as a whole line: searching for a bare `PYEOF` past
+    the opener's own index finds the opener's OWN text three characters in,
+    which yields a three-character "body" whose every `find()` returns -1 —
+    an ordering check that silently never runs."""
+    start = block.find("<<'PYEOF'\n")
+    if start == -1:
+        fail("Upsert mep-meta comment step has no <<'PYEOF' heredoc")
+        return None
+    end = block.find("\n          PYEOF\n", start)
+    if end == -1:
+        fail("Upsert mep-meta comment step's Python heredoc is unterminated")
+        return None
+    return block[start:end]
+
+
 def check_mep_meta_omits_deps_and_recipe_hash_when_absent(text):
     # T6 (ADR-0138 §13/§18): deps/recipe_hash fields are omitted entirely
     # (never emitted empty/null) when no recipe was assembled.

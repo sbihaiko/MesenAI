@@ -1115,10 +1115,52 @@ jobs:
           AUTHOR: ${{ steps.apply-verdict.outputs.author }}
           CONTENT_ID: ${{ steps.content-id.outputs.content_id }}
           PACK_URL: ${{ inputs.pack_url }}
+          GAME: ${{ steps.rename-title.outputs.game }}
         run: |
           set -euo pipefail
           ISSUE_AUTHOR=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json author -q .author.login 2>/dev/null || true)
           export ISSUE_AUTHOR
+          # ADR-0143: a split submission's per-game identity (`game`, and the
+          # primary's `siblings`) exists ONLY in this comment, and the write
+          # below replaces it wholesale (§5). Read it back BEFORE the
+          # rewrite — without this the first revalidation of a split sibling
+          # silently degrades its slot to the bare origin, and two games of
+          # one submission then compete for a single catalog row.
+          #
+          # `pack:split` is what marks an issue as one game of a multi-game
+          # container. A plain pack keeps the bare owner/repo pack_id it
+          # already has, so no existing catalog row re-keys.
+          ISSUE_LABELS=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels -q '[.labels[].name] | join(" ")' 2>/dev/null || true)
+          export ISSUE_LABELS
+          # Bot-owned lookup (ADR-0138 §5): `--paginate` re-runs the `--jq`
+          # filter once PER PAGE, so an aggregating `[.[] | ...]`/`.[-1]`
+          # filter prints one line per page and command substitution keeps
+          # every embedded newline except a trailing one -- corrupting
+          # COMMENT_ID whenever the match isn't on the first page (30
+          # comments/page by default). Emitting one bare `.id` per match
+          # instead makes every page's output just more lines in the same
+          # stream, so `head -n1` alone is well-defined across any number
+          # of pages. Restricting to `.user.login == "$OWNER"` (PROJECT_PAT
+          # is a classic PAT, so API-authored comments are attributed to
+          # its owning account) stops a submitter's own issue text from
+          # ever being mistaken for the bot's provenance comment, and
+          # `head -n1` (oldest first, GitHub's default order) always keeps
+          # the FIRST such comment so a later injected marker can never
+          # take its place.
+          COMMENT_ID=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" --paginate \
+            --jq ".[] | select((.user.login == \"$OWNER\") and (.body | test(\"<!-- mep-meta -->\"))) | .id" \
+            | head -n1)
+          # The identity carried forward above is read out of that same
+          # comment. A gh failure leaves the file empty, which the parser
+          # reads as "no prior metadata" — never a hard failure of a pass
+          # that still has a verdict to record.
+          PRIOR_META_PATH="$RUNNER_TEMP/mep_meta_prior.md"
+          export PRIOR_META_PATH
+          : >"$PRIOR_META_PATH"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/$REPO/issues/comments/$COMMENT_ID" -q .body >"$PRIOR_META_PATH" 2>/dev/null \
+              || : >"$PRIOR_META_PATH"
+          fi
           RECIPE_PATH="$RUNNER_TEMP/mep_recipe.json"
           RECIPE_HASH=""
           if [ "$RECIPE_STATUS" = "present" ] && [ -f "$RECIPE_PATH" ]; then
@@ -1161,12 +1203,42 @@ jobs:
           content_id = os.environ.get("CONTENT_ID", "").strip()
           if content_id:
               meta["content_id"] = content_id
+          # ADR-0143: one catalog slot per game. A split submission's
+          # identity is `{origin}:{game-slug}`, and this workflow never
+          # performed the split — so `game` is not derived here. It is
+          # carried forward from the comment this pass is replacing,
+          # falling back to the issue's declared target only when that
+          # comment has none (a sibling revalidated after its identity was
+          # already lost). The fallback order matters: a split PRIMARY keeps
+          # the original multi-game line in its Issue Form, so the prior
+          # value has to win over GAME wherever both exist.
+          #
+          # `siblings` cannot be regenerated at all — the split happened
+          # outside CI — so the primary's list is re-emitted verbatim:
+          # dropping it would erase the only record that these issues are
+          # one submission (and the catalog's per-game rows read `game`
+          # from here to label each one, ADR-0143).
+          from mep_meta_parser import parse_mep_meta
+          prior = {}
+          prior_path = os.environ.get("PRIOR_META_PATH", "")
+          if prior_path and os.path.isfile(prior_path):
+              with open(prior_path, encoding="utf-8") as handle:
+                  prior = parse_mep_meta(handle.read()) or {}
+          if "pack:split" in os.environ.get("ISSUE_LABELS", "").split():
+              game = (prior.get("game") or os.environ.get("GAME", "")).strip()
+              if game:
+                  meta["game"] = game
+              siblings = prior.get("siblings")
+              if isinstance(siblings, list) and siblings:
+                  meta["siblings"] = siblings
           # ADR-0140/§3.3 (P.2): pack_id (id -> owner/repo -> issue-n) and
           # the origin it is bound to (owner/repo for GitHub hosts, else the
           # issue author's login). The catalog generator and the client (P.3)
           # read these from here — one shared resolution function
           # (pack_id_rules) used by the workflow, the generator and the MEI
-          # assembler, so they can never drift.
+          # assembler, so they can never drift. Runs AFTER the ADR-0143 block
+          # above, which is what puts `game` in front of it for a split
+          # submission (`resolve_pack_id` reads it off `meta`).
           from pack_id_rules import pack_origin, resolve_pack_id
           pack_id, _ = resolve_pack_id(os.environ.get("PACK_URL", ""), meta, int(os.environ["ISSUE_NUMBER"]))
           if pack_id:
@@ -1238,24 +1310,7 @@ jobs:
           with open(os.environ["PAYLOAD_PATH"], "w", encoding="utf-8") as handle:
               json.dump(payload, handle)
           PYEOF
-          # Bot-owned lookup (ADR-0138 §5): `--paginate` re-runs the `--jq`
-          # filter once PER PAGE, so an aggregating `[.[] | ...]`/`.[-1]`
-          # filter prints one line per page and command substitution keeps
-          # every embedded newline except a trailing one -- corrupting
-          # COMMENT_ID whenever the match isn't on the first page (30
-          # comments/page by default). Emitting one bare `.id` per match
-          # instead makes every page's output just more lines in the same
-          # stream, so `head -n1` alone is well-defined across any number
-          # of pages. Restricting to `.user.login == "$OWNER"` (PROJECT_PAT
-          # is a classic PAT, so API-authored comments are attributed to
-          # its owning account) stops a submitter's own issue text from
-          # ever being mistaken for the bot's provenance comment, and
-          # `head -n1` (oldest first, GitHub's default order) always keeps
-          # the FIRST such comment so a later injected marker can never
-          # take its place.
-          COMMENT_ID=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" --paginate \
-            --jq ".[] | select((.user.login == \"$OWNER\") and (.body | test(\"<!-- mep-meta -->\"))) | .id" \
-            | head -n1)
+          # COMMENT_ID was resolved above, before the body was rewritten.
           if [ -n "$COMMENT_ID" ]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$COMMENT_ID" --input "$PAYLOAD_PATH" >/dev/null
           else
