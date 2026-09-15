@@ -10,7 +10,8 @@ work lives in Part A, player-shell/chrome work lives in Part B — it is now
 expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
-the shipped record, and the pending slices (Phase 9 F9.18-V, F9.18 and F9.25, the
+the shipped record, and the pending slices (Phase 9 F9.18-V — first re-run
+recorded 2026-09-15, two runtime checks still open — F9.18 and F9.25, the
 Phase 10 spike S10.b, plus the manual/hardware-gated residue of the shipped
 phases). Phase 11 consolidation is complete. Part B is the
 default-GUI roadmap: player
@@ -136,6 +137,13 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **C.5 experiment completed** — two independent agent runs took 12/11 minutes and found visible edits, but required `hires.txt` diagnosis and exposed incomplete painting; product acceptance remains unproven. [Zelda log](../validation/c5-fable-artist-run-zelda-2026-09-14.md), [Mega Man 3 log](../validation/c5-fable-artist-run-mega-man-3-2026-09-14.md). Findings #253/#255/#256 require current-binary verification under F9.18-V, regardless of issue closure.
 - **C.6** — second reference measured: Zelda II 165/874 tile shapes, 28/3301 exact keys, 670 emitted versus 4679 authored conditions, 3.78× palette inflation; lint success was not a runtime round-trip proof.
 - **C.7/C.8** — file ceilings, dependency pins and ADR debts closed (ADR-0137/0192; 2026-09-15).
+- **F9.18-V, first re-run** (2026-09-15) — with a binary rebuilt at `main`
+  `04d7fc63`, the structural gate and the paint-application gate pass on both
+  golden games: Mega Man 3 (CHR ROM) diffs only inside the edit's bounding box,
+  Contra (CHR RAM) shows every differing pixel magenta. #253 passes structurally
+  and visually, #256 structurally, #255 structurally only. A runtime
+  condition-miss frame and a live mirrored-instance screenshot remain open,
+  both blocked on a per-frame key/`[condition]` introspection tool. [Log](../validation/f918v-current-binary-painting-2026-09-15.md).
 - **ADR-0193** — PR and main-push CI triggers retained; workflow details live in `.github/` and the ADR.
 
 
@@ -229,7 +237,10 @@ default viewport, letterbox inside the viewport, lint the bare root
 
 **Status.** Implementation through F9.29 is recorded in §3, with F9.21
 withdrawn. Open work: F9.18-V (current-binary painting verification), F9.18
-(independent human panel) and F9.25 (bounded second-pass evidence). C.5 was
+(independent human panel) and F9.25 (bounded second-pass evidence). The first
+F9.18-V re-run landed 2026-09-15 on both golden games — structural and
+paint-application gates pass with pixel-exact runtime evidence, two runtime
+checks stay open (§3). C.5 was
 an independent agent experiment; it neither satisfies the human panel nor
 proves the promise of a publishable pack in under one hour.
 
@@ -285,7 +296,7 @@ F9.6 and Phase 10).
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F9.18-V | Re-run the painting workflow on one CHR RAM game and one CHR ROM game using a named current binary and unmodified documented tools. Exercise shared sheet keys, mirrored cells and a condition that does not match. Record structural, untouched-image and painted-image results separately under the protocol below. | Open validation follow-up to C.5 (#253/#255/#256); no claim that those defects remain unfixed. Pass only when the intended complete figure appears without reading/editing `hires.txt`; issue closure and unit-test success alone do not close this row. |
+| F9.18-V | Re-run the painting workflow on one CHR RAM game and one CHR ROM game using a named current binary and unmodified documented tools. Exercise shared sheet keys, mirrored cells and a condition that does not match. Record structural, untouched-image and painted-image results separately under the protocol below. | Re-run recorded 2026-09-15 ([log](../validation/f918v-current-binary-painting-2026-09-15.md)): structural gate and paint application pass on both games on a binary rebuilt at current `main`; shared keys (#253) and condition fallback (#256) confirmed, mirror (#255) structurally only. Still open: a runtime condition-miss frame and a live mirrored-instance screenshot. No claim that those defects remain unfixed. Pass only when the intended complete figure appears without reading/editing `hires.txt`; issue closure and unit-test success alone do not close this row. |
 | F9.18 | Human acceptance of the composition editor over ADR-0170/0171 pose data, with ADR-0165/0166 background sources and exports. | Engine/GUI implemented; waiting for F9.18-V, then a person who did not build the feature. Log tests 1–7 where applicable on the golden set; missing evidence is not a pass. Include native window interaction. |
 | F9.25 | Complete the bounded Contra second-pass evidence matrix below, preserving ADR-0184 clean/coverage/navigation separation. | Tooling exists; evidence reconciliation and any missing runs remain open. No target of beating every stage or reaching 100% art coverage. |
 
@@ -553,10 +564,13 @@ available in git and the logs.
 
 ### 5. Order of execution
 
-1. **F9.18-V:** establish current-binary correctness of the documented painting
-   path on CHR RAM and CHR ROM. Fix any reproduced defect in a separately scoped
-   task before rerunning the affected criterion. Do not reopen fixed issues on
-   the strength of the old C.5 logs alone.
+1. **F9.18-V:** finish the row. The 2026-09-15 re-run established current-binary
+   correctness of the documented painting path on CHR RAM and CHR ROM, with
+   pixel-exact evidence on both (§3); what remains is a runtime condition-miss
+   frame and a live mirrored-instance screenshot, both blocked on a per-frame
+   key/`[condition]` introspection tool. Should a defect reproduce instead, fix
+   it in a separately scoped task before rerunning the affected criterion, and do
+   not reopen fixed issues on the strength of the old C.5 logs alone.
 2. **F9.18:** after F9.18-V passes, run the independent human panel and record
    all applicable criteria. C.5's agent runs cannot satisfy this gate.
 3. **F9.25:** reconcile the bounded Contra matrix; perform only missing runs.
