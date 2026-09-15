@@ -196,6 +196,12 @@ surface is for).
 
 ## 5. Union rebuild and structural validation
 
+"Union" here is ADR-0184's coverage unit and the pattern-page union, not a kit
+that merges surfaces: ADR-0194 (`proposed`) records that a kit is the
+projection of one recording, so the figure and scenery rows below are nine
+verifications, one per recording, and only the pattern pages are one artifact
+built from all 22.
+
 The union is a set union of the recordings, and the tooling defines that union
 per surface rather than globally — an asymmetry this run measured rather than
 assumed.

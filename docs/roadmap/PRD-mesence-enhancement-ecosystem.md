@@ -300,7 +300,7 @@ F9.6 and Phase 10).
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F9.18-V | Re-run the painting workflow on one CHR RAM game and one CHR ROM game using a named current binary and unmodified documented tools. Exercise shared sheet keys, mirrored cells and a condition that does not match. Record structural, untouched-image and painted-image results separately under the protocol below. | Re-run recorded 2026-09-15 ([log](../validation/f918v-current-binary-painting-2026-09-15.md)): structural gate and paint application pass on both games on a binary rebuilt at current `main`; shared keys (#253), condition fallback (#256) and mirror (#255) confirmed structurally and at run time — the last two via a negative-control pack replayed on the same binary (log §4): a condition miss rendered the painted bare twin beside live hits, and the same `mirror: "HV"` key rendered flipped and un-flipped on the same route. Runtime evidence for #255/#256 is Contra-only. No `Core/` change was needed. Pass only when the intended complete figure appears without reading/editing `hires.txt`; issue closure and unit-test success alone do not close this row. |
-| F9.18 | Human acceptance of the composition editor over ADR-0170/0171 pose data, with ADR-0165/0166 background sources and exports. | Engine/GUI implemented; waiting for F9.18-V, then a person who did not build the feature. Log tests 1–7 where applicable on the golden set; missing evidence is not a pass. Include native window interaction. |
+| F9.18 | Human acceptance of the composition editor over ADR-0170/0171 pose data, with ADR-0165/0166 background sources and exports. | Engine/GUI implemented; waiting for F9.18-V, then a person who did not build the feature. Log tests 1–7 where applicable on the golden set; missing evidence is not a pass. Include native window interaction. Test 2 also records ADR-0194's kit-selection observation (below). |
 | F9.25 | Complete the bounded Contra second-pass evidence matrix below, preserving ADR-0184 clean/coverage/navigation separation. | Recorded 2026-09-15 ([log](../validation/f925-contra-matrix-2026-09-15.md)): nine rows, each with a hash-identified clean control on one binary; four with a measured second pass — `stage1-run` by coverage (`0032:99`, and `+00B0:FE`), `stage2-base` / `stage3-waterfall` / `stage4-base` by navigation (`0030:01/02/03`); five with a named reason (`stage1-water`, `stage1-2p` and the three boss rooms, whose sessions carry no cheat and so are clean passes feeding all four surfaces). The union rebuild passes structural validation: every generator's `--verify` 0 lost / 0 invented, the CHR union takes 142 donated cells from the other 21 recordings, and the painted pack builds and lints with 0 errors. No target of beating every stage or reaching 100% art coverage. |
 
 **F9.25 scope and stop rule.** Inventory the nine existing Contra states:
@@ -329,9 +329,9 @@ worth reading before re-deriving anything: at 300 s of effective input the
 coverage cheat buys no map extent (all three stage-1 variants stitch the
 identical 2512×240), and the navigation passes are one screen deep because the
 sweep's body script is the stage-1 route. One question the run raised and did
-not settle is ADR-0194 (`proposed`): a kit's four surfaces union across
-recordings only where a flag defines it, so this row's figures and scenery were
-verified nine times rather than merged once.
+not settle is ADR-0194 (`proposed`): a kit's cross-recording union is the
+pattern pages, so this row's figures and scenery were verified nine times per
+recording rather than merged once.
 
 **Validation — qualitative and intuitive.** The deliverable is legibility,
 which no pixel metric captures, so each slice is judged by a fixed panel
@@ -378,6 +378,15 @@ local artifact hashes and one delivery-record line after acceptance passes.
    distributed only via Google Drive, which this project does not fetch
    (Phase 6 non-goals). Contra is the substitute — the artist pack is on
    an allow-listed host.
+
+   **One observation this test also records** (ADR-0194, `proposed`): kit
+   selection across recordings. When a subject the reference pack shows exists
+   only in a second recording of the same stage — the panorama a coverage pass
+   extends, a pose only the boss state holds — note whether the artist found
+   it, how long it took, and whether they could say which recording feeds which
+   surface without reading a manifest. This is an observation, not a pass
+   condition: it is the evidence ADR-0194 names as the trigger for reopening
+   the cross-recording merge it rejected.
 3. **Find-and-edit test** (F9.4). Task card: "make every bush purple",
    "put a face on the rock", "draw a road marking on the ramp". From
    opening the folder to seeing the change in the emulator: pass when
