@@ -907,6 +907,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   refreshes `~/Desktop/mesen/Mesen.app` with a timestamped backup. No CI
   step or other script depends on it; see its header comment for the
   prerequisites.
+- `scripts/requirements.txt` pins Pillow/numpy/PyYAML to the versions
+  `.github/workflows/checks.yml` installs (Phase 11 C.7). Prefer
+  `pip install -r scripts/requirements.txt` over copying versions from CI.
 - `check-core-manifest.sh`, `check-file-loc.sh`, `verify-fase0-1-dox.sh`,
   `verify-ui-logic-firewall.sh` - repo-hygiene shell checks. All four are
   now invoked by `make doc-checks` (ADR-0137, roadmap slice H1):

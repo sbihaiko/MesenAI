@@ -1,0 +1,6 @@
+# Pins for scripts that need third-party packages. Versions match
+# `.github/workflows/checks.yml` (Phase 11 C.7). Install with:
+#   python3 -m pip install -r scripts/requirements.txt
+PyYAML==6.0.3
+Pillow==12.3.0
+numpy==2.2.6
