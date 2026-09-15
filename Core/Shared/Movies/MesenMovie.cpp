@@ -66,31 +66,33 @@ bool MesenMovie::SetInput(BaseControlDevice* device)
 	if(_lastPollCounter != inputRowIndex) {
 		_lastPollCounter = inputRowIndex;
 		//A native Mesen recording always has exactly one array element per
-		//registered device, so this used to assert(_deviceIndex == 0) here as
-		//a sanity check. A BizHawk .bk2's row width instead reflects what its
-		//own LogKey declares, which does not have to match how many devices
-		//NES/SmsConsole::InitializeInputDevices auto-configures for this ROM
-		//(e.g. it defaults both controller ports on, even for a single-player
-		//recording) - so a row can end with a leftover element nothing consumed,
-		//or run out before every registered device took its turn. Resetting
-		//unconditionally tolerates both: a leftover element is dropped, a
-		//missing one leaves that device's state unchanged for the row instead
-		//of aborting the whole run.
+		//registered device. A BizHawk .bk2's row width instead reflects what
+		//its own LogKey declares, which does not have to match how many
+		//devices NES/SmsConsole::InitializeInputDevices auto-configures for
+		//this ROM (e.g. it defaults both controller ports on, even for a
+		//single-player recording). Reset on every new row so a leftover
+		//element from a longer row is dropped instead of asserting, and so a
+		//shorter row can leave later devices alone (see below).
 		_deviceIndex = 0;
 	}
 
-	if(_inputData.size() > inputRowIndex && _inputData[inputRowIndex].size() > _deviceIndex) {
-		device->SetTextState(_inputData[inputRowIndex][_deviceIndex]);
-
-		_deviceIndex++;
-		if(_deviceIndex >= _inputData[inputRowIndex].size()) {
-			//Move to the next frame's data
-			_deviceIndex = 0;
-		}
-	} else {
-		//End of input data reached (movie end)
+	if(_inputData.size() <= inputRowIndex) {
+		//Past the last recorded row - end of movie.
 		_emu->GetMovieManager()->Stop();
+		return true;
 	}
+
+	if(_deviceIndex < _inputData[inputRowIndex].size()) {
+		device->SetTextState(_inputData[inputRowIndex][_deviceIndex]);
+		_deviceIndex++;
+	}
+	//else: this row has fewer fields than registered devices. Leave the
+	//device at the ClearState() UpdateInputState already applied (equivalent
+	//to "no input" for a controller the recording never drove). Do NOT wrap
+	//_deviceIndex back to 0 here - that would re-feed earlier fields (e.g.
+	//the Commands/Power+Reset column) into a later port and desync playback.
+	//Do NOT treat a short row as movie end either; only running past
+	//_inputData.size() ends the movie.
 	return true;
 }
 
