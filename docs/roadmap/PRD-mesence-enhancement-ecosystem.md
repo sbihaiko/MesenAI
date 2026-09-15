@@ -867,6 +867,29 @@ does not exist.
   is `checks.yml`'s five jobs, `build.yml` keeps only its Linux and AppImage
   legs, and the macOS binary is built locally by `make release-macos`.
 
+- **C.5 — the first outside artist measured** (2026-09-14, two logs in
+  `docs/validation/`): a fresh session with no context, sandboxed to the C.4
+  release and the three guides, ran the guide end to end on two games. **Both
+  passed** — Zelda (CHR RAM): red-tunic Link on screen, pixel-identical to the
+  kit (2 832/2 832 px), 12 min wall clock, verdict "yes"; Mega Man 3 (CHR ROM):
+  red Mega Man running and jumping, 11 min, verdict "yes". Well inside the
+  one-hour budget, so the meta-goal has its first number: **the recording and
+  the kit are the part the tool wins** — 60 s of gameplay to 22 named-by-phase
+  figure sheets and a lint-clean `hires.txt` in under a minute of machine time.
+  The painting contract is the part it loses: **in both runs the mechanical
+  acceptance test (`build` 0 errors, `mep_lint.py` 0, every `--verify` PASS)
+  reported success while the repainted figure was absent or half-unpainted**,
+  and the artist found out on screen, not from the tool — #253 (keys owned by
+  another sheet), #255 (a `mirror: H` cell keyed at the source without
+  un-flipping the pixels) and #256 (the unconditional fallback rule dropped
+  beside each `[condition]`). Four of nine stops were the guide's and are fixed
+  in PR #254 (how to load a built pack, what `bootstrap`/`hdpack`/`hdpack-off`
+  mean, `make` against a binary release); the fifth was the sandbox's Contra
+  file being a 40 KB stub. Phase 9 panel §§2–3 were filled from the logs and
+  **failed on the `hires.txt` clause in both runs** for that reason. Full run
+  record: `c5-fable-artist-run-zelda-2026-09-14.md`,
+  `c5-fable-artist-run-mega-man-3-2026-09-14.md`.
+
 ### 4. Roadmap — pending work, by slice
 
 #### Phase 6 — Community pack auto-install (MEP Recipe v1)
@@ -1326,7 +1349,7 @@ user (C.4–C.6). No new emulator feature ships under this phase.
 | C.2 | **Register and roadmap say what shipped.** One pass over ADR Status lines (0169, 0170, 0171, 0186 at minimum; grep for `uncommitted`, `not yet in`, `being built`, `awaits`) and over `Related:` lines still calling 0168/0180 `proposed`; `docs/roadmap/AGENTS.md` describes Phases 9–11; a `scripts/checks/` script in `make doc-checks` fails when a live slice-table row's Decision cell contains `shipped` (a shipped row is deleted, per this folder's contract) | accepted 2026-09-14; Status-line edits on accepted ADRs are the user's call — list them in the PR, do not silently rewrite |
 | C.3 | **Boards and catalog agree.** Run `community-pack-catalog.yml` (or schedule it after each accepted verdict) so #207–#211 appear; `community-pack-validate.yml` applies `pack:invalid` when it moves an item to "Inválido" (today 8 items, 0 labels); bug-board hygiene: #196 → Done, #238/#239 added, Size set on open items | accepted 2026-09-14; no ADR |
 | C.4 | **A binary release of the fork.** `mesence-v0.1.0`, **macOS Apple Silicon only for now, built locally** by a scripted `make release-macos` target (user's decisions 2026-09-14: every binary build is limited to macOS arm64 until further notice, and CI compiles Linux only — the gate's `core-unit-tests` — so `build.yml` stays dispatch-only and unused; the target injects the fresh `MesenCore.dylib`, codesigns ad hoc, fails on a hash mismatch and writes `SHA256SUMS` + the commit so a local build stays auditable; Windows/Linux follow later) (the `.app` gets its fresh `MesenCore.dylib` injected and codesigned — the BundleApp staleness is a known trap), release notes that link `docs/remastering-a-game.md` and `docs/enhancement-ecosystem.md`; `README.md` links the release and the guide above the fold | accepted 2026-09-14; the version scheme is a one-line decision to record in the release notes, not an ADR |
-| C.5 | **The first outside artist, timed — Fable as the artist.** A Claude Fable 5.1 session with **no prior context** stands in for the external artist (user's decision 2026-09-14, in line with the standing goal "use Fable to proxy human decision and vision"). It runs `docs/remastering-a-game.md` from a release binary on a game it picks from the local ROM library: record → cover → kit → repaint one figure → build → play. Profile, sandbox, prompt and log format: "The C.5 evaluator" below. Pass: a lint-clean pack with one repainted figure on screen in **under one hour** of wall clock, zero reads outside the guide, and the evaluator's own verdict that it would choose this over hand-editing `hires.txt`. Run on **two games**, one CHR RAM and one CHR ROM | accepted 2026-09-14; depends on C.4; a run by a human artist stays a non-goal until the user reopens it — the §7 row records the trade-off |
+| C.5 | **The first outside artist, timed — Fable as the artist.** A Claude Fable 5.1 session with **no prior context** stands in for the external artist (user's decision 2026-09-14, in line with the standing goal "use Fable to proxy human decision and vision"). It runs `docs/remastering-a-game.md` from a release binary on a game it picks from the local ROM library: record → cover → kit → repaint one figure → build → play. Profile, sandbox, prompt and log format: "The C.5 evaluator" below. Pass: a lint-clean pack with one repainted figure on screen in **under one hour** of wall clock, zero reads outside the guide, and the evaluator's own verdict that it would choose this over hand-editing `hires.txt`. Run on **two games**, one CHR RAM and one CHR ROM | accepted 2026-09-14; depends on C.4; a run by a human artist stays a non-goal until the user reopens it — the §7 row records the trade-off. **Measured 2026-09-14 (record in §3): both games passed** — 12 min (Zelda, CHR RAM) and 11 min (Mega Man 3, CHR ROM), lint-clean, figure on screen, verdict "yes"; panel §§2–3 filled from the logs, and the `hires.txt` clause failed in both runs, producing #253/#255/#256 |
 | C.6 | **A second reference pack.** Pick one community pack other than Contra80s with a rich hand-made `hires.txt` (the 260 146-line Metroid pack and Zelda II ModernRetroDesign are on hand), run `artist_cover.py` and the F9.29 condition emitters against it, and log the same four numbers as Contra (coverage, conditions emitted vs hand-written, palette inflation, keys round-tripped) as a §3 line. Purpose: stop tuning to one author's habits | accepted 2026-09-14; no ADR unless a number forces a rule change |
 | C.7 | **The size guard ratchets.** `check-file-loc.sh` gains the six files above at their current line count as a ceiling (a PR may shrink them, never grow them), and `scripts/requirements.txt` pins Pillow/numpy/PyYAML where `checks.yml` does today | accepted 2026-09-14; amends ADR-0137's file list |
 | C.8 | **Close the debts ADRs left open.** ADR-0154: run the `diffusion` backend once or supersede Option A (it has never executed; PRD test 8 has never run); ADR-0186: publish the debugger slowdown as a number; ADR-0187: a `doc-checks` script that diffs the host allow-list between `fetch_pack.py`, `CommunityPackDownloader.cs` and `community-pack-validate.yml`; ADR-0171 → 0170: the "loosen pose identity" revisit (223 poses on a 300 s run) | accepted 2026-09-14; each item is its own PR; 0154's outcome is an ADR either way |

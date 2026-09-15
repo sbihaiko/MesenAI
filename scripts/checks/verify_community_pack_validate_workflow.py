@@ -114,6 +114,7 @@ CHECKS = (
     mep_meta.check_mep_meta_body_built_via_python_json,
     mep_meta.check_mep_meta_omits_deps_and_recipe_hash_when_absent,
     mep_meta.check_mep_meta_fence_not_hardcoded,
+    mep_meta.check_mep_meta_records_split_game_identity,
 )
 
 

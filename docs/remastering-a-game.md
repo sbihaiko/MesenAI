@@ -50,6 +50,11 @@ make core
 make capture-tool        # writes scripts/headless_record
 ```
 
+**Using a binary release?** The release already includes `headless_record` and
+`MesenCore.dylib`; do not run `make`. Run the prebuilt executable from the
+unpacked release directory, keeping the dylib beside it, and run the bundled
+Python tools from that same release.
+
 ### The three positional arguments
 
 ```sh
@@ -193,7 +198,20 @@ A frame reading `GAME OVER` or `PASS WORD` means the route died before its
 budget; shorten the run to the part that survives, or fix the route. Repeat at a
 few different `<seconds>` values to find where it dies.
 
-### Two flags worth knowing before you record
+### The flags in those command lines
+
+Every `headless_record` line in this guide uses the same six arguments. They are
+positional-then-flags: `<rom> <seconds> <output prefix>` come first, everything
+after is a flag, and the order of the flags does not matter.
+
+| Flag | What it does |
+| --- | --- |
+| `bootstrap` | Runs the pack builder as the game plays, so a pack is written beside the ROM. **This is what makes a recording**, and it costs about 3x the emulation time. Without it the run is only audio export or a screenshot. |
+| `hdpack-off` | Disables HD pack / MEP texture substitution for the run, so you record the game's own art. Omit it on a run whose purpose is to *look at* a pack you installed — that is the difference between recording and reviewing. |
+| `hdpack` | The opposite switch: record a pack skeleton to `<prefix>-hdpack/` from the first `<seconds>` with no input fed. Used by the tooling's own tests; you do not need it to remaster a game. |
+| `screenshot` | Saves the final frame to `<output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png`. The route check above and the pack review later both depend on it. |
+| `input=<file>` | Plays an input script (`.txt`, `<frames>f <buttons>` per line) instead of idling. This is the route. |
+| `state=<file>` / `save-state=<file>` | `state=` starts the run from a saved state; `save-state=` writes one at the end. Minting a stage state and then recording from it is two runs, as above. |
 
 - `MESEN_SHEET_GRID_DUMP=<file>` (environment variable) writes the grid stream
   that `artist_map.py` needs to rebuild a whole stage as one scrolling image.
@@ -367,6 +385,12 @@ error: <stage>: <pack>: this pack keys its tiles by CHR index (ADR-0172) and the
 grid dump carries no index — a panorama built from it would match nothing.
 ```
 
+The ROM you feed it decides this, not the game's name. Contra (USA) is a UNROM
+board with CHR RAM and gives a panorama; Contra (Japan) is a VRC2 board with CHR
+ROM and `artist_map.py` refuses it, even though the panorama section above uses
+Contra as its worked example. If a tool's answer does not match the game you
+think you loaded, check the dump before you re-read the guide.
+
 That is the tool refusing to write a surface it cannot verify, not a broken
 run. On such a game the kit is the other three surfaces; the stage's
 backgrounds are still in `textures/backgrounds/screenNNN.png`.
@@ -453,6 +477,29 @@ such in the output.
 That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and
 a failure means the kit is wrong — never that the check is wrong.
+
+### Look at the painted pack before you ship it
+
+The mechanical checks prove the pack is valid; they do not replace looking at
+your edit in the game. Copy the built folder beside the ROM as its `mep/`
+override, then run a screenshot pass **without** `hdpack-off`:
+
+```sh
+rm -rf <rom dir>/<rom stem>/mep
+cp -R out/painted <rom dir>/<rom stem>/mep
+scripts/headless_record <rom> 20 out/painted-check screenshot
+```
+
+The recorder log must say that it loaded `<rom dir>/<rom stem>/mep/textures`.
+Open the resulting screenshot and confirm the exact figure you painted. The
+`mep/` layer overrides `auto/` entry by entry, so your original recording stays
+available underneath it.
+
+If `build` reports dropped duplicate keys, do this screenshot check before you
+call the edit done. A sheet may share `(tile, palette)` keys with other sheets;
+a lint-clean build can still leave part of a figure supplied by `auto/`. Track
+key ownership manually for now; issue #253 covers an artist-facing ownership
+report.
 
 `mep_build.py check-coverage` answers a different question — "did this repaint
 lose a tile the previous build carried?" — and its `--baseline` has to be a
