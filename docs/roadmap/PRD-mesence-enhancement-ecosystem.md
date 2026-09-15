@@ -11,8 +11,8 @@ expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
 the shipped record, and the pending slices (Phase 9 F9.18 and F9.25, the
-Phase 10 spike S10.b, Phase 11 consolidation, plus the hardware-gated
-residue of the shipped phases). Part B is the
+Phase 10 spike S10.b, plus the manual/hardware-gated residue of the shipped
+phases). Phase 11 consolidation is complete. Part B is the
 default-GUI roadmap: player
 chrome, Advanced GUI, pack identity (`pack_id`/`content_id`/version),
 duplicates, the pack picker, and the quick-enhancements panel. The two
@@ -23,7 +23,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-14, roadmap review) — pack/core roadmap of this
+**Status:** active (2026-09-15, roadmap audit) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -312,8 +312,8 @@ does not exist.
   translation unit with `-MMD -MP` (39.3 s → 9.7 s cold).
 - **H9 — `HeadlessInputEngine`** (ADR-0127 pattern, 2026-09-05): the stateful
   headless input surface tested against a fake core, `core_unit_tests` Bloco R.
-- **H10 — accuracy suite as a regression gate** (ADR-0162 `proposed`,
-  2026-09-05): `scripts/accuracy_compare.py` runs AccuracyCoin against one
+- **H10 — accuracy suite as a regression gate** (ADR-0162 accepted
+  2026-09-06): `scripts/accuracy_compare.py` runs AccuracyCoin against one
   binary in four arms (`vanilla`/`builder`/`hdpack`/`mep`) and requires
   identical frame checksums; an identity pack makes the texture arm real;
   proved red two ways; ROM not vendored; not in CI yet, by decision.
@@ -369,13 +369,13 @@ does not exist.
   = appearances of A; Excitebike's bike + rider one figure across 25 pose
   groups.
 - **F9.6 — optional AI repaint, external** (ADR-0154 accepted, ADR-0161
-  `proposed`, 2026-09-05): `scripts/sheet_repaint.py` behind a `RepaintBackend`
+  accepted 2026-09-06): `scripts/sheet_repaint.py` behind a `RepaintBackend`
   seam (`passthrough`, `classical`, `esrgan`, `diffusion`; availability probed
   before any write; non-loopback endpoints refused), output in
   `auto/repaint/`, MEP-v1 v1.6 `generated` object as disclosure, not a gate;
-  `--target screens` run on the real Mega Man 3 recording. Not done:
-  validation test 8 (blind A/B) — blocked on a local diffusion stack, not on
-  reviewers.
+  `--target screens` run on the real Mega Man 3 recording. Validation test 8
+  (blind A/B) was not run; ADR-0192 later retired its generative arm and made
+  the optional comparison `classical` versus `passthrough`.
 - **F9.7 + F9.11 — alias pass, ink budget** (2026-09-05):
   `MesenSheets::CollapseAliases`, sidecar `aliases[]`, `mep_build.py` fan-out;
   budget = share of the ink of the richer cell (the area rule let one blank
@@ -975,7 +975,7 @@ first release.
 #### Repo hygiene and tests
 
 **Shipped or closed** — H1–H10; record in §3. Open: ADR-0162 (accuracy
-suite) is `proposed` and not in CI by decision; the `CheatTypeDetector`
+suite) is accepted and not in CI by decision; the `CheatTypeDetector`
 GB/SMS product decision (H7) stays deferred.
 
 #### Documentation and normative integrity
@@ -1162,15 +1162,12 @@ summary line in this PRD's shipped record.
    unlabelled; three reviewers. Pass to keep the slice: the AI output is
    preferred or tied on ≥ 2 of 5 screens **and** fails seam test 4 on
    none; any visible alpha loss on sprites fails the slice regardless.
-   **Blocked, and not on a reviewer.** There is no AI repaint to judge yet:
-   the `diffusion` backend of `scripts/sheet_repaint.py` has never been
-   executed, because ADR-0154 §2 deliberately makes the weights and the
-   local ComfyUI/`diffusers` process the user's to install, and this machine
-   has neither. Its driver and its unavailable paths are covered; its
-   generation path is untested code. The precondition is therefore a local
-   stack, not three humans — until someone installs one, the `classical`
-   backend is the only non-`passthrough` arm that has produced pixels, and
-   this test does not run.
+   **Generative arm retired.** ADR-0192 superseded ADR-0154 §2 Option A on
+   2026-09-15 because the `diffusion` generation path had never executed.
+   This test is no longer blocked on installing a local diffusion stack and
+   is not a release gate. If scheduled, it compares the supported
+   `classical` backend with `passthrough`; reopening generative repaint first
+   requires the measured run and new/amended ADR that ADR-0192 specifies.
 
 Tests 3, 4 and 6 have automatable halves (rebuild, headless run, diff)
 that go into `make doc-checks`/`scripts/test_mep_build.py`; the judgement
@@ -1222,11 +1219,13 @@ what the spikes measure.
   `Core/`, `UI/` or the installer. If a studio exists it is an external
   script in `scripts/`, like the viewer and the composition editor
   (ADR-0165, ADR-0169).
-- ADR-0154 §2 and §4 stand until an ADR amends them: today no tool in this
-  repo sends ROM-derived art off the machine (`sheet_repaint.py` refuses a
-  non-loopback endpoint), and generated output lands in `auto/`, never
-  `mep/`. Sending crops to a hosted model is a decision to take *against*
-  that ADR with spike results in hand — not a premise of this phase.
+- ADR-0192 supersedes ADR-0154 §2 Option A: generative repaint is not a
+  project commitment until a measured run reopens it. ADR-0154 §4 and the
+  remaining contract still stand: no tool in this repo sends ROM-derived art
+  off the machine (`sheet_repaint.py` refuses a non-loopback endpoint), and
+  generated output lands in `auto/`, never `mep/`. Sending crops to a hosted
+  model remains a decision that needs spike results and an ADR — not a premise
+  of this phase.
 - The model never writes the format. Deterministic code validates every
   byte that reaches a pack; Phase 9's rule — nothing generated can break
   rendering — is kept verbatim.
@@ -1234,14 +1233,11 @@ what the spikes measure.
 - GB/SMS only after NES passes.
 
 **Gaps found in review (2026-09-09) that the spikes must answer.**
-1. **Pose membership does not exist in the data.** ADR-0168 (`proposed`)
-   says a `sprNNN` group spans several poses, the pack records only
-   pairwise tile totals, never which tiles co-occurred in one OAM frame,
-   and its layout walk *drops* members rather than separating poses. A
-   subject sheet "with every pose" cannot be built from today's sidecars;
-   accepting ADR-0168 does not change that. Either the recorder records
-   pose membership (a bootstrap change, its own ADR) or the unit is
-   smaller than "the character".
+1. **Pose membership was absent from the data.** The 2026-09-09 review found
+   that a `sprNNN` group spanned several poses and the pack recorded only
+   pairwise tile totals. ADR-0170/F9.19 subsequently added `poses.json`, and
+   the S10.a rerun passed at 100 %. ADR-0168 is superseded by ADR-0171. This
+   gap is closed; it remains here as the premise and result of the spike.
 2. **Layout fidelity of a hosted image model is unmeasured.** Whether a
    generated image keeps a contact sheet's cells in place, leaves gutters
    clean and returns alpha (assume not — ADR-0154 §7) is unknown.
@@ -1469,26 +1465,19 @@ and in git history.
 1. ~~Phase 6 · H1–H10 · Phase 5 · D1–D13 · input tester · Phase 7 · Phase 8
    · Phase 9 F9.0–F9.17, F9.19–F9.20, F9.22–F9.29 · Phase 10 S10.a/c/d~~ —
    shipped (§3).
-2. **Phase 11 C.1 → C.2 → C.3** first: they are cheap, mechanical, and
-   every later slice is judged through them. A feature PR merged while the
-   gate does not compile the Core is a regression waiting for a human to
-   trip over it.
+2. ~~Phase 11 C.1–C.8~~ — shipped 2026-09-14/15; the gate, register,
+   release, external-artist proxy runs, second reference pack, size/pin
+   guardrails and ADR debts are recorded in §3.
 3. **Phase 9 F9.18** human panel (sections 2 and 3, on a pack recorded on the
    current binary) and **F9.25** per-stage second passes. F9.18 is the only
-   Phase 9 item that needs a person; schedule it with C.5 if the same
-   person can do both.
-4. **Phase 11 C.4 → C.5 → C.6**: release, the Fable artist run on two
-   games, a second reference pack. **Until C.5 has a logged number, no new
-   F9.x slice is opened** — the meta-goal is measured there or nowhere.
-   C.1, C.2, C.3 and the C.4 preparation run **in parallel** as isolated
-   worktrees driven by Opus sessions, one PR each (user's direction,
-   2026-09-14); C.5 waits for C.4's binary.
-5. **Phase 10 S10.b**, by the user, from their own account; then the
+   Phase 9 item that needs a person. The completed C.5 proxy runs do not
+   satisfy it: the Phase 9 contract requires a person, not an agent persona.
+4. **Phase 10 S10.b**, by the user, from their own account; then the
    BYOK/egress ADR it feeds, or a line here saying the spike declined it.
-6. **Phase 11 C.7, C.8** and the manual/hardware residue, opportunistically:
-   F6.5 file-picker step, Phase 5 listening pass, input tester with a pad,
-   Phase 9 validation test 8 (needs a local diffusion stack — or C.8's
-   ADR-0154 decision retires it).
+5. **Manual/hardware residue**, opportunistically: F6.5 file-picker step,
+   Phase 5 listening pass, and input tester with a pad. Phase 9 validation
+   test 8 is optional and, under ADR-0192, compares `classical` with
+   `passthrough`; it no longer waits on a local diffusion stack.
 
 ### 6. ADR map
 
@@ -1508,7 +1497,7 @@ files and in §3.
 | 0150 | accepted | Avalonia.Headless XAML-wiring tests (`UI.HeadlessTests/`) |
 | 0151/0152 | accepted | unresolvable `<background>` is a lint error; known-missing errata (F6.8) |
 | 0153/0156/0159/0160/0164/0166 | accepted (0153 amended by F9.12/F9.16) | Phase 9 sheets: vocabulary + grouping + maps; screen residency; save-time anchors; `textures/chr/`; adjacency sidecar; screen ownership of nodes |
-| 0154 | accepted (Option A) | F9.6 external repaint, loopback-only, `generated` as disclosure not gate; Phase 10 S10.b measures whether an amendment of §2/§4 is worth proposing — until then it stands as written |
+| 0154 | accepted; §2 Option A superseded by ADR-0192 | F9.6 external repaint remains loopback-only and `generated` remains disclosure, not a gate; generative diffusion is retired until the measured run required by ADR-0192 |
 | 0155/0157/0158/0163/0167 | accepted | `-MMD -MP`; frame-counted headless input; no `NES_ONLY`/`LessUI`; fork–upstream coexistence; HUD-only capture |
 | 0161 | accepted (2026-09-06) | positional palette-variant correspondence (F9.6 §5) |
 | 0162 | accepted (2026-09-06) | accuracy suite as a regression gate (H10); not in CI by decision |
@@ -1545,13 +1534,13 @@ files and in §3.
 | Catalog-shaping decisions recorded only in issue comments or commit messages (the 2026-08-31 audio-only NEA removal) | every such decision gets an ADR or a PRD line the same day (ADR-0148 backfilled the one already made) |
 | ADR files deleted by an unrelated commit go unnoticed (0130/0131/0136/0137, 2026-08-28) | restored (D1); `scripts/checks/verify_adr_refs.py` in `make doc-checks` fails on a dangling `ADR-NNNN` reference |
 | Scope explosion | phases independent; GitHub is the only backend; no telemetry |
-| Phase 10 sends ROM-derived art to a hosted model | only S10.b does, by hand, by the user, from their own account, with the files listed first; no tool in the repo automates a hosted call until an ADR amends ADR-0154 §2 |
+| Phase 10 sends ROM-derived art to a hosted model | only S10.b does, by hand, by the user, from their own account, with the files listed first; no tool in the repo automates a hosted call until an ADR reopens ADR-0192 and amends ADR-0154's remaining local-only contract |
 | Phase 10 spikes read as a product plan | the section names no modules, formats or product slices; ADRs are written after S10.a/S10.b report numbers |
 | Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. From F9.18 on, and for Phase 11 C.5, it is enforced: a slice that changes what the artist sees is not "shipped" until a person who did not build it logs the cold-read / find-and-edit rows |
-| The PR gate does not compile the Core or run the Python suite; `main` has no branch protection (#230, 2026-09-14) | Phase 11 C.1; until it lands, every PR that touches `Core/` or `scripts/*.py` states in its body which suites the author ran locally, with the counts |
+| The PR gate regresses and stops compiling the Core or running the Python suite | Phase 11 C.1 shipped both as jobs in `.github/workflows/checks.yml`; its verifier protects the workflow contract, while local runs remain required when CI is unavailable |
 | The roadmap and the ADR Status lines drift behind `main` (three shipped rows in a live table, four "not yet in code" ADRs for shipped code, ADR ids missing from §6 — all found 2026-09-14) | Phase 11 C.2: a `doc-checks` script fails on a `shipped` row in a live table; ADR Status-line edits listed per PR; this file's header date is part of "done" (§ Process) |
 | An ADR is accepted and implemented in the same turn (ADR-0189, ADR-0190) | Rule relaxed by the user on 2026-09-14 and written into `CLAUDE.md`: same-turn implementation is allowed when the change ships with unit tests covering the decision and the go-ahead is quoted in the ADR Status line **and** the PR body; otherwise accepting stays a request for work |
-| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 (a binary anyone can run) then C.5 (one hour, one log, two games). **Trade-off taken 2026-09-14:** the C.5 artist is a fresh Fable session, not a person — faster and repeatable, and still a proxy. What makes it more than the earlier proxies is the sandbox (no code, no ADRs, no context) and the stop rule; what it cannot measure is taste, fatigue, or whether a human would come back tomorrow. A human run stays a non-goal until the user reopens it |
+| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 shipped a binary and C.5 ran the one-hour protocol on two games. **Trade-off taken 2026-09-14:** the C.5 artist was a fresh Fable session, not a person — faster and repeatable, and still a proxy. Its sandbox and stop rule make it stronger than the earlier proxies, but it cannot measure taste, fatigue, or whether a human would return. A real external-user C.5 rerun remains out of scope until reopened; this does not waive F9.18's separately required human panel |
 | Everything is tuned to one reference pack (Contra80s: 864 conditions, one author's habits) | Phase 11 C.6: a second hand-made pack measured with the same four numbers before any grouping or condition rule is tightened again |
 | Parallel sessions on one machine: a checkout falls behind `origin/main` and re-does merged work (this checkout was 22 commits behind with a stale duplicate of three merged PRs on 2026-09-14) | check `origin/main` before dispatching or editing; the memory note `feedback_check_main_before_dispatch` is the standing rule; a stale dirty tree is stashed, never committed |
 
