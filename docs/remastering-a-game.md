@@ -385,6 +385,12 @@ error: <stage>: <pack>: this pack keys its tiles by CHR index (ADR-0172) and the
 grid dump carries no index — a panorama built from it would match nothing.
 ```
 
+The ROM you feed it decides this, not the game's name. Contra (USA) is a UNROM
+board with CHR RAM and gives a panorama; Contra (Japan) is a VRC2 board with CHR
+ROM and `artist_map.py` refuses it, even though the panorama section above uses
+Contra as its worked example. If a tool's answer does not match the game you
+think you loaded, check the dump before you re-read the guide.
+
 That is the tool refusing to write a surface it cannot verify, not a broken
 run. On such a game the kit is the other three surfaces; the stage's
 backgrounds are still in `textures/backgrounds/screenNNN.png`.
