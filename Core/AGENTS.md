@@ -89,6 +89,23 @@ needs no local rules beyond the root DOX.
 - Host-free rule (ADR-0127): `SpriteGrouping` and `SheetRender` take data
   and return data; file, env and log access stay in `HdPackBuilder`, so
   `scripts/core_unit_tests.cpp` can cover the rules without an emulator.
+- **Movie row ↔ device list need not match in width.**
+  `MesenMovie::SetInput` (also used by `BizHawkMovie`) walks one
+  `_inputData[row]` element per registered control device, in
+  `BaseControlManager::_controlDevices` order (system action manager
+  first, then the console's ports). A native `.mmo` row has exactly one
+  field per device; a BizHawk `.bk2` row has only what its `LogKey`
+  declared, while `NesConsole`/`SmsConsole::InitializeInputDevices` may
+  still auto-configure both controller ports. Contract on mismatch: a
+  leftover field is dropped when the poll counter advances; a missing
+  field leaves that device at the `ClearState()` already applied for the
+  poll (no input) and must **not** wrap `_deviceIndex` back into earlier
+  fields of the same row (that would turn a Commands/Power+Reset column
+  into a phantom later-port direction) nor treat the short row as movie
+  end. Only advancing past `_inputData.size()` ends the movie. Side
+  effect: assertion-enabled builds no longer abort on a real `.bk2`
+  (#270); playback of a single-player `.bk2` on a two-port auto-config
+  stays deterministic instead of silently feeding Commands into port 2.
 
 ## Child DOX Index
 
