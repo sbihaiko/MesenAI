@@ -447,15 +447,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   measured over 136 packs in ADR-0178's "Measured 2026-09-13"). Do not
   widen it back without re-measuring. When a sprite cell carries `source` +
   `mirror`, build also un-bakes those pixels into the sheet PNG so the
-  source key stores the art the run time will mirror (#255). Every
-  `[condition]` rule from the key source keeps its unconditional fallback
-  twin in the rebuilt `hires.txt` (synthesised when the source omitted it)
-  so a condition miss still shows the painted art (#256 / ADR-0189 §3). A
-  painted sprite sheet whose cells lose to another sheet fails the build
-  with an ownership error instead of a silent all-green success (#253);
-  map-vs-metatiles both-painted stays a logged precedence choice.
-  `scripts/test_mep_build.py` is the acceptance test wired into
-  `make doc-checks`, and asserts these halves.
+  source key stores the art the run time will mirror, then rewrites the
+  sidecar to a plain unflipped entry so a second build is idempotent
+  (#255). Every `[condition]` rule from the key source keeps its
+  unconditional fallback twin in the rebuilt `hires.txt` (synthesised when
+  the source omitted it) so a condition miss still shows the painted art
+  (#256 / ADR-0189 §3). A painted sprite sheet whose cells lose to another
+  sheet fails the build with an ownership error instead of a silent
+  all-green success (#253); map-vs-metatiles both-painted stays a logged
+  precedence choice. `scripts/test_mep_build.py` is the acceptance test
+  wired into `make doc-checks`, and asserts these halves.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a
