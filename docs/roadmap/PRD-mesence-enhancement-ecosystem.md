@@ -911,6 +911,18 @@ does not exist.
   record: `c5-fable-artist-run-zelda-2026-09-14.md`,
   `c5-fable-artist-run-mega-man-3-2026-09-14.md`.
 
+- **C.6 — a second reference pack** (2026-09-15): Zelda II ModernRetroDesign
+  (74 205-line `hires.txt`; Metroid HD refused — patched CHR ROM vs stock CHR
+  RAM, #225). Four numbers against one stock recording: **coverage 165/874
+  tileData (18.9%), exact keys 28/3301**; **conditions 670 emitted / 4 679
+  hand-written** (emitted: 0 `spriteNearby`, 112 `tileNearby`, 558
+  `tileAtPosition`; hand-written: 913 `spriteNearby`, 3 511
+  `memoryCheckConstant`, …); **palette inflation 3.78×** (3 301 keys / 874
+  tileData); **keys round-tripped** as `mep_lint` 0 errors on the artist pack
+  (stock recording rebuild refused — pre-ADR-0172 sidecars). Contra80s was
+  47% / 864 conditions / ~2.3× — a second author's habits are not the same
+  shape, so grouping and condition rules must not be retuned to Contra alone.
+
 ### 4. Roadmap — pending work, by slice
 
 #### Phase 6 — Community pack auto-install (MEP Recipe v1)
@@ -1315,8 +1327,8 @@ harness problem, solved several ways, in readable code.
 **Status:** proposed 2026-09-14 by the roadmap review of the same day,
 **accepted 2026-09-14 by the user, all eight slices** ("me ajude a decidir"
 → C.1–C.8 selected), in the order §5 gives: C.1 → C.3 → C.2, then C.4 →
-C.5, with C.6–C.8 after C.5 reports. **C.1–C.5 shipped 2026-09-14** (record
-in §3); live table holds C.6–C.8. No ADR is needed for C.2, C.3 and C.4;
+C.5, with C.6–C.8 after C.5 reports. **C.1–C.6 shipped 2026-09-14/15** (record
+in §3); live table holds C.7–C.8. No ADR is needed for C.2, C.3 and C.4;
 C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`), C.7 amends the
 LOC guard (ADR-0137), and C.8 closes debts other ADRs left open.
 
@@ -1367,7 +1379,6 @@ user (C.4–C.6). No new emulator feature ships under this phase.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| C.6 | **A second reference pack.** Pick one community pack other than Contra80s with a rich hand-made `hires.txt` (the 260 146-line Metroid pack and Zelda II ModernRetroDesign are on hand), run `artist_cover.py` and the F9.29 condition emitters against it, and log the same four numbers as Contra (coverage, conditions emitted vs hand-written, palette inflation, keys round-tripped) as a §3 line. Purpose: stop tuning to one author's habits | accepted 2026-09-14; no ADR unless a number forces a rule change |
 | C.7 | **The size guard ratchets.** `check-file-loc.sh` gains the six files above at their current line count as a ceiling (a PR may shrink them, never grow them), and `scripts/requirements.txt` pins Pillow/numpy/PyYAML where `checks.yml` does today | accepted 2026-09-14; amends ADR-0137's file list |
 | C.8 | **Close the debts ADRs left open.** ADR-0154: run the `diffusion` backend once or supersede Option A (it has never executed; PRD test 8 has never run); ADR-0186: publish the debugger slowdown as a number; ADR-0187: a `doc-checks` script that diffs the host allow-list between `fetch_pack.py`, `CommunityPackDownloader.cs` and `community-pack-validate.yml`; ADR-0171 → 0170: the "loosen pose identity" revisit (223 poses on a 300 s run) | accepted 2026-09-14; each item is its own PR; 0154's outcome is an ADR either way |
 
