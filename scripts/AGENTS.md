@@ -919,6 +919,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `check-file-loc.sh` (against `Core/Shared/Audio/MidiExporter.cpp 200`),
   and the ADR-0138 §41 F6.4b-2 trio -
   `checks/verify_pack_host_allowlist_embed.sh`,
+  `checks/verify_pack_host_allowlist_drift.py` (Phase 11 C.8 / ADR-0187 —
+  kind handlers in `fetch_pack.py` and `CommunityPackDownloader.cs` must
+  cover every non-`direct` kind in `pack_host_allowlist.json`, and
+  `community-pack-validate.yml` must gate through that JSON),
   `checks/verify_core_no_http_client.sh`, and
   `checks/verify_fetcher_no_filesystem_allowlist_load.sh` (see `checks/`
   below) - run directly by `doc-checks`, in order, failing on the first
