@@ -265,6 +265,9 @@ doc-checks: check-manifest
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	./scripts/check-file-loc.sh scripts/core_unit_tests.cpp 7342
 	./scripts/checks/verify_pack_host_allowlist_embed.sh
+	# Phase 11 C.8 / ADR-0187: kind handlers and the validate gate stay in step
+	# with scripts/pack_host_allowlist.json (CI vs client drift).
+	python3 scripts/checks/verify_pack_host_allowlist_drift.py
 	./scripts/checks/verify_core_no_http_client.sh
 	./scripts/checks/verify_fetcher_no_filesystem_allowlist_load.sh
 	./scripts/checks/verify_no_ptbr_usage_strings.sh
