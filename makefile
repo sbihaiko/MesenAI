@@ -53,6 +53,37 @@ ifeq ($(UNAME_S),Darwin)
 	LINKCHECKUNRESOLVED :=
 endif
 
+#Post-link fixup for the C++ harness binaries (roles-probe, capture-tool,
+#spike-sound-driver): they link against InteropDLL/$(OBJFOLDER)/$(SHAREDLIB),
+#whose install name is the bare file name, so the path has to be rewritten or
+#the tool aborts at startup with a dyld "Library not loaded" error.
+#
+#Issue #268: the /usr/bin copies of install_name_tool and codesign are xcrun
+#shims that fail the Xcode-licence check on a machine that only has the Command
+#Line Tools, and the recipes used to swallow that with `2>/dev/null || true` -
+#a green `make capture-tool` shipping a binary that crashes at load. Prefer the
+#real CLT binaries, same as scripts/release_macos.sh already does, and let a
+#failed rewrite fail the target. codesign stays best-effort (an ad-hoc
+#signature is not required for the tool to run).
+ifeq ($(UNAME_S),Darwin)
+CLT_BIN := /Library/Developer/CommandLineTools/usr/bin
+INSTALL_NAME_TOOL := $(shell test -x $(CLT_BIN)/install_name_tool && echo $(CLT_BIN)/install_name_tool || echo install_name_tool)
+CODESIGN_ALLOCATE := $(shell test -x $(CLT_BIN)/codesign_allocate && echo $(CLT_BIN)/codesign_allocate)
+ifneq ($(CODESIGN_ALLOCATE),)
+export CODESIGN_ALLOCATE
+endif
+
+#$(call fixup_install_name,<binary>) - macOS only; a no-op everywhere else.
+define fixup_install_name
+	$(INSTALL_NAME_TOOL) -change $(SHAREDLIB) $(CURDIR)/InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) $(1)
+	codesign -f -s - $(1) 2>/dev/null || true
+endef
+else
+define fixup_install_name
+	@:
+endef
+endif
+
 MESENFLAGS += -m64
 
 MACHINE := $(shell uname -m)
@@ -478,14 +509,12 @@ python-tests:
 #F5.4g level-2 validation harness (channel roles / SFX classifier) - see scripts/roles_probe.cpp
 roles-probe: core
 	$(CXX) -std=c++17 -O2 -w -I . -I Core -Wl,-headerpad_max_install_names scripts/roles_probe.cpp Core/Shared/Audio/ChannelRoleClassifier.cpp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) -o scripts/roles_probe
-	install_name_tool -change $(SHAREDLIB) $(CURDIR)/InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) scripts/roles_probe 2>/dev/null || true
-	codesign -f -s - scripts/roles_probe 2>/dev/null || true
+	$(call fixup_install_name,scripts/roles_probe)
 
 #Headless MIDI/VGM capture harness (F1 regression tool) - see scripts/headless_record.cpp
 capture-tool: core
 	$(CXX) -std=c++17 -O2 -I . -I Core -Wl,-headerpad_max_install_names scripts/headless_record.cpp Core/Shared/Video/FrameCapture.cpp Core/Shared/MovieSyncGate.cpp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) -o scripts/headless_record
-	install_name_tool -change $(SHAREDLIB) $(CURDIR)/InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) scripts/headless_record 2>/dev/null || true
-	codesign -f -s - scripts/headless_record 2>/dev/null || true
+	$(call fixup_install_name,scripts/headless_record)
 
 #F5.4g Block D item 11 (ADR-0135/0051): productised extract-audio tool - discover the NES sound
 #driver and enumerate music/SFX without playing. Full runtime contract: per-id frame budget +
@@ -493,8 +522,7 @@ capture-tool: core
 #Run: scripts/spike_sound_driver <rom.nes> <workdir> <output-folder> [maxIds=40] [secondsPerId=4] [startAt=3.0] [wallClockBudget=300]
 spike-sound-driver: core
 	$(CXX) -std=c++17 -O2 -w -I . -I Core -Wl,-headerpad_max_install_names scripts/spike_sound_driver.cpp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) -o scripts/spike_sound_driver
-	install_name_tool -change $(SHAREDLIB) $(CURDIR)/InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) scripts/spike_sound_driver 2>/dev/null || true
-	codesign -f -s - scripts/spike_sound_driver 2>/dev/null || true
+	$(call fixup_install_name,scripts/spike_sound_driver)
 
 pgohelper: InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 	mkdir -p PGOHelper/$(OBJFOLDER) && cd PGOHelper/$(OBJFOLDER) && $(CXX) $(CXXFLAGS) $(LINKCHECKUNRESOLVED) -o pgohelper ../PGOHelper.cpp ../../bin/pgohelperlib.so -pthread $(FSLIB) $(SDL2LIB) $(LIBEVDEVLIB) $(X11LIB)

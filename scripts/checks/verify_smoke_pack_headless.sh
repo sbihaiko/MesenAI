@@ -66,6 +66,23 @@ if harness_is_stale; then
   rm -f "$BUILD_LOG"
 fi
 
+# Issue #268: on macOS the harness links against a dylib whose install name is
+# the bare file name, and `make capture-tool` rewrites it to the absolute path
+# in InteropDLL/. When that rewrite is skipped the tool aborts at load (exit
+# 134, "Library not loaded"), which shows up here as every fixture failing for
+# no visible reason. Catch it with one line instead. macOS only, and silent
+# when otool is unavailable - /usr/bin/otool is an xcrun shim that needs an
+# accepted Xcode licence, so prefer the Command Line Tools copy.
+if [ "$(uname -s)" = "Darwin" ] && [ -x "$HARNESS" ]; then
+  OTOOL="/Library/Developer/CommandLineTools/usr/bin/otool"
+  command -v "$OTOOL" >/dev/null 2>&1 || OTOOL="$(command -v otool || true)"
+  if [ -n "$OTOOL" ] && BAD="$("$OTOOL" -L "$HARNESS" 2>/dev/null | tail -n +2 | awk '$1 == "MesenCore.dylib" { print $1 }')" && [ -n "$BAD" ]; then
+    echo "FAIL: $HARNESS still has the bare \"MesenCore.dylib\" install name; it will abort at load." >&2
+    echo "      Re-run 'make capture-tool' (see issue #268) or repair it with install_name_tool." >&2
+    exit 1
+  fi
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
