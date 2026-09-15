@@ -8,18 +8,15 @@
 # a macOS or Windows runner, or the moment one of the two deleted workflows
 # comes back without its contract being restated.
 #
-# One documented exception: `dotnet-format-check.yml` is `disabled_manually`
-# and pinned to a Windows runner because `dotnet format` is only wired for the
-# Windows-hosted `Mesen.sln` here. It compiles nothing and produces no binary,
-# so it is not a "compilation on Windows"; it stays listed below so that
-# enabling it is a deliberate edit of this file rather than a silent drift.
+# `dotnet-format-check.yml` was the one documented exception (a Windows
+# runner that compiled nothing) and was deleted on 2026-09-14 by the user's
+# decision, since ADR-0191 already forbids CI from touching a Windows
+# runner for anything. A changed-files-only format check may return as a
+# separate PR; if it does, it belongs on Linux.
 set -euo pipefail
 
 WORKFLOWS=".github/workflows"
 FAIL=0
-
-# Workflow files allowed to name a non-Linux runner, and why.
-ALLOWED_NON_LINUX="dotnet-format-check.yml"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -37,16 +34,13 @@ done
 while IFS= read -r line; do
   file="${line%%:*}"
   rest="${line#*:}"
-  base="$(basename "$file")"
   runner="$(printf '%s' "$rest" | sed -e 's/.*runs-on:[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^['\"]//" -e "s/['\"]$//")"
   case "$runner" in
     macos-*|macOS-*)
       fail "$file runs a job on '$runner'; ADR-0191 allows no macOS runner (the macOS release is built locally with 'make release-macos')"
       ;;
     windows-*|windows|windows-latest)
-      if [ "$base" != "$ALLOWED_NON_LINUX" ]; then
-        fail "$file runs a job on '$runner'; ADR-0191 retired Windows from CI"
-      fi
+      fail "$file runs a job on '$runner'; ADR-0191 retired Windows from CI"
       ;;
   esac
 done < <(grep -rn "runs-on:" "$WORKFLOWS" --include='*.yml' | grep -v '\${{')

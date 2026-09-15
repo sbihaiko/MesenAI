@@ -147,6 +147,15 @@ made (that is C.4's `make release-macos`), does not touch `README.md` or
   and which is `disabled_manually`, should be enabled. Neither is changed by
   this ADR.
 
+**Updated 2026-09-14:** the user answered the first question by deleting
+`dotnet-format-check.yml` outright rather than leaving it disabled — a
+Windows-only workflow that compiled nothing was not worth keeping as a
+documented exception. `scripts/checks/verify_ci_linux_only.sh`'s
+`ALLOWED_NON_LINUX` exception is removed along with it; the verifier now
+fails on any workflow naming a Windows runner, with no exception left.
+`community-pack-drift-check.yml` stays `disabled_manually`, unchanged by this
+update, per the same day's decision recorded in `CLAUDE.md`.
+
 ## Alternatives
 
 - **Keep `tests.yml` and `unit-tests.yml` disabled instead of deleting

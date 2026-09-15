@@ -156,20 +156,21 @@ can be exercised by real xunit tests without Avalonia or the native
   expose the project to the solution-level flows in
   `.github/workflows/build.yml`/`tests.yml`
   (`dotnet restore -r win-x64 -p:PublishAot=true Mesen.sln`, Windows-only)
-  and `dotnet-format-check.yml`
-  (`dotnet format --verify-no-changes` against the whole `.sln`). This
-  actor's environment is macOS/Linux, so the plan's own risk item —
-  verifying locally that a RID-less `UI.Tests.csproj` survives that
-  win-x64/AOT restore — cannot be executed here; per the plan
-  ("Phase 0 — Mesen.sln"), the fallback when that can't be confirmed is to
-  keep the project OUT of the `.sln` and let `.github/workflows/unit-tests.yml`
-  invoke `UI.Tests/UI.Tests.csproj` directly instead. That is the choice
-  recorded here. Consequence: `UI.Tests` code is not gated by
-  `dotnet-format-check.yml` — if it later joins the `.sln`, either confirm
-  the win-x64/AOT restore survives first, or add it with `Build.0` disabled
-  under `Release|x64`, and its code must then also satisfy the repo's
-  `.editorconfig` (tabs) under `dotnet format`. See `.github/AGENTS.md` for
-  how the CI split reflects this.
+  and, at the time this decision was made, `dotnet-format-check.yml`
+  (`dotnet format --verify-no-changes` against the whole `.sln`; that
+  workflow was itself deleted 2026-09-14). This actor's environment is
+  macOS/Linux, so the plan's own risk item — verifying locally that a
+  RID-less `UI.Tests.csproj` survives that win-x64/AOT restore — cannot be
+  executed here; per the plan ("Phase 0 — Mesen.sln"), the fallback when
+  that can't be confirmed is to keep the project OUT of the `.sln` and let
+  `.github/workflows/unit-tests.yml` invoke `UI.Tests/UI.Tests.csproj`
+  directly instead. That is the choice recorded here. Consequence:
+  `UI.Tests` code is not gated by a solution-wide `dotnet format` check — if
+  it later joins the `.sln`, either confirm the win-x64/AOT restore survives
+  first, or add it with `Build.0` disabled under `Release|x64`, and its code
+  must then also satisfy the repo's `.editorconfig` (tabs) under
+  `dotnet format`. See `.github/AGENTS.md` for how the CI split reflects
+  this.
 
 - **`UI/Services/*.cs`** (ADR-0138 §37/§38/§43/§45-§47, F6.4b-2) is
   deliberately outside the `UI/Logic` firewall: `scripts/verify-ui-logic-firewall.sh`
