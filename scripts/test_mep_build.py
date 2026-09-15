@@ -44,7 +44,14 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
   * #173: `build` reports its key count as a delta against the key source,
     says why dropping keys is the designed outcome and where the
     screen-owned cells are repainted, and groups the lint warnings about
-    the tool's own sheet geometry instead of burying the rest.
+    the tool's own sheet geometry instead of burying the rest;
+  * #255: a sprite sheet cell with `source` + `mirror: H` stores unflipped
+    pixels under the unflipped source key (ADR-0178 — the run time mirrors
+    the replacement art itself);
+  * #256: every `[condition]` rule keeps its unconditional fallback twin in
+    the rebuilt `hires.txt`, so a condition miss still shows the painted art;
+  * #253: a painted sprite sheet whose cells lose to another sheet fails the
+    build with an ownership error instead of a silent all-green success.
 
 Framework-free, mirroring test_mep_recipe.py's ok()/fail()/main() style.
 Wired into `make doc-checks`. Usage: python3 scripts/test_mep_build.py
@@ -210,6 +217,22 @@ def flip_hex(data: str) -> str:
     """`data` read as if its OAM horizontal-flip bit had been baked in."""
     b = bytes.fromhex(data)
     return bytes(int(f"{x:08b}"[::-1], 2) for x in b).hex().upper()
+
+
+def render_tile_hflipped(shape: int, pixels, x: int, y: int, width: int, height: int):
+    """RenderTile with the OAM horizontal flip baked into the bitmap — what
+    HdBuilderPpu::CaptureOam stores on a mirrored sprite cell."""
+    tmp = blank(8, 8)
+    render_tile(shape, tmp, 0, 0, 8, 8)
+    for row in range(8):
+        py = y + row
+        if not 0 <= py < height:
+            continue
+        for col in range(8):
+            px = x + col
+            if not 0 <= px < width:
+                continue
+            pixels[py][px] = tmp[row][7 - col]
 
 
 
@@ -755,6 +778,9 @@ def sheet_round_trip_tests(root: Path):
     screen_residency_tests(root)
     chr_rom_key_tests(root)
     flip_baked_key_tests(root)
+    mirror_h_pixel_key_tests(root)
+    condition_fallback_twin_tests(root)
+    painted_sprite_ownership_tests(root)
 
 
 def flip_baked_key_tests(root: Path):
@@ -815,6 +841,144 @@ def flip_baked_key_tests(root: Path):
         else:
             fail(f"background exemption changed the emitted keys: missing {sorted(want - got)[:3]}, "
                  f"unexpected {sorted(got - want)[:3]}")
+
+
+def mirror_h_pixel_key_tests(root: Path):
+    """#255: build must store unflipped pixels under the unflipped source key.
+    The kit shows the artist the baked-flipped bitmap; the run time looks up
+    `source` and mirrors the replacement art itself (ADR-0178)."""
+    folder = root / "mirror-h-pixels"
+    sheets = folder / "textures" / "sheets"
+    sheets.mkdir(parents=True)
+    # One 8x8 sprite cell: PNG is flip-baked, sidecar carries source + mirror.
+    shape = 3
+    pixels = blank(8, 8)
+    render_tile_hflipped(shape, pixels, 0, 0, 8, 8)
+    write_pair(sheets, "spr000", pixels, 1)
+    src = tile_hex(shape)
+    baked = flip_hex(src)
+    (sheets / "spr000.json").write_text(
+        serialize_sheet("sprite", 8, 0, 1, "spr000.png", "spr000.orig.png",
+                        [{"index": 0, "x": 0, "y": 0, "count": 1, "context": "sprite",
+                          "tiles": [shape]}]),
+        encoding="utf-8")
+    # serialize_sheet uses EMIT_FLIP_* globals; force the sidecar bytes we need.
+    (sheets / "spr000.json").write_text(
+        "{\n"
+        '  "version": 1,\n'
+        '  "kind": "sprite",\n'
+        '  "gridUnit": 8,\n'
+        '  "gridPhase": { "x": 0, "y": 0 },\n'
+        '  "gridConsistency": { "chosen": 0.8300, "alt8x8": 0.4100 },\n'
+        '  "cell": { "w": 8, "h": 8 },\n'
+        '  "gutter": 0,\n'
+        '  "columns": 1,\n'
+        '  "sheet": "spr000.png",\n'
+        '  "reference": "spr000.orig.png",\n'
+        '  "cells": [\n'
+        f'    {{ "index": 0, "x": 0, "y": 0, "count": 1, "context": "sprite", "label": "", '
+        f'"tiles": [{{ "tile": "{baked}", "palette": "{PAL_HEX}", '
+        f'"source": "{src}", "mirror": "H" }}] }}\n'
+        "  ]\n"
+        "}\n",
+        encoding="utf-8")
+    (folder / "textures" / "hires.txt").write_text(
+        "\n".join(["<ver>107", "<scale>1", "<system>nes",
+                   "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+                   f"<tile>0,{src},{PAL_HEX},0,0,1,N"]) + "\n",
+        encoding="utf-8")
+    # Paint so the cell counts as edited (otherwise an untouched crop is fine
+    # to leave, but we need the round-trip to rewrite the baked pixels).
+    paint(folder, "spr000.png", 0, 0, 8, color=0xFFA020F0)
+    # Re-apply the baked flip over the paint so the sheet still looks mirrored
+    # the way a real kit cell does — paint() filled a flat colour; rebuild a
+    # mirrored pattern the artist would have seen, distinct from the unflipped
+    # want.
+    px = png_read(sheets / "spr000.png")
+    render_tile_hflipped(shape, px, 0, 0, 8, 8)
+    # Tint one pixel so edited-probe still sees a difference from orig.
+    px[0][0] = 0xFFA020F0
+    (sheets / "spr000.png").write_bytes(png_rgba(px))
+
+    out = run("build", str(folder))
+    if out is None:
+        return
+    imgs, tiles = parse_hires(folder / "textures" / "hires.txt")
+    if (src, PAL_HEX) not in tiles:
+        fail(f"#255: source key missing from rebuilt hires.txt: {sorted(tiles)[:3]}")
+        return
+    if (baked, PAL_HEX) in tiles:
+        fail("#255: baked flip key was still emitted; source should have replaced it")
+        return
+    img_i, x, y, _f = tiles[(src, PAL_HEX)]
+    got = crop(png_read(sheets / Path(imgs[img_i]).name), x, y, 8)
+    want = blank(8, 8)
+    render_tile(shape, want, 0, 0, 8, 8)
+    want[0][7] = 0xFFA020F0  # the tint, un-baked from (0,0) by the H flip
+    if got == want:
+        ok("#255: mirror-H cell stores unflipped pixels under the source key")
+    else:
+        fail(f"#255: crop under source key is not the unflipped art "
+             f"(first pixel got={got[0][0]:08X} want={want[0][0]:08X})")
+
+
+def condition_fallback_twin_tests(root: Path):
+    """#256: each [condition] rule keeps its unconditional fallback twin."""
+    folder, _v, cells = make_sheet_folder(root, "cond-fallback", sprite_sheet=True)
+    # Key source: one tile under a spriteNearby condition, with its bare twin
+    # (recorder order). A second tile under a condition only — build must
+    # synthesise the missing twin.
+    key0, key1 = tile_hex(0), tile_hex(1)
+    # HdPackLoader: <condition>name,spriteNearby,dx,dy,tileData,palette
+    lines = ["<ver>107", "<scale>2", "<system>nes",
+             "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+             f"<condition>spr000_n0,spriteNearby,0,0,{key0},{PAL_HEX}",
+             f"[spr000_n0]<tile>0,{key0},{PAL_HEX},0,0,1,N",
+             f"<tile>0,{key0},{PAL_HEX},0,0,1,N",
+             f"[spr000_n0]<tile>0,{key1},{PAL_HEX},0,0,1,N"]
+    (folder / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    paint(folder, "spr000.png", cells[0]["x"], cells[0]["y"], 16)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    body = (folder / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    tile_lines = [ln for ln in body if "<tile>" in ln and not ln.strip().startswith("#")]
+    has_cond = [ln for ln in tile_lines if ln.startswith("[spr000_n0]<tile>") and key0 in ln]
+    has_bare = [ln for ln in tile_lines if ln.startswith("<tile>") and key0 in ln]
+    has_cond1 = [ln for ln in tile_lines if ln.startswith("[spr000_n0]<tile>") and key1 in ln]
+    has_bare1 = [ln for ln in tile_lines if ln.startswith("<tile>") and key1 in ln]
+    if has_cond and has_bare:
+        ok("#256: conditional rule keeps its recorder-written unconditional twin")
+    else:
+        fail(f"#256: key0 missing cond/bare twin: cond={has_cond} bare={has_bare}")
+    if has_cond1 and has_bare1:
+        ok("#256: a conditional-only key source still gets a synthesised bare twin")
+    else:
+        fail(f"#256: key1 missing synthesised bare twin: cond={has_cond1} bare={has_bare1}")
+
+
+def painted_sprite_ownership_tests(root: Path):
+    """#253: a painted sprite sheet whose cells lose to another sheet fails."""
+    folder, _v, _c = make_sheet_folder(root, "painted-owned-elsewhere",
+                                       sprite_sheet=True)
+    sheets = folder / "textures" / "sheets"
+    # Second sprite sheet claiming the same keys as spr000, later name so it
+    # wins the same-rank tie when both are painted.
+    spr_cells, spr_pixels = contact_sheet(16, 1, 2, [
+        {"count": 431, "context": "scene", "metatile": 0, "tiles": [0, 1, 2, 3]},
+        {"count": 300, "context": "scene", "metatile": 1, "tiles": [4, 5, 6, 7]},
+    ])
+    write_pair(sheets, "spr001", spr_pixels, 1)
+    (sheets / "spr001.json").write_text(
+        serialize_sheet("sprite", 16, 1, 2, "spr001.png", "spr001.orig.png", spr_cells),
+        encoding="utf-8")
+    paint(folder, "spr000.png", spr_cells[0]["x"], spr_cells[0]["y"], 16)
+    paint(folder, "spr001.png", spr_cells[0]["x"], spr_cells[0]["y"], 16, color=0xFF20A0F0)
+    out = run("build", str(folder), expect=1)
+    if out is not None and "painted tile" in out and "#253" in out and "spr000.png" in out:
+        ok("#253: a painted sprite sheet that loses its cells to another sheet fails the build")
+    else:
+        fail(f"#253: overlapping painted sprite sheets did not fail with ownership error: {out}")
 
 
 def chr_rom_key_tests(root: Path):

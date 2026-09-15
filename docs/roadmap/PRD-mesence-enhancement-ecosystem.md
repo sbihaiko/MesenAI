@@ -867,6 +867,27 @@ does not exist.
   is `checks.yml`'s five jobs, `build.yml` keeps only its Linux and AppImage
   legs, and the macOS binary is built locally by `make release-macos`.
 
+- **C.1 — the gate compiles and runs every suite** (2026-09-14, #245,
+  ADR-0191): `checks.yml` runs `make core-unit-tests` with `-Werror` and a
+  per-file runner over `scripts/test_*.py`; required jobs are `checks`,
+  `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests`. Windows
+  CI retired; macOS binaries stay local.
+
+- **C.2 — register and roadmap say what shipped** (2026-09-14, `d296b456`):
+  ADR Status lines brought current; `docs/roadmap/AGENTS.md` covers Phases
+  9–11; `scripts/checks/verify_prd_live_rows.py` fails when a live slice-table
+  Decision cell declares `shipped` (wired into `make doc-checks`).
+
+- **C.3 — boards and catalog agree** (2026-09-14, #247): catalog workflow
+  regenerates `docs/community-packs.md` on a schedule; validation applies
+  `pack:invalid` on "Inválido"; bug-board hygiene for #196 / #238 / #239.
+
+- **C.4 — a binary release of the fork** (2026-09-14, #249, `cf896c2d`):
+  `mesence-v0.1.0` macOS Apple Silicon only, built by `make release-macos`
+  (injects fresh `MesenCore.dylib`, ad-hoc codesign, hash mismatch fails,
+  writes `SHA256SUMS` + commit); release notes link the remastering guide;
+  `README.md` links the release above the fold.
+
 - **C.5 — the first outside artist measured** (2026-09-14, two logs in
   `docs/validation/`): a fresh session with no context, sandboxed to the C.4
   release and the three guides, ran the guide end to end on two games. **Both
@@ -1294,9 +1315,10 @@ harness problem, solved several ways, in readable code.
 **Status:** proposed 2026-09-14 by the roadmap review of the same day,
 **accepted 2026-09-14 by the user, all eight slices** ("me ajude a decidir"
 → C.1–C.8 selected), in the order §5 gives: C.1 → C.3 → C.2, then C.4 →
-C.5, with C.6–C.8 after C.5 reports. No ADR is needed for C.2, C.3
-and C.4; C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`), C.7
-amends the LOC guard (ADR-0137), and C.8 closes debts other ADRs left open.
+C.5, with C.6–C.8 after C.5 reports. **C.1–C.5 shipped 2026-09-14** (record
+in §3); live table holds C.6–C.8. No ADR is needed for C.2, C.3 and C.4;
+C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`), C.7 amends the
+LOC guard (ADR-0137), and C.8 closes debts other ADRs left open.
 
 **Problem — measured on 2026-09-14.** The fork carries 653 commits and
 +111 k lines against the frozen `master`, 98 ADRs and 96 slice ids in
@@ -1345,11 +1367,6 @@ user (C.4–C.6). No new emulator feature ships under this phase.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| C.1 | **The gate compiles and runs every suite.** `checks.yml` (or a sibling job it requires) runs `make core-unit-tests` with `-Werror` and a runner for `scripts/test_*.py` that exits non-zero on any file's failure (the files use per-file runners, so a loop over the 36 files, not `unittest discover`, which finds 40 of 287); `test_mep_nested_zip.py` is fixed or its test retired with a reason; a ruleset on `main` requires `Checks`, `ui-tests`, `headless-ui-tests` and the Windows `tests.yml` job before merge. Binaries stay on demand (#230 stands) | accepted 2026-09-14; amends the `.github/AGENTS.md` CI contract (ADR-0131) — say so in that file. Amended the same day by ADR-0191: there is no Windows `tests.yml` job to require (the file is deleted and Windows is retired from CI), and `ui-tests`/`headless-ui-tests` are jobs of `checks.yml`, so the required set is `checks`, `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests` |
-| C.2 | **Register and roadmap say what shipped.** One pass over ADR Status lines (0169, 0170, 0171, 0186 at minimum; grep for `uncommitted`, `not yet in`, `being built`, `awaits`) and over `Related:` lines still calling 0168/0180 `proposed`; `docs/roadmap/AGENTS.md` describes Phases 9–11; a `scripts/checks/` script in `make doc-checks` fails when a live slice-table row's Decision cell contains `shipped` (a shipped row is deleted, per this folder's contract) | accepted 2026-09-14; Status-line edits on accepted ADRs are the user's call — list them in the PR, do not silently rewrite |
-| C.3 | **Boards and catalog agree.** Run `community-pack-catalog.yml` (or schedule it after each accepted verdict) so #207–#211 appear; `community-pack-validate.yml` applies `pack:invalid` when it moves an item to "Inválido" (today 8 items, 0 labels); bug-board hygiene: #196 → Done, #238/#239 added, Size set on open items | accepted 2026-09-14; no ADR |
-| C.4 | **A binary release of the fork.** `mesence-v0.1.0`, **macOS Apple Silicon only for now, built locally** by a scripted `make release-macos` target (user's decisions 2026-09-14: every binary build is limited to macOS arm64 until further notice, and CI compiles Linux only — the gate's `core-unit-tests` — so `build.yml` stays dispatch-only and unused; the target injects the fresh `MesenCore.dylib`, codesigns ad hoc, fails on a hash mismatch and writes `SHA256SUMS` + the commit so a local build stays auditable; Windows/Linux follow later) (the `.app` gets its fresh `MesenCore.dylib` injected and codesigned — the BundleApp staleness is a known trap), release notes that link `docs/remastering-a-game.md` and `docs/enhancement-ecosystem.md`; `README.md` links the release and the guide above the fold | accepted 2026-09-14; the version scheme is a one-line decision to record in the release notes, not an ADR |
-| C.5 | **The first outside artist, timed — Fable as the artist.** A Claude Fable 5.1 session with **no prior context** stands in for the external artist (user's decision 2026-09-14, in line with the standing goal "use Fable to proxy human decision and vision"). It runs `docs/remastering-a-game.md` from a release binary on a game it picks from the local ROM library: record → cover → kit → repaint one figure → build → play. Profile, sandbox, prompt and log format: "The C.5 evaluator" below. Pass: a lint-clean pack with one repainted figure on screen in **under one hour** of wall clock, zero reads outside the guide, and the evaluator's own verdict that it would choose this over hand-editing `hires.txt`. Run on **two games**, one CHR RAM and one CHR ROM | accepted 2026-09-14; depends on C.4; a run by a human artist stays a non-goal until the user reopens it — the §7 row records the trade-off. **Measured 2026-09-14 (record in §3): both games passed** — 12 min (Zelda, CHR RAM) and 11 min (Mega Man 3, CHR ROM), lint-clean, figure on screen, verdict "yes"; panel §§2–3 filled from the logs, and the `hires.txt` clause failed in both runs, producing #253/#255/#256 |
 | C.6 | **A second reference pack.** Pick one community pack other than Contra80s with a rich hand-made `hires.txt` (the 260 146-line Metroid pack and Zelda II ModernRetroDesign are on hand), run `artist_cover.py` and the F9.29 condition emitters against it, and log the same four numbers as Contra (coverage, conditions emitted vs hand-written, palette inflation, keys round-tripped) as a §3 line. Purpose: stop tuning to one author's habits | accepted 2026-09-14; no ADR unless a number forces a rule change |
 | C.7 | **The size guard ratchets.** `check-file-loc.sh` gains the six files above at their current line count as a ceiling (a PR may shrink them, never grow them), and `scripts/requirements.txt` pins Pillow/numpy/PyYAML where `checks.yml` does today | accepted 2026-09-14; amends ADR-0137's file list |
 | C.8 | **Close the debts ADRs left open.** ADR-0154: run the `diffusion` backend once or supersede Option A (it has never executed; PRD test 8 has never run); ADR-0186: publish the debugger slowdown as a number; ADR-0187: a `doc-checks` script that diffs the host allow-list between `fetch_pack.py`, `CommunityPackDownloader.cs` and `community-pack-validate.yml`; ADR-0171 → 0170: the "loosen pose identity" revisit (223 poses on a 300 s run) | accepted 2026-09-14; each item is its own PR; 0154's outcome is an ADR either way |
