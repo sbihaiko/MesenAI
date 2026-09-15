@@ -64,7 +64,9 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   `add_argument` calls *and* from the usage block it states about itself: a CLI
   that hand-parses argv publishes its flags only there, and reading just
   `add_argument` reported a correct doc as broken.
-- Plans have no automated check.
+- Roadmap: `python3 scripts/checks/verify_prd_live_rows.py` checks shipped
+  declarations in live tables. Semantic consistency and acceptance evidence
+  require review; the script does not validate product completion.
 
 ## Child DOX Index
 

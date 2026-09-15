@@ -10,7 +10,7 @@ work lives in Part A, player-shell/chrome work lives in Part B — it is now
 expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
-the shipped record, and the pending slices (Phase 9 F9.18 and F9.25, the
+the shipped record, and the pending slices (Phase 9 F9.18-V, F9.18 and F9.25, the
 Phase 10 spike S10.b, plus the manual/hardware-gated residue of the shipped
 phases). Phase 11 consolidation is complete. Part B is the
 default-GUI roadmap: player
@@ -36,7 +36,7 @@ Earlier plans (`PRD-ecossistema-enhancement-comunitario.md`,
 **Scope:** MesenCE fork (`main`); nothing goes upstream ·
 **Specs:** [MEP-v1](../specs/MEP-v1.md) · [MEI-v1](../specs/MEI-v1.md) · [ESP-v1](../specs/ESP-v1.md) · [MEP-recipe-v1](../specs/MEP-recipe-v1.md) · [hires-gbsms-v1 (draft)](../specs/hires-gbsms-v1-draft.md) ·
 **Decisions:** `docs/adr/` — `accepted` ADRs are binding; §6 lists the ones this roadmap depends on ·
-**Process:** one task per **slice** (F6.1, F6.2, …), never a whole phase or the whole PRD in one run — decomposing multi-phase work failed twice. Settle the slice's ADRs before running it. A slice is done when its acceptance checks pass headless and the header of this file is updated.
+**Process:** one implementation task per **slice**, with its ADRs settled first. A slice is done when all applicable acceptance checks have evidence of the required class (structural, runtime or human), its live row is removed, and the delivery record and header are updated. A documentation review may reconcile the whole PRD without implementing its slices.
 
 ---
 
@@ -93,850 +93,51 @@ does not exist.
 | hires.txt extension GB/SMS (OGG on GB/SMS) | `docs/specs/hires-gbsms-v1-draft.md` | draft, frozen until a second implementer appears |
 | **MEP Recipe v1** — re-packaging of split-distribution packs | `docs/specs/MEP-recipe-v1.md` | v1 |
 
-### 3. What has shipped (record, one line each)
+### 3. Delivery record
 
-- **F1 — MIDI/VGM exporter** from the Enhanced Synth tap; headless harness
-  (`scripts/headless_record`) records without GUI.
-- **F2 — HD Pack Builder for GB/SMS** (ADR-0036/0037); loader/renderer 1:1.
-- **F3 — MEP v1 host** (ADR-0038…0042): folder + zip packs, hash matching,
-  per-section toggles, "Enhancement Packs" window, golden tree; zips are
-  extracted to `.cache`; lexicographic precedence between packs.
-- **Console reduction** (2026-08-26): `main` = NES/GB/SMS/GBA.
-- **F5.1 — convention over configuration** (ADR-0044/0049): sibling folder
-  `<ROM>/` = pack, `auto/` = machine layer, human > `auto/`; `patches[]`;
-  `scripts/mep_lint.py`; discovery precedence sibling > `HdPacks/<Game>/` >
-  `EnhancementPacks/` (ADR-0040 as revised by 0049, extended by 0120/0121).
-- **F5.2 — image bootstrap** (`BootstrapEnhancementFolder`, xBRZ 4x into
-  `auto/textures/`, ROM/PRG-scan tile export incl. CHR-RAM games, ADR-0043).
-- **F5.3 — sound bootstrap**: `NesAudioBootstrap` → `TrackSegmenter` →
-  `fingerprints.json` + seed MIDI; `mep_render_audio.py`; `NesAudioReplacer`
-  swaps OGG in by fingerprint (ADR-0047).
-- **F5.4a/a′ — `<background>` screens** (ADR-0050) and assets-without-playing.
-- **F5.4b — per-shape palette-variant cap** (ADR-0132; follow-ups (a) saturation
-  log and (b) seed-from-disk shipped 2026-08-29).
-- **F5.4f spike — sound-driver discovery** (`scripts/spike_sound_driver`,
-  ADR-0051 → runtime contract ADR-0135).
-- **F5.4g Block A — level-2 audio**: `ChannelRoleClassifier`, SFX separation,
-  TinySoundFont GM cover, `roles_probe` (ADR-0052).
-- **Community-pack pipeline**: Issue Form → `community-pack-validate.yml`
-  (host allow-list, `mep_lint.py`, sha256 → board "Pack Hash", LLM classify
-  with a binary verdict, labels `pack:*`/`assets:*`/`patch:*`/`console:*`),
-  `/revalidate`, daily drift check, `docs/community-packs.md` catalog.
-  Legacy bare `hires.txt` packs (incl. GitHub `/archive/` wrappers) are
-  accepted via the structural fallback of ADR-0121 (option A, shipped
-  `805cb10d`).
-- **Unit tests / CI**: `UI.Tests` + core unit tests (ADR-0122, 0126, 0127,
-  0129, 0130).
-- **H1 — `make doc-checks`** (ADR-0137): wires `check-core-manifest.sh`,
-  `verify-fase0-1-dox.sh`, `verify-ui-logic-firewall.sh`, and
-  `check-file-loc.sh` (against `Core/Shared/Audio/MidiExporter.cpp`, 200
-  lines) into one `make` target that the Linux and macOS `build.yml` jobs
-  run before their build step.
-- **H2 — `unit-tests.yml` contract as invariants** (ADR-0131): the
-  `.github/AGENTS.md` Work Guidance bullets state what the workflow must
-  never do (link `InteropDLL`/`MesenCore`, need SDL2/SDK/ROMs), note that the
-  `ui-tests` job covers both host-free suites, record the clang-only C++
-  step and the `10.x` dotnet pin, with grep lines in Verification. Doc-only;
-  the workflow file was already compliant.
-- **H3 — `path-cases.txt` format guard and control-char scope** (ADR-0124):
-  `validate_path_cases` in `scripts/validate-specs.py` (skip rules identical
-  to the C++ reader, no whitespace around the path column), a "Scope" note in
-  the fixture header, and `TestNormalizeRelativePathRejectsControlChars` in
-  `scripts/core_unit_tests.cpp` Block B (NUL, 0x01, literal TAB).
-- **F6.0 — community-pack pipeline prerequisites** (ADR-0138):
-  `community-pack-submitted.yml` `cancel-in-progress` is gated on
-  `issues` events so a verdict comment no longer cancels the catalog
-  dispatch; classify step `timeout-minutes: 15`; catalog backfill of
-  accepted packs #64 and #73.
-- **F6.1 — MEP Recipe v1 spec + interpreter** (ADR-0138):
-  `docs/specs/MEP-recipe-v1.md`, golden `docs/specs/golden/mep-recipe/recipe.json`,
-  MEP-v1 §6 "as code" wording and §2.1 rule 9 bare-basename (ADR-0121),
-  `scripts/mep_recipe.py validate|dry-run|apply` reusing `mep_lint`
-  discovery.
-- **F6.2a — issue metadata + docs half of F6.2** (ADR-0138 §12–14, run
-  `4f0d742630e5`): Issue Form `external_assets` textarea (grammar of §12)
-  and `external_assets_license` input; `assets:external` label in
-  `ensure_community_pack_labels.sh`; "Split-distribution packs (MEP Recipe)"
-  section in `docs/hd-pack-authoring.md`; §13 handoff
-  (`$RUNNER_TEMP/mep_recipe.json` + `recipe_status`) recorded in
-  `.github/AGENTS.md` Local Contracts; verifiers
-  `verify_community_pack_labels_script.sh`,
-  `verify_agents_md_recipe_handoff.sh` and extended Issue-Form/authoring-doc
-  checks. F6.2b (workflow steps) is the remaining half.
-- **F6.2b — workflow half of F6.2** (ADR-0138 §1–2, §4, §6–7, §9–13,
-  §16–23, run `3cca17a3180c` + follow-up): classify schema carries the recipe
-  as one optional nested `recipe` fragment; `assemble-recipe` step
-  (`mep_recipe.py assemble-sources`, issue body via `gh issue view`,
-  `$RUNNER_TEMP/mep_recipe.json`, `recipe_status` enum, `continue-on-error`);
-  `recipe-gate` (validate + dry-run → `recipe_ok`); `apply-verdict` sole
-  verdict writer (single downgrade expression, `assets:external` branch,
-  `refused` note, `verdict`/`labels` outputs); wholesale `<!-- mep-meta -->`
-  upsert with provenance line and `recipe_ok`; `run_recipe` transitive skip
-  of dep-dependent `rename`/`rewrite-paths` (MEP-recipe-v1 §6 amended);
-  `verify_community_pack_validate_workflow.py` CHECKS extended. F6.2 done;
-  **F6.2c** (mechanical split, §23) precedes F6.3.
-- **F6.2c — mechanical split** (ADR-0138 §23–24, run `05a8927950be` +
-  follow-up): `scripts/mep_recipe_assemble.py` (CI-side assembly) and leaf
-  `scripts/mep_recipe_common.py`; `verify_community_pack_validate_workflow.py`
-  is a 121-line entry point assembling `CHECKS` from six topic modules under
-  `scripts/checks/community_pack_validate/`. Behaviour unchanged; all tests
-  and verifiers green.
-- **F6.3 — catalog as MEI v1.1** (ADR-0138 §3, §18, §25–27, run
-  `3630fa06cbcf`, 2026-08-28): `generate_community_pack_catalog.py` also
-  writes `docs/community-packs.json` (`mei: "1.1.0"`, one entry per accepted
-  item from Project fields + Form fields + mep-meta; `kind` mep/hd-legacy;
-  non-conformant items omitted with a warning); `scripts/mep_meta_parser.py`
-  pure parser + tests; MEI-v1 amended to v1.1 (kind, optional rom.sha1,
-  deps/recipe, provenance fields) with golden bumped; `validate-specs.py`
-  gains `validate_mei_catalog()`; catalog workflow commits both files;
-  Markdown gains "External assets" column. Follow-up (same day): `license`
-  made optional across MEP/MEI/lint/validator/`MepPack.cpp` (§34); auditor
-  findings folded into §28–§35; F6.3b hardening slice defined.
-- **F6.3b — catalog hardening** (ADR-0138 §28/§29/§33/§35, run
-  `0613b444cee2`, 2026-08-28): leaf `scripts/mei_rules.py` (constants,
-  `required_mei_pack_fields`, `mei_entry_conforms`, `STATUS_TO_KIND`,
-  `resolve_kind`) shared by `validate-specs.py` and the generator; generator
-  split into `mei_catalog_entry.py` + `community_pack_markdown.py` with a
-  ≤200-line facade; `apply-verdict` writes `kind` into mep-meta; shared
-  fence rule (`choose_fence`/`find_fenced_block` in `mep_recipe_common.py`)
-  used by the mep-meta writer, `mep_recipe.py` and — fast-follow —
-  `mep_meta_parser.py`; second `mei_entry_conforms` removed (fast-follow);
-  checkers `verify_mei_catalog_split.py`, `verify_status_kind_parity.sh`,
-  tests `test_mei_rules.py` and fence round-trips. §36 process lesson.
-- **F6.4a — Core offline recipe installer** (ADR-0138 §4, §37, run
-  `99c183d691f7`, 2026-08-28): `Utilities/sha256.{h,cpp}` (self-contained,
-  `""` on unopenable file); `Core/Shared/EnhancementPacks/MepRecipeInstaller.{h,cpp}`
-  + `MepRecipeOps.{h,cpp}` — offline four-op interpreter, sha256 gate,
-  §6 transitive skip, `pack.json` + `.mep-install.json`, `[MEP] recipe
-  unsupported` on unknown op/version; `AutoInstallCommunityPacks` appended
-  to `EnhancementPackConfig` (C++ and C# interop struct in lockstep);
-  real-bytes fixture `docs/specs/golden/mep-recipe/fixture/` from
-  `gen_mep_recipe_fixture.py`; `core_unit_tests` Bloco E: C++ install equals
-  `mep_recipe.py apply` byte-for-byte (79/79). Run ended `ac_failed`/T4
-  stagnated on critic false positives; T4 recovered from the orphaned branch
-  and merged by hand (§40). Audit folded into §35, §38–§40.
-- **F6.4b — UI fetch + consent** (ADR-0138 §37/§38/§41–§55, runs
-  `2ef26ba839d1` + `119e1031a25f`, 2026-08-28): host-free decision classes
-  `UI/Logic/Community{PackHostAllowlist,CatalogCacheDecision,PackDepResolver,
-  PackReinstallDecision,PackConsentState,PackCatalog,PackContainerName}.cs`
-  (UI.Tests 183/183); `InteropDLL/EmuApiWrapperMep.cpp` `InstallMepRecipe`
-  export + `EmuApi` DllImport; `UI/Services/` layer —
-  `CommunityPackDownloader` (§50: per-hop allow-list, no auto-redirect,
-  byte cap), `CommunityPackCatalogFetcher` (ETag cache, No-Intro sha1
-  match, sha256-verified `.cache/downloads/`), `CommunityPackInstallCoordinator`
-  (§43 reinstall gate, dep resolution, `id<TAB>path` rows → interop),
-  `CommunityPackInstallService` (ROM-load hook, §51 consent-before-network,
-  per-session idempotency, withheld-patch / user_supplied notices);
-  allow-list embedded in `UI.csproj` (§41) with three `scripts/checks/`
-  guardrails in `make doc-checks`; `AutoInstallCommunityPacks` checkbox +
-  first-run consent dialog in `EnhancementPacksWindow`; firewall script now
-  enforces the §53 three-layer rule both ways. Both runs ended `ac_failed`
-  with T1 stagnated; recovered per §40. GUI flow exercised against the
-  live catalog by F6.5 on 2026-09-04; the first-run consent dialog was later
-  removed by F6.7 (ADR-0146).
-- **F6.4c — parity fixture set** (ADR-0138 §39; run `cdcf29816ecd` stalled at
-  Spec on spec-proxy context thrashing — the dev-squad's own spec document,
-  `validation.pass: true`, was implemented by hand following the same slice):
-  `gen_mep_recipe_fixture.py` gains the shared `ROM_NAME` constant and the
-  three discovery edge-case primaries — `wrapped-subfolder.zip` (ADR-0120
-  name-anchored subfolder), `nested-zip.zip` (nested top-level zip, sha256 of
-  the outer container) and `bare-probe.zip` (ADR-0121 bare `preset.cfg`
-  probe) — each with its own `recipe-<case>.json` reusing the shared
-  `audio-dep.zip`; `test_gen_mep_recipe_fixture.py` iterates the full set
-  (`rom_name` threaded into the wrapped cases, non-empty-tree assertion);
-  Bloco E grows the table-driven `TestDiscoveryEdgeCaseParity` passing the
-  identical non-empty `romName` to both interpreters (or `""` for nested-zip)
-  and matching `mep_recipe.py apply` byte-for-byte — 88/88 cases.
-- **H4 — `mep_compare.py` system dispatch + NES golden** (ADR-0136):
-  `render_original(..., system=)` and `Pack.system` for nes/gb/gbc/sms with
-  per-system tile/palette widths and explicit errors; sibling golden
-  `docs/specs/golden/mep-nes/`; `validate-specs.py` runs `mep_lint` over both
-  goldens (`lint_golden_packs`); `test_mep_compare_auto_palettes.py` uses the
-  golden; `test_mep_compare_render_dispatch.py` added.
-- **F5.4c — `mep_build.py`** (2026-08-29): sheets → tiles → `textures/hires.txt`,
-  new OGGs into `audio/`, the linter as the gate, `pack` → deterministic zip
-  with a generated `pack.json`, `rename-audio-id`; `scripts/test_mep_build.py`.
-- **F5.4d — coverage report + Before/After preview** (2026-08-29):
-  `HdPackBuilder::GetCoverageReport()` surfaced in the builder window;
-  `HdPackPreviewWindow` shows each sheet beside its `*.orig.png` twin.
-- **F5.4e — objects from spatial co-occurrence** (2026-08-29): union-find over
-  8 px neighbours → `textures/sheets/object<NNN>.png` + inert `# inferred`
-  `tileNearby` candidates. Never emitted a sheet on a real game; the criterion
-  was retired by Phase 9 F9.3, the inert-condition contract kept.
-- **F5.4g Block B — arpeggio→chord, expression, `FixedRole.<ch>` override,
-  channel-steal hand-back** (ADR-0052, 2026-08-29); regression pinned by
-  `core_unit_tests` Bloco L against a PCM golden (2026-09-03).
-- **F5.4g Block C — loop point (ADR-0134), SFX mute mask (ADR-0133), 40 ms
-  BGM crossfade (ADR-0142)** (2026-08-29); the listening checks replaced by
-  Blocos I/J/K (2026-09-03; bug #151, a block-stepped fade, fixed on the way).
-- **F5.4g Block D — Extract Audio tool + GUI wiring** (ADR-0135/0051,
-  2026-08-29): `spike_sound_driver` productised (frame and wall-clock budgets,
-  guaranteed no-op), detached spawn from the HD Pack Builder button (no-op
-  path confirmed on a real display 2026-09-01); `audio_cleanup_suggest.py`;
-  "Seeding audio" tutorial in `docs/hd-pack-authoring.md`.
-- **F5.5 — wrap-up** (2026-08-29): last pack-UI strings localized, goldens
-  refreshed and wired into `make doc-checks`, README Player-mode section,
-  F1–F3 regressions green, `dotnet build UI` 0 warnings.
-- **SoundFont** (decided 2026-08-29): bundle GeneralUser GS (31 MB,
-  permissive) in the installer — waits on the installer's first release.
-- **F6.5 — rollout** (2026-08-29 → 2026-09-04): accepted set re-validated
-  (current issues #128–#148; catalog at 11 rows), classify prompt
-  single-sourced from `.github/ai/validate-classify.md`, the six
-  `liquidzgit/hdnes` submissions resolved by ADR-0143, audio-only NEA siblings
-  de-listed (ADR-0148); guided GUI install acceptance run 2026-09-04
-  (`docs/validation/f65-install-acceptance-checklist.md`), finding and fixing
-  #155 (→ ADR-0151) and #156. Only the native OS file-picker step stays
-  manual; CI live validation re-enable (`LIVE_VALIDATION_ENABLED`) deferred
-  by user decision 2026-08-29.
-- **F6.6 — headless load smoke** (2026-08-29): `scripts/smoke_pack_headless.sh
-  <pack> <rom>` asserts zero missing-target warnings; CI variant over the
-  F6.4c fixtures in `make doc-checks`; `MepPack::Parse` accepts an empty
-  section `path` (MEP-v1 §3.2).
-- **F6.7 — auto-load every accepted pack** (ADR-0146, 2026-09-01): first-run
-  consent gate removed, `AutoInstallCommunityPacks` the single switch;
-  confirmed on Donkey Kong #144 (catalog art wins over the bootstrap auto
-  pack); macOS open-documents routing fixed (#149).
-- **F6.8 — known-missing errata** (ADR-0152, 2026-09-04):
-  `docs/community-packs/errata/<sha256>.json` read by one parser
-  (`scripts/mep_errata.py`) for both gates; provenance in MEI v1.4 `errata`,
-  the `†` footnote and the Player picker; `pack:known-missing` applied by
-  `apply-verdict`. Returned `issue-139`, `issue-137` and `issue-148` to the
-  catalog; found and fixed #160 (log ring) and #161 (`Customization/` roots,
-  ADR-0121 amended).
-- **H5–H7** (ADR-0123/0125/0128, 2026-08-29): UI-logic firewall parity scan
-  in CI; public test-facing helpers; `CheatTypeDetector` ThrowsAny (the GB/SMS
-  product decision still deferred).
-- **H8 — `NES_ONLY`/`LessUI` build modes** (ADR-0158, 2026-09-05): measured
-  and **declined** — the prior art is C#-only and none of its exclusions
-  applies to this tree; the one win kept is `core-unit-tests` compiled per
-  translation unit with `-MMD -MP` (39.3 s → 9.7 s cold).
-- **H9 — `HeadlessInputEngine`** (ADR-0127 pattern, 2026-09-05): the stateful
-  headless input surface tested against a fake core, `core_unit_tests` Bloco R.
-- **H10 — accuracy suite as a regression gate** (ADR-0162 accepted
-  2026-09-06): `scripts/accuracy_compare.py` runs AccuracyCoin against one
-  binary in four arms (`vanilla`/`builder`/`hdpack`/`mep`) and requires
-  identical frame checksums; an identity pack makes the texture arm real;
-  proved red two ways; ROM not vendored; not in CI yet, by decision.
-- **D1–D13 — documentation integrity** (audit 2026-09-01; all shipped
-  2026-09-01/03 except D8 §3): ADR files restored + `verify_adr_refs.py`
-  (D1); MEP-v1 v1.4 `id` (D2); MEI v1.2 `rom.sha1s` (D3); ADR-0148 (D4);
-  ADR-0138/0143/0049 amended in place (D5, §4 note 2026-09-07); consent
-  plumbing removed (D6); ADR-0139–0145 Consequences/Alternatives filled (D7);
-  ADR-0120 §4 covered by `core_unit_tests` Bloco M through `MepZipExtract.h`,
-  §3 deferred with a dated note (D8); stale docs, the `CLAUDE.md` Author rule,
-  line citations → target names, `build_app_macos.sh` versioned, empty
-  `Core/SNES|PCE|WS` deleted (D9–D12); MEI v1.3 `pack_id`/`content_id`/`votes`
-  + the ADR-0148 rule-1 classify refusal confirmed offline (D13).
-- **I.0–I.3 — host input tester** (2026-08-29): gamepad info/state/rumble on
-  `IKeyManager` for all three backends; Settings → Input → Test tab with live
-  buttons/axes, deadzone ring, drift warning, circularity score and a
-  per-device (VID:PID) deadzone; the mapping window highlights the pressed
-  button. XAML halves asserted by `UI.HeadlessTests` (ADR-0150, 2026-09-03);
-  the physical-pad pass stays hardware-gated.
-- **Phase 7 — player shell, P.0–P.7** (ADR-0139/0140/0141, 2026-08-28 →
-  2026-09-01): `content_id`/`pack_id` identity, one catalog slot per pack,
-  per-ROM preference resolver + Advanced picker, `UiMode` default rule with
-  Player chrome/overlay/Esc precedence, pack picker + current-pack chip +
-  apply toast, §3.6 catalog update trigger wired into F6.4b, Enhancements
-  quick-toggle panel + welcome/Continue cards; GUI wiring asserted by
-  `UI.HeadlessTests` (ADR-0150). Normative text in Part B. The on-window
-  letterbox fit was closed 2026-09-05 (`0f8535c4`: `UI/Logic/RendererViewportFit`,
-  14 `UI.Tests` + 3 `UI.HeadlessTests/RendererLetterboxTests.cs`).
-- **Phase 8 — border layer, F8.1–F8.3** (ADR-0149, 2026-09-02): MEP v1.5
-  `border` section (`border.png` + `border.json`), VideoRenderer compositing,
-  `EnableBorder` toggle, `mep_lint`/`validate-specs` gates, host-free
-  `BorderLayout` + Bloco H. Divergences recorded in the spec for an optional
-  F8.4: `scale_mode` unapplied, `width`/`height` ignored, 4:3 default, no
-  letterbox inside the viewport, bare root `border.png` not linted.
-- **Phase 9 F9.0–F9.4 — artist-legible texture sheets** (ADR-0153, accepted
-  and amended 2026-09-05): five host-free modules under `Core/NES/HdPacks/`
-  (`TileSheetTypes.h`, `MetatileVocabulary`, `ScreenStitcher`, `SheetGrouping`,
-  `SheetRender`); F5.4e's union-find retired; `mep_build.py` slices painted
-  sheets back with painted-cell precedence; Bloco P. Also fixed the headless
-  `input=` no-op (no controller in port 1). Library runs 2026-09-05: 30/30
-  packs written; recordings are not deterministic between runs, so only the
-  vocabulary artifacts (`metatiles`, `font`, `hud`, `obj000`) compare
-  before/after — never a pack diff. Panel spot checks: map recognizability
-  passes on Metroid, SMB 1-1 and Excitebike (8224 px track, no duplicated
-  loop); cold-read passes at the top of each sheet; the two Zeldas need a GUI
-  save state to get past name registration. ADR-0155 (`-MMD -MP`) came out
-  of a stale-object segfault met on the way.
-- **Phase 9 scrutiny against a Punch-Out!! HD mockup** (2026-09-05): grouping
-  already isolates Glass Joe and both Little Mac views; five blockers became
-  F9.5/F9.7/F9.8/F9.9/F9.10.
-- **F9.5 — sprite (OAM) grouping** (2026-09-05): `SpriteGrouping.{h,cpp}`,
-  `sheets/sprNNN.png`; one dominant offset per ordered OAM pair, denominator
-  = appearances of A; Excitebike's bike + rider one figure across 25 pose
-  groups.
-- **F9.6 — optional AI repaint, external** (ADR-0154 accepted, ADR-0161
-  accepted 2026-09-06): `scripts/sheet_repaint.py` behind a `RepaintBackend`
-  seam (`passthrough`, `classical`, `esrgan`, `diffusion`; availability probed
-  before any write; non-loopback endpoints refused), output in
-  `auto/repaint/`, MEP-v1 v1.6 `generated` object as disclosure, not a gate;
-  `--target screens` run on the real Mega Man 3 recording. Validation test 8
-  (blind A/B) was not run; ADR-0192 later retired its generative arm and made
-  the optional comparison `classical` versus `passthrough`.
-- **F9.7 + F9.11 — alias pass, ink budget** (2026-09-05):
-  `MesenSheets::CollapseAliases`, sidecar `aliases[]`, `mep_build.py` fan-out;
-  budget = share of the ink of the richer cell (the area rule let one blank
-  cell absorb 335 of Ninja Gaiden's 465 entries). Library 10165 → 8684 cells.
-- **F9.8 — adjacency evidence before stitching** (2026-09-05):
-  `kStitchBandMatch` 0.60 / `kStitchBandLead` 0.25 over cells the anchor
-  already carried; single-screen components dropped; Punch-Out!!'s collages
-  gone.
-- **F9.9 — static screens routed to `<background>`** (ADR-0156, 2026-09-05):
-  a screen-resident cell leaves `metatiles.png`; three floors withhold routing
-  (not gameplay per F9.13, > `kMaxRoutedSceneShare` 0.93, < `kMinSceneSheetCells`
-  30). Punch-Out!! routes 41 % of its scene cells, SMB 8 %.
-- **F9.10 — CHR-order layer relegated to `textures/chr/`** (ADR-0160,
-  2026-09-05): the `<img>` line carries the path, older packs still load,
-  `PruneLegacyChrFiles` sweeps orphaned top-level fragments after a re-record.
-- **F9.12 — a continuous region ends when the world is replaced** (2026-09-05,
-  amends ADR-0153 §6): still-score cut at `kStitchWorldAgree` 0.85; SMB's
-  title no longer baked into 1-1; Excitebike's track 8224 → 15424 px.
-- **F9.13 — `scripts/gameplay_probe.py`** (2026-09-05): did the recording
-  reach gameplay, answered from the pack on disk; calibrated over 91 packs
-  (TP 17 / FN 3 / FP 0 / TN 66); `MENU` is trustworthy, `OK` means nothing
-  caught it; wired into `sheet_report.py` and `bootstrap_auto_packs.sh`.
-- **F9.14 — headless input in emulated frames** (ADR-0157 amended,
-  2026-09-05): `HeadlessInputProvider` resolves an absolute-frame script in
-  `SetInput` and pauses on the target frame; power-on RAM zeroed; two runs of
-  the same ROM/script yield a byte-identical `auto/` tree under a 20× speed
-  spread.
-- **F9.15 — in-memory frame capture** (2026-09-05): `BaseVideoFilter::
-  CopyOutputBuffer` + `CaptureScreenshot`, host-free `FrameCapture.{h,cpp}`
-  (size validation, border bands, FNV-1a checksum), `headless_record capture`
-  flag, Bloco S; extended by ADR-0167 (2026-09-07) with a HUD-only capture
-  whose `blank` bit is the toast oracle.
-- **F9.16 — `sprites.png` sprite vocabulary sheet** (2026-09-07): the full OAM
-  vocabulary through the alias pass, `kind: "sprites"` at precedence 1;
-  amends ADR-0153 §2–§4.
-- **F9.17 — `sheets/adjacency.json`** (ADR-0164, 2026-09-07): complete
-  background E/S edge map with degrees and `tiles[]`, sprite `floors[]` bands
-  and per-pair `coFrames` next to the pruned offset histogram; the data the
-  composition editor (F9.18) builds against. ADR-0166 (2026-09-07) adds per
-  screen-resident node the owning `screenNNN` and its offset.
-- **Live recorder + viewer** (ADR-0169, 2026-09-08): `LiveFrameRecorder`
-  publishes `frame.ppm` / `sprites.json` / `chr.bin` / `nametables.bin` /
-  `status.json` by file swap; `scripts/record_viewer.py` is spawned by the
-  emulator (Tools → Live Recorder) and never blocks the run; slot re-targets
-  per ROM.
-- **S10.c/S10.d — pack-side spikes of Phase 10** (2026-09-09): `mep_build.py
-  pack` carries the root `generated` disclosure across a rebuild instead of
-  dropping it, and an exact-namelist test pins that the zip still ships every
-  file under the folder — excluding a `studio/` subfolder is policy no spec
-  states, so studio data lives outside the pack folder rather than being
-  filtered by the builder. `mep_build.py check-coverage` is the "nothing
-  broken" gate for a repainted pack: every baseline tile key still resolves
-  and the F5.4d tiles-with-art count over those keys is unchanged, pixels
-  never compared. Five `test_mep_build.py` cases, one per behavior, negative
-  arm defect-probed. Adjacent bug left unfixed and filed: `pack` drops the
-  root `id`, moving catalog identity (#168).
-- **S10.a — pose separability measured, and it fails** (2026-09-09): the
-  ADR-0168 `evidence[]` walk recovers 6.7 % (Mega Man 3) and 10.5 % (Contra)
-  of a main character's poses as distinct figures against a >= 80 %
-  criterion, with 0/15 resp. 3/57 poses fitting inside one `sprNNN` group;
-  measured on fresh 300 s recordings against poses read off ADR-0169's live
-  OAM channel, decode validated at 98.7 % / 94.4 % against the pack's own
-  vocabulary. The binding cause is under-grouping, not ADR-0168 §3's
-  cross-pose stacking. ADR-0168 amended in place with the numbers and the
-  corrected mechanism (still `proposed`); ADR-0170 written `proposed` for the
-  prerequisite — a pose sidecar written from `HdPackBuilder::_oamFrames`,
-  which the recorder already holds at save time.
-- **F9.19 — the pose sidecar** (2026-09-11): ADR-0170 accepted by the user
-  and implemented the same day, as Phase 9 debt rather than as a Phase 10
-  prerequisite — the F9.18 sprite layer composed fragments, which is the
-  defect the human panel would have reported. `BuildPoses` in host-free
-  `SpriteGrouping` segments each retained OAM frame into spatially connected
-  clusters (within 8 px on both axes, `SheetGrouping`'s DSU promoted to its
-  header rather than copied), normalises each to its own top-left through
-  the existing round-to-nearest-cell rule, and merges equal sets; the
-  recorder writes `textures/sheets/poses.json` next to `adjacency.json` from
-  the same pass and the same sprite vocabulary, and reports found / over the
-  threshold / kept after the cap. No capture change, no new key, so nothing
-  here can break rendering. 27 `core_unit_tests` cases (Bloco P), both arms
-  defect-probed — the 8 px boundary is asserted against the literal, not
-  against its own constant, after the first probe showed a drifting
-  `kPoseMaxGap` passing unnoticed. Consumer side (ADR-0170 §4): the
-  composition engine takes a figure's layout from the sidecar when the pack
-  has one and otherwise runs the ADR-0168 walk unchanged, proven by a spy
-  rather than inferred from output; a malformed or partial sidecar degrades
-  to the fallback instead of raising. Three implementation semantics the
-  tests forced into the open (the frame floor counts `RepeatCount`, "found"
-  is already past the tile floor, "kept" is pre-cap) are recorded in
-  ADR-0170 §2. Open, and deliberately not invented: which poses belong to
-  the same subject — ADR-0170 declines it, so a figure is still identified
-  by its anchor node.
-- **S10.a re-measured, and it passes** (2026-09-11): a fresh 300 s Mega Man 3
-  recording on the F9.19 binary, ground truth read the same way as the
-  failing run (ADR-0169's live OAM channel, 1 369 captures, canon keying),
-  puts **25 of 25** of the main character's poses in the pack's
-  `poses.json` — 100 % against the >= 80 % criterion, from 6.7 % on
-  2026-09-09 — and 68 of 72 (94.4 %) of every ground-truth pose. The
-  agreement is a cross-implementation check rather than a tautology: the
-  file is C++ over the retained, de-duplicated `_oamFrames` stream keyed by
-  vocabulary node, the ground truth is Python over the live channel keyed by
-  canonical CHR bytes. The reverse ratio is low by construction (68 of 223
-  file poses appear in the ground truth) because the live channel publishes
-  one capture every 50 frames and so never sees most of what the retained
-  stream holds. The first measuring pass read the node → shape mapping off
-  `sprites.json` and scored 76 %; that was the measurement, not the file —
-  the sheet draws only the 241 cells it routed while `poses.json` indexes
-  all 288 vocabulary nodes, so a third of the file was being discarded.
-  `adjacency.json` `sprites.nodes[]` is the authoritative mapping. Evidence:
-  `runs/s10a-rerun/S10a-rerun-summary.json` (untracked, like the first run's).
-- **F9.18 sprite layer: the pose becomes its unit** (2026-09-11): ADR-0171
-  accepted by the user and implemented the same day, superseding ADR-0168.
-  The editor seeds, ranks, locks, previews and exports **poses** read from
-  F9.19's sidecar; the ADR-0168 `evidence[]` walk stays as the fallback for
-  a pack recorded before ADR-0170, and the bare node as the degenerate case.
-  Engine: `pose_anchor` (rarest member, so a character's poses do not all
-  resolve to one silhouette on reopen), `pose_bottom_nodes` /
-  `pose_band_members` (ADR-0171 §3 band = bottom row), `pose_rank`
-  (`sum(coFrames)/sqrt(members)`, §4), `pose_art`, `pose_cells`; the View
-  draws silhouettes in variable-sized row cells over a host-free
-  `compose_editor_layout.row_metrics`, where `cell_origin`/`index_at` stay
-  exact inverses and `metrics=None` reproduces the old fixed grid to the
-  pixel. `export` is unchanged in format (§5): `seed`/`locked` still name
-  nodes, one anchor simply writes a whole silhouette's cells. 34 headless
-  cases across the engine, ViewModel and GUI suites (23/23, 11/11, 56/56),
-  six defect probes (rarest → most common anchor, sqrt → mean, art-less
-  member exported, band = any member, and the two dedup rules) each failing
-  at least one case. Judged by render-to-PNG against the ADR-0170-era pack
-  `runs/s10a-rerun/work/MegaMan3/auto`: the composed band draws whole,
-  recognisable enemies instead of slivers.
-  Three defects the real pack exposed and the synthetic fixture could not:
-  `pose_cells` emitted members no sheet draws, which made a pose whose
-  vocabulary node was never routed impossible to export at all (the same
-  288-vs-241 mismatch that cost the first S10.a pass 24 points); the
-  candidate list offered a silhouette already composed, because several
-  anchors resolve to one pose, and the seed palette listed the same
-  silhouette under two anchors; the export caption counted locked anchors
-  (4) instead of the cells the file carries (19).
-  Known and accepted, for the human panel to weigh: only **62 of 223** poses
-  on that pack are addressable, since `pose_of(anchor)` resolves to the
-  most-seen pose containing the anchor and ADR-0171 §5 deliberately adds no
-  field to name a pose; and the export preview shows the later poses with
-  holes, because a node already placed is not emitted twice (§5, `mep_build`
-  fans a painted cell out by tile key).
+Implementation records do not certify unperformed product acceptance. Detailed
+chronology remains in git history and the cited ADRs; current debts belong in §4
+or Part B §8. Dates below describe delivery, not a new validation run.
 
-- **The rebuilt pack matches again on a CHR ROM game** (2026-09-12): ADR-0172
-  accepted by the user and implemented the same day. A `hires.txt` key is two
-  different things — 32 hex of tile data on a CHR RAM game, a CHR index on a
-  CHR ROM one — and the ADR-0153 sidecar recorded only the data, so
-  `mep_build.py build` emitted the CHR RAM form for a CHR ROM game and the
-  rebuilt pack matched **0** tiles at run time while still loading and still
-  drawing its `<background>` captures. Measured on a fresh Mega Man 3 pack
-  over a 100 s headless run, reading `[HDPack-Debug] bg tile match rate`: the
-  bootstrap's own pack 100 %, the rebuild before the ADR 0 of 3 455 861 /
-  3 390 239 / 3 192 008, the rebuild with it 479 861 / 295 199 / 450 368 of
-  the same three. `SheetTileKey` gains `TileIndex` **outside** its identity —
-  `operator==`, `operator<` and the hash still compare `TileData` +
-  `PaletteColors`, so vocabulary, dedup and every grouping decision are
-  bit-for-bit unchanged — filled from `HdBuilderPpu`'s absolute
-  `AbsoluteTileAddr / 16` (no bank id: the value is already absolute across
-  the whole CHR ROM). A sidecar tile entry gains an optional `"index"`;
-  `mep_build.py build` emits the index form only when the key source's own
-  `<tile>` lines are index-keyed **and** the entry carries one, and otherwise
-  **fails** with a named error rather than shipping a pack that renders
-  nothing. A pack recorded before this ADR is therefore not silently
-  degraded, it is refused. Issue #170.
-- **A sprite that never moved stops poisoning the band it is painted in**
-  (2026-09-12): ADR-0173 accepted by the user and implemented the same day,
-  amending ADR-0164 §1. `floors[]` answers "who stands on this ground", but a
-  HUD bar stands on nothing — it is painted in several stacked rows every
-  frame, so it joined seven bands at once on Mega Man 3 and, being the
-  most-seen shape in the capture, headed each one's suggestion list. The
-  signal was measured before the threshold was chosen: over a 120 s scripted
-  capture (4096 OAM frames, 288 nodes), frames-per-distinct-position runs
-  609.0 / 253.3 / 139.6 for the three HUD nodes against a **median of 4.3**.
-  The first attempt used `appearances` as the denominator, which multi-counts
-  instances within a frame and is biased; `NodeFrames` (once per frame) is
-  what the file now carries, next to `Positions`. The recorder classifies and
-  labels — `screenFixed` when `frames >= 64` and `positions * 32 <= frames` —
-  and `compose_engine` filters; `floors[]` is still written for a
-  screen-fixed node, and nothing is deleted, so a reader that disagrees has
-  the verdict and the two numbers behind it. 30 of 288 nodes classified, 19
-  of 30 bands shed 1–11 false members. Known trade: an actor that genuinely
-  never moved during a capture is misread as furniture. Issue #167.
-- **Four smaller defects from the same pass** (2026-09-12): `mep_build.py
-  pack` and `mep_recipe._write_pack_json` both dropped a pack's declared
-  `id` on a re-pack, silently demoting its ADR-0140 identity from source (1)
-  to a weaker one — the second site was an undiscovered mirror of the first
-  (#168); the composition editor exported at 1x instead of the pack's scale
-  and carried unreadable chrome (#169, #171). All five issues (#167–#171)
-  are closed and Done on the board.
+- **F1–F3** — MIDI/VGM export, GB/SMS HD builder and MEP host (ADR-0036–0042).
+- **Console reduction** — NES, GB/GBC/GBS, SMS/GG/SG-1000 and GBA on `main` (2026-08-26).
+- **F5.1–F5.3** — sibling/auto discovery, image and audio bootstrap, fingerprint replacement (ADR-0043/0044/0047/0049).
+- **F5.4a–f** — backgrounds, palette cap, build/preview and sound-driver tooling; the original spatial grouper was replaced by Phase 9 (ADR-0050/0051/0132).
+- **F5.4g / F5.5** — level-2 audio, loops, SFX masks, crossfade, UI and regression integration (ADR-0052/0133/0134/0135/0142); listening and installer SoundFont remain in §4.
+- **F6.0–F6.3b** — community intake, MEP Recipe, catalog and deterministic gates (ADR-0121/0138).
+- **F6.4a–c** — offline recipe interpreter, client download/install and shared discovery fixtures (ADR-0138).
+- **F6.5–F6.8** — rollout, headless smoke, automatic loading and known-missing errata (ADR-0146/0151/0152); native picker and live CI validation remain in §4.
+- **H1–H7 / D1–D13** — tests, doc gates, identity/spec reconciliation and ADR reference checks (ADR-0122–0131/0136/0137); explicit residual debts remain in §4.
+- **H8** — `NES_ONLY`/`LessUI` declined after measurement; per-translation-unit test compilation retained (ADR-0158).
+- **H9 / H10** — headless input tests and four-arm accuracy comparison (ADR-0127/0162); accuracy CI remains deferred.
+- **I.0–I.3** — input tester and mapping feedback; physical-device checks remain hardware-gated.
+- **P.0–P.7** — player shell, catalog identity and preference resolver (ADR-0139/0140/0141, 2026-08-28–09-01); local identity integration remains Part B §8 P.1-local.
+- **F8.1–F8.3** — pack border layer (ADR-0149); optional rendering/lint residue is F8.4.
+- **F9.0–F9.5** — legible vocabulary, maps, sheets and sprite grouping (ADR-0153); delivered on spot checks, not a completed human panel.
+- **F9.6** — external repaint scaffold and classical output (ADR-0154/0161); ADR-0192 retires the unmeasured generative commitment.
+- **F9.7–F9.13** — aliases, stitching evidence, static-screen routing, CHR separation and gameplay probe (ADR-0153/0156/0160).
+- **F9.14–F9.17** — frame-counted input, capture, sprite vocabulary and adjacency (ADR-0157/0164/0166/0167).
+- **Live recorder/viewer** — one-way, nonblocking publication (ADR-0169).
+- **F9.18 implementation** — composition engine and GUI, then pose-based sprite selection (ADR-0165/0166/0171); human acceptance remains open.
+- **F9.19** — pose sidecar (ADR-0170); membership is evidence, not proof of editor addressability.
+- **S10.a** — original walk failed at 6.7%/10.5%; sidecar rerun found 25/25 Mega Man poses (2026-09-11); no claim of complete subject editing follows.
+- **S10.c/S10.d** — `generated` survives packing; studio data stays outside the pack; sheet-key coverage check delivered and narrowed after #218. Visual correctness is a separate gate.
+- **Recorder/build fixes** — CHR indices, screen-fixed sprites, sheet/pose joins, layout gaps, per-frame denominators, fusion and mirror provenance (ADR-0172–0178).
+- **F9.20 / F9.21** — pose succession/cycles/variants delivered; rigid parts withdrawn on measurement (ADR-0179/0180).
+- **F9.22 / F9.23** — per-state recording, two-port input and interruption-based driver attribution (ADR-0181/0182); Contra mechanisms covered through stage4-boss, not all stages.
+- **F9.24** — four artist-kit surfaces, assembler and coverage tools (ADR-0183); portability exercised on Contra, Castlevania, Metroid and Zelda II.
+- **F9.25 tooling** — RAM-cheat and navigation drivers (ADR-0184); bounded second-pass evidence remains in §4.
+- **F9.26** — FM2 conversion and movie recording (ADR-0185); increased coverage measured, synchronization not established by key count (#201).
+- **F9.27** — CDL analysis and recording (ADR-0186); measured cost approximately 1.9× on the logged Zelda run.
+- **F9.28 / F9.29** — AI review as human-promoted proposal and emitted nearby conditions with fallback (ADR-0188/0189/0190).
+- **Pack hosts** — Dropbox/MEGA support and cross-implementation allow-list drift check (ADR-0187).
+- **C.1–C.3** — Linux compilation and all suites in the PR gate, register reconciliation, catalog/board hygiene (ADR-0191; 2026-09-14).
+- **C.4** — `mesence-v0.1.0`, macOS Apple Silicon binary and guides (2026-09-14).
+- **C.5 experiment completed** — two independent agent runs took 12/11 minutes and found visible edits, but required `hires.txt` diagnosis and exposed incomplete painting; product acceptance remains unproven. [Zelda log](../validation/c5-fable-artist-run-zelda-2026-09-14.md), [Mega Man 3 log](../validation/c5-fable-artist-run-mega-man-3-2026-09-14.md). Findings #253/#255/#256 require current-binary verification under F9.18-V, regardless of issue closure.
+- **C.6** — second reference measured: Zelda II 165/874 tile shapes, 28/3301 exact keys, 670 emitted versus 4679 authored conditions, 3.78× palette inflation; lint success was not a runtime round-trip proof.
+- **C.7/C.8** — file ceilings, dependency pins and ADR debts closed (ADR-0137/0192; 2026-09-15).
+- **ADR-0193** — PR and main-push CI triggers retained; workflow details live in `.github/` and the ADR.
 
-- **The panel ran its own sections 2 and 3, and produced four defects**
-  (2026-09-12): the first pass on a pack that actually applies, by two
-  evaluators given no access to the code or the ADRs. Both sections **failed**,
-  and both verdicts held up under re-measurement, though neither report was
-  right as written — a cold evaluator errs in both directions, and every
-  headline was re-derived before it became an issue.
-  - **#174** (fixed, ADR-0174): 35 sprite pairs at `count == coFrames == 1338`
-    at one constant offset — nodes never once on screen apart — split across
-    `spr###` sheets. A `sprNNN` sidecar now names the `poses.json` ids its
-    cells belong to, ordered most-covered first. The join rather than a
-    grouping change, because grouping changes invalidate every recorded pack:
-    verified by re-recording Contra, where all 130 sheet PNGs and `poses.json`
-    come back byte-identical and every sidecar matches once the new keys are
-    removed. `spr018` and `spr023` both name `pose001`, which covers 9 of the
-    9 nodes of the two combined.
-  - **#175** (half fixed, ADR-0175; half withdrawn): a group sheet states its
-    blank slots instead of filling them — the grid is the bounding box of a
-    BFS layout, so a non-rectangular figure holes by construction, and filling
-    would put two crops under one tile key, which the rebuild silently
-    collapses. The report's second half was wrong: the 14 background nodes on
-    no sheet are screen-resident, and 14 of 14 resolve to an existing
-    `backgrounds/screenNNN.orig.png` through ADR-0166's `screens[]`. Its
-    original count, 37, was wrong too — it did not follow `aliases`.
-  - **#172** (fixed): `check-coverage` never said which layout it expected,
-    advised `run build first` when `build` had run, and let a baseline that
-    `build` had overwritten be compared against itself. The issue's own
-    diagnosis — two incompatible layouts — was wrong; `cmd_build` reads both
-    shapes under one rule. The fix is the messages plus a `samefile` refusal.
-  - **#218** (fixed, 2026-09-14): the same command reported a drop on an
-    *untouched* bootstrap pack. It resolved every `<tile>` key of the
-    baseline, while `build` re-derives only the keys a `textures/sheets/`
-    cell claims — the recorder's manifest also keys every CHR tile it saw out
-    of `textures/chr/` (ADR-0043), so art nothing had repainted counted as
-    lost. The other half of the defect was the mirror image: a copy of the
-    manifest kept *outside* the pack resolved zero images and passed
-    vacuously. ADR-0189's "Consequences" already named the first as a known
-    limitation. The check now narrows the baseline to sheet-derived keys,
-    refuses a baseline that has none (naming the recorder manifest and the
-    two commands that produce a real one), and re-resolves a detached
-    baseline against the pack under test, where an unresolved image is an
-    error rather than an info line. S10.d above was reconciled in the same
-    change.
-  - **#173** (fixed): `build` announced 644 surviving keys of 10057 as good
-    news. It now reports a key-by-key delta (which surfaces the 1 key the
-    sheets *add*, invisible to a subtraction), states that dropping keys is
-    expected under ADR-0043/0156/0160 and points the artist at
-    `backgrounds/screenNNN.png`, and groups the 76 warnings about the
-    recorder's own sheet geometry instead of burying the actionable lines.
-  - **Still open, deliberately**: `spr016` renders `GA M` / `OV R` because its
-    `E` is in *zero* slots, not because a repeat was de-duplicated. The glyph
-    occurs twice per frame, so its ADR-0153 §2 `appearances` denominator is
-    double every partner's and every edge from it is dropped — **a tile that
-    repeats within one frame can never join a group.** Same biased-denominator
-    shape as ADR-0173, and it wants the same treatment: measure the
-    distribution before choosing the rule.
-  - Section 2's pass criterion was amended the same day (§5, Phase 9
-    validation): it judged sheet cells, which ADR-0171 had already stopped
-    being the unit, and was unpassable by construction.
-  - **#179** (fixed, ADR-0177): found while assembling the bench for the
-    human run of section 2. `BuildPoses` clusters a frame by spatial
-    connectivity, so any two actors that touch fuse into one entry, and the
-    pose list repeats the same figure with a different bystander each time —
-    the mirror of the split-cell defect the criterion amendment addressed,
-    with the unit arriving too large instead of too small. An entry is now
-    labelled `fusionOf` when its tiles split, at some translation, into two
-    entries the recorder also saw standing alone; the editor stops offering
-    a labelled entry, in the band list and when laying a figure out. No
-    threshold: the classification is a property of the tile sets. A
-    frequency ratio was measured first and rejected — continuous from 0.0 to
-    562 across the kit, with no plateau, and backwards on Excitebike.
-    Re-recording the kit labels 44 of 223 Mega Man 3 poses, 39 of 84
-    Zelda 1, 21 of 85 Contra, 12 of 77 Excitebike; each pack's `poses.json`
-    comes back identical apart from the new field, and the only other files
-    that change are the 52 `sprNNN` sidecars whose ADR-0174 `poses[]` list
-    stops citing a fusion.
-  - **#181** (fixed, ADR-0178): the CHR RAM half of the defect ADR-0172
-    fixed for CHR ROM. `HdBuilderPpu::CaptureOam` bakes a sprite's OAM flip
-    bits into the shape it records — deliberately, so the two mirrored
-    halves of a figure can sit side by side on a sheet — but the run time
-    keys by the unflipped CHR and mirrors the replacement art itself, so
-    the baked bitmap is a key nothing ever looks up. Measured over the kit:
-    156 of Contra's 446 sprite-sheet tile entries (34 %) and 88 of
-    Zelda 1's 240 (36 %) had no `<tile>` line in the pack's own
-    `hires.txt`, and un-flipping recovered 155 and 88 of them; Mega Man 3
-    and Excitebike, both index-keyed, were at 2 of 451 and 2 of 383. A
-    third of the sprite cells an artist was invited to paint were inert.
-    The sidecar now carries `source` and `mirror`, and the rebuild emits
-    the unflipped key on a data-keyed game; a pack recorded before the ADR
-    is detected by an un-flip test and fails the build rather than being
-    silently repaired.
-    The residue after the fix is 5 cells across the kit, all sharing one
-    palette word 336 other entries carry with blank tile data — a different
-    cause, filed as #183.
-  Logs: `runs/golden-20260912/panel-section2.md`, `panel-section3.md` (not
-  versioned). The golden kit was re-recorded on the ADR-0172/0173 binary the
-  same day: Mega Man 3 and Excitebike carry tile indices (CHR ROM, 1037 and
-  392), Contra and Zelda 1 correctly carry none (CHR RAM); Excitebike's
-  rebuilt pack was measured back at 100 % `bg tile match rate`, the first
-  independent confirmation of ADR-0172 outside Mega Man 3.
-
-- **`poses.json` says what follows what** (2026-09-12, F9.20, ADR-0179):
-  the recorder links kept clusters frame to frame into tracks (nearest
-  top-left within 16 px), and each entry gains `hold` and `next[]`; the
-  tracks are scanned for `cycles[]` (a period repeated twice in a row, found
-  on the track *sequence* so one silhouette can be two phases) and for
-  `sequences[]` (a non-looping run seen twice); a kept pose that is another
-  kept pose plus fewer than 4 tiles is labelled `variantOf` it. The editor
-  ranks the base above its variants and lays the seed list out one cycle at
-  a time in phase order, captioned `cycle000 3/6`. Measured on the Contra
-  golden re-record: the soldier's run is one period-6 cycle (two 3-cycles
-  the soldier alternates between), the somersault a 4-cycle, the death an
-  8-pose sequence, and exactly the 9 variants the spike predicted. The
-  player's run is *not* a cycle here — no track holds it for two full
-  turns, because the entry script taps R in short bursts — which is the
-  measurement F9.22 exists to fix, not a defect of the rule. Five new
-  `core_unit_tests` cases from ADR-0179 §6, three Python tests; the pack
-  format is unchanged for a reader that ignores the new optional fields.
-
-- **F9.21 withdrawn** (2026-09-12, ADR-0180 superseded by ADR-0179 §4):
-  rigid `parts[]` recurring across poses were measured on the kit
-  (`runs/golden-20260912/spike-pose-parts.md`) and the best cover tiles
-  21–43 % of the kept poses with 1.0–1.4 parts each — the "part" is the
-  whole figure inside its projectile variant; genuine limb parts tile 10 of
-  37 Contra stage-1 poses and none on the three other golden games. No
-  `parts[]` block ships; `variantOf` carries what the data supports. The
-  door reopens as a measurement (a game whose cover tiles a majority of
-  its poses with >= 2 parts), not as a slice.
-- **Per-stage recording, the tooling half** (2026-09-12, F9.22): the
-  headless recorder writes a save state at the end of a complete run
-  (`save-state=`) and starts from one (`state=`, already there), and
-  `scripts/record_stages.sh` runs one short bootstrap record per state into
-  its own pack folder. On Contra the stage-1 state plus a 60 s long-run
-  script finds the player's run as a period-6 cycle at once — the exact
-  loop the 120 s golden run only ever showed as 3–4-pose fragments — which
-  is the measurement the slice was opened for. Run on the kit the same
-  day: Mega Man 3's run, Link's walk in four directions and Excitebike's
-  wheels all come out as cycles from a 60 s stage-1 run. Contra's later
-  stages turned out not to need a human: input scripts chained from state
-  to state, steered by RAM read off the `.mss` (`scripts/mss_ram.py`),
-  crossed stage 1, beat the wall and minted `stage1-boss` and `stage2-base`
-  the same day (163 poses and 10 cycles from the corridor alone). Stages
-  3–8 stay open, with the same tooling.
-
-- **Controller state per retained frame** (2026-09-12, ADR-0181 §1–§2 under
-  F9.22): `OamFrame` carries the packed button byte of ports 1 and 2 at
-  frame end (not part of frame identity — a repeated frame keeps its first
-  buttons), `NesConsole` passes them to `HdPackBuilder::OnFrameEnd`, and
-  `poses.json` writes an optional `input` block — frames, ports, `held`
-  per button and `never`: the buttons and direction+action pairs the run
-  never held at once. On the Contra stage-1 run that reads `never: Select,
-  Start, Left, Up+A, Down+A, Down+B`, which is the "what the recording did
-  not exercise" ADR-0179's Consequences could only assert. The §3 `driver`
-  rule was measured on the kit the same day and left open (conditional
-  frequency attributes Zelda's walks and nothing else; interruption is the
-  right evidence and the 60 s stage-1 data has too few windows for it —
-  `runs/golden-20260912/spike-pose-driver.md`). One `core_unit_tests`
-  case, one Python check; `MESEN_POSE_TRACK_DUMP` joins `MESEN_OAM_STREAM_DUMP`
-  as a save-time debug dump.
-
-- **Water and the second player** (2026-09-13, F9.22): the input script
-  grammar gained a port-2 token — `<count>f <port1>|<port2>`, ADR-0157
-  amended — and `headless_record` plugs a pad into port 2 only when a
-  line names one, so every one-player script records as before. Two
-  stage-1 states minted headlessly: `stage1-water` (Bill in the water at
-  the start: 13 poses, no cycle — he swims and shoots without animating)
-  and `stage1-2p` (the 30-lives code, Select, Start: 311 poses, 11 cycles,
-  two of them the pair running side by side as one 20-tile fused pose).
-  `stage1-2p-probe` moves only Lance and reads his run as `port2` (13/14
-  and 12/12 windows) — the first measurement of the port-2 path. Bill and
-  Lance share every pose (shape-keyed vocabulary, palette-only
-  difference), so a probe that moves both leaves the run unclassified
-  (7/13 and 6/13), as the rule intends. Two `core_unit_tests` cases.
-
-- **The base, the waterfall and its boss** (2026-09-13, F9.22): Contra
-  stages 2 and 3 beaten headlessly, states `stage3-waterfall`,
-  `stage3-boss` and `stage4-base` minted and recorded with a probe each
-  (`scripts/stages/README.md` has the RAM map and the search shapes).
-  What the RAM taught: an enemy slot is reused, so a target is (slot,
-  type); the base head's HP nibble is not monotone, so the win is read off
-  `$003b`; the vertical stage's camera catches up only after a landing, so
-  every window ends idle; the stage-3 core's visible HP flips to 0xF1 while
-  its mouth is shut and the lasting value is in a second table (`$05c5`).
-  One search failure worth keeping: the greedy climb rule (highest camera,
-  then highest Bill) cannot take an exit that is below-left of the figure;
-  a two-window lookahead and a three-window beam did not find it either,
-  four chained jumps left did. The base probe is the first that attributes
-  nothing to the player: Bill's sideways walk there is a short irregular
-  cycle (period 5, 4 repeats), under the 4-window floor. Reproducibility,
-  on review: a save-state boundary is input-neutral once each run's six
-  idle tail frames are kept, which retracts the 2026-09-12 "a chain
-  reproduces only as a chain" — the chains from `stage3-waterfall` to
-  `stage3-boss` and on to `stage4-base` are versioned as flat
-  `.chain.txt` scripts (`scripts/replay_chain.sh`) that replay byte for
-  byte; `stage3-waterfall.mss` itself is archived only, its hand-stitched
-  chain not recoverable from disk.
-
-- **The second base, to its boss room** (2026-09-13, F9.22 closed):
-  stage 4 played through eight screens by the same search and `stage4-boss`
-  recorded from the boss room with a probe. What the second base taught:
-  bullets converge toward the vanishing point, so off-centre cores are hit
-  from lanes 24–48 px farther out; core HP nibbles regenerate, so only the
-  cores-left counter is monotone; a wall's core may appear only after its
-  cannons die, so targets are re-read per state. The chain from
-  `stage4-base` is versioned; the boss (pods and eye down, head not found
-  within the depth budget) and stages 5–8 are left unplayed by decision:
-  ADR-0182 judges coverage by the mechanisms the recorded states exercise,
-  not by stages, and closes F9.22 on the nine Contra states. The slice
-  row is deleted; this entry and the 2026-09-12/13 ones above are its record.
-
-- **`driver` by interruption** (2026-09-13, ADR-0181 §3, F9.23):
-  `FindPoseRuns` reads each cycle occurrence as a window that stops at its
-  last phase advance plus that phase's median hold, and a port drives the
-  cycle when >= `kDriverMinWindows` (4) windows exist, >= 2/3 of them stop
-  within `kDriverStopLag` (12) frames of a release on that port and the
-  other port fails the same test; `cycles[]` entries gain `"driver":
-  "port1"|"port2"` only then, the save line says how many. One probe
-  script per golden game (`stage1-probe.txt`: hold a direction >= 2 turns,
-  release, idle, no scroll) is the measurement's input; on the entry and
-  stage scripts nothing is attributed, by design. Measured: Contra's run
-  right/left `port1` (12/12 each), soldier none; Zelda's four walks
-  `port1` (>= 9/10); Mega Man 3's run `port1` (12/13), enemies none;
-  Excitebike's wheels none (3/18). `compose_engine.PoseRun.driver` reads
-  it; no consumer drops a run for lacking one (§5).
-
-- **F9.24 — the artist kit** (2026-09-13 → 14, ADR-0183, #198/#199): the
-  four surfaces — `artist_kit.py` (figure grids), `artist_bg_kit.py` (named
-  scenery), `artist_map.py` (stage panorama + slicer), `artist_chr_kit.py`
-  (pattern pages completed from the ROM, `seen:false` marked; inert and fade
-  palette variants folded, PR #213) — plus `artist_kit_assemble.py` (one
-  contact sheet) and `artist_cover.py` (coverage against a reference pack,
-  refusing a pack it cannot measure — a patched-ROM key namespace — instead
-  of printing `0/1465`, #225/#228/#235). A second recording of the same ROM
-  may donate CHR cells as evidence of shape, never of colour (#199). Every
-  surface round-trips through `mep_build.py build --verify` with the key set
-  unchanged. Portability measured on four games with **no code change to the
-  generators**: Contra (flagship), Castlevania, Metroid
-  (`docs/validation/metroid-artist-workflow-evidence.md`) and Zelda II
-  (#233); on a CHR ROM game `artist_map.py` refuses by design (the pack keys
-  by CHR index, the grid dump carries none), and the guide says so. The
-  artist's entry point is `docs/remastering-a-game.md`. The slice row is
-  deleted; what stays open of the kit is the external-artist trial (Phase 11
-  C.5) — every run so far was by someone who built the tools.
-
-- **F9.26 — the TAS driver** (2026-09-14, ADR-0185, #200): `fm2_to_bk2.py`
-  + `movie=` on the harness, refusing by name on savestate/FDS/fourscore or
-  a `romChecksum` mismatch; Zelda 1 "all items" 614 shapes vs 276 movie-less,
-  union 5557 keys; `scripts/stages/zelda/stage1-run.txt` retired as a control
-  (it never left attract mode). A partial desync passes the acceptance gate
-  and is only caught by hand (#201, NESHawk divergence). Row deleted.
-
-- **F9.27 — the code/data map** (2026-09-14, ADR-0186, #202 + `8a2b9f64`):
-  offline `cdl_tool.py` (`report`/`union`/`regions`/`strip`) and the harness
-  `cdl=<path>` flag (accumulates across runs, fails on zero code bytes).
-  Program analysis, not art extraction — the art-coverage justification was
-  withdrawn the same day (ADR-0186 amendment). Debt still open: the debugger
-  slowdown was never published as a number (ADR-0186 Consequences). Row
-  deleted.
-
-- **F9.28 — an AI reviews the kit, and its judgement stays a proposal**
-  (2026-09-14, ADR-0188, `43eaab04`): `scripts/artist_ai_review.py`
-  (`packet` / `check` / `truth` / `score` / `promote`) sends a rendered
-  surface to a model and scores the answer against the hand-made truth of a
-  community pack, in four buckets including `confidently_wrong`; nothing it
-  emits reaches a sidecar without `promote` by a human (ADR-0183 §3
-  "evidence and inference are never confused"). Flagship result on Contra:
-  `docs/validation/artist-ai-review-flagship-result.md`. *Id collision:*
-  commit `2f57f5dc` labels the `spriteNearby` work F9.28 as well; that work
-  is recorded here as F9.29 and the ADR id (0188 ⇒ F9.28) wins.
-
-- **F9.29 — conditions are emitted, not commented** (2026-09-14, ADR-0189
-  `2f57f5dc`, ADR-0190 #227): a sprite-group edge from `SelectSpriteEdges`
-  becomes a `spriteNearby` `<condition>` on the tile line, and every
-  conditioned tile keeps a byte-identical bare twin right after it, so a
-  failing condition renders the plain art instead of a hole (`GetMatchingTile`
-  takes the first passing entry). `tileNearby` follows from a **directed**
-  co-occurrence table gated on both-ways frame support — the study
-  (`docs/validation/tilenearby-evidence-study.md`) found the previous
-  `# inferred` comments pointed the wrong way about half the time and that
-  replacing all 186 emitted targets by a never-drawn pattern produces the
-  identical frame (checksum `0x80267D82`), so a wrong `tileNearby` costs
-  nothing. Before this the builder had attached a condition to a `<tile>`
-  line zero times against Contra80s' 864 hand-written ones. Both ADRs were
-  accepted **and implemented in the same change** (see §7). The re-record
-  path is where it is still fragile: #232, #237, #238, #239 (open, PR #236).
-
-- **ADR-0187 — Dropbox and MEGA as pack hosts** (2026-09-14, #206): five
-  fetch kinds instead of three; 5 of 6 unlisted romhacking.net packs live on
-  Dropbox. `fetch_pack.py` and `CommunityPackDownloader.cs` are now a
-  five-way mirror with no drift check (ADR-0187 Consequences → Phase 11 C.8).
-
-- **CI reshaped** (2026-09-14, #230): the fourteen binary builds run on
-  `workflow_dispatch` only; the PR gate is `checks.yml` running
-  `make doc-checks`. Consequence recorded as a risk in §7 and as Phase 11
-  C.1: **no CI job compiles the Core or runs the `scripts/test_*.py` suite
-  any more**, and `main` has no branch protection, so no check is required.
-  2026-09-14 later the same day: Linux-only compilation, ADR-0191 — the
-  Windows `tests.yml` and the folded-in `unit-tests.yml` are deleted, the gate
-  is `checks.yml`'s five jobs, `build.yml` keeps only its Linux and AppImage
-  legs, and the macOS binary is built locally by `make release-macos`.
-
-- **C.1 — the gate compiles and runs every suite** (2026-09-14, #245,
-  ADR-0191): `checks.yml` runs `make core-unit-tests` with `-Werror` and a
-  per-file runner over `scripts/test_*.py`; required jobs are `checks`,
-  `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests`. Windows
-  CI retired; macOS binaries stay local.
-
-- **C.2 — register and roadmap say what shipped** (2026-09-14, `d296b456`):
-  ADR Status lines brought current; `docs/roadmap/AGENTS.md` covers Phases
-  9–11; `scripts/checks/verify_prd_live_rows.py` fails when a live slice-table
-  Decision cell declares `shipped` (wired into `make doc-checks`).
-
-- **C.3 — boards and catalog agree** (2026-09-14, #247): catalog workflow
-  regenerates `docs/community-packs.md` on a schedule; validation applies
-  `pack:invalid` on "Inválido"; bug-board hygiene for #196 / #238 / #239.
-
-- **C.4 — a binary release of the fork** (2026-09-14, #249, `cf896c2d`):
-  `mesence-v0.1.0` macOS Apple Silicon only, built by `make release-macos`
-  (injects fresh `MesenCore.dylib`, ad-hoc codesign, hash mismatch fails,
-  writes `SHA256SUMS` + commit); release notes link the remastering guide;
-  `README.md` links the release above the fold.
-
-- **C.5 — the first outside artist measured** (2026-09-14, two logs in
-  `docs/validation/`): a fresh session with no context, sandboxed to the C.4
-  release and the three guides, ran the guide end to end on two games. **Both
-  passed** — Zelda (CHR RAM): red-tunic Link on screen, pixel-identical to the
-  kit (2 832/2 832 px), 12 min wall clock, verdict "yes"; Mega Man 3 (CHR ROM):
-  red Mega Man running and jumping, 11 min, verdict "yes". Well inside the
-  one-hour budget, so the meta-goal has its first number: **the recording and
-  the kit are the part the tool wins** — 60 s of gameplay to 22 named-by-phase
-  figure sheets and a lint-clean `hires.txt` in under a minute of machine time.
-  The painting contract is the part it loses: **in both runs the mechanical
-  acceptance test (`build` 0 errors, `mep_lint.py` 0, every `--verify` PASS)
-  reported success while the repainted figure was absent or half-unpainted**,
-  and the artist found out on screen, not from the tool — #253 (keys owned by
-  another sheet), #255 (a `mirror: H` cell keyed at the source without
-  un-flipping the pixels) and #256 (the unconditional fallback rule dropped
-  beside each `[condition]`). Four of nine stops were the guide's and are fixed
-  in PR #254 (how to load a built pack, what `bootstrap`/`hdpack`/`hdpack-off`
-  mean, `make` against a binary release); the fifth was the sandbox's Contra
-  file being a 40 KB stub. Phase 9 panel §§2–3 were filled from the logs and
-  **failed on the `hires.txt` clause in both runs** for that reason. Full run
-  record: `c5-fable-artist-run-zelda-2026-09-14.md`,
-  `c5-fable-artist-run-mega-man-3-2026-09-14.md`.
-
-- **C.6 — a second reference pack** (2026-09-15): Zelda II ModernRetroDesign
-  (74 205-line `hires.txt`; Metroid HD refused — patched CHR ROM vs stock CHR
-  RAM, #225). Four numbers against one stock recording: **coverage 165/874
-  tileData (18.9%), exact keys 28/3301**; **conditions 670 emitted / 4 679
-  hand-written** (emitted: 0 `spriteNearby`, 112 `tileNearby`, 558
-  `tileAtPosition`; hand-written: 913 `spriteNearby`, 3 511
-  `memoryCheckConstant`, …); **palette inflation 3.78×** (3 301 keys / 874
-  tileData); **keys round-tripped** as `mep_lint` 0 errors on the artist pack
-  (stock recording rebuild refused — pre-ADR-0172 sidecars). Contra80s was
-  47% / 864 conditions / ~2.3× — a second author's habits are not the same
-  shape, so grouping and condition rules must not be retuned to Contra alone.
-
-- **C.7 — size guard + pins** (2026-09-15, #261/#262): `make doc-checks`
-  ceilings `HdPackBuilder.cpp` 2246, `artist_chr_kit.py` 1762, `mep_build.py`
-  1932, `sheet_repaint.py` 1591, `core_unit_tests.cpp` 7342 (shrink ok, grow
-  fails); `scripts/requirements.txt` pins PyYAML/Pillow/numpy to `checks.yml`.
-  Amends ADR-0137. (PRD said six files, listed five — those five are the
-  contract.)
-
-- **C.8 — ADR debts closed** (2026-09-15): (a) ADR-0154 Option A superseded by
-  **ADR-0192** — generative diffusion retired until a measured run; (b)
-  ADR-0186 `cdl=` cost published — **≈1.9×** wall clock on a 30 s Zelda run
-  (2.7 s → 5.1 s); (c) `verify_pack_host_allowlist_drift.py` fails when
-  fetch_pack / CommunityPackDownloader / validate.yml drift (#263); (d)
-  ADR-0170 pose-identity revisit closed — keep sets-equal, do not loosen.
-  Phase 11 live table empty of C.* rows.
 
 ### 4. Roadmap — pending work, by slice
 
@@ -1010,7 +211,7 @@ automatic remapping, browser Gamepad API, stats collection.
 
 #### Phase 7 — Player shell (minimal GUI)
 
-**Shipped** — P.0–P.7, 2026-08-28 → 2026-09-01; record in §3, normative
+**Delivered with debt** — P.0–P.7, 2026-08-28 → 2026-09-01; P.1-local remains open in Part B §8. Record in §3, normative
 text and slice list in Part B (do not duplicate that prose here). Pack
 identity is the pair `pack_id` (product) + `content_id` (revision); the
 catalog keeps one live slot per `pack_id`. The letterbox fit, once the last
@@ -1026,22 +227,13 @@ default viewport, letterbox inside the viewport, lint the bare root
 
 #### Phase 9 — Artist-legible texture sheets (bootstrap output redesign)
 
-**Status.** F9.0–F9.17 shipped 2026-09-05 → 2026-09-07, F9.19–F9.20 and
-F9.22–F9.29 shipped 2026-09-11 → 2026-09-14, F9.21 withdrawn (record in §3).
-Live rows: **F9.18** (the human panel) and **F9.25** (the per-stage second
-passes). F9.18 is in delivery — code and GUI acceptance are done, the human
-panel is not. Two proxy passes ran on 2026-09-12, both by evaluators with no access
-to the code: the first reached only its cold-read section, because the pack
-it judged matched 0 % of its background tiles (ADR-0172); the second, on the
-golden kit re-recorded that day (`runs/golden-20260912/`, not versioned),
-ran sections 2 and 3 and failed both, yielding #172–#175 and ADR-0174/0175
-(record in §3). Section 2's criterion was amended in the same pass. What is
-still owed is the panel itself — a person, not a proxy; an agent that wrote
-the feature cannot be the artist who has never seen it, and both passes are
-labelled proxies for that reason. The problem statement below is kept as the
-baseline the validation protocol measures against.
+**Status.** Implementation through F9.29 is recorded in §3, with F9.21
+withdrawn. Open work: F9.18-V (current-binary painting verification), F9.18
+(independent human panel) and F9.25 (bounded second-pass evidence). C.5 was
+an independent agent experiment; it neither satisfies the human panel nor
+proves the promise of a publishable pack in under one hour.
 
-**Problem.** The bootstrap `auto/` pack emits `Chr_N.png` sheets in CHR
+**Original problem (2026-09-04 baseline).** The bootstrap `auto/` pack emitted `Chr_N.png` sheets in CHR
 order: thousands of 8×8 fragments with no neighbourhood — half a logo,
 one corner of a rock, a run of font glyphs. An artist opening `mep/` of a
 hand-made pack (Zelda 1 reference) sees whole bushes, trees, a stitched
@@ -1093,8 +285,28 @@ F9.6 and Phase 10).
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F9.18 | **The composition editor** — an external, stdlib-only Python tool in `scripts/` (`scripts/compose_editor.py <pack folder>`, a tkinter layered canvas over a host-free `compose_engine.py`) that opens a pack recorded since F9.17 and builds the ADR-0164 §5 scene as a stack of layers: HUD/font edited in place, background from maps/metatiles/screens, objects from `objNNN`, and sprites as one sub-layer per **Y band** — `adjacency.json` `sprites.nodes[].floors[]` joined with `pairs[].coFrames`, ranked by `coFrames × band overlap`. Seed → rank → lock → recompute runs inside a layer, placing a candidate's `sprNNN` figure by the near-field `offsets[]` when one exists; export is in-place sheets for HUD/background/objects and a `usrNNN` sidecar (`composed: true`, `seed`/`locked`, `band {bottom, tolerance: 8}`) per kept sprite band. Node pixels come from the sheet that shows them (`*.orig.png`, nearest-neighbour); a screen-owned node (ADR-0156) from `backgrounds/screenNNN.orig.png` or a `textures/chr/` render, never a silent blank. No new format: the output is ordinary `mep_build.py` input (`_SHEET_RANK` ranks by `kind`; `usrNNN` sorts after `objNNN`/`sprNNN`); unpainted scenes live under `auto/`, a painted sheet is written to `mep/` (ADR-0147). The two ADR-0164 acceptance tests (seed on a Ninja Gaiden `obj000` metatile → rest of the group ranks first; the Y band of Ryu's bottom edge ranks ground enemies above projectiles) are suites against the engine, headless | **accepted 2026-09-07** — ADR-0165 (accepted 2026-09-07, by the user); delivery in progress. ADR-0166 (accepted 2026-09-07) closes the F9.18 pixel-source gap: `adjacency.json` records, per screen-resident node, the `screenNNN` that owns it and its 8 px on-screen offset, so a sheetless background cell resolves to a crop from `backgrounds/<screen>.orig.png`. **Engine acceptance run against real data, 2026-09-07** (`runs/f918-accept/report.txt`): a fresh 300 s Mega Man 3 recording since F9.17 (62 sheets, `vocabularySize` 379, 15 distinct screens, 77 background nodes carrying `screens[]`) exercised `background_rank`/`sprite_rank`/`node_art`/`export` end to end — a screen-owned node's crop is real, legible pixels (spot-checked visually, not just "did not raise"), and both a `usrNNN` object and sprite-band export round-trip through `mep_build._load_sheet_docs` unchanged. Found and fixed a real bug no synthetic fixture caught: `Pack.next_free_name()` scanned the pack's own `sheets_dir` instead of the caller's `to_dir`, so two exports into the same `mep/` folder — an ordinary editing session — both landed on `usr000` and the second silently overwrote the first on disk; fixed, with a defect-probed regression test (`test_export_twice_to_same_dir_gets_distinct_names`, 9/10 → 10/10). Engine code acceptance is done. **GUI pass 2026-09-09:** `scripts/render_compose_editor.py` opens the real `EditorApp`, drives its handlers by named step and repaints the mapped widget tree into a PNG (the `render_record_viewer.py` technique of ADR-0169 — no screencapture, no TCC prompt), so the GUI needs no display to be judged either. It exposed a headline defect the engine tests could not see: `_refresh_row` drew cells column-major while `_row_index_at` hit-tested row-major, so every cell after the seed was drawn below the canvas and clicks landed on the wrong cell — the whole lock/swap/remove gesture set was unusable. Fixed by moving the grid arithmetic into host-free `compose_editor_layout.py` (ADR-0127) where `cell_origin`/`index_at` are exact inverses, plus five packing/contrast defects (clipped export preview, Selection panel squeezed off the right edge, squeezed tab buttons, clipped Output path, four #aaa/#888 labels on the aqua theme). `scripts/test_compose_editor_gui.py` covers the layout invariants host-free and drives the real app Tk-gated (36/36; the old origin fails 14 checks; no display skips 3 cases with rc=0). Remaining before "shipped": the Phase 9 human panel (cold-read/find-and-edit/seam) and native window-manager behaviour only a desktop shows. Note for that panel: the composed band renders **fragments** of a character, not poses — the correct unit is what PRD Phase 10 spike S10.a measured as unreachable from today's sidecars, so a "still striped" verdict would be ADR-0170's subject, not a GUI defect. **Resolved 2026-09-11:** ADR-0171 (accepted, supersedes ADR-0168) makes the pose the unit of the sprite layer, and the slice shipped the same day (record in §3) — the composed band now draws whole characters, so the human panel judges poses. Run it against a pack recorded since ADR-0170; an older pack measures the fallback, which is the 6.7 % path. **Proxy panel 2026-09-12** (`runs/f918-panel/panel-log.md`, not versioned): run by a session that had not built the editor, against a rebuilt Mega Man 3 pack — and it invalidated its own sections 2 and 3. The pack under test matched **0 %** of its background tiles at run time (ADR-0172, #170), so "the edit reaches the screen" was never actually observed; the magenta the log called proof was the game's own palette. Sections 2 and 3 are marked **not reached** and the pass produced five real bugs instead (#167–#171, all closed; records above). The human panel still owes sections 2 and 3, now against a pack re-recorded on the ADR-0172/0173 binary — `runs/golden-20260912/` holds the re-recorded golden kit |
-| F9.25 | **The coverage pass** — `scripts/headless_record` gains `cheat=AAAA:VV[:CC]` (repeatable), validated at the parser per ADR-0184 §1: only the `NesCustom` form, only an address below `$0800`, a failing code ends the run rather than warning. Applied after `LoadRom` and after any state load. A stage whose clean run stops short is recorded a second time under a RAM cheat, and only its stage map and pattern pages are taken from that run; the cheat goes verbatim into the kit fragment's `notes[]` | **accepted 2026-09-13** — ADR-0184, measured on Contra stage 1: 99 lives buys survival and no ground (2304 px unchanged), the barrier adds 208 px to 2512 px, and the same run's figure grids come back with the Barrier fused into every phase (14 → 115 fused poses). Flag shipped. **Amended 2026-09-14** (ADR-0184): a third, *navigation* pass (Contra `$30` level selector) feeds all four surfaces, byte-identical to the clean control — the row's "only its stage map" applies to the barrier-style coverage pass, not to navigation. Measured on Contra: 53.8 % → 58.9 % with 11 sessions, 64.6 % on the union. Still owed: the per-stage second passes themselves, recorded and logged as one §3 line |
+| F9.18-V | Re-run the painting workflow on one CHR RAM game and one CHR ROM game using a named current binary and unmodified documented tools. Exercise shared sheet keys, mirrored cells and a condition that does not match. Record structural, untouched-image and painted-image results separately under the protocol below. | Open validation follow-up to C.5 (#253/#255/#256); no claim that those defects remain unfixed. Pass only when the intended complete figure appears without reading/editing `hires.txt`; issue closure and unit-test success alone do not close this row. |
+| F9.18 | Human acceptance of the composition editor over ADR-0170/0171 pose data, with ADR-0165/0166 background sources and exports. | Engine/GUI implemented; waiting for F9.18-V, then a person who did not build the feature. Log tests 1–7 where applicable on the golden set; missing evidence is not a pass. Include native window interaction. |
+| F9.25 | Complete the bounded Contra second-pass evidence matrix below, preserving ADR-0184 clean/coverage/navigation separation. | Tooling exists; evidence reconciliation and any missing runs remain open. No target of beating every stage or reaching 100% art coverage. |
+
+**F9.25 scope and stop rule.** Inventory the nine existing Contra states:
+`stage1-run`, `stage1-water`, `stage1-2p`, `stage1-boss`, `stage2-base`,
+`stage3-waterfall`, `stage3-boss`, `stage4-base`, `stage4-boss`. Use
+`scripts/stages/contra/` and its `navigation.json`; stages 5–8 are not new
+save-state objectives (ADR-0182). Navigation entries already in that profile
+may be measured without extending the stage-playing objective.
+
+For each state, log the clean control and either a second pass or a justified
+not-applicable result (the clean pass reached its route boundary, or no
+admissible cheat is known). For each second pass record ROM/state/script and
+binary hashes, duration, exact cheat, mode, output hashes, gained/lost keys,
+map extent and contaminated surfaces. Coverage cheats donate only scenery/map
+and pattern pages; navigation may donate all four surfaces only with the
+ADR-0184 clean-control evidence. Reuse existing evidence only when these inputs
+are identifiable. Missing archived states are blocked rows, never successes.
+Stop when every row has evidence or an explicit not-applicable reason and the
+union rebuild passes structural validation. A zero-gain run is a valid measured
+result; do not keep searching for a higher percentage without a new scoped task.
 
 **Validation — qualitative and intuitive.** The deliverable is legibility,
 which no pixel metric captures, so each slice is judged by a fixed panel
@@ -1103,8 +315,8 @@ persona — a developer may stand in but must not have seen the sheets
 before). Golden games: Zelda 1 (16×16 grid, screen scrolling), Excitebike
 (no grid, continuous scrolling), Mega Man 3 (CHR ROM), Contra (CHR RAM);
 GB/SMS follow once NES passes. Each run records the `auto/` folder, the
-answers and elapsed times as a short `runs/` log (not versioned) and one
-summary line in this PRD's shipped record.
+answers and elapsed times in a text summary under `docs/validation/`, with
+local artifact hashes and one delivery-record line after acceptance passes.
 
 1. **Cold-read test** (F9.1, F9.3, F9.5). Open `sheets/*.png` for the first
    time, 60 s per sheet, name aloud what each cell is. Pass: ≥ 80 % of
@@ -1114,8 +326,10 @@ summary line in this PRD's shipped record.
 2. **Side-by-side with the artist pack** (F9.1–F9.3). A golden game's
    `auto/` sheets next to a community `mep/` pack's: every subject the
    artist drew as one figure is **addressable as one unit** in `auto/`.
-   Pass: no subject the artist treated as a unit is unreachable as a unit
-   in ours; list the exceptions.
+   Freeze the reference subjects and recorded route before evaluating.
+   Pass: every reference subject observed on that route is reachable as a unit;
+   list failures and separately list subjects the recording never reached.
+   If no compatible reference is available, mark this test not evaluated.
 
    **The unit is the pose, not the sheet cell** (amended 2026-09-12, on
    ADR-0171, which made the pose the unit of the sprite layer and the
@@ -1125,8 +339,11 @@ summary line in this PRD's shipped record.
    its own sheet — a pair of legs worn by two torsos is stored once — so a
    whole character is *always* split across `sprNNN` cells, on every pack,
    for a reason the architecture is not going to give up. A sprite subject
-   therefore passes when one `poses.json` entry covers it, reachable from
-   the sheets through ADR-0174's `poses[]`; a background subject still
+   passes only when its pose is present, selectable, exportable and paintable
+   as a complete unit. Record a count and named exceptions for each step;
+   a `poses[]` link alone does not prove selection. The historical 62/223
+   addressable poses versus 25/25 recorded main-character poses measured
+   different populations and cannot substitute for this check. A background subject still
    passes on the cell/object surface, where nothing forces a split, and a
    screen-resident cell passes on its `backgrounds/screenNNN.png`
    (ADR-0156, ADR-0166) — a captured screen **is** a painting surface, and
@@ -1150,28 +367,50 @@ summary line in this PRD's shipped record.
 5. **Map recognizability** (F9.2). Show `map-NNN.png` alone. Pass: the
    person points to where the game starts and traces the route they
    would take; for Excitebike, identifies the ramps and the finish line.
-6. **Nothing-lost test** (all). Identity round-trip renders every
-   captured screen pixel-exactly (automated, `headless_record`), and the
-   F5.4d coverage line reports the same tiles-with-art count before and
-   after the redesign for a 5-min play.
+6. **Three independent correctness gates** (all).
+   - **Structural:** `mep_lint.py`, kit `--verify`, and `check-coverage`
+     compare supported sheet-derived keys against a copy of the post-build,
+     pre-paint manifest. Report the key counts and excluded CHR/background
+     coverage; this does not prove visual correctness.
+   - **Untouched identity:** replay the same ROM/state/input/frame sequence
+     with the original pack and an unpainted rebuild, on the same binary and
+     rendering settings. Compare every sampled game frame pixel-exactly;
+     record frame numbers and hashes. A missing baseline is not a pass.
+   - **Paint application:** apply a known asymmetric edit, rebuild and replay.
+     Check every tile of the selected figure, including shared-key ownership,
+     mirrored orientations and a nonmatching condition's fallback. Compare
+     expected edited regions and require pixels outside the declared affected
+     key instances to remain unchanged. No source or `hires.txt` diagnosis is
+     allowed in the successful user path; a workaround is a failed trial.
+   Existing key checks cover only the first gate. Runtime evidence for the
+   other two is required by F9.18-V; this PRD does not claim that an automated
+   implementation of the complete protocol already exists.
+
 7. **Noise budget** (F9.1, F9.3). Count cells with count = 1 or flagged
    "unaligned"; pass when they sit in a separate `misc` sheet and make
    up < 15 % of scene cells (Zelda spike: count-1 cells were GAME OVER
    text — correct to isolate, wrong to interleave).
-8. **AI blind A/B** (F9.6 only). Five screens, artist pack vs AI repaint,
-   unlabelled; three reviewers. Pass to keep the slice: the AI output is
-   preferred or tied on ≥ 2 of 5 screens **and** fails seam test 4 on
-   none; any visible alpha loss on sprites fails the slice regardless.
-   **Generative arm retired.** ADR-0192 superseded ADR-0154 §2 Option A on
-   2026-09-15 because the `diffusion` generation path had never executed.
-   This test is no longer blocked on installing a local diffusion stack and
-   is not a release gate. If scheduled, it compares the supported
-   `classical` backend with `passthrough`; reopening generative repaint first
-   requires the measured run and new/amended ADR that ADR-0192 specifies.
+8. **Optional classical A/B** (F9.6, ADR-0192). Compare `classical` with
+   `passthrough` on five identical source screens at the same display size,
+   with labels hidden from three reviewers. Record each vote; a screen is
+   preferred/tied when at least two reviewers rate it that way. Positive
+   result: classical preferred/tied on at least two screens, no seam failure
+   and no alpha loss. A negative result is reported, not a release blocker.
+   This does not evaluate AI generation. Reopening diffusion requires the
+   measured run and new/amended ADR specified by ADR-0192.
 
-Tests 3, 4 and 6 have automatable halves (rebuild, headless run, diff)
-that go into `make doc-checks`/`scripts/test_mep_build.py`; the judgement
-calls (1, 2, 5, 7, 8) stay human and are repeated per golden game.
+**Evidence and completion.** Structural suites, independent agent workflow
+runs and human usability panels are three different evidence classes. Every
+result names its class, binary commit/hash, input hashes, commands, sampled
+frames, duration, exceptions and pass/fail/not-evaluated verdict per criterion.
+Text summaries belong in `docs/validation/`; ROM-derived assets stay local in
+`runs/`, with hashes in the summary. Tests 3/4/6 have automatable portions;
+a green suite is not a claim that the human tests ran. C.5 remains a completed
+proxy experiment. F9.18 requires a human who did not build the feature; a
+fresh agent cannot fill that role. A real external-user repeat of C.5 remains
+out of scope. The under-one-hour publishable-pack promise remains unvalidated
+until the complete documented path, including packaging/lint and on-screen
+paint verification, succeeds without undocumented repairs.
 
 #### Phase 10 — LLM-assisted skin studio (feasibility spikes first)
 
@@ -1180,8 +419,8 @@ the same day after review** into the feasibility spikes below. **No product
 slice exists**; only the spikes ran. Nothing in this section is a decision: no module layout, sidecar
 format, tool contract, storage location, provider or emulator entry point
 is fixed here. **S10.c/S10.d shipped 2026-09-09; S10.a ran the same day and
-failed** — its premise ("every pose the recorder saw") is not reachable from
-today's sidecars. The user took that decision on 2026-09-11: **ADR-0170 is
+failed** — its premise ("every pose the recorder saw") was not reachable from
+the sidecars available then. The user took that decision on 2026-09-11: **ADR-0170 is
 accepted and shipped as F9.19** (§3) — the recorder now writes pose
 membership — and **S10.a was re-measured the same day and passes at 100 %**
 (25 of 25 of a character's poses, against >= 80 %; §3). ADR-0170 was
@@ -1232,60 +471,25 @@ what the spikes measure.
 - Provenance is disclosure, not a gate (ADR-0154 §3, MEP v1.6 `generated`).
 - GB/SMS only after NES passes.
 
-**Gaps found in review (2026-09-09) that the spikes must answer.**
-1. **Pose membership was absent from the data.** The 2026-09-09 review found
-   that a `sprNNN` group spanned several poses and the pack recorded only
-   pairwise tile totals. ADR-0170/F9.19 subsequently added `poses.json`, and
-   the S10.a rerun passed at 100 %. ADR-0168 is superseded by ADR-0171. This
-   gap is closed; it remains here as the premise and result of the spike.
-2. **Layout fidelity of a hosted image model is unmeasured.** Whether a
-   generated image keeps a contact sheet's cells in place, leaves gutters
-   clean and returns alpha (assume not — ADR-0154 §7) is unknown.
-   Chroma-key plus silhouette intersection is a hypothesis to measure, not
-   a rule to specify.
-3. **Export leaks local data and drops the label.** `mep_build.py pack`
-   zips every file under the folder (`folder.rglob("*")`) and rewrites
-   `pack.json` carrying over only `patches`/`crc32`/`md5` — so anything
-   stored under `mep/` (transcripts, candidates, egress logs) ships with
-   the pack, and a root `generated` object is lost on export. Studio data
-   must not live under `mep/`, and `mep_build.py pack` must carry
-   `generated` — a fix worth making now, independent of the phase.
-4. **There is no reverse channel to the emulator.** ADR-0169 is one-way:
-   producers publish, the viewer never sends. "Save state → power-cycle →
-   restore" from an external tool is a new interop surface plus an
-   ADR-0169 amendment, not "the existing interop".
-5. **The identity test does not apply to a painted pack.**
-   `scripts/test_mep_build.py`'s identity round-trip is pixel-exact for
-   untouched sheets; a skin changes pixels by definition. The "nothing
-   broken" check for a generated pack is *key/coverage preservation* —
-   every tile the recorder keyed still resolves, F5.4d count unchanged —
-   and that test does not exist yet.
+**Remaining feasibility questions.** Pose membership exists (S10.a), but
+complete subject selection/export/painting must be measured separately under
+Phase 9. S10.c preserves `generated`; studio data stays outside the pack tree.
+S10.d provides structural sheet-key coverage, not visual acceptance. Hosted
+layout fidelity is S10.b. A reverse channel is still a new decision under
+ADR-0169, justified only if headless preview is insufficient.
 
-**Provider facts (ai.google.dev, read 2026-09-09 — configuration, not
-decisions; they churn).** Image models: `gemini-3.1-flash-lite-image` (1K
-only), `gemini-3.1-flash-image` (0.5K–4K; $0.067 per 1K image, $0.101 per
-2K), `gemini-3-pro-image` (1K/2K $0.134; adds style references),
-`gemini-2.5-flash-image` (legacy). Interactions API: key in the
-`x-goog-api-key` header, `response_format {type: "image", mime_type,
-aspect_ratio, image_size}`, `previous_interaction_id` for multi-turn
-(tools, system instruction and generation config are re-sent each turn);
-Gemini 3 text models combine function calling (`tool_choice
-auto|any|none|validated`) with structured output. Image models have **no
-free tier**; paid-tier prompts are not used for product improvement. Every
-image carries a SynthID watermark. Keys: new AI Studio keys are
-service-account-bound "auth keys"; unrestricted standard keys are already
-rejected and **all** standard keys stop working in September 2026. Not
-documented anywhere, hence spikes: alpha output, pixel-exact layout
-preservation, per-model rate limits.
+Provider/model identifiers, prices, authentication and data handling must be
+verified against the provider's current official documentation immediately
+before S10.b and recorded with the experiment. They are not durable PRD
+requirements.
+
 
 | Spike | Question | Pass / fail | Feeds |
 |---|---|---|---|
-| S10.a | **Can poses be separated from a recorded pack?** Run the ADR-0168 walk on fresh Mega Man 3 and Contra recordings; count poses recovered as distinct figures against poses visible in `sprites.png`. If the walk fails, prototype recording OAM co-occurrence per frame in the bootstrap and re-measure | ≥ 80 % of a main character's poses as distinct figures, HUD excluded — else the recorder change is the prerequisite and goes first | ADR-0168 (accept / supersede); a recorder ADR if pose membership is needed — **measured 2026-09-09: FAIL.** Fresh 300 s recordings of both games, poses counted off ADR-0169's live OAM channel: 1/15 Mega Man poses and 6/57 Contra poses recovered as distinct figures (6.7 % / 10.5 %), and 0/15 resp. 3/57 poses fit entirely inside one `sprNNN`. The cause is not the cross-pose stacking ADR-0168 §3 blames (its guard fires on 1 of 45 groups) but **under-grouping**: ADR-0153 §2's 0.80 test drops every edge from a tile that moves between poses. ADR-0168 amended in place with the evidence (still `proposed`); the recorder change is the prerequisite and is written up as `proposed` ADR-0170 — the OAM stream is already in memory at save time (`_oamFrames`), so it costs one sidecar, no new capture. Evidence: `runs/s10a-shared/S10a-summary.json`. **Re-measured 2026-09-11 on the F9.19 binary: PASS at 100 %** (25 of 25 of the main character's poses present in `poses.json`, 68 of 72 of every ground-truth pose), so the prerequisite this row asked for exists and the spike's question is answered — evidence `runs/s10a-rerun/S10a-rerun-summary.json` |
 | S10.b | **Does a hosted image model preserve a contact sheet?** One subject sheet on a chroma backdrop, 1K and 2K, three prompts; measure per-cell displacement, gutter ink, whether alpha comes back, silhouette growth, cost, latency. **Run by hand, by the user, from their own account**, with the files to be sent listed before sending; nothing in the repo automates it | cells within ±1 px at 1x and gutters clean on ≥ 2 of 3 runs — else per-cell or per-row generation is the only path and the cost model changes | the BYOK/egress ADR (amends ADR-0154 §2/§4, or declines to) |
-| S10.c | **Keep `generated`, keep local data out.** `mep_build.py pack` carries the root `generated` object across a rebuild; a fixture with a non-pack subfolder shows what the zip contains | `test_mep_build.py` cases, one per behavior | `mep_build.py` fix — do now, needed by F9.6 too — **done 2026-09-09** (§3); the exclusion half is documented, not implemented: it would be new policy, and the PRD's own rule (studio data outside the pack folder) is the fix |
-| S10.d | **Coverage-preservation check for a painted pack.** Every tile key of the pack's own post-`build` `hires.txt` still resolves after a repaint; F5.4d count unchanged | a `test_mep_build.py` / `headless_record` case a skinned pack passes and a pack with a dropped key fails | the validation rule for any generated pack (F9.6 test 8 too) — **done 2026-09-09** (§3) as `mep_build.py check-coverage`; strictness open (equality vs. "must not shrink") for the ADR this feeds. **Baseline narrowed 2026-09-14 (#218):** the check compares only the keys `build` re-derives, i.e. those a `textures/sheets/` image claims, so the *recorder's* raw `hires.txt` — which keys every CHR tile it saw out of `textures/chr/` (ADR-0043) — is refused rather than reported as a drop on an untouched pack. The baseline is a copy of the manifest taken after a `build` and before the repaint |
 
-**After the spikes.** If S10.a and S10.b pass, write the ADRs — one
+**After the spikes.** S10.a is complete. If S10.b passes, record Phase 9
+selection/export/paint evidence before promising a whole-subject studio, then write the ADRs — one
 decision each, by hand, via `/adr`: (i) whether and how a player's own key
 may send ROM-derived crops to a hosted model (amending ADR-0154 §2/§4, or
 not); (ii) the subject model and where studio data lives (outside `mep/`);
@@ -1333,151 +537,41 @@ harness problem, solved several ways, in readable code.
 | 21 empty mirrors; ~6 mutually redundant localisation forks; WonderSwan / GBA / SNES / Mega Drive / packaging forks | — | **None.** Off-product consoles or no content | Not planned |
 
 
-#### Phase 11 — Consolidation: gate, register, release, first external artist
+#### Phase 11 — Consolidation
 
-**Status:** proposed 2026-09-14 by the roadmap review of the same day,
-**accepted 2026-09-14 by the user, all eight slices** ("me ajude a decidir"
-→ C.1–C.8 selected), in the order §5 gives: C.1 → C.3 → C.2, then C.4 →
-C.5, with C.6–C.8 after C.5 reports. **C.1–C.8 shipped 2026-09-14/15** (record
-in §3); Phase 11 live table has no remaining C.* rows. No ADR is needed for
-C.2, C.3 and C.4; C.1 amends a CI contract (ADR-0131 / `.github/AGENTS.md`),
-C.7 amends the LOC guard (ADR-0137), and C.8 closes debts other ADRs left
-open (ADR-0192 supersedes 0154 §2 Option A).
+**Status:** C.1–C.8 completed 2026-09-14/15; results in §3. C.5 completion
+means the independent-agent experiment ran and its defects were recorded,
+not that human usability or the full painting promise passed.
 
-**Problem — measured on 2026-09-14.** The fork carries 653 commits and
-+111 k lines against the frozen `master`, 98 ADRs and 96 slice ids in
-20 days, with **40 PRs merged in 53 hours** at a median of ~500 lines each.
-Decision quality kept up (two ADRs killed by measurement, two that corrected
-their own thesis); the *documents* and the *gate* did not:
-
-- **The gate no longer compiles.** Since #230 the only required-by-habit
-  check is `make doc-checks`; `unit-tests.yml` and `tests.yml` still trigger
-  on PRs but nothing requires them (no branch protection, no ruleset). The
-  Python suite — 36 `scripts/test_*.py`, 287 tests, 43 shared modules — is
-  run by **no** workflow, and `test_mep_nested_zip.py` already fails on
-  `main`. The warning flags that caught the `tileNearby` bug twice on the
-  day they were switched off are `/W4 /WX` and `-Werror`.
-- **The roadmap lagged the code.** Before this revision: header dated
-  2026-09-09, three shipped rows still in the Phase 9 table, F9.28 in an ADR
-  but in no table, ADR-0176/0187–0190 absent from §6, ADR-0161/0162 listed
-  as `proposed` a week after acceptance, and §7's "not shipped until two
-  golden games are logged" contradicted by §3. At least four ADR Status
-  lines say "uncommitted" / "not yet in the code" / "being built" for work
-  that is on `main` (0169, 0170, 0171, 0186).
-- **Boards and catalog drifted.** 16 packs accepted on the board, 11 in
-  `docs/community-packs.json` (#207–#211 missing since 2026-09-06); 8 items
-  in "Inválido" and zero `pack:invalid` labels; #196 closed but "Doing";
-  #238/#239 filed but not on the bug board; Size never set on 40 items.
-- **No one outside has used it.** 1 star, 0 forks, 66 of 66 issues and
-  41 of 41 PRs by the maintainer; all 24 pack submissions were opened by
-  the maintainer curating third-party packs. No binary release exists
-  (`media-v1` and a test fixture only), so trying the fork means building
-  it. Every Phase 9 panel so far was a proxy or a person who had seen the
-  code — the meta-goal ("the best tool for the artist", faster than a
-  spreadsheet on day one) has no measurement yet.
-- **Files grew past the guard.** Six fork files exceed 1 500 lines
-  (`HdPackBuilder.cpp` 1 978, `artist_chr_kit.py` 1 762, `mep_build.py`
-  1 661, `sheet_repaint.py` 1 591, `core_unit_tests.cpp` 6 839); the
-  200-line guard covers four unrelated files. `scripts/` is 120 flat
-  modules with no `requirements.txt`; dependency pins live only in
-  `checks.yml`.
-- **Rule drift.** ADR-0189 and ADR-0190 were accepted and implemented in
-  the same turn, against the `CLAUDE.md` of the day. Resolved 2026-09-14 by
-  relaxing the rule in writing (see §7) rather than by a third precedent.
-
-**Principles.** Restore trust before adding surface: every slice below is
-either cheap and mechanical (C.1–C.3, C.7) or the first contact with a real
-user (C.4–C.6). No new emulator feature ships under this phase.
-
-Phase 11 consolidation is complete: every C.1–C.8 row has been deleted into
-§3. What remains of the broader roadmap outside this phase is unchanged
-(F9.18 human panel, F9.25 second-pass recordings, S10.b, Part B).
-
-**The C.5 evaluator — profile, sandbox, prompt, log.**
-
-*Profile the session plays.* A NES pixel artist who has shipped two HD
-packs by hand-editing `hires.txt` next to a spreadsheet, owns the ROMs, has
-never seen this fork, and gives up on a tool that is slower than the
-spreadsheet on day one. Not a programmer: reading source code to get
-unstuck counts as a failure of the guide, and is logged as such.
-
-*Sandbox — what the session may see.* Exactly: the release binary from
-C.4 (unpacked, not built), `docs/remastering-a-game.md`,
-`docs/hd-pack-authoring.md`, `docs/enhancement-ecosystem.md`, the ROM
-library, and a paint tool. **Not**: the repository checkout, `docs/adr/`,
-this PRD, `scripts/*.py` source (the scripts ship with the release and are
-run, never read), the memory directory, or any session transcript. The
-run is dispatched as a fresh agent (`Agent`, `subagent_type` other than
-`fork`, model `fable`) so no conversation context leaks in; the prompt below
-is the whole briefing. Reading anything outside the sandbox is allowed but
-is logged as a **stop**, with the question the guide failed to answer.
-
-*The "paint" step.* The evaluator cannot draw. It applies one visible,
-deterministic edit to one figure's PNG with the paint tool the release
-documents (a hue shift or an outline on a single pose is enough); what is
-being measured is whether the surface tells it *which* PNG and *where*,
-and whether the edit comes back on screen through `build` and a play run —
-not the art.
-
-*Games.* Two runs. One CHR RAM game (Contra, Zelda, Metroid) so the stage
-panorama is exercised, one CHR ROM game (Mega Man 3, Zelda II) so the
-guide's "what a CHR ROM game cannot do" line is tested cold. The evaluator
-picks within each class.
-
-*Prompt (verbatim, en-US, the entire briefing):*
-
-> You are a NES pixel artist. You have shipped two HD packs by hand-editing
-> `hires.txt` with a spreadsheet beside you, and you are trying MesenCE for
-> the first time. In the folder `<release>` is the emulator and its tools;
-> `<docs>` holds three guides — start with `remastering-a-game.md`. Your
-> ROMs are in `<roms>`. Goal: within one hour, record `<game>`, find one
-> figure you recognize, repaint it in a visible way, build the pack, and
-> see it on screen. Keep a log as you go, one line per step with the clock
-> time: what you ran, what you saw, every time you had to stop and look for
-> an answer the guide did not give (say where you looked). Do not read the
-> tools' source code; if you feel you must, log it as a stop and then do it.
-> At the end write, in five lines: elapsed time per stage of the guide's
-> table, the number of stops, whether the repainted figure appeared, and
-> whether you would use this over your spreadsheet — and why, in one
-> sentence.
-
-*Log.* `docs/validation/c5-fable-artist-run-<game>-<date>.md`: the
-evaluator's log verbatim, the six stage times, the stop list, sections 2
-and 3 of the Phase 9 panel filled from the log by the dispatcher, the
-verdict, and a "defects filed" list (each stop becomes an issue or a guide
-fix in the same PR). No ROM-derived image in the repo; screenshots stay in
-`runs/`.
-
-*Pass.* Both games: pack lint-clean, figure on screen, under one hour,
-verdict "yes". One game failing is a C.5 **fail** and reopens the guide,
-not the criterion. The two logs become one §3 line.
-
-**Non-goals.** New recorder drivers, new sidecar fields, new condition
-types, Phase 10 product work. Telemetry stays out (§7 "Scope explosion");
-C.5's log is the evaluator's own words, edited only for the ROM-art rule.
+The two preserved C.5 logs are the experiment's evidence. Both skipped reference
+coverage measurement; both found a visible edit within one hour, but the
+painting workflow required manifest diagnosis and exposed incomplete output.
+Their original verdicts remain historical observations. F9.18-V owns current-
+binary verification of those findings, and F9.18 owns human acceptance.
+No completed C.* execution plan remains here; its briefing and history are
+available in git and the logs.
 
 ### 5. Order of execution
 
-Rewritten 2026-09-14 by the roadmap review; the chronology it replaced
-(F9.19–F9.23, the Contra stage recordings, the Phase 10 spikes) is in §3
-and in git history.
+1. **F9.18-V:** establish current-binary correctness of the documented painting
+   path on CHR RAM and CHR ROM. Fix any reproduced defect in a separately scoped
+   task before rerunning the affected criterion. Do not reopen fixed issues on
+   the strength of the old C.5 logs alone.
+2. **F9.18:** after F9.18-V passes, run the independent human panel and record
+   all applicable criteria. C.5's agent runs cannot satisfy this gate.
+3. **F9.25:** reconcile the bounded Contra matrix; perform only missing runs.
+   This can proceed independently of the panel, but its artifacts must identify
+   the binary used and the allowed donor surfaces.
+4. **Part B P.1-local:** complete the accepted local identity requirement with
+   cache invalidation and local/catalog deduplication acceptance.
+5. **S10.b:** the user runs the scoped hosted-model experiment; its results feed
+   an egress/provider ADR or a recorded decision to defer. Whole-subject product
+   work additionally depends on Phase 9 selection/export/paint evidence.
+6. **Manual/hardware residue:** native picker, audio listening, physical input
+   and optional classical A/B when their prerequisites are available.
 
-1. ~~Phase 6 · H1–H10 · Phase 5 · D1–D13 · input tester · Phase 7 · Phase 8
-   · Phase 9 F9.0–F9.17, F9.19–F9.20, F9.22–F9.29 · Phase 10 S10.a/c/d~~ —
-   shipped (§3).
-2. ~~Phase 11 C.1–C.8~~ — shipped 2026-09-14/15; the gate, register,
-   release, external-artist proxy runs, second reference pack, size/pin
-   guardrails and ADR debts are recorded in §3.
-3. **Phase 9 F9.18** human panel (sections 2 and 3, on a pack recorded on the
-   current binary) and **F9.25** per-stage second passes. F9.18 is the only
-   Phase 9 item that needs a person. The completed C.5 proxy runs do not
-   satisfy it: the Phase 9 contract requires a person, not an agent persona.
-4. **Phase 10 S10.b**, by the user, from their own account; then the
-   BYOK/egress ADR it feeds, or a line here saying the spike declined it.
-5. **Manual/hardware residue**, opportunistically: F6.5 file-picker step,
-   Phase 5 listening pass, and input tester with a pad. Phase 9 validation
-   test 8 is optional and, under ADR-0192, compares `classical` with
-   `passthrough`; it no longer waits on a local diffusion stack.
+One implementation slice per task; architecture changes still require their
+ADR. This documentation update records work and acceptance, not completed runs.
 
 ### 6. ADR map
 
@@ -1512,12 +606,12 @@ files and in §3.
 | 0181 | accepted (2026-09-12); §1–§3 shipped | the retained frame keeps the controller state of both ports and `poses.json` reports what the run exercised (`input.held`, `input.never`); §3 attributes a cycle's `driver` by interruption (a release on the port stops it within 12 f on >= 2/3 of >= 4 windows), shipped as F9.23 (2026-09-13) with per-game probe scripts |
 | 0182 | accepted (2026-09-13) | per-stage recording coverage is judged by the mechanisms the states exercise, not by stages played; Contra stops at `stage4-boss`, F9.22 closed, a further stage needs a measurement that names it |
 | 0183 | accepted (2026-09-13) | a recording produces an **artist kit** of four surfaces (figure grids, named scenery, stage maps, completed pattern pages), generated as a projection over the recorded pack, reading order included; evidence and inference are never confused (`seen: false`), and a surface counts as delivered only when the pack rebuilds with the same `(tileData, palette)` key set |
-| 0184 | accepted (2026-09-13) | a recording may carry a cheat only as a **RAM-address** code (`NesCustom`, address below `$0800`), never a PRG patch — a Game Genie code is PRG-space by construction and a CHR RAM game unpacks its tiles out of PRG; a cheated run is a second pass that feeds only the background surfaces (stage maps, pattern pages), because the barrier sprite and the swapped palette reach the figure grids and not the panorama |
-| 0185 | accepted (2026-09-14); shipped | a **published TAS movie** is an admissible recording driver when it matches our ROM byte for byte: it is input, never evidence, so a movie-driven run is a *clean* run for all four kit surfaces. `.fm2` is converted outside the Core by `scripts/fm2_to_bk2.py` (the Core keeps `.bk2`/`.mmo` and has no `.fm2` reader); the harness refuses a movie the Core silently dropped; sync is proven only by recording strictly more keys than the movie-less run. Contra is the one game it does not help — every modern publication runs the Japanese VRC2 cartridge. |
-| 0186 | accepted (2026-09-14) | a recording also yields a **code/data map**, and the only ROM we disassemble is the part we executed. The CPU performs the code/data separation and the offset is absolute, so two of static analysis's three walls fall by construction; the third, naming, stays human. Coverage accumulates by union and a run that logs nothing fails loudly. §4 is the load-bearing clause: access is not meaning, so a large untouched-by-code data run is reported as a *candidate* with offset and bank and never with a name. Amended the same day: the art-coverage justification is withdrawn; this is program analysis. | F9.27 |
+| 0184 | accepted (2026-09-13) | a recording may carry a cheat only as a **RAM-address** code (`NesCustom`, address below `$0800`), never a PRG patch — a Game Genie code is PRG-space by construction and a CHR RAM game unpacks its tiles out of PRG; coverage cheats feed only stage maps/pattern pages; the amended navigation mode may feed all four surfaces when its clean-control evidence passes |
+| 0185 | accepted (2026-09-14); shipped | a **published TAS movie** is an admissible recording driver when it matches our ROM byte for byte: it is input, never evidence, so a movie-driven run is a *clean* run for all four kit surfaces. `.fm2` is converted outside the Core by `scripts/fm2_to_bk2.py` (the Core keeps `.bk2`/`.mmo` and has no `.fm2` reader); the harness refuses a movie the Core silently dropped; more keys demonstrate coverage gain only. Synchronization remains unverified without independent route checkpoints (frame plus expected scene/state) through the claimed segment; a divergent checkpoint invalidates that segment even if coverage grows. Contra is the one game it does not help — every modern publication runs the Japanese VRC2 cartridge. |
+| 0186 | accepted (2026-09-14) | a recording also yields a **code/data map**, and the only ROM we disassemble is the part we executed. The CPU performs the code/data separation and the offset is absolute, so two of static analysis's three walls fall by construction; the third, naming, stays human. Coverage accumulates by union and a run that logs nothing fails loudly. §4 is the load-bearing clause: access is not meaning, so a large untouched-by-code data run is reported as a *candidate* with offset and bank and never with a name. Amended the same day: the art-coverage justification is withdrawn; this is program analysis. |
 | 0187 | accepted (2026-09-14); shipped | Dropbox and MEGA are allow-listed pack hosts, each with its own fetch kind (amends 0138 §41); five-way mirror drift check shipped as Phase 11 C.8 (`verify_pack_host_allowlist_drift.py`) |
 | 0192 | accepted (2026-09-15); shipped | Generative repaint backend retired until measured (supersedes 0154 §2 Option A; Phase 11 C.8) |
-| 0188 | accepted (2026-09-14); shipped as F9.28 | an AI judges a rendered surface; its judgement is a **proposal** that becomes evidence only through a human `promote` — the judging half of AI in this project, ADR-0170 being the generative half |
+| 0188 | accepted (2026-09-14); shipped as F9.28 | an AI judges a rendered surface; its judgement is a **proposal** that becomes evidence only through a human `promote` — the judging half of AI in this project; ADR-0154/0192 govern the repaint half |
 | 0189 | accepted (2026-09-14); implemented in the same change | a sprite-group edge is serialized as a `spriteNearby` condition and a conditioned tile always keeps a bare twin; defers `frameRange`, `tileAtPosition`, `memoryCheckConstant` |
 | 0190 | accepted (2026-09-14); implemented in the same change | `tileNearby` auto-attached from a directed co-occurrence table gated on both-ways frame support; removes `tileNearby` from 0189 §4's deferrals |
 | 0191 | accepted (2026-09-14); implemented in the same change | CI compiles **Linux only**: `tests.yml` (Windows MSBuild + `PGOHelper citests`, not reproducible on Linux) deleted, `unit-tests.yml` folded into `checks.yml` as `ui-tests`/`headless-ui-tests` and deleted, `build.yml` trimmed to its Linux/AppImage legs. The macOS Apple Silicon binary is built locally by `make release-macos` (C.4) and Windows is retired from CI, so MSVC-only breakage is caught only when it returns. Amends ADR-0131 (the unit-test contract moves to `checks.yml`) and drops C.1's "Windows `tests.yml` job" from the required checks |
@@ -1536,7 +630,7 @@ files and in §3.
 | Scope explosion | phases independent; GitHub is the only backend; no telemetry |
 | Phase 10 sends ROM-derived art to a hosted model | only S10.b does, by hand, by the user, from their own account, with the files listed first; no tool in the repo automates a hosted call until an ADR reopens ADR-0192 and amends ADR-0154's remaining local-only contract |
 | Phase 10 spikes read as a product plan | the section names no modules, formats or product slices; ADRs are written after S10.a/S10.b report numbers |
-| Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. From F9.18 on, and for Phase 11 C.5, it is enforced: a slice that changes what the artist sees is not "shipped" until a person who did not build it logs the cold-read / find-and-edit rows |
+| Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. For F9.18 it is enforced; C.5 is a completed proxy experiment, not human acceptance: a slice that changes what the artist sees is not "shipped" until a person who did not build it logs the cold-read / find-and-edit rows |
 | The PR gate regresses and stops compiling the Core or running the Python suite | Phase 11 C.1 shipped both as jobs in `.github/workflows/checks.yml`; its verifier protects the workflow contract, while local runs remain required when CI is unavailable |
 | The roadmap and the ADR Status lines drift behind `main` (three shipped rows in a live table, four "not yet in code" ADRs for shipped code, ADR ids missing from §6 — all found 2026-09-14) | Phase 11 C.2: a `doc-checks` script fails on a `shipped` row in a live table; ADR Status-line edits listed per PR; this file's header date is part of "done" (§ Process) |
 | An ADR is accepted and implemented in the same turn (ADR-0189, ADR-0190) | Rule relaxed by the user on 2026-09-14 and written into `CLAUDE.md`: same-turn implementation is allowed when the change ships with unit tests covering the decision and the go-ahead is quoted in the ADR Status line **and** the PR body; otherwise accepting stays a request for work |
@@ -1554,9 +648,9 @@ files and in §3.
 
 ## Part B — Player shell (default GUI)
 
-**Status:** **Phase 7 shipped — P.0–P.7** (2026-08-28 → 2026-09-01; record
-in Part A §3). Product text of §3–§6 accepted by the user 2026-08-28. Manual
-residue: the native file picker (F6.5) only — the letterbox fit was closed
+**Status:** **Phase 7 delivered with local-identity debt — P.1-local open** (2026-08-28 → 2026-09-01; record
+in Part A §3). Product text of §3–§6 accepted by the user 2026-08-28. Remaining implementation: P.1-local (§8). Manual
+residue: the native file picker (F6.5) — the letterbox fit was closed
 2026-09-05 (`RendererViewportFit`, `UI.HeadlessTests/RendererLetterboxTests.cs`);
 the cards, the Player Settings tabs and the picker's arrow navigation are
 asserted by `UI.HeadlessTests/` (ADR-0150) and the aspect-ratio math by
@@ -1687,14 +781,15 @@ recipe when one exists.
 
 Exact canonicalization (path order, which files, newline folding, zip
 entry metadata ignored, whether `pack.json` `version` is part of the
-payload) is the P.0 ADR. The product constraint is: **same loaded files
-⇒ same `content_id`; wrapper-only change ⇒ same `content_id`; any
-loaded-file change ⇒ new `content_id`.** Recommendation for the ADR:
+payload) is the P.0 ADR. The product constraint is: **for tree-form identity, equal canonical payloads produce equal ids and
+wrapper-only changes do not change the id. Recipe identity also includes the
+recipe and declared dependency digests; it is not byte equality of installed
+output (ADR-0139).** Recommendation for the ADR:
 hash payload files, not the `version` string, so a label-only bump is not
 a new revision.
 
-`content_id` answers: *are these two artifacts the same bytes the
-emulator will play?* It does **not** answer: *is this Contra80s 1.2 or a
+`content_id` answers whether two canonical trees, or two recipe-input
+composites, are equal under ADR-0139. It does **not** answer: *is this Contra80s 1.2 or a
 different Contra pack?*
 
 The algorithm has **two implementations, one normative reference**, like
@@ -1728,7 +823,7 @@ Stable across revisions. Source, first match wins:
    `local:<container-name>` (the ADR-0040/0049 discovery key). Two local
    containers with the same `content_id` are one pack (§5). A local
    container whose `content_id` equals a catalog entry's is that catalog
-   `pack_id`, not a second choice. The local `content_id` is computed
+   `pack_id`, not a second choice. The required local `content_id` cache (**not implemented; P.1-local**) computes it
    **once** and cached under `EnhancementPacks/.cache/` keyed by the
    container's path + size + mtime (recomputed only when those change);
    it is never computed on the synchronous ROM-load path. Until the cache
@@ -1925,7 +1020,8 @@ which container is the chosen one.
 whose `content_id` equals the pack already chosen for this ROM is the same
 pack, not a second choice. A local container with a different
 `content_id` and no `id` joins the picker as `local:<container-name>`
-(§3.3 rule 4). The merge only works for packs whose `content_id` is a
+(§3.3 rule 4). This merge requires a populated identity; stamp-less local drops currently
+remain separate until P.1-local is implemented. The merge only works for packs whose `content_id` is a
 tree hash: the *output* folder of a recipe install copied elsewhere
 without its `.mep-install.json` cannot be re-associated with the catalog
 row (§3.2 — the recipe composite is never derived from the output tree);
@@ -2028,25 +1124,19 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-Architecture slices need their ADR accepted first. All eight shipped;
-the one-line record is Part A §3 and the decisions are §9 below.
+P.0–P.7 implementation history is in Part A §3. P.1's local integration was
+not delivered; ADR-0139's implementation note and `ReadInstallIdentity` confirm
+that stamp-less containers currently receive no computed `content_id`.
 
-- **P.0** — ADR-0139/0140/0141 accepted (2026-08-28).
-- **P.1** — `content_id` in `scripts/` and in the Core, mep-meta +
-  `.mep-install.json`, golden parity (2026-08-29).
-- **P.2** — catalog / mep-meta / MEI identity fields, one slot per `pack_id`
-  (2026-08-29).
-- **P.3** — per-ROM preference resolver + Advanced picker (2026-08-29).
-- **P.4** — `UiMode` default rule, Player chrome, overlay, Esc precedence in
-  the shortcut config (2026-08-29).
-- **P.5** — Player pack UX: picker decision + panel, current-pack chip, apply
-  toast (2026-08-29).
-- **P.6** — §3.6 catalog update trigger wired into F6.4b; wrapper-only change
-  does not reinstall, no auto-downgrade, a removed slot keeps its install,
-  votes sort the picker (2026-08-29).
-- **P.7** — Enhancements quick-toggle panel + welcome/Continue cards, §6.1–§6.2
-  (2026-09-01); XAML wiring asserted by `UI.HeadlessTests/` (ADR-0150);
-  the letterbox fit closed 2026-09-05 (`RendererViewportFit`).
+| Slice | Deliverable | Decision |
+|---|---|---|
+| P.1-local | Integrate the accepted local-container identity requirement from §3.3 and ADR-0139/0140. Compute/cache identity off the synchronous ROM-load path, then merge equal local/catalog packs on the next load. | Open implementation debt. Acceptance: identical stamp-less folders/zips collapse; a matching catalog tree adopts its pack identity; a changed nested payload invalidates the cache and remains distinct; first load stays responsive with a cold cache. Existing recipe-output-without-stamp non-goal remains. |
+
+Before implementation, specify how a directory cache detects changes to nested
+files (directory mtime alone is insufficient) and settle any new cache trade-off
+in an ADR. Test both cold and warm behavior, malformed/unreadable containers,
+changed nested files and persisted per-ROM choices. Do not label the requirement
+shipped merely because the hash algorithm has a parity fixture.
 
 ### 9. ADR map
 
@@ -2071,7 +1161,7 @@ the one-line record is Part A §3 and the decisions are §9 below.
 | Two issues, same product, different `pack_id` fallbacks (non-GitHub hosts) | `content_id` still collapses byte-duplicates; remaining cases open the picker (safe default); documented non-goal until `id` is common |
 | Inflated `version` wins the slot | accepted trade-off (§3.6 rule 1) **within one origin**; triage warns; no auto-downgrade protects installs |
 | Third party claims an existing `pack_id` (`id` or `owner/repo` spoof) with a high `version` | origin binding (§3.3): different origin never occupies the slot; `pack:needs-review` for a human |
-| Hashing local HD trees stalls the ROM load | `content_id` of local containers cached by path+size+mtime, computed off the load path (§3.3 rule 4) |
+| Hashing local HD trees stalls the ROM load | P.1-local must implement caching off the load path and nested-file invalidation; not yet delivered (§3.3 rule 4) |
 | Overlay unusable from the couch | overlay shortcut bindable to a controller button; overlay/picker navigable by D-pad (§6) |
 | Recipe identity without dep bytes | composite in §3.2; computed at install time from the primary bytes, stored, not re-derived |
 | `scripts/` and Core hashers drift | parity fixture in P.1, same pattern as ADR-0138 §39 |
