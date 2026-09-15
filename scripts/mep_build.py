@@ -238,6 +238,69 @@ def _unflips(data: str) -> set:
     return {h.hex().upper(), v.hex().upper(), hv.hex().upper()}
 
 
+def _png_write(path: Path, bmp: "_Bitmap") -> None:
+    """Write an 8-bit RGB/RGBA PNG (filter 0) from a `_Bitmap`. Stdlib only."""
+    raw = bytearray()
+    stride = bmp.stride
+    for y in range(bmp.height):
+        raw.append(0)
+        raw += bmp.raw[y * stride:(y + 1) * stride]
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    color = 2 if bmp.channels == 3 else 6
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", bmp.width, bmp.height, 8, color, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        + chunk(b"IEND", b""))
+
+
+def _flip_bitmap_region(bmp: "_Bitmap", x: int, y: int, w: int, h: int, mirror: str) -> None:
+    """Un-bake an OAM mirror from a crop in place (#255 / ADR-0178). The run
+    time keys by the unflipped tile and mirrors the replacement art itself, so
+    a sheet cell that carried `source` + `mirror` must store unflipped pixels
+    under the source key — not the baked-flipped bitmap the kit showed."""
+    ch = bmp.channels
+    if "H" in mirror:
+        for row in range(y, y + h):
+            off = row * bmp.stride
+            for i in range(w // 2):
+                a = off + (x + i) * ch
+                b = off + (x + w - 1 - i) * ch
+                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
+                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
+    if "V" in mirror:
+        for col in range(x, x + w):
+            for i in range(h // 2):
+                a = (y + i) * bmp.stride + col * ch
+                b = (y + h - 1 - i) * bmp.stride + col * ch
+                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
+                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
+
+
+def _unflip_sheet_crops(png_path: Path, crops: list, scale: int) -> int:
+    """Apply pending mirror un-bakes to `png_path`. Returns how many crops
+    were rewritten; 0 when the PNG could not be decoded (left untouched)."""
+    if not crops:
+        return 0
+    bmp = _png_pixels(png_path)
+    if bmp is None:
+        print(f"warning: {png_path.name}: cannot rewrite mirror crops — not an "
+              f"8-bit RGB/RGBA PNG; mirrored cells keep their baked pixels",
+              file=sys.stderr)
+        return 0
+    span = 8 * scale
+    for x, y, mirror in crops:
+        if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
+            continue
+        _flip_bitmap_region(bmp, x, y, span, span, mirror)
+    _png_write(png_path, bmp)
+    return len(crops)
+
+
 def _index_token(index: int) -> str:
     """The index in the width HexUtilities::ToHex writes it — 2, 4, 6 or 8
     digits. The loader parses any width, but matching the emulator's own form
@@ -246,6 +309,27 @@ def _index_token(index: int) -> str:
         if index < (1 << (4 * digits)):
             return f"{index:0{digits}X}"
     return f"{index:08X}"
+
+
+def _condition_variants(raw_variants):
+    """(cond, rest) rows for one (tile, palette), with the unconditional
+    fallback twin ADR-0189 §3 / #256 requires. `raw_variants` is the list
+    collected from the key source, or None when the key is unknown."""
+    if not raw_variants:
+        return [("", ["1", "N"])]
+    by_cond = {}
+    for cond, rest in raw_variants:
+        by_cond.setdefault(cond, list(rest))
+    if any(c for c in by_cond) and "" not in by_cond:
+        # Recorder always writes the bare twin after each [condition] rule;
+        # synthesise it from the first conditional's trailing fields when the
+        # key source lost it (or a hand-edited manifest omitted it).
+        by_cond[""] = list(next(v for c, v in by_cond.items() if c))
+    # Conditionals first, bare twin last — matches HdPackBuilder's order and
+    # GetMatchingTile's "first passing entry" walk.
+    return sorted(by_cond.items(), key=lambda kv: (0 if kv[0] else 1, kv[0]))
+
+
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
 
 
@@ -598,19 +682,22 @@ def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, 
         idx = idx if isinstance(idx, int) and idx >= 0 else None
         # ADR-0178: the unflipped tile data, present only on an entry whose
         # shape was recorded with its OAM flips baked in. None means "never
-        # flipped, or a sidecar older than the ADR".
+        # flipped, or a sidecar older than the ADR". `mirror` is "H"/"V"/"HV"
+        # beside it — build un-bakes those pixels when it emits `source` (#255).
         src = str(entry.get("source") or "").strip().upper()
         src = src if _HEX_TILE_RE.match(src) else None
-        out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale, data, pal, edited, idx, src))
+        mirror = str(entry.get("mirror") or "").strip().upper()
+        mirror = mirror if mirror in ("H", "V", "HV") else None
+        out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
+                    data, pal, edited, idx, src, mirror))
 
 
 def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
-    """(x, y, tileData, palette, edited, index, source) for every 8x8 crop the
-    sheet resolves,
-    in sheet pixels at `scale`. `edited` says the crop's cell differs from the
-    `*.orig.png` twin, i.e. the artist actually painted it. Crops that fall
-    outside the PNG are dropped with a warning rather than emitting a tile that
-    would render transparent."""
+    """(x, y, tileData, palette, edited, index, source, mirror) for every 8x8
+    crop the sheet resolves, in sheet pixels at `scale`. `edited` says the
+    crop's cell differs from the `*.orig.png` twin, i.e. the artist actually
+    painted it. Crops that fall outside the PNG are dropped with a warning
+    rather than emitting a tile that would render transparent."""
     crops = []
     skipped = []
     per = sd.tiles_per_cell
@@ -991,19 +1078,22 @@ def cmd_build(args) -> int:
             # so its cells always count as painted and it relies on rank 0.
             entries.append(((cond, fields[1].strip().upper(), fields[2].strip().upper()), cond, fields, True))
         slots.append({
-            "rel": f"sheets/{p.name}", "rank": 0, "always": True,
+            "rel": f"sheets/{p.name}", "rank": 0, "always": True, "kind": "legacy",
             "comment": _emit_comment(f"sheets/{p.name}", cell_sizes[i]), "entries": entries,
         })
 
     # ADR-0153: the sidecar carries each crop's exact hires.txt key, so the
     # remaining <tile> fields (condition prefix, brightness, defaultTile, ...)
     # are carried over from the key source when it knows the key, and default
-    # to "1,N" for a key the bootstrap never recorded.
+    # to "1,N" for a key the bootstrap never recorded. A (data, palette) may
+    # appear under several condition prefixes — the recorder writes each
+    # conditional rule and then a bare unconditional twin (ADR-0189 §3); keep
+    # every variant so build does not drop the fallback (#256).
     keysrc_attrs = {}
     for cond, raw in tiles:
         f = [x.strip() for x in raw.split(",")]
         if len(f) >= 6:
-            keysrc_attrs.setdefault((f[1].upper(), f[2].upper()), (cond, f[5:]))
+            keysrc_attrs.setdefault((f[1].upper(), f[2].upper()), []).append((cond, f[5:]))
 
     # ADR-0172: a CHR ROM game's manifest keys every tile by its CHR index, so
     # emitting the 32-hex data form the sidecar's `tile` field carries would
@@ -1025,7 +1115,8 @@ def cmd_build(args) -> int:
         entries = []
         seen = {}
         repeats = 0
-        for x, y, data, pal, edited, index, unflipped in crops:
+        pending_unflips = []
+        for x, y, data, pal, edited, index, unflipped, mirror in crops:
             if index_keyed:
                 if index is None:
                     missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
@@ -1035,8 +1126,12 @@ def cmd_build(args) -> int:
                 # ADR-0178: the recorded bitmap has the sprite's OAM flips baked
                 # in, and the run time keys by the unflipped data - it mirrors
                 # the replacement art itself. On a data-keyed (CHR RAM) game the
-                # baked form is a key nothing ever looks up.
+                # baked form is a key nothing ever looks up. The pixels must be
+                # un-baked too (#255): storing the flipped bitmap under the
+                # source key makes the mirrored phase render garbled.
                 data = unflipped
+                if mirror:
+                    pending_unflips.append((x, y, mirror))
             elif (sd.kind in _FLIPPABLE_SHEET_KINDS
                   and (data, pal) not in keysrc_attrs
                   and any((u, pal) in keysrc_attrs for u in _unflips(data))):
@@ -1049,24 +1144,31 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
-            cond, rest = keysrc_attrs.get((data, pal), ("", ["1", "N"]))
-            key = (cond, data, pal)
-            row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)
-            at = seen.get(key)
-            if at is not None:
-                # The same metatile placed twice on one sheet: only one crop can
-                # own the key, and a painted instance beats an untouched one.
-                repeats += 1
-                if edited and not entries[at][3]:
-                    entries[at] = row
-                continue
-            seen[key] = len(entries)
-            entries.append(row)
+            variants = _condition_variants(keysrc_attrs.get((data, pal)))
+            for cond, rest in variants:
+                key = (cond, data, pal)
+                row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)
+                at = seen.get(key)
+                if at is not None:
+                    # The same metatile placed twice on one sheet: only one crop
+                    # can own the key, and a painted instance beats an untouched
+                    # one.
+                    repeats += 1
+                    if edited and not entries[at][3]:
+                        entries[at] = row
+                    continue
+                seen[key] = len(entries)
+                entries.append(row)
+        if pending_unflips:
+            n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale)
+            if n:
+                print(f"info: {sd.name}: un-baked {n} mirror crop(s) so the source "
+                      f"key stores the pixels the run time will mirror")
         if repeats:
             print(f"info: {sd.name}: {repeats} crop(s) repeat a tile key already taken by an earlier crop of the same sheet")
         rel = f"sheets/{sd.name}"
         slots.append({
-            "rel": rel, "rank": sd.rank, "always": False,
+            "rel": rel, "rank": sd.rank, "always": False, "kind": sd.kind,
             "comment": _emit_sheet_comment(rel, sd.kind, len(entries), sd.json_path.name),
             "entries": entries,
         })
@@ -1091,8 +1193,13 @@ def cmd_build(args) -> int:
     # always beats an untouched one, whatever their kinds; between two painted
     # cells - and between two untouched ones - the static rank decides, ties
     # broken by emission order (later wins). Every override is logged, so
-    # nothing silently disappears.
+    # nothing silently disappears. A painted *sprite* cell that still loses is
+    # an error (#253): figure sheets (`usrNNN`, kind sprite) are what the
+    # artist repaints, and a green build used to hide that the paint never
+    # reached the rendered figure. Map-vs-metatiles both-painted stays a
+    # logged precedence choice, not a failure.
     winner = {}
+    painted_losses = []
     for order, slot in enumerate(slots):
         for pos, entry in enumerate(slot["entries"]):
             key = entry[0]
@@ -1104,10 +1211,29 @@ def cmd_build(args) -> int:
                 if score < prev[2]:
                     lost = "untouched" if prev[2][0] and not edited else "precedence"
                     print(f"info: {slot['rel']} loses tile {key[1]}/{key[2]} to {slots[prev[0]]['rel']} ({lost})")
+                    if edited and slot.get("kind") in _FLIPPABLE_SHEET_KINDS:
+                        painted_losses.append((slot["rel"], key[1], key[2], slots[prev[0]]["rel"]))
                     continue
+                if prev[2][0] and slots[prev[0]].get("kind") in _FLIPPABLE_SHEET_KINDS:
+                    painted_losses.append((slots[prev[0]]["rel"], key[1], key[2], slot["rel"]))
                 print(f"info: {slot['rel']} overrides tile {key[1]}/{key[2]} from {slots[prev[0]]['rel']} ({why})")
             winner[key] = (order, pos, score)
     kept = {(o, p) for o, p, _s in winner.values()}
+
+    if painted_losses:
+        # Dedup (sheet, data, pal) — condition variants of the same crop share
+        # one artist decision and should not flood the report.
+        seen_loss = set()
+        for rel, data, pal, other in painted_losses:
+            sig = (rel, data, pal)
+            if sig in seen_loss:
+                continue
+            seen_loss.add(sig)
+            print(f"error: {rel}: painted tile {data}/{pal} lost to {other} — "
+                  f"the repaint cannot affect that key at run time; paint the "
+                  f"sheet that owns it, or remove the overlapping claim (#253)",
+                  file=sys.stderr)
+        return 1
 
     # HdPackLoader resolves a "[name]" prefix at the moment it reads the line
     # (ParseConditionString), so every <condition> has to stand above the first
