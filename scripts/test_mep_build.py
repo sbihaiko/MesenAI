@@ -920,6 +920,31 @@ def mirror_h_pixel_key_tests(root: Path):
     else:
         fail(f"#255: crop under source key is not the unflipped art "
              f"(first pixel got={got[0][0]:08X} want={want[0][0]:08X})")
+        return
+
+    # A second build must not flip again: un-baking mutates the PNG in place,
+    # so the sidecar has to drop source/mirror or the next pass restores the
+    # baked bitmap under the source key.
+    out2 = run("build", str(folder))
+    if out2 is None:
+        return
+    imgs2, tiles2 = parse_hires(folder / "textures" / "hires.txt")
+    if (src, PAL_HEX) not in tiles2:
+        fail("#255: source key missing after the second build")
+        return
+    img_i2, x2, y2, _f2 = tiles2[(src, PAL_HEX)]
+    got2 = crop(png_read(sheets / Path(imgs2[img_i2]).name), x2, y2, 8)
+    if got2 == want:
+        ok("#255: a second build leaves the unflipped pixels unflipped (idempotent)")
+    else:
+        fail(f"#255: second build re-flipped the crop under the source key "
+             f"(first pixel got={got2[0][0]:08X} want={want[0][0]:08X})")
+    side = json_loads((sheets / "spr000.json").read_text(encoding="utf-8"))
+    entry = side["cells"][0]["tiles"][0]
+    if entry.get("tile") == src and "source" not in entry and "mirror" not in entry:
+        ok("#255: after un-bake the sidecar is a plain unflipped tile entry")
+    else:
+        fail(f"#255: sidecar still carries mirror fields after un-bake: {entry}")
 
 
 def condition_fallback_twin_tests(root: Path):
