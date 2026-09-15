@@ -328,7 +328,10 @@ panorama extents per session and the union validation. Two results there are
 worth reading before re-deriving anything: at 300 s of effective input the
 coverage cheat buys no map extent (all three stage-1 variants stitch the
 identical 2512×240), and the navigation passes are one screen deep because the
-sweep's body script is the stage-1 route.
+sweep's body script is the stage-1 route. One question the run raised and did
+not settle is ADR-0194 (`proposed`): a kit's four surfaces union across
+recordings only where a flag defines it, so this row's figures and scenery were
+verified nine times rather than merged once.
 
 **Validation — qualitative and intuitive.** The deliverable is legibility,
 which no pixel metric captures, so each slice is judged by a fixed panel
