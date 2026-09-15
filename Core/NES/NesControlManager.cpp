@@ -212,6 +212,18 @@ uint8_t NesControlManager::GetOpenBusMask(uint8_t port)
 	}
 }
 
+void NesControlManager::ExtendDmcRead(uint16_t addr)
+{
+	uint64_t cpuCycle = _console->GetMasterClock();
+	for(shared_ptr<BaseControlDevice>& device : _controlDevices) {
+		if(device->IsConnected() && device->GetPort() == addr - 0x4016 && device->GetPreviousReadCycle() == cpuCycle) {
+			//The DMC fetch happens before the CPU executes its next cycle. Extend the
+			//same-port read suppression by one cycle, matching the NES controller bus.
+			device->SetPreviousRead(cpuCycle + 1, device->GetPreviousReadValue());
+		}
+	}
+}
+
 void NesControlManager::RemapControllerButtons()
 {
 	//Used by VS System games

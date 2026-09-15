@@ -483,15 +483,19 @@ uint8_t NesCpu::ProcessDmaRead(uint16_t addr, uint16_t& prevReadAddress, bool en
 					// Joypads stop driving the bus later than cartridge ROM, so joypad bits win on open bus.
 					_memoryManager->SetOpenBus<NesCpuBusType::External>((externalValue & obMask) | (val & ~obMask));
 
+					if(_isDmcDmaRead) {
+						((NesControlManager*)_console->GetControlManager())->ExtendDmcRead(internalAddr);
+					}
+
 					//The value seen by the CPU is the bus conflict between the driven joypad bits and the DMA read value.
 					//The DMA read may come from an address that is open bus and thus does not drive bits, which should not
 					//cause a bus conflict. However, because we read the joypad first before doing the DMA, the joypad read
 					//updated open bus, and so any open bus bits in the DMA read will match the joypad read value. So, even
 					//if we simulate a bus conflict on these bits, because they are the same, it's the same as taking the
 					//joypad's value.
-					//For this bus conflict, we keep the external value for all open bus pins on the 4016/4017 port, and we
-					//AND all other bits together
-					val = (externalValue & obMask) | ((val & ~obMask) & (externalValue & ~obMask));
+					//For this bus conflict, we keep the external value for all open bus pins on the 4016/4017 port, and use
+					//the joypad value for the driven pins.
+					val = (externalValue & obMask) | (val & ~obMask);
 				}
 				break;
 
