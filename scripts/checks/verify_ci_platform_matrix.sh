@@ -19,7 +19,9 @@
 # Windows and macOS-Apple-Silicon-only legs. `checks.yml` and every other
 # workflow stay Linux-only - section 2 below is scoped to exclude `build.yml`
 # for exactly that reason, and section 7 asserts what `build.yml` is allowed
-# to have instead.
+# to have instead. Section 8 asserts the one thing the restored Windows job
+# cannot be transcribed without: the MSBuild native-compile step that has to
+# run before `dotnet publish`.
 #
 # The ADR was accepted and implemented in the same change, so per CLAUDE.md
 # these greps ARE its unit tests: they fail the moment a workflow other than
@@ -185,8 +187,37 @@ if grep -q "MACOS_CERTIFICATE" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml's macos job signs with a Developer ID certificate; ADR-0203 §5 keeps that out of CI"
 fi
 
+# 8. ADR-0203: the Windows job must COMPILE the native interop library before
+#    it publishes. `dotnet publish` does not build MesenCore.dll, it only
+#    copies it into the publish output, so the MSBuild `-t:...UI` target has to
+#    run first. Dropping that step does not fail at compile time - it fails
+#    publish with `MSB3030: Could not copy the file ...MesenCore.dll because it
+#    was not found`, which is exactly what the first ADR-0203 run did. Both the
+#    presence and the ORDER are asserted: a publish that runs first would fail
+#    the same way.
+# Anchored on the step's own `run:` line, not on the bare command name: the
+# comment above the step explains the trap by naming `dotnet publish`, and a
+# looser match reads that comment as the publish step and reports the order
+# backwards. (Found by mutating this section, which is why it is spelled out.)
+msbuild_line="$(awk '/^[[:space:]]*run: msbuild/ {print NR; exit}' "$WORKFLOWS/build.yml")"
+publish_line="$(awk '/^[[:space:]]*run: dotnet publish/ {print NR; exit}' "$WORKFLOWS/build.yml")"
+if [ -z "$msbuild_line" ]; then
+  fail "$WORKFLOWS/build.yml has no 'run: msbuild' step; the windows job must compile the native MesenCore.dll before publishing or publish fails with MSB3030 (ADR-0203)"
+else
+  msbuild_cmd="$(awk '/^[[:space:]]*run: msbuild/ {print; exit}' "$WORKFLOWS/build.yml")"
+  case "$msbuild_cmd" in
+    *-t:*UI*) ;;
+    *) fail "$WORKFLOWS/build.yml's msbuild step does not target the UI project ('-t:...UI'); that target is what builds the native MesenCore.dll (ADR-0203)" ;;
+  esac
+  if [ -z "$publish_line" ]; then
+    fail "$WORKFLOWS/build.yml has no 'run: dotnet publish' step; the windows job would build nothing to upload (ADR-0203)"
+  elif [ "$msbuild_line" -ge "$publish_line" ]; then
+    fail "$WORKFLOWS/build.yml runs 'dotnet publish' before the msbuild native-compile step; publish only copies MesenCore.dll and fails with MSB3030 when nothing built it (ADR-0203)"
+  fi
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS: ADR-0191 (checks.yml compiles Linux only; no macOS/Windows runner outside build.yml; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run) + ADR-0203 (build.yml restores an unsigned Windows job and an Apple-Silicon-only macOS job)"
+echo "PASS: ADR-0191 (checks.yml compiles Linux only; no macOS/Windows runner outside build.yml; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run) + ADR-0203 (build.yml restores an unsigned Windows job and an Apple-Silicon-only macOS job, and the Windows job compiles the native interop library before it publishes)"
