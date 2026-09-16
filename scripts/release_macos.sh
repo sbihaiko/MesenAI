@@ -10,8 +10,9 @@
 #   out/release/mesence-tools-<version>.zip         the Python tools the guide uses
 #   out/release/SHA256SUMS                          hashes of both
 #
-# Why local and not CI: the project's CI compiles Linux only, and the macOS
-# leg of build.yml is dispatch-only and unused. The first release is therefore
+# Why local and not CI: the project's CI compiles Linux only, and build.yml has
+# no macOS leg left to run — ADR-0191 deleted it, so no trigger of that
+# workflow can produce this artifact. The first release is therefore
 # cut on a maintainer's Mac; docs/releases/mesence-v0.1.0.md says so and says
 # from which commit.
 #

@@ -20,22 +20,18 @@ name: Build Mesen
 # ADR saying why.
 
 on:
-  # TEMPORARY (2026-09-14): `push` and `pull_request` were REMOVED, so the
-  # matrix below runs only when someone dispatches it:
+  # ADR-0191 (2026-09-14) cut the matrix to the eight Linux legs below and
+  # removed both triggers. ADR-0200 (2026-09-16) restores ONE of them, the
+  # narrow one: a pull request whose BASE branch is `prod`.
+  #
   #   gh workflow run build.yml --repo sbihaiko/MesenAI --ref <branch>
   #
-  # The reason is the same one that suspended the `pull_request` trigger on
-  # 2026-09-13: the matrix was 14 jobs (two Windows publish profiles, six
-  # Linux/AppImage compiler×arch legs, four macOS legs with a codesign step),
-  # each a full LTO/AOT build, and a branch that lands three commits in an
-  # afternoon queues more runner time than the work in the commits. ADR-0191
-  # then cut it to the eight Linux legs below; the trigger stays
-  # `workflow_dispatch` regardless.
+  # `pull_request.branches` filters on the BASE branch, so a pull request
+  # opened AGAINST `prod` builds, and an ordinary one against `main` does not.
+  # The default activity types (opened, synchronize, reopened) are kept, so a
+  # push to the head branch of an open `prod` pull request rebuilds it.
   #
-  # The always-on gate did NOT go away with the triggers — it moved to
-  # `checks.yml`, which runs on every push and pull request. It had to move to
-  # another file rather than becoming a job here, for two reasons that are both
-  # about this file's identity:
+  # `push` stays gone, for the two reasons that are this file's identity:
   #   1. nightly.link resolves the README's download links against the NEWEST
   #      run of THIS workflow on `main`. A push to `main` that ran an
   #      artifact-less job here would become that newest run and the links would
@@ -43,12 +39,20 @@ on:
   #   2. `cancel-in-progress` below is keyed on the workflow and the ref. A push
   #      to `main` while a dispatched build was running would cancel the only
   #      artifact-producing run for that ref.
-  # With the triggers gone, every run of this file is a build, so neither can
-  # happen.
+  # A `pull_request` run executes at `refs/pull/N/merge` — neither `main` nor a
+  # ref a dispatch uses — so it can do neither. That is what makes this trigger
+  # safe where `push` is not.
   #
-  # TO RESTORE THE BINARY BUILDS: put the `push`/`pull_request` blocks back
-  # under `on:` (and, if `checks.yml` is no longer wanted, delete that file).
-  # No job below is aware of the gate — there is no `if:` to remove.
+  # The always-on gate lives in `checks.yml`, not here, for those same two
+  # reasons: it runs on every push and pull request, and an artifact-less job in
+  # THIS file would supersede the run the download links resolve against.
+  #
+  # WHAT IS BUILT is unchanged by this trigger: the eight legs below are every
+  # platform this repository supports in CI. Restoring macOS or Windows is a
+  # revert of the ADR-0191 commit plus a line in that ADR, not an edit here.
+  pull_request:
+    branches:
+      - 'prod'
   workflow_dispatch:
 
 # Every job used to carry
@@ -60,14 +64,17 @@ on:
 # could not overlap, and the guard only had the effect of skipping every
 # internal pull request — including each `sync/upstream/<date>` branch the
 # upstream-sync workflow opens, which reached `main` never having been compiled
-# (#178). Removed, and moot while the only trigger is `workflow_dispatch`. If
-# `push` is ever restored, key any guard on the branch, not on the head
-# repository.
+# (#178). Removed, and never reintroduced: the trigger set is now a
+# `prod`-filtered `pull_request` plus `workflow_dispatch`, which still cannot
+# overlap. If `push` is ever restored, key any guard on the branch, not on the
+# head repository.
 
 # A second dispatch for the same ref cancels the first — no point finishing a
-# build for a revision someone else is already superseding by hand. This cannot
-# fire in response to a push any more, because a push does not trigger this
-# workflow at all.
+# build for a revision someone else is already superseding by hand. A push
+# cannot trigger this workflow at all, so this only ever fires for the two
+# remaining triggers, and a pull request groups on its own `refs/pull/N/merge`
+# ref: concurrent `prod` pull requests never cancel each other, and none of
+# them can cancel a dispatched build on `main`.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -129,7 +136,6 @@ jobs:
 
       - name: Upload Mesen
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: github.event_name != 'pull_request'
         with:
           name: Mesen (Linux - ${{ matrix.platform.os }} - ${{ matrix.compiler }})
           path: bin/linux-${{ matrix.platform.path }}/Release/linux-${{ matrix.platform.path }}/publish/Mesen
@@ -172,7 +178,6 @@ jobs:
 
       - name: Upload Mesen (AppImage)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: github.event_name != 'pull_request'
         with:
           name: Mesen (Linux ${{ matrix.platform.name }} - AppImage)
           path: Mesen.AppImage
