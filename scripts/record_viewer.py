@@ -91,11 +91,17 @@ def emulator_live_dir():
     """The convention slot the emulator's own live recorder publishes to
     (UI/Config/ConfigManager.cs: LiveRecordingFolder). Mirrors the C# rule for a
     non-portable install: HomeFolder = <MyDocuments on Windows, ApplicationData
-    elsewhere>/MesenCE, then LiveRecording/ under it. A portable emulator (a
-    settings.json beside the executable) uses that folder instead; point this
-    tool at it explicitly in that case."""
+    elsewhere>/MesenAI, then LiveRecording/ under it. The older names are still
+    consulted, newest first, because ADR-0201 adopts an existing install's
+    folder rather than moving it - a user who predates the rename keeps writing
+    to MesenCE. A portable emulator (a settings.json beside the executable)
+    uses that folder instead; point this tool at it explicitly in that case."""
     base = Path.home() / ("Library/Application Support" if sys.platform == "darwin" else "Documents")
-    return base / "MesenCE" / "LiveRecording"
+    for name in ("MesenAI", "MesenCE", "Mesen2"):
+        folder = base / name / "LiveRecording"
+        if folder.is_dir():
+            return folder
+    return base / "MesenAI" / "LiveRecording"
 
 
 def geometry_scale(width, height):
@@ -1446,7 +1452,7 @@ class RecordViewerApp:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="MesenCE live recording viewer (ADR-0169) — watch the "
+        description="MesenAI live recording viewer (ADR-0169) — watch the "
                     "emulator's live recording, or a headless run, without "
                     "touching the run (read-only)")
     ap.add_argument("live_dir", nargs="?", default=None,

@@ -92,7 +92,9 @@ out of scope here, and the reason Part B exists.
   bare `.ogg` fails the install with `not a valid zip archive`. Its content is
   irrelevant, its sha256 is not.
 - Paths used below (macOS):
-  - Mesen home: `~/Library/Application Support/MesenCE`
+  - Mesen home: `~/Library/Application Support/MesenAI` — a fresh install
+    (ADR-0201); an install that predates the rename stays in `…/MesenCE`, so
+    check both before concluding a path is wrong
   - log: `<home>/mesen.log` (previous session rotated to `mesen.log.1`)
   - downloads cache: `<home>/EnhancementPacks/.cache/downloads/`
   - catalog cache: `<home>/EnhancementPacks/.cache/community-packs.json`

@@ -42,7 +42,8 @@
 #                          (No-Intro PRG+CHR sha1 vs the row's rom.sha1/sha1s)
 #   --app <Mesen.app>      app bundle (default: the Release publish output)
 #   --home <dir>           Mesen home folder holding mesen.log (default:
-#                          ~/Library/Application Support/MesenCE)
+#                          ~/Library/Application Support/MesenAI, or the
+#                          MesenCE/Mesen2 folder an older install still uses)
 #   --seconds N            how long to leave the client running (default 40)
 #   --expect <verdict>     fail unless the observed verdict equals this
 #   --no-launch            catalog phase only: resolve the live row for the
@@ -65,7 +66,18 @@ PY="${PYTHON:-python3}"
 CATALOG_URL="https://raw.githubusercontent.com/sbihaiko/MesenAI/main/docs/community-packs.json"
 
 APP="$REPO_ROOT/bin/osx-arm64/Release/osx-arm64/publish/Mesen.app"
-HOME_FOLDER="$HOME/Library/Application Support/MesenCE"
+#ADR-0201: the folder is MesenAI since the rename. An install that predates it
+#still runs out of MesenCE (or Mesen2), and ConfigManager adopts that folder
+#rather than moving it - so the first of the three that exists is the one to
+#read. An explicit --home below still wins over this.
+HOME_FOLDER=""
+for candidate in MesenAI MesenCE Mesen2; do
+  if [[ -d "$HOME/Library/Application Support/$candidate" ]]; then
+    HOME_FOLDER="$HOME/Library/Application Support/$candidate"
+    break
+  fi
+done
+HOME_FOLDER="${HOME_FOLDER:-$HOME/Library/Application Support/MesenAI}"
 RUN_SECONDS=40
 EXPECT=""
 NO_LAUNCH=0
