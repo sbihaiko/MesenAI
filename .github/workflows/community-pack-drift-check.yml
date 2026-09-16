@@ -179,5 +179,6 @@ jobs:
       mode: revalidate
     secrets:
       PROJECT_PAT: ${{ secrets.PROJECT_PAT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

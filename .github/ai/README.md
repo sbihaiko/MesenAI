@@ -1,6 +1,6 @@
 # Community-pack validation prompt family
 
-Versioned Claude prompts for the community HD/MEP pack validation pipeline.
+Versioned prompts for the community HD/MEP pack validation pipeline.
 Each file is the single source for one LLM step — both invokers render the
 same file, so a pack triaged locally and one triaged by the CI workflow are
 judged against identical instructions.
@@ -47,9 +47,10 @@ Only the classify step is an LLM prompt.
    Status/Category/Pack Hash, and the `<!-- mep-meta -->` comment.
 
 **CI** — `community-pack-validate.yml`, "Prepare classify prompt" fills the
-same three placeholders and "Classify pack (Claude Code Action)" runs the
-rendered prompt (`--disallowedTools Bash,Read`). The deterministic steps
-are the same scripts.
+same three placeholders and "Classify pack (Gemini)" runs the rendered
+prompt through `scripts/gemini_classify.py` (ADR-0199: a direct API call
+with no tools in the request body). The deterministic steps are the same
+scripts.
 
 ## Rendering contract
 

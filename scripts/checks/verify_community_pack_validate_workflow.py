@@ -78,7 +78,7 @@ CHECKS = (
     general.check_size_cap,
     general.check_hash_write,
     general.check_mep_lint_call,
-    general.check_claude_action,
+    general.check_classify_is_tool_free,
     general.check_prompt_file_data_not_instruction,
     general.check_secret_name_comment,
     general.check_catalog_dispatch_gated_on_aceito,

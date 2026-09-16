@@ -7,9 +7,10 @@
 # scopes — GITHUB_TOKEN cannot read/write Projects v2 on a personal account;
 # `read:org` is also required, confirmed live: `gh project item-add` fails
 # with "unknown owner type" against a personal-account owner without it,
-# even though the project itself is user-owned, not org-owned) and, for the
-# classification step, ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.
-# Documented here only; neither secret is created here.
+# even though the project itself is user-owned, not org-owned), GEMINI_API_KEY
+# for the classification step (ADR-0199), and — for the dormant autofix
+# subsystem only (LIVE_VALIDATION_ENABLED) — ANTHROPIC_API_KEY or
+# CLAUDE_CODE_OAUTH_TOKEN. Documented here only; none is created here.
 #
 # Project/Status/option/Pack-Hash ids below are referenced by value only
 # (confirmed live via `gh project field-list 3 --owner sbihaiko --format
@@ -32,11 +33,14 @@ on:
         required: true
         type: string
     # Passed explicitly by every caller (no `secrets: inherit`): the classic
-    # PAT for Projects v2 / issue writes, and one of the two model credentials
-    # for the classify step. All optional here so a caller that lacks one
+    # PAT for Projects v2 / issue writes, the Gemini key for the classify
+    # step, and one of the two Anthropic credentials the dormant autofix
+    # subsystem would need. All optional here so a caller that lacks one
     # still validates as far as its steps can get.
     secrets:
       PROJECT_PAT:
+        required: false
+      GEMINI_API_KEY:
         required: false
       ANTHROPIC_API_KEY:
         required: false
@@ -608,33 +612,35 @@ jobs:
           set -euo pipefail
           git checkout -q --detach "$GITHUB_SHA"
           git checkout -q "$GITHUB_SHA" -- scripts/mep_lint.py
-      # Claude only READS the pack and returns a validated JSON verdict via
-      # --json-schema; it never calls a comment/label/Project tool itself —
-      # github_token below is present only for the action's own internal
-      # API calls, not because Claude has any write tool to use it with.
-      # This replaces an earlier design that granted
-      # `allowed_tools: mcp__github_comment__create, mcp__github_issue__add_
-      # label, mcp__github_project__move_status` — tool names that were
-      # never real MCP tools in this action (confirmed against
-      # anthropics/claude-code-action's own src/mcp/ on 2026-08-27: only a
-      # comment server and a CI server exist, no issue-label or
-      # project-status server), on top of `allowed_tools`/`disallowed_tools`
-      # themselves having been dropped from this action version in favor of
-      # `claude_args` (confirmed live, run 33036041774: the inputs were
-      # silently ignored — GitHub Actions only warns on unknown `with:` keys,
-      # never fails — and the agent hit permission_denials_count: 7 trying
-      # to call tools that didn't exist). The verdict is applied
-      # deterministically by the next step, via plain `gh` CLI, matching
-      # every other verdict path in this file (see "Reject on lint failure"
-      # above) — Claude gets zero write-capable tools at all, which is
-      # strictly safer than the tool-restriction approach this replaces.
-      # Read is also disallowed: the rendered prompt already contains the
-      # bounded {{PACK_BRIEF}} (scripts/classify_pack_brief.py). Opening
-      # pack_download.bin / hires.txt hung issue #148 until timeout-minutes.
-      # Cap the LLM classify step so a hung Claude Code Action cannot hold
-      # the runner for the job's 6-hour default (F6.0). 15 minutes is well
-      # above a successful classify (typically 1–3 min) and well below the
-      # time a stalled run used to sit until a verdict comment cancelled it.
+      # Classify is a plain, tool-free text generation call (ADR-0199): the
+      # rendered prompt — already carrying the bounded {{PACK_BRIEF}} from
+      # scripts/classify_pack_brief.py — and the JSON schema from
+      # .github/ai/validate-classify.md go to the Gemini API, and only the
+      # model's JSON verdict comes back (scripts/gemini_classify.py). The
+      # model never reads the pack and never calls a comment/label/Project
+      # tool; the verdict is applied deterministically by a later step, via
+      # plain `gh` CLI, matching every other verdict path in this file (see
+      # "Reject on lint failure" above).
+      #
+      # This replaces the anthropics/claude-code-action step used until
+      # 2026-09-16 (the user's decision; ADR-0199). That step needed an
+      # elaborate denial list to reach the same place —
+      # `--disallowedTools Bash,Read,Write,Edit,MultiEdit,NotebookEdit,
+      # WebFetch,WebSearch,Task` — and before that had granted MCP tool
+      # names that turned out never to exist in that action (confirmed
+      # against its own src/mcp/ on 2026-08-27: only a comment server and a
+      # CI server exist, no issue-label or project-status server), while
+      # `allowed_tools`/`disallowed_tools` had themselves been dropped in
+      # favor of `claude_args` and were silently ignored (confirmed live,
+      # run 33036041774: permission_denials_count 7). A request body with no
+      # `tools` key makes "no tool at all" structural rather than enforced —
+      # and the prompt's {{PACK_BRIEF}} is still the whole evidence, because
+      # opening pack_download.bin / hires.txt hung issue #148 until
+      # timeout-minutes.
+      # Cap the step so a hung request cannot hold the runner for the job's
+      # 6-hour default (F6.0). 15 minutes is well above a successful
+      # classify (typically 1–3 min) and well below the time a stalled run
+      # used to sit until a verdict comment cancelled it.
       # Deterministic external-assets injection (F6.5): the classify LLM
       # repeatedly failed to connect the issue body's "### External assets"
       # section to the ADR-0138 §2/§7 EXCEPTION — it keeps applying MEP-v1 §5
@@ -699,31 +705,40 @@ jobs:
               f.write("classify_prompt<<__PROMPT_EOF__\n" + prompt + "\n__PROMPT_EOF__\n")
               f.write("classify_schema<<__SCHEMA_EOF__\n" + schema + "\n__SCHEMA_EOF__\n")
           PYEOF
-      - name: Classify pack (Claude Code Action)
+      - name: Classify pack (Gemini)
         id: classify
         if: steps.download.outcome == 'success' && steps.lint.outcome == 'success'
         timeout-minutes: 15
-        uses: anthropics/claude-code-action@9c5ddab2e6d17b83ea679153b31f1d5f023cf636 # v1.0.217
-        with:
-          # github_token here is only so the action's own internal GitHub
-          # API calls (rate-limit checks, etc.) don't fail under the job's
-          # contents:read-only default token — it grants Claude no write
-          # capability by itself, since no write-capable MCP tool is
-          # allowed (claude_args below disallows Bash, and no comment/
-          # label/Project tool is ever offered to this step at all).
-          github_token: ${{ secrets.PROJECT_PAT }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: |
-            --model claude-haiku-4-5
-            --disallowedTools Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task
-            --json-schema '${{ steps.prepare-classify-prompt.outputs.classify_schema }}'
-          prompt: |
-            ${{ steps.prepare-classify-prompt.outputs.classify_prompt }}
-      # Deterministic belt-and-braces for the tool restrictions above: the
-      # model step has no Write/Edit/Bash, so nothing under scripts/ or
-      # .github/ may differ from the checkout afterwards. Any diff means the
-      # restriction did not hold and the verdict must not be applied.
+        env:
+          # GEMINI_API_KEY is a repo secret only documented here, never
+          # created here (same as PROJECT_PAT above).
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Passed through env and written to files rather than interpolated
+          # into the script body: the prompt carries submitter-influenced
+          # text (the PACK BRIEF, and the external-assets block inside it),
+          # so it must never be parsed by the shell.
+          CLASSIFY_PROMPT: ${{ steps.prepare-classify-prompt.outputs.classify_prompt }}
+          CLASSIFY_SCHEMA: ${{ steps.prepare-classify-prompt.outputs.classify_schema }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASSIFY_PROMPT" > "$RUNNER_TEMP/classify_prompt.txt"
+          printf '%s' "$CLASSIFY_SCHEMA" > "$RUNNER_TEMP/classify_schema.json"
+          python3 scripts/gemini_classify.py \
+            --prompt-file "$RUNNER_TEMP/classify_prompt.txt" \
+            --schema-file "$RUNNER_TEMP/classify_schema.json" \
+            > "$RUNNER_TEMP/classify_verdict.json"
+          # Same output name the replaced step exposed, so the sanitize step
+          # below — and every reader behind it (recipe assembly, the verdict,
+          # the identity check) — is unchanged.
+          {
+            echo "structured_output<<__STRUCTURED_EOF__"
+            cat "$RUNNER_TEMP/classify_verdict.json"
+            echo "__STRUCTURED_EOF__"
+          } >> "$GITHUB_OUTPUT"
+      # Belt-and-braces for the boundary above: classify is an HTTP call and
+      # has no filesystem tool, so nothing under scripts/ or .github/ may
+      # differ from the checkout afterwards. Any diff means the boundary did
+      # not hold and the verdict must not be applied.
       - name: Verify classify left the checkout untouched
         if: steps.classify.outcome == 'success'
         run: |
@@ -763,13 +778,18 @@ jobs:
       # skipping `apply-verdict`; an empty `recipe_status` is not `present`,
       # so the downgrade expression stays inert and the pre-ADR verdict path
       # runs (ADR-0138 §13/§19).
-      # Sanitize classify's structured output (F6.5): the Claude Code Action
-      # emits the model's JSON with real newlines inside string values (a
-      # `\n` in a multi-paragraph `comment` arrives as a literal 0x0A byte),
-      # which makes the JSON invalid for `jq` — every downstream reader
-      # failed on it. Repair those newlines back to `\n` escapes and write a
-      # clean copy to `$RUNNER_TEMP/mep_classify_clean.json`; the assembly
-      # and verdict steps below read from that file instead of the raw env.
+      # Sanitize classify's structured output (F6.5). This step dates from
+      # the Claude Code Action, which emitted the model's JSON with real
+      # newlines inside string values (a `\n` in a multi-paragraph `comment`
+      # arrived as a literal 0x0A byte), making the JSON invalid for `jq` —
+      # every downstream reader failed on it. scripts/gemini_classify.py
+      # re-serializes through json.dumps and cannot produce that shape, so
+      # this is now a no-op pass-through on every run (it re-parses first
+      # and returns the input unchanged when it is already valid JSON). It
+      # is kept because it is the single write point of
+      # `$RUNNER_TEMP/mep_classify_clean.json`, which the assembly and
+      # verdict steps below read instead of the raw step output — removing
+      # it would move that contract, not simplify it.
       - name: Sanitize classify structured output
         id: sanitize-classify
         if: steps.classify.outcome == 'success'
