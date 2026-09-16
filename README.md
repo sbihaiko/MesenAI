@@ -42,8 +42,10 @@ whether your remaster is complete.
 ### 🎮 I want to play
 
 Download, open a ROM, done. Enhanced Audio is **on by default** — same notes,
-same timing, modern instruments. Drop a community HD pack beside the ROM and
-it is found by hash, no config. Fifteen validated packs are one click away.
+same timing, modern instruments. Open a ROM that has a validated community
+HD pack and the pack downloads, installs and loads on its own — zero clicks,
+no config. Fifteen packs ship that way today; a local pack beside the ROM is
+picked up by hash too.
 
 **→ [Download](#download)** · [Community packs](docs/community-packs.md)
 
