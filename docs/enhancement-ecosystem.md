@@ -1,4 +1,4 @@
-# MesenCE Community Enhancement Ecosystem
+# MesenAI Community Enhancement Ecosystem
 
 *Status: maintained front-door narrative. The consolidated, binding roadmap
 (Part A: pack/core; Part B: player GUI) and its shipped record live in
@@ -6,13 +6,13 @@
 the open specs live in [docs/specs/](specs/). This page is the short
 why/vision — where it drifts from the PRD or a spec, the PRD and the spec win.*
 
-MesenCE is a platform for **extracting, authoring and consuming community
+MesenAI is a platform for **extracting, authoring and consuming community
 enhancement packs** — textures, music and synth presets — while keeping the
 emulator itself legally clean. The thesis is proven: the relaunched
 [SUPER ZSNES](https://www.zsnes.com/) built its whole product around per-game
 curated enhancements (hand-drawn hi-res art, audio replacement, overclock),
 each individually toggleable, with enhancement data kept free of copyrighted
-content. MesenCE already ships the three foundations needed to do the same as
+content. MesenAI already ships the three foundations needed to do the same as
 an open ecosystem:
 
 | Foundation | Where | What it provides |

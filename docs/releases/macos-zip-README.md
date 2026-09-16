@@ -1,4 +1,4 @@
-# MesenCE — macOS (Apple Silicon)
+# MesenAI — macOS (Apple Silicon)
 
 This zip holds the emulator and the compiled recorder the remastering guide
 uses. `VERSION` and `COMMIT` name the release and the exact commit it was
