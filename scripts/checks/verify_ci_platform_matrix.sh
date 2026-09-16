@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# ADR-0191: CI compiles Linux only, the macOS release is built locally by
-# `make release-macos`, and Windows is retired from CI until the user lifts
-# the rule.
+# ADR-0191: CI's always-on gate (`checks.yml`) compiles Linux only, and
+# Windows/macOS are otherwise banned from every workflow's `runs-on:` - the
+# single documented exception is `dotnet-format-check.yml`, disabled and
+# compiling nothing.
 #
 # ADR-0193 (2026-09-15) extends it with the gate's trigger contract:
 # `checks.yml` keeps `pull_request` on `main` and `workflow_dispatch`. The
@@ -9,14 +10,22 @@
 #
 # ADR-0200 (2026-09-16) amends ADR-0191 §4's "stays workflow_dispatch-only"
 # clause: `build.yml` builds on a pull request opened against `prod`. Section 5
-# is where that is asserted - the branch filter that keeps the eight-leg matrix
-# off every ordinary pull request, and the absence of the `event_name` guard
-# that would otherwise publish nothing.
+# is where that is asserted - the branch filter that keeps the matrix off
+# every ordinary pull request, and the absence of the `event_name` guard that
+# would otherwise publish nothing.
+#
+# ADR-0203 (2026-09-16) amends ADR-0191 §1/§2: `build.yml` (and only
+# `build.yml`) may run a job on `windows-*`/`macos-*` again, restoring the
+# Windows and macOS-Apple-Silicon-only legs. `checks.yml` and every other
+# workflow stay Linux-only - section 2 below is scoped to exclude `build.yml`
+# for exactly that reason, and section 7 asserts what `build.yml` is allowed
+# to have instead.
 #
 # The ADR was accepted and implemented in the same change, so per CLAUDE.md
-# these greps ARE its unit tests: they fail the moment a workflow reintroduces
-# a macOS or Windows runner, or the moment one of the two deleted workflows
-# comes back without its contract being restated.
+# these greps ARE its unit tests: they fail the moment a workflow other than
+# `build.yml` reintroduces a macOS or Windows runner, the moment `build.yml`
+# drops the Windows/macOS jobs ADR-0203 restored, or the moment one of the two
+# deleted workflows comes back without its contract being restated.
 #
 # `dotnet-format-check.yml` was the one documented exception (a Windows
 # runner that compiled nothing) and was deleted on 2026-09-14 by the user's
@@ -40,17 +49,21 @@ for gone in tests.yml unit-tests.yml; do
   fi
 done
 
-# 2. No workflow runs a job on a macOS or Windows runner.
+# 2. No workflow OTHER THAN build.yml runs a job on a macOS or Windows
+#    runner (ADR-0203 scopes the restored platforms to build.yml alone).
 while IFS= read -r line; do
   file="${line%%:*}"
   rest="${line#*:}"
+  case "$file" in
+    "$WORKFLOWS/build.yml") continue ;;
+  esac
   runner="$(printf '%s' "$rest" | sed -e 's/.*runs-on:[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^['\"]//" -e "s/['\"]$//")"
   case "$runner" in
     macos-*|macOS-*)
-      fail "$file runs a job on '$runner'; ADR-0191 allows no macOS runner (the macOS release is built locally with 'make release-macos')"
+      fail "$file runs a job on '$runner'; only build.yml may (ADR-0203) - the macOS release is otherwise built locally with 'make release-macos'"
       ;;
     windows-*|windows|windows-latest)
-      fail "$file runs a job on '$runner'; ADR-0191 retired Windows from CI"
+      fail "$file runs a job on '$runner'; only build.yml may (ADR-0203)"
       ;;
   esac
 done < <(grep -rn "runs-on:" "$WORKFLOWS" --include='*.yml' | grep -v '\${{')
@@ -84,8 +97,8 @@ if [ "$(grep -c "dotnet-version: 10.x" "$WORKFLOWS/checks.yml")" -lt 2 ]; then
   fail "the two dotnet jobs in checks.yml must both pin 'dotnet-version: 10.x' (ADR-0131 item 4)"
 fi
 
-# 5. build.yml stays Linux-only, keeps its dispatch escape, and takes exactly
-#    one trigger besides it: a pull_request filtered to the `prod` base branch
+# 5. build.yml keeps its dispatch escape, and takes exactly one trigger
+#    besides it: a pull_request filtered to the `prod` base branch
 #    (ADR-0200, 2026-09-16).
 #
 #    `push` still fails outright. A push run on `main` would become the newest
@@ -96,14 +109,14 @@ fi
 #    where `push` is not.
 #
 #    The branch filter is the entire cost guard. Without it, every pull request
-#    in the repository would fire the eight-leg LTO matrix - the cost #230 and
+#    in the repository would fire the full matrix - the cost #230 and
 #    ADR-0191 existed to stop.
 if grep -qE "^  push:" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml regained a push trigger; a push run on main supersedes the binary run the README's links resolve against (#230, ADR-0191)"
 fi
 if grep -qE "^  pull_request:$" "$WORKFLOWS/build.yml"; then
   if [ "$(grep -A3 '^  pull_request:$' "$WORKFLOWS/build.yml" | grep -c -- "- 'prod'")" -eq 0 ]; then
-    fail "$WORKFLOWS/build.yml's pull_request trigger is not filtered to 'prod'; an unfiltered one fires the eight-leg binary matrix on every pull request (ADR-0200)"
+    fail "$WORKFLOWS/build.yml's pull_request trigger is not filtered to 'prod'; an unfiltered one fires the full binary matrix on every pull request (ADR-0200)"
   fi
 else
   fail "$WORKFLOWS/build.yml lost its pull_request trigger; a PR opened against 'prod' no longer builds (ADR-0200)"
@@ -114,11 +127,14 @@ fi
 if ! grep -q "ADR-0191" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml's header no longer states the ADR-0191 policy"
 fi
-# The uploads must not be gated on the event: an `if:` there would run all
-# eight legs of a `prod` pull request and publish no artifact at all - the
-# expensive half of a build with none of the result (ADR-0200 §4).
+if ! grep -q "ADR-0203" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml's header no longer states the ADR-0203 policy (Windows/macOS restored)"
+fi
+# The uploads must not be gated on the event: an `if:` there would run every
+# leg of a `prod` pull request and publish no artifact at all - the expensive
+# half of a build with none of the result (ADR-0200 §4, ADR-0203 §4).
 if grep -q "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml"; then
-  fail "$WORKFLOWS/build.yml gates an upload on github.event_name; a 'prod' pull request would run all eight legs and publish no artifact (ADR-0200)"
+  fail "$WORKFLOWS/build.yml gates an upload on github.event_name; a 'prod' pull request would run every leg and publish no artifact (ADR-0200, ADR-0203)"
 fi
 
 # 6. ADR-0193: the gate keeps its pre-merge trigger and its dispatch escape.
@@ -141,8 +157,36 @@ if [ "$(grep -A2 '^  pull_request:$' "$WORKFLOWS/checks.yml" | grep -c -- "- 'ma
   fail "$WORKFLOWS/checks.yml's pull_request trigger no longer names 'main' in its branches list (ADR-0193)"
 fi
 
+# 7. ADR-0203: build.yml restores exactly one Windows job and one macOS job,
+#    the macOS one scoped to Apple Silicon only (no macos-15-intel leg), and
+#    neither carries the deleted event_name guard on its own upload (checked
+#    generically for the whole file in section 5, asserted again here so a
+#    mutation local to just these two jobs is still caught).
+if ! grep -qE "^  windows:$" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml has no 'windows' job; ADR-0203 restores it"
+fi
+if ! grep -q "runs-on: windows-2025-vs2026" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml's windows job does not run on windows-2025-vs2026 (ADR-0203)"
+fi
+if ! grep -qE "^  macos:$" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml has no 'macos' job; ADR-0203 restores it, Apple Silicon only"
+fi
+if ! grep -q "os: macos-15}" "$WORKFLOWS/build.yml" && ! grep -qE 'os: macos-15\s*[,}]' "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml's macos job does not declare os: macos-15 (ADR-0203)"
+fi
+# The old job also had a comment recalling the deleted macos-15-intel leg;
+# only a non-comment line naming it as an actual matrix entry should fail.
+if grep -vE "^\\s*#" "$WORKFLOWS/build.yml" | grep -q "macos-15-intel"; then
+  fail "$WORKFLOWS/build.yml's macos job carries a macos-15-intel leg; ADR-0203 keeps this Apple-Silicon-only, the published release is arm64"
+fi
+# The CI macOS leg must not carry distribution signing - that is
+# scripts/release_macos.sh's job (ADR-0203 §5).
+if grep -q "MACOS_CERTIFICATE" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml's macos job signs with a Developer ID certificate; ADR-0203 §5 keeps that out of CI"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS: ADR-0191 (CI compiles Linux only; no macOS/Windows compilation job; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run)"
+echo "PASS: ADR-0191 (checks.yml compiles Linux only; no macOS/Windows runner outside build.yml; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run) + ADR-0203 (build.yml restores an unsigned Windows job and an Apple-Silicon-only macOS job)"
