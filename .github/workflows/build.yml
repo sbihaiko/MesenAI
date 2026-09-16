@@ -22,7 +22,7 @@ name: Build Mesen
 on:
   # TEMPORARY (2026-09-14): `push` and `pull_request` were REMOVED, so the
   # matrix below runs only when someone dispatches it:
-  #   gh workflow run build.yml --repo sbihaiko/MesenCE --ref <branch>
+  #   gh workflow run build.yml --repo sbihaiko/MesenAI --ref <branch>
   #
   # The reason is the same one that suspended the `pull_request` trigger on
   # 2026-09-13: the matrix was 14 jobs (two Windows publish profiles, six

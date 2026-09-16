@@ -134,7 +134,7 @@ jobs:
           {
             echo "Merge of upstream @ \`${UPSTREAM_SHA:0:12}\` (${MERGE_BASE:0:12}..${UPSTREAM_SHA:0:12}) into \`main\`."
             echo
-            echo "Merge and tiers follow [ADR-0163](https://github.com/sbihaiko/MesenCE/blob/main/docs/adr/0163-fork-upstream-coexistence-policy.md): merge, never rebase; tier-D delete/modify conflicts auto-resolved as **keep the fork's deletion** (rerere records them)."
+            echo "Merge and tiers follow [ADR-0163](https://github.com/sbihaiko/MesenAI/blob/main/docs/adr/0163-fork-upstream-coexistence-policy.md): merge, never rebase; tier-D delete/modify conflicts auto-resolved as **keep the fork's deletion** (rerere records them)."
             echo
             echo "- upstream commits merged: $(git rev-list --count "$MERGE_BASE".."$UPSTREAM_REF")"
             echo "- delete/modify auto-resolved (tier-D, kept deletions): $DM_COUNT"

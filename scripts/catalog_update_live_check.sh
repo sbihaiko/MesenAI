@@ -62,7 +62,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="${PYTHON:-python3}"
 
 # The exact URL CommunityPackCatalogFetcher.CatalogUrl uses - keep in sync.
-CATALOG_URL="https://raw.githubusercontent.com/sbihaiko/MesenCE/main/docs/community-packs.json"
+CATALOG_URL="https://raw.githubusercontent.com/sbihaiko/MesenAI/main/docs/community-packs.json"
 
 APP="$REPO_ROOT/bin/osx-arm64/Release/osx-arm64/publish/Mesen.app"
 HOME_FOLDER="$HOME/Library/Application Support/MesenCE"

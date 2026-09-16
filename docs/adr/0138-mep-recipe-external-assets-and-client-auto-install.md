@@ -137,7 +137,7 @@ does not). One entry per pack:
   "verdict": "accepted", "validated_at": "2026-08-27T21:25:00Z", "catalog_version": 1 }
 ```
 
-Served from `raw.githubusercontent.com/sbihaiko/MesenCE/main/docs/community-packs.json`:
+Served from `raw.githubusercontent.com/sbihaiko/MesenAI/main/docs/community-packs.json`:
 one unauthenticated, cacheable request. The Markdown stays the human view.
 
 ### 4. Client — `MepRecipeInstaller` (C++, Core)

@@ -39,7 +39,7 @@ import sys
 from mep_meta_parser import parse_mep_meta
 import pack_id_rules
 
-REPO = "sbihaiko/MesenCE"
+REPO = "sbihaiko/MesenAI"
 OWNER = "sbihaiko"
 PROJECT_NUMBER = 3
 ACCEPTED_STATUSES = {"Aceito (MEP completo)", "Aceito parcial (HD Mesen)"}

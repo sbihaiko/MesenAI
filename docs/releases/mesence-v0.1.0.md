@@ -58,7 +58,7 @@ Open, or `xattr -dr com.apple.quarantine Mesen.app`.
 
 ## Remastering a game's art
 
-The reason the tools ship beside the emulator: **[docs/remastering-a-game.md](https://github.com/sbihaiko/MesenCE/blob/main/docs/remastering-a-game.md)**
+The reason the tools ship beside the emulator: **[docs/remastering-a-game.md](https://github.com/sbihaiko/MesenAI/blob/main/docs/remastering-a-game.md)**
 is the end-to-end guide from a recording of a game you own to a pack you can
 paint and play. Record → measure coverage → unpack into a kit of PNGs → paint →
 build and verify → ship. `mesence-tools-v0.1.0.zip` carries every Python tool
@@ -66,11 +66,11 @@ that guide names; `headless_record`, its stage 1, is in the macOS zip. Each zip
 has its own `README.md` saying how to set it up.
 
 Orientation on the pack format:
-[docs/enhancement-ecosystem.md](https://github.com/sbihaiko/MesenCE/blob/main/docs/enhancement-ecosystem.md).
+[docs/enhancement-ecosystem.md](https://github.com/sbihaiko/MesenAI/blob/main/docs/enhancement-ecosystem.md).
 Getting a finished pack listed:
-[docs/hd-pack-authoring.md](https://github.com/sbihaiko/MesenCE/blob/main/docs/hd-pack-authoring.md).
+[docs/hd-pack-authoring.md](https://github.com/sbihaiko/MesenAI/blob/main/docs/hd-pack-authoring.md).
 The catalog of validated community packs:
-[docs/community-packs.md](https://github.com/sbihaiko/MesenCE/blob/main/docs/community-packs.md).
+[docs/community-packs.md](https://github.com/sbihaiko/MesenAI/blob/main/docs/community-packs.md).
 
 ## What it runs
 

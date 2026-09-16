@@ -547,3 +547,39 @@ enum class HdPackOptions
 	DontRenderOriginalTiles = 16,
 	AutomaticFallbackTiles = 32
 };
+
+//The token list of an <options> line, in the order the writer has always
+//emitted them. Host-free so it can be unit-tested (ADR-0127): the line is a
+//format contract, and a trailing comma is not cosmetic. StringUtilities::Split
+//always pushes a final token, so "a,b," yields an empty last entry, which
+//HdPackLoader::ProcessOptionTag reports as "Invalid option: " and counts as a
+//load error. The hand-written community packs carry no trailing comma for the
+//same reason.
+inline string HdPackOptionsToString(uint32_t flags)
+{
+	vector<string> tokens;
+	if(flags & (int)HdPackOptions::NoSpriteLimit) {
+		tokens.push_back("disableSpriteLimit");
+	}
+	if(flags & (int)HdPackOptions::AlternateRegisterRange) {
+		tokens.push_back("alternateRegisterRange");
+	}
+	if(flags & (int)HdPackOptions::DisableCache) {
+		tokens.push_back("disableCache");
+	}
+	if(flags & (int)HdPackOptions::DontRenderOriginalTiles) {
+		tokens.push_back("disableOriginalTiles");
+	}
+	if(flags & (int)HdPackOptions::AutomaticFallbackTiles) {
+		tokens.push_back("automaticFallbackTiles");
+	}
+
+	string out;
+	for(size_t i = 0; i < tokens.size(); i++) {
+		if(i > 0) {
+			out += ',';
+		}
+		out += tokens[i];
+	}
+	return out;
+}

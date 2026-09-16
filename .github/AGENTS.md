@@ -393,7 +393,7 @@ what CI actually runs; this doc records why they're split the way they are.
      `checks.yml`'s `ui-tests` and `headless-ui-tests` jobs (ADR-0191);
   4. report the five check runs `checks`, `python-tests`, `core-unit-tests`,
      `ui-tests` and `headless-ui-tests`, which are the required status checks
-     of the `main` ruleset (`gh api repos/sbihaiko/MesenCE/rulesets`).
+     of the `main` ruleset (`gh api repos/sbihaiko/MesenAI/rulesets`).
      Renaming a job here renames a required check: update the ruleset in the
      same PR, or `main` blocks on a name that never reports.
   Adding a sixth required check is fine; removing one of the five, or letting
@@ -469,7 +469,7 @@ what CI actually runs; this doc records why they're split the way they are.
   (expected: the five jobs the `main` ruleset requires)
 - `grep -E "Werror" makefile` (the `CUTFLAGS` line; `-w` must not come back)
 - `./scripts/checks/run_python_tests.sh` (38 files, ~25 s as of 2026-09-14)
-- `gh api repos/sbihaiko/MesenCE/rulesets --jq '.[].name'`
+- `gh api repos/sbihaiko/MesenAI/rulesets --jq '.[].name'`
 - `grep -E "exclude-regex" .github/workflows/clang-format-check.yml`
 - `python3 scripts/checks/verify_community_pack_issue_template.py`
 - `python3 scripts/checks/verify_community_pack_submitted_workflow.py`

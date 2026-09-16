@@ -54,7 +54,7 @@ jobs:
     outputs:
       mismatched: ${{ steps.diff.outputs.mismatched }}
     env:
-      REPO: sbihaiko/MesenCE
+      REPO: sbihaiko/MesenAI
       STATUS_ACCEPTED_PARTIAL: "Aceito parcial (HD Mesen)"
       STATUS_ACCEPTED_FULL: "Aceito (MEP completo)"
       STATUS_INVALID: "Inválido"

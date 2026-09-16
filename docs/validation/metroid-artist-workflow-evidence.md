@@ -211,7 +211,7 @@ ROM one. A 32-hex-character pattern can never equal a 2-to-4-character bank
 index, so the intersection is necessarily empty and the 0% is vacuous.
 
 That the tool reports this as a clean-looking zero, with no diagnostic, is
-filed as **[issue #225](https://github.com/sbihaiko/MesenCE/issues/225)** (P2).
+filed as **[issue #225](https://github.com/sbihaiko/MesenAI/issues/225)** (P2).
 `scripts/artist_cover.py` is 109 lines and contains no reference to `patch`,
 to CHR RAM/ROM, or to tileData width. A silent 0% is the worst available
 failure mode here, because §2 of the guide tells an artist to steer on that

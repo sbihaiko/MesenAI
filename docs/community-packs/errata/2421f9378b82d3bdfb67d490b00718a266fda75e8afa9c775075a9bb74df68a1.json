@@ -8,7 +8,7 @@
       "tag": "background",
       "target": "LavaAirGlow0.png",
       "reason": "Null layer, verified against the shipped assets. LavaAirGlow0.png is the first step of a five-frame additive heat-haze ramp over Norfair and Ridley; the four frames that do ship are 512x480 with mean alpha 0, 5, 10 and 15 respectively, so LavaAirGlow1.png -- the step directly above the missing one -- is already fully transparent in every pixel. All 12 references use the Add blend mode, where an alpha-0 source is the identity, so the frame below an already-invisible frame contributes nothing by construction. HdPackLoader::ProcessBackgroundTag drops the 12 entries at load and the rendered frame is bit-identical.",
-      "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/148"
+      "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/148"
     }
   ]
 }

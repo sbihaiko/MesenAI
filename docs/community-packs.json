@@ -113,7 +113,7 @@
         "known_missing": [
           {
             "manifest": "hires.txt",
-            "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/137",
+            "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/137",
             "tag": "background",
             "target": "Stage1.png"
           }
@@ -148,7 +148,7 @@
         "known_missing": [
           {
             "manifest": "hires.txt",
-            "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/148",
+            "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/148",
             "tag": "background",
             "target": "LavaAirGlow0.png"
           }
@@ -184,7 +184,7 @@
         "known_missing": [
           {
             "manifest": "hires.txt",
-            "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/139",
+            "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/139",
             "tag": "background",
             "target": "selectscreen.png"
           }

@@ -27,7 +27,7 @@ namespace Mesen.Services
 	//the on-disk file-path overload or a repo-relative path (verify_fetcher_no_filesystem_allowlist_load.sh).
 	public static class CommunityPackCatalogFetcher
 	{
-		private const string CatalogUrl = "https://raw.githubusercontent.com/sbihaiko/MesenCE/main/docs/community-packs.json";
+		private const string CatalogUrl = "https://raw.githubusercontent.com/sbihaiko/MesenAI/main/docs/community-packs.json";
 		private const string AllowlistResourceName = "Mesen.pack_host_allowlist.json";
 		//Wall-clock budgets: the catalog is a small JSON file, an artifact may be
 		//up to 300MB on a slow link. Both bound a stalled transfer so a ROM load

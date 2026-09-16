@@ -137,7 +137,7 @@ int OggMixer::GetBgmOffset()
 //sample between the block's start and end factors. The fade used to be a
 //single uint8_t per MixAudio call, i.e. one step per ~735-sample block over a
 //1764-sample window (2-3 steps of ~40%) - an audible click, not a crossfade
-//(https://github.com/sbihaiko/MesenCE/issues/151). When the window ends inside
+//(https://github.com/sbihaiko/MesenAI/issues/151). When the window ends inside
 //the block the block is split, so the ramp finishes exactly at
 //kBgmFadeSamples: the fade-in's remainder mixes at the steady volume, and the
 //fade-out's remainder is silence and is not mixed at all.

@@ -9,7 +9,7 @@
 # Requires `gh` authenticated with write access to issues/labels on the repo.
 set -euo pipefail
 
-REPO="sbihaiko/MesenCE"
+REPO="sbihaiko/MesenAI"
 
 # name|color|description — '|' as separator because label names themselves
 # contain ':' (e.g. "pack:invalid").

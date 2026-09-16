@@ -190,7 +190,7 @@ def check_errata_field_accepts_a_reviewed_declaration():
     """MEI v1.4 §2.6 (ADR-0152): the shape the generator really emits."""
     good = {"errata": {"known_missing": [
         {"manifest": "hires.txt", "tag": "background", "target": "selectscreen.png",
-         "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/139"}],
+         "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/139"}],
         "declared_by": "MesenCE validation"}}
     errors = mei_rules.mei_errata_field_errors(good)
     if errors:

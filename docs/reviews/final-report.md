@@ -1,6 +1,6 @@
 # Fork/upstream inherited-code review — final report
 
-Review of the code `sbihaiko/MesenCE` inherited from `nesdev-org/MesenCE`, under the hard constraint that the fork stays mergeable with upstream. Baseline `HEAD` `2c58e139`; fork/upstream merge-base `73be5b58` (upstream/master is an ancestor of HEAD).
+Review of the code `sbihaiko/MesenAI` inherited from `nesdev-org/MesenCE`, under the hard constraint that the fork stays mergeable with upstream. Baseline `HEAD` `2c58e139`; fork/upstream merge-base `73be5b58` (upstream/master is an ancestor of HEAD).
 
 ## 1. Method & policy (ADR-0163)
 

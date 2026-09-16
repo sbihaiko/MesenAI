@@ -25,7 +25,7 @@ and §5.1 for the normative version of this rule.
 ## Pack: Contra80s (TasticHacks)
 
 Source: <https://github.com/TasticHacks/Contra80s/releases/latest/download/Contra80s.zip>
-(also tracked as `sbihaiko/MesenCE` community-pack submission, issue #137).
+(also tracked as `sbihaiko/MesenAI` community-pack submission, issue #137).
 
 **Before (as published, classic Mesen HD pack layout):**
 ```
@@ -99,7 +99,7 @@ published here:
    finish with no `error` lines.
 2. Submit through the "Community HD/MEP Pack Submission" form
    (`.github/ISSUE_TEMPLATE/community-pack.yml`) on
-   [`sbihaiko/MesenCE`](https://github.com/sbihaiko/MesenCE/issues/new/choose).
+   [`sbihaiko/MesenAI`](https://github.com/sbihaiko/MesenAI/issues/new/choose).
    The automated triage comments the verdict on the issue.
 
 The verdict is binary — `accepted` (Status "Aceito parcial (HD Mesen)",
