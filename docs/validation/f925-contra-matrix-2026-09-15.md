@@ -224,6 +224,14 @@ per-recording surfaces with no `--also`, so their row above is nine
 independent verifications, not one merged artifact. Both are recorded in
 `runs/f925-20260915/contra/kit-union/RESULTS.md`.
 
+**Update 2026-09-16 (bug #275):** the first fact is fixed — `--also` now drops
+the positional pack and any repeat, naming it in `notes[]`, instead of
+refusing. Re-running this run's own 22-pack set on the fixed tool, with the
+positional pack left in `--also` as the issue's repro does, reproduces the row
+above exactly and exits 0: 21 donors, donated 142, recorded 246, ROM fill 91,
+unrecoverable 33 → 94 %, and `--verify` 1956 → 1956 keys with 0 lost and 0
+added. The second fact is ADR-0194, still proposed.
+
 ## 6. Verdict
 
 **F9.25's stop rule is met.** Nine rows, each with a hash-identified clean

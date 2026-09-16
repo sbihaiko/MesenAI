@@ -41,7 +41,10 @@ travels further, a mortal one sees the banks that death, respawn and GAME OVER
 load. `--also <pack>` therefore takes **another recording of the same ROM as
 additional evidence**. It is evidence, not a second source of truth (ADR-0183
 §1): the pack named on the command line stays the pack the kit is for, its own
-recorded cells always win, and a donated cell only ever fills a hole.
+recorded cells always win, and a donated cell only ever fills a hole. Passing
+that same pack (or any recording twice) adds no evidence, so the repeat is
+ignored and named in `notes[]` rather than refused — a caller that builds the
+list as "the whole set, and then also the whole set" gets the kit it meant.
 
 **Order of preference per cell of a bank's rank-0 page**, in this order and no
 other (`write_bank` implements it as one if/elif chain):
@@ -637,20 +640,52 @@ def _real_sha1(h) -> bool:
     return bool(h) and len(h) == 40 and set(h) != {"0"}
 
 
+def donor_paths(also, pack_dir: Path) -> tuple[list[Path], list[str]]:
+    """Resolve `--also` into the recordings it actually names.
+
+    A caller that builds the list as "the whole set, and then also the whole
+    set" hands back the pack it passed positionally, and a list assembled from
+    several sources can repeat one. Neither adds a recording: the primary pack
+    is already the pack the kit is for (ADR-0183 §1), and of two entries naming
+    one folder the first is the one that donates (`attach_donors` pairs each
+    bank with the first donor that has it). So a repeat is dropped rather than
+    refused — refusing it named no way out and read as if the pack were invalid
+    — and the manifest says which argument was ignored (#275)."""
+    # Resolved on both sides: `run()` may be called with a path that still holds
+    # a `..` or sits behind a symlink (/var against /private/var on macOS), and a
+    # repeat that survives on a string difference is a repeat the pack gets
+    # twice.
+    primary = pack_dir.resolve()
+    paths, notes, seen = [], [], {primary}
+    for p in also:
+        path = Path(p).resolve()
+        if path not in seen:
+            seen.add(path)
+            paths.append(path)
+        elif path == primary:
+            notes.append(
+                f"--also {path}: the pack itself, and the positional pack is the one "
+                "this kit is for — a redundant argument, ignored.")
+        else:
+            notes.append(
+                f"--also {path}: listed more than once, and the first one listed is the "
+                "one that donates — the repeat is ignored.")
+    return paths, notes
+
+
 class Donor:
     """A second recording of the same ROM, read only as evidence for holes.
 
     Never a second source of truth (ADR-0183 §1): a donor is not merged into the
     pack, contributes no `hires.txt` rule, and cannot displace a cell the primary
     pack recorded itself. It is refused outright unless it is provably the same
-    game — the same check the ROM itself gets, applied between the two packs."""
+    game — the same check the ROM itself gets, applied between the two packs.
+    Being the primary pack itself is not one of those refusals: `donor_paths`
+    has already taken it out of the list."""
 
     def __init__(self, path: Path, primary: Pack, primary_path: Path):
         self.path = path
         self.label = str(path)
-        if path == primary_path:
-            raise ChrKitError(f"--also {path}: that is the pack itself, not a second "
-                              "recording of it")
         self.pack = Pack(path)
         if not _real_sha1(primary.rom_sha1) or not _real_sha1(self.pack.rom_sha1) \
                 or primary.rom_sha1 != self.pack.rom_sha1:
@@ -1500,7 +1535,10 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                 f"{'no ' if expect_ram else ''}CHR ROM — wrong ROM for this pack?")
 
     # Second recordings of the same ROM, as evidence for this pack's holes only.
-    donors = [Donor(Path(p).resolve(), pack, pack_dir) for p in also]
+    # A repeat of the positional pack adds no recording, so it is dropped and
+    # reported in notes[] rather than refused (#275).
+    also_paths, ignored_also = donor_paths(also, pack_dir)
+    donors = [Donor(p, pack, pack_dir) for p in also_paths]
     donor_notes = attach_donors(banks, donors)
 
     images = {p.name: {"hd": read_png(p.path),
@@ -1593,6 +1631,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "filtered art, and a sprite/background misread would punch a transparent "
         "hole — so hires.txt is left exactly as recorded.",
     ]
+    notes.extend(ignored_also)
     if donors:
         notes.append(
             "Blue in Chr_<n>.legend.png is a cell **another recording of this ROM** "
@@ -1734,7 +1773,8 @@ def main(argv=None):
     ap.add_argument("--also", action="append", default=[], metavar="PACK",
                     help="another recorded pack of the SAME ROM, used as evidence for "
                          "cells this pack never recorded (repeatable; first one wins). "
-                         "Its cells never displace this pack's own.")
+                         "Its cells never displace this pack's own. The pack itself, or "
+                         "a recording already listed, adds nothing and is ignored.")
     ap.add_argument("--names", default=None, help="optional titles, shared kit schema")
     ap.add_argument("--fill-rules", choices=("none", "observed", "all"), default="none",
                     help="emit a <tile> rule for a filled cell: never / only when the "
