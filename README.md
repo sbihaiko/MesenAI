@@ -99,7 +99,7 @@ back to stock.
 ## See it
 
 This is what the HD-pack community already achieves on the NES with the engine
-MesenAI ships:
+Mesen ships:
 
 <!-- Images hotlinked from the pack author's own repository, with credit — not redistributed here. -->
 <p align="center">
