@@ -5,13 +5,19 @@ verdict, asset index, authorship, issue comment, and — for split-distribution
 packs — the MEP recipe fragment, by reading the submitted pack and the lint
 report. It never writes anything itself.
 
-Two invokers render the placeholders below and pass the result to Claude:
+Two invokers render the placeholders below and send the result to a model:
 
 - **Local**: `scripts/validate_pack_local.sh` fills `{{ISSUE_NUMBER}}` and
   `{{EXTERNAL_ASSETS_SUFFIX}}`, then runs Claude headless (`claude -p`) or in
   supervised-session mode against this file.
-- **CI**: the "Prepare classify prompt" and "Classify pack" steps of
-  `.github/workflows/community-pack-validate.yml` fill the same two values.
+- **CI**: the "Prepare classify prompt" and "Classify pack (Gemini)" steps of
+  `.github/workflows/community-pack-validate.yml` fill the same two values and
+  call the Gemini API through `scripts/gemini_classify.py` (ADR-0199).
+
+The prompt and the schema are provider-neutral — plain text and JSON
+Schema — so both invokers share them verbatim even though they run
+different models. Changing the model on either side is a change to that
+invoker, never to this file.
 
 Placeholders:
 - `{{ISSUE_NUMBER}}` — the GitHub issue number.

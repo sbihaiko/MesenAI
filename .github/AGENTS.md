@@ -167,21 +167,24 @@ what CI actually runs; this doc records why they're split the way they are.
   MediaFire `/file/` share pages and `downloadN.mediafire.com`) and a 300MB cap before
   and during the download, always records the pack's `sha256` to Pack
   Hash, calls `scripts/mep_lint.py` unmodified, and — only on lint
-  success — classifies the pack via `anthropics/claude-code-action`
-  with `--disallowedTools Bash,Read`. Pack evidence is a bounded
-  `{{PACK_BRIEF}}` from `scripts/classify_pack_brief.py` (member list,
-  tag counts, header/README excerpts, patch magic, lint summary);
-  classify must not open `pack_download.bin` or `hires.txt` (issue #148
-  timed out on a 26 MiB manifest). File names/`pack.json`/issue text stay
+  success — classifies the pack with a direct, tool-free Gemini API call
+  (`scripts/gemini_classify.py`, `gemini-3.8-flash`, ADR-0199). Pack
+  evidence is a bounded `{{PACK_BRIEF}}` from
+  `scripts/classify_pack_brief.py` (member list, tag counts,
+  header/README excerpts, patch magic, lint summary); classify must not
+  open `pack_download.bin` or `hires.txt` (issue #148 timed out on a
+  26 MiB manifest), and the request body carries no `tools` key, so it
+  cannot rather than must not. File names/`pack.json`/issue text stay
   framed as data, never instructions. The classify step carries
-  `timeout-minutes: 15` (F6.0) so a hung Claude Code Action cannot hold
+  `timeout-minutes: 15` (F6.0) so a hung request cannot hold
   the runner for the job's 6-hour default. Dispatches
   `workflows/community-pack-catalog.yml` by name (never opens it) when the
   final Status is one of the two "Aceito" states. Requires the caller to
   supply a `PROJECT_PAT` PAT (`repo` + `project` + `read:org` scopes —
   `read:org` is required by `gh project` commands to resolve a
   personal-account owner, confirmed via a live "unknown owner type"
-  failure without it) and either
+  failure without it), `GEMINI_API_KEY` for the classify step, and — for
+  the dormant autofix subsystem only — either
   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` as repo secrets — this
   workflow only documents those names, never creates them. See
   `scripts/checks/verify_community_pack_validate_workflow.py` for its
