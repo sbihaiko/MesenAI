@@ -140,7 +140,7 @@ def shared_available(sizes):
 
 
 # The window title, so a taskbar/dock entry says which game is on screen.
-TITLE = "MesenCE — live recording viewer"
+TITLE = "MesenAI — live recording viewer"
 
 
 def window_title(rom):
