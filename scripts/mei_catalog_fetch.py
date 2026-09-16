@@ -24,7 +24,7 @@ import subprocess
 import community_pack_markdown as markdown
 from mep_meta_parser import MARKER as MEP_META_MARKER, parse_mep_meta
 
-REPO = "sbihaiko/MesenCE"
+REPO = "sbihaiko/MesenAI"
 OWNER = "sbihaiko"
 PROJECT_NUMBER = 3
 

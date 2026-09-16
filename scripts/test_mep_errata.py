@@ -37,7 +37,7 @@ def write_errata(tmp, **overrides):
         "tag": "background",
         "target": "missing.png",
         "reason": "x" * 45,
-        "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/1",
+        "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/1",
     }
     entry.update(overrides.pop("entry", {}))
     doc = {"artifact_sha256": SHA, "known_missing": [entry]}

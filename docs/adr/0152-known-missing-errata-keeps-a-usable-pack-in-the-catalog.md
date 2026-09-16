@@ -100,7 +100,7 @@ material. Errata expire by construction; there is no stale-errata state to prune
       "tag": "background",
       "target": "selectscreen.png",
       "reason": "Dead entry: the same screen is fully painted by the priority-1 selectscreen1..6.png frame cycle (always active, frameRange 60) plus the priority-39 selectscreentop.png overlay. HdPackLoader drops this entry at load, so the rendered result is identical with or without it.",
-      "reviewed_in": "https://github.com/sbihaiko/MesenCE/pull/NNN"
+      "reviewed_in": "https://github.com/sbihaiko/MesenAI/pull/NNN"
     }
   ]
 }

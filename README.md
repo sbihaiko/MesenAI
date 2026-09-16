@@ -1,90 +1,80 @@
 <div align="center">
 
-# MesenCE · Bihaiko's Fork
-[![Build](https://github.com/sbihaiko/MesenCE/actions/workflows/build.yml/badge.svg)](https://github.com/sbihaiko/MesenCE/actions/workflows/build.yml?query=branch%3Amain)
-[![Unit tests](https://github.com/sbihaiko/MesenCE/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/sbihaiko/MesenCE/actions/workflows/unit-tests.yml?query=branch%3Amain)
+# MesenAI
+
+### Every 8-bit game you own is remaster material. This emulator proves it while you play.
+
+[![Checks](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/sbihaiko/MesenAI?label=release&color=2ea043)](https://github.com/sbihaiko/MesenAI/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.en.html)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-555.svg)](#download)
 [![Systems](https://img.shields.io/badge/systems-NES%20%7C%20GB%2FGBC%20%7C%20SMS%2FGG%2FSG--1000%20%7C%20GBA-8a2be2.svg)](#what-it-runs)
-[![Specs: CC0](https://img.shields.io/badge/open%20specs-CC0-lightgrey.svg)](docs/specs/)
-[![Community packs](https://img.shields.io/badge/community%20packs-catalog-2ea043.svg)](docs/community-packs.md)
-[![Submit a pack](https://img.shields.io/badge/submit-a%20pack-orange.svg)](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml)
+[![Open specs: CC0](https://img.shields.io/badge/open%20specs-CC0-lightgrey.svg)](docs/specs/)
+[![Community packs](https://img.shields.io/badge/community%20packs-15%20validated-2ea043.svg)](docs/community-packs.md)
 
-**[⬇ Download](https://github.com/sbihaiko/MesenCE/releases/latest)** · [Remaster a game](docs/remastering-a-game.md) · [Hear it](#hear-it) · [See it](#see-it) · [Features](#what-you-get) · [Quick start](#quick-start) · [Packs](#enhancement-packs-mep) · [Community packs](#community-packs) · [Why this fork](#why-this-fork) · [FAQ](#faq)<br/>
+**[⬇ Download](https://github.com/sbihaiko/MesenAI/releases/latest)** · **[Remaster a game](docs/remastering-a-game.md)** · [Hear it](#hear-it) · [See it](#see-it) · [Quick start](#quick-start) · [What's real today](#whats-real-today) · [FAQ](#faq)
 
-</div><br/>
+</div>
 
-**What is MesenCE?** An accuracy-first emulator for NES, Game Boy/GBC, Master
-System/Game Gear and GBA — Mesen's core, unchanged — that also **enhances every
-game it runs**: modern instruments re-voicing the sound chip in real time, HD
-texture packs on three console families, and a starter pack it builds for you
-while you play.
-It is also a **platform for making those packs**: record a game you own, get its
-art back as PNGs laid out to paint, and build a pack from them — the project
-ships the tools and the open specs, never anyone's game files.
+<br/>
 
-### Download / Get started
+Emulators stopped at *faithful* twenty years ago. **MesenAI starts there** — it is
+Mesen's accuracy-first core, unchanged — **and keeps going**: the first ROM you
+open already sounds better, HD art works on three console families instead of
+one, and the emulator quietly turns the game you are playing into a folder an
+artist can paint.
 
-1. **[Download a build](https://github.com/sbihaiko/MesenCE/releases/latest)** — the first release is **macOS Apple Silicon** only; every other platform builds from source, or uses the on-demand CI builds in [Download](#download) below. No installer: unzip and run. macOS needs SDL2 (`brew install sdl2`) and the app is ad-hoc signed, so allow it the first time.
-2. **Open a ROM.** Enhanced Audio is already on; a starter enhancement pack is written beside the ROM while you play. That is the whole [quick start](#quick-start).
-3. **Want to redraw a game?** **[docs/remastering-a-game.md](docs/remastering-a-game.md)** takes you from a recording to a pack you can paint — and the release ships every tool it uses, so you do not need a checkout.
+That last part is the step forward. Redrawing a game used to mean playing it
+end to end with a recorder running, then untangling thousands of 8×8 fragments
+by hand — the most prolific HD-pack author on the NES keeps a 9.9 MB, 34-sheet
+spreadsheet just to write the rule file. MesenAI replaces that with **a route
+you can write down, a coverage number you can measure, and a kit laid out to
+paint**. The play still happens. It just stops being the thing that decides
+whether your remaster is complete.
 
-Looking for packs other people made? The validated catalog is
-**[docs/community-packs.md](docs/community-packs.md)**.
+---
 
-Want something newer than the last tag? [Download](#download) below explains the
-on-demand build channel.
+## Pick your door
 
-## Your NES, Game Boy, Master System and GBA games — faithful, then enhanced
+<table>
+<tr>
+<td width="33%" valign="top">
 
-**Same accuracy as Mesen. Plus HD art, modern instruments, and packs that find themselves.**  
-Most emulators stop at *faithful*. This one starts there and keeps going — and the enhancements are **on by default**, so the very first ROM you open already sounds better.
+### 🎮 I want to play
 
-- **Every game sounds better the moment you load it.** [Enhanced Audio](#enhanced-audio) reads the sound chip's live registers and re-voices them with modern instruments in real time — same notes, same timing, zero per-game files. Five styles, optional SoundFont, one checkbox to go back to stock.
-- **HD art on three console families, not one.** Mesen's proven NES HD Pack pipeline now covers **Game Boy/GBC and Master System/Game Gear** too. No pack for your game yet? The emulator **starts building one while you play** — upscaled tiles, static screens and extracted music, ready for an artist to finish.
-- **One pack, every layer.** Textures, music and synth presets ship together in a hash-matched [MEP](#enhancement-packs-mep) pack. Drop a folder or `.zip` next to the ROM and it's found automatically; toggle each layer independently.
-- **Know a great HD pack? [Submit the link](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml).** Opening a pre-filled GitHub Issue is all it takes: a bot downloads the pack, validates it, labels it and adds it to the [public catalog](docs/community-packs.md). Classic Mesen `hires.txt` packs and full MEP `pack.json` packs both qualify — years of existing community work, one ecosystem. Details in [Community packs](#community-packs).
-- **Built to stay reliable.** A CI gate on every push that is not just *"it compiled"* — the structural suite plus a headless boot of the real core against synthetic ROM and pack fixtures.
+Download, open a ROM, done. Enhanced Audio is **on by default** — same notes,
+same timing, modern instruments. Drop a community HD pack beside the ROM and
+it is found by hash, no config. Fifteen validated packs are one click away.
 
-Underneath it all is [MesenCE](https://github.com/nesdev-org/MesenCE) / [Mesen2](https://github.com/SourMesen/Mesen2), so you keep Mesen's accuracy, debugger, netplay, shaders, run-ahead and rewind. Upstream fixes are ported in regularly.
+**→ [Download](#download)** · [Community packs](docs/community-packs.md)
 
-## Download
+</td>
+<td width="33%" valign="top">
 
-**Tagged releases are on the [Releases page](https://github.com/sbihaiko/MesenCE/releases/latest)** —
-the emulator plus `mesence-tools-<version>.zip`, the command-line tools
-[the remastering guide](docs/remastering-a-game.md) uses. `v0.1.0` is macOS
-Apple Silicon only, cut locally from a tagged commit; other platforms follow.
+### 🎨 I want to remaster a game
 
-The table below is the other channel, and today the only one for Windows and
-Linux: the newest build of `main` that passed CI — no installer, unzip and
-run.
+Record the game once — scripted, from a save state, or driven by a published
+TAS. Get back **sprite figures with their animation cycles, the stage stitched
+into one panorama, and completed pattern pages**, each cell labeled. Paint the
+PNGs. Build. See it in the game.
 
-> **The binaries are currently built on demand, not on every push.** The 14-job matrix is dispatch-only (see [Built to stay correct](#built-to-stay-correct)) so a merge does not queue an hour of runner time. The links below resolve against the newest *build* run on `main`, which is now always a real build, so they keep serving the last one that was triggered. To produce a fresh one:
->
-> ```sh
-> gh workflow run build.yml --repo sbihaiko/MesenCE --ref main
-> ```
->
-> Then download from that run's Summary page — or use the links below once it finishes.
+**→ [Remastering guide](docs/remastering-a-game.md)**
 
-| Platform | Build | Notes |
-|---|---|---|
-| **Windows x64** | [Download](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip) | Windows 10 (1607) or newer |
-| **Linux x64** | [Download](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28Linux%20x64%20-%20AppImage%29.zip) | requires **SDL2**: `sudo apt install libsdl2-2.0-0` |
-| **Linux ARM64** | [Download](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04-arm%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28Linux%20ARM64%20-%20AppImage%29.zip) | requires **SDL2**: `sudo apt install libsdl2-2.0-0` |
-| **macOS Apple Silicon** | [Download](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28macOS%20-%20macos-15%20-%20clang_aot%29.zip) | requires **SDL2**: `brew install sdl2` |
-| **macOS Intel** | [Download](https://nightly.link/sbihaiko/MesenCE/workflows/build/main/Mesen%20%28macOS%20-%20macos-15-intel%20-%20clang_aot%29.zip) | requires **SDL2**: `brew install sdl2` |
+</td>
+<td width="33%" valign="top">
 
-The AppImage packs the same build into a single executable file with a desktop
-entry; it is not a bundle, so it still needs SDL2 on the host.
+### 📦 I made (or found) a pack
 
-**macOS, first launch.** The app is signed with our own certificate rather than
-an Apple Developer ID, so Gatekeeper refuses it the first time. Open it once,
-dismiss the warning, then go to **System Settings → Privacy & Security** and
-press **Open Anyway** next to the Mesen entry.
+Open one pre-filled Issue with a link. A bot downloads it, lints it against an
+open spec, labels it and lists it in the public catalog with a 👍 vote. Classic
+`hires.txt` packs qualify as-is — years of community work, one ecosystem.
 
-These links always serve the newest *green* build, so they lag `main` whenever
-a build is red. Per-commit builds live in the [Actions](https://github.com/sbihaiko/MesenCE/actions/workflows/build.yml?query=branch%3Amain) tab. Building from source: [COMPILING.md](COMPILING.md).
+**→ [Submit a pack](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml)**
+
+</td>
+</tr>
+</table>
+
+---
 
 ## Hear it
 
@@ -100,11 +90,16 @@ https://github.com/user-attachments/assets/20218b52-e79b-4bad-a99c-6cbd5ab6f6c1
 
 ![Spectrogram: original NES chip audio vs. Enhanced Audio remaster](docs/media/shadowman-spectrogram.png)
 
-Melody and timing come straight from the game's own APU register log. Enhanced Audio never re-composes — it re-*voices*: the square-wave lead becomes a detuned-saw lead, the mix gains body, and every note stays exactly where the game put it. More demos (Game Boy, SMS FM) will land here as presets get ear-tuned.
+Enhanced Audio never re-composes — it re-**voices**. Melody and timing come
+straight from the game's own sound-chip registers, frame by frame; the
+square-wave lead becomes a detuned saw, the mix gains body, and every note stays
+exactly where the game put it. Five styles, optional SoundFont, one checkbox
+back to stock.
 
 ## See it
 
-Enhanced Audio is the sound half. The visual half is what the HD-pack community already achieves on NES with the same engine this fork ships:
+This is what the HD-pack community already achieves on the NES with the engine
+MesenAI ships:
 
 <!-- Images hotlinked from the pack author's own repository, with credit — not redistributed here. -->
 <p align="center">
@@ -112,23 +107,126 @@ Enhanced Audio is the sound half. The visual half is what the HD-pack community 
   <a href="https://github.com/TasticHacks/Contra80s"><img src="https://raw.githubusercontent.com/TasticHacks/Contra80s/main/screenshots/Contra80s-Screenshot-Larger-4.png" width="49%" alt="Contra 80s — HD pack gameplay, jungle stage reimagined"></a>
 </p>
 
-<p align="center"><sub><i>Contra</i> (NES, 1988) through <b><a href="https://github.com/TasticHacks/Contra80s">Contra 80s</a></b>, an HD pack by <b>Tastic</b> — 8-bit graphics replaced in real time with hand-made HD art (<a href="https://www.youtube.com/watch?v=Ho1-30w41RU">trailer</a>). More packs: <a href="https://github.com/lyonhrt/hdnes-projects">lyonhrt</a> · <a href="https://forums.nesdev.org/viewtopic.php?t=17110">NESDev thread</a>.</sub></p>
+<p align="center"><sub><i>Contra</i> (NES, 1988) through <b><a href="https://github.com/TasticHacks/Contra80s">Contra 80s</a></b>, an HD pack by <b>Tastic</b> — 8-bit graphics replaced in real time with hand-made HD art (<a href="https://www.youtube.com/watch?v=Ho1-30w41RU">trailer</a>).</sub></p>
 
-This fork takes that pipeline to **Game Boy and Master System**, bundles it with Enhanced Audio in one pack format, and keeps a [validated catalog](docs/community-packs.md) of community packs so you don't have to dig through forum threads.
+MesenAI takes that pipeline to **Game Boy and Master System**, ships the tools
+that generate an artist's base material from a recording, and keeps a
+[validated catalog](docs/community-packs.md) so nobody digs through forum
+threads again.
 
-## What you get
+---
 
-| | Stock Mesen / MesenCE | **This fork** |
+## Why artists pick up MesenAI
+
+The artist's real competitor was never another emulator. It was a spreadsheet,
+a text editor, and a week of playing with the recorder running. Here is what
+changes, with the numbers behind each claim taken from packs recorded on this
+machine ([method](docs/hd-pack-toolchain-comparison.md)):
+
+| The old way | With MesenAI | Measured |
 |---|---|---|
-| **Audio** | Faithful chip emulation | Faithful emulation **+ real-time modern re-synthesis**, on by default, 5 styles, optional General MIDI SoundFont, tunable via a text file |
+| Play the whole game with the recorder on | **Write the route down.** Frame-counted input scripts, save states, published TAS movies and RAM-only cheats drive a headless recorder | ~3× real time, deterministic in emulated frames |
+| Hope you saw everything | **Measure coverage, then steer.** Per recording, per image, which tiles only *that* state shows | Contra: 53.8 % → 58.9 % → 64.6 % across three recordings |
+| Untangle thousands of 8×8 fragments | **A kit of four surfaces.** Figures with animation cycles, named scenery, stage panoramas, completed pattern pages — every cell labeled | Contra stage-3 boss: 517 poses over 195 distinct tiles, a 50× reuse the kit makes visible |
+| Hand-write the rule file (or a 34-sheet spreadsheet) | **Build it from the sheets.** Ambiguous reused tiles get their conditions from observed neighbours, automatically | 0 tile keys lost, 0 invented, on every generator's round trip |
+| No linter, no spec | **Lint against an open spec.** `mep_lint.py`, MEP v1, canonical content id, sha256 errata, pack CI | 15 community packs validated by the same script you run offline |
+
+Everything a generator infers is marked as inference. Nothing that changes what
+a rebuilt pack renders is emitted unless the recording actually observed it.
+Names come from the data or from a human — never from a guess.
+
+---
+
+## Quick start
+
+1. **[Download](#download)**, unzip, run `Mesen`.
+2. **File → Open** a ROM. Enhanced Audio is already on (Style: *Studio*). With
+   *Bootstrap* on, a starter enhancement pack is written beside the ROM while
+   you play.
+3. Different sound? **Settings → Audio → General → Enhanced audio** — pick
+   Synthwave, Chip Deluxe, Orchestral Lite, Dry or Studio, or point it at your
+   own `.sf2` SoundFont.
+4. Got a pack? Drop the folder or `.zip` beside the ROM (or into
+   `EnhancementPacks/`) and toggle textures / audio / synth per pack under
+   **Tools → HD Packs → Enhancement Packs (MEP)…**.
+5. Want the soundtrack as MIDI or VGM? **Tools → Record Music (MIDI/VGM)**.
+
+Want to redraw a game? Start at **[docs/remastering-a-game.md](docs/remastering-a-game.md)** —
+every command, in order, and the release ships every tool it uses.
+
+## Download
+
+**[Releases](https://github.com/sbihaiko/MesenAI/releases/latest)** carry the
+emulator plus `mesence-tools-<version>.zip`, the command-line tools the
+remastering guide uses. **v0.1.0 is macOS Apple Silicon only**, cut locally
+from a tagged commit. No installer: unzip and run. macOS needs SDL2
+(`brew install sdl2`); the app is ad-hoc signed, so open it once, then
+**System Settings → Privacy & Security → Open Anyway**.
+
+Other platforms use the on-demand CI channel — the newest build of `main` that
+passed, unzip and run:
+
+| Platform | Build | Notes |
+|---|---|---|
+| **Windows x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip) | Windows 10 (1607) or newer |
+| **Linux x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20x64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
+| **Linux ARM64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04-arm%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20ARM64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
+| **macOS Intel** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28macOS%20-%20macos-15-intel%20-%20clang_aot%29.zip) | `brew install sdl2` |
+
+> The binary matrix is **built on demand, not on every push**, so these links
+> serve the last build that was triggered. To refresh it:
+> `gh workflow run build.yml --repo sbihaiko/MesenAI --ref main`.
+> Building from source: [COMPILING.md](COMPILING.md).
+
+---
+
+## How a remaster happens
+
+```
+  record ──▶ measure ──▶ unpack ──▶ paint ──▶ build ──▶ see it
+  (route)   (coverage)    (kit)     (PNGs)   (hires.txt)  (in game)
+```
+
+1. **Record** the game doing everything it can do. Four drivers feed one
+   builder: a frame-counted input script, a **save state** to start mid-level,
+   a published **TAS movie** (`.bk2`), or a **RAM-only cheat** to reach a
+   later stage. No window, no human at the pad, about 3× real time.
+2. **Measure** what the recording put on screen — per image, per state — and
+   write a better route if a figure is missing.
+3. **Unpack** the recording into a **kit**: sprite figures and their cycles,
+   named scenery, the stage as one scrolling panorama, and pattern pages
+   completed from the cartridge — each with a sidecar saying what every cell
+   is and whether it was *seen* or *inferred*.
+4. **Paint** the PNGs in your own editor. Cells are the deliverable.
+5. **Build and lint.** `mep_build.py` regenerates `hires.txt` from the sheets;
+   `mep_lint.py` checks the pack against MEP v1. Every generator round-trips
+   with 0 keys lost or invented.
+6. **See it.** Open the game. It is your art now.
+
+Step by step, with every command: **[docs/remastering-a-game.md](docs/remastering-a-game.md)**.
+Want a model to propose the tedious names? It can — as a proposal a human
+promotes, never as evidence ([docs/ai-kit-review.md](docs/ai-kit-review.md)).
+
+## What you get, side by side
+
+| | Stock Mesen / MesenCE | **MesenAI** |
+|---|---|---|
+| **Audio** | Faithful chip emulation | Faithful **+ real-time modern re-voicing**, on by default, 5 styles, SoundFont, text-file presets |
 | **HD textures** | NES only | **NES, Game Boy/GBC, SMS/Game Gear/SG-1000** |
-| **Starter packs** | Hand-authored from a blank canvas | **Auto-bootstrapped** beside the ROM: xBRZ-upscaled tiles, static screens, extracted music — laid out to paint, artist sheets up front |
-| **Pack format** | `hires.txt` per game | **MEP**: one hash-keyed pack for textures + audio + synth presets, folder or `.zip`, per-layer toggles |
-| **Finding packs** | Forum threads | **Validated [community catalog](docs/community-packs.md)** — every entry lint-checked, hash-tracked, labeled by content |
-| **Music export** | — | **Record Music (MIDI/VGM)** while you play |
-| **Player mode** | — | **Couch-friendly shell on a fresh install**: menu hidden, one overlay (resume / save / load / pack chip / settings / quit), recent-games home, pack picker when packs compete |
-| **Correctness** | Build check | **Structural gate on every push** — guardrails, ADR integrity, pack-pipeline suites, headless core smoke ([details](#built-to-stay-correct)) |
-| **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist ([why](#why-this-fork)) |
+| **Recording a game** | Press Start, play to the end, press Stop | Same window, **plus a headless recorder driven by scripts, states, TAS movies or RAM cheats** |
+| **Knowing what you missed** | Play more and look | **Coverage per recording, per image, per state** |
+| **Vocabulary** | Tiles in cartridge order | **Metatiles, sprite figures, poses, animation cycles**, inferred and marked |
+| **The rule file** | By hand, or your own spreadsheet | **Generated from the sheets**; conditions for reused tiles attached from observed neighbours |
+| **Validation** | None | **Linter, versioned spec, content id, sha256 errata, pack CI** |
+| **Finding packs** | Forum threads | **Validated catalog**, hash-tracked, labeled by content, ranked by 👍 |
+| **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets in one hash-keyed pack, folder or `.zip`, per-layer toggles |
+| **Music export** | — | **MIDI / VGM** while you play |
+| **Player mode** | — | Couch shell on a fresh install: overlay, recent games, pack picker |
+| **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist |
+
+Everything in the left column is also in the right one. `Core/NES/HdPacks/`,
+the format and the HD Pack Builder are upstream's work, credited as such, and a
+MesenCE pack loads here unchanged.
 
 ### What it runs
 
@@ -136,111 +234,138 @@ This fork takes that pipeline to **Game Boy and Master System**, bundles it with
 
 Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision — see [FAQ](#faq).
 
-## Quick start
-
-1. **[Download](#download)**, unzip, run `Mesen`.
-2. **File → Open** a ROM. Enhanced Audio is already on (Style: *Studio*).
-3. Want it different? **Settings → Audio → General → "Enhanced audio (experimental)"** — toggle, pick a style (Synthwave, Chip Deluxe, Orchestral Lite, Dry, Studio), balance synth vs. original chip.
-4. Got an HD pack or MEP pack? Drop the folder or `.zip` into `EnhancementPacks/` (or a folder named like the ROM, beside it) and open **Tools → HD Packs → Enhancement Packs (MEP)…** to toggle textures / audio / synth per pack.
-5. Want a MIDI or VGM of the soundtrack? **Tools → Record Music (MIDI/VGM)** while the game plays.
-
-## Enhanced Audio
-
-An alternative synthesizer that reads the **live chip state** — frequency, volume, duty, key-on — and re-voices it with modern instruments in real time, on any ROM, with zero per-game assets. The original chip stays the source of truth; the synth mixes on top of (or replaces) its output.
-
-- **Supported cores:** NES (2A03), Game Boy/GBC APU, SMS-family (SN76489 PSG **and** YM2413 FM — *After Burner*, *Shadow Dancer* and other FM soundtracks are covered, with FM rhythm mode mapped to drum voices). On GBA the checkbox is visible but has no effect yet.
-- **Smart voicing:** a channel-role classifier separates melody, bass and SFX so sound effects don't get orchestrated along with the music.
-- **Styles:** Synthwave, Chip Deluxe, Orchestral Lite, Dry, Studio — each console has its own tuning on a shared DSP engine.
-- **Bring your own instruments:** point it at any General MIDI **SoundFont (.sf2)** (Settings → Audio) or drop `EnhancedAudio.sf2` in the Mesen folder.
-- **Tune without recompiling:** `EnhancedAudioPresets.cfg` in the Mesen home folder, with `[Studio]`, `[Studio.Gb]`, `[Studio.Sms]` sections. Documented template: [docs/EnhancedAudioPresets.example.cfg](docs/EnhancedAudioPresets.example.cfg). Format spec: [ESP v1](docs/specs/ESP-v1.md).
-- Per-console channel volumes apply to the synth voices too — muting a chip channel mutes its enhanced voice.
-
-## Enhancement Packs (MEP)
-
-Textures, music and synth presets ship as **one hash-keyed pack**, matched to your ROM by its No-Intro hash — no per-game config.
-
-- **Install:** a folder or `.zip` in `EnhancementPacks/`, or a folder named like the ROM right beside it (the sibling folder always wins).
-- **Toggle per layer:** textures / audio (OGG) / synth / ROM patches, from **Tools → HD Packs → Enhancement Packs (MEP)…**.
-- **Never start from nothing:** with *Bootstrap* on, playing a game with no pack writes `<Game>/auto/` beside the ROM — xBRZ 4× tiles, static screens as backgrounds and (NES) fingerprinted music ready for `scripts/mep_render_audio.py`. A player gets something better than raw pixels immediately. An artist gets a folder laid out to paint: it opens on `sheets/` — tiles grouped into the metatiles a game actually draws, with the screens they came from stitched beside them — plus `backgrounds/`, while the machine-ordered CHR fragments sit out of the way in `chr/`. Paint a sheet, run `scripts/mep_build.py`, and it slices back into a pack.
-- **Player mode** (the default shell on a fresh install): the menu is hidden and a small overlay — resume / save slot / load slot / **Pack** chip / settings / **Advanced GUI** / quit — sits over the game, with a recent-games home screen. When two or more packs compete for the loaded ROM and none is preferred, a **pack picker** opens once over the un-enhanced game; picking stores the per-ROM preference (power-cycles to apply), and the overlay's pack chip reopens it any time. **Advanced GUI** returns to the classic menu/IDE shell — existing installs keep it by default.
-- **Built on existing standards** (No-Intro hashes, HDNes `hires.txt`, VGM/GD3, SMF/GM, OGG, BPS) — and where a gap exists, small **CC0 specs anyone can implement**: [MEP v1](docs/specs/MEP-v1.md) (pack) · [ESP v1](docs/specs/ESP-v1.md) (presets) · [MEI v1](docs/specs/MEI-v1.md) (federated discovery) · [hires.txt GB/SMS](docs/specs/hires-gbsms-v1-draft.md) (draft).
-- **Tooling:** `scripts/mep_lint.py` validates a pack offline; **Tools → HD Packs → HD Pack Builder** records tiles while you play, and its **Extract Audio** button (NES) runs the headless sound-driver probe (`scripts/spike_sound_driver`) to seed the pack's `auto/audio/` straight from the game's own driver — then `scripts/mep_render_audio.py` + `audio_cleanup_suggest.py` turn those seeds into a curated OGG layer (see the [pack authoring guide](docs/hd-pack-authoring.md)).
-
-Current limits: the `audio` layer is applied on NES only (GB/SMS wait for the hires.txt extension to freeze). Roadmap and design notes: [docs/enhancement-ecosystem.md](docs/enhancement-ecosystem.md).
-
-**Legal footing:** the project ships tools, mappings and specs — never other people's game assets. Extraction happens on your machine and stays there.
-
-## Remastering a game's art
-
-Redrawing a game the way the Contra80s pack does starts from a **recording of the game**, not from tracing screenshots. The whole base material is generated:
-
-1. **Record** the game doing everything it can do. Four drivers feed one builder: a scripted route, a published **TAS movie** (`.bk2`), a **RAM-only cheat** to warp to later stages, or a **save state** to start mid-game. The recorder writes what the game drew, frame by frame.
-2. **Unpack** the recording into a **kit** — sprite figures with their animation cycles, background objects, the whole stage stitched into a scrolling panorama, and completed CHR pattern pages — each with a sidecar saying what every cell will become.
-3. **Paint** the PNGs in your editor. Cells are the deliverable; the pack's `hires.txt` is generated from them.
-4. **Verify** mechanically: `scripts/mep_build.py build` and `scripts/mep_lint.py` both exit 0, and each generator's `--verify` round-trips with **0 tile keys lost or invented**.
-
-Coverage is a measured quantity, not a hope: `scripts/artist_cover.py` reports which of a reference pack's tiles your recordings actually put on screen, per recording, so you know which stage to play again.
-
-Step by step, with every command: **[docs/remastering-a-game.md](docs/remastering-a-game.md)**.
+---
 
 ## Community packs
 
-Packs stay with their authors — this project only **validates and catalogs** them, so players have one trustworthy list to browse and pack makers get their work found.
+Packs stay with their authors. MesenAI **validates and catalogs** them, so
+players get one trustworthy list and pack makers get found.
 
-**Browse:** [docs/community-packs.md](docs/community-packs.md) — the catalog, regenerated automatically from the [Community Packs board](https://github.com/users/sbihaiko/projects/3), ranked by 👍 reactions: click a row's 👍 to open its submission Issue and add your own vote.
+- **Browse:** [docs/community-packs.md](docs/community-packs.md) — regenerated
+  from the [Community Packs board](https://github.com/users/sbihaiko/projects/3),
+  ranked by 👍. Click a row's 👍 to vote on its Issue.
+- **Submit:** [one Issue](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml)
+  with pack link, game + region, console. A workflow downloads the pack (GitHub
+  releases, gists, raw links, Drive, MediaFire, Dropbox, MEGA; 300 MB cap), runs
+  the same `mep_lint.py` you can run offline, computes its hash, labels the
+  Issue (`pack:valid` / `pack:invalid`, `assets:*`, `patch:*`, `console:*`) and
+  comments with the spec section behind the verdict.
+- **Play:** every accepted pack is auto-installed for the matching ROM. One
+  master switch, per-pack disable.
+- **Update:** comment `/revalidate` on the Issue.
 
-**Submit a pack (yours or someone else's you love):**
+Both formats are welcome — a plain **Mesen `hires.txt` pack** or a **full MEP
+`pack.json`**. Making one? [Remastering guide](docs/remastering-a-game.md), then
+the [pack authoring guide](docs/hd-pack-authoring.md).
 
-1. **[Open a pack submission](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml)** — it's a GitHub Issue with a short pre-filled template: just pack link, target game + region, and console. No account beyond GitHub, nothing to upload. (Authorship is discovered from the pack itself during validation and shown in the catalog — you don't fill it in.)
-2. A workflow **downloads the pack** (GitHub releases, gists and raw links are accepted, up to 300 MB), runs the same `scripts/mep_lint.py` you can run offline, and computes its hash.
-3. The Issue gets **labeled** — `pack:valid` or `pack:invalid`, plus what's inside (`assets:textures`, `assets:audio`, `patch:ips`/`patch:bps`, `console:*`) — with a comment citing the exact section of [MEP v1](docs/specs/MEP-v1.md) behind the verdict.
-4. Valid packs land in the **catalog** on the next refresh. Updated the pack? Comment `/revalidate` on the Issue; a daily check also re-runs when the link's content changes.
+---
 
-Both formats are welcome: a plain **Mesen `hires.txt` HD pack** (all the existing NES community work) or a **full MEP `pack.json`** with textures, audio and synth presets. Making one? Generate the base material with the [remastering guide](docs/remastering-a-game.md), then get it listed with the [pack authoring guide](docs/hd-pack-authoring.md).
+## What's real today
 
-## Built to stay correct
+A project that measures its own claims should say what is and isn't shipped.
 
-Every push and PR runs [`checks.yml`](.github/workflows/checks.yml) — `make doc-checks`, the repo's own structural suite: the guardrails that fail a PR on drift (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline verifiers, and the script suites for the HD-pack and artist-kit tooling. It also boots the real core headless against synthetic ROM and pack fixtures, so the acceptance gate is mechanical rather than "it compiled".
+**Shipped and measured**
+- Enhanced Audio on NES, GB/GBC and SMS/GG (PSG and YM2413 FM). On GBA the
+  checkbox exists and does nothing yet.
+- HD textures on NES, GB/GBC, SMS/GG. The `audio` layer of a MEP pack applies
+  on NES only until the GB/SMS `hires.txt` extension freezes.
+- The headless recorder, all four drivers, coverage measurement, the four-surface
+  kit, `mep_build`/`mep_lint`, the composition editor, auto-attached
+  `spriteNearby`/`tileNearby` conditions, 15 validated community packs
+  auto-installing.
+- A CI gate on every push: the structural suite, the Python tool suites and a
+  headless boot of the real core. 792 dependency-free C++ unit tests and a C#
+  xUnit suite run locally.
 
-Two suites exist beyond that gate and are run by hand while the binary matrix is dispatch-only:
+**Not yet, and named as such**
+- Hot reload of a pack without reopening the ROM; copying a tile from the
+  viewers straight into a sheet; `<addition>` overflow art from the editor;
+  hand-written conditions validated against recorded routes; importing an
+  existing `hires.txt` pack into the toolchain. These are **Phase 12** of the
+  [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md), opened from a
+  [side-by-side with upstream](docs/hd-pack-toolchain-comparison.md) that says
+  where a hand author is still better served.
+- A human artist who did not build the tools has not yet run the painting
+  workflow end to end. Every acceptance so far is measured, but by proxy.
+- Windows and Linux binaries are on-demand CI builds, not tagged releases.
 
-- **`core-unit-tests`** — dependency-free C++ harness (`scripts/core_unit_tests.cpp`, `make core-unit-tests`) for core logic: Enhanced Audio channel-role classifier, MEP parsing, and other logic deliberately factored out so it can be tested without a ROM or GUI.
-- **`UI.Tests`** — C# xUnit suite (`UI.Tests/`) for the host layer: cheat parsing, pack-list handling, MEP parser and zip validator.
+Decisions behind all of it are recorded as an [ADR trail](docs/adr/) — the *why*
+stays reviewable.
 
-No SDL2, no full core: the C++ harness compiles one object per source and links, so `make -j` runs all 771 cases in about ten seconds from cold. It's not full-core coverage — it's real, growing coverage of what this fork adds and changes, so regressions get caught before they ship.
+---
 
-> **Temporarily, `checks.yml` is the only thing CI runs.** The 14-job binary matrix in `build.yml` is dispatch-only as of 2026-09-14 and both suites in [`unit-tests.yml`](.github/workflows/unit-tests.yml) are gated off to keep a push from queueing ~14 full builds; `unit-tests.yml` has additionally been disabled in the repo's Actions settings since 2026-08-29, so the two bullets above are **not gating** today. Run them locally with `make core-unit-tests` and `dotnet test UI.Tests/UI.Tests.csproj`. The note at the top of `build.yml` says how to restore the matrix.
+## Why this fork exists
 
-## Why this fork
+**Focused, not generalist.** Every extra console is another core to keep
+accurate and another place "enhancement" has to be reinvented. Dropping SNES,
+PCE, WonderSwan and ColecoVision paid for three things a generalist cannot
+easily have: audio that upgrades every game automatically, one pack format
+across consoles, and a real test layer.
 
-**Focused, not generalist.** Every console a multi-system emulator carries is another core to keep accurate, another regression surface, another place "enhancement" has to be reinvented. Dropping SNES, PCE, WonderSwan and ColecoVision freed the effort for three things a generalist can't easily have: audio that upgrades every game automatically, a shared pack format across consoles, and a real test layer. The four remaining families are exactly the ones where community HD packs and music extraction already prove the concept.
+**Built with AI, on purpose — and honest about it.** Implementation, review and
+the test suite are AI-assisted; that is how a small project moves four cores, a
+synth engine and a pack ecosystem at once, with tests as the safety net.
+Upstream's contribution policy does not accept AI-assisted PRs (Enhanced Audio
+was proposed as [nesdev-org/MesenCE#262](https://github.com/nesdev-org/MesenCE/pull/262)
+and closed for exactly that reason), so MesenAI is an independent fork.
+Upstream accuracy fixes are ported in regularly; enhancement never means
+drifting from accuracy. Throughput since going AI-assisted, with the commit
+video: [issue #166](https://github.com/sbihaiko/MesenAI/issues/166).
 
-**Built with AI, on purpose.** Implementation, review and the test suite are AI-assisted. That's what lets a small project move four cores, a synth engine and a pack ecosystem forward at once — with tests, not manual review alone, as the safety net. It's also why this is an independent fork: upstream's contribution policy doesn't accept AI-assisted PRs (Enhanced Audio was proposed as [PR #262](https://github.com/nesdev-org/MesenCE/pull/262) and closed for exactly that reason). Design decisions are recorded as an [ADR trail](docs/adr/), so the *why* stays reviewable. Upstream accuracy fixes from MesenCE/Mesen2 are ported in regularly, so enhancement doesn't mean drifting from accuracy.
-
-**The pace, visualized.** Roughly 3× the commit throughput since going AI-assisted — commit history video, numbers and full context in [issue #166](https://github.com/sbihaiko/MesenCE/issues/166).
+**Lineage.** Mesen 0.9.x → Mesen2 → [MesenCE](https://github.com/nesdev-org/MesenCE)
+(upstream, nesdev.org) → **MesenAI** (this fork).
 
 ## FAQ
 
-**Where's SNES?** Not here, deliberately. [bsnes](https://github.com/bsnes-emu/bsnes), [snes9x](https://github.com/snes9x/snes9x) and [ZSNES](https://www.zsnes.com/) already do it better than a bolted-on core would.
+**Does Enhanced Audio change the music?** No. It changes the *instruments*.
+Notes, timing and dynamics come from the game's own registers, frame by frame.
 
-**Does Enhanced Audio change the music?** No. It changes the *instruments*. Notes, timing and dynamics come from the game's own registers, frame by frame.
+**Can I turn it all off?** Yes — one checkbox in Settings → Audio, and you have
+stock Mesen accuracy.
 
-**Can I turn it all off?** Yes — one checkbox in Settings → Audio, and you have stock Mesen accuracy.
+**Do existing NES HD packs work?** Yes. The `hires.txt` format is unchanged;
+drop them in `HdPacks/` as always, or wrap them in a MEP pack.
 
-**Do existing NES HD packs work?** Yes, the HDNes `hires.txt` format is unchanged; drop them in `HdPacks/` as always, or wrap them in a MEP pack.
+**Do I need to play the whole game to remaster it?** No. Write the route, or
+start from a save state, or let a published TAS play. Measure what you covered.
+Record again where the number says so.
 
-**Will you host packs?** No. Packs stay with their authors; this project validates and [catalogs](docs/community-packs.md) them, and the emulator can consume any [MEI](docs/specs/MEI-v1.md) index.
+**Will you host packs?** No. Packs stay with their authors; MesenAI validates
+and [catalogs](docs/community-packs.md) them, and the emulator can consume any
+[MEI](docs/specs/MEI-v1.md) index.
 
-**Is it a drop-in replacement for Mesen?** For NES, GB/GBC, SMS/GG/SG-1000 and GBA — yes: same core, same debugger, same save/state formats, plus the enhancement layer. If you need SNES, PCE or WonderSwan, keep stock Mesen alongside.
+**Where's SNES?** Not here, deliberately. [bsnes](https://github.com/bsnes-emu/bsnes),
+[snes9x](https://github.com/snes9x/snes9x) and [ZSNES](https://www.zsnes.com/)
+already do it better than a bolted-on core would.
 
-## Contributing & community
+**Is it a drop-in replacement for Mesen?** For NES, GB/GBC, SMS/GG/SG-1000 and
+GBA — yes: same core, same debugger, same save/state formats, plus the
+enhancement layer.
 
-- **Found a game that sounds wrong / a pack that doesn't load?** [Open a bug](https://github.com/sbihaiko/MesenCE/issues/new) with the ROM's No-Intro name — never the ROM.
-- **Made or found a pack?** [Submit it](https://github.com/sbihaiko/MesenCE/issues/new?template=community-pack.yml) — see [Community packs](#community-packs).
-- **Tuned a style by ear?** Presets are just `.cfg` files — PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+## Contributing
+
+- **Something sounds wrong or a pack won't load?** [Open a bug](https://github.com/sbihaiko/MesenAI/issues/new)
+  with the ROM's No-Intro name — never the ROM.
+- **Made or found a pack?** [Submit it](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml).
+- **Tuned a style by ear?** Presets are `.cfg` files — PRs welcome. See
+  [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits & license
 
-Built on [Mesen2](https://github.com/SourMesen/Mesen2) by Sour and [MesenCE](https://github.com/nesdev-org/MesenCE) by the nesdev.org community. GPL v3 — full text: <http://www.gnu.org/licenses/gpl-3.0.en.html>. Copyright (C) 2014-2026 Sour, 2026 contributors. Open specs in `docs/specs/` are CC0.
+Built on [Mesen2](https://github.com/SourMesen/Mesen2) by Sour and
+[MesenCE](https://github.com/nesdev-org/MesenCE) by the nesdev.org community.
+GPL v3 — full text: <http://www.gnu.org/licenses/gpl-3.0.en.html>.
+Copyright (C) 2014-2026 Sour, 2026 contributors. Open specs in `docs/specs/`
+are CC0.
 
-Thanks to the wider MesenCE fork network, whose work we read while building this fork — all GPLv3, like this repo. Two of those readings are now in the code: [zerkz/MesenCE](https://github.com/zerkz/MesenCE)'s `InputOverrideProvider` is the prior art behind our frame-bounded headless input (frame-scoped overrides, buttons resolved by name, re-registration on `GameLoaded`), and [lusid/MesenCE](https://github.com/lusid/MesenCE)'s in-memory frame capture is behind the harness that reads a frame straight from the emulator instead of from a saved PNG. [libretro/MesenCE](https://github.com/libretro/MesenCE) shaped [ADR-0157](docs/adr/0157-headless-input-counted-in-frames.md) twice over: its commit `41e0b517` records the stale-input trap that catches anyone driving the core a frame at a time, and its `#ifdef LIBRETRO` fences are exactly why ours is a runtime mode instead. [ky12138/MesenCE](https://github.com/ky12138/MesenCE)'s PRG/CHR bank-mapping tracker stays recorded as prior art in `docs/roadmap/` for a slice not yet built, and its `NES_ONLY`/`LessUI` build modes we measured against this tree and declined ([ADR-0158](docs/adr/0158-no-nes-only-lessui-build-modes.md)) — a fork earns the credit for the question it made us answer, not only for the code we took.
+Thanks to the wider MesenCE fork network, all GPLv3 like this repo:
+[zerkz/MesenCE](https://github.com/zerkz/MesenCE)'s `InputOverrideProvider` is
+the prior art behind our frame-bounded headless input;
+[lusid/MesenCE](https://github.com/lusid/MesenCE)'s in-memory frame capture is
+behind the harness that reads a frame straight from the emulator;
+[libretro/MesenCE](https://github.com/libretro/MesenCE) shaped
+[ADR-0157](docs/adr/0157-headless-input-counted-in-frames.md) twice over; and
+[ky12138/MesenCE](https://github.com/ky12138/MesenCE)'s `NES_ONLY`/`LessUI`
+build modes we measured and declined
+([ADR-0158](docs/adr/0158-no-nes-only-lessui-build-modes.md)) — a fork earns
+credit for the question it made us answer, not only for the code we took.

@@ -7,7 +7,7 @@
 # Requires `gh` authenticated with the `project` scope (gh auth refresh -s project).
 set -euo pipefail
 
-REPO="sbihaiko/MesenCE"
+REPO="sbihaiko/MesenAI"
 OWNER="sbihaiko"
 PROJECT_NUMBER=1
 PROJECT_ID="PVT_kwHOB1MsbM4BhjX3"

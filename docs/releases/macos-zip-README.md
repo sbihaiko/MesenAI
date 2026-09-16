@@ -54,4 +54,4 @@ path is wherever you unpacked it.
 
 `mesence-tools-<version>.zip` carries the Python half of the pipeline and the
 three guides. Unpack both and start at
-[`docs/remastering-a-game.md`](https://github.com/sbihaiko/MesenCE/blob/main/docs/remastering-a-game.md).
+[`docs/remastering-a-game.md`](https://github.com/sbihaiko/MesenAI/blob/main/docs/remastering-a-game.md).

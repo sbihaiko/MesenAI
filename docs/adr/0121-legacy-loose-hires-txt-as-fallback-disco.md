@@ -7,11 +7,11 @@
 - Related: ADR-0040 (storage/discovery precedence this fallback extends), ADR-0120 (the zip subfolder fallback it refines)
 
 ## Context
-Bug https://github.com/sbihaiko/MesenCE/issues/48: scripts/mep_lint.py rejects classic Mesen 0.9.5/Mesen2-native HD packs (hires.txt at the pack's own root, no textures/ subfolder — the pre-MEP, pre-ADR-0049 convention MesenCE's HdPacks loader still supports at the container root) with "no section found", specifically when that loose hires.txt sits one level down inside an unrelated wrapper folder — e.g. a raw GitHub /archive/refs/heads/<branch>.zip download whose top-level folder is named after the repo (HDNes-Graphics-Pac-master/, ZII-mesen-main/), not the ROM/game.
+Bug https://github.com/sbihaiko/MesenAI/issues/48: scripts/mep_lint.py rejects classic Mesen 0.9.5/Mesen2-native HD packs (hires.txt at the pack's own root, no textures/ subfolder — the pre-MEP, pre-ADR-0049 convention MesenCE's HdPacks loader still supports at the container root) with "no section found", specifically when that loose hires.txt sits one level down inside an unrelated wrapper folder — e.g. a raw GitHub /archive/refs/heads/<branch>.zip download whose top-level folder is named after the repo (HDNes-Graphics-Pac-master/, ZII-mesen-main/), not the ROM/game.
 
 Verified with two real test fixtures, both filed as community-pack submissions and run locally through scripts/mep_lint.py:
-- https://github.com/sbihaiko/MesenCE/issues/46 (PepCodes/HDNes-Graphics-Pac, Pac-Man): HDNes-Graphics-Pac-master/hires.txt, HDNes-Graphics-Pac-master/Chr_00_0.png, etc.
-- https://github.com/sbihaiko/MesenCE/issues/47 (ModernRetroDesign/ZII-mesen, Zelda II): ZII-mesen-main/hires.txt plus Characters/, Dialog/, Font/, HUD/, IPS patches.
+- https://github.com/sbihaiko/MesenAI/issues/46 (PepCodes/HDNes-Graphics-Pac, Pac-Man): HDNes-Graphics-Pac-master/hires.txt, HDNes-Graphics-Pac-master/Chr_00_0.png, etc.
+- https://github.com/sbihaiko/MesenAI/issues/47 (ModernRetroDesign/ZII-mesen, Zelda II): ZII-mesen-main/hires.txt plus Characters/, Dialog/, Font/, HUD/, IPS patches.
 
 Both fail today with exit code 1: "no section found (textures/hires.txt, audio/hires.txt, synth/preset.cfg, auto/...)".
 

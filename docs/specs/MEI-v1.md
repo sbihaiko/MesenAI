@@ -295,7 +295,7 @@ declared:
       "manifest": "hires.txt",
       "tag": "background",
       "target": "selectscreen.png",
-      "reviewed_in": "https://github.com/sbihaiko/MesenCE/issues/139"
+      "reviewed_in": "https://github.com/sbihaiko/MesenAI/issues/139"
     }
   ],
   "declared_by": "MesenCE validation"

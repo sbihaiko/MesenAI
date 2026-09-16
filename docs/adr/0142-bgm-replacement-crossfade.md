@@ -69,7 +69,7 @@ path (never by run-ahead frames):
   manual-pending (listening validation — loop-intro, SFX audibility, no click
   on switch), not a blocker for the acceptance.
 - **Defect found and fixed 2026-09-03 (bug
-  https://github.com/sbihaiko/MesenCE/issues/151).** The shipped fade was
+  https://github.com/sbihaiko/MesenAI/issues/151).** The shipped fade was
   block-stepped, not a ramp: `MixAudio` computed one `fadeIn`/`fadeOut` factor
   per call and handed `ApplySamples` a single `uint8_t` volume for the whole
   block. `SoundMixer::PlayAudioBuffer` calls `MixAudio` once per emulated frame

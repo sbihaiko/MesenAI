@@ -174,7 +174,7 @@ Nothing here patches the client.
       and write the **live** catalog's current ETag to
       `<home>/EnhancementPacks/.cache/community-packs.etag`:
       ```bash
-      curl -sI https://raw.githubusercontent.com/sbihaiko/MesenCE/main/docs/community-packs.json \
+      curl -sI https://raw.githubusercontent.com/sbihaiko/MesenAI/main/docs/community-packs.json \
         | awk 'tolower($1)=="etag:"{print $2}' | tr -d '\r"'
       ```
       The next launch sends `If-None-Match`, gets `304`, and your body wins.

@@ -7,7 +7,7 @@
 
 ## Context
 
-The fork (`sbihaiko/MesenCE`) exists to build an enhancement ecosystem on top
+The fork (`sbihaiko/MesenAI`) exists to build an enhancement ecosystem on top
 of upstream `nesdev-org/MesenCE`, so it must keep being able to merge
 upstream from time to time without turning into a conflict hell. Upstream is
 slow-moving but is not dead: in the last year it touched 1,441 files, led by

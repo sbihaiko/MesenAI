@@ -235,7 +235,7 @@ deferred.
 ## Provenance of the motivating claim (see also AC-8)
 The pack that motivated this fallback is referenced by this repository's own
 issue #3, "[Community Pack] Contra80s (NES)"
-(https://github.com/sbihaiko/MesenCE/issues/3), which names the target as
+(https://github.com/sbihaiko/MesenAI/issues/3), which names the target as
 `Contra (USA)` / NES and links the pack at
 `https://github.com/TasticHacks/Contra80s/releases/download/1.1/Contra80s.zip`
 (release `1.1`, asset `Contra80s.zip`, reported size ≈91MB) — matching the

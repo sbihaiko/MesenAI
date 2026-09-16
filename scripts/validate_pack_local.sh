@@ -51,7 +51,7 @@
 set -euo pipefail
 
 # ---- board / project constants (mirror community-pack-validate.yml env) ----
-REPO="sbihaiko/MesenCE"
+REPO="sbihaiko/MesenAI"
 OWNER="sbihaiko"
 PROJECT_NUMBER=3
 PROJECT_ID="PVT_kwHOB1MsbM4BhjpN"

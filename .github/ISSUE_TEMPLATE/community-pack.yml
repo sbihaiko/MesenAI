@@ -14,7 +14,7 @@ body:
         The moment you hit *Create*, a bot downloads the pack, checks it, and
         **posts the result right here as a comment** — usually within a few
         minutes. If it passes, your pack joins the
-        [community catalog](https://github.com/sbihaiko/MesenCE/blob/main/docs/community-packs.md)
+        [community catalog](https://github.com/sbihaiko/MesenAI/blob/main/docs/community-packs.md)
         with its first 👍. Updated the pack later? Just comment `/revalidate`.
   - type: input
     id: pack_link
@@ -48,6 +48,6 @@ body:
     attributes:
       value: |
         _Making your own pack? The
-        [authoring guide](https://github.com/sbihaiko/MesenCE/blob/main/docs/hd-pack-authoring.md)
+        [authoring guide](https://github.com/sbihaiko/MesenAI/blob/main/docs/hd-pack-authoring.md)
         (`docs/hd-pack-authoring.md`) has the full details — you don't need it
         to submit._
