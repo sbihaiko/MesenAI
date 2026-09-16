@@ -68,7 +68,7 @@ def _pose_shape(pose):
 class EditorApp:
     def __init__(self, root: tk.Tk, folder: Path):
         self.root = root
-        root.title("MesenCE — composition editor (F9.18)")
+        root.title("MesenAI — composition editor (F9.18)")
         self.vm = ComposeViewModel()
         self._imgs = []       # keep PhotoImage references alive
         self._cell_imgs = []
@@ -607,7 +607,7 @@ class EditorApp:
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="MesenCE composition editor (ADR-0165, F9.18)")
+    ap = argparse.ArgumentParser(description="MesenAI composition editor (ADR-0165, F9.18)")
     ap.add_argument("folder", nargs="?", default=None, help="pack folder with textures/sheets/")
     args = ap.parse_args(argv)
     root = tk.Tk()

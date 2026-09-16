@@ -170,13 +170,13 @@ passed, unzip and run:
 
 | Platform | Build | Notes |
 |---|---|---|
-| **Windows x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip) | Windows 10 (1607) or newer |
 | **Linux x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20x64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
 | **Linux ARM64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20-%20ubuntu-22.04-arm%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Linux%20ARM64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
-| **macOS Intel** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28macOS%20-%20macos-15-intel%20-%20clang_aot%29.zip) | `brew install sdl2` |
+| **macOS Apple Silicon** | [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) | arm64; ad-hoc signed, so the first-open step above applies. `brew install sdl2` |
+| **Windows x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/main/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip) | Windows 10 (1607) or newer. **Frozen at the 2026-09-14 build** — CI stopped building Windows (ADR-0191), so this link will never refresh |
 
-> The binary matrix is **built on demand, not on every push**, so these links
-> serve the last build that was triggered. To refresh it:
+> The Linux matrix is **built on demand, not on every push**, so those links
+> serve the last build that was triggered. To refresh them:
 > `gh workflow run build.yml --repo sbihaiko/MesenAI --ref main`.
 > Building from source: [COMPILING.md](COMPILING.md).
 

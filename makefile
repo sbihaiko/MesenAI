@@ -291,7 +291,12 @@ doc-checks: check-manifest
 	# Amends ADR-0137's guarded-file list. PRD named five files with counts
 	# (said "six"); those five are the contract.
 	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2246
-	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1762
+	# Amended 2026-09-16 (ADR-0137, third amendment): the artist_chr_kit.py
+	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
+	# dedup, which added a function and the prose that explains it. The other
+	# three implementation ceilings are untouched, and this one is a ratchet
+	# again from 1802.
+	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1802
 	./scripts/check-file-loc.sh scripts/mep_build.py 1932
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	# Amended 2026-09-16 (ADR-0137, second amendment): the test file's ceiling

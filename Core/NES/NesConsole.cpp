@@ -1078,7 +1078,7 @@ static string ResolveExtractAudioToolPath()
 		}
 	}
 
-	//3. <Mesen home>/Tools (the app data folder, e.g. ~/Library/Application Support/MesenCE on macOS - GetHomeFolder() is not $HOME).
+	//3. <Mesen home>/Tools (the app data folder, e.g. ~/Library/Application Support/MesenAI on macOS - GetHomeFolder() is not $HOME; an install predating ADR-0201 still uses the MesenCE folder beside it).
 	string homeTools = FolderUtilities::CombinePath(
 		FolderUtilities::CombinePath(FolderUtilities::GetHomeFolder(), "Tools"), "spike_sound_driver");
 	if(std::filesystem::exists(homeTools)) {

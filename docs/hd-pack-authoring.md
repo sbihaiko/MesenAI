@@ -70,11 +70,11 @@ first-class convention: there is no `pack.json` at the zip root, and the zip
 is not named exactly like the ROM (MEP-v1.md §2.1, rules 5-6).
 
 For this case there is a **last-resort compatibility path**
-(MEP-v1.md §2.1, rule 9), but automatic triage and the MesenCE host locate
+(MEP-v1.md §2.1, rule 9), but automatic triage and the MesenAI host locate
 the candidate subfolder using different criteria — the engine-vs-validators
 asymmetry documented in MEP-v1.md §2.1:
 
-- **MesenCE host (`PrepareZip`, which decides whether the pack loads in the
+- **MesenAI host (`PrepareZip`, which decides whether the pack loads in the
   game)** looks, inside the zip, for the subfolder whose **name matches the
   ROM's name** (case-insensitive, no extension) — the same criterion as
   rule 5. For your pack to work in the host through this fallback, **name
@@ -192,7 +192,7 @@ In the folder-form/sibling-folder layout (no `pack.json`) the same
 `border/border.png` is picked up automatically; a bootstrap or tool may
 write a machine-generated one under `auto/border/border.png`, and the
 human `border/` always wins over `auto/` (the same human > auto rule as
-textures and audio). MesenCE also accepts a bare `border.png` at the pack
+textures and audio). MesenAI also accepts a bare `border.png` at the pack
 root, but the lint only recognizes the `border/` folder — use the folder.
 
 **`border.json`** (the file is optional; once present, `width`, `height`
@@ -221,7 +221,7 @@ and a full `viewport` are required — see the spec table for exact rules):
   wide, centred horizontally.
 - `underlay: true` draws the PNG *behind* the game instead of blending it
   on top (the game covers the whole viewport opaquely).
-- `scale_mode` is `fit` (default) or `stretch`. The current MesenCE build
+- `scale_mode` is `fit` (default) or `stretch`. The current MesenAI build
   parses it but still hands the canvas to the normal video scaler (your
   aspect-ratio/integer-scale settings apply), so do not rely on `stretch`
   yet.

@@ -1,7 +1,7 @@
-# MesenCE tools
+# MesenAI tools
 
 The command-line tools [`docs/remastering-a-game.md`](docs/remastering-a-game.md)
-uses, packaged for someone who downloaded a MesenCE binary instead of building
+uses, packaged for someone who downloaded a MesenAI binary instead of building
 the repository. The release and the exact commit it was cut from are in
 `VERSION` and `COMMIT`.
 

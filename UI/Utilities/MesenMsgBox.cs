@@ -37,12 +37,12 @@ namespace Mesen.Utilities
 
 			if(resourceText.StartsWith("[[")) {
 				if(args != null && args.Length > 0) {
-					return MessageBox.Show(wnd, string.Format("Critical error (" + text + ") {0}", args), "MesenCE", buttons, icon);
+					return MessageBox.Show(wnd, string.Format("Critical error (" + text + ") {0}", args), "MesenAI", buttons, icon);
 				} else {
-					return MessageBox.Show(wnd, string.Format("Critical error (" + text + ")"), "MesenCE", buttons, icon);
+					return MessageBox.Show(wnd, string.Format("Critical error (" + text + ")"), "MesenAI", buttons, icon);
 				}
 			} else {
-				return MessageBox.Show(wnd, ResourceHelper.GetMessage(text, args), "MesenCE", buttons, icon);
+				return MessageBox.Show(wnd, ResourceHelper.GetMessage(text, args), "MesenAI", buttons, icon);
 			}
 		}
 	}

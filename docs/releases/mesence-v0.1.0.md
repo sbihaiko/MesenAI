@@ -1,9 +1,9 @@
-# MesenCE v0.1.0
+# MesenAI v0.1.0
 
-**The first binary release of this fork.** Until now, trying MesenCE meant
+**The first binary release of this fork.** Until now, trying MesenAI meant
 building it; this is the download.
 
-MesenCE is a platform for **extracting, authoring and consuming community
+MesenAI is a platform for **extracting, authoring and consuming community
 enhancement packs** — textures, music and synth presets — while keeping the
 emulator itself legally clean. The community produces the content; the project
 ships the tools, the open specs and a validated catalog, and stays out of the
@@ -13,7 +13,7 @@ way.
 
 This release is **macOS on Apple Silicon and nothing else**. That is a
 deliberate scope decision, not an oversight: the project's CI compiles Linux
-only as a correctness gate and never publishes binaries, so a release has to be
+only, and no job of it produces a macOS binary, so a release has to be
 cut on a maintainer's machine, and the maintainer's machine is an Apple Silicon
 Mac. Shipping one build that has actually been run beats shipping seven that
 have not.
@@ -121,7 +121,7 @@ has been run end-to-end by someone who did not write it; tags are
 
 ## Relationship to upstream
 
-MesenCE is a fork of [Mesen2](https://github.com/SourMesen/Mesen2) by Sour and
+MesenAI is a fork of [Mesen2](https://github.com/SourMesen/Mesen2) by Sour and
 of [MesenCE](https://github.com/nesdev-org/MesenCE) by the nesdev.org
 community, and keeps their accuracy, debugger, netplay, shaders, run-ahead and
 rewind. Upstream fixes are ported in regularly. **Nothing goes the other way:**
