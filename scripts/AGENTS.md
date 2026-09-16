@@ -811,13 +811,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   The order of preference, stated in `write_bank` as one if/elif chain: this
   pack's own recorded cell -> a cell this bank recorded on a lower-ranked page ->
   a cell another recording of the same ROM recorded -> a ROM fill ->
-  unrecoverable. A donor is refused unless its `<supportedRom>` sha1 is present
-  and equal to this pack's (the message names both packs and both hashes) and
-  its `<scale>` matches; a bank whose identity the pack does not record is never
-  paired. A donated cell contributes no `<tile>` rule - its key was observed by
-  the donor, not by this pack - and every donation field is omitted from the
-  output when no `--also` was given, so a plain run is byte-for-byte what it was
-  before the flag existed (re-verified on the Contra stage-1 pack). Measured
+  unrecoverable. Naming the pack itself, or one recording twice, is not a
+  refusal: neither names a second recording, so `donor_paths` drops the repeat
+  and says so in `notes[]` (#275) - a caller that builds the list as "the whole
+  set, and then also the whole set" gets the kit it meant. A donor is refused
+  unless its `<supportedRom>` sha1 is present and equal to this pack's (the
+  message names both packs and both hashes) and its `<scale>` matches; a bank
+  whose identity the pack does not record is never paired. A donated cell
+  contributes no `<tile>` rule - its key was observed by the donor, not by this
+  pack - and every donation field is omitted from the output when no `--also`
+  was given, so a plain run is byte-for-byte what it was before the flag existed
+  (re-verified on the Contra stage-1 pack). Measured
   2026-09-14 on Contra stage 1 (clean pass + the `0032:99`/`00B0:FE` coverage
   pass): 29 cells donated, of which only **2** closed a real hole - 27 replaced
   a PRG-based ROM fill, and 10 of those 27 fills were **wrong** (the donated

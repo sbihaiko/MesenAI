@@ -866,6 +866,60 @@ def test_without_also_the_run_leaves_no_trace_of_the_feature():
               "which is a real difference, not an absent code path")
 
 
+def test_the_pack_passed_positionally_is_ignored_in_also_not_refused():
+    # #275: the caller builds the list as "the whole set, and then also the whole
+    # set", so the positional pack comes back in `--also`. It names no second
+    # recording — the pack the kit is for is already the union's primary — so
+    # the run is accepted and the kit is the one it would have got by dropping
+    # it, with the manifest naming the argument it ignored.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        rc = K.main([str(pack), "--rom", str(rom), "--out", str(td / "kit"),
+                     "--also", str(pack), "--also", str(donor), "--quiet"])
+        check(rc == 0, "the pack named positionally is not refused in --also", str(rc))
+        frag = json.loads((td / "kit" / "kit-part-chr.json").read_text())
+        # the same invocation with the pack dropped from --also
+        K.main([str(pack), "--rom", str(rom), "--out", str(td / "ref"),
+                "--also", str(donor), "--quiet"])
+        ref = json.loads((td / "ref" / "kit-part-chr.json").read_text())
+        check({k: v for k, v in frag.items() if k != "notes"}
+              == {k: v for k, v in ref.items() if k != "notes"},
+              "the kit is the one a caller that dropped it from --also gets")
+        check((td / "kit" / "chr" / "Chr_00_0.png").read_bytes()
+              == (td / "ref" / "chr" / "Chr_00_0.png").read_bytes(),
+              "and the painted page is byte-identical, not merely equal in counts")
+        note = next((n for n in frag["notes"]
+                     if n.startswith("--also") and str(pack) in n), None)
+        check(note is not None and "redundant" in note,
+              "the manifest says which argument was redundant, not that the pack "
+              "is invalid", str(note))
+
+
+def test_a_recording_listed_twice_is_ignored_and_the_first_one_donates():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, donor, rom = chr_rom_pair_fixture(td)
+        # The pack alone in --also is a run with no donor at all: it contributes
+        # no donated cell, no donors[] entry and no donation counter.
+        frag = K.run(pack, rom, td / "kit", None, "none", False, True, [str(pack)])
+        check("donors" not in frag and "donated" not in frag["totals"],
+              "the pack alone in --also is a run with no donor",
+              str(sorted(frag["totals"])))
+        check(any(n.startswith("--also") and "ignored" in n for n in frag["notes"]),
+              "but the manifest still says the argument was ignored", str(frag["notes"][-1]))
+        # The same donor three times is one donor: the first listed is the one
+        # that wins, so the repeats donate nothing and are named as ignored.
+        frag2 = K.run(pack, rom, td / "kit2", None, "none", False, True,
+                      [str(donor), str(donor), str(donor)])
+        check([d["cells"] for d in frag2["donors"]] == [20],
+              "a recording listed three times is one donor, unchanged",
+              str(frag2["donors"]))
+        repeats = [n for n in frag2["notes"] if n.startswith("--also")]
+        check(len(repeats) == 2 and all("ignored" in n for n in repeats),
+              "and each repeat is named rather than silently dropped", str(repeats))
+
+
 def main():
     tests = [
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
@@ -891,6 +945,8 @@ def main():
         test_provenance_travels_into_the_fragment_and_its_notes,
         test_a_donated_cell_never_becomes_a_hires_rule,
         test_without_also_the_run_leaves_no_trace_of_the_feature,
+        test_the_pack_passed_positionally_is_ignored_in_also_not_refused,
+        test_a_recording_listed_twice_is_ignored_and_the_first_one_donates,
         test_a_fade_step_of_one_ramp_folds_onto_the_step_above_it,
         test_a_fully_faded_palette_folds_at_brightness_zero,
         test_two_colourways_of_one_pattern_are_never_folded,

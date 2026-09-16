@@ -425,6 +425,9 @@ Two more things the CHR kit does that matter for how much work you have:
 Recording the same ROM twice and passing the second pack as `--also` is the
 cheapest coverage increase available: it converts "empty" cells into donated
 ones without you replaying anything. Use it whenever a stage came out thin.
+Passing the pack you named positionally — or the same recording twice — adds
+nothing rather than failing: the repeat is ignored, and the kit's `notes[]` says
+which argument it was.
 
 ---
 
