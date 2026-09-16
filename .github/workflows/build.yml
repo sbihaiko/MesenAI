@@ -1,28 +1,26 @@
 name: Build Mesen
 
-# LINUX ONLY (ADR-0191, 2026-09-14). The user's policy, that day, in two
-# sentences: every *binary* build is macOS Apple Silicon only for now, and CI
-# compiles Linux only while the macOS build is made locally when it is needed.
-# The two Windows publish jobs and the four macOS legs were therefore DELETED
-# from this file - they are not commented out, not `if: false`. The revision
-# history is where they live: `git log -p -- .github/workflows/build.yml`, or
-# `git show 109c1a6f:.github/workflows/build.yml` for the last 14-job version.
-# What is left is the six-leg Linux matrix and the two AppImage legs, and
-# neither needed an artifact from a removed job.
+# LINUX + WINDOWS + macOS APPLE SILICON (ADR-0203, 2026-09-16, amending
+# ADR-0191). ADR-0191 (2026-09-14) had cut this file to Linux only, deleting
+# the two Windows publish jobs and all four macOS legs (2 compilers x 2
+# architectures - Apple Silicon and Intel). ADR-0203 restores Windows and
+# macOS, narrowed to what the published release actually is: Apple Silicon
+# only, no `macos-15-intel` leg. The matrix is 10 jobs, not the original 14.
 #
-# The macOS release is built LOCALLY by `make release-macos` (Phase 11 C.4),
-# which injects the fresh `MesenCore.dylib` into the bundle, codesigns ad hoc
-# and fails on a hash mismatch. There is no macOS runner in this repository to
-# compare it against, by decision.
+# The 14-job version, if a full restore is ever wanted, lives in history:
+# `git show 109c1a6f:.github/workflows/build.yml`.
 #
-# Windows is retired from CI until the user lifts the rule. Restoring either
-# platform is a revert of the commit that landed ADR-0191, plus a line in that
-# ADR saying why.
+# The CI macOS leg is NOT code-signed. The deleted job signed with a
+# Developer ID certificate from repository secrets, which is distribution
+# signing and belongs to the release path, not to a CI compile check. The
+# published macOS release is still built by `scripts/release_macos.sh`, which
+# ad-hoc signs and verifies the bundle itself (Phase 11 C.4); this leg exists
+# to prove the build compiles and to hand back a runnable artifact.
 
 on:
-  # ADR-0191 (2026-09-14) cut the matrix to the eight Linux legs below and
-  # removed both triggers. ADR-0200 (2026-09-16) restores ONE of them, the
-  # narrow one: a pull request whose BASE branch is `prod`.
+  # ADR-0191 (2026-09-14) cut this workflow down to a hand-run path and
+  # removed both triggers it used to have. ADR-0200 (2026-09-16) restored ONE
+  # of them, the narrow one: a pull request whose BASE branch is `prod`.
   #
   #   gh workflow run build.yml --repo sbihaiko/MesenAI --ref <branch>
   #
@@ -47,9 +45,9 @@ on:
   # reasons: it runs on every push and pull request, and an artifact-less job in
   # THIS file would supersede the run the download links resolve against.
   #
-  # WHAT IS BUILT is unchanged by this trigger: the eight legs below are every
-  # platform this repository supports in CI. Restoring macOS or Windows is a
-  # revert of the ADR-0191 commit plus a line in that ADR, not an edit here.
+  # ADR-0203 (2026-09-16) restored the Windows and macOS jobs below without
+  # touching this trigger set: two thirds of the matrix therefore only runs on
+  # a `prod` pull request or a manual dispatch, not on every push to `main`.
   pull_request:
     branches:
       - 'prod'
@@ -84,6 +82,128 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
+  windows:
+    strategy:
+      matrix:
+        platform: [
+          {netversion: 10.x, targetframework: net10.0, aot: false, singleFile: true, aotString: ""},
+          {netversion: 10.x, targetframework: net10.0, aot: true, singleFile: false, aotString: " - AoT"}
+        ]
+      fail-fast: false
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET Core
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ matrix.platform.netversion }}
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+        with:
+          msbuild-architecture: x64
+
+      - name: Restore packages
+        run: dotnet restore -p:TargetFramework="${{ matrix.platform.targetframework }}" -r win-x64 -p:PublishAot="${{ matrix.platform.aot }}" -p:BuildWithNetFrameworkHostedCompiler=true
+
+      - name: Write commit SHA1 to file
+        uses: ./.github/actions/build-sha1-action
+
+      # MSBuild compiles the native MesenCore.dll (the C++ interop project) via
+      # the -t:UI target; `dotnet publish` below does not compile it and only
+      # copies it into the publish output, so skipping this step fails publish
+      # with "Could not copy the file ...MesenCore.dll because it was not
+      # found" rather than a native compile error - caught the hard way on the
+      # first ADR-0203 run.
+      - name: Build Mesen
+        run: msbuild -nologo -v:d -clp:ForceConsoleColor -m -p:Configuration=Release -p:Platform=x64 -t:Clean,UI -p:TargetFramework="${{ matrix.platform.targetframework }}" -p:OptimizeUi="true"
+
+      - name: Publish Mesen
+        run: dotnet publish --no-restore -c Release -p:PublishAot="${{ matrix.platform.aot }}" -p:SelfContained="${{ matrix.platform.aot }}" -p:PublishSingleFile="${{ matrix.platform.singleFile }}" -p:OptimizeUi="true" -p:Platform="Any CPU" -p:TargetFramework="${{ matrix.platform.targetframework }}" -r win-x64 Mesen.sln /p:PublishProfile=UI\Properties\PublishProfiles\Release.pubxml
+
+      - name: Upload Mesen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Mesen (Windows - ${{ matrix.platform.targetframework }}${{ matrix.platform.aotString }})
+          path: |
+            build/TmpReleaseBuild/Mesen.exe
+
+  macos:
+    strategy:
+      matrix:
+        compiler: [clang, clang_aot]
+        # Apple Silicon only (ADR-0203): the published release is arm64 and
+        # the README says "macOS Apple Silicon". The deleted job also carried
+        # a macos-15-intel leg; it is not restored, because it would build an
+        # artifact nothing links to.
+        platform: [
+          {os: macos-15, arch: arm64}
+        ]
+        include:
+          - compiler: clang
+            make_flags: ""
+          - compiler: clang_aot
+            make_flags: "USE_AOT=true"
+      fail-fast: false
+    runs-on: ${{ matrix.platform.os }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET Core
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.x
+
+      - name: Install dependencies
+        run: |
+          brew install sdl2 ccache
+          # Homebrew python is externally-managed (PEP 668): --break-system-packages is required.
+          python3 -m pip install --user --break-system-packages PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
+
+      - name: Get brew prefix
+        run: |
+          echo "brewPrefix=$(brew --prefix)" >> "$GITHUB_ENV"
+
+      - name: Setup CCache
+        uses: ./.github/actions/setup-ccache-action
+        with:
+          ccache-path: '${{ env.brewPrefix }}/opt/ccache/libexec'
+
+      - name: Write commit SHA1 to file
+        uses: ./.github/actions/build-sha1-action
+
+      - name: Run doc checks
+        run: make doc-checks
+
+      # stderr is not detected as a TTY, so diagnostics are by default printed without colours;
+      # forcing colours makes the log a little nicer to read.
+      - name: Build Mesen
+        run: |
+          ${{ matrix.make_flags }} make -j$(sysctl -n hw.logicalcpu)
+
+      # No signing step: this leg is a compile check + a runnable artifact for
+      # `workflow_dispatch`, not a distribution build. ADR-0203 §5 keeps
+      # Developer ID signing out of CI; the published release is signed ad hoc
+      # by scripts/release_macos.sh, run locally.
+      - name: Zip Mesen.app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent bin/osx-${{ matrix.platform.arch }}/Release/osx-${{ matrix.platform.arch }}/publish/Mesen.app bin/osx-${{ matrix.platform.arch }}/Release/Mesen.app.zip
+
+      - name: Upload Mesen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Mesen (macOS - ${{ matrix.platform.os }} - ${{ matrix.compiler }})
+          path: bin/osx-${{ matrix.platform.arch }}/Release/Mesen.app.zip
+
   linux:
     strategy:
       matrix:
