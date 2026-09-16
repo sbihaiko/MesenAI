@@ -104,10 +104,10 @@ what CI actually runs; this doc records why they're split the way they are.
   `Mesen.sln` on a Windows runner, `disabled_manually`; it had been the one
   file ADR-0191 allowed to name a Windows runner, since it compiled nothing
   and produced no binary. Rather than keep a dead, Windows-only exception
-  around, it was removed outright and `verify_ci_linux_only.sh` no longer
-  carries the exception. A changed-files-only format check may return as a
-  separate PR — on Linux, since ADR-0191 forbids a Windows runner for
-  anything now.
+  around, it was removed outright and the verifier (now
+  `verify_ci_platform_matrix.sh`) no longer carries the exception. A
+  changed-files-only format check may return as a separate PR — on Linux,
+  since only `build.yml` may name a Windows runner (ADR-0203).
 - `workflows/tests.yml` — **deleted** by ADR-0191 (2026-09-14). It was the
   Windows-only ROM regression suite (MSBuild `PGOHelper` + the private
   `nesdev-org/MesenTests` corpus, run as `PGOHelper.exe … citests`) and the
@@ -375,19 +375,22 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Work Guidance
 
-- **CI compiles Linux only (ADR-0191, 2026-09-14).** Every binary build is
-  macOS Apple Silicon only for now, and CI is not where it happens: no
-  workflow in this repository may declare `runs-on:` naming a `macos-*` or a
-  `windows-*` runner. There is no exception left: `dotnet-format-check.yml`,
-  the one file `scripts/checks/verify_ci_linux_only.sh` used to allow to name
-  a Windows runner, was itself deleted (2026-09-14, the user's decision) — a
-  dead, Windows-only exception was not worth keeping. The macOS release is
-  built **locally** by `make release-macos` (Phase 11 C.4), whose hash check — not
-  CI — is what verifies the `.app`. Windows is retired from CI until the user
-  lifts the rule, and with it the upstream ROM accuracy suite; the practical
-  cost is that MSVC-only breakage (`/W4 /WX`, e.g. the `getenv` C4996 trap)
-  is caught only when Windows returns. Do not add a macOS or Windows job, and
-  do not re-create `tests.yml`/`unit-tests.yml`, without amending ADR-0191.
+- **`checks.yml` compiles Linux only; `build.yml` also builds Windows and
+  macOS Apple Silicon (ADR-0191, 2026-09-14; amended by ADR-0203,
+  2026-09-16).** No workflow other than `build.yml` may declare `runs-on:`
+  naming a `macos-*` or a `windows-*` runner — `checks.yml`'s always-on gate
+  stays Linux only. `build.yml` restores a `windows` job
+  (`windows-2025-vs2026`, two publish profiles) and a `macos` job
+  (`macos-15`/arm64 only — no `macos-15-intel` leg, since the published
+  release is arm64), neither code-signed: the CI leg is a compile check and a
+  runnable artifact, not the distribution build. The published macOS release
+  is still built **locally** by `make release-macos` (Phase 11 C.4), whose
+  hash check — not CI — is what verifies the `.app`. `tests.yml` (the
+  upstream ROM accuracy suite) stays deleted; MSVC-only breakage (`/W4 /WX`,
+  e.g. the `getenv` C4996 trap) is caught again now that Windows compiles in
+  CI, but the accuracy suite itself does not come back with it. Do not add a
+  macOS or Windows job to any workflow other than `build.yml`, and do not
+  re-create `tests.yml`/`unit-tests.yml`, without amending ADR-0191/ADR-0203.
 - **The PR gate's invariants (Phase 11 C.1, 2026-09-14 — amends the CI
   contract of ADR-0131; extended by ADR-0191 the same day).** Every pull
   request into `main` must, without a `workflow_dispatch`:
@@ -447,9 +450,10 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Verification
 
-- `./scripts/checks/verify_ci_linux_only.sh` — ADR-0191's own test plus
-  ADR-0193's trigger contract and ADR-0200's `build.yml` trigger, wired into
-  `make doc-checks`. It subsumes the greps below; run it first.
+- `./scripts/checks/verify_ci_platform_matrix.sh` — ADR-0191's own test plus
+  ADR-0193's trigger contract, ADR-0200's `build.yml` trigger, and ADR-0203's
+  restored Windows/macOS jobs, wired into `make doc-checks`. It subsumes the
+  greps below; run it first.
 - `grep -E "^  (pull_request|workflow_dispatch):" .github/workflows/checks.yml`
   (expected: both — ADR-0193; the `push` trigger is intentionally absent from
   this grep and from the verifier, see ADR-0193 §4)
