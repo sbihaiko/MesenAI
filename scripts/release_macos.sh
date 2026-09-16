@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# release_macos.sh - build the macOS Apple Silicon release of MesenCE from this
+# release_macos.sh - build the macOS Apple Silicon release of MesenAI from this
 # working tree and lay the artifacts out under out/release/.
 #
 # Invoked by `make release-macos` (VERSION=v0.1.0 by default). Everything it
 # produces is reproducible from one command, so the release is a build, not a
 # sequence of remembered steps:
 #
-#   out/release/MesenCE-<version>-macos-arm64.zip   Mesen.app + headless_record
-#   out/release/mesence-tools-<version>.zip         the Python tools the guide uses
+#   out/release/MesenAI-<version>-macos-arm64.zip   Mesen.app + headless_record
+#   out/release/mesenai-tools-<version>.zip         the Python tools the guide uses
 #   out/release/SHA256SUMS                          hashes of both
 #
 # Why local and not CI: the project's CI compiles Linux only, and build.yml has
@@ -70,8 +70,12 @@ PUBLISH_APP="$ROOT/bin/$PLATFORM/Release/$PLATFORM/publish/Mesen.app"
 RECORDER="$ROOT/scripts/headless_record"
 
 OUT="$ROOT/out/release"
-APP_STAGE="$ROOT/out/stage/MesenCE-$VERSION-macos-arm64"
-TOOLS_STAGE="$ROOT/out/stage/mesence-tools-$VERSION"
+# ADR-0202: the artifact names come from the product name, not from the tag
+# prefix - `ditto --keepParent` writes the staged folder's name into the zip,
+# so these two decide what a user sees on the download page and after
+# unpacking.
+APP_STAGE="$ROOT/out/stage/MesenAI-$VERSION-macos-arm64"
+TOOLS_STAGE="$ROOT/out/stage/mesenai-tools-$VERSION"
 
 # The Command Line Tools make; the /usr/bin shim is an xcrun wrapper that dies
 # with "You have not agreed to the Xcode license agreements" before compiling
@@ -112,7 +116,7 @@ COMMIT="$(git rev-parse HEAD)"
 DIRTY=""
 git diff --quiet HEAD -- || DIRTY=" (working tree has uncommitted changes)"
 
-echo "==> MesenCE $VERSION - macOS arm64 release"
+echo "==> MesenAI $VERSION - macOS arm64 release"
 echo "    commit: $COMMIT$DIRTY"
 echo "    make:   $MAKE_BIN"
 
@@ -275,8 +279,8 @@ find "$TOOLS_STAGE" -name __pycache__ -type d -exec rm -rf {} +
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-APP_ZIP="$OUT/MesenCE-$VERSION-macos-arm64.zip"
-TOOLS_ZIP="$OUT/mesence-tools-$VERSION.zip"
+APP_ZIP="$OUT/MesenAI-$VERSION-macos-arm64.zip"
+TOOLS_ZIP="$OUT/mesenai-tools-$VERSION.zip"
 
 echo "==> zipping $(basename "$APP_ZIP")"
 # ditto keeps the bundle's symlinks, permissions and signature intact; `zip`

@@ -355,6 +355,11 @@ doc-checks: check-manifest
 	#`make release-macos`, and Windows is retired from CI. The ADR was accepted
 	#and implemented in the same change, so this grep suite is its unit test.
 	./scripts/checks/verify_ci_linux_only.sh
+	#ADR-0202: the release artifacts are named after the product (MesenAI) and
+	#not after the tag (mesence-v0.1.0), the two are kept apart on purpose, and
+	#SHA256SUMS stays derived from the zip basenames. Same-turn ADR, so this
+	#grep suite is its unit test.
+	./scripts/checks/verify_release_asset_names.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py

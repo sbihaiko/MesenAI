@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard for the release tools zip (Phase 11 C.4).
 
-`scripts/release_macos.sh` builds `mesence-tools-<version>.zip` from the file
+`scripts/release_macos.sh` builds `mesenai-tools-<version>.zip` from the file
 list in `scripts/tools-zip-manifest.txt`. That list is the transitive local
 import closure of the tools `docs/remastering-a-game.md` and
 `docs/hd-pack-authoring.md` tell a pack author to run.
