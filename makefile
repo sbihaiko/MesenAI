@@ -351,10 +351,11 @@ doc-checks: check-manifest
 	./scripts/checks/verify_mep_nested_zip_fallback.sh
 	./scripts/checks/verify_status_kind_parity.sh
 	./scripts/checks/verify_synthetic_nrom.sh
-	#ADR-0191: CI compiles Linux only, the macOS release is built locally by
-	#`make release-macos`, and Windows is retired from CI. The ADR was accepted
-	#and implemented in the same change, so this grep suite is its unit test.
-	./scripts/checks/verify_ci_linux_only.sh
+	#ADR-0191 (checks.yml compiles Linux only) + ADR-0203 (build.yml restores
+	#a Windows job and an Apple-Silicon-only macOS job). Both were accepted
+	#and implemented in the same change as their code, so this grep suite is
+	#their unit test.
+	./scripts/checks/verify_ci_platform_matrix.sh
 	#ADR-0202: the release artifacts are named after the product (MesenAI) and
 	#not after the tag (mesence-v0.1.0), the two are kept apart on purpose, and
 	#SHA256SUMS stays derived from the zip basenames. Same-turn ADR, so this
