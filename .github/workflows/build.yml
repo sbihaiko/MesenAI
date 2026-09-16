@@ -114,7 +114,16 @@ jobs:
       - name: Write commit SHA1 to file
         uses: ./.github/actions/build-sha1-action
 
+      # MSBuild compiles the native MesenCore.dll (the C++ interop project) via
+      # the -t:UI target; `dotnet publish` below does not compile it and only
+      # copies it into the publish output, so skipping this step fails publish
+      # with "Could not copy the file ...MesenCore.dll because it was not
+      # found" rather than a native compile error - caught the hard way on the
+      # first ADR-0203 run.
       - name: Build Mesen
+        run: msbuild -nologo -v:d -clp:ForceConsoleColor -m -p:Configuration=Release -p:Platform=x64 -t:Clean,UI -p:TargetFramework="${{ matrix.platform.targetframework }}" -p:OptimizeUi="true"
+
+      - name: Publish Mesen
         run: dotnet publish --no-restore -c Release -p:PublishAot="${{ matrix.platform.aot }}" -p:SelfContained="${{ matrix.platform.aot }}" -p:PublishSingleFile="${{ matrix.platform.singleFile }}" -p:OptimizeUi="true" -p:Platform="Any CPU" -p:TargetFramework="${{ matrix.platform.targetframework }}" -r win-x64 Mesen.sln /p:PublishProfile=UI\Properties\PublishProfiles\Release.pubxml
 
       - name: Upload Mesen
