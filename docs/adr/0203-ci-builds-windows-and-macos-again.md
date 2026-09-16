@@ -103,5 +103,17 @@ as it already depended on someone dispatching after a `main` change.
 - **The verifier is rewritten, not deleted.** `verify_ci_linux_only.sh` asserted
   the absence of exactly these runners, so it fails the moment this lands. It
   becomes `verify_ci_platform_matrix.sh`, which asserts the new contract: the
-  platform set, the trigger set, the absence of the `event_name` guard, and the
-  absence of the `macos-15-intel` legs.
+  platform set, the trigger set, the absence of the `event_name` guard, the
+  absence of the `macos-15-intel` legs, and — section 8 — the Windows job's
+  two-step shape below.
+- **The Windows job is two steps, and that is load-bearing.** The native
+  `MesenCore.dll` (the C++ interop project) is built by the MSBuild `-t:...UI`
+  target, not by `dotnet publish`, which only copies it into the publish
+  output. Transcribing the job as a single publish step therefore does not
+  produce a native compile error: it fails publish with
+  `MSB3030: Could not copy the file ...MesenCore.dll because it was not found`,
+  which is what the first run of this ADR did. The original 14-job file in
+  history carries both steps for that reason, and the transcription lost the
+  distinction. `verify_ci_platform_matrix.sh` §8 now asserts presence, the `UI`
+  target and the order, because the failure is invisible to every other check —
+  it needs a Windows runner and 90 seconds to surface.
