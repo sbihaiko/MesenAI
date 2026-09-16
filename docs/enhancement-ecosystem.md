@@ -49,6 +49,9 @@ an open ecosystem:
   `ESP-v1`, `MEP-v1`, `MEI-v1`, `MEP-recipe-v1`, `hires-gbsms-v1` (draft); see
   [`docs/specs/README.md`](specs/README.md) for the index.
 - **Authoring a pack for submission:** [`docs/hd-pack-authoring.md`](hd-pack-authoring.md).
+- **Where the inherited upstream toolchain still serves an author better,
+  and the slice that answers each row:** [`docs/hd-pack-toolchain-comparison.md`](hd-pack-toolchain-comparison.md)
+  ("Gaps this table names") → PRD Part A §4, Phase 12.
 - **Community catalog:** [`docs/community-packs.md`](community-packs.md) (+ `.json`).
 
 ## Non-goals

@@ -22,7 +22,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-15, roadmap audit) — pack/core roadmap of this
+**Status:** active (2026-09-16, Phase 12 opened) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -587,6 +587,71 @@ human acceptance.
 No completed C.* execution plan remains here; its briefing and history are
 available in git and the logs.
 
+#### Phase 12 — Paint loop and hand-authored conditions
+
+**Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
+("Gaps this table names"). Nothing shipped. Three ADRs are `proposed`
+(ADR-0196, ADR-0197, ADR-0198); their slices are blocked until a human
+accepts them.
+
+**Why this phase.** The comparison table names seven rows where the
+inherited upstream toolchain still serves an author better than the layer
+built here. Read as a scoreboard it points at the wrong target: the Core,
+the format and the builder are upstream's, and the competitor the artist
+evidence measured is a spreadsheet, not another emulator
+(`docs/validation/metroid-artist-workflow-evidence.md` §3). This phase takes
+the rows that map onto two of the three criteria of the project's goal —
+**faster on day one** and **discovery** — and leaves the third, **recording
+coverage**, where it already lives (ADR-0182/0184/0185, F9.25). It does not
+claim recording is solved: Contra's clean routes cover 64.6 % and the F9.25
+matrix records that more input buys no map extent at 300 s.
+
+**Goal.** An artist opens the kit in the paint program they already use,
+paints on layers, saves, and sees the change in the running game without
+reopening the ROM; picks a single tile's key from the emulator's own viewers
+as a sheet cell; expands a pose beyond its hardware box from the composition
+editor; writes a condition by hand and learns from lint where the recorded
+routes agree with it; and brings an existing plain pack into the same
+toolchain. Success is measured per row of the comparison table, re-measured
+in `docs/validation/` when a slice closes.
+
+**Principles.**
+- Measure before optimizing: the pack Metroid (USA) installed on this
+  machine (67 images, 150 199 tile rules, 8401 keys) is the scale reference;
+  no Core or generator optimization lands before its number is recorded.
+- Nothing here emits a key the recording did not observe (ADR-0183 §3);
+  the one exception, the `<addition>` target key, is confined and marked
+  by ADR-0196 §3.
+- The toolchain stays external and stdlib (ADR-0165): no `psd-tools`, no
+  C# rewrite of the generators. The paint program exports PNGs; we name
+  them and reload them.
+- The sheets stay the source of truth; a `.psd`, `.aseprite` or `.kra` is
+  the artist's input, never the pack's.
+- A slice that changes what the artist sees is not shipped until a person
+  who did not build it logs the cold-read rows (§7 "Honest record"); the
+  F9.18 panel does not cover this phase's slices.
+
+**Non-goals.** Runtime dual-namespace lookup in the Core; relaxing IPS
+matching (ADR-0145); automatic emission of `frameRange`,
+`tileAtPosition` or `memoryCheckConstant` (ADR-0189 §4); any tool that picks
+a memory address for the author; automatic anti-flicker via `<addition>`;
+tile normalization by similarity; embedding the Python toolchain in the UI.
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| F12.1 | **Scale and load measurement.** Time `NesConsole::LoadHdPack` on the installed Metroid pack and on a synthetic 300 000-line `hires.txt`; emulation throughput (emulated frames per wall second, with and without the pack) and peak memory over a 60 s headless run; `mep_build.py build` and `mep_lint.py` wall time on a 300 000-line project. | No prerequisite. Numbers only; no optimization in this slice. Stop when the four numbers are in a `docs/validation/` log with binary and input hashes. F12.3's reload strategy and any later optimization cite this log. Re-measures the "Vocabulary scale" row. |
+| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py --verify` on both. Human panel row: a person pastes one cell and paints it without reading `hires.txt`. Re-measures "Picking a tile's key by hand". |
+| F12.3 | **Reload the pack without reopening the ROM.** A menu action and a headless flag that re-run the loader on the pack directory and swap the HD data at the next frame boundary. | Prerequisite: F12.1's load number. Bounded input: the Metroid pack and a Contra kit pack. Decision rule from F12.1: full reload if it costs under one frame budget times an agreed factor, otherwise per-image invalidation with the strategy named in the log. Stop when a PNG overwritten on disk renders pixel-exact in a `headless_record` screenshot after the reload, with no state loss. Re-measures "Painting, end to end" and "Staying inside the emulator". |
+| F12.4 | **Asset-name template for the paint program.** The kit generators write each surface under a file name the artist's program can export to on save (Photoshop *Generate Image Assets* `name.png` convention; Aseprite/Krita export slots), plus a one-line "open, paint, save" step in `docs/remastering-a-game.md`. | Prerequisite: F12.3. Stdlib only; no `.psd` reader. Bounded input: the Contra and Zelda kits. Stop when saving in the paint program overwrites the kit PNG and F12.3 renders it. What we measure is ours: valid names, reload fired, pixel-exact result. |
+| F12.5 | **`<addition>` from the composition editor.** An overflow layer on a pose exports `<addition>` lines anchored on the pose's root cell, with the target key chosen per ADR-0196 §3, and the round-trip and lint of ADR-0196 §4. | Blocked on ADR-0196 (§3 CHR RAM key choice is the open question). Bounded input: one pose each on Mega Man 3 (CHR ROM) and Contra (CHR RAM, or refused per §3(c)). Stop when the expanded pose renders pixel-exact on a known frame and the pack round-trips with the synthetic keys listed. Re-measures "Extra tiles drawn on match". |
+| F12.6a | **Lint validates authored conditions against routes.** Sheets accept a hand-written condition; `mep_lint.py --routes` evaluates `frameRange`, `tileAtPosition`, `tileNearby`, `spriteNearby` on every retained frame of every recording and reports held / failed / unintended-hit per route, with the phase offset for `frameRange`. | Blocked on ADR-0197 (§1–§2). Bounded input: Contra routes under `scripts/stages/contra/` and a sheet carrying three authored conditions. Stop when the report names the frame and route of every failure. `memoryCheckConstant` reports `not evaluable` until F12.6b. Re-measures "Conditions deliberately refused". |
+| F12.6b | **Recorder retains watched memory.** Per ADR-0197 §3's chosen option, the recorder dumps memory values per retained frame so lint can evaluate `memoryCheckConstant`. | Blocked on ADR-0197 §3 (option (a) or (b) is the human's pick). Core change; `make capture-tool` if the wire format moves. Stop when a `memoryCheckConstant` from Contra80s is evaluated on a recorded route and the verdict matches a manual check on three frames. |
+| F12.7 | **Import a legacy plain pack.** `mep_import.py` turns a `hires.txt` pack without an IPS into a MEP project that rebuilds to the same rule set and pixels (ADR-0198 §1). | Blocked on ADR-0198 (§3 bridge is the open question; §1–§2 can be accepted alone). Bounded input: two accepted packs without `<patch>` (Ninja Gaiden, Bomberman) and Contra80s. Stop when `build` on the imported project equals the input by `(tileData, palette, condition)` and pixels. Packs with `<patch>` are refused with the ADR named. Re-measures the plain half of "Interop with community packs". |
+
+**Order.** F12.1 and F12.2 have no prerequisite and run in parallel; F12.3
+after F12.1; F12.4 after F12.3; F12.5, F12.6a/b and F12.7 each after their
+ADR is accepted, in any order. One slice per task.
+
 ### 5. Order of execution
 
 1. **F9.18:** F9.18-V closed on 2026-09-15 — current-binary correctness of the
@@ -604,6 +669,9 @@ available in git and the logs.
    work additionally depends on Phase 9 selection/export/paint evidence.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
+5. **Phase 12:** F12.1 (measurement) and F12.2 (copy as sheet cell) may start
+   now; F12.3–F12.4 follow F12.1; F12.5, F12.6a/b and F12.7 wait for a human
+   to accept ADR-0196/0197/0198 respectively.
 
 One implementation slice per task; architecture changes still require their
 ADR. This documentation update records work and acceptance, not completed runs.
@@ -651,6 +719,9 @@ files and in §3.
 | 0190 | accepted (2026-09-14); implemented in the same change | `tileNearby` auto-attached from a directed co-occurrence table gated on both-ways frame support; removes `tileNearby` from 0189 §4's deferrals |
 | 0191 | accepted (2026-09-14); implemented in the same change | CI compiles **Linux only**: `tests.yml` (Windows MSBuild + `PGOHelper citests`, not reproducible on Linux) deleted, `unit-tests.yml` folded into `checks.yml` as `ui-tests`/`headless-ui-tests` and deleted, `build.yml` trimmed to its Linux/AppImage legs. The macOS Apple Silicon binary is built locally by `make release-macos` (C.4) and Windows is retired from CI, so MSVC-only breakage is caught only when it returns. Amends ADR-0131 (the unit-test contract moves to `checks.yml`) and drops C.1's "Windows `tests.yml` job" from the required checks |
 | 0193 | accepted (2026-09-15); documented in the same change | `checks.yml` keeps **both** triggers, and the `push` on `main` is not an optimization to be cut: `pull_request` reports the five required checks before merge, and `push` is the only gate for the paths that bypass the ruleset — a direct push (admin `bypass_actors`, which is how `community-pack-catalog.yml` and a hand fix land) and a merge-commit/rebase tree the PR never tested (`strict_required_status_checks_policy: false`). Measured over the last 60 commits on `main`: 49 squash-merges, 7 merge-commit/rebase PRs, 4 with no PR at all. Reopening conditions in §5; the verifier asserts the `pull_request` + dispatch half and deliberately not the `push` one |
+| 0196 | proposed (2026-09-16) | `<addition>` is a compose-editor export anchored on a pose's observed root cell; its target key is synthetic by construction and must be provably unmatched (CHR ROM: index past CHR; CHR RAM: open, §3). Slice F12.5 |
+| 0197 | proposed (2026-09-16); amends 0189 §4's scope to emission only | hand-authored conditions are admitted in sheets and `mep_lint.py --routes` evaluates them on every retained frame of every recording; the three refusals of 0189 §4 stand; `memoryCheckConstant` needs recorder capture first (§3 open). Slices F12.6a/F12.6b |
+| 0198 | proposed (2026-09-16) | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool, stock-ROM namespace only; packs with an IPS are refused until the CHR RAM→ROM bridge question (§3) is decided. Slice F12.7 |
 
 ### 7. Risks
 
