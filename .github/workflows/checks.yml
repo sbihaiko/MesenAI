@@ -14,6 +14,12 @@ name: Checks
 # split: `cancel-in-progress` groups on workflow+ref, so a push to `main` during
 # a dispatched build would have cancelled it.
 #
+# ADR-0200 (2026-09-16) added a `prod`-filtered `pull_request` to `build.yml`.
+# The reasoning above is unaffected and that is why the trigger was safe to
+# add: a pull request run executes at `refs/pull/N/merge`, which is neither
+# `main` nor a ref a dispatch uses, so it can neither supersede the
+# downloadable run nor cancel one.
+#
 # Phase 11 C.1 (2026-09-14) added the two jobs below `checks`. With the binary
 # matrix on `workflow_dispatch`, nothing on a pull request compiled `Core/` any
 # more (and `/W4 /WX` + `-Werror` there had caught the tileNearby bug twice on

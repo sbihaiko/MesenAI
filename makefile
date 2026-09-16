@@ -370,6 +370,9 @@ doc-checks: check-manifest
 	python3 scripts/test_mep_recipe_fence.py
 	python3 scripts/test_pack_id_rules.py
 	python3 scripts/test_classify_pack_brief.py
+	#ADR-0199: the classify step's API call — body shape (no `tools`), the
+	#Interactions-API response walk, and the exit codes. No network.
+	python3 scripts/test_gemini_classify.py
 	python3 scripts/test_mep_build.py
 	python3 scripts/test_mep_lint_border.py
 	python3 scripts/test_mep_errata.py

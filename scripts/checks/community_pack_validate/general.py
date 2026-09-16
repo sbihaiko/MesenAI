@@ -4,9 +4,9 @@ Covers: the required Project/Status/option/Pack-Hash ids, the
 PROJECT_NUMBER pin, the host allow-list wiring (scripts/pack_host_allowlist.json
 plus fetch_pack.py's redirect/private-address guards), the 300MB size cap,
 the always-write sha256 step, the unmodified mep_lint.py invocation, the
-Claude Code Action tool restriction and data-not-instruction prompt clause,
-the top-of-file secret-name comment, and the Aceito*-gated catalog-workflow
-dispatch (AC-2, AC-6 validate-side).
+classify step's tool-free boundary (ADR-0199) and the data-not-instruction
+prompt clause, the top-of-file secret-name comment, and the Aceito*-gated
+catalog-workflow dispatch (AC-2, AC-6 validate-side).
 """
 import json
 import re
@@ -115,13 +115,41 @@ def _has_data_not_instruction_clause(text):
     return "data" in lowered and "never" in lowered
 
 
-def check_claude_action(text):
-    if "anthropics/claude-code-action" not in text:
-        fail("anthropics/claude-code-action not used")
-    if "disallowed_tools" not in text or "Bash" not in text:
-        fail("Claude Code Action step does not explicitly disallow Bash")
-    if "--disallowedTools Bash,Read" not in text:
-        fail("Classify pack must --disallowedTools Bash,Read (issue #148)")
+def _step_block(text, name):
+    """The YAML block of the step whose name starts with `name`."""
+    for block in text.split("\n      - name:"):
+        if block.lstrip().startswith(name):
+            return block
+    return ""
+
+
+def check_classify_is_tool_free(text):
+    """ADR-0199: classify is a direct, tool-free API call.
+
+    Until 2026-09-16 the classify step ran inside
+    `anthropics/claude-code-action` and its boundary was a denial list
+    (`--disallowedTools Bash,Read,...`, issue #148). The step is now a
+    `run:` that calls the Gemini API with no `tools` in the request body,
+    so what this check can assert is stronger: the step names the script,
+    reads the API key, and uses no action at all.
+    """
+    block = _step_block(text, "Classify pack")
+    if not block:
+        fail("no step named 'Classify pack ...' in the workflow")
+        return
+    if "scripts/gemini_classify.py" not in block:
+        fail("classify step does not call scripts/gemini_classify.py (ADR-0199)")
+    if "GEMINI_API_KEY" not in block:
+        fail("classify step does not read GEMINI_API_KEY")
+    if "anthropics/claude-code-action" in block:
+        fail("classify step still uses anthropics/claude-code-action (ADR-0199 replaced it)")
+    if "\n        uses:" in block:
+        fail("classify step still delegates to a third-party action")
+    # The request body is built in scripts/gemini_classify.py, whose unit
+    # test asserts it carries no `tools` key — the workflow itself must not
+    # start assembling its own payload.
+    if "tools" in block:
+        fail("classify step mentions tools; the request payload is the script's job")
     if not _has_data_not_instruction_clause(text):
         fail("prompt lacks an explicit data-not-instruction clause")
 
@@ -142,8 +170,11 @@ def check_prompt_file_data_not_instruction(text):
 
 
 def check_secret_name_comment(text):
+    # GEMINI_API_KEY is the live classify credential (ADR-0199); the two
+    # Anthropic names stay listed because the dormant autofix subsystem
+    # still declares them.
     header = "\n".join(text.splitlines()[:15])
-    for secret in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+    for secret in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
         if secret not in header:
             fail(f"top-of-file comment does not name required secret: {secret}")
 

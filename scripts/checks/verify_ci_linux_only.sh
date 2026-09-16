@@ -7,6 +7,12 @@
 # `checks.yml` keeps `pull_request` on `main` and `workflow_dispatch`. The
 # `push` trigger is not asserted on purpose - see section 6.
 #
+# ADR-0200 (2026-09-16) amends ADR-0191 §4's "stays workflow_dispatch-only"
+# clause: `build.yml` builds on a pull request opened against `prod`. Section 5
+# is where that is asserted - the branch filter that keeps the eight-leg matrix
+# off every ordinary pull request, and the absence of the `event_name` guard
+# that would otherwise publish nothing.
+#
 # The ADR was accepted and implemented in the same change, so per CLAUDE.md
 # these greps ARE its unit tests: they fail the moment a workflow reintroduces
 # a macOS or Windows runner, or the moment one of the two deleted workflows
@@ -78,12 +84,41 @@ if [ "$(grep -c "dotnet-version: 10.x" "$WORKFLOWS/checks.yml")" -lt 2 ]; then
   fail "the two dotnet jobs in checks.yml must both pin 'dotnet-version: 10.x' (ADR-0131 item 4)"
 fi
 
-# 5. build.yml stays dispatch-only and Linux-only.
-if grep -qE "^  (push|pull_request):" "$WORKFLOWS/build.yml"; then
-  fail "$WORKFLOWS/build.yml regained a push/pull_request trigger; binaries stay on workflow_dispatch (#230, ADR-0191)"
+# 5. build.yml stays Linux-only, keeps its dispatch escape, and takes exactly
+#    one trigger besides it: a pull_request filtered to the `prod` base branch
+#    (ADR-0200, 2026-09-16).
+#
+#    `push` still fails outright. A push run on `main` would become the newest
+#    run of this workflow there, and the README's nightly.link URLs resolve
+#    against exactly that run; its cancel-in-progress group (workflow+ref)
+#    would also kill a dispatched build. A pull_request run executes at
+#    `refs/pull/N/merge`, so it can do neither - which is what makes it safe
+#    where `push` is not.
+#
+#    The branch filter is the entire cost guard. Without it, every pull request
+#    in the repository would fire the eight-leg LTO matrix - the cost #230 and
+#    ADR-0191 existed to stop.
+if grep -qE "^  push:" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml regained a push trigger; a push run on main supersedes the binary run the README's links resolve against (#230, ADR-0191)"
+fi
+if grep -qE "^  pull_request:$" "$WORKFLOWS/build.yml"; then
+  if [ "$(grep -A3 '^  pull_request:$' "$WORKFLOWS/build.yml" | grep -c -- "- 'prod'")" -eq 0 ]; then
+    fail "$WORKFLOWS/build.yml's pull_request trigger is not filtered to 'prod'; an unfiltered one fires the eight-leg binary matrix on every pull request (ADR-0200)"
+  fi
+else
+  fail "$WORKFLOWS/build.yml lost its pull_request trigger; a PR opened against 'prod' no longer builds (ADR-0200)"
+fi
+if ! grep -qE "^  workflow_dispatch:$" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml lost its workflow_dispatch trigger; that is still the hand-run path for a release build (ADR-0191 §4, ADR-0200)"
 fi
 if ! grep -q "ADR-0191" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml's header no longer states the ADR-0191 policy"
+fi
+# The uploads must not be gated on the event: an `if:` there would run all
+# eight legs of a `prod` pull request and publish no artifact at all - the
+# expensive half of a build with none of the result (ADR-0200 §4).
+if grep -q "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml"; then
+  fail "$WORKFLOWS/build.yml gates an upload on github.event_name; a 'prod' pull request would run all eight legs and publish no artifact (ADR-0200)"
 fi
 
 # 6. ADR-0193: the gate keeps its pre-merge trigger and its dispatch escape.
@@ -110,4 +145,4 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS: ADR-0191 (CI compiles Linux only; no macOS/Windows compilation job; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch)"
+echo "PASS: ADR-0191 (CI compiles Linux only; no macOS/Windows compilation job; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run)"

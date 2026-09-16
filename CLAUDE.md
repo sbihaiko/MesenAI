@@ -135,9 +135,10 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   - runs `python3 scripts/mep_lint.py` unmodified against it;
   - always computes the content `sha256` and writes it to the "Pack Hash"
     field (`PVTF_lAHOB1MsbM4BhjpNzhge9Is`);
-  - on a passing lint, classifies the pack with the Claude Code Action
-    (tools restricted to commenting/labeling/moving the item — no general
-    Bash) from the lint report and manifest (`pack.json`, or the legacy
+  - on a passing lint, classifies the pack with a direct, tool-free Gemini
+    API call (ADR-0199; `scripts/gemini_classify.py`, `gemini-3.8-flash` —
+    the request body has no tools, so the model can only return JSON) from
+    the lint report and manifest (`pack.json`, or the legacy
     `hires.txt` of a plain HD Mesen pack), always treating the file name,
     manifest and issue text as **data**, never as instruction. A section
     counts as present only when its referenced files actually resolve inside

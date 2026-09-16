@@ -16,12 +16,18 @@ what CI actually runs; this doc records why they're split the way they are.
   ADR-0191 (2026-09-14). The two Windows publish jobs and the four macOS legs
   were deleted from the file (history keeps them); what is left is the
   six-leg Linux matrix and the two AppImage legs, and neither consumed an
-  artifact of a removed job. Its `push` and `pull_request` triggers are still
-  gone (#230), so it runs only on `workflow_dispatch`
-  (`gh workflow run build.yml --ref <branch>`). Restoring the triggers is
-  putting the two blocks back under `on:`; restoring a platform is a revert of
-  the ADR-0191 commit plus a line in that ADR. The rationale for both is in
-  the file's header comment.
+  artifact of a removed job. The `push` trigger is gone (#230) and stays gone:
+  a push run on `main` would become the newest run of this workflow there,
+  which is the run the README's nightly.link URLs resolve against. Since
+  **ADR-0200** (2026-09-16) it takes one trigger besides `workflow_dispatch`
+  (`gh workflow run build.yml --ref <branch>`): a `pull_request` **filtered to
+  the `prod` base branch**, so a pull request opened against `prod` builds all
+  eight legs and publishes their artifacts, while an ordinary pull request
+  against `main` builds nothing. That filter is the cost guard — an unfiltered
+  trigger would fire the eight-leg LTO matrix on every pull request, the cost
+  #230 and ADR-0191 existed to stop. Restoring a platform is a revert of the
+  ADR-0191 commit plus a line in that ADR. The rationale is in the file's
+  header comment.
 - `workflows/checks.yml` — `make doc-checks` on every pull request into
   `main`, on every push to `main`, and on dispatch. The two triggers are not
   duplicates, and the `push` one is not removable as an optimization
@@ -161,21 +167,24 @@ what CI actually runs; this doc records why they're split the way they are.
   MediaFire `/file/` share pages and `downloadN.mediafire.com`) and a 300MB cap before
   and during the download, always records the pack's `sha256` to Pack
   Hash, calls `scripts/mep_lint.py` unmodified, and — only on lint
-  success — classifies the pack via `anthropics/claude-code-action`
-  with `--disallowedTools Bash,Read`. Pack evidence is a bounded
-  `{{PACK_BRIEF}}` from `scripts/classify_pack_brief.py` (member list,
-  tag counts, header/README excerpts, patch magic, lint summary);
-  classify must not open `pack_download.bin` or `hires.txt` (issue #148
-  timed out on a 26 MiB manifest). File names/`pack.json`/issue text stay
+  success — classifies the pack with a direct, tool-free Gemini API call
+  (`scripts/gemini_classify.py`, `gemini-3.8-flash`, ADR-0199). Pack
+  evidence is a bounded `{{PACK_BRIEF}}` from
+  `scripts/classify_pack_brief.py` (member list, tag counts,
+  header/README excerpts, patch magic, lint summary); classify must not
+  open `pack_download.bin` or `hires.txt` (issue #148 timed out on a
+  26 MiB manifest), and the request body carries no `tools` key, so it
+  cannot rather than must not. File names/`pack.json`/issue text stay
   framed as data, never instructions. The classify step carries
-  `timeout-minutes: 15` (F6.0) so a hung Claude Code Action cannot hold
+  `timeout-minutes: 15` (F6.0) so a hung request cannot hold
   the runner for the job's 6-hour default. Dispatches
   `workflows/community-pack-catalog.yml` by name (never opens it) when the
   final Status is one of the two "Aceito" states. Requires the caller to
   supply a `PROJECT_PAT` PAT (`repo` + `project` + `read:org` scopes —
   `read:org` is required by `gh project` commands to resolve a
   personal-account owner, confirmed via a live "unknown owner type"
-  failure without it) and either
+  failure without it), `GEMINI_API_KEY` for the classify step, and — for
+  the dormant autofix subsystem only — either
   `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` as repo secrets — this
   workflow only documents those names, never creates them. See
   `scripts/checks/verify_community_pack_validate_workflow.py` for its
@@ -398,8 +407,11 @@ what CI actually runs; this doc records why they're split the way they are.
      same PR, or `main` blocks on a name that never reports.
   Adding a sixth required check is fine; removing one of the five, or letting
   a compile or a Python test leave the gate, is not — that is the state #230
-  left behind and C.1 was written to end. Binaries stay on
-  `workflow_dispatch` (#230 stands); none of this re-enables them.
+  left behind and C.1 was written to end. Binaries stay off the pull-request
+  path for an ordinary pull request (#230 stands); none of this re-enables
+  them. ADR-0200 later gave `build.yml` a `pull_request` filtered to the
+  `prod` base branch, which does not touch the gate — a `prod` pull request
+  runs no test and reports no required check.
   **Trigger half (ADR-0193, 2026-09-15):** the invariant above binds what a
   pull request *must* report, and that is the trigger the gate cannot lose —
   drop `pull_request` from `checks.yml` and the five checks never report, so
@@ -436,13 +448,19 @@ what CI actually runs; this doc records why they're split the way they are.
 ## Verification
 
 - `./scripts/checks/verify_ci_linux_only.sh` — ADR-0191's own test plus
-  ADR-0193's trigger contract, wired into `make doc-checks`. It subsumes the
-  greps below; run it first.
+  ADR-0193's trigger contract and ADR-0200's `build.yml` trigger, wired into
+  `make doc-checks`. It subsumes the greps below; run it first.
 - `grep -E "^  (pull_request|workflow_dispatch):" .github/workflows/checks.yml`
   (expected: both — ADR-0193; the `push` trigger is intentionally absent from
   this grep and from the verifier, see ADR-0193 §4)
 - `grep -A2 "^  pull_request:" .github/workflows/checks.yml` (expected: the
   `branches:` filter naming `main`)
+- `grep -A2 "^  pull_request:" .github/workflows/build.yml` (expected: the
+  `branches:` filter naming `prod`, plus `workflow_dispatch` — ADR-0200. An
+  unfiltered `pull_request` here fires the eight-leg binary matrix on every
+  pull request in the repository; `grep -c "github.event_name != 'pull_request'"
+  .github/workflows/build.yml` must be 0, or a `prod` PR runs all eight legs
+  and publishes nothing)
 - `! grep -l "windows-latest" .github/workflows/*.yml` (no Windows runner by
   that name; the verifier above also rejects `windows-2025-vs2026` and every
   other `windows-*` — there is no exception left, `dotnet-format-check.yml`
