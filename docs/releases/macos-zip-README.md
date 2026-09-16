@@ -10,7 +10,7 @@ built from.
 ## Contents
 
 ```
-MesenCE-<version>-macos-arm64/
+MesenAI-<version>-macos-arm64/
   Mesen.app              the emulator
   headless_record        stage 1 of docs/remastering-a-game.md
   MesenCore.dylib        the core headless_record links against — keep it beside the binary
@@ -52,6 +52,6 @@ path is wherever you unpacked it.
 
 ## Next
 
-`mesence-tools-<version>.zip` carries the Python half of the pipeline and the
+`mesenai-tools-<version>.zip` carries the Python half of the pipeline and the
 three guides. Unpack both and start at
 [`docs/remastering-a-game.md`](https://github.com/sbihaiko/MesenAI/blob/main/docs/remastering-a-game.md).

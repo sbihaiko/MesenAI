@@ -27,8 +27,8 @@ anywhere Python does.
 
 | File | What it is |
 |---|---|
-| `MesenCE-v0.1.0-macos-arm64.zip` | `Mesen.app` (ad-hoc signed) + `headless_record` + `MesenCore.dylib` |
-| `mesence-tools-v0.1.0.zip` | the command-line tools the remastering guide uses, the shipped recording routes, the three guides and a `requirements.txt` |
+| `MesenAI-v0.1.0-macos-arm64.zip` | `Mesen.app` (ad-hoc signed) + `headless_record` + `MesenCore.dylib` |
+| `mesenai-tools-v0.1.0.zip` | the command-line tools the remastering guide uses, the shipped recording routes, the three guides and a `requirements.txt` |
 | `SHA256SUMS` | hashes of both |
 
 Both were built by `make release-macos VERSION=v0.1.0`
@@ -61,7 +61,7 @@ Open, or `xattr -dr com.apple.quarantine Mesen.app`.
 The reason the tools ship beside the emulator: **[docs/remastering-a-game.md](https://github.com/sbihaiko/MesenAI/blob/main/docs/remastering-a-game.md)**
 is the end-to-end guide from a recording of a game you own to a pack you can
 paint and play. Record → measure coverage → unpack into a kit of PNGs → paint →
-build and verify → ship. `mesence-tools-v0.1.0.zip` carries every Python tool
+build and verify → ship. `mesenai-tools-v0.1.0.zip` carries every Python tool
 that guide names; `headless_record`, its stage 1, is in the macOS zip. Each zip
 has its own `README.md` saying how to set it up.
 
