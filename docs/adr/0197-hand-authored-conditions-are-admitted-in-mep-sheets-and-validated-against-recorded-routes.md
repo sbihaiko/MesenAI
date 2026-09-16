@@ -1,9 +1,9 @@
 # ADR-0197: Hand-authored conditions are admitted in MEP sheets and validated against the recorded routes; the toolchain still never emits the refused three
 
-- Status: proposed (2026-09-16) — open question in §3: whether the recorder
-  should start retaining watched memory values so `memoryCheckConstant` can be
-  validated at all. Implementing slices, once accepted: PRD Part A §4,
-  Phase 12, F12.6a (lint) and F12.6b (recorder capture)
+- Status: accepted (2026-09-16) — §3 decided as option (b), the fixed
+  `$0000`–`$07FF` window; user's go-ahead quoted verbatim: "confirmo". Not
+  implemented; the implementing slices are PRD Part A §4, Phase 12, F12.6a
+  (lint) and F12.6b (recorder capture)
 - Date: 2026-09-16
 - Related: ADR-0189 §4 (the three refused condition types), ADR-0190
   (`tileNearby` auto-attached), ADR-0183 §3 (evidence vs inference),
@@ -65,21 +65,32 @@ visible as a number, not a guess. This is a report, not a gate: an authored
 condition is the author's decision, and lint says whether the recorded
 evidence agrees.
 
-### 3. `memoryCheckConstant` needs recorder capture first — open
+### 3. The recorder retains the fixed `$0000`–`$07FF` window — decided
 
 Validating a memory condition requires the value of that address on each
-retained frame. Two shapes, for the human to pick:
+retained frame. Decided 2026-09-16: option (b). The recorder retains the
+2 KB of internal RAM (`$0000`–`$07FF`, the range ADR-0184 already bounds
+for RAM cheats with `AAAA < 0x0800`) on every retained frame, independent
+of route and of any loaded pack. Any recording made after F12.6b ships
+can then validate any authored `memoryCheckConstant` in that range,
+including one written after the recording.
 
-- (a) the recorder retains, per retained frame, the values of the addresses
-  the *loaded* pack's conditions watch (`HdPackData::WatchedMemoryAddresses`,
-  already computed by the loader) — cheap, but the pack must exist before the
-  recording that validates it;
-- (b) the recorder retains a fixed window (`$0000`–`$07FF`, the RAM the
-  RAM-cheat rule of ADR-0184 already bounds) on every retained frame —
-  route-independent, costs about 2 KB per retained frame in the dump.
+Rejected: (a) retaining only `HdPackData::WatchedMemoryAddresses` of the
+loaded pack — a new address would need the pack loaded and the run
+re-recorded before it could be checked, a circular dependency.
 
-Until one is accepted, lint reports a `memoryCheckConstant` as
-`not evaluable: no memory stream in recording` and never as a pass.
+Limits, to be stated by lint rather than hidden:
+
+- an address outside the window — WRAM `$6000`–`$7FFF`, PRG `$8000`+,
+  mapper registers, and PPU memory (`$10000`+ in the HD pack condition
+  syntax) — reports `not evaluable: address outside retained window`;
+- a recording made before F12.6b reports `not evaluable: no memory stream
+  in recording`; neither verdict is ever a pass;
+- the cost is 2 KB per retained frame. The total per recording depends on
+  the retention cadence of `HdPackBuilder::OnFrameEnd`; F12.6b measures it
+  on a 60 s Contra route and records the number in `docs/validation/`
+  before any doc quotes one. Widening the window later (WRAM first) is an
+  amendment to this section, not a new ADR.
 
 ## Consequences
 

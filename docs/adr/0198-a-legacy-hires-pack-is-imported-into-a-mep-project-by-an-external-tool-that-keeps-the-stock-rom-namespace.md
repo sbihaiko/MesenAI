@@ -1,8 +1,9 @@
 # ADR-0198: A legacy `hires.txt` pack is imported into a MEP project by an external tool that keeps the stock-ROM namespace; the CHR RAM→ROM bridge is a separate question
 
-- Status: proposed (2026-09-16) — open question in §3: whether to bridge
-  packs keyed against an IPS-patched ROM at all. Implementing slice, once
-  accepted: PRD Part A §4, Phase 12, F12.7
+- Status: accepted (2026-09-16) — §3 decided as option (a), import against
+  the patched ROM, with its cost stated; user's go-ahead quoted verbatim:
+  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
+  Phase 12, F12.7 (plain packs first, per §2)
 - Date: 2026-09-16
 - Related: ADR-0005 (MEP textures is an envelope over `hires.txt`), ADR-0145
   (optimistic matching; IPS does not relax), ADR-0003/ADR-0039 (No-Intro
@@ -58,14 +59,33 @@ Ice Climber, Little Nemo, Pac-Man, Donkey Kong, and the hand-made Contra80s
 reference). A pack with `<patch>` is refused with a message naming this ADR
 until §3 is decided.
 
-### 3. The CHR RAM→ROM bridge — open
+### 3. A patched-ROM pack is imported against the patched ROM — decided
 
-For a pack keyed against a patched ROM, three shapes, for the human to pick:
+For a pack keyed against a patched ROM, decided 2026-09-16: option (a).
 
-- (a) **import against the patched ROM.** The project's `supportedRom` is
-  the patched hash and the IPS is carried as a project asset; the fork
-  matches it exactly (ADR-0145 (3)) as it does today. Cheapest; buys the
-  author sheets and lint, and nothing about the stock ROM.
+- **(a) import against the patched ROM — chosen.** The project's
+  `supportedRom` is the patched hash and the IPS is carried as a project
+  asset; the fork matches it exactly (ADR-0145 (3)) as it does today. The
+  author gets sheets, poses, the composition editor and lint.
+
+  **What it does not buy, stated so the title is not read as more than it
+  is:** the imported project lives in the patched ROM's key namespace (CHR
+  ROM bank indices the IPS created). Recordings this fork makes on the stock
+  ROM produce CHR RAM 16-byte pattern keys, and the two never meet. So the
+  recording → artist kit → sheet loop of ADR-0183 does **not** connect to an
+  imported patched-ROM pack; its author can paint and lint, not record. The
+  "stock-ROM namespace" in this ADR's title is the namespace `mep_import.py`
+  keeps for the *plain* packs of §1–§2; a patched-ROM import is a second,
+  clearly labelled namespace, and `mep_import.py` prints that limit on every
+  such import. Closing the gap is option (b) below, left as future work with
+  no slice.
+
+  This follows §2: F12.7 ships against plain packs first; patched-ROM import
+  is admitted by this decision but scheduled only when a plain-pack import
+  round-trips.
+
+Rejected for now, kept as the recorded alternatives:
+
 - (b) **translate keys by observation.** Record the stock ROM on the same
   routes, record the patched ROM on the same routes, pair frames by
   `FrameNumber`, and map each patched bank index to the stock 16-byte
@@ -73,7 +93,9 @@ For a pack keyed against a patched ROM, three shapes, for the human to pick:
   co-occurrence are translated; the rest stay refused and are listed. This
   is observation, not interpretation, and stays inside ADR-0183 §3.
 - (c) **do not bridge.** The bet on the stock ROM (ADR-0003, ADR-0184) is
-  the opposite of that author's, and the project says so.
+  the opposite of that author's, and the project says so. Rejected because
+  it turns away the authors whose packs the comparison document measures
+  against, without offering them the sheets and lint that (a) does.
 
 ## Consequences
 

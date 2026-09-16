@@ -1,8 +1,9 @@
 # ADR-0196: `<addition>` tags are emitted only from a composed pose, anchored on an observed cell, and their target key is provably unmatched
 
-- Status: proposed (2026-09-16) — open question in §3: how the synthetic
-  target key is chosen on CHR RAM. Implementing slice, once accepted:
-  PRD Part A §4, Phase 12, F12.5
+- Status: accepted (2026-09-16) — §3 decided as option (a) with a reserved
+  palette added to the reserved pattern; user's go-ahead quoted verbatim:
+  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
+  Phase 12, F12.5
 - Date: 2026-09-16
 - Related: ADR-0165 (composition editor, external stdlib tool), ADR-0171
   (the sprite layer's unit is the pose), ADR-0179 (`poses.json` succession),
@@ -72,16 +73,31 @@ size the recording used.
   cell of the pack: an index past the end of CHR can never be fetched, so it
   can never collide. The build asserts `index >= chrTileCount` against the
   ROM's iNES header.
-- **CHR RAM.** Open. The 16-byte pattern namespace is the game's own, and
-  the game may write any pattern at run time. Candidates, for the human to
-  pick before this ADR is accepted:
-  - (a) a pattern reserved by convention (all-zero rows except a fixed
-    marker) with a build-time check that no recorded frame ever showed it,
-    reported as evidence-bounded, not proven;
-  - (b) refuse `<addition>` on CHR RAM until a recording of the full route
-    set shows the reserved pattern is unused, and lint the pack against that
-    recording;
-  - (c) refuse `<addition>` on CHR RAM outright, and say so in the editor.
+- **CHR RAM.** Decided 2026-09-16: option (a), a key reserved by
+  convention, with the reservation placed on **both** halves of the key.
+  `HdTileKey` on CHR RAM compares `PaletteColors` and the 16-byte pattern
+  together (`HdData.h`, `operator==`), and `BuildAdditionalTileCache` in
+  `HdNesPack.cpp` matches an `<addition>` whose `ignorePalette` is unset only
+  on an exact palette. So the synthetic target is:
+  - pattern: all-zero rows except a fixed marker row, `n` encoded in the
+    marker for the *n*-th synthetic cell;
+  - palette: the four entries `$0D` (`0x0D0D0D0D`) — the "blacker than
+    black" index no shipping game writes to a palette;
+  - `ignorePalette` never set on a synthetic target.
+
+  A collision then needs the game to write that pattern **and** load that
+  palette on the same tile. The build still runs the evidence check — no
+  retained frame of any recording under the project showed the reserved
+  palette — and reports it as *evidence-bounded, not proven*, because the
+  recordings cover routes, not the game (the gap `docs/hd-pack-toolchain-
+  comparison.md` names under "Recording"). The check is on the palette, not
+  the pattern: the pattern half alone would inherit the coverage gap
+  without the palette's protection.
+
+  Rejected: (b) refuse until a full-route recording proves the pattern
+  unused — a barrier the coverage gap makes indefinite; (c) refuse CHR RAM
+  outright — it removes Metroid and Contra, the two CHR RAM games this
+  toolchain is measured on, from the overflow layer.
 
 ### 4. Round-trip and lint
 

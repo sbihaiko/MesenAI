@@ -93,9 +93,9 @@ loop and hand-authored conditions**, opened 2026-09-16). The mapping:
 | Vocabulary scale | F12.1 (measure the installed Metroid pack first) | — |
 | Picking a tile's key by hand | F12.2 (*Copy as MEP sheet cell*) | — |
 | Painting, end to end · Staying inside the emulator | F12.3 (reload without reopening the ROM), F12.4 (asset-name template) | — |
-| Extra tiles drawn on match | F12.5 | ADR-0196 (`proposed`) |
-| Conditions deliberately refused | F12.6a / F12.6b | ADR-0197 (`proposed`; amends ADR-0189 §4's scope, keeps its refusals) |
-| Interop with community packs | F12.7 (plain packs only; the IPS half is ADR-0198 §3) | ADR-0198 (`proposed`) |
+| Extra tiles drawn on match | F12.5 | ADR-0196 (accepted 2026-09-16) |
+| Conditions deliberately refused | F12.6a / F12.6b | ADR-0197 (accepted 2026-09-16; amends ADR-0189 §4's scope, keeps its refusals) |
+| Interop with community packs | F12.7 (plain packs first; a patched-ROM pack imports against the patched ROM, ADR-0198 §3) | ADR-0198 (accepted 2026-09-16) |
 | Tile identity | none — it is the inherited contract | — |
 
 When a slice closes, the row above is re-measured and the cell cites the log
