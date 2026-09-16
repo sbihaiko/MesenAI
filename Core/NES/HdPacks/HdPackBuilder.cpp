@@ -2145,23 +2145,18 @@ void HdPackBuilder::SaveHdPack()
 		ss << "<patch>" << VirtualFile(patchInfo.second).GetFileName() << "," << patchInfo.first << std::endl;
 	}
 
+	//ADR-0195: every CHR ROM recording asks the run time to derive index->index
+	//fallbacks from the cartridge itself, so an artist never has to paint the
+	//same 16 bytes twice. Not set on CHR RAM, where HdNesPack::InitializeFallbackTiles
+	//does nothing (the key is already the bitmap) - a pack whose key namespace
+	//cannot use the flag should not carry it.
+	if(!_isChrRam) {
+		_hdData.OptionFlags |= (int)HdPackOptions::AutomaticFallbackTiles;
+	}
+
 	if(_hdData.OptionFlags != 0) {
-		ss << "<options>";
-		if(_hdData.OptionFlags & (int)HdPackOptions::NoSpriteLimit) {
-			ss << "disableSpriteLimit,";
-		}
-		if(_hdData.OptionFlags & (int)HdPackOptions::AlternateRegisterRange) {
-			ss << "alternateRegisterRange,";
-		}
-		if(_hdData.OptionFlags & (int)HdPackOptions::DisableCache) {
-			ss << "disableCache,";
-		}
-		if(_hdData.OptionFlags & (int)HdPackOptions::DontRenderOriginalTiles) {
-			ss << "disableOriginalTiles,";
-		}
-		if(_hdData.OptionFlags & (int)HdPackOptions::AutomaticFallbackTiles) {
-			ss << "automaticFallbackTiles,";
-		}
+		//Terminated, and built without a trailing comma: see HdPackOptionsToString.
+		ss << "<options>" << HdPackOptionsToString(_hdData.OptionFlags) << std::endl;
 	}
 
 	ss << tileRows.str();

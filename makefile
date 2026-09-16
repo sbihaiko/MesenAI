@@ -294,7 +294,12 @@ doc-checks: check-manifest
 	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1762
 	./scripts/check-file-loc.sh scripts/mep_build.py 1932
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
-	./scripts/check-file-loc.sh scripts/core_unit_tests.cpp 7342
+	# Amended 2026-09-16 (ADR-0137, second amendment): the test file's ceiling
+	# rose from the C.7 count of 7342 to 7600. C.7 ratcheted the four
+	# implementation files above; a test file grows when a decision does, and
+	# ADR-0195 arrived one day after C.7 with the ratchet already at zero
+	# headroom. The four implementation ceilings are untouched.
+	./scripts/check-file-loc.sh scripts/core_unit_tests.cpp 7600
 	./scripts/checks/verify_pack_host_allowlist_embed.sh
 	# Phase 11 C.8 / ADR-0187: kind handlers and the validate gate stay in step
 	# with scripts/pack_host_allowlist.json (CI vs client drift).

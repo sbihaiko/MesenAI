@@ -30,7 +30,8 @@
 //grids - status-bar detection, grid phase advantage, vocabulary counts and the
 //`misc` isolation rule, mutual-predictability grouping over background
 //adjacency and (F9.5) over OAM offsets, scroll matching, and
-//SheetRender's geometry and sidecar JSON. Bloco Q (ADR-0157, F9.14) covers
+//SheetRender's geometry and sidecar JSON. It also covers the `<options>` line
+//the builder serializes for a CHR ROM pack (ADR-0195). Bloco Q (ADR-0157, F9.14) covers
 //HeadlessInputScript, the parser that turns a play script into absolute frame
 //ranges; Bloco S (F9.15) covers FrameCapture, the host-free half of the
 //in-memory frame capture - the dimension validation that runs before anything
@@ -56,6 +57,7 @@
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -1237,7 +1239,7 @@ namespace
 //The shipped fade was block-stepped: MixAudio computed one uint8_t volume per
 //call and applied it to the whole block, so at the real 735-sample block size
 //the 1764-sample window was 2-3 steps of ~40% - a quieter click, not a
-//crossfade (https://github.com/sbihaiko/MesenCE/issues/151). The volume is now
+//crossfade (https://github.com/sbihaiko/MesenAI/issues/151). The volume is now
 //interpolated per sample (OggFadeRamp::MixSamples, the same kernel OggReader
 //uses). The mixer is driven here through IOggSource stubs of constant
 //amplitude, so the case needs no stb_vorbis, no VirtualFile and no Emulator.
@@ -6771,6 +6773,43 @@ void TestCaptureSizeRejectsAnAbsurdlyLargeFrame()
 		"BlocoS: the largest filter we ship (prescale 10x) is still a valid capture");
 }
 
+//ADR-0195. The recorder always asks for CHR ROM fallback tiles, and the line
+//that asks for it is a format contract with the loader: HdPackLoader splits it
+//on ',' and StringUtilities::Split always pushes a final token, so a trailing
+//comma would arrive as an empty option and be reported as "Invalid option: ".
+//The writer used to build this line with a comma after every token and never
+//exercised the path, because nothing ever set an option flag.
+void TestHdPackOptionsLineHasNoTrailingComma()
+{
+	Check(HdPackOptionsToString((uint32_t)HdPackOptions::AutomaticFallbackTiles) == "automaticFallbackTiles",
+		"BlocoP: automaticFallbackTiles alone renders without a trailing comma");
+
+	std::vector<std::string> tokens = StringUtilities::Split(HdPackOptionsToString((uint32_t)HdPackOptions::AutomaticFallbackTiles), ',');
+	Check(tokens.size() == 1 && tokens[0] == "automaticFallbackTiles",
+		"BlocoP: the loader's own splitter sees exactly one non-empty option");
+}
+
+void TestHdPackOptionsLineOrderAndEmptiness()
+{
+	Check(HdPackOptionsToString(0).empty(),
+		"BlocoP: no flags renders the empty string, so no <options> line is written at all");
+
+	uint32_t all = (uint32_t)HdPackOptions::NoSpriteLimit | (uint32_t)HdPackOptions::AlternateRegisterRange
+		| (uint32_t)HdPackOptions::DisableCache | (uint32_t)HdPackOptions::DontRenderOriginalTiles
+		| (uint32_t)HdPackOptions::AutomaticFallbackTiles;
+	Check(HdPackOptionsToString(all) == "disableSpriteLimit,alternateRegisterRange,disableCache,disableOriginalTiles,automaticFallbackTiles",
+		"BlocoP: all five flags render in the writer's historical order");
+
+	std::vector<std::string> tokens = StringUtilities::Split(HdPackOptionsToString(all), ',');
+	Check(tokens.size() == 5, "BlocoP: five flags split back into five tokens");
+
+	bool anyEmpty = false;
+	for(const std::string& token : tokens) {
+		anyEmpty |= token.empty();
+	}
+	Check(!anyEmpty, "BlocoP: no flag set produces an empty option token the loader would reject");
+}
+
 void TestBordersOnAUniformFrame()
 {
 	std::vector<uint32_t> pixels((size_t)64 * 32, 0xFF000000);
@@ -7318,6 +7357,9 @@ int main()
 	TestCaptureSizeRejectsABufferThatDoesNotMatch();
 	TestCaptureSizeRejectsAnOverflowingProduct();
 	TestCaptureSizeRejectsAnAbsurdlyLargeFrame();
+	TestHdPackOptionsLineHasNoTrailingComma();
+	TestHdPackOptionsLineOrderAndEmptiness();
+
 	TestBordersOnAUniformFrame();
 	TestBordersMeasureLetterboxing();
 	TestBordersMeasurePillarboxing();
