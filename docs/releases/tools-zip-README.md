@@ -38,7 +38,7 @@ Stage 1 is a compiled C++ tool, not a Python one, because it drives the
 emulator core directly, so it does not travel in this zip.
 
 - **macOS (Apple Silicon)**: it ships inside
-  `MesenCE-<version>-macos-arm64.zip`, beside `Mesen.app`, with the core
+  `MesenAI-<version>-macos-arm64.zip`, beside `Mesen.app`, with the core
   library it links against. Keep the two together and run it from there.
 - **Every other platform**: there is no build in this release. Build it from a
   repository checkout with `make core && make capture-tool`. Every other stage

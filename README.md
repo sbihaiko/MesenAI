@@ -159,7 +159,7 @@ every command, in order, and the release ships every tool it uses.
 ## Download
 
 **[Releases](https://github.com/sbihaiko/MesenAI/releases/latest)** carry the
-emulator plus `mesence-tools-<version>.zip`, the command-line tools the
+emulator plus `mesenai-tools-<version>.zip`, the command-line tools the
 remastering guide uses. **v0.1.0 is macOS Apple Silicon only**, cut locally
 from a tagged commit. No installer: unzip and run. macOS needs SDL2
 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
