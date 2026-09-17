@@ -281,12 +281,30 @@ bool NesConsole::IsHdPackVideoActive()
 	return _hdData && _hdData->HasVideoContent();
 }
 
+//F12.1 (measurement slice): one line per ROM load carrying the time
+//NesConsole::LoadHdPack itself spent and the scale of what it parsed, so the
+//number the phase's "measure before optimizing" principle asks for is
+//reproducible from a plain run instead of inferred from a process wall clock.
+//The bitmap decode is deliberately not in here: it is detached into
+//HdPackData::LoadAsync and logs its own line, so the two halves never hide
+//behind each other.
+static void LogHdPackLoadTime(std::chrono::steady_clock::time_point start, HdPackData* data)
+{
+	double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	string counts = data
+		? ("; tiles=" + std::to_string(data->Tiles.size()) + " keys=" + std::to_string(data->TileByKey.size()) +
+			" images=" + std::to_string(data->ImageFileData.size()) + " backgrounds=" + std::to_string(data->BackgroundFileData.size()))
+		: string("; no-pack");
+	MessageManager::Log("[MEP] LoadHdPack: " + std::to_string((int)(ms + 0.5)) + " ms" + counts);
+}
+
 void NesConsole::LoadHdPack(VirtualFile& romFile)
 {
 	_hdData.reset();
 	if(!GetNesConfig().EnableHdPacks) {
 		return;
 	}
+	std::chrono::steady_clock::time_point loadStart = std::chrono::steady_clock::now();
 
 	MepPackManager* mep = _emu->GetEnhancementPackManager();
 	string mepTextures = mep->GetSectionPath(MepSectionType::Textures);
@@ -434,6 +452,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 
 	if(!loaded) {
 		_hdData.reset();
+		LogHdPackLoadTime(loadStart, nullptr);
 		return;
 	}
 
@@ -501,6 +520,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	}
 
 	shared_ptr<HdPackData> data = _hdData.lock();
+	LogHdPackLoadTime(loadStart, data.get());
 	if(data) {
 		thread asyncLoadData([data]() {
 			data->LoadAsync();
