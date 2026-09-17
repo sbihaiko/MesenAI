@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <unordered_map>
 #include "NES/HdPacks/HdPackLoader.h"
+#include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/NesConsole.h"
@@ -17,12 +18,24 @@
 #include "Utilities/FastString.h"
 #include "Utilities/magic_enum.hpp"
 
-#define logError(y) MessageManager::Log("[HDPack - Line " + std::to_string(_currentLine) + "] " + (y)); _errorCount++;
+//Issue #302: every error still counts towards _errorCount (so the
+//"Loaded with N errors" total is unchanged), but only the first occurrence
+//of each distinct message reaches the log; the repeats are summarised once
+//at the end of the parse. See HdPackErrorDedupe.
+#define logError(y) LogError(y);
 #define checkConstraint(x, y) if(!(x)) { logError(y); return; }
 #define checkConstraintEx(x, y) if(_data->Version >= 109) { checkConstraint(x, y); } else { if(!(x)) { logError(y); } }
 
 HdPackLoader::HdPackLoader()
 {
+}
+
+void HdPackLoader::LogError(const string& message)
+{
+	_errorCount++;
+	if(_errorLog.ShouldLog(message)) {
+		MessageManager::Log("[HDPack - Line " + std::to_string(_currentLine) + "] " + message);
+	}
 }
 
 bool HdPackLoader::InitializeLoader(VirtualFile& romFile, HdPackData* data)
@@ -246,6 +259,8 @@ bool HdPackLoader::LoadPack()
 {
 	string lineContent;
 	_currentLine = 0;
+	//Per load, not per process: a second pack must report its own errors.
+	_errorLog.Reset();
 
 	try {
 		vector<uint8_t> hdDefinition;
@@ -362,6 +377,17 @@ bool HdPackLoader::LoadPack()
 		InitializeHdPack();
 
 		if(_errorCount > 0) {
+			//One line per distinct problem that repeated, carrying its true
+			//occurrence count - the first occurrence was already logged with
+			//its manifest line number.
+			for(auto& repeated : _errorLog.GetRepeated()) {
+				MessageManager::Log("[HDPack] " + repeated.first + " (" + std::to_string(repeated.second) + " occurrences)");
+			}
+			uint32_t unretained = _errorLog.GetUnretainedCount();
+			if(unretained > 0) {
+				MessageManager::Log("[HDPack] " + std::to_string(unretained) + " further error(s) were not logged: this pack has more than " +
+					std::to_string(HdPackErrorDedupe::MaxDistinctMessages) + " distinct error messages.");
+			}
 			if(_data->Version >= 109) {
 				MessageManager::DisplayMessage("HDPack", "Loaded with " + std::to_string(_errorCount) + " errors");
 			}
