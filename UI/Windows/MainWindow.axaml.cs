@@ -496,6 +496,29 @@ namespace Mesen.Windows
 							EmuApi.DisplayMessage("MEP", "MepPackApplied", _model.CurrentPackName + layers);
 						}
 					});
+
+					//P.1-local (ADR-0206 §3): a hand-dropped container has no
+					//content_id until the cache has seen it once, so it reads as a
+					//separate `local:<name>` pack on its first load. The refresh is
+					//off this path by design (it walks and hashes local packs), so it
+					//runs on a background thread and only when some container is still
+					//unidentified - and when it actually recomputed something, the
+					//pack list is re-evaluated once so the §5 merge and the adopted
+					//catalog pack_id apply in this session, not the next one.
+					if(MepPackListParser.Parse(EmuApi.GetMepPackList()).Packs.Any(p => string.IsNullOrEmpty(p.ContentId))) {
+						string loadedRomSha1 = EmuApi.GetMepRomSha1();
+						Task.Run(() => {
+							Int32 recomputed = EmuApi.RefreshMepLocalIdentities();
+							if(recomputed <= 0) {
+								return;
+							}
+							Dispatcher.UIThread.Post(() => {
+								if(EmuApi.GetMepRomSha1() == loadedRomSha1) {
+									_model.EvaluatePlayerPackPicker(EmuApi.GetMepPackList(), loadedRomSha1);
+								}
+							});
+						});
+					}
 					if(!evtParams.IsPowerCycle) {
 						Dispatcher.UIThread.Post(() => {
 							_model.RecentGames.Visible = false;

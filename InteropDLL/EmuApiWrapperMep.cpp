@@ -1,5 +1,6 @@
 #include "Common.h"
 #include "Core/Shared/EnhancementPacks/MepContentId.h"
+#include "Core/Shared/EnhancementPacks/MepPackManager.h"
 #include "Core/Shared/EnhancementPacks/MepRecipeInstaller.h"
 #include "Utilities/StringUtilities.h"
 
@@ -79,5 +80,18 @@ extern "C"
 	{
 		string result = MepContentId::ComputeFolder(folder ? folder : "");
 		StringUtilities::CopyToBuffer(result, outBuffer, maxLength);
+	}
+
+	//P.1-local (ADR-0206 §3): the local-container content_id cache refresh.
+	//Blocking and I/O-heavy by design (it walks and hashes the local packs
+	//whose fingerprint moved) - the client calls it on a background thread
+	//after a game loads, never from the ROM-load path, and picks the result up
+	//on the next load. Static: it reads the packs folder, so it shares no state
+	//with the running emulator. Returns how many containers were re-hashed
+	//(0 = the cache was already current, so the caller has nothing to
+	//re-evaluate).
+	DllExport int32_t __stdcall RefreshMepLocalIdentities()
+	{
+		return MepPackManager::RefreshLocalIdentityCache().Recomputed;
 	}
 }

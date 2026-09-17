@@ -32,6 +32,23 @@ public:
 		vector<uint8_t> Data;
 	};
 
+	//ADR-0139's own exclusion rule, applied by ComputeTree: a path with a
+	//`__MACOSX` or `screenshots` segment, a `.DS_Store` basename, or a
+	//`README*` basename is outside the discovered root and never hashed.
+	//Exposed so the ADR-0206 local-identity fingerprint skips exactly the same
+	//files the content_id skips (a file that is not content must not be able
+	//to invalidate the cache either).
+	static bool IsExcludedPath(const string& relPath);
+
+	//Host control files a pack carries but that are not its content:
+	//`.mep-install.json` (the ADR-0140/0139 stamp), `.bootstrap` (the F5
+	//marker) and `.mep-source` (the ADR-0120 §4 zip-extraction stamp). Dropped
+	//by ComputeFolder so a reinstall is not an edit (ADR-0147) and by the
+	//ADR-0206 fingerprint so a re-extraction of the same tree keeps its
+	//identity. Not applied by ComputeTree, whose byte-for-byte parity with the
+	//normative Python hasher (ADR-0139) has no knowledge of these files.
+	static bool IsHostControlFile(const string& relPath);
+
 	//Hex tree content_id over `entries`; "" when a path is >= 256 bytes (the
 	//ADR-0139 path-length bound - the hash is undefined then, and callers
 	//treat "" as "not computed").

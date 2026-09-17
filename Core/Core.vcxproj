@@ -507,6 +507,7 @@
     <ClInclude Include="Shared\EnhancementPacks\AudioFingerprint.h" />
     <ClInclude Include="Shared\EnhancementPacks\MepRecipeInstaller.h" />
     <ClInclude Include="Shared\EnhancementPacks\MepRecipeOps.h" />
+    <ClInclude Include="Shared\EnhancementPacks\MepLocalIdentityCache.h" />
     <ClInclude Include="Shared\BaseControlManager.h" />
     <ClInclude Include="Shared\BaseState.h" />
     <ClInclude Include="Gameboy\GbControlManager.h" />
@@ -845,6 +846,7 @@
     <ClCompile Include="Shared\EnhancementPacks\MepPackManager.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\AudioFingerprint.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepContentId.cpp" />
+    <ClCompile Include="Shared\EnhancementPacks\MepLocalIdentityCache.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepRecipeInstaller.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepRecipeOps.cpp" />
     <ClCompile Include="Shared\Video\BaseVideoFilter.cpp" />

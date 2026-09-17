@@ -500,6 +500,7 @@ CUTSRC := \
   Core/Shared/EnhancementPacks/MepRecipeInstaller.cpp \
   Core/Shared/EnhancementPacks/MepRecipeOps.cpp \
   Core/Shared/EnhancementPacks/MepContentId.cpp \
+  Core/Shared/EnhancementPacks/MepLocalIdentityCache.cpp \
   Core/Shared/HeadlessInputScript.cpp \
   Core/Shared/HeadlessInputEngine.cpp \
   Core/Shared/MessageManager.cpp \

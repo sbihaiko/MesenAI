@@ -2,6 +2,7 @@
 #include <filesystem>
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
+#include "Shared/EnhancementPacks/MepContentId.h"
 #include "Shared/EnhancementPacks/MepFileIo.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Emulator.h"
@@ -491,10 +492,16 @@ void MepPackManager::LoadForRom(VirtualFile& romFile)
 
 	//P.3: fill each pack's identity (pack_id/content_id) from its
 	//.mep-install.json stamp, for the preferred-pack lookup below and the
-	//pack-list columns the UI resolver reads
+	//pack-list columns the UI resolver reads.
+	//P.1-local (ADR-0206 §3): the local-identity cache is read once here and
+	//answers for the containers that have no stamp - the file is small and no
+	//tree is walked or hashed on this path.
+	MepLocalIdentityCache localIdentityCache;
+	localIdentityCache.Load(MepLocalIdentityCache::GetCacheFilePath(GetPacksFolder()));
 	for(MepPack& pack : _packs) {
-		ReadInstallIdentity(pack);
+		ReadInstallIdentity(pack, localIdentityCache);
 	}
+	AdoptEqualContentIds();
 
 	//ADR-0145: snapshot the winning textures pack for the renderer's health
 	//signal. Taken here on the emulation thread (after ScanAndMatch and
@@ -524,12 +531,14 @@ bool MepPackManager::ReadTextFile(const string& path, string& out)
 	return MepFileIo::ReadWholeFile(path, out);
 }
 
-void MepPackManager::ReadInstallIdentity(MepPack& pack)
+void MepPackManager::ReadInstallIdentity(MepPack& pack, const MepLocalIdentityCache& cache)
 {
 	//P.3: the .mep-install.json a MEP Recipe install writes at the container
 	//root (MepRecipeInstaller::WriteInstallStamp) carries the ADR-0140 pack_id
-	//and ADR-0139 content_id. Missing/malformed stamp -> an empty identity
-	//(the UI derives `local:<container>` and never content-merges it, PRD §5).
+	//and ADR-0139 content_id. Missing/malformed stamp -> the P.1-local cache
+	//answers instead when it has an entry whose container stamp still matches;
+	//with neither, the identity stays empty and the UI derives
+	//`local:<container>` (PRD §5).
 	MepPackIdentity identity;
 	string text;
 	if(ReadTextFile(FolderUtilities::CombinePath(pack.RootFolder, ".mep-install.json"), text)) {
@@ -540,7 +549,39 @@ void MepPackManager::ReadInstallIdentity(MepPack& pack)
 			identity.ContentId = root.GetString("content_id");
 		}
 	}
+	if(identity.ContentId.empty()) {
+		const MepLocalIdentityCache::Entry* entry = cache.Find(pack.RootFolder);
+		if(entry != nullptr && !entry->ContainerStamp.empty() &&
+			entry->ContainerStamp == MepLocalIdentityCache::ComputeContainerStamp(pack.RootFolder)) {
+			identity.ContentId = entry->ContentId;
+		}
+	}
 	_packIdentityByContainer[StringUtilities::ToLower(pack.ContainerName)] = std::move(identity);
+}
+
+void MepPackManager::AdoptEqualContentIds()
+{
+	//ADR-0206 §4, applied to what this load discovered (the rule itself lives
+	//in the header so the unit tests can drive it without a manager).
+	vector<string> containers;
+	containers.reserve(_packs.size());
+	for(const MepPack& pack : _packs) {
+		containers.push_back(StringUtilities::ToLower(pack.ContainerName));
+	}
+	for(const auto& adopted : AdoptIdentities(containers, _packIdentityByContainer)) {
+		Log("local pack '" + adopted.first + "' shares its content with a stamped container - adopting pack_id '" + adopted.second + "'");
+	}
+}
+
+MepLocalIdentityCache::RefreshResult MepPackManager::RefreshLocalIdentityCache()
+{
+	//ADR-0206 §3/§6: the byte-reading half, off the ROM-load path. The walk
+	//itself lives in the cache module (which the unit tests link, and which
+	//takes the folder as a parameter) and reads the packs folder rather than
+	//_packs, so it shares no state with the emulation thread and needs no lock.
+	MepLocalIdentityCache::RefreshResult result = MepLocalIdentityCache::RefreshFolder(GetPacksFolder());
+	Log("local pack identity cache refreshed: " + std::to_string(result.Scanned) + " container(s) scanned, " + std::to_string(result.Recomputed) + " recomputed, " + std::to_string(result.Pruned) + " pruned");
+	return result;
 }
 
 string MepPackManager::EffectivePackId(const MepPack& pack) const
