@@ -999,6 +999,9 @@
     <ClCompile Include="Shared\EnhancementPacks\MepPackManager.cpp">
       <Filter>Shared\EnhancementPacks</Filter>
     </ClCompile>
+    <ClCompile Include="Shared\EnhancementPacks\MepLocalIdentityCache.cpp">
+      <Filter>Shared\EnhancementPacks</Filter>
+    </ClCompile>
     <ClCompile Include="Shared\EnhancementPacks\AudioFingerprint.cpp">
       <Filter>Shared\EnhancementPacks</Filter>
     </ClCompile>
@@ -1033,6 +1036,9 @@
       <Filter>Shared\EnhancementPacks</Filter>
     </ClInclude>
     <ClInclude Include="Shared\EnhancementPacks\MepPackManager.h">
+      <Filter>Shared\EnhancementPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="Shared\EnhancementPacks\MepLocalIdentityCache.h">
       <Filter>Shared\EnhancementPacks</Filter>
     </ClInclude>
     <ClInclude Include="Shared\EnhancementPacks\AudioFingerprint.h">

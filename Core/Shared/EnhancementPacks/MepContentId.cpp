@@ -16,7 +16,7 @@ namespace
 	const char* kExcludedSegments[] = { "__MACOSX", "screenshots" };
 	const char* kExcludedBasenames[] = { ".DS_Store" };
 
-	string Basename(const string& path)
+	string BasenameOf(const string& path)
 	{
 		size_t slash = path.find_last_of('/');
 		return slash == string::npos ? path : path.substr(slash + 1);
@@ -38,7 +38,7 @@ namespace
 			}
 			start = end + 1;
 		}
-		string base = Basename(path);
+		string base = BasenameOf(path);
 		for(const char* name : kExcludedBasenames) {
 			if(base == name) {
 				return true;
@@ -244,6 +244,17 @@ namespace
 	}
 }
 
+bool MepContentId::IsExcludedPath(const string& relPath)
+{
+	return IsExcluded(relPath);
+}
+
+bool MepContentId::IsHostControlFile(const string& relPath)
+{
+	string base = BasenameOf(relPath);
+	return base == ".mep-install.json" || base == ".bootstrap" || base == ".mep-source";
+}
+
 string MepContentId::ComputeTree(const vector<Entry>& entries)
 {
 	//Sort pointers, not entries: the file bytes never need to be copied
@@ -314,10 +325,10 @@ string MepContentId::ComputeFolder(const string& folder)
 		if(ec || rel.empty()) {
 			return "";
 		}
-		string base = Basename(rel);
 		//Install/host metadata is not part of the editable pack content; keep
-		//the baseline stable across reinstalls (installed_at changes each time).
-		if(base == ".mep-install.json" || base == ".bootstrap") {
+		//the baseline stable across reinstalls (installed_at changes each time)
+		//and across a re-extraction of the same zip tree (ADR-0206).
+		if(IsHostControlFile(rel) || IsExcluded(rel)) {
 			continue;
 		}
 		ifstream in(abs, std::ios::binary);

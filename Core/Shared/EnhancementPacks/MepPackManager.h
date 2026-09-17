@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "Shared/EnhancementPacks/MepPack.h"
+#include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
 #include "Utilities/SimpleLock.h"
 
 class VirtualFile;
@@ -81,8 +82,17 @@ private:
 	//Comma-joined names of the pack's present sections (log + pack-list text)
 	static string JoinPresentSections(const MepPack& pack);
 	//Reads .mep-install.json at the pack root into _packIdentityByContainer
-	//(P.3; a missing/malformed stamp leaves the entry with empty fields)
-	void ReadInstallIdentity(MepPack& pack);
+	//(P.3; a missing/malformed stamp leaves the entry with empty fields).
+	//P.1-local (ADR-0206 §3): a stamp-less container takes its content_id from
+	//the local-identity cache when the cache's container stamp still matches -
+	//one stat, no tree walk, never a hash on this path.
+	void ReadInstallIdentity(MepPack& pack, const MepLocalIdentityCache& cache);
+	//P.1-local (ADR-0206 §4): containers discovered for this ROM that share a
+	//content_id are the same pack, so a stamp-less copy of a catalog pack
+	//adopts that pack's pack_id instead of the `local:<container>` fallback -
+	//which is what lets the stored per-ROM preference and the §5 picker merge
+	//see one pack instead of two. String comparison only, no I/O.
+	void AdoptEqualContentIds();
 	//A pack's effective pack_id for preference matching (P.3): its
 	//.mep-install.json pack_id when present, else the ADR-0140 rule-4
 	//`local:<container>` fallback (lower-cased)
@@ -120,9 +130,57 @@ public:
 	//No-Intro SHA-1 of the ROM payload (ADR-0039): 40 uppercase hex digits
 	static string ComputeNoIntroSha1(VirtualFile& romFile);
 
+	//The ADR-0206 §4 adoption rule, with no pack state around it so the unit
+	//tests can drive it directly (the counter-test target links no manager):
+	//`containers` are the discovered container names in precedence order,
+	//already lower-cased - the key of `identities` (see
+	//_packIdentityByContainer). A container sharing a non-empty content_id with
+	//one that already carries a pack_id takes that pack_id, which is what makes
+	//a hand-dropped copy of a catalog pack one pack instead of two competing
+	//`local:<container>` choices (PRD Part B §5). Returns the
+	//container/pack_id pairs it adopted, for the caller's log.
+	static vector<std::pair<string, string>> AdoptIdentities(const vector<string>& containers, unordered_map<string, MepPackIdentity>& identities)
+	{
+		unordered_map<string, string> packIdByContentId;
+		for(const string& container : containers) {
+			auto it = identities.find(container);
+			if(it == identities.end() || it->second.ContentId.empty() || it->second.PackId.empty()) {
+				continue;
+			}
+			packIdByContentId.emplace(it->second.ContentId, it->second.PackId);
+		}
+		vector<std::pair<string, string>> adopted;
+		if(packIdByContentId.empty()) {
+			return adopted;
+		}
+		for(const string& container : containers) {
+			auto it = identities.find(container);
+			if(it == identities.end() || it->second.ContentId.empty() || !it->second.PackId.empty()) {
+				continue;
+			}
+			auto found = packIdByContentId.find(it->second.ContentId);
+			if(found != packIdByContentId.end()) {
+				it->second.PackId = found->second;
+				adopted.emplace_back(container, found->second);
+			}
+		}
+		return adopted;
+	}
+
 	//Rescans the packs folder and keeps only the packs matching this ROM
 	void LoadForRom(VirtualFile& romFile);
 	void Clear();
+
+	//P.1-local (ADR-0206 §3/§6): the background half of the local-identity
+	//cache. Walks the packs folder - the same surface ScanAndMatch uses, so it
+	//shares no state with the emulation thread and needs no lock - and, for
+	//every local container whose tree fingerprint moved since the cached
+	//value, recomputes the ADR-0139 content_id and rewrites the cache file.
+	//Entries whose container is gone are pruned. Never called from LoadForRom:
+	//the client runs it on a background thread after a game loads, and the next
+	//load reads the result. The walk itself is MepLocalIdentityCache::
+	//RefreshFolder, which the unit tests drive against a temporary folder.
+	static MepLocalIdentityCache::RefreshResult RefreshLocalIdentityCache();
 
 	//Applies the winning pack's patches[] entry for this ROM (ADR-0044),
 	//in place, before the console reads the ROM. Honours the

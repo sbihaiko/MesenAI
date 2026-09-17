@@ -110,7 +110,15 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **H8** — `NES_ONLY`/`LessUI` declined after measurement; per-translation-unit test compilation retained (ADR-0158).
 - **H9 / H10** — headless input tests and four-arm accuracy comparison (ADR-0127/0162); accuracy CI remains deferred.
 - **I.0–I.3** — input tester and mapping feedback; physical-device checks remain hardware-gated.
-- **P.0–P.7** — player shell, catalog identity and preference resolver (ADR-0139/0140/0141, 2026-08-28–09-01); local identity integration remains Part B §8 P.1-local.
+- **P.0–P.7** — player shell, catalog identity and preference resolver (ADR-0139/0140/0141, 2026-08-28–09-01).
+- **P.1-local** — the local-container `content_id` cache (ADR-0206, 2026-09-17):
+  a stamp-less drop gets its ADR-0139 identity from
+  `EnhancementPacks/.cache/content-ids.json`, read at load with a one-`stat`
+  staleness check and maintained by a fingerprint-validated background refresh;
+  a drop equal to a stamped container adopts that `pack_id`, so Part B §5's
+  local/catalog merge collapses the pair. Bloco G in `scripts/core_unit_tests.cpp`
+  plus `scripts/p1_local_identity_check.py` (cold/warm, nested edit, pruning,
+  adoption, zip-with-prefix).
 - **F8.1–F8.3** — pack border layer (ADR-0149); optional rendering/lint residue is F8.4.
 - **F9.0–F9.5** — legible vocabulary, maps, sheets and sprite grouping (ADR-0153); delivered on spot checks, not a completed human panel.
 - **F9.6** — external repaint scaffold and classical output (ADR-0154/0161); ADR-0192 retires the unmeasured generative commitment.
@@ -222,7 +230,8 @@ automatic remapping, browser Gamepad API, stats collection.
 
 #### Phase 7 — Player shell (minimal GUI)
 
-**Delivered with debt** — P.0–P.7, 2026-08-28 → 2026-09-01; P.1-local remains open in Part B §8. Record in §3, normative
+**Delivered** — P.0–P.7, 2026-08-28 → 2026-09-01, and P.1-local on 2026-09-17
+(ADR-0206); no slice of Part B remains open. Record in §3, normative
 text and slice list in Part B (do not duplicate that prose here). Pack
 identity is the pair `pack_id` (product) + `content_id` (revision); the
 catalog keeps one live slot per `pack_id`. The letterbox fit, once the last
@@ -663,8 +672,9 @@ ADR is accepted, in any order. One slice per task.
    Should a defect reproduce instead, fix it in a separately scoped task before
    rerunning the affected criterion, and do not reopen fixed issues on the
    strength of the old C.5 logs alone.
-2. **Part B P.1-local:** complete the accepted local identity requirement with
-   cache invalidation and local/catalog deduplication acceptance.
+2. **Part B P.1-local:** shipped 2026-09-17 (ADR-0206) — the local identity
+   cache, its nested-file invalidation and the local/catalog deduplication
+   acceptance are in §3 and Part B §8.
 3. **S10.b:** the user runs the scoped hosted-model experiment; its results feed
    an egress/provider ADR or a recorded decision to defer. Whole-subject product
    work additionally depends on Phase 9 selection/export/paint evidence.
@@ -755,8 +765,9 @@ files and in §3.
 
 ## Part B — Player shell (default GUI)
 
-**Status:** **Phase 7 delivered with local-identity debt — P.1-local open** (2026-08-28 → 2026-09-01; record
-in Part A §3). Product text of §3–§6 accepted by the user 2026-08-28. Remaining implementation: P.1-local (§8). Manual
+**Status:** **Phase 7 delivered, P.1-local included** (2026-08-28 → 2026-09-01;
+P.1-local 2026-09-17, ADR-0206; record in Part A §3). Product text of §3–§6
+accepted by the user 2026-08-28. No implementation debt remains (§8). Manual
 residue: the native file picker (F6.5) — the letterbox fit was closed
 2026-09-05 (`RendererViewportFit`, `UI.HeadlessTests/RendererLetterboxTests.cs`);
 the cards, the Player Settings tabs and the picker's arrow navigation are
@@ -930,13 +941,16 @@ Stable across revisions. Source, first match wins:
    `local:<container-name>` (the ADR-0040/0049 discovery key). Two local
    containers with the same `content_id` are one pack (§5). A local
    container whose `content_id` equals a catalog entry's is that catalog
-   `pack_id`, not a second choice. The required local `content_id` cache (**not implemented; P.1-local**) computes it
-   **once** and cached under `EnhancementPacks/.cache/` keyed by the
-   container's path + size + mtime (recomputed only when those change);
-   it is never computed on the synchronous ROM-load path. Until the cache
-   is warm the container is treated as `local:<container-name>`; the
-   catalog merge happens on the next load. HD trees run to hundreds of
-   MB — hashing them at every boot is not acceptable.
+   `pack_id`, not a second choice. The required local `content_id` cache (**shipped 2026-09-17; P.1-local,
+   ADR-0206**) computes it **once** and caches it under
+   `EnhancementPacks/.cache/content-ids.json` keyed by the container's
+   path plus a stat-manifest fingerprint of its tree — the container's own
+   mtime alone cannot see a nested file change (§8) — and it is never
+   computed on the synchronous ROM-load path: the load only reads the file,
+   and a background refresh re-hashes what moved. Until the cache is warm
+   the container is treated as `local:<container-name>`; the catalog merge
+   happens on the next load. HD trees run to hundreds of MB — hashing them
+   at every boot is not acceptable.
 
 **Catalog uniqueness** (product requirement; enforcement is the P.0 ADR).
 The catalog holds **one live row per `pack_id`** (§3.6) — never two
@@ -1127,8 +1141,10 @@ which container is the chosen one.
 whose `content_id` equals the pack already chosen for this ROM is the same
 pack, not a second choice. A local container with a different
 `content_id` and no `id` joins the picker as `local:<container-name>`
-(§3.3 rule 4). This merge requires a populated identity; stamp-less local drops currently
-remain separate until P.1-local is implemented. The merge only works for packs whose `content_id` is a
+(§3.3 rule 4). The merge requires a populated identity: since P.1-local
+(ADR-0206, 2026-09-17) a stamp-less local drop gets one from the identity
+cache, and a drop that matches a stamped catalog container adopts its
+`pack_id` — so the pair collapses into one choice instead of two. The merge only works for packs whose `content_id` is a
 tree hash: the *output* folder of a recipe install copied elsewhere
 without its `.mep-install.json` cannot be re-associated with the catalog
 row (§3.2 — the recipe composite is never derived from the output tree);
@@ -1231,19 +1247,27 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-P.0–P.7 implementation history is in Part A §3. P.1's local integration was
-not delivered; ADR-0139's implementation note and `ReadInstallIdentity` confirm
-that stamp-less containers currently receive no computed `content_id`.
+No slice is pending. P.0–P.7 implementation history is in Part A §3, and
+P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
+shipped 2026-09-17 with ADR-0206:
 
-| Slice | Deliverable | Decision |
-|---|---|---|
-| P.1-local | Integrate the accepted local-container identity requirement from §3.3 and ADR-0139/0140. Compute/cache identity off the synchronous ROM-load path, then merge equal local/catalog packs on the next load. | Open implementation debt. Acceptance: identical stamp-less folders/zips collapse; a matching catalog tree adopts its pack identity; a changed nested payload invalidates the cache and remains distinct; first load stays responsive with a cold cache. Existing recipe-output-without-stamp non-goal remains. |
+`EnhancementPacks/.cache/content-ids.json` holds one ADR-0139 `content_id` per
+local container. The load reads it with a one-`stat` staleness check and never
+walks or hashes a tree; a background refresh, off the load path, re-hashes only
+the containers whose stat-manifest fingerprint moved. Acceptance met: identical
+stamp-less folders/zips — including a zip whose pack root sits in a subfolder —
+collapse onto one `content_id`; a container equal to a stamped one adopts its
+`pack_id`; a changed nested payload invalidates that container alone and it
+stays distinct. Evidence: Bloco G in `scripts/core_unit_tests.cpp` (cold/warm,
+missing/corrupt cache, pruning, adoption) and
+`scripts/p1_local_identity_check.py` against the built library. The
+recipe-output-without-stamp non-goal remains (§7).
 
-Before implementation, specify how a directory cache detects changes to nested
-files (directory mtime alone is insufficient) and settle any new cache trade-off
-in an ADR. Test both cold and warm behavior, malformed/unreadable containers,
-changed nested files and persisted per-ROM choices. Do not label the requirement
-shipped merely because the hash algorithm has a parity fixture.
+The nested-file question this section used to raise is answered in ADR-0206 §2
+(a stat-manifest fingerprint, not the container's mtime), and its cache
+trade-off is settled there rather than here. The per-ROM persisted choice
+needed no change: it keys off `pack_id`, which the adoption step now supplies
+for a local drop.
 
 ### 9. ADR map
 
@@ -1268,7 +1292,7 @@ shipped merely because the hash algorithm has a parity fixture.
 | Two issues, same product, different `pack_id` fallbacks (non-GitHub hosts) | `content_id` still collapses byte-duplicates; remaining cases open the picker (safe default); documented non-goal until `id` is common |
 | Inflated `version` wins the slot | accepted trade-off (§3.6 rule 1) **within one origin**; triage warns; no auto-downgrade protects installs |
 | Third party claims an existing `pack_id` (`id` or `owner/repo` spoof) with a high `version` | origin binding (§3.3): different origin never occupies the slot; `pack:needs-review` for a human |
-| Hashing local HD trees stalls the ROM load | P.1-local must implement caching off the load path and nested-file invalidation; not yet delivered (§3.3 rule 4) |
+| Hashing local HD trees stalls the ROM load | Delivered by P.1-local (ADR-0206): the load reads `EnhancementPacks/.cache/content-ids.json` and does one `stat` per local container, never a walk or a hash; the background refresh pays the byte-reading cost and invalidates on a nested-file change (§3.3 rule 4) |
 | Overlay unusable from the couch | overlay shortcut bindable to a controller button; overlay/picker navigable by D-pad (§6) |
 | Recipe identity without dep bytes | composite in §3.2; computed at install time from the primary bytes, stored, not re-derived |
 | `scripts/` and Core hashers drift | parity fixture in P.1, same pattern as ADR-0138 §39 |
