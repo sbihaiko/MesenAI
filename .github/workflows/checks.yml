@@ -122,8 +122,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update -qy
-          sudo apt-get install -qy python3-tk # scripts/test_compose_editor_gui.py imports tkinter at module scope; without a DISPLAY it skips only its four windowed cases, but a missing module fails the import
+          # python3-tk: scripts/test_compose_editor_gui.py imports tkinter at
+          # module scope; without a DISPLAY it skips only its four windowed
+          # cases, but a missing module fails the import.
+          #
+          # The update comes second on purpose. The runner image ships
+          # third-party apt sources of its own (dl.google.com among them), and
+          # one of them caught mid-sync makes `apt-get update` exit 100, which
+          # took this whole job down before a single test ran - measured
+          # 2026-09-17 on #298: "File has unexpected size (1409 != 1407).
+          # Mirror sync in progress?". The image carries a usable index
+          # already, so the install is tried first and the update only runs
+          # when that index cannot satisfy it; if the update fails there, the
+          # job fails for a reason that is its own.
+          sudo apt-get install -qy python3-tk || { sudo apt-get update -qy; sudo apt-get install -qy python3-tk; }
           python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
 
       - name: Run the Python suite

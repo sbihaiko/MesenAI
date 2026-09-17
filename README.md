@@ -44,8 +44,9 @@ whether your remaster is complete.
 Download, open a ROM, done. Enhanced Audio is **on by default** — same notes,
 same timing, modern instruments. Open a ROM that has a validated community
 HD pack and the pack downloads, installs and loads on its own — zero clicks,
-no config. Fifteen packs ship that way today; a local pack beside the ROM is
-picked up by hash too.
+no config. Fifteen packs ship that way today, and a hand-dropped copy of a
+catalog pack is recognized as that same pack — one entry in the picker, and
+your stored per-ROM choice follows it.
 
 **→ [Download](#download)** · [Community packs](docs/community-packs.md)
 
@@ -282,7 +283,7 @@ A project that measures its own claims should say what is and isn't shipped.
   `spriteNearby`/`tileNearby` conditions, 15 validated community packs
   auto-installing.
 - A CI gate on every push: the structural suite, the Python tool suites and a
-  headless boot of the real core. 792 dependency-free C++ unit tests and a C#
+  headless boot of the real core. 813 dependency-free C++ unit tests and a C#
   xUnit suite run locally.
 
 **Not yet, and named as such**
