@@ -61,7 +61,7 @@ Two facts about the base that colour the rest:
 | **Interop with community packs** | The packs are written for the format upstream defines | Textures and BPS match optimistically; **IPS does not relax**, and a pack that patches CHR RAM → CHR ROM keys in a disjoint namespace (ADR-0145) | **MesenCE** (it defined the namespace; the fork inherited the incompatibility) |
 | **Painting, end to end** | Edit the recorded PNGs in place and reload | Kit → paint PNG → `build` → `lint`; the acceptance test can pass while the figure is half-unpainted (#255, #256) | **MesenCE** |
 | **Staying inside the emulator** | One window. Start, play, stop, edit, see it | A repo checkout, a headless binary with six flags, four generators, a copy step, and a "see it on screen" step that is not in the guide's table | **MesenCE** |
-| **Vocabulary scale** | An author's shipped Metroid pack: 8401 keys, 260 146 lines | A 60-second recording: 2211 keys. Correct at the size we tested, not demonstrated at his | **MesenCE** |
+| **Vocabulary scale** | An author's shipped Metroid pack, re-measured 2026-09-17: 67 images, 150 199 tile rules, **8 401 keys** (distinct `tileData`+`palette`), 260 146 lines | A 60-second recording: 2211 keys. The tools run at his scale — `mep_build` 2.70 s and `mep_lint` 0.59 s on a 300 000-line project — but the recording vocabulary is still ours to close ([log](validation/f12.1-scale-and-load-2026-09-17.md)) | **MesenCE** |
 
 ## Where the numbers came from
 
@@ -90,7 +90,7 @@ loop and hand-authored conditions**, opened 2026-09-16). The mapping:
 
 | Row | Slice | Decision it waits on |
 | --- | --- | --- |
-| Vocabulary scale | F12.1 (measure the installed Metroid pack first) | — |
+| Vocabulary scale | F12.1 — delivered 2026-09-17: the pack is measured and every count now carries its definition ([log](validation/f12.1-scale-and-load-2026-09-17.md)); what remains open on this row is the recording's vocabulary, not the tools' speed | — |
 | Picking a tile's key by hand | F12.2 (*Copy as MEP sheet cell*) | — |
 | Painting, end to end · Staying inside the emulator | F12.3 (reload without reopening the ROM), F12.4 (asset-name template) | — |
 | Extra tiles drawn on match | F12.5 | ADR-0196 (accepted 2026-09-16) |
