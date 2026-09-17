@@ -2,8 +2,12 @@
 
 - Status: accepted (2026-09-16) — §3 decided as option (a), import against
   the patched ROM, with its cost stated; user's go-ahead quoted verbatim:
-  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
-  Phase 12, F12.7 (plain packs first, per §2)
+  "confirmo". §1 implemented 2026-09-17 by PRD Part A §4, Phase 12, F12.7
+  (`scripts/mep_import.py` + `scripts/test_mep_import.py`; evidence and
+  hashes in `docs/validation/f12-7-legacy-pack-import-2026-09-17.md`); §3
+  still open — the patched-ROM import is a follow-up slice, and §1's pixel
+  half is not yet met on a pack that keys one pattern at several crops (the
+  measurement and the two ways to close it are in that log)
 - Date: 2026-09-16
 - Related: ADR-0005 (MEP textures is an envelope over `hires.txt`), ADR-0145
   (optimistic matching; IPS does not relax), ADR-0003/ADR-0039 (No-Intro
