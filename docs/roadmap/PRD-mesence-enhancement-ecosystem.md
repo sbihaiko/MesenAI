@@ -156,6 +156,20 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   with a negative-control pack replayed on the same binary (no `Core/` change).
   [Log](../validation/f918v-current-binary-painting-2026-09-15.md).
 - **ADR-0193** — PR and main-push CI triggers retained; workflow details live in `.github/` and the ADR.
+- **F12.1** (2026-09-17) — the Phase 12 scale reference is measured instead of
+  assumed. `NesConsole::LoadHdPack` takes **412 ms** on the installed Metroid
+  pack (431 ms on the loose `HdPacks/` twin, 295 ms on a synthetic 300 000-line
+  file); 60 s headless runs at 200–260 fps with the pack against 508 without,
+  peak RSS 2.2–3.0 GB against 24 MB; `mep_build.py build` 2.70 s and
+  `mep_lint.py` 0.59 s on 300 000 lines. The pack's counts are stated with their
+  definitions: 67 images, 150 199 tile rules (`Tiles.size()`), 8 401 keys as
+  distinct `(tileData, palette)` — the artist-evidence definition — against
+  9 197 in the loader's `TileByKey`, whose key carries two fields the pair does
+  not. Numbers only, no optimization; the Core gains two `[MEP]` timing lines so
+  the numbers are reproducible from a plain run. The finding that shapes F12.3:
+  the 412 ms is the parse, while the bitmaps decode in a detached
+  `HdPackData::LoadAsync` at **13.2–16.4 s for 271 images**.
+  [Log](../validation/f12.1-scale-and-load-2026-09-17.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -599,10 +613,12 @@ available in git and the logs.
 #### Phase 12 — Paint loop and hand-authored conditions
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
-("Gaps this table names"). Nothing shipped. ADR-0196, ADR-0197 and
-ADR-0198 were accepted 2026-09-16 (§3 of each decided: reserved
-pattern + `$0D` palette; fixed `$0000`–`$07FF` window; import against the
-patched ROM with its cost stated), so every slice below is unblocked.
+("Gaps this table names"). **F12.1 is delivered** (2026-09-17, §3) — the scale
+reference is measured, and it moved F12.3's premise: the load an artist waits
+for is a 13–16 s decode, not the 0.4 s parse. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
+each decided: reserved pattern + `$0D` palette; fixed `$0000`–`$07FF` window;
+import against the patched ROM with its cost stated), so every remaining slice
+below is unblocked.
 
 **Why this phase.** The comparison table names seven rows where the
 inherited upstream toolchain still serves an author better than the layer
@@ -627,8 +643,12 @@ in `docs/validation/` when a slice closes.
 
 **Principles.**
 - Measure before optimizing: the pack Metroid (USA) installed on this
-  machine (67 images, 150 199 tile rules, 8401 keys) is the scale reference;
-  no Core or generator optimization lands before its number is recorded.
+  machine is the scale reference — 67 images, 150 199 tile rules
+  (`Tiles.size()`), 8 401 keys as distinct `(tileData, palette)` — and no Core
+  or generator optimization lands before its number is recorded. F12.1's log
+  carries every definition beside its value
+  ([2026-09-17](../validation/f12.1-scale-and-load-2026-09-17.md)); quote the
+  definition with the number, they are not interchangeable.
 - Nothing here emits a key the recording did not observe (ADR-0183 §3);
   the one exception, the `<addition>` target key, is confined and marked
   by ADR-0196 §3.
@@ -649,18 +669,17 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F12.1 | **Scale and load measurement.** Time `NesConsole::LoadHdPack` on the installed Metroid pack and on a synthetic 300 000-line `hires.txt`; emulation throughput (emulated frames per wall second, with and without the pack) and peak memory over a 60 s headless run; `mep_build.py build` and `mep_lint.py` wall time on a 300 000-line project. | No prerequisite. Numbers only; no optimization in this slice. Stop when the four numbers are in a `docs/validation/` log with binary and input hashes. F12.3's reload strategy and any later optimization cite this log. Re-measures the "Vocabulary scale" row. |
 | F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py --verify` on both. Human panel row: a person pastes one cell and paints it without reading `hires.txt`. Re-measures "Picking a tile's key by hand". |
-| F12.3 | **Reload the pack without reopening the ROM.** A menu action and a headless flag that re-run the loader on the pack directory and swap the HD data at the next frame boundary. | Prerequisite: F12.1's load number. Bounded input: the Metroid pack and a Contra kit pack. Decision rule from F12.1: full reload if it costs under one frame budget times an agreed factor, otherwise per-image invalidation with the strategy named in the log. Stop when a PNG overwritten on disk renders pixel-exact in a `headless_record` screenshot after the reload, with no state loss. Re-measures "Painting, end to end" and "Staying inside the emulator". |
+| F12.3 | **Reload the pack without reopening the ROM.** A menu action and a headless flag that re-run the loader on the pack directory and swap the HD data at the next frame boundary. | Prerequisite: F12.1's load numbers — measured 2026-09-17 as a **412 ms** parse plus a **13.2–16.4 s** detached bitmap decode; the decode is the half a reload strategy has to answer for, and the parse is not (§3). Bounded input: the Metroid pack and a Contra kit pack. Decision rule from F12.1: full reload if it costs under one frame budget times an agreed factor, otherwise per-image invalidation with the strategy named in the log. Stop when a PNG overwritten on disk renders pixel-exact in a `headless_record` screenshot after the reload, with no state loss. Re-measures "Painting, end to end" and "Staying inside the emulator". |
 | F12.4 | **Asset-name template for the paint program.** The kit generators write each surface under a file name the artist's program can export to on save (Photoshop *Generate Image Assets* `name.png` convention; Aseprite/Krita export slots), plus a one-line "open, paint, save" step in `docs/remastering-a-game.md`. | Prerequisite: F12.3. Stdlib only; no `.psd` reader. Bounded input: the Contra and Zelda kits. Stop when saving in the paint program overwrites the kit PNG and F12.3 renders it. What we measure is ours: valid names, reload fired, pixel-exact result. |
 | F12.5 | **`<addition>` from the composition editor.** An overflow layer on a pose exports `<addition>` lines anchored on the pose's root cell, with the target key chosen per ADR-0196 §3, and the round-trip and lint of ADR-0196 §4. | ADR-0196 accepted 2026-09-16 (§3: reserved pattern + `$0D` palette on CHR RAM). Bounded input: one pose each on Mega Man 3 (CHR ROM) and Contra (CHR RAM). Stop when the expanded pose renders pixel-exact on a known frame and the pack round-trips with the synthetic keys listed. Re-measures "Extra tiles drawn on match". |
 | F12.6a | **Lint validates authored conditions against routes.** Sheets accept a hand-written condition; `mep_lint.py --routes` evaluates `frameRange`, `tileAtPosition`, `tileNearby`, `spriteNearby` on every retained frame of every recording and reports held / failed / unintended-hit per route, with the phase offset for `frameRange`. | ADR-0197 accepted 2026-09-16. Bounded input: Contra routes under `scripts/stages/contra/` and a sheet carrying three authored conditions. Stop when the report names the frame and route of every failure. `memoryCheckConstant` reports `not evaluable` until F12.6b. Re-measures "Conditions deliberately refused". |
 | F12.6b | **Recorder retains internal RAM.** Per ADR-0197 §3 (option (b)), the recorder dumps `$0000`–`$07FF` per retained frame so lint can evaluate `memoryCheckConstant` in that window. | ADR-0197 accepted 2026-09-16. Core change; measure and record the per-recording cost on a 60 s Contra route in `docs/validation/` before any doc quotes a number; `make capture-tool` if the wire format moves. Stop when a `memoryCheckConstant` from Contra80s is evaluated on a recorded route and the verdict matches a manual check on three frames. |
 | F12.7 | **Import a legacy plain pack.** `mep_import.py` turns a `hires.txt` pack without an IPS into a MEP project that rebuilds to the same rule set and pixels (ADR-0198 §1). | ADR-0198 accepted 2026-09-16 (§3: patched-ROM packs import against the patched ROM, plain packs first). Bounded input: two accepted packs without `<patch>` (Ninja Gaiden, Bomberman) and Contra80s. Stop when `build` on the imported project equals the input by `(tileData, palette, condition)` and pixels. Packs with `<patch>` are refused in this slice with the ADR named; their import is a follow-up slice opened only after this one round-trips. Re-measures the plain half of "Interop with community packs". |
 
-**Order.** F12.1 and F12.2 have no prerequisite and run in parallel; F12.3
-after F12.1; F12.4 after F12.3; F12.5, F12.6a/b and F12.7 each after their
-ADR is accepted, in any order. One slice per task.
+**Order.** F12.1 is delivered (2026-09-17), so F12.3 may start and F12.4
+follows it; F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
+order. One slice per task.
 
 ### 5. Order of execution
 
@@ -680,9 +699,10 @@ ADR is accepted, in any order. One slice per task.
    work additionally depends on Phase 9 selection/export/paint evidence.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
-5. **Phase 12:** F12.1 (measurement) and F12.2 (copy as sheet cell) may start
-   now; F12.3–F12.4 follow F12.1; F12.5, F12.6a/b and F12.7 are unblocked
-   since ADR-0196/0197/0198 were accepted on 2026-09-16.
+5. **Phase 12:** F12.1 is delivered (2026-09-17, §3), so F12.3 is next and
+   F12.4 follows it. F12.2's code is on `main` with its human panel row open;
+   F12.5, F12.6a/b and F12.7 are unblocked since ADR-0196/0197/0198 were
+   accepted on 2026-09-16.
 
 One implementation slice per task; architecture changes still require their
 ADR. This documentation update records work and acceptance, not completed runs.
