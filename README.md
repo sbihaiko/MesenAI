@@ -170,16 +170,19 @@ build of `prod` that passed, unzip and run:
 
 | Platform | Build | Notes |
 |---|---|---|
-| **Linux x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28Linux%20-%20ubuntu-22.04%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28Linux%20x64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
-| **Linux ARM64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28Linux%20-%20ubuntu-22.04-arm%20-%20clang_aot%29.zip) · [AppImage](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28Linux%20ARM64%20-%20AppImage%29.zip) | `sudo apt install libsdl2-2.0-0` |
-| **macOS Apple Silicon (CI)** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28macOS%20-%20macos-15%20-%20clang_aot%29.zip) | Not code-signed (ADR-0203); Gatekeeper needs `xattr -dr com.apple.quarantine Mesen.app`. The signed, released build is below. `brew install sdl2` |
+| **Linux x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-x64.zip) · [AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-x64.AppImage) | `sudo apt install libsdl2-2.0-0` |
+| **Linux ARM64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.zip) · [AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.AppImage) | `sudo apt install libsdl2-2.0-0` |
+| **macOS Apple Silicon (CI)** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-macos-arm64.zip) | Not code-signed (ADR-0203); Gatekeeper needs `xattr -dr com.apple.quarantine Mesen.app`. The signed, released build is below. `brew install sdl2` |
 | **macOS Apple Silicon (release)** | [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) | arm64; ad-hoc signed, so the first-open step above applies. `brew install sdl2` |
-| **Windows x64** | [Download](https://nightly.link/sbihaiko/MesenAI/workflows/build/prod/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip) | Windows 10 (1607) or newer |
+| **Windows x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-windows-x64-aot.zip) | Windows 10 (1607) or newer |
 
-> This channel is **built on demand, not on every push** — `build.yml` runs on
-> a pull request opened against `prod` or a manual dispatch (ADR-0200,
-> ADR-0203), never on a plain push. Those links serve the last build that was
-> triggered on `prod`. To refresh them after promoting `main` into `prod`:
+> Those files are assets of the `ci-latest` **pre-release** (ADR-0204), so the
+> URLs are fixed and the files never expire — and because it is a pre-release,
+> the [Releases](#download) link above still resolves to the tagged release, not
+> to a CI build. The channel is **built on demand, not on every push** —
+> `build.yml` runs on a pull request opened against `prod` or a manual dispatch
+> (ADR-0200, ADR-0203), never on a plain push. To refresh the assets after
+> promoting `main` into `prod`:
 > `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod`.
 > Building from source: [COMPILING.md](COMPILING.md).
 

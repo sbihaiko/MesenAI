@@ -16,6 +16,12 @@ name: Build Mesen
 # published macOS release is still built by `scripts/release_macos.sh`, which
 # ad-hoc signs and verifies the bundle itself (Phase 11 C.4); this leg exists
 # to prove the build compiles and to hand back a runnable artifact.
+#
+# ADR-0204 (2026-09-17) adds the `publish` job at the bottom: the four build
+# jobs upload artifacts, and `publish` republishes them under fixed names as
+# assets of a rolling pre-release, which is what the README's download links
+# resolve against. Until then those links were nightly.link URLs, which can only
+# ever resolve against a PUSH run - see the job's own comment.
 
 on:
   # ADR-0191 (2026-09-14) cut this workflow down to a hand-run path and
@@ -301,3 +307,59 @@ jobs:
         with:
           name: Mesen (Linux ${{ matrix.platform.name }} - AppImage)
           path: Mesen.AppImage
+
+  # ADR-0204: the README's download links point at fixed-name assets of one
+  # rolling pre-release, not at nightly.link. nightly.link resolves a branch
+  # against a PUSH run and nothing else - its 404 says so outright,
+  # `?query=event%3Apush+is%3Asuccess+branch%3Aprod` - and this workflow has had
+  # no push trigger since ADR-0191, so every URL ADR-0203 §6 put in the README
+  # was a guaranteed 404 no matter how many times it was dispatched.
+  #
+  # `pull_request` is excluded on purpose: a pull request run executes at
+  # `refs/pull/N/merge`, a merge preview of code that has not landed. This is
+  # the one place in this file where the event guard belongs - the build jobs'
+  # uploads must never carry it, which is what §5 of
+  # `verify_ci_platform_matrix.sh` asserts.
+  publish:
+    needs: [windows, macos, linux, appimage]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download this run's artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+
+      # The artifact names carry the matrix coordinates and may change; the
+      # asset names below are the README's URLs and must not. Keeping the
+      # translation in one step is what makes that separation checkable.
+      - name: Stage the assets under their fixed names
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          zip -j out/MesenAI-ci-linux-x64.zip       "artifacts/Mesen (Linux - ubuntu-22.04 - clang_aot)/Mesen"
+          zip -j out/MesenAI-ci-linux-arm64.zip     "artifacts/Mesen (Linux - ubuntu-22.04-arm - clang_aot)/Mesen"
+          zip -j out/MesenAI-ci-windows-x64-aot.zip "artifacts/Mesen (Windows - net10.0 - AoT)/Mesen.exe"
+          cp "artifacts/Mesen (Linux x64 - AppImage)/Mesen.AppImage"     out/MesenAI-ci-linux-x64.AppImage
+          cp "artifacts/Mesen (Linux ARM64 - AppImage)/Mesen.AppImage"   out/MesenAI-ci-linux-arm64.AppImage
+          cp "artifacts/Mesen (macOS - macos-15 - clang_aot)/Mesen.app.zip" out/MesenAI-ci-macos-arm64.zip
+          ls -l out
+
+      - name: Publish to the rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=ci-latest
+          # --prerelease is load-bearing: it keeps `releases/latest` - the
+          # badge, the README's release link, `gh release view` with no tag -
+          # resolving to the real release instead of to a CI build.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --prerelease \
+              --title "CI builds (not a release)" \
+              --notes "Rolling build of the \`prod\` branch, replaced on every publish (ADR-0204). Not a release: the tagged release is macOS Apple Silicon only. Unzip and run; see the README's Download section for each platform's prerequisite."
+          gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber
