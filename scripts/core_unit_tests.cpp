@@ -60,6 +60,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -6944,6 +6945,48 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 	Check(!anyEmpty, "BlocoP: no flag set produces an empty option token the loader would reject");
 }
 
+//Issue #302: the Metroid pack logged 8 234 loader errors over 28 distinct
+//messages, evicting every other entry from MessageManager's 1 000-entry ring.
+void TestHdPackErrorDedupeLogsEachDistinctMessageOnce()
+{
+	HdPackErrorDedupe log;
+	int logged = 0;
+	for(int i = 0; i < 2400; i++) {
+		logged += log.ShouldLog("Condition not found: !SamusInTheAir") ? 1 : 0;
+	}
+	logged += log.ShouldLog("Error while loading background: LavaAirGlow0.png") ? 1 : 0;
+	Check(logged == 2, "BlocoP: 2 401 occurrences over two distinct messages are logged twice");
+
+	std::vector<std::pair<std::string, uint32_t>> repeated = log.GetRepeated();
+	Check(repeated.size() == 1 && repeated[0].first == "Condition not found: !SamusInTheAir" && repeated[0].second == 2400,
+		"BlocoP: the repeated message is summarised once with its true occurrence count");
+	Check(log.GetDistinctCount() == 2 && log.GetUnretainedCount() == 0,
+		"BlocoP: nothing is lost while the distinct-message budget lasts");
+}
+
+void TestHdPackErrorDedupeIsPerLoad()
+{
+	HdPackErrorDedupe log;
+	Check(log.ShouldLog("Invalid blend mode: nonsense"), "BlocoP: the first occurrence of a load is logged");
+	Check(!log.ShouldLog("Invalid blend mode: nonsense"), "BlocoP: a repeat inside the same load is suppressed");
+	log.Reset();
+	Check(log.ShouldLog("Invalid blend mode: nonsense"), "BlocoP: the next load reports the same problem again");
+	Check(log.GetRepeated().empty() && log.GetUnretainedCount() == 0, "BlocoP: Reset clears the counts, not just the log decision");
+}
+
+void TestHdPackErrorDedupeCapsDistinctMessages()
+{
+	HdPackErrorDedupe log;
+	int logged = 0;
+	for(size_t i = 0; i < HdPackErrorDedupe::MaxDistinctMessages + 50; i++) {
+		logged += log.ShouldLog("Condition not found: c" + std::to_string(i)) ? 1 : 0;
+	}
+	Check(logged == (int)HdPackErrorDedupe::MaxDistinctMessages,
+		"BlocoP: a pack with more distinct errors than the cap cannot flood the log by that route");
+	Check(log.GetDistinctCount() == HdPackErrorDedupe::MaxDistinctMessages && log.GetUnretainedCount() == 50u,
+		"BlocoP: occurrences past the cap are counted so the loader can say how many it dropped");
+}
+
 void TestBordersOnAUniformFrame()
 {
 	std::vector<uint32_t> pixels((size_t)64 * 32, 0xFF000000);
@@ -7494,6 +7537,9 @@ int main()
 	TestCaptureSizeRejectsAnAbsurdlyLargeFrame();
 	TestHdPackOptionsLineHasNoTrailingComma();
 	TestHdPackOptionsLineOrderAndEmptiness();
+	TestHdPackErrorDedupeLogsEachDistinctMessageOnce();
+	TestHdPackErrorDedupeIsPerLoad();
+	TestHdPackErrorDedupeCapsDistinctMessages();
 
 	TestBordersOnAUniformFrame();
 	TestBordersMeasureLetterboxing();
