@@ -272,6 +272,14 @@ headless-ui-tests:
 check-manifest:
 	./scripts/check-core-manifest.sh
 
+#ADR-0204: fetch every download link the README publishes and fail if one does
+#not answer 200. Deliberately NOT part of doc-checks - doc-checks is hermetic
+#and runs on every pull request, and this needs the network and a published
+#release, so a GitHub outage would redden the gate for reasons the change did
+#not cause. Run it after publishing the rolling pre-release.
+check-download-links:
+	./scripts/checks/verify_download_links.sh
+
 #ADR-0137: repo-hygiene guardrails wired into one make target so CI fails
 #the PR instead of relying on someone running these checks by hand.
 #Depends on check-manifest (kept separate, not duplicated) then runs the
@@ -361,6 +369,12 @@ doc-checks: check-manifest
 	#SHA256SUMS stays derived from the zip basenames. Same-turn ADR, so this
 	#grep suite is its unit test.
 	./scripts/checks/verify_release_asset_names.sh
+	#ADR-0204: the README's download links are fixed-name assets of the
+	#`ci-latest` pre-release, published by build.yml's `publish` job. Same-turn
+	#ADR, so this grep suite is its unit test. It asserts the two files agree on
+	#the six names; it does NOT touch the network - `make check-download-links`
+	#is the target that actually fetches them.
+	./scripts/checks/verify_download_channel.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
