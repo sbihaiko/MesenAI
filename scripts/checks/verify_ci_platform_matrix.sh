@@ -132,11 +132,26 @@ fi
 if ! grep -q "ADR-0203" "$WORKFLOWS/build.yml"; then
   fail "$WORKFLOWS/build.yml's header no longer states the ADR-0203 policy (Windows/macOS restored)"
 fi
-# The uploads must not be gated on the event: an `if:` there would run every
-# leg of a `prod` pull request and publish no artifact at all - the expensive
-# half of a build with none of the result (ADR-0200 §4, ADR-0203 §4).
-if grep -q "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml"; then
-  fail "$WORKFLOWS/build.yml gates an upload on github.event_name; a 'prod' pull request would run every leg and publish no artifact (ADR-0200, ADR-0203)"
+# The build jobs' uploads must not be gated on the event: an `if:` there would
+# run every leg of a `prod` pull request and publish no artifact at all - the
+# expensive half of a build with none of the result (ADR-0200 §4, ADR-0203 §4).
+#
+# ADR-0204 §1 carves out the single place the guard belongs: the `publish` job,
+# which must NOT publish from a pull request, because that run executes at
+# `refs/pull/N/merge` - a merge preview of code that has not landed. So the
+# contract stopped being "the guard appears nowhere" and became "it appears
+# exactly once, and only there". That fails in both directions: a build job
+# regaining it, and the publish job losing it.
+guard_count="$(grep -c "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml" || true)"
+if [ "$guard_count" -gt 1 ]; then
+  fail "$WORKFLOWS/build.yml carries the event guard $guard_count times; only ADR-0204's publish job may have it - every build job's upload must publish on a 'prod' pull request too (ADR-0200, ADR-0203)"
+fi
+if [ "$guard_count" -eq 1 ]; then
+  guard_line="$(grep -n "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml" | head -1 | cut -d: -f1)"
+  publish_line="$(awk '/^  publish:/{print NR; exit}' "$WORKFLOWS/build.yml")"
+  if [ -z "$publish_line" ] || [ "$guard_line" -lt "$publish_line" ]; then
+    fail "$WORKFLOWS/build.yml's event guard sits outside the publish job; a build job gated that way would run every leg of a 'prod' pull request and publish no artifact (ADR-0200, ADR-0203, ADR-0204)"
+  fi
 fi
 
 # 6. ADR-0193: the gate keeps its pre-merge trigger and its dispatch escape.
@@ -220,4 +235,4 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS: ADR-0191 (checks.yml compiles Linux only; no macOS/Windows runner outside build.yml; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run) + ADR-0203 (build.yml restores an unsigned Windows job and an Apple-Silicon-only macOS job, and the Windows job compiles the native interop library before it publishes)"
+echo "PASS: ADR-0191 (checks.yml compiles Linux only; no macOS/Windows runner outside build.yml; checks.yml holds the five gate jobs) + ADR-0193 (the gate keeps pull_request on main and workflow_dispatch) + ADR-0200 (build.yml takes pull_request filtered to prod, keeps workflow_dispatch, and publishes artifacts on a PR run) + ADR-0203 (build.yml restores an unsigned Windows job and an Apple-Silicon-only macOS job, and the Windows job compiles the native interop library before it publishes) + ADR-0204 (the event guard belongs to the publish job alone)"
