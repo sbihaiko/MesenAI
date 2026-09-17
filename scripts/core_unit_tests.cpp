@@ -974,16 +974,28 @@ void TestDetectConventionLayoutBorderSection()
 		Check(!fingerprint.empty() && !baseContentId.empty(), "BlocoG: the stat fingerprint and the tree hash both answer on a real tree");
 
 		//The whole point of the fingerprint: a NESTED file moving is visible even
-		//though the container directory's own mtime never changes.
-		std::ofstream(dir / "mep" / "pack.json", std::ios::out | std::ios::binary) << "{\"name\":\"t\",\"version\":\"1.0.1\"}\n";
+		//though the container directory's own mtime never changes. Both axes are
+		//asserted separately and deterministically - an edit that changes the byte
+		//count, and an edit that keeps it but moves the recorded time. Asserting
+		//only the second one would be a timing test: two writes inside the same
+		//mtime tick (the CI runner's libstdc++ resolves last_write_time coarser
+		//than APFS does) are indistinguishable by design (ADR-0206 §2).
+		std::ofstream(dir / "mep" / "pack.json", std::ios::out | std::ios::binary) << "{\"name\":\"t\",\"version\":\"1.0.1\",\"author\":\"a\"}\n";
 		std::string afterEdit = MepLocalIdentityCache::ComputeTreeFingerprint(dir.string());
-		Check(afterEdit != fingerprint, "BlocoG: editing a nested file changes the fingerprint");
+		Check(afterEdit != fingerprint, "BlocoG: an edit that changes a nested file's size changes the fingerprint");
 		Check(MepContentId::ComputeFolder(dir.string()) != baseContentId, "BlocoG: the same edit changes the tree hash the fingerprint guards");
+
+		std::filesystem::file_time_type moved = std::filesystem::last_write_time(dir / "mep" / "pack.json", ec) +
+			std::chrono::duration_cast<std::filesystem::file_time_type::duration>(std::chrono::seconds(10));
+		std::filesystem::last_write_time(dir / "mep" / "pack.json", moved, ec);
+		std::string afterTouch = MepLocalIdentityCache::ComputeTreeFingerprint(dir.string());
+		Check(afterTouch != afterEdit,
+			"BlocoG: a nested file whose recorded time moved changes the fingerprint even at an unchanged size");
 
 		//Host control files are not content: a reinstall/re-extraction must not
 		//invalidate the cache (same rule ComputeFolder applies to the hash).
 		std::ofstream(dir / ".mep-source", std::ios::out | std::ios::binary) << "123:456\n\n";
-		Check(MepLocalIdentityCache::ComputeTreeFingerprint(dir.string()) == afterEdit, "BlocoG: .mep-source is excluded from the fingerprint");
+		Check(MepLocalIdentityCache::ComputeTreeFingerprint(dir.string()) == afterTouch, "BlocoG: .mep-source is excluded from the fingerprint");
 
 		//Round trip: the entry survives Save/Load with its content_id, and the
 		//container stamp is what the load-side check compares.
@@ -996,7 +1008,7 @@ void TestDetectConventionLayoutBorderSection()
 		MepLocalIdentityCache::Entry entry;
 		entry.ContainerPath = dir.string();
 		entry.ContainerStamp = stamp;
-		entry.TreeFingerprint = afterEdit;
+		entry.TreeFingerprint = afterTouch;
 		entry.ContentId = contentId;
 		save.Set(entry);
 		Check(save.Save(cachePath), "BlocoG: the identity cache writes its file");
@@ -1045,8 +1057,11 @@ void TestDetectConventionLayoutBorderSection()
 		Check(warm.Scanned == 2 && warm.Recomputed == 0, "BlocoG: a warm cache re-hashes nothing");
 
 		//A changed nested payload invalidates that container only, and the new
-		//content_id no longer matches the twin - the drop stays distinct.
-		std::ofstream(packs / "drop" / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>b.png\n";
+		//content_id no longer matches the twin - the drop stays distinct. The edit
+		//changes the byte count on purpose: a same-size rewrite is only visible
+		//through the recorded time (ADR-0206 §2), which a fast test cannot
+		//guarantee on every filesystem.
+		std::ofstream(packs / "drop" / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>b.png\n<img>c.png\n";
 		MepLocalIdentityCache::RefreshResult editedRefresh = MepLocalIdentityCache::RefreshFolder(packs.string());
 		Check(editedRefresh.Recomputed == 1, "BlocoG: an edited container is the only one re-hashed", std::to_string(editedRefresh.Recomputed));
 		MepLocalIdentityCache afterCache;

@@ -84,11 +84,29 @@ The `tree_fingerprint` is what makes a nested change visible: editing
 container directory's own `mtime` is untouched.
 
 **Accepted limit, stated rather than hidden:** this is a fingerprint, not a
-content hash. A payload rewritten to the *same* size with its `mtime`
-deliberately restored is not detected. Ordinary editors, saves, unzips and
-copies all move `mtime`, so this is the price of not reading hundreds of MB;
-the escape hatches are already there — deleting `content-ids.json`, the
-`Restore` action, and any reinstall recompute from scratch.
+content hash, so it sees what `size` and `mtime` can see and nothing more. A
+rewrite that keeps the byte count **and** leaves the recorded time unchanged is
+invisible to it. Two ways that happens:
+
+- the `mtime` is deliberately restored (`touch -r`) after an edit;
+- the write lands inside the same `mtime` tick as the one the cache recorded.
+  That tick is filesystem *and* stdlib dependent — nanosecond on APFS, coarser
+  on some libstdc++ builds, which is how this shipped test caught it: two
+  writes in the same test failed to move `last_write_time` on the CI runner
+  while passing on macOS.
+
+This is git's own rule (`size` + `mtime`, with `git status` occasionally
+needing a `touch` for the same reason), and the escapes are the ones that rule
+has always had: delete `content-ids.json`, touch the tree, or run the
+`Restore`/reinstall path, and the identity is recomputed from scratch. Reading
+every byte at refresh time instead would remove the limit and also the point of
+the cache — hundreds of MB per pack per session.
+
+The consequences of a miss are bounded rather than silent-corrupting: the
+container keeps its previous identity, which at worst means a drop stays merged
+with a catalog twin it no longer byte-matches (or stays its own `local:` entry)
+until one of those escapes runs. Nothing is applied that the pack did not ask
+for; the ADR-0139 hash is still what the identity *means*.
 
 **3. Load reads the cache without revalidating it. Refresh revalidates it.**
 

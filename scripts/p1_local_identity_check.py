@@ -80,7 +80,10 @@ check(len(set(sameTree.values())) == 1,
 
 check(lib.RefreshMepLocalIdentities() == 0, "a warm cache re-hashes nothing")
 
-write(os.path.join(packs, "drop", "textures", "hires.txt"), "<ver>106\n<img>b.png\n")
+# The edit changes the byte count on purpose: a same-size rewrite is only
+# visible through the recorded time (ADR-0206 section 2), which this check
+# cannot guarantee on every filesystem.
+write(os.path.join(packs, "drop", "textures", "hires.txt"), "<ver>106\n<img>b.png\n<img>c.png\n")
 check(lib.RefreshMepLocalIdentities() == 1, "a nested edit re-hashes exactly one container")
 after = read_cache()
 check(after["drop"]["content_id"] != after["installed"]["content_id"],
