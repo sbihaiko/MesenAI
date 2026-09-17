@@ -151,6 +151,19 @@ namespace Mesen.Interop
 			}, 100);
 		}
 
+		//P.1-local (ADR-0206): refreshes the local-container content_id cache -
+		//walks the packs folder, re-hashes only the containers whose stat
+		//fingerprint moved and rewrites EnhancementPacks/.cache/content-ids.json.
+		//Blocking and I/O-heavy: call it on a background thread (never the
+		//ROM-load path). Returns how many containers were re-hashed; the caller
+		//re-evaluates the pack list only when that is > 0.
+		[DllImport(DllPath, EntryPoint = "RefreshMepLocalIdentities")]
+		private static extern Int32 RefreshMepLocalIdentitiesWrapper();
+		public static Int32 RefreshMepLocalIdentities()
+		{
+			return RefreshMepLocalIdentitiesWrapper();
+		}
+
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);
 

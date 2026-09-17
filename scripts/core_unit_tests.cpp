@@ -48,6 +48,8 @@
 #include "Shared/EnhancementPacks/MepRecipeInstaller.h"
 #include "Shared/EnhancementPacks/MepRecipeOps.h"
 #include "Shared/EnhancementPacks/MepContentId.h"
+#include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
+#include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Video/BorderLayout.h"
@@ -951,6 +953,138 @@ void TestDetectConventionLayoutBorderSection()
 		//A real content edit DOES change the baseline
 		std::ofstream(dir / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>different.png\n";
 		Check(MepContentId::ComputeFolder(dir.string()) != base, "BlocoG: editing textures changes the baseline (an edit is detected)");
+
+		std::filesystem::remove_all(dir, ec);
+	}
+
+	void TestMepLocalIdentityCache()
+	{
+		//ADR-0206 / P.1-local: the cache that gives a stamp-less local drop its
+		//content_id without hashing the tree on the ROM-load path.
+		std::filesystem::path dir = std::filesystem::temp_directory_path() / "mep_local_identity_test";
+		std::error_code ec;
+		std::filesystem::remove_all(dir, ec);
+		std::filesystem::create_directories(dir / "textures", ec);
+		std::filesystem::create_directories(dir / "mep", ec);
+		std::ofstream(dir / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n";
+		std::ofstream(dir / "mep" / "pack.json", std::ios::out | std::ios::binary) << "{\"name\":\"t\",\"version\":\"1.0.0\"}\n";
+
+		std::string fingerprint = MepLocalIdentityCache::ComputeTreeFingerprint(dir.string());
+		std::string baseContentId = MepContentId::ComputeFolder(dir.string());
+		Check(!fingerprint.empty() && !baseContentId.empty(), "BlocoG: the stat fingerprint and the tree hash both answer on a real tree");
+
+		//The whole point of the fingerprint: a NESTED file moving is visible even
+		//though the container directory's own mtime never changes. Both axes are
+		//asserted separately and deterministically - an edit that changes the byte
+		//count, and an edit that keeps it but moves the recorded time. Asserting
+		//only the second one would be a timing test: two writes inside the same
+		//mtime tick (the CI runner's libstdc++ resolves last_write_time coarser
+		//than APFS does) are indistinguishable by design (ADR-0206 §2).
+		std::ofstream(dir / "mep" / "pack.json", std::ios::out | std::ios::binary) << "{\"name\":\"t\",\"version\":\"1.0.1\",\"author\":\"a\"}\n";
+		std::string afterEdit = MepLocalIdentityCache::ComputeTreeFingerprint(dir.string());
+		Check(afterEdit != fingerprint, "BlocoG: an edit that changes a nested file's size changes the fingerprint");
+		Check(MepContentId::ComputeFolder(dir.string()) != baseContentId, "BlocoG: the same edit changes the tree hash the fingerprint guards");
+
+		std::filesystem::file_time_type moved = std::filesystem::last_write_time(dir / "mep" / "pack.json", ec) +
+			std::chrono::duration_cast<std::filesystem::file_time_type::duration>(std::chrono::seconds(10));
+		std::filesystem::last_write_time(dir / "mep" / "pack.json", moved, ec);
+		std::string afterTouch = MepLocalIdentityCache::ComputeTreeFingerprint(dir.string());
+		Check(afterTouch != afterEdit,
+			"BlocoG: a nested file whose recorded time moved changes the fingerprint even at an unchanged size");
+
+		//Host control files are not content: a reinstall/re-extraction must not
+		//invalidate the cache (same rule ComputeFolder applies to the hash).
+		std::ofstream(dir / ".mep-source", std::ios::out | std::ios::binary) << "123:456\n\n";
+		Check(MepLocalIdentityCache::ComputeTreeFingerprint(dir.string()) == afterTouch, "BlocoG: .mep-source is excluded from the fingerprint");
+
+		//Round trip: the entry survives Save/Load with its content_id, and the
+		//container stamp is what the load-side check compares.
+		std::string cachePath = MepLocalIdentityCache::GetCacheFilePath(dir.string());
+		std::string contentId = MepContentId::ComputeFolder(dir.string());
+		std::string stamp = MepLocalIdentityCache::ComputeContainerStamp(dir.string());
+		Check(!contentId.empty() && !stamp.empty(), "BlocoG: the tree hash and the container stamp both compute");
+
+		MepLocalIdentityCache save;
+		MepLocalIdentityCache::Entry entry;
+		entry.ContainerPath = dir.string();
+		entry.ContainerStamp = stamp;
+		entry.TreeFingerprint = afterTouch;
+		entry.ContentId = contentId;
+		save.Set(entry);
+		Check(save.Save(cachePath), "BlocoG: the identity cache writes its file");
+
+		MepLocalIdentityCache load;
+		load.Load(cachePath);
+		const MepLocalIdentityCache::Entry* found = load.Find(dir.string());
+		Check(found != nullptr && found->ContentId == contentId, "BlocoG: the cache round-trips a container's content_id");
+		Check(found != nullptr && found->ContainerStamp == stamp, "BlocoG: the cache round-trips the container stamp");
+
+		//A cache whose file is missing or corrupt is empty, never fatal, and a
+		//container that is gone is pruned rather than kept forever.
+		MepLocalIdentityCache missing;
+		missing.Load(cachePath + ".does-not-exist");
+		Check(missing.Count() == 0 && missing.Find(dir.string()) == nullptr, "BlocoG: a missing cache file loads as empty");
+		std::ofstream(cachePath, std::ios::out | std::ios::binary) << "{not json";
+		MepLocalIdentityCache corrupt;
+		corrupt.Load(cachePath);
+		Check(corrupt.Count() == 0, "BlocoG: a corrupt cache file loads as empty");
+		Check(load.Prune({}) == 1 && load.Count() == 0, "BlocoG: a vanished container is pruned from the cache");
+
+		//The refresh itself (ADR-0206 §3, P.1-local's acceptance rows): it runs
+		//against a temporary packs folder - never the user's own - and gives a
+		//stamp-less drop the SAME content_id its stamped twin already has, which
+		//is what collapses the pair into one `local + catalog` pack.
+		std::filesystem::path packs = std::filesystem::temp_directory_path() / "mep_local_identity_packs";
+		std::filesystem::remove_all(packs, ec);
+		std::filesystem::create_directories(packs / "drop" / "textures", ec);
+		std::filesystem::create_directories(packs / "installed" / "textures", ec);
+		std::ofstream(packs / "drop" / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>a.png\n";
+		std::ofstream(packs / "installed" / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>a.png\n";
+		std::ofstream(packs / "installed" / ".mep-install.json", std::ios::out | std::ios::binary) << "{\"pack_id\":\"tastic/contra80s:contra\"}\n";
+
+		MepLocalIdentityCache::RefreshResult first = MepLocalIdentityCache::RefreshFolder(packs.string());
+		Check(first.Scanned == 2 && first.Recomputed == 2, "BlocoG: the refresh hashes every local container once", std::to_string(first.Scanned) + "/" + std::to_string(first.Recomputed));
+
+		MepLocalIdentityCache refreshed;
+		refreshed.Load(MepLocalIdentityCache::GetCacheFilePath(packs.string()));
+		const MepLocalIdentityCache::Entry* dropEntry = refreshed.Find((packs / "drop").string());
+		const MepLocalIdentityCache::Entry* installedEntry = refreshed.Find((packs / "installed").string());
+		Check(dropEntry != nullptr && installedEntry != nullptr && dropEntry->ContentId == installedEntry->ContentId,
+			"BlocoG: a stamp-less drop and its stamped twin get the same content_id (the §5 merge key)");
+
+		//Warm cache: nothing to do, and no tree is read again.
+		MepLocalIdentityCache::RefreshResult warm = MepLocalIdentityCache::RefreshFolder(packs.string());
+		Check(warm.Scanned == 2 && warm.Recomputed == 0, "BlocoG: a warm cache re-hashes nothing");
+
+		//A changed nested payload invalidates that container only, and the new
+		//content_id no longer matches the twin - the drop stays distinct. The edit
+		//changes the byte count on purpose: a same-size rewrite is only visible
+		//through the recorded time (ADR-0206 §2), which a fast test cannot
+		//guarantee on every filesystem.
+		std::ofstream(packs / "drop" / "textures" / "hires.txt", std::ios::out | std::ios::binary) << "<ver>106\n<img>b.png\n<img>c.png\n";
+		MepLocalIdentityCache::RefreshResult editedRefresh = MepLocalIdentityCache::RefreshFolder(packs.string());
+		Check(editedRefresh.Recomputed == 1, "BlocoG: an edited container is the only one re-hashed", std::to_string(editedRefresh.Recomputed));
+		MepLocalIdentityCache afterCache;
+		afterCache.Load(MepLocalIdentityCache::GetCacheFilePath(packs.string()));
+		Check(afterCache.Find((packs / "drop").string())->ContentId != afterCache.Find((packs / "installed").string())->ContentId,
+			"BlocoG: an edited drop stops matching its stamped twin");
+
+		//A container the user removed is pruned instead of kept forever.
+		std::filesystem::remove_all(packs / "drop", ec);
+		Check(MepLocalIdentityCache::RefreshFolder(packs.string()).Pruned == 1, "BlocoG: a removed container is pruned by the refresh");
+		std::filesystem::remove_all(packs, ec);
+
+		//ADR-0206 §4: a stamp-less copy of a catalog pack adopts the catalog
+		//pack_id, which is what makes the §5 merge and the stored preference
+		//see one pack instead of two.
+		unordered_map<string, MepPackIdentity> identities;
+		identities["catalog"] = { "tastic/contra80s:contra", "abc123" };
+		identities["drop"] = { "", "abc123" };
+		identities["other"] = { "", "def456" };
+		MepPackManager::AdoptIdentities({ "catalog", "drop", "other" }, identities);
+		Check(identities["drop"].PackId == "tastic/contra80s:contra", "BlocoG: an equal content_id adopts the catalog pack_id");
+		Check(identities["other"].PackId.empty(), "BlocoG: a different content_id keeps its `local:<container>` fallback");
+		Check(identities["catalog"].PackId == "tastic/contra80s:contra", "BlocoG: adoption never overwrites the stamped pack_id");
 
 		std::filesystem::remove_all(dir, ec);
 	}
@@ -7196,6 +7330,7 @@ int main()
 
 	TestContentIdGoldenParity();
 	TestMepContentIdComputeFolder();
+	TestMepLocalIdentityCache();
 
 	TestFingerprintLoopLoad();
 	TestFingerprintLoopAbsent();
