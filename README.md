@@ -165,8 +165,8 @@ from a tagged commit. No installer: unzip and run. macOS needs SDL2
 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
 **System Settings → Privacy & Security → Open Anyway**.
 
-Other platforms use the on-demand CI channel — the newest build of `prod` that
-passed, unzip and run:
+Platforms without a tagged release use the on-demand CI channel — the newest
+build of `prod` that passed, unzip and run:
 
 | Platform | Build | Notes |
 |---|---|---|
@@ -292,7 +292,9 @@ A project that measures its own claims should say what is and isn't shipped.
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
   workflow end to end. Every acceptance so far is measured, but by proxy.
-- Windows and Linux binaries are on-demand CI builds, not tagged releases.
+- Only macOS Apple Silicon is a tagged release. The Windows and Linux binaries,
+  and macOS's own CI build, come from the on-demand channel in
+  [Download](#download) — never from a tag.
 
 Decisions behind all of it are recorded as an [ADR trail](docs/adr/) — the *why*
 stays reviewable.
