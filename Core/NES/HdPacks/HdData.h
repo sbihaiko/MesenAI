@@ -6,6 +6,8 @@
 #include "Utilities/HexUtilities.h"
 #include "Utilities/SimpleLock.h"
 #include "Utilities/Timer.h"
+//F12.1: HdPackData::LoadAsync reports its own cost (see the log line below).
+#include <chrono>
 
 class BaseHdNesPack;
 
@@ -518,18 +520,33 @@ public:
 
 	void LoadAsync()
 	{
+		//F12.1: this runs on the detached thread NesConsole::LoadHdPack starts,
+		//so the ROM load returns before the pack's images are ready. A number
+		//that only covered the parse would understate what the user waits for,
+		//so the decode reports its own cost here.
+		std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 		for(auto& bitmap : BackgroundFileData) {
 			bitmap->Init();
 			if(_cancelLoad) {
+				LogLoadAsyncTime(start, true);
 				return;
 			}
 		}
 		for(auto& bitmap : ImageFileData) {
 			bitmap->Init();
 			if(_cancelLoad) {
+				LogLoadAsyncTime(start, true);
 				return;
 			}
 		}
+		LogLoadAsyncTime(start, false);
+	}
+
+	void LogLoadAsyncTime(std::chrono::steady_clock::time_point start, bool cancelled)
+	{
+		double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		MessageManager::Log("[MEP] LoadAsync (bitmap decode): " + std::to_string((int)(ms + 0.5)) + " ms, " +
+			std::to_string(BackgroundFileData.size() + ImageFileData.size()) + " image(s)" + (cancelled ? " (cancelled)" : ""));
 	}
 
 	void CancelLoad()
