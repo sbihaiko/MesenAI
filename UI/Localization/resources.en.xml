@@ -3872,6 +3872,7 @@ E
 			<Value ID="ResetAccessCounters">Reset access stats</Value>
 
 			<Value ID="CopyToHdPackFormat">Copy tile (HD pack format)</Value>
+			<Value ID="CopyToMepSheetCell">Copy as MEP sheet cell</Value>
 			<Value ID="CheatDatabase">Cheat database</Value>
 			<Value ID="ToggleBilinearInterpolation">Use bilinear interpolation</Value>
 
