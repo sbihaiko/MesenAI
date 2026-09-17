@@ -226,6 +226,17 @@ namespace Mesen.Debugger.ViewModels
 							HdPackCopyHelper.CopyToHdPackFormat(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false);
 						}
 					}
+				},
+				new ContextMenuAction() {
+					ActionType = ActionType.CopyToMepSheetCell,
+					IsVisible = () => IsNes,
+					IsEnabled = () => HdPackCopyHelper.IsActionAllowed(GetVramMemoryType()),
+					OnClick = () => {
+						DebugTilemapTileInfo? tile = GetSelectedTileInfo();
+						if(tile != null && tile?.TileAddress >= 0) {
+							HdPackCopyHelper.CopyAsMepSheetCell(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false);
+						}
+					}
 				}
 			}));
 

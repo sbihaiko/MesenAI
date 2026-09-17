@@ -851,6 +851,8 @@ namespace Mesen.Debugger.Utilities
 
 		[IconFile("HdPack")]
 		CopyToHdPackFormat,
+		[IconFile("HdPack")]
+		CopyToMepSheetCell,
 
 		[IconFile("Find")]
 		CheatDatabase,

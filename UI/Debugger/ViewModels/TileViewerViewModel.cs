@@ -191,6 +191,17 @@ namespace Mesen.Debugger.ViewModels
 							HdPackCopyHelper.CopyToHdPackFormat(address, Config.Source, RawPalette, SelectedPalette, false);
 						}
 					}
+				},
+				new ContextMenuAction() {
+					ActionType = ActionType.CopyToMepSheetCell,
+					IsVisible = () => CpuType == CpuType.Nes,
+					IsEnabled = () => GetSelectedTileAddress() >= 0 && HdPackCopyHelper.IsActionAllowed(Config.Source),
+					OnClick = () => {
+						int address = GetSelectedTileAddress();
+						if(address >= 0) {
+							HdPackCopyHelper.CopyAsMepSheetCell(address, Config.Source, RawPalette, SelectedPalette, false);
+						}
+					}
 				}
 			}));
 
