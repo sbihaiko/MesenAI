@@ -1,0 +1,147 @@
+# ADR-0210: Sheet coverage is completed from the ROM's own CHR, and a third-party index contributes palettes — never art, and never conditions
+
+- Status: proposed
+- Date: 2026-09-18
+- Related: ADR-0183 (the artist kit; "an observation, never a reading"), ADR-0209 Q4 (how coverage reaches 100%), ADR-0198 §2/§3 (patched-ROM key namespace), ADR-0145 (optimistic matcher), ADR-0153 (artist-legible sheets), MEP-v1 §5, PRD Part A F9.24, F12.2
+- Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR"
+
+## Context
+
+ADR-0209 measured the gap that blocks the four-step artist loop: of the 2 203
+keys in Zelda's recorded pack, only 319 (12.5%) have a cell on a sheet. Its Q4
+asked how coverage reaches 100%, and option (m) proposed seeding it from an
+existing pack's key index on the premise that *"a `<tile>` key is
+`(tileData, palette)`: 16 bytes of original CHR plus four NES colours — that
+**is** the original art"*.
+
+**That premise is only half true, and the half that is false is the majority of
+the library.** `HdPackLoader::ReadTileData` branches on the field's length:
+
+- **32 hex characters or more** → the literal 16 bytes of the pattern, and
+  `IsChrRamTile = true`. This is a **CHR RAM** game: the art is genuinely
+  carried in the key, because it is not in the ROM file in tile form.
+- **shorter** → the field is a **tile index** (hex from `<ver>`103 on), and
+  `IsChrRamTile = false`. This is a **CHR ROM** game: the key is a *pointer*
+  into the ROM's own CHR, and carries no art whatsoever.
+
+Measured across the 30-ROM bounded library on 2026-09-18: **23 games are CHR
+ROM** (88 576 tiles, statically present in the files) and **7 are CHR RAM**
+(Castlevania, Contra, Lifeforce, Mega Man, Mega Man 2, Metroid, The Legend of
+Zelda).
+
+Three further facts came out of the same measurement, and each one narrows the
+decision:
+
+1. **For a CHR ROM game we already have every shape, and we do not need anyone.**
+   `scripts/artist_chr_kit.py` (ADR-0183) walks the ROM's CHR; Ninja Gaiden's
+   `auto/` carries indices 0–8191, i.e. **8192 of 8192 tiles**, and 1942 and
+   Super Mario Bros. carry 512 of 512. A third-party index cannot add a shape
+   to a set that is already complete by construction.
+2. **A third-party index can be for a ROM that is not ours, and says so only
+   arithmetically.** The Ninja Gaiden pack's indices run to **33 168** against
+   our CHR's 8 192 tiles. 5 532 of its "distinct keys" address tiles that do not
+   exist in the dump we load. A first pass of this measurement reported those
+   5 532 as new art; they are nothing of the kind.
+3. **What a third-party index really adds to a CHR ROM game is palettes.** The
+   Ninja Gaiden pack names 401 distinct palettes to our 364; Donkey Kong 19 to
+   our 8. A pair whose palette we never observed will not match at run time
+   however complete our shapes are — so the palette set, not the shape set, is
+   the scarce resource there.
+
+The non-goal is stated up front: this ADR does not decide how a marked figure
+reaches the artist's editor (that is ADR-0209), and it does not import a single
+pixel, colour choice or upscale from anyone's pack.
+
+## Decision
+
+Coverage has **three sources**, used in this order, and each cell records which
+one it came from.
+
+### 1. Recording — the only source that is `seen: true`
+
+What `HdPackBuilder::ProcessTile` observed the PPU actually draw. It is the only
+source that carries a real `(shape, palette)` pair witnessed in play, and it
+stays the primary source. Everything below fills holes around it and never
+overwrites it.
+
+### 2. The ROM's own CHR — for the 23 CHR ROM games, this closes the shape gap
+
+`artist_chr_kit.py`'s existing preference order (`evidence` → `borrowed` →
+`donated` → `fill` → `empty`) already does this; a `fill` cell is marked
+`seen: false`. For a CHR ROM game the shape side of coverage is therefore
+**100% by construction, with no third party and no further play**. This ADR
+changes nothing here except to name it as the answer to ADR-0209 Q4 for 23 of
+30 games.
+
+The residue is the palette: a shape pulled straight from CHR has no colours
+attached. Source 3 supplies them.
+
+### 3. A third-party key index — palettes always, art only for CHR RAM
+
+A community pack's `hires.txt` is read as **an index of facts about the ROM**:
+which tiles exist, and which palettes the game puts them under. Its PNGs are
+never opened.
+
+- **CHR RAM game** (7 of 30): the key carries the 16 pattern bytes. Those bytes
+  are the game's own art, not the pack author's, so we render them ourselves
+  through the same path a recorded key takes. This is the only static source of
+  shape for these games, and it is a real gain — measured against our
+  recordings: **Contra +2 585 shapes, Castlevania +485, Mega Man +483,
+  Zelda +53**.
+- **CHR ROM game** (23 of 30): the shape half of the key is discarded (we have
+  the CHR). Only the **palette set** is taken, and only for indices that exist
+  in our dump.
+
+Three filters are mandatory, and each one exists because the measurement tripped
+over it:
+
+- **Index range.** Drop any key whose `TileIndex` is outside our CHR's tile
+  count. This is what disqualifies the Ninja Gaiden pack wholesale.
+- **`<patch>` packs.** A pack carrying `<patch>` keys the patched ROM's
+  namespace (ADR-0198 §2/§3); its indices and its CHR RAM bytes both describe a
+  different binary. Drop it, as `scripts/mep_import.py` already does.
+- **Conditions.** `<condition>` lines are **never** imported, at any coverage
+  cost. A `memoryCheck` is the other author's *reading* of the machine, and
+  ADR-0183 §3 is explicit that this recorder emits observations, never readings
+  — it "retains no RAM stream at all, so a memoryCheck would have to be invented
+  rather than observed". Importing one would launder someone else's claim into
+  our evidence. The 18 392 conditions across the installed packs are left where
+  they are.
+
+### Provenance is recorded per cell
+
+Every cell carries its source: `recorded` (source 1), `chr` (source 2),
+`index` (source 3). Only `recorded` is `seen: true`. A sheet built from sources
+2 and 3 is an editable surface, not a claim that the tile was observed.
+
+### What stays open
+
+Source 2 gives shapes without palettes for 23 of 30 games, and today a `<tile>`
+rule must name a concrete palette. Internally the builder already collapses
+this — `HdPackBuilder::GetKey(true)` sets `PaletteColors = 0xFFFFFFFF` so that
+"every palette variant of the same tile content collapses into one shape" — but
+the `hires.txt` format exposes `IgnorePalette` only for `<addition>` and for
+conditions, never for `<tile>`. A per-rule palette wildcard on `<tile>` would
+let one painted cell serve every palette variant of a shape and would make
+source 2 self-sufficient. That is a **format change** (a MEP/hires spec bump and
+a loader change), so it is deliberately left out of this ADR and needs its own.
+
+## Consequences
+
+- ADR-0209's Q4(m) can be answered concretely, but only for the 7 CHR RAM games;
+  for the other 23 the answer is Q4 option (b)-shaped — the ROM itself — and no
+  third party is involved. Q4(k)'s remainder sheet remains the mechanism that
+  makes *any* of these sources reach the artist.
+- The importer needs the ROM's CHR tile count to apply the range filter, so it
+  cannot run on a key index alone — it always needs the matching dump present.
+  That is a feature: it is also what catches a pack aimed at another ROM.
+- Refusing conditions costs real coverage. A pack like Metroid's, with 4 426
+  conditions, has much of its behaviour in rules we will not take. This is
+  accepted deliberately: the alternative is a pack that asserts things we never
+  saw, which is exactly the property ADR-0183 exists to protect.
+- A first pass of this measurement over-reported the gain by comparing a
+  zero-padded hex index against an unpadded one, and then by treating
+  out-of-range indices as art. Any future tooling that compares two `hires.txt`
+  files must normalise the index (`int(field, 16)`) and must not compare a CHR
+  RAM key space against a CHR ROM one. Both traps are cheap to fall into and
+  silent.
