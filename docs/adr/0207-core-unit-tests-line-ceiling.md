@@ -1,6 +1,6 @@
-# ADR-0207: The `core_unit_tests.cpp` line ceiling — drop it, split the file, or keep paying the amendment
+# ADR-0207: Drop the `core_unit_tests.cpp` line ceiling — the ratchet guards implementation, and this is a test file
 
-- Status: proposed
+- Status: accepted (2026-09-17 — Option A, the user's decision, asked as an either/or and answered "Largar o teto do arquivo de teste". Implemented the same day in the `doc-checks` recipe and ADR-0137's fourth amendment; the change is the removal of a gate, so it ships with the gate's own evidence — `make doc-checks` green with the line gone — rather than with unit tests, which cannot cover a deleted makefile line.)
 - Date: 2026-09-17
 - Related: ADR-0137 (the guarded-file list and its three amendments), ADR-0131 (the unit-test harness invariants), ADR-0195 (the decision whose tests first hit the ceiling)
 
@@ -46,10 +46,11 @@ adopt a third-party test framework (ADR-0131's invariants stand: no
 
 ## Decision
 
-**Open.** Three candidates; a human picks, and this ADR becomes `accepted`
-carrying only the chosen one.
+**Option A — drop the ceiling on the test file.** Chosen 2026-09-17. The
+other two candidates are kept below as the
+alternatives that were weighed, not as open questions.
 
-### Option A — drop the ceiling on the test file
+### Option A — drop the ceiling on the test file (CHOSEN)
 
 Delete the `check-file-loc.sh scripts/core_unit_tests.cpp` line from
 `doc-checks` and record in ADR-0137 that the guarded list is four
@@ -62,7 +63,7 @@ Cost: no gate at all against a genuinely bloated or duplicated test file. The
 mitigation is review, which is what catches duplicated cases anyway — the line
 count never did.
 
-### Option B — split the harness into per-block translation units
+### Option B — split the harness into per-block translation units (not chosen)
 
 The file is already organised in named blocks (`BlocoP`, `BlocoT`, …). Split
 it into `scripts/core_unit_tests/<block>.cpp` with a thin runner, add each to
@@ -75,7 +76,7 @@ makefile line plus a new ceiling. It also multiplies the amendment problem by
 the number of parts rather than removing it, unless the per-part ceilings are
 set with deliberate headroom.
 
-### Option C — raise it again, with headroom sized to the queue
+### Option C — raise it again, with headroom sized to the queue (not chosen)
 
 Keep the ratchet and move it to a number chosen from the work in flight rather
 than from the current count — the amendment pattern's real defect is that each
@@ -86,7 +87,7 @@ Cost: postpones the question and keeps the two-file amendment ritual. It is the
 honest choice only if someone believes the test file genuinely should stop
 growing soon, which nobody has argued.
 
-**Recommendation: Option A.** ADR-0137's own second amendment already contains
+**Why A won.** ADR-0137's own second amendment already contains
 the argument for it — the ratchet exists to stop implementation creeping, and a
 test file is not implementation. Two ceiling hits in three days, both from
 sanctioned work, are evidence that the instrument is mismatched to the file
