@@ -1,6 +1,6 @@
 # ADR-0208: What the core log retains — the 1 000-entry ring and the uncapped `mesen.log`
 
-- Status: proposed
+- Status: accepted 2026-09-17 — the user picked the recommendation verbatim: "Marcar truncagem + teto no mesen.log". Implemented in the same turn under the CLAUDE.md exception (ships with unit tests; go-ahead quoted here and in the PR body).
 - Date: 2026-09-17
 - Related: ADR-0137 (`doc-checks` gates), issue #302 (the loader flood that exposed this), issue #160 (the false FAIL the ring's eviction produced)
 
@@ -43,11 +43,33 @@ format; changing what any subsystem logs; the Log Window's UI.
 
 ## Decision
 
-**Open.** The question is one decision with two halves, and they should be
+**(a) + (d).** The question is one decision with two halves, and they were
 answered together because the reason the ring's limit is tolerable today is
-that the disk log catches the overflow.
+that the disk log catches the overflow. The options considered are kept below
+so the ones not taken stay legible.
 
-**Half 1 — the in-memory ring.** Candidates:
+Concretely, in `Core/Shared/MessageManager`:
+
+- `MaxLogEntries = 1000` — unchanged, but every eviction now increments a
+  counter. `GetLog()` prepends `FormatTruncationNotice(n)` when that counter is
+  non-zero: *"[MessageManager] log truncated - N earlier message(s) evicted
+  from the 1000-entry ring; mesen.log has the full run"*. `ClearLog()` resets
+  the counter, and `GetDroppedLogEntryCount()` exposes it without parsing.
+- `MaxLogFileBytes = 4 * 1024 * 1024` — when the next entry would cross the
+  budget, `mesen.log` rotates into `mesen.log.1` and reopens, through the same
+  single generation the per-session rotation already used. `ReopenLogFile()`
+  is the shared entry point, so a caller that changes the home folder can
+  re-point the file instead of writing into a stale handle.
+
+Verified by `BlocoU` in `scripts/core_unit_tests.cpp` (18 cases): the notice's
+position, its number, that the evicted entries are genuinely gone, that
+`ClearLog()` clears the debt, and — writing a real file under a temporary home
+— that the live log never exceeds the budget while `mesen.log.1` holds the
+overflow.
+
+### Options considered
+
+**Half 1 — the in-memory ring.** Candidates (chosen: **a**):
 
 - **(a) Keep 1 000, but mark the truncation.** When entries have been evicted,
   `GetLog()` leads with a synthetic line naming how many were dropped. Cheapest
@@ -59,7 +81,7 @@ that the disk log catches the overflow.
   entries, since the useful evidence is usually the beginning of a session and
   the most recent activity, not the middle of a flood.
 
-**Half 2 — `mesen.log`.** Candidates:
+**Half 2 — `mesen.log`.** Candidates (chosen: **d**):
 
 - **(d) Cap by size** with rotation at a fixed byte budget, keeping the
   existing `.1` generation.
@@ -80,10 +102,11 @@ right answer if a "keep 1 000" log is found losing session starts again after
 
 ## Consequences
 
-- Under (a), anything asserting on `GetLog()` — the headless harness and any
-  test reading the ring — sees a new first line when truncation happened. That
-  is a wire-format change for those readers, small but real, and
-  `make capture-tool` rules apply if the capture tool's expectations move.
+- Under (a), anything asserting on `GetLog()` sees a new first line when
+  truncation happened. Audited before shipping: the only two consumers are
+  `UI/Windows/LogWindow.axaml.cs` and `headless_record`'s `log` flag, and both
+  display the string without parsing it — so the notice lands where a reader is
+  already looking and no capture-tool rebuild is required.
 - Under (d), a long session can lose its own early lines from disk, which is
   exactly what `mesen.log` is currently the only defence against. This is why
   the two halves are one decision: capping the disk log while leaving the ring

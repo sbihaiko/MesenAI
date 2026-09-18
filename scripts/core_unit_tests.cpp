@@ -6987,6 +6987,107 @@ void TestHdPackErrorDedupeCapsDistinctMessages()
 		"BlocoP: occurrences past the cap are counted so the loader can say how many it dropped");
 }
 
+//===== BlocoU: log retention (ADR-0208) ================================
+//Two incidents drove this: #160 (a false FAIL because the ring had silently
+//evicted the line a script asserted on) and #302 (8 234 loader errors in one
+//load, ~570 KB added to an uncapped mesen.log). (a) marks the eviction,
+//(d) caps the file.
+
+void TestLogRingSaysNothingWhenNothingWasLost()
+{
+	MessageManager::ClearLog();
+	for(int i = 0; i < 10; i++) {
+		MessageManager::Log("[BlocoT] line " + std::to_string(i));
+	}
+	string log = MessageManager::GetLog();
+	Check(MessageManager::GetDroppedLogEntryCount() == 0, "BlocoU: a log under the cap has evicted nothing");
+	Check(log.find("log truncated") == std::string::npos,
+		"BlocoU: a short log is not dressed up as a truncated one");
+	Check(log.rfind("[BlocoT] line 0", 0) == 0, "BlocoU: the first message logged is still the first line returned");
+}
+
+void TestLogRingAnnouncesItsOwnTruncation()
+{
+	MessageManager::ClearLog();
+	const int overflow = 250;
+	const int total = (int)MessageManager::MaxLogEntries + overflow;
+	for(int i = 0; i < total; i++) {
+		MessageManager::Log("[BlocoT] flood " + std::to_string(i));
+	}
+	Check(MessageManager::GetDroppedLogEntryCount() == (uint64_t)overflow,
+		"BlocoU: every entry past the cap is counted, not just noticed",
+		std::to_string(MessageManager::GetDroppedLogEntryCount()));
+
+	string log = MessageManager::GetLog();
+	Check(log.rfind(MessageManager::FormatTruncationNotice(overflow), 0) == 0,
+		"BlocoU: the notice is the first thing a reader sees, before the surviving entries");
+	Check(log.find("[BlocoT] flood 249") == std::string::npos,
+		"BlocoU: the evicted entries really are gone - the notice is not cosmetic");
+	Check(log.find("[BlocoT] flood 250") != std::string::npos,
+		"BlocoU: the oldest surviving entry is the one right after the last eviction");
+	Check(log.find("[BlocoT] flood " + std::to_string(total - 1)) != std::string::npos,
+		"BlocoU: the newest entry survives - eviction is from the front");
+}
+
+void TestClearLogResetsTheEvictionCount()
+{
+	MessageManager::ClearLog();
+	for(size_t i = 0; i < MessageManager::MaxLogEntries + 5; i++) {
+		MessageManager::Log("[BlocoT] fill " + std::to_string(i));
+	}
+	Check(MessageManager::GetDroppedLogEntryCount() == 5u, "BlocoU: the ring overflowed as set up");
+	MessageManager::ClearLog();
+	Check(MessageManager::GetDroppedLogEntryCount() == 0u,
+		"BlocoU: clearing the log clears the debt too - a fresh log has lost nothing");
+	Check(MessageManager::GetLog().find("log truncated") == std::string::npos,
+		"BlocoU: a cleared log does not keep claiming to be truncated");
+}
+
+void TestTruncationNoticeNamesTheNumberAndTheCap()
+{
+	string notice = MessageManager::FormatTruncationNotice(8234);
+	Check(notice.find("8234") != std::string::npos, "BlocoU: the notice says how many entries were lost");
+	Check(notice.find(std::to_string(MessageManager::MaxLogEntries)) != std::string::npos,
+		"BlocoU: the notice says what the ring holds, so the reader can judge the loss");
+	Check(notice.find("mesen.log") != std::string::npos,
+		"BlocoU: the notice points at the file that still has the full run");
+}
+
+void TestLogFileIsCappedBySizeAndRotates()
+{
+	std::error_code ec;
+	std::filesystem::path home = std::filesystem::temp_directory_path() / "mesence-blocot-logcap";
+	std::filesystem::remove_all(home, ec);
+	std::filesystem::create_directories(home, ec);
+
+	string previousHome = FolderUtilities::GetHomeFolder();
+	FolderUtilities::SetHomeFolder(home.string());
+	MessageManager::ReopenLogFile();
+
+	//Enough payload to spend the byte budget twice over without writing an
+	//unreasonable number of lines.
+	string payload(4000, 'x');
+	uint64_t written = 0;
+	while(written < MessageManager::MaxLogFileBytes + (MessageManager::MaxLogFileBytes / 4)) {
+		MessageManager::Log("[BlocoT] " + payload);
+		written += payload.size();
+	}
+
+	std::filesystem::path logPath = home / "mesen.log";
+	std::filesystem::path bakPath = home / "mesen.log.1";
+	uint64_t liveSize = std::filesystem::file_size(logPath, ec);
+	Check(!ec, "BlocoU: mesen.log exists after the cap was reached");
+	Check(liveSize <= MessageManager::MaxLogFileBytes,
+		"BlocoU: the live log never exceeds its byte budget", std::to_string(liveSize));
+	Check(liveSize > 0, "BlocoU: rotating does not leave the caller without a log to write to");
+	Check(std::filesystem::exists(bakPath),
+		"BlocoU: the bytes over the budget are rotated into mesen.log.1, not discarded");
+
+	FolderUtilities::SetHomeFolder(previousHome);
+	MessageManager::ReopenLogFile();
+	std::filesystem::remove_all(home, ec);
+}
+
 void TestBordersOnAUniformFrame()
 {
 	std::vector<uint32_t> pixels((size_t)64 * 32, 0xFF000000);
@@ -7540,6 +7641,12 @@ int main()
 	TestHdPackErrorDedupeLogsEachDistinctMessageOnce();
 	TestHdPackErrorDedupeIsPerLoad();
 	TestHdPackErrorDedupeCapsDistinctMessages();
+
+	TestLogRingSaysNothingWhenNothingWasLost();
+	TestLogRingAnnouncesItsOwnTruncation();
+	TestClearLogResetsTheEvictionCount();
+	TestTruncationNoticeNamesTheNumberAndTheCap();
+	TestLogFileIsCappedBySizeAndRotates();
 
 	TestBordersOnAUniformFrame();
 	TestBordersMeasureLetterboxing();
