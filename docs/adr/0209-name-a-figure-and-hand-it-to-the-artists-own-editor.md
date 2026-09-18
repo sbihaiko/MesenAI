@@ -1,7 +1,7 @@
 # ADR-0209: Name a figure, hand it to the artist's own editor, and reload — we own selection and return, not the brush
 
 - Status: proposed
-- Date: 2026-09-18
+- Date: 2026-09-18 (amended the same day: sheet coverage measured, Q4 added)
 - Related: ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
 
 ## Context
@@ -56,6 +56,35 @@ and the reason is worth recording rather than rediscovering:
 
 So the honest answer is split: our tool is already the **selector** the second
 step asks for, and should not become the **brush**.
+
+**Measured 2026-09-18 — the simple flow already exists, for 12.5% of the art.**
+The question that produced this measurement was asked plainly: why are the
+editable textures not already sitting in `auto/`, ready to paint? The answer
+turns out to be "they are, for one tile in eight".
+
+- **Every `<tile>` rule points at `chr/`, none at `sheets/`.** Zelda: 2 203 of
+  2 203. Contra: 2 276 of 2 276. The sheets are a derived surface; what makes a
+  painted sheet reach the game is `mep_build.py build`, which asks "was this
+  cell painted?" by comparing it against its `*.orig.png` twin (`_EditedProbe`)
+  and rewrites `hires.txt` to point the key at the sheet.
+- **So for a cell that is already in a sheet, the four-step flow works today**:
+  open `sheets/metatiles.png`, paint, `mep_build.py build`, reopen. No key, no
+  JSON edit, no computed pixel offset. Steps 6 to 10 of the F12.2 panel script
+  do not exist on that path.
+- **But the sheets hold 319 keys against the pack's 2 203** — 275 of them
+  matching, 12.5%. `metatiles.json` 141, `sprites.json` 121, `misc.json` 62,
+  the rest in the tens. **1 928 keys have no sheet at all.**
+
+The F12.2 panel script does not use the working path. It tells the evaluator to
+*append* a cell to `misc.json`, which deliberately exercises the uncovered case.
+That is why the script reads as complicated: it measures the worst case and
+presents it as the normal one.
+
+One candidate explanation was checked and refuted rather than assumed: the
+uncovered 1 928 are **not** CHR dump noise. `HdPackBuilder::ProcessTile` is
+called from `HdBuilderPpu` per scanline and cycle, so a tile is recorded only
+when the PPU actually drew it. Every uncovered key is art that appeared on
+screen.
 
 **Non-goals.** Writing a pixel editor. Reading `.psd`. Changing the recorder's
 scale (a separate question). Superseding F12.2 — the copy action stays, and the
@@ -131,6 +160,24 @@ we are actually good at.
 - **(i) Whatever F12.4's template already decides**, with this ADR adding only
   the launch and the reload trigger on top.
 
+**Q4 — how does sheet coverage get to 100%?** Added by the measurement above;
+without it the other three questions only serve one tile in eight.
+
+- **(j) Record more.** Coverage comes from what the recorder saw, so longer and
+  wider sessions fill the sheets with no code at all — this is what F9.25
+  already does for Contra. Cheapest, and unbounded: it never *reaches* 100%,
+  it only approaches it.
+- **(k) Emit a remainder sheet.** One `unsorted` sheet per pack carrying every
+  key no other sheet claimed, with the same `*.orig.png` twin mechanic. Coverage
+  becomes 100% by construction, and an artist can never again meet a tile with
+  no surface. Reuses the mechanism that already works rather than adding one.
+- **(l) Leave it, and keep `Copy as MEP sheet cell`** as the escape hatch for
+  whatever the sheets miss — the status quo, stated as a choice.
+
+(k) is the one that makes the original question stop existing. It is also the
+only one that satisfies constraint 1 for the whole library rather than for the
+covered fraction.
+
 **Ordering, independent of the above.** F12.3 is the prerequisite for all of
 it: without reload, step 4 is "reopen the ROM", which is the friction the whole
 request exists to remove. F12.3 is already next in the Phase 12 order and needs
@@ -149,6 +196,10 @@ table as a first-class strategy rather than a fallback.
   (`open -a`, `xdg-open`, `ShellExecute`) and a configuration surface we do not
   have yet. It is also the first place MesenAI would execute something the user
   configured, which deserves its own line in whatever ships.
+- (k) grows every pack's `sheets/` directory by whatever the vocabulary did not
+  claim — on Zelda that is 1 928 keys, against the 319 the sheets hold now. The
+  remainder sheet's size, and whether it is one sheet or many, is the part of
+  (k) that needs measuring before it is chosen.
 - Constraint 1 argues against (f) and against (c) on its own, independently of
   cost: both add a decision the artist has to make before they can paint. If a
   measurement later contradicts that, the measurement wins.
