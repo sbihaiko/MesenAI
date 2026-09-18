@@ -2,7 +2,7 @@
 
 - Status: proposed
 - Date: 2026-09-18 (amended twice the same day: sheet coverage measured with Q4; then Q4 option (m), seeding coverage from an existing pack's key index)
-- Related: ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
+- Related: ADR-0210 (where coverage comes from; amends Q4(m)), ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
 
 ## Context
 
@@ -180,6 +180,14 @@ without it the other three questions only serve one tile in eight.
   rendered through the upscale `HdPackBuilder` already applies. No pixel of the
   other pack is copied; nothing but facts about the ROM is taken.
 
+  > **Amended 2026-09-18 by ADR-0210:** the premise above holds only for CHR RAM
+  > games. `HdPackLoader::ReadTileData` branches on the field's length — 32 hex
+  > characters or more are the literal 16 pattern bytes (CHR RAM), anything
+  > shorter is a *tile index* into the ROM's own CHR and carries no art at all.
+  > Zelda and Contra, measured below, are both CHR RAM, so their numbers stand;
+  > but 23 of the 30 bounded ROMs are CHR ROM, and for those a third-party index
+  > contributes palettes only. ADR-0210 decides how each source is used.
+
 Measured 2026-09-18 against the two community packs installed beside the
 bounded ROMs:
 
@@ -189,7 +197,7 @@ bounded ROMs:
 | Contra | 2 276 pairs | 7 818 | **9 417** |
 
 Roughly 4x coverage on both, and the shape of the gain differs per game. By
-`tileData` — distinct art, paletteignored — Zelda is **1 615 ours against 992
+`tileData` — distinct art, palette ignored — Zelda is **1 615 ours against 992
 theirs**, with only **53** shapes we lack: their advantage there is almost
 entirely palette variety (131 palettes against our 24), and a pair whose
 palette we never recorded does not match at run time however good our art is.
