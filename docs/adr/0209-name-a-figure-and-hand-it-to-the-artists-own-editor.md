@@ -1,7 +1,7 @@
 # ADR-0209: Name a figure, hand it to the artist's own editor, and reload — we own selection and return, not the brush
 
 - Status: proposed
-- Date: 2026-09-18 (amended the same day: sheet coverage measured, Q4 added)
+- Date: 2026-09-18 (amended twice the same day: sheet coverage measured with Q4; then Q4 option (m), seeding coverage from an existing pack's key index)
 - Related: ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
 
 ## Context
@@ -173,8 +173,50 @@ without it the other three questions only serve one tile in eight.
   no surface. Reuses the mechanism that already works rather than adding one.
 - **(l) Leave it, and keep `Copy as MEP sheet cell`** as the escape hatch for
   whatever the sheets miss — the status quo, stated as a choice.
+- **(m) Seed coverage from an existing pack's key index, and render the art
+  ourselves.** A `<tile>` key is `(tileData, palette)`: 16 bytes of original CHR
+  plus four NES colours. That *is* the original art — so any third-party
+  `hires.txt` can be read as an **index of which tiles exist**, and each key
+  rendered through the upscale `HdPackBuilder` already applies. No pixel of the
+  other pack is copied; nothing but facts about the ROM is taken.
 
-(k) is the one that makes the original question stop existing. It is also the
+Measured 2026-09-18 against the two community packs installed beside the
+bounded ROMs:
+
+| | our `auto/` | their pack | union |
+|---|---|---|---|
+| Zelda | 2 203 pairs | 7 210 | **8 744** |
+| Contra | 2 276 pairs | 7 818 | **9 417** |
+
+Roughly 4x coverage on both, and the shape of the gain differs per game. By
+`tileData` — distinct art, paletteignored — Zelda is **1 615 ours against 992
+theirs**, with only **53** shapes we lack: their advantage there is almost
+entirely palette variety (131 palettes against our 24), and a pair whose
+palette we never recorded does not match at run time however good our art is.
+Contra is the opposite: **3 404 theirs against 2 064 ours**, 2 585 shapes we
+never saw.
+
+The split between "art we already have in a PNG" and "art we never recorded"
+does **not** bear on feasibility, only on where the pixel comes from: since
+`tileData` is in the key, both are generated the same way, at the same quality.
+
+Two constraints on (m), both found while measuring:
+
+- **A pack carrying `<patch>` cannot seed anything.** Its keys are bank indices
+  of the *patched* ROM (ADR-0198 §2/§3). Checked: the Zelda community pack has
+  one `<patch>` line, the Contra one has none — so the game with the larger art
+  gain is the usable one, and the other needs §3's patched-ROM path first.
+- **Provenance should be recorded** in `pack.json` even though a key is a fact
+  derived from the ROM rather than an authored thing. Cheap now, and it settles
+  a question that will otherwise be asked later.
+
+`mep_import.py` is **not** this: ADR-0198 §1 has it "cut every `<tile>` it names
+out of the PNG the rule points at" — it imports their art. (m) imports their
+index and leaves their art alone.
+
+(k) and (m) compose rather than compete: (m) decides *which keys exist*, (k)
+guarantees *every key has a surface*. (k) is the one that makes the original
+question stop existing. It is also the
 only one that satisfies constraint 1 for the whole library rather than for the
 covered fraction.
 
