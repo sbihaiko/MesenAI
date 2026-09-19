@@ -94,6 +94,7 @@ import zipfile
 import zlib
 from pathlib import Path
 
+import mep_addition  # ADR-0196: <addition> lines and their synthetic target keys
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
 from mep_recipe_common import sha256_file
@@ -219,11 +220,9 @@ _FLIPPABLE_SHEET_KINDS = frozenset({"sprite", "sprites"})
 _HEX_TILE_RE = re.compile(r"^[0-9A-F]{32}$")
 
 
-def _is_index_key(token: str) -> bool:
-    """Whether a `<tile>`'s key field names a CHR index rather than 16 bytes
-    of tile data. HdPackLoader::ReadTileData draws the line at 32 characters:
-    anything shorter is an index, and the pack is a CHR ROM game's."""
-    return len(token.strip()) < 32
+# "Is this key a CHR index?" and "how wide is an index written?" live in `mep_addition`, so build/lint/editor spell a key one way (ADR-0196).
+_is_index_key = mep_addition.is_index_key
+_index_token = mep_addition.index_token
 
 
 def _unflips(data: str) -> set:
@@ -289,16 +288,14 @@ def _flip_bitmap_region(bmp: "_Bitmap", x: int, y: int, w: int, h: int, mirror: 
 def _unflip_sheet_crops(png_path: Path, crops: list, scale: int,
                         ref_path: Path | None = None) -> int:
     """Apply pending mirror un-bakes to `png_path` and, in lockstep (#329), to
-    its 1x `*.orig.png` twin `ref_path`. Returns how many crops were rewritten;
-    0 when the sheet PNG could not be decoded.
+    its 1x `*.orig.png` twin `ref_path`. Returns how many crops were rewritten.
 
     The twin is the baseline ADR-0153 §4 diffs the sheet against to decide
-    whether the artist painted a cell, so a mechanical rewrite of the sheet has
-    to land on it too: un-baking only the sheet left each corrected cell
-    differing from a still-baked twin, so the next `build` read those cells as
-    painted and each one that lost its key to a higher-ranked sheet tripped
-    #253. The reflection commutes with nearest-neighbour upscaling, so the
-    twin's 8x8 region mirrors as the sheet's 8N x 8N one does."""
+    whether the artist painted a cell, so a mechanical rewrite of the sheet must
+    land on it too: un-baking only the sheet left each corrected cell differing
+    from a still-baked twin, so the next `build` read those cells as painted and
+    tripped #253 wherever one lost its key to a higher-ranked sheet. Un-baking is
+    a reflection, and nearest-neighbour upscaling commutes with it."""
     if not crops:
         return 0
     bmp = _png_pixels(png_path)
@@ -366,14 +363,6 @@ def _sidecar_drop_mirrors(json_path: Path) -> int:
     return n
 
 
-def _index_token(index: int) -> str:
-    """The index in the width HexUtilities::ToHex writes it — 2, 4, 6 or 8
-    digits. The loader parses any width, but matching the emulator's own form
-    keeps a rebuilt manifest diffable against the bootstrap's."""
-    for digits in (2, 4, 6):
-        if index < (1 << (4 * digits)):
-            return f"{index:0{digits}X}"
-    return f"{index:08X}"
 
 
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
@@ -392,6 +381,7 @@ class SheetDoc:
         self.columns = max(1, int(doc.get("columns") or 1))
         self.cells = doc.get("cells") or []
         self.conditions = doc.get("conditions") or []  # ADR-0197 §1, authored
+        self.additions = doc.get("additions") or []    # ADR-0196 §1, overflow layer
         self.rank = _SHEET_RANK[self.kind]
 
     @property
@@ -1322,6 +1312,13 @@ def cmd_build(args) -> int:
             rebuilt_keys.add((_key[1], _key[2]))
         emitted += len(live)
         img_index += 1
+
+    # ADR-0196: the overflow layer. The synthetic targets' `<tile>` rules were
+    # emitted above out of the sheets' own cells; this writes the tags at them.
+    body, synthetic_keys, rc = mep_addition.emit_additions(
+        getattr(args, "rom", None), sheet_docs, index_keyed, out_lines, body)
+    if rc:
+        return rc
     out_lines.extend(body)
 
     textures_dir = folder / "textures"
@@ -1382,7 +1379,9 @@ def cmd_build(args) -> int:
             source_keys.add((f[1].upper(), f[2].upper()))
     carried = len(source_keys & rebuilt_keys)
     dropped_keys = len(source_keys - rebuilt_keys)
-    added_keys = len(rebuilt_keys - source_keys)
+    # ADR-0196's Consequences: a synthetic target is a key no recording saw, so
+    # it is counted on its own line above, never as "new key(s) the sheets brought".
+    added_keys = len(rebuilt_keys - source_keys - synthetic_keys)
     print(f"tile keys: {len(source_keys)} in the key source ({src_label}) -> {carried} carried, "
           f"{dropped_keys} dropped"
           + (f", {added_keys} new key(s) the sheets brought" if added_keys else ""))
@@ -1910,6 +1909,7 @@ def main(argv=None) -> int:
     b.add_argument("--scale", type=int, help="cell size = 8*scale (default: the key source's <scale>, else 2)")
     b.add_argument("--source", help="hires.txt carrying the tile keys (default: textures/hires.txt, then auto/textures/hires.txt)")
     b.add_argument("--quiet", action="store_true", help="suppress lint info findings")
+    b.add_argument("--rom", help="the ROM this pack was recorded from; needed only to serialize an ADR-0196 overflow layer on a CHR ROM game, whose synthetic target index is asserted past the iNES header's CHR size")
     b.set_defaults(func=cmd_build)
     pk = sub.add_parser("pack", help="write pack.json and zip the folder deterministically")
     pk.add_argument("folder")
