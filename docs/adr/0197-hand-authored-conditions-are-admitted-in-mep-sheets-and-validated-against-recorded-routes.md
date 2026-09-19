@@ -6,8 +6,15 @@
   deviation: `spriteNearby` reports `not evaluable` rather than a verdict,
   because `MESEN_OAM_STREAM_DUMP` carries vocabulary indexes and not the tile
   data a `<condition>` line names, so matching it needs the dump-format change
-  this ADR's Consequences assign to F12.6b. §3 (recorder capture of
-  `$0000`–`$07FF`) is still pending, as slice F12.6b
+  this ADR's Consequences assign to F12.6b. §3 shipped 2026-09-19 as
+  F12.6b: the recorder writes the `$0000`–`$07FF` window as an `M` line per
+  retained frame and `mep_lint --routes` evaluates `memoryCheckConstant` from
+  it. Measured on a 60 s Contra stage-1 route (607 retained frames standing
+  for 3 597 played): +2 488 093 B of grid dump, +6.42 %, and no wall-clock
+  cost outside run-to-run noise —
+  `docs/validation/f12.6b-recorder-retains-internal-ram-2026-09-19.md`.
+  `spriteNearby` is **still** `not evaluable`: this slice widened the memory
+  plane, not the sprite stream
 - Date: 2026-09-16
 - Related: ADR-0189 §4 (the three refused condition types), ADR-0190
   (`tileNearby` auto-attached), ADR-0183 §3 (evidence vs inference),

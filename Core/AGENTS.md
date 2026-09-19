@@ -73,9 +73,13 @@ needs no local rules beyond the root DOX.
   checked, with a negative control, as the third leg of the slice's acceptance.
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
-  shape and a palette word, then `x y shape palette` per cell - the palette
-  field and the `P` lines are F9.24's per-cell palette plane, since the shape
-  ids wildcard the palette), `MESEN_OAM_STREAM_DUMP` (per retained frame:
+  shape and a palette word, `M` carries the frame's internal RAM, then
+  `x y shape palette` per cell - the palette field and the `P` lines are
+  F9.24's per-cell palette plane, since the shape ids wildcard the palette,
+  and the `M` line is F12.6b's `$0000`-`$07FF` window (ADR-0197 §3, one line
+  per retained frame, on its first repeat, 4096 upper-case hex characters, the
+  byte at address A at characters 2A/2A+1), `MESEN_OAM_STREAM_DUMP` (per
+  retained frame:
   index, repeat count, port 1 and 2 button bytes, then `node,x,y` per
   sprite), `MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as
   `frame:pose:held` triples in retained-frame indexes) and

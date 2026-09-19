@@ -870,7 +870,7 @@ void HdPackBuilder::EnableScreenCapture()
 	_screensSeen.clear();
 }
 
-void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2])
+void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2], const uint8_t* internalRam, uint32_t internalRamSize)
 {
 	if(!_captureScreens) {
 		return;
@@ -884,7 +884,7 @@ void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2])
 
 	//F9.1 (ADR-0153): keep this frame's background grid for the sheet inference
 	//that runs once at save time.
-	RecordGridFrame();
+	RecordGridFrame(internalRam, internalRamSize);
 
 	//F9.5: close the OAM snapshot HdBuilderPpu filled in during this frame.
 	RecordOamFrame();
@@ -963,7 +963,7 @@ MesenSheets::PaletteId HdPackBuilder::PaletteIdFor(uint32_t paletteColors)
 //equal. Consecutive duplicates collapse into RepeatCount and the stream is
 //capped at kMaxSheetFrames, so a long session costs late-game vocabulary,
 //never correctness.
-void HdPackBuilder::RecordGridFrame()
+void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize)
 {
 	//Set again below once this frame really is _gridFrames.back(); a dropped
 	//frame (empty runs, or the retention cap) must never let CaptureScreen
@@ -1028,6 +1028,15 @@ void HdPackBuilder::RecordGridFrame()
 	}
 	frame.FrameNumber = (uint32_t)_gridFrames.size();
 	_gridFrames.push_back(frame);
+	//F12.6b (ADR-0197 §3): the RAM plane grows with the frame it belongs to, so
+	//the two stay parallel whatever the caller hands over - a console with no
+	//internal RAM leaves zeroes rather than a shorter plane, which would
+	//silently re-index every frame after it.
+	_gridRam.resize((size_t)_gridFrames.size() * MesenSheets::kRetainedRamSize, 0);
+	if(internalRam) {
+		uint32_t n = std::min(internalRamSize, MesenSheets::kRetainedRamSize);
+		memcpy(_gridRam.data() + (_gridFrames.size() - 1) * MesenSheets::kRetainedRamSize, internalRam, n);
+	}
 	//ADR-0166: keep the screen-stem plane parallel; a stem is filled in only
 	//when OnFrameEnd's capture of this frame actually succeeds.
 	_screenStems.push_back("");
@@ -1134,9 +1143,22 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 		}
 	}
 	std::vector<bool> paletteEmitted(paletteColors.size(), false);
+	size_t frameIndex = 0;
 	for(const MesenSheets::GridFrame& frame : _gridFrames) {
+		//F12.6b (ADR-0197 §3): the RAM window of this retained frame, written
+		//once and not once per repeat. The repeats below re-emit the cell body
+		//so a reader that counts played frames can, but the memory of a frame
+		//that held still is the memory of the frame it collapsed into, and
+		//4 KB of hex per *played* frame would be six times the file for no
+		//further evidence. A reader collapses repeats on the "F" line, so the
+		//line belongs to the first one.
+		size_t ramAt = frameIndex * MesenSheets::kRetainedRamSize;
+		frameIndex++;
 		for(uint32_t repeat = 0; repeat < frame.RepeatCount; repeat++) {
 			dump << "F " << frame.FrameNumber << '\n';
+			if(repeat == 0 && ramAt + MesenSheets::kRetainedRamSize <= _gridRam.size()) {
+				dump << "M " << MesenSheets::RamDumpLine(_gridRam.data() + ramAt, MesenSheets::kRetainedRamSize) << '\n';
+			}
 			for(uint32_t row = 0; row < MesenSheets::kGridRows; row++) {
 				for(uint32_t col = 0; col < MesenSheets::kGridCols; col++) {
 					MesenSheets::ShapeId id = frame.Cells[row][col];

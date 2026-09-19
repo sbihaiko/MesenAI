@@ -7677,6 +7677,61 @@ void TestReloadRefusesAResizedCanvas()
 }
 
 
+//---- F12.6b (ADR-0197 sec. 3): the retained RAM window's wire form ---------
+//
+//HdPackBuilder.cpp is not in the unit-test link set, so the `M` line's encoder
+//lives inline in TileSheetTypes.h and is tested here. What it has to guarantee
+//is the one thing `mep_conditions.py` relies on: the byte at address A sits at
+//characters 2A and 2A+1, always, whatever the caller handed over.
+
+void TestRamDumpLineIsFixedWidthUpperCaseHex()
+{
+	std::vector<uint8_t> ram(kRetainedRamSize, 0);
+	ram[0x30] = 0x04;
+	ram[0x64] = 0xAB;
+	ram[kRetainedRamSize - 1] = 0xFF;
+	std::string line = RamDumpLine(ram.data(), (size_t)kRetainedRamSize);
+	Check(line.size() == (size_t)kRetainedRamSize * 2,
+		"F12.6b: the line is two characters per byte of the window",
+		std::to_string(line.size()));
+	Check(line.substr(0x30 * 2, 2) == "04",
+		"F12.6b: the byte at 0x30 is at character 0x60", line.substr(0x30 * 2, 2));
+	Check(line.substr(0x64 * 2, 2) == "AB",
+		"F12.6b: hex is upper case", line.substr(0x64 * 2, 2));
+	Check(line.substr((kRetainedRamSize - 1) * 2, 2) == "FF",
+		"F12.6b: the last byte of the window is written too");
+	Check(line.substr(0, 2) == "00", "F12.6b: an untouched byte reads 00");
+}
+
+void TestRamDumpLineStaysFullWidthOnAShortOrAbsentWindow()
+{
+	//A console with no internal RAM, or a mapper whose window is narrower than
+	//the ADR's: pad, never shorten. A ragged line would silently re-address
+	//every byte after the gap.
+	std::string none = RamDumpLine(nullptr, 0);
+	Check(none == std::string((size_t)kRetainedRamSize * 2, '0'),
+		"F12.6b: no window at all is all zeroes, at full width");
+	std::vector<uint8_t> tiny(4, 0x11);
+	std::string line = RamDumpLine(tiny.data(), tiny.size());
+	Check(line.size() == (size_t)kRetainedRamSize * 2,
+		"F12.6b: a short window still writes the full line",
+		std::to_string(line.size()));
+	Check(line.substr(0, 8) == "11111111" && line.substr(8, 2) == "00",
+		"F12.6b: what was given is written, the rest is zero", line.substr(0, 10));
+}
+
+void TestRamDumpLineClipsAWiderWindowToTheAdrsRange()
+{
+	//FamicomBox has 0x2000 of internal RAM; ADR-0197 sec. 3 fixes the retained
+	//window at 0x0000-0x07FF, so the extra must not reach the file.
+	std::vector<uint8_t> wide(0x2000, 0x22);
+	std::string line = RamDumpLine(wide.data(), wide.size());
+	Check(line.size() == (size_t)kRetainedRamSize * 2,
+		"F12.6b: a wider window is clipped to the ADR's range",
+		std::to_string(line.size()));
+}
+
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -7922,6 +7977,10 @@ int main()
 	TestReloadOfAZipBackedImageIsNotWatched();
 	TestReloadOfAnUnchangedImageDecodesNothing();
 	TestReloadRefusesAResizedCanvas();
+
+	TestRamDumpLineIsFixedWidthUpperCaseHex();
+	TestRamDumpLineStaysFullWidthOnAShortOrAbsentWindow();
+	TestRamDumpLineClipsAWiderWindowToTheAdrsRange();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

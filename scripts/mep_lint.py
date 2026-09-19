@@ -1428,6 +1428,13 @@ def report_routes(src, route_paths, target):
             print("    not evaluable is never a pass.")
             continue
         for route_name, v in verdicts.get(cond.name, []):
+            if not v.evaluable:
+                # ADR-0197 §3: a route-dependent refusal — the condition is a
+                # type this build evaluates, but *this* recording cannot
+                # answer it (a dump made before F12.6b carries no memory).
+                print(f"    {route_name}: not evaluable — {v.reason}")
+                print("      not evaluable is never a pass.")
+                continue
             print(f"    {route_name}: {v.state} — held {v.held}, "
                   f"failed {v.failed}, of {v.instances} instance(s)")
             if v.first_failure is not None:

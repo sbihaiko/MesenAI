@@ -114,7 +114,8 @@ def test_a_frame_range_period_of_zero_is_refused():
 def test_the_types_a_recording_cannot_answer_are_named_not_guessed():
     for ctype, needle in [
         (f"<condition>s,spriteNearby,8,0,{T},{PAL}", "vocabulary indexes"),
-        ("<condition>m,memoryCheckConstant,0050,==,01", "no memory stream"),
+        ("<condition>m,memoryCheck,0050,==,0060", "two watched addresses"),
+        ("<condition>q,ppuMemoryCheckConstant,2000,==,01", "PPU memory"),
         ("<condition>p,positionCheckX,>,80", "sprite stream, not the grid"),
     ]:
         c = C.parse_condition_line(ctype)
@@ -379,6 +380,126 @@ def test_two_sheets_may_share_a_condition_but_not_two_definitions_of_it():
               "two different definitions under one name are refused", str(exc))
 
 
+# --- F12.6b: the memory plane (ADR-0197 §3) --------------------------------
+
+
+def _ram_line(pairs):
+    """An `M` line body with `pairs` = {address: value}, zero elsewhere."""
+    ram = bytearray(C.RAM_WINDOW)
+    for addr, value in pairs.items():
+        ram[addr] = value
+    return ram.hex().upper()
+
+
+def _memory_route(td, per_frame, name="route.txt"):
+    """One retained frame per entry of `per_frame` (a dict of address->value),
+    each drawing shape T at cell (0,0)."""
+    out = ["F 0", f"K 1 {T} {PAL}", f"M {_ram_line(per_frame[0])}", "0 0 1"]
+    for i, pairs in enumerate(per_frame[1:], start=1):
+        out += [f"F {i}", f"M {_ram_line(pairs)}", "0 0 1"]
+    return _route(td, out, name)
+
+
+def test_a_memory_check_constant_is_parsed_in_the_loaders_hex():
+    c = C.parse_condition_line("<condition>stage5,memoryCheckConstant,30,==,04")
+    check(c.operand_a == 0x30, "the address is hex, so `30` is $0030", hex(c.operand_a))
+    check(c.operand_b == 0x04 and c.operator == "==", "value and operator parse")
+    check(c.mask == 0xFF, "the mask defaults to FF", hex(c.mask))
+    check(c.evaluable, "an in-window memoryCheckConstant is evaluable")
+    d = C.parse_condition_line("<condition>half,memoryCheckConstant,0040,>=,0F,0F")
+    check(d.mask == 0x0F and d.operator == ">=", "an explicit mask parses")
+
+
+def test_a_memory_check_constant_out_of_range_is_refused_like_the_loader():
+    for line, needle in [
+        ("<condition>x,memoryCheckConstant,30,==,0100", "00-FF"),
+        ("<condition>x,memoryCheckConstant,30,~,01", "not an operator"),
+        ("<condition>x,memoryCheckConstant,30,==", "at least 5 fields"),
+    ]:
+        try:
+            C.parse_condition_line(line)
+            check(False, f"refused: {line}", "it was accepted")
+        except C.ConditionError as exc:
+            check(needle in str(exc), f"refused: {line}", str(exc))
+
+
+def test_an_address_outside_the_window_is_not_evaluable_never_a_pass():
+    # ADR-0197 §3 fixes the window at $0000-$07FF; WRAM, PRG and the mapper
+    # registers are outside it and the report must say so rather than guess.
+    c = C.parse_condition_line("<condition>wram,memoryCheckConstant,6000,==,01")
+    check(not c.evaluable, "an address above $07FF is not evaluable")
+    check("outside the retained" in (c.not_evaluable_reason or ""),
+          "it says the window is the reason", c.not_evaluable_reason)
+
+
+def test_the_m_line_is_read_into_the_frame_it_opens():
+    with tempfile.TemporaryDirectory() as td:
+        r = _memory_route(td, [{0x30: 0x00, 0x64: 0x00}, {0x30: 0x04, 0x64: 0x21}])
+        check(r.has_ram, "the route carries a memory plane")
+        check(r.frames[0].ram[0x30] == 0x00 and r.frames[1].ram[0x30] == 0x04,
+              "each frame keeps its own window",
+              f"{r.frames[0].ram[0x30]},{r.frames[1].ram[0x30]}")
+        check(len(r.frames[0].ram) == C.RAM_WINDOW,
+              "the window is 2 KB wide", str(len(r.frames[0].ram)))
+
+
+def test_a_recording_made_before_f12_6b_is_not_evaluable_never_a_pass():
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)   # no M lines: a pre-F12.6b dump
+        check(not r.has_ram, "an old dump carries no memory plane")
+        c = C.parse_condition_line("<condition>stage5,memoryCheckConstant,30,==,04")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(not v.evaluable and v.state == "not evaluable",
+              "the verdict is not evaluable", v.state)
+        check(v.held == 0 and v.failed == 0,
+              "not evaluable is never counted as a pass or a failure")
+        check("before F12.6b" in v.reason, "it says why", v.reason)
+
+
+def test_the_comparison_mirrors_the_cpp_operator_by_operator():
+    # HdPackMemoryCheckConstantCondition::InternalCheckCondition.
+    with tempfile.TemporaryDirectory() as td:
+        r = _memory_route(td, [{0x30: 0x10}])
+        frame = r.frames[0]
+        for op, expected in [("==", False), ("!=", True), (">", False),
+                             ("<", True), ("<=", True), (">=", False)]:
+            c = C.parse_condition_line(f"<condition>o,memoryCheckConstant,30,{op},20")
+            check(c.holds(frame) is expected,
+                  f"$10 {op} $20 is {expected}", str(c.holds(frame)))
+
+
+def test_the_mask_is_applied_to_the_read_byte_and_not_to_the_constant():
+    # The C++ masks `a` only: `uint8_t a = ...& Mask; uint8_t b = OperandB;`.
+    with tempfile.TemporaryDirectory() as td:
+        r = _memory_route(td, [{0x40: 0xF3}])
+        frame = r.frames[0]
+        c = C.parse_condition_line("<condition>m,memoryCheckConstant,40,==,03,0F")
+        check(c.holds(frame), "$F3 & $0F == $03 holds")
+        d = C.parse_condition_line("<condition>m,memoryCheckConstant,40,==,F3,0F")
+        check(not d.holds(frame),
+              "the constant is not masked, so $F3 & $0F == $F3 fails")
+
+
+def test_a_memory_condition_is_counted_per_drawn_instance_of_its_key():
+    with tempfile.TemporaryDirectory() as td:
+        r = _memory_route(td, [{0x30: 0x04}, {0x30: 0x00}])
+        c = C.parse_condition_line("<condition>stage5,memoryCheckConstant,30,==,04")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "mixed", "one frame holds and one does not", v.state)
+        check(v.held == 1 and v.failed == 1, "one each",
+              f"{v.held}/{v.failed}")
+        check(v.first_failure == (1, 0, 0),
+              "the failure names its frame and cell", str(v.first_failure))
+
+
+def test_a_short_or_broken_m_line_is_dropped_not_half_read():
+    with tempfile.TemporaryDirectory() as td:
+        r = _route(td, ["F 0", f"K 1 {T} {PAL}", "M DEADBEEF", "0 0 1"])
+        check(r.frames[0].ram is None,
+              "a short window is dropped rather than indexed into")
+        check(not r.has_ram, "and the route reports no memory plane")
+
+
 def main():
     tests = [
         test_the_loaders_own_syntax_is_what_a_sheet_may_carry,
@@ -406,6 +527,15 @@ def main():
         test_a_sheet_condition_whose_name_disagrees_with_its_line_is_refused,
         test_an_authored_condition_always_emits_the_bare_twin_after_it,
         test_two_sheets_may_share_a_condition_but_not_two_definitions_of_it,
+        test_a_memory_check_constant_is_parsed_in_the_loaders_hex,
+        test_a_memory_check_constant_out_of_range_is_refused_like_the_loader,
+        test_an_address_outside_the_window_is_not_evaluable_never_a_pass,
+        test_the_m_line_is_read_into_the_frame_it_opens,
+        test_a_recording_made_before_f12_6b_is_not_evaluable_never_a_pass,
+        test_the_comparison_mirrors_the_cpp_operator_by_operator,
+        test_the_mask_is_applied_to_the_read_byte_and_not_to_the_constant,
+        test_a_memory_condition_is_counted_per_drawn_instance_of_its_key,
+        test_a_short_or_broken_m_line_is_dropped_not_half_read,
     ]
     for t in tests:
         t()

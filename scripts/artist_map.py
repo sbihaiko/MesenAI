@@ -166,11 +166,12 @@ class GridFrame:
 def parse_grid_dump(path: Path):
     """(frames, shapes, palettes) from a MESEN_SHEET_GRID_DUMP file.
 
-    Four line kinds (HdPackBuilder::WriteGridDump): `F <n>` opens a frame and is
+    Five line kinds (HdPackBuilder::WriteGridDump): `F <n>` opens a frame and is
     repeated once per collapsed duplicate, `K <id> <32 hex tile data> <8 hex
     palette>` interns a shape the first time it is drawn, `P <id> <8 hex
-    palette>` interns a palette word, and `<x> <y> <shape> [<palette id>]`
-    places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
+    palette>` interns a palette word, `M <4096 hex>` carries the frame's
+    internal RAM (F12.6b, read by mep_conditions.py and skipped here), and
+    `<x> <y> <shape> [<palette id>]` places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
     fine scroll and `(x - fineX) // 8` its column.
 
     The fourth cell field and the `P` lines are F9.24's palette plane. A dump
@@ -198,6 +199,12 @@ def parse_grid_dump(path: Path):
             elif head == "P":
                 parts = line.split()
                 palettes[int(parts[1])] = parts[2].upper()
+            elif head == "M":
+                # F12.6b (ADR-0197 §3): the retained RAM window of the frame.
+                # A map is drawn from tiles, not from memory, so this reader
+                # skips it — but it must skip it *by name*, or the line falls
+                # through to the cell parser and the whole dump fails.
+                continue
             elif cur is not None:
                 parts = line.split()
                 x = int(parts[0])
