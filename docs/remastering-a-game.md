@@ -508,6 +508,51 @@ That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and
 a failure means the kit is wrong — never that the check is wrong.
 
+### Optional: a condition you wrote by hand
+
+Most packs never need one. If you do want a tile to render differently in some
+situation — "this piece, but only where the sky is open to its right" — you can
+write the emulator's own condition into the sheet and attach cells to it:
+
+```json
+"conditions": [
+  { "name": "openToTheRight", "authored": true,
+    "line": "<condition>openToTheRight,tileNearby,8,0,<32 hex>,<8 hex>" }
+],
+"cells": [ { "index": 37, "condition": "openToTheRight", ... } ]
+```
+
+`authored: true` is required: the toolchain never writes one of these itself, so
+an unmarked block is a mistake rather than a shortcut. `mep_build.py` emits the
+definition once, above the rules that cite it, and always writes the
+unconditional twin behind each conditional rule — without it, a frame where the
+condition does not hold falls through to the ROM's own art.
+
+A condition is a claim about the game, and you can check it against what the
+game actually drew before anyone plays it:
+
+```sh
+python3 scripts/mep_lint.py out/painted --routes runs/<run>/grid.txt ...
+```
+
+Pass the pack first; `--routes` takes every path after it, and a folder is
+searched one level deep. Each route is a grid stream from step 1
+(`MESEN_SHEET_GRID_DUMP`). For every condition the report says, per route,
+how many drawn instances it held on and failed on, **the frame and cell of the
+first failure**, and — for `tileNearby` — how many times the pattern also
+occurred around a tile you did not attach it to. That last number is the one
+that usually surprises people: "with open sky to the right" is true of most of
+the sky.
+
+It is a report, not a gate: exit 0 means the report was produced, not that your
+conditions were right. Reading it is your job.
+
+Two kinds are reported as **`not evaluable`**, with the reason printed: the ones
+that need the console's memory (`memoryCheckConstant`, `ppuMemoryCheck*`) and
+the ones that need the sprite stream (`spriteNearby`, `positionCheck*`). A
+recording does not carry what they ask about. `not evaluable` is never a pass —
+if you ship one, nothing has checked it.
+
 ### Look at the painted pack before you ship it
 
 The mechanical checks prove the pack is valid; they do not replace looking at

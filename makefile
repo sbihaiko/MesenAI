@@ -317,7 +317,7 @@ doc-checks: check-manifest
 	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
 	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
 	# its rank never decides anything.
-	./scripts/check-file-loc.sh scripts/mep_build.py 1936
+	./scripts/check-file-loc.sh scripts/mep_build.py 1945
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	# Amended 2026-09-17 (ADR-0137, fourth amendment; ADR-0207): the ceiling on
 	# scripts/core_unit_tests.cpp is GONE, not raised. C.7 ratcheted it at 7342
@@ -439,6 +439,10 @@ doc-checks: check-manifest
 	#Generate Image Assets grammar, a Windows file system and the kit's own
 	#manifest all have to accept. Pure string rules; no kit, no pack, no ROM.
 	python3 scripts/test_asset_names.py
+	#F12.6a (ADR-0197): hand-authored conditions -- the syntax a sheet may
+	#carry, and the evaluation of one against a recorded route, written from
+	#HdPackConditions.h. Synthetic grid streams; no emulator, no ROM.
+	python3 scripts/test_mep_conditions.py
 	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
 	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
 	python3 scripts/test_artist_kit_assemble.py

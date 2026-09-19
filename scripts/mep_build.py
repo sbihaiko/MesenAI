@@ -94,6 +94,7 @@ import zipfile
 import zlib
 from pathlib import Path
 
+import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
 from mep_recipe_common import sha256_file
 
@@ -391,6 +392,7 @@ class SheetDoc:
         self.gutter = int(doc.get("gutter") or 0)
         self.columns = max(1, int(doc.get("columns") or 1))
         self.cells = doc.get("cells") or []
+        self.conditions = doc.get("conditions") or []  # ADR-0197 §1, authored
         self.rank = _SHEET_RANK[self.kind]
 
     @property
@@ -703,7 +705,7 @@ class _EditedProbe:
 
 
 def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, out: list, skipped: list,
-                edited: bool = True):
+                edited: bool = True, condition: str = ""):
     """One 8x8 crop per resolved entry of `tiles[]`, row-major inside the cell
     at the same offsets RenderMetatile drew them. A null/short/malformed entry
     means that sub-tile had no art: it is skipped, and the entries after it do
@@ -735,7 +737,7 @@ def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, 
         mirror = str(entry.get("mirror") or "").strip().upper()
         mirror = mirror if mirror in ("H", "V", "HV") else None
         out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
-                    data, pal, edited, idx, src, mirror))
+                    data, pal, edited, idx, src, mirror, condition))
 
 
 def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
@@ -785,7 +787,7 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
                 continue
             painted = probe.edited(cx, cy, sd.unit)
             _cell_crops(c.get("tiles"), cx, cy, per, scale, f"{sd.name} cell {c.get('index')}", crops, skipped,
-                        painted)
+                        painted, str(c.get("condition") or ""))
             # ADR-0153 §3 alias pass (F9.7): a bank-swapping mapper delivers the
             # same drawing under several tile keys, so the sheet carries one cell
             # per *subject* and lists the keys it absorbed. The artist paints the
@@ -1162,7 +1164,7 @@ def cmd_build(args) -> int:
         seen = {}
         repeats = 0
         pending_unflips = []
-        for x, y, data, pal, edited, index, unflipped, mirror in crops:
+        for x, y, data, pal, edited, index, unflipped, mirror, authored in crops:
             if index_keyed:
                 if index is None:
                     missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
@@ -1190,7 +1192,8 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
-            variants = _condition_variants(keysrc_attrs.get((data, pal)))
+            variants = (mep_conditions.authored_variants(authored, ["1", "N"]) if authored
+                        else _condition_variants(keysrc_attrs.get((data, pal))))
             for cond, rest in variants:
                 key = (cond, data, pal)
                 row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)
@@ -1294,6 +1297,12 @@ def cmd_build(args) -> int:
     # ever cite conditions, never define them.
     condition_defs = [b for b in body if b.startswith("<condition>")]
     body = [b for b in body if not b.startswith("<condition>")]
+    # ADR-0197 §1: a sheet's own authored definitions join the inherited ones,
+    # still above the first <tile> that cites them. A name defined by both the
+    # key source and a sheet keeps the sheet's - the human wrote it last.
+    authored_defs = mep_conditions.definition_lines(sd.doc for sd in sheet_docs)
+    named = {d.split(",")[0] for d in authored_defs}
+    condition_defs = [d for d in condition_defs if d.split(",")[0] not in named] + authored_defs
 
     out_lines = list(out_header) + condition_defs
     img_index = 0

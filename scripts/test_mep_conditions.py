@@ -1,0 +1,417 @@
+"""Headless suite for hand-authored conditions and their evaluation over a
+recorded route (`mep_conditions.py`). F12.6a / ADR-0197.
+
+Two things are tested, and the second is the one that matters: that the
+evaluator agrees with `Core/NES/HdPacks/HdPackConditions.h`. A report that
+disagrees with the emulator is worse than no report, so every evaluation case
+here is written from the C++ expression rather than from the Python.
+
+Synthetic grid streams in a temp dir; no emulator, no ROM, no recording.
+
+Run:  python3 scripts/test_mep_conditions.py
+"""
+
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import mep_conditions as C  # noqa: E402
+
+_FAILURES = []
+
+T = "AA" * 16          # one shape's 16 pattern bytes
+U = "BB" * 16          # another
+PAL = "0F001020"
+PAL2 = "0F112233"
+
+
+def check(cond, name, detail=""):
+    if cond:
+        print(f"ok   {name}")
+    else:
+        print(f"FAIL {name}: {detail}")
+        _FAILURES.append(name)
+
+
+def _route(td, lines, name="route.txt"):
+    p = Path(td) / name
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return C.load_route(p)
+
+
+def _two_frame_route(td):
+    """Frame 0: T at (0,0) and (1,0); U at (0,1). Frame 1: the two swapped."""
+    return _route(td, [
+        "F 0", f"K 1 {T} {PAL}", f"K 2 {U} {PAL}",
+        "0 0 1", "8 0 2", "0 8 1",
+        "F 1", "0 0 2", "8 0 1",
+    ])
+
+
+# --- parsing ---------------------------------------------------------------
+
+
+def test_the_loaders_own_syntax_is_what_a_sheet_may_carry():
+    c = C.parse_condition_line(f"<condition>onBridge,tileAtPosition,120,80,{T},{PAL}")
+    check(c.name == "onBridge" and c.type == "tileAtPosition", "name and type parse")
+    check((c.x, c.y) == (120, 80), "x and y parse", f"{c.x},{c.y}")
+    check(c.tile == T.upper() and c.palette == PAL, "the key parses and is upper-cased")
+    check(c.evaluable, "tileAtPosition is evaluable from a grid stream")
+
+
+def test_a_line_that_is_not_a_condition_is_refused():
+    for bad, needle in [
+        ("<tile>0,AA,0F001020,0,0,1,N", "not a <condition> line"),
+        ("<condition>x,tileAtPosition", "at least 4"),
+        ("<condition>,frameRange,2,1", "may not be empty"),
+        ("<condition>a!b,frameRange,2,1", "may not contain"),
+        ("<condition>x,noSuchType,1,2", "unknown condition type"),
+    ]:
+        try:
+            C.parse_condition_line(bad)
+            check(False, f"refused: {bad[:34]}", "it parsed")
+        except C.ConditionError as exc:
+            check(needle in str(exc), f"refused: {bad[:34]}", str(exc))
+
+
+def test_a_chr_index_key_is_refused_with_the_reason():
+    # Legal for the loader, useless against a recording: a grid stream interns
+    # shapes by their 16 pattern bytes and has no index to compare against.
+    try:
+        C.parse_condition_line("<condition>x,tileAtPosition,8,8,1F,0F001020")
+        check(False, "a CHR index key is refused", "it parsed")
+    except C.ConditionError as exc:
+        check("CHR index" in str(exc) and "keys shapes by data" in str(exc),
+              "a CHR index key is refused, saying why a recording cannot use it",
+              str(exc))
+
+
+def test_tile_nearby_offsets_must_be_multiples_of_eight():
+    # HdPackLoader logs this as an error on load; a sheet must not be able to
+    # author a condition the emulator will reject.
+    try:
+        C.parse_condition_line(f"<condition>x,tileNearby,4,0,{T},{PAL}")
+        check(False, "an unaligned tileNearby is refused", "it parsed")
+    except C.ConditionError as exc:
+        check("multiples of 8" in str(exc), "an unaligned tileNearby is refused",
+              str(exc))
+    C.parse_condition_line(f"<condition>x,tileNearby,-8,16,{T},{PAL}")
+    check(True, "an aligned negative offset is accepted")
+
+
+def test_a_frame_range_period_of_zero_is_refused():
+    # The emulator computes `FrameNumber % OperandA`; zero would divide by zero
+    # there, so it can never be written into a pack.
+    try:
+        C.parse_condition_line("<condition>x,frameRange,0,1")
+        check(False, "a zero period is refused", "it parsed")
+    except C.ConditionError as exc:
+        check("period must be positive" in str(exc), "a zero period is refused",
+              str(exc))
+
+
+def test_the_types_a_recording_cannot_answer_are_named_not_guessed():
+    for ctype, needle in [
+        (f"<condition>s,spriteNearby,8,0,{T},{PAL}", "vocabulary indexes"),
+        ("<condition>m,memoryCheckConstant,0050,==,01", "no memory stream"),
+        ("<condition>p,positionCheckX,>,80", "sprite stream, not the grid"),
+    ]:
+        c = C.parse_condition_line(ctype)
+        check(not c.evaluable, f"{c.type} is not evaluable")
+        check(needle in (c.not_evaluable_reason or ""),
+              f"{c.type} says why", c.not_evaluable_reason)
+
+
+# --- the recorded route ----------------------------------------------------
+
+
+def test_a_grid_dump_parses_into_frames_shapes_and_palettes():
+    with tempfile.TemporaryDirectory() as td:
+        r = _route(td, [
+            "F 0", f"K 1 {T} {PAL}", f"P 3 {PAL2}", "0 0 1", "8 8 1 3",
+            "F 1", "F 1", "0 0 1",
+        ])
+        check(r.retained == 2, "two distinct frames", str(r.retained))
+        check(r.played == 3, "the collapsed duplicate is counted as played",
+              str(r.played))
+        check(r.frames[0].key_at(0, 0) == (T, PAL),
+              "a cell with no palette id falls back to the shape's own")
+        check(r.frames[0].key_at(1, 1) == (T, PAL2),
+              "a cell with a palette id uses the interned word (ADR-0159)")
+        check(r.frames[0].key_at(5, 5) is None, "an undrawn cell has no key")
+
+
+def test_fine_scroll_is_recovered_from_the_cell_x():
+    with tempfile.TemporaryDirectory() as td:
+        r = _route(td, ["F 0", f"K 1 {T} {PAL}", "11 0 1"])
+        f = r.frames[0]
+        check(f.fine == 3, "x & 7 is the frame's fine scroll", str(f.fine))
+        check(f.rows[0][1] == 1, "(x - fine) // 8 is the column",
+              str(f.rows[0][:3]))
+
+
+def test_a_dump_with_no_frames_is_refused_rather_than_read_as_empty():
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "empty.txt"
+        p.write_text("", encoding="utf-8")
+        try:
+            C.load_route(p)
+            check(False, "an empty dump is refused", "it loaded")
+        except C.ConditionError as exc:
+            check("MESEN_SHEET_GRID_DUMP" in str(exc),
+                  "an empty dump is refused, naming what produces one", str(exc))
+
+
+def test_routes_are_loaded_one_at_a_time_not_all_at_once():
+    # Not a style point: six Contra recordings are ~1 GB of text and ~80 000
+    # retained frames, so a caller that materialises them runs out of memory on
+    # the slice's own bounded input.
+    import inspect
+    check(inspect.isgeneratorfunction(C.iter_routes),
+          "iter_routes is a generator, so a caller can drop each route")
+
+
+def test_a_route_called_grid_is_named_by_its_folder():
+    # Six recordings are six `<run>/grid.txt`; reported by stem they would be
+    # six rows all called "grid", and the reader could not tell which run the
+    # failure came from.
+    with tempfile.TemporaryDirectory() as td:
+        run = Path(td) / "nav-stage2"
+        run.mkdir()
+        r = _route(run, ["F 0", f"K 1 {T} {PAL}", "0 0 1"], "grid.txt")
+        check(r.name == "nav-stage2", "a generic stem is named by its folder", r.name)
+        r2 = _route(run, ["F 0", f"K 1 {T} {PAL}", "0 0 1"], "stage1-boss.txt")
+        check(r2.name == "stage1-boss", "a named route keeps its own name", r2.name)
+
+
+def test_discover_skips_what_is_not_a_route_and_says_so():
+    with tempfile.TemporaryDirectory() as td:
+        _route(td, ["F 0", f"K 1 {T} {PAL}", "0 0 1"], "good.txt")
+        (Path(td) / "notes.txt").write_text("just a note\n", encoding="utf-8")
+        skipped = []
+        routes = list(C.iter_routes([td], on_skip=lambda p, w: skipped.append((p, w))))
+        check([r.name for r in routes] == ["good"],
+              "only the real route is loaded", str([r.name for r in routes]))
+        check(len(skipped) == 1 and "notes.txt" in skipped[0][0],
+              "the other file is skipped with its reason", str(skipped))
+
+
+# --- evaluation, against HdPackConditions.h --------------------------------
+
+
+def test_tile_at_position_reads_the_absolute_screen_pixel():
+    # C++: PixelOffset = (y * 256) + x; ScreenTiles[PixelOffset].Tile compared
+    # against PaletteColors and TileData together.
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>x,tileAtPosition,0,0,{T},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        # Counted per *drawn instance* of the key, not per frame: the emulator
+        # asks the condition once for every tile it draws through the rule, so
+        # frame 0's two T cells both hold and frame 1's single T cell fails.
+        check((v.held, v.failed) == (2, 1),
+              "every drawn instance of the key asks the condition",
+              f"{v.held}/{v.failed}")
+        check(v.first_failure == (1, 0, 1),
+              "the first failure names the frame and the cell", str(v.first_failure))
+        check(v.state == "mixed", "a condition that both held and failed is mixed")
+
+
+def test_the_palette_must_match_unless_ignore_palette_is_set():
+    with tempfile.TemporaryDirectory() as td:
+        r = _route(td, ["F 0", f"K 1 {T} {PAL}", f"P 3 {PAL2}", "0 0 1 3"])
+        strict = C.parse_condition_line(f"<condition>x,tileAtPosition,0,0,{T},{PAL}")
+        check(not strict.holds(r.frames[0]),
+              "a different palette fails: the C++ memcmp covers palette and data")
+        loose = C.parse_condition_line(
+            f"<condition>x,tileAtPosition,0,0,{T},{PAL},true")
+        check(loose.holds(r.frames[0]),
+              "ignorePalette compares the tile data alone")
+
+
+def test_a_position_off_the_screen_never_holds_rather_than_erroring():
+    # C++ bounds-checks the pixel index and returns false.
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>x,tileAtPosition,300,0,{T},{PAL}")
+        check(not c.holds(r.frames[0]), "an x past 255 never holds")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "never held" and v.held == 0,
+              "lint reports it as a run of failures, not as a crash", v.state)
+
+
+def test_tile_nearby_is_relative_to_the_tile_being_drawn():
+    # C++: pixelIndex = PixelOffset + (y * 256) + x, with x/y the drawn tile's.
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>x,tileNearby,8,0,{U},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        # Frame 0: T at (0,0), U one cell to its right -> holds. T also at row 1
+        # col 0, with nothing to its right -> fails. Frame 1: T at col 1, empty
+        # to its right -> fails.
+        check((v.held, v.failed) == (1, 2),
+              "held only where U really is one cell to the right",
+              f"{v.held}/{v.failed}")
+        check(v.instances == 3, "every drawn instance of the key is an instance",
+              str(v.instances))
+
+
+def test_an_unintended_hit_is_a_pattern_around_a_key_the_author_did_not_mean():
+    with tempfile.TemporaryDirectory() as td:
+        # T at (0,0) with U to its right, and U at (0,2) with U to *its* right:
+        # the pattern the author described also occurs around a key they never
+        # attached the condition to.
+        r = _route(td, [
+            "F 0", f"K 1 {T} {PAL}", f"K 2 {U} {PAL}",
+            "0 0 1", "8 0 2", "16 0 2", "24 0 2",
+        ])
+        c = C.parse_condition_line(f"<condition>x,tileNearby,8,0,{U},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.held == 1 and v.failed == 0, "it held on the key it was attached to",
+              f"{v.held}/{v.failed}")
+        check(v.unintended == 2,
+              "and on two cells of a key it was not attached to", str(v.unintended))
+        check(v.first_unintended == (0, 0, 1),
+              "the first unintended hit names the frame and the cell",
+              str(v.first_unintended))
+
+
+def test_an_absolute_condition_reports_unintended_as_not_applicable():
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>x,tileAtPosition,0,0,{T},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.unintended == 0,
+              "an absolute predicate does not vary by cell, so it reports none "
+              "rather than one per drawn cell on screen")
+
+
+def test_frame_range_is_reported_with_the_phase_the_recording_cannot_know():
+    # C++: FrameNumber % OperandA >= OperandB, against the emulator's global
+    # counter. A recording knows only its own retained index (ADR-0189 §4).
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line("<condition>blink,frameRange,4,2")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.held == 0, "indexes 0 and 1 do not satisfy n % 4 >= 2")
+        check(v.phase == [2],
+              "offset 2 would make it hold on every retained frame", str(v.phase))
+        never = C.parse_condition_line("<condition>never,frameRange,2,2")
+        v2 = C.evaluate(never, {(T, PAL)}, r)
+        check(v2.phase == [],
+              "a threshold the period can never reach reports no offset at all",
+              str(v2.phase))
+
+
+def test_a_key_that_was_never_drawn_is_never_drawn_not_a_pass():
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>x,tileAtPosition,0,0,{T},{PAL}")
+        v = C.evaluate(c, {("CC" * 16, PAL)}, r)
+        check(v.state == "never drawn" and v.instances == 0,
+              "a condition on a key the routes never drew says so", v.state)
+
+
+def test_a_type_the_recording_cannot_answer_is_not_evaluable_never_a_pass():
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        c = C.parse_condition_line(f"<condition>s,spriteNearby,8,0,{T},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "not evaluable" and not v.evaluable,
+              "it is reported as not evaluable", v.state)
+        check(v.held == 0 and v.failed == 0,
+              "and it counts nothing, so it can never read as a pass")
+
+
+# --- the sheet side --------------------------------------------------------
+
+
+def test_a_sheet_condition_must_be_marked_authored():
+    line = f"<condition>onBridge,tileAtPosition,0,0,{T},{PAL}"
+    ok = C.load_sheet_conditions({"conditions": [
+        {"name": "onBridge", "authored": True, "line": line}]}, "s.json")
+    check(list(ok) == ["onBridge"], "a marked condition loads")
+    try:
+        C.load_sheet_conditions({"conditions": [{"name": "x", "line": line}]}, "s.json")
+        check(False, "an unmarked condition is refused", "it loaded")
+    except C.ConditionError as exc:
+        check("authored: true" in str(exc),
+              "an unmarked condition is refused: the toolchain never generates "
+              "one, so an unmarked one is a mistake", str(exc))
+
+
+def test_a_sheet_condition_whose_name_disagrees_with_its_line_is_refused():
+    line = f"<condition>onBridge,tileAtPosition,0,0,{T},{PAL}"
+    try:
+        C.load_sheet_conditions({"conditions": [
+            {"name": "elsewhere", "authored": True, "line": line}]}, "s.json")
+        check(False, "a disagreeing name is refused", "it loaded")
+    except C.ConditionError as exc:
+        check("but the line names" in str(exc), "a disagreeing name is refused",
+              str(exc))
+
+
+def test_an_authored_condition_always_emits_the_bare_twin_after_it():
+    # ADR-0189 §3 / #256: without the unconditional twin, a frame where the
+    # condition does not hold falls through to the ROM's own art.
+    rows = C.authored_variants("onBridge", ["1", "N"])
+    check([r[0] for r in rows] == ["[onBridge]", ""],
+          "the conditional rule comes first and the bare twin last, which is "
+          "the order GetMatchingTile walks", str([r[0] for r in rows]))
+    check(rows[0][1] == rows[1][1] and rows[0][1] is not rows[1][1],
+          "the twin carries the same trailing fields, as its own list")
+
+
+def test_two_sheets_may_share_a_condition_but_not_two_definitions_of_it():
+    line = f"<condition>onBridge,tileAtPosition,0,0,{T},{PAL}"
+    other = f"<condition>onBridge,tileAtPosition,8,0,{T},{PAL}"
+    same = {"conditions": [{"name": "onBridge", "authored": True, "line": line}]}
+    check(C.definition_lines([same, dict(same)]) == [line],
+          "the same definition in two sheets is emitted once")
+    try:
+        C.definition_lines([same, {"conditions": [
+            {"name": "onBridge", "authored": True, "line": other}]}])
+        check(False, "two different definitions under one name are refused",
+              "it returned")
+    except C.ConditionError as exc:
+        check("two different definitions" in str(exc),
+              "two different definitions under one name are refused", str(exc))
+
+
+def main():
+    tests = [
+        test_the_loaders_own_syntax_is_what_a_sheet_may_carry,
+        test_a_line_that_is_not_a_condition_is_refused,
+        test_a_chr_index_key_is_refused_with_the_reason,
+        test_tile_nearby_offsets_must_be_multiples_of_eight,
+        test_a_frame_range_period_of_zero_is_refused,
+        test_the_types_a_recording_cannot_answer_are_named_not_guessed,
+        test_a_grid_dump_parses_into_frames_shapes_and_palettes,
+        test_fine_scroll_is_recovered_from_the_cell_x,
+        test_a_dump_with_no_frames_is_refused_rather_than_read_as_empty,
+        test_routes_are_loaded_one_at_a_time_not_all_at_once,
+        test_a_route_called_grid_is_named_by_its_folder,
+        test_discover_skips_what_is_not_a_route_and_says_so,
+        test_tile_at_position_reads_the_absolute_screen_pixel,
+        test_the_palette_must_match_unless_ignore_palette_is_set,
+        test_a_position_off_the_screen_never_holds_rather_than_erroring,
+        test_tile_nearby_is_relative_to_the_tile_being_drawn,
+        test_an_unintended_hit_is_a_pattern_around_a_key_the_author_did_not_mean,
+        test_an_absolute_condition_reports_unintended_as_not_applicable,
+        test_frame_range_is_reported_with_the_phase_the_recording_cannot_know,
+        test_a_key_that_was_never_drawn_is_never_drawn_not_a_pass,
+        test_a_type_the_recording_cannot_answer_is_not_evaluable_never_a_pass,
+        test_a_sheet_condition_must_be_marked_authored,
+        test_a_sheet_condition_whose_name_disagrees_with_its_line_is_refused,
+        test_an_authored_condition_always_emits_the_bare_twin_after_it,
+        test_two_sheets_may_share_a_condition_but_not_two_definitions_of_it,
+    ]
+    for t in tests:
+        t()
+    print(f"\n{len(tests) - len(_FAILURES)}/{len(tests)} cases passed")
+    return 1 if _FAILURES else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,9 +1,13 @@
 # ADR-0197: Hand-authored conditions are admitted in MEP sheets and validated against the recorded routes; the toolchain still never emits the refused three
 
 - Status: accepted (2026-09-16) — §3 decided as option (b), the fixed
-  `$0000`–`$07FF` window; user's go-ahead quoted verbatim: "confirmo". Not
-  implemented; the implementing slices are PRD Part A §4, Phase 12, F12.6a
-  (lint) and F12.6b (recorder capture)
+  `$0000`–`$07FF` window; user's go-ahead quoted verbatim: "confirmo". §1 and
+  §2 shipped 2026-09-19 as PRD Part A §4, Phase 12, F12.6a — with one stated
+  deviation: `spriteNearby` reports `not evaluable` rather than a verdict,
+  because `MESEN_OAM_STREAM_DUMP` carries vocabulary indexes and not the tile
+  data a `<condition>` line names, so matching it needs the dump-format change
+  this ADR's Consequences assign to F12.6b. §3 (recorder capture of
+  `$0000`–`$07FF`) is still pending, as slice F12.6b
 - Date: 2026-09-16
 - Related: ADR-0189 §4 (the three refused condition types), ADR-0190
   (`tileNearby` auto-attached), ADR-0183 §3 (evidence vs inference),
