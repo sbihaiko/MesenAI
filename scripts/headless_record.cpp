@@ -1590,10 +1590,27 @@ int main(int argc, char** argv)
 	}
 	Stop();
 	Release();
+
+	//The run's own verdict, in the output and not only in the exit code.
 	//A run that did not reach its frame target is a failed capture, not a
 	//short one - the caller (bootstrap_auto_packs.sh) must see it.
 	//A run the sync gate failed is a corrupt recording, not a short one: its
 	//art comes from a playthrough nobody intended (ADR-0185 sec. 4 as amended,
 	//issue #201), so it must never be archived as if it were the movie's.
-	return reachedTarget && !captureFailed && !syncGateFailed && !cdlFailed ? 0 : 1;
+	//
+	//Printed because the exit code is the first thing a caller loses: the
+	//2026-09-19 F12.2 sweep reported "headless_record exits 1 on a successful
+	//render" from a shell line that piped this tool into `tail` and ended in an
+	//`ls` of a folder that did not exist - the 1 was the `ls`, this tool had
+	//already returned 0, and nothing in the output said so. A run that ends
+	//without a "result:" line did not finish; one that ends with "result: ok"
+	//succeeded whatever the surrounding pipeline reports.
+	std::string verdict;
+	if(!reachedTarget) { verdict += verdict.empty() ? "" : ", "; verdict += "the run never reached its frame target"; }
+	if(captureFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the frame capture failed"; }
+	if(syncGateFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the movie sync gate failed"; }
+	if(cdlFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the CDL was not written"; }
+	printf("result: %s\n", verdict.empty() ? "ok" : ("FAILED - " + verdict).c_str());
+	fflush(stdout);
+	return verdict.empty() ? 0 : 1;
 }
