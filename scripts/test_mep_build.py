@@ -51,7 +51,10 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
   * #256: every `[condition]` rule keeps its unconditional fallback twin in
     the rebuilt `hires.txt`, so a condition miss still shows the painted art;
   * #253: a painted sprite sheet whose cells lose to another sheet fails the
-    build with an ownership error instead of a silent all-green success.
+    build with an ownership error instead of a silent all-green success;
+  * #329: `build` is idempotent over a pack it un-baked — the `*.orig.png`
+    twin is un-baked with the sheet, so a second build exits 0 and leaves the
+    pack byte-identical, while #253 still fires for a real paint conflict.
 
 Framework-free, mirroring test_mep_recipe.py's ok()/fail()/main() style.
 Wired into `make doc-checks`. Usage: python3 scripts/test_mep_build.py
@@ -300,6 +303,27 @@ def contact_sheet(unit, gutter, columns, vocab_cells):
             if shape is None:
                 continue
             render_tile(shape, pixels, x + (k % 2) * 8, y + (k // 2) * 8, width, height)
+        cells.append(dict(cell, index=i, x=x, y=y))
+    return cells, pixels
+
+
+def hflipped_contact_sheet(unit, gutter, columns, vocab_cells):
+    """`contact_sheet` with the OAM horizontal flip baked into every tile —
+    what HdBuilderPpu::CaptureOam stored on a mirrored sprite cell, i.e. the
+    pixels of a pack recorded before ADR-0178. Returns (cells, 1x pixels)."""
+    stride = unit + gutter
+    rows = (len(vocab_cells) + columns - 1) // columns
+    width, height = columns * stride + gutter, rows * stride + gutter
+    pixels = blank(width, height)
+    cells = []
+    for i, cell in enumerate(vocab_cells):
+        x = gutter + (i % columns) * stride
+        y = gutter + (i // columns) * stride
+        for k in range(4):
+            shape = cell["tiles"][k] if k < len(cell["tiles"]) else None
+            if shape is None:
+                continue
+            render_tile_hflipped(shape, pixels, x + (k % 2) * 8, y + (k // 2) * 8, width, height)
         cells.append(dict(cell, index=i, x=x, y=y))
     return cells, pixels
 
@@ -779,6 +803,7 @@ def sheet_round_trip_tests(root: Path):
     chr_rom_key_tests(root)
     flip_baked_key_tests(root)
     mirror_h_pixel_key_tests(root)
+    mirror_unbake_idempotency_tests(root)
     condition_fallback_twin_tests(root)
     authored_condition_round_trip_tests(root)
     painted_sprite_ownership_tests(root)
@@ -1033,6 +1058,67 @@ def authored_condition_round_trip_tests(root: Path):
         ok("F12.6a: the definition precedes its first use, as HdPackLoader needs")
     else:
         fail("F12.6a: the definition is emitted after the rule that uses it")
+
+
+def mirror_unbake_idempotency_tests(root: Path):
+    """#329: `build` has to be safe to re-run over its own output.
+
+    A pack recorded before ADR-0178 carries sprite cells whose sidecar names
+    the unflipped `source` beside `mirror`, with the OAM flip baked into the
+    pixels. Build un-bakes those cells in place — and the `*.orig.png` twin is
+    the baseline the "was this cell painted?" probe diffs the sheet against,
+    so the twin has to be un-baked with it. Left baked, the twin made every
+    corrected cell read as painted on the next run, and each one that lost its
+    key to a higher-ranked sheet tripped #253: the second build refused,
+    naming the tool's own corrections as if they were the artist's paint."""
+    global EMIT_FLIP_SOURCE
+    folder, _v, _c = make_sheet_folder(root, "unbake-idempotent")
+    sheets = folder / "textures" / "sheets"
+    vocab = [
+        {"count": 431, "context": "scene", "metatile": 0, "tiles": [0, 1, 2, 3]},
+        {"count": 300, "context": "scene", "metatile": 1, "tiles": [4, 5, 6, 7]},
+    ]
+    # Two sprite sheets over the same keys, the way a recorder emits the OAM
+    # vocabulary more than once. `sprites` ranks below `spr000` (`_SHEET_RANK`
+    # 1 vs 4), so it owns none of the keys whenever both were painted — which
+    # is what #253 exists to report, and what the un-bake must not fake.
+    for stem, kind in (("sprites", "sprites"), ("spr000", "sprite")):
+        cells, pixels = hflipped_contact_sheet(16, 1, 2, vocab)
+        write_pair(sheets, stem, pixels, 1)  # sheet and twin both baked
+        EMIT_FLIP_SOURCE = True
+        (sheets / f"{stem}.json").write_text(
+            serialize_sheet(kind, 16, 1, 2, f"{stem}.png", f"{stem}.orig.png", cells),
+            encoding="utf-8")
+        EMIT_FLIP_SOURCE = False
+
+    def digest():
+        return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(folder.rglob("*")) if p.is_file()}
+
+    if run("build", str(folder)) is None:
+        return
+    before = digest()
+    out2 = run("build", str(folder))
+    if out2 is None:
+        fail("#329: a second build over its own output must exit 0")
+        return
+    after = digest()
+    touched = sorted(set(before) ^ set(after)) + sorted(k for k in before if before[k] != after.get(k))
+    if touched:
+        fail(f"#329: the second build rewrote the pack: {touched}")
+    else:
+        ok("#329: a second build over an un-baked pack exits 0 and changes nothing")
+
+    # Negative: idempotency must not have been bought by weakening #253. Paint
+    # both sheets' first cell — the artist's own paint — and `sprites`, whose
+    # rank loses, still has to fail the build.
+    paint(folder, "sprites.png", 1, 1, 16)
+    paint(folder, "spr000.png", 1, 1, 16, color=0xFF20A0F0)
+    out3 = run("build", str(folder), expect=1)
+    if out3 is not None and "#253" in out3 and "sprites.png" in out3:
+        ok("#329: a genuinely painted sprite cell that loses its key still fails #253")
+    else:
+        fail(f"#329: #253 no longer fires for a real paint conflict: {out3}")
 
 
 def painted_sprite_ownership_tests(root: Path):

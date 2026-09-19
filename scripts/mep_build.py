@@ -286,9 +286,19 @@ def _flip_bitmap_region(bmp: "_Bitmap", x: int, y: int, w: int, h: int, mirror: 
                     bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
 
 
-def _unflip_sheet_crops(png_path: Path, crops: list, scale: int) -> int:
-    """Apply pending mirror un-bakes to `png_path`. Returns how many crops
-    were rewritten; 0 when the PNG could not be decoded (left untouched)."""
+def _unflip_sheet_crops(png_path: Path, crops: list, scale: int,
+                        ref_path: Path | None = None) -> int:
+    """Apply pending mirror un-bakes to `png_path` and, in lockstep (#329), to
+    its 1x `*.orig.png` twin `ref_path`. Returns how many crops were rewritten;
+    0 when the sheet PNG could not be decoded.
+
+    The twin is the baseline ADR-0153 §4 diffs the sheet against to decide
+    whether the artist painted a cell, so a mechanical rewrite of the sheet has
+    to land on it too: un-baking only the sheet left each corrected cell
+    differing from a still-baked twin, so the next `build` read those cells as
+    painted and each one that lost its key to a higher-ranked sheet tripped
+    #253. The reflection commutes with nearest-neighbour upscaling, so the
+    twin's 8x8 region mirrors as the sheet's 8N x 8N one does."""
     if not crops:
         return 0
     bmp = _png_pixels(png_path)
@@ -297,12 +307,20 @@ def _unflip_sheet_crops(png_path: Path, crops: list, scale: int) -> int:
               f"8-bit RGB/RGBA PNG; mirrored cells keep their baked pixels",
               file=sys.stderr)
         return 0
+    ref = _png_pixels(ref_path) if ref_path is not None else None
+    if ref is not None and (ref.width * scale, ref.height * scale, ref.channels) != (bmp.width, bmp.height, bmp.channels):
+        ref = None  # not this sheet's twin: _EditedProbe is blind here too
     span = 8 * scale
     for x, y, mirror in crops:
         if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
             continue
         _flip_bitmap_region(bmp, x, y, span, span, mirror)
+        tx, ty = x // scale, y // scale
+        if ref is not None and tx + 8 <= ref.width and ty + 8 <= ref.height:
+            _flip_bitmap_region(ref, tx, ty, 8, 8, mirror)
     _png_write(png_path, bmp)
+    if ref is not None:
+        _png_write(ref_path, ref)
     return len(crops)
 
 
@@ -1189,7 +1207,9 @@ def cmd_build(args) -> int:
                 seen[key] = len(entries)
                 entries.append(row)
         if pending_unflips:
-            n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale)
+            # The twin is the "was this painted?" baseline: same un-bake (#329).
+            twin = str(sd.doc.get("reference") or "").strip()
+            n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale, sheets_dir / twin if twin else None)
             if n:
                 # Drop source/mirror from the sidecar so a second build does not
                 # un-bake the already-corrected pixels again (#255 idempotency).
