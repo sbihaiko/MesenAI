@@ -23,6 +23,11 @@
 #include "Core/Debugger/TraceLogFileSaver.h"
 #include "Core/Debugger/FrozenAddressManager.h"
 #include "Core/Gameboy/GbTypes.h"
+//ADR-0215: the two NES per-scanline traces and the loaded pack's tile index
+//are console-side state, not debugger-side - see GetNesScanlineTrace below.
+#include "Core/NES/NesConsole.h"
+#include "Core/NES/BaseNesPpu.h"
+#include "Core/NES/HdPacks/HdData.h"
 #include "Utilities/StringUtilities.h"
 
 extern unique_ptr<Emulator> _emu;
@@ -287,6 +292,83 @@ extern "C"
 	DllExport AddressInfo __stdcall GetAbsoluteAddress(AddressInfo relAddress)
 	{
 		return WithDebugger(AddressInfo, GetAbsoluteAddress(relAddress));
+	}
+
+	//ADR-0215: GetAbsoluteAddress above answers with `_chrPages` - the CHR
+	//mapping in effect at the instant the debugger asks, which on a CHR-banked
+	//game is not the mapping that drew the frame the user is looking at. The
+	//two per-scanline traces ADR-0169 already keeps are the record of what did
+	//draw it, and nothing in the debugger path could reach them: until now
+	//GetScanlineChrBankTrace was exported only through
+	//HeadlessCaptureNesSpriteLayer. Published as the raw traces rather than as
+	//a scanline-aware GetAbsoluteAddress, because the decision that needs them
+	//(which scanline names a tilemap cell, and whether the scanlines agree) is
+	//a UI decision with its own unit tests - see UI/Logic/NesDrawnTileResolver.
+	//outScroll is 240 uint32, outChrBank is 240*32. False on a non-NES console
+	//or before a ROM is loaded, in which case neither buffer is written.
+	DllExport bool __stdcall GetNesScanlineTrace(uint32_t* outScroll, uint32_t* outChrBank)
+	{
+		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
+		if(!nes || !nes->GetPpu() || !outScroll || !outChrBank) {
+			return false;
+		}
+		auto lock = _emu->AcquireLock();
+		nes->GetPpu()->GetScanlineScrollTrace(outScroll);
+		nes->GetPpu()->GetScanlineChrBankTrace(outChrBank);
+		return true;
+	}
+
+	//ADR-0215 / issue #342: which palettes does the loaded pack key this tile
+	//under? The copy actions read the palette out of live PPU palette RAM, but
+	//a pack's rules are keyed on the palette that was live when each tile was
+	//*recorded*; on Metroid the two never intersect, so a verbatim paste is a
+	//well-formed key that matches nothing. Answering that needs the pack's own
+	//index, which only the core holds.
+	//Returns -1 when there is no NES console or no loaded pack (the caller then
+	//has nothing to check against and keeps the live palette), otherwise the
+	//number of distinct palettes written to outPalettes - 0 meaning the pack
+	//holds no rule for this tile at all, which is itself the answer. A
+	//defaultTile rule is emitted as 0xFFFFFFFF: it is HdTileKey::GetKey(true)'s
+	//own wildcard, so it matches whatever palette is live.
+	DllExport int32_t __stdcall GetNesHdPackTilePalettes(int32_t tileIndex, uint8_t* tileData, bool isChrRam, uint32_t* outPalettes, int32_t maxCount)
+	{
+		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
+		if(!nes || !outPalettes || maxCount <= 0) {
+			return -1;
+		}
+		auto lock = _emu->AcquireLock();
+		HdPackData* hdData = nes->GetHdData();
+		if(!hdData) {
+			return -1;
+		}
+		int32_t count = 0;
+		for(unique_ptr<HdPackTileInfo>& tile : hdData->Tiles) {
+			if(tile->IsChrRamTile != isChrRam) {
+				continue;
+			}
+			if(isChrRam) {
+				if(!tileData || memcmp(tile->TileData, tileData, 16) != 0) {
+					continue;
+				}
+			} else if(tile->TileIndex != tileIndex) {
+				continue;
+			}
+			uint32_t palette = tile->DefaultTile ? 0xFFFFFFFF : tile->PaletteColors;
+			bool seen = false;
+			for(int32_t i = 0; i < count; i++) {
+				seen |= (outPalettes[i] == palette);
+			}
+			if(!seen) {
+				if(count >= maxCount) {
+					//Out of room: the caller only ever needs to know "the live
+					//palette is not among them, and there is more than one",
+					//which is already decided by the palettes it has.
+					break;
+				}
+				outPalettes[count++] = palette;
+			}
+		}
+		return count;
 	}
 
 	DllExport AddressInfo __stdcall GetRelativeAddress(AddressInfo absAddress, CpuType cpuType)

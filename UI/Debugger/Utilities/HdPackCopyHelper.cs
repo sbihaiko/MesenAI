@@ -12,8 +12,62 @@ using System.Threading.Tasks;
 
 namespace Mesen.Debugger.Utilities
 {
+	//Which frame context the viewer can offer for the tile being copied
+	//(ADR-0215 OPEN 3: one rule, three viewers, and the viewer that has no
+	//context says so instead of guessing).
+	public readonly struct HdPackCopyContext
+	{
+		public int TileMapAddress { get; }
+		public int SpriteY { get; }
+		public int SpriteHeight { get; }
+		public bool HasFrameContext { get; }
+
+		private HdPackCopyContext(int tileMapAddress, int spriteY, int spriteHeight, bool hasFrameContext)
+		{
+			TileMapAddress = tileMapAddress;
+			SpriteY = spriteY;
+			SpriteHeight = spriteHeight;
+			HasFrameContext = hasFrameContext;
+		}
+
+		//The Tilemap Viewer: a nametable address, which the scroll trace can be
+		//inverted against.
+		public static HdPackCopyContext ForTilemap(int tileMapAddress) => new(tileMapAddress, -1, 0, true);
+		//The Sprite Viewer: a Y, which names the scanlines the sprite was fetched on.
+		public static HdPackCopyContext ForSprite(int spriteY, int spriteHeight) => new(-1, spriteY, spriteHeight, true);
+		//The Tile Viewer: neither a row nor a frame.
+		public static HdPackCopyContext None() => new(-1, -1, 0, false);
+	}
+
+	//What one copy did, so the caller can both put it on the clipboard and say so
+	//out loud. Issue #340: across all 28 cold-read sessions nothing after the copy
+	//said it had worked or which tile it took - the first confirmation was a
+	//`build` line two steps later, by which point a wrong tile, a wrong slot and a
+	//key lost to precedence all present as the same symptom, an unchanged frame.
+	public readonly struct HdPackCopyResult
+	{
+		//The text put on the clipboard, or "" when the action refused.
+		public string Text { get; }
+		//One line for the OSD, always present - a refusal has to say why on screen
+		//or it trades a silent wrong key for a silent nothing (ADR-0215).
+		public string Receipt { get; }
+		public bool Copied => Text.Length > 0;
+
+		public HdPackCopyResult(string text, string receipt)
+		{
+			Text = text;
+			Receipt = receipt;
+		}
+	}
+
 	public static class HdPackCopyHelper
 	{
+		//ADR-0167's OSD toast is where the other debugger actions put their
+		//feedback (ShortcutHandler's layer toggles, LiveRecordingSession's
+		//failures), so the copy's receipt goes through the same seam - which also
+		//means the headless HUD capture can see it.
+		public const string OsdTitle = "MEP";
+
 		public static bool IsActionAllowed(MemoryType type)
 		{
 			return type switch {
@@ -24,16 +78,12 @@ namespace Mesen.Debugger.Utilities
 			};
 		}
 
-		public static string ToHdPackFormat(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite)
+		public static string ToHdPackFormat(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, HdPackCopyContext context)
 		{
-			if(!TryReadTileKey(tileAddr, rawPalette, paletteIndex, forSprite, out string tileData, out string palette, out int tileIndex)) {
+			if(!TryReadTileKey(tileAddr, rawPalette, paletteIndex, forSprite, context, out TileKey key)) {
 				return "";
 			}
-
-			//The `<tile>` key's own field: a CHR ROM game keys by index, a CHR RAM game
-			//by the 16 bytes of the tile shape (HdPackTileInfo::ToString).
-			string key = tileIndex >= 0 ? tileIndex.ToString("X2") : tileData;
-			return key + "," + palette;
+			return Render(key, mepFormat: false);
 		}
 
 		//PRD Phase 12 F12.2: the same key as one MEP sheet sidecar entry
@@ -41,98 +91,177 @@ namespace Mesen.Debugger.Utilities
 		//The inherited Copy tile hands the author a `<tile>` line; this hands them the
 		//object the sheet carries, so a key picked by eye in the viewer pastes into a
 		//sheet project without anyone reading hires.txt.
-		public static string ToMepSheetCell(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite)
+		public static string ToMepSheetCell(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, HdPackCopyContext context)
 		{
-			if(!TryReadTileKey(tileAddr, rawPalette, paletteIndex, forSprite, out string tileData, out string palette, out int tileIndex)) {
+			if(!TryReadTileKey(tileAddr, rawPalette, paletteIndex, forSprite, context, out TileKey key)) {
 				return "";
 			}
+			return Render(key, mepFormat: true);
+		}
 
-			return MepSheetCell.Format(tileData, palette, tileIndex);
+		private static string Render(TileKey key, bool mepFormat)
+		{
+			if(mepFormat) {
+				return MepSheetCell.Format(key.TileData, key.Palette, key.TileIndex);
+			}
+			//The `<tile>` key's own field: a CHR ROM game keys by index, a CHR RAM game
+			//by the 16 bytes of the tile shape (HdPackTileInfo::ToString).
+			return (key.TileIndex >= 0 ? key.TileIndex.ToString("X2") : key.TileData) + "," + key.Palette;
+		}
+
+		private struct TileKey
+		{
+			public string TileData;
+			public string Palette;
+			public int TileIndex;
+			//Why the action refused, or the note a successful copy carries.
+			public string Note;
+			public int Scanline;
 		}
 
 		//One reader for both copy formats, so the two can never disagree about which
-		//bytes a tile has or which palette word goes beside it. `tileIndex` is the
+		//bytes a tile has or which palette word goes beside it. `TileIndex` is the
 		//absolute CHR index on a CHR ROM game (ADR-0172 §4: what HdPackTileInfo holds,
 		//computed by HdBuilderPpu as AbsoluteTileAddr / 16) and -1 on CHR RAM, where the
 		//field means nothing.
-		private static bool TryReadTileKey(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, out string tileData, out string palette, out int tileIndex)
+		//
+		//ADR-0215: a PPU-space address is resolved through the CHR mapping that DREW
+		//the frame, never through `_chrPages` as the paused emulator holds it, and the
+		//palette is checked against the rules the loaded pack actually keys this tile
+		//under. Either check can refuse; `key.Note` then says why.
+		private static bool TryReadTileKey(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, HdPackCopyContext context, out TileKey key)
 		{
-			tileData = "";
-			palette = "";
-			tileIndex = MepSheetCell.UnknownIndex;
+			key = new TileKey() { TileData = "", Palette = "", TileIndex = MepSheetCell.UnknownIndex, Note = "", Scanline = -1 };
 
 			if(tileAddr.Type == MemoryType.NesPpuMemory) {
-				tileAddr = DebugApi.GetAbsoluteAddress(tileAddr);
+				NesDrawnTileAddress drawn = ResolveDrawnAddress(tileAddr.Address, context);
+				if(drawn.IsRefusal) {
+					key.Note = drawn.Reason;
+					return false;
+				}
+				key.Scanline = drawn.Scanline;
+				if(drawn.Status == NesDrawnTileStatus.Resolved) {
+					tileAddr = new AddressInfo() { Address = drawn.AbsoluteAddress, Type = MemoryType.NesChrRom };
+				} else {
+					//NotChrRom: no bank lives in this key, so the paused resolution is
+					//the same answer the drawing scanline would have given.
+					tileAddr = DebugApi.GetAbsoluteAddress(tileAddr);
+				}
 			}
 
 			if(tileAddr.Type != MemoryType.NesChrRom && tileAddr.Type != MemoryType.NesChrRam) {
+				key.Note = "this address is not backed by CHR ROM or CHR RAM";
 				return false;
 			}
 			//A tile is 16 bytes; a shape read past the end of CHR would be a silent
 			//out-of-bounds read inside the core, so a key that does not fit is dropped.
 			if(tileAddr.Address < 0 || tileAddr.Address + 16 > DebugApi.GetMemorySize(tileAddr.Type)) {
+				key.Note = $"a 16-byte tile at ${tileAddr.Address:X6} would read past the end of {tileAddr.Type}";
 				return false;
 			}
 
 			if(tileAddr.Type == MemoryType.NesChrRom) {
-				tileIndex = tileAddr.Address / 16;
+				key.TileIndex = tileAddr.Address / 16;
 			}
 
+			byte[] bytes = new byte[16];
 			StringBuilder sb = new StringBuilder();
 			for(int i = 0; i < 16; i++) {
-				sb.Append(DebugApi.GetMemoryValue(tileAddr.Type, (uint)(tileAddr.Address + i)).ToString("X2"));
+				bytes[i] = DebugApi.GetMemoryValue(tileAddr.Type, (uint)(tileAddr.Address + i));
+				sb.Append(bytes[i].ToString("X2"));
 			}
-			tileData = sb.ToString();
+			key.TileData = sb.ToString();
 
-			StringBuilder pal = new StringBuilder();
-			if(forSprite) {
-				pal.Append("FF");
-				for(int i = 1; i < 4; i++) {
-					pal.Append(rawPalette[(paletteIndex + 4) * 4 + i].ToString("X2"));
-				}
-			} else {
-				pal.Append(rawPalette[0].ToString("X2")); //Always use color 0 for palette index 0
-				for(int i = 1; i < 4; i++) {
-					pal.Append(rawPalette[paletteIndex * 4 + i].ToString("X2"));
-				}
+			uint live = ReadLivePalette(rawPalette, paletteIndex, forSprite);
+			NesPackPaletteVerdict verdict = NesPackTilePalette.Resolve(
+				live, DebugApi.GetNesHdPackTilePalettes(key.TileIndex, bytes, tileAddr.Type == MemoryType.NesChrRam));
+			if(verdict.IsRefusal) {
+				key.Note = verdict.Reason;
+				return false;
 			}
-			palette = pal.ToString();
+			key.Palette = verdict.Palette.ToString("X8");
+			key.Note = verdict.Reason;
 
 			return true;
 		}
 
-		public static void CopyToHdPackFormat(int address, MemoryType memoryType, UInt32[] palette, int paletteIndex, bool forSprite, bool isLargeSprite = false)
+		private static NesDrawnTileAddress ResolveDrawnAddress(int ppuTileAddress, HdPackCopyContext context)
 		{
-			AddressInfo addr = new AddressInfo() { Address = address, Type = memoryType };
-			string hdPackTile = HdPackCopyHelper.ToHdPackFormat(addr, palette, paletteIndex, forSprite);
-
-			if(isLargeSprite && hdPackTile.Length > 0) {
-				//Also copy the bottom tile's information to the clipboard
-				addr.Address += 16;
-				hdPackTile += Environment.NewLine + HdPackCopyHelper.ToHdPackFormat(addr, palette, paletteIndex, forSprite);
+			if(!context.HasFrameContext) {
+				return NesDrawnTileResolver.NoFrameContext();
 			}
-
-			if(hdPackTile.Length > 0) {
-				ApplicationHelper.GetMainWindow()?.Clipboard?.SetTextAsync(hdPackTile);
+			if(!DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] chrBank)) {
+				return NesDrawnTileResolver.NoTrace();
 			}
+			if(context.TileMapAddress >= 0) {
+				return NesDrawnTileResolver.ResolveTilemapTile(scroll, chrBank, context.TileMapAddress, ppuTileAddress);
+			}
+			return NesDrawnTileResolver.ResolveSpriteTile(chrBank, context.SpriteY, context.SpriteHeight, ppuTileAddress);
 		}
 
-		public static void CopyAsMepSheetCell(int address, MemoryType memoryType, UInt32[] palette, int paletteIndex, bool forSprite, bool isLargeSprite = false)
+		//The palette word as HdTileKey::PaletteColors packs it: color 0 in the high
+		//byte, then colors 1-3. A sprite's color 0 is transparent, so it is FF.
+		private static uint ReadLivePalette(UInt32[] rawPalette, int paletteIndex, bool forSprite)
+		{
+			int baseIndex = forSprite ? (paletteIndex + 4) * 4 : paletteIndex * 4;
+			uint color0 = forSprite ? 0xFFu : (rawPalette[0] & 0xFF);
+			return (color0 << 24) | ((rawPalette[baseIndex + 1] & 0xFF) << 16) | ((rawPalette[baseIndex + 2] & 0xFF) << 8) | (rawPalette[baseIndex + 3] & 0xFF);
+		}
+
+		public static HdPackCopyResult CopyToHdPackFormat(int address, MemoryType memoryType, UInt32[] palette, int paletteIndex, bool forSprite, HdPackCopyContext context, bool isLargeSprite = false)
 		{
 			AddressInfo addr = new AddressInfo() { Address = address, Type = memoryType };
-			string cell = HdPackCopyHelper.ToMepSheetCell(addr, palette, paletteIndex, forSprite);
+			return Copy(addr, palette, paletteIndex, forSprite, context, isLargeSprite, "HD pack tile", false);
+		}
 
-			if(isLargeSprite && cell.Length > 0) {
+		public static HdPackCopyResult CopyAsMepSheetCell(int address, MemoryType memoryType, UInt32[] palette, int paletteIndex, bool forSprite, HdPackCopyContext context, bool isLargeSprite = false)
+		{
+			AddressInfo addr = new AddressInfo() { Address = address, Type = memoryType };
+			return Copy(addr, palette, paletteIndex, forSprite, context, isLargeSprite, "MEP sheet cell", true);
+		}
+
+		private static HdPackCopyResult Copy(AddressInfo addr, UInt32[] palette, int paletteIndex, bool forSprite, HdPackCopyContext context, bool isLargeSprite, string what, bool mepFormat)
+		{
+			//The receipt is built from the same TileKey the clipboard text is, so it
+			//can never describe a tile the clipboard does not carry.
+			bool read = TryReadTileKey(addr, palette, paletteIndex, forSprite, context, out TileKey key);
+			string text = read ? Render(key, mepFormat) : "";
+
+			if(text.Length == 0) {
+				string why = key.Note.Length > 0 ? key.Note : "this tile has no key";
+				return new HdPackCopyResult("", $"{what} not copied: {why}");
+			}
+
+			if(isLargeSprite) {
 				//The second half of a 16px-tall sprite is its own tile, so it is its own
 				//entry. One object per line and no comma between them: the entry the paste
 				//lands next to decides whether a separator is needed, and a comma the
 				//artist did not ask for is the one thing that breaks the sidecar's JSON.
-				addr.Address += 16;
-				cell += Environment.NewLine + HdPackCopyHelper.ToMepSheetCell(addr, palette, paletteIndex, forSprite);
+				AddressInfo bottom = new AddressInfo() { Address = addr.Address + 16, Type = addr.Type };
+				if(TryReadTileKey(bottom, palette, paletteIndex, forSprite, context, out TileKey second)) {
+					string secondText = Render(second, mepFormat);
+					if(secondText.Length > 0) {
+						text += Environment.NewLine + secondText;
+					}
+				}
 			}
 
-			if(cell.Length > 0) {
-				ApplicationHelper.GetMainWindow()?.Clipboard?.SetTextAsync(cell);
+			ApplicationHelper.GetMainWindow()?.Clipboard?.SetTextAsync(text);
+
+			string named = key.TileIndex >= 0 ? $"index {key.TileIndex}" : $"CHR RAM tile {key.TileData[..8]}";
+			string from = key.Scanline >= 0 ? $", as scanline {key.Scanline} drew it" : "";
+			string note = key.Note.Length > 0 ? $" - {key.Note}" : "";
+			return new HdPackCopyResult(text, $"{what} copied: {named}, palette {key.Palette}{from}{note}");
+		}
+
+		//Issue #340: the receipt goes to the OSD at the moment of the copy, where
+		//the other debugger actions put theirs. Every entry point calls this - the
+		//Tile Viewer's and the Sprite Viewer's copies need it as much as the
+		//Tilemap Viewer's.
+		public static void Announce(HdPackCopyResult result)
+		{
+			if(result.Receipt.Length > 0) {
+				DisplayMessageHelper.DisplayMessage(OsdTitle, result.Receipt);
 			}
 		}
 	}

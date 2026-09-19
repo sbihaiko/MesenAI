@@ -296,7 +296,9 @@ namespace Mesen.Debugger.ViewModels
 				OnClick = () => {
 					SpritePreviewModel? sprite = GetSelectedSprite();
 					if(sprite != null && sprite.TileAddress >= 0 && _data.Palette != null) {
-						HdPackCopyHelper.CopyToHdPackFormat(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, sprite.Height > 8);
+						//ADR-0215 OPEN 3: a sprite has a Y, so it can name the scanlines it was
+						//fetched on - the same rule the Tilemap Viewer applies, under one name.
+						HdPackCopyHelper.Announce(HdPackCopyHelper.CopyToHdPackFormat(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, HdPackCopyContext.ForSprite(sprite.Y, sprite.Height), sprite.Height > 8));
 					}
 				}
 			};
@@ -314,7 +316,7 @@ namespace Mesen.Debugger.ViewModels
 				OnClick = () => {
 					SpritePreviewModel? sprite = GetSelectedSprite();
 					if(sprite != null && sprite.TileAddress >= 0 && _data.Palette != null) {
-						HdPackCopyHelper.CopyAsMepSheetCell(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, sprite.Height > 8);
+						HdPackCopyHelper.Announce(HdPackCopyHelper.CopyAsMepSheetCell(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, HdPackCopyContext.ForSprite(sprite.Y, sprite.Height), sprite.Height > 8));
 					}
 				}
 			};
