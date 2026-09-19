@@ -780,6 +780,7 @@ def sheet_round_trip_tests(root: Path):
     flip_baked_key_tests(root)
     mirror_h_pixel_key_tests(root)
     condition_fallback_twin_tests(root)
+    authored_condition_round_trip_tests(root)
     painted_sprite_ownership_tests(root)
 
 
@@ -980,6 +981,58 @@ def condition_fallback_twin_tests(root: Path):
         ok("#256: a conditional-only key source still gets a synthesised bare twin")
     else:
         fail(f"#256: key1 missing synthesised bare twin: cond={has_cond1} bare={has_bare1}")
+
+
+def authored_condition_round_trip_tests(root: Path):
+    """F12.6a / ADR-0197 §1: a condition an artist writes into a sheet reaches
+    hires.txt — its definition once, the cell's rule under it, and the bare twin
+    behind it — and only the cells that named it are conditioned."""
+    folder, _v, cells = make_sheet_folder(root, "authored-cond", sprite_sheet=True)
+    sheets = folder / "textures" / "sheets"
+    doc_path = sheets / "spr000.json"
+    doc = json_loads(doc_path.read_text(encoding="utf-8"))
+    key0 = tile_hex(0)
+    line = f"<condition>onBridge,tileAtPosition,120,80,{key0},{PAL_HEX}"
+    doc["conditions"] = [{"name": "onBridge", "authored": True, "line": line}]
+    doc["cells"][0]["condition"] = "onBridge"
+    doc_path.write_text(json_dumps(doc), encoding="utf-8")
+    # Two cells painted: only the first names the condition, so the second is
+    # the control that proves the condition did not spread across the sheet.
+    paint(folder, "spr000.png", cells[0]["x"], cells[0]["y"], 16)
+    paint(folder, "spr000.png", cells[1]["x"], cells[1]["y"], 16, color=0xFF20A0F0)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    body = (folder / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    defs = [ln for ln in body if ln.startswith("<condition>onBridge,")]
+    if len(defs) == 1 and defs[0] == line:
+        ok("F12.6a: the authored definition reaches hires.txt once, verbatim")
+    else:
+        fail(f"F12.6a: authored definition not emitted once: {defs}")
+    tile_lines = [ln for ln in body if "<tile>" in ln and not ln.strip().startswith("#")]
+    cond = [ln for ln in tile_lines if ln.startswith("[onBridge]<tile>") and key0 in ln]
+    bare = [ln for ln in tile_lines if ln.startswith("<tile>") and key0 in ln]
+    if cond and bare:
+        ok("F12.6a: the conditioned cell emits its rule and the bare twin (#256)")
+    else:
+        fail(f"F12.6a: conditioned cell missing a rule: cond={cond} bare={bare}")
+    key1 = tile_hex(cells[1]["tiles"][0])
+    # Assert the control cell is really there first: "no conditional rule
+    # mentions key1" is also true of a key the build never emitted at all.
+    emitted1 = [ln for ln in tile_lines if key1 in ln]
+    if key1 == key0 or not emitted1:
+        fail(f"F12.6a: the control cell was not emitted, so the leak check is vacuous ({key1})")
+    elif not [ln for ln in emitted1 if ln.startswith("[")]:
+        ok("F12.6a: a cell that named no condition stays unconditional")
+    else:
+        fail(f"F12.6a: the condition leaked onto a cell that did not name it ({key1})")
+    # The name must exist before it is used: HdPackLoader reads the file top
+    # down and drops a rule whose condition it has not seen.
+    first_use = next((i for i, ln in enumerate(body) if "[onBridge]" in ln), -1)
+    if defs and body.index(defs[0]) < first_use:
+        ok("F12.6a: the definition precedes its first use, as HdPackLoader needs")
+    else:
+        fail("F12.6a: the definition is emitted after the rule that uses it")
 
 
 def painted_sprite_ownership_tests(root: Path):

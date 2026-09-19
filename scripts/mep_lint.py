@@ -23,6 +23,13 @@ Usage: python3 scripts/mep_lint.py <folder-or-zip> [rom_name] [--quiet]
        python3 scripts/mep_lint.py --content-id <folder-or-zip> [rom_name]
        python3 scripts/mep_lint.py --list-games <folder-or-zip> [rom_name]
        python3 scripts/mep_lint.py [--content-id] --root <prefix> <folder-or-zip> [rom_name]
+       python3 scripts/mep_lint.py <folder-or-zip> --routes <recording>... (ADR-0197 §2)
+
+  --routes evaluates every hand-authored condition the pack's sheets carry
+  against the retained frames of one or more recordings (a grid stream written
+  by MESEN_SHEET_GRID_DUMP), and reports where it held, where it failed and
+  where it fired on a key the author did not condition. It is a report, not a
+  gate: the exit code says whether the report could be produced.
   rom_name (optional): target ROM name declared by the submitter (e.g.
   "Contra (U) [!]"). When present, enables the ROM-name fallback (ADR-0120
   §3's named follow-up) in addition to the structural fallback — see
@@ -56,6 +63,7 @@ import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 
+import mep_conditions  # ADR-0197 authored conditions and their evaluation over routes
 import mep_content_id  # ADR-0139 tree content_id of the discovered pack root
 import mep_errata  # ADR-0152 reviewed known-missing declarations, shared with the smoke gate
 import pack_id_rules  # ADR-0140 source (1): SLUG shape of the MEP root `id`
@@ -1321,6 +1329,132 @@ def scan_bundled_patches(src: Source, rep: Report):
             rep.info("pack", f"bundled patch: {name} (present, NOT wired — no <patch> line / patches[] entry, never applied; ADR-0148)")
 
 
+def collect_authored_conditions(src):
+    """Every authored condition in the target's sheet sidecars, with the keys
+    it is attached to.
+
+    ADR-0197 §1 puts a hand-written condition in the sheet, not in
+    `hires.txt`: the manifest is generated and an edit there is thrown away on
+    the next build, so the sheet is the only place an authored decision can
+    survive. Returns `[(sidecar name, condition, keys)]` plus the sidecars that
+    could not be read, each with its reason.
+    """
+    found, broken = [], []
+    for rel in sorted(n for n in src.names
+                      if n.endswith(".json") and "/sheets/" in "/" + n):
+        try:
+            doc = json.loads(src.text(rel))
+        except Exception as exc:  # noqa: BLE001
+            continue  # not a sidecar; the normal lint pass reports bad JSON
+        if not isinstance(doc, dict) or not doc.get("conditions"):
+            continue
+        try:
+            conds = mep_conditions.load_sheet_conditions(doc, rel)
+        except mep_conditions.ConditionError as exc:
+            broken.append((rel, str(exc)))
+            continue
+        keys = {}
+        for cell in doc.get("cells") or []:
+            if not isinstance(cell, dict):
+                continue
+            name = cell.get("condition")
+            if not name:
+                continue
+            for entry in cell.get("tiles") or []:
+                if not isinstance(entry, dict):
+                    continue
+                data = str(entry.get("tile") or "").strip().upper()
+                pal = str(entry.get("palette") or "").strip().upper()
+                if data and pal:
+                    keys.setdefault(name, set()).add((data, pal))
+        for name, cond in sorted(conds.items()):
+            found.append((rel, cond, keys.get(name, set())))
+            if name not in keys:
+                broken.append((rel, f"condition {name!r} is defined but no cell "
+                                    "names it; it would gate nothing"))
+    return found, broken
+
+
+def report_routes(src, route_paths, target):
+    """ADR-0197 §2: evaluate every authored condition on every retained frame
+    of every recording, and say where it held, where it failed and where it
+    fired on a key the author did not condition.
+
+    A report, not a gate. An authored condition is the author's decision; this
+    says whether the recorded evidence agrees, and its exit code reflects only
+    whether the report could be produced.
+
+    Read route-major and printed condition-major: a route is far too large to
+    keep (see `mep_conditions.iter_routes`), a verdict is a handful of
+    integers, so each recording is loaded once, asked about every condition,
+    and dropped.
+    """
+    found, broken = collect_authored_conditions(src)
+    for rel, why in broken:
+        print(f"warning  {rel}  {why}")
+
+    summaries, verdicts = [], {}
+    def skip(path, why):
+        print(f"skipped  {path}  {why}")
+    for route in mep_conditions.iter_routes(route_paths, on_skip=skip):
+        summaries.append((route.name, route.retained, route.played, len(route.shapes)))
+        for rel, cond, keys in found:
+            if cond.evaluable:
+                verdicts.setdefault(cond.name, []).append(
+                    (route.name, mep_conditions.evaluate(cond, keys, route)))
+    if not summaries:
+        print("error: no recorded route could be read. A route is a grid stream "
+              "written by MESEN_SHEET_GRID_DUMP on a run that reached gameplay "
+              "(docs/remastering-a-game.md).", file=sys.stderr)
+        return 2
+
+    print(f"\nroutes: {len(summaries)} recording(s), "
+          f"{sum(s[1] for s in summaries)} retained frame(s) "
+          f"standing for {sum(s[2] for s in summaries)} played")
+    for name, retained, played, shapes in summaries:
+        print(f"  {name}: {retained} retained, {played} played, {shapes} shape(s)")
+    if not found:
+        print(f"\nno authored condition found in {target} — nothing to validate. "
+              "A sheet carries one in its `conditions` block, marked "
+              "`authored: true` (ADR-0197 §1).")
+        return 0
+
+    print(f"\n{len(found)} authored condition(s):")
+    for rel, cond, keys in found:
+        print(f"\n  {cond.name}  ({cond.type}, {rel}, {len(keys)} key(s))")
+        print(f"    {cond.line}")
+        if not cond.evaluable:
+            print(f"    not evaluable: {cond.not_evaluable_reason}")
+            print("    not evaluable is never a pass.")
+            continue
+        for route_name, v in verdicts.get(cond.name, []):
+            print(f"    {route_name}: {v.state} — held {v.held}, "
+                  f"failed {v.failed}, of {v.instances} instance(s)")
+            if v.first_failure is not None:
+                frame, row, col = v.first_failure
+                where = f" at cell ({col},{row})" if col is not None else ""
+                print(f"      first failure: frame {frame}{where}")
+            if cond.type == "tileNearby":
+                if v.unintended:
+                    frame, row, col = v.first_unintended
+                    print(f"      unintended hits: {v.unintended}, first at "
+                          f"frame {frame} cell ({col},{row}) — the pattern also "
+                          "occurs around a key this condition is not attached to")
+                else:
+                    print("      unintended hits: 0")
+            else:
+                print("      unintended hits: n/a — the predicate does not "
+                      "depend on the cell being drawn")
+            if cond.type == "frameRange":
+                if v.phase:
+                    print("      phase offsets that would hold throughout: "
+                          + ", ".join(str(k) for k in v.phase))
+                else:
+                    print("      no phase offset makes it hold on every "
+                          "retained frame of this route")
+    return 0
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -1330,10 +1464,20 @@ def main(argv):
     list_games = "--list-games" in argv
     root_prefix = None
     errata_path = None
+    route_paths = []
     positional = []
     i = 1
     while i < len(argv):
         arg = argv[i]
+        if arg == "--routes":
+            # Takes every following non-flag argument, so the pack has to come
+            # first: `mep_lint.py <pack> --routes <dir-or-file>...`.
+            j = i + 1
+            while j < len(argv) and not argv[j].startswith("--"):
+                route_paths.append(argv[j])
+                j += 1
+            i = j
+            continue
         if arg == "--root" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
             root_prefix = argv[i + 1].rstrip("/")
             i += 2
@@ -1351,6 +1495,12 @@ def main(argv):
         print(f"error: {target} does not exist")
         return 2
     src = Source(target)
+
+    #ADR-0197 §2: a report over the recorded routes, not a gate. It answers a
+    #different question from the rest of lint (does the evidence agree with
+    #what the author wrote?), so it runs on its own and returns.
+    if route_paths:
+        return report_routes(src, route_paths, target)
 
     #ADR-0152: an explicit --errata wins; otherwise, when the target is the
     #downloaded artifact itself, look one up by its sha256. A directory has no
