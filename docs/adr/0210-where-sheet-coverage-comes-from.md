@@ -1,7 +1,7 @@
 # ADR-0210: Sheet coverage is completed from the ROM's own CHR, and a third-party index contributes palettes — never art, and never conditions
 
 - Status: proposed
-- Date: 2026-09-18
+- Date: 2026-09-18 (amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted)
 - Related: ADR-0183 (the artist kit; "an observation, never a reading"), ADR-0209 Q4 (how coverage reaches 100%), ADR-0198 §2/§3 (patched-ROM key namespace), ADR-0145 (optimistic matcher), ADR-0153 (artist-legible sheets), MEP-v1 §5, PRD Part A F9.24, F12.2
 - Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR"
 
@@ -114,17 +114,40 @@ Every cell carries its source: `recorded` (source 1), `chr` (source 2),
 `index` (source 3). Only `recorded` is `seen: true`. A sheet built from sources
 2 and 3 is an editable surface, not a claim that the tile was observed.
 
-### What stays open
+### The palette question is already answered — `defaultTile` is the wildcard
 
-Source 2 gives shapes without palettes for 23 of 30 games, and today a `<tile>`
-rule must name a concrete palette. Internally the builder already collapses
-this — `HdPackBuilder::GetKey(true)` sets `PaletteColors = 0xFFFFFFFF` so that
-"every palette variant of the same tile content collapses into one shape" — but
-the `hires.txt` format exposes `IgnorePalette` only for `<addition>` and for
-conditions, never for `<tile>`. A per-rule palette wildcard on `<tile>` would
-let one painted cell serve every palette variant of a shape and would make
-source 2 self-sufficient. That is a **format change** (a MEP/hires spec bump and
-a loader change), so it is deliberately left out of this ADR and needs its own.
+**Corrected 2026-09-19.** An earlier revision of this section claimed that a
+`<tile>` rule must name a concrete palette, that `hires.txt` exposes a palette
+wildcard only through `IgnorePalette` on `<addition>` and on conditions, and
+that a per-rule wildcard on `<tile>` was therefore a pending format change.
+**That is wrong.** The mechanism exists, it is in the format today, and we
+already emit it.
+
+The last field of a `<tile>` rule — `Y`/`N`, parsed into `DefaultTile` — is not
+"the default artwork for this tile". When it is `Y`, `HdPackLoader` registers
+the rule under **two** keys: the exact one, and `GetKey(true)`, whose
+`PaletteColors` is `0xFFFFFFFF`. The lookup in `HdNesPack` then tries the exact
+key first and falls back to `GetKey(true)` when it misses. That is a per-rule
+palette wildcard, with the precedence a wildcard needs: a cell painted for one
+specific palette wins, and the palette-agnostic cell serves every other variant.
+
+So source 2 is **already self-sufficient**. A shape lifted out of the ROM's CHR
+carries no real palette, is emitted with `Y`, and matches whatever colours the
+game puts it under. Measured across the 30-ROM library: **88 576 of 117 650
+`<tile>` rules (75%) are already `Y`** — and 88 576 is exactly the CHR ROM tile
+count of the same library, i.e. the whole static CHR fill is wildcarded.
+
+One consequence for anyone measuring this pack space: comparing two `hires.txt`
+files by `(shape, palette)` equality **understates matching**, because it does
+not model the fallback. A rule whose palette looks unmatched may match at run
+time through `GetKey(true)`. The trap that produced the retracted claim above
+was exactly this — a dictionary comparison in Python standing in for a two-step
+lookup in the Core.
+
+What genuinely stays open is therefore **not** palette: it is editing surface.
+The 1 928 Zelda keys with no cell on any sheet (ADR-0209) are unreachable
+because nothing draws them onto a sheet, not because their colours disagree.
+Q4(k)'s remainder sheet is the answer, and no format change is involved.
 
 ## Consequences
 
