@@ -794,13 +794,19 @@ Look first, then move aside rather than remove:
 
 ```sh
 MEP="<rom dir>/<rom stem>/mep"
-if [ -f "$MEP/.mep-install.json" ]; then mv "$MEP" "$MEP.community"; fi
+if [ -f "$MEP/.mep-install.json" ]; then
+  mv "$MEP" "$MEP.community"   # somebody else's pack: aside, never delete
+elif [ -d "$MEP" ]; then
+  rm -rf "$MEP"                # your own earlier copy: replace, do not merge
+fi
 cp -R out/painted "$MEP"
 scripts/headless_record <rom> 20 out/painted-check screenshot
 ```
 
-No stamp means the folder is your own earlier copy, and there `rm -rf` is what
-you want — `cp -R` onto it would merge the two rather than replace it.
+The stamp is what tells the two apart, and the second branch matters as much as
+the first: `cp -R` onto an earlier copy of your own **merges** the two trees
+instead of replacing them, so a file you deleted since the last build stays on
+disk and keeps painting.
 
 The recorder log must say that it loaded `<rom dir>/<rom stem>/mep/textures`.
 Open the resulting screenshot and confirm the exact figure you painted. The
