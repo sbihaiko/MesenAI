@@ -842,7 +842,20 @@ void HdNesPack<scale>::ReportSuppressedTiles()
 		//sees. Headless runs gate the OSD off (HeadlessSetOsdEnabled), which turns
 		//this into one more log line instead of a toast - so the same diagnostic is
 		//asserted from a script either way.
-		MessageManager::DisplayMessage("HdPack", "HdPackTilesHidden");
+		//
+		//Unlike the two log lines above, the toast is only worth showing when the
+		//pack has a human-authored textures layer (ADR-0049). ADR-0050's bootstrap
+		//writes one priority-20 <background> per captured screen, so a recorded pack
+		//suppresses tiles by construction; announcing that to a player is the nag
+		//ADR-0146 forbids - nobody painted anything and there is nothing to do.
+		//`HumanAuthoredTextures` is set by NesConsole::LoadHdPack from the existing
+		//MepSection::HasHuman signal, and stays false for a pack that loaded from
+		//auto/ alone. The log half above is deliberately unconditional: a developer
+		//diagnosing a recorded pack still gets the same lines; only the popup is
+		//withheld.
+		if(_hdData->HumanAuthoredTextures) {
+			MessageManager::DisplayMessage("HdPack", "HdPackTilesHidden");
+		}
 	}
 }
 
