@@ -17,6 +17,7 @@
 #   mep_build mep_compare mep_lint mep_render_audio sheet_repaint
 
 artist_ai_review.py
+asset_names.py
 artist_bg_kit.py
 artist_chr_kit.py
 artist_cover.py

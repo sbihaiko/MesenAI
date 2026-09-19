@@ -65,6 +65,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 
 PART = "background"
@@ -501,7 +502,7 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
         rows, columns = _geometry(placements)
         ids = [Path(sheet.name).stem]
         files.append({
-            "path": f"sheets/{name}.png",
+            "path": f"sheets/{N.require_asset_name(name + N.SURFACE_EXT, 'artist_bg_kit.py')}",
             "title": _title(names, ids, f"{ids[0]} ({len(placements)} cells)"),
             "unit": "object",
             "rows": rows,
@@ -536,7 +537,7 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
         rows, columns = _geometry(element["nodes"])
         ids = [f"bg{n:03d}" for n, _x, _y in element["nodes"]]
         files.append({
-            "path": f"sheets/{name}.png",
+            "path": f"sheets/{N.require_asset_name(name + N.SURFACE_EXT, 'artist_bg_kit.py')}",
             "title": _title(names, ids,
                             f"{ids[0]} + {len(ids) - 1} cells that always follow it"),
             "unit": "element",
