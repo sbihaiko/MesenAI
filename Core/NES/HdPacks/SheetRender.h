@@ -5,6 +5,7 @@
 //Everything here is pure: buffers in, buffers out - no I/O, no PNG encoding.
 #include "NES/HdPacks/TileSheetTypes.h"
 #include <functional>
+#include <set>
 
 namespace MesenSheets
 {
@@ -109,6 +110,30 @@ namespace MesenSheets
 		//ADR-0174 carries none and must still load.
 		std::vector<uint32_t> Poses;
 	};
+
+	//---- remainder sheet (ADR-0209 Q4(k), F12.8) ---------------------------
+
+	//Builds the `unsorted` sheet: one cell for every shape id in
+	//[0, shapeCount) that no other sheet claimed, at grid unit 8, in shape-id
+	//order (first-sight order, which is the only order this set has - the
+	//remainder is by definition what no grouping pass found structure in).
+	//
+	//Coverage is the whole point (ADR-0209 Q4(k)): with this sheet on disk the
+	//artist can never meet a recorded tile that has no surface to paint, which
+	//is what made the F12.2 panel script read as complicated - it walked the
+	//uncovered case. Sheets carried 319 of Zelda's 2 203 keys before this.
+	//
+	//Deliberately *not* alias-collapsed. CollapseAliases exists to stop an
+	//artist paying twice for one subject on a sheet built around subjects; this
+	//sheet is the leftovers, its cells are unrelated by construction, and
+	//collapsing them would hide a key behind a look-alike with no group to
+	//explain the substitution. Coverage beats tidiness here.
+	//
+	//Returns false - and touches neither out parameter - when nothing is left
+	//over, so a pack whose sheets already cover everything ships no empty
+	//`unsorted.png`. `outDoc`'s Kind, CellWidth/Height, Columns and Cells are
+	//filled; the caller owns SheetFile/ReferenceFile (WriteSheetFiles does).
+	bool BuildUnsortedSheet(size_t shapeCount, const std::set<ShapeId>& claimed, const TileLookup& lookup, NesPalette palette, SheetImage& outImage, SheetJsonDoc& outDoc);
 
 	//Serialises `doc` to the ADR-0153 §4 schema. `lookup` resolves each cell's
 	//shapes into the exact hires.txt keys, so a crop maps back to tile entries

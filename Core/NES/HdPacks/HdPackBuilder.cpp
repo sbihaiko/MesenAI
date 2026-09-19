@@ -1187,6 +1187,17 @@ void HdPackBuilder::WriteSheetFiles(const string& folder, const string& baseName
 
 	ofstream json(FolderUtilities::CombinePath(folder, baseName + ".json"), ios::out);
 	json << MesenSheets::SerializeSheet(doc, lookup);
+
+	//ADR-0209 Q4(k): this is the one funnel every sheet passes through, so it
+	//is where "the artist has a surface for this shape" becomes true. The
+	//remainder sheet reads the complement at the end of BuildSheets.
+	for(const MesenSheets::SheetCell& cell : doc.Cells) {
+		for(MesenSheets::ShapeId shape : cell.Key.Tiles) {
+			if(shape != MesenSheets::kEmptyCell) {
+				_claimedShapes.insert(shape);
+			}
+		}
+	}
 }
 
 //F9.1-F9.3 (ADR-0153): the whole sheet inference, once, at save time.
@@ -1196,6 +1207,7 @@ void HdPackBuilder::BuildSheets()
 		return;
 	}
 	_sheetsBuilt = true;
+	_claimedShapes.clear();
 
 	#ifdef _MSC_VER
 	#pragma warning(push)
@@ -1242,6 +1254,13 @@ void HdPackBuilder::BuildSheets()
 	//same vocabulary - the per-frame silhouettes adjacency.json's pairwise
 	//totals throw away.
 	WritePoseFile(folder, spriteVocab);
+	//ADR-0209 Q4(k) (F12.8): last, because it is the complement of every sheet
+	//above - a shape reaches unsorted.png only when nothing better claimed it.
+	MesenSheets::SheetImage unsortedImage;
+	MesenSheets::SheetJsonDoc unsortedDoc;
+	if(MesenSheets::BuildUnsortedSheet(_shapeTiles.size(), _claimedShapes, lookup, _palette, unsortedImage, unsortedDoc)) {
+		WriteSheetFiles(folder, "unsorted", unsortedImage, unsortedDoc, lookup);
+	}
 
 	MessageManager::Log("[HD Pack Builder] sheets: grid unit " + std::to_string(vocab.Grid.Unit) +
 		" (phase " + std::to_string(vocab.Grid.PhaseX) + "," + std::to_string(vocab.Grid.PhaseY) +

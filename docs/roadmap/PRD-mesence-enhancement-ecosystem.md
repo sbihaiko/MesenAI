@@ -170,6 +170,18 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   the 412 ms is the parse, while the bitmaps decode in a detached
   `HdPackData::LoadAsync` at **13.2–16.4 s for 271 images**.
   [Log](../validation/f12.1-scale-and-load-2026-09-17.md).
+- **F12.8** (2026-09-19) — the `unsorted` remainder sheet. `HdPackBuilder::BuildSheets`
+  writes `unsorted.png`/`.orig.png`/`.json` last, carrying one 8x8 cell for every
+  recorded shape no other sheet put on a canvas, so an artist can never meet a
+  recorded tile with no surface to paint. Coverage is by construction: the builder
+  accumulates the shapes each sheet claims as it writes them, and the remainder is
+  what is left. Not alias-collapsed (the leftovers are unrelated by construction);
+  a shape with no drawable art is left off rather than shipped as a hole; an empty
+  remainder writes no file. ADR-0209 Q4 option (k). Measured on a 60 s Castlevania
+  bootstrap recording: 457 shapes claimed by the existing sheets, **135 more on
+  `unsorted`, overlap zero** — 12x12 grid, `unsorted.png` 436x436 against a 109x109
+  `.orig.png` twin, so the `_EditedProbe` 1x contract holds. Donkey Kong's sheets
+  cover everything and correctly write no file.
 
 
 ### 4. Roadmap — pending work, by slice
@@ -679,7 +691,9 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 
 **Order.** F12.1 is delivered (2026-09-17), so F12.3 may start and F12.4
 follows it; F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
-order. One slice per task.
+order. One slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
+prerequisite of any of them — it only guarantees that whatever surface those
+slices name, every recorded tile has one.
 
 ### 5. Order of execution
 

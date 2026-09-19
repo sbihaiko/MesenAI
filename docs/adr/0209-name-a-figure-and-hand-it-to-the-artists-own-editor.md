@@ -1,7 +1,7 @@
 # ADR-0209: Name a figure, hand it to the artist's own editor, and reload — we own selection and return, not the brush
 
-- Status: proposed
-- Date: 2026-09-18 (amended twice the same day: sheet coverage measured with Q4; then Q4 option (m), seeding coverage from an existing pack's key index)
+- Status: **Q4 accepted 2026-09-19 and shipped the same turn as F12.8** — option (k), the `unsorted` remainder sheet. User go-ahead, verbatim: *"vamos fazer a sheet unsorted então"*. Same-turn implementation is allowed by CLAUDE.md only when the change ships with unit tests covering the decision and the go-ahead is quoted here and in the PR body; both hold (`BlocoV` in `scripts/core_unit_tests.cpp`, 6 cases). **Q1, Q2 and Q3 remain `proposed`** — naming a figure, exporting it and getting the file back are untouched by this slice.
+- Date: 2026-09-18 (amended 2026-09-19 with the Q4 decision; amended twice on 09-18: sheet coverage measured with Q4; then Q4 option (m), seeding coverage from an existing pack's key index)
 - Related: ADR-0210 (where coverage comes from; amends Q4(m)), ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
 
 ## Context
@@ -167,7 +167,7 @@ without it the other three questions only serve one tile in eight.
   wider sessions fill the sheets with no code at all — this is what F9.25
   already does for Contra. Cheapest, and unbounded: it never *reaches* 100%,
   it only approaches it.
-- **(k) Emit a remainder sheet.** One `unsorted` sheet per pack carrying every
+- **(k) Emit a remainder sheet. — CHOSEN 2026-09-19, shipped as F12.8.** One `unsorted` sheet per pack carrying every
   key no other sheet claimed, with the same `*.orig.png` twin mechanic. Coverage
   becomes 100% by construction, and an artist can never again meet a tile with
   no surface. Reuses the mechanism that already works rather than adding one.
@@ -188,6 +188,38 @@ without it the other three questions only serve one tile in eight.
   > but 23 of the 30 bounded ROMs are CHR ROM, and for those a third-party index
   > contributes palettes only. ADR-0210 decides how each source is used.
 
+
+### Q4 decided: (k), the remainder sheet
+
+`unsorted.png` / `unsorted.orig.png` / `unsorted.json` carry one 8x8 cell for
+every recorded shape no other sheet put on a canvas. Written last in
+`HdPackBuilder::BuildSheets`, because it is the complement of everything above
+it: `WriteSheetFiles` is the single funnel every sheet passes through, so it
+accumulates the shape ids as they are written and the remainder reads what is
+left. Coverage stops being a number to improve and becomes true by
+construction — after this, an artist cannot meet a recorded tile with no
+surface to paint.
+
+Three properties are deliberate, and each is pinned by a unit test:
+
+- **Not alias-collapsed.** `CollapseAliases` stops an artist paying twice for
+  one subject on a sheet built *around* subjects. The remainder is leftovers,
+  its cells are unrelated by construction, and collapsing them would hide a key
+  behind a look-alike with no group to explain the substitution.
+- **A shape with no drawable art is left off**, not shipped as a transparent
+  cell. Coverage means a paintable surface, not a numbered blank — a hole would
+  make `mep_build.py` resolve that key to empty pixels.
+- **An empty remainder writes no file.** A pack whose sheets already cover
+  everything ships no stub `unsorted.png`.
+
+Nothing else changes: the sheet uses the same `BuildContactSheet` geometry, the
+same `*.orig.png` twin, and the same v1 sidecar schema, so `mep_build.py` reads
+it with one new line — a `_SHEET_RANK` entry of 0, which never actually decides
+anything because the sheet is disjoint from the others by construction.
+
+The other three options stay unchosen rather than refuted: (j) recording more
+is still the only thing that adds *observed* pairs, (m) is now governed by
+ADR-0210, and (l) is what this supersedes.
 Measured 2026-09-18 against the two community packs installed beside the
 bounded ROMs:
 

@@ -346,6 +346,56 @@ namespace MesenSheets
 		return out.str();
 	}
 
+	//ADR-0209 Q4(k) (F12.8): the remainder sheet. See SheetRender.h for why it
+	//is not alias-collapsed and why an empty remainder writes no file.
+	bool BuildUnsortedSheet(size_t shapeCount, const std::set<ShapeId>& claimed, const TileLookup& lookup, NesPalette palette, SheetImage& outImage, SheetJsonDoc& outDoc)
+	{
+		//A synthetic vocabulary at grid unit 8 with one shape per entry - the
+		//same shape SpriteGrouping builds for the OAM side. Building one here
+		//rather than teaching BuildContactSheet a second input keeps the
+		//contact-sheet geometry (gutters, cell origins, ordering) in exactly
+		//one place, so the remainder sheet cannot drift from the sheets the
+		//artist already knows how to read.
+		Vocabulary vocab;
+		vocab.Grid.Unit = 8;
+		std::vector<uint32_t> indexes;
+		for(size_t id = 0; id < shapeCount && id < kEmptyCell; id++) {
+			ShapeId shape = (ShapeId)id;
+			if(claimed.count(shape)) {
+				continue;
+			}
+			//A shape with no drawable art renders as a transparent cell - a
+			//hole the artist cannot act on, and a key mep_build.py would then
+			//resolve to empty pixels. Skip it: the remainder is what can be
+			//painted, not everything that was ever numbered.
+			if(lookup(shape) == nullptr) {
+				continue;
+			}
+			MetatileEntry entry;
+			entry.Key.Tiles[0] = shape;
+			entry.Count = 1;
+			entry.Context = SheetContext::Misc;
+			vocab.Index[entry.Key] = (uint32_t)vocab.Entries.size();
+			indexes.push_back((uint32_t)vocab.Entries.size());
+			vocab.Entries.push_back(entry);
+		}
+		if(indexes.empty()) {
+			return false;
+		}
+
+		uint32_t columns = PreferredColumns(indexes.size());
+		outDoc = SheetJsonDoc();
+		outImage = BuildContactSheet(vocab, indexes, lookup, palette, columns, outDoc.Cells);
+		if(outImage.Width == 0 || outImage.Height == 0) {
+			return false;
+		}
+		outDoc.Kind = "unsorted";
+		outDoc.Grid = vocab.Grid;
+		outDoc.CellWidth = outDoc.CellHeight = 8;
+		outDoc.Columns = columns;
+		return true;
+	}
+
 	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup)
 	{
 		std::stringstream json;

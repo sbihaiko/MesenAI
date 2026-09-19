@@ -7436,6 +7436,124 @@ void TestSyncGateIgnoresWhatHappensAfterTheMovieEnds()
 		findings.empty() ? "" : findings[0].Code);
 }
 
+//--- BlocoV: the unsorted remainder sheet (ADR-0209 Q4(k), F12.8) -----------
+//
+//The decision is "coverage by construction": after this sheet, no shape the
+//recorder captured can be left without a surface for the artist to paint.
+//These cases pin that property, not the pixels.
+
+void TestUnsortedSheetCarriesExactlyWhatNobodyClaimed()
+{
+	std::set<ShapeId> claimed;
+	claimed.insert(1);
+	claimed.insert(3);
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(BuildUnsortedSheet(6, claimed, SheetLookup(), SheetPalette(), image, doc),
+		"BlocoV: a pack with unclaimed shapes gets a remainder sheet");
+	Check(doc.Cells.size() == 4,
+		"BlocoV: the remainder is the complement of what the sheets claimed",
+		std::to_string(doc.Cells.size()));
+	std::set<ShapeId> onSheet;
+	for(size_t i = 0; i < doc.Cells.size(); i++) {
+		onSheet.insert(doc.Cells[i].Key.Tiles[0]);
+	}
+	Check(onSheet.count(0) && onSheet.count(2) && onSheet.count(4) && onSheet.count(5),
+		"BlocoV: every unclaimed shape is on it");
+	Check(!onSheet.count(1) && !onSheet.count(3),
+		"BlocoV: a shape another sheet already shows is not paid for twice");
+}
+
+void TestUnsortedSheetIsSkippedWhenTheSheetsAlreadyCoverEverything()
+{
+	std::set<ShapeId> claimed;
+	for(ShapeId i = 0; i < 5; i++) {
+		claimed.insert(i);
+	}
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(!BuildUnsortedSheet(5, claimed, SheetLookup(), SheetPalette(), image, doc),
+		"BlocoV: full coverage writes no empty unsorted.png");
+	Check(doc.Cells.empty() && image.Width == 0,
+		"BlocoV: a skipped remainder leaves the out parameters untouched");
+}
+
+void TestUnsortedSheetIsSkippedWhenThereAreNoShapesAtAll()
+{
+	std::set<ShapeId> claimed;
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(!BuildUnsortedSheet(0, claimed, SheetLookup(), SheetPalette(), image, doc),
+		"BlocoV: a recording that captured nothing produces no sheet");
+}
+
+void TestUnsortedSheetDeclaresTheEightPixelGridItActuallyUses()
+{
+	std::set<ShapeId> claimed;
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(BuildUnsortedSheet(9, claimed, SheetLookup(), SheetPalette(), image, doc),
+		"BlocoV: nothing claimed means everything is left over");
+	Check(doc.Kind == "unsorted", "BlocoV: the sidecar names its own kind", doc.Kind);
+	//The remainder is single tiles, not metatiles: a sidecar that said 16 would
+	//make mep_build.py slice 2x2 crops out of 8x8 cells.
+	Check(doc.CellWidth == 8 && doc.CellHeight == 8,
+		"BlocoV: cells are 8x8, and the sidecar says so",
+		std::to_string(doc.CellWidth) + "x" + std::to_string(doc.CellHeight));
+	Check(doc.Grid.Unit == 8, "BlocoV: the declared grid unit matches the cells");
+	Check(doc.Columns == PreferredColumns(9),
+		"BlocoV: the remainder uses the same column rule as every other sheet");
+	Check(image.Width >= doc.Columns * 8 && image.Height >= 8,
+		"BlocoV: the canvas is big enough to hold the cells it declares");
+}
+
+void TestUnsortedSheetSkipsAShapeWithNoDrawableArt()
+{
+	//A shape the lookup cannot resolve would render as a transparent hole the
+	//artist cannot act on, and mep_build.py would resolve its key to empty
+	//pixels. Coverage means a paintable surface, not a numbered blank.
+	TileLookup holey = [](ShapeId shape) -> const SheetTileKey* {
+		static SheetTileKey key;
+		key = SheetTileFor(shape);
+		return shape == 2 ? nullptr : &key;
+	};
+	std::set<ShapeId> claimed;
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(BuildUnsortedSheet(4, claimed, holey, SheetPalette(), image, doc),
+		"BlocoV: the other shapes still get their sheet");
+	Check(doc.Cells.size() == 3,
+		"BlocoV: the artless shape is left off rather than shipped as a hole",
+		std::to_string(doc.Cells.size()));
+	for(size_t i = 0; i < doc.Cells.size(); i++) {
+		Check(doc.Cells[i].Key.Tiles[0] != 2,
+			"BlocoV: the artless shape is not the one that was kept");
+	}
+}
+
+void TestUnsortedSheetCellsResolveBackToTileKeys()
+{
+	//The round-trip contract: mep_build.py reads cells[].tiles[] out of the
+	//sidecar and writes those keys into hires.txt. A cell whose shape does not
+	//serialise is a cell the artist can paint and never see in the game.
+	std::set<ShapeId> claimed;
+	claimed.insert(0);
+	SheetImage image;
+	SheetJsonDoc doc;
+	Check(BuildUnsortedSheet(3, claimed, SheetLookup(), SheetPalette(), image, doc),
+		"BlocoV: shapes 1 and 2 are left over");
+	doc.SheetFile = "unsorted.png";
+	doc.ReferenceFile = "unsorted.orig.png";
+	std::string json = SerializeSheet(doc, SheetLookup());
+	Check(json.find("\"kind\": \"unsorted\"") != std::string::npos,
+		"BlocoV: the serialised sidecar carries the kind mep_build.py ranks on");
+	Check(json.find("\"tiles\": ") != std::string::npos,
+		"BlocoV: every cell serialises the tile keys the round-trip needs");
+	Check(json.find("\"reference\": \"unsorted.orig.png\"") != std::string::npos,
+		"BlocoV: the .orig.png twin is declared, so _EditedProbe can tell paint from pixels");
+}
+
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -7666,6 +7784,13 @@ int main()
 	TestSyncGateCatchesAMovieThatStoppedEarly();
 	TestSyncGateSaysSoWhenItHadNoBaseline();
 	TestSyncGateIgnoresWhatHappensAfterTheMovieEnds();
+
+	TestUnsortedSheetCarriesExactlyWhatNobodyClaimed();
+	TestUnsortedSheetIsSkippedWhenTheSheetsAlreadyCoverEverything();
+	TestUnsortedSheetIsSkippedWhenThereAreNoShapesAtAll();
+	TestUnsortedSheetDeclaresTheEightPixelGridItActuallyUses();
+	TestUnsortedSheetSkipsAShapeWithNoDrawableArt();
+	TestUnsortedSheetCellsResolveBackToTileKeys();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
