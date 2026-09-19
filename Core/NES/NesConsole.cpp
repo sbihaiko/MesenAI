@@ -363,6 +363,12 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 
 	_hdData.reset(new HdPackData());
 	bool loaded = false;
+	//ADR-0049: whether the textures that end up loaded were painted by a person
+	//(the human section of a MEP pack, or a legacy loose HdPacks/ pack, which has
+	//no auto layer at all) rather than produced by the F5 bootstrap's machine
+	//layer. Recorded here, at the only place that knows, and handed to the
+	//renderer through HdPackData::HumanAuthoredTextures.
+	bool humanTextures = false;
 	unique_ptr<HdPackData> looseAudioOnly;
 
 	//1) Loose HdPacks/<rom>/ pack (MEP-v1 §5.1) - unless the ROM's sibling
@@ -384,6 +390,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 			if(loose->HasVideoContent()) {
 				_hdData.reset(loose.release());
 				loaded = true;
+				humanTextures = true;
 				MessageManager::Log("[MEP] textures: loaded loose NES HD pack from HdPacks/" + FolderUtilities::GetFilename(romFile.GetFileName(), false) + "/hires.txt (" + std::to_string(_hdData->Tiles.size()) + " tiles, scale " + std::to_string(_hdData->Scale) + ")");
 				if(anyMepTextures) {
 					MessageManager::Log("[MEP] loose HD pack found for this ROM - it takes precedence over the pack's textures section");
@@ -399,6 +406,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	if(!loaded && anyMepTextures) {
 		if(!mepTextures.empty()) {
 			loaded = HdPackLoader::LoadHdNesPack(FolderUtilities::CombinePath(mepTextures, "hires.txt"), *_hdData.get());
+			humanTextures = loaded;
 			MessageManager::Log(loaded ? "[MEP] textures: loaded NES HD pack from '" + mepTextures + "'" : "[MEP] textures section has no loadable hires.txt in " + mepTextures);
 		}
 		if(!autoTextures.empty()) {
@@ -503,6 +511,11 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 		LogHdPackLoadTime(loadStart, nullptr);
 		return;
 	}
+
+	//Hand the origin of the loaded textures to the renderer (ADR-0049): it only
+	//addresses a diagnostic to the artist when the artist's own layer is what
+	//loaded.
+	_hdData->HumanAuthoredTextures = humanTextures;
 
 	//NEA audio packs (LiQuiDz 1942, etc.) ship a single .ips/.bps next to
 	//hires.txt but omit the <patch> line. If nothing was declared, register

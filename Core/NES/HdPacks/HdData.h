@@ -669,6 +669,15 @@ public:
 	uint32_t Version = 0;
 	uint32_t OptionFlags = 0;
 
+	//ADR-0049's human-vs-auto line, carried along with the data so the renderer
+	//can tell a pack somebody painted from the bootstrap's machine layer. Set by
+	//NesConsole::LoadHdPack from the existing MepSection::HasHuman signal (and for
+	//a legacy loose HdPacks/ pack, which has no auto layer at all) - never
+	//re-derived here. A recorded-only pack keeps this false: its <background>
+	//lines are the bootstrap's, so a diagnostic addressed to an artist would be
+	//addressed to nobody (ADR-0146).
+	bool HumanAuthoredTextures = false;
+
 	HdPackData() {}
 	~HdPackData() {}
 
