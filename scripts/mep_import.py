@@ -29,6 +29,12 @@ Posture, kept from the ADRs this slice sits on:
 - A rule whose fields `mep_build.py build` would *rewrite* is refused too.
   That is the `_index_token` case below, and it is the one place where a
   faithful import needs more than copying text.
+- A legacy pack animates by keying one `(tileData, palette)` pattern at
+  several crops, one per condition. Each of those rules gets a cell of its
+  own, pinned with `exactCondition` to the condition it carried (ADR-0198 §1
+  over ADR-0197 §1's per-cell condition), so no key is emitted twice and no
+  precedence rule decides which crop an imported key draws from. See
+  `_plan_cells`.
 
 Two representations, and why the tool has to know the difference:
 
@@ -478,13 +484,17 @@ def lookup_attrs(lines: list[str]) -> dict:
     return attrs
 
 
-def emitted_attrs(pack: Pack, attrs: dict, normalize: bool) -> tuple:
+def emitted_attrs(pack: Pack, attrs: dict, normalize: bool, split: set = frozenset()) -> tuple:
     """What `build` will emit per rule, checked against what the input says.
 
     Returns (twin_additions, problems). A problem is a rule whose fields build
     would replace with its default — that is the `_index_token` lookup missing,
     and it is refused rather than imported, because the whole point of the
-    slice is that the rule set does not change."""
+    slice is that the rule set does not change.
+
+    `split` is the set of `(tileData, palette)` patterns `_plan_cells` gave one
+    exact cell per rule: those emit exactly the rules the input had, so the
+    ADR-0189 §3 twin is neither added nor counted for them."""
     twins, problems = set(), []
     for rule in pack.rules:
         key = (mep_build._index_token(rule.parsed_index(pack.ver))
@@ -494,7 +504,8 @@ def emitted_attrs(pack: Pack, attrs: dict, normalize: bool) -> tuple:
             if rule.cond or rule.rest != ["1", "N"]:
                 problems.append(rule)
             continue
-        if any(c for c, _r in got) and "" not in {c for c, _r in got}:
+        if ((rule.token, rule.palette) not in split
+                and any(c for c, _r in got) and "" not in {c for c, _r in got}):
             twins.add((key, rule.palette))
     return twins, problems
 
@@ -519,7 +530,12 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
                 "import a pack whose keys or conditions shift")
     key_lines = build_key_source(pack, normalize)
     attrs = lookup_attrs(key_lines)
-    twins, problems = emitted_attrs(pack, attrs, normalize)
+    # The whole read side first — every <img> decodes, every cell's PNG name
+    # is usable, every planned crop fits its image — because a refusal must
+    # not leave a half-written project behind: the retry would then hit the
+    # non-empty--out guard instead of the real error.
+    plan, split = _plan_cells(pack)
+    twins, problems = emitted_attrs(pack, attrs, normalize, {p for p, _c in split})
     if problems:
         first = problems[0]
         raise PackError(
@@ -528,11 +544,6 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
             "looks up) — the import refuses rather than drop a condition or a brightness "
             "(ADR-0198 §1)")
 
-    # The whole read side first — every <img> decodes, every cell's PNG name
-    # is usable, every planned crop fits its image — because a refusal must
-    # not leave a half-written project behind: the retry would then hit the
-    # non-empty--out guard instead of the real error.
-    plan, moved = _plan_cells(pack)
     sources = _read_sources(pack, plan)
     if out.exists() and any(out.iterdir()) and not force:
         raise PackError(f"{out} exists and is not empty; pass --force to write into it")
@@ -547,7 +558,7 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
     backgrounds = _copy_backgrounds(pack, auto_dir)
     audio = _copy_audio(pack, out)
     (out / "IMPORT.md").write_text(
-        _import_note(pack, sheets, sum(len(v) for v in plan.values()), len(twins), moved, normalize),
+        _import_note(pack, sheets, sum(len(v) for v in plan.values()), len(twins), split, normalize),
         encoding="utf-8")
 
     return {
@@ -558,7 +569,7 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
         "sheets": sheets,
         "images": len(plan),
         "twins": len(twins),
-        "moved": moved,
+        "split": split,
         "keyed": "index" if pack.index_keyed else "data",
         "ver": pack.ver,
         "normalized": normalize,
@@ -569,47 +580,65 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
 
 
 def _plan_cells(pack: Pack) -> tuple:
-    """`bitmap -> [(x, y, [entry, ...]), ...]` plus the keys whose art cannot
-    survive a rebuild.
+    """`bitmap -> [(x, y, [entry, ...], condition), ...]` plus the patterns that
+    had to be split across several cells.
 
-    One cell per crop, and a crop carries only the keys that *need* it: build
-    emits one rule per `(tileData, palette, condition)` key, drawn from
-    whichever crop wins, and the winner is the first cell that carries the
-    `(tileData, palette)` pair. A legacy manifest may name the same pair at
-    many crops with different conditions — Contra80s animates Norris that way —
-    and `mep_build.py build` takes a pattern's conditions from the key source
-    as a whole, so it cannot give two conditions of one pair two crops. That is
-    the shape this tool cannot express, and the reason each pair is carried by
-    exactly one cell: the one the input's own first rule for that pair names.
+    Two kinds of cell, and the second is what makes the pixel half of ADR-0198
+    §1 hold.
 
-    A key whose own first rule sits at a *different* crop of the same pair is
-    therefore drawn, after a rebuild, from the crop its pair chose. That is a
-    real difference and it is returned, never swallowed: `verify` measures it
-    against the built manifest too."""
-    chosen: dict = {}
-    required: dict = {}
+    A **pattern** — a `(tileData, palette)` pair — that the manifest only ever
+    draws at one crop is carried by an *inherit* cell: it names the pair and
+    lets `mep_build.py build` take the pair's conditions from the key source,
+    exactly as a recorded pack does. Several pairs drawn at the same crop share
+    one cell through its `aliases`, so the crop's pixels are stored once.
+
+    A pattern the manifest keys at **several** crops cannot be carried that
+    way: build takes a pair's conditions from the key source as a whole, so a
+    single cell would draw every one of them from the one crop it names.
+    Contra80s animates Norris exactly like that (592 of its 7836 patterns) and
+    Super Mario Bros. 430 of 2076. Each such rule therefore gets its own
+    *exact* cell at its own crop, carrying the one condition that rule had —
+    the per-cell condition ADR-0197 §1 opened, pinned by `exactCondition` so
+    that build emits that rule and nothing else. The unconditional rule, when
+    the pack has one, is an exact cell too, with an empty condition; 586 of
+    Contra80s' 592 split patterns draw it at a crop of its own.
+
+    No key is then emitted twice, so no precedence rule decides which crop an
+    imported key draws from: every rule of the input has one cell, and one only.
+    """
+    patterns: dict = {}
     for rule in pack.rules:
         if rule.bitmap >= len(pack.imgs):
             raise PackError(f"{pack.hires}:{rule.line}: bitmap index {rule.bitmap} is out of "
                             f"range ({len(pack.imgs)} <img> line(s))")
-        pattern = (rule.token, rule.palette)
-        required.setdefault((pattern, rule.cond), (rule.bitmap, rule.x, rule.y))
-        chosen.setdefault(pattern, (rule.bitmap, rule.x, rule.y))
-    moved = sorted((pat, cond) for (pat, cond), pos in required.items() if pos != chosen[pat])
+        patterns.setdefault((rule.token, rule.palette), {}).setdefault(
+            rule.cond, (rule.bitmap, rule.x, rule.y))
 
     plan: dict = {}
     at: dict = {}
-    for pattern, pos in chosen.items():
-        cell = at.get(pos)
-        if cell is None:
-            cell = (pos[1], pos[2], [])
-            at[pos] = cell
-            plan.setdefault(pos[0], []).append(cell)
+    split: list = []
+    exact: list = []
+    for pattern, by_cond in patterns.items():
         entry = (pattern[0], pattern[1],
                  _index_of(pattern[0], pack.ver) if pack.index_keyed else None)
-        if entry not in cell[2]:
-            cell[2].append(entry)
-    return plan, moved
+        if len(set(by_cond.values())) == 1:
+            pos = next(iter(by_cond.values()))
+            cell = at.get(pos)
+            if cell is None:
+                cell = (pos[1], pos[2], [], None)
+                at[pos] = cell
+                plan.setdefault(pos[0], []).append(cell)
+            if entry not in cell[2]:
+                cell[2].append(entry)
+            continue
+        split.append((pattern, sorted(by_cond)))
+        for cond, pos in by_cond.items():
+            exact.append((pos[0], (pos[1], pos[2], [entry], (cond[1:-1] if cond else "", True))))
+    # The exact cells last: they are the pack's animated frames, and a reader
+    # opening the sheet meets its plain art first.
+    for bitmap, cell in exact:
+        plan.setdefault(bitmap, []).append(cell)
+    return plan, split
 
 
 def _index_of(token: str, ver: int) -> int:
@@ -631,7 +660,7 @@ def _read_sources(pack: Pack, plan: dict) -> dict:
             raise PackError(f"{pack.hires}: <img> {pack.imgs[bitmap]!r} cannot name an imported "
                             "sheet (a sheet PNG must end in .png and not in .orig.png)")
         img = _source_image(pack, bitmap, cache)
-        for x, y, _entries in cells:
+        for x, y, _entries, _cond in cells:
             if img.block(x, y, size) is None:
                 raise PackError(f"{pack.hires}: a <tile> at ({x},{y}) in {rel} does not fit that "
                                 f"{img.width}x{img.height} PNG")
@@ -655,7 +684,7 @@ def _write_sheets(pack: Pack, plan: dict, sources: dict, sheets_dir: Path) -> li
         columns = min(_SHEET_COLUMNS, len(cells))
         rows = (len(cells) + columns - 1) // columns
         sheet = Image(columns * size, rows * size)
-        for i, (x, y, _entries) in enumerate(cells):
+        for i, (x, y, _entries, _cond) in enumerate(cells):
             block = source.block(x, y, size)
             if block is None:
                 raise PackError(f"{pack.hires}: a <tile> at ({x},{y}) in {pack.imgs[bitmap]} does "
@@ -685,7 +714,7 @@ def _sidecar(pack: Pack, stem: str, cells: list, columns: int, size: int) -> dic
     and `_slice_sheet` read, and no field this tool cannot fill honestly:
     `count`/`context` are the recorder's observations, not an import's."""
     out = []
-    for i, (x, y, entries) in enumerate(cells):
+    for i, (x, y, entries, cond) in enumerate(cells):
         # ADR-0172: a CHR-ROM pack's manifest carries the CHR index and not the
         # tile's 16 bytes, so `tile` is a zero-padded placeholder here and
         # `index` is the key. build overrides `tile` with `_index_token(index)`
@@ -703,6 +732,18 @@ def _sidecar(pack: Pack, stem: str, cells: list, columns: int, size: int) -> dic
         if len(entries) > 1:
             cell["aliases"] = [{"metatile": i * 1000 + j, "tiles": [entry(e)]}
                                for j, e in enumerate(entries[1:], 1)]
+        if cond is not None:
+            # ADR-0198 §1 over ADR-0197 §1's per-cell condition: this crop
+            # carries exactly the one rule it was cut from. The `<condition>`
+            # it names is the *pack's own*, defined in the key source the
+            # import copied verbatim, so the sidecar cites it and never
+            # redefines it — `conditions` here would be a second, hand-written
+            # definition of something the manifest already says.
+            name, exact = cond
+            if name:
+                cell["condition"] = name
+            if exact:
+                cell["exactCondition"] = True
         out.append(cell)
     return {"version": 1, "kind": "misc", "gridUnit": 8, "gutter": 0,
             "columns": columns, "sheet": f"{stem}.png", "reference": f"{stem}.orig.png",
@@ -776,7 +817,7 @@ def _copy_audio(pack: Pack, out: Path) -> int:
     return n
 
 
-def _import_note(pack: Pack, sheets: list, cells: int, twins: int, moved: list,
+def _import_note(pack: Pack, sheets: list, cells: int, twins: int, split: list,
                  normalize: bool) -> str:
     digest = hashlib.sha256(pack.hires.read_bytes()).hexdigest()
     lines = [
@@ -816,14 +857,15 @@ def _import_note(pack: Pack, sheets: list, cells: int, twins: int, moved: list,
             "source pack said is lost by it.",
             "",
         ]
-    if moved:
+    if split:
+        keys = sum(len(conds) for _pat, conds in split)
         lines += [
-            f"⚠ {len(moved)} key(s) names the same (tile data, palette) pair as another key but a",
-            "different crop. `mep_build.py build` emits one rule per key, drawn from the crop the",
-            "pair's first rule names, so after a rebuild those keys draw that crop and not their",
-            "own (ADR-0189 §3's model: a pair's conditions come from the key source as a whole,",
-            "not per crop). The source pack animates by keying the same pattern with different",
-            "conditions; the sheets cannot carry that, and `mep_import.py verify` lists the keys.",
+            f"{len(split)} tile pattern(s) of this pack are drawn at more than one crop — the way",
+            f"a legacy manifest animates: the same (tile data, palette) under {keys} different",
+            "conditions, each pointing at a different piece of art. Each of those rules has a",
+            "cell of its own, marked `exactCondition` and naming the pack's own `<condition>`,",
+            "so a rebuild emits exactly the rule the crop came from (ADR-0198 §1, on ADR-0197",
+            "§1's per-cell condition). Repaint any of those cells and only that frame changes.",
             "",
             "```",
             "python3 mep_import.py verify <legacy pack> .",
@@ -992,10 +1034,11 @@ def main(argv=None) -> int:
         print(f"  {summary['backgrounds']} <background> PNG(s) copied into auto/textures/")
     if summary["audio"]:
         print(f"  {summary['audio']} audio file(s) copied into audio/")
-    if summary["moved"]:
-        print(f"  WARNING: {len(summary['moved'])} key(s) share their (tile data, palette) pair with "
-              "another key at a different crop; a rebuild draws the pair's first crop, so those "
-              "keys' own art is not what renders (see IMPORT.md, and run `verify` to list them)")
+    if summary["split"]:
+        keys = sum(len(conds) for _pat, conds in summary["split"])
+        print(f"  {len(summary['split'])} pattern(s) are drawn at more than one crop "
+              f"({keys} rule(s)); each got a cell of its own, pinned to the condition it "
+              "carried (ADR-0198 §1)")
     if summary["strays"]:
         print(f"  note: {len(summary['strays'])} line(s) are not a tag and carry no rule "
               f"(the loader skips them too); kept verbatim: line(s) "
