@@ -656,12 +656,15 @@ result names its class, binary commit/hash, input hashes, commands, sampled
 frames, duration, exceptions and pass/fail/not-evaluated verdict per criterion.
 Text summaries belong in `docs/validation/`; ROM-derived assets stay local in
 `runs/`, with hashes in the summary. Tests 3/4/6 have automatable portions;
-a green suite is not a claim that the human tests ran. C.5 remains a completed
-proxy experiment. F9.18 requires a human who did not build the feature; a
-fresh agent cannot fill that role. A real external-user repeat of C.5 remains
-out of scope. The under-one-hour publishable-pack promise remains unvalidated
-until the complete documented path, including packaging/lint and on-screen
-paint verification, succeeds without undocumented repairs.
+a green suite is not a claim that the cold-read ran. C.5 remains a completed
+proxy experiment of the one-hour record→kit→paint path. **Phase 12 cold-reads
+are a fresh Fable session** (ADR-0214), scored on the briefing, with
+criterion 4 (`hires.txt` never opened) as a gate that C.5 lacked. F9.18 still
+requires a human who did not build the feature; ADR-0214 does not amend it.
+A real external-user repeat of C.5 remains out of scope. The under-one-hour
+publishable-pack promise remains unvalidated until the complete documented
+path, including packaging/lint and on-screen paint verification, succeeds
+without undocumented repairs.
 
 #### Phase 10 — LLM-assisted skin studio (feasibility spikes first)
 
@@ -867,9 +870,11 @@ in `docs/validation/` when a slice closes.
   them and reload them.
 - The sheets stay the source of truth; a `.psd`, `.aseprite` or `.kra` is
   the artist's input, never the pack's.
-- A slice that changes what the artist sees is not shipped until a person
-  who did not build it logs the cold-read rows (§7 "Honest record"); the
-  F9.18 panel does not cover this phase's slices.
+- A slice that changes what the artist sees is not shipped until a **fresh
+  Fable session** (ADR-0214) logs the cold-read rows from the slice's
+  briefing, not the dispatcher script; the F9.18 panel is a separate
+  decision and is not covered by this phase. Pointer-level discoverability
+  stays not evaluated until a pointer harness exists.
 
 **Non-goals.** Runtime dual-namespace lookup in the Core; relaxing IPS
 matching (ADR-0145); automatic emission of `frameRange`,
@@ -879,7 +884,7 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) Human panel row: a person pastes one cell and paints it without reading `hires.txt`; the script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md`, whose setup step S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them. Re-measures "Picking a tile's key by hand". A **mechanical** replay of the script's setup S1–S4 and of P9–P14 now exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games, ending in a magenta pixel asserted in a real screenshot — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. It does **not** close this row: the cold read, criterion 4 and the P15 judgement are only measurable on a person, and the human panel row stays open. |
+| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) **Evaluator (ADR-0214, 2026-09-19):** a fresh Fable session pastes one cell and paints it without reading `hires.txt`, from `docs/validation/f12.2-fable-evaluator-briefing.md`. The dispatcher script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md` (S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them); handing it to Fable invalidates the run. Re-measures "Picking a tile's key by hand". A **mechanical** replay of setup S1–S4 and of P9–P14 exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. The remaining row is the Fable dispatch, not a calendar wait for a person. P15 and pointer-level discoverability are observations / not evaluated. |
 
 **Day-one material without a human at the controller (added 2026-09-19).**
 The slices above all assume a recorded `auto/` exists. The artist evidence
@@ -967,7 +972,7 @@ sequence and bound the work.
    and optional classical A/B when their prerequisites are available.
 5. **Phase 12:** F12.1, F12.3, F12.4, F12.5, F12.6a, F12.6b, F12.7 and
    F12.10 are delivered (2026-09-17 and 2026-09-19, §3). F12.2's code is on `main` with
-   its human panel row open, and so does F12.5's — the pane is driven
+   its Fable-evaluator row open (ADR-0214), and so does F12.5's — the pane is driven
    headlessly, but nobody has added an overflow cell by hand. Of the day-one block (F12.9–F12.12, added
    2026-09-19), F12.10 shipped the same day — it needed no ADR and its paths
    (a)–(c) did not depend on F12.9. What remains runs F12.9 → F12.11 → F12.12,
@@ -1035,6 +1040,7 @@ files and in §3.
 | 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 pending | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3), which is the follow-up slice |
 | 0209 | Q4 accepted and shipped as F12.8 (2026-09-19); Q1–Q3 proposed | MesenAI owns **selection** and **return**, painting is delegated to the artist's own program; the `unsorted` remainder sheet gives every recorded shape a cell. Q1–Q3 (label author, export unit, return path) still need one answer each. Slices F12.9–F12.12 are bounded by its three constraints |
 | 0210 | proposed (2026-09-18, amended 09-19) | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocks F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
+| 0214 | accepted (2026-09-19); protocol shipped, Fable run pending | a fresh Fable session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
 
 ### 7. Risks
 
@@ -1049,11 +1055,11 @@ files and in §3.
 | Scope explosion | phases independent; GitHub is the only backend; no telemetry |
 | Phase 10 sends ROM-derived art to a hosted model | only S10.b does, by hand, by the user, from their own account, with the files listed first; no tool in the repo automates a hosted call until an ADR reopens ADR-0192 and amends ADR-0154's remaining local-only contract |
 | Phase 10 spikes read as a product plan | the section names no modules, formats or product slices; ADRs are written after S10.a/S10.b report numbers |
-| Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. For F9.18 it is enforced; C.5 is a completed proxy experiment, not human acceptance: a slice that changes what the artist sees is not "shipped" until a person who did not build it logs the cold-read / find-and-edit rows |
+| Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. For F9.18 it is still a person who did not build the feature. Phase 12 cold-reads are a fresh Fable session (ADR-0214), with `hires.txt` as a fail gate; that is not F9.18 and does not certify taste or return |
 | The PR gate regresses and stops compiling the Core or running the Python suite | Phase 11 C.1 shipped both as jobs in `.github/workflows/checks.yml`; its verifier protects the workflow contract, while local runs remain required when CI is unavailable |
 | The roadmap and the ADR Status lines drift behind `main` (three shipped rows in a live table, four "not yet in code" ADRs for shipped code, ADR ids missing from §6 — all found 2026-09-14) | Phase 11 C.2: a `doc-checks` script fails on a `shipped` row in a live table; ADR Status-line edits listed per PR; this file's header date is part of "done" (§ Process) |
 | An ADR is accepted and implemented in the same turn (ADR-0189, ADR-0190) | Rule relaxed by the user on 2026-09-14 and written into `CLAUDE.md`: same-turn implementation is allowed when the change ships with unit tests covering the decision and the go-ahead is quoted in the ADR Status line **and** the PR body; otherwise accepting stays a request for work |
-| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 shipped a binary and C.5 ran the one-hour protocol on two games. **Trade-off taken 2026-09-14:** the C.5 artist was a fresh Fable session, not a person — faster and repeatable, and still a proxy. Its sandbox and stop rule make it stronger than the earlier proxies, but it cannot measure taste, fatigue, or whether a human would return. A real external-user C.5 rerun remains out of scope until reopened; this does not waive F9.18's separately required human panel |
+| The project has no external user (1 star, 0 forks, 100 % of issues and PRs by the maintainer; every panel a proxy) so "the best tool for the artist" is unmeasured | Phase 11 C.4 shipped a binary and C.5 ran the one-hour protocol on two games. **Trade-off taken 2026-09-14 and named 2026-09-19 (ADR-0214):** Phase 12 cold-reads are a fresh Fable session, not a person — faster, repeatable, and still a proxy for taste, fatigue, and whether a human would return. P15 is an observation. A real external-user C.5 rerun remains out of scope until reopened; this does not waive F9.18's separately required human panel |
 | Everything is tuned to one reference pack (Contra80s: 864 conditions, one author's habits) | Phase 11 C.6: a second hand-made pack measured with the same four numbers before any grouping or condition rule is tightened again |
 | A layered file (`.ora`, later `.psd`) quietly becomes a second source of truth: a tool reads `paint` out of it and the sheet PNG stops being what `mep_build` sees | F12.11's ADR states the file is write-only for the toolchain; the return path is a flat PNG diffed against `*.orig.png`; lint refuses the guides sentinel colour so a wrong export fails loudly instead of shipping grid lines |
 | A static kit (F12.9) or an index import (F12.12) is read as evidence that a tile was seen | every such cell is `seen: false` with provenance `fill` / `index` (ADR-0183 §3, ADR-0210 "Provenance is recorded per cell"); `ARTIST.md` says so in its first line; no `poses.json`, scenery or map is ever synthesised from a static source |

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Mechanical replay of the F12.2 "Copy as MEP sheet cell" panel script.
 
-`docs/validation/f12.2-copy-sheet-cell-panel-script.md` is a *human* cold-read
-panel: a person who did not build the feature finds the menu item, pastes one
-cell and paints it without ever opening `textures/hires.txt`. This script does
-NOT replace that run and cannot: discoverability, the P15 judgement and "did
-they read hires.txt" are only measurable on a person.
+`docs/validation/f12.2-copy-sheet-cell-panel-script.md` is the *dispatcher*
+script. ADR-0214 assigns the remaining cold read to a fresh Fable session
+briefed by `docs/validation/f12.2-fable-evaluator-briefing.md`. This replay
+does NOT replace that run: it never finds the menu item by its visible label
+(that is the headless test plus Fable on the dump), never scores criterion 4
+or P15, and cannot be surprised by the UI.
 
-What it does replace is the part a machine does better than a person: the
+What it does replace is the part a machine does better than an evaluator: the
 setup steps S1-S4, and the paste-and-paint round trip P9-P14, replayed end to
 end until a magenta square is asserted in a real emulator screenshot. Its job
-is to make sure the human run cannot be silently defeated by the environment -
+is to make sure the Fable run cannot be silently defeated by the environment -
 every one of S1-S4 exists because a real attempt was defeated by it.
 
 Per game the replay does exactly what the script tells the evaluator to do:

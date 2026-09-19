@@ -23,20 +23,24 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//PRD Phase 12 F12.2, panel script steps P5-P8. The human panel
-//(docs/validation/f12.2-copy-sheet-cell-panel-script.md) asks a person who did
-//not build the feature to find the menu item and paste what it copies; that
-//cold read is not something a test can stand in for. What IS mechanical is the
-//claim P8 makes about the clipboard's contents, and this drives the real
-//Tilemap Viewer ViewModel to check it:
+//PRD Phase 12 F12.2, dispatcher steps P5-P8. ADR-0214: a fresh Fable session
+//is the remaining evaluator; this test is not that session. What IS mechanical
+//is the claim P8 makes about the clipboard, and ADR-0214 §3: the menu's
+//identity is the visible label, not ActionType. This drives the real Tilemap
+//Viewer ViewModel to check:
 //
 //  - the panel is null until SelectionRect is set (P6's own correction of
 //    2026-09-18: the first evaluator hovered instead of clicking, and the
 //    right-hand side stayed on the whole-screen Tilemap block);
-//  - "Copy as MEP sheet cell" is a real entry in the viewer's context menu,
-//    visible and enabled on a NES CHR source;
+//  - "Copy as MEP sheet cell" is a real, visible, enabled entry found by that
+//    Name (ResourceHelper.GetEnumText), then checked to be wired to
+//    ActionType.CopyToMepSheetCell — looking it up by enum first is the
+//    opposite of a cold read;
 //  - invoking it puts ONE line on the clipboard: `tile` + `palette` and no
 //    `index` on a CHR RAM game, and a third `index` field on a CHR ROM one.
+//
+//Set MESEN_F122_LABEL_DUMP to a path to write the visible, enabled labels
+//(the dump the Fable briefing treats as the right-click menu).
 //
 //MepSheetCell.Format's own rules stay covered host-free in
 //UI.Tests/Mep/MepSheetCellTests.cs (ADR-0123 firewall); what is asserted here
@@ -49,6 +53,9 @@ namespace Mesen.HeadlessTests;
 public class CopyAsMepSheetCellTests
 {
 	private const string RomFolderVariable = "MESEN_NES_ROMS";
+	private const string LabelDumpVariable = "MESEN_F122_LABEL_DUMP";
+	private const string SheetCellLabel = "Copy as MEP sheet cell";
+	private const string HdPackLabel = "Copy tile (HD pack format)";
 
 	//Zelda is mapper 1 with 8 KB of CHR RAM, Super Mario Bros. is NROM with
 	//8 KB of CHR ROM - the two sides of the `index` field ADR-0172 §2 defines.
@@ -138,10 +145,18 @@ public class CopyAsMepSheetCellTests
 			//P6: hovering is not enough. Until a click fills SelectionRect,
 			//UpdatePreviewPanel() keeps PreviewPanel null.
 			Assert.Null(model.PreviewPanel);
+			model.SelectionRect = new Rect(0, 0, 8, 8);
+			Dispatcher.UIThread.RunJobs();
+			Assert.NotNull(model.PreviewPanel);
 
-			ContextMenuAction copy = FindCopyAction(window);
-			Assert.True(copy.IsVisible?.Invoke() ?? true, "the item is hidden on a NES tilemap");
-			Assert.True(copy.IsEnabled?.Invoke() ?? true, "the item is greyed out on a NES CHR source");
+			List<string> labels = VisibleEnabledLabels(window);
+			MaybeWriteLabelDump(labels);
+			Assert.Contains(SheetCellLabel, labels);
+			Assert.Contains(HdPackLabel, labels);
+
+			//ADR-0214 §3: find by the string a user reads, then check the wiring.
+			ContextMenuAction copy = FindCopyActionByLabel(window, SheetCellLabel);
+			Assert.Equal(ActionType.CopyToMepSheetCell, copy.ActionType);
 
 			string text = CopyFirstUsableTile(model, copy, window);
 			Assert.False(text.Length == 0, "no tile in the visible tilemap produced a sheet cell");
@@ -200,21 +215,57 @@ public class CopyAsMepSheetCellTests
 				copy.OnClick();
 				Dispatcher.UIThread.RunJobs();
 				string text = clipboard.TryGetTextAsync().GetAwaiter().GetResult() ?? "";
-				if(text.Length > 0) {
-					return text;
+				if(text.Length == 0) {
+					continue;
 				}
+				return text;
 			}
 		}
 		return "";
 	}
 
-	private static ContextMenuAction FindCopyAction(TilemapViewerWindow window)
+	private static IEnumerable MenuActions(TilemapViewerWindow window)
 	{
 		PictureViewer viewer = window.FindNamed<ScrollPictureViewer>("picViewer").InnerViewer;
 		IEnumerable? items = viewer.ContextMenu?.ItemsSource;
 		Assert.NotNull(items);
-		return items.OfType<ContextMenuAction>()
-			.Single(action => action.ActionType == ActionType.CopyToMepSheetCell);
+		return items;
+	}
+
+	private static List<string> VisibleEnabledLabels(TilemapViewerWindow window)
+	{
+		List<string> labels = new();
+		foreach(ContextMenuAction action in MenuActions(window).OfType<ContextMenuAction>()) {
+			if(action is ContextMenuSeparator) {
+				continue;
+			}
+			if(!(action.IsVisible?.Invoke() ?? true) || !(action.IsEnabled?.Invoke() ?? true)) {
+				continue;
+			}
+			labels.Add(action.Name);
+		}
+		return labels;
+	}
+
+	private static ContextMenuAction FindCopyActionByLabel(TilemapViewerWindow window, string label)
+	{
+		return MenuActions(window).OfType<ContextMenuAction>()
+			.Where(action => action is not ContextMenuSeparator)
+			.Where(action => action.IsVisible?.Invoke() ?? true)
+			.Single(action => action.Name == label);
+	}
+
+	private static void MaybeWriteLabelDump(List<string> labels)
+	{
+		string path = Environment.GetEnvironmentVariable(LabelDumpVariable) ?? "";
+		if(path.Length == 0) {
+			return;
+		}
+		string? folder = Path.GetDirectoryName(Path.GetFullPath(path));
+		if(!string.IsNullOrEmpty(folder)) {
+			Directory.CreateDirectory(folder);
+		}
+		File.WriteAllLines(path, labels);
 	}
 
 	private static bool IsUpperHex(string text)
