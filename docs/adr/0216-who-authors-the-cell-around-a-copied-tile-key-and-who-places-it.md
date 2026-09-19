@@ -144,8 +144,15 @@ record of what was rejected; the answers are:
 3. **3(a) — grow.** The sheet gains a row, and `<sheet>.png` and
    `<sheet>.orig.png` are rewritten together in one operation, the cell
    emitted only if both writes succeeded.
-4. **4(a) — say it at copy time.** The receipt names the sheet that already
-   holds the key and whether that cell is painted.
+4. **4(a) — say it before the build, not three steps later.** The report
+   names the sheet that already holds the key and whether that cell is
+   painted. Where it is said follows from answer 1, and the option text above
+   assumed 1(a): under **1(b)** the sidecar reader is `mep_add_cell.py`, not
+   the viewer, so the report lands in the placer's output at paste time. The
+   viewer's own receipt stays what ADR-0215 made it — the tile identity the
+   emulator can see without opening the artist's tree — because 1(b) exists
+   precisely so the emulator never reads it. Paste time is still before the
+   build, which is what the question was about.
 
 A key copied from the **Sprite Viewer** is out of scope for the placer: it
 refuses a sprite-sourced key rather than guessing a flip-baked destination
