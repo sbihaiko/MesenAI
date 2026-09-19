@@ -266,18 +266,31 @@ With `bootstrap`, the pack builder writes **beside the ROM**:
 That folder is what every step below consumes. It is also a working pack — you
 can load it in the emulator as-is and see what you have.
 
-**Delete it before you record the same ROM again.** Once `<rom stem>/auto/`
-exists it is discovered as a pack that already dresses this ROM, so the next
-`bootstrap` run declines to record and leaves the old pack untouched — the run
-still exits 0 and says nothing, so a second recording that overwrote nothing
-looks exactly like one that worked. Either `rm -rf <rom dir>/<rom stem> <rom
-dir>/.bootstrap` first, or record through `scripts/record_stages.sh`, which
-gives every run its own directory with a hard link to the ROM and clears any
-pack left there.
+**Clear it before you record the same ROM again.** Anything already dressing
+this ROM — the `auto/` folder, but also a `mep/` layer beside it — makes the
+next `bootstrap` run decline to record tiles, so a second run over the same
+folder leaves the pack you already had. It says so, on its own line, since
+issue #229 was fixed on 2026-09-14:
 
-Silence is the defect, not the decline — a run that recorded nothing should
-say so. Tracked as issue #229; the workaround above stays valid until it
-lands.
+```
+[MEP] bootstrap: no tiles were recorded - '<rom>' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.
+```
+
+Read that line as *the pack on disk is the old one*. Clear `auto/`, but **move
+a `mep/` layer aside rather than deleting the whole folder**, because since
+ADR-0146 that is also where an accepted community pack installs itself:
+
+```sh
+ROMDIR="<rom dir>/<rom stem>"
+[ -f "$ROMDIR/mep/.mep-install.json" ] && mv "$ROMDIR/mep" "$ROMDIR/mep.community"
+rm -rf "$ROMDIR/auto" "<rom dir>/.bootstrap"
+```
+
+Or record through `scripts/record_stages.sh`, which gives every run its own
+directory with a hard link to the ROM and clears any pack left there.
+
+The decline itself is deliberate — it is what keeps a short session from
+erasing a long recording — so the message is the fix, not the behaviour.
 
 ---
 
@@ -492,6 +505,192 @@ Do not hand-edit `textures/hires.txt`. It is generated from the sheets by
 each sheet **together with its `.json`** — the sidecar is the slicing contract
 that says which cell is which tile.
 
+### What a cell is
+
+Adding a tile by hand means adding a cell to that sidecar, so here is the shape
+of one. Nothing else in this guide spells it out, and both 2026-09-19 cold-read
+runs had to reverse-engineer it from the cells already there:
+
+```json
+"cell": { "w": 16, "h": 16 }, "columns": 6, "gutter": 1,
+"cells": [
+  { "index": 23, "x": 52, "y": 69, "count": 1, "context": "misc", "label": "tree-12,8",
+    "tiles": [ { "tile": "<32 hex>", "palette": "<8 hex>" } ] }
+]
+```
+
+| Field | What it is |
+|---|---|
+| `index` | the cell's ordinal in this sheet. Unique; it is what `metatile`, `additions[]` and the condition blocks cite. |
+| `x`, `y` | the cell's top-left in the **1× pixel space** of the `.orig.png`, *not* the PNG you paint on. A pack at `scale` 4 puts the same cell at `4x,4y` there. |
+| `count` | how many tiles the cell holds. Free — it is not checked against `tiles[]`. |
+| `tiles[]` | one entry per tile the cell carries, in the cell's own order. |
+| `context`, `label`, `metatile` | free text and an optional back-reference the tools write and carry. Copy them off a neighbouring cell; nothing requires them. |
+| `columns`, `cell`, `gutter` | the grid: how many cells fit across, each cell's size, and the transparent margin between them. Written above `cells[]`, not inside it. |
+| `kind` | what the surface holds: `unsorted`, `misc`, `metatiles`, `object`, `sprite`, `sprites`, `font`, `hud`, `map`. With `cell` it decides which sheet a new cell belongs on — see *Which sheet a copied key goes on*. |
+| `emptySlots` | `{ "col": n, "row": n }` per **blank** slot, written by the generators on the object and sprite sheets. It is not free space: a group sheet's grid is the bounding box of an L-shaped or otherwise non-rectangular figure, so a blank states where the figure is *not*, and the recorder never fills it (ADR-0175). A background key put in one lands in the hole of a named figure. To place a new cell, use a free-form sheet; where there is none, compute the slot from `columns`, `cell` and `gutter` — `metatiles.json` does not carry the list. |
+
+A `tiles[]` entry is `{"tile": "<32 uppercase hex>", "palette": "<8 hex>"}` —
+the same two strings *Copy as MEP sheet cell* puts on your clipboard, which is
+the point of that action. Two optional fields appear only where they mean
+something:
+
+- `"index": <n>` — the tile's CHR index (ADR-0172), present only on a CHR ROM
+  game, where `hires.txt` keys by index rather than by bitmap data. Paste the
+  action's text as-is; it already carries this on those games and omits it
+  elsewhere.
+- `"source"` and `"mirror"` — written by the recorder for a shape it recorded
+  with an OAM flip baked in (ADR-0178), so the rebuild can emit the unflipped
+  key the run time looks up. Never author these by hand.
+
+**A cell may hold a single 8×8 tile.** The 16×16 cell grid is a layout
+convention, not a constraint: `count: 1` with one entry in `tiles[]` builds,
+lints and renders, which is how a one-off repaint of one tile is done.
+
+**Where the pack's `scale` is written: the `<scale>` line at the top of
+`textures/hires.txt`.** Every sheet in a pack shares that one number (4 for the
+NES bootstrap packs here), and nothing else states it — not the sidecars, and
+not `pack.json`, which a folder-convention pack does not have at all. The
+`<sheet>.png` ÷ `<sheet>.orig.png` size ratio is the same number if you would
+rather not open a generated file, and that ratio is how most of the 2026-09-19
+cold reads got it. You need it twice: to paint the cell at `scale × x, scale × y`
+on the sheet, and to grow both PNGs consistently when the grid has no free slot.
+Get the factor wrong and the paint lands on a different cell: `build` exits 0,
+`mep_lint.py` exits 0, and the screen does not change. Reading `hires.txt` is
+fine — only *editing* it is thrown away.
+
+### The tilemap is a picture of the nametable, not of the screen
+
+*Copy as MEP sheet cell* lives in the Tilemap Viewer's right-click menu, and the
+picture you right-click is **one nametable** — the whole 32×30 map in map order,
+labelled `($2000)` in the same menu. The screen is a **scrolled window** into it,
+and nothing in the viewer marks where that window is. Three consequences, all
+measured on 2026-09-19:
+
+- **A tile can be in the map and off the screen.** Zelda II's cold read picked a
+  full-width rock band at row 0 that looked exactly like the rock on the frame,
+  added the cell, painted it, built, linted, deployed and rendered — four green
+  exit codes — and got a byte-identical frame. The logo sat at map rows 19–25 and
+  at screen rows 6–12, so the map was scrolled ~13 rows and row 0 was above the
+  top of the screen. Anchor on a landmark that is in both pictures (a word, a HUD
+  digit, a platform band) and work out the offset before you trust a coordinate:
+  Contra's run read `PLAY` at map col 5 and screen col 27, so frame col = map
+  col + 22 and only map cols 0–9 were on screen at all.
+- **A nametable can hold art the frame never displays.** Bubble Bobble's attract
+  frame keeps the whole "Bubble Bobble" logo in VRAM while the background layer
+  draws the backdrop: 59 917 of the frame's 61 440 pixels are one colour and the
+  logo is not fetched. A key copied there is well-formed and unreachable.
+- **The viewer's own picture is not the frame's picture.** It draws patterns in a
+  flat palette, so the shapes read differently from the game's colours, and on a
+  CHR-banked game it can draw the tile from a different bank than the PPU used
+  for that scanline — Ninja Gaiden's viewer shows glyphs where the frame shows a
+  boulder. Issue #341 tracks the copy emitting a key from the wrong bank; until
+  it is fixed, check that the tile you copied is the shape you meant by its
+  coordinates, not by the thumbnail.
+
+If your repaint builds clean, lints clean and changes nothing, "the tile I picked
+is not on this frame" is the first thing to rule out — it is cheaper than
+bisecting the pack.
+
+### Which sheet a copied key goes on
+
+*Copy as MEP sheet cell* puts a **`tiles[]` entry** on the clipboard — one
+tile — not a whole cell. You author the wrapper above it, and you choose the
+sheet. Nothing in the copied text names one, and the `context` field cannot
+help: a pack that ships both `misc.json` and `unsorted.json` usually labels
+every cell of both `"context": "misc"`. Eleven 2026-09-19 cold reads hit this
+and every one of them had to work it out from the sheet headers instead:
+
+- `cell: { "w": 8, "h": 8 }` — the cell holds **one** tile, which is what you
+  copied. This is the free-form sheet, `unsorted.json`, on all 27 of the 30
+  packs here that ship one.
+- `cell: { "w": 16, "h": 16 }` — a metatile, 2×2 tiles: `misc.json` (21 packs)
+  and `metatiles.json` (all 30). A single pasted entry here is legal but
+  leaves three quadrants of the cell as they were.
+- `kind` and `gridUnit` in the same header say what the sheet is for. **`kind`
+  alone does not choose the sheet, and neither does the grid alone.**
+  `sprite` and `sprites` sheets are 8×8 too — 747 of them across those 30
+  packs, against 27 `unsorted` — and a background key put on one never
+  reaches the background. The sheet you want is the 8×8 one that is not a
+  named figure: not `sprite`, `sprites`, `object`, `font`, `hud` or `map`.
+  That lands on `unsorted`, and on `misc` only when the pack ships no
+  `unsorted`.
+
+**Some packs ship no free-form sheet at all.** Zelda II and Donkey Kong have
+neither `misc.json` nor `unsorted.json`: their `textures/sheets/` holds
+`metatiles.json`, one `objNNN.json` per recovered background object, the sprite
+sheets, and `adjacency.json` / `poses.json`, which are not paintable surfaces.
+Every cell in every one of those sheets reads `"context": "scene"`, so the
+`context` field routes nothing there either. The destination rule is `kind`
+plus the grid:
+
+| `kind` | Takes a background key? |
+|---|---|
+| `unsorted` | yes — the free-form one-tile sheet (8×8 cells), the destination whenever the pack has one |
+| `misc` | yes — the free-form 16×16 sheet, when there is no `unsorted` |
+| `metatiles` | yes — the destination when there is neither. 16×16 cells, four tiles each; a `count: 1` cell with one `tiles[]` entry is legal beside them |
+| `object`, `font`, `hud` | yes, but each is one recovered thing and is small; use one only when your key belongs to it |
+| `map` | not the free-form destination — a nametable surface (`map-NNN.json`); use it only when you mean to repaint the map itself |
+| `sprite`, `sprites` | no — a background key put here never reaches the background |
+
+Finding the free slot: on `metatiles.json` you compute it from the header. The
+`emptySlots` list on `objNNN.json` and `sprNNN.json` is **not** a slot you may
+take — it is the blank half of a figure's own grid (see the field table above),
+and those sheets are not where a background key goes in the first place.
+Zelda II's worked example: `columns: 18`, `cell: 16×16`, `gutter: 1`,
+`metatiles.orig.png` 307×290, 298 cells. The pitch is 17, so the grid is 18×17 =
+306 slots and 8 are free; index 298 lands at `x = 1 + 17×10 = 171`,
+`y = 1 + 17×16 = 273`, painted at `(684, 1092)` on the scale-4 PNG, and no
+resize is needed. Donkey Kong is the same shape: `columns: 13`, a 222×222
+reference, 169 slots, 161 used, 8 free.
+
+Two traps around it, both measured:
+
+- **A key may already be claimed by another sheet.** Paste anyway: the build
+  logs which cell won — `sheets/unsorted.png overrides tile <key> from
+  sheets/misc.png (painted)` — and a *painted* cell beats an untouched one.
+  Check that line; a cell that loses builds and lints clean and changes
+  nothing.
+- **Find a free slot, do not guess one.** A cell you overwrite silently
+  repaints whatever tile already lived there. The grid is `columns` wide and
+  `cells[]` is in row-major order, so the free slots are the ones no `index`
+  claims.
+
+- **A painted cell that reaches nothing now says so.** `build` names the sheet
+  and the key in two cases: a painted key another crop already owns
+  (`... painted tile key(s) were already claimed by another crop ... (#343)`),
+  and a painted key a capture also draws (`... also drawn by the captured
+  screen backgrounds/screenNNN.png ... (#338)`). Both are per sheet and count
+  only cells you actually painted, so silence about your sheet means the paint
+  did reach the manifest.
+
+Finally: a frame a captured screen owns is drawn from `backgrounds/`, and on
+it no cell of any sheet reaches the screen. `build` warns that captures exist;
+the recorder log (`auto layer has N captured screen(s) - not used under the
+human layer`) is what tells you whether one applies. If your repaint builds
+clean, lints clean and changes nothing, move `textures/backgrounds/` aside and
+render again — that is the diagnosis, not a rebuild.
+
+**A capture is gated on probes, not on the frame.** The recorder writes three
+`<condition>` lines per capture (`screenNNN_A/_B/_C`, `tileAtPosition`), so any
+frame that happens to match those few tiles gets the capture drawn over it —
+including frames it was never frozen for, whose own art it then erases. Mike
+Tyson's Punch-Out!! is the measured case: the pre-fight card renders with the
+game's own `STARRING` / `LITTLE MAC` text missing, and no capture in the pack
+matches that frame exactly (the closest, `screen003.png`, is 16 047 pixels
+away). ADR-0050 and ADR-0156 make a *present* capture's precedence deliberate
+and that has not changed; what changed is that the build now says the gate is
+approximate, and that you have a way out.
+
+**Retiring a capture.** Delete `textures/backgrounds/screenNNN.png` (and the
+`auto/textures/` copy, if the pack still carries the recorder layer) and
+rebuild. `build` drops the `<background>` line with it and reports
+`info: retired N captured screen(s) ... (#344)`; those frames are drawn from
+the sheets again. Deleting the PNG used to fail the build with one
+`error: <background> ... does not exist` per file even though the engine
+itself drops a dangling entry harmlessly at load, which left keeping the
+capture — and living with a no-op repaint — as the only option.
+
 For a panorama, `artist_map.py --slice` is the way back:
 
 ```sh
@@ -584,18 +783,35 @@ ship one, nothing has checked it.
 
 The mechanical checks prove the pack is valid; they do not replace looking at
 your edit in the game. Copy the built folder beside the ROM as its `mep/`
-override, then run a screenshot pass **without** `hdpack-off`:
+override, then run a screenshot pass **without** `hdpack-off`.
+
+`mep/` is a **single slot**, and you are probably not the only thing in it: an
+accepted community pack is downloaded and installed into that same path
+automatically, with a `.mep-install.json` stamp beside its textures (ADR-0146,
+ADR-0147). Delete the folder blindly and you delete somebody else's pack — the
+next ROM load downloads it again, over the very edit you are trying to look at.
+Look first, then move aside rather than remove:
 
 ```sh
-rm -rf <rom dir>/<rom stem>/mep
-cp -R out/painted <rom dir>/<rom stem>/mep
+MEP="<rom dir>/<rom stem>/mep"
+if [ -f "$MEP/.mep-install.json" ]; then mv "$MEP" "$MEP.community"; fi
+cp -R out/painted "$MEP"
 scripts/headless_record <rom> 20 out/painted-check screenshot
 ```
+
+No stamp means the folder is your own earlier copy, and there `rm -rf` is what
+you want — `cp -R` onto it would merge the two rather than replace it.
 
 The recorder log must say that it loaded `<rom dir>/<rom stem>/mep/textures`.
 Open the resulting screenshot and confirm the exact figure you painted. The
 `mep/` layer overrides `auto/` entry by entry, so your original recording stays
 available underneath it.
+
+Put the community pack back when you are done comparing — `mv
+"$MEP.community" "$MEP"` — or keep your own and leave it moved aside. The
+automatic install itself is the `Automatically install matching community
+packs` switch in Preferences, if you would rather it stopped happening while
+you work.
 
 If `build` reports dropped duplicate keys, do this screenshot check before you
 call the edit done. A sheet may share `(tile, palette)` keys with other sheets;
@@ -675,13 +891,15 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A recording has almost no sprites | Frames after the retained-stream cap are dropped. Use several shorter runs (`record_stages.sh`) instead of one long one. |
 | A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
 | `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
-| A second `bootstrap` run changes nothing in the pack | `<rom stem>/auto/` already exists, so the bootstrap declines and keeps it. Delete the folder (and the sibling `.bootstrap` stamp) or record through `record_stages.sh`. The run should say so and does not — issue #229. |
+| A second `bootstrap` run changes nothing in the pack | Something already dresses the ROM — `<rom stem>/auto/`, or a `mep/` layer beside it — so the bootstrap declines and keeps it — it logs `no tiles were recorded - '<rom>' already dresses this ROM`. Clear `auto/` and the sibling `.bootstrap` stamp, moving any `mep/` aside first (step 1), or record through `record_stages.sh`. |
 | `artist_map.py` refuses: "keys its tiles by CHR index" | A CHR ROM game; there is no panorama for it yet. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
 | `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
 | The sprite sheet's top rows are wrong | HUD runs along a fixed row and is excluded; if your game puts HUD elsewhere, check the band before trusting those cells. |
 | A figure is two figures fused together | Sprite grouping is by adjacency, so two bodies that touch become one box. Mark it `multiple` in a review, or split it by hand — the kit's box is a grouping, not a truth. |
 | `check-coverage` refuses your baseline as "not sheet-derived" | You pointed it at the recorder's manifest. Its baseline must be a manifest `build` wrote, taken before the repaint — see step 5. |
+| A pasted cell builds and lints clean and the frame does not change | Rule out the tile first: the Tilemap Viewer draws the whole nametable and the screen is a scrolled window into it, so the tile you picked may be off screen — see *The tilemap is a picture of the nametable*. Then check the scale: `x,y` are in the `.orig.png`'s 1× space and the PNG you paint is `<scale>`× that. |
+| There is no `misc.json` or `unsorted.json` to paste into | That pack has no free-form sheet. Go by the sidecar's `kind`: a background key goes on `metatiles.json`, and the free slot is computed from `columns`, `cell` and `gutter` — see *Which sheet a copied key goes on*. |
 | `error: stage1-000.png: painted at 1x while metatiles.png is at 4x` | Every sheet in a pack shares one `<scale>`. Give `artist_map.py --scale N` the same N the recording's `textures/hires.txt` declares under `<scale>` (4 for the NES bootstrap packs here). |
 
 ## Related
