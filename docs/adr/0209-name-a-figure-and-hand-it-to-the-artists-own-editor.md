@@ -2,7 +2,7 @@
 
 - Status: **Q4 accepted 2026-09-19 and shipped the same turn as F12.8** — option (k), the `unsorted` remainder sheet. User go-ahead, verbatim: *"vamos fazer a sheet unsorted então"*. Same-turn implementation is allowed by CLAUDE.md only when the change ships with unit tests covering the decision and the go-ahead is quoted here and in the PR body; both hold (`BlocoV` in `scripts/core_unit_tests.cpp`, 6 cases). **Q1, Q2 and Q3 remain `proposed`** — naming a figure, exporting it and getting the file back are untouched by this slice.
 - Date: 2026-09-18 (amended 2026-09-19 with the Q4 decision; amended twice on 09-18: sheet coverage measured with Q4; then Q4 option (m), seeding coverage from an existing pack's key index)
-- Related: ADR-0210 (where coverage comes from; amends Q4(m)), ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (shipped), F12.3 (reload), F12.4 (asset-name template)
+- Related: ADR-0210 (where coverage comes from; amends Q4(m)), ADR-0153 (artist-legible sheets), ADR-0164 (adjacency statistics), ADR-0165 (the composition editor), ADR-0168 (the `sprNNN` figure is the sprite unit), PRD Part A F12.2 (code on `main`, human panel row open), F12.3 (reload), F12.4 (asset-name template)
 
 ## Context
 

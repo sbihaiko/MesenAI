@@ -11,7 +11,7 @@ The fork's planning lives in one consolidated PRD under this folder:
   Phase 11 consolidation is complete; its proxy experiment is not human
   product acceptance). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
-  quick-enhancements panel, with P.1-local identity integration still open). Each Part carries its own header `Status`,
+  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 12 and the ADR-0205 replay slices. Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface.
 
