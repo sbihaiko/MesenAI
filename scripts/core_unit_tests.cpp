@@ -61,6 +61,7 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
+#include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -6987,6 +6988,46 @@ void TestHdPackErrorDedupeCapsDistinctMessages()
 		"BlocoP: occurrences past the cap are counted so the loader can say how many it dropped");
 }
 
+//Issue #328: a `<background>` at priority 20+ is drawn after the `<tile>` rule
+//(intended: ADR-0050, ADR-0156), so it hides every `<tile>` rule on a screen it
+//matches. The renderer now says so; this is the ledger that decides how often.
+void TestHdTileSuppressionLogsEachBackgroundOnce()
+{
+	HdTileSuppressionLog log;
+	const std::string screen001 = "[screen001_A&screen001_B]<background>backgrounds/screen001.png,1,0,0,20";
+	int logged = 0;
+	for(int i = 0; i < 60000; i++) {
+		logged += log.ShouldLog(screen001) ? 1 : 0;
+	}
+	Check(logged == 1, "BlocoP: the same <background> covering 60 000 pixels is written once, not per pixel");
+	Check(log.GetDistinctCount() == 1 && log.GetUnretainedCount() == 0 && log.HasAny(),
+		"BlocoP: one signature in, one distinct line out, nothing unretained");
+}
+
+void TestHdTileSuppressionCapsDistinctBackgrounds()
+{
+	HdTileSuppressionLog log;
+	int logged = 0;
+	for(size_t i = 0; i < HdTileSuppressionLog::MaxDistinctMessages + 5; i++) {
+		logged += log.ShouldLog("<background>backgrounds/screen" + std::to_string(i) + ".png,1,0,0,20") ? 1 : 0;
+	}
+	Check(logged == (int)HdTileSuppressionLog::MaxDistinctMessages,
+		"BlocoP: a pack with more covered screens than the cap cannot flood the log by that route");
+	Check(log.GetDistinctCount() == HdTileSuppressionLog::MaxDistinctMessages && log.GetUnretainedCount() == 5u,
+		"BlocoP: backgrounds past the cap are counted, which is what tells the renderer the list it wrote is incomplete");
+}
+
+void TestHdTileSuppressionIsPerPackLoad()
+{
+	//HdNesPack is rebuilt per pack load, so a fresh ledger is the reset - the
+	//type carries no Reset() precisely so nothing can be reset in place.
+	HdTileSuppressionLog first;
+	Check(first.ShouldLog("sig"), "BlocoP: a fresh ledger logs its first signature");
+	HdTileSuppressionLog second;
+	Check(second.ShouldLog("sig"), "BlocoP: the next pack load reports the same background again");
+	Check(!first.ShouldLog("sig"), "BlocoP: the load that already reported it stays quiet");
+}
+
 //===== BlocoU: log retention (ADR-0208) ================================
 //Two incidents drove this: #160 (a false FAIL because the ring had silently
 //evicted the line a script asserted on) and #302 (8 234 loader errors in one
@@ -7937,6 +7978,9 @@ int main()
 	TestHdPackErrorDedupeLogsEachDistinctMessageOnce();
 	TestHdPackErrorDedupeIsPerLoad();
 	TestHdPackErrorDedupeCapsDistinctMessages();
+	TestHdTileSuppressionLogsEachBackgroundOnce();
+	TestHdTileSuppressionCapsDistinctBackgrounds();
+	TestHdTileSuppressionIsPerPackLoad();
 
 	TestLogRingSaysNothingWhenNothingWasLost();
 	TestLogRingAnnouncesItsOwnTruncation();

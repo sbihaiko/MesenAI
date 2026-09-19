@@ -32,6 +32,7 @@ std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "HdPackExportDone", u8"HD pack: %1 ROM tiles exported as defaultTile entries" },
 	{ "HdPackExportNoChrRom", u8"HD pack: this game uses CHR RAM - record tiles during gameplay instead" },
 	{ "HdPackExtractAudioStarted", u8"Extract audio: the probe is running in the background - results will appear in the pack folder's auto/audio/ folder." },
+	{ "HdPackTilesHidden", u8"A <background> in this HD pack is drawn over <tile> rules, so painting one of those tiles changes nothing on screen. See the log for the screen and the tiles." },
 	{ "HdPackExtractAudioToolMissing", u8"Extract audio: tool not found - build it with `make spike-sound-driver` and set MESEN_EXTRACT_AUDIO_TOOL, or drop the binary next to the Mesen executable / in the Tools folder of the Mesen data folder" },
 	{ "HdPackExtractAudioStartFailed", u8"Extract audio: failed to launch the tool process" },
 	{ "MEP", u8"MEP" },
