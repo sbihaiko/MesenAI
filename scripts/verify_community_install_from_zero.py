@@ -21,7 +21,11 @@ the actual C++ loader picks the installed pack up headlessly:
      google-drive-two-step downloader the client mirrors), verify sha256
      against the catalog entry, extract into mesen-home/HdPacks/<romName>/
      using the same pack-root discovery + nested-zip unwrap as the client;
-  4. boot the real ROM via scripts/headless_record (the C++ core, no GUI)
+  4. refuse the install when the extracted pack's <supportedRom> names a
+     different ROM (ADR-0211, the guard for issue #314) - a declaration
+     matching either hash form of the ROM in hand, or the pack's own <patch>
+     target, installs; an absent or malformed one installs unchanged;
+  5. boot the real ROM via scripts/headless_record (the C++ core, no GUI)
      and assert the loader log proves the HD pack loaded.
 
 The report table doubles as the coverage diagnostic: a ROM with no catalog
@@ -276,6 +280,50 @@ def find_catalog_entry_for_game(packs, game_norm):
     return [p for p in packs if same_game(p.get("game") or "", game_norm)]
 
 
+def read_supported_rom(hires: Path):
+    """LegacyHdPackInstall.ReadSupportedRom (ADR-0211): the pack's declared
+    <supportedRom>, plus the hashes its own <patch> lines target. Anything that
+    is not a 40-hex sha1 is dropped, so a malformed line declares nothing."""
+    declared, patch_targets = "", []
+    try:
+        text = hires.read_text(errors="replace")
+    except OSError:
+        return "", []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("<supportedRom>"):
+            value = _sha1_field(line[len("<supportedRom>"):])
+            if value and not declared:
+                declared = value
+        elif line.startswith("<patch>"):
+            for field in line[len("<patch>"):].split(","):
+                value = _sha1_field(field)
+                if value:
+                    patch_targets.append(value)
+    return declared, patch_targets
+
+
+def _sha1_field(text: str) -> str:
+    value = text.strip()
+    if len(value) != 40 or any(c not in "0123456789abcdefABCDEF" for c in value):
+        return ""
+    return value.upper()
+
+
+def supported_rom_verdict(declared, patch_targets, no_intro, whole_file) -> str:
+    """LegacyHdPackInstall.DecideSupportedRom (ADR-0211). Both hash forms of the
+    loaded ROM are accepted; the two forms are never compared against each
+    other. A declaration equal to one of the pack's own <patch> targets is the
+    patched ROM (ADR-0198 §2), not a contradiction."""
+    if not declared:
+        return "not-declared"
+    if declared in (no_intro.upper(), whole_file.upper()):
+        return "matches"
+    if declared in patch_targets:
+        return "patch-target"
+    return "contradicts"
+
+
 def rom_sha1(path: Path) -> str:
     return no_intro_sha1(path.read_bytes())
 
@@ -378,8 +426,22 @@ def install_and_load(rom: Path, args, work: Path) -> str:
         extract_legacy_pack(pack, home / "HdPacks" / rom_name, rom_name)
     except ValueError as e:
         return f"FAIL (extract): {e}"
-    if not (home / "HdPacks" / rom_name / "hires.txt").exists():
+    hires = home / "HdPacks" / rom_name / "hires.txt"
+    if not hires.exists():
         return "FAIL (extract): hires.txt not at HdPacks/<rom>/hires.txt"
+
+    #ADR-0211, mirroring the client's guard: a pack that names a different ROM
+    #refuses the install rather than being stamped with the ROM in hand. This
+    #is the check that would have caught issue #314 before the ten days.
+    declared, patch_targets = read_supported_rom(hires)
+    whole_file = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+    verdict = supported_rom_verdict(declared, patch_targets, sha1, whole_file)
+    if verdict == "contradicts":
+        shutil.rmtree(home / "HdPacks" / rom_name, ignore_errors=True)
+        #FAIL, not SKIP: the catalog matched this ROM by hash and the artifact
+        #says otherwise, so one of the two is wrong and someone should look.
+        return (f"FAIL (ADR-0211 refused): pack declares supportedRom {declared}, "
+                f"loaded ROM is {whole_file} (no-intro {sha1.upper()})")
 
     out_prefix = work / "out" / "x"
     log = subprocess.run(

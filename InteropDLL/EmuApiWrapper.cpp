@@ -314,6 +314,15 @@ extern "C"
 		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRomSha1(), outBuffer, maxLength);
 	}
 
+	//ADR-0211: the whole-file SHA-1 (header included), the form an HD pack's
+	//<supportedRom> line carries. Deliberately a second export rather than a
+	//flag on GetMepRomSha1 - the two hashes must never be mistaken for one
+	//another at the call site.
+	DllExport void __stdcall GetMepRomFileSha1(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRomFileSha1(), outBuffer, maxLength);
+	}
+
 	DllExport void __stdcall GetMepSiblingFolder(char* outBuffer, uint32_t maxLength)
 	{
 		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetSiblingFolder(), outBuffer, maxLength);

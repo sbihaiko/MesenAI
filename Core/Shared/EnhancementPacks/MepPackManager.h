@@ -28,6 +28,12 @@ class MepPackManager
 private:
 	Emulator* _emu;
 	string _romSha1;
+	//ADR-0211: the whole-file SHA-1, header included - the form an HD pack's
+	//<supportedRom> line carries (HdPackBuilder writes RomFile.GetSha1Hash()).
+	//Kept beside the No-Intro body hash above, never conflated with it: these
+	//are two different hashes of the same ROM and comparing one against the
+	//other refuses every correct install.
+	string _romFileSha1;
 	//Containers disabled by the user (UI/config), lower-cased; independent of
 	//the current scan so it can be pushed at any time. Written from the UI
 	//thread (SetPackEnabled) and the decode thread (HandleLowTextureMatchRate)
@@ -202,6 +208,9 @@ public:
 	const string& GetRomName() const { return _romName; }
 
 	const string& GetRomSha1() const { return _romSha1; }
+	//ADR-0211: whole-file SHA-1 (see _romFileSha1) - the community-pack
+	//installer compares a declared <supportedRom> against this form.
+	const string& GetRomFileSha1() const { return _romFileSha1; }
 	bool HasPacks() const { return !_packs.empty(); }
 
 	//Per-pack toggle (persisted by the UI); takes effect on the next load

@@ -302,6 +302,7 @@ void MepPackManager::Clear()
 {
 	_bootstrapping = false;
 	_romSha1.clear();
+	_romFileSha1.clear();
 	_romExtension.clear();
 	_romName.clear();
 	_romFolder.clear();
@@ -478,6 +479,9 @@ void MepPackManager::LoadForRom(VirtualFile& romFile)
 	}
 
 	_romSha1 = ComputeNoIntroSha1(romFile);
+	//ADR-0211: the installer needs the whole-file form too - an HD pack's
+	//<supportedRom> is that hash, not the No-Intro body one.
+	_romFileSha1 = romFile.GetSha1Hash();
 	_romExtension = StringUtilities::ToLower(romFile.GetFileExtension());
 	string romPath = romFile.GetFilePath();
 	_romName = FolderUtilities::GetFilename(romPath, false);
