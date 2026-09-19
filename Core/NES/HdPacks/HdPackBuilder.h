@@ -312,6 +312,11 @@ private:
 	uint32_t _screenResidentCells = 0; //cells the screen surface owns (ADR-0156)
 	unordered_map<HdTileKey, MesenSheets::ShapeId> _shapeIds;
 	vector<MesenSheets::SheetTileKey> _shapeTiles; //drawable art per shape id
+	//ADR-0209 Q4(k) (F12.8): every shape id some sheet already put on a
+	//canvas, accumulated by WriteSheetFiles as each sheet is written, so the
+	//remainder sheet at the end of BuildSheets knows what is left. Cleared per
+	//BuildSheets run - it describes one save, not the object's lifetime.
+	std::set<MesenSheets::ShapeId> _claimedShapes;
 	bool _sheetsBuilt = false;
 	unordered_set<uint32_t> _sheetObjectShapes; //shape hashes inside an inferred object
 	vector<uint32_t> _shapeHashes;              //shape id -> shape hash

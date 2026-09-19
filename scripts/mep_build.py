@@ -194,6 +194,10 @@ def _sheet_layout(path: Path, scale: int) -> int:
 # is logged, so a surprising win is visible in the build output rather than
 # silent.
 _SHEET_RANK = {
+    # ADR-0209 Q4(k): the remainder sheet is disjoint from every other sheet by
+    # construction, so this rank never actually decides anything - it is 0 so
+    # that if a stale sheet ever does overlap it, the specific surface wins.
+    "unsorted": 0,
     "metatiles": 1,
     "sprites": 1,
     "misc": 2,

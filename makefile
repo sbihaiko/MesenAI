@@ -298,14 +298,23 @@ doc-checks: check-manifest
 	# Phase 11 C.7: ceilings = line count at the C.7 commit (shrink ok, grow fails).
 	# Amends ADR-0137's guarded-file list. PRD named five files with counts
 	# (said "six"); those five are the contract.
-	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2246
+	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): the
+	# HdPackBuilder.cpp ceiling rose from 2246 to 2265 for F12.8's remainder
+	# sheet. The sheet itself is host-free in SheetRender (no ceiling, unit
+	# tested); what landed here is the part that cannot be: accumulating each
+	# written sheet's shapes in the one funnel they all pass through, and the
+	# call that writes the complement. A ratchet again from 2265.
+	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2265
 	# Amended 2026-09-16 (ADR-0137, third amendment): the artist_chr_kit.py
 	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
 	# dedup, which added a function and the prose that explains it. The other
 	# three implementation ceilings are untouched, and this one is a ratchet
 	# again from 1802.
 	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1802
-	./scripts/check-file-loc.sh scripts/mep_build.py 1932
+	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
+	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
+	# its rank never decides anything.
+	./scripts/check-file-loc.sh scripts/mep_build.py 1936
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	# Amended 2026-09-17 (ADR-0137, fourth amendment; ADR-0207): the ceiling on
 	# scripts/core_unit_tests.cpp is GONE, not raised. C.7 ratcheted it at 7342
