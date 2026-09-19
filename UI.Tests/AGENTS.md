@@ -60,6 +60,11 @@ AOT/publish flow (see `.github/AGENTS.md` for the CI split).
 - `CommunityPacks/LegacyHdPackInstallTests` covers nested-wrapper extract
   (`ExtractToFolder` must write while the inner zip is still open) and
   LiQuiDz-style per-game folder zips (`FindGameFolderZip`).
+- `CommunityPacks/SupportedRomGuardTests` covers ADR-0211's four verdicts; keep
+  the patch-target case (a pack declaring its own patched hash, ADR-0198 §2) and
+  the unparseable-declaration cases when touching `DecideSupportedRom` — both
+  exist because the first version of that rule would have refused a correct
+  install.
 - Never add a `PackageReference` to Avalonia, or a `ProjectReference` to
   `UI/UI.csproj` — that reintroduces the native/SDL2 dependency this project
   is built to avoid.

@@ -252,6 +252,31 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   identical cell for cell, so they are less independent evidence than six
   recordings sound. `not evaluable` is never counted as a pass.
   [Log](../validation/f12.6a-lint-authored-conditions-2026-09-19.md).
+- **ADR-0211** (2026-09-19) — a pack that names a different ROM no longer gets
+  stamped with the ROM in hand. The fix for issue #314, where
+  `Bomberman/mep/` held the Contra 80s pack and rendered Contra's art for ten
+  days: `BuildLegacyPackJson` wrote the **loaded** ROM's hash over the
+  artifact's own `<supportedRom>`, manufacturing a pack that matched cleanly
+  forever after. `InstallHdLegacy` now reads the extracted `hires.txt` before
+  writing `pack.json` — a contradicting declaration refuses the install, leaves
+  no `mep/` behind and logs both hashes; a matching one is written into
+  `targets[0].sha1` in place of the loaded ROM's, so the stamp records the
+  pack's own claim. Absent or malformed declarations still install unchanged:
+  ADR-0145's optimism is about the *absence* of evidence, and this is about
+  contrary evidence. Two amendments the measurement forced, both in the ADR:
+  the No-Intro body hash counts as a match (the loader already accepts both
+  forms for `<patch>`, and an installer stricter than the loader would refuse
+  packs the loader then applies), and a declaration equal to the pack's own
+  `<patch>` target is the **patched** ROM (ADR-0198 §2) — without it, Zelda
+  Remastered, a pack issue #314 had cleared, would have been refused. The
+  decision is host-free in `LegacyHdPackInstall` (16 tests), the whole-file
+  hash reaches the installer through a new `GetMepRomFileSha1` export kept
+  deliberately separate from the No-Intro one, and
+  `verify_community_install_from_zero.py` mirrors the guard so the two cannot
+  drift. Replayed against the six packs on disk: #314 refused, the same pack
+  under Contra accepted, Zelda accepted as a patch target, Pac-Man refused as
+  the intended trade.
+  [Log](../validation/adr-0211-supported-rom-guard-2026-09-19.md).
 - **F12.10** (2026-09-19) — recording a folder of ROMs is a job, not an
   afternoon. `scripts/record_library.sh <roms-dir> <out-dir> [seconds=60]`
   resolves a driver per ROM — a declared route set, then a `.bk2` for that exact
@@ -937,7 +962,7 @@ files and in §3.
 | 0205 | accepted (2026-09-17), **pending slices R.1/R.2** | a shared replay is a `.mmo` from a single *Record and share* action, attached to its submission issue, listed by ROM and ranked by votes; the git tree carries no replay bytes. Phase 13 above |
 | 0206 | accepted (2026-09-17); shipped as Part B P.1-local | the local-container `content_id` cache is a stat-manifest fingerprint validated off the ROM load path |
 | 0207/0208 | accepted (2026-09-17); implemented | `core_unit_tests.cpp` loses its line ceiling (the ratchet guards the rest); the core log keeps a 1 000-entry ring plus an uncapped `mesen.log` with truncation marked |
-| 0211 | proposed (2026-09-18) | a declared `<supportedRom>` that contradicts the loaded ROM refuses the install — the guard for #314 (Bomberman rendered with Contra's art); no slice yet |
+| 0211 | accepted (2026-09-19); shipped the same day | a declared `<supportedRom>` that contradicts the loaded ROM refuses the install — the guard for #314 (Bomberman rendered with Contra's art). Amended on acceptance: the loaded ROM's No-Intro body hash also counts as a match (the loader already accepts both forms for `<patch>`), and a declaration equal to the pack's own `<patch>` target is the patched ROM (ADR-0198 §2), not a contradiction |
 | 0193 | accepted (2026-09-15); documented in the same change | `checks.yml` keeps **both** triggers, and the `push` on `main` is not an optimization to be cut: `pull_request` reports the five required checks before merge, and `push` is the only gate for the paths that bypass the ruleset — a direct push (admin `bypass_actors`, which is how `community-pack-catalog.yml` and a hand fix land) and a merge-commit/rebase tree the PR never tested (`strict_required_status_checks_policy: false`). Measured over the last 60 commits on `main`: 49 squash-merges, 7 merge-commit/rebase PRs, 4 with no PR at all. Reopening conditions in §5; the verifier asserts the `pull_request` + dispatch half and deliberately not the `push` one |
 | 0196 | accepted (2026-09-16), pending slice | `<addition>` is a compose-editor export anchored on a pose's observed root cell; its target key is synthetic by construction and provably unmatched (CHR ROM: index past CHR; CHR RAM: reserved pattern + `$0D` palette, evidence check on the palette). Slice F12.5 |
 | 0197 | accepted (2026-09-16), §1–§2 shipped as F12.6a (2026-09-19), §3 pending as F12.6b; amends 0189 §4's scope to emission only | hand-authored conditions are admitted in sheets and `mep_lint.py --routes` evaluates them on every retained frame of every recording; the three refusals of 0189 §4 stand; the recorder retains `$0000`–`$07FF` per retained frame so `memoryCheckConstant` in that window is evaluable (§3). Slice F12.6b; `spriteNearby` also waits on it (F12.6a log) |

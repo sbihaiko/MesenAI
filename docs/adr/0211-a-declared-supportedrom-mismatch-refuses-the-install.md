@@ -1,7 +1,12 @@
 # ADR-0211: A declared `<supportedRom>` that contradicts the loaded ROM refuses the install, instead of being overwritten by it
 
-- Status: proposed
-- Date: 2026-09-18
+- Status: accepted (2026-09-19) — implemented the same turn it was accepted,
+  under CLAUDE.md's exception: the change ships with unit tests covering the
+  decision (`UI.Tests/CommunityPacks/SupportedRomGuardTests.cs`), and the
+  go-ahead is quoted verbatim — *"agora resolve a ADR-0211, o bug #314"*.
+  Shipped 2026-09-19; amended the same day by §5 and §6 below, which the
+  measurement forced.
+- Date: 2026-09-18 (amended 2026-09-19)
 - Related: ADR-0145 (optimistic matcher), ADR-0146 (auto-install, no consent gate), ADR-0147 (`mep/` beside the ROM), ADR-0138 §41, MEP-v1 §2.1, issue #314
 
 ## Context
@@ -57,6 +62,24 @@ directly would refuse every correct install. The install path therefore needs
 the full-file hash exposed alongside the body hash; whichever way that is
 plumbed, the two must never be compared across forms.
 
+5. **Amendment, 2026-09-19 — a declaration equal to the loaded ROM's No-Intro
+   body hash also counts as a match.** Rule 3 above named only the full-file
+   form. Both conventions exist: `HdPackBuilder` writes the full-file hash, and
+   community packs sometimes carry the No-Intro one (ADR-0044) — `NesConsole`
+   already tries both when matching a `<patch>` line. An installer stricter
+   than the loader would refuse packs the loader then happily applies. Both
+   forms of the loaded ROM are therefore accepted; what is still never done is
+   comparing one form against the other.
+
+6. **Amendment, 2026-09-19 — a declaration equal to one of the pack's own
+   `<patch>` targets is not a contradiction.** Measured against the packs on
+   disk: Zelda Remastered declares `DAB79C84…` in `<supportedRom>` *and* on its
+   `<patch>ZeldaHD.ips` line — the hash of the ROM **after** the patch
+   (ADR-0198 §2). It matches no unpatched dump, so rule 4 as first written would
+   have refused a correct install, one issue #314 had already examined and
+   cleared. The exemption is narrow on purpose: it covers the pack's own
+   declared patch targets, not the mere presence of a `<patch>` line.
+
 Verification: unit tests in `scripts/core_unit_tests.cpp` (or `UI.Tests` if the
 decision lands host-free, which is preferred — the comparison itself has no host
 dependency) covering all four branches, including the header/body distinction as
@@ -66,7 +89,10 @@ its own case, since that is the trap.
 
 - A user whose dump is a different revision of the same game, where the pack
   author declared a hash, now gets a refusal where they previously got an
-  optimistic install. This is the intended trade: the pack author stated which
+  optimistic install. **Measured, 2026-09-19:** of the packs on this machine,
+  exactly one falls here — Pac-Man, whose pack targets the 1993 Namco release
+  against a 1984 dump. It is asserted as a test so the day this proves too
+  strict, the test is what gets edited, with an amendment beside it. This is the intended trade: the pack author stated which
   dump they targeted, and the optimistic path remains for every pack that did
   not state one. Should this prove too strict in practice, the escape hatch is a
   per-pack override, not a return to silent overwriting.

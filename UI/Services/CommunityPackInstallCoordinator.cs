@@ -117,11 +117,61 @@ namespace Mesen.Services
 				return CommunityPackInstallOutcome.Failed(error);
 			}
 
+			//ADR-0211: the extracted pack may name the ROM it was authored for.
+			//A declaration that contradicts the ROM in hand refuses the install
+			//instead of being overwritten by it - that overwrite is what made
+			//issue #314 silent (Bomberman rendered with Contra's art for ten
+			//days, because the stamp replaced the only record of the
+			//disagreement). Absent or unparseable declarations still install,
+			//unchanged: ADR-0145's optimism is about the *absence* of evidence.
+			string loadedNoIntroSha1 = EmuApi.GetMepRomSha1();
+			string loadedWholeFileSha1 = EmuApi.GetMepRomFileSha1();
+			LegacyHdPackInstall.SupportedRomDeclaration declaration = ReadSupportedRomDeclaration(texturesFolder);
+			string stampedSha1 = loadedNoIntroSha1;
+			switch(LegacyHdPackInstall.DecideSupportedRom(declaration, loadedNoIntroSha1, loadedWholeFileSha1)) {
+				case LegacyHdPackInstall.SupportedRomVerdict.Contradicts:
+					EmuApi.WriteLogEntry("[CommunityPackInstall] refused: pack declares supportedRom " + declaration.Declared +
+						", loaded ROM is " + loadedWholeFileSha1 + " (no-intro " + loadedNoIntroSha1 + ")");
+					//Leave no mep/ behind - a half-written folder would be
+					//unstamped, and the next install would refuse it as the
+					//user's own work.
+					ClearFolderForReinstall(outFolder);
+					return CommunityPackInstallOutcome.Failed(
+						"pack declares supportedRom " + declaration.Declared + ", which is not the loaded ROM");
+				case LegacyHdPackInstall.SupportedRomVerdict.Matches:
+					//Record the pack's own claim rather than the loaded ROM's
+					//hash, so the stamp keeps the evidence it was checked against.
+					stampedSha1 = declaration.Declared;
+					break;
+				case LegacyHdPackInstall.SupportedRomVerdict.PatchTarget:
+					EmuApi.WriteLogEntry("[CommunityPackInstall] supportedRom " + declaration.Declared +
+						" is this pack's own <patch> target (ADR-0198 §2) - installing");
+					break;
+				case LegacyHdPackInstall.SupportedRomVerdict.NotDeclared:
+					break;
+			}
+
 			Directory.CreateDirectory(outFolder);
-			File.WriteAllText(Path.Combine(outFolder, "pack.json"), BuildLegacyPackJson(entry, EmuApi.GetMepRomSha1(), romName));
+			File.WriteAllText(Path.Combine(outFolder, "pack.json"), BuildLegacyPackJson(entry, stampedSha1, romName));
 			File.WriteAllText(stampPath, BuildLegacyInstallStamp(entry, entry.Sha256));
 			EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy installed (MEP-ized): " + outFolder);
 			return CommunityPackInstallOutcome.Installed(containerName, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
+		}
+
+		//Reads the extracted pack's textures/hires.txt for ADR-0211's check. A
+		//pack with no readable hires.txt declares nothing, which installs
+		//unchanged - the loader is what decides whether the pack is usable.
+		private static LegacyHdPackInstall.SupportedRomDeclaration ReadSupportedRomDeclaration(string texturesFolder)
+		{
+			string hiresPath = Path.Combine(texturesFolder, "hires.txt");
+			try {
+				if(File.Exists(hiresPath)) {
+					return LegacyHdPackInstall.ReadSupportedRom(File.ReadLines(hiresPath));
+				}
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				EmuApi.WriteLogEntry("[CommunityPackInstall] could not read " + hiresPath + " for the supportedRom check: " + ex.Message);
+			}
+			return new LegacyHdPackInstall.SupportedRomDeclaration();
 		}
 
 		//Finds the pack root (the folder that holds hires.txt) inside a legacy
@@ -170,8 +220,10 @@ namespace Mesen.Services
 
 		//MEP-ized pack.json for a legacy HD pack (ADR-0147): the pack root is
 		//extracted to mep/textures/, so it loads as a MEP `textures` section.
-		//Location is identity (MEP-v1 §2.1 rule 8) - the target records the
-		//loaded ROM's No-Intro SHA-1 (or the catalog's) for reference only.
+		//Location is identity (MEP-v1 §2.1 rule 8) - the target records a hash
+		//for reference only: the pack's own <supportedRom> when it declared one
+		//that checks out (ADR-0211), otherwise the loaded ROM's No-Intro SHA-1
+		//(or the catalog's).
 		private static string BuildLegacyPackJson(CommunityPackCatalogEntry entry, string romSha1, string romName)
 		{
 			string system = string.IsNullOrWhiteSpace(entry.System) ? "nes" : entry.System;
