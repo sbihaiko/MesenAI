@@ -121,6 +121,15 @@ namespace MesenSheets
 	//amendment added the palette plane (1920 B of shape ids + 960 B of palette
 	//ids), i.e. ~11.5 MB with the stream full.
 	constexpr uint32_t kMaxSheetFrames = 4096;
+	//F12.6b (ADR-0197 §3, option (b)): the internal RAM window the recorder
+	//keeps beside every retained grid frame, so a `memoryCheckConstant` an
+	//artist writes after the fact can still be checked against the run. It is
+	//the same range ADR-0184 bounds for RAM cheats (AAAA < 0x0800). Fixed, and
+	//independent of any loaded pack's WatchedMemoryAddresses - option (a),
+	//retaining only what a pack already watches, was rejected because a new
+	//address would need the pack loaded and the run re-recorded first.
+	//2 KB x kMaxSheetFrames = 8 MB with the stream full.
+	constexpr uint32_t kRetainedRamSize = 0x800;
 	//1-cell gutter, transparent, between every sheet cell.
 	constexpr uint32_t kSheetGutter = 1;
 	//Largest stitched-map canvas rendered at 1x, in pixels (ADR-0153 §6: a map
@@ -420,6 +429,29 @@ namespace MesenSheets
 			return SameCells(o) && memcmp(Palettes, o.Palettes, sizeof(Palettes)) == 0;
 		}
 	};
+
+	//F12.6b (ADR-0197 §3): the body of a grid dump's `M` line - the retained
+	//RAM window as upper-case hex with no separators, `kRetainedRamSize * 2`
+	//characters, always the full width so a reader can index a byte by
+	//multiplying its address by two. A short or absent buffer pads with zeroes
+	//rather than shortening the line, because a ragged line would read as a
+	//different address space.
+	//
+	//It lives here, host-free and inline, on purpose: `HdPackBuilder.cpp` is
+	//not in the unit-test link set, so the encoding the emulator writes would
+	//otherwise be untestable and could drift from the one `mep_conditions.py`
+	//reads.
+	inline std::string RamDumpLine(const uint8_t* ram, size_t size)
+	{
+		static const char* digits = "0123456789ABCDEF";
+		std::string out((size_t)kRetainedRamSize * 2, '0');
+		size_t n = ram == nullptr ? 0 : (size < kRetainedRamSize ? size : kRetainedRamSize);
+		for(size_t i = 0; i < n; i++) {
+			out[i * 2] = digits[ram[i] >> 4];
+			out[i * 2 + 1] = digits[ram[i] & 0x0F];
+		}
+		return out;
+	}
 
 	//---- OAM (F9.5) --------------------------------------------------------
 

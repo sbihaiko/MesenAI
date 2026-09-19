@@ -674,7 +674,12 @@ void NesConsole::InternalRunFrame()
 					((uint8_t)snesPad->IsPressed(SnesController::Buttons::Right) << 7);
 			}
 		}
-		_hdPackBuilder->OnFrameEnd(buttons);
+		//F12.6b (ADR-0197 §3): the console's own `$0000`-`$07FF`, read at this
+		//same end-of-frame boundary, so a `memoryCheckConstant` replayed off
+		//the recording sees what HdNesPpu::OnBeforeSendFrame would have
+		//sampled. A mapper with a wider internal RAM (FamicomBox) is clipped to
+		//the window the ADR fixes.
+		_hdPackBuilder->OnFrameEnd(buttons, _memoryManager->GetInternalRam(), _mapper->GetInternalRamSize());
 	}
 
 	if(_hdAudioDevice) {

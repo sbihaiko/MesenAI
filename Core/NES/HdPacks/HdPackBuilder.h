@@ -309,6 +309,13 @@ private:
 	//stem and the node's on-screen placement, so a sheetless cell resolves to
 	//a crop from backgrounds/<stem>.orig.png.
 	vector<string> _screenStems;
+	//F12.6b (ADR-0197 §3, option (b)): the internal RAM of each retained grid
+	//frame, flat, kRetainedRamSize bytes per frame and parallel to _gridFrames
+	//by construction (RecordGridFrame resizes it to match on every push). A
+	//separate plane rather than a GridFrame member: the vocabulary, the
+	//stitcher and the grouping all copy GridFrames around and none of them
+	//reads memory, so 2 KB inside the struct would be paid on every pass.
+	vector<uint8_t> _gridRam;
 	uint32_t _screenResidentCells = 0; //cells the screen surface owns (ADR-0156)
 	unordered_map<HdTileKey, MesenSheets::ShapeId> _shapeIds;
 	vector<MesenSheets::SheetTileKey> _shapeTiles; //drawable art per shape id
@@ -321,7 +328,7 @@ private:
 	unordered_set<uint32_t> _sheetObjectShapes; //shape hashes inside an inferred object
 	vector<uint32_t> _shapeHashes;              //shape id -> shape hash
 	uint32_t _sheetObjectCount = 0;
-	void RecordGridFrame();
+	void RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize);
 	MesenSheets::ShapeId ShapeIdFor(const HdPpuTileInfo& tile);
 	//ADR-0159 amendment: PaletteColors -> the per-cell palette id the grid
 	//stream carries, so a variant that only recolours an anchor cell is
@@ -339,7 +346,9 @@ private:
 	//save time - the hot path keeps no dump code. Line kinds: "F <n>" opens a
 	//frame (repeated once per collapsed duplicate), "K <shape> <32 hex tile
 	//data> <8 hex palette>" interns a shape, "P <id> <8 hex palette>" interns a
-	//palette word, and "<x> <y> <shape> <palette id>" places a cell. The fourth
+	//palette word, "M <4096 hex>" carries the frame's internal RAM (F12.6b,
+	//ADR-0197 §3 - once per retained frame, on its first repeat), and
+	//"<x> <y> <shape> <palette id>" places a cell. The fourth
 	//cell field and the "P" lines are the per-cell palette plane (F9.24): the
 	//shape ids wildcard the palette, so without it a recoloured tile reads as
 	//the colours it was *first* seen with. A reader that predates them parses
@@ -399,7 +408,13 @@ public:
 	//ADR-0181 §1: `buttons` is the packed button byte of ports 1 and 2 at
 	//frame end (NesController::ToByte order), 0 for a port without a pad;
 	//it rides on the retained OamFrame and never enters frame identity.
-	void OnFrameEnd(const uint8_t buttons[2]);
+	//F12.6b (ADR-0197 §3): `internalRam` is the console's `$0000`-`$07FF`, read
+	//at the same frame boundary HdNesPpu samples a pack's watched addresses at,
+	//so a condition replayed off the recording sees the byte the emulator would
+	//have seen. It is copied per *retained* frame - a frame that collapses into
+	//RepeatCount keeps the RAM of the frame it collapsed into. May be null (a
+	//console without one); the plane then holds zeroes and stays parallel.
+	void OnFrameEnd(const uint8_t buttons[2], const uint8_t* internalRam, uint32_t internalRamSize);
 
 	//Static export (no gameplay needed): every 16-byte tile of CHR ROM becomes
 	//a palette-agnostic defaultTile entry drawn with a neutral gray ramp.

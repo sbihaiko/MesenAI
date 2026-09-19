@@ -304,7 +304,13 @@ doc-checks: check-manifest
 	# tested); what landed here is the part that cannot be: accumulating each
 	# written sheet's shapes in the one funnel they all pass through, and the
 	# call that writes the complement. A ratchet again from 2265.
-	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2265
+	# Amended 2026-09-19 (ADR-0137, eighth amendment; ADR-0197 §3, F12.6b):
+	# 2265 -> 2282 for the recorder's retention of the $0000-$07FF window. The
+	# `M` line's encoder is host-free and inline in TileSheetTypes.h (and unit
+	# tested there); what is here is the OnFrameEnd/RecordGridFrame parameter,
+	# the per-retained-frame copy, and the line WriteGridDump emits. A ratchet
+	# again from 2282.
+	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2282
 	# Amended 2026-09-16 (ADR-0137, third amendment): the artist_chr_kit.py
 	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
 	# dedup, which added a function and the prose that explains it. The other

@@ -567,11 +567,18 @@ the sky.
 It is a report, not a gate: exit 0 means the report was produced, not that your
 conditions were right. Reading it is your job.
 
-Two kinds are reported as **`not evaluable`**, with the reason printed: the ones
-that need the console's memory (`memoryCheckConstant`, `ppuMemoryCheck*`) and
-the ones that need the sprite stream (`spriteNearby`, `positionCheck*`). A
-recording does not carry what they ask about. `not evaluable` is never a pass —
-if you ship one, nothing has checked it.
+A `memoryCheckConstant` is checked like the rest, as long as the address is in
+the console's internal RAM (`$0000`–`$07FF`) and the recording was made after
+F12.6b: every retained frame carries that 2 KB window, so lint reads the byte
+the emulator would have read. All 486 `memoryCheckConstant` lines of the
+`Contra80s 1.1` pack are inside it.
+
+What is still reported as **`not evaluable`**, with the reason printed, is an
+address outside that window (WRAM `$6000`+, PRG, mapper registers,
+`ppuMemoryCheck*`), a `memoryCheck` comparing two watched addresses, a
+recording made before F12.6b, and everything that needs the sprite stream
+(`spriteNearby`, `positionCheck*`). `not evaluable` is never a pass — if you
+ship one, nothing has checked it.
 
 ### Look at the painted pack before you ship it
 

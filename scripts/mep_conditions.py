@@ -15,15 +15,18 @@ report. Where the C++ is reproduced, the C++ line is quoted in a comment.
 **What a recording can and cannot answer.** The evaluator reads the grid stream
 the recorder writes under `MESEN_SHEET_GRID_DUMP` — per retained frame, the
 background tile grid with each cell's shape and palette. That is enough for
-`frameRange`, `tileAtPosition` and `tileNearby`. It is not enough for:
+`frameRange`, `tileAtPosition` and `tileNearby`. Since F12.6b (ADR-0197 §3,
+option (b)) every retained frame also carries the 2 KB of internal RAM,
+`$0000`–`$07FF`, as an `M` line, which is what `memoryCheckConstant` reads. It
+is not enough for:
 
 * `spriteNearby` / `spriteAtPosition` — the sprite stream is dumped separately
   (`MESEN_OAM_STREAM_DUMP`) and carries **vocabulary indexes**, not tile data,
   so a condition's 32-hex key cannot be matched against it. Resolving that
   needs the dump format to change, which ADR-0197's Consequences assign to
   F12.6b;
-* `memoryCheckConstant` / `memoryCheck` — no memory stream is retained at all
-  until F12.6b (ADR-0197 §3);
+* `memoryCheck` — it compares two watched addresses; F12.6b scoped the
+  retained window to what `memoryCheckConstant` needs and stopped there;
 * `positionCheckX/Y`, `originPositionCheckX/Y` — these read the sprite's own
   screen position, which is in the OAM stream, not the grid.
 
@@ -52,7 +55,14 @@ _HEX32 = re.compile(r"^[0-9A-Fa-f]{32}$")
 
 # Types this module can decide from a grid stream, and the reason for each one
 # it cannot. Anything absent from both is an unknown type and lint says so.
-EVALUABLE = ("frameRange", "tileAtPosition", "tileNearby")
+EVALUABLE = ("frameRange", "tileAtPosition", "tileNearby",
+             "memoryCheckConstant")
+# ADR-0197 §3 option (b): the recorder retains exactly this window per frame.
+# It is the range ADR-0184 already bounds for RAM cheats.
+RAM_WINDOW = 0x800
+NO_MEMORY_STREAM = (
+    "the recording retains no memory stream — it was made before F12.6b "
+    "(ADR-0197 §3); re-record it to validate a memory condition")
 NOT_EVALUABLE = {
     "spriteNearby":
         "the recorded sprite stream carries vocabulary indexes, not tile data, "
@@ -61,13 +71,12 @@ NOT_EVALUABLE = {
         "the recorded sprite stream carries vocabulary indexes, not tile data, "
         "so a 32-hex key cannot be matched against it (ADR-0197, F12.6b)",
     "memoryCheck":
-        "no memory stream is retained in the recording (ADR-0197 §3, F12.6b)",
-    "memoryCheckConstant":
-        "no memory stream is retained in the recording (ADR-0197 §3, F12.6b)",
+        "it compares two watched addresses; F12.6b retained the window "
+        "memoryCheckConstant needs and scoped itself to that (ADR-0197 §3)",
     "ppuMemoryCheck":
-        "PPU memory is outside the retained window (ADR-0197 §3)",
+        "PPU memory is outside the retained $0000-$07FF window (ADR-0197 §3)",
     "ppuMemoryCheckConstant":
-        "PPU memory is outside the retained window (ADR-0197 §3)",
+        "PPU memory is outside the retained $0000-$07FF window (ADR-0197 §3)",
     "positionCheckX":
         "the sprite's own screen position is in the sprite stream, not the grid",
     "positionCheckY":
@@ -84,11 +93,22 @@ class ConditionError(ValueError):
     """A `<condition>` line a sheet cannot carry."""
 
 
+# HdPackLoader::ParseConditionOperator, in the loader's own spellings.
+_COMPARE = {
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+    ">": lambda a, b: a > b,
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    ">=": lambda a, b: a >= b,
+}
+
+
 class Condition:
     """One parsed `<condition>` line, in the loader's own field order."""
 
     __slots__ = ("name", "type", "line", "x", "y", "tile", "palette",
-                 "ignore_palette", "operand_a", "operand_b")
+                 "ignore_palette", "operand_a", "operand_b", "operator", "mask")
 
     def __init__(self, name, ctype, line):
         self.name = name
@@ -99,14 +119,37 @@ class Condition:
         self.palette = ""
         self.ignore_palette = False
         self.operand_a = self.operand_b = 0
+        # memoryCheckConstant only: the comparison and the AND mask the C++
+        # applies to the *watched* byte alone (`a & Mask`, `b = OperandB`).
+        self.operator = "=="
+        self.mask = 0xFF
 
     @property
     def evaluable(self):
-        return self.type in EVALUABLE
+        return self.not_evaluable_reason is None
 
     @property
     def not_evaluable_reason(self):
+        """Why this condition cannot be decided from *any* recording, or None.
+
+        Route-dependent reasons (an old dump with no memory stream) are
+        `not_evaluable_on` — a condition that this build can evaluate should
+        not read as a type the toolchain refuses.
+        """
+        if self.type == "memoryCheckConstant" and self.operand_a >= RAM_WINDOW:
+            return (f"address ${self.operand_a:04X} is outside the retained "
+                    f"$0000-$07FF window (ADR-0197 §3); WRAM, PRG and mapper "
+                    "registers are not recorded")
         return NOT_EVALUABLE.get(self.type)
+
+    def not_evaluable_on(self, route):
+        """Why this condition cannot be decided from *this* route, or None."""
+        reason = self.not_evaluable_reason
+        if reason is not None:
+            return reason
+        if self.type == "memoryCheckConstant" and not route.has_ram:
+            return NO_MEMORY_STREAM
+        return None
 
     def __repr__(self):
         return f"<Condition {self.name} {self.type}>"
@@ -129,6 +172,15 @@ class Condition:
         if self.type == "tileAtPosition":
             # PixelOffset = (y * 256) + x, then ScreenTiles[PixelOffset].Tile.
             return self._tile_matches(frame, self.x, self.y)
+        if self.type == "memoryCheckConstant":
+            # HdPackMemoryCheckConstantCondition::InternalCheckCondition:
+            #   uint8_t a = WatchedAddressValues[OperandA] & Mask;
+            #   uint8_t b = OperandB;
+            # The mask is applied to the read byte only, never to the constant.
+            if frame.ram is None:
+                return False
+            return _COMPARE[self.operator](frame.ram[self.operand_a] & self.mask,
+                                           self.operand_b)
         if self.type == "tileNearby":
             if cell_col is None or cell_row is None:
                 return False
@@ -220,6 +272,37 @@ def parse_condition_line(line):
             raise ConditionError(
                 f"{name}: tileNearby offsets must be multiples of 8 "
                 f"(got {cond.x},{cond.y})")
+    elif ctype == "memoryCheckConstant":
+        # HdPackLoader: `<condition>name,memoryCheckConstant,<addr>,<op>,<val>
+        # [,<mask>]`, every numeric field hex (the loader reads them all with
+        # HexUtilities::FromHex, so `30` is $30 and not 30).
+        if len(tokens) < 5:
+            raise ConditionError(
+                f"{name}: memoryCheckConstant needs at least 5 fields "
+                "(name, type, address, operator, value)")
+        if len(tokens) > 6:
+            raise ConditionError(f"{name}: memoryCheckConstant takes at most 6 fields")
+        try:
+            cond.operand_a = int(tokens[2], 16)
+            cond.operand_b = int(tokens[4], 16)
+            cond.mask = int(tokens[5], 16) if len(tokens) > 5 else 0xFF
+        except ValueError:
+            raise ConditionError(
+                f"{name}: memoryCheckConstant address, value and mask are hex") from None
+        if tokens[3] not in _COMPARE:
+            raise ConditionError(
+                f"{name}: {tokens[3]!r} is not an operator; the loader knows "
+                + ", ".join(sorted(_COMPARE)))
+        cond.operator = tokens[3]
+        if not 0 <= cond.operand_a <= 0xFFFF:
+            raise ConditionError(f"{name}: address out of range")
+        if not 0 <= cond.operand_b <= 0xFF:
+            # HdPackLoader: "Out of range memoryCheckConstant operand".
+            raise ConditionError(
+                f"{name}: memoryCheckConstant compares one byte, so the value "
+                f"must be 00-FF (got {tokens[4]!r})")
+        if not 0 <= cond.mask <= 0xFF:
+            raise ConditionError(f"{name}: mask must be 00-FF")
     elif ctype == "frameRange":
         if len(tokens) < 4:
             raise ConditionError(f"{name}: frameRange needs 4 fields")
@@ -275,12 +358,15 @@ def load_sheet_conditions(doc, where=""):
 class GridFrame:
     """One retained frame of the recorder's background grid."""
 
-    __slots__ = ("index", "repeat", "fine", "rows", "pals", "_shapes")
+    __slots__ = ("index", "repeat", "fine", "rows", "pals", "ram", "_shapes")
 
     def __init__(self, index, shapes):
         self.index = index
         self.repeat = 1
         self.fine = 0
+        # F12.6b: the `M` line's 2 KB, or None on a dump written before it.
+        # Held as `bytes`, so `frame.ram[addr]` is the byte at that address.
+        self.ram = None
         self.rows = [[EMPTY] * COLS for _ in range(ROWS)]
         self.pals = [[UNKNOWN_PALETTE] * COLS for _ in range(ROWS)]
         self._shapes = shapes
@@ -332,6 +418,9 @@ class Route:
         self.frames = frames
         self.shapes = shapes
         self.path = path
+        # F12.6b: whether this recording carries the memory plane at all. A
+        # dump is written by one build, so one frame settles it.
+        self.has_ram = any(f.ram is not None for f in frames)
 
     @property
     def retained(self):
@@ -349,16 +438,19 @@ class Route:
 def parse_grid_dump(path):
     """Read a `MESEN_SHEET_GRID_DUMP` file into frames and shapes.
 
-    Four line kinds (`HdPackBuilder::WriteGridDump`): `F <n>` opens a frame and
+    Five line kinds (`HdPackBuilder::WriteGridDump`): `F <n>` opens a frame and
     repeats once per collapsed duplicate, `K <id> <32 hex tile data> <8 hex
     palette>` interns a shape the first time it is drawn, `P <id> <8 hex
-    palette>` interns a palette word, and `<x> <y> <shape> [<palette id>]`
-    places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
+    palette>` interns a palette word, `M <4096 hex>` carries that frame's
+    internal RAM (F12.6b — written once, on the frame's first repeat), and
+    `<x> <y> <shape> [<palette id>]` places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
     fine scroll and `(x - fineX) // 8` its column.
 
     The fourth cell field and the `P` lines are F9.24's palette plane. A dump
     written by an older build has neither; it parses unchanged and every cell
-    falls back to the shape's own first-seen palette.
+    falls back to the shape's own first-seen palette. The same holds for `M`:
+    a pre-F12.6b dump has none, every frame's `ram` stays None, and a memory
+    condition reports `not evaluable` rather than a verdict.
     """
     path = Path(path)
     frames = []
@@ -384,6 +476,19 @@ def parse_grid_dump(path):
             elif head == "P":
                 parts = line.split()
                 shapes.palettes[int(parts[1])] = parts[2].upper()
+            elif head == "M":
+                # F12.6b: `M <4096 hex>` — the retained $0000-$07FF of the
+                # frame that is open, written once on its first repeat. A
+                # short or malformed line is dropped rather than half-read:
+                # a partial window would answer a memory condition with a
+                # byte from the wrong address.
+                if cur is not None:
+                    body = line[2:].strip()
+                    if len(body) == RAM_WINDOW * 2:
+                        try:
+                            cur.ram = bytes.fromhex(body)
+                        except ValueError:
+                            cur.ram = None
             elif cur is not None:
                 parts = line.split()
                 x = int(parts[0])
@@ -500,9 +605,10 @@ def evaluate(condition, keys, route):
     for by name.
     """
     v = ConditionVerdict(condition, route)
-    if not condition.evaluable:
+    reason = condition.not_evaluable_on(route)
+    if reason is not None:
         v.evaluable = False
-        v.reason = condition.not_evaluable_reason or "unknown condition type"
+        v.reason = reason
         return v
 
     relative = condition.type == "tileNearby"
