@@ -26,9 +26,9 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        source: `--source`, else `textures/hires.txt` (a prior build), else
        `auto/textures/hires.txt` (the emulator bootstrap, F5.2). The sheets
        replace the art; the keys and the header tags (ver/scale/system/
-       supportedRom/options/overscan) are carried over. Background tags are
-       preserved; a background PNG missing under `textures/` but present
-       under `auto/textures/` is copied up (the author keeps their assets).
+       supportedRom/options/overscan) are carried over. A background PNG
+       missing under `textures/` but present under `auto/textures/` is copied
+       up; one missing from both is retired and its tag dropped (#344).
        <bgm>/<sfx> never live in the textures manifest — they belong to the
        audio section (MEP-v1 §2.1 rule 6), so build moves them there.
 
@@ -904,24 +904,14 @@ def _build_audio_manifest(folder: Path, system: str | None, seed: list) -> str |
 
 
 
-def screen_shadowed_cells(sheets_dir: Path, docs: list):
-    """Cells whose art a captured screen covers, per sheet.
+def screen_resident_keys(sheets_dir: Path):
+    """`{tile key: capture name}` — every tile a captured screen also draws.
 
-    A bootstrap pack draws whole captured screens as `<background>` layers
-    (ADR-0050) at a priority above every `<tile>`, and ADR-0156 makes such a
-    screen the owner of the cells it covers. So on a scene a capture covers,
-    painting `metatiles.png` or `map-NNN.png` changes nothing on screen — the
-    file to paint is `backgrounds/screenNNN.png`. That is by design, and
-    invisible: an artist repaints a sheet, rebuilds, sees the old scene and has
-    no way to tell why. This reports it.
-
-    Returns `{sheet name: (count, first screen)}`. Empty is the normal answer
-    for a pack recorded since ADR-0156, which keeps a covered cell off the
-    sheets in the first place — then the scene is simply not in `sheets/` at
-    all, and `captured_screen_note` is what tells the artist where it lives.
-    Also empty when the pack carries no `adjacency.json` or no screen-resident
-    node (ADR-0166 records `screens[]`; a pack recorded before it says nothing,
-    and silence is not evidence of coverage)."""
+    ADR-0050/ADR-0156: a capture owns the frames it was frozen for, so a cell
+    whose key it also draws is painted in vain there. Keyed on the tile (the
+    32-hex bitmap, plus the CHR index token for a CHR ROM game), never on the
+    `metatile` cell id a pasted cell does not carry (#338). Empty for a pack
+    with no `adjacency.json`/`screens[]` — silence is not evidence."""
     adjacency = Path(sheets_dir) / "adjacency.json"
     if not adjacency.is_file():
         return {}
@@ -929,39 +919,26 @@ def screen_shadowed_cells(sheets_dir: Path, docs: list):
         doc = json.loads(adjacency.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return {}
-    nodes = ((doc.get("background") or {}).get("nodes")) or []
     resident = {}
-    for n in nodes:
-        if not isinstance(n, dict):
+    for n in ((doc.get("background") or {}).get("nodes")) or []:
+        screens = n.get("screens") if isinstance(n, dict) else None
+        if not screens or not isinstance(screens[0], dict):
             continue
-        screens = n.get("screens") or []
-        cell = n.get("cell")
-        if screens and isinstance(cell, int) and isinstance(screens[0], dict):
-            resident[cell] = screens[0].get("screen")
-    if not resident:
-        return {}
-    out = {}
-    for sd in docs:
-        if sd.kind not in ("metatiles", "map", "object", "misc"):
-            continue
-        hits = [resident[c["metatile"]] for c in (sd.cells or [])
-                if isinstance(c, dict) and c.get("metatile") in resident]
-        if hits:
-            out[sd.name] = (len(hits), hits[0])
-    return out
+        for t in n.get("tiles") or []:
+            if not isinstance(t, dict):
+                continue
+            resident.setdefault(str(t.get("tile") or "").upper(), screens[0].get("screen"))
+            if isinstance(t.get("index"), int) and t["index"] >= 0:
+                resident.setdefault(_index_token(t["index"]), screens[0].get("screen"))
+    resident.pop("", None)  # a sidecar entry with no bitmap
+    return resident
 
 
 
 def captured_screen_note(textures_dir: Path):
     """`(count, first capture name)` for the `<background>` captures a pack
-    carries, or None.
-
-    ADR-0050 has the bootstrap freeze static screens as whole-screen
-    `<background>` layers, and the host draws them above every `<tile>`. On a
-    scene one covers, the sheets are not the surface: repainting
-    `metatiles.png` or `map-NNN.png` and rebuilding leaves the game looking
-    exactly as before, with nothing to explain why. The F9.18 panel rehearsal
-    lost its seam test to precisely this."""
+    carries, or None. The F9.18 panel rehearsal lost its seam test to a scene
+    a capture owned, so a pack that has any is worth saying so out loud."""
     backgrounds = Path(textures_dir) / "backgrounds"
     if not backgrounds.is_dir():
         return None
@@ -1063,11 +1040,6 @@ def cmd_build(args) -> int:
     if total_cells > len(tiles):
         print(f"info: sheets hold {total_cells} cell(s), only {len(tiles)} are referenced; trailing cells stay unused")
 
-    for name, (count, screen) in sorted(screen_shadowed_cells(sheets_dir, sheet_docs).items()):
-        print(f"warning: {name}: {count} cell(s) are covered by the captured screen "
-              f"backgrounds/{screen}.png, which draws over every <tile> (ADR-0050/ADR-0156) — "
-              f"paint that capture to change those cells; painting this sheet will not show in game")
-
     offsets = []
     acc = 0
     for n in cell_sizes:
@@ -1143,6 +1115,9 @@ def cmd_build(args) -> int:
     # ADR-0178: crops of a pack recorded before the ADR, recognised - never
     # repaired - by the un-flip test below.
     baked_flip = {}
+    # #343: every painted crop that emits no <tile> because another crop
+    # already owns its key, as (sheet, data, palette, owner).
+    muted = []
     for sd in sheet_docs:
         try:
             crops = _slice_sheet(sd, scale, sheets_dir)
@@ -1193,6 +1168,8 @@ def cmd_build(args) -> int:
                     repeats += 1
                     if edited and not entries[at][3]:
                         entries[at] = row
+                    elif edited:
+                        muted.append((f"sheets/{sd.name}", data, pal, f"sheets/{sd.name}"))
                     continue
                 seen[key] = len(entries)
                 entries.append(row)
@@ -1220,29 +1197,24 @@ def cmd_build(args) -> int:
         for name, count in sorted(baked_flip.items()):
             print(f"error: {name}: {count} crop(s) carry a flip-baked tile key the run time "
                   f"never looks up, and the unflipped twin is in this game's key source — "
-                  f"repainting them would do nothing; re-record the pack with a build that "
-                  f"has ADR-0178", file=sys.stderr)
+                  f"repainting them would do nothing; record the pack again into an EMPTY "
+                  f"folder, never in place (ADR-0178, #337)", file=sys.stderr)
         return 2
 
     if missing_index:
         for name, count in sorted(missing_index.items()):
             print(f"error: {name}: {count} crop(s) carry no tile index, but this game's keys are "
-                  f"index-based (CHR ROM) — the rebuilt pack would match nothing at run time; "
-                  f"re-record the pack with a build that has ADR-0172", file=sys.stderr)
+                  f"index-based (CHR ROM) — the rebuild would match nothing; record the pack again "
+                  f"into an EMPTY folder, never in place (ADR-0172, #337)", file=sys.stderr)
         return 2
 
     # Precedence (ADR-0153 §4): a cell only claims a tile key when it was
     # actually painted, measured against the `*.orig.png` twin. A painted cell
     # always beats an untouched one, whatever their kinds; between two painted
     # cells - and between two untouched ones - the static rank decides, ties
-    # broken by emission order (later wins). Every override is logged, so
-    # nothing silently disappears. A painted *sprite* cell that still loses is
-    # an error (#253): figure sheets (`usrNNN`, kind sprite) are what the
-    # artist repaints, and a green build used to hide that the paint never
-    # reached the rendered figure. Map-vs-metatiles both-painted stays a
-    # logged precedence choice, not a failure.
+    # broken by emission order (later wins). Every override is logged, and
+    # every painted crop that loses a key joins `muted` for the reports below.
     winner = {}
-    painted_losses = []
     for order, slot in enumerate(slots):
         for pos, entry in enumerate(slot["entries"]):
             key = entry[0]
@@ -1254,28 +1226,45 @@ def cmd_build(args) -> int:
                 if score < prev[2]:
                     lost = "untouched" if prev[2][0] and not edited else "precedence"
                     print(f"info: {slot['rel']} loses tile {key[1]}/{key[2]} to {slots[prev[0]]['rel']} ({lost})")
-                    if edited and slot.get("kind") in _FLIPPABLE_SHEET_KINDS:
-                        painted_losses.append((slot["rel"], key[1], key[2], slots[prev[0]]["rel"]))
+                    if edited:
+                        muted.append((slot["rel"], key[1], key[2], slots[prev[0]]["rel"]))
                     continue
-                if prev[2][0] and slots[prev[0]].get("kind") in _FLIPPABLE_SHEET_KINDS:
-                    painted_losses.append((slots[prev[0]]["rel"], key[1], key[2], slot["rel"]))
+                if prev[2][0]:
+                    muted.append((slots[prev[0]]["rel"], key[1], key[2], slot["rel"]))
                 print(f"info: {slot['rel']} overrides tile {key[1]}/{key[2]} from {slots[prev[0]]['rel']} ({why})")
             winner[key] = (order, pos, score)
     kept = {(o, p) for o, p, _s in winner.values()}
 
-    if painted_losses:
-        # Dedup (sheet, data, pal) — condition variants of the same crop share
-        # one artist decision and should not flood the report.
-        seen_loss = set()
-        for rel, data, pal, other in painted_losses:
-            sig = (rel, data, pal)
-            if sig in seen_loss:
-                continue
-            seen_loss.add(sig)
-            print(f"error: {rel}: painted tile {data}/{pal} lost to {other} — "
-                  f"the repaint cannot affect that key at run time; paint the "
-                  f"sheet that owns it, or remove the overlapping claim (#253)",
-                  file=sys.stderr)
+    # #338/#343: "did the cell I just painted reach the screen?" — measured in test_mep_build.py.
+    resident = {k: s for k, s in screen_resident_keys(sheets_dir).items()  # a retired capture (#344) warns about nothing
+                if (folder / "textures" / "backgrounds" / f"{s}.png").is_file()}
+    lost_by = {}
+    for rel, data, pal, other in muted:
+        lost_by.setdefault(rel, {})[f"{data}/{pal}"] = other
+    for slot in slots:
+        lost = lost_by.get(slot["rel"]) or {}
+        if lost:
+            sample = ", ".join(f"{k} (to {o})" for k, o in list(lost.items())[:3])
+            print(f"warning: {slot['rel']}: {len(lost)} painted tile key(s) were already claimed "
+                  f"by another crop, so this sheet emits no <tile> for them and the paint cannot "
+                  f"reach the screen — {sample} (#343)")
+        shadow = sorted({e[0][1] for e in slot["entries"] if e[3] and e[0][1] in resident})
+        if shadow:
+            print(f"warning: {slot['rel']}: {len(shadow)} painted tile key(s) are also drawn by the "
+                  f"captured screen backgrounds/{resident[shadow[0]]}.png, which wins over every "
+                  f"<tile> on the frames it was frozen for and only there (ADR-0050/ADR-0156) — "
+                  f"paint that capture too, or delete it to retire it (#338)")
+
+    # #253: a painted *sprite* cell that loses to another sheet is an error — a
+    # green build hid that the paint never reached the figure. Others: a choice.
+    kind_of = {s["rel"]: s.get("kind") for s in slots}
+    fatal = [(rel, k, o) for rel, lost in sorted(lost_by.items())
+             if kind_of.get(rel) in _FLIPPABLE_SHEET_KINDS for k, o in lost.items() if o != rel]
+    for rel, k, other in fatal:
+        print(f"error: {rel}: painted tile {k} lost to {other} — the repaint cannot affect "
+              f"that key at run time; paint the sheet that owns it, or remove the "
+              f"overlapping claim (#253)", file=sys.stderr)
+    if fatal:
         return 1
 
     # HdPackLoader resolves a "[name]" prefix at the moment it reads the line
@@ -1319,40 +1308,51 @@ def cmd_build(args) -> int:
         getattr(args, "rom", None), sheet_docs, index_keyed, out_lines, body)
     if rc:
         return rc
-    out_lines.extend(body)
 
     textures_dir = folder / "textures"
     textures_dir.mkdir(parents=True, exist_ok=True)
 
-    # A background PNG referenced by the body that is not under textures/
-    # yet is copied up from auto/textures (the author keeps their assets).
-    # The tag may carry a condition prefix ([cond]<background>...) — the only
-    # form the emulator writes for captured-screen backgrounds.
+    # A background PNG referenced by the body that is not under textures/ yet
+    # is copied up from auto/textures (the author keeps their assets). The tag
+    # may carry a condition prefix ([cond]<background>...) — the only form the
+    # emulator writes for captured-screen backgrounds. A capture in neither
+    # layer is *retired*: its lines are dropped, so deleting the PNG is the way
+    # out of a capture (#344). ADR-0050/ADR-0156 still rule a present one.
     _BG_TAG = re.compile(r"^(\[[^\]]*\])?<background>")
+    retired = {}
+    live_body = []
     for b in body:
         m = _BG_TAG.match(b)
-        if not m:
-            continue
-        name = b[m.end():].split(",")[0].strip()
-        if not name:
-            continue
-        target = textures_dir / name
-        if target.exists():
-            continue
-        auto_cand = folder / "auto" / "textures" / name
-        if auto_cand.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(auto_cand.read_bytes())
+        name = b[m.end():].split(",")[0].strip() if m else ""
+        if name and not (textures_dir / name).exists():
+            auto_cand = folder / "auto" / "textures" / name
+            if not auto_cand.exists():
+                retired[name] = retired.get(name, 0) + 1
+                continue
+            (textures_dir / name).parent.mkdir(parents=True, exist_ok=True)
+            (textures_dir / name).write_bytes(auto_cand.read_bytes())
             print(f"info: copied background {name} from auto/textures into textures/")
+        live_body.append(b)
+    body = live_body
+    if retired:
+        print(f"info: retired {len(retired)} captured screen(s) missing from textures/ and "
+              f"auto/textures/ — {sum(retired.values())} <background> line(s) dropped, so the "
+              f"frames they owned come from the sheets again (#344): {', '.join(sorted(retired)[:3])}")
+    out_lines.extend(body)
 
     # Named after the captures are copied up, so the path printed is the one
-    # the artist will actually open.
+    # the artist will actually open. #339: the gate is a few tileAtPosition
+    # probes, not the whole frame, so "the frames it was frozen for" is the
+    # recorder's claim and a neighbour can satisfy the same probes.
     captures = captured_screen_note(textures_dir)
     if captures:
         count, first = captures
-        print(f"info: {count} captured screen(s) in textures/backgrounds/ draw over every <tile> on the "
-              f"scenes they cover (ADR-0050) — to repaint one of those scenes edit "
-              f"backgrounds/{first}.png, not the sheets")
+        print(f"info: {count} captured screen(s) in textures/backgrounds/ override every <tile> on "
+              f"the frames each was frozen for, and only there (ADR-0050) — for one of those, edit "
+              f"backgrounds/{first}.png. Each is gated on a few tileAtPosition probes, not on the "
+              f"whole frame, so a neighbouring frame that matches those probes gets the capture too "
+              f"and loses whatever the game drew elsewhere on it (#339); delete the PNG to retire "
+              f"the capture and hand its frames back to the sheets (#344).")
 
     hires = textures_dir / "hires.txt"
     hires.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
