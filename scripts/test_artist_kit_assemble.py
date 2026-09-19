@@ -171,6 +171,66 @@ def test_writing_the_kit_produces_both_files():
               "ARTIST.md is written and titled")
 
 
+def test_every_surface_carries_the_name_the_paint_program_exports_to():
+    # F12.4 / ADR-0213. The manifest's `path` is kit-relative, but what an
+    # artist pastes into Photoshop is the base name: a `/` in a layer name is a
+    # subfolder under Photoshop's own -assets folder.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3},
+            {"path": "chr/Chr_0.png", "cells": 256},
+        ]))
+        kit = A.build_kit(root)
+        got = [f["assetName"] for f in kit["parts"][0]["files"]]
+        check(got == ["usr000.png", "Chr_0.png"],
+              "each surface carries the layer name to paste, base name only",
+              str(got))
+        page = A.render_markdown(kit)
+        check("Reload Repainted Images" in page,
+              "the page names the F12.3 action that puts the save on screen")
+        check("-assets" in page and "cannot be changed" in page,
+              "the page states Photoshop's -assets folder rather than implying "
+              "an in-place overwrite it does not do")
+
+
+def test_a_surface_a_paint_program_cannot_export_to_stops_the_kit():
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/run,walk.png", "cells": 1}]))
+        try:
+            A.build_kit(root)
+            check(False, "a comma in a surface name stops the kit", "it built")
+        except A.KitError as exc:
+            check("comma" in str(exc) and "run,walk.png" in str(exc),
+                  "a comma in a surface name stops the kit, naming the file "
+                  "and the reader it would break", str(exc))
+
+
+def test_two_surfaces_that_differ_only_in_case_stop_the_kit():
+    # The one rule that does not exist per name: on the artist's macOS or
+    # Windows machine these are one file, so the kit would silently lose one.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[
+            {"path": "chr/Chr_0.png", "cells": 1},
+            {"path": "chr/chr_0.png", "cells": 1},
+        ]))
+        try:
+            A.build_kit(root)
+            check(False, "a case-only clash stops the kit", "it built")
+        except A.KitError as exc:
+            check("differ only in case" in str(exc),
+                  "a case-only clash inside one folder stops the kit", str(exc))
+    # The same two names in *different* folders are two files everywhere.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[
+            {"path": "chr/Chr_0.png", "cells": 1},
+            {"path": "sheets/chr_0.png", "cells": 1},
+        ]))
+        kit = A.build_kit(root)
+        check(len(kit["parts"][0]["files"]) == 2,
+              "the same name in two folders is not a clash")
+
+
 def main():
     tests = [
         test_parts_are_ordered_most_recognisable_first,
@@ -182,6 +242,9 @@ def main():
         test_a_gained_key_is_only_passed_when_it_came_from_the_pack,
         test_an_empty_or_broken_kit_fails_loudly,
         test_writing_the_kit_produces_both_files,
+        test_every_surface_carries_the_name_the_paint_program_exports_to,
+        test_a_surface_a_paint_program_cannot_export_to_stops_the_kit,
+        test_two_surfaces_that_differ_only_in_case_stop_the_kit,
     ]
     for t in tests:
         t()

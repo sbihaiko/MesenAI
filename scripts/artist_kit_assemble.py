@@ -20,6 +20,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
+
 # The order an artist should open the kit in, most recognisable first. A part
 # missing from the kit is simply skipped - the four generators run separately
 # and a kit assembled from one of them is still a kit.
@@ -115,6 +118,38 @@ def _verify_line(fragment: dict) -> str:
             f"{before} tile keys before, {after} after, {lost} lost, {added} added{tail}")
 
 
+def _name_surfaces(fragment: dict) -> None:
+    """Stamp each surface with the name the artist's paint program exports to.
+
+    F12.4 / ADR-0213. `path` is relative to the kit (`sheets/usr000.png`) but a
+    Photoshop layer name reads `/` as a subfolder under its own `-assets`
+    folder, so what an artist pastes is the base name alone. The generators
+    already refuse an unusable name at write time; this is the last gate before
+    the kit claims one, and it also catches the rule that only exists *between*
+    names: two surfaces in one folder that differ by case are one file on the
+    artist's machine.
+    """
+    by_folder = {}
+    for entry in fragment.get("files") or []:
+        path = str(entry.get("path") or "")
+        if not path:
+            continue
+        name = N.asset_name_for(path)
+        reasons = N.check_asset_name(name)
+        if reasons:
+            raise KitError(
+                f"{fragment.get('part', '?')}: `{path}` cannot be painted - "
+                + "; ".join(reasons))
+        entry["assetName"] = name
+        by_folder.setdefault(path[: -len(name)], []).append(name)
+    for folder, names in sorted(by_folder.items()):
+        clashes = N.check_asset_set(names)
+        if clashes:
+            raise KitError(
+                f"{fragment.get('part', '?')}: {folder or './'} - "
+                + "; ".join(clashes))
+
+
 def build_kit(kit_dir: Path, title: str = "") -> dict:
     fragments = load_fragments(kit_dir)
     if not fragments:
@@ -128,6 +163,7 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
         "totals": {"files": 0, "cells": 0, "inferred_files": 0, "dropped": 0},
     }
     for fragment in fragments:
+        _name_surfaces(fragment)
         counts = _count(fragment)
         for key, value in counts.items():
             kit["totals"][key] += value
@@ -165,6 +201,32 @@ def render_markdown(kit: dict) -> str:
         "<pack folder>`. It reports 0 errors when the pack is still legal.",
         "- Do not paint `sheets/sprites.png` if you meet it: it is the raw sprite "
         "vocabulary the recorder dumps, not a surface (ADR-0153 §3).",
+    ])
+    out.append("")
+    out.append("## Open, paint, save")
+    out.append("")
+    out.extend([
+        "Open the surface in the program you already use, paint on it, and save "
+        "back over the same file - then ask the running game for it with **HD Packs "
+        "> Reload Repainted Images**. You do not reopen the ROM and you do not lose "
+        "where you are standing.",
+        "",
+        "Each surface's file name is also the name to export to, so the save is one "
+        "shortcut after the first time:",
+        "",
+        "| program | the one step |",
+        "|---|---|",
+        "| GIMP | *File > Overwrite `<name>.png`* |",
+        "| Aseprite | *File > Export* once, then *Repeat last export* |",
+        "| Krita | *File > Export* once, then *File > Export* again over the same path |",
+        "| Photoshop | *File > Generate > Image Assets*, with your layer named exactly "
+        "`<name>.png` (the `assetName` in `kit.json`) |",
+        "",
+        "Photoshop is the one exception and it is worth knowing before you start: its "
+        "generator always writes into a `<document>-assets` folder beside the `.psd` "
+        "and that location cannot be changed. The file it writes has the right name, "
+        "so copying it over the kit's copy is the whole difference. The other three "
+        "overwrite the kit file directly.",
     ])
     out.append("")
     out.append("## When you are done")

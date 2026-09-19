@@ -440,6 +440,33 @@ everything inside it, keep transparency transparent, and **never paint a
 `.orig.png`**: that is the untouched reference the rebuild is checked against,
 and painting it is how your work becomes invisible.
 
+### Open, paint, save
+
+**Open the surface, paint it, save back over the same file, then ask the
+running game for it with *HD Packs > Reload Repainted Images*** — you do not
+reopen the ROM and you do not lose where you are standing (F12.3, ADR-0212).
+
+Each surface's file name is also the name to export to, so after the first save
+it is one shortcut (F12.4, ADR-0213). `kit.json` carries that name per surface
+as `assetName`:
+
+| program | the one step |
+|---|---|
+| GIMP | *File > Overwrite `<name>.png`* |
+| Aseprite | *File > Export* once, then *Repeat last export* |
+| Krita | *File > Export* once, then *File > Export* again over the same path |
+| Photoshop | *File > Generate > Image Assets*, with your layer named exactly `<name>.png` |
+
+Photoshop is the one exception, and it is worth knowing before you start: its
+generator always writes into a `<document>-assets` folder beside the `.psd`, and
+that location cannot be changed. The file it writes has the right name, so
+copying it over the kit's copy is the whole difference. The other three
+overwrite the kit file directly, and the reload picks it up from there.
+
+A resized canvas is refused rather than half-applied: the reload keeps the old
+pixels and logs the two sizes, because the sheet's sidecar names a crop that a
+smaller image no longer holds. Repaint at the size you were given.
+
 Do not hand-edit `textures/hires.txt`. It is generated from the sheets by
 `mep_build.py build`, and an edit there is thrown away on the next build. Copy
 each sheet **together with its `.json`** — the sidecar is the slicing contract

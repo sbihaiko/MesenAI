@@ -88,6 +88,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import mep_build  # noqa: E402  — the tree's single PNG decoder
 import sheet_repaint  # noqa: E402  — Image / read_png / write_png
 
@@ -812,7 +813,9 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
         out_cells.append({"index": i, "x": (i % columns) * CELL, "y": (i // columns) * CELL,
                           "tiles": [{"tile": key[0], "palette": key[1]}]})
 
-    name = f"pano-{map_json.stem}"
+    name = N.require_asset_name(
+        "pano-" + N.sanitize_asset_stem(map_json.stem, fallback="map") + N.SURFACE_EXT,
+        "artist_map.py slice")[:-len(N.SURFACE_EXT)]
     sheets = out_dir / "sheets"
     sheets.mkdir(parents=True, exist_ok=True)
     write_png(sheets / f"{name}.png", sheet)
@@ -971,6 +974,12 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
             "surface. Contra's base stages (2 and 4) are like this by design.")
     map_dir = out_dir / "map"
     map_dir.mkdir(parents=True, exist_ok=True)
+    # `stage` comes from the command line and ends up in a file name the
+    # artist's paint program has to export back onto, so it goes through the
+    # F12.4 contract first (ADR-0213 section 3). The caption keeps the name the
+    # operator typed; only the file name is rewritten, and `renamedStage` below
+    # records it when the two differ.
+    safe_stage = N.sanitize_asset_stem(stage, fallback="stage")
     files = []
     stems = []
     dump_keys = set()
@@ -981,7 +990,8 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
                 dump_keys.add((shapes[sid][0], palettes.get(pid, shapes[sid][1])))
     for i, region in enumerate(sorted(regions, key=lambda r: -len(r.cells))):
         painted, orig, cells, stats = build_panorama(region, shapes, palettes, pack, scale)
-        name = f"{stage}-{i:03d}"
+        name = N.require_asset_name(
+            f"{safe_stage}-{i:03d}" + N.SURFACE_EXT, "artist_map.py")[:-len(N.SURFACE_EXT)]
         stems.append(name)
         write_png(map_dir / f"{name}.png", painted)
         write_png(map_dir / f"{name}.orig.png", orig)
@@ -1016,7 +1026,11 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
               f"({100.0 * len(covered) / len(pack.tiles):.1f}%); "
               f"{len(dump_keys - pack.keys)} panorama key(s) the pack does not hold")
     return files, stems, {
-        "stage": stage, "hudTop": top, "hudBottom": bottom,
+        "stage": stage,
+        # Only present when the file name had to be rewritten, so a reader who
+        # never hits the case never has to wonder what it means.
+        **({"renamedStage": safe_stage} if safe_stage != stage else {}),
+        "hudTop": top, "hudBottom": bottom,
         "regions": len(regions),
         "packKeys": len(pack.tiles), "panoramaKeys": len(dump_keys),
         "covered": len(covered), "notInPack": len(dump_keys - pack.keys),

@@ -211,6 +211,28 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   bitmap — so the sweep also re-cuts the affected tile rules; ADR-0212 §1 is
   amended to say so.
   [Log](../validation/f12.3-reload-repainted-images-2026-09-19.md).
+- **F12.4** (2026-09-19) — the name a painting surface is written under is now
+  a contract with the artist's paint program, not a convention. ADR-0213:
+  `scripts/asset_names.py` holds the rules all three readers need — Photoshop's
+  *Generate Image Assets* layer-name grammar (a comma splits one layer into two
+  assets, a leading `2x ` resizes, `.png24` drops the alpha), a file system that
+  may be Windows, and the kit's own manifest — and every generator checks
+  against it where it writes. A name we compose raises; a name derived from
+  outside input (`<stage>-NNN.png`, `pano-<map stem>.png`) is sanitized with the
+  original recorded. Each `kit-part-*.json` entry gains `assetName`, the string
+  an artist pastes as a layer name, and the assembler is the last gate — it also
+  catches the rule that only exists between names, two surfaces in one folder
+  differing by case. `ARTIST.md` and `docs/remastering-a-game.md` gain the
+  **open, paint, save** step: one line per program, then *HD Packs > Reload
+  Repainted Images*. Measured on 429 real surfaces across the Contra and Zelda
+  kits — all valid, no case clashes — and end to end: a painted kit surface
+  copied onto the pack **by `assetName` alone** renders byte-identically
+  (`0xC4D2F4DD`) to the same paint applied before load, against a control of
+  `0x55645B9C`. Photoshop's `-assets` output folder is not configurable, so that
+  one path costs a copy; the docs say so rather than implying an in-place
+  overwrite that does not happen. ADR-0209's Q3 stays open — F12.4 only resolves
+  its option (i) to (h), the explicit re-import F12.3 shipped.
+  [Log](../validation/f12.4-asset-name-template-2026-09-19.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -652,14 +674,16 @@ available in git and the logs.
 #### Phase 12 — Paint loop and hand-authored conditions
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
-("Gaps this table names"). **F12.1 and F12.3 are delivered** (2026-09-17 and
-2026-09-19, §3). F12.1's scale reference moved F12.3's premise — the load an
-artist waits for is a 13–16 s decode, not the 0.4 s parse — and F12.3 answered
-it with ADR-0212's per-image, in-place reload: a repainted sheet is back in the
-running game in 2 ms, without reopening the ROM. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
+("Gaps this table names"). **F12.1, F12.3 and F12.4 are delivered**
+(2026-09-17 and 2026-09-19, §3). F12.1's scale reference moved F12.3's premise —
+the load an artist waits for is a 13–16 s decode, not the 0.4 s parse — and
+F12.3 answered it with ADR-0212's per-image, in-place reload: a repainted sheet
+is back in the running game in 2 ms, without reopening the ROM. F12.4 then made
+the file name the join (ADR-0213), so the artist's own program exports onto the
+name the kit published. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
 each decided: reserved pattern + `$0D` palette; fixed `$0000`–`$07FF` window;
 import against the patched ROM with its cost stated), so F12.5, F12.6a/b and
-F12.7 are unblocked. F12.4 is now unblocked too. The day-one
+F12.7 are unblocked. The day-one
 block (F12.9–F12.12, added 2026-09-19) is **not** unblocked: three of its four
 slices wait on an ADR named in their Decision cell.
 
@@ -724,7 +748,6 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) Human panel row: a person pastes one cell and paints it without reading `hires.txt`; the script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md`, whose setup step S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them. Re-measures "Picking a tile's key by hand". |
-| F12.4 | **Asset-name template for the paint program.** The kit generators write each surface under a file name the artist's program can export to on save (Photoshop *Generate Image Assets* `name.png` convention; Aseprite/Krita export slots), plus a one-line "open, paint, save" step in `docs/remastering-a-game.md`. | Prerequisite: F12.3. Stdlib only; no `.psd` reader. Bounded input: the Contra and Zelda kits. Stop when saving in the paint program overwrites the kit PNG and F12.3 renders it. What we measure is ours: valid names, reload fired, pixel-exact result. |
 | F12.5 | **`<addition>` from the composition editor.** An overflow layer on a pose exports `<addition>` lines anchored on the pose's root cell, with the target key chosen per ADR-0196 §3, and the round-trip and lint of ADR-0196 §4. | ADR-0196 accepted 2026-09-16 (§3: reserved pattern + `$0D` palette on CHR RAM). Bounded input: one pose each on Mega Man 3 (CHR ROM) and Contra (CHR RAM). Stop when the expanded pose renders pixel-exact on a known frame and the pack round-trips with the synthetic keys listed. Re-measures "Extra tiles drawn on match". |
 | F12.6a | **Lint validates authored conditions against routes.** Sheets accept a hand-written condition; `mep_lint.py --routes` evaluates `frameRange`, `tileAtPosition`, `tileNearby`, `spriteNearby` on every retained frame of every recording and reports held / failed / unintended-hit per route, with the phase offset for `frameRange`. | ADR-0197 accepted 2026-09-16. Bounded input: Contra routes under `scripts/stages/contra/` and a sheet carrying three authored conditions. Stop when the report names the frame and route of every failure. `memoryCheckConstant` reports `not evaluable` until F12.6b. Re-measures "Conditions deliberately refused". |
 | F12.6b | **Recorder retains internal RAM.** Per ADR-0197 §3 (option (b)), the recorder dumps `$0000`–`$07FF` per retained frame so lint can evaluate `memoryCheckConstant` in that window. | ADR-0197 accepted 2026-09-16. Core change; measure and record the per-recording cost on a 60 s Contra route in `docs/validation/` before any doc quotes a number; `make capture-tool` if the wire format moves. Stop when a `memoryCheckConstant` from Contra80s is evaluated on a recorded route and the verdict matches a manual check on three frames. |
@@ -764,14 +787,14 @@ by the paint program; **nothing in the pack is ever read out of it**.
 F12.10's path (d) and F12.11's second bounded input stand on; its stop does
 not wait on F12.3. F12.10 next; it needs no ADR and turns the existing drivers
 into a job. F12.11 last of the three that can start: its chain is F12.3 →
-F12.4 → its own ADR → F12.11, so it cannot begin before the original phase's
-F12.4 ships whatever this block's order says. F12.12 only after ADR-0210 is
+F12.4 → its own ADR → F12.11, and the first two shipped on 2026-09-19, so all
+that is left of the chain is its own ADR. F12.12 only after ADR-0210 is
 accepted and its title made to agree with its §3. Each slice is one task, and a
 slice that changes what the artist sees (F12.11) is not shipped until a person
 who did not build it logs its open-and-paint row.
 
-**Order.** F12.1 and F12.3 are delivered (2026-09-17, 2026-09-19), so F12.4 may
-start; F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
+**Order.** F12.1, F12.3 and F12.4 are delivered (2026-09-17, 2026-09-19);
+F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
 order. One slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
 prerequisite of any of them — it only guarantees that whatever surface those
 slices name, every recorded tile has one. F12.9–F12.12 (added 2026-09-19) follow the order
@@ -809,8 +832,8 @@ sequence and bound the work.
    work additionally depends on Phase 9 selection/export/paint evidence.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
-5. **Phase 12:** F12.1 is delivered (2026-09-17, §3), so F12.3 is next and
-   F12.4 follows it. F12.2's code is on `main` with its human panel row open;
+5. **Phase 12:** F12.1, F12.3 and F12.4 are delivered (2026-09-17 and
+   2026-09-19, §3). F12.2's code is on `main` with its human panel row open;
    F12.5, F12.6a/b and F12.7 are unblocked since ADR-0196/0197/0198 were
    accepted on 2026-09-16. The day-one block (F12.9–F12.12, added 2026-09-19)
    runs F12.9 → F12.10 → F12.11 → F12.12; F12.10 needs no ADR and may start

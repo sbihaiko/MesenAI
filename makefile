@@ -309,8 +309,11 @@ doc-checks: check-manifest
 	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
 	# dedup, which added a function and the prose that explains it. The other
 	# three implementation ceilings are untouched, and this one is a ratchet
-	# again from 1802.
-	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1802
+	# again from 1802. Amended 2026-09-19 (ADR-0137, sixth amendment; ADR-0213,
+	# F12.4): 1802 -> 1803 for the `import asset_names as N` the F12.4 surface-name
+	# guard needs. The guard itself folds into the existing write_png call; an
+	# import cannot. No headroom added -- it is a ratchet again from 1803.
+	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1803
 	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
 	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
 	# its rank never decides anything.
@@ -432,6 +435,10 @@ doc-checks: check-manifest
 	#header, the union's CRC gate, region coalescing and both strip
 	#directions. Fixtures built in memory; no emulator, no ROM.
 	python3 scripts/test_cdl_tool.py
+	#F12.4 (ADR-0213): the painting-surface name contract -- what Photoshop's
+	#Generate Image Assets grammar, a Windows file system and the kit's own
+	#manifest all have to accept. Pure string rules; no kit, no pack, no ROM.
+	python3 scripts/test_asset_names.py
 	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
 	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
 	python3 scripts/test_artist_kit_assemble.py

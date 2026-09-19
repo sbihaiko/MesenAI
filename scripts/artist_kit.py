@@ -57,6 +57,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 import mep_build  # noqa: E402 — the rebuild `--verify` runs and its <tile> regex
 
@@ -540,7 +541,7 @@ def grid_title(grid, names):
 
 def _file_record(grid, names):
     return {
-        "path": f"sheets/{grid.name}.png",
+        "path": f"sheets/{N.require_asset_name(grid.name + N.SURFACE_EXT, 'artist_kit.py')}",
         "title": grid_title(grid, names),
         "unit": "grid",
         "rows": len(grid.rows),
