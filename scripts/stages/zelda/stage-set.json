@@ -1,0 +1,8 @@
+{
+  "game": "The Legend of Zelda",
+  "rom": {
+    "noIntroSha1": ["BE2F5DC8C5BA8EC1A344A71F9FB204750AF24FE7"]
+  },
+  "mechanisms": [],
+  "note": "Hash of the dump these routes were verified against by the F12.10 bounded-input run (roms/Zelda.nes in the working checkout). A different Zelda dump is deliberately not listed: an unverified hash here would silently record a game against routes nobody played on it."
+}

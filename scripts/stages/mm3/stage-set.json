@@ -1,0 +1,8 @@
+{
+  "game": "Mega Man 3",
+  "rom": {
+    "noIntroSha1": ["6780B3FCC547C013EE45AFAC6BB30C6FC6D8B46E"]
+  },
+  "mechanisms": [],
+  "note": "Hash of the dump these routes were verified against by the F12.10 bounded-input run (roms/Mega Man 3 (USA).nes in the working checkout)."
+}

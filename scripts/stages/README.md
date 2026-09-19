@@ -29,6 +29,28 @@ folder per golden game. Four kinds:
   stages dir. A chain step may be `Ns`; the helper converts it the way the
   script parser does (`round(N * 60.0988)`).
 
+A game folder **should** also declare which ROM its scripts were authored
+against, or the unattended job cannot use it:
+
+- `stage-set.json` — `{"game": ..., "rom": {"noIntroSha1": [...]}}`, optionally
+  with `mechanisms` (the ADR-0182 list this set exercises) and a `note` saying
+  where the hash came from. `scripts/record_library.sh` matches a ROM to a set
+  **only** through this file. A set without one is skipped and listed as
+  undeclared — matching by folder name was deliberately not implemented, because
+  guessing that `zelda/` means the Zelda in hand is how a pack gets recorded
+  against the wrong ROM (issue #314).
+
+  Only declare a hash you have run the set against. Adding one is:
+
+  ```sh
+  python3 -c "import sys; sys.path.insert(0,'scripts'); \
+    from mep_build import _no_intro_sha1 as h; print(h(__import__('pathlib').Path(sys.argv[1])))" <rom>
+  scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
+  ```
+
+  As of 2026-09-19 only `mm3/` and `zelda/` are declared; the other four sets
+  are waiting for someone to run them once.
+
 A game folder may also hold one **profile**:
 
 - `navigation.json` — the navigation sweep of ADR-0184's 2026-09-14 amendment,

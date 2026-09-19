@@ -443,6 +443,10 @@ doc-checks: check-manifest
 	#carry, and the evaluation of one against a recorded route, written from
 	#HdPackConditions.h. Synthetic grid streams; no emulator, no ROM.
 	python3 scripts/test_mep_conditions.py
+	#F12.10: the unattended recording job's resolver and report -- which
+	#driver a ROM gets, which minted state a stage starts from, and a ROM
+	#that failed reading as a row. Synthetic iNES files in a temp dir.
+	python3 scripts/test_library_job.py
 	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
 	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
 	python3 scripts/test_artist_kit_assemble.py
