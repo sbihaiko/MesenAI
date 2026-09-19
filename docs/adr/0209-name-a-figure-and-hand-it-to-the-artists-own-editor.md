@@ -169,8 +169,10 @@ without it the other three questions only serve one tile in eight.
   it only approaches it.
 - **(k) Emit a remainder sheet. — CHOSEN 2026-09-19, shipped as F12.8.** One `unsorted` sheet per pack carrying every
   key no other sheet claimed, with the same `*.orig.png` twin mechanic. Coverage
-  becomes 100% by construction, and an artist can never again meet a tile with
-  no surface. Reuses the mechanism that already works rather than adding one.
+  of the recorder's shape registry becomes 100% by construction. Reuses the
+  mechanism that already works rather than adding one. (The "100%" was written
+  here as coverage of the *pack*; the measurement below shows the registry and
+  the pack are not the same set, and the honest claim is the narrower one.)
 - **(l) Leave it, and keep `Copy as MEP sheet cell`** as the escape hatch for
   whatever the sheets miss — the status quo, stated as a choice.
 - **(m) Seed coverage from an existing pack's key index, and render the art
@@ -196,9 +198,8 @@ every recorded shape no other sheet put on a canvas. Written last in
 `HdPackBuilder::BuildSheets`, because it is the complement of everything above
 it: `WriteSheetFiles` is the single funnel every sheet passes through, so it
 accumulates the shape ids as they are written and the remainder reads what is
-left. Coverage stops being a number to improve and becomes true by
-construction — after this, an artist cannot meet a recorded tile with no
-surface to paint.
+left. Within that set, coverage stops being a number to improve and becomes
+true by construction.
 
 Three properties are deliberate, and each is pinned by a unit test:
 
@@ -211,6 +212,43 @@ Three properties are deliberate, and each is pinned by a unit test:
   make `mep_build.py` resolve that key to empty pixels.
 - **An empty remainder writes no file.** A pack whose sheets already cover
   everything ships no stub `unsorted.png`.
+
+### What (k) actually closed, measured 2026-09-19
+
+Run on two CHR RAM games with a bootstrap recording (Castlevania 60 s idle;
+Zelda 85 s played from `scripts/stages/zelda/mint-stage1.txt` +
+`stage1-run.txt`), counting distinct `(tileData, palette)` keys in the emitted
+`hires.txt` against the keys reachable from a sheet cell:
+
+| | Castlevania | Zelda |
+|---|---|---|
+| `<tile>` keys in `hires.txt` | 3 209 | 2 171 |
+| distinct shapes in `hires.txt` | 2 673 | 1 615 |
+| shapes in the recorder's registry (`_shapeTiles`) | 514 | 277 |
+| on a sheet **before** `unsorted` | 380 | 187 |
+| on a sheet **after** `unsorted` | **514** | **277** |
+| registry coverage after | **100%** | **100%** |
+| pack coverage after | 19.2% | 17.2% |
+
+**The claim this ADR made — "an artist cannot meet a recorded tile with no
+surface to paint" — is false as written, and the table is why.** (k) closes the
+gap between the shape registry and the sheets completely, and that gap is now
+zero by construction. It does not close the gap between the *pack* and the
+registry, which is far larger and was never in this slice's reach.
+
+The cause is upstream of every sheet. `ShapeIdFor` — the only thing that ever
+appends to `_shapeTiles` — is reached from exactly two callers,
+`RecordGridFrame` and `RecordSprite`, both gated on `_captureScreens` and both
+fed by the retained frame stream (`kMaxSheetFrames`, consecutive duplicates
+collapsed). `ProcessTile`, which emits the `<tile>` rules, runs on everything
+the PPU draws and answers to neither. Zelda's registry tops out at shape id 276
+while its `hires.txt` names 1 615 distinct shapes; the missing 1 338 were never
+offered to the sheet pipeline in the first place, so no sheet — remainder or
+otherwise — could have carried them.
+
+Reaching 100% of the *pack* is therefore a separate decision about what the
+recorder retains, not about how sheets are laid out. It is left open here
+deliberately rather than folded into this slice.
 
 Nothing else changes: the sheet uses the same `BuildContactSheet` geometry, the
 same `*.orig.png` twin, and the same v1 sidecar schema, so `mep_build.py` reads
