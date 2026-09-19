@@ -25,6 +25,11 @@ HdNesPpu::~HdNesPpu()
 
 void* HdNesPpu::OnBeforeSendFrame()
 {
+	//F12.3 (ADR-0212 §3): the frame boundary a pending pack reload waits for.
+	//It is a no-op unless someone asked, and it runs before this frame is
+	//handed over, so the decode thread it drains is the previous frame's.
+	_console->ProcessPendingHdPackReload();
+
 	HdScreenInfo* info = _info;
 	info->FrameNumber = _frameCount;
 	info->WatchedAddressValues.clear();

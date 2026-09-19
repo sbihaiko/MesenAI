@@ -164,6 +164,18 @@ namespace Mesen.Interop
 			return RefreshMepLocalIdentitiesWrapper();
 		}
 
+		//F12.3 (ADR-0212): asks the loaded NES pack to re-decode the images an
+		//artist repainted on disk. Returns at once - the work happens on the
+		//emulation thread at the next frame boundary, so this is safe to call
+		//from the UI thread. False means no NES console is loaded. The outcome
+		//goes to the [MEP] log, because it is not known yet when this returns.
+		[DllImport(DllPath, EntryPoint = "RequestMepImageReload")]
+		[return: MarshalAs(UnmanagedType.I1)] private static extern bool RequestMepImageReloadWrapper();
+		public static bool RequestMepImageReload()
+		{
+			return RequestMepImageReloadWrapper();
+		}
+
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);
 

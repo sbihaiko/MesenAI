@@ -229,9 +229,12 @@ bool HdPackLoader::CheckFile(string filename)
 	return CheckFileExact(ResolvePackRelativePath(filename));
 }
 
-bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData)
+bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData, string* outDiskPath)
 {
 	fileData.clear();
+	if(outDiskPath) {
+		outDiskPath->clear();
+	}
 	filename = ResolvePackRelativePath(filename);
 
 	if(_loadFromZip) {
@@ -239,8 +242,12 @@ bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData)
 			return true;
 		}
 	} else {
-		ifstream file(FolderUtilities::CombinePath(_hdPackFolder, filename), ios::in | ios::binary);
+		string diskPath = FolderUtilities::CombinePath(_hdPackFolder, filename);
+		ifstream file(diskPath, ios::in | ios::binary);
 		if(file.good()) {
+			if(outDiskPath) {
+				*outDiskPath = diskPath;
+			}
 			file.seekg(0, ios::end);
 			uint32_t fileSize = (uint32_t)file.tellg();
 			file.seekg(0, ios::beg);
@@ -406,12 +413,14 @@ bool HdPackLoader::ProcessImgTag(string src)
 	_data->ImageFileData.push_back(unique_ptr<HdPackBitmapInfo>(new HdPackBitmapInfo()));
 	HdPackBitmapInfo& bitmapInfo = *_data->ImageFileData.back().get();
 
-	if(!LoadFile(src, bitmapInfo.FileData)) {
+	if(!LoadFile(src, bitmapInfo.FileData, &bitmapInfo.SourcePath)) {
 		_data->ImageFileData.pop_back();
 		logError("Error loading HDPack: PNG file " + src + " could not be read.");
 		return false;
 	}
 	bitmapInfo.PngName = src;
+	//F12.3 (ADR-0212 §2): the pair a later reload compares against.
+	bitmapInfo.RecordSourceFingerprint();
 	return true;
 }
 
@@ -802,10 +811,12 @@ void HdPackLoader::ProcessBackgroundTag(vector<string>& tokens, vector<HdPackCon
 		bgFileData = _data->BackgroundFileData.back().get();
 		bgFileData->PngName = tokens[0];
 
-		if(!LoadFile(bgFileData->PngName, bgFileData->FileData)) {
+		if(!LoadFile(bgFileData->PngName, bgFileData->FileData, &bgFileData->SourcePath)) {
 			bgFileData = nullptr;
 			_data->BackgroundFileData.pop_back();
 		} else {
+			//F12.3 (ADR-0212 §2): the pair a later reload compares against.
+			bgFileData->RecordSourceFingerprint();
 			_backgroundsByName[tokens[0]] = bgFileData;
 		}
 	} else {

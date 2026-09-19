@@ -48,7 +48,10 @@ private:
 	void LogError(const string& message);
 
 	bool InitializeLoader(VirtualFile& romPath, HdPackData* data);
-	bool LoadFile(string filename, vector<uint8_t>& fileData);
+	//F12.3 (ADR-0212 §2): `outDiskPath`, when given, receives the absolute file
+	//the bytes came from - empty for a zip-backed pack, which has no file to
+	//stat and is therefore never reloaded (ADR-0212 §5).
+	bool LoadFile(string filename, vector<uint8_t>& fileData, string* outDiskPath = nullptr);
 	bool CheckFile(string filename);
 	bool CheckFileExact(const string& filename);
 	void TrimTokens(vector<string>& tokens);

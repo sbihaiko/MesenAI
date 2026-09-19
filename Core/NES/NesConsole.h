@@ -64,6 +64,11 @@ private:
 
 	bool _nextFrameOverclockDisabled = false;
 
+	//F12.3 (ADR-0212 §3): a reload is requested from any thread and served on
+	//the emulation thread at the next frame boundary, once the video decode
+	//thread has been drained.
+	std::atomic<bool> _hdPackReloadPending { false };
+
 	void UpdateRegion(bool forceUpdate = false);
 	void LoadHdPack(VirtualFile& romFile);
 
@@ -77,6 +82,13 @@ private:
 	void ExtractAudioHdPack(HdPackBuilderOptions options);
 
 public:
+	//F12.3 (ADR-0212): ask for the pack's repainted images to be re-decoded.
+	//Callable from any thread; the work happens on the emulation thread at the
+	//next frame boundary (ADR-0212 §3), which is where ProcessPendingHdPackReload
+	//runs - HdNesPpu::OnBeforeSendFrame calls it.
+	void RequestHdPackImageReload();
+	void ProcessPendingHdPackReload();
+
 	NesConsole(Emulator* emulator);
 	~NesConsole();
 
