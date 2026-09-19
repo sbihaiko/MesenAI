@@ -358,25 +358,6 @@ def _index_token(index: int) -> str:
     return f"{index:08X}"
 
 
-def _condition_variants(raw_variants):
-    """(cond, rest) rows for one (tile, palette), with the unconditional
-    fallback twin ADR-0189 §3 / #256 requires. `raw_variants` is the list
-    collected from the key source, or None when the key is unknown."""
-    if not raw_variants:
-        return [("", ["1", "N"])]
-    by_cond = {}
-    for cond, rest in raw_variants:
-        by_cond.setdefault(cond, list(rest))
-    if any(c for c in by_cond) and "" not in by_cond:
-        # Recorder always writes the bare twin after each [condition] rule;
-        # synthesise it from the first conditional's trailing fields when the
-        # key source lost it (or a hand-edited manifest omitted it).
-        by_cond[""] = list(next(v for c, v in by_cond.items() if c))
-    # Conditionals first, bare twin last — matches HdPackBuilder's order and
-    # GetMatchingTile's "first passing entry" walk.
-    return sorted(by_cond.items(), key=lambda kv: (0 if kv[0] else 1, kv[0]))
-
-
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
 
 
@@ -705,7 +686,7 @@ class _EditedProbe:
 
 
 def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, out: list, skipped: list,
-                edited: bool = True, condition: str = ""):
+                edited: bool = True, condition=None):
     """One 8x8 crop per resolved entry of `tiles[]`, row-major inside the cell
     at the same offsets RenderMetatile drew them. A null/short/malformed entry
     means that sub-tile had no art: it is skipped, and the entries after it do
@@ -787,7 +768,7 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
                 continue
             painted = probe.edited(cx, cy, sd.unit)
             _cell_crops(c.get("tiles"), cx, cy, per, scale, f"{sd.name} cell {c.get('index')}", crops, skipped,
-                        painted, str(c.get("condition") or ""))
+                        painted, mep_conditions.cell_condition(c))
             # ADR-0153 §3 alias pass (F9.7): a bank-swapping mapper delivers the
             # same drawing under several tile keys, so the sheet carries one cell
             # per *subject* and lists the keys it absorbed. The artist paints the
@@ -1192,8 +1173,7 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
-            variants = (mep_conditions.authored_variants(authored, ["1", "N"]) if authored
-                        else _condition_variants(keysrc_attrs.get((data, pal))))
+            variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
             for cond, rest in variants:
                 key = (cond, data, pal)
                 row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)

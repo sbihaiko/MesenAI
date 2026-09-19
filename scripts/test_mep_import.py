@@ -30,10 +30,10 @@ Covers:
     `--out` without `--force`, and — for an index-keyed pack — a construct
     the 103 raise would re-read (`frameRange` at 101, a multi-field
     `<background>`, a 6-field `memoryCheck`);
-  * the shape the tool cannot express: two conditions of one
-    `(tileData, palette)` pair drawn from two crops. The import still
-    succeeds, but it reports the keys as *moved* (`IMPORT.md` + the CLI),
-    and `verify` measures the difference instead of hiding it;
+  * the shape a legacy pack animates with: one `(tileData, palette)` pair
+    drawn at several crops, one per condition. Each rule gets its own
+    `exactCondition` cell, so the rebuild reproduces the input's rules and
+    its pixels — with and without an unconditional rule in the pair;
   * the CLI: the bare-path form, `verify`, and `--force`.
 
 Framework-free, mirroring scripts/test_mep_build.py's ok()/fail() style.
@@ -262,8 +262,8 @@ def test_data_keyed(root: Path):
     if summary["keyed"] != "data" or summary["normalized"]:
         fail(f"a 32-hex key must import as data-keyed, got {summary['keyed']}/{summary['normalized']}")
         return
-    if summary["rules"] != 2 or summary["twins"] != 1 or summary["moved"]:
-        fail(f"summary: rules={summary['rules']} twins={summary['twins']} moved={summary['moved']}")
+    if summary["rules"] != 2 or summary["twins"] != 1 or summary["split"]:
+        fail(f"summary: rules={summary['rules']} twins={summary['twins']} split={summary['split']}")
         return
     if summary["backgrounds"] != 1 or summary["audio"] != 1 or len(summary["strays"]) != 1:
         fail(f"summary: backgrounds={summary['backgrounds']} audio={summary['audio']} "
@@ -445,53 +445,94 @@ def test_refusals(root: Path):
 
 # --- the shape the tool cannot express --------------------------------------
 
-MOVED_LINES = [
+SPLIT_LINES = [
     "<ver>100",
     "<scale>1",
     "<system>nes",
     "<condition>C1,tileAtPosition,8,8," + HEX_A + "," + PAL_A,
+    "<condition>C2,frameRange,4,2",
     "<img>art.png",
     "<tile>0," + HEX_A + "," + PAL_A + ",0,0,1,N",
-    "[C1]<tile>0," + HEX_A + "," + PAL_A + ",8,0,1,N",
+    "[C1]<tile>0," + HEX_A + "," + PAL_A + ",8,0,0.5,N",
+    "[C2]<tile>0," + HEX_A + "," + PAL_A + ",16,0,1,Y",
 ]
-MOVED_FILES = {"art.png": cell_png(2, 1, 1)}
+SPLIT_FILES = {"art.png": cell_png(3, 1, 1)}
+
+# The same shape without the unconditional rule: every crop is conditioned, so
+# the rebuild must emit two rules and no bare twin at all.
+SPLIT_NO_BARE_LINES = SPLIT_LINES[:6] + SPLIT_LINES[7:]
 
 
-def test_moved_is_reported(root: Path):
-    """Contra80s' shape: one (tileData, palette) pair, two conditions, two
-    crops. `build` emits one rule per key, drawn from the pair's chosen crop,
-    so the second key's art cannot survive a rebuild — the import says so
-    instead of claiming the round-trip."""
-    src, project, summary = imported_pack(root, "moved", MOVED_LINES, MOVED_FILES)
-    if summary["moved"] != [((HEX_A, PAL_A), "[C1]")]:
-        fail(f"the import should name the moved key, got {summary['moved']}")
+def test_split_pattern_round_trips(root: Path):
+    """Contra80s' shape: one (tileData, palette) pair, three conditions, three
+    crops — 592 of its 7836 patterns are drawn that way, and Super Mario Bros.
+    430 of 2076. A single cell cannot carry it: build takes a pair's conditions
+    from the key source as a whole and would draw all three from one crop. Each
+    rule therefore gets its own `exactCondition` cell (ADR-0198 §1 over
+    ADR-0197 §1), and the round-trip is exact — pixels included."""
+    src, project, summary = imported_pack(root, "split", SPLIT_LINES, SPLIT_FILES)
+    if [p for p, _c in summary["split"]] != [(HEX_A, PAL_A)]:
+        fail(f"the import should name the split pattern, got {summary['split']}")
         return
+    if summary["twins"]:
+        fail(f"an exact cell emits the input's own rules, so no twin is due: {summary['twins']}")
+        return
+    sidecar = json.loads((project / "textures" / "sheets" / "art.json").read_text())
+    cells = [(c.get("condition", ""), c.get("exactCondition") is True)
+             for c in sidecar["cells"]]
+    if sorted(cells) != [("", True), ("C1", True), ("C2", True)]:
+        fail(f"each crop should be pinned to the one condition it carried, got {cells}")
+        return
+    if sidecar.get("conditions"):
+        fail("the import must cite the pack's own <condition>, never redefine it in the sheet")
+        return
+    ok("a pattern drawn at three crops becomes three exactCondition cells citing the pack's own"
+       " conditions")
+
     note = (project / "IMPORT.md").read_text(encoding="utf-8")
-    if "⚠" not in note or "different crop" not in note:
-        fail("IMPORT.md does not warn about the key whose art a rebuild will not draw")
+    if "exactCondition" not in note or "more than one crop" not in note:
+        fail("IMPORT.md does not explain the cells a split pattern produced")
         return
-    ok("a key whose own art cannot survive a rebuild is reported in IMPORT.md and the summary")
-
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = MI.main([str(src), "--out", str(root / "moved-cli"), "--force"])
-    if rc != 0 or "WARNING" not in buf.getvalue():
-        fail(f"the CLI did not warn about the moved key (rc={rc}):\n{buf.getvalue()}")
+        rc = MI.main([str(src), "--out", str(root / "split-cli"), "--force"])
+    if rc != 0 or "drawn at more than one crop" not in buf.getvalue():
+        fail(f"the CLI did not report the split pattern (rc={rc}):\n{buf.getvalue()}")
         return
-    ok("the CLI warns about moved keys (the bare-path form of `import` too)")
+    ok("IMPORT.md and the CLI both report the split (the bare-path form of `import` too)")
 
     rc, out = run_build(project)
     if rc != 0:
-        fail(f"build on the moved-key project exited {rc}:\n{out}")
+        fail(f"build on the split-pattern project exited {rc}:\n{out}")
         return
-    rc, out = run_verify(src, project)
-    if rc != 1 or "pixels differ" not in out:
-        fail(f"verify must measure the moved key, not hide it (rc={rc}):\n{out}")
+    rc, out = run_verify(src, project, strict=True)
+    if rc != 0 or "0 differ" not in out:
+        fail(f"a split pattern must round-trip exactly, pixels included (rc={rc}):\n{out}")
         return
-    if "0 missing, 0 unexpected extra" not in out:
-        fail(f"the rule set should still round-trip exactly:\n{out}")
+    ok("`verify --strict` passes: the rule set and every crop's pixels survive the rebuild")
+
+    built = (project / "textures" / "hires.txt").read_text(encoding="utf-8")
+    rules = sorted(ln for ln in built.splitlines() if "<tile>" in ln)
+    if not any(ln.endswith(",0.5,N") for ln in rules) or not any(ln.endswith(",1,Y") for ln in rules):
+        fail(f"each crop must keep its own brightness/defaultTile fields:\n{rules}")
         return
-    ok("verify keeps the rule set exact and fails on the pixels it cannot reproduce")
+    ok("an exact cell keeps the trailing fields of the rule it came from, not the defaults")
+
+
+def test_split_pattern_without_a_bare_rule(root: Path):
+    """The other half of the shape: a pattern whose every rule is conditioned.
+    ADR-0198 §1 asks for the input's rule set, so no unconditional twin is
+    invented here — `verify --strict` is what proves it."""
+    src, project, _summary = imported_pack(root, "split2", SPLIT_NO_BARE_LINES, SPLIT_FILES)
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build exited {rc}:\n{out}")
+        return
+    rc, out = run_verify(src, project, strict=True)
+    if rc != 0 or "0 ADR-0189 §3 twin(s) added by build" not in out:
+        fail(f"a fully conditioned split pattern must round-trip with no twin (rc={rc}):\n{out}")
+        return
+    ok("a split pattern with no unconditional rule rebuilds to exactly its two conditioned rules")
 
 
 # --- the CLI ----------------------------------------------------------------
@@ -535,7 +576,8 @@ def main():
         test_data_keyed(root)
         test_index_keyed(root)
         test_refusals(root)
-        test_moved_is_reported(root)
+        test_split_pattern_round_trips(root)
+        test_split_pattern_without_a_bare_rule(root)
         test_cli(root)
     if FAILED:
         print("\nFAILURES")

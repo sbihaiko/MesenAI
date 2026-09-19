@@ -575,10 +575,85 @@ def authored_variants(name, rest):
     bare unconditional twin, so a frame where the condition does not hold still
     draws the replacement art instead of falling through to the ROM. The order
     matters — `GetMatchingTile` takes the first passing entry — and it is the
-    same order `_condition_variants` produces for an inherited condition.
+    same order `inherited_variants` produces for an inherited condition.
     """
     rest = list(rest or ["1", "N"])
     return [(f"[{name}]", list(rest)), ("", list(rest))]
+
+
+def inherited_variants(raw_variants):
+    """(cond, rest) rows for one (tile, palette), with the unconditional
+    fallback twin ADR-0189 §3 / #256 requires. `raw_variants` is the list
+    collected from the key source, or None when the key is unknown.
+
+    Moved here from `mep_build` with F12.7, so that the three ways a crop can
+    decide which rules it carries — inherit, authored, exact — read as one
+    model in one module.
+    """
+    if not raw_variants:
+        return [("", ["1", "N"])]
+    by_cond = {}
+    for cond, rest in raw_variants:
+        by_cond.setdefault(cond, list(rest))
+    if any(c for c in by_cond) and "" not in by_cond:
+        # Recorder always writes the bare twin after each [condition] rule;
+        # synthesise it from the first conditional's trailing fields when the
+        # key source lost it (or a hand-edited manifest omitted it).
+        by_cond[""] = list(next(v for c, v in by_cond.items() if c))
+    # Conditionals first, bare twin last — matches HdPackBuilder's order and
+    # GetMatchingTile's "first passing entry" walk.
+    return sorted(by_cond.items(), key=lambda kv: (0 if kv[0] else 1, kv[0]))
+
+
+def cell_condition(cell):
+    """How a sheet cell says which rules its crop carries, or None.
+
+    - `None` — the cell says nothing, so the key source decides. Every
+      recorded pack, and every sheet written before ADR-0197.
+    - `(name, False)` — ADR-0197 §1: a human attached a condition to the cell,
+      and the crop emits `[name]` plus the ADR-0189 §3 bare twin (#256).
+    - `(name, True)` — ADR-0198 §1 (F12.7): the crop carries *exactly* one
+      rule, `[name]`, or the bare unconditional rule when `name` is empty. No
+      inherited sibling, no synthesised twin. A legacy manifest keys one
+      pattern at several crops, one per condition, and any extra rule emitted
+      from this crop would draw the other crops' art.
+    """
+    if not isinstance(cell, dict):
+        return None
+    name = str(cell.get("condition") or "")
+    exact = cell.get("exactCondition") is True
+    return (name, exact) if (name or exact) else None
+
+
+def rest_for(raw_variants, name):
+    """The trailing `<tile>` fields (brightness, defaultTile, ...) a crop keeps.
+
+    The key source carries them per rule, so a crop that names a condition
+    reuses the fields of the rule that had that condition; failing that, the
+    key's unconditional rule; failing that, the loader's own defaults. Contra80s
+    gives 576 of its 592 multi-crop patterns a different brightness per
+    condition, so taking them from the key source is the difference between a
+    faithful import and a plausible one.
+    """
+    want = f"[{name}]" if name else ""
+    for cond, rest in raw_variants or []:
+        if cond == want:
+            return list(rest)
+    for cond, rest in raw_variants or []:
+        if not cond:
+            return list(rest)
+    return ["1", "N"]
+
+
+def variants_for(authored, raw_variants):
+    """The (cond, rest) rows one crop emits, over the three modes above."""
+    if authored is None:
+        return inherited_variants(raw_variants)
+    name, exact = authored
+    rest = rest_for(raw_variants, name)
+    if exact:
+        return [(f"[{name}]" if name else "", rest)]
+    return authored_variants(name, rest)
 
 
 def definition_lines(docs):
