@@ -289,6 +289,9 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//panes that cannot agree (LiveRecordFormat.h's HdPackActive comment). The
 	//"hdpack-off" flag below is the switch that turns it off.
 	bool HeadlessIsNesHdPackVideoActive();
+	//F12.3 (ADR-0212) - ask the loaded NES pack to re-decode its repainted
+	//images. Declared in InteropDLL/EmuApiWrapperMep.cpp.
+	bool RequestMepImageReload();
 	//F9.15 - in-memory frame capture (same wrapper file)
 	bool HeadlessCaptureFrame(uint32_t* outWidth, uint32_t* outHeight, uint32_t* outFrameNumber, uint32_t* outPixelCount);
 	uint32_t HeadlessReadCapturedPixels(uint32_t* outPixels, uint32_t maxPixels);
@@ -577,6 +580,7 @@ int main(int argc, char** argv)
 	if(argc < 4) {
 		fprintf(stderr, "usage: %s <rom> <seconds> <output-prefix> [pal] [hdpack] [romtiles]\n"
 			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [mep-off]\n"
+"       [reload-at-frame=<n>] [replace=<destination>=<source>]...\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
 			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
@@ -596,6 +600,18 @@ int main(int argc, char** argv)
 	bool screenshot = false;
 	bool capture = false;
 	bool dumpLog = false;
+	//F12.3 (ADR-0212): "reload-at-frame=<n>" asks for a pack image reload once
+	//the run reaches that emulated frame; "replace=<dst>=<src>" copies one file
+	//over another immediately before the request, so the overwrite and the
+	//reload are ordered by construction instead of by a race with an outside
+	//script. "replace" may be given more than once.
+	//
+	//The trigger counts emulated frames, not wall seconds: a headless run is
+	//far faster than real time (80 emulated seconds finish in about 11 wall
+	//seconds on an M1), so a wall-clock trigger would simply never fire.
+	int64_t reloadAtFrame = -1;
+	bool reloadRequested = false;
+	std::vector<std::pair<std::string, std::string>> replacements; //destination -> source
 	VideoFilterType videoFilter = VideoFilterType::None;
 	EnhancementPackConfig mep = {};
 	mep.BootstrapEnhancementFolder = false; //opt-in headless ("bootstrap" flag) - it writes beside the ROM
@@ -695,6 +711,20 @@ int main(int argc, char** argv)
 			//composed frame against PPU data needs substitution off at the one
 			//gate NesConsole::LoadHdPack checks first.
 			hdPackOff = true;
+		} else if(strncmp(argv[i], "reload-at-frame=", 16) == 0) {
+			reloadAtFrame = atoll(argv[i] + 16);
+			if(reloadAtFrame < 0) {
+				fprintf(stderr, "reload-at-frame must be a non-negative frame number\n");
+				return 1;
+			}
+		} else if(strncmp(argv[i], "replace=", 8) == 0) {
+			std::string spec = argv[i] + 8;
+			size_t eq = spec.find('=');
+			if(eq == std::string::npos || eq == 0 || eq + 1 >= spec.size()) {
+				fprintf(stderr, "replace must be <destination>=<source>\n");
+				return 1;
+			}
+			replacements.emplace_back(spec.substr(0, eq), spec.substr(eq + 1));
 		} else if(strcmp(argv[i], "mep-notextures") == 0) {
 			mep.EnableTextures = false;
 		} else if(strcmp(argv[i], "mep-nosynth") == 0) {
@@ -1256,7 +1286,31 @@ int main(int argc, char** argv)
 		syncTrace.push_back(sample);
 	};
 
+	//F12.3 (ADR-0212): the run's own reload trigger. Copies the replacement
+	//file first, then asks - so the bytes are on disk before the stat that
+	//decides whether anything changed. Fires once.
+	auto serveReload = [&]() {
+		if(reloadAtFrame < 0 || reloadRequested || (int64_t)HeadlessGetFrameCount() < reloadAtFrame) {
+			return;
+		}
+		reloadRequested = true;
+		for(const std::pair<std::string, std::string>& swap : replacements) {
+			std::error_code ec;
+			std::filesystem::copy_file(std::filesystem::u8path(swap.second), std::filesystem::u8path(swap.first),
+				std::filesystem::copy_options::overwrite_existing, ec);
+			if(ec) {
+				fprintf(stderr, "replace failed: %s -> %s (%s)\n", swap.second.c_str(), swap.first.c_str(), ec.message().c_str());
+				return;
+			}
+			printf("replaced %s with %s\n", swap.first.c_str(), swap.second.c_str());
+		}
+		bool asked = RequestMepImageReload();
+		printf("pack image reload requested at frame %u: %s\n", HeadlessGetFrameCount(), asked ? "accepted" : "no NES console loaded");
+		fflush(stdout);
+	};
+
 	auto onTick = [&]() {
+		serveReload();
 		publishLive();
 		sampleSync();
 		if(moviePath.empty()) {

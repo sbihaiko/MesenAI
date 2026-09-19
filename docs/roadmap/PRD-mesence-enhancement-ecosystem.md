@@ -191,6 +191,26 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   reached from the retained frame stream while `ProcessTile` emits rules for
   everything the PPU draws. Closing *that* gap is a decision about what the
   recorder retains; see ADR-0209, "What (k) actually closed".
+- **F12.3** (2026-09-19) — the pack's repainted images come back without
+  reopening the ROM. ADR-0212: the reload re-decodes, **in place**, only the
+  images whose `(size, mtime)` fingerprint moved, and the `HdPackData` object
+  never moves — so none of the three raw `HdPackData*` holders (`HdNesPpu`,
+  `HdVideoFilter`, `HdNesPack`) needs coordinating, and the one that lives on
+  `VideoDecoder`'s decode thread is handled by draining it with
+  `WaitForAsyncFrameDecode()` at the frame boundary rather than by locking the
+  per-pixel read path. Surfaces: the **Reload Repainted Images** menu action
+  under HD Packs, the `RequestMepImageReload` interop entry point, and the
+  headless `reload-at-frame=<n>` + `replace=<dst>=<src>` flags. Stop rule met:
+  a run that repaints mid-play and reloads lands on the byte-identical final
+  frame as a run that had the repaint from the start (`0xA8693E63`), both
+  differing from the untouched control (`0xDBA93B36`). Cost **0 ms** for a no-op,
+  **2 ms** for one sheet, **25 ms** for all 19 images of the test pack. A
+  resized canvas is refused per image and the old pixels survive; a manifest
+  edit still needs a reopen (ADR-0212 non-goal). The implementation found a
+  second cache the ADR had missed — `HdPackTileInfo` memcpys its crop out of the
+  bitmap — so the sweep also re-cuts the affected tile rules; ADR-0212 §1 is
+  amended to say so.
+  [Log](../validation/f12.3-reload-repainted-images-2026-09-19.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -632,12 +652,14 @@ available in git and the logs.
 #### Phase 12 — Paint loop and hand-authored conditions
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
-("Gaps this table names"). **F12.1 is delivered** (2026-09-17, §3) — the scale
-reference is measured, and it moved F12.3's premise: the load an artist waits
-for is a 13–16 s decode, not the 0.4 s parse. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
+("Gaps this table names"). **F12.1 and F12.3 are delivered** (2026-09-17 and
+2026-09-19, §3). F12.1's scale reference moved F12.3's premise — the load an
+artist waits for is a 13–16 s decode, not the 0.4 s parse — and F12.3 answered
+it with ADR-0212's per-image, in-place reload: a repainted sheet is back in the
+running game in 2 ms, without reopening the ROM. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
 each decided: reserved pattern + `$0D` palette; fixed `$0000`–`$07FF` window;
 import against the patched ROM with its cost stated), so F12.5, F12.6a/b and
-F12.7 are unblocked. F12.3 and F12.4 wait only on each other. The day-one
+F12.7 are unblocked. F12.4 is now unblocked too. The day-one
 block (F12.9–F12.12, added 2026-09-19) is **not** unblocked: three of its four
 slices wait on an ADR named in their Decision cell.
 
@@ -702,7 +724,6 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) Human panel row: a person pastes one cell and paints it without reading `hires.txt`; the script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md`, whose setup step S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them. Re-measures "Picking a tile's key by hand". |
-| F12.3 | **Reload the pack without reopening the ROM.** A menu action and a headless flag that re-run the loader on the pack directory and swap the HD data at the next frame boundary. | Prerequisite: F12.1's load numbers — measured 2026-09-17 as a **412 ms** parse plus a **13.2–16.4 s** detached bitmap decode; the decode is the half a reload strategy has to answer for, and the parse is not (§3). Bounded input: the Metroid pack and a Contra kit pack. Decision rule from F12.1: full reload if it costs under one frame budget times an agreed factor, otherwise per-image invalidation with the strategy named in the log. Stop when a PNG overwritten on disk renders pixel-exact in a `headless_record` screenshot after the reload, with no state loss. Re-measures "Painting, end to end" and "Staying inside the emulator". |
 | F12.4 | **Asset-name template for the paint program.** The kit generators write each surface under a file name the artist's program can export to on save (Photoshop *Generate Image Assets* `name.png` convention; Aseprite/Krita export slots), plus a one-line "open, paint, save" step in `docs/remastering-a-game.md`. | Prerequisite: F12.3. Stdlib only; no `.psd` reader. Bounded input: the Contra and Zelda kits. Stop when saving in the paint program overwrites the kit PNG and F12.3 renders it. What we measure is ours: valid names, reload fired, pixel-exact result. |
 | F12.5 | **`<addition>` from the composition editor.** An overflow layer on a pose exports `<addition>` lines anchored on the pose's root cell, with the target key chosen per ADR-0196 §3, and the round-trip and lint of ADR-0196 §4. | ADR-0196 accepted 2026-09-16 (§3: reserved pattern + `$0D` palette on CHR RAM). Bounded input: one pose each on Mega Man 3 (CHR ROM) and Contra (CHR RAM). Stop when the expanded pose renders pixel-exact on a known frame and the pack round-trips with the synthetic keys listed. Re-measures "Extra tiles drawn on match". |
 | F12.6a | **Lint validates authored conditions against routes.** Sheets accept a hand-written condition; `mep_lint.py --routes` evaluates `frameRange`, `tileAtPosition`, `tileNearby`, `spriteNearby` on every retained frame of every recording and reports held / failed / unintended-hit per route, with the phase offset for `frameRange`. | ADR-0197 accepted 2026-09-16. Bounded input: Contra routes under `scripts/stages/contra/` and a sheet carrying three authored conditions. Stop when the report names the frame and route of every failure. `memoryCheckConstant` reports `not evaluable` until F12.6b. Re-measures "Conditions deliberately refused". |
@@ -749,8 +770,8 @@ accepted and its title made to agree with its §3. Each slice is one task, and a
 slice that changes what the artist sees (F12.11) is not shipped until a person
 who did not build it logs its open-and-paint row.
 
-**Order.** F12.1 is delivered (2026-09-17), so F12.3 may start and F12.4
-follows it; F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
+**Order.** F12.1 and F12.3 are delivered (2026-09-17, 2026-09-19), so F12.4 may
+start; F12.5, F12.6a/b and F12.7 each after their ADR is accepted, in any
 order. One slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
 prerequisite of any of them — it only guarantees that whatever surface those
 slices name, every recorded tile has one. F12.9–F12.12 (added 2026-09-19) follow the order

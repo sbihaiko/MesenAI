@@ -3733,6 +3733,7 @@ E
 			<Value ID="InstallHdPack">Install HD Pack</Value>
 			<Value ID="HdPackBuilder">HD Pack Builder</Value>
 			<Value ID="EnhancementPacks">Enhancement Packs (MEP)...</Value>
+			<Value ID="ReloadPackImages">Reload Repainted Images</Value>
 			<Value ID="TakeScreenshot">Take Screenshot</Value>
 			<Value ID="SaveSpcFile">Save .SPC File</Value>
 

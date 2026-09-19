@@ -609,6 +609,10 @@ namespace Mesen.Debugger.Utilities
 		HdPackBuilder,
 		[IconFile("HdPack")]
 		EnhancementPacks,
+		//F12.3 (ADR-0212): re-decode the pack images an artist repainted on
+		//disk, without reopening the ROM.
+		[IconFile("Refresh")]
+		ReloadPackImages,
 
 		[IconFile("LogWindow")]
 		LogWindow,

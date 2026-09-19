@@ -19,6 +19,7 @@
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdBuilderPpu.h"
 #include "NES/HdPacks/HdVideoFilter.h"
+#include "Shared/Video/VideoDecoder.h"
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "NES/HdPacks/NesAudioFingerprint.h"
 #include "Shared/MessageManager.h"
@@ -26,6 +27,7 @@
 #include "Utilities/ProcessUtilities.h"
 #include <cstdlib>
 #include <filesystem>
+#include <atomic>
 #include "NES/NesDefaultVideoFilter.h"
 #include "NES/NesNtscFilter.h"
 #include "NES/BisqwitNtscFilter.h"
@@ -296,6 +298,52 @@ static void LogHdPackLoadTime(std::chrono::steady_clock::time_point start, HdPac
 			" images=" + std::to_string(data->ImageFileData.size()) + " backgrounds=" + std::to_string(data->BackgroundFileData.size()))
 		: string("; no-pack");
 	MessageManager::Log("[MEP] LoadHdPack: " + std::to_string((int)(ms + 0.5)) + " ms" + counts);
+}
+
+//F12.3 (ADR-0212): the artist saves a repainted PNG and asks for it back
+//without reopening the ROM. The request can come from the GUI thread, from a
+//headless driver or from interop, so it only raises a flag; the work belongs
+//to the emulation thread (below).
+void NesConsole::RequestHdPackImageReload()
+{
+	_hdPackReloadPending = true;
+}
+
+//Runs on the emulation thread from HdNesPpu::OnBeforeSendFrame, i.e. at a frame
+//boundary before the next frame is handed to the video pipeline.
+//
+//WaitForAsyncFrameDecode is the entire synchronisation (ADR-0212 §3):
+//HdVideoFilter::ApplyFilter reads the very PixelData this is about to
+//overwrite, and it runs on VideoDecoder's decode thread. Draining that thread
+//here is cheaper than locking the per-pixel read path for an event a human
+//triggers by hand. Nothing is reallocated behind a pointer - the images are
+//re-decoded in place, so HdPackTileInfo::Bitmap and the three raw HdPackData*
+//holders stay valid by construction.
+void NesConsole::ProcessPendingHdPackReload()
+{
+	if(!_hdPackReloadPending.exchange(false)) {
+		return;
+	}
+	if(!_hdData) {
+		MessageManager::Log("[MEP] reload: no HD pack is loaded");
+		return;
+	}
+
+	VideoDecoder* decoder = _emu->GetVideoDecoder();
+	if(decoder) {
+		decoder->WaitForAsyncFrameDecode();
+	}
+
+	HdPackReloadResult result = _hdData->ReloadChangedImages();
+	if(result.Scanned > 0 && result.NotWatched == result.Scanned) {
+		//ADR-0212 §5: a zip-backed pack has no file on disk to stat.
+		MessageManager::Log("[MEP] reload: this pack is loaded from a zip - nothing to watch");
+		return;
+	}
+	MessageManager::Log("[MEP] reload: " + std::to_string(result.Reloaded) + " re-decoded, " +
+		std::to_string(result.Refused) + " refused, " + std::to_string(result.Failed) + " failed, of " +
+		std::to_string(result.Scanned) + " image(s), " + std::to_string(result.TilesInvalidated) +
+		" tile rule(s) re-cut, in " + std::to_string((int)(result.Milliseconds + 0.5)) + " ms");
 }
 
 void NesConsole::LoadHdPack(VirtualFile& romFile)

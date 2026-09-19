@@ -731,6 +731,15 @@ namespace Mesen.ViewModels
 								ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new HdPackBuilderWindow());
 							}
 						},
+						//F12.3 (ADR-0212): the artist saves in their own paint
+						//program and asks for the pixels back here - no ROM
+						//reopen, no state lost. Only images whose file changed
+						//are re-decoded, at the next frame boundary.
+						new MainMenuAction() {
+							ActionType = ActionType.ReloadPackImages,
+							IsEnabled = () => EmuApi.IsRunning(),
+							OnClick = () => EmuApi.RequestMepImageReload()
+						},
 						new ContextMenuSeparator(),
 						new MainMenuAction() {
 							ActionType = ActionType.EnhancementPacks,

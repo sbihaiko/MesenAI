@@ -7554,6 +7554,129 @@ void TestUnsortedSheetCellsResolveBackToTileKeys()
 }
 
 
+//--- BlocoW: the pack image reload (ADR-0212, F12.3) ------------------------
+//
+//The decision worth pinning is the change rule and the resize refusal, not the
+//PNG decode: Utilities/PNGHelper.cpp is deliberately outside the
+//core-unit-tests link set, and ADR-0212 section 1 keeps the decode a thin
+//wrapper around the sequence Init() already performs.
+//
+//None of these assert on mtime resolution. libstdc++ resolves last_write_time
+//more coarsely than APFS, which has flaked CI before, so the change cases move
+//the file size or set the write time explicitly.
+
+std::filesystem::path MakeReloadTempFile(const std::string& label, const std::string& content)
+{
+	std::filesystem::path dir = MakeTempPackDir("reload_" + label);
+	std::filesystem::path file = dir / "sheet.png";
+	WriteTestFile(file, content);
+	return file;
+}
+
+void TestReloadFingerprintOfAMissingFileIsNotRecorded()
+{
+	HdPackBitmapInfo bitmap;
+	bitmap.SourcePath = (std::filesystem::temp_directory_path() / "mep_core_unit_tests_no_such_file.png").string();
+	bitmap.SourceSize = 4242;
+	bitmap.SourceTime = 4242;
+	bitmap.RecordSourceFingerprint();
+	Check(bitmap.SourceSize == 0 && bitmap.SourceTime == 0,
+		"BlocoW: a path that cannot be stat'ed records an empty fingerprint, not a stale one");
+}
+
+void TestReloadSeesAFileWhoseSizeMoved()
+{
+	std::filesystem::path file = MakeReloadTempFile("size", "original bytes");
+	HdPackBitmapInfo bitmap;
+	bitmap.SourcePath = file.string();
+	bitmap.RecordSourceFingerprint();
+	Check(!bitmap.SourceChanged(),
+		"BlocoW: an untouched file reads as unchanged");
+
+	WriteTestFile(file, "original bytes plus a repaint");
+	Check(bitmap.SourceChanged(),
+		"BlocoW: a repaint that changes the file size is seen");
+
+	bitmap.RecordSourceFingerprint();
+	Check(!bitmap.SourceChanged(),
+		"BlocoW: recording the fingerprint again clears the change");
+}
+
+void TestReloadSeesAFileWhoseWriteTimeMovedAtTheSameSize()
+{
+	//The artist's real case: the paint program writes the same number of bytes.
+	//The write time is set explicitly rather than slept for, so the case does
+	//not depend on the host's mtime granularity.
+	std::filesystem::path file = MakeReloadTempFile("mtime", "abcdefgh");
+	HdPackBitmapInfo bitmap;
+	bitmap.SourcePath = file.string();
+	bitmap.RecordSourceFingerprint();
+
+	WriteTestFile(file, "hgfedcba");
+	std::error_code ec;
+	std::filesystem::last_write_time(file, std::filesystem::last_write_time(file, ec) + std::chrono::hours(1), ec);
+	Check(!ec, "BlocoW: the test can set a write time explicitly");
+	Check(bitmap.SourceChanged(),
+		"BlocoW: a same-size repaint is seen through the write time");
+}
+
+void TestReloadTreatsAnUnreadableFileAsUnchanged()
+{
+	//A paint program that writes through a temporary file makes the target
+	//briefly absent. Losing good pixels over that would be worse than waiting
+	//for the next explicit reload.
+	std::filesystem::path file = MakeReloadTempFile("vanish", "pixels");
+	HdPackBitmapInfo bitmap;
+	bitmap.SourcePath = file.string();
+	bitmap.RecordSourceFingerprint();
+	std::error_code ec;
+	std::filesystem::remove(file, ec);
+	Check(!bitmap.SourceChanged(),
+		"BlocoW: a file that momentarily cannot be stat'ed reads as unchanged, not as changed");
+}
+
+void TestReloadOfAZipBackedImageIsNotWatched()
+{
+	HdPackBitmapInfo bitmap;
+	bitmap.PngName = "inside.png";
+	Check(bitmap.SourcePath.empty(),
+		"BlocoW: an image loaded from a zip carries no source path");
+	Check(bitmap.ClassifyReload() == HdPackImageReload::NotWatched,
+		"BlocoW: a zip-backed image is never reloaded (ADR-0212 section 5)");
+	Check(!bitmap.SourceChanged(),
+		"BlocoW: and it never reports a change either");
+}
+
+void TestReloadOfAnUnchangedImageDecodesNothing()
+{
+	std::filesystem::path file = MakeReloadTempFile("noop", "not really a png");
+	HdPackBitmapInfo bitmap;
+	bitmap.SourcePath = file.string();
+	bitmap.RecordSourceFingerprint();
+	Check(bitmap.ClassifyReload() == HdPackImageReload::Unchanged,
+		"BlocoW: an unchanged image costs one stat and no decode");
+
+	WriteTestFile(file, "not really a png, repainted");
+	Check(bitmap.ClassifyReload() == HdPackImageReload::Needed,
+		"BlocoW: a repainted image is classified as needing a decode");
+}
+
+void TestReloadRefusesAResizedCanvas()
+{
+	//ADR-0212 section 4. HdPackTileInfo caches x/y/w/h from the manifest, so a
+	//repaint that shrinks the canvas would be read out of bounds; the old
+	//pixels are kept and the artist is told to reopen the ROM.
+	Check(HdPackBitmapInfo::DimensionsAllowInPlaceSwap(256, 240, 256, 240),
+		"BlocoW: the same canvas may be swapped in place");
+	Check(!HdPackBitmapInfo::DimensionsAllowInPlaceSwap(256, 240, 256, 241),
+		"BlocoW: a taller canvas is refused");
+	Check(!HdPackBitmapInfo::DimensionsAllowInPlaceSwap(256, 240, 128, 240),
+		"BlocoW: a narrower canvas is refused");
+	Check(!HdPackBitmapInfo::DimensionsAllowInPlaceSwap(256, 240, 512, 480),
+		"BlocoW: an upscaled canvas is refused too - bigger is not safer, the manifest still names the old crop");
+}
+
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -7791,6 +7914,14 @@ int main()
 	TestUnsortedSheetDeclaresTheEightPixelGridItActuallyUses();
 	TestUnsortedSheetSkipsAShapeWithNoDrawableArt();
 	TestUnsortedSheetCellsResolveBackToTileKeys();
+
+	TestReloadFingerprintOfAMissingFileIsNotRecorded();
+	TestReloadSeesAFileWhoseSizeMoved();
+	TestReloadSeesAFileWhoseWriteTimeMovedAtTheSameSize();
+	TestReloadTreatsAnUnreadableFileAsUnchanged();
+	TestReloadOfAZipBackedImageIsNotWatched();
+	TestReloadOfAnUnchangedImageDecodesNothing();
+	TestReloadRefusesAResizedCanvas();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
