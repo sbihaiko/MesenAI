@@ -20,7 +20,16 @@ import sys
 from pathlib import Path
 
 ADR_DIR = Path(__file__).resolve().parent.parent / "docs/adr"
-STATUS = re.compile(r"^- Status:\s*(\w+)", re.MULTILINE)
+#The status token is *searched for* in the line, not taken as its first word.
+#ADRs write `- Status: **accepted 2026-09-19** ...` as often as they write it
+#plain, and 0209 writes `- Status: **Q4 accepted 2026-09-19** ...`, where the
+#first word is a quarter and the token is second. A pattern anchored on the
+#word alone dropped four accepted ADRs (0209, 0212, 0213, 0214) out of the
+#session index silently - and an index that omits a binding decision is worse
+#than no index, because a reader trusts it. Only the line's own text is read,
+#so a body sentence mentioning `superseded` cannot promote or demote anything.
+STATUS = re.compile(r"^- Status:[^\n]*?\b(proposed|accepted|superseded)\b",
+                    re.MULTILINE | re.IGNORECASE)
 DATE = re.compile(r"^- Date:\s*(\S+)", re.MULTILINE)
 
 

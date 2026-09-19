@@ -400,6 +400,10 @@ doc-checks: check-manifest
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
+	#The session-start index is the only register a session sees by default;
+	#four accepted ADRs were missing from it (0209, 0212, 0213, 0214) because
+	#the Status parser anchored on the first word. That guard is this one.
+	python3 scripts/checks/verify_adr_index.py
 	#Roadmap freshness (PRD slice C.2): a slice that has shipped loses its row
 	#in the PRD's live tables and gains one line in the shipped record, so a
 	#live row whose Decision cell opens with "shipped" is a contract breach.
