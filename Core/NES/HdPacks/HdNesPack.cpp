@@ -372,13 +372,16 @@ void HdNesPack<scale>::ProcessAdditionalSprites()
 	}
 
 	bool checkFallbackTiles = _console->GetMapper()->HasChrRom() && _fallbackTiles.size() > 0;
-	HdPpuPixelInfo& lineFirstPixel = _hdScreenInfo->ScreenTiles[0];
-	uint32_t yScroll = (((lineFirstPixel.TmpVideoRamAddr & 0x3E0) >> 2) | ((lineFirstPixel.TmpVideoRamAddr & 0x7000) >> 12)) + ((lineFirstPixel.TmpVideoRamAddr & 0x800) ? 240 : 0);
-	uint16_t tmpVramAddr = lineFirstPixel.TmpVideoRamAddr;
+	HdPpuPixelInfo& screenFirstPixel = _hdScreenInfo->ScreenTiles[0];
+	uint32_t yScroll = (((screenFirstPixel.TmpVideoRamAddr & 0x3E0) >> 2) | ((screenFirstPixel.TmpVideoRamAddr & 0x7000) >> 12)) + ((screenFirstPixel.TmpVideoRamAddr & 0x800) ? 240 : 0);
+	uint16_t tmpVramAddr = screenFirstPixel.TmpVideoRamAddr;
 	bool processBgNextRow = true;
 
 	for(int32_t y = 0; y < NesConstants::ScreenHeight; y++) {
-		lineFirstPixel = _hdScreenInfo->ScreenTiles[y << 8];
+		//A reference cannot be re-seated: `lineFirstPixel = ScreenTiles[y << 8]`
+		//copy-assigned this scanline's pixel info *into* ScreenTiles[0], so the
+		//rendered frame's first pixel was overwritten on every scanline (#326).
+		const HdPpuPixelInfo& lineFirstPixel = _hdScreenInfo->ScreenTiles[y << 8];
 
 		//Only process the first scanline for each row of tiles (if no additions are found)
 		if(((yScroll + y) & 0x07) == 0 || tmpVramAddr != lineFirstPixel.TmpVideoRamAddr) {
