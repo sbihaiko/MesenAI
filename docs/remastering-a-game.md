@@ -179,6 +179,26 @@ scripts/headless_record roms/Contra.nes 60 out/mint \
 `.mss` files are **never versioned** — a CHR-RAM state carries the game's
 graphics. Keep them in your working directory.
 
+### Recording a whole folder of ROMs, unattended
+
+When you have route sets already, the per-ROM steps above can run as one job:
+
+```sh
+scripts/record_library.sh <roms-dir> <out-dir> 60
+```
+
+For each ROM it computes the No-Intro SHA1, picks the best driver that matches
+it — a declared route set, then a `.bk2` for that exact dump, then a lone entry
+script — mints whatever save states the set needs into its own scratch copy,
+records, builds the kit, and writes `<out-dir>/library-report.md`: one row per
+ROM with the driver, retained frames, `seen` %, surface counts and the kit's
+`--verify` result. It never waits for you, and a ROM it cannot record is a row
+saying why, not a stop.
+
+A ROM that matches nothing gets driver `static` and no kit — there is nothing to
+record. A route set is matched only through its `stage-set.json`
+(`scripts/stages/README.md`), never by folder name.
+
 ### Check the route before you trust the recording
 
 A route is a blind script, and a blind script dies. When it does, the run keeps
