@@ -883,7 +883,7 @@ namespace MesenSheets
 		}
 	}
 
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates)
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames)
 	{
 		AnchorChoice empty;
 		if(candidates.empty()) {
@@ -914,7 +914,10 @@ namespace MesenSheets
 				if(i == capturedIndex || frames[i].FineX != screen->FineX) {
 					continue;
 				}
-				if(IsScreenVariant(*screen, frames[i])) {
+				//ADR-0217 Option C / ADR-0218 Option A: a forced rival skips
+				//IsScreenVariant entirely, never landing in `variants`.
+				bool forcedRival = std::find(forcedRivalFrames.begin(), forcedRivalFrames.end(), i) != forcedRivalFrames.end();
+				if(!forcedRival && IsScreenVariant(*screen, frames[i])) {
 					variants.push_back(&frames[i]);
 				} else {
 					rivals.push_back(&frames[i]);
@@ -967,5 +970,45 @@ namespace MesenSheets
 			return wide;
 		}
 		return choice;
+	}
+
+	std::vector<AnchorKey> AnchorKeysOf(const GridFrame& frame, const AnchorChoice& choice, const std::vector<AnchorCandidate>& candidates)
+	{
+		std::vector<AnchorKey> keys;
+		for(size_t index : choice.Picked) {
+			const AnchorCandidate& candidate = candidates[index];
+			AnchorKey key;
+			key.Row = candidate.Row;
+			key.Col = candidate.Col;
+			key.FineX = frame.FineX;
+			key.Tile = frame.Cells[candidate.Row][candidate.Col];
+			key.Palette = frame.Palettes[candidate.Row][candidate.Col];
+			keys.push_back(key);
+		}
+		return keys;
+	}
+
+	bool SameAnchorKeys(std::vector<AnchorKey> a, std::vector<AnchorKey> b)
+	{
+		if(a.empty() || a.size() != b.size()) {
+			return false;
+		}
+		auto byPosition = [](const AnchorKey& x, const AnchorKey& y) {
+			if(x.Row != y.Row) { return x.Row < y.Row; }
+			if(x.Col != y.Col) { return x.Col < y.Col; }
+			if(x.FineX != y.FineX) { return x.FineX < y.FineX; }
+			return x.Tile < y.Tile;
+		};
+		std::sort(a.begin(), a.end(), byPosition);
+		std::sort(b.begin(), b.end(), byPosition);
+		for(size_t i = 0; i < a.size(); i++) {
+			if(a[i].Row != b[i].Row || a[i].Col != b[i].Col || a[i].FineX != b[i].FineX || a[i].Tile != b[i].Tile) {
+				return false;
+			}
+			if(a[i].Palette != b[i].Palette && a[i].Palette != kUnknownPalette && b[i].Palette != kUnknownPalette) {
+				return false;
+			}
+		}
+		return true;
 	}
 }

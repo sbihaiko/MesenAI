@@ -95,5 +95,37 @@ namespace MesenSheets
 	//written from; out of range (no retained grid frame for it) degrades to
 	//ADR-0050's plain rarity-and-spread greedy, which is also what an empty
 	//stream yields.
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates);
+	//
+	//`forcedRivalFrames` (ADR-0217 Option C, ADR-0218 Option A): indices into
+	//`frames` that must classify as rivals regardless of IsScreenVariant - a
+	//frame another pending screen is itself anchored on is, by definition, a
+	//different picture someone chose to capture separately, however close the
+	//raw pixels sit.
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {});
+
+	//ADR-0217 Option A / ADR-0218 Option B: a screen's picked anchors, reduced
+	//to what GetLayerIndex actually reads - independent of any HdPackCondition
+	//object or its name. Two screens whose keys are the same set (regardless
+	//of pick order) are indistinguishable at read time: the second one is
+	//permanently unreachable. FineX is part of the key because it is part of
+	//the real pixel X a <background>'s tileAtPosition condition carries
+	//(TileX = Col*8 + FineX) - two screens agreeing on (row, col) at different
+	//scroll offsets are not actually the same condition.
+	struct AnchorKey
+	{
+		uint32_t Row = 0;
+		uint32_t Col = 0;
+		uint8_t FineX = 0;
+		ShapeId Tile = 0;
+		PaletteId Palette = kUnknownPalette;
+	};
+
+	//Reads `choice.Picked` against `frame`'s own cells - the frame the screen
+	//was captured from.
+	std::vector<AnchorKey> AnchorKeysOf(const GridFrame& frame, const AnchorChoice& choice, const std::vector<AnchorCandidate>& candidates);
+
+	//True when `a` and `b` are the same set of keys, order-independent, an
+	//unknown palette on either side matching anything (same permissiveness as
+	//the rival test inside SelectScreenAnchors itself).
+	bool SameAnchorKeys(std::vector<AnchorKey> a, std::vector<AnchorKey> b);
 }
