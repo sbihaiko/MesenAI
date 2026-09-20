@@ -1,6 +1,6 @@
 # ADR-0210: Sheet coverage is completed from the ROM's own CHR; a third-party index contributes palettes for CHR ROM games and the game's own pattern bytes for CHR RAM games — never a pixel of the other pack, and never conditions
 
-- Status: proposed
+- Status: accepted (2026-09-20). User go-ahead, verbatim: *"Sim, implementar agora"*. Same-turn implementation requires unit tests covering the decision; see the implementing PR for that coverage and this quote repeated in its body.
 - Date: 2026-09-18 (amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted. Title amended the same day to agree with §3 — the earlier "never art" contradicted the CHR RAM clause, where the 16 pattern bytes in a key are the game's art and are rendered by us)
 - Related: ADR-0183 (the artist kit; "an observation, never a reading"), ADR-0209 Q4 (how coverage reaches 100%), ADR-0198 §2/§3 (patched-ROM key namespace), ADR-0145 (optimistic matcher), ADR-0153 (artist-legible sheets), MEP-v1 §5, PRD Part A F9.24, F12.2
 - Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR"
