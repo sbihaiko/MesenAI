@@ -322,8 +322,13 @@ doc-checks: check-manifest
 	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1803
 	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
 	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
-	# its rank never decides anything.
-	./scripts/check-file-loc.sh scripts/mep_build.py 1945
+	# its rank never decides anything. Amended again the same day (seventh
+	# amendment, ADR-0197 §1, F12.6a): 1936 -> 1945 for the authored-condition
+	# read/merge in _cell_crops and the sheet's own <condition> definitions.
+	# Amended a ninth time 2026-09-19 (#346): 1945 -> 1953 for _EditedProbe's
+	# size-mismatch branch, which now refuses the build instead of falling
+	# back to blind on a half-grown sheet/twin pair.
+	./scripts/check-file-loc.sh scripts/mep_build.py 1953
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	# Amended 2026-09-17 (ADR-0137, fourth amendment; ADR-0207): the ceiling on
 	# scripts/core_unit_tests.cpp is GONE, not raised. C.7 ratcheted it at 7342
