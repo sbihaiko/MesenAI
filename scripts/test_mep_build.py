@@ -544,6 +544,28 @@ def edited_precedence_tests(root: Path):
     else:
         ok("a sheet with no *.orig.png twin counts as fully painted and keeps its static rank")
 
+    # #346: a twin that exists but is the wrong size is not "no evidence" —
+    # the pair is meant to grow together, so a mismatch proves a half-grown
+    # grow rather than an absent one. This must refuse, not go blind.
+    # Reproduce it the way a real grow happens: a 7th cell added to the
+    # vocabulary spills contact_sheet into a new row, so metatiles.png and
+    # its sidecar both grow — but *.orig.png is left at the old, smaller size.
+    e, vocab_e, _c = make_sheet_folder(root, "edited-half-grown")
+    sheets_e = e / "textures" / "sheets"
+    grown_vocab = vocab_e + [{"count": 1, "context": "scene", "metatile": 6, "tiles": [0]}]
+    grown_cells, grown_pixels = contact_sheet(16, 1, 3, grown_vocab)
+    (sheets_e / "metatiles.png").write_bytes(png_rgba(grown_pixels))
+    (sheets_e / "metatiles.json").write_text(
+        serialize_sheet("metatiles", 16, 1, 3, "metatiles.png", "metatiles.orig.png", grown_cells),
+        encoding="utf-8")
+    out = run("build", str(e), expect=2)
+    if out is None:
+        return
+    if "#346" not in out or "must grow together" not in out:
+        fail(f"a half-grown sheet/twin pair was not refused with the #346 reason:\n{out}")
+    else:
+        ok("#346: a sheet grown without its *.orig.png twin refuses the build instead of going blind")
+
 
 def screen_residency_tests(root: Path):
     """ADR-0156 (F9.9): the cells a captured screen owns leave `metatiles.png`,
@@ -774,6 +796,13 @@ def sheet_round_trip_tests(root: Path):
             f = orphan / "textures" / "sheets" / f"{stem}{suffix}"
             if f.exists():
                 f.unlink()
+    # With no non-map sheet left, nothing pins the pack's scale from the art
+    # any more and the build falls back to the key source's <scale> (2)
+    # (main()'s "else 2" default). That leaves map-000's own pair — written
+    # at make_sheet_folder's default 1x — declaring a size the #346 check
+    # would now (correctly) refuse as half-grown; drop its twin too so this
+    # stays the "no reference" case the orphan test does not care about.
+    (orphan / "textures" / "sheets" / "map-000.orig.png").unlink()
     out = run("build", str(orphan))
     if out is not None and "no sibling metatiles.json" in out:
         ok("a map without its metatile vocabulary is skipped with a warning")

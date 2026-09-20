@@ -643,10 +643,17 @@ class _EditedProbe:
     is compared against the twin upscaled by N — the cheaper direction, since
     it needs no resampling decision and no whole-image allocation.
 
-    With no usable twin (`"reference": ""`, a missing or unreadable file, a
-    size that is not exactly N x the sheet's) there is nothing to diff against,
-    so every cell of that sheet counts as edited and the static rank decides,
-    exactly as before this rule existed."""
+    With no usable twin (`"reference": ""`, a missing or unreadable file)
+    there is nothing to diff against, so every cell of that sheet counts as
+    edited and the static rank decides, exactly as before this rule existed.
+
+    A twin that *is* readable but the wrong size is a different case (#346):
+    the sheet and its twin are meant to grow together (ADR-0153 §3), one PNG
+    at a time, so a size mismatch between two files that both exist is not
+    "no evidence" — it is proof the pair was half-grown. Falling back to
+    blind here would ring the same silent bell #346 was filed over: every
+    cell of the sheet counts as painted and `_SHEET_RANK` decides cells
+    nobody touched, with the build staying green. This one refuses instead."""
 
     def __init__(self, sd: "SheetDoc", scale: int, sheets_dir: Path):
         self.scale = scale
@@ -669,9 +676,10 @@ class _EditedProbe:
         elif (self.orig.width * scale != self.sheet.width
               or self.orig.height * scale != self.sheet.height
               or self.orig.channels != self.sheet.channels):
-            self.reason = (f"reference twin {ref} is {self.orig.width}x{self.orig.height}, "
-                           f"not {self.sheet.width // scale}x{self.sheet.height // scale}")
-            self.sheet = self.orig = None
+            raise BuildError(
+                f"{sd.name}: reference twin {ref} is {self.orig.width}x{self.orig.height}, "
+                f"not {self.sheet.width // scale}x{self.sheet.height // scale} — "
+                f"{sd.name} and {ref} must grow together (#346)")
 
     @property
     def blind(self) -> bool:
