@@ -62,6 +62,14 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   blocks a copy-table key explains. The number is in `report.json` and in the
   per-game index the evaluator reads, and a frame that fails the gate is
   re-chosen from the next-best candidate rather than shipped;
+- that count can lie by itself, though - it matches *pixel designs*, and a
+  repeating one (a brick, the blank tile) can "explain" most of a frame from a
+  near-empty dump. The 2026-09-19 Sonnet sweep read Contra's "692/930 blocks
+  explained" and Ninja Gaiden's "828/960" as if they meant the dump was that
+  complete, then found the actual `tilemap-copy/*.txt` held 90 and 30 rows.
+  `dump_coverage` is the honest number - the dump's own row count over the
+  frame's `FULL_GRID_CELLS` - logged and gated on (`MOMENT_CELLS`) apart from
+  the pixel-match figure, and never conflated with it in the index again;
 - `draw_tilemap` dims every tile whose key is not on the frame, so "this shape is
   not on the screen you were given" is visible in the picture rather than a round
   trip the evaluator pays for;
@@ -112,6 +120,20 @@ SPRITE_KINDS = {"sprite", "sprites", "poses"}
 #non-blank keys in a corner is not a frame an artist can pick a shape off.
 MOMENT_BLOCKS = 0.50
 MOMENT_KEYS = 4
+#The scan walks the paused frame's full 256x240 in 8x8 steps - always this many
+#positions, on every game, regardless of how much of it the copy action actually
+#answers for (WalkTilemap in CopyAsMepSheetCellTests.cs).
+FULL_GRID_CELLS = (256 // 8) * (240 // 8)
+#A third leg of the same gate, and the one the 2026-09-19 Sonnet sweep's
+#"coverage-count mismatch" finding was missing. `explained` in `moment_agreement`
+#counts *pixel-pattern* repeats - a handful of table rows can "explain" most of
+#the screen when their designs (a brick, the blank tile) tile across it - so it
+#stayed high on Contra (692/930, from a 90-row dump) and Ninja Gaiden (828/960,
+#from 30 rows, every one of them column 0) while the actual dump the evaluator
+#pastes from covered under a tenth of the frame. This checks the dump itself:
+#the fraction of the 960 positions the copy action actually named something for,
+#with no repeats to inflate it.
+MOMENT_CELLS = 0.50
 #How many candidate seconds may be minted and scanned before the game is handed
 #over with its measurement and a warning. A scan is the expensive step, so this
 #is deliberately small.
@@ -391,6 +413,29 @@ def table_rows(table):
     return rows
 
 
+def dump_coverage(table):
+    """How much of the paused frame the copy action actually named a cell for.
+
+    `WalkTilemap` (`CopyAsMepSheetCellTests.cs`) always walks the full
+    `FULL_GRID_CELLS` positions of the 256x240 frame; a position is missing
+    from `table` when the copy refused it (`NesDrawnTileResolver`'s
+    `NotDrawnThisFrame`/`BanksDisagree`, most often a scrolled game whose
+    on-screen half-window belongs to a nametable this dump never touches).
+    This is the raw row count, with no repetition to inflate it - the number
+    an evaluator's own count of the dump file would get.
+
+    Do not confuse this with `moment_agreement`'s "blocks explained": that one
+    matches rendered *pixel patterns*, so a handful of rows whose design (a
+    brick, the blank tile) repeats across the screen can "explain" most of it
+    while naming almost none of the frame. The 2026-09-19 Sonnet sweep read
+    the two as the same number and called the gap a defect - Contra's index
+    claimed "692/930 blocks explained" from a 90-row dump (9% of the frame),
+    Mike Tyson's Punch-Out!! claimed "793/960" from 32 rows (3%), and Ninja
+    Gaiden claimed "828/960" from 30 rows (3%, every one of them column 0)."""
+    cells = len(table_rows(table))
+    return cells, round(cells / FULL_GRID_CELLS, 3) if FULL_GRID_CELLS else 0.0
+
+
 def tile_pixels(doc):
     """The 8x8 the PPU draws for one copy-table cell, as 24 bytes per row.
 
@@ -470,6 +515,16 @@ def moment_agreement(shot, table):
         #on it must not be marked as if it were the Zelda II case.
         "drawn": all_seen,
     }
+
+
+def one_moment(agreement, coverage):
+    """The one-moment gate, all three legs: pixel-match, non-blank keys, and
+    the dump's own coverage of the frame (`MOMENT_CELLS` - see `dump_coverage`).
+    One function so the loop's break and the final report can never disagree
+    about what passed."""
+    return (agreement["explained"] >= MOMENT_BLOCKS
+            and agreement["keys_on_frame"] >= MOMENT_KEYS
+            and coverage >= MOMENT_CELLS)
 
 
 def capture_drift(rom, pack, state, out, frame_png):
@@ -811,23 +866,30 @@ def main(argv=None):
     #take the next-best candidate when they are not. The gate is checked after
     #the scan because the copy table is what the frame is compared against;
     #everything before it is the cheap half.
-    agreement, seconds, drawn, state = None, None, None, None
+    agreement, seconds, drawn, state, coverage = None, None, None, None, 0.0
     for attempt, (candidate, rules, _, _) in enumerate(ranked[:MOMENT_TRIES], 1):
         seconds, drawn = candidate, rules
         log("frame", f"{rom.stem} at {seconds}s draws {drawn} background rule(s)")
         state, shot = mint(rom, pack, out, seconds, frames)
         log("mint", f"{state.name} + {shot.name}")
-        report["cells"] = scan(rom, state, table)
-        log("scan", f"{report['cells']} tile(s) answered in {table.name}")
+        scan(rom, state, table)
+        report["cells"], coverage = dump_coverage(table)
+        report["dump_coverage"] = coverage
+        log("scan", f"{report['cells']} tile(s) answered in {table.name} "
+                    f"({report['cells']}/{FULL_GRID_CELLS} of the frame, {coverage:.1%})")
         screen = render_screen(rom, state, out)
         shutil.copy(screen, frames / f"{safe}-screen.png")
         agreement = moment_agreement(screen, table)
+        #`agreement['blocks']`/`explained` match rendered pixel *patterns*, so a
+        #handful of rows whose design repeats across the screen (a brick, the
+        #blank tile) can score high while the dump itself - `coverage` - names
+        #almost none of the frame (see `dump_coverage`). Logged apart, on
+        #purpose, so the two are never read as the same claim again.
         log("moment", f"{agreement['blocks']} block(s) of the frame explained by the "
                       f"copy table, {agreement['keys_on_frame']} non-blank key(s) of "
                       f"{agreement['keys_in_table']} on screen, fine scroll "
                       f"{agreement['fine_scroll']}")
-        if (agreement["explained"] >= MOMENT_BLOCKS
-                and agreement["keys_on_frame"] >= MOMENT_KEYS):
+        if one_moment(agreement, coverage):
             break
         if attempt < min(MOMENT_TRIES, len(ranked)):
             log("moment", "the tilemap and the frame are not one screen at this "
@@ -841,8 +903,14 @@ def main(argv=None):
                                             frames / f"{safe}.png")
     log("moment", f"captured screens repaint {report['capture_drift']} pixel(s) of "
                   f"the handed-over frame")
-    report["one_moment"] = (agreement["explained"] >= MOMENT_BLOCKS
-                            and agreement["keys_on_frame"] >= MOMENT_KEYS)
+    report["one_moment"] = one_moment(agreement, coverage)
+    if report["dump_coverage"] < MOMENT_CELLS:
+        log("warn", f"the copy table names only {report['cells']}/{FULL_GRID_CELLS} "
+                    f"({coverage:.1%}) of the frame's positions - most of it is "
+                    "likely off the nametable this dump describes (a scrolled "
+                    "game whose visible window is mostly the other nametable), "
+                    "so the pixel-match 'blocks explained' figure above overstates "
+                    "what the evaluator can actually paste from")
     if not report["one_moment"]:
         log("warn", "no candidate second puts this pack's nametable on the screen "
                     "- the panel is handed over with the measurement above, and a "
@@ -902,6 +970,15 @@ def main(argv=None):
         f"{agreement['keys_in_table']} keys are non-blank shapes on that frame. "
         f"A tile dimmed and backed in dark red on the tilemap image is in the "
         f"nametable and **not** on this screen - do not pick one.\n"
+        f"- Coverage: the copy table itself names {report['cells']} of the frame's "
+        f"{FULL_GRID_CELLS} positions ({report['dump_coverage']:.1%}). This is a "
+        f"different number from the 'blocks explained' line above, on purpose - "
+        f"that one counts a *pixel design* wherever it repeats (a brick, the blank "
+        f"tile, tiled across the whole screen), so it can read high while this "
+        f"count, the one the tilemap picture and the dump file actually cover, "
+        f"stays small on a scrolled frame. Trust this number for what you can "
+        f"paste; the tilemap picture is `{cols}x{lines_}` cells wide/tall for the "
+        f"same reason.\n"
         + (f"- The visible window: the tilemap is one nametable and the screen is "
            f"a {window['cols']}x{window['rows']} window into two of them. The cyan "
            f"box on the tilemap is the part of this nametable the frame shows; its "
