@@ -48,7 +48,9 @@ jobs:
   generate-catalog:
     runs-on: ubuntu-latest
     env:
-      # Board reads need PROJECT_PAT; git push / gh pr use GITHUB_TOKEN below.
+      # Board reads need PROJECT_PAT, and so does opening the PR (GITHUB_TOKEN
+      # cannot — see the `gh pr create` call below). git push and the
+      # pr view/close/merge calls still use GITHUB_TOKEN.
       PROJECT_PAT: ${{ secrets.PROJECT_PAT }}
 
     steps:
@@ -118,7 +120,19 @@ jobs:
           if gh pr view "$BRANCH" --json number -q .number >/dev/null 2>&1; then
             echo "catalog PR already open for $BRANCH"
           else
-            gh pr create --base main --head "$BRANCH" \
+            # GITHUB_TOKEN cannot open the PR: this repository keeps "Allow
+            # GitHub Actions to create and approve pull requests" off
+            # (can_approve_pull_request_reviews: false), so the API answers
+            # `GitHub Actions is not permitted to create or approve pull
+            # requests`. PROJECT_PAT is the same secret the board read above
+            # and sync-upstream.yml's `gh pr create` use. Without it every run
+            # since the "main gate" ruleset landed (2026-09-14) failed here,
+            # after the branch and its commit had already been pushed.
+            if [ -z "${PROJECT_PAT:-}" ]; then
+              echo "::error::PROJECT_PAT is unset — branch $BRANCH is pushed, but the PR must be opened by hand: https://github.com/$GITHUB_REPOSITORY/pull/new/$BRANCH"
+              exit 1
+            fi
+            GH_TOKEN="$PROJECT_PAT" gh pr create --base main --head "$BRANCH" \
               --title "chore: regenerate community pack catalog" \
               --body "Automated regeneration of \`docs/community-packs.md\` and \`docs/community-packs.json\` from the Community Packs board (Project 3). Triggered by schedule or an accepted-pack verdict."
           fi
