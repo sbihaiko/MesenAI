@@ -365,7 +365,15 @@ def mint(rom, pack, out, seconds, frames):
 
 
 def table_rows(table):
-    """`col,row<TAB><json>` per line, as the scan writes it."""
+    """`col,row<TAB><json>` per line, as the scan writes it.
+
+    ADR-0216 changed the copy action's own JSON from a bare `{"tile": ...,
+    "palette": ...}` to a "sheet cell" wrapper, `{"count": 1, "tiles": [{...}]}`
+    (`scripts/mep_add_cell.py`'s docstring names both shapes it accepts). This
+    dispatcher predates that change and only ever reasoned about one 8x8 tile
+    per cell, so a background rule's copy is unwrapped to its first (and, for
+    every rule this dispatcher paints, only) `tiles[]` entry here, once, so
+    every caller below keeps seeing the bare shape."""
     rows = []
     for line in table.read_text().splitlines():
         if "\t" not in line:
@@ -375,6 +383,9 @@ def table_rows(table):
             doc = json.loads(text)
         except ValueError:
             continue
+        if isinstance(doc, dict) and "tiles" in doc:
+            tiles = doc.get("tiles") or []
+            doc = tiles[0] if tiles and isinstance(tiles[0], dict) else {}
         col, row = (int(v) for v in pos.split(","))
         rows.append((col, row, doc))
     return rows
