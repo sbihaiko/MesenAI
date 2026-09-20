@@ -69,6 +69,36 @@ namespace Mesen.Tests.Mep
 		}
 
 		[Fact]
+		public void FormatCell_WrapsTheEntryInAnUnplacedCell()
+		{
+			//ADR-0216 OPEN 1(b): `count` + `tiles[]`, and no `index`/`x`/`y` of the
+			//cell's own - those are the sheet's arithmetic, and `mep_add_cell.py`
+			//does it. The `index` that IS here rides inside `tiles[]` and is the
+			//tile's absolute CHR index (ADR-0172 §2); the two are the trap the ADR
+			//names, so this pins which one survives.
+			Assert.Equal(
+				"{\"count\": 1, \"tiles\": [{\"tile\": \"" + SmbChrRomTile + "\", \"palette\": \"" + SmbPalette + "\", \"index\": 2}]}",
+				MepSheetCell.FormatCell(SmbChrRomTile, SmbPalette, 2));
+
+			using JsonDocument doc = JsonDocument.Parse(MepSheetCell.FormatCell(ContraTile, ContraPalette));
+			JsonElement root = doc.RootElement;
+			Assert.Equal(new[] { "count", "tiles" }, root.EnumerateObject().Select(p => p.Name).ToArray());
+			Assert.Equal(1, root.GetProperty("count").GetInt32());
+			JsonElement entry = Assert.Single(root.GetProperty("tiles").EnumerateArray().ToArray());
+			Assert.Equal(new[] { "tile", "palette" }, entry.EnumerateObject().Select(p => p.Name).ToArray());
+			Assert.Equal(ContraTile, entry.GetProperty("tile").GetString());
+		}
+
+		[Fact]
+		public void FormatCell_KeyThatIsNotASheetCell_ReturnsEmpty()
+		{
+			//Same "leave the clipboard alone" signal as Format: a cell wrapped
+			//around a key that cannot be one would paste and then fail to build.
+			Assert.Equal("", MepSheetCell.FormatCell("31", ContraPalette));
+			Assert.Equal("", MepSheetCell.FormatCell(ContraTile, "0G192908"));
+		}
+
+		[Fact]
 		public void Format_LowercaseInput_IsUppercased()
 		{
 			//`mep_build` matches the key source case-insensitively but stores what

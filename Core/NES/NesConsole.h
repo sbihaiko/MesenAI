@@ -113,6 +113,13 @@ public:
 	NesSoundMixer* GetSoundMixer() { return _mixer.get(); }
 	HdAudioDevice* GetHdAudioDevice() { return _hdAudioDevice.get(); }
 
+	//ADR-0215 / issue #342: the loaded pack's own data, so the debugger's copy
+	//actions can ask which palettes the pack keys a tile under instead of
+	//handing out whatever is live in palette RAM at the instant of the copy.
+	//Null when no pack is loaded. Read under the emulation lock - the pack
+	//loads on the detached thread NesConsole::LoadHdPack starts.
+	HdPackData* GetHdData() { return _hdData.get(); }
+
 	//True when a loaded pack actually replaces pixels - the same condition
 	//InitializeRam uses to swap in HdNesPpu/HdVideoFilter, so an audio-only
 	//pack (which also fills _hdData) reads as false. A consumer that compares

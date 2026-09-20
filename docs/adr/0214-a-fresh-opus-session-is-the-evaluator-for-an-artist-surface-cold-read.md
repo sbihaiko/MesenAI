@@ -1,8 +1,18 @@
-# ADR-0214: A fresh Fable session is the evaluator for an artist-surface cold read
+# ADR-0214: A fresh Opus session is the evaluator for an artist-surface cold read
 
-- Status: **accepted 2026-09-19** — the protocol (briefing, dispatcher script, label-identity test) ships in this change; the Fable run itself is the remaining F12.2 panel row and is a request for work, not done by accepting. User go-ahead, verbatim: *"quero usar o Fable, ajuste o que for necessário"*. CLAUDE.md allows same-turn implementation when the change ships with unit tests covering the decision and the go-ahead is quoted here and in the PR body; both hold.
+- Status: **accepted 2026-09-19**, amended the same day — the evaluator is a
+  fresh **Opus** session, not Fable. The protocol (briefing, dispatcher
+  script, label-identity test) shipped on 2026-09-19 under the original
+  Fable wording; the amendment comes after the same protocol was run 28
+  times, once per ROM in the library, with Opus in the seat
+  (`docs/validation/f12.2-opus-sweep-2026-09-19.md`). User go-ahead for the
+  amendment, verbatim: *"se funcionar, substitua definitivamente o fable
+  pelo opus"*, on the strength of the sweep's criterion 1 (28 of 28 runs
+  named the action unaided, 5–55 s) and criterion 4 (one self-reported
+  failure in 28). The original go-ahead, verbatim: *"quero usar o Fable,
+  ajuste o que for necessário"*.
 - Date: 2026-09-19
-- Related: PRD Part A F12.2 (and any later Phase 12 slice whose stop rule is a cold-read of what the artist sees), ADR-0188 (an AI judgement is a proposal), ADR-0150 (Avalonia.Headless), C.5 logs (`docs/validation/c5-fable-artist-run-zelda-2026-09-14.md`, `…-mega-man-3-2026-09-14.md`)
+- Related: PRD Part A F12.2 (and any later Phase 12 slice whose stop rule is a cold-read of what the artist sees), ADR-0188 (an AI judgement is a proposal), ADR-0150 (Avalonia.Headless), C.5 logs (`docs/validation/c5-fable-artist-run-zelda-2026-09-14.md`, `…-mega-man-3-2026-09-14.md`), `docs/validation/f12.2-fable-panel-2026-09-19.md` (the Fable half, kept as the record of the two-game panel this amendment supersedes as the standing evaluator)
 - Amends: PRD Part A Phase 12 principle "a person who did not build it logs the cold-read rows"; F12.2's "human panel row"; the F12.2 mechanical-replay log's claim that the remaining half is only measurable on a person. Does **not** amend F9.18, S10.b, or ADR-0188 §5 (promotion stays gated).
 
 ## Context
@@ -43,11 +53,11 @@ gate.
 
 ## Decision
 
-### 1. The evaluator is a fresh Fable session
+### 1. The evaluator is a fresh Opus session
 
 For a Phase 12 slice whose remaining acceptance is a cold-read of what the
-artist sees, the evaluator is a **new Fable agent** (`Agent`, not `fork`;
-model `fable`) with no prior context from the builder session. The C.5
+artist sees, the evaluator is a **new Opus agent** (`Agent`, not `fork`;
+model `opus`) with no prior context from the builder session. The C.5
 shape stands: the session sees the binary, the three artist guides, the
 ROMs, and the work copies. It does not see the repository checkout's
 `docs/adr/`, the PRD, `scripts/*.py` source, the panel dispatcher script,
@@ -60,11 +70,26 @@ this ADR (the run is then invalid, not failed — it was not a cold read).
 Dispatch is a separately scoped task. Accepting this ADR is a request for
 that run, not the run.
 
+**Why Opus and not Fable (amendment, 2026-09-19).** Fable ran the panel
+twice and passed it (`docs/validation/f12.2-fable-panel-2026-09-19.md`).
+The sweep then ran the same protocol on 28 ROMs with Opus, because one game
+is a panel and 28 are a sample: the difference between "this game's pack is
+odd" and "the feature is broken" only shows up at 28, and the sweep found
+seven defects the two-game panel could not, including a silent wrong-bank
+key on CHR-banked games (#341). Opus was chosen for the standing seat on
+that evidence, not against Fable's: **28 of 28 runs named the action
+unaided from the label dump between 5 and 55 seconds**, and 27 of 28 never
+opened `hires.txt` — the one failure self-reported and caused by a missing
+feature, not by a weaker evaluator. The seat is a model that
+understands the goal and can follow a rule it was given; both did.
+
 ### 2. The briefing is the goal, not the path
 
-The evaluator is given `docs/validation/f12.2-fable-evaluator-briefing.md`
-and nothing that names `Debug > Tilemap Viewer`, `Ctrl+1`,
-`SelectionRect`, `ActionType`, crop pixels, or the P5–P14 answer key.
+The evaluator is given `docs/validation/f12.2-sweep-evaluator-briefing.md`
+(one game; `docs/validation/f12.2-fable-evaluator-briefing.md` is the
+Fable-era two-game version, kept as the record) and nothing that names
+`Debug > Tilemap Viewer`, `Ctrl+1`, `SelectionRect`, `ActionType`, crop
+pixels, or the P5–P14 answer key.
 `docs/validation/f12.2-copy-sheet-cell-panel-script.md` is the
 **dispatcher** script: setup S1–S4, the dump in §3, scoring, known traps.
 Handing it to the evaluator invalidates the run the same way handing a
@@ -83,7 +108,7 @@ the mechanical replay's job, and is the opposite of a cold read.
 Because this machine cannot open an Avalonia context-menu flyout, criterion
 1 is scored on a **label dump** of the Tilemap Viewer's visible, enabled
 context-menu entries at a selected tile, produced in setup (not on the
-evaluator's clock) and placed in the Fable sandbox as
+evaluator's clock) and placed in the evaluator's sandbox as
 `tilemap-menu-labels.txt` — the menu a right-click would have shown. The
 same dump is pasted into the dated log's Binary and inputs header. The evaluator names the line it would click, in under two minutes
 from pause, without being told which. Picking *Copy tile (HD pack format)*
@@ -91,9 +116,9 @@ is a fail of criterion 1, not a skip. Pointer-level discoverability
 (hover vs click, grid off, flyout never appearing) stays **not
 evaluated** until a pointer harness exists; it is not recorded as a pass.
 
-### 4. Which criteria Fable may close
+### 4. Which criteria the evaluator may close
 
-| # | Criterion | Fable may close? |
+| # | Criterion | May the evaluator close it? |
 |---|---|---|
 | 1 | The action is findable from visible labels, under 2 min from pause | **yes**, on the label dump in §3. Pointer/AX discoverability is not evaluated |
 | 2 | Clipboard text is usable as-is | **yes** — paste into a scratch file; valid JSON, one line, no hand-edit of the object |
@@ -101,9 +126,9 @@ evaluated** until a pointer harness exists; it is not recorded as a pass.
 | 4 | `hires.txt` never opened | **yes** — any read is a fail, with the clock time and the question it answered. This is the C.5 miss, now a gate |
 | 5 | Round-trip through `mep_build.py build` | **yes** — already mechanical; the evaluator's key must come back as a `<tile>` at the painted crop |
 | 6 | `mep_lint.py` exits 0 | **yes** |
-| 7 | P1→P14 under 20 min per game | **yes**, wall clock of the Fable session |
+| 7 | P1→P14 under 20 min per game | **yes**, wall clock of the evaluator's session |
 | 8 | Did they expect feedback after clicking? | **observation**, recorded verbatim or omitted. Not a gate |
-| P15 | Would this beat typing the key from a spreadsheet? | **observation**. A Fable "yes" does not close a market claim; it is logged as the C.5 sentence was, and is not a pass |
+| P15 | Would this beat typing the key from a spreadsheet? | **observation**. An evaluator's "yes" does not close a market claim; it is logged as the C.5 sentence was, and is not a pass |
 
 A run that fails criterion 4 (opens `hires.txt`) cannot be scored as
 product acceptance even if the figure appears. That is the rule C.5 lacked.
@@ -118,13 +143,13 @@ product acceptance even if the figure appears. That is the rule C.5 lacked.
   proposal; promoting it still needs `promote`. The evaluator here is
   walking a GUI path, not judging art.
 - A substitute for the mechanical replay. S1–S4 and P9–P14 stay green on
-  a machine so the Fable run cannot be silently defeated by `mep/`
+  a machine so the evaluator's run cannot be silently defeated by `mep/`
   precedence, a stray `EnhancementPacks/` stub, or a whole-screen
   `<background>` (replay findings 1–3).
 
 ## Consequences
 
-- **F12.2's open row is a Fable dispatch, not a calendar wait for a
+- **F12.2's open row is an evaluator dispatch, not a calendar wait for a
   person.** The row still exists until the dated log is filled; it is no
   longer blocked on finding an external artist.
 - **The dispatcher must not contaminate the session.** The briefing file
@@ -132,7 +157,7 @@ product acceptance even if the figure appears. That is the rule C.5 lacked.
   similar panel, it gets its own briefing; it does not reuse this one
   with the answers filled in.
 - **Criterion 1 is weaker than a person's right-click and is labelled
-  so.** A Fable pass on the label dump does not prove the flyout opens,
+  so.** A pass on the label dump does not prove the flyout opens,
   that hovering was not mistaken for a click, or that the silent
   clipboard (known trap 2) was understood. Those stay in the dispatcher
   script as known traps and in criterion 8 as an observation.

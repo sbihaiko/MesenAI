@@ -55,6 +55,15 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
   * #329: `build` is idempotent over a pack it un-baked — the `*.orig.png`
     twin is un-baked with the sheet, so a second build exits 0 and leaves the
     pack byte-identical, while #253 still fires for a real paint conflict;
+  * #338/#343: a painted cell that reaches nothing says so — the capture
+    warning is keyed on the tile (so a freshly pasted cell is visible to it)
+    and names only the sheets that were actually painted, and a painted cell
+    whose key another crop already owns is named instead of vanishing into a
+    "repeat(s)" count;
+  * #339/#344: the build says a capture's gate is a few `tileAtPosition`
+    probes rather than the whole frame, and a capture deleted from both layers
+    is retired — its `<background>` line dropped and counted — instead of
+    failing the build;
   * ADR-0196 (F12.5): a sheet's `additions[]` overflow layer round-trips —
     the `<addition>` tag and the synthetic target's own `<tile>` rule come
     out of the same sheet cell, a rebuild re-emits rather than stacks them,
@@ -598,10 +607,141 @@ def screen_residency_tests(root: Path):
     # covers the sheets are not the surface an artist paints. The build says so
     # - without it, repainting metatiles.png and seeing no change in game has
     # no explanation anywhere.
-    if "captured screen(s)" not in out or "backgrounds/screen001.png" not in out:
-        fail(f"the build does not name the captured screen as the surface to paint:\n{out}")
+    #
+    # "and only there" is load-bearing, and was added after the 2026-09-19 cold
+    # read: the old wording said a capture draws over every <tile> on the scenes
+    # it covers, the evaluator read that as "my paint will never show here",
+    # and it showed. A warning that overstates its scope is a defect of its own,
+    # so the message has to name the frames each capture owns, not just that
+    # captures exist.
+    if ("captured screen(s)" not in out or "backgrounds/screen001.png" not in out
+            or "and only there" not in out):
+        fail(f"the build does not scope the captured screen to the frames it owns:\n{out}")
     else:
-        ok("the build points at backgrounds/screen001.png as the surface that covers the scene")
+        ok("the build points at backgrounds/screen001.png and scopes it to the frames it owns")
+
+    # #339: the capture's gate is a handful of `tileAtPosition` probes, not the
+    # whole frame. Measured on the F12.2 sweep's Mike Tyson's Punch-Out!!: the
+    # frame the dispatcher minted renders with the game's own STARRING /
+    # LITTLE MAC text erased, and a pixelwise compare against the pack's ten
+    # captures finds no exact match at all - the closest, screen003.png, is
+    # 16 047 pixels away, and its whole gate is three <condition> lines
+    # (screen003_A/_B/_C, tileAtPosition). So the run time picks a capture on a
+    # frame it was not frozen for.
+    #
+    # Decision, recorded here rather than as a new rule: the precedence is NOT
+    # weakened. ADR-0050 and ADR-0156 chose it deliberately, the build cannot
+    # evaluate a tileAtPosition probe (it has no PPU and no ROM state), and
+    # tightening the gate is the recorder's job in Core/NES/HdPacks, not the
+    # packer's. What the build owes the artist is (a) to stop implying the gate
+    # is exact, and (b) to give a way out - which is #344's retirement. Both
+    # are in the one message below; the guide says the same thing in prose.
+    if "tileAtPosition probes" not in out or "#339" not in out:
+        fail(f"the build does not say the capture's gate is approximate:\n{out}")
+    else:
+        ok("#339: the build says a capture is gated on probes, not on the whole frame")
+
+    # #344: a capture is retired by deleting its PNG. Before this, the build
+    # carried the <background> line over from the previous hires.txt and never
+    # re-derived it, so the artist had no exit: keeping the capture made the
+    # repaint a no-op, deleting it made the build fail with one
+    # `<background> ... does not exist` per file (Tennis (1984): 5 errors,
+    # exit 1, on a pack the engine itself loads fine - HdPackLoader drops a
+    # dangling entry at load). Now the line is dropped and counted.
+    (folder / "textures" / "backgrounds" / "screen001.png").unlink()
+    (auto_bg / "screen001.png").unlink()
+    out = run("build", str(folder))
+    if out is None:
+        return
+    body = [ln.strip() for ln in hires.read_text(encoding="utf-8").splitlines()]
+    if bg_line in body:
+        fail("a capture deleted from both layers is still referenced by the rebuilt manifest")
+    elif "retired 1 captured screen(s)" not in out or "#344" not in out:
+        fail(f"the retirement was silent:\n{out}")
+    else:
+        ok("#344: deleting the capture retires it — the <background> line is dropped, and counted")
+    if run("build", str(folder)) is None:
+        fail("#344: a second build over a retired capture is not clean")
+    else:
+        ok("#344: retirement is idempotent — a rebuild neither re-adds nor re-reports it")
+
+
+def muted_paint_tests(root: Path):
+    """#338 and #343: a painted cell that reaches nothing must say so.
+
+    Both defects come out of the 2026-09-19 F12.2 cold read, and both are the
+    same artist question - "did the cell I just painted reach the screen?" -
+    answered by silence.
+
+    #343, measured on Dr. Mario (1990) (Nintendo): appending a cell to
+    `misc.json` whose key an earlier crop of the same sheet already owns, and
+    painting it magenta, left the rebuilt `textures/hires.txt` byte-identical
+    to the previous build. The entire signal was one info line moving from
+    `19 crop(s) repeat a tile key` to `20 crop(s) repeat a tile key` - no key
+    named, no mention of paint, no change to the `tile keys: ...` delta line,
+    exit 0, lint 0.
+
+    #338, measured on Pac-Man (1984) (Namco): the build warned about 19 sheets
+    and stayed silent about `unsorted.png`, the one the evaluator had edited.
+    `screen_shadowed_cells()` keyed on `adjacency.json`'s `metatile` cell id,
+    which a freshly pasted cell does not carry, so the check was blind to
+    exactly the edit that needed judging - while claiming, of 19 other sheets,
+    that "painting this sheet will not show in game". Keying on the tile finds
+    the edited sheet and only it: 1 warning, naming `sheets/unsorted.png`."""
+    # #343. The last cell of metatiles.json is re-pointed at cell 0's keys —
+    # the artist pasting a key that is already on the sheet. Both cells are
+    # painted, so the later one cannot win and emits no <tile> of its own.
+    folder, _vocab, cells = make_sheet_folder(root, "muted-repeat")
+    sheets = folder / "textures" / "sheets"
+    unit, gutter, columns = 16, 1, 3
+    twin = [dict(c) for c in cells]
+    twin[5]["tiles"] = list(twin[0]["tiles"])
+    (sheets / "metatiles.json").write_text(
+        serialize_sheet("metatiles", unit, gutter, columns, "metatiles.png",
+                        "metatiles.orig.png", twin), encoding="utf-8")
+    paint(folder, "metatiles.png", twin[0]["x"], twin[0]["y"], 16)
+    paint(folder, "metatiles.png", twin[5]["x"], twin[5]["y"], 16)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    if "(#343)" not in out or tile_hex(0) not in out:
+        fail(f"a painted cell whose key was already claimed was dropped without a word:\n{out}")
+    else:
+        ok("#343: a painted cell that emits no <tile> is named, with the key and the owner")
+
+    # #338. A screen-resident node that carries tile keys and no `cell` id -
+    # the shape the old lookup could not see - plus a painted cell holding one
+    # of those keys.
+    folder, _vocab, _cells = make_sheet_folder(root, "muted-shadow")
+    sheets = folder / "textures" / "sheets"
+    node = ('{"tile": "%s", "palette": "%s"}' % (tile_hex(0), PAL_HEX))
+    (sheets / "adjacency.json").write_text(
+        '{"version": 1, "kind": "adjacency", "background": {"nodes": ['
+        '{"count": 9, "screens": [{"screen": "screen007", "x": 0, "y": 0}], '
+        f'"tiles": [{node}]}}], "edges": []}}}}', encoding="utf-8")
+    # The capture has to be on disk: a capture the artist retired (#344) must
+    # stop warning about itself, so the report only counts the ones still there.
+    (folder / "textures" / "backgrounds").mkdir(parents=True)
+    (folder / "textures" / "backgrounds" / "screen007.png").write_bytes(png(256, 240))
+    paint(folder, "metatiles.png", 1, 1, 16)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    if "(#338)" not in out or "backgrounds/screen007.png" not in out:
+        fail(f"a painted cell a capture also draws was not reported:\n{out}")
+    elif "sheets/metatiles.png" not in out.split("(#338)")[0].rsplit("warning:", 1)[-1]:
+        fail(f"the capture warning does not name the sheet that was painted:\n{out}")
+    else:
+        ok("#338: the capture warning is keyed on the tile and names the painted sheet")
+
+    # And it stays quiet about the sheets nobody painted - the 19-vs-1 of the
+    # Pac-Man measurement. map-000.png and obj000.png hold the same key and are
+    # untouched, so they must not be warned about.
+    shadow = [ln for ln in out.splitlines() if "(#338)" in ln]
+    if len(shadow) != 1:
+        fail(f"the capture warning fired for {len(shadow)} sheet(s), expected only the painted one")
+    else:
+        ok("#338: untouched sheets holding the same key are not warned about")
 
 
 def sheet_alias_tests(root: Path):
@@ -806,6 +946,7 @@ def sheet_round_trip_tests(root: Path):
 
     edited_precedence_tests(root)
     screen_residency_tests(root)
+    muted_paint_tests(root)
     chr_rom_key_tests(root)
     flip_baked_key_tests(root)
     mirror_h_pixel_key_tests(root)
@@ -840,10 +981,13 @@ def flip_baked_key_tests(root: Path):
     legacy, _v, _c = make_sheet_folder(root, "flip-baked-legacy", flip_baked=True,
                                        sidecar_source=False, sprite_sheet=True)
     out = run("build", str(legacy), expect=2)
-    if out is not None and "flip-baked tile key" in out and "re-record" in out:
+    # #337: the message has to name the fix that works. "Re-record the pack" is
+    # what it said, and re-recording in place reproduces this error every time -
+    # the bootstrap loads the existing auto/ layer, so the cells come back.
+    if out is not None and "flip-baked tile key" in out and "EMPTY folder" in out:
         ok("ADR-0178: a pack whose sidecars predate the ADR fails the build, naming the fix")
     else:
-        fail(f"pre-ADR-0178 pack did not fail with the re-record message: {out}")
+        fail(f"pre-ADR-0178 pack did not fail with the empty-folder message: {out}")
     named = sorted(line.split(":")[1].strip() for line in (out or "").splitlines()
                    if "flip-baked tile key" in line)
     if named == ["spr000.png"]:
@@ -1179,10 +1323,10 @@ def chr_rom_key_tests(root: Path):
     # the decision: the alternative is a pack that silently renders nothing.
     legacy, _v, _c = make_sheet_folder(root, "chr-rom-legacy", chr_rom=True, sidecar_index=False)
     out = run("build", str(legacy), expect=2)
-    if out is not None and "carry no tile index" in out and "re-record" in out:
+    if out is not None and "carry no tile index" in out and "EMPTY folder" in out:
         ok("ADR-0172: a CHR ROM pack whose sidecars predate the ADR fails the build, naming the fix")
     else:
-        fail(f"pre-ADR-0172 CHR ROM pack did not fail with the re-record message: {out}")
+        fail(f"pre-ADR-0172 CHR ROM pack did not fail with the empty-folder message: {out}")
 
 
 def author_overflow(folder: Path, target, anchor, cell: int = 1, offset=(16, -24),

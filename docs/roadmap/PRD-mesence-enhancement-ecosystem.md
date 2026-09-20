@@ -658,8 +658,8 @@ Text summaries belong in `docs/validation/`; ROM-derived assets stay local in
 `runs/`, with hashes in the summary. Tests 3/4/6 have automatable portions;
 a green suite is not a claim that the cold-read ran. C.5 remains a completed
 proxy experiment of the one-hour record→kit→paint path. **Phase 12 cold-reads
-are a fresh Fable session** (ADR-0214), scored on the briefing, with
-criterion 4 (`hires.txt` never opened) as a gate that C.5 lacked. F9.18 still
+are a fresh Opus session** (ADR-0214, amended 2026-09-19), scored on the
+briefing, with criterion 4 (`hires.txt` never opened) as a gate that C.5 lacked. F9.18 still
 requires a human who did not build the feature; ADR-0214 does not amend it.
 A real external-user repeat of C.5 remains out of scope. The under-one-hour
 publishable-pack promise remains unvalidated until the complete documented
@@ -871,7 +871,7 @@ in `docs/validation/` when a slice closes.
 - The sheets stay the source of truth; a `.psd`, `.aseprite` or `.kra` is
   the artist's input, never the pack's.
 - A slice that changes what the artist sees is not shipped until a **fresh
-  Fable session** (ADR-0214) logs the cold-read rows from the slice's
+  Opus session** (ADR-0214) logs the cold-read rows from the slice's
   briefing, not the dispatcher script; the F9.18 panel is a separate
   decision and is not covered by this phase. Pointer-level discoverability
   stays not evaluated until a pointer harness exists.
@@ -884,7 +884,7 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) **Evaluator (ADR-0214, 2026-09-19):** a fresh Fable session pastes one cell and paints it without reading `hires.txt`, from `docs/validation/f12.2-fable-evaluator-briefing.md`. The dispatcher script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md` (S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them); handing it to Fable invalidates the run. Re-measures "Picking a tile's key by hand". A **mechanical** replay of setup S1–S4 and of P9–P14 exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. The remaining row is the Fable dispatch, not a calendar wait for a person. P15 and pointer-level discoverability are observations / not evaluated. |
+| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) **Evaluator (ADR-0214, 2026-09-19):** a fresh Fable session pastes one cell and paints it without reading `hires.txt`, from `docs/validation/f12.2-fable-evaluator-briefing.md`. The dispatcher script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md` (S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them); handing it to Fable invalidates the run. Re-measures "Picking a tile's key by hand". A **mechanical** replay of setup S1–S4 and of P9–P14 exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. The remaining row is the Fable dispatch, not a calendar wait for a person. P15 and pointer-level discoverability are observations / not evaluated. **Closed 2026-09-19:** two fresh Fable sessions, one game each, both PASS — 0 hard stops, neither opened a `hires.txt`, magenta on screen in ~2 min (Zelda 1) and ~4 min (Contra). Criteria 3/5/6 re-derived mechanically from the packs they left behind, 0 magenta on an unpainted baseline at the same frame. Log: `docs/validation/f12.2-fable-panel-2026-09-19.md`. The same log is the argument for the protocol: round 1 stopped **both** sessions on the same two dispatcher defects (a copy table keyed in pixels while the tilemap is labelled in tiles, and a screenshot path that did not match the tool), neither reachable by any green suite. |
 
 **Day-one material without a human at the controller (added 2026-09-19).**
 The slices above all assume a recorded `auto/` exists. The artist evidence
@@ -971,9 +971,13 @@ sequence and bound the work.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
 5. **Phase 12:** F12.1, F12.3, F12.4, F12.5, F12.6a, F12.6b, F12.7 and
-   F12.10 are delivered (2026-09-17 and 2026-09-19, §3). F12.2's code is on `main` with
-   its Fable-evaluator row open (ADR-0214), and so does F12.5's — the pane is driven
-   headlessly, but nobody has added an overflow cell by hand. Of the day-one block (F12.9–F12.12, added
+   F12.10 are delivered (2026-09-17 and 2026-09-19, §3). F12.2's code is on `main` and
+   its evaluator row is **closed** — two fresh Fable sessions, both PASS
+   (`docs/validation/f12.2-fable-panel-2026-09-19.md`), and the same protocol
+   then ran on all 28 ROMs with Opus as the standing evaluator
+   (`docs/validation/f12.2-opus-sweep-2026-09-19.md`: criterion 1 28/28,
+   criterion 4 27/28, criterion 3 13/28 on the path as dispatched). F12.5's stays open: the pane
+   is driven headlessly, but nobody has added an overflow cell by hand. Of the day-one block (F12.9–F12.12, added
    2026-09-19), F12.10 shipped the same day — it needed no ADR and its paths
    (a)–(c) did not depend on F12.9. What remains runs F12.9 → F12.11 → F12.12,
    each waiting on its own decision (ADR-0183 §1 amendment, `.ora` layer

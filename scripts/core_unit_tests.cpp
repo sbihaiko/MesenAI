@@ -59,6 +59,7 @@
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Debugger/CdlFileCheck.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
@@ -7772,6 +7773,136 @@ void TestRamDumpLineClipsAWiderWindowToTheAdrsRange()
 		std::to_string(line.size()));
 }
 
+//--- Issue #347: a CDL write is proven against the bytes on disk ------------
+//headless_record's "cdl=" run used to prove its write by reloading the file
+//and comparing the statistics. LoadCdlFile leaves the map untouched when the
+//file will not read, so on an unwritable path the run compared its own
+//statistics against themselves, printed "round-trip verified" and exited 0.
+//CheckCdlFileOnDisk is the missing half - it opens the target for read and
+//reports what is actually there.
+
+namespace
+{
+	//A minimal well-formed CDL: the 9-byte CDLv2 header plus one flag byte per
+	//ROM byte, with at least one byte set.
+	std::string MakeCdlFileBytes(size_t prgBytes)
+	{
+		std::string bytes = "CDLv2";
+		bytes.append(4, '\0'); //CRC32
+		bytes.append(prgBytes, '\0');
+		if(prgBytes > 0) {
+			bytes[CdlFileHeaderSize] = (char)0x01; //CdlFlags::Code on the first byte
+		}
+		return bytes;
+	}
+
+	std::filesystem::path WriteCdlFixture(const std::string& name, const std::string& bytes)
+	{
+		std::filesystem::path dir = std::filesystem::temp_directory_path() / "cdl_file_check";
+		std::filesystem::create_directories(dir);
+		std::filesystem::path path = dir / name;
+		std::ofstream out(path, std::ios::out | std::ios::binary | std::ios::trunc);
+		out.write(bytes.data(), (std::streamsize)bytes.size());
+		out.close();
+		return path;
+	}
+}
+
+void TestTheOldCdlRoundTripPassesOnAPathThatWasNeverWritten()
+{
+	//The defect in miniature. A "reload" that cannot read the file leaves the
+	//statistics exactly as they were, so the comparison the tool used to make
+	//is a value against itself and says yes whatever happened on disk.
+	struct Stats { uint32_t Code; uint32_t Data; uint32_t Total; };
+	const Stats recorded{ 2439, 14484, 131072 };
+	Stats reread = recorded; //what LoadCdlFile leaves behind on a missing file
+	bool oldGuardPassed = reread.Code == recorded.Code && reread.Data == recorded.Data &&
+		reread.Total == recorded.Total;
+	Check(oldGuardPassed,
+		"#347: the statistics-only round-trip passes even though nothing was written");
+
+	std::filesystem::path missing = std::filesystem::temp_directory_path() /
+		"cdl_file_check_no_such_dir" / "x.cdl";
+	std::filesystem::remove_all(missing.parent_path());
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(missing.string(), recorded.Total);
+	Check(!check.Ok,
+		"#347: the on-disk check fails on a path that was never written");
+	Check(check.Reason.find("nothing is on disk") != std::string::npos,
+		"#347: the failure names what is on disk", check.Reason);
+}
+
+void TestCdlFileCheckRejectsAnEmptyFile()
+{
+	std::filesystem::path path = WriteCdlFixture("empty.cdl", "");
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 32768);
+	Check(!check.Ok && check.Reason.find("empty") != std::string::npos,
+		"#347: a zero-byte file is not a written CDL", check.Reason);
+}
+
+void TestCdlFileCheckRejectsAFileShorterThanItsHeader()
+{
+	std::filesystem::path path = WriteCdlFixture("stub.cdl", "CDL");
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 32768);
+	Check(!check.Ok && check.Reason.find("shorter than the 9-byte") != std::string::npos,
+		"#347: a file shorter than the header is not a written CDL", check.Reason);
+}
+
+void TestCdlFileCheckRejectsAFileWithoutTheCdlV2Header()
+{
+	//Whatever else is at that path - a leftover log, an HTML error page - it
+	//is not the map this run recorded.
+	std::string bytes = MakeCdlFileBytes(64);
+	bytes[0] = 'X';
+	std::filesystem::path path = WriteCdlFixture("headerless.cdl", bytes);
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 64);
+	Check(!check.Ok && check.Reason.find("CDLv2 header") != std::string::npos,
+		"#347: a file that is not a CDLv2 is refused", check.Reason);
+}
+
+void TestCdlFileCheckRejectsAMapShorterThanTheRom()
+{
+	//The truncated write: header intact, payload cut short. CodeDataLogger
+	//refuses such a file on load, so accepting it here would hand the caller a
+	//trace no tool can read.
+	std::filesystem::path path = WriteCdlFixture("short.cdl", MakeCdlFileBytes(1000));
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 32768);
+	Check(!check.Ok && check.Reason.find("short of the") != std::string::npos,
+		"#347: a map shorter than the ROM it covers is refused", check.Reason);
+	Check(check.SizeOnDisk == CdlFileHeaderSize + 1000,
+		"#347: the failure carries the size it found",
+		std::to_string(check.SizeOnDisk));
+}
+
+void TestCdlFileCheckRejectsAnAllZeroMap()
+{
+	std::string bytes = "CDLv2";
+	bytes.append(4, '\0');
+	bytes.append(2048, '\0');
+	std::filesystem::path path = WriteCdlFixture("blank.cdl", bytes);
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 2048);
+	Check(!check.Ok && check.Reason.find("zero bytes") != std::string::npos,
+		"#347: a header with nothing behind it is refused", check.Reason);
+}
+
+void TestCdlFileCheckAcceptsACompleteMap()
+{
+	//The successful write must stay successful - and a NES file, whose CHR
+	//block follows the PRG map, is longer than the minimum rather than equal.
+	std::filesystem::path path = WriteCdlFixture("good.cdl", MakeCdlFileBytes(2048));
+	CdlFileOnDiskCheck check = CheckCdlFileOnDisk(path.string(), 2048);
+	Check(check.Ok && check.Reason.empty(),
+		"#347: a complete map passes with no reason to report", check.Reason);
+	Check(check.SizeOnDisk == CdlFileHeaderSize + 2048,
+		"#347: the size it reports is the size on disk",
+		std::to_string(check.SizeOnDisk));
+
+	std::string withChr = MakeCdlFileBytes(2048);
+	withChr.append(512, (char)0x02);
+	std::filesystem::path chrPath = WriteCdlFixture("good_chr.cdl", withChr);
+	CdlFileOnDiskCheck chrCheck = CheckCdlFileOnDisk(chrPath.string(), 2048);
+	Check(chrCheck.Ok, "#347: a NES file with a CHR block after the PRG map passes",
+		chrCheck.Reason);
+}
 
 int main()
 {
@@ -8025,6 +8156,14 @@ int main()
 	TestRamDumpLineIsFixedWidthUpperCaseHex();
 	TestRamDumpLineStaysFullWidthOnAShortOrAbsentWindow();
 	TestRamDumpLineClipsAWiderWindowToTheAdrsRange();
+
+	TestTheOldCdlRoundTripPassesOnAPathThatWasNeverWritten();
+	TestCdlFileCheckRejectsAnEmptyFile();
+	TestCdlFileCheckRejectsAFileShorterThanItsHeader();
+	TestCdlFileCheckRejectsAFileWithoutTheCdlV2Header();
+	TestCdlFileCheckRejectsAMapShorterThanTheRom();
+	TestCdlFileCheckRejectsAnAllZeroMap();
+	TestCdlFileCheckAcceptsACompleteMap();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

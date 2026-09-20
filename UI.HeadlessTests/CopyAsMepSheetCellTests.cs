@@ -23,7 +23,7 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//PRD Phase 12 F12.2, dispatcher steps P5-P8. ADR-0214: a fresh Fable session
+//PRD Phase 12 F12.2, dispatcher steps P5-P8. ADR-0214: a fresh Opus session
 //is the remaining evaluator; this test is not that session. What IS mechanical
 //is the claim P8 makes about the clipboard, and ADR-0214 §3: the menu's
 //identity is the visible label, not ActionType. This drives the real Tilemap
@@ -36,8 +36,17 @@ namespace Mesen.HeadlessTests;
 //    Name (ResourceHelper.GetEnumText), then checked to be wired to
 //    ActionType.CopyToMepSheetCell — looking it up by enum first is the
 //    opposite of a cold read;
-//  - invoking it puts ONE line on the clipboard: `tile` + `palette` and no
-//    `index` on a CHR RAM game, and a third `index` field on a CHR ROM one.
+//  - invoking it puts ONE line on the clipboard, and that line is a whole
+//    *unplaced* cell: `count` + `tiles[]`, with no `index`, `x` or `y` of its
+//    own (ADR-0216 OPEN 1(b) - the slot is `scripts/mep_add_cell.py`'s to
+//    choose, and the emulator never opens the artist's sheets to guess it).
+//    Inside `tiles[]`, the one entry is `tile` + `palette` on a CHR RAM game
+//    and carries a third `index` field on a CHR ROM one. The two `index`
+//    fields are the trap ADR-0216 names: the absent one is the cell's ordinal
+//    in its sheet, the present one is the tile's absolute CHR index
+//    (ADR-0172 §2). This case asserts exactly that shape, so the pre-ADR-0216
+//    payload - a bare `tiles[]` entry with `tile`/`palette`/`index` at the
+//    root - fails it.
 //
 //Set MESEN_F122_LABEL_DUMP to a path to write the visible, enabled labels
 //(the dump the Fable briefing treats as the right-click menu).
@@ -54,6 +63,9 @@ public class CopyAsMepSheetCellTests
 {
 	private const string RomFolderVariable = "MESEN_NES_ROMS";
 	private const string LabelDumpVariable = "MESEN_F122_LABEL_DUMP";
+	private const string CopyScanVariable = "MESEN_F122_COPY_SCAN";
+	private const string CopyOutVariable = "MESEN_F122_COPY_OUT";
+	private const string CopyStateVariable = "MESEN_F122_COPY_STATE";
 	private const string SheetCellLabel = "Copy as MEP sheet cell";
 	private const string HdPackLabel = "Copy tile (HD pack format)";
 
@@ -95,6 +107,113 @@ public class CopyAsMepSheetCellTests
 			//calls EmuApi.InitializeEmu from a background Task, and it lands on
 			//a core this test had already torn down. Leaving the core
 			//initialized and idle is the state every other case here expects.
+			EmuApi.Stop();
+			ConfigApi.SetEmulationFlag(EmulationFlags.MaximumSpeed, false);
+			ConfigApi.SetEmulationFlag(EmulationFlags.ConsoleMode, false);
+			TryInstallDesktopLifetime(null);
+		}
+	}
+
+	//ADR-0214 §3's other half. The evaluator cannot open the flyout, and the
+	//dispatcher cannot know which tile a cold read will pick, so setup drives
+	//the action for every tile of the paused frame and hands over the result.
+	//This is a fact about the emulator, never the answer to criterion 1: the
+	//file says what a tile copies to, and nothing about which menu entry did it.
+	//
+	//MESEN_F122_COPY_STATE points at a .mss the dispatcher minted with
+	//`headless_record ... save-state=` at the same frame the sandbox screenshot
+	//shows. Without it the scan reads whatever power-on leaves after 2 emulated
+	//seconds, which is the title screen - a frame the recording captured as a
+	//whole-screen <background>, where no painted cell could ever show.
+	//Skips unless the ROM and output variables are set, so an ordinary run - and
+	//CI, which has no ROMs - is unchanged.
+	[AvaloniaFact]
+	public void The_dispatcher_can_read_every_tile_of_a_paused_frame_as_a_cell()
+	{
+		string rom = Environment.GetEnvironmentVariable(CopyScanVariable) ?? "";
+		string output = Environment.GetEnvironmentVariable(CopyOutVariable) ?? "";
+		string state = Environment.GetEnvironmentVariable(CopyStateVariable) ?? "";
+		Assert.SkipWhen(rom.Length == 0 || output.Length == 0,
+			$"set {CopyScanVariable} to a ROM and {CopyOutVariable} to a file to scan a frame.");
+		Assert.SkipWhen(!File.Exists(rom), $"{rom} does not exist");
+		Assert.SkipWhen(state.Length > 0 && !File.Exists(state), $"{state} does not exist");
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		ClassicDesktopStyleApplicationLifetime lifetime = new();
+		Assert.SkipUnless(TryInstallDesktopLifetime(lifetime),
+			"this Avalonia build does not let a test install a desktop application lifetime, so " +
+			"ApplicationHelper.GetMainWindow() answers null and the clipboard write is unreachable " +
+			"- the copy would be a silent no-op indistinguishable from a refusal.");
+
+		EmuApi.InitDll();
+		EmuApi.InitializeEmu(ConfigManager.HomeFolder, IntPtr.Zero, IntPtr.Zero, true, true, true, true);
+		try {
+			ConfigApi.SetEmulationFlag(EmulationFlags.ConsoleMode, true);
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			if(state.Length > 0) {
+				//The dispatcher's own reference frame, restored rather than
+				//replayed: a .mss carries the PPU memory the scan reads, and
+				//nothing is emulated after the load, so the scan and the sandbox
+				//screenshot describe the same screen.
+				EmuApi.Resume();
+				Thread.Sleep(500);
+				EmuApi.Pause();
+				EmuApi.LoadStateFile(state);
+				//A state carries the frame the core was on when it was written,
+				//and a load can leave the console running. Without this the walk
+				//below reads a screen that scrolls underneath it, and every tile
+				//after the first few describes a different frame.
+				EmuApi.Pause();
+				Thread.Sleep(200);
+				EmuApi.Pause();
+			} else {
+				//The same few emulated seconds the assertion above uses, so the
+				//scan describes a real screen and not whatever power-on left in VRAM.
+				ConfigApi.SetEmulationFlag(EmulationFlags.MaximumSpeed, true);
+				EmuApi.Resume();
+				Thread.Sleep(2000);
+				EmuApi.Pause();
+			}
+			Dispatcher.UIThread.RunJobs();
+
+			TilemapViewerWindow window = new(CpuType.Nes);
+			lifetime.MainWindow = window;
+			try {
+				window.Show();
+				Dispatcher.UIThread.RunJobs();
+				TilemapViewerViewModel model = Assert.IsType<TilemapViewerViewModel>(window.DataContext);
+				model.RefreshData();
+				Dispatcher.UIThread.RunJobs();
+				model.SelectionRect = new Rect(0, 0, 8, 8);
+				Dispatcher.UIThread.RunJobs();
+				Assert.NotNull(model.PreviewPanel);
+
+				ContextMenuAction copy = FindCopyActionByLabel(window, SheetCellLabel);
+				List<string> lines = new();
+				foreach((int x, int y, string text) in WalkTilemap(model, copy, window)) {
+					//Tile units, not the selection's pixel origin: the tilemap
+					//image the evaluator reads is labelled in columns and rows,
+					//and that is what a person counts off a picture. Handing over
+					//`96,64` for the tile labelled `12,8` cost both Fable runs a
+					//stop on 2026-09-19 - the dispatcher's defect, not the
+					//feature's.
+					lines.Add($"{x / 8},{y / 8}\t{text}");
+				}
+				Assert.False(lines.Count == 0,
+					"no tile of the paused frame produced a cell - the scan would hand the " +
+					"evaluator nothing to paste");
+
+				string? folder = Path.GetDirectoryName(Path.GetFullPath(output));
+				if(!string.IsNullOrEmpty(folder)) {
+					Directory.CreateDirectory(folder);
+				}
+				File.WriteAllLines(output, lines);
+			} finally {
+				lifetime.MainWindow = null;
+				window.Close();
+				Dispatcher.UIThread.RunJobs();
+			}
+		} finally {
 			EmuApi.Stop();
 			ConfigApi.SetEmulationFlag(EmulationFlags.MaximumSpeed, false);
 			ConfigApi.SetEmulationFlag(EmulationFlags.ConsoleMode, false);
@@ -168,7 +287,18 @@ public class CopyAsMepSheetCellTests
 			//JsonDocument, not JsonSerializer: this project builds with
 			//reflection-based serialization disabled.
 			using JsonDocument parsed = JsonDocument.Parse(text);
-			Dictionary<string, JsonElement> fields = parsed.RootElement.EnumerateObject()
+			Dictionary<string, JsonElement> cell = parsed.RootElement.EnumerateObject()
+				.ToDictionary(property => property.Name, property => property.Value.Clone());
+
+			//ADR-0216 OPEN 1(b): a whole cell, unplaced. `count` and `tiles[]` and
+			//nothing else - an `index`, `x` or `y` at this level would be the viewer
+			//claiming a slot it cannot know is free.
+			Assert.Equal(new[] { "count", "tiles" }, cell.Keys.ToArray());
+			Assert.Equal(1, cell["count"].GetInt32());
+			JsonElement[] tiles = cell["tiles"].EnumerateArray().ToArray();
+			Assert.Single(tiles);
+
+			Dictionary<string, JsonElement> fields = tiles[0].EnumerateObject()
 				.ToDictionary(property => property.Name, property => property.Value.Clone());
 			string[] expected = expectIndex
 				? new[] { "tile", "palette", "index" }
@@ -187,8 +317,13 @@ public class CopyAsMepSheetCellTests
 				Assert.InRange(index, 0, 0x7FFFFFFF);
 			}
 			//The text is the sidecar's own form, character for character - the
-			//panel's criterion 2 is that it pastes into `tiles[]` unedited.
-			Assert.Equal(MepSheetCell.Format(tile, palette, index), text);
+			//panel's criterion 2 is that it pastes into `cells[]` unedited, and
+			//`mep_add_cell.py` reads exactly this shape off the clipboard.
+			Assert.Equal(MepSheetCell.FormatCell(tile, palette, index), text);
+			//...and the entry inside it is still the `tiles[]` object it always was,
+			//so a hand paste into an existing cell keeps working (ADR-0216's
+			//"the action does not stop being a copy").
+			Assert.Contains(MepSheetCell.Format(tile, palette, index), text);
 		} finally {
 			lifetime.MainWindow = null;
 			window.Close();
@@ -200,8 +335,10 @@ public class CopyAsMepSheetCellTests
 	//whether the selected tile has a key, so a click can be a silent no-op that
 	//leaves the previous clipboard in place. Walking the tilemap until one tile
 	//answers is what an evaluator does by eye; the assertions above then run on
-	//a text this run really produced, never on a stale clipboard.
-	private static string CopyFirstUsableTile(TilemapViewerViewModel model, ContextMenuAction copy, Window window)
+	//a text this run really produced, never on a stale clipboard. Only the tiles
+	//that answered are yielded, so a text read back is never a stale one.
+	private static IEnumerable<(int X, int Y, string Text)> WalkTilemap(
+		TilemapViewerViewModel model, ContextMenuAction copy, Window window)
 	{
 		IClipboard? clipboard = window.Clipboard;
 		Assert.NotNull(clipboard);
@@ -215,11 +352,17 @@ public class CopyAsMepSheetCellTests
 				copy.OnClick();
 				Dispatcher.UIThread.RunJobs();
 				string text = clipboard.TryGetTextAsync().GetAwaiter().GetResult() ?? "";
-				if(text.Length == 0) {
-					continue;
+				if(text.Length > 0) {
+					yield return (x, y, text);
 				}
-				return text;
 			}
+		}
+	}
+
+	private static string CopyFirstUsableTile(TilemapViewerViewModel model, ContextMenuAction copy, Window window)
+	{
+		foreach((int _, int _, string text) in WalkTilemap(model, copy, window)) {
+			return text;
 		}
 		return "";
 	}

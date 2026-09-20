@@ -223,7 +223,9 @@ namespace Mesen.Debugger.ViewModels
 					OnClick = () => {
 						DebugTilemapTileInfo? tile = GetSelectedTileInfo();
 						if(tile != null && tile?.TileAddress >= 0) {
-							HdPackCopyHelper.CopyToHdPackFormat(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false);
+							//ADR-0215: the cell's nametable address is the frame context - the
+							//scroll trace is inverted against it to find the scanline that drew it.
+							HdPackCopyHelper.Announce(HdPackCopyHelper.CopyToHdPackFormat(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false, HdPackCopyContext.ForTilemap(tile.Value.TileMapAddress)));
 						}
 					}
 				},
@@ -234,7 +236,7 @@ namespace Mesen.Debugger.ViewModels
 					OnClick = () => {
 						DebugTilemapTileInfo? tile = GetSelectedTileInfo();
 						if(tile != null && tile?.TileAddress >= 0) {
-							HdPackCopyHelper.CopyAsMepSheetCell(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false);
+							HdPackCopyHelper.Announce(HdPackCopyHelper.CopyAsMepSheetCell(tile.Value.TileAddress, GetVramMemoryType(), _data.RawPalette, tile.Value.PaletteIndex, false, HdPackCopyContext.ForTilemap(tile.Value.TileMapAddress)));
 						}
 					}
 				}

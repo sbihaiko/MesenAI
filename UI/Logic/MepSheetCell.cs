@@ -47,6 +47,31 @@ namespace Mesen.Logic
 			return $"{{\"tile\": \"{data}\", \"palette\": \"{pal}\"}}";
 		}
 
+		//ADR-0216 OPEN 1(b): the clipboard carries the whole cell, **unplaced** -
+		//`count` and `tiles[]`, and deliberately no `index`, `x` or `y`. Those three
+		//are the sheet's arithmetic, not the tile's: which slot is free depends on
+		//`columns`/`cell`/`gutter` and on how many cells the sidecar already holds,
+		//and the emulator never opens the artist's tree to find out. `scripts/mep_add_cell.py`
+		//is what places it.
+		//
+		//The one trap the ADR flags: `index` means two different things in a
+		//whole-cell document. The cell's own `index` is its ordinal in its sheet and
+		//is absent here on purpose; the `index` inside `tiles[]` is the tile's
+		//absolute CHR index (ADR-0172 §2) and is the one this text carries. The
+		//placer sets the first and never touches the second.
+		//
+		//One tile per cell: a 16px-tall sprite's second half is a second cell, not a
+		//second entry, because `mep_build._cell_crops` lays a cell's `tiles[]` out
+		//row-major 2x2 - entry 1 would land to the *right* of entry 0, not below it.
+		public static string FormatCell(string tileData, string palette, int tileIndex = UnknownIndex)
+		{
+			string entry = Format(tileData, palette, tileIndex);
+			if(entry.Length == 0) {
+				return "";
+			}
+			return "{\"count\": 1, \"tiles\": [" + entry + "]}";
+		}
+
 		private static bool IsHex(string text, int length)
 		{
 			if(text.Length != length) {

@@ -9,8 +9,8 @@ The fork's planning lives in one consolidated PRD under this folder:
   standards, compact delivery record, and remaining work: Phase 9 painting
   verification, F9.18's human panel and bounded coverage; Phase 10 feasibility.
   Phase 11 consolidation is complete; its proxy experiment is not human
-  product acceptance. Phase 12 artist-surface cold-reads are a fresh Fable
-  session, ADR-0214). Part B is the default-GUI roadmap (player chrome,
+  product acceptance. Phase 12 artist-surface cold-reads are a fresh Opus
+  session, ADR-0214, amended 2026-09-19). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
   quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 12 and the ADR-0205 replay slices. Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that

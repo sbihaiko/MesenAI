@@ -604,6 +604,7 @@
     <ClInclude Include="Debugger\Breakpoint.h" />
     <ClInclude Include="Debugger\BreakpointManager.h" />
     <ClInclude Include="Debugger\CallstackManager.h" />
+    <ClInclude Include="Debugger\CdlFileCheck.h" />
     <ClInclude Include="Debugger\CodeDataLogger.h" />
     <ClInclude Include="Shared\EmulatorLock.h" />
     <ClInclude Include="Shared\ControlDeviceState.h" />
