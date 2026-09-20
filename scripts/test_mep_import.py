@@ -34,7 +34,19 @@ Covers:
     drawn at several crops, one per condition. Each rule gets its own
     `exactCondition` cell, so the rebuild reproduces the input's rules and
     its pixels — with and without an unconditional rule in the pair;
-  * the CLI: the bare-path form, `verify`, and `--force`.
+  * the CLI: the bare-path form, `verify`, and `--force`;
+  * the **index read** (F12.12, ADR-0210 §3), which is the other direction:
+    their `hires.txt` read as facts about the ROM, never as art. A CHR RAM
+    game's new shapes are rendered from the pack's own pattern bytes at the
+    pack's scale (`index.png` / `.orig.png` / `.json`, provenance `index`,
+    `seen: false`, the other palettes of a shape riding as `aliases`); a CHR
+    ROM game takes the palette set and nothing else and says so. Each of the
+    three mandatory filters has its own case — the index range against the
+    loaded CHR (read the loader's own way, `<ver>` deciding decimal vs hex),
+    a `<patch>` pack refused by name, and `<condition>` lines never read — and
+    the read never opens a PNG of the input pack (asserted with a trap), never
+    touches the F12.8 `unsorted` sheet, and produces a sheet `mep_build.py
+    build` slices back into rules with 0 errors.
 
 Framework-free, mirroring scripts/test_mep_build.py's ok()/fail() style.
 Wired into `make python-tests` by name. Usage:
@@ -569,6 +581,479 @@ def test_cli(root: Path):
     ok("`mep_import.py verify <pack> <project>` passes on a rebuilt project")
 
 
+# --- the index read (ADR-0210 §3) -------------------------------------------
+
+PAL_C = "0F162A30"
+PAL_D = "1F2F3F4F"
+
+
+def shape_hex(shape: int) -> str:
+    """A distinct 16-byte 2bpp pattern per shape id, as 32 uppercase hex — the
+    form a CHR RAM key's `tileData` carries."""
+    lo = bytes(((shape * 7 + r * 13) & 0xFF) for r in range(8))
+    hi = bytes(((shape * 11 + r * 5) & 0xFF) for r in range(8))
+    return (lo + hi).hex().upper()
+
+
+def write_pack(root: Path, name: str, lines, files: dict = None) -> Path:
+    """One pack folder the way a recording lays it out: `textures/hires.txt`
+    plus whatever the manifest names, all of it under `textures/`."""
+    pack = root / name
+    textures = pack / "textures"
+    (textures / "sheets").mkdir(parents=True, exist_ok=True)
+    (textures / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for rel, data in (files or {}).items():
+        p = textures / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    return pack
+
+
+def make_rom(root: Path, name: str, chr_banks: int, prg_banks: int = 1) -> Path:
+    """A minimal, valid iNES file. Header byte 5 is what says whether the game
+    is CHR ROM (`artist_chr_kit.Rom.has_chr_rom`): 0 -> CHR RAM, N -> N x 8 KB
+    of CHR, i.e. N x 512 tiles."""
+    rom = root / name
+    rom.parent.mkdir(parents=True, exist_ok=True)
+    # 4 magic bytes + the 12-byte rest of the iNES header, or the CHR slice
+    # comes up short and the tile count with it (511 of 512).
+    rom.write_bytes(b"NES\x1a" + bytes([prg_banks, chr_banks] + [0] * 10)
+                    + bytes(prg_banks * 16384) + bytes(chr_banks * 8192))
+    return rom
+
+
+def flat(width: int, height: int, value: int = 0x20) -> "mep_build._Bitmap":
+    return mep_build._Bitmap(width, height, 4, bytearray(bytes([value] * 4) * width * height))
+
+
+def write_free_sheet(sheets: Path, stem: str, kind: str, keys, scale: int, columns: int = 2):
+    """A contact sheet the recorder would have written: `columns` 8px cells on
+    a gutterless grid, at `scale`, with the pixel-exact 1x `*.orig.png` twin
+    `mep_build._EditedProbe` diffs against."""
+    rows = (len(keys) + columns - 1) // columns
+    lw, lh = columns * 8, rows * 8
+    cells = [{"index": i, "x": (i % columns) * 8, "y": (i // columns) * 8, "count": 1,
+              "tiles": [{"tile": t, "palette": p}]} for i, (t, p) in enumerate(keys)]
+    (sheets / f"{stem}.json").write_text(json.dumps(
+        {"version": 1, "kind": kind, "gridUnit": 8, "gutter": 0, "columns": columns,
+         "cell": {"w": 8, "h": 8}, "sheet": f"{stem}.png", "reference": f"{stem}.orig.png",
+         "cells": cells}, indent=1) + "\n", encoding="utf-8")
+    mep_build._png_write(sheets / f"{stem}.orig.png", flat(lw, lh))
+    mep_build._png_write(sheets / f"{stem}.png", flat(lw * scale, lh * scale))
+
+
+def ram_recording(root: Path, name: str = "rec", scale: int = 2, shapes=(1, 2),
+                  sheet_only=(3,)) -> Path:
+    """A CHR RAM recording: a data-keyed manifest plus one F12.8 `unsorted`
+    sheet, which the index read must leave byte for byte alone.
+
+    `sheet_only` is the trap that matters most here: shapes the recording's
+    sheet carries and its manifest does not (the bounded input has 251 of
+    them). They are part of the recording all the same, and a shape the index
+    sheet also claimed would be taken off the recorded sheet by the build."""
+    pack = write_pack(root, name, ["<ver>109", f"<scale>{scale}"]
+                      + [f"<tile>0,{shape_hex(s)},{PAL_C},0,0,1,N,0,0" for s in shapes])
+    write_free_sheet(pack / "textures" / "sheets", "unsorted", "unsorted",
+                     [(shape_hex(s), PAL_C) for s in tuple(shapes) + tuple(sheet_only)], scale)
+    return pack
+
+
+def index_pack(root: Path, name: str, lines, files: dict = None) -> Path:
+    """Their pack: a flat legacy one (`hires.txt` beside its art, ADR-0005),
+    holding no art of ours to open."""
+    pack = root / name
+    pack.mkdir(parents=True, exist_ok=True)
+    (pack / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for rel, data in (files or {}).items():
+        p = pack / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    return pack
+
+
+def run_index(their: Path, pack: Path, rom: Path, *extra):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        rc = MI.main(["index", str(their), "--pack", str(pack), "--rom", str(rom), *extra])
+    return rc, buf.getvalue()
+
+
+def sheet_bytes(pack: Path) -> dict:
+    return {p.name: p.read_bytes() for p in sorted((pack / "textures" / "sheets").iterdir())}
+
+
+def test_index_render(root: Path):
+    """The render itself: a key's own 16 bytes through the key's own palette,
+    at the pack's scale."""
+    table = MI._nes_palette()
+    # Row 0 low plane 0x80 = one pixel of colour 1 at x=0; high plane 0x40 =
+    # one pixel of colour 2 at x=1. Everything else is colour 0.
+    data = bytes([0x80, 0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 0])
+    pal = [0x0F, 0x19, 0x29, 0x08]
+    hex_pal = "".join(f"{c:02X}" for c in pal)
+    block = MI.render_pattern(data.hex().upper(), hex_pal, 2)
+    want_px = [table[pal[1]], table[pal[2]], table[pal[0]]]
+    got_px = [tuple(block[i * 4:i * 4 + 4][:3]) for i in range(3)]
+    if got_px != want_px or len(block) != (16 * 16) * 4:
+        fail(f"render_pattern gave {got_px} / {len(block)} bytes, expected {want_px} / "
+             f"{(16 * 16) * 4} (a 16x16 RGBA cell at scale 2)")
+    else:
+        ok("render_pattern unpacks 2bpp through the key's own palette at the pack's scale")
+
+    flat_block = MI.render_pattern("00" * 16, hex_pal, 1)
+    if len(flat_block) != 8 * 8 * 4 or any(flat_block[i:i + 4] != bytes(table[pal[0]]) + b"\xff"
+                                          for i in range(0, len(flat_block), 4)):
+        fail("a zero pattern did not render as one flat colour-0 cell")
+    else:
+        ok("a blank pattern renders as colour 0, opaque (a recorded cell's own convention)")
+
+    # The key's palette decides the colours: the same bytes under another
+    # palette is another picture.
+    other = MI.render_pattern(data.hex().upper(), "00010203", 1)
+    if other == MI.render_pattern(data.hex().upper(), hex_pal, 1):
+        fail("two palettes rendered the same picture")
+    else:
+        ok("the key's palette word decides the cell's colours")
+
+
+def test_index_chr_ram(root: Path):
+    """A CHR RAM game: every shape our recording lacks is rendered, the ones
+    it holds are not, and the sheet is what `mep_build` slices back."""
+    root = root / "ram"
+    pack = ram_recording(root)                       # shapes 1 and 2 are ours, 3 is ours too
+    before = sheet_bytes(pack)
+    their = index_pack(root, "their", [
+        "<ver>100",
+        "<scale>2",
+        f"<tile>0,{shape_hex(2)},{PAL_C},0,0,1,N",   # in our manifest: no cell
+        f"<tile>0,{shape_hex(3)},{PAL_C},0,0,1,N",   # only on our sheet: no cell either
+        f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",
+        f"<tile>0,{shape_hex(5)},{PAL_D},0,0,1,N",   # same shape, second palette: an alias
+        f"<tile>0,{shape_hex(9)},{PAL_D},0,0,1,N",
+    ], files={"notart.png": b"this is not a PNG at all"})
+    rom = make_rom(root, "ram.nes", chr_banks=0)
+    rc, out = run_index(their / "hires.txt", pack, rom)
+    if rc != 0:
+        fail(f"the index read exited {rc}:\n{out}")
+        return
+    doc = json.loads((pack / "textures" / "sheets" / "index.json").read_text())
+    if [len(doc["cells"]), doc["kind"], doc["source"], doc["seen"], doc["origin"]["shapes"]] \
+            != [2, "index", "index", False, 4]:
+        fail(f"sidecar reads {len(doc['cells'])} cells, kind {doc['kind']!r}, "
+             f"source {doc['source']!r}, seen {doc['seen']}, shapes {doc['origin']['shapes']}")
+    else:
+        ok("4 distinct shapes in theirs, 2 of them new: 2 cells, kind/source `index`, `seen: false`")
+
+    if [c["tiles"][0]["tile"] for c in doc["cells"]] != [shape_hex(5), shape_hex(9)]:
+        fail(f"the wrong shapes got cells: {[c['tiles'][0]['tile'][:8] for c in doc['cells']]}")
+    else:
+        ok("a shape our recording holds on a sheet (not in its manifest) is not re-rendered: the "
+           "index sheet and the recorded sheets are disjoint by construction")
+
+    if [c.get("seen") for c in doc["cells"]] != [False, False]:
+        fail(f"cells carry seen {[c.get('seen') for c in doc['cells']]}")
+    else:
+        ok("every cell carries its own provenance: `index`, `seen: false`")
+
+    aliased = [c for c in doc["cells"] if c.get("aliases")]
+    if (len(aliased) != 1 or [c["tiles"][0]["palette"] for c in doc["cells"]] != [PAL_C, PAL_D]
+            or aliased[0]["aliases"][0]["tiles"][0]["palette"] != PAL_D):
+        fail(f"the second palette of a shape did not ride as an alias: "
+             f"{json.dumps(doc['cells'])[:200]}")
+    else:
+        ok("a shape's other palettes ride as the cell's `aliases`, so no key of theirs is lost")
+
+    # The pixels are the pack's own pattern bytes, at our recording's scale.
+    scale = 2
+    scaled = mep_build._png_pixels(pack / "textures" / "sheets" / "index.png")
+    lw = 2 * 8
+    if (scaled.width, scaled.height) != (lw * scale, 8 * scale):
+        fail(f"index.png is {scaled.width}x{scaled.height}, expected {lw * scale}x{8 * scale}")
+        return
+    ok("index.png is the sheet at the recording's own <scale>")
+    cell0 = doc["cells"][0]["tiles"][0]
+    want = MI.render_pattern(cell0["tile"], cell0["palette"], scale)
+    got = bytearray()
+    for y in range(8 * scale):
+        o = y * scaled.stride
+        got += scaled.raw[o:o + 8 * scale * scaled.channels]
+    if bytes(got) != want:
+        fail("the cell in index.png is not render_pattern's own pixels")
+    else:
+        ok("each cell holds the shape rendered from its own 16 pattern bytes")
+
+    twin = mep_build._png_pixels(pack / "textures" / "sheets" / "index.orig.png")
+    if (twin.width, twin.height) != (lw, 8):
+        fail(f"index.orig.png is {twin.width}x{twin.height}, expected the 1x {lw}x8 twin")
+    else:
+        ok("index.orig.png is the pixel-exact 1x twin the sheet is diffed against")
+
+    if {p.name for p in (pack / "textures" / "sheets").iterdir() if p.name.startswith("index")} \
+            != {"index.png", "index.orig.png", "index.json"}:
+        fail("the index read wrote something other than the three sheet files")
+    else:
+        ok("the read writes index.png, index.orig.png and index.json and nothing else")
+
+    # The whole point of the sheet: `build` slices it back into rules, and it
+    # takes nothing off a recorded sheet to do it.
+    rc, out = run_build(pack)
+    if rc != 0 or "0 error(s)" not in out:
+        fail(f"build exited {rc} on the pack carrying an index sheet:\n{out}")
+        return
+    ok("`mep_build.py build` accepts a pack carrying an index sheet, 0 errors")
+    if "to sheets/index.png" in out:
+        fail(f"the index sheet took a key off a recorded sheet:\n{out}")
+    else:
+        ok("the build moves no key of a recorded sheet onto the index sheet")
+    built = (pack / "textures" / "hires.txt").read_text(encoding="utf-8")
+    rows = {}
+    for line in built.splitlines():
+        if line.startswith("<tile>"):
+            f = [x.strip() for x in line[6:].split(",")]
+            rows[(f[1].upper(), f[2].upper())] = line
+    want_keys = {(shape_hex(5), PAL_C), (shape_hex(5), PAL_D), (shape_hex(9), PAL_D)}
+    if set(rows) & want_keys != want_keys:
+        fail(f"the rebuild is missing index keys: {sorted(want_keys - set(rows))}")
+    elif any(line.startswith("[") for line in rows.values()):
+        fail("an index key was emitted with a condition prefix")
+    else:
+        ok("every index key is in the rebuilt manifest as a bare <tile> rule")
+
+    # F12.8's remainder sheet holds recorded keys and the index sheet holds
+    # keys the recording lacks: disjoint by construction, so the first is
+    # byte for byte what it was.
+    after = sheet_bytes(pack)
+    if after["unsorted.png"] != before["unsorted.png"] \
+            or after["unsorted.orig.png"] != before["unsorted.orig.png"] \
+            or after["unsorted.json"] != before["unsorted.json"]:
+        fail("the F12.8 unsorted sheet changed during the index read")
+    else:
+        ok("the F12.8 `unsorted` sheet is byte for byte unchanged (disjoint by construction)")
+
+
+def test_index_conditions(root: Path):
+    """Filter 3: `<condition>` lines are never read, at any coverage cost."""
+    root = root / "cond"
+    pack = ram_recording(root)
+    their = index_pack(root, "their", [
+        "<ver>105",
+        "<scale>2",
+        # A condition this toolchain would have had to *invent* to import
+        # (ADR-0183 §3), and a rule gated on it. The tile is a fact; the gate
+        # is the other author's reading of the machine.
+        "<condition>alwaysOn,memoryCheck,3,4,5,6",
+        "[alwaysOn]<tile>0,%s,%s,0,0,1,N" % (shape_hex(5), PAL_C),
+        "<tile>0,%s,%s,0,0,1,N" % (shape_hex(7), PAL_C),
+    ])
+    rom = make_rom(root, "ram.nes", chr_banks=0)
+    plan = MI.index_run(their / "hires.txt", pack, rom, None, False)
+    if plan["conditioned_rules"] != 1 or len(plan["cells"]) != 2:
+        fail(f"the conditioned rule was not read as a bare key: {plan['conditioned_rules']} "
+             f"conditioned rule(s), {len(plan['cells'])} cell(s)")
+        return
+    doc = json.loads((pack / "textures" / "sheets" / "index.json").read_text()) \
+        if (pack / "textures" / "sheets" / "index.json").is_file() else None
+    if doc is None:
+        fail("no sidecar was written")
+    elif any(k in ("condition", "exactCondition", "conditions") for c in doc["cells"] for k in c) \
+            or "conditions" in doc:
+        fail(f"a condition reached the sidecar: {json.dumps(doc)[:300]}")
+    elif [c["tiles"][0]["tile"] for c in doc["cells"]] != [shape_hex(5), shape_hex(7)]:
+        fail(f"the conditioned tile's shape was dropped instead of imported bare: "
+             f"{[c['tiles'][0]['tile'] for c in doc['cells']]}")
+    else:
+        ok("a conditioned rule contributes the bare key of the tile it names; no condition is "
+           "read, written or cited")
+
+    rc, out = run_build(pack)
+    built = (pack / "textures" / "hires.txt").read_text(encoding="utf-8")
+    if rc != 0 or "<condition>" in built or "[alwaysOn]" in built:
+        fail(f"a condition reached the rebuilt manifest (build exited {rc})")
+    else:
+        ok("the rebuild carries no <condition> line and no condition prefix for those keys")
+
+
+def test_index_patch(root: Path):
+    """Filter 2: a pack carrying `<patch>` keys a namespace we never meet."""
+    root = root / "patch"
+    pack = ram_recording(root)
+    their = index_pack(root, "their", [
+        "<ver>100",
+        "<scale>2",
+        "<patch>chr-ram-to-rom.ips",
+        f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",
+    ])
+    rom = make_rom(root, "ram.nes", chr_banks=0)
+    expect_error(lambda: MI.read_index(their / "hires.txt", pack, rom), "ADR-0198",
+                 "an index read of a pack carrying <patch>")
+    rc, out = run_index(their / "hires.txt", pack, rom)
+    if rc != 2 or not (pack / "textures" / "sheets").is_dir() \
+            or [p.name for p in (pack / "textures" / "sheets").iterdir() if "index" in p.name]:
+        fail(f"the refused read exited {rc} and/or wrote a sheet:\n{out}")
+    else:
+        ok("the refusal exits 2 and writes nothing into the recording")
+
+
+def test_index_range(root: Path):
+    """Filter 1: the index range against the loaded CHR, read the loader's own
+    way — `<ver>` decides whether that field is decimal or hex."""
+    root = root / "range"
+    rom = make_rom(root, "chrrom.nes", chr_banks=1)      # 8 KB CHR = 512 tiles
+    pack = write_pack(root, "rec", ["<ver>109", "<scale>2", "<tile>0,00,0F162A30,0,0,1,N"])
+    their = index_pack(root, "their", [
+        "<ver>100",                                       # decimal, per ReadTileData
+        "<scale>2",
+        "<tile>0,1,FF072235,0,0,1,N",
+        "<tile>0,511,FF072235,8,0,1,N",
+        "<tile>0,512,11073325,0,0,1,N",                   # past the CHR
+        "<tile>0,7000,20192233,0,0,1,N",                  # far past it
+    ])
+    plan = MI.read_index(their / "hires.txt", pack, rom)
+    if (plan["shapes"], plan["cells"], plan["in_range_rules"]) != (0, [], 2):
+        fail(f"a CHR ROM read planned {plan['shapes']} shape(s), {len(plan['cells'])} cell(s), "
+             f"{plan['in_range_rules']} in-range rule(s)")
+    elif sorted(plan["palettes"]) != ["FF072235"]:
+        fail(f"the palette set took {plan['palettes']} — an out-of-range key's palette is a "
+             "claim about another binary")
+    elif (plan["dropped"]["out_of_range_rules"], plan["dropped"]["out_of_range_indices"]) != (2, 2):
+        fail(f"dropped {plan['dropped']}, expected 2 rules over 2 tile indices")
+    else:
+        ok("a CHR ROM read takes palettes from in-range keys only and drops the rest by index")
+
+    if plan["chr_tiles"] != 512 or plan["game"] != "chr_rom":
+        fail(f"the dump read as {plan['game']} with {plan['chr_tiles']} tiles")
+    else:
+        ok("the range is the loaded dump's own CHR tile count (8 KB of CHR = 512 tiles)")
+
+    rc, out = run_index(their / "hires.txt", pack, rom)
+    if rc != 0 or "palette set is taken" not in out or "dropped as out of range: 2 rule(s)" not in out:
+        fail(f"the CHR ROM run did not say what it did (rc {rc}):\n{out}")
+    else:
+        ok("the CHR ROM run says so: shapes discarded, the palette set taken, what was dropped")
+    if [p.name for p in (pack / "textures" / "sheets").iterdir() if "index" in p.name]:
+        fail("a CHR ROM run wrote a sheet")
+    else:
+        ok("a CHR ROM run adds no shape and writes no sheet")
+
+    # The trap this filter is read through: `int(field, 16)` is not a
+    # normalisation, it is a reading. The same token, two `<ver>`s.
+    dec = write_pack(root, "dec", ["<ver>102", "<scale>2", "<tile>0,200,FF072235,0,0,1,N"])
+    hexp = write_pack(root, "hexp", ["<ver>103", "<scale>2", "<tile>0,200,FF072235,0,0,1,N"])
+    if (MI.read_index(dec / "textures" / "hires.txt", pack, rom)["palettes"],
+            MI.read_index(hexp / "textures" / "hires.txt", pack, rom)["palettes"]) \
+            != (["FF072235"], []):
+        fail("<ver> did not decide how the index field is read")
+    else:
+        ok("`200` is tile 200 below <ver>103 (in range) and 0x200 = 512 at 103+ (dropped): the "
+           "loader's own reading, not a hex normalisation")
+
+
+def test_index_opens_no_png(root: Path):
+    """Not one PNG of the input pack is opened — the shape comes from the key,
+    the art never does. A trap on the decoder says so, and the fixture's `<img>`
+    files are made unreadable to make the point twice."""
+    root = root / "trap"
+    pack = ram_recording(root)
+    their = index_pack(root, "their", [
+        "<ver>100",
+        "<scale>2",
+        "<img>ghost.png",                       # does not exist at all
+        "<img>notapng.png",                     # exists, and is not a PNG
+        f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",
+    ], files={"notapng.png": b"\x00\x01\x02 not a PNG"})
+    rom = make_rom(root, "ram.nes", chr_banks=0)
+    real_read_png = MI.read_png
+
+    def trap(*_a, **_k):
+        raise AssertionError("the index read opened a PNG of the input pack")
+
+    MI.read_png = trap
+    try:
+        plan = MI.read_index(their / "hires.txt", pack, rom)
+    except AssertionError as e:
+        fail(str(e))
+        return
+    finally:
+        MI.read_png = real_read_png
+    if plan["shapes"] != 1:
+        fail(f"the read planned {plan['shapes']} shape(s) with no PNG readable")
+    else:
+        ok("the read never opens a PNG of the input pack (trapped decoder), and does not need "
+           "its art to exist")
+
+
+def test_index_refusals(root: Path):
+    """What an index read refuses, and why: the wrong dump, a pack and a
+    recording whose namespaces are not the same game."""
+    root = root / "refuse"
+    ram = make_rom(root, "ram.nes", chr_banks=0)
+    chrrom = make_rom(root, "chrrom.nes", chr_banks=1)
+    pack = ram_recording(root)
+    their = index_pack(root, "their", ["<ver>100", "<scale>2",
+                                       f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N"])
+
+    junk = root / "junk.nes"
+    junk.write_bytes(b"not a rom")
+    expect_error(lambda: MI.read_index(their / "hires.txt", pack, junk), "iNES",
+                 "an index read against a file that is not an iNES ROM")
+
+    # The recording and the dump must be the same binary (ADR-0210).
+    stamped = write_pack(root, "stamped", ["<ver>109", "<scale>2",
+                                           "<supportedRom>" + "AB" * 20,
+                                           f"<tile>0,{shape_hex(1)},{PAL_C},0,0,1,N"])
+    expect_error(lambda: MI.read_index(their / "hires.txt", stamped, ram), "not the dump",
+                 "a dump whose SHA1 is not the recording's <supportedRom>")
+
+    empty = write_pack(root, "empty", ["<ver>109", "<scale>2"])
+    expect_error(lambda: MI.read_index(their / "hires.txt", empty, ram), "no <tile> entries",
+                 "a recording with no tiles to compare against")
+
+    # A CHR ROM dump with a data-keyed recording: the two are not one game.
+    expect_error(lambda: MI.read_index(their / "hires.txt", pack, chrrom), "not the same game",
+                 "a CHR ROM dump against a data-keyed recording")
+
+    # Index-keyed recording vs data-keyed pack: the namespaces never meet
+    # (ADR-0198 §2/§3 — a patched-ROM pack is the usual reason).
+    idx_rec = write_pack(root, "idxrec", ["<ver>109", "<scale>2", "<tile>0,00,0F162A30,0,0,1,N"])
+    expect_error(lambda: MI.read_index(their / "hires.txt", idx_rec, chrrom), "never meet",
+                 "a data-keyed pack against an index-keyed recording")
+
+
+def test_index_cli(root: Path):
+    """The command line the slice names, plus the guard that keeps a painted
+    index sheet from being overwritten."""
+    root = root / "cli"
+    pack = ram_recording(root)
+    their = index_pack(root, "their", ["<ver>100", "<scale>2",
+                                       f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N"])
+    rom = make_rom(root, "ram.nes", chr_banks=0)
+    report = root / "index-report.json"
+    rc, out = run_index(their, pack, rom, "--report", str(report))
+    if rc != 0 or "index " not in out or "1 cell(s) rendered" not in out:
+        fail(f"`mep_import.py index <folder> --pack <pack> --rom <rom>` exited {rc}:\n{out}")
+        return
+    ok("`mep_import.py index <their pack> --pack <ours> --rom <dump>` reads either form of path")
+    doc = json.loads(report.read_text()) if report.is_file() else None
+    if doc is None or doc["shapes"] != 1 or doc["game"] != "chr_ram" or doc["keys"] != 1:
+        fail(f"the --report file reads {doc and {k: doc[k] for k in ('shapes', 'game', 'keys')}}")
+    else:
+        ok("--report writes the run's own JSON: shapes, keys, game, what was dropped")
+
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        rc = MI.main(["index", str(their), "--pack", str(pack), "--rom", str(rom)])
+    if rc != 2 or "--force" not in buf.getvalue():
+        fail(f"a second read without --force should exit 2 naming --force: {rc}\n{buf.getvalue()}")
+    else:
+        ok("a second read refuses to overwrite the index sheet without --force")
+
+    rc, out = run_index(their, pack, rom, "--force")
+    if rc != 0:
+        fail(f"`--force` did not let the sheet be rewritten: {rc}\n{out}")
+    else:
+        ok("--force rewrites the index sheet")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -579,6 +1064,14 @@ def main():
         test_split_pattern_round_trips(root)
         test_split_pattern_without_a_bare_rule(root)
         test_cli(root)
+        test_index_render(root)
+        test_index_chr_ram(root)
+        test_index_conditions(root)
+        test_index_patch(root)
+        test_index_range(root)
+        test_index_opens_no_png(root)
+        test_index_refusals(root)
+        test_index_cli(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)

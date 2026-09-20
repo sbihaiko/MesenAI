@@ -51,9 +51,14 @@ Two representations, and why the tool has to know the difference:
   refused when the pack carries a construct the loader reads differently at
   103 (`_ver_sensitive_reason`).
 
+A third command reads a community pack as *facts about the ROM* instead of as
+art (ADR-0210 §3), which is a different question from importing it: no PNG of
+that pack is opened, and no `<condition>` line is read. See `read_index`.
+
 Usage:
   python3 mep_import.py <legacy pack folder> --out <project folder> [--force]
   python3 mep_import.py verify <legacy pack folder> <project folder> [--strict]
+  python3 mep_import.py index <their hires.txt> --pack <our auto/> --rom X.nes
 """
 from __future__ import annotations
 
@@ -992,6 +997,398 @@ def _token_as_built(rule: Rule, ver: int) -> str:
     return rule.token if len(rule.token) >= 32 else mep_build._index_token(rule.parsed_index(ver))
 
 
+# --- the index read (ADR-0210 §3) -------------------------------------------
+#
+# A community pack's `hires.txt` read as an **index of facts about the ROM**:
+# which tiles exist and which palettes the game puts them under. Not one PNG of
+# that pack is opened — the shapes it names are the game's own bytes, not its
+# author's art — and not one `<condition>` line is read (ADR-0183 §3: a
+# `memoryCheck` is the other author's *reading* of the machine, and this
+# toolchain emits observations; importing one would launder a claim into our
+# evidence).
+#
+# The ROM decides which of two things happens, and both are decided from the
+# key's own form (`HdPackLoader::ReadTileData`):
+#
+#   * **CHR RAM** (no CHR in the iNES file) — a `<tile>` key's 32-hex `tileData`
+#     *is* the game's 16 pattern bytes, because the art is not in the ROM file
+#     in tile form. Every shape our recording does not already hold is rendered
+#     from those bytes into `sheets/index.png` / `.orig.png` / `.json`,
+#     provenance `index`, `seen: false`: art, but not observed art.
+#   * **CHR ROM** — the shape half of a key is a pointer into the ROM's own
+#     CHR, which `artist_chr_kit.py` already publishes whole, so a third party
+#     cannot add a shape here. Only the **palette set** is taken, and only for
+#     indices that exist in the dump; the run says so and writes no sheet.
+#
+# The three filters are mandatory (ADR-0210 §3), and each one exists because
+# the measurement tripped over it:
+#
+#   1. **Index range** — a key whose `TileIndex` is past the loaded CHR names
+#      art this dump does not have. Read the loader's own way, `<ver>` decides
+#      whether that field is decimal (<= 102) or hex (103+); reading a
+#      `<ver>100` pack as hex is how a legitimate pack gets misread as aimed at
+#      another ROM (`int(field, 16)` is not a normalisation, it is a reading).
+#   2. **`<patch>`** — refused by name, naming ADR-0198 §2/§3: its keys are bank
+#      indices of the patched ROM, a namespace the stock-ROM tools never meet.
+#   3. **Conditions** — a `[...]` prefix is dropped, never carried: the tile
+#      exists, the condition is the other author's claim about when it draws.
+
+_INDEX_STEM = "index"
+# The sheet's own geometry, the one `_write_sheets` uses for an import: a
+# 16-cell-wide grid of 8px logical cells, no gutter.
+_INDEX_COLUMNS = 16
+
+
+def _open_manifest(path: Path) -> Pack:
+    """A `Pack` from either the manifest itself or the folder holding it."""
+    return Pack(path.parent, path) if path.is_file() else open_pack(path)
+
+
+def _nes_palette() -> list:
+    """2C02 RGB, from `artist_map` — the copy the artist tools read, taken on
+    import so this tool carries no second colour table."""
+    import artist_map
+    return artist_map.NES_PALETTE
+
+
+def _rom_chr_tiles(rom: Path) -> int:
+    """The loaded dump's CHR tile count, walked the kit's own way (ADR-0183):
+    `artist_chr_kit.Rom` is this tree's iNES reader, and it is also what says
+    whether the game is CHR ROM at all (byte 5 > 0)."""
+    import artist_chr_kit
+    try:
+        return artist_chr_kit.Rom(rom).chr_tile_count
+    except (OSError, artist_chr_kit.ChrKitError) as e:
+        raise PackError(f"{rom}: cannot be read as an iNES ROM ({e})") from e
+
+
+def _check_supported_rom(pack: Pack, rom: Path) -> str:
+    """The recording and the dump must be the same binary or the indices mean
+    nothing (ADR-0210 Consequences: the importer "always needs the matching
+    dump present", and that is what catches a pack aimed at another ROM)."""
+    want = next((h[len("<supportedRom>"):].strip() for h in pack.header
+                 if h.startswith("<supportedRom>")), "")
+    got = hashlib.sha1(rom.read_bytes()).hexdigest()
+    if not want:
+        print(f"note: {pack.hires} carries no <supportedRom>; the dump was not checked "
+              "against the recording", file=sys.stderr)
+        return got
+    if want.lower() != got.lower():
+        raise PackError(f"{rom} is not the dump {pack.hires} was recorded from "
+                        f"(<supportedRom> {want.upper()}, file sha1 {got.upper()}) — the keys "
+                        "describe that ROM's tiles, not this one's (ADR-0210 §3)")
+    return got
+
+
+def render_pattern(data_hex: str, pal_hex: str, scale: int) -> bytes:
+    """A key's own 16 pattern bytes as one `8*scale` square RGBA cell.
+
+    2bpp NES CHR, the same unpack `artist_map.render_tile` does for a key the
+    pack never wrote art for: eight low-plane bytes, then eight high-plane
+    bytes, two bits per pixel, looked up in the key's own four palette indices
+    (2C02 RGB, read from `artist_map` so this tool carries no second table).
+
+    The upscale is nearest neighbour — `ScaleFilterType::Prescale`, which is
+    the recorder's own path (`HdPackBuilder` falls back to it whenever the
+    pack's `<scale>` is forced) and which every sampled cell of the bounded
+    input's recording is pixel-exact against (448 of 448, measured 2026-09-20).
+    Which *smoothing* filter a run used is a recording-time choice the manifest
+    does not carry, so a tool that renders a key from bytes cannot always know
+    it — and nearest neighbour invents no edge the ROM does not have, which is
+    the same reason ADR-0183 §3 gives a ROM-derived kit cell its crisp fill."""
+    data = bytes.fromhex(data_hex)
+    table = _nes_palette()
+    pal = [table[int(pal_hex[i:i + 2], 16) & 0x3F] for i in range(0, 8, 2)]
+    block = bytearray()
+    for y in range(8):
+        lo, hi = data[y], data[y + 8]
+        row = bytearray()
+        for x in range(8):
+            bit = 7 - x
+            r, g, b = pal[((lo >> bit) & 1) | (((hi >> bit) & 1) << 1)]
+            row += bytes((r, g, b, 0xFF))
+        block += bytes(row) * scale
+    return bytes(block) * scale
+
+
+def read_index(their: Path, pack_dir: Path, rom: Path) -> dict:
+    """The whole read side: their manifest, our recording and the dump, plus
+    every filter, as one plan. Nothing is written here."""
+    ours = _open_manifest(pack_dir)
+    if not ours.rules:
+        raise PackError(f"{ours.hires}: no <tile> entries — there is no recording to compare "
+                        "against")
+    if not 1 <= ours.scale <= 10:
+        raise PackError(f"{ours.hires}: <scale>{ours.scale} is outside the loader's 1..10")
+    pack_dir = ours.folder
+    theirs = _open_manifest(their)
+    if not theirs.rules:
+        raise PackError(f"{theirs.hires}: no <tile> entries to read")
+    chr_tiles = _rom_chr_tiles(rom)
+    rom_sha1 = _check_supported_rom(ours, rom)
+    if (chr_tiles > 0) != ours.index_keyed:
+        kind = f"a CHR ROM game ({chr_tiles} tiles)" if chr_tiles else "a CHR RAM game"
+        raise PackError(
+            f"{rom} is {kind}, so its recording keys <tile> by "
+            f"{'CHR index' if chr_tiles else 'the tile’s 16 data bytes'}, but {ours.hires} "
+            f"keys them by {'CHR index' if ours.index_keyed else '16 data bytes'} — this "
+            "recording and this dump are not the same game (ADR-0210 §3)")
+    if ours.index_keyed != theirs.index_keyed:
+        raise PackError(
+            f"{theirs.hires} keys <tile> by "
+            f"{'CHR index' if theirs.index_keyed else 'the tile’s 16 data bytes'} while "
+            f"{ours.hires} keys them by {'CHR index' if ours.index_keyed else '16 data bytes'}"
+            " — the two namespaces never meet: a pack keyed by CHR index against a CHR RAM "
+            "recording is a pack for a patched ROM, which ADR-0198 §2/§3 keeps out of the "
+            "stock-ROM tools, and the reverse is a pack this dump cannot check")
+    plan = {
+        "their": theirs.hires,
+        "their_sha256": hashlib.sha256(theirs.hires.read_bytes()).hexdigest(),
+        "their_rules": len(theirs.rules),
+        "their_ver": theirs.ver,
+        "their_keyed": "index" if theirs.index_keyed else "data",
+        "pack": ours.hires,
+        "rom": rom,
+        "rom_sha1": rom_sha1,
+        "chr_tiles": chr_tiles,
+        "game": "chr_rom" if chr_tiles else "chr_ram",
+        "scale": ours.scale,
+        # A `[...]` prefix is dropped, never carried (filter 3).
+        "conditioned_rules": sum(1 for r in theirs.rules if r.cond),
+        "ours_rules": len(ours.rules),
+        "cells": [],
+        "palettes": [],
+        "dropped": {},
+    }
+    if chr_tiles:
+        _read_index_palettes(theirs, chr_tiles, plan)
+    else:
+        _read_index_shapes(ours, theirs, plan)
+    return plan
+
+
+def _recorded_shapes(pack: Pack) -> set:
+    """Every 32-hex `tileData` our recording already holds: the keys its
+    manifest lists **and** the keys its own sheets carry.
+
+    The manifest alone is not enough, and the bounded input proves it: 251 of
+    its sheets' shapes are absent from its manifest (the recorder's sheets keep
+    palette variants and shapes a later manifest no longer lists). Excluding
+    only the manifest's let the index sheet claim 30 keys a recorded sheet
+    already owned, and `mep_build` handed them over — "spr005.png loses tile
+    ... to sheets/index.png" on the F12.12 bounded run, 2026-09-20. F12.8's
+    sheet and this one are meant to be disjoint by construction (ADR-0209
+    Q4(k)), so the exclusion reads what `build` itself emits: every sidecar it
+    accepts, every `tiles[]` entry, aliases included, and each entry's
+    `source` — the un-flipped form ADR-0178 makes build emit for a sprite crop
+    whose recorded bitmap has its OAM flips baked in (five more keys of the
+    bounded input are on a recorded sheet only in that form)."""
+    shapes = {r.token for r in pack.rules if len(r.token) >= 32}
+    docs, _claimed = mep_build._load_sheet_docs(pack.hires.parent / "sheets")
+    for sd in docs:
+        # This tool's own surface is not part of the recording: excluding it
+        # would make a second run report "nothing new" against the first run's
+        # own output instead of against what the recorder observed.
+        if sd.json_path.stem == _INDEX_STEM:
+            continue
+        for cell in sd.cells:
+            if not isinstance(cell, dict):
+                continue
+            groups = [cell.get("tiles")]
+            groups += [a.get("tiles") for a in cell.get("aliases") or [] if isinstance(a, dict)]
+            for group in groups:
+                for entry in group or []:
+                    if not isinstance(entry, dict):
+                        continue
+                    for field in ("tile", "source"):
+                        token = str(entry.get(field) or "").strip().upper()
+                        if len(token) >= 32:
+                            shapes.add(token)
+    return shapes
+
+
+def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
+    """CHR RAM: one cell per shape our recording does not already hold.
+
+    Keyed by shape, the way ADR-0209 measured the gain ("distinct art, palette
+    ignored"): two of their keys that name the same 16 bytes are one picture.
+    The other palettes of that shape become the cell's `aliases`, which
+    `mep_build`'s ADR-0153 §3 pass emits from the same crop — so every key
+    their manifest names is reachable, and none of them is drawn twice."""
+    ours_shapes = _recorded_shapes(ours)
+    shapes: dict = {}
+    short = 0
+    recorded = 0
+    for rule in theirs.rules:
+        if len(rule.token) < 32:
+            short += 1
+            continue
+        if rule.token in ours_shapes:
+            recorded += 1
+            continue
+        pals = shapes.setdefault(rule.token, [])
+        if rule.palette not in pals:
+            pals.append(rule.palette)
+    plan["cells"] = [{"tile": shape, "palette": pals[0], "aliases": pals[1:]}
+                     for shape, pals in shapes.items()]
+    plan["palettes"] = sorted({p for pals in shapes.values() for p in pals})
+    plan["dropped"] = {"short_key": short, "already_recorded": recorded}
+    plan["our_shapes"] = len(ours_shapes)
+    plan["their_shapes"] = len({r.token for r in theirs.rules if len(r.token) >= 32})
+    plan["shapes"] = len(shapes)
+    # What a rebuild emits: one rule per key of theirs that is new to us.
+    plan["keys"] = sum(len(p) for p in shapes.values())
+
+
+def _read_index_palettes(theirs: Pack, chr_tiles: int, plan: dict):
+    """CHR ROM: the shape half is discarded, the palette set is taken.
+
+    **Filter 1, index range**, read the loader's own way (`Rule.parsed_index`):
+    a key past the loaded CHR names a tile this dump does not have, so its
+    palette is a claim about another binary and is dropped."""
+    palettes: list = []
+    in_range = 0
+    dropped_rules = 0
+    dropped_keys = set()
+    dropped_idx = set()
+    for rule in theirs.rules:
+        index = rule.parsed_index(theirs.ver)
+        if index >= chr_tiles:
+            dropped_rules += 1
+            dropped_keys.add((index, rule.palette))
+            dropped_idx.add(index)
+            continue
+        in_range += 1
+        if rule.palette not in palettes:
+            palettes.append(rule.palette)
+    plan["palettes"] = palettes
+    plan["in_range_rules"] = in_range
+    plan["dropped"] = {"out_of_range_rules": dropped_rules,
+                       "out_of_range_keys": len(dropped_keys),
+                       "out_of_range_indices": len(dropped_idx)}
+    plan["shapes"] = 0
+    plan["keys"] = 0
+
+
+def _write_index_report(plan: dict, out: Path | None):
+    """The read's own provenance as JSON: which of their keys was read, what
+    was dropped and why. `--report` writes it anywhere; the CHR RAM sheet
+    carries the same block in its sidecar, and a CHR ROM run writes no sheet at
+    all, so this is the only durable trace of a palette-only read."""
+    if out is None:
+        return
+    doc = {k: v for k, v in plan.items()}
+    doc["rom"] = str(plan["rom"])
+    doc["pack"] = str(plan["pack"])
+    doc["their"] = str(plan["their"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+
+
+def _index_sidecar(plan: dict, columns: int) -> dict:
+    """An ADR-0153 v1 sheet sidecar — every field `mep_build._load_sheet_docs`
+    and `_slice_sheet` read, plus this source's provenance (ADR-0210: "every
+    cell carries its source", and only `recorded` is `seen: true`)."""
+    cells = []
+    for i, cell in enumerate(plan["cells"]):
+        def entry(palette):
+            return {"tile": cell["tile"], "palette": palette}
+        doc = {"index": i, "metatile": i, "x": (i % columns) * 8, "y": (i // columns) * 8,
+               "tiles": [entry(cell["palette"])], "source": "index", "seen": False}
+        if cell["aliases"]:
+            doc["aliases"] = [{"metatile": i * 1000 + j, "tiles": [entry(p)]}
+                              for j, p in enumerate(cell["aliases"], 1)]
+        cells.append(doc)
+    return {
+        "version": 1, "kind": "index", "gridUnit": 8, "gutter": 0,
+        "cell": {"w": 8, "h": 8}, "columns": columns,
+        "sheet": f"{_INDEX_STEM}.png", "reference": f"{_INDEX_STEM}.orig.png",
+        "source": "index", "seen": False,
+        "origin": {
+            "hires": plan["their"].name, "sha256": plan["their_sha256"],
+            "rules": plan["their_rules"], "ver": plan["their_ver"],
+            "shapes": plan.get("their_shapes", 0),
+            "conditionsRead": 0, "conditionedRules": plan["conditioned_rules"],
+            "dropped": plan["dropped"],
+        },
+        "cells": cells,
+    }
+
+
+def write_index_sheet(plan: dict, force: bool) -> list:
+    """Write `sheets/index.png`, `index.orig.png` and `index.json` beside our
+    recording's manifest. Refuses to overwrite an existing index sheet without
+    `--force`: it is a surface an artist may have painted on."""
+    sheets_dir = plan["pack"].parent / "sheets"
+    for name in (f"{_INDEX_STEM}.png", f"{_INDEX_STEM}.orig.png", f"{_INDEX_STEM}.json"):
+        if (sheets_dir / name).exists() and not force:
+            raise PackError(f"{sheets_dir / name} already exists; the artist may have painted it "
+                            "— pass --force to overwrite the index sheet")
+    scale = plan["scale"]
+    cells = plan["cells"]
+    size = 8 * scale
+    columns = min(_INDEX_COLUMNS, max(1, len(cells)))
+    rows = (len(cells) + columns - 1) // columns
+    sheet = Image(columns * size, rows * size)
+    for i, cell in enumerate(cells):
+        sheet.paste(render_pattern(cell["tile"], cell["palette"], scale),
+                    (i % columns) * size, (i // columns) * size, size)
+    sheets_dir.mkdir(parents=True, exist_ok=True)
+    write_png(sheets_dir / f"{_INDEX_STEM}.png", sheet)
+    write_png(sheets_dir / f"{_INDEX_STEM}.orig.png", sheet.downscale(scale))
+    (sheets_dir / f"{_INDEX_STEM}.json").write_text(
+        json.dumps(_index_sidecar(plan, columns), indent=1) + "\n", encoding="utf-8")
+    return [f"{_INDEX_STEM}.png", f"{_INDEX_STEM}.orig.png", f"{_INDEX_STEM}.json"]
+
+
+def index_run(their: Path, pack_dir: Path, rom: Path, report: Path | None, force: bool) -> dict:
+    plan = read_index(their, pack_dir, rom)
+    plan["written"] = []
+    if plan["game"] == "chr_ram" and plan["cells"]:
+        plan["written"] = write_index_sheet(plan, force)
+    if report is not None:
+        _write_index_report(plan, report)
+    return plan
+
+
+def _print_index_summary(plan: dict):
+    """What the tool says about what it did — the CHR ROM half of ADR-0210 §3
+    is a *statement*, since there is nothing to draw there."""
+    dropped = plan["dropped"]
+    print(f"index {plan['their']}: {plan['their_rules']} rule(s), "
+          f"{plan.get('their_shapes', 0)} distinct 32-hex shape(s)")
+    if plan["game"] == "chr_rom":
+        print(f"  {plan['rom'].name} is a CHR ROM game ({plan['chr_tiles']} CHR tiles): the shape "
+              "half of every key is discarded — artist_chr_kit.py already publishes this ROM's "
+              "CHR whole — so only the palette set is taken (ADR-0210 §3)")
+        print(f"  {plan['in_range_rules']} of {plan['their_rules']} rule(s) name a tile this dump "
+              f"has; {len(plan['palettes'])} palette(s) taken")
+        if dropped["out_of_range_rules"]:
+            print(f"  dropped as out of range: {dropped['out_of_range_rules']} rule(s), "
+                  f"{dropped['out_of_range_indices']} tile index(es) past {plan['chr_tiles']} "
+                  f"({dropped['out_of_range_keys']} distinct key(s))")
+        else:
+            print("  nothing dropped as out of range: every index this pack names exists in the "
+                  "dump")
+        print("  no sheet written: a CHR ROM game's shapes are already in the ROM, and this pack "
+              "adds none")
+    elif not plan["cells"]:
+        print(f"  no shape here is new: our recording ({plan['ours_rules']} rule(s)) already holds "
+              "every 32-hex shape this pack names — no sheet written")
+    else:
+        print(f"  wrote {', '.join('sheets/' + n for n in plan['written'])}: "
+              f"{len(plan['cells'])} cell(s) rendered from the pack's own pattern bytes, "
+              f"{plan['keys']} key(s) once built, {len(plan['palettes'])} palette(s)")
+    if dropped.get("short_key"):
+        print(f"  {dropped['short_key']} rule(s) key a tile by CHR index in a CHR RAM game's "
+              "namespace; skipped")
+    if plan["conditioned_rules"]:
+        print(f"  <condition> lines were never read: {plan['conditioned_rules']} conditioned "
+              "rule(s) contributed the bare key of the tile they name, no condition (ADR-0210 §3)")
+    print(f"  provenance: index, seen: false — this is the ROM's art, not art anyone observed "
+          f"(ADR-0183 §3); {plan['rom'].name} sha1 {plan['rom_sha1'].upper()[:12]}…")
+
+
 # --- CLI ---------------------------------------------------------------------
 
 def main(argv=None) -> int:
@@ -1009,15 +1406,30 @@ def main(argv=None) -> int:
     ver.add_argument("project")
     ver.add_argument("--strict", action="store_true",
                      help="a difference is a difference: fail on the ADR-0189 §3 twins too")
+    idx = sub.add_parser("index", help="read a community pack's hires.txt as facts about the ROM "
+                                       "and render the shapes our recording lacks (ADR-0210 §3)")
+    idx.add_argument("hires", help="their hires.txt, or the folder holding it")
+    idx.add_argument("--pack", required=True,
+                     help="our recording's pack folder (the one holding textures/hires.txt)")
+    idx.add_argument("--rom", required=True,
+                     help="the dump those keys describe; the CHR in it is the range filter")
+    idx.add_argument("--report", help="also write this run's JSON report to this path")
+    idx.add_argument("--force", action="store_true", help="overwrite an existing index sheet")
 
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("import", "verify", "-h", "--help"):
+    if argv and argv[0] not in ("import", "verify", "index", "-h", "--help"):
         argv.insert(0, "import")
     args = p.parse_args(argv)
     try:
         if args.cmd == "verify":
             return verify_pack(Path(args.pack).resolve(), Path(args.project).resolve(),
                                args.strict)
+        if args.cmd == "index":
+            summary = index_run(Path(args.hires).resolve(), Path(args.pack).resolve(),
+                                Path(args.rom).resolve(),
+                                Path(args.report).resolve() if args.report else None, args.force)
+            _print_index_summary(summary)
+            return 0
         summary = import_pack(Path(args.pack).resolve(), Path(args.out).resolve(), args.force)
     except PackError as e:
         print(f"error: {e}", file=sys.stderr)
