@@ -36,8 +36,17 @@ namespace Mesen.HeadlessTests;
 //    Name (ResourceHelper.GetEnumText), then checked to be wired to
 //    ActionType.CopyToMepSheetCell — looking it up by enum first is the
 //    opposite of a cold read;
-//  - invoking it puts ONE line on the clipboard: `tile` + `palette` and no
-//    `index` on a CHR RAM game, and a third `index` field on a CHR ROM one.
+//  - invoking it puts ONE line on the clipboard, and that line is a whole
+//    *unplaced* cell: `count` + `tiles[]`, with no `index`, `x` or `y` of its
+//    own (ADR-0216 OPEN 1(b) - the slot is `scripts/mep_add_cell.py`'s to
+//    choose, and the emulator never opens the artist's sheets to guess it).
+//    Inside `tiles[]`, the one entry is `tile` + `palette` on a CHR RAM game
+//    and carries a third `index` field on a CHR ROM one. The two `index`
+//    fields are the trap ADR-0216 names: the absent one is the cell's ordinal
+//    in its sheet, the present one is the tile's absolute CHR index
+//    (ADR-0172 §2). This case asserts exactly that shape, so the pre-ADR-0216
+//    payload - a bare `tiles[]` entry with `tile`/`palette`/`index` at the
+//    root - fails it.
 //
 //Set MESEN_F122_LABEL_DUMP to a path to write the visible, enabled labels
 //(the dump the Fable briefing treats as the right-click menu).
@@ -278,7 +287,18 @@ public class CopyAsMepSheetCellTests
 			//JsonDocument, not JsonSerializer: this project builds with
 			//reflection-based serialization disabled.
 			using JsonDocument parsed = JsonDocument.Parse(text);
-			Dictionary<string, JsonElement> fields = parsed.RootElement.EnumerateObject()
+			Dictionary<string, JsonElement> cell = parsed.RootElement.EnumerateObject()
+				.ToDictionary(property => property.Name, property => property.Value.Clone());
+
+			//ADR-0216 OPEN 1(b): a whole cell, unplaced. `count` and `tiles[]` and
+			//nothing else - an `index`, `x` or `y` at this level would be the viewer
+			//claiming a slot it cannot know is free.
+			Assert.Equal(new[] { "count", "tiles" }, cell.Keys.ToArray());
+			Assert.Equal(1, cell["count"].GetInt32());
+			JsonElement[] tiles = cell["tiles"].EnumerateArray().ToArray();
+			Assert.Single(tiles);
+
+			Dictionary<string, JsonElement> fields = tiles[0].EnumerateObject()
 				.ToDictionary(property => property.Name, property => property.Value.Clone());
 			string[] expected = expectIndex
 				? new[] { "tile", "palette", "index" }
@@ -297,8 +317,13 @@ public class CopyAsMepSheetCellTests
 				Assert.InRange(index, 0, 0x7FFFFFFF);
 			}
 			//The text is the sidecar's own form, character for character - the
-			//panel's criterion 2 is that it pastes into `tiles[]` unedited.
-			Assert.Equal(MepSheetCell.Format(tile, palette, index), text);
+			//panel's criterion 2 is that it pastes into `cells[]` unedited, and
+			//`mep_add_cell.py` reads exactly this shape off the clipboard.
+			Assert.Equal(MepSheetCell.FormatCell(tile, palette, index), text);
+			//...and the entry inside it is still the `tiles[]` object it always was,
+			//so a hand paste into an existing cell keeps working (ADR-0216's
+			//"the action does not stop being a copy").
+			Assert.Contains(MepSheetCell.Format(tile, palette, index), text);
 		} finally {
 			lifetime.MainWindow = null;
 			window.Close();

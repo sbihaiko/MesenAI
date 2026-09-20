@@ -86,11 +86,17 @@ namespace Mesen.Debugger.Utilities
 			return Render(key, mepFormat: false);
 		}
 
-		//PRD Phase 12 F12.2: the same key as one MEP sheet sidecar entry
-		//(`cells[].tiles[]`), the form `mep_build.py` reads back (ADR-0153, ADR-0172 §2).
-		//The inherited Copy tile hands the author a `<tile>` line; this hands them the
-		//object the sheet carries, so a key picked by eye in the viewer pastes into a
-		//sheet project without anyone reading hires.txt.
+		//PRD Phase 12 F12.2: one MEP sheet cell, **unplaced** - `count` and `tiles[]`,
+		//no `index`/`x`/`y` (ADR-0216 OPEN 1(b)). The inherited Copy tile hands the
+		//author a `<tile>` line; this hands them the object the sheet carries, so a
+		//key picked by eye in the viewer pastes into a sheet project without anyone
+		//reading hires.txt.
+		//
+		//The slot is deliberately not filled in here. Choosing a sheet and a free
+		//slot means reading the artist's `textures/sheets/*.json`, which the emulator
+		//has no export for and no business doing: `scripts/mep_add_cell.py <pack>`
+		//places this text. Pasting it into a `cells[]` by hand still works, which is
+		//the point of leaving the payload a complete cell rather than a confirmation.
 		public static string ToMepSheetCell(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, HdPackCopyContext context)
 		{
 			if(!TryReadTileKey(tileAddr, rawPalette, paletteIndex, forSprite, context, out TileKey key)) {
@@ -102,7 +108,7 @@ namespace Mesen.Debugger.Utilities
 		private static string Render(TileKey key, bool mepFormat)
 		{
 			if(mepFormat) {
-				return MepSheetCell.Format(key.TileData, key.Palette, key.TileIndex);
+				return MepSheetCell.FormatCell(key.TileData, key.Palette, key.TileIndex);
 			}
 			//The `<tile>` key's own field: a CHR ROM game keys by index, a CHR RAM game
 			//by the 16 bytes of the tile shape (HdPackTileInfo::ToString).
@@ -233,10 +239,14 @@ namespace Mesen.Debugger.Utilities
 			}
 
 			if(isLargeSprite) {
-				//The second half of a 16px-tall sprite is its own tile, so it is its own
-				//entry. One object per line and no comma between them: the entry the paste
-				//lands next to decides whether a separator is needed, and a comma the
-				//artist did not ask for is the one thing that breaks the sidecar's JSON.
+				//The second half of a 16px-tall sprite is its own cell, not a second
+				//`tiles[]` entry of the first: `mep_build._cell_crops` lays a cell's
+				//entries out row-major 2x2, so entry 1 draws to the *right* of entry 0
+				//rather than below it. One object per line and no comma between them:
+				//the entry the paste lands next to decides whether a separator is
+				//needed, and a comma the artist did not ask for is the one thing that
+				//breaks the sidecar's JSON. `mep_add_cell.py` reads the two lines as
+				//two cells for the same reason.
 				AddressInfo bottom = new AddressInfo() { Address = addr.Address + 16, Type = addr.Type };
 				if(TryReadTileKey(bottom, palette, paletteIndex, forSprite, context, out TileKey second)) {
 					string secondText = Render(second, mepFormat);
