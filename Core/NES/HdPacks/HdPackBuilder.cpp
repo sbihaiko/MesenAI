@@ -1924,18 +1924,132 @@ void HdPackBuilder::CaptureScreen()
 //capture time, so the pick happens here instead: once, at save time, over the
 //whole stream. See TileSheetTypes.h for the measurement and for why "prefer
 //stable cells" on its own is the wrong lever.
+//
+//ADR-0217/ADR-0218: post-hoc collision detector for whatever the write-time
+//checks below cannot rule out (a screen past the retention cap, with no grid
+//evidence to key on). Downcasts because by this point all that survives is
+//the serialized HdPackCondition - a background built some other way (a
+//loaded pack's own conditions) returns empty and is never treated as a
+//collision.
+namespace
+{
+	struct ConditionKey
+	{
+		int32_t X = 0;
+		int32_t Y = 0;
+		int32_t TileIndex = 0;
+		uint32_t PaletteColors = 0;
+		uint8_t TileData[16] = {};
+
+		bool operator==(const ConditionKey& o) const
+		{
+			return X == o.X && Y == o.Y && TileIndex == o.TileIndex && PaletteColors == o.PaletteColors &&
+				memcmp(TileData, o.TileData, sizeof(TileData)) == 0;
+		}
+		bool operator<(const ConditionKey& o) const
+		{
+			if(X != o.X) return X < o.X;
+			if(Y != o.Y) return Y < o.Y;
+			if(TileIndex != o.TileIndex) return TileIndex < o.TileIndex;
+			if(PaletteColors != o.PaletteColors) return PaletteColors < o.PaletteColors;
+			return memcmp(TileData, o.TileData, sizeof(TileData)) < 0;
+		}
+	};
+
+	vector<ConditionKey> ConditionKeysOf(const HdBackgroundInfo& bg)
+	{
+		vector<ConditionKey> keys;
+		for(HdPackCondition* cond : bg.Conditions) {
+			HdPackBaseTileCondition* tile = dynamic_cast<HdPackBaseTileCondition*>(cond);
+			if(!tile) {
+				return {};
+			}
+			ConditionKey key;
+			key.X = tile->TileX;
+			key.Y = tile->TileY;
+			key.TileIndex = tile->TileIndex;
+			key.PaletteColors = tile->PaletteColors;
+			memcpy(key.TileData, tile->TileData, sizeof(key.TileData));
+			keys.push_back(key);
+		}
+		return keys;
+	}
+
+	bool SameConditionKeys(vector<ConditionKey> a, vector<ConditionKey> b)
+	{
+		if(a.empty() || a.size() != b.size()) {
+			return false;
+		}
+		std::sort(a.begin(), a.end());
+		std::sort(b.begin(), b.end());
+		return a == b;
+	}
+}
+
 void HdPackBuilder::FinalizeScreenAnchors()
 {
 	uint32_t volatileScreens = 0;
 	uint32_t ambiguousScreens = 0;
+	uint32_t skippedCollisions = 0;
+
+	//ADR-0217 Option C / ADR-0218 Option A: every *other* pending screen's own
+	//captured frame is a forced rival for this screen's search, bypassing
+	//IsScreenVariant - a screen someone chose to capture separately is by
+	//definition a different picture, however close the raw pixels sit. One
+	//shared set per call (not grown incrementally) since _pendingScreens is
+	//already fully populated here: "every other capture" (ADR-0217) already
+	//covers "every earlier one" (ADR-0218's own ask), so a single mechanism
+	//satisfies both.
+	vector<size_t> allCapturedFrames;
+	for(const PendingScreen& p : _pendingScreens) {
+		if(p.HasGridFrame) {
+			allCapturedFrames.push_back(p.GridFrameIndex);
+		}
+	}
+
+	//ADR-0217 Option A: each committed screen's anchor keys, read straight off
+	//its own captured GridFrame (MesenSheets::AnchorKeysOf - host-free, unit-
+	//tested in ScreenStitcher). A screen past the retention cap has no grid
+	//frame to key on and is not tracked here; ADR-0218 Option B's post-hoc
+	//pass below is its only safety net.
+	vector<vector<MesenSheets::AnchorKey>> committedKeys;
+
 	for(PendingScreen& pending : _pendingScreens) {
 		size_t captured = pending.HasGridFrame ? pending.GridFrameIndex : _gridFrames.size();
-		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells);
+		vector<size_t> forcedRivals;
+		for(size_t frame : allCapturedFrames) {
+			if(frame != captured) {
+				forcedRivals.push_back(frame);
+			}
+		}
+		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals);
 		if(choice.Picked.empty() || pending.BitmapIndex >= _hdData.BackgroundFileData.size()) {
 			continue;
 		}
 		volatileScreens += choice.UsedVolatileCell ? 1 : 0;
 		ambiguousScreens += choice.Rivals > 0 ? 1 : 0;
+
+		//ADR-0217 Option A: a gate another committed capture already satisfies
+		//draws nothing new - GetLayerIndex would never reach this one. The PNG
+		//stays on disk (CaptureScreen already wrote it at capture time); only
+		//the <background> line is withheld - a missing draw instead of a
+		//silent wrong one.
+		vector<MesenSheets::AnchorKey> keys;
+		if(pending.HasGridFrame) {
+			keys = MesenSheets::AnchorKeysOf(_gridFrames[captured], choice, pending.Cells);
+			bool collides = false;
+			for(const vector<MesenSheets::AnchorKey>& existing : committedKeys) {
+				if(MesenSheets::SameAnchorKeys(keys, existing)) {
+					collides = true;
+					break;
+				}
+			}
+			if(collides) {
+				skippedCollisions++;
+				MessageManager::Log("[HDPack] bootstrap: " + pending.RelPath + " matches an earlier capture's gate, no <background> written");
+				continue;
+			}
+		}
 
 		HdBackgroundInfo bg = {};
 		bg.Data = _hdData.BackgroundFileData[pending.BitmapIndex].get();
@@ -1961,12 +2075,44 @@ void HdPackBuilder::FinalizeScreenAnchors()
 			bg.Conditions.push_back(cond);
 			_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
 		}
+		if(!keys.empty()) {
+			committedKeys.push_back(std::move(keys));
+		}
 		_hdData.BackgroundsByPriority[bg.Priority].push_back(bg);
 	}
+
+	//ADR-0218 Option B: the fallback for whatever the avoidance pass above (and
+	//ADR-0217's forced-rival search) still cannot separate - byte-identical
+	//frames, picks kAnchorMinSpread keeps apart, or a screen with no grid
+	//evidence to key on above. One pass over the finalized set, before
+	//BuildSheets(); on a collision the later entry loses (removed from
+	//BackgroundsByPriority only - its conditions and PNG are left alone, so
+	//nothing already referenced becomes a dangling pointer).
+	uint32_t postHocDrops = 0;
+	for(vector<HdBackgroundInfo>& backgrounds : _hdData.BackgroundsByPriority) {
+		for(size_t i = 0; i < backgrounds.size(); i++) {
+			vector<ConditionKey> keys = ConditionKeysOf(backgrounds[i]);
+			if(keys.empty()) {
+				continue;
+			}
+			for(size_t j = i + 1; j < backgrounds.size(); ) {
+				if(SameConditionKeys(keys, ConditionKeysOf(backgrounds[j]))) {
+					postHocDrops++;
+					MessageManager::Log("[HDPack] bootstrap: " + backgrounds[j].Data->PngName + " collides with another capture's gate, dropped (post-hoc)");
+					backgrounds.erase(backgrounds.begin() + j);
+				} else {
+					j++;
+				}
+			}
+		}
+	}
+
 	if(!_pendingScreens.empty()) {
 		MessageManager::Log("[HDPack] bootstrap: " + std::to_string(_pendingScreens.size()) + " screen(s) anchored (" +
 			std::to_string(volatileScreens) + " on a cell a variant may change, " +
-			std::to_string(ambiguousScreens) + " still matching another recorded screen)");
+			std::to_string(ambiguousScreens) + " still matching another recorded screen, " +
+			std::to_string(skippedCollisions) + " skipped for an earlier capture's gate, " +
+			std::to_string(postHocDrops) + " dropped post-hoc)");
 	}
 	_pendingScreens.clear();
 }

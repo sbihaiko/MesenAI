@@ -1,7 +1,19 @@
 # ADR-0217: A captured screen draws only where its gate separates it from every other capture of the same recording
 
-- Status: proposed — the measurements are done; the threshold and the loss it
-  buys are a human call (see *What a human has to pick*)
+- Status: **accepted 2026-09-20.** Answers to *What a human has to pick*:
+  (1) a capture keeps owning its variants — ADR-0159's rule stands; (3)/(4)
+  moot, since neither threshold-E nor spread-relaxation-D ships this round;
+  (5) A and C ship now, on what is already measured, no re-record required.
+  Selected through the decision prompt, recorded verbatim as the labels the
+  user picked: *"Manter (captura vale p/ variantes) — Recomendado"* (keeps
+  ADR-0159), and, for the next investment, *"C — todo outro capture vira
+  rival (Recomendado)"*. Option A (refuse to write a capture whose gate an
+  earlier one already satisfies) ships alongside C as the safety net for
+  whatever C still cannot separate (the 9 byte-identical-frame pairs, and
+  the captures Option D would have reached but D was not picked). Question
+  (2) — which capture wins when gates still collide — is answered by A
+  itself: with A, they no longer both get written, so `GetLayerIndex`'s
+  load-order rule stops mattering for this failure mode.
 - Date: 2026-09-19
 - Related: ADR-0050 (bootstrap captures a static screen as a `<background>`
   gated on three `tileAtPosition` anchors), ADR-0156 (a captured screen owns
@@ -162,8 +174,11 @@ measured: ADR-0050 states it without a number.
 
 ## Decision
 
-Not taken. Five options were measured; each is stated with what it costs in
-memory, in recording time, and in frames that lose their capture.
+**A and C ship together.** B, D and E were measured and are kept below as
+the record of what was weighed, not adopted: B is a no-op without C, D has
+no measurement behind the loss it would trade for 44 more captures, and E
+is a pack-format change whose realistic threshold (≥99.6%) already forfeits
+every legitimate variant redraw, which is the entire reason ADR-0159 exists.
 
 ### A — Refuse to write a capture whose gate another capture already satisfies
 

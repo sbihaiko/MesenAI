@@ -1,6 +1,18 @@
 # ADR-0218: A capture's anchors are chosen against every other capture already decided in the same recording, not just the raw grid stream
 
-- Status: proposed — options are laid out, none is picked
+- Status: **accepted 2026-09-20.** Answers to *What a human has to pick*:
+  (1) ships coordinated with ADR-0217, not independently and not waiting on
+  it — both land in the same change; (2) A and B both ship, A is the
+  avoidance pass, B is the fallback safety net for whatever A (and
+  ADR-0217's C) still cannot separate; (3) yes, B's drop gets a build-time
+  warning (mirrors the existing empty-`pending.Candidates` warning) so an
+  artist notices a capture that never made it in, not just a silent gap in
+  the log; (4) capture order, as Option A already specifies — the rarity
+  ordering is unmeasured extra complexity, deferred; (5) A and B ship with
+  synthetic-`GridFrame` unit coverage now, no re-record required. Selected
+  through the decision prompt, recorded verbatim as the labels the user
+  picked: for the safety net, *"Sim, implementar agora"*; for the avoidance
+  pass, *"Sim, adicionar a opção A do ADR-0218"*.
 - Date: 2026-09-19
 - Related: ADR-0050 (bootstrap captures a static screen as a `<background>`
   gated on three `tileAtPosition` anchors, `kAnchorMinSpread` = 64px),
@@ -126,9 +138,12 @@ nothing already flushed to disk.
 
 ## Decision
 
-Not taken. Three options, each changing `FinalizeScreenAnchors` to make
-one pending screen's anchor search aware of what earlier iterations in the
-same loop already decided.
+**A and B ship together.** C is kept below as the record of what was
+weighed, not adopted: its fixed-point re-search recovers more but the
+implementation cost (a mutable, growing forced-rival set plus a
+convergence pass over `GreedyAnchors`'s call sites) is not justified before
+A and B are shipped and measured — B's own drop-and-log count is the
+number that says whether chasing C's extra recovery is worth it.
 
 ### A — Forced extra rivals from previously-decided captures
 

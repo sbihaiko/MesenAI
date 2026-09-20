@@ -3953,6 +3953,91 @@ namespace
 			"BlocoP2: a changed cell is still a changed frame under both comparisons");
 	}
 
+	//--- issue #339, #349 (ADR-0217, ADR-0218): every other capture is a
+	//rival, and a collision that survives that is caught by its own keys ---
+	//
+	//Punch-Out!!'s five credit screens (#339) and Donkey Kong's 46 captures on
+	//one gate (#349) are the same fact from two sides: two pending screens
+	//that are >= 90% cell-identical file each other as *variants*, not
+	//rivals, so neither search ever has to tell them apart, and both can
+	//converge on the exact same tileAtPosition triple. `forcedRivalFrames`
+	//(ADR-0217 Option C, ADR-0218 Option A) is the fix; `AnchorKeysOf`/
+	//`SameAnchorKeys` (ADR-0217 Option A, ADR-0218 Option B) is what both the
+	//write-time check and the post-hoc drop in HdPackBuilder::FinalizeScreenAnchors
+	//key on - not host-free itself (HdPackBuilder.cpp is not in the
+	//core-unit-tests link set), but everything it depends on is, and is
+	//pinned down here.
+
+	void TestAnchorForcedRivalSeparatesTwoPendingScreens()
+	{
+		GridFrame screenA = SheetBlockScreen(0, 3);
+		GridFrame screenB = screenA;
+		screenB.Cells[15][20] = 900; //the one cell that tells them apart
+		screenB.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screenA, screenB };
+		std::vector<AnchorCandidate> candidates = { { 2, 5, 1 }, { 14, 5, 2 }, { 26, 5, 3 }, { 15, 20, 4 } };
+
+		//Unforced: each screen reads the other as a >= 90%-agreeing variant,
+		//so the discriminating cell is never a candidate, and both searches
+		//land on the same three stable cells - the ADR-0218 bug itself.
+		AnchorChoice unforcedA = SelectScreenAnchors(frames, 0, candidates);
+		AnchorChoice unforcedB = SelectScreenAnchors(frames, 1, candidates);
+		Check(!AnchorPicked(unforcedA, 3) && !AnchorPicked(unforcedB, 3),
+			"BlocoP2: without forced rivals, two near-identical pending screens both skip the discriminating cell");
+		Check(SameAnchorKeys(AnchorKeysOf(screenA, unforcedA, candidates), AnchorKeysOf(screenB, unforcedB, candidates)),
+			"BlocoP2: unforced, the two screens independently converge on the same anchor keys");
+
+		//Forced: each screen is told the other's captured frame is a rival.
+		AnchorChoice forcedA = SelectScreenAnchors(frames, 0, candidates, { 1 });
+		AnchorChoice forcedB = SelectScreenAnchors(frames, 1, candidates, { 0 });
+		Check(AnchorPicked(forcedA, 3) && AnchorPicked(forcedB, 3),
+			"BlocoP2: forcing each pending screen into the other's rival set picks the cell that separates them");
+		Check(!SameAnchorKeys(AnchorKeysOf(screenA, forcedA, candidates), AnchorKeysOf(screenB, forcedB, candidates)),
+			"BlocoP2: forced, the two screens' anchor keys no longer collide");
+	}
+
+	void TestAnchorByteIdenticalFramesStillCollideEvenForced()
+	{
+		//The residual case neither ADR's search-side fix can reach: 9 frame
+		//pairs in the F12.2 sweep are byte-identical at every cell, so there
+		//is no cell left for GreedyAnchors to key on regardless of the rival
+		//set. This is exactly the fact ADR-0218 Option B's post-hoc drop
+		//exists to catch once search-side separation has nothing left to try.
+		GridFrame screenA = SheetBlockScreen(0, 3);
+		GridFrame screenB = screenA; //byte-identical: Cells and Palettes both
+		screenB.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screenA, screenB };
+		std::vector<AnchorCandidate> candidates = AnchorCandidates();
+
+		AnchorChoice forcedA = SelectScreenAnchors(frames, 0, candidates, { 1 });
+		AnchorChoice forcedB = SelectScreenAnchors(frames, 1, candidates, { 0 });
+		Check(SameAnchorKeys(AnchorKeysOf(screenA, forcedA, candidates), AnchorKeysOf(screenB, forcedB, candidates)),
+			"BlocoP2: byte-identical frames still collide even with each other forced into the rival set");
+	}
+
+	void TestAnchorKeysComparePositionTileAndPalettePermissively()
+	{
+		GridFrame a = SheetBlockScreen(0, 3);
+		SheetPaintPalettes(a, 1);
+		std::vector<AnchorCandidate> candidates = AnchorCandidates();
+		AnchorChoice choice;
+		choice.Picked = { 0, 1 };
+
+		GridFrame b = a;
+		Check(SameAnchorKeys(AnchorKeysOf(a, choice, candidates), AnchorKeysOf(b, choice, candidates)),
+			"BlocoP2: identical frames produce identical anchor keys for the same pick");
+
+		GridFrame differentTile = a;
+		differentTile.Cells[candidates[0].Row][candidates[0].Col] += 1;
+		Check(!SameAnchorKeys(AnchorKeysOf(a, choice, candidates), AnchorKeysOf(differentTile, choice, candidates)),
+			"BlocoP2: a different tile at a picked cell breaks the key match");
+
+		GridFrame unknownPalette = a;
+		unknownPalette.Palettes[candidates[0].Row][candidates[0].Col] = kUnknownPalette;
+		Check(SameAnchorKeys(AnchorKeysOf(a, choice, candidates), AnchorKeysOf(unknownPalette, choice, candidates)),
+			"BlocoP2: an unknown palette on either side still matches - same permissiveness as the rival test");
+	}
+
 	void TestSheetContactSheetGeometry()
 	{
 		Vocabulary vocab;
@@ -8026,6 +8111,9 @@ int main()
 	TestAnchorSeparatesAScreenByPaletteAlone();
 	TestAnchorWithoutPaletteEvidenceKeepsTheStablePick();
 	TestGridFrameRecolourIsItsOwnFrame();
+	TestAnchorForcedRivalSeparatesTwoPendingScreens();
+	TestAnchorByteIdenticalFramesStillCollideEvenForced();
+	TestAnchorKeysComparePositionTileAndPalettePermissively();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();
 	TestSheetJsonCarriesTheGridDecision();
