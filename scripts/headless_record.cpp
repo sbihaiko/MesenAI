@@ -118,8 +118,11 @@
 //GbDebugger/SmsDebugger and only run while one exists), so the flag calls
 //InitializeDebugger before the run - see the "cdl=" block in main(). An
 //existing file at <file.cdl> is loaded first, so coverage accumulates across
-//runs as a union, never a maximum. The run fails (non-zero exit) if the CDL
-//came back with zero code bytes, rather than quietly writing an empty map.
+//runs as a union, never a maximum. The run fails (non-zero exit, and "the CDL
+//was not written" in the "result:" line) if the CDL came back with zero code
+//bytes, or if the file is not on disk with the recorded map in it after the
+//write - a path the tool cannot write is a failed run, not a warning, because
+//the caller's whole reason for the flag is the trace (issue #347).
 //One consequence: HeadlessInputEngine refuses to park the run from inside the
 //frame while a debugger is attached (Emulator::Pause() would step the debugger
 //from the emulation thread, which deadlocks on DebugBreakHelper), and logs
@@ -148,6 +151,9 @@
 //"cdl=" - the CDL exports take the Core's own MemoryType enum; that header is
 //a bare enum with no further dependency, so it is included rather than mirrored.
 #include "Core/Shared/MemoryType.h"
+//"cdl=" - issue #347: the proof that the map reached disk. Host-free, so the
+//same function is exercised branch by branch in scripts/core_unit_tests.cpp.
+#include "Debugger/CdlFileCheck.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -1564,21 +1570,40 @@ int main(int argc, char** argv)
 			cdlFailed = true;
 		} else {
 			SaveCdlFile(cdlMemType, (char*)cdlPath.c_str());
-			//Round-trip: reload what was just written and require identical
-			//statistics. This catches a truncated write and, on the NES, a CHR
-			//block that did not survive the append/split in NesCodeDataLogger.
-			LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
-			CdlStatisticsAbi reread = GetCdlStatistics(cdlMemType);
-			uint32_t rereadFunctions = CountCdlFunctions(cdlMemType);
-			bool sameStats = reread.CodeBytes == stats.CodeBytes && reread.DataBytes == stats.DataBytes &&
-				reread.TotalBytes == stats.TotalBytes && reread.DrawnChrBytes == stats.DrawnChrBytes &&
-				reread.TotalChrBytes == stats.TotalChrBytes && rereadFunctions == functionCount;
-			if(sameStats) {
-				printf("cdl written: %s (round-trip verified)\n", cdlPath.c_str());
-			} else {
-				PrintCdlStatistics("reloaded", reread, rereadFunctions);
-				fprintf(stderr, "cdl: %s does not read back as what was written\n", cdlPath.c_str());
+			//The DllExport SaveCdlFile returns void, so the ofstream failing
+			//(an unwritable path, a full disk) is not something this tool can
+			//be told. Issue #347: the round-trip below used to be the only
+			//guard, and it cannot see that either - LoadCdlFile leaves the map
+			//untouched when the file will not read, so the statistics were
+			//compared against themselves and an unwritable path printed
+			//"round-trip verified" and exited 0. The bytes on disk are checked
+			//first, and they carry the reason.
+			CdlFileOnDiskCheck onDisk = CheckCdlFileOnDisk(cdlPath, stats.TotalBytes);
+			if(!onDisk.Ok) {
+				fprintf(stderr, "cdl: %s %s\n", cdlPath.c_str(), onDisk.Reason.c_str());
 				cdlFailed = true;
+			} else {
+				//Round-trip: reload what was just written and require identical
+				//statistics. This catches a truncated write and, on the NES, a CHR
+				//block that did not survive the append/split in NesCodeDataLogger.
+				//ResetCdl first so a load that refuses the file (a CRC that does
+				//not match the ROM) cannot leave the run's own map in place and
+				//pass as its own reload; a load that succeeds resets it anyway.
+				ResetCdl(cdlMemType);
+				LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
+				CdlStatisticsAbi reread = GetCdlStatistics(cdlMemType);
+				uint32_t rereadFunctions = CountCdlFunctions(cdlMemType);
+				bool sameStats = reread.CodeBytes == stats.CodeBytes && reread.DataBytes == stats.DataBytes &&
+					reread.TotalBytes == stats.TotalBytes && reread.DrawnChrBytes == stats.DrawnChrBytes &&
+					reread.TotalChrBytes == stats.TotalChrBytes && rereadFunctions == functionCount;
+				if(sameStats) {
+					printf("cdl written: %s (%llu bytes on disk, round-trip verified)\n",
+						cdlPath.c_str(), (unsigned long long)onDisk.SizeOnDisk);
+				} else {
+					PrintCdlStatistics("reloaded", reread, rereadFunctions);
+					fprintf(stderr, "cdl: %s does not read back as what was written\n", cdlPath.c_str());
+					cdlFailed = true;
+				}
 			}
 		}
 	}
