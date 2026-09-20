@@ -425,6 +425,11 @@ doc-checks: check-manifest
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
 	python3 scripts/test_mep_build.py
+	#F12.2 (ADR-0216): the placer for a copied MEP sheet cell -- which sheet a
+	#loose background key goes on, the free slot, and the two-file grow whose
+	#half-written form silently blinds the build's painted-cell probe (#346).
+	#Synthetic packs in a temp dir; no emulator, no ROM.
+	python3 scripts/test_mep_add_cell.py
 	python3 scripts/test_mep_lint_border.py
 	#ADR-0196 (F12.5): the `<addition>` tag's synthetic target key — the rule
 	#itself, then the lint that gates a pack carrying one.

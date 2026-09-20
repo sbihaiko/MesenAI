@@ -531,9 +531,9 @@ runs had to reverse-engineer it from the cells already there:
 | `emptySlots` | `{ "col": n, "row": n }` per **blank** slot, written by the generators on the object and sprite sheets. It is not free space: a group sheet's grid is the bounding box of an L-shaped or otherwise non-rectangular figure, so a blank states where the figure is *not*, and the recorder never fills it (ADR-0175). A background key put in one lands in the hole of a named figure. To place a new cell, use a free-form sheet; where there is none, compute the slot from `columns`, `cell` and `gutter` — `metatiles.json` does not carry the list. |
 
 A `tiles[]` entry is `{"tile": "<32 uppercase hex>", "palette": "<8 hex>"}` —
-the same two strings *Copy as MEP sheet cell* puts on your clipboard, which is
-the point of that action. Two optional fields appear only where they mean
-something:
+the same two strings *Copy as MEP sheet cell* puts on your clipboard, inside
+the `{"count": …, "tiles": […]}` wrapper it copies (see *Which sheet a copied
+key goes on*). Two optional fields appear only where they mean something:
 
 - `"index": <n>` — the tile's CHR index (ADR-0172), present only on a CHR ROM
   game, where `hires.txt` keys by index rather than by bitmap data. Paste the
@@ -594,12 +594,53 @@ bisecting the pack.
 
 ### Which sheet a copied key goes on
 
-*Copy as MEP sheet cell* puts a **`tiles[]` entry** on the clipboard — one
-tile — not a whole cell. You author the wrapper above it, and you choose the
-sheet. Nothing in the copied text names one, and the `context` field cannot
-help: a pack that ships both `misc.json` and `unsorted.json` usually labels
-every cell of both `"context": "misc"`. Eleven 2026-09-19 cold reads hit this
-and every one of them had to work it out from the sheet headers instead:
+**The short path: let `mep_add_cell.py` place it.**
+
+```sh
+scripts/mep_add_cell.py out/painted --paste     # or: … cell.json, or pipe it in with -
+```
+
+It reads the copied text, picks the sheet by the rule below, finds the free
+slot, writes the cell, and grows `<sheet>.png` and `<sheet>.orig.png` together
+when the grid is full — the four hand steps this section and the two below it
+describe. It also says, before you build, whether another sheet already claims
+the key and whether that cell was painted. `--dry-run` reports the placement
+without writing anything.
+
+Two things it will not do. It refuses a key whose palette leads with `FF` —
+that is how a sprite's transparent color 0 is packed, and a background key
+does not belong on a sprite sheet (`--allow-sprite-palette` if you know
+better; 131 of the 3 495 cells on the 30 packs' `unsorted` sheets are keyed
+that way legitimately). And it refuses to grow a sheet whose `.orig.png` twin
+it cannot read, rather than write one of the two files: a sheet grown without
+its twin makes the build treat **every** cell of that sheet as painted, which
+is silent and changes cells you never touched.
+
+**What is on the clipboard.** *Copy as MEP sheet cell* puts a whole cell
+there, **unplaced**:
+
+```json
+{"count": 1, "tiles": [{"tile": "<32 hex>", "palette": "<8 hex>", "index": 486}]}
+```
+
+No `index`, `x` or `y` of the cell's own — those depend on the sheet, which
+the emulator never opens. **The `index` you can see is not the cell's.** It is
+inside `tiles[]` and it is the tile's absolute CHR index (ADR-0172); the
+cell's own `index` is its ordinal in the sheet, and `mep_add_cell.py` sets
+that one. Copying the tile's index into the cell's field gives you a cell at a
+slot that already exists. A 16-pixel-tall sprite copies as **two lines, two
+cells** — a cell's `tiles[]` is laid out row-major 2×2, so a second entry
+would draw to the *right* of the first, not below it.
+
+Pasting the text into a sidecar's `cells[]` by hand still works, and the
+`tiles[]` entry inside it is unchanged, so the manual procedure below is still
+correct — it is just longer.
+
+**The rule the placer applies, and the one to apply by hand.** Nothing in the
+copied text names a sheet, and the `context` field cannot help: a pack that
+ships both `misc.json` and `unsorted.json` usually labels every cell of both
+`"context": "misc"`. Eleven 2026-09-19 cold reads hit this and every one of
+them had to work it out from the sheet headers instead:
 
 - `cell: { "w": 8, "h": 8 }` — the cell holds **one** tile, which is what you
   copied. This is the free-form sheet, `unsorted.json`, on all 27 of the 30
@@ -633,7 +674,9 @@ plus the grid:
 | `map` | not the free-form destination — a nametable surface (`map-NNN.json`); use it only when you mean to repaint the map itself |
 | `sprite`, `sprites` | no — a background key put here never reaches the background |
 
-Finding the free slot: on `metatiles.json` you compute it from the header. The
+Finding the free slot, by hand (`mep_add_cell.py` does all of this for you, and
+grows the sheet when there is no free slot): on `metatiles.json` you compute it
+from the header. The
 `emptySlots` list on `objNNN.json` and `sprNNN.json` is **not** a slot you may
 take — it is the blank half of a figure's own grid (see the field table above),
 and those sheets are not where a background key goes in the first place.
@@ -650,7 +693,10 @@ Two traps around it, both measured:
   logs which cell won — `sheets/unsorted.png overrides tile <key> from
   sheets/misc.png (painted)` — and a *painted* cell beats an untouched one.
   Check that line; a cell that loses builds and lints clean and changes
-  nothing.
+  nothing. `mep_add_cell.py` says it at paste time instead
+  (`metatiles.json cell 1 already claims … (painted)`), which is two steps
+  earlier, and it reads the paint state through the build's own probe, so the
+  two never disagree.
 - **Find a free slot, do not guess one.** A cell you overwrite silently
   repaints whatever tile already lived there. The grid is `columns` wide and
   `cells[]` is in row-major order, so the free slots are the ones no `index`

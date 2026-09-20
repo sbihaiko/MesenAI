@@ -6,13 +6,20 @@
   they picked: *"Clipboard leva a célula, script a posiciona (Recomendado)"*,
   *"Por `cell.w` == 8 (Recomendado)"*, *"Crescer os dois arquivos numa
   operação só (Recomendado)"*, *"Avisar no momento do copy (Recomendado)"*.
-  No code changed with this ADR.
-- **The same-turn rule is NOT satisfied yet.** This project allows
-  implementing in the turn an ADR is accepted only when the change ships
-  with unit tests covering the decision **and** the go-ahead is quoted
-  verbatim in this Status line **and** in the PR body. The tests do not
-  exist yet and no PR carries the quote, so the implementation is the turn
-  after the acceptance, not this one.
+  Implemented in the same turn as the acceptance, under the project's
+  same-turn rule: the change ships with unit tests covering each of the four
+  decisions, and the go-ahead is quoted verbatim both above and in the body
+  of PR #348.
+- **The same-turn rule holds.** This project allows implementing in the turn
+  an ADR is accepted only when the change ships with unit tests covering the
+  decision **and** the go-ahead is quoted verbatim in this Status line
+  **and** in the PR body. All three are true: `UI.Tests/Mep/MepSheetCellTests.cs`
+  and `UI.HeadlessTests/CopyAsMepSheetCellTests.cs` cover the payload,
+  `scripts/test_mep_add_cell.py` (24 checks, wired into `make doc-checks`)
+  covers sheet choice, slot arithmetic, the two-file grow and the claim
+  report, and PR #348 carries the quote. What shipped under answer 1 of
+  *Corrections as shipped*, below, is narrower than the sentence the Decision
+  first carried.
 - Date: 2026-09-19
 - Related: issue #340 (the half still open — the clipboard carries a
   `tiles[]` entry, not a cell), ADR-0215 (the same action's key resolution
@@ -103,10 +110,10 @@ the cheap case and the expensive one.
 **`emptySlots[]` is not scratch space.** ADR-0175 states blanks and
 explicitly refuses to fill them: a group sheet's blanks are the shape of an
 L-shaped or non-rectangular figure, and the slot belongs to that figure's
-grid. `docs/remastering-a-game.md` currently reads `emptySlots` as "the
-answer to 'where do I put this'", which is a background key being written
-into a named figure's hole. Whatever is decided here, that sentence needs
-correcting.
+grid. `docs/remastering-a-game.md` read `emptySlots` as "the answer to 'where
+do I put this'", which is a background key being written into a named
+figure's hole; that sentence was corrected in the change that implements this
+ADR, and the placer never offers a `sprite`/`object` sheet as a destination.
 
 **What the emulator can reach today.** The sidecars ship *inside* a
 deployed pack — `mep_build pack` zips the folder unfiltered and `mep_lint`
@@ -162,6 +169,34 @@ The one trap — `index` meaning two different things in a whole-cell payload �
 is the placer's to avoid, not the artist's: `mep_add_cell.py` sets the cell's
 `index` itself and carries `tiles[].index` through untouched, and the guide
 states which is which.
+
+### Corrections as shipped (2026-09-19, measured while implementing)
+
+Three things the Decision above could not have known, and one it got wrong.
+None changes an answer; each narrows what the answer means in code.
+
+- **The Sprite Viewer refusal is not implementable as written.** The Decision
+  said the placer "refuses a sprite-sourced key", but under 1(b) the clipboard
+  carries no record of which viewer the copy came from, and adding one would
+  break the payload's being a paste-ready `cells[]` entry. The only signal
+  present is the palette — a sprite's transparent colour 0 is packed `FF` —
+  and it is **not a clean marker**: 131 of 3 495 `unsorted` cells and 340 of
+  13 932 `metatiles` cells carry an FF-leading palette. Shipped as a refusal
+  with an explicit `--allow-sprite-palette` override, so the ~3.7 % of
+  legitimate background cells are a speed bump rather than a wall. A clean
+  fix needs either a clipboard marker or a decision to drop the refusal.
+- **The grow's fill colour was unspecified.** OPEN 3 said "append one row" and
+  not what it is filled with. It is the image's own top-left pixel, which on
+  every generated sheet is the gutter.
+- **A 16-pixel-tall sprite copies as two cells, not one cell with two
+  `tiles[]` entries.** `mep_build._cell_crops` lays a cell's entries out
+  row-major 2×2, so a second entry would draw to the *right* of the first
+  rather than below it. The action already emitted the two halves as two
+  objects; the placer reads them as two cells.
+- **The Context section's complaint about `emptySlots` was already stale when
+  it was written** — it is corrected in `docs/remastering-a-game.md`, in the
+  same change that this ADR's Consequences describe. The register now says so
+  instead of claiming otherwise.
 
 ### OPEN 1 — what lands on the clipboard
 
@@ -245,10 +280,12 @@ which in the receipt or in the guide.
 
 ## Consequences
 
-- **Until this ships, #340 stays half-fixed.** The receipt shipped
-  (ADR-0215); the cell did not. The sweep's finding 4 is the one line item
-  that cost all 28 runs, so the measured value of shipping it is the highest
-  of anything still open on F12.2.
+- **#340 is closed by this.** The receipt shipped (ADR-0215); the cell now
+  ships with it. The sweep's finding 4 was the one line item that cost all 28
+  runs, and the four hand steps it named — the wrapper, the free slot, the
+  sheet, the `scale` — are the placer's now. What is *not* claimed: that the
+  28 runs would each have been faster by a measured amount, because the
+  protocol has not been re-run since.
 - **The action does not stop being a copy.** It puts an unplaced cell on the
   clipboard and keeps emitting the `tiles[]` entry inside it, so a run that
   pastes the payload into a sheet by hand still works exactly as it does
