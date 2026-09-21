@@ -920,6 +920,187 @@ def test_a_recording_listed_twice_is_ignored_and_the_first_one_donates():
               "and each repeat is named rather than silently dropped", str(repeats))
 
 
+
+# --- the static projection (ADR-0219, PRD F12.9) ----------------------------
+
+
+def static_rom(td: Path, banks: int = 2, name: str = "static.nes") -> Path:
+    """A CHR ROM game and nothing else: no pack, no recording, no kit."""
+    chr_rom = b"".join(tile_bytes(i) for i in range(banks * 256))
+    rom = td / name
+    rom.write_bytes(ines(lcg(16384, 3), chr_rom))
+    return rom
+
+
+def run_static(td: Path, rom: Path, **kw) -> dict:
+    out = kw.pop("out", td / "kit")
+    K.run(td / "nothing-here", rom, out, None, "all", kw.pop("verify", False),
+          True, static=True, scale=kw.pop("scale", SCALE), **kw)
+    return json.loads((out / "kit-part-chr.json").read_text())
+
+
+def test_a_static_kit_has_one_page_per_4kb_bank_and_every_cell_is_a_fill():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td, banks=2)
+        frag = run_static(td, rom)
+        pages = sorted(f["path"] for f in frag["files"])
+        doc = sidecar(td / "kit", "Chr_00_0")
+        counts = doc["counts"]
+        check(len(frag["files"]) == 512 // 256, "page count is CHR size / 4 KB",
+              f"{len(frag['files'])} page(s) for 512 tiles: {pages}")
+        check(counts["fill"] == 256 and counts["evidence"] == 0 and counts["empty"] == 0,
+              "every cell of a static page is a fill", str(counts))
+        check(all(c["seen"] is False for c in doc["cells"]),
+              "every static cell is seen: false")
+        check(frag["totals"]["fill"] == 512 and frag["totals"]["evidence"] == 0,
+              "the fragment counts every tile of the file as a fill",
+              str(frag["totals"]))
+
+
+def test_a_static_cell_carries_the_roms_own_bytes():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        doc = sidecar(td / "kit", "Chr_01_0")
+        wrong = [c for c in doc["cells"]
+                 if c["tileData"] != tile_bytes(256 + c["index"]).hex().upper()]
+        check(not wrong, "bank 1 cell N is CHR tile 256+N",
+              f"{len(wrong)} cell(s) differ, first: {wrong[:1]}")
+
+
+def test_every_static_rule_is_the_palette_wildcard():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        rows = [ln for ln in (td / "kit" / "chr" / "fill-rules.hires.txt")
+                .read_text().splitlines() if ln.startswith("<tile>")]
+        check(len(rows) == 512, "one <tile> rule per tile of the CHR", str(len(rows)))
+        check(all(r.endswith(",Y") for r in rows),
+              "every static rule carries defaultTile=Y (ADR-0210's wildcard)",
+              next((r for r in rows if not r.endswith(",Y")), ""))
+
+
+def test_the_static_manifest_carries_the_header_a_build_needs():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        lines = (td / "kit" / "chr" / "fill-rules.hires.txt").read_text().splitlines()
+        sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+        check(lines[0] == K.PAGES_ONLY_MARK,
+              "the first line marks the file as a pages-only manifest", lines[0])
+        check(f"<supportedRom>{sha1}" in lines,
+              "the manifest records the ROM it was read from")
+        check(f"<scale>{SCALE}" in lines and f"<ver>{K.PACK_VERSION}" in lines,
+              "the manifest declares ver and scale")
+        check(sum(1 for ln in lines if ln.startswith("<img>")) == 2,
+              "one <img> per page")
+
+
+def test_a_recorded_run_writes_no_static_header_and_no_marker():
+    """The static path must leave the recorded path's bytes alone."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = chr_rom_fixture(td)
+        K.run(pack, rom, td / "kit", None, "all", False, True)
+        text = (td / "kit" / "chr" / "fill-rules.hires.txt").read_text()
+        check(K.PAGES_ONLY_MARK not in text and "<supportedRom>" not in text,
+              "a recorded kit's fill-rules file is unchanged by ADR-0219",
+              text.splitlines()[0])
+
+
+def test_a_chr_ram_rom_is_refused_and_points_at_the_index_import():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = td / "ram.nes"
+        rom.write_bytes(ines(lcg(32768, 5), b""))
+        try:
+            run_static(td, rom)
+            check(False, "a CHR RAM ROM is refused by --static", "it ran")
+        except K.ChrKitError as e:
+            check("F12.12" in str(e) and "mep_import" in str(e),
+                  "the CHR RAM refusal names the only static source of shape", str(e))
+
+
+def test_a_folder_that_holds_a_recording_is_never_projected_over():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = chr_rom_fixture(td)
+        try:
+            K.run(pack, rom, td / "kit", None, "all", False, True, static=True)
+            check(False, "a recorded folder is refused by --static", "it ran")
+        except K.ChrKitError as e:
+            check("hires.txt" in str(e), "the refusal names the recording it found",
+                  str(e))
+
+
+def test_also_is_refused_on_the_static_path():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        try:
+            run_static(td, rom, also=["anything"])
+            check(False, "--also with --static is refused", "it ran")
+        except K.ChrKitError as e:
+            check("--also" in str(e), "the refusal names --also", str(e))
+
+
+def test_the_static_path_never_starts_an_emulator():
+    """ADR-0219's tool contract: the generator acquires no play session.
+
+    Asserted by trapping the one door this module has to any other program —
+    `subprocess` — for the whole run."""
+    import subprocess as real_subprocess
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        calls = []
+
+        class Trap:
+            def __getattr__(self, name):
+                def fail(*a, **kw):
+                    calls.append((name, a))
+                    raise AssertionError(f"subprocess.{name} on the static path")
+                return fail
+
+        K.subprocess = Trap()
+        try:
+            run_static(td, rom)
+        finally:
+            K.subprocess = real_subprocess
+        check(not calls, "no subprocess is spawned while a static kit is built",
+              str(calls))
+
+
+def test_verify_reports_the_build_and_the_rule_count():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        frag = run_static(td, rom, verify=True)
+        v = frag["verify"]
+        check(v["ran"] and v["built"] and v["errors"] == 0,
+              "a pages-only pack builds with 0 errors", str(v))
+        check(v["rules"] == v["expectedRules"] == 512 and v["wildcard"] == 512,
+              "the rebuilt manifest has one Y rule per CHR tile", str(v))
+
+
+def test_the_fragment_says_it_is_static_and_names_the_rom():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        frag = run_static(td, rom)
+        sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+        check(frag.get("static") is True and frag["romSha1"] == sha1,
+              "the fragment carries static and the ROM's sha1", str(frag.get("romSha1")))
+        check(frag["notes"][0].startswith("NOTHING ON THESE PAGES WAS SEEN IN PLAY"),
+              "the first note says no play session happened", frag["notes"][0][:60])
+        check(not any("donated" in k for k in frag["totals"]),
+              "no donor counter is emitted", str(frag["totals"].keys()))
+
+
 def main():
     tests = [
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
@@ -955,6 +1136,17 @@ def main():
         test_a_palette_that_gets_brighter_is_never_a_fade_downwards,
         test_only_the_indices_the_pattern_paints_are_compared,
         test_the_fold_is_reported_per_page_and_per_pack_and_changes_no_pixel,
+        test_a_static_kit_has_one_page_per_4kb_bank_and_every_cell_is_a_fill,
+        test_a_static_cell_carries_the_roms_own_bytes,
+        test_every_static_rule_is_the_palette_wildcard,
+        test_the_static_manifest_carries_the_header_a_build_needs,
+        test_a_recorded_run_writes_no_static_header_and_no_marker,
+        test_a_chr_ram_rom_is_refused_and_points_at_the_index_import,
+        test_a_folder_that_holds_a_recording_is_never_projected_over,
+        test_also_is_refused_on_the_static_path,
+        test_the_static_path_never_starts_an_emulator,
+        test_verify_reports_the_build_and_the_rule_count,
+        test_the_fragment_says_it_is_static_and_names_the_rom,
     ]
     for t in tests:
         t()

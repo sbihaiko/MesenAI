@@ -17,10 +17,11 @@
 #   (c) entry  - a matched set with only an entry script -> one power-on run
 #   (d) static - nothing matched; no recording is possible here
 #
-# (d) is where F12.9 (static kit from the ROM alone) would take over for a CHR
-# ROM game. F12.9 is not shipped, so this job records the driver as `static`
-# and produces no kit for that ROM, and the report says which. That is a stated
-# gap, not a silent one.
+# (d) is where F12.9 (static kit from the ROM alone, ADR-0219) takes over for a
+# CHR ROM game, since 2026-09-20: the ROM's own CHR is projected into pattern
+# pages with every cell `fill` / `seen: false`, and no emulator is started. A
+# CHR RAM game still has nothing to fall back on - the generator refuses it,
+# naming the index import (F12.12), and the report says so per ROM.
 #
 # Runs under caffeinate so a long job is not suspended by App Nap.
 set -uo pipefail
@@ -143,7 +144,16 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
       fi
       ;;
     static)
-      status="no kit - static path needs F12.9, which is not shipped"
+      # No recording is possible, so the kit is projected over the ROM alone
+      # (F12.9 / ADR-0219). The pack folder named here is never written to: the
+      # generator takes it as an output location and refuses one that holds a
+      # recording.
+      if python3 "$here/artist_chr_kit.py" "$romout/no-recording" --rom "$rom" \
+           --static --out "$romout/kit" --verify > "$romout/kit-chr.log" 2>&1; then
+        status="static kit from the ROM alone - nothing was seen in play"
+      else
+        status="no kit - $(tail -n 1 "$romout/kit-chr.log")"
+      fi
       ;;
   esac
 
@@ -173,6 +183,13 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
            ${also[@]+"${also[@]}"} --verify > "$romout/kit-chr.log" 2>&1; then
       status="$status; artist_chr_kit failed"
     fi
+    if ! python3 "$here/artist_kit_assemble.py" "$kit" --title "$name" \
+           > "$romout/kit-assemble.log" 2>&1; then
+      status="$status; assemble failed"
+    fi
+  elif [ "$driver" = "static" ] && [ -f "$kit/kit-part-chr.json" ]; then
+    # The static kit has one part and no recording behind it; assembling it is
+    # what puts ADR-0219's first line at the top of ARTIST.md.
     if ! python3 "$here/artist_kit_assemble.py" "$kit" --title "$name" \
            > "$romout/kit-assemble.log" 2>&1; then
       status="$status; assemble failed"
