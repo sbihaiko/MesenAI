@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as F12.12's code, its bounded input not yet measured; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started) — pack/core roadmap of this
+**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as **F12.12**, bounded input measured the same day, which retracted ADR-0210's own "5 532 keys out of range" Context figure; the ADR-0217/ADR-0218 recorder change re-recorded and closed; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -394,7 +394,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   ROM alone — nothing was seen in play`, `seen % 0.0`, `--verify 0`.
   [Log](../validation/f12.9-static-kit-from-the-rom-2026-09-20.md).
 
-- **F12.12 — implemented, not yet measured** (2026-09-20, PR #361).
+- **F12.12 — shipped** (2026-09-20, PR #361; measured 2026-09-20).
   `mep_import.py index <their hires.txt> --pack <ours> --rom <dump>` implements
   ADR-0210 §3: a community pack's `hires.txt` read as facts about the ROM, never
   opening a PNG of it. On a CHR RAM game every 32-hex key the recording does not
@@ -403,22 +403,43 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   and only in range. The three mandatory filters each have a test, as do the two
   refusals (dump sha1 ≠ the recording's `<supportedRom>`; data-keyed and
   index-keyed packs never meet), and a trapped decoder proves no PNG of the input
-  is opened. **The row's bounded input has not been run**: Contra80s against our
-  Contra recording (expected order of gain +2 585 shapes) and the Ninja Gaiden
-  pack against our dump (expected 0 shapes, 5 532 keys dropped as out of range)
-  are the numbers that close the slice, and there is no `docs/validation/` log
-  for it. Until that runs, the slice is code with unit tests, not a closed row.
+  is opened. The bounded input ran on 2026-09-20, on the two catalog packs at
+  the sha256 their rows declare, against the dumps their `<supportedRom>` names:
+  **Contra80s → 2 583 cells rendered** from the pack's own pattern bytes
+  (13 218 of their rules, 3 404 of their shapes, 3 735 rules we already had,
+  6 166 keys, 131 palettes, 1 364 conditioned rules contributing a bare key and
+  no condition, 0.93 s) — against ADR-0210's prospective +2 585, a difference of
+  two shapes. **Ninja Gaiden → 0 shapes and 401 palettes**, 19 153 of 19 153
+  rules in range, no sheet written, 0.16 s. The run also **retracted ADR-0210's
+  Context item 2**: its "5 532 keys out of range" is a base-16 reading of a
+  `<ver>`100 pack's decimal tokens, and read the loader's way — which is what
+  the shipped code does — the pack's highest index is 8 190 against 8 192 tiles
+  and nothing is dropped. The filter, the decision and the wrong-ROM case all
+  stand; the example did not. ADR-0210 amended the same day.
+  [Log](../validation/f12.12-third-party-index-read-2026-09-20.md).
 
-- **ADR-0217 / ADR-0218 — implemented, not yet measured** (2026-09-20, commit
-  `186077d0`). Both were accepted on 2026-09-20 and the recorder change landed
+- **ADR-0217 / ADR-0218 — shipped** (2026-09-20, commit `186077d0`; measured
+  2026-09-20). Both were accepted on 2026-09-20 and the recorder change landed
   the same day: the forced-rival set shared by ADR-0217 Option C and ADR-0218
   Option A, the write-time exact-key check against every already-committed
   capture (ADR-0217 Option A), and the post-hoc same-priority collision scan with
   its drop-and-log and build-time warning (ADR-0218 Option B). The key comparison
-  is host-free in `ScreenStitcher.cpp` and unit-tested there. What is missing is
-  the same thing F12.12 is missing: no re-measurement against the captures that
-  motivated it (issues #339, #344, #349), and no `docs/validation/` log. The
-  ceiling raise it cost is recorded as ADR-0137's tenth amendment.
+  is host-free in `ScreenStitcher.cpp` and unit-tested there. Re-recorded on
+  2026-09-20 over the four worst games of the F12.2 sweep, same 60 s power-on
+  route before and after, with the "before" run reproducing the sweep's gate
+  definitions byte for byte as a control: **95 co-gated captures of 108 became
+  0 of 61**. Punch-Out!! (issue #339's game) is the clean case — all ten
+  captures kept, none skipped, and the five credits screens that shared one
+  probe triple now carry five distinct ones, which is ADR-0217 Option C
+  separating rather than discarding. The cost is Option A's refusals, and it is
+  large on games whose screens barely differ: Ice Climber goes from 25 captures
+  to 4. ADR-0218 Option B never fired (0 post-hoc drops on all four). The first
+  attempt at this measurement read the stale dylib on disk and nearly reported
+  "the change does nothing"; the binary must be proven to contain the change
+  before it measures anything, and the F12.9 log's binary-provenance sentence is
+  corrected for the same reason. The ceiling raise it cost is recorded as
+  ADR-0137's tenth amendment.
+  [Log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -878,9 +899,12 @@ and F12.7 all shipped on 2026-09-19 (§3). The day-one block (F12.9–F12.12, ad
 **F12.9 shipped with it** on 2026-09-20 (§3), and only F12.11 still waits — on
 ADR-0220, which stays `proposed` by the user's decision of 2026-09-20 (no
 GIMP/Krita population is measured yet, and its stop condition (2) needs a person
-with both programs). Two of the block's rows are code without a measurement:
-F12.12's bounded input has not been run, and neither has a re-measurement of the
-ADR-0217/ADR-0218 recorder change (§3).
+with both programs). The two rows that were code without a measurement were
+both measured on 2026-09-20 and are closed: F12.12's bounded input (2 583 cells
+from Contra80s, 0 shapes and 401 palettes from the Ninja Gaiden pack, and a
+retraction of ADR-0210's "5 532 out of range") and the ADR-0217/ADR-0218
+recorder change (95 co-gated captures of 108 became 0 of 61) — §3 and their
+logs.
 
 **Why this phase.** The comparison table names seven rows where the
 inherited upstream toolchain still serves an author better than the layer
@@ -972,7 +996,6 @@ by the paint program; **nothing in the pack is ever read out of it**.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F12.11 | **Layered surface for the paint program (OpenRaster).** Beside every surface PNG the kit writes `<name>.ora` — a zip with `stack.xml`, `mergedimage.png`, `Thumbnails/thumbnail.png` and one PNG per layer, written with `zipfile` + `xml.etree` and the PNG writer the generators already have. Layers, bottom to top — **five on a recorded surface, four on an F12.9 static page**: `orig` (the `*.orig.png` twin, `edit-locked`), `context` (the 1x stitched-map crop around a figure at 50 % opacity — only when a recording exists, absent on F12.9 pages), `paint` (fully transparent, the **selected** layer, the only one the artist touches), `guides` (cell grid, pose / cycle captions from `names.json` or the sidecar ids, hatch over `seen: false` cells — drawn in one sentinel colour outside every NES palette, `visibility="hidden"` for export), `palettes` (a swatch strip of the palettes recorded for that sheet, hidden). GIMP, Krita and MyPaint open `.ora` natively; Photoshop and Aseprite do not and stay on F12.4's per-layer asset names — **no `.psd` or `.aseprite` writer**, stated in `docs/remastering-a-game.md`. F12.11 is a second path beside F12.4, not its replacement: the artist evidence measured so far (Metroid, a spreadsheet user) does not show a GIMP/Krita population, so F12.4 stays the default path and this one is measured against it. **The return path does not change:** the artist exports a flat PNG over the F12.4 name; `sheet_repaint` keeps only cells that differ from `orig`, and `mep_lint.py` fails a cell that contains the sentinel colour (the guides layer was left visible) naming the cell. | **Needs an ADR before start** — it adds a fifth file kind to ADR-0183 §2's surfaces and fixes the layer contract; it must also state that `.ora` is **write-only** for the toolchain (reading `paint` out of it is stdlib-trivial and is refused on purpose, or the sheet stops being the source of truth). Prerequisite chain, in full: F12.3 (the reload that shows it) → F12.4 (the name the flat export lands on) → F12.11; the SMB bounded input additionally needs F12.9. Bounded input: one Contra figure sheet (recorded, five layers) and one SMB static page from F12.9 (four layers). Stop when (1) `stack.xml` validates against the OpenRaster 0.0.5 schema shape the three programs read and each `.ora` round-trips through `zipfile` unchanged; (2) GIMP and Krita open both files with every layer named (five and four respectively) and `paint` selected — this row is logged by a person, per this phase's cold-read rule; (3) a stroke on `paint`, exported flat, reaches the game pixel-exact via F12.3 with the unchanged cells dropped; (4) the same export with `guides` left visible is refused by lint with the offending cell named. What we measure is ours: file validity, layer order, refusal, pixel-exact result. Re-measures "Painting, end to end" and the **"simple"** constraint: open one file, paint, export, look at the game. |
-| F12.12 | **Shape index for CHR RAM games from a third-party key index.** `mep_import.py index <their hires.txt> --pack <our auto/> --rom X.nes` reads a community pack's `hires.txt` as **facts about the ROM**, never opening a PNG of it: on a CHR RAM game every `<tile>` key whose 32-hex `tileData` is not already in our recording is rendered from its own 16 pattern bytes through the recorder's upscale into `sheets/index.png` / `index.orig.png` / `index.json` with provenance `index`, `seen: false`; on a CHR ROM game only palettes are taken and only for in-range indices, and the tool says so. Filters are mandatory and each has a test: index range against the loaded CHR, `<patch>` packs refused with ADR-0198 named, `<condition>` lines never read. | **ADR-0210 accepted 2026-09-20** (go-ahead, verbatim: *"Sim, implementar agora"*), so this slice's gate is clear; it is the ADR's §3 and adds nothing to it. Stdlib only; needs the ROM present for the range filter by construction. Bounded input: Contra80s against our Contra recording (expected order of gain: +2 585 shapes), and the Ninja Gaiden community pack against our Ninja Gaiden dump (expected: **0 shapes, palettes only, 5 532 keys dropped as out of range**). Stop when the Contra `index` sheet exists with the measured count ± the recorder's dedup, the F12.8 `unsorted` sheet is unchanged (the two are disjoint by construction), `mep_build.py build` reports 0 errors, no PNG of the input pack is opened (asserted), and the Ninja Gaiden run adds no shape. Re-measures "Interop with community packs" on the half F12.7 does not cover. |
 
 **Order within this block.** F12.10 shipped first, on 2026-09-19 (§3), out of
 the order below: it needed no ADR, and paths (a)–(c) do not depend on F12.9.
@@ -980,9 +1003,9 @@ What F12.9 still owes it is path (d) — a ROM matching no route set resolves to
 `static` and produces no kit until then. F12.9 shipped on 2026-09-20 and closed that
 gap: a ROM matching no route set now produces a static kit, and F12.11's second
 bounded input (one SMB static page) exists. F12.12's gate — ADR-0210 accepted and
-its title made to agree with its §3 — was cleared on 2026-09-20 and its code
-shipped the same day, but its bounded input has not been measured, so the row is
-open. F12.11 is the only one of the four that has not started: its chain is
+its title made to agree with its §3 — was cleared on 2026-09-20, its code shipped
+the same day and its bounded input was measured the same day (§3), so its row is
+closed. F12.11 is the only one of the four that has not started: its chain is
 F12.3 → F12.4 → its own ADR → F12.11, the first two shipped on 2026-09-19 and the
 third, ADR-0220, is `proposed` and stays that way by the user's decision of
 2026-09-20. Each slice is one task, and a
@@ -997,9 +1020,9 @@ closed half of what F12.6a's report left open:
 slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
 prerequisite of any of them — it only guarantees that whatever surface those
 slices name, every recorded tile has one. F12.9–F12.12 (added 2026-09-19) follow the order
-stated in their own block, except that F12.10 shipped early (§3): F12.9 →
-F12.11 (after F12.4) → F12.12 (ADR-0210 accepted 2026-09-20, gate clear);
-F12.9 and F12.11 each wait on their ADR. F12.9 also completes F12.10's path (d).
+stated in their own block, except that F12.10 shipped early (§3). Three of the
+four are now delivered — F12.9, F12.10 and F12.12 (§3) — and only **F12.11**
+remains, waiting on ADR-0220. F12.9 also completed F12.10's path (d).
 
 #### Phase 13 — Shared replays (ADR-0205)
 
@@ -1106,10 +1129,10 @@ files and in §3.
 | 0197 | accepted (2026-09-16), §1–§2 shipped as F12.6a (2026-09-19), §3 shipped as F12.6b (2026-09-19); amends 0189 §4's scope to emission only | hand-authored conditions are admitted in sheets and `mep_lint.py --routes` evaluates them on every retained frame of every recording; the three refusals of 0189 §4 stand; the recorder retains `$0000`–`$07FF` per retained frame so `memoryCheckConstant` in that window is evaluable (§3). `spriteNearby` is still `not evaluable` — F12.6b widened the memory plane, not the sprite stream |
 | 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 pending | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3), which is the follow-up slice |
 | 0209 | Q4 accepted and shipped as F12.8 (2026-09-19); Q1–Q3 accepted 2026-09-20 — (b), (e), (i), **not implemented** | MesenAI owns **selection** and **return**, painting is delegated to the artist's own program; the `unsorted` remainder sheet gives every recorded shape a cell. Q1–Q3 answered the label author (the Core infers it at record time, the artist renames), the export unit (the `sprNNN` figure reassembled through its `evidence[]` offsets, not the cell) and the return path (F12.4's template, with this ADR adding only the launch and the reload trigger). Slices F12.9–F12.12 are bounded by its three constraints |
-| 0210 | accepted (2026-09-20); §3 shipped as F12.12's code (2026-09-20, PR #361), bounded input **not yet measured**; §2 is what F12.9 stands on | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocks F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
+| 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
 | 0214 | accepted (2026-09-19); protocol shipped, Fable run pending | a fresh Fable session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
-| 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), **not re-measured** | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344
-| 0218 | accepted (2026-09-20), implemented the same day (`186077d0`), **not re-measured** | a capture's anchors are chosen against every other capture already decided in the same recording; Option A is the avoidance pass, Option B the post-hoc drop with a build-time warning. Coordinated with ADR-0217, one change. Issue #349
+| 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Punch-Out!! (issue #339's game) keeps all ten captures and skips none — Option C separates rather than discards ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344
+| 0218 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Option B never fired (0 post-hoc drops on all four); the cost lands as Option A refusals, and it is large — Ice Climber goes from 25 captures to 4 ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a capture's anchors are chosen against every other capture already decided in the same recording; Option A is the avoidance pass, Option B the post-hoc drop with a build-time warning. Coordinated with ADR-0217, one change. Issue #349
 | 0219 | accepted (2026-09-20), shipped as F12.9 the same day | a kit may project over the ROM alone — every cell `fill`, `seen: false`, no play session — amending ADR-0183 §1 by reference. CHR ROM only; CHR RAM refused, pointing at ADR-0210 §3. Recording always wins, the recorder is untouched, and the ROM-SHA-1 pin is disabled by construction on that path. Slice F12.9
 | 0220 | **proposed** (2026-09-20) — left proposed by user decision the same day | a layered `.ora` beside every surface, write-only for the toolchain, five layers with `paint` topmost visible, the flat PNG over F12.4's name the only return path. Blocks F12.11, which does not start until this is accepted; the deferral's reason is that no GIMP/Krita artist population is measured and its stop condition (2) needs a person with both programs
 
