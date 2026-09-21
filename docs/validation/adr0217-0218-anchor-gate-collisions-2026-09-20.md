@@ -110,18 +110,83 @@ everything; the post-hoc scan is a net that caught nothing in this sample. It
 is not dead code — its unit tests exercise the byte-identical-frame case the
 ADRs name — but no real recording here reached it.
 
+## Extended the same day: the whole bounded library
+
+The section above stopped at four games. The remaining 26 of the 30-ROM library
+were re-recorded on the same route with the same rebuilt binary:
+
+> **30 packs, 193 captures, 0 co-gated.**
+
+That is the strong form of the claim, and it does not depend on route matching:
+after this change **no two captures of one recording may share a gate**, so any
+co-gated capture in a fresh pack would be a failure whatever the route. There
+are none in the whole library.
+
+Every game the F12.2 sweep flagged, with its capture count before and after:
+
+| game | before (caps / co-gated) | after (caps / co-gated) | captures lost |
+|---|---|---|---|
+| Donkey Kong | 47 / 46 | 30 / 0 | 17 |
+| Ice Climber | 25 / 22 | 4 / 0 | **21** |
+| Pac-Man | 26 / 22 | 17 / 0 | 9 |
+| Bomberman | 16 / 10 | 16 / 0 | **0** |
+| Mike Tyson's Punch-Out!! | 10 / 5 | 10 / 0 | **0** |
+| Tennis | 5 / 4 | 5 / 0 | **0** |
+| Mario Bros. | 3 / 2 | 3 / 0 | **0** |
+| The Flintstones | 3 / 2 | 3 / 0 | **0** |
+| **sweep total** | **237 / 113** | — | — |
+
+**Five of the eight offenders lose nothing.** Bomberman, Punch-Out!!, Tennis,
+Mario Bros. and The Flintstones each keep every capture and go to zero
+collisions — Option C's forced rivals found separating cells and no capture had
+to be refused. The cost is concentrated in three games whose screens really are
+near-identical, and Ice Climber is the extreme: 25 captures to 4.
+
+The 26-game half has no route-matched "before" — those sweep packs were recorded
+on a different route, so their counts are a reference, not a control. The
+four-game half above does have one (byte-for-byte), and the absolute claim
+(0 co-gated anywhere) needs no control at all.
+
 ## What this does not deliver
 
 - **No pixel measurement against issue #339's specific complaint.** #339 reports
   a capture drawing over a frame it mismatches by 16 047 pixels. This log shows
   the gate that let that happen is gone; it does not re-render the pre-fight
   card and re-measure the distance. That render is the remaining half of
-  closing #339.
-- **Four games, not 28.** The F12.2 sweep's other 24 packs were not re-recorded.
-  The four here hold 95 of the sweep's ~113 co-gated captures, so the sample is
-  the bulk of the problem, not a random slice.
+  closing #339, and a first attempt is recorded below.
 - **Nothing about variants.** ADR-0217 answer (1) kept ADR-0159's rule that a
   capture owns its variants. This run does not test it.
+
+### The #339 render attempt, and why it did not conclude
+
+Punch-Out!! was rendered from power-on at eleven timestamps between 8 s and
+56 s, three ways: no pack, the pre-change pack and the post-change pack — the
+two packs route-matched, same 11 606 `<tile>` keys, differing only in their
+capture gates. **The two packs rendered identically at every timestamp
+(0 pixels).**
+
+That is not evidence the change does nothing; it is evidence the sampling
+missed the moments. Matching each no-pack frame against the captures' own
+`.orig.png` shows why: the nearest capture at each sampled second is off by
+5 632 to 765 792 pixels, i.e. no gate was satisfied at any of them. A capture
+draws only inside the static window it was frozen for, and second boundaries
+do not land in those windows.
+
+Two things this did establish, both worth keeping:
+
+- **A pack in `mesen-home/HdPacks/<stem>/` is not found by this harness** —
+  the log says `LoadHdPack: 0 ms; no-pack` and the screenshot comes back at
+  native 256×240. The sibling convention (`<romdir>/<stem>/auto`) loads it:
+  `tiles=11606 keys=18895 images=96 backgrounds=10`, screenshot 1024×960. Any
+  render measurement must check the resolution and the `LoadHdPack` line before
+  trusting a zero.
+- **Comparing a rendered pack frame against a nearest-neighbour upscale of the
+  no-pack frame is meaningless** — it measures the upscale, not correctness.
+  The distances (9 309 to 105 850) say nothing about whether the right capture
+  drew.
+
+Closing #339 needs the frame, not the second: either a dense search for a frame
+whose gate is satisfied, or an instrumented run that logs which capture drew.
 
 ## Reproduce
 
