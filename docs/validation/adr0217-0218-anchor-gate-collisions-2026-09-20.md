@@ -149,30 +149,47 @@ four-game half above does have one (byte-for-byte), and the absolute claim
 
 ## What this does not deliver
 
-- **No pixel measurement against issue #339's specific complaint.** #339 reports
-  a capture drawing over a frame it mismatches by 16 047 pixels. This log shows
-  the gate that let that happen is gone; it does not re-render the pre-fight
-  card and re-measure the distance. That render is the remaining half of
-  closing #339, and a first attempt is recorded below.
+- **It does not close issue #339.** The re-render is below, and it reproduces
+  the bug on the post-change pack. Gate *collisions* are gone library-wide;
+  a gate being *sufficient for its frame* is a separate, untaken decision.
 - **Nothing about variants.** ADR-0217 answer (1) kept ADR-0159's rule that a
   capture owns its variants. This run does not test it.
 
-### The #339 render attempt, and why it did not conclude
+### Issue #339 is **not** fixed by this change — reproduced on the post-change pack
 
-Punch-Out!! was rendered from power-on at eleven timestamps between 8 s and
-56 s, three ways: no pack, the pre-change pack and the post-change pack — the
-two packs route-matched, same 11 606 `<tile>` keys, differing only in their
-capture gates. **The two packs rendered identically at every timestamp
-(0 pixels).**
+Punch-Out!! was rendered from power-on at 1 s steps from 10 s to 45 s, three
+ways: no pack, the pre-change pack and the post-change pack — the two packs
+route-matched, same 11 606 `<tile>` keys, differing only in their capture
+gates. **They render identically at all 36 timestamps (0 pixels).**
 
-That is not evidence the change does nothing; it is evidence the sampling
-missed the moments. Matching each no-pack frame against the captures' own
-`.orig.png` shows why: the nearest capture at each sampled second is off by
-5 632 to 765 792 pixels, i.e. no gate was satisfied at any of them. A capture
-draws only inside the static window it was frozen for, and second boundaries
-do not land in those windows.
+At 18–27 s the game draws the pre-fight card, and there the pathology is intact:
 
-Two things this did establish, both worth keeping:
+| measurement | pixels |
+|---|---|
+| the game's own frame vs the capture that draws (`screen003`) | **23 664** |
+| the rendered frame vs the game's own frame | **12 686** |
+| `STARRING` / `LITTLE MAC` pixels in the game's own frame | **7 808** |
+| the same pixels in the rendered frame | **0** |
+
+`screen003` was frozen at an *earlier* moment of the same card — Little Mac
+alone, Doc Louis's head still an undrawn white block, no text. It draws over
+the live background on the later frame, and the game's own text is gone. Doc
+Louis survives only because he is sprites, which the capture does not cover.
+This is exactly #339's complaint, at the same order of magnitude as the
+16 047 px it reported for a different recording of the same game.
+
+**Why these ADRs cannot fix it, by their own wording.** ADR-0217's title is
+"a captured screen draws only where its gate separates it from **every other
+capture**". `screen003`'s gate now does exactly that — it is unique in the pack,
+and the library-wide count above is 0 collisions. But a gate of three
+`tileAtPosition` probes being *distinct from other captures* is not the same as
+being *sufficient to identify the frame*: none of screen003's three probes
+samples a cell that changes between the frozen moment and the later one, so the
+gate matches frames the capture was never frozen for. These ADRs separate
+captures from each other. #339 needs a capture separated from **frames**, which
+is a different decision and has not been taken.
+
+Two traps this run also found, worth keeping:
 
 - **A pack in `mesen-home/HdPacks/<stem>/` is not found by this harness** —
   the log says `LoadHdPack: 0 ms; no-pack` and the screenshot comes back at
@@ -181,12 +198,9 @@ Two things this did establish, both worth keeping:
   render measurement must check the resolution and the `LoadHdPack` line before
   trusting a zero.
 - **Comparing a rendered pack frame against a nearest-neighbour upscale of the
-  no-pack frame is meaningless** — it measures the upscale, not correctness.
-  The distances (9 309 to 105 850) say nothing about whether the right capture
-  drew.
-
-Closing #339 needs the frame, not the second: either a dense search for a frame
-whose gate is satisfied, or an instrumented run that logs which capture drew.
+  no-pack frame is meaningless as a correctness measure** — it also counts the
+  upscale. The band comparison above is the honest one: count the pixels the
+  game drew and the render does not have.
 
 ## Reproduce
 

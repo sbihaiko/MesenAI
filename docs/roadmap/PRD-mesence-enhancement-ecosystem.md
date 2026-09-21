@@ -432,7 +432,14 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   0 co-gated** — the absolute form of the claim, which needs no route matching.
   Five of the eight offending games lose no capture at all (Bomberman,
   Punch-Out!!, Tennis, Mario Bros., The Flintstones); the cost concentrates in
-  three. Punch-Out!! (issue #339's game) is the clean case — all ten
+  three. **It does not close issue #339**: re-rendered on the post-change pack,
+  the pre-fight card still loses the game's own `STARRING` / `LITTLE MAC` —
+  7 808 text pixels drawn by the ROM, 0 in the render — because `screen003`,
+  frozen at an earlier moment of the same card, draws over it. Its gate is
+  unique in the pack (that is what these ADRs bought); it is simply not
+  sufficient to identify the frame, since none of its three probes samples a
+  cell that changed. Separating a capture from **frames** is a different
+  decision and has not been taken. Punch-Out!! (issue #339's game) is the clean case — all ten
   captures kept, none skipped, and the five credits screens that shared one
   probe triple now carry five distinct ones, which is ADR-0217 Option C
   separating rather than discarding. The cost is Option A's refusals, and it is
