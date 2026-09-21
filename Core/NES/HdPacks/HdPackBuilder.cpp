@@ -2014,6 +2014,15 @@ void HdPackBuilder::FinalizeScreenAnchors()
 	//pass below is its only safety net.
 	vector<vector<MesenSheets::AnchorKey>> committedKeys;
 
+	//ADR-0221: which shapes are a single flat colour, so the variant rule can
+	//tell "the capture has art here" from "the capture has the card's backdrop
+	//here". Built once per save - _shapeTiles is final by now - and indexed by
+	//ShapeId, the same space GridFrame::Cells uses.
+	vector<uint8_t> flatShapes(_shapeTiles.size(), 0);
+	for(size_t i = 0; i < _shapeTiles.size(); i++) {
+		flatShapes[i] = MesenSheets::IsFlatTileData(_shapeTiles[i].TileData) ? 1 : 0;
+	}
+
 	for(PendingScreen& pending : _pendingScreens) {
 		size_t captured = pending.HasGridFrame ? pending.GridFrameIndex : _gridFrames.size();
 		vector<size_t> forcedRivals;
@@ -2022,7 +2031,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 				forcedRivals.push_back(frame);
 			}
 		}
-		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals);
+		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals, &flatShapes);
 		if(choice.Picked.empty() || pending.BitmapIndex >= _hdData.BackgroundFileData.size()) {
 			continue;
 		}

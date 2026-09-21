@@ -101,7 +101,10 @@ namespace MesenSheets
 	//frame another pending screen is itself anchored on is, by definition, a
 	//different picture someone chose to capture separately, however close the
 	//raw pixels sit.
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {});
+	//`flatShapes` (ADR-0221): ShapeId -> 1 when that shape is a single flat
+	//colour, i.e. the capture carries no art in a cell showing it. Null or
+	//short degrades to "every drawn cell carries art".
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {}, const std::vector<uint8_t>* flatShapes = nullptr);
 
 	//ADR-0217 Option A / ADR-0218 Option B: a screen's picked anchors, reduced
 	//to what GetLayerIndex actually reads - independent of any HdPackCondition

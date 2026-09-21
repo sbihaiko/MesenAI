@@ -3726,6 +3726,214 @@ namespace
 			"BlocoP: the rarest cell no variant changes is preferred");
 	}
 
+	//--- ADR-0221 option B: a variant is judged by the kind of difference -----
+	//
+	//Issue #339, in the smallest form that reproduces it. A capture frozen
+	//before the game finished drawing a screen agreed with the finished frame
+	//on 0.9573 of the grid - a variant by size - so ADR-0159's stability
+	//filter excluded the very cells that differ, and the gate was guaranteed
+	//to match the frame the capture must not draw on. The size of the
+	//difference was never the point: the capture had nothing to put in those
+	//cells, so drawing it there erased what the ROM had drawn.
+
+	void TestVariantThatAddsContentTheCaptureLacksIsARival()
+	{
+		//The capture was frozen with the text area still blank; the later
+		//frame fills it in. Two cells out of 960 - far inside the budget that
+		//used to call this a variant.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = kEmptyCell;
+		screen.Cells[8][13] = kEmptyCell;
+		GridFrame later = screen;
+		later.Cells[8][12] = 910; //the game draws its text where the capture has nothing
+		later.Cells[8][13] = 911;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		//Every candidate sits on a cell the later frame also has, so nothing
+		//but the variant verdict itself can separate them.
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 10, 20, 3 }, { 26, 28, 4 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rivals == 1,
+			"ADR-0221: a frame that adds background content the capture lacks is counted as a rival",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestVariantThatChangesCoveredContentStaysAVariant()
+	{
+		//The other half of the rule, and the reason it is not option C: a
+		//blink or a score digit changes a cell the capture *does* draw, so the
+		//capture carries art for it either way and keeps owning the frame.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[2][4] = 900;  //the digit: drawn once, so ranked first
+		screen.Cells[20][4] = 901; //a rare badge that never changes
+		GridFrame variant = screen;
+		variant.Cells[2][4] = 902; //covered cell, different shape
+		variant.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, variant };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates());
+		Check(choice.Rivals == 0,
+			"ADR-0221: a frame that only changes cells the capture draws is still a variant",
+			"rivals=" + std::to_string(choice.Rivals));
+		Check(!AnchorPicked(choice, 0),
+			"ADR-0221: and the cell it changes is still kept out of the gate");
+	}
+
+	void TestVariantBlankingACellTheCaptureDrawsIsStillAVariant()
+	{
+		//The rule is directional on purpose. The capture carries art for a
+		//cell the later frame blanks, so drawing it there paints over an empty
+		//cell - the game loses nothing it drew, and ADR-0156 already says the
+		//capture owns that cell.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		GridFrame later = screen;
+		later.Cells[8][12] = kEmptyCell;
+		later.Cells[8][13] = kEmptyCell;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates());
+		Check(choice.Rivals == 0,
+			"ADR-0221: a frame that only blanks cells the capture draws stays a variant",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAddedContentOutrankstheAgreementBudget()
+	{
+		//A single added cell is enough, however much of the frame agrees. This
+		//is the difference from option A: no threshold on a proportion can
+		//express it, because the proportion here is 959/960.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = kEmptyCell;
+		GridFrame later = screen;
+		later.Cells[8][12] = 910;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 10, 20, 3 }, { 26, 28, 4 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rivals == 1,
+			"ADR-0221: one added cell out of 960 makes a rival, which no agreement threshold can do",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestFlatTileDataTellsArtFromBackdrop()
+	{
+		//A NES tile is two bitplanes of 8 bytes. Every pixel shares one palette
+		//index exactly when each plane is all-0x00 or all-0xFF, which is the
+		//card backdrop `kEmptyCell` cannot see.
+		uint8_t blank[16] = {};
+		Check(MesenSheets::IsFlatTileData(blank), "ADR-0221: an all-zero tile is flat");
+
+		uint8_t solid[16];
+		memset(solid, 0xFF, 16);
+		Check(MesenSheets::IsFlatTileData(solid), "ADR-0221: an all-ones tile is flat (colour 3)");
+
+		uint8_t colour2[16] = {};
+		memset(colour2 + 8, 0xFF, 8); //low plane 0, high plane 1
+		Check(MesenSheets::IsFlatTileData(colour2), "ADR-0221: one plane set and one clear is still flat");
+
+		uint8_t art[16] = {};
+		art[3] = 0x18; //one row of two lit pixels
+		Check(!MesenSheets::IsFlatTileData(art), "ADR-0221: a tile with any drawn pixel is not flat");
+
+		uint8_t halfByte[16] = {};
+		halfByte[0] = 0x0F;
+		Check(!MesenSheets::IsFlatTileData(halfByte), "ADR-0221: a partially lit byte is not flat");
+	}
+
+	void TestBackdropCellCountsAsContentTheCaptureLacks()
+	{
+		//Issue #339 as it actually is. The capture was frozen with the card's
+		//backdrop where the text goes - not an empty cell, a flat tile - so the
+		//structural reading (kEmptyCell) calls the later frame a variant and
+		//the render erases the text. Measured 2026-09-21: keying on kEmptyCell
+		//left the recorded pack byte-identical.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = 800; //the backdrop tile, flat
+		screen.Cells[8][13] = 800;
+		GridFrame later = screen;
+		later.Cells[8][12] = 910; //the game draws its text over the backdrop
+		later.Cells[8][13] = 911;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 10, 20, 3 }, { 26, 28, 4 } };
+
+		//Without the table every drawn cell is assumed to carry art, so the
+		//backdrop is indistinguishable from a painted cell: the old verdict.
+		AnchorChoice blind = SelectScreenAnchors(frames, 0, candidates);
+		Check(blind.Rivals == 0,
+			"ADR-0221: with no shape art the backdrop reads as art, and the frame stays a variant",
+			"rivals=" + std::to_string(blind.Rivals));
+
+		//With it, 800 is known to be flat and the text is an addition.
+		std::vector<uint8_t> flat(1024, 0);
+		flat[800] = 1;
+		AnchorChoice seeing = SelectScreenAnchors(frames, 0, candidates, {}, &flat);
+		Check(seeing.Rivals == 1,
+			"ADR-0221: a frame drawing art over the capture's flat backdrop is a rival",
+			"rivals=" + std::to_string(seeing.Rivals));
+	}
+
+	void TestArtReplacedByBackdropStaysAVariant()
+	{
+		//The directional half, now that "covered" is visual. A frame that
+		//clears art back to the backdrop takes nothing away from the capture -
+		//the capture has art to put there - so it stays a variant.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = 910; //the capture carries art here
+		GridFrame later = screen;
+		later.Cells[8][12] = 800;  //the game clears it to the backdrop
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		std::vector<uint8_t> flat(1024, 0);
+		flat[800] = 1;
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates(), {}, &flat);
+		Check(choice.Rivals == 0,
+			"ADR-0221: art giving way to the backdrop is still a variant",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestBackdropReplacedByBackdropStaysAVariant()
+	{
+		//Two different flat tiles - a colour change in the backdrop itself.
+		//Neither side carries art, so nothing can be erased.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = 800;
+		GridFrame later = screen;
+		later.Cells[8][12] = 801;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		std::vector<uint8_t> flat(1024, 0);
+		flat[800] = 1;
+		flat[801] = 1;
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates(), {}, &flat);
+		Check(choice.Rivals == 0,
+			"ADR-0221: one backdrop colour replacing another is still a variant",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestShortFlatTableDegradesToTheStructuralReading()
+	{
+		//A table that does not reach the shape id in question must not read off
+		//its end; the honest answer there is "assume it carries art".
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[8][12] = 800;
+		GridFrame later = screen;
+		later.Cells[8][12] = 910;
+		later.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, later };
+
+		std::vector<uint8_t> flat(16, 0); //far too short to hold shape 800
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates(), {}, &flat);
+		Check(choice.Rivals == 0,
+			"ADR-0221: a short flat table degrades to the structural reading instead of reading off its end",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
 	void TestAnchorPrefersCellsThatTellTheScreenApart()
 	{
 		//Stability alone is the wrong lever, and this is why: what holds still
@@ -8103,6 +8311,15 @@ int main()
 	TestSheetRoutingIsWithheldWhenTooLittleWouldBeLeftToPaint();
 	TestSheetResidencyLeavesTheHudSheetAlone();
 	TestAnchorAvoidsACellAVariantChanges();
+	TestVariantThatAddsContentTheCaptureLacksIsARival();
+	TestVariantThatChangesCoveredContentStaysAVariant();
+	TestVariantBlankingACellTheCaptureDrawsIsStillAVariant();
+	TestAddedContentOutrankstheAgreementBudget();
+	TestFlatTileDataTellsArtFromBackdrop();
+	TestBackdropCellCountsAsContentTheCaptureLacks();
+	TestArtReplacedByBackdropStaysAVariant();
+	TestBackdropReplacedByBackdropStaysAVariant();
+	TestShortFlatTableDegradesToTheStructuralReading();
 	TestAnchorPrefersCellsThatTellTheScreenApart();
 	TestAnchorFallsBackWhenNoStableCellDiscriminates();
 	TestAnchorsStaySpreadApartAndCapAtThree();

@@ -783,15 +783,54 @@ namespace MesenSheets
 		//(captured screen x retained frame) pair, up to 300 x kMaxSheetFrames,
 		//and the overwhelming majority of those pairs are unrelated frames that
 		//disqualify themselves in the first rows.
-		bool IsScreenVariant(const GridFrame& a, const GridFrame& b)
+		//
+		//ADR-0221 option B: the verdict is about the *kind* of difference, not
+		//only its size. A frame that adds background content the capture does
+		//not carry is a rival however small the difference is - drawing the
+		//capture there would freeze art over content the game is drawing now,
+		//and the player loses it. Issue #339 is exactly that: Punch-Out's
+		//pre-fight card agreed with `screen003` on 0.9573 of the grid, well
+		//inside the budget, and the render lost every STARRING / LITTLE MAC
+		//pixel the ROM draws.
+		//
+		//"Content the capture does not carry" is read visually, not
+		//structurally. A cell holding a flat backdrop tile is not empty, but
+		//the capture has no art there, so text drawn over it later is an
+		//addition. Keying on kEmptyCell alone was measured on 2026-09-21 and
+		//left the recorded pack byte-identical - the card's cells all hold its
+		//backdrop. `flatShapes` is indexed by ShapeId; a null or short table
+		//degrades to "every drawn cell carries art", i.e. the structural
+		//reading, which is what a caller with no shape art can honestly claim.
+		//
+		//The rule is directional. A frame that *blanks* a cell the capture
+		//draws, or repaints art over art, stays inside the agreement budget:
+		//the capture has something to put there either way, which is what
+		//keeps a blink or a score digit a variant.
+		bool HasArt(ShapeId shape, const std::vector<uint8_t>* flatShapes)
+		{
+			if(shape == kEmptyCell) {
+				return false;
+			}
+			if(!flatShapes || shape >= flatShapes->size()) {
+				return true;
+			}
+			return (*flatShapes)[shape] == 0;
+		}
+
+		bool IsScreenVariant(const GridFrame& a, const GridFrame& b, const std::vector<uint8_t>* flatShapes)
 		{
 			uint32_t cells = kGridRows * kGridCols;
 			uint32_t budget = cells - (uint32_t)(kAnchorVariantAgree * (double)cells);
 			uint32_t different = 0;
 			for(uint32_t r = 0; r < kGridRows; r++) {
 				for(uint32_t c = 0; c < kGridCols; c++) {
-					if(a.Cells[r][c] != b.Cells[r][c] && ++different > budget) {
-						return false;
+					if(a.Cells[r][c] != b.Cells[r][c]) {
+						if(!HasArt(a.Cells[r][c], flatShapes) && HasArt(b.Cells[r][c], flatShapes)) {
+							return false;
+						}
+						if(++different > budget) {
+							return false;
+						}
 					}
 				}
 			}
@@ -883,7 +922,7 @@ namespace MesenSheets
 		}
 	}
 
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames)
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames, const std::vector<uint8_t>* flatShapes)
 	{
 		AnchorChoice empty;
 		if(candidates.empty()) {
@@ -917,7 +956,7 @@ namespace MesenSheets
 				//ADR-0217 Option C / ADR-0218 Option A: a forced rival skips
 				//IsScreenVariant entirely, never landing in `variants`.
 				bool forcedRival = std::find(forcedRivalFrames.begin(), forcedRivalFrames.end(), i) != forcedRivalFrames.end();
-				if(!forcedRival && IsScreenVariant(*screen, frames[i])) {
+				if(!forcedRival && IsScreenVariant(*screen, frames[i], flatShapes)) {
 					variants.push_back(&frames[i]);
 				} else {
 					rivals.push_back(&frames[i]);

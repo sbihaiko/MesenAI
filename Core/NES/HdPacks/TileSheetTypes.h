@@ -360,6 +360,31 @@ namespace MesenSheets
 	using ShapeId = uint16_t;
 	constexpr ShapeId kEmptyCell = 0xFFFF;
 
+	//ADR-0221: does this 8x8 pattern carry art, or is it one flat colour?
+	//A NES tile is two bitplanes of 8 bytes; every pixel shares one palette
+	//index exactly when each plane is all-0x00 or all-0xFF. The distinction is
+	//load-bearing for the variant rule: a capture that shows a flat background
+	//tile in a cell has *no art* there, so a later frame drawing text over it
+	//adds content the capture cannot carry - which `kEmptyCell` alone does not
+	//catch, because the cell is not empty, it holds the card's backdrop.
+	//Measured 2026-09-21: keying on kEmptyCell instead left the recorded pack
+	//byte-identical and issue #339 untouched.
+	inline bool IsFlatTileData(const uint8_t tileData[16])
+	{
+		for(uint32_t plane = 0; plane < 2; plane++) {
+			uint8_t first = tileData[plane * 8];
+			if(first != 0x00 && first != 0xFF) {
+				return false;
+			}
+			for(uint32_t i = 1; i < 8; i++) {
+				if(tileData[plane * 8 + i] != first) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
 	//Which 4-colour NES palette a cell was drawn with, interned by the recorder
 	//in first-sight order (ADR-0159 amendment, 2026-09-05). A whole
 	//PaletteColors word per cell would triple the retained stream; an id only
