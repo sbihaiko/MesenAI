@@ -523,12 +523,7 @@ namespace Mesen.ViewModels
 		{
 			return new MainMenuAction() {
 				ActionType = ActionType.Custom,
-				DynamicText = () => {
-					if(region == ConsoleRegion.Pal && MainWindow.RomInfo.Format == RomFormat.GameGear) {
-						return "PAL (60 FPS)"; //GG is 60fps even when region is PAL
-					}
-					return ResourceHelper.GetEnumText(region);
-				},
+				DynamicText = () => ResourceHelper.GetEnumText(region),
 				IsVisible = () => {
 					if(MainWindow.RomInfo.ConsoleType == ConsoleType.Gameboy) {
 						return false;
@@ -537,7 +532,7 @@ namespace Mesen.ViewModels
 					return region switch {
 						ConsoleRegion.Ntsc => true,
 						ConsoleRegion.NtscJapan => MainWindow.RomInfo.Format == RomFormat.GameGear,
-						ConsoleRegion.Pal => true,
+						ConsoleRegion.Pal => MainWindow.RomInfo.Format != RomFormat.GameGear,
 						ConsoleRegion.Dendy => MainWindow.RomInfo.ConsoleType == ConsoleType.Nes,
 						ConsoleRegion.Auto or _ => true
 					};
