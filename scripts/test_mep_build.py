@@ -1865,6 +1865,86 @@ def make_author_folder(root: Path, keys: int = 16, name: str = "author"):
     return folder
 
 
+
+def pages_only_test(root: Path):
+    """ADR-0219 / PRD F12.9: a pack that is only CHR pages and their manifest.
+
+    The normal build maps a key source onto `textures/sheets/` cells; there are
+    no sheets here and nothing to map, because a static kit's manifest already
+    names the page each key is painted on and the crop inside it. What this
+    checks is that the path is taken only for a pack that declares itself one,
+    that it carries every rule over unchanged, and that it refuses rather than
+    overwrites when the pack turns out to hold a recording."""
+    folder = root / "pages-only"
+    chr_dir = folder / "textures" / "chr"
+    chr_dir.mkdir(parents=True)
+    scale, cell = 2, 16
+    (chr_dir / "Chr_00_0.png").write_bytes(png(16 * cell, 16 * cell))
+    rows = [f"<tile>0,{i:02X},{PAL_HEX},{(i % 16) * cell},{(i // 16) * cell},1,Y"
+            for i in range(256)]
+    manifest = chr_dir / "fill-rules.hires.txt"
+    manifest.write_text("\n".join(
+        ["# mep-pages-only 1", "<ver>109", f"<scale>{scale}",
+         "<supportedRom>" + "A" * 40, "<img>chr/Chr_00_0.png"] + rows) + "\n")
+
+    out = run("build", str(folder))
+    if out is None:
+        return
+    hires = folder / "textures" / "hires.txt"
+    text = hires.read_text(encoding="utf-8")
+    tiles = [ln for ln in text.splitlines() if ln.startswith("<tile>")]
+    if len(tiles) != 256:
+        fail(f"pages-only build emitted {len(tiles)} tiles, expected 256")
+    elif any(not ln.endswith(",Y") for ln in tiles):
+        fail("pages-only build dropped a defaultTile=Y")
+    elif tiles != rows:
+        fail(f"pages-only build rewrote a rule: {next(a for a, b in zip(tiles, rows) if a != b)}")
+    else:
+        ok("pages-only build carries every <tile> rule over unchanged, all defaultTile=Y")
+    if "<img>chr/Chr_00_0.png" not in text or "<scale>2" not in text:
+        fail(f"pages-only manifest lost its <img>/<scale>:\n{text[:300]}")
+    else:
+        ok("pages-only build keeps the page reference and the declared scale")
+
+    # Idempotent: the second build overwrites the manifest the first one wrote.
+    if run("build", str(folder)) is not None and hires.read_text(encoding="utf-8") == text:
+        ok("a pages-only build is idempotent")
+    else:
+        fail("rebuilding a pages-only pack changed its manifest")
+
+    # A recorded manifest is never overwritten by this path.
+    hires.write_text("<ver>109\n<scale>2\n<img>chr/Chr_00_0.png\n" + rows[0] + "\n")
+    out = run("build", str(folder), expect=2)
+    if out is not None and "refusing to overwrite a recorded manifest" in out:
+        ok("a pack whose manifest was not built from its pages is refused")
+    else:
+        fail(f"a recorded manifest was not protected: {out}")
+    hires.unlink()
+
+    # A crop outside the page is an error, not a silent mis-slice.
+    bad = root / "pages-only-bad"
+    shutil.copytree(folder, bad)
+    m = bad / "textures" / "chr" / "fill-rules.hires.txt"
+    m.write_text(m.read_text().replace(
+        f"<tile>0,00,{PAL_HEX},0,0,1,Y", f"<tile>0,00,{PAL_HEX},9000,0,1,Y"))
+    out = run("build", str(bad), expect=2)
+    if out is not None and "outside" in out:
+        ok("a crop outside the page is a build error")
+    else:
+        fail(f"an out-of-page crop was accepted: {out}")
+
+    # Without the marker the folder is not a pages-only pack at all.
+    plain = root / "pages-only-unmarked"
+    shutil.copytree(folder, plain)
+    m = plain / "textures" / "chr" / "fill-rules.hires.txt"
+    m.write_text(m.read_text().replace("# mep-pages-only 1\n", ""))
+    out = run("build", str(plain), expect=2)
+    if out is not None and "no tile-key source" in out:
+        ok("an unmarked fill-rules file is not treated as a manifest")
+    else:
+        fail(f"an unmarked fill-rules file was picked up as a manifest: {out}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -2073,6 +2153,8 @@ def main() -> int:
             fail(f"audio_cleanup_suggest -> exit {p.returncode}, expected 1 + garbage ids: {out}")
         else:
             ok("audio_cleanup_suggest flags short/repeat/silent ids from the probe's enumeration.log")
+
+        pages_only_test(root)
 
     return 1 if FAILED else 0
 

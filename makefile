@@ -319,7 +319,12 @@ doc-checks: check-manifest
 	# F12.4): 1802 -> 1803 for the `import asset_names as N` the F12.4 surface-name
 	# guard needs. The guard itself folds into the existing write_png call; an
 	# import cannot. No headroom added -- it is a ratchet again from 1803.
-	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1803
+	# Amended 2026-09-20 (ADR-0137, eleventh amendment; ADR-0219, F12.9):
+	# 1803 -> 2074 for the static projection -- --static, the Pack/Page/Bank
+	# construction the recording normally supplies, the blank canvas and the
+	# manifest a static kit writes. A second input path through this file, and
+	# none of it host-free. A ratchet again from 2074.
+	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 2074
 	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
 	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
 	# its rank never decides anything. Amended again the same day (seventh
@@ -328,7 +333,11 @@ doc-checks: check-manifest
 	# Amended a ninth time 2026-09-19 (#346): 1945 -> 1953 for _EditedProbe's
 	# size-mismatch branch, which now refuses the build instead of falling
 	# back to blind on a half-grown sheet/twin pair.
-	./scripts/check-file-loc.sh scripts/mep_build.py 1953
+	# Amended an eleventh time 2026-09-20 (ADR-0219, F12.9): 1953 -> 2070 for
+	# cmd_build_pages_only -- the build of a pack that is only CHR pages and
+	# the manifest beside them, which slices nothing because the manifest
+	# already names the page and the crop. A ratchet again from 2070.
+	./scripts/check-file-loc.sh scripts/mep_build.py 2070
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
 	# Amended 2026-09-17 (ADR-0137, fourth amendment; ADR-0207): the ceiling on
 	# scripts/core_unit_tests.cpp is GONE, not raised. C.7 ratcheted it at 7342

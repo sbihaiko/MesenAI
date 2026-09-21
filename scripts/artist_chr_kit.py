@@ -5,6 +5,8 @@
                               [--also <other recorded pack dir>]...
                               [--names names.json] [--fill-rules none|observed|all]
                               [--verify] [--quiet]
+    scripts/artist_chr_kit.py <empty or missing dir> --rom <path.nes> --static
+                              [--out DIR] [--scale N] [--names names.json] [--quiet]
 
 A recorded pack is the `auto/` folder the bootstrap builder writes. Its
 `textures/chr/Chr_*.png` pages are already the surface the hand-built fan packs
@@ -15,6 +17,17 @@ put the recorded coverage at 47 % of the fan pack's distinct tiles, so an artist
 painting page by page hits a hole every few cells.
 
 This tool fills the holes from the ROM and refuses to pretend when it cannot.
+
+`--static` (ADR-0219, PRD F12.9) is the degenerate case of exactly that: there is
+no recording at all, so every cell is a hole and every hole is filled from the
+ROM. It runs on a **CHR ROM** game and only there — the bank *is* 4 KB of the
+file, so the shape half of the kit needs no play session — and it produces the
+pattern pages alone: no figure, no scenery, no stage map, because nothing was
+observed. Every cell comes out `fill` / `seen: false` and every emitted `<tile>`
+rule carries `defaultTile = Y`, the palette wildcard ADR-0210 measured. A CHR RAM
+game is refused, with a pointer to the third-party key index (ADR-0210 §3,
+F12.12) that is the only static source of shape for those. The tool never starts
+an emulator, reads a `.mss`, a route set or a movie on any path.
 
 A page is not one palette. `HdPackBuilder::SaveHdPack` spreads each tile's
 palette variants across the pages of its CHR bank by usage, so `Chr_<b>_0` holds
@@ -155,6 +168,30 @@ LEGEND_EMPTY = (0xC4, 0x28, 0x28, 0xFF)
 MIN_BASE_SUPPORT = 3
 LOCALITY_WINDOW = 16
 
+# `<ver>` a static manifest declares: BaseHdNesPack::CurrentVersion, the number
+# the recorder writes (HdNesPack.h). A static pack is read by the same loader as
+# a recorded one, so it declares the same version.
+PACK_VERSION = 109
+
+# The palette a static fill is rendered under. It is a guess and it does not
+# have to be a good one: every static rule carries `defaultTile = Y`, which is
+# the per-rule palette wildcard (ADR-0210), so the shape matches whatever
+# colours the game puts it under. `Bank.fill_palette()` returns this same value
+# when a bank has no recorded cell to vote, which is every bank here.
+STATIC_FILL_PALETTE = "0F001030"
+
+# First line of a static manifest, and of the `hires.txt` a pages-only build
+# writes from it. It is what lets `mep_build.py build` tell "this pack is its
+# own pages" from "this pack has a recording", so it never overwrites a
+# recorded manifest; `scripts/mep_build.py` reads the same constant.
+PAGES_ONLY_MARK = "# mep-pages-only 1"
+
+# The colour the recorder leaves an unpainted cell (`0xFFFF00FF`, ARGB). A
+# static page starts as this and is then written cell by cell; any pixel still
+# wearing it would be a cell the ROM could not supply, which cannot happen on a
+# CHR ROM bank and is why the static kit reports 0 `empty`.
+UNPAINTED_RGBA = (0xFF, 0x00, 0xFF, 0xFF)
+
 
 class ChrKitError(Exception):
     pass
@@ -186,17 +223,30 @@ class TileRow:
 
 
 class Pack:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, static: "Rom | None" = None, scale: int = 1,
+                 rom_sha1: str = ""):
         self.root = root
         self.textures = root / "textures"
         self.hires = self.textures / "hires.txt"
-        if not self.hires.is_file():
-            raise ChrKitError(f"{root}: no textures/hires.txt — not a recorded pack folder")
-        self.version = 0
+        self.version = PACK_VERSION
         self.scale = 1
         self.rom_sha1 = ""
         self.images: list[str] = []
         self.tiles: list[TileRow] = []
+        self.static = static is not None
+        if self.static:
+            # ADR-0219: the ROM is the whole input and the folder is an output
+            # location, so there is nothing to parse. One page per 4 KB bank of
+            # the file, rank 0, in bank order; no `<tile>` row exists yet
+            # because no cell was ever recorded.
+            self.scale = scale
+            self.rom_sha1 = rom_sha1
+            self.images = [f"chr/{static_page_name(b)}.png"
+                           for b in range(static.chr_tile_count // 256)]
+            return
+        self.version = 0
+        if not self.hires.is_file():
+            raise ChrKitError(f"{root}: no textures/hires.txt — not a recorded pack folder")
         self._parse()
 
     def _parse(self):
@@ -393,6 +443,60 @@ def collect_pages(pack: Pack) -> list[Page]:
         page.layout = _fit_layout(page)
         pages.append(page)
     return pages
+
+
+def static_page_name(bank_id: int) -> str:
+    """The page name the recorder would have written for this CHR ROM bank.
+
+    `HdPackBuilder::SaveHdPack` names a CHR ROM page `Chr_<HexUtilities::ToHex(
+    bankId)>_<rank>.png`, and that helper widens by bytes: 2 hex digits up to
+    0xFF, then 4, then 6, then 8. A static kit has only rank 0 — a rank is a
+    palette variant and no palette was ever seen."""
+    for width, top in ((2, 0xFF), (4, 0xFFFF), (6, 0xFFFFFF)):
+        if bank_id <= top:
+            return f"Chr_{bank_id:0{width}X}_0"
+    return f"Chr_{bank_id:08X}_0"
+
+
+def static_pages(pack: Pack) -> list[Page]:
+    """One `Page` per 4 KB CHR ROM bank, with no recorded row on any of them.
+
+    Every field `collect_pages` reads off the recording is decided here instead,
+    and each one is a statement about the ROM rather than about a run: the
+    layout is `identity` because a static page is laid out in bank order (the
+    `largeSprites` shuffle is something the *builder* does to what it saw), the
+    bank id is the bank's own number, and the page carries no palette of its own
+    (ADR-0219 §"Nothing is claimed to be seen")."""
+    pages = []
+    for image_index, rel in enumerate(pack.images):
+        page = Page(Path(rel).stem, None, image_index, pack.scale)
+        page.is_chr_ram = False
+        page.palette = STATIC_FILL_PALETTE
+        page.chr_bank_id = image_index
+        page.layout = "identity"
+        pages.append(page)
+    return pages
+
+
+def static_images(pages: list[Page]) -> dict:
+    """The blank canvas each static page is drawn onto.
+
+    A recorded page arrives as a PNG the recorder wrote; there is none here, so
+    the page starts as the recorder's own unpainted colour and every one of its
+    256 cells is then written by the ROM fill. `orig` is the same canvas rather
+    than `None`, so the twin ADR-0153 §3 requires comes out identical to the
+    sheet — which is exactly what an untouched reference means here."""
+    out = {}
+    for page in pages:
+        size = 16 * page.cell_px
+        # Built as one buffer rather than pixel by pixel: a 32-bank ROM at
+        # scale 4 is 16.7 M pixels, and the per-pixel form spent 9 of the
+        # slice's 10-second budget writing a colour that is about to be
+        # overwritten.
+        row = bytes(UNPAINTED_RGBA) * size
+        out[page.name] = {role: Image(size, size, bytearray(row * size))
+                          for role in ("hd", "orig")}
+    return out
 
 
 class Bank:
@@ -1378,6 +1482,81 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
 # --- verify -----------------------------------------------------------------
 
 
+DEFAULT_STATIC_SCALE = 4
+
+
+def static_notes(rom_path: Path, cells: int, filled: int, rules: int) -> list:
+    """What a static kit has to say for itself, in the order it has to say it.
+
+    The first note is the one that matters: no play session happened, so the
+    pages are shape without evidence. Everything a recorded kit says about
+    green/olive/blue cells is omitted rather than reworded — there are none."""
+    return [
+        f"NOTHING ON THESE PAGES WAS SEEN IN PLAY. They were projected over "
+        f"{rom_path.name}'s own CHR with no recording at all (ADR-0219, PRD F12.9): "
+        f"all {cells} cell(s) are `fill` and `seen: false` in the sidecars, and "
+        "there is no figure sheet, no scenery sheet and no stage map, because "
+        "those come from what a run observed and nothing was observed.",
+        f"{filled} of {cells} cell(s) were read out of the file. A CHR ROM bank "
+        "*is* 4 KB of the ROM, so the shape of every tile is exact — what is "
+        "missing is not accuracy, it is organisation.",
+        f"The colours are not. Every one of the {rules} <tile> row(s) in "
+        "chr/fill-rules.hires.txt carries defaultTile=Y, the per-rule palette "
+        "wildcard (ADR-0210): the shape matches whatever palette the game puts it "
+        f"under, and the {STATIC_FILL_PALETTE} the page is *drawn* in is a "
+        "placeholder for reading, never a claim.",
+        "A fill is rendered nearest-neighbour: the recorder smooths its own cells "
+        "and these were never recorded, so they are deliberately crisp.",
+        "This kit is a folder, not a pack, and nothing installs it. To paint: edit "
+        "a page, copy chr/ into a pack folder's textures/ and run "
+        "`python3 scripts/mep_build.py build <pack>` — the build reads "
+        "chr/fill-rules.hires.txt as the manifest and rebuilds textures/hires.txt "
+        "from it.",
+        "Recording the game later never becomes pointless: a run contributes the "
+        "palettes a static page can only wildcard, plus the figures, scenery and "
+        "maps this kit does not have. A recorded cell always wins over a fill.",
+    ]
+
+
+def verify_static(pack: Pack, out_chr: Path, rom: Rom, quiet=False) -> dict:
+    """The static substitute for `verify`'s round-trip, and why it differs.
+
+    ADR-0183 §4 accepts a surface when a rebuilt pack loses and invents no key
+    *against the recording it came from*. A static kit has no recording, so
+    "unchanged" is vacuous and faking it would be worse than useless. What
+    survives of §4 is the half that is checkable here (ADR-0219, F12.9 stop
+    condition 2): the pages-only pack builds with 0 errors and the rebuilt
+    manifest carries exactly one `<tile>` rule per tile of the ROM's CHR, every
+    one of them the `Y` wildcard."""
+    result = {"ran": True, "errors": 0, "rules": 0, "expectedRules": rom.chr_tile_count,
+              "wildcard": 0, "built": False}
+    with tempfile.TemporaryDirectory(prefix="artist-chr-static-verify-") as tmp:
+        target = Path(tmp) / "pack" / "textures" / "chr"
+        target.parent.mkdir(parents=True)
+        shutil.copytree(out_chr, target)
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "mep_build.py"), "build", str(target.parent.parent)],
+            capture_output=True, text=True)
+        result["built"] = proc.returncode == 0
+        result["errors"] = sum(1 for ln in (proc.stdout + proc.stderr).splitlines()
+                               if ln.startswith("error:"))
+        if not result["built"] and not result["errors"]:
+            # A non-zero exit with no `error:` line is still a failure, and
+            # reporting 0 errors beside it would read as a pass.
+            result["errors"] = 1
+        built = target.parent / "hires.txt"
+        if built.is_file():
+            rows = [ln for ln in built.read_text().splitlines() if ln.startswith("<tile>")]
+            result["rules"] = len(rows)
+            result["wildcard"] = sum(1 for ln in rows if ln.rstrip().endswith(",Y"))
+        if not quiet:
+            print(f"  verify: build {'ok' if result['built'] else 'FAILED'}, "
+                  f"{result['errors']} error(s), {result['rules']} <tile> rule(s) "
+                  f"of {result['expectedRules']} expected, "
+                  f"{result['wildcard']} carrying defaultTile=Y")
+    return result
+
+
 def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
     """Drop the completed pages into a copy of the pack, rebuild it, and prove
     nothing was lost.
@@ -1502,13 +1681,48 @@ _PASSTHROUGH_WHY = {
 }
 
 
+def static_input(pack_dir: Path, rom: Rom, rom_path: Path, scale: int, also) -> Pack:
+    """The three refusals of the static path, then the Pack the ROM defines.
+
+    Each refusal is the ADR's, not a convenience: a CHR RAM game has no static
+    source of shape here at all (its recovery pins PRG blocks against *recorded*
+    tiles, and there are none), `--also` presupposes a primary with cells to
+    donate to, and a folder that already holds a recording is a recorded pack —
+    running the static path over it would replace evidence with inference, which
+    is the one thing ADR-0183 §3 forbids."""
+    if not rom.has_chr_rom:
+        raise ChrKitError(
+            f"{rom_path.name}: a CHR RAM game has no CHR in the file, so a static kit "
+            "has nothing to read — its pattern tables are built at run time from PRG "
+            "data, and pinning a PRG block needs recorded tiles. The only static source "
+            "of shape for these games is a third-party key index read as facts: "
+            "`scripts/mep_import.py index` (ADR-0210 §3, PRD F12.12)")
+    if also:
+        raise ChrKitError(
+            "--also is another recording used as evidence for a recorded pack's holes; "
+            "--static has no recording for it to attach to")
+    if (pack_dir / "textures" / "hires.txt").is_file():
+        raise ChrKitError(
+            f"{pack_dir}: this folder holds a recording (textures/hires.txt) — run "
+            "without --static to complete it from the ROM. A static kit is what a kit "
+            "looks like when there is no recording at all")
+    rom_sha1 = hashlib.sha1(rom_path.read_bytes()).hexdigest().lower()
+    pack = Pack(pack_dir, static=rom, scale=scale, rom_sha1=rom_sha1)
+    if not pack.images:
+        raise ChrKitError(f"{rom_path.name}: CHR ROM smaller than one 4 KB bank")
+    return pack
+
+
 def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
-        do_verify, quiet, also=()):
-    pack = Pack(pack_dir)
+        do_verify, quiet, also=(), static=False, scale=DEFAULT_STATIC_SCALE):
     rom = Rom(rom_path)
+    if static:
+        pack = static_input(pack_dir, rom, rom_path, scale, also)
+    else:
+        pack = Pack(pack_dir)
     names = load_names(names_path)
 
-    pages = collect_pages(pack)
+    pages = static_pages(pack) if static else collect_pages(pack)
     if not pages:
         raise ChrKitError(f"{pack_dir}: textures/hires.txt references no chr/ page")
     banks = collect_banks(pack, pages)
@@ -1519,7 +1733,12 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     # with that game's graphics, then reported as an exact ROM fill. The fill
     # is the one place a wrong input produces confident, plausible, wrong art,
     # so the ROM is pinned to the recording rather than merely type-checked.
-    if pack.rom_sha1 and set(pack.rom_sha1) != {"0"}:
+    # On the static path there is no recording to pin against, so this guard has
+    # no anchor and the caller's --rom is the whole of the input (ADR-0219
+    # Consequences). The substitute is that the manifest records the ROM's own
+    # SHA-1 and every cell says `seen: false`: the art is the named ROM's, and
+    # the kit never claims it is any particular game's.
+    if not pack.static and pack.rom_sha1 and set(pack.rom_sha1) != {"0"}:
         actual = hashlib.sha1(rom_path.read_bytes()).hexdigest().lower()
         if actual != pack.rom_sha1:
             raise ChrKitError(
@@ -1527,8 +1746,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                 f"from ({pack.rom_sha1.upper()}) — filling from another game would write its "
                 f"graphics into this one and report them as exact")
 
+    # Static pages are derived from this very ROM, so the pack cannot disagree
+    # with it about CHR kind; the check below is about a recorded pack paired
+    # with the wrong file.
     expect_ram = not rom.has_chr_rom
-    for b in banks:
+    for b in ([] if pack.static else banks):
         if b.kind in ("chrRam", "chrRom") and b.is_chr_ram != expect_ram:
             raise ChrKitError(
                 f"{b.primary.name}: the pack says "
@@ -1542,10 +1764,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     donors = [Donor(p, pack, pack_dir) for p in also_paths]
     donor_notes = attach_donors(banks, donors)
 
-    images = {p.name: {"hd": read_png(p.path),
-                       "orig": (read_png(p.path.parent / (p.name + ".orig.png"))
-                                if (p.path.parent / (p.name + ".orig.png")).is_file() else None)}
-              for p in pages}
+    images = static_images(pages) if pack.static else {
+        p.name: {"hd": read_png(p.path),
+                 "orig": (read_png(p.path.parent / (p.name + ".orig.png"))
+                          if (p.path.parent / (p.name + ".orig.png")).is_file() else None)}
+        for p in pages}
     table = learn_palette(banks, images, rom)
 
     stats = collections.Counter()
@@ -1580,7 +1803,23 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                                 _PASSTHROUGH_WHY[b.kind].format(id=b.id)))
 
     rules_path = out_chr / "fill-rules.hires.txt"
-    if rules:
+    if rules and pack.static:
+        # On the static path these rows are not a suggestion beside a recording:
+        # they are the whole manifest, one per tile in the file, every one of
+        # them `defaultTile = Y`. So the file carries the header and the <img>
+        # lines a build needs, and `mep_build.py build` reads it as the key
+        # source of a pages-only pack (ADR-0219, PRD F12.9 (2)).
+        head = [f"<ver>{PACK_VERSION}", f"<scale>{pack.scale}",
+                f"<supportedRom>{pack.rom_sha1.upper()}"]
+        head += [f"<img>{rel}" for rel in pack.images]
+        rules_path.write_text(
+            PAGES_ONLY_MARK + "\n"
+            f"# The manifest of a static kit: one <tile> row per tile of "
+            f"{rom_path.name}'s own CHR,\n"
+            "# every one of them defaultTile=Y (the palette wildcard) and every one of\n"
+            "# them `seen: false` in the sidecars. Nothing here was observed in play.\n"
+            + "\n".join(head + rules) + "\n", encoding="utf-8")
+    elif rules:
         rules_path.write_text(
             f"// <tile> rows for ROM-filled cells, --fill-rules={fill_rules}.\n"
             "// NOT part of the drop-in: appending these to a pack's textures/hires.txt\n"
@@ -1605,7 +1844,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
     donated_clause = (f"{donated} donated by {len(donors)} other recording(s), "
                       if donors else "")
-    notes = [
+    notes = static_notes(rom_path, real_cells, filled, len(rules)) if pack.static else [
         f"{len(real)} real CHR bank(s) of 256 tiles each ({real_cells} tiles): "
         f"{recorded} recorded by the run, {donated_clause}{filled} filled from "
         f"{rom_path.name}, {real_cells - recorded - donated - filled} still empty.",
@@ -1700,6 +1939,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "generator": "scripts/artist_chr_kit.py",
         "pack": str(pack_dir),
         "rom": rom_path.name,
+        # Only on the static path, so a recorded run writes the bytes it wrote
+        # before this flag existed. `static` is what ARTIST.md keys its first
+        # line off, and `romSha1` is the whole of what identifies the input when
+        # there is no recording to pin against (ADR-0219).
+        **({"static": True, "romSha1": pack.rom_sha1.upper()} if pack.static else {}),
         "romHasChrRom": rom.has_chr_rom,
         "mapper": rom.mapper,
         "totals": {
@@ -1738,12 +1982,18 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "verify": {"ran": False},
     }
     if do_verify:
-        fragment["verify"] = verify(pack, out_chr, quiet=quiet)
+        fragment["verify"] = (verify_static(pack, out_chr, rom, quiet=quiet) if pack.static
+                              else verify(pack, out_chr, quiet=quiet))
 
     (out_dir / "kit-part-chr.json").write_text(
         json.dumps(fragment, indent=1) + "\n", encoding="utf-8")
 
-    if not quiet:
+    if not quiet and pack.static:
+        print(f"{rom_path.name} — static, no recording")
+        print(f"  {len(files)} page(s) in {len(banks)} bank(s) -> {out_chr}")
+        print(f"  {real_cells} cell(s), all fill / seen: false; "
+              f"{len(rules)} <tile> rule(s), all defaultTile=Y")
+    elif not quiet:
         pct = 100.0 * recorded / real_cells if real_cells else 0.0
         done = 100.0 * (recorded + donated + filled) / real_cells if real_cells else 0.0
         print(f"{pack_dir}")
@@ -1763,7 +2013,9 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("pack", type=Path, help="recorded pack dir (the auto/ folder)")
+    ap.add_argument("pack", type=Path,
+                    help="recorded pack dir (the auto/ folder); with --static, a missing "
+                         "or empty folder used only to place the kit beside")
     ap.add_argument("--rom", type=Path, required=True,
                     help="the .nes file the pack was recorded from")
     ap.add_argument("--out", type=Path, default=None,
@@ -1782,17 +2034,36 @@ def main(argv=None):
                          "pack already has that (pattern, palette) key (adds no key, "
                          "but re-binds one to another image) / always (unsafe: it "
                          "changes what a rebuilt pack renders)")
+    # ADR-0219 / PRD F12.9. Not a mode of the recorded path with the recording
+    # left out: it is the same projection over the one source that is available
+    # before any play session, and it says so on every cell it writes.
+    ap.add_argument("--static", action="store_true",
+                    help="no recording: project every page over the ROM's own CHR "
+                         "(CHR ROM games only). Every cell is a fill, seen: false, and "
+                         "the kit has no figure, scenery or map surface")
+    ap.add_argument("--scale", type=int, default=DEFAULT_STATIC_SCALE,
+                    help=f"--static only: the upscale the pages are drawn at "
+                         f"(default {DEFAULT_STATIC_SCALE}, the recorder's own). A "
+                         "recorded run takes its scale from the recording instead")
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
+    if args.scale < 1 or args.scale > 10:
+        raise SystemExit("error: --scale out of range (1..10)")
 
     pack_dir = args.pack.resolve()
     out_dir = (args.out or pack_dir.parent / "kit").resolve()
     if out_dir == pack_dir or str(out_dir).startswith(str(pack_dir) + os.sep):
         raise SystemExit("error: --out must not be inside the recorded pack")
+    # With no recording there is no key that was ever observed, so "emit a rule
+    # only for an observed (pattern, palette)" would emit nothing at all and the
+    # kit would have no manifest. A static rule is safe for the opposite reason
+    # to a recorded one: it is the Y wildcard, so it cannot re-bind a key the
+    # pack rendered differently — there is no such key.
+    fill_rules = "all" if args.static else args.fill_rules
     try:
-        run(pack_dir, args.rom.resolve(), out_dir, args.names, args.fill_rules,
-            args.verify, args.quiet, args.also)
+        run(pack_dir, args.rom.resolve(), out_dir, args.names, fill_rules,
+            args.verify, args.quiet, args.also, static=args.static, scale=args.scale)
     except ChrKitError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

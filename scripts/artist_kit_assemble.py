@@ -155,13 +155,22 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
     if not fragments:
         raise KitError(f"no kit-part-*.json fragment in {kit_dir}")
     packs = {f.get("pack") for f in fragments if f.get("pack")}
+    # A static kit's `pack` is an output location that may not even exist, so
+    # the ROM is what names it (ADR-0219).
+    static_rom = next((f.get("rom") for f in fragments
+                       if f.get("static") and f.get("rom")), "")
     kit = {
         "version": 1,
-        "title": title or (sorted(packs)[0] if packs else kit_dir.name),
+        "title": title or static_rom or (sorted(packs)[0] if packs else kit_dir.name),
         "packs": sorted(p for p in packs if p),
         "parts": [],
         "totals": {"files": 0, "cells": 0, "inferred_files": 0, "dropped": 0},
     }
+    # A kit is static only when *every* part of it is: one recorded part means a
+    # recording exists, and the first line must not deny it.
+    if fragments and all(f.get("static") for f in fragments):
+        kit["static"] = True
+        kit["rom"] = next((f.get("rom") for f in fragments if f.get("rom")), "")
     for fragment in fragments:
         _name_surfaces(fragment)
         counts = _count(fragment)
@@ -169,6 +178,10 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
             kit["totals"][key] += value
         kit["parts"].append({
             "part": fragment["part"],
+            # ADR-0219: a part projected over the ROM alone, with no recording.
+            # Carried up so ARTIST.md's first line can say so before anything
+            # else, and absent on every recorded part.
+            **({"static": True} if fragment.get("static") else {}),
             "generator": fragment.get("generator", ""),
             "counts": counts,
             "verify": fragment.get("verify", {}),
@@ -181,12 +194,27 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
 
 def render_markdown(kit: dict) -> str:
     out = [f"# Artist kit - {kit['title']}", ""]
-    out.append(
-        "Everything here was generated from a recording of the game being played. "
-        "Nothing was drawn by hand, and nothing was invented: a caption comes from "
-        "the recording's own data, and anything inferred rather than seen is marked "
-        "as such."
-    )
+    if kit.get("static"):
+        # ADR-0219 / PRD F12.9: the first line, before anything else, because
+        # every later sentence of this page is about what a recording gives an
+        # artist and this kit had none.
+        rom = kit.get("rom") or "the ROM"
+        out.append(
+            f"**Nothing here was seen in play.** Every page was read straight out of "
+            f"{rom}'s own pattern tables, with no recording at all: the shapes are "
+            "exact, the colours are a placeholder, and each cell says `seen: false` "
+            "in its sidecar. There is no figure sheet, no scenery sheet and no stage "
+            "map in this kit - those come from what a run observed, and nothing was "
+            "observed. Record the game and generate the kit again to get them; a "
+            "recorded cell always wins over one of these."
+        )
+    else:
+        out.append(
+            "Everything here was generated from a recording of the game being played. "
+            "Nothing was drawn by hand, and nothing was invented: a caption comes from "
+            "the recording's own data, and anything inferred rather than seen is marked "
+            "as such."
+        )
     out.append("")
     out.append("## Before you paint")
     out.append("")
@@ -232,6 +260,20 @@ def render_markdown(kit: dict) -> str:
     out.append("## When you are done")
     out.append("")
     out.extend([
+        "The kit is a folder, not the pack itself. There is no recording to copy here, "
+        "so the pack is the pages and nothing else:",
+        "",
+        "```",
+        "mkdir -p <game>/painted/textures",
+        "cp -R <kit>/chr <game>/painted/textures/",
+        "python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal",
+        "```",
+        "",
+        "`chr/fill-rules.hires.txt` travels with the pages: it is the manifest, one "
+        "`<tile>` row per tile of the ROM, and the build regenerates "
+        "`textures/hires.txt` from it. Leave every `.orig.png` in the kit - it is the "
+        "untouched reference, and painting it is how your work becomes invisible.",
+    ] if kit.get("static") else [
         "The kit is a folder beside the recording, not the pack itself. To turn painted "
         "work into a pack, copy the recording, drop your files into the copy and build it:",
         "",

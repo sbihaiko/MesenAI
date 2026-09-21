@@ -38,8 +38,9 @@ the one its source actually carries.
    header SHA1 is this ROM's whole-file SHA1.
 3. `entry`  — a matched set with an entry script but no recordable stage: one
    power-on run.
-4. `static` — nothing matched. No recording is possible; a CHR ROM game is
-   F12.9's job, and a CHR RAM game has nothing to fall back on at all.
+4. `static` — nothing matched. No recording is possible; a CHR ROM game gets
+   the static kit F12.9 projects over its own CHR (ADR-0219), and a CHR RAM game
+   has nothing to fall back on at all.
 
 The resolved driver is recorded per ROM whether or not it succeeds, because the
 report's job is to say what the pipeline did, not what it hoped to do.

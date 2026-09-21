@@ -1,11 +1,17 @@
 # ADR-0219: A kit may project over the ROM alone — every cell `fill`, `seen: false`, no play session — which amends ADR-0183 §1's "generated from an already-recorded pack" without making the ROM a second source of truth
 
-- Status: **proposed 2026-09-20. Not decided, and not implemented.** Nothing in
-  this file exists in code: `scripts/artist_chr_kit.py` takes a recorded pack as
-  its positional argument, has no `--static` flag, and `Pack.__init__` raises
-  `f"{root}: no textures/hires.txt — not a recorded pack folder"`. The PRD
-  blocks Part A slice **F12.9** on this amendment, so a human has to accept it
-  before the slice starts.
+- Status: **accepted 2026-09-20, and implemented in the same change as slice
+  F12.9.** Selected through the decision prompt, recorded verbatim as the label
+  the user picked: *"Aceitar e implementar agora (Recomendado)"*. Same-turn
+  implementation is allowed here because both conditions of the project's rule
+  hold: the change ships with unit tests that cover the decision
+  (`scripts/test_artist_chr_kit.py`, `scripts/test_mep_build.py`), and the
+  go-ahead is quoted verbatim in this line and in the PR body. What the file
+  described as absent when it was written — `scripts/artist_chr_kit.py` took a
+  recorded pack as its positional argument, had no `--static` flag, and
+  `Pack.__init__` raised `f"{root}: no textures/hires.txt — not a recorded pack
+  folder"` — is what this change builds; the measurement is
+  `docs/validation/f12.9-static-kit-from-the-rom-2026-09-20.md`.
 - Date: 2026-09-20
 - Related: ADR-0183 §1/§2.4/§3/§4 (the artist kit this amends), ADR-0210 §2
   (the ROM's own CHR as a coverage source), ADR-0172 (the sheet sidecar's CHR

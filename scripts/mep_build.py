@@ -954,12 +954,129 @@ def captured_screen_note(textures_dir: Path):
     return (len(shots), shots[0].stem) if shots else None
 
 
+# First line of a static kit's manifest and of the `hires.txt` a pages-only
+# build writes from it (ADR-0219). `scripts/artist_chr_kit.py` writes it; the
+# two spellings must stay identical, which is why each file names the other.
+PAGES_ONLY_MARK = "# mep-pages-only 1"
+
+
+def _is_pages_only(path: Path) -> bool:
+    """True when `path` is a manifest this build path owns."""
+    if not path.is_file():
+        return False
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        return fh.readline().strip() == PAGES_ONLY_MARK
+
+
+def cmd_build_pages_only(folder: Path, source: Path, args) -> int:
+    """Build a pack that holds only CHR pages — a static kit's `chr/` output.
+
+    ADR-0219 / PRD F12.9. The normal build maps a key source's tile keys onto
+    the cells of `textures/sheets/`, in sheet order: the sheets decide where a
+    key is painted. A pages-only pack has no sheets and no recording, and its
+    manifest (`chr/fill-rules.hires.txt`) already carries every key *with* the
+    image it belongs to and the crop inside it — the page is the surface. So
+    this path validates and emits rather than slicing, and the only thing it
+    rewrites is `<scale>`.
+
+    It is deliberately not a fallback for a pack that merely happens to be
+    missing its sheets: the caller reaches it only when there is no
+    `textures/sheets/` at all *and* the static manifest is present."""
+    text = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    header, tiles, _audio, _body = _parse_source(text)
+    images = [ln.strip()[5:].strip() for ln in text if ln.strip().startswith("<img>")]
+    if not tiles:
+        print(f"error: {source} has no <tile> entries", file=sys.stderr)
+        return 2
+    if not images:
+        print(f"error: {source} has no <img> entries — a pages-only manifest names "
+              "the page each key is painted on", file=sys.stderr)
+        return 2
+
+    src_scale = next((int(h[7:].strip()) for h in header if h.startswith("<scale>")), None)
+    scale = args.scale if args.scale is not None else (src_scale if src_scale else 1)
+    if scale < 1 or scale > 10:
+        print(f"error: scale {scale} out of range (1..10)", file=sys.stderr)
+        return 2
+
+    textures = folder / "textures"
+    sizes = []
+    for rel in images:
+        path = textures / rel
+        if not path.is_file():
+            print(f"error: {rel}: named by the manifest and not in the pack", file=sys.stderr)
+            return 2
+        try:
+            sizes.append(_png_size(path))
+        except BuildError as e:
+            print(f"error: {rel}: {e}", file=sys.stderr)
+            return 2
+
+    cell = 8 * scale
+    rows = []
+    for k, (cond, raw) in enumerate(tiles):
+        f = [x.strip() for x in raw.split(",")]
+        if len(f) < 6:
+            print(f"error: <tile> #{k} has only {len(f)} fields: {raw}", file=sys.stderr)
+            return 2
+        img = int(f[0])
+        if img < 0 or img >= len(images):
+            print(f"error: <tile> #{k} points at <img> {img}, and the manifest names "
+                  f"{len(images)}", file=sys.stderr)
+            return 2
+        x, y = int(f[3]), int(f[4])
+        w, h = sizes[img]
+        if x < 0 or y < 0 or x + cell > w or y + cell > h:
+            print(f"error: <tile> #{k} crops ({x},{y}) {cell}x{cell} outside "
+                  f"{images[img]} ({w}x{h}) — the page was resized, or the scale is "
+                  f"not {scale}", file=sys.stderr)
+            return 2
+        rows.append(f"{cond}<tile>" + ",".join(f))
+
+    out = [PAGES_ONLY_MARK]
+    out += [h if not h.startswith("<scale>") else f"<scale>{scale}" for h in header]
+    if not any(h.startswith("<ver>") for h in out):
+        out.insert(1, f"<ver>{NES_VER}")
+    if not any(h.startswith("<scale>") for h in out):
+        out.append(f"<scale>{scale}")
+    out.append("")
+    out += [f"<img>{rel}" for rel in images]
+    out.append("")
+    out.append(f"# {len(rows)} <tile> row(s) carried over from "
+               f"{source.relative_to(textures)} — a pages-only pack: every key is "
+               "painted on the CHR page it names, and none of them was seen in play.")
+    out += rows
+    (textures / "hires.txt").write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    wildcard = sum(1 for r in rows if r.rstrip().endswith(",Y"))
+    print(f"pages-only pack: {len(images)} page(s), {len(rows)} <tile> rule(s) "
+          f"({wildcard} defaultTile=Y) at scale {scale} -> textures/hires.txt")
+    return 0
+
+
 def cmd_build(args) -> int:
     folder = Path(args.folder).resolve()
     if not folder.is_dir():
         print(f"error: {folder} is not a directory", file=sys.stderr)
         return 2
     scale = args.scale
+
+    # ADR-0219 / PRD F12.9: a pack holding only CHR pages, their sidecars and
+    # the static manifest beside them. There is nothing to slice and no
+    # recording to take attributes from, so it takes its own path.
+    static_manifest = folder / "textures" / "chr" / "fill-rules.hires.txt"
+    if (args.source is None and not (folder / "textures" / "sheets").is_dir()
+            and _is_pages_only(static_manifest)):
+        existing = folder / "textures" / "hires.txt"
+        # A rebuild overwrites the manifest this path wrote before; a recording
+        # is never overwritten, because a pack that has one is not a pages-only
+        # pack and its `hires.txt` is the evidence, not an output.
+        if existing.is_file() and not _is_pages_only(existing):
+            print(f"error: {existing.relative_to(folder)} was not built from these pages "
+                  "— refusing to overwrite a recorded manifest with a pages-only build",
+                  file=sys.stderr)
+            return 2
+        return cmd_build_pages_only(folder, static_manifest, args)
 
     # --- key source (where the tile keys come from) ---
     source = Path(args.source).resolve() if args.source else None
