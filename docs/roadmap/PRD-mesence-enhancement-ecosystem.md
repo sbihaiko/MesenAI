@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as F12.12's code, its bounded input not yet measured; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started) — pack/core roadmap of this
+**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as **F12.12**, bounded input measured the same day, which retracted ADR-0210's own "5 532 keys out of range" Context figure; the ADR-0217/ADR-0218 recorder change re-recorded and closed; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -394,7 +394,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   ROM alone — nothing was seen in play`, `seen % 0.0`, `--verify 0`.
   [Log](../validation/f12.9-static-kit-from-the-rom-2026-09-20.md).
 
-- **F12.12 — implemented, not yet measured** (2026-09-20, PR #361).
+- **F12.12 — shipped** (2026-09-20, PR #361; measured 2026-09-20).
   `mep_import.py index <their hires.txt> --pack <ours> --rom <dump>` implements
   ADR-0210 §3: a community pack's `hires.txt` read as facts about the ROM, never
   opening a PNG of it. On a CHR RAM game every 32-hex key the recording does not
@@ -403,22 +403,43 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   and only in range. The three mandatory filters each have a test, as do the two
   refusals (dump sha1 ≠ the recording's `<supportedRom>`; data-keyed and
   index-keyed packs never meet), and a trapped decoder proves no PNG of the input
-  is opened. **The row's bounded input has not been run**: Contra80s against our
-  Contra recording (expected order of gain +2 585 shapes) and the Ninja Gaiden
-  pack against our dump (expected 0 shapes, 5 532 keys dropped as out of range)
-  are the numbers that close the slice, and there is no `docs/validation/` log
-  for it. Until that runs, the slice is code with unit tests, not a closed row.
+  is opened. The bounded input ran on 2026-09-20, on the two catalog packs at
+  the sha256 their rows declare, against the dumps their `<supportedRom>` names:
+  **Contra80s → 2 583 cells rendered** from the pack's own pattern bytes
+  (13 218 of their rules, 3 404 of their shapes, 3 735 rules we already had,
+  6 166 keys, 131 palettes, 1 364 conditioned rules contributing a bare key and
+  no condition, 0.93 s) — against ADR-0210's prospective +2 585, a difference of
+  two shapes. **Ninja Gaiden → 0 shapes and 401 palettes**, 19 153 of 19 153
+  rules in range, no sheet written, 0.16 s. The run also **retracted ADR-0210's
+  Context item 2**: its "5 532 keys out of range" is a base-16 reading of a
+  `<ver>`100 pack's decimal tokens, and read the loader's way — which is what
+  the shipped code does — the pack's highest index is 8 190 against 8 192 tiles
+  and nothing is dropped. The filter, the decision and the wrong-ROM case all
+  stand; the example did not. ADR-0210 amended the same day.
+  [Log](../validation/f12.12-third-party-index-read-2026-09-20.md).
 
-- **ADR-0217 / ADR-0218 — implemented, not yet measured** (2026-09-20, commit
-  `186077d0`). Both were accepted on 2026-09-20 and the recorder change landed
+- **ADR-0217 / ADR-0218 — shipped** (2026-09-20, commit `186077d0`; measured
+  2026-09-20). Both were accepted on 2026-09-20 and the recorder change landed
   the same day: the forced-rival set shared by ADR-0217 Option C and ADR-0218
   Option A, the write-time exact-key check against every already-committed
   capture (ADR-0217 Option A), and the post-hoc same-priority collision scan with
   its drop-and-log and build-time warning (ADR-0218 Option B). The key comparison
-  is host-free in `ScreenStitcher.cpp` and unit-tested there. What is missing is
-  the same thing F12.12 is missing: no re-measurement against the captures that
-  motivated it (issues #339, #344, #349), and no `docs/validation/` log. The
-  ceiling raise it cost is recorded as ADR-0137's tenth amendment.
+  is host-free in `ScreenStitcher.cpp` and unit-tested there. Re-recorded on
+  2026-09-20 over the four worst games of the F12.2 sweep, same 60 s power-on
+  route before and after, with the "before" run reproducing the sweep's gate
+  definitions byte for byte as a control: **95 co-gated captures of 108 became
+  0 of 61**. Punch-Out!! (issue #339's game) is the clean case — all ten
+  captures kept, none skipped, and the five credits screens that shared one
+  probe triple now carry five distinct ones, which is ADR-0217 Option C
+  separating rather than discarding. The cost is Option A's refusals, and it is
+  large on games whose screens barely differ: Ice Climber goes from 25 captures
+  to 4. ADR-0218 Option B never fired (0 post-hoc drops on all four). The first
+  attempt at this measurement read the stale dylib on disk and nearly reported
+  "the change does nothing"; the binary must be proven to contain the change
+  before it measures anything, and the F12.9 log's binary-provenance sentence is
+  corrected for the same reason. The ceiling raise it cost is recorded as
+  ADR-0137's tenth amendment.
+  [Log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -878,9 +899,12 @@ and F12.7 all shipped on 2026-09-19 (§3). The day-one block (F12.9–F12.12, ad
 **F12.9 shipped with it** on 2026-09-20 (§3), and only F12.11 still waits — on
 ADR-0220, which stays `proposed` by the user's decision of 2026-09-20 (no
 GIMP/Krita population is measured yet, and its stop condition (2) needs a person
-with both programs). Two of the block's rows are code without a measurement:
-F12.12's bounded input has not been run, and neither has a re-measurement of the
-ADR-0217/ADR-0218 recorder change (§3).
+with both programs). The two rows that were code without a measurement were
+both measured on 2026-09-20 and are closed: F12.12's bounded input (2 583 cells
+from Contra80s, 0 shapes and 401 palettes from the Ninja Gaiden pack, and a
+retraction of ADR-0210's "5 532 out of range") and the ADR-0217/ADR-0218
+recorder change (95 co-gated captures of 108 became 0 of 61) — §3 and their
+logs.
 
 **Why this phase.** The comparison table names seven rows where the
 inherited upstream toolchain still serves an author better than the layer

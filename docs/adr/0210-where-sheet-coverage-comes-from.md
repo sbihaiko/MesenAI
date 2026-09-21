@@ -1,7 +1,7 @@
 # ADR-0210: Sheet coverage is completed from the ROM's own CHR; a third-party index contributes palettes for CHR ROM games and the game's own pattern bytes for CHR RAM games — never a pixel of the other pack, and never conditions
 
 - Status: accepted (2026-09-20). User go-ahead, verbatim: *"Sim, implementar agora"*. Same-turn implementation requires unit tests covering the decision; see the implementing PR for that coverage and this quote repeated in its body.
-- Date: 2026-09-18 (amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted. Title amended the same day to agree with §3 — the earlier "never art" contradicted the CHR RAM clause, where the 16 pattern bytes in a key are the game's art and are rendered by us)
+- Date: 2026-09-18 (amended 2026-09-20: Context item 2 retracted against the measurement — its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens, and the Consequences bullet that prescribed that reading is corrected; the Decision is unchanged. Amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted. Title amended the same day to agree with §3 — the earlier "never art" contradicted the CHR RAM clause, where the 16 pattern bytes in a key are the game's art and are rendered by us)
 - Related: ADR-0183 (the artist kit; "an observation, never a reading"), ADR-0209 Q4 (how coverage reaches 100%), ADR-0198 §2/§3 (patched-ROM key namespace), ADR-0145 (optimistic matcher), ADR-0153 (artist-legible sheets), MEP-v1 §5, PRD Part A F9.24, F12.2
 - Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR"
 
@@ -38,10 +38,29 @@ decision:
    Super Mario Bros. carry 512 of 512. A third-party index cannot add a shape
    to a set that is already complete by construction.
 2. **A third-party index can be for a ROM that is not ours, and says so only
-   arithmetically.** The Ninja Gaiden pack's indices run to **33 168** against
+   arithmetically.** ~~The Ninja Gaiden pack's indices run to **33 168** against
    our CHR's 8 192 tiles. 5 532 of its "distinct keys" address tiles that do not
-   exist in the dump we load. A first pass of this measurement reported those
+   exist in the dump we load.~~ A first pass of this measurement reported those
    5 532 as new art; they are nothing of the kind.
+
+   **Retracted 2026-09-20, measured.** The example is wrong and the figure is an
+   artifact of the measurement, not a property of the pack. That pack is
+   `<ver>100`, and `HdPackLoader::ReadTileData` reads the tile token as
+   **decimal** below `<ver>103` and as hex from 103 on. Read the loader's way
+   its highest index is **8 190**, inside the dump's 8 192, and **nothing is out
+   of range**; read in base 16 the same tokens top out at 33 168 with 5 532 past
+   the end. The first pass read base 16 unconditionally, which is also the error
+   the last Consequences bullet used to prescribe (corrected below).
+
+   The *filter* stands and is why this was caught at all — the shipped
+   `scripts/mep_import.py index` applies it through `Rule.parsed_index(ver)`,
+   which branches on `<ver>`, and reports 19 153 of 19 153 rules in range. What
+   does not stand is the claim that index range "disqualifies the Ninja Gaiden
+   pack wholesale": it disqualifies nothing there, and the pack contributes
+   exactly what item 3 says a CHR ROM pack contributes — palettes, no shapes.
+   A pack aimed at another dump is still the case the filter exists for; this
+   simply is not one. Evidence:
+   `docs/validation/f12.12-third-party-index-read-2026-09-20.md`.
 3. **What a third-party index really adds to a CHR ROM game is palettes.** The
    Ninja Gaiden pack names 401 distinct palettes to our 364; Donkey Kong 19 to
    our 8. A pair whose palette we never observed will not match at run time
@@ -168,3 +187,8 @@ Q4(k)'s remainder sheet is the answer, and no format change is involved.
   files must normalise the index (`int(field, 16)`) and must not compare a CHR
   RAM key space against a CHR ROM one. Both traps are cheap to fall into and
   silent.
+- **Corrected 2026-09-20.** "Normalise the index (`int(field, 16)`)" is itself
+  one of those traps: base 16 is right only from `<ver>`103 on, and a `<ver>`100
+  pack's tokens are decimal. Normalise the loader's way — branch on `<ver>`, as
+  `Rule.parsed_index` does — or a pack that is entirely in range reads as
+  two-thirds out of it. This is what the Context item 2 retraction above cost.
