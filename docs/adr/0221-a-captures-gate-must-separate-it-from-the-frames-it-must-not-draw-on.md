@@ -9,7 +9,8 @@
   from cells variants do not change and rivals do not share), ADR-0156 (a
   captured screen owns the cells it covers), ADR-0050 (bootstrap `<background>`
   capture), ADR-0183 §3 (the recorder emits observations, never readings),
-  PRD Part A §3, `docs/validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md`
+  PRD Part A §3, `docs/validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md`,
+  `docs/validation/adr0221-capture-overdraw-harness-2026-09-20.md`
 - Supersedes / amends: nothing yet. Options B, C and D below would each amend
   ADR-0159 §1, and option D would also amend ADR-0156 §Decision; the amendment
   is written when the option is picked, not before.
@@ -168,23 +169,34 @@ the frames, and leave the fix to the artist's own repaint.
    carries". That is a real narrowing of a rule other decisions lean on.
 5. **What is the measurement budget?** Re-recording the 30-ROM library is
    ~15 minutes of wall clock and is what produced every number above; a
-   synthetic-`GridFrame` unit test is seconds but cannot see #339. The stop
-   condition for whichever option wins should say which it requires.
+   synthetic-`GridFrame` unit test is seconds but cannot see #339. Scoring a
+   sweep is now free (`scripts/measure_capture_overdraw.py`, added 2026-09-20),
+   so the cost is the recording, not the reading. The stop condition for
+   whichever option wins should say which it requires.
 
 ## Consequences
 
-- **Whatever is picked, the acceptance test is the same and it exists**:
-  re-render Punch-Out!! at 1 s steps from 10 s to 45 s and count the
-  `STARRING` / `LITTLE MAC` pixels in the render. The ROM draws 7 808 of them;
-  today the render has 0. Any option that does not move that number has not
-  closed #339.
+- **Whatever is picked, the acceptance test is the same and it is now a
+  tool**: `scripts/measure_capture_overdraw.py --sweep <dir>` renders
+  Punch-Out!! at 1 s steps from 10 s to 45 s and counts, per 8×8 cell, what the
+  ROM draws and the render does not. Today it reports **12 of 36 frames losing
+  content, 437 erased cells**, identical before and after ADR-0217/ADR-0218.
+  Any option that does not move that number has not closed #339. The tool is
+  decision-neutral — it measures, it does not pick an option — and its exit
+  code is the verdict, so a sweep can gate whichever fix wins.
+- **There is a second occurrence, at 41–43 s**, that the hand measurement
+  missed: 18, 18 and 27 erased cells after the pre-fight card is long gone. Any
+  option that fixes only the card has not finished the job. See
+  `docs/validation/adr0221-capture-overdraw-harness-2026-09-20.md`; attributing
+  it to a capture still needs the recorder's anchor summary.
 - **Two measurement traps are now known and must be honoured** by anyone
-  re-running this. A pack installed at `mesen-home/HdPacks/<stem>/` is *not*
-  found by `scripts/headless_record` — the log says `LoadHdPack: 0 ms; no-pack`
-  and the screenshot comes back at native 256×240, so a pixel diff reads a
-  misleading zero; the sibling convention `<romdir>/<stem>/auto` loads it. And
-  comparing a rendered pack frame against a nearest-neighbour upscale of the
-  no-pack frame measures the upscale, not correctness.
+  re-running this; the tool enforces both rather than leaving them to the
+  operator. A pack installed at `mesen-home/HdPacks/<stem>/` is *not* found by
+  `scripts/headless_record` — the log says `LoadHdPack: 0 ms; no-pack` and the
+  screenshot comes back at native 256×240, so a pixel diff reads a misleading
+  zero; the sibling convention `<romdir>/<stem>/auto` loads it. And comparing a
+  rendered pack frame against a nearest-neighbour upscale of the no-pack frame
+  measures the upscale, not correctness — which is why the metric is per cell.
 - **Doing nothing has a cost that is not zero.** ADR-0146 auto-installs every
   accepted community pack, so a capture that erases live art reaches players
   without anyone opting in. That is the argument against E and it should be
