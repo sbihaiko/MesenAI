@@ -61,6 +61,7 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
@@ -7229,6 +7230,137 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 	Check(!anyEmpty, "BlocoP: no flag set produces an empty option token the loader would reject");
 }
 
+//BlocoP4 - ADR-0224 (F12.15). HdNesPack::GetPixels is not host-free (it needs
+//NesConsole for its palette), so what is covered here is the rule it applies
+//and the two format ends of the tag: the predicate that decides the re-apply,
+//the loader-side line match, and the header tail the recorder writes. The
+//pixel cases below run the pass sequence of GetPixels as a model - backdrop,
+//behind-background sprite, ROM tile where its colour index is not 0, layer-2
+//<background>, the ADR-0224 re-apply, front sprite - over flat colours, with
+//the real predicate deciding the re-apply. The renderer itself is proven on
+//the headless render: a pack without the tag must come back byte-identical
+//(docs/validation/f12.15-behind-bg-sprites-2026-09-22.md).
+namespace
+{
+	struct ModelPixel
+	{
+		bool BgSprite = false;      //an opaque behind-background sprite covers the pixel
+		bool FrontSprite = false;   //an opaque front sprite covers the pixel
+		uint8_t BgColorIndex = 0;   //the ROM's background colour index
+		bool Layer2Covers = true;   //a priority-20 <background> paints the pixel
+	};
+
+	constexpr uint32_t kBackdrop = 0xFF000000;
+	constexpr uint32_t kBgSpriteColor = 0xFF00FF00;
+	constexpr uint32_t kFrontSpriteColor = 0xFFFF0000;
+	constexpr uint32_t kTileColor = 0xFF0000FF;
+	constexpr uint32_t kScreenColor = 0xFFFFFFFF;
+
+	uint32_t ModelGetPixels(const ModelPixel& p, bool packOptedIn)
+	{
+		uint32_t out = kBackdrop;
+		int lowestBgSprite = 999;
+		if(p.BgSprite) {
+			lowestBgSprite = 0;
+			out = kBgSpriteColor;
+		}
+		if(p.BgColorIndex != 0) {
+			out = kTileColor;
+		}
+		bool layer2Painted = false;
+		if(p.Layer2Covers && out != kScreenColor) {
+			out = kScreenColor;
+			layer2Painted = true;
+		}
+		if(HdBehindBgSpriteRule::KeepsBehindBgSprite(packOptedIn, lowestBgSprite, p.BgColorIndex, layer2Painted)) {
+			out = kBgSpriteColor;
+		}
+		if(p.FrontSprite) {
+			out = kFrontSpriteColor;
+		}
+		return out;
+	}
+}
+
+void TestBehindBgSpriteRuleIsOffWithoutTheTag()
+{
+	ModelPixel spriteOverCanvas;
+	spriteOverCanvas.BgSprite = true;
+	Check(ModelGetPixels(spriteOverCanvas, false) == kScreenColor,
+		"BlocoP4: without the tag a recorded screen paints over a behind-background sprite on colour-0 canvas, as today");
+
+	bool anyKept = false;
+	for(int lowest : {999, 0, 3}) {
+		for(uint8_t index : {(uint8_t)0, (uint8_t)1, (uint8_t)3}) {
+			for(bool painted : {false, true}) {
+				anyKept |= HdBehindBgSpriteRule::KeepsBehindBgSprite(false, lowest, index, painted);
+			}
+		}
+	}
+	Check(!anyKept, "BlocoP4: with the pack opted out the predicate is false for every input, so every other pack renders byte-identically");
+}
+
+void TestBehindBgSpriteRuleKeepsTheSpriteOverColourZero()
+{
+	ModelPixel spriteOverCanvas;
+	spriteOverCanvas.BgSprite = true;
+	Check(ModelGetPixels(spriteOverCanvas, true) == kBgSpriteColor,
+		"BlocoP4: with the tag the behind-background sprite stays visible where the ROM background is colour 0");
+	Check(HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 0, true),
+		"BlocoP4: predicate: opted in, opaque bg sprite, colour 0, layer 2 painted -> re-apply");
+}
+
+void TestBehindBgSpriteRuleHidesTheSpriteUnderAnOpaqueBackground()
+{
+	ModelPixel spriteUnderWall;
+	spriteUnderWall.BgSprite = true;
+	spriteUnderWall.BgColorIndex = 2;
+	Check(ModelGetPixels(spriteUnderWall, true) == kScreenColor,
+		"BlocoP4: an opaque ROM background pixel (colour index != 0) still hides the sprite - the screen paints as today");
+	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 2, true),
+		"BlocoP4: predicate: colour index != 0 -> no re-apply");
+	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 999, 0, true),
+		"BlocoP4: predicate: no opaque behind-background sprite drew here (999) -> no re-apply, a transparent sprite pixel never blocks the screen");
+	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 0, false),
+		"BlocoP4: predicate: layer 2 did not paint the pixel -> nothing to undo");
+}
+
+void TestBehindBgSpriteRuleLeavesFrontSpritesAlone()
+{
+	ModelPixel front;
+	front.BgSprite = true;
+	front.FrontSprite = true;
+	Check(ModelGetPixels(front, true) == kFrontSpriteColor && ModelGetPixels(front, false) == kFrontSpriteColor,
+		"BlocoP4: a front sprite draws last with or without the tag");
+
+	ModelPixel noSprite;
+	Check(ModelGetPixels(noSprite, true) == ModelGetPixels(noSprite, false),
+		"BlocoP4: a pixel with no sprite renders the same with and without the tag");
+}
+
+void TestBehindBgSpriteTagLineParsesAndWrites()
+{
+	Check(HdBehindBgSpriteRule::IsTagLine("<bgPreservesBehindBgSprites>"),
+		"BlocoP4: the loader recognises the bare tag line");
+	Check(!HdBehindBgSpriteRule::IsTagLine("<bgPreservesBehindBgSprites>1") && !HdBehindBgSpriteRule::IsTagLine("<options>bgPreservesBehindBgSprites"),
+		"BlocoP4: the tag takes no arguments and is not an <options> token");
+
+	HdPackData data;
+	Check(!data.PreservesBehindBgSprites, "BlocoP4: a pack starts opted out");
+
+	std::ostringstream withOptions;
+	HdBehindBgSpriteRule::WriteHeaderTail(withOptions, (uint32_t)HdPackOptions::AutomaticFallbackTiles);
+	Check(withOptions.str() == "<options>automaticFallbackTiles\n<bgPreservesBehindBgSprites>\n",
+		"BlocoP4: the recorder writes the tag right after the <options> line, and the <options> line is unchanged");
+
+	std::ostringstream chrRam;
+	HdBehindBgSpriteRule::WriteHeaderTail(chrRam, 0);
+	Check(chrRam.str() == "<bgPreservesBehindBgSprites>\n",
+		"BlocoP4: a CHR RAM pack (no option flags) still gets the tag and still gets no <options> line");
+	Check(HdPackOptionsToString((uint32_t)HdPackOptions::AutomaticFallbackTiles).find("bgPreserves") == std::string::npos,
+		"BlocoP4: HdPackOptionsToString gained no token");
+}
+
 //Issue #302: the Metroid pack logged 8 234 loader errors over 28 distinct
 //messages, evicting every other entry from MessageManager's 1 000-entry ring.
 void TestHdPackErrorDedupeLogsEachDistinctMessageOnce()
@@ -8627,6 +8759,11 @@ int main()
 	TestCaptureSizeRejectsAnAbsurdlyLargeFrame();
 	TestHdPackOptionsLineHasNoTrailingComma();
 	TestHdPackOptionsLineOrderAndEmptiness();
+	TestBehindBgSpriteRuleIsOffWithoutTheTag();
+	TestBehindBgSpriteRuleKeepsTheSpriteOverColourZero();
+	TestBehindBgSpriteRuleHidesTheSpriteUnderAnOpaqueBackground();
+	TestBehindBgSpriteRuleLeavesFrontSpritesAlone();
+	TestBehindBgSpriteTagLineParsesAndWrites();
 	TestHdPackErrorDedupeLogsEachDistinctMessageOnce();
 	TestHdPackErrorDedupeIsPerLoad();
 	TestHdPackErrorDedupeCapsDistinctMessages();

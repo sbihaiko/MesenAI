@@ -95,6 +95,8 @@ def test_inferred_art_is_marked_in_the_page_an_artist_reads():
         check("mep_build.py build" in text and "cp -R" in text,
               "the page says to build a copy of the recording, not the recording itself")
         check("ADR-0147" in text, "the page cites the layer rule it follows")
+        check("<bgPreservesBehindBgSprites>" in text and "ADR-0224" in text,
+              "the page tells the artist what the recorder's opt-in tag is, so it is not deleted as noise")
 
 
 def test_a_dropped_surface_keeps_its_reason():

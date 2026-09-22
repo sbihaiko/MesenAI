@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include "NES/HdPacks/HdNesPack.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackLoader.h"
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
@@ -550,6 +551,25 @@ HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32
 }
 
 template<uint32_t scale>
+void HdNesPack<scale>::DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite)
+{
+	for(int k = pixelInfo.SpriteCount - 1; k >= 0; k--) {
+		if(pixelInfo.Sprite[k].BackgroundPriority) {
+			if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
+				lowestBgSprite = k;
+			}
+
+			HdPackTileInfo* hdPackSpriteInfo = GetMatchingTile(x, y, &pixelInfo.Sprite[k]);
+			if(hdPackSpriteInfo) {
+				DrawTile(pixelInfo.Sprite[k], *hdPackSpriteInfo, outputBuffer, screenWidth);
+			} else if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
+				DrawColor(_palette[pixelInfo.Sprite[k].SpriteColor], outputBuffer, screenWidth);
+			}
+		}
+	}
+}
+
+template<uint32_t scale>
 void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth)
 {
 	HdPackTileInfo* hdPackTileInfo = nullptr;
@@ -574,20 +594,7 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 	}
 
 	if(hasSprite) {
-		for(int k = pixelInfo.SpriteCount - 1; k >= 0; k--) {
-			if(pixelInfo.Sprite[k].BackgroundPriority) {
-				if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
-					lowestBgSprite = k;
-				}
-
-				hdPackSpriteInfo = GetMatchingTile(x, y, &pixelInfo.Sprite[k]);
-				if(hdPackSpriteInfo) {
-					DrawTile(pixelInfo.Sprite[k], *hdPackSpriteInfo, outputBuffer, screenWidth);
-				} else if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
-					DrawColor(_palette[pixelInfo.Sprite[k].SpriteColor], outputBuffer, screenWidth);
-				}
-			}
-		}
+		DrawBehindBgSprites(x, y, pixelInfo, outputBuffer, screenWidth, lowestBgSprite);
 	}
 
 	for(int i = 0; i < _activeBgCount[1]; i++) {
@@ -615,6 +622,7 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 
 	uint32_t pixelAfterTile = trackTileSuppression ? *outputBuffer : 0;
 	HdBackgroundInfo* coveringBackground = nullptr;
+	bool layer2Painted = false;
 
 	for(int i = 0; i < _activeBgCount[2]; i++) {
 		uint32_t before = *outputBuffer;
@@ -623,7 +631,19 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 			//The comparison is scoped to this one draw, so a sprite drawn
 			//between the layers can never be blamed on a background.
 			coveringBackground = bgInfo;
+			layer2Painted = true;
 		}
+	}
+
+	//ADR-0224: a pack that opted in keeps a behind-background sprite visible
+	//where the ROM's background pixel is colour 0 - on hardware the sprite
+	//shows there, and a recorded screen (ADR-0050) carries no sprite of either
+	//priority, so the layer-2 draw above just painted canvas over it. The pass
+	//is re-applied rather than the layer skipped, so layers 0/1 and the tile
+	//stay as they were and the #328 counters above are untouched.
+	if(HdBehindBgSpriteRule::KeepsBehindBgSprite(_hdData->PreservesBehindBgSprites, lowestBgSprite, pixelInfo.Tile.BgColorIndex, layer2Painted)) {
+		int ignored = 999;
+		DrawBehindBgSprites(x, y, pixelInfo, outputBuffer, screenWidth, ignored);
 	}
 
 	if(hasSprite) {

@@ -139,6 +139,10 @@ private:
 	void BuildAdditionalTileCache(int32_t x, int32_t y, HdPpuTileInfo& tile, bool checkFallbackTiles);
 	void InsertAdditionalSprite(int32_t x, int32_t y, HdPpuTileInfo& sprite, HdPackAdditionalSpriteInfo& additionalSprite);
 
+	//The behind-background sprite pass. Records in lowestBgSprite the topmost
+	//opaque one it drew (999 when none). Run once before layer 1 as always, and
+	//again after layer 2 on the pixels ADR-0224's opt-in names.
+	__forceinline void DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite);
 	__forceinline void GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth);
 	__forceinline void ProcessGrayscaleAndEmphasis(HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t hdScreenWidth);
 

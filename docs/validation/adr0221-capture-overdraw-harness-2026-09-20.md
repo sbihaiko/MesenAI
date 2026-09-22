@@ -74,7 +74,49 @@ only the pre-fight card has not finished the job.
   is ~15 minutes of wall clock and would give the real scale of #339 — that is
   the "measurement budget" question ADR-0221 §5 leaves to a human.
 - **Nothing about sprites.** A `<background>` does not cover sprites, so sprite
-  content is never erased and never counted here.
+  content is never erased and never counted here. *(Wrong, as it turned out:
+  the priority-20 layer does cover behind-background sprites, and 63 of the
+  437 cells above are exactly that — see the 2026-09-22 addendum below.)*
+
+## Addendum 2026-09-22 — two columns under the total (F12.15, ADR-0224 §4)
+
+The total misled: it scores a cell "erased" when the render is flat where the
+ROM had detail, without asking whether the detail was *background* or a
+*sprite*. On the fight frames (41–45 s) every flagged cell is a
+behind-background sprite — Glass Joe's shorts and legs, OAM attribute bit 5
+set — painted over by the priority-20 `<background>` layer, which
+`HdNesPack::GetPixels` draws after the behind-background sprite pass. No gate
+rule can move that number; ADR-0221's "0 erased" was therefore unreachable on
+this route under every option, and "the number to beat" in ADR-0223 had to be
+argued by hand. The tool now takes `--grid <grid.txt>` (the recording the sweep
+replays), locates each no-pack screenshot in the grid dump by background match
+(the residual, sprite-covered cells, is printed so a bad match is visible),
+and splits `erased` by the retained frame's own background plane:
+**`erased background`** — the ROM's background tiles have detail in the cell,
+the capture sits on content it lacks, the number ADR-0221/ADR-0223 gates are
+judged on — and **`erased sprite`** — the background is flat there, so the
+buried detail can only be a sprite, ADR-0224's renderer change. Sprite presence
+is cross-checked against the frame's `M` RAM line (shadow OAM at `$0200`, which
+also yields the behind-BG bit as the `behind-bg` column) or, failing that, the
+ADR-0222 OAM dump — whose `<shape>,<x>,<y>,<pal>` entry carries **no attribute
+byte**, so from that source `behind-bg` is `n/a` rather than invented.
+`--verdict background` makes the exit code follow the first column, the F12.15
+stop condition; the default stays on the total for the older logs. Re-run on
+the same sweep (`--sprite-height 16`, Punch-Out!! draws 8x16 sprites; at 8 the
+tool reports 22 `unattributed` cells, at 16 none):
+
+| pack | window | erased | background | sprite | behind-bg |
+|---|---|---|---|---|---|
+| before = after | 19–27 s | 10, 17, 19, 33, 39, 52, 62, 71, 71 | same | 0 | 0 |
+| before = after | 41–43 s | 18, 18, 27 | 0 | 18, 18, 27 | 18, 18, 23 |
+| before = after | 44–45 s | 0 | 0 | 0 | 0 |
+| proto (ADR-0223 B+probes) | 19–27 s | 0 | 0 | 0 | 0 |
+| proto | 41–45 s | 18, 18, 27, 34, 44 | 0 | 18, 18, 27, 34, 44 | 18, 18, 23, 33, 44 |
+
+ADR-0224's prediction holds: the card is background loss with zero sprite
+loss, the fight is sprite loss with zero background loss; the prototype's 141
+is 0 on the background column, so it passes `--verdict background` while the
+shipped pack's 374 does not.
 
 ## Traps honoured
 
