@@ -1,10 +1,17 @@
 # ADR-0222: The retained OAM stream must let lint resolve a sprite to its tile data and palette, so `spriteNearby`, `spriteAtPosition`, `positionCheck*` and `memoryCheck` stop reporting `not evaluable`
 
-- Status: **proposed** (2026-09-22). The Decision below is an either/or —
-  three options for the sprite side, and one point (`memoryCheck`) that needs
-  no format change and is stated so it is not lost again. It stays `proposed`
-  until a human picks; see "What a human has to pick". Nothing here is
-  implemented.
+- Status: **accepted 2026-09-22 — option A, not implemented.** User's picks
+  through a structured question, verbatim: *"A: dump autodescritivo
+  (Recommended)"* and *"So registrar (Recommended)"* — a decision and a request
+  for work, with no same-turn implementation and no go-ahead to build sought or
+  given. The pending slice is PRD Part A **F12.14**. Answers to *What a human
+  has to pick*: (1) A; (2) yes — one palette id per entry, and `SameEntries`
+  compares it; (3) the viewer's wire format follows: ADR-0169's OAM entries
+  gain the same byte and `make capture-tool` is rebuilt, so dump and wire do
+  not diverge; (4) the stop condition is the one stated in question 4, and the
+  re-record of the F12.6a Contra route is required. `memoryCheck` ships with
+  the same slice. Proposed earlier the same day with the three options below,
+  which stay in the file as the record of what was weighed.
 - Date: 2026-09-22
 - Related: ADR-0197 (§2 lint validates authored conditions against recorded
   routes; §3 the retained `$0000`–`$07FF` window, option (b), shipped as
@@ -18,10 +25,12 @@
   `docs/validation/f12.6b-recorder-retains-internal-ram-2026-09-19.md`,
   `scripts/mep_conditions.py`, `scripts/stages/README.md` ("Two env-gated
   save-time dumps")
-- Supersedes / amends: nothing yet. Options A and B below amend ADR-0197 §3's
-  "Limits" list (the sprite bullets) and the dump-format sentence of
-  `scripts/stages/README.md`; the amendment is written when the option is
-  picked.
+- Supersedes / amends: ADR-0197 §3's "Limits" list — the sprite bullets stop
+  being permanent limits and become "a recording made before F12.14 reports
+  `not evaluable: OAM stream carries no tile data`"; the dump-format sentence
+  of `scripts/stages/README.md` ("`node,x,y` per sprite"); and ADR-0169's OAM
+  wire format by reference (one palette byte per entry). Each amendment is
+  written in the PR that ships F12.14, not before.
 
 ## Context
 
@@ -97,8 +106,26 @@ OAM dump — it was not.
 
 ## Decision
 
-**Open.** The question is: *how does a reader of the OAM stream get from a
-sprite entry to the `(tileData, palette)` a condition names?*
+### Decided 2026-09-22: option A
+
+**The OAM dump becomes self-describing, exactly as the grid dump is.** It
+interns shapes with `K <id> <32 hex tile data> <8 hex palette>` and palette
+words with `P <id> <8 hex palette>`, and each sprite entry is written as
+`<shape>,<x>,<y>,<pal>` — `shape` the `ShapeId` `RecordOamEntry` already
+holds, `pal` the interned palette word of the sprite's OAM attribute bits.
+`OamEntry` gains that palette id and `SameEntries` compares it, so two frames
+that differ only in sprite colour no longer collapse. The frame line keeps
+its `<frame> <repeat> <port1> <port2>` prefix (ADR-0181). `mep_conditions.py`
+gains a `parse_oam_dump` beside `parse_grid_dump`, and `spriteNearby`,
+`spriteAtPosition`, `positionCheckX/Y` and `originPositionCheckX/Y` get a
+verdict from the OAM file alone; `memoryCheck` reads its second operand from
+the `M` line as stated below. The pose-succession consumers of the old
+`node` token are named in the slice and their frozen logs keep their text.
+
+### The options as proposed
+
+The question was: *how does a reader of the OAM stream get from a sprite
+entry to the `(tileData, palette)` a condition names?*
 
 ### A. Make the OAM dump self-describing, like the grid dump
 
