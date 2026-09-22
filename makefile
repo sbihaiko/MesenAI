@@ -472,6 +472,12 @@ doc-checks: check-manifest
 	#Generate Image Assets grammar, a Windows file system and the kit's own
 	#manifest all have to accept. Pure string rules; no kit, no pack, no ROM.
 	python3 scripts/test_asset_names.py
+	#ADR-0209 Q2 (e) / Q3 (i): a sprNNN/objNNN figure exported as one PNG
+	#through the pack's own offsets, and the painted file brought back onto
+	#exactly the sheet cells it came from -- unpainted round-trip writes zero
+	#cells, one painted cell changes one sheet cell, build keeps the key set.
+	#Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_mep_figure.py
 	#F12.6a (ADR-0197): hand-authored conditions -- the syntax a sheet may
 	#carry, and the evaluation of one against a recorded route, written from
 	#HdPackConditions.h. Synthetic grid streams; no emulator, no ROM.

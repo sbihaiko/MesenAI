@@ -500,6 +500,37 @@ A resized canvas is refused rather than half-applied: the reload keeps the old
 pixels and logs the two sizes, because the sheet's sidecar names a crop that a
 smaller image no longer holds. Repaint at the size you were given.
 
+### Mark a figure and paint it whole
+
+A `sprNNN` sheet cuts a character into the fragments the recorder grouped, and
+a soldier painted at the waist is hard to paint well. To paint the character
+instead, export the figure as one PNG (ADR-0209 Q2, the `sprNNN` unit of
+ADR-0168 reassembled through the offsets the pack already recorded), paint
+that, and bring it back onto the cells it came from (ADR-0209 Q3, the same
+explicit return path as any other surface):
+
+```sh
+python3 scripts/mep_figure.py export out/painted spr000 --out out/kit/figures
+#   -> out/kit/figures/spr000-figure.png       paint this one
+#      out/kit/figures/spr000-figure.orig.png  never this one (the 1x reference)
+#      out/kit/figures/spr000-figure.json      which sheet cell each rect came from
+python3 scripts/mep_figure.py import out/painted out/kit/figures/spr000-figure.png --verify
+python3 scripts/mep_build.py build out/painted
+```
+
+Then *HD Packs > Reload Repainted Images*, as above. `export` takes a
+`sprNNN`, an `objNNN` or a `poseNNN` id; the printed `layout from poses` /
+`layout from walk` line says whether the layout is the silhouette the recorder
+saw in one frame (`sheets/poses.json`) or the ADR-0168 evidence walk a pack
+recorded before that sidecar falls back to — the walk is a guess, and any
+member it could not place is listed rather than drawn at a guessed spot.
+`import` writes only the cells that differ from the `.orig.png` twin, into the
+sheet each came from (the `sprNNN` sheet itself, or `sprites.png` for a member
+the group does not hold), and leaves everything else alone; `--verify` rebuilds
+a throwaway copy and asserts the `(tileData, palette)` key set is unchanged.
+The surface is at the pack's scale like every other sheet, and a resized
+figure is refused the same way.
+
 Do not hand-edit `textures/hires.txt`. It is generated from the sheets by
 `mep_build.py build`, and an edit there is thrown away on the next build. Copy
 each sheet **together with its `.json`** — the sidecar is the slicing contract
