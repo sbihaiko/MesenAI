@@ -2,9 +2,23 @@
 
 - Status: accepted — reflected in `Core/NES/HdPacks/{ScreenStitcher,HdPackBuilder,TileSheetTypes}`; the code landed with the measurement, this ADR records the decision behind it
 - Date: 2026-09-05
-- Amended: 2026-09-05 (palette-swapped variants; see below)
+- Amended: 2026-09-05 (palette-swapped variants; see below); 2026-09-22 (ADR-0221 narrows §1's definition of *variant*; see below)
 - Related: ADR-0162 (the accuracy harness reuses `FrameCapture.h`), ADR-0050 (bootstrap `<background>` capture), ADR-0153 (sheets), ADR-0156 (screen residency), PRD Part A Phase 9, issue #164, `Core/NES/HdPacks/ScreenStitcher.cpp`, `Core/NES/HdPacks/HdPackBuilder.cpp`, `scripts/spike_anchor_stability.py`
 - Amends: ADR-0050 §Decision, the clause "up to three `tileAtPosition` anchors (rarest non-flat tiles on screen, ≥ 64 px apart)" — both the criterion and the moment it is applied. Lifts ADR-0156 §Non-goals' exclusion of "changing what `CaptureScreen` captures, or its anchors".
+
+## Amended 2026-09-22: a variant may not add content the capture lacks
+
+ADR-0221 (accepted 2026-09-22, option B; pending as PRD slice F12.13) narrows
+§1. "Cells that no variant of this screen changes" assumed a variant differs
+from the captured frame only in art the capture also carries. Issue #339
+measured the case it does not: a frame agreeing on 919 of 960 cells (0.9573,
+above `kAnchorVariantAgree`) that draws text where the capture holds a flat
+white block. Under §1 as written those 41 cells were excluded from the anchor
+pool by construction, and the capture drew over the text. From ADR-0221 on, a
+frame is a variant only when every cell it changes is non-empty in the
+captured frame too; a frame that adds content to an empty cell is a rival,
+whatever its ratio. The threshold, §2, §3 and §4 are unchanged. The wording
+"a capture owns its variants" stands, under that narrower *variant*.
 
 ## Amended 2026-09-05: the grid stream carries the palette
 

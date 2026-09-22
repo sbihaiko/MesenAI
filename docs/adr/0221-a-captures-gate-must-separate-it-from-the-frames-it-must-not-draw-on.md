@@ -1,8 +1,18 @@
 # ADR-0221: A capture's gate must separate it from the frames it must not draw on, not only from the other captures
 
-- Status: **proposed** (2026-09-20). The Decision below is an either/or — five
-  options with a measured root cause, not a chosen rule. It stays `proposed`
-  until a human picks; see "What a human has to pick".
+- Status: **accepted 2026-09-22 — option B, not implemented.** The user picked
+  it through a structured question whose labels are recorded verbatim: *"B
+  sozinha (Recommended)"* for the option, and *"Não, só a ADR"* for the
+  go-ahead — so this is a decision and a request for work, not a same-turn
+  implementation. The pending slice is PRD Part A **F12.13**. Answers to *What
+  a human has to pick*: (1) B alone — no D; (2) ADR-0159's "a capture owns its
+  variants" survives, **narrowed** by the definition under "Decided" below;
+  (3) correctness at render time — ADR-0146 auto-loads every accepted pack, so
+  #339 is player-visible, which is what rules E out; (4) moot, ADR-0156 is not
+  amended; (5) the re-record of the 30-ROM bounded library (~15 min) is
+  required, since B changes what the recorder writes and a synthetic unit test
+  cannot see #339. Proposed 2026-09-20 with the five options below, which stay
+  in the file as the record of what was weighed.
 - Date: 2026-09-20
 - Related: issue #339, ADR-0217 and ADR-0218 (the change that closed gate
   *collisions* and did not close #339), ADR-0159 (anchors chosen at save time
@@ -11,9 +21,12 @@
   capture), ADR-0183 §3 (the recorder emits observations, never readings),
   PRD Part A §3, `docs/validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md`,
   `docs/validation/adr0221-capture-overdraw-harness-2026-09-20.md`
-- Supersedes / amends: nothing yet. Options B, C and D below would each amend
-  ADR-0159 §1, and option D would also amend ADR-0156 §Decision; the amendment
-  is written when the option is picked, not before.
+- Supersedes / amends: ADR-0159 §1, narrowed — a frame is a *variant* of a
+  captured screen only when every cell it changes is a cell whose content the
+  capture already carries; a frame that adds content the capture lacks is a
+  *rival* regardless of agreement ratio. ADR-0156 §Decision is **not** amended
+  (option D was not picked). ADR-0159 carries the matching "Amended 2026-09-22"
+  note.
 
 ## Context
 
@@ -74,7 +87,42 @@ about separating a capture from *frames*.
 
 ## Decision
 
-**Open.** The question is: *when may a capture own a variant?* Owning a variant
+### Decided 2026-09-22: option B
+
+**A frame is a variant of a captured screen only when every cell it changes is
+a cell the capture's own art already carries. A frame that adds content the
+capture does not have is a rival, whatever the agreement ratio.**
+
+Concretely, at save time in `MesenSheets::SelectScreenAnchors` (ADR-0159 §3),
+for each retained frame at the same `FineX` that today clears
+`kAnchorVariantAgree`: walk its changed cells against the captured frame. A
+cell whose captured content is **empty** — the shape id of a flat tile, the
+same "single flat colour per 8×8 cell" the acceptance tool already scores —
+and whose frame content is **non-empty** is an *addition*. One addition makes
+the frame a rival; a frame whose every changed cell is non-empty on both sides
+(animation, a score digit, the other half of a blink) stays a variant. The
+threshold constant is untouched and `kAnchorVariantAgree` keeps its measured
+meaning; the kind test runs *after* it, so nothing that was a rival becomes a
+variant.
+
+- Why "empty on the capture side" and not a pixel diff: the capture is a
+  frozen PNG of the whole screen, so it *covers* every cell by construction;
+  the destructive case is the cell it covers with nothing (#339's white block
+  under `STARRING`). The repainted-pack objection under B dissolves the same
+  way: the classification is made once, at record time, from the recorded
+  grid — a later repaint changes no gate, and the frame with the text, now a
+  rival, is captured on its own when it holds still, so the artist paints both.
+- Stop condition for F12.13: `scripts/measure_capture_overdraw.py --sweep` on
+  a re-recorded Punch-Out!! reports **0 erased cells** across the 36 frames,
+  including the 41–43 s occurrence; and the library-wide re-record publishes
+  capture count **and** per-capture draw rate before/after, so the cost C
+  would have hidden is visible here. Unit tests cover the kind test on a
+  synthetic `GridFrame` pair (addition → rival; content-for-content → variant;
+  ratio below threshold → rival as before).
+
+### The options as proposed 2026-09-20
+
+The question was: *when may a capture own a variant?* Owning a variant
 means drawing frozen art over a frame that differs from it. That is harmless
 when the difference is art the capture also carries, and destructive when the
 difference is background art the capture lacks — which is #339 exactly.
