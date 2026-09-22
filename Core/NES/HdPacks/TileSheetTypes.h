@@ -9,6 +9,7 @@
 #include <cstring>
 #include <array>
 #include <map>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -460,13 +461,22 @@ namespace MesenSheets
 	//can sit beside its twin on a sheet - plus its screen origin in pixels. An
 	//8x16 sprite is recorded as its two 8x8 halves, which keeps the whole slice
 	//on one unit and lets the grouping recover the tall figure by itself.
+	//
+	//ADR-0222 (F12.14): Palette is the interned id of the sprite's palette word
+	//(the OAM attribute's two palette bits resolved through palette RAM), from
+	//the same first-sight table the grid stream's "P" lines spell
+	//(HdPackBuilder::PaletteIdFor). The shape id wildcards the palette on
+	//purpose, so without it the OAM stream could settle the shape half of a
+	//spriteNearby condition and never its colour half. It is part of entry
+	//identity: two frames that differ only in sprite colour are two frames.
 	struct OamEntry
 	{
 		ShapeId Shape = kEmptyCell;
 		uint8_t X = 0;
 		uint8_t Y = 0;
+		PaletteId Palette = kUnknownPalette;
 
-		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y; }
+		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y && Palette == o.Palette; }
 	};
 
 	//One frame's OAM, in OAM order. Consecutive identical frames collapse into
@@ -485,8 +495,58 @@ namespace MesenSheets
 		//attention, not a duty cycle). 0 for a port with no controller.
 		uint8_t Buttons[2] = {};
 
+		//Entry identity includes the palette id (ADR-0222), so a frame that only
+		//recolours a sprite is retained as its own frame, as the grid stream
+		//already does for a recoloured cell (ADR-0159 amendment, 2026-09-05).
 		bool SameEntries(const OamFrame& o) const { return Entries == o.Entries; }
 	};
+
+	//ADR-0222 option A (F12.14): the MESEN_OAM_STREAM_DUMP writer, host-free so
+	//scripts/core_unit_tests.cpp can pin the format `mep_conditions.py` reads.
+	//Self-describing like WriteGridDump: "K <id> <32 hex tile data> <8 hex
+	//palette>" interns a shape on first sight, "P <id> <8 hex palette>" interns
+	//a palette word on first sight, and each frame is one line,
+	//"<frame> <repeat> <port1> <port2>" (ADR-0181: the two button bytes) followed
+	//by "<shape>,<x>,<y>,<pal>" per sprite, where <shape> is the ShapeId - the
+	//same id space the grid stream's "K" lines use, since ShapeIdFor interns
+	//sprites and background cells into one table. The "K" tile data is the
+	//shape's drawable art (TileData, with the OAM flips baked in - ADR-0178),
+	//exactly what the grid dump writes for the same id. A palette id with no
+	//entry in `paletteColors` (kUnknownPalette: the id space ran out) gets no
+	//"P" line and a reader falls back to the shape's own first-seen palette.
+	inline void WriteOamStreamDump(std::ostream& out, const std::vector<OamFrame>& frames, const std::vector<SheetTileKey>& shapeTiles, const std::vector<uint32_t>& paletteColors)
+	{
+		static const char* digits = "0123456789ABCDEF";
+		auto hex8 = [&](uint8_t v) { out << digits[v >> 4] << digits[v & 0x0F]; };
+		auto hex32 = [&](uint32_t v) { hex8((uint8_t)(v >> 24)); hex8((uint8_t)(v >> 16)); hex8((uint8_t)(v >> 8)); hex8((uint8_t)v); };
+		std::vector<bool> shapeEmitted(shapeTiles.size(), false);
+		std::vector<bool> paletteEmitted(paletteColors.size(), false);
+		for(const OamFrame& frame : frames) {
+			for(const OamEntry& entry : frame.Entries) {
+				if(entry.Shape < shapeTiles.size() && !shapeEmitted[entry.Shape]) {
+					shapeEmitted[entry.Shape] = true;
+					out << "K " << entry.Shape << ' ';
+					for(int b = 0; b < 16; b++) {
+						hex8(shapeTiles[entry.Shape].TileData[b]);
+					}
+					out << ' ';
+					hex32(shapeTiles[entry.Shape].PaletteColors);
+					out << '\n';
+				}
+				if(entry.Palette < paletteColors.size() && !paletteEmitted[entry.Palette]) {
+					paletteEmitted[entry.Palette] = true;
+					out << "P " << (uint32_t)entry.Palette << ' ';
+					hex32(paletteColors[entry.Palette]);
+					out << '\n';
+				}
+			}
+			out << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
+			for(const OamEntry& entry : frame.Entries) {
+				out << ' ' << entry.Shape << ',' << (int)entry.X << ',' << (int)entry.Y << ',' << (uint32_t)entry.Palette;
+			}
+			out << '\n';
+		}
+	}
 
 	//---- F9.17 (ADR-0164): adjacency.json statistics ----------------------
 

@@ -18,6 +18,15 @@
   (`LiveFrameRecorder`, Decision section 4) and supersedes the viewer-launch
   panel of section 3: the viewer no longer starts processes, fields, or knows a
   ROM; it auto-attaches by convention to the emulator's live slot.
+- Amended 2026-09-22 (ADR-0222 option A, F12.14) — the save-time
+  `MESEN_OAM_STREAM_DUMP` gained a palette id per entry; the live wire format
+  (`Utilities/LiveRecordFormat.h`, `sprites.json`) is **not** changed and
+  needs no byte: it carries the raw 64 OAM entries as `[y, tile, attr, x]`
+  plus the 32 bytes of palette RAM, so the sprite palette is already on the
+  wire as the attribute's two palette bits resolved through palette RAM. The
+  dump and the wire describe the same sprite in two encodings on purpose —
+  the dump interns `(tileData, palette)` for a reader with no CHR or palette
+  RAM, the wire ships the console's own bytes for a viewer that has both.
 - Updated: 2026-09-08 ("capture every layer") — both producers now also read
   the background layer under the same `Lock()` hold as the sprite layer:
   `nametables.bin` (the mapper-resolved `$2000-$2FFF` bytes) and

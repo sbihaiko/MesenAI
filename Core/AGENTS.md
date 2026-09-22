@@ -78,10 +78,14 @@ needs no local rules beyond the root DOX.
   F9.24's per-cell palette plane, since the shape ids wildcard the palette,
   and the `M` line is F12.6b's `$0000`-`$07FF` window (ADR-0197 §3, one line
   per retained frame, on its first repeat, 4096 upper-case hex characters, the
-  byte at address A at characters 2A/2A+1), `MESEN_OAM_STREAM_DUMP` (per
-  retained frame:
-  index, repeat count, port 1 and 2 button bytes, then `node,x,y` per
-  sprite), `MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as
+  byte at address A at characters 2A/2A+1), `MESEN_OAM_STREAM_DUMP`
+  (`MesenSheets::WriteOamStreamDump`, self-describing since ADR-0222 /
+  F12.14: `K`/`P` intern lines exactly like the grid's, then per retained
+  frame index, repeat count, port 1 and 2 button bytes, then
+  `shape,x,y,pal` per sprite — `shape` is the ShapeId shared with the grid
+  stream, `pal` the interned palette id `OamEntry::Palette` carries, which is
+  part of entry identity so a frame that only recolours a sprite is not
+  collapsed into `RepeatCount`), `MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as
   `frame:pose:held` triples in retained-frame indexes) and
   `MESEN_TILENEARBY_EVIDENCE` (the whole co-occurrence table as CSV:
   `a,b,dir,count,frames,framesA,framesB,aIsObject,bIsObject`, written **before**

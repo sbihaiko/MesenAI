@@ -122,9 +122,16 @@ the run never held at once. That is the check on a `<stage>.txt`: Contra's
 `stage1-run` says `never: Select, Start, Left, Up+A, Down+A, Down+B`, so its
 sidecar cannot hold the aim-while-jumping or prone-shooting states, and a
 script that wants them has to press them. Two env-gated save-time dumps back
-a measurement: `MESEN_OAM_STREAM_DUMP` (retained frame, repeat, port 1 and 2
-button bytes, then `node,x,y` per sprite) and `MESEN_POSE_TRACK_DUMP` (one
-ADR-0179 track per line as `frame:pose:held`).
+a measurement: `MESEN_OAM_STREAM_DUMP` (self-describing since F12.14 /
+ADR-0222: `K <id> <32 hex tile data> <8 hex palette>` interns a shape and
+`P <id> <8 hex palette>` a palette word on first sight; then one line per
+retained frame — frame, repeat, port 1 and 2 button bytes, then
+`shape,x,y,pal` per sprite, `shape` being the recorder's ShapeId, the same id
+space as the grid dump's `K` lines; before 2026-09-22 the entry was `node,x,y`
+with `node` a vocabulary index, which no reader resolves any more) and
+`MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as `frame:pose:held`).
+Pointing the OAM dump at `oam.txt` beside a `grid.txt` is what lets
+`mep_lint.py --routes` evaluate sprite conditions (`mep_conditions.py`).
 
 ## Probing which cycle answers the pad (F9.23)
 

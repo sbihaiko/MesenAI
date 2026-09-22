@@ -7830,6 +7830,82 @@ void TestRamDumpLineIsFixedWidthUpperCaseHex()
 	Check(line.substr(0, 2) == "00", "F12.6b: an untouched byte reads 00");
 }
 
+//ADR-0222 option A (F12.14): the OAM stream carries a palette id per entry
+//and is written self-describing, like the grid stream, so `mep_conditions.py`
+//can resolve a sprite to (tileData, palette) from the OAM file alone. Two
+//guarantees are pinned here: entry identity includes the palette (a frame that
+//only recolours a sprite is not collapsed into RepeatCount), and the dump line
+//format the Python parser reads.
+
+void TestOamFramesDifferingOnlyInPaletteDoNotCollapse()
+{
+	OamFrame a, b;
+	OamEntry e;
+	e.Shape = 7;
+	e.X = 40;
+	e.Y = 96;
+	e.Palette = 1;
+	a.Entries.push_back(e);
+	b.Entries.push_back(e);
+	Check(a.SameEntries(b), "ADR-0222: two frames with identical entries (palette included) collapse");
+	b.Entries[0].Palette = 2;
+	Check(!a.SameEntries(b), "ADR-0222: a frame that only recolours a sprite is its own frame");
+	b.Entries[0].Palette = kUnknownPalette;
+	Check(!a.SameEntries(b), "ADR-0222: no palette evidence is not the same as palette 1");
+}
+
+void TestOamStreamDumpIsSelfDescribing()
+{
+	std::vector<SheetTileKey> shapes(2);
+	for(int b = 0; b < 16; b++) {
+		shapes[0].TileData[b] = 0xAA;
+		shapes[1].TileData[b] = (uint8_t)b;
+	}
+	shapes[0].PaletteColors = 0x0F001020;
+	shapes[1].PaletteColors = 0x0F112233;
+	std::vector<uint32_t> palettes = { 0x0F001020, 0x0F112233, 0x0FABCDEF };
+
+	OamFrame f0;
+	f0.FrameNumber = 0;
+	f0.RepeatCount = 3;
+	f0.Buttons[0] = 0x81;
+	f0.Buttons[1] = 0;
+	OamEntry e;
+	e.Shape = 1; e.X = 10; e.Y = 20; e.Palette = 2;
+	f0.Entries.push_back(e);
+	e.Shape = 0; e.X = 5; e.Y = 6; e.Palette = kUnknownPalette;
+	f0.Entries.push_back(e);
+	OamFrame f1 = f0;
+	f1.FrameNumber = 1;
+	f1.RepeatCount = 1;
+	f1.Entries.resize(1);
+	f1.Entries[0].Palette = 1;
+
+	std::ostringstream out;
+	WriteOamStreamDump(out, { f0, f1 }, shapes, palettes);
+	std::string text = out.str();
+	std::vector<std::string> lines;
+	std::string line;
+	std::istringstream in(text);
+	while(std::getline(in, line)) {
+		lines.push_back(line);
+	}
+	Check(lines.size() == 6, "ADR-0222: K, P, K, frame, P, frame - six lines", std::to_string(lines.size()));
+	Check(lines.size() > 0 && lines[0] == "K 1 000102030405060708090A0B0C0D0E0F 0F112233",
+		"ADR-0222: a shape is interned on first sight as K <id> <32 hex> <8 hex>", lines.size() > 0 ? lines[0] : "");
+	Check(lines.size() > 1 && lines[1] == "P 2 0FABCDEF",
+		"ADR-0222: a palette word is interned on first sight as P <id> <8 hex>", lines.size() > 1 ? lines[1] : "");
+	Check(lines.size() > 2 && lines[2] == "K 0 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0F001020",
+		"ADR-0222: the second shape follows, in entry order", lines.size() > 2 ? lines[2] : "");
+	Check(lines.size() > 3 && lines[3] == "0 3 129 0 1,10,20,2 0,5,6,255",
+		"ADR-0222: <frame> <repeat> <port1> <port2> then <shape>,<x>,<y>,<pal>; kUnknownPalette has no P line",
+		lines.size() > 3 ? lines[3] : "");
+	Check(lines.size() > 4 && lines[4] == "P 1 0F112233",
+		"ADR-0222: a palette first seen on a later frame is interned before that frame's line", lines.size() > 4 ? lines[4] : "");
+	Check(lines.size() > 5 && lines[5] == "1 1 129 0 1,10,20,1",
+		"ADR-0222: a shape already interned is not re-emitted", lines.size() > 5 ? lines[5] : "");
+}
+
 void TestRamDumpLineStaysFullWidthOnAShortOrAbsentWindow()
 {
 	//A console with no internal RAM, or a mapper whose window is narrower than
@@ -8242,6 +8318,8 @@ int main()
 	TestReloadRefusesAResizedCanvas();
 
 	TestRamDumpLineIsFixedWidthUpperCaseHex();
+	TestOamFramesDifferingOnlyInPaletteDoNotCollapse();
+	TestOamStreamDumpIsSelfDescribing();
 	TestRamDumpLineStaysFullWidthOnAShortOrAbsentWindow();
 	TestRamDumpLineClipsAWiderWindowToTheAdrsRange();
 
