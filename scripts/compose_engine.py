@@ -275,14 +275,57 @@ def walk_layout(nodes, evidence):
     return pos
 
 
+# ---- labels (ADR-0209 Q1 (b)) ------------------------------------------------
+#
+# The Core writes a default `label` per sidecar entry (a sheet, a cell, a pose,
+# a cycle) inferred from the grouping it computed, beside a `labelSource` that
+# says so ("inferred"). An artist renames by editing the label and setting the
+# source to anything else (say "human"); a names.json caption beats both
+# (ADR-0183 §5). `caption()` is the one place that precedence lives, so every
+# reader captions the same way and none invents a name.
+
+LABEL_SOURCE_INFERRED = "inferred"
+LABEL_SOURCE_NAMES = "names"
+LABEL_SOURCE_ID = "id"
+
+
+def read_label(entry):
+    """`(label, labelSource)` off a sidecar entry, or `("", None)` when it
+    carries no usable label. A label with no source is still a label — it was
+    written by something, and "sidecar" says which file it came from without
+    claiming who typed it."""
+    if not isinstance(entry, dict):
+        return ("", None)
+    label = entry.get("label")
+    if not isinstance(label, str) or not label.strip():
+        return ("", None)
+    source = entry.get("labelSource")
+    return (label.strip(), source if isinstance(source, str) and source else "sidecar")
+
+
+def caption(entity_id, label="", label_source=None, human=None):
+    """ADR-0183 §5 precedence: a human's name > the recorder's label > the id.
+
+    Returns `(text, source)`; `source` is `names` for a human caption, the
+    label's own `labelSource` (`inferred` from the Core, or whatever an artist
+    set when renaming) for a sidecar label, and `id` for the bare fallback —
+    so whoever prints the caption can also say where it came from."""
+    if isinstance(human, str) and human.strip():
+        return (human.strip(), LABEL_SOURCE_NAMES)
+    if isinstance(label, str) and label.strip():
+        return (label.strip(), label_source or "sidecar")
+    return (str(entity_id), LABEL_SOURCE_ID)
+
+
 class Pose:
     """One entry of `poses.json`: a silhouette the recorder actually saw in a
     single OAM frame, normalised to its own top-left (ADR-0170 §1)."""
 
-    __slots__ = ("id", "frames", "size", "tiles", "fusion_of", "variant_of", "hold", "next")
+    __slots__ = ("id", "frames", "size", "tiles", "fusion_of", "variant_of", "hold", "next",
+                 "label", "label_source")
 
     def __init__(self, pose_id, frames, size, tiles, fusion_of=(), variant_of=None,
-                 hold=0, next_poses=()):
+                 hold=0, next_poses=(), label="", label_source=None):
         self.id = pose_id
         self.frames = frames
         self.size = size          # (cols, rows) in cells, as the file states it
@@ -300,6 +343,11 @@ class Pose:
         # evidence, not the animation (a pose can be two phases of one loop).
         self.hold = hold
         self.next = tuple(next_poses)
+        # ADR-0209 Q1 (b): the recorder's default name and who wrote it
+        # ("inferred" from the Core; an artist's rename sets something else).
+        # "" on a pack recorded before the field existed.
+        self.label = label
+        self.label_source = label_source
 
     @property
     def variant(self) -> bool:
@@ -366,15 +414,19 @@ class PoseRun:
     seen to stop the cycle, else None - not classified, never "not the
     player's" (§5): no consumer drops a run for lacking one."""
 
-    __slots__ = ("id", "poses", "hold", "repeats", "period", "driver")
+    __slots__ = ("id", "poses", "hold", "repeats", "period", "driver", "label", "label_source")
 
-    def __init__(self, run_id, poses, hold, repeats, period=None, driver=None):
+    def __init__(self, run_id, poses, hold, repeats, period=None, driver=None,
+                 label="", label_source=None):
         self.id = run_id
         self.poses = tuple(poses)
         self.hold = tuple(hold)
         self.repeats = repeats
         self.period = period
         self.driver = driver if driver in ("port1", "port2") else None
+        # ADR-0209 Q1 (b): the recorder's default name for the run, see Pose.
+        self.label = label
+        self.label_source = label_source
 
     @property
     def cyclic(self) -> bool:
@@ -524,8 +576,9 @@ class Poses:
                 repeats = int(entry.get("repeats") or 0)
             except (TypeError, ValueError):
                 repeats = 0
+            label, label_source = read_label(entry)
             out.append(PoseRun(run_id, poses, hold, repeats, len(poses) if cyclic else None,
-                               entry.get("driver")))
+                               entry.get("driver"), label, label_source))
         return out
 
     def runs(self) -> list:
@@ -595,7 +648,9 @@ class Poses:
                 continue
             if isinstance(target, str) and target:
                 next_poses.append((target, count))
-        pose = Pose(pose_id, frames, size, tiles, fusion, variant_of, hold, next_poses)
+        label, label_source = read_label(entry)
+        pose = Pose(pose_id, frames, size, tiles, fusion, variant_of, hold, next_poses,
+                    label, label_source)
         if size is None:
             pose.size = pose.extent()
         return pose
@@ -628,6 +683,10 @@ class Sheet:
         self.png_path = sd.png_path
         ref = str(sd.doc.get("reference") or "").strip()
         self.orig_path = sheets_dir / ref if ref else None
+        # ADR-0209 Q1 (b): a sprNNN/objNNN group sheet's default name, from the
+        # Core, and who wrote it. "" on a vocabulary sheet and on any pack
+        # recorded before the field existed.
+        self.label, self.label_source = read_label(sd.doc)
         self._scale = None
 
     @property

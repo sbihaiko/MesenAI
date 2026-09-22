@@ -1,5 +1,6 @@
 //ADR-0153 §3/§4 (Phase 9) - see SheetRender.h. Stateful partner: HdPackBuilder.
 #include "NES/HdPacks/SheetRender.h"
+#include "NES/HdPacks/SheetLabels.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -416,6 +417,16 @@ namespace MesenSheets
 		json << "  \"sheet\": \"" << doc.SheetFile << "\",\n";
 		json << "  \"reference\": \"" << doc.ReferenceFile << "\",\n";
 
+		//ADR-0209 Q1 (b): a sprite/object group sheet is a figure, and it gets
+		//a default name inferred from the grouping (SheetLabels.h), marked
+		//"inferred" so a human's names.json entry wins over it in every reader
+		//(ADR-0183 §5). A vocabulary sheet gets none - it is not a figure.
+		std::string sheetLabel = InferSheetLabel(doc.Kind, doc.Columns, doc.Cells, doc.EmptySlots.size(), doc.Poses.size());
+		if(!sheetLabel.empty()) {
+			json << "  \"label\": \"" << sheetLabel << "\",\n";
+			json << "  \"labelSource\": \"" << kLabelSourceInferred << "\",\n";
+		}
+
 		if(doc.IsMap) {
 			json << "  \"mode\": \"" << (doc.Mode == StitchMode::Continuous ? "continuous" : "screen") << "\",\n";
 			json << "  \"hudRows\": " << doc.HudRows << ",\n";
@@ -489,7 +500,16 @@ namespace MesenSheets
 				}
 				json << "]";
 			}
-			json << ", \"label\": \"\", \"tiles\": ";
+			//ADR-0209 Q1 (b): the cell's default name, from its own context,
+			//vocabulary index and count (SheetLabels.h). A cell with no grouping
+			//data keeps the empty label every pack ever recorded carried.
+			std::string cellLabel = InferCellLabel(cell, doc.Kind);
+			if(cellLabel.empty()) {
+				json << ", \"label\": \"\"";
+			} else {
+				json << LabelFields(cellLabel);
+			}
+			json << ", \"tiles\": ";
 			AppendTiles(json, cell.Key, doc.Grid.Unit, lookup);
 			json << " }";
 		}
@@ -644,7 +664,7 @@ namespace MesenSheets
 	//One top-level array of ADR-0179 §3 runs. Ids are positions in the array,
 	//as pose ids are; `period` is written for cycles only, where it means
 	//something (a sequence's length is its poses count).
-	static void WritePoseRuns(std::stringstream& json, const char* key, const char* idPrefix, const std::vector<PoseRun>& runs, bool withPeriod)
+	static void WritePoseRuns(std::stringstream& json, const char* key, const char* idPrefix, const std::vector<PoseRun>& runs, bool withPeriod, const std::vector<PoseEntry>& poses)
 	{
 		if(runs.empty()) {
 			return;
@@ -675,6 +695,9 @@ namespace MesenSheets
 			if(run.Driver == 1 || run.Driver == 2) {
 				json << ", \"driver\": \"port" << (int)run.Driver << "\"";
 			}
+			//ADR-0209 Q1 (b): the run's default name (SheetLabels.h) - a
+			//rendering of this entry plus the extents of the poses it names.
+			json << LabelFields(InferRunLabel(run, poses, withPeriod));
 			json << " }";
 		}
 		json << "\n  ]";
@@ -772,6 +795,11 @@ namespace MesenSheets
 				snprintf(base, sizeof(base), "pose%03u", (uint32_t)pose.VariantOf);
 				json << ", \"variantOf\": \"" << base << "\"";
 			}
+			//ADR-0209 Q1 (b): the pose's default name, formatted from the
+			//fields written above and nothing else (SheetLabels.h) - the one
+			//field here that is a rendering of the others rather than a datum,
+			//and marked "inferred" for exactly that reason.
+			json << LabelFields(InferPoseLabel(pose));
 			json << ", \"tiles\": [";
 			for(size_t t = 0; t < pose.Tiles.size(); t++) {
 				const PoseTile& tile = pose.Tiles[t];
@@ -785,8 +813,8 @@ namespace MesenSheets
 		//absent, not empty, when the stream showed no repetition - a reader
 		//distinguishes "nothing found" from "written by an older recorder"
 		//by the version, not by these keys.
-		WritePoseRuns(json, "cycles", "cycle", stats.Cycles, true);
-		WritePoseRuns(json, "sequences", "seq", stats.Sequences, false);
+		WritePoseRuns(json, "cycles", "cycle", stats.Cycles, true, stats.Poses);
+		WritePoseRuns(json, "sequences", "seq", stats.Sequences, false, stats.Poses);
 		json << "\n}\n";
 		return json.str();
 	}

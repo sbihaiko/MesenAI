@@ -531,26 +531,36 @@ def grid_title(grid, names):
 
     The name of the run itself wins when `--names` gives one. Failing that the
     **subjects** of the poses on the sheet are the caption — `seq021` tells an
-    artist nothing, "green soldier" tells them what to paint. With nothing
-    named at all the caption is the run/pose id plus the counts, which is the
-    honest fallback and is never dressed up as a name."""
+    artist nothing, "green soldier" tells them what to paint. Failing that too,
+    the recorder's own `label` (ADR-0209 Q1 (b), `E.caption` precedence:
+    names > label > id) stands in for the counts this function used to spell
+    out — it is the same measured facts, stated once by the Core and marked
+    `inferred` in the sidecar — kept beside the id so the join still reads.
+    With nothing at all the caption is the run/pose id plus the counts, which
+    is the honest fallback and is never dressed up as a name."""
     who = ", ".join(names.subject_label(k) for k in sheet_subjects(grid, names))
     run = grid.run
     if run is not None:
-        named = names.run(run.id)
-        if named:
-            return named
+        text, source = E.caption(run.id, run.label, run.label_source, names.run(run.id))
+        if source == E.LABEL_SOURCE_NAMES:
+            return text
         kind = "loop" if grid.kind == "cycle" else "ordered run"
         tail = f"a {len(run.poses)}-phase {kind}, seen {run.repeats} time(s)"
-        return f"{who or run.id} — {tail}"
+        if who:
+            return f"{who} — {tail}"
+        if source != E.LABEL_SOURCE_ID:
+            return f"{run.id} — {text}"
+        return f"{run.id} — {tail}"
     cells = grid.cells
     if len(cells) == 1:
         pose = cells[0].pose
-        named = names.pose(pose.id)
-        if named:
-            return named
+        text, source = E.caption(pose.id, pose.label, pose.label_source, names.pose(pose.id))
+        if source == E.LABEL_SOURCE_NAMES:
+            return text
         if who:
             return f"{who} — one figure, seen in {pose.frames} frame(s)"
+        if source != E.LABEL_SOURCE_ID:
+            return f"{pose.id} — {text}"
         return f"{pose.id} — seen in {pose.frames} frame(s)"
     frames = sum(c.pose.frames for c in cells)
     if who:

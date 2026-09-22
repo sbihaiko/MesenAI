@@ -142,14 +142,58 @@ def figure_stem(figure_id: str) -> str:
     return f"{figure_id}{FIGURE_SUFFIX}"
 
 
+# ---- caption (ADR-0209 Q1 (b), ADR-0183 §5) ----------------------------------
+
+def load_names(path):
+    """The optional human caption file (`--names`, the schema of
+    `artist_kit.py`'s names file): `poses{id: name | {name}}`, `cycles{}`,
+    and `figures{sprNNN|objNNN: name}` for a group a human named directly.
+    Missing or unreadable is an empty file, never an error — a caption is
+    never evidence and must not cost an export."""
+    if not path:
+        return {}
+    try:
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _human_name(names: dict, section: str, key):
+    table = names.get(section) if isinstance(names, dict) else None
+    if not isinstance(table, dict) or key is None:
+        return None
+    entry = table.get(key)
+    if isinstance(entry, dict):
+        entry = entry.get("name")
+    return entry if isinstance(entry, str) and entry.strip() else None
+
+
+def figure_caption(pack: E.Pack, figure: Figure, names=None):
+    """`(text, source)` for a figure: a human's name from `names` (the figure's
+    own id first, then its pose) > the sidecar's `label` (the group sheet's
+    for sprNNN/objNNN, the pose entry's for poseNNN) > the id. `source` says
+    which won — `names`, the label's own `labelSource` (`inferred` when the
+    Core wrote it), or `id`."""
+    names = names or {}
+    human = _human_name(names, "figures", figure.id) or _human_name(names, "poses", figure.pose_id)
+    if figure.group is not None:
+        label, label_source = figure.group.label, figure.group.label_source
+    else:
+        pose = pack.poses.by_id(figure.pose_id) if pack.poses is not None and figure.pose_id else None
+        label, label_source = (pose.label, pose.label_source) if pose is not None else ("", None)
+    return E.caption(figure.id, label, label_source, human)
+
+
 # ---- export ------------------------------------------------------------------
 
-def export_figure(pack: E.Pack, figure_id: str, out_dir: Path) -> dict:
+def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> dict:
     """Write `<stem>.png`, `<stem>.orig.png`, `<stem>.json` into `out_dir`
     and return the sidecar document."""
     figure = resolve_figure(pack, figure_id)
     scale = pack.scale
     stem = figure_stem(figure_id)
+    label, label_source = figure_caption(pack, figure, names)
     name = f"{stem}.png"
     N.require_asset_name(name, where=f"figure {figure_id}")
 
@@ -220,6 +264,10 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path) -> dict:
         "sheet": name,
         "reference": f"{stem}.orig.png",
         "assetName": N.asset_name_for(name),
+        # ADR-0209 Q1 (b) / ADR-0183 §5: the caption and where it came from
+        # (names > sidecar label > id). "inferred" means the Core wrote it.
+        "label": label,
+        "labelSource": label_source,
         "cells": cells,
         "unplaced": list(figure.unplaced),
         "unresolved": unresolved,
@@ -392,10 +440,11 @@ def _open_pack(folder: str) -> E.Pack:
 def cmd_export(args) -> int:
     pack = _open_pack(args.pack)
     out_dir = Path(args.out) if args.out else Path(args.pack).resolve().parent / "kit" / "figures"
-    doc = export_figure(pack, args.figure, out_dir)
+    doc = export_figure(pack, args.figure, out_dir, load_names(args.names))
     print(f"{doc['sheet']}: {len(doc['cells'])} cells, {doc['size'][0]}x{doc['size'][1]} "
           f"at unit {doc['unit']}, scale {doc['scale']}x, layout from {doc['source']}"
           + (f" ({doc['pose']})" if doc["pose"] else ""))
+    print(f"  caption   {doc['label']}  ({doc['labelSource']})")
     print(f"  surface   {out_dir / doc['sheet']}")
     print(f"  reference {out_dir / doc['reference']}  (never paint this one)")
     print(f"  layer name to paste in Photoshop: {doc['assetName']}")
@@ -440,6 +489,8 @@ def main(argv=None) -> int:
     ex.add_argument("pack", help="the recorded pack folder (the one holding textures/)")
     ex.add_argument("figure", help="sprNNN, objNNN or poseNNN")
     ex.add_argument("--out", help="folder for the three files (default: kit/figures beside the pack)")
+    ex.add_argument("--names", help="optional human caption file (poses/cycles/figures); a name in it "
+                                    "beats the recorder's inferred label (ADR-0183 §5)")
     ex.set_defaults(func=cmd_export)
     im = sub.add_parser("import", help="write the painted cells of a figure back into its sheets")
     im.add_argument("pack", help="the same pack folder the figure was exported from")

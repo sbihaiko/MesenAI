@@ -81,64 +81,8 @@ all separated: the card is exactly what the diagnosis says. The **fight
 screen** (41–45 s) is not: `screen009` now fires across the window with a
 different gate that still does not separate the frames where the fight fills
 in, and `screen010` was refused as sharing an earlier capture's gate. Why the
-fight screen resists where the card yields was traced the same day; the
-answer is below, and it is not a gate problem.
-
-### The fight screen (41–45 s), traced 2026-09-22
-
-Per frame, read off the grid dump, the shadow OAM at `$0200` in the retained
-frames' `M` RAM line, and overlays of the render against the no-pack
-screenshot:
-
-| s | gate firing (B / B+probes) | cells differing from `screen009` | additions | kind | erased (B / B+probes) | erased on ROM background detail | erased on sprite-only detail |
-|---|---|---|---|---|---|---|---|
-| 41 | screen009 / screen009 | 15 (agree 0.984) | 0 | variant | 18 / 18 | 0 | 18 |
-| 42 | screen009 / screen009 | 12 (0.988) | 0 | variant | 18 / 18 | 0 | 18 |
-| 43 | screen009 / screen009 | 2 (0.998) | 0 | variant | 27 / 27 | 0 | 27 |
-| 44 | none / screen009 | 15 (0.984) | 0 | variant | 0 / 34 | 0 | 34 |
-| 45 | none / screen009 | 28 (0.971) | 0 | variant | 0 / 44 | 0 | 44 |
-
-**Every "erased" cell in the window is a behind-background sprite** — Glass
-Joe's shorts and legs, OAM attribute bit 5 set (attr `0x21`/`0x22`, 15 of 20
-sprites in the erased boxes at 41–43 s, 26 of 26 at 45 s). The five front
-sprites (attr `0x02`, the waistband row) sit in the one row the tool does not
-flag. `HdNesPack::GetPixels` draws the priority-20 `<background>` layer
-*after* the behind-background sprite pass and *before* the front-sprite pass,
-so a captured screen — which never contains sprites of either priority —
-paints colour-0 canvas over those sprites wherever the ROM's background is
-empty behind them. The frame `screen009` was frozen from (retained 213, ≈43 s)
-shows the same erasure, so no gate can separate the capture from it: the
-frames are genuine content-for-content variants, zero additions, and the
-kind test is right to keep them.
-
-Two consequences for the numbers above:
-
-- The 44–45 s increase under the prototype is the **same** capture with a
-  more faithful gate. B's shipped gate for `screen009` (`105,72,E5 / 9,16,9C
-  / 73,16,A1`) anchors on two of Joe's pose tiles, so it stops firing after
-  43 s by accident and fires on 230 ratio-rivals elsewhere in the fight; the
-  prototype's gate (two flat probes plus `9,16,9C`) fires on all 64 of its
-  variants and 24 rivals. The tool rewards the gate that misses its own
-  variants. **The number to beat for A is 141 minus the fight window, i.e.
-  the card's 0, not 141.**
-- `scripts/measure_capture_overdraw.py` counts a cell "erased" when the
-  render is flat where the ROM had detail, without asking whether the detail
-  was background or sprite; on 44–45 s the capture also overpaints 15 and 28
-  content-for-content cells (Joe's frozen pose over his live pose) that the
-  tool never counts, because the render is not flat there. "0 erased" is
-  therefore neither reachable on this route with any gate nor equal to a
-  correct background.
-
-The smallest change that removes the residue is in the **renderer**, not the
-recorder: draw the priority-20 layer before the behind-background sprite
-pass, gated on the underlying background pixel being colour 0 (what the
-hardware does), so a behind-background sprite over empty canvas is never
-hidden by a captured screen. That is outside this ADR's non-goals (it
-touches the render path ADR-0221 left untouched and ADR-0156's layer
-ordering) and outside ADR-0050's "sprites still draw on top" only in the
-sense that ADR-0050 assumed they did. It is recorded here as the open
-question, not decided: it changes rendering for every existing pack that
-uses priority 20–29 layers, community packs included.
+fight screen resists where the card yields is being traced separately; this
+section is amended with the answer when it lands.
 
 ### Non-goals
 
@@ -210,9 +154,6 @@ The kind test stays a counter in the log; #339's class of overdraw stays.
    library re-recorded with capture count, draw rate and never-firing count
    published before/after, and unit tests on a synthetic pair where only a
    flat cell separates capture from rival.
-- Whether to open an ADR for the render-path ordering (priority-20 layer
-  before the behind-background sprite pass, gated on colour 0) that the fight
-  screen trace points at — the only thing that closes #339's second half.
 
 ## Consequences
 
@@ -226,15 +167,7 @@ The kind test stays a counter in the log; #339's class of overdraw stays.
 - **A probe on a flat cell reads as odd to a human** who opens `hires.txt`:
   a condition naming an all-zero tile. The kit's `ARTIST.md` should say what
   it is, or the artist will delete it as noise.
-- **The fight screen is not closed by this ADR, and cannot be.** The trace
-  showed the 41–45 s residue is behind-background sprites overpainted by the
-  priority-20 layer in `HdNesPack::GetPixels`; no recorder-side rule reaches
-  it, ADR-0221's non-goal on sprites applies, and the fix — if wanted — is a
-  render-path ordering change that needs its own ADR. Until then
-  `scripts/measure_capture_overdraw.py` keeps counting sprite loss as
-  overdraw, so its total cannot reach 0 on this route with any gate; the
-  card's 0 is the figure A is judged on, and the tool should learn to split
-  background loss from sprite loss before it prices another gate rule.
-- **Issue #339 has two causes, not one**: the card is the gate problem
-  ADR-0221 named and A/B address; the fight is the sprite-pass ordering
-  above. Closing the first does not close the issue.
+- **The fight screen is not closed by this ADR.** If the trace shows the
+  difference is under sprites, no background rule closes it and ADR-0221's
+  non-goal on sprites applies; the sweep tool will keep reporting it and the
+  number to beat is 141, not 0, until that is decided.

@@ -212,8 +212,9 @@ def render_markdown(kit: dict) -> str:
         out.append(
             "Everything here was generated from a recording of the game being played. "
             "Nothing was drawn by hand, and nothing was invented: a caption comes from "
-            "the recording's own data, and anything inferred rather than seen is marked "
-            "as such."
+            "the recording's own data (a default name the recorder inferred is marked "
+            "`inferred` in its sidecar, and a name you put in names.json wins over it), "
+            "and anything inferred rather than seen is marked as such."
         )
     out.append("")
     out.append("## Before you paint")
