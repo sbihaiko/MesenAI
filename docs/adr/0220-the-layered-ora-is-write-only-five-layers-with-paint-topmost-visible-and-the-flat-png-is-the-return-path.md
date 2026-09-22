@@ -1,14 +1,21 @@
 # ADR-0220: A layered `.ora` is written beside every surface, write-only for the toolchain, its five layers ordered so `paint` is the topmost visible one — and the flat PNG over the F12.4 name stays the only return path
 
-- Status: **accepted 2026-09-22 — not implemented.** User's decision, verbatim:
-  *"aceito o F12.11. nao implemente ainda."* — a decision and a request for
-  work, with no same-turn implementation and no go-ahead to build sought or
-  given. Nothing in this file exists in code yet: no script under `scripts/`
-  writes or reads a `.ora`, `mep_lint.py` has no sentinel check, and the kit's
-  surfaces are the PNG / `*.orig.png` / `.json` triple ADR-0183 §2 describes.
-  The pending slice is PRD Part A **F12.11**, whose prerequisites F12.3 and
-  F12.4 shipped 2026-09-19; its stop condition (2) is logged by a person with
-  GIMP and Krita, so the slice is not closable by an automated session alone.
+- Status: **accepted 2026-09-22 — code landed the same day as PRD Part A
+  F12.11; stop condition (2) still open.** Accepted with *"aceito o F12.11.
+  nao implemente ainda."*; the build go-ahead came later the same day,
+  verbatim *"dispara as frentes 1, 2, 3 e 4 em paralelo usando workflows"*,
+  and the two deviations found while building were decided by the user with
+  *"Emendar §3 e o PRD (Recommended)"* (the `context` layer exists only where
+  every cell has a stage position, i.e. the `artist_map` panoramas) and
+  *"Trocar para #FF00FD (Recommended)"* (the sentinel; `#FF00FF` collides with
+  the recorder's unpainted fill). Both amendments are in §3 and §4, dated. In
+  code: `scripts/ora_writer.py` and `scripts/mep_sentinel.py`, called from
+  `compose_engine.py`, `artist_chr_kit.py` and `mep_figure.py`; `mep_lint.py`
+  fails a cell carrying the sentinel. Unit tests: `scripts/test_ora_writer.py`
+  (16). Stop conditions (1), (3) and (4) are met by the automated pass; **(2)
+  — GIMP and Krita opening both files with every layer named and `paint`
+  selected — is logged by a person** and had not been when this landed, so the
+  PRD row stays live until that log exists.
   Proposed 2026-09-20 and left so the same day by the user's decision; the
   deferral's reason (no GIMP/Krita artist population measured) is unchanged
   and F12.11 stays the second path beside F12.4, measured against it (§6).
@@ -217,6 +224,22 @@ Five rules complete the contract:
   the sheet saying "nothing here was seen in play", the same sentence `ARTIST.md`
   opens with (ADR-0183 §3, ADR-0219).
 
+*Amended 2026-09-22 (F12.11 implementation).* The rule stands — `context` iff
+every cell has a stage position — and today's data settles what it yields: no
+recorded artefact gives a sprite pose or a scenery cell a stage position.
+`poses.json` and `adjacency.json` carry screen floor bands only, and the
+recordings the kit generators read ship no `map-NNN.json` `placements[]`. So
+`context` is present on the `artist_map` stage panoramas (every cell *is* on
+the stage) and absent on figure, scenery and CHR sheets: "five on a recorded
+surface" reads **five on a stage panorama, four elsewhere until a
+sprite-position source exists**. The follow-up is named, not implied: derive a
+sprite's screen position from the ADR-0222 OAM stream dump, place it on the
+stage with the grid-dump camera recovery `artist_map.py` already does, and hand
+the 1x crop to `compose_engine.Pack.export(context=)`, which is the hook the
+writer already exposes. The row's Contra bounded input is therefore a
+four-layer file today, and stop condition (2) reads "five and four" as
+"panorama and figure page" once that source lands.
+
 ### 4. The sentinel, and what catches a wrong export
 
 **The sentinel is `#FF00FF` at alpha 255, drawn opaque.** The argument for that
@@ -254,6 +277,18 @@ check names cells that still carry exact sentinel pixels, which is why every lay
 we draw is opaque and why `opacity` is `1.0` on `guides` and `palettes`. And a
 `context` band left visible is harmless by §3's clipping rule, so it needs no
 sentinel at all.
+
+*Amended 2026-09-22 (F12.11 implementation).* **The sentinel is `#FF00FD` at
+alpha 255 (RGBA 255, 0, 253, 255), not `#FF00FF`.** The recorder paints an
+unrecorded CHR cell `0xFFFF00FF` (`HdPackBuilder.cpp`, mirrored as
+`artist_chr_kit.UNPAINTED_RGBA`), so every recorded page with an `empty` cell
+carried the original triplet in its own artwork and twin; the write-time
+assertion above fired on the first recorded CHR page the writer met, exactly as
+"checked absent, never argued absent" is meant to. `#FF00FD` keeps the same
+argument (no 6-bit-quantised NES channel reaches `0xFD` either) and collides
+with nothing the recorder writes. The triplet is spelled once, in
+`scripts/mep_sentinel.py`; the assertion, the `mep_lint.py` scan and the
+knock-out captions all read it from there.
 
 ### 5. Write-only, and the refusal is deliberate
 

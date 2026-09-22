@@ -129,6 +129,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 from sheet_repaint import Image, read_png, write_png  # noqa: E402
+import ora_writer  # noqa: E402 — ADR-0220: the layered .ora beside every page
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -1415,9 +1416,8 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
                 states[slot] = "empty"
             cells.append(entry)
 
-        write_png(out_chr / N.require_asset_name(page.name + N.SURFACE_EXT, __name__), hd)
-        if orig is not None:
-            write_png(out_chr / f"{page.name}.orig.png", orig)
+        ora_writer.write_chr_surface(  # page PNG + twin + layered .ora, one pass (ADR-0220 §1)
+            out_chr, N.require_asset_name(page.name + N.SURFACE_EXT, __name__), hd, orig, cells, page)
         write_png(out_chr / f"{page.name}.legend.png", legend_image(page, states))
 
         counts = collections.Counter(c["state"] for c in cells)

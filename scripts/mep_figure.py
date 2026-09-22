@@ -58,6 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import asset_names as N  # noqa: E402 — F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 import mep_build  # noqa: E402
+import ora_writer  # noqa: E402 — ADR-0220: the layered .ora beside the figure
 import sheet_repaint  # noqa: E402
 
 FIGURE_VERSION = 1
@@ -195,8 +196,17 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path) -> dict:
                      entry["x"] * scale, entry["y"] * scale)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    sheet_repaint.write_png(out_dir / name, canvas)
-    sheet_repaint.write_png(out_dir / f"{stem}.orig.png", canvas_1x)
+    # ADR-0220 §1: the layered .ora from this same canvas, beside the pair.
+    # Four layers — no `context`: a figure has no stage position (§3).
+    ora_writer.write_surface(
+        out_dir, name, canvas, canvas_1x,
+        [{"index": c.get("index", i), "x": c["x"] * scale, "y": c["y"] * scale,
+          "w": unit * scale, "h": unit * scale} for i, c in enumerate(cells)],
+        captions=[(0, 0, f"{figure_id} {figure.pose_id or ''}".strip())],
+        swatches=ora_writer.nes_swatches(sorted({
+            t.get("palette") for c in cells
+            for t in (home_cell(pack, figure, c["node"])[1].get("tiles") or [])
+            if isinstance(t, dict) and t.get("palette")})))
     doc = {
         "version": FIGURE_VERSION,
         "kind": "figure",

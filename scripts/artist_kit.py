@@ -374,13 +374,34 @@ class KitBuilder:
 
 # ---- export ----------------------------------------------------------------
 
-def export_grid(pack, builder, grid, out_dir: Path):
+def row_captions(grid, boxes, names, unit: int = 8):
+    """`[(x, y, text)]` in 1x sheet pixels for the `.ora`'s `guides` layer
+    (ADR-0220 §3): one caption per row at the row's top-left — the sheet title
+    on the first row (a `--names` caption or the ids and counts, ADR-0183 §5),
+    the row's pose ids on every row. Nothing here is invented: an unnamed
+    figure is captioned by its `poses.json` id."""
+    out, top = [], 0
+    for r, row in enumerate(grid.rows):
+        ids = " ".join(str(c.pose.id) for c in row)
+        text = f"{grid_title(grid, names)} | {ids}" if r == 0 and names is not None else ids
+        out.append((E.GUTTER, E.GUTTER + top * (unit + E.GUTTER), text))
+        top += boxes[r][1] + SLOT_GAP
+    return out
+
+
+def export_grid(pack, builder, grid, out_dir: Path, names=None):
     """Write one grid as a composed sprite sheet. Returns its `usrNNN` stem.
 
     The whole figure is what gets painted, so a tile shared by two phases is
     emitted in **both** cells — `mep_build` settles the duplicate itself (one
     crop owns the key, a painted one beats an untouched one), and the
-    alternative would be phases with holes where the shared torso should be."""
+    alternative would be phases with holes where the shared torso should be.
+
+    No `context` is passed (ADR-0220 §3: present iff every cell has a stage
+    position): a sprite pose has no stage position in any recorded artefact —
+    `poses.json` and `adjacency.json` place a figure on the screen's floor
+    bands, never on the stitched map — so a figure sheet's `.ora` carries four
+    layers until a recording writes where a pose was seen on the stage."""
     cells, boxes = builder.placements(grid)
     if not cells:
         return None
@@ -394,7 +415,8 @@ def export_grid(pack, builder, grid, out_dir: Path):
     try:
         pack.export("sprite", nodes, seed=anchors[0] if anchors else None,
                     locked=anchors[1:], to_dir=out_dir, placements=cells,
-                    poses=[p.id for p in grid.poses()], name=name)
+                    poses=[p.id for p in grid.poses()], name=name,
+                    captions=row_captions(grid, boxes, names))
     except Exception:
         (out_dir / f"{name}.json").unlink(missing_ok=True)   # release the claim
         raise
@@ -742,14 +764,14 @@ def verify(pack_dir: Path, sheets_out: Path, scratch=None):
 
 # ---- CLI -------------------------------------------------------------------
 
-def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg):
+def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg, names=None):
     pack = E.Pack(pack_dir)
     builder = KitBuilder(pack, columns=columns, rows=rows)
     grids = builder.build()
     sheets_out.mkdir(parents=True, exist_ok=True)
     kept = []
     for grid in grids:
-        if export_grid(pack, builder, grid, sheets_out) is not None:
+        if export_grid(pack, builder, grid, sheets_out, names) is not None:
             kept.append(grid)
     return pack, builder, kept
 
@@ -791,7 +813,7 @@ def main(argv=None) -> int:
     try:
         names = Names.load(args.names)
         pack, builder, grids = build_kit(pack_dir, sheets_out, args.columns,
-                                         args.rows, str(pack_dir))
+                                         args.rows, str(pack_dir), names)
     except (E.ComposeError, KitError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

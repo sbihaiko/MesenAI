@@ -255,6 +255,28 @@ def render_markdown(kit: dict) -> str:
         "and that location cannot be changed. The file it writes has the right name, "
         "so copying it over the kit's copy is the whole difference. The other three "
         "overwrite the kit file directly.",
+        "",
+        "### The layered file (GIMP, Krita, MyPaint)",
+        "",
+        "Beside every surface there is also a `<name>.ora` - the same picture as "
+        "layers, for a program that opens OpenRaster: `orig` (the untouched reference, "
+        "locked), `paint` (empty - the one you paint on; it is the topmost visible "
+        "layer when the file opens), `guides` (the cell grid, the captions and a hatch "
+        "over every cell nothing was seen in play, hidden) and `palettes` (the colours "
+        "the recording saw on this sheet, hidden). A stage panorama also carries "
+        "`context` - the stage at 1x, at half strength, below the grid, a reference "
+        "you may move - so it has five layers; a figure, scenery or pattern page has "
+        "four, because nothing recorded says where on the stage its cells were seen.",
+        "",
+        "The `.ora` is a **starting point, not the deliverable**. Paint on `paint`, "
+        "then export a flat PNG over `<name>.png` - the name in the table above - "
+        "exactly as you would without it. Nothing reads the `.ora` back: not the "
+        "rebuild, not the reload, not the lint. Keep `guides` and `palettes` hidden "
+        "when you export; both are drawn in one magenta (`#FF00FD`) no NES palette "
+        "reaches, and a cell that carries that colour is refused by "
+        "`python3 scripts/mep_lint.py`, which names the cell. Photoshop and Aseprite "
+        "do not open `.ora`; they stay on the per-surface names above, and there is no "
+        "`.psd`, `.aseprite` or `.kra` in the kit.",
     ])
     out.append("")
     out.append("## When you are done")

@@ -67,6 +67,7 @@ import mep_addition  # ADR-0196 <addition> tags and their synthetic target keys
 import mep_conditions  # ADR-0197 authored conditions and their evaluation over routes
 import mep_content_id  # ADR-0139 tree content_id of the discovered pack root
 import mep_errata  # ADR-0152 reviewed known-missing declarations, shared with the smoke gate
+import mep_sentinel  # ADR-0220 §4: the guide sentinel and the per-cell scan that catches a wrong export
 import pack_id_rules  # ADR-0140 source (1): SLUG shape of the MEP root `id`
 
 SECTION_PATHS = {"textures": "textures", "audio": "audio", "synth": "synth/preset.cfg", "border": "border"}
@@ -1321,6 +1322,52 @@ def lint_gbsms_hires(src: Source, rel: str, rep: Report):
     rep.info(rel, f"GB/SMS hires.txt: system {system}, scale {scale}, {len(imgs)} images, {tiles} tiles")
 
 
+def lint_sheet_sentinels(src: Source, hires_rel: str, rep: Report):
+    """ADR-0220 §4: a cell that still carries the guide sentinel (`#FF00FD`,
+    alpha 255) was exported with the `.ora`'s `guides` or `palettes` layer
+    left visible. Every sheet PNG this lint can pair with a sidecar — the
+    `sheets/*.json` beside `hires.txt` and the `chr/*.json` page sidecars a
+    kit writes — is scanned cell rectangle by cell rectangle, and a hit is an
+    **error naming the sheet and the cell** (`index` and `(x, y)`), so the
+    message is one a person can act on. Exact equality, no tolerance. The scan
+    reads the flat PNG and the sidecar, never a `.ora` (§5)."""
+    folder = hires_rel[:-len("hires.txt")]
+    scale = 1
+    for line in src.text(hires_rel).splitlines():
+        s = line.strip()
+        if s.startswith("<scale>"):
+            try:
+                scale = max(1, int(s[7:].strip()))
+            except ValueError:
+                pass
+            break
+    for sub in ("sheets/", "chr/"):
+        prefix = folder + sub
+        for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
+            try:
+                doc = json.loads(src.text(name))
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(doc, dict) or not doc.get("cells") or not doc.get("sheet"):
+                continue
+            png_rel = prefix + str(doc["sheet"])
+            if not src.exists(png_rel):
+                continue
+            try:
+                bitmap = mep_sentinel.decode_png(src.read(png_rel))
+            except MemberTooLargeError:
+                raise
+            except Exception:  # noqa: BLE001 — an unreadable PNG is reported by the image pass
+                bitmap = None
+            if bitmap is None:
+                continue
+            for index, x, y in mep_sentinel.scan_sidecar(doc, bitmap, scale):
+                rep.error(png_rel, f"cell index {index} at ({x}, {y}) contains the guide sentinel "
+                                   f"{mep_sentinel.SENTINEL_HEX} — the .ora's guides or palettes "
+                                   "layer was left visible on export (ADR-0220 §4); hide both "
+                                   f"layers and export the flat PNG again over {doc['sheet']}")
+
+
 def lint_hires(src: Source, rel: str, rep: Report):
     head = src.text(rel)[:400]
     m = re.search(r"<ver>(\d+)", head)
@@ -1751,6 +1798,7 @@ def main(argv):
                 if hires not in seen and src.exists(hires):
                     seen.add(hires)
                     lint_hires(src, hires, rep)
+                    lint_sheet_sentinels(src, hires, rep)
 
         scan_bundled_patches(src, rep)
 

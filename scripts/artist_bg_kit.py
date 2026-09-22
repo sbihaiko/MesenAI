@@ -444,10 +444,17 @@ def _claim_name(pack: E.Pack, out_dir: Path) -> str:
 
 
 def _export(pack: E.Pack, out_dir: Path, placements):
+    """One composed object sheet. The `.ora` beside it (ADR-0220) captions the
+    sheet with its first node id — the same id the manifest's `ids[]` opens
+    with, never a name this tool invents (ADR-0183 §5). No `context` is
+    passed: a stage position for a background node would come from a
+    recorder `map-NNN.json`'s `placements[]`, and the packs this tool reads
+    ship none, so a scenery sheet's `.ora` has four layers today."""
     nodes = [n for n, _x, _y in placements]
     return pack.export("object", nodes, seed=nodes[0], locked=nodes,
                        to_dir=out_dir, placements=placements,
-                       name=_claim_name(pack, out_dir))
+                       name=_claim_name(pack, out_dir),
+                       captions=[(E.GUTTER, E.GUTTER, f"bg{nodes[0]:03d}")])
 
 
 def _geometry(placements):
