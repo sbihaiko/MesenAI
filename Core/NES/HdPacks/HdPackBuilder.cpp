@@ -1990,15 +1990,15 @@ void HdPackBuilder::FinalizeScreenAnchors()
 	uint32_t volatileScreens = 0;
 	uint32_t ambiguousScreens = 0;
 	uint32_t skippedCollisions = 0;
+	uint32_t additionRivals = 0;
 
 	//ADR-0217 Option C / ADR-0218 Option A: every *other* pending screen's own
-	//captured frame is a forced rival for this screen's search, bypassing
-	//IsScreenVariant - a screen someone chose to capture separately is by
-	//definition a different picture, however close the raw pixels sit. One
-	//shared set per call (not grown incrementally) since _pendingScreens is
-	//already fully populated here: "every other capture" (ADR-0217) already
-	//covers "every earlier one" (ADR-0218's own ask), so a single mechanism
-	//satisfies both.
+	//captured frame is a forced rival, bypassing IsScreenVariant - a screen
+	//someone captured separately is a different picture, however close the raw
+	//pixels sit. One shared set per call: "every other capture" (ADR-0217)
+	//already covers "every earlier one" (ADR-0218), so one mechanism serves both.
+	//ADR-0221 option B (F12.13): the flat-shape plane the variant kind test reads.
+	vector<bool> flatShapes = MesenSheets::FlatShapePlane(_shapeTiles);
 	vector<size_t> allCapturedFrames;
 	for(const PendingScreen& p : _pendingScreens) {
 		if(p.HasGridFrame) {
@@ -2006,11 +2006,9 @@ void HdPackBuilder::FinalizeScreenAnchors()
 		}
 	}
 
-	//ADR-0217 Option A: each committed screen's anchor keys, read straight off
-	//its own captured GridFrame (MesenSheets::AnchorKeysOf - host-free, unit-
-	//tested in ScreenStitcher). A screen past the retention cap has no grid
-	//frame to key on and is not tracked here; ADR-0218 Option B's post-hoc
-	//pass below is its only safety net.
+	//ADR-0217 Option A: each committed screen's anchor keys (AnchorKeysOf, host-
+	//free). A screen past the retention cap has no grid frame to key on and is
+	//not tracked here; ADR-0218 Option B's post-hoc pass is its only safety net.
 	vector<vector<MesenSheets::AnchorKey>> committedKeys;
 
 	for(PendingScreen& pending : _pendingScreens) {
@@ -2021,10 +2019,11 @@ void HdPackBuilder::FinalizeScreenAnchors()
 				forcedRivals.push_back(frame);
 			}
 		}
-		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals);
+		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals, flatShapes);
 		if(choice.Picked.empty() || pending.BitmapIndex >= _hdData.BackgroundFileData.size()) {
 			continue;
 		}
+		additionRivals += choice.AdditionRivals;
 		volatileScreens += choice.UsedVolatileCell ? 1 : 0;
 		ambiguousScreens += choice.Rivals > 0 ? 1 : 0;
 
@@ -2111,7 +2110,8 @@ void HdPackBuilder::FinalizeScreenAnchors()
 			std::to_string(volatileScreens) + " on a cell a variant may change, " +
 			std::to_string(ambiguousScreens) + " still matching another recorded screen, " +
 			std::to_string(skippedCollisions) + " skipped for an earlier capture's gate, " +
-			std::to_string(postHocDrops) + " dropped post-hoc)");
+			std::to_string(postHocDrops) + " dropped post-hoc, " +
+			std::to_string(additionRivals) + " frame(s) filed as rivals for adding content the capture lacks)");
 	}
 	_pendingScreens.clear();
 }

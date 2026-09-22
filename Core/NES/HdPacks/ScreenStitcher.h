@@ -86,7 +86,18 @@ namespace MesenSheets
 		//No stable triple could tell the screen apart, so the pick fell back to
 		//cells a variant may change (a combinatorial screen: a Tetris board).
 		bool UsedVolatileCell = false;
+		//ADR-0221 (option B): frames that cleared kAnchorVariantAgree and were
+		//still filed as rivals because they draw content into a cell the
+		//captured frame holds empty. Reported so a recording can say how often
+		//the kind test, not the ratio, decided.
+		uint32_t AdditionRivals = 0;
 	};
+
+	//ADR-0221 (option B, F12.13): one flag per shape id, true when the shape's
+	//art is a flat tile (IsFlatTileData) - the "empty" side of the variant kind
+	//test. Built once per save from the recorder's shape table; the stitcher is
+	//host-free and only sees ids, so the builder hands it this plane.
+	std::vector<bool> FlatShapePlane(const std::vector<SheetTileKey>& shapes);
 
 	//The F9.9 follow-up to ADR-0050's anchor rule (see TileSheetTypes.h for the
 	//measurement): prefer cells no variant of this screen changes, and inside
@@ -101,7 +112,15 @@ namespace MesenSheets
 	//frame another pending screen is itself anchored on is, by definition, a
 	//different picture someone chose to capture separately, however close the
 	//raw pixels sit.
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {});
+	//
+	//`emptyShapes` (ADR-0221 option B, F12.13): FlatShapePlane's output. A frame
+	//that clears kAnchorVariantAgree is a *variant* only when every cell it
+	//changes is non-empty in the captured frame too; one cell where the capture
+	//is empty (kEmptyCell, or a shape flagged here) and the frame is not makes
+	//it a *rival*, whatever the ratio. The kind test runs after the ratio test,
+	//so nothing that was a rival becomes a variant. An empty plane (a caller
+	//with no shape table) degrades to "only kEmptyCell is empty".
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {}, const std::vector<bool>& emptyShapes = {});
 
 	//ADR-0217 Option A / ADR-0218 Option B: a screen's picked anchors, reduced
 	//to what GetLayerIndex actually reads - independent of any HdPackCondition

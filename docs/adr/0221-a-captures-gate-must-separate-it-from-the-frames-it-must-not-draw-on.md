@@ -1,6 +1,15 @@
 # ADR-0221: A capture's gate must separate it from the frames it must not draw on, not only from the other captures
 
-- Status: **accepted 2026-09-22 — option B, not implemented.** The user picked
+- Status: **accepted 2026-09-22 — option B, shipped the same day as PRD Part A
+  F12.13** ([log](../validation/f12.13-variant-kind-rule-2026-09-22.md)),
+  go-ahead verbatim *"dispara as frentes 1, 2, 3 e 4 em paralelo usando
+  workflows"*, then *"Mergear + abrir ADR-0223 (Recommended)"* once the result
+  was in. Stop conditions (2) and (3) met; **(1) not met** — the Punch-Out!!
+  sweep still erases 437 cells, because the kind test files the frames as
+  rivals (228 of them) and the search cannot separate them: the only
+  discriminating cell is flat on the capture side, and ADR-0050 excludes flat
+  cells from the anchor pool. Issue #339 stays open; the follow-up decision is
+  ADR-0223 (`proposed`). Original acceptance record: the user picked
   it through a structured question whose labels are recorded verbatim: *"B
   sozinha (Recommended)"* for the option, and *"Não, só a ADR"* for the
   go-ahead — so this is a decision and a request for work, not a same-turn
