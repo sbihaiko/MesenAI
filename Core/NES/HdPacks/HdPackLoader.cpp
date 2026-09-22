@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include "NES/HdPacks/HdPackLoader.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/NesConsole.h"
@@ -84,6 +85,8 @@ bool HdPackLoader::MergeLowerLayer(HdPackData& into, HdPackData& lower, bool inc
 
 	into.Version = std::max(into.Version, lower.Version);
 	into.OptionFlags |= lower.OptionFlags;
+	//ADR-0224: on or off for the whole stacked pack, like the option flags.
+	into.PreservesBehindBgSprites |= lower.PreservesBehindBgSprites;
 	if(into.Palette.empty()) {
 		into.Palette = lower.Palette;
 	}
@@ -377,6 +380,11 @@ bool HdPackLoader::LoadPack()
 				tokens = StringUtilities::Split(lineContent.substr(9), ',');
 				TrimTokens(tokens);
 				ProcessOptionTag(tokens);
+			} else if(HdBehindBgSpriteRule::IsTagLine(lineContent)) {
+				//ADR-0224: no arguments, no error path - an emulator that does
+				//not know the tag skips it exactly like this dispatch skips any
+				//other unknown line.
+				_data->PreservesBehindBgSprites = true;
 			}
 		}
 

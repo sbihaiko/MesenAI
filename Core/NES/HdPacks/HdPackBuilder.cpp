@@ -5,6 +5,7 @@
 #include <set>
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdNesPack.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/BaseMapper.h"
 #include "NES/BaseNesPpu.h"
 #include "NES/NesConstants.h"
@@ -2340,10 +2341,8 @@ void HdPackBuilder::SaveHdPack()
 		_hdData.OptionFlags |= (int)HdPackOptions::AutomaticFallbackTiles;
 	}
 
-	if(_hdData.OptionFlags != 0) {
-		//Terminated, and built without a trailing comma: see HdPackOptionsToString.
-		ss << "<options>" << HdPackOptionsToString(_hdData.OptionFlags) << std::endl;
-	}
+	//The <options> line, then ADR-0224's <bgPreservesBehindBgSprites> on every recorded pack.
+	HdBehindBgSpriteRule::WriteHeaderTail(ss, _hdData.OptionFlags);
 
 	ss << tileRows.str();
 

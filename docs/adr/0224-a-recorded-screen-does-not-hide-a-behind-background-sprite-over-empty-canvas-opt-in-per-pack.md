@@ -1,19 +1,22 @@
 # ADR-0224: A recorded screen does not hide a behind-background sprite over empty canvas — opt-in per pack
 
-- Status: **accepted 2026-09-22 — slice F12.15 in progress the same day.**
-  User's decisions through structured questions, labels verbatim: *"Opt-in
-  por pack (Recommended)"* for the scope, *"Sim, na mesma fatia
-  (Recommended)"* for splitting the overdraw tool's count, *"So a ADR agora
-  (Recommended)"* for the timing, and *"Tag nova em hires.txt (Recommended)"*
-  for where the opt-in lives. The build go-ahead came later the same day,
-  verbatim: *"libera a F12.15, dispara as três partes em paralelo. mergea o
-  PR assim que puder e garante que t  tudo na main."* — three parallel
-  worktrees (Core, tool, docs), Sonnet verification before the PR, unit
-  tests covering both renderer paths. Until that PR lands nothing here
-  exists in code: `HdNesPack::GetPixels` draws the
-  priority-20 layer after the behind-background sprite pass for every pack,
-  `HdPackLoader` knows no such tag, `HdPackBuilder` writes none, and
-  `scripts/measure_capture_overdraw.py` reports one "erased" total.
+- Status: **accepted 2026-09-22 — shipped the same day as PRD Part A F12.15**
+  ([log](../validation/f12.15-behind-bg-sprites-2026-09-22.md)). User's
+  decisions through structured questions, labels verbatim: *"Opt-in por pack
+  (Recommended)"* for the scope, *"Sim, na mesma fatia (Recommended)"* for
+  splitting the overdraw tool's count, *"So a ADR agora (Recommended)"* for
+  the timing, and *"Tag nova em hires.txt (Recommended)"* for where the opt-in
+  lives. Build go-ahead verbatim: *"libera a F12.15, dispara as três partes em
+  paralelo. mergea o PR assim que puder e garante que t  tudo na main."*
+  Three parallel worktrees (Core, tool, docs), Sonnet verification before the
+  PR. Stop conditions (1), (3), (4) met; **(2) partially met** — the
+  predicate, parse and writer have unit cases, `HdNesPack::GetPixels` has no
+  direct unit test (outside the `core-unit-tests` link set), so the tag-on
+  render path rests on the headless renders (0 `erased sprite` on 41–45 s,
+  36/36 + 9/9 byte-identical without the tag). Open edge: layer 3 with the
+  tag is untested. §2's "equivalently" form is what shipped
+  (`DrawBehindBgSprites` re-applied after layer 2 when
+  `HdBehindBgSpriteRule::KeepsBehindBgSprite` holds).
 - Date: 2026-09-22
 - Related: issue #339 (its second cause), ADR-0223 (the first cause — the
   card's addition-rivals; this ADR closes what ADR-0223 says it cannot),

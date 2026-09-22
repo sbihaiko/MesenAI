@@ -320,6 +320,13 @@ def render_markdown(kit: dict) -> str:
         "A stage map is not copied: it is sliced back into tiles, because a pack stores "
         "tiles and the map is a picture of them. Run the slicer named in the map section.",
     ])
+    out.extend([
+        "",
+        "If the manifest carries a bare `<bgPreservesBehindBgSprites>` line, leave it: "
+        "the recorder writes it so a recorded screen does not hide a behind-background "
+        "sprite over empty (colour-0) canvas (ADR-0224). It is not noise, and other "
+        "emulators simply ignore it.",
+    ])
     out.append("")
     out.append("## What is in here")
     out.append("")

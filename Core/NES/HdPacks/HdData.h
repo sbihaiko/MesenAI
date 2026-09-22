@@ -669,6 +669,12 @@ public:
 	uint32_t Version = 0;
 	uint32_t OptionFlags = 0;
 
+	//ADR-0224: the pack carried <bgPreservesBehindBgSprites>, so a layer-2
+	//<background> must not hide a behind-background sprite over a colour-0
+	//background pixel. Deliberately not an HdPackOptions bit: the <options>
+	//line is a contract other emulators enforce (see HdBehindBgSpriteRule.h).
+	bool PreservesBehindBgSprites = false;
+
 	//ADR-0049's human-vs-auto line, carried along with the data so the renderer
 	//can tell a pack somebody painted from the bootstrap's machine layer. Set by
 	//NesConsole::LoadHdPack from the existing MepSection::HasHuman signal (and for
