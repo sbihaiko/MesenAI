@@ -66,6 +66,7 @@
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
+#include "NES/HdPacks/SheetLabels.h"
 #include "NES/HdPacks/SheetRender.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/HdPacks/OggFadeRamp.h"
@@ -6406,8 +6407,13 @@ namespace
 			"BlocoP: the sidecar carries the amended grid decision");
 		Check(json.find("\"phaseAdvantage\": 0.3447") != std::string::npos,
 			"BlocoP: the sidecar carries the phase advantage that made it");
-		Check(json.find("\"label\": \"\"") != std::string::npos,
-			"BlocoP: the artist's label field is always emitted and always empty");
+		//ADR-0209 Q1 (b), 2026-09-22: the label field is always emitted; it
+		//used to be always empty, now a cell with grouping data carries the
+		//Core's inferred default beside its provenance (SheetLabels.h).
+		Check(json.find("\"label\": \"") != std::string::npos,
+			"BlocoP: the artist's label field is always emitted");
+		Check(json.find("\"label\": \"scene #") != std::string::npos && json.find("\"labelSource\": \"inferred\"") != std::string::npos,
+			"BlocoP: a metatile cell's default label is inferred from its context and index, and says so");
 		Check(json.find("\"tiles\": [{ \"tile\": \"") != std::string::npos,
 			"BlocoP: a cell carries the exact hires.txt keys of its tiles");
 		Check(SerializeSheet(doc, SheetLookup()) == json, "BlocoP: serialisation is deterministic");
@@ -8256,6 +8262,160 @@ void TestCdlFileCheckAcceptsACompleteMap()
 		chrCheck.Reason);
 }
 
+//--- ADR-0209 Q1 (b): inferred default labels (SheetLabels.h) ---------------
+//The Core writes a default `label` per sidecar entry from the grouping it
+//already computed, marked "inferred" so a human's name wins over it (ADR-0183
+//§3/§5). Pinned here: the exact scheme, its determinism, the empty label of
+//an entry with no grouping data, and the provenance field beside every label.
+
+void TestInferredCellLabelFollowsTheSchemeAndNeverGuessesASubject()
+{
+	SheetCell cell;
+	cell.Index = 4;
+	cell.Count = 1004;
+	cell.Metatile = 142;
+	cell.Context = SheetContext::Scene;
+	Check(InferCellLabel(cell, "metatiles") == "scene #142 x1004",
+		"ADR-0209 Q1: a vocabulary-backed background cell is <context> #<metatile> x<count>",
+		InferCellLabel(cell, "metatiles"));
+	Check(InferCellLabel(cell, "sprite") == "sprite #142 x1004",
+		"ADR-0209 Q1: on a sprite sheet the word is sprite, not the cell's default Scene context",
+		InferCellLabel(cell, "sprite"));
+
+	SheetCell hud;
+	hud.Index = 23;
+	hud.Count = 5;
+	hud.Context = SheetContext::Hud;
+	Check(InferCellLabel(hud, "hud") == "hud cell 23 x5",
+		"ADR-0209 Q1: a cell with no vocabulary index falls back to its own index",
+		InferCellLabel(hud, "hud"));
+	Check(InferCellLabel(cell, "metatiles") == InferCellLabel(cell, "metatiles"),
+		"ADR-0209 Q1: the cell label is deterministic");
+	std::string label = InferCellLabel(cell, "metatiles");
+	Check(label.find("player") == std::string::npos && label.find("enemy") == std::string::npos && label.find('"') == std::string::npos,
+		"ADR-0209 Q1: a label carries counts and classification only - no subject, no quote to escape");
+}
+
+void TestACellWithNoGroupingDataGetsNoLabel()
+{
+	SheetCell blank;
+	Check(InferCellLabel(blank, "misc").empty(),
+		"ADR-0209 Q1: count 0 and no vocabulary index is no grouping data, so no label",
+		InferCellLabel(blank, "misc"));
+	Check(LabelFields("").empty(),
+		"ADR-0209 Q1: an empty label writes neither label nor labelSource");
+	Check(LabelFields("x") == ", \"label\": \"x\", \"labelSource\": \"inferred\"",
+		"ADR-0209 Q1: a label is always written with its provenance beside it", LabelFields("x"));
+	Check(InferSheetLabel("metatiles", 6, std::vector<SheetCell>(3), 0, 0).empty(),
+		"ADR-0209 Q1: a vocabulary sheet is not a figure and gets no sheet label");
+	Check(InferSheetLabel("sprite", 3, std::vector<SheetCell>(), 0, 0).empty(),
+		"ADR-0209 Q1: a group sheet with no cells gets no sheet label");
+	PoseEntry empty;
+	Check(InferPoseLabel(empty).empty(), "ADR-0209 Q1: a pose with no tiles gets no label");
+	PoseRun none;
+	Check(InferRunLabel(none, {}, true).empty(), "ADR-0209 Q1: a run with no phases gets no label");
+}
+
+void TestSheetSidecarCarriesTheInferredLabelWithItsProvenance()
+{
+	std::vector<OamFrame> frames = SpriteFigureFrames(12);
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<SheetGroup> groups = BuildSprites(frames, vocab);
+	Check(!groups.empty(), "ADR-0209 Q1: the sprite fixture has a group to serialise");
+	if(groups.empty()) {
+		return;
+	}
+	SheetJsonDoc doc;
+	doc.Kind = "sprite";
+	doc.SheetFile = "spr000.png";
+	doc.ReferenceFile = "spr000.orig.png";
+	doc.Grid = vocab.Grid;
+	doc.CellWidth = doc.CellHeight = vocab.Grid.Unit;
+	doc.Columns = groups[0].Columns;
+	doc.Edges = groups[0].Edges;
+	doc.Poses = { 0, 2 };
+	RenderGroup(groups[0], vocab, SheetLookup(), SheetPalette(), doc.Cells, true);
+
+	std::string json = SerializeSheet(doc, SheetLookup());
+	std::string expected = "  \"label\": \"" + InferSheetLabel("sprite", doc.Columns, doc.Cells, 0, 2) + "\",\n  \"labelSource\": \"inferred\",\n";
+	Check(json.find(expected) != std::string::npos,
+		"ADR-0209 Q1: the group sheet's top-level label and its provenance are written together", json.substr(0, 700));
+	Check(json.find("\"label\": \"sprite group ") != std::string::npos && json.find(", 2 poses, x") != std::string::npos,
+		"ADR-0209 Q1: the sheet label names the kind, the grid, the cells and the poses it cites");
+	Check(json.find("\"label\": \"sprite #") != std::string::npos && json.find("\"labelSource\": \"inferred\", \"tiles\": ") != std::string::npos,
+		"ADR-0209 Q1: every group cell carries its inferred label with the provenance beside it");
+	Check(json.find("\"label\": \"\"") == std::string::npos,
+		"ADR-0209 Q1: no cell of a rendered group is left with the empty label");
+	Check(SerializeSheet(doc, SheetLookup()) == json,
+		"ADR-0209 Q1: labels do not break the sidecar's determinism");
+
+	SheetJsonDoc vocabDoc = doc;
+	vocabDoc.Kind = "sprites";
+	vocabDoc.Poses.clear();
+	std::string vocabJson = SerializeSheet(vocabDoc, SheetLookup());
+	Check(vocabJson.find("  \"label\": ") == std::string::npos,
+		"ADR-0209 Q1: the vocabulary sheet has no top-level label - it is not a figure");
+}
+
+void TestPosesSidecarCarriesInferredLabelsForPosesAndRuns()
+{
+	PoseStats stats;
+	stats.Frames = 100;
+	PoseEntry a;
+	a.Tiles = { { 3, 0, 0 }, { 4, 0, 1 }, { 5, 1, 0 } };
+	a.Width = 2;
+	a.Height = 2;
+	a.Frames = 41;
+	PoseEntry b;
+	b.Tiles = { { 3, 0, 0 }, { 4, 0, 1 }, { 5, 1, 0 }, { 6, 2, 0 } };
+	b.Width = 3;
+	b.Height = 2;
+	b.Frames = 7;
+	b.VariantOf = 0;
+	PoseEntry fused;
+	fused.Tiles = { { 3, 0, 0 } };
+	fused.Width = 1;
+	fused.Height = 1;
+	fused.Frames = 1;
+	fused.FusionOf = { 0, 1 };
+	stats.Poses = { a, b, fused };
+	PoseRun cycle;
+	cycle.Poses = { 0, 1 };
+	cycle.Hold = { 3, 0 };
+	cycle.Repeats = 12;
+	cycle.Driver = 1;
+	stats.Cycles = { cycle };
+	PoseRun seq;
+	seq.Poses = { 1, 0, 2 };
+	seq.Hold = { 0, 0, 0 };
+	seq.Repeats = 2;
+	stats.Sequences = { seq };
+
+	Check(InferPoseLabel(a) == "figure 2x2, 3 tiles, 41 frames",
+		"ADR-0209 Q1: a pose label is its extent, tile count and frames", InferPoseLabel(a));
+	Check(InferPoseLabel(b) == "figure 3x2, 4 tiles, 7 frames, variant of pose000",
+		"ADR-0209 Q1: a variant says which pose it varies", InferPoseLabel(b));
+	Check(InferPoseLabel(fused) == "figure 1x1, 1 tile, 1 frame, fusion",
+		"ADR-0209 Q1: a fusion is marked as one, and singulars read as singulars", InferPoseLabel(fused));
+	Check(InferRunLabel(cycle, stats.Poses, true) == "loop of 2 phases, 3x2, x12, driver port1",
+		"ADR-0209 Q1: a cycle label is the phase count, the largest phase box, the repeats and the driver",
+		InferRunLabel(cycle, stats.Poses, true));
+	Check(InferRunLabel(seq, stats.Poses, false) == "sequence of 3 phases, 3x2, x2",
+		"ADR-0209 Q1: a sequence reads as one and carries no driver when none was judged",
+		InferRunLabel(seq, stats.Poses, false));
+
+	Vocabulary sprites;
+	std::string json = SerializePoses(sprites, stats);
+	Check(json.find("\"id\": \"pose000\", \"frames\": 41, \"size\": [2, 2], \"hold\": 0, \"label\": \"figure 2x2, 3 tiles, 41 frames\", \"labelSource\": \"inferred\", \"tiles\": [") != std::string::npos,
+		"ADR-0209 Q1: poses.json writes each pose's label and provenance right before its tiles", json);
+	Check(json.find("\"driver\": \"port1\", \"label\": \"loop of 2 phases, 3x2, x12, driver port1\", \"labelSource\": \"inferred\" }") != std::string::npos,
+		"ADR-0209 Q1: a cycle's label and provenance close its entry", json);
+	Check(json.find("\"label\": \"sequence of 3 phases, 3x2, x2\", \"labelSource\": \"inferred\" }") != std::string::npos,
+		"ADR-0209 Q1: a sequence's label and provenance close its entry", json);
+	Check(SerializePoses(sprites, stats) == json,
+		"ADR-0209 Q1: labels do not break poses.json's determinism");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -8527,6 +8687,11 @@ int main()
 	TestCdlFileCheckRejectsAMapShorterThanTheRom();
 	TestCdlFileCheckRejectsAnAllZeroMap();
 	TestCdlFileCheckAcceptsACompleteMap();
+
+	TestInferredCellLabelFollowsTheSchemeAndNeverGuessesASubject();
+	TestACellWithNoGroupingDataGetsNoLabel();
+	TestSheetSidecarCarriesTheInferredLabelWithItsProvenance();
+	TestPosesSidecarCarriesInferredLabelsForPosesAndRuns();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

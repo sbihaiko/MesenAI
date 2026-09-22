@@ -478,6 +478,11 @@ doc-checks: check-manifest
 	#cells, one painted cell changes one sheet cell, build keeps the key set.
 	#Synthetic pack in a temp dir; no emulator, no ROM.
 	python3 scripts/test_mep_figure.py
+	#ADR-0209 Q1 (b): the Core-inferred sidecar `label` on the reader side --
+	#names.json > label > id in every caption, Pose/PoseRun/Sheet carry the
+	#label and its source, a labelled pack builds to the same key set.
+	#Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_sidecar_labels.py
 	#F12.6a (ADR-0197): hand-authored conditions -- the syntax a sheet may
 	#carry, and the evaluation of one against a recorded route, written from
 	#HdPackConditions.h. Synthetic grid streams; no emulator, no ROM.

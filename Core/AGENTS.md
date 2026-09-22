@@ -42,7 +42,15 @@ needs no local rules beyond the root DOX.
   resolve to a `<tile>` line (condition-prefixed or not) of the pack's own
   `hires.txt`.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
-  from `PoseStats` and nothing in it is computed at serialisation time.
+  from `PoseStats` and nothing in it is computed at serialisation time — with
+  one named exception: the `label` beside each pose and run is a *rendering*
+  of the fields already in that entry (ADR-0209 Q1 (b),
+  `Core/NES/HdPacks/SheetLabels.h`), never a new measurement, and it always
+  travels with `"labelSource": "inferred"` so a reader can tell it from a
+  human's name and let the human's win (ADR-0183 §5). The same two fields
+  appear on every sheet sidecar cell with grouping data and, top-level, on
+  every `sprNNN`/`objNNN` group sheet; a cell with no grouping data keeps the
+  empty `label` and no `labelSource`.
   Optional fields a reader must tolerate being absent: per entry
   `fusionOf[]`, `next[]`, `variantOf`; top-level `cycles[]`, `sequences[]`
   (ADR-0179) and `input {frames, ports, held{}, never[]}` (ADR-0181 §2,
