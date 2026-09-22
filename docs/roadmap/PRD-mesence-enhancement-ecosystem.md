@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as **F12.12**, bounded input measured the same day, which retracted ADR-0210's own "5 532 keys out of range" Context figure; the ADR-0217/ADR-0218 recorder change re-recorded and closed; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started; **2026-09-22** — ADR-0221 accepted as option B, opening **F12.13**, and ADR-0220 accepted, so **F12.11** is a pending slice; both decisions only, neither implemented) — pack/core roadmap of this
+**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as **F12.12**, bounded input measured the same day, which retracted ADR-0210's own "5 532 keys out of range" Context figure; the ADR-0217/ADR-0218 recorder change re-recorded and closed; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started; **2026-09-22** — ADR-0221 accepted as option B, opening **F12.13**, and ADR-0220 accepted, so **F12.11** is a pending slice; both decisions only, neither implemented; ADR-0194 accepted, nothing to build; ADR-0222 opened `proposed` for the OAM dump format) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -251,7 +251,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   log: `spriteNearby` reports **`not evaluable`** (the OAM dump carries
   vocabulary indexes, not tile data — the log pointed at F12.6b, but that
   slice shipped ADR-0197 §3's *memory* plane only and `spriteNearby` is still
-  `not evaluable`, so the OAM change remains undecided), and
+  `not evaluable`, so the OAM change remains undecided — ADR-0222, `proposed`), and
   the six routes share their opening, 249 of the first 300 retained frames
   identical cell for cell, so they are less independent evidence than six
   recordings sound. `not evaluable` is never counted as a pass.
@@ -632,7 +632,7 @@ worth reading before re-deriving anything: at 300 s of effective input the
 coverage cheat buys no map extent (all three stage-1 variants stitch the
 identical 2512×240), and the navigation passes are one screen deep because the
 sweep's body script is the stage-1 route. One question the run raised and did
-not settle is ADR-0194 (`proposed`): a kit's cross-recording union is the
+not settle is ADR-0194 (accepted 2026-09-22): a kit's cross-recording union is the
 pattern pages, so this row's figures and scenery were verified nine times per
 recording rather than merged once.
 
@@ -682,7 +682,7 @@ local artifact hashes and one delivery-record line after acceptance passes.
    (Phase 6 non-goals). Contra is the substitute — the artist pack is on
    an allow-listed host.
 
-   **One observation this test also records** (ADR-0194, `proposed`): kit
+   **One observation this test also records** (ADR-0194, accepted 2026-09-22; this is its reopen trigger): kit
    selection across recordings. When a subject the reference pack shows exists
    only in a second recording of the same stage — the panorama a coverage pass
    extends, a pose only the boss state holds — note whether the artist found
@@ -1030,7 +1030,7 @@ who did not build it logs its open-and-paint row.
 2026-09-19), and F12.5, F12.6b and F12.7 with them (2026-09-19). F12.6b
 closed half of what F12.6a's report left open:
 `memoryCheckConstant` is a verdict, `spriteNearby` and `memoryCheck` are still
-`not evaluable` and now wait on an OAM-format decision nobody has taken. One
+`not evaluable` and wait on the OAM-format decision, now written up as ADR-0222 (`proposed` 2026-09-22, options A/B/C plus `memoryCheck`). One
 slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
 prerequisite of any of them — it only guarantees that whatever surface those
 slices name, every recorded tile has one. F12.9–F12.12 (added 2026-09-19) follow the order
@@ -1129,7 +1129,7 @@ files and in §3.
 | 0189 | accepted (2026-09-14); implemented in the same change | a sprite-group edge is serialized as a `spriteNearby` condition and a conditioned tile always keeps a bare twin; defers `frameRange`, `tileAtPosition`, `memoryCheckConstant` |
 | 0190 | accepted (2026-09-14); implemented in the same change | `tileNearby` auto-attached from a directed co-occurrence table gated on both-ways frame support; removes `tileNearby` from 0189 §4's deferrals |
 | 0191 | accepted (2026-09-14); implemented in the same change | CI compiles **Linux only**: `tests.yml` (Windows MSBuild + `PGOHelper citests`, not reproducible on Linux) deleted, `unit-tests.yml` folded into `checks.yml` as `ui-tests`/`headless-ui-tests` and deleted, `build.yml` trimmed to its Linux/AppImage legs. The macOS Apple Silicon binary is built locally by `make release-macos` (C.4) and Windows is retired from CI, so MSVC-only breakage is caught only when it returns. Amends ADR-0131 (the unit-test contract moves to `checks.yml`) and drops C.1's "Windows `tests.yml` job" from the required checks. **Amended by 0203/0204 (2026-09-16/17): Windows and macOS Apple Silicon are built again on the existing triggers, and the download channel is the rolling `ci-latest` pre-release — the "Linux only" clause above no longer holds** |
-| 0194 | proposed (2026-09-15) | the kit's cross-recording union is the pattern pages, "judged as a union" means the `--also` donation and no generator gains a merge; F9.25's text cites it |
+| 0194 | **accepted 2026-09-22** (*"Aceitar (Recommended)"*); nothing to implement — proposed 2026-09-15 | the kit's cross-recording union is the pattern pages, "judged as a union" means the `--also` donation and no generator gains a merge; F9.25's text cites it |
 | 0195 | accepted (2026-09-16); implemented in the same change | the recorder always asks for `automaticFallbackTiles` on a CHR ROM game |
 | 0199 | accepted (2026-09-16); implemented in the same change | the community-pack classify step is a direct, tool-free Gemini API call, not the Claude Code action |
 | 0200/0203/0204 | accepted (2026-09-16/17); shipped | a PR against `prod` builds the binaries; CI builds Windows and macOS Apple Silicon again on the existing triggers; the download channel is a rolling `ci-latest` pre-release with a link check — together they supersede 0191's "Linux only" |
@@ -1150,6 +1150,7 @@ files and in §3.
 | 0219 | accepted (2026-09-20), shipped as F12.9 the same day | a kit may project over the ROM alone — every cell `fill`, `seen: false`, no play session — amending ADR-0183 §1 by reference. CHR ROM only; CHR RAM refused, pointing at ADR-0210 §3. Recording always wins, the recorder is untouched, and the ROM-SHA-1 pin is disabled by construction on that path. Slice F12.9
 | 0220 | **accepted 2026-09-22 — not implemented; slice F12.11.** Proposed 2026-09-20 and left so by user decision the same day; accepted with *"aceito o F12.11. nao implemente ainda."* | a layered `.ora` beside every surface, write-only for the toolchain, five layers with `paint` topmost visible, the flat PNG over F12.4's name the only return path. Blocks F12.11, which does not start until this is accepted; the deferral's reason is that no GIMP/Krita artist population is measured and its stop condition (2) needs a person with both programs
 | 0221 | **accepted 2026-09-22, option B — not implemented; slice F12.13.** Opened `proposed` 2026-09-20 from the ADR-0217/0218 measurement, which reproduced issue #339 on the post-change pack, with five options (A raise `kAnchorVariantAgree`, B classify a variant by the kind of difference, C require one discriminating probe, D refuse at draw time, E accept and surface it to the artist). B alone was picked: ADR-0159 §1 narrowed (a variant may not add content the capture lacks), ADR-0156 not amended, E ruled out because ADR-0146 auto-loads every accepted pack | a capture's gate must separate it from the **frames** it must not draw on, not only from the other captures. Root cause measured: the pre-fight frame agrees with `screen003` on 919 of 960 cells (0.9573) against `kAnchorVariantAgree` 0.90, so it is a *variant*, and ADR-0159 §1 deliberately excludes the cells a variant changes from the anchor pool — the gate is built to match it. Acceptance test exists: the ROM draws 7 808 `STARRING`/`LITTLE MAC` pixels, the render has 0 |
+| 0222 | **proposed** (2026-09-22) — opened from the F12.6a/F12.6b logs' open item; three options for the sprite side (A self-describing OAM dump with `K`/`P` lines and a palette id per entry, B write the `ShapeId` and resolve against the grid dump of the same recording, C leave sprite conditions `not evaluable` and say so to the artist) plus `memoryCheck` from the existing `M` plane under any of them; four questions for a human | the retained OAM stream must let lint resolve a sprite to its `(tileData, palette)`, so `spriteNearby`, `spriteAtPosition`, `positionCheck*` and `memoryCheck` stop reporting `not evaluable` |
 
 ### 7. Risks
 
