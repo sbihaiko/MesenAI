@@ -90,6 +90,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import mep_build  # noqa: E402  — the tree's single PNG decoder
+import ora_writer  # noqa: E402  — ADR-0220: the layered .ora beside every panorama
 import sheet_repaint  # noqa: E402  — Image / read_png / write_png
 
 Image = sheet_repaint.Image
@@ -1000,8 +1001,20 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
         name = N.require_asset_name(
             f"{safe_stage}-{i:03d}" + N.SURFACE_EXT, "artist_map.py")[:-len(N.SURFACE_EXT)]
         stems.append(name)
-        write_png(map_dir / f"{name}.png", painted)
-        write_png(map_dir / f"{name}.orig.png", orig)
+        # ADR-0220 §1/§3: the panorama, its twin and the layered .ora from one
+        # canvas. Every cell of a panorama has a stage position by construction
+        # (it *is* the stage), so this surface carries the `context` layer: the
+        # 1x panorama itself, in a band below the painted grid, at 50 %.
+        rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
+                  "w": CELL * scale, "h": CELL * scale,
+                  "seen": False if c.get("paletteAttributed") else None} for c in cells]
+        swatches = ora_writer.nes_swatches(sorted({
+            t["palette"] for c in cells for t in c["tiles"] if t.get("palette")}))
+        # `orig` below stays the 1x panorama: the twin on disk grew by the
+        # band, but rows/title/columns describe the stage, not the file.
+        ora_writer.write_surface(
+            map_dir, f"{name}.png", painted, orig, rects, context=orig,
+            captions=[(0, 0, f"{safe_stage} region {i}")], swatches=swatches)
         columns = orig.width // CELL
         doc = sidecar(name, cells, columns, scale, orientation_of(region), stats, region,
                       pack.scale)

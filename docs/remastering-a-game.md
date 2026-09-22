@@ -529,7 +529,41 @@ sheet each came from (the `sprNNN` sheet itself, or `sprites.png` for a member
 the group does not hold), and leaves everything else alone; `--verify` rebuilds
 a throwaway copy and asserts the `(tileData, palette)` key set is unchanged.
 The surface is at the pack's scale like every other sheet, and a resized
-figure is refused the same way.
+figure is refused the same way. The figure also gets its `<id>-figure.ora`
+beside the pair — four layers, `paint` on top of the untouched figure, the cell
+grid and the figure's id hidden in `guides` (see "The layered file" below); the
+flat PNG over the F12.4 name is still the only way back.
+
+### The layered file, for GIMP, Krita and MyPaint (F12.11, ADR-0220)
+
+Beside every surface the kit also writes `<name>.ora`, an OpenRaster file the
+three programs above open natively — the same picture as layers, bottom to top:
+
+| layer | what it is | flags |
+|---|---|---|
+| `orig` | the `*.orig.png` twin, pixel for pixel | visible, locked |
+| `context` | the stage around the surface at 1x, at 50 % — only on a surface whose every cell has a stage position: today the stage panoramas (five layers); figure, scenery and CHR sheets have four until a recording writes where a sprite was seen on the stage (ADR-0220 §3, amended 2026-09-22) | visible, movable |
+| `paint` | empty — **the one layer you paint on**; it opens as the topmost visible layer | visible |
+| `guides` | cell grid, captions from the recording's ids or your `names.json`, a hatch over every cell nothing saw in play | **hidden**, locked |
+| `palettes` | a swatch strip of the palettes recorded for the sheet (a static page states `defaultTile = Y` instead) | **hidden**, locked |
+
+**The `.ora` is a starting point; the flat PNG is the deliverable.** Paint on
+`paint`, then export a flat PNG over `<name>.png` — the F12.4 name in the table
+above — exactly as you would without the layered file. The return path does not
+change: `mep_build` keeps only the cells that differ from the twin, the reload
+puts them on screen, and **nothing reads the `.ora` back** — not the rebuild,
+not the reload, not `mep_lint.py`. That refusal is deliberate and tested
+(ADR-0220 §5): the sheet PNG stays the only source of truth.
+
+Keep `guides` and `palettes` hidden when you export. Both are drawn in one
+magenta, `#FF00FD`, that no NES palette reaches, and the kit checks the value is
+absent from the artwork before writing; a flat export that still carries it in a
+cell is refused by `python3 scripts/mep_lint.py`, which names the sheet and the
+cell (`index` and `(x, y)`). Photoshop and Aseprite do not open `.ora` and stay
+on the per-surface names above — there is no `.psd`, `.aseprite` or `.kra`
+writer, on purpose. A surface that carries a `context` layer is taller than its
+cell grid, and its `*.orig.png` twin grew with it: paint at the size you were
+given, the cells have not moved.
 
 Do not hand-edit `textures/hires.txt`. It is generated from the sheets by
 `mep_build.py build`, and an edit there is thrown away on the next build. Copy

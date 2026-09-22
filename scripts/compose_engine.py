@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mep_addition  # noqa: E402 — ADR-0196 synthetic target keys
 import mep_build  # noqa: E402 — PNG decoder (_png_pixels) and the sheet loader
+import ora_writer  # noqa: E402 — ADR-0220: the layered .ora written beside every sheet
 import sheet_repaint  # noqa: E402 — Image/read_png/write_png, stdlib RGBA codec
 
 GUTTER = 1  # kSheetGutter (TileSheetTypes.h): the cell grid's transparent margin
@@ -1453,7 +1454,8 @@ class Pack:
 
     def export(self, kind: str, nodes: list, seed, locked: list, band=None,
                to_dir: Path = None, placements: list = None, poses: list = None,
-               name: str = None, overflow: list = None, chr_tile_count: int = 0):
+               name: str = None, overflow: list = None, chr_tile_count: int = 0,
+               captions: list = None, context=None):
         """Write a composed sheet (`usrNNN`) to `to_dir` (default the pack's own
         sheets dir). `kind` is `object` or `sprite`; `nodes` are the kept node
         ids in sheet order; `band` is the quantised bottom for a sprite band.
@@ -1482,7 +1484,14 @@ class Pack:
         record naming the pose's root cell as the anchor. `chr_tile_count` is
         the ROM's own CHR tile count and is **required** on a CHR ROM pack —
         §3's target index is `chrTileCount + n`, and there is no honest way to
-        guess it from a recording."""
+        guess it from a recording.
+
+        `captions` is `[(x, y, text)]` in 1x sheet pixels and `context` the 1x
+        stitched-map crop around the sheet's subject, or None when no cell has
+        a stage position; both go to the layered `.ora` written beside the pair
+        (ADR-0220 §1/§3) and change nothing in the PNG, the twin or the sidecar
+        — except that a `context` grows the canvas and the twin together by
+        the band that holds it."""
         if kind not in ("object", "sprite"):
             raise ComposeError(f"composed kind {kind!r} must be 'object' or 'sprite'")
         if not nodes:
@@ -1499,8 +1508,17 @@ class Pack:
                                       extra=len(overflow))[0]
                    if scale > 1 else canvas.clone())
         name = name or self.next_free_name(to_dir)
-        sheet_repaint.write_png(to_dir / f"{name}.png", painted)
-        sheet_repaint.write_png(to_dir / f"{name}.orig.png", canvas)
+        # ADR-0220 §1: the `.ora` is written in this same pass from this same
+        # canvas, so the sheet, its twin and the layered file cannot disagree.
+        rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
+                  "w": unit * scale, "h": unit * scale, "seen": c.get("seen")} for c in cells]
+        swatches = ora_writer.nes_swatches(sorted({
+            t.get("palette") for c in cells for t in (c.get("tiles") or [])
+            if isinstance(t, dict) and t.get("palette")}))
+        ora_writer.write_surface(
+            to_dir, f"{name}.png", painted, canvas, rects,
+            captions=[(x * scale, y * scale, text) for x, y, text in (captions or [])],
+            swatches=swatches, context=context)
         doc = {
             "version": SHEET_VERSION,
             "kind": kind,
