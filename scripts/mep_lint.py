@@ -1488,7 +1488,16 @@ def report_routes(src, route_paths, target):
     def skip(path, why):
         print(f"skipped  {path}  {why}")
     for route in mep_conditions.iter_routes(route_paths, on_skip=skip):
-        summaries.append((route.name, route.retained, route.played, len(route.shapes)))
+        # F12.14 (ADR-0222): the OAM stream beside the grid, when there is one.
+        if route.oam is not None:
+            oam = (f"OAM {route.oam.retained} retained, {route.oam.played} played"
+                   + ("" if route.oam.has_tiles else ", no tile data (pre-F12.14)")
+                   + ("" if route.oam_aligned else ", not aligned with the grid"))
+        elif route.oam_skipped:
+            oam = f"OAM skipped: {route.oam_skipped}"
+        else:
+            oam = "no OAM stream"
+        summaries.append((route.name, route.retained, route.played, len(route.shapes), oam))
         for rel, cond, keys in found:
             if cond.evaluable:
                 verdicts.setdefault(cond.name, []).append(
@@ -1502,8 +1511,8 @@ def report_routes(src, route_paths, target):
     print(f"\nroutes: {len(summaries)} recording(s), "
           f"{sum(s[1] for s in summaries)} retained frame(s) "
           f"standing for {sum(s[2] for s in summaries)} played")
-    for name, retained, played, shapes in summaries:
-        print(f"  {name}: {retained} retained, {played} played, {shapes} shape(s)")
+    for name, retained, played, shapes, oam in summaries:
+        print(f"  {name}: {retained} retained, {played} played, {shapes} shape(s); {oam}")
     if not found:
         print(f"\nno authored condition found in {target} — nothing to validate. "
               "A sheet carries one in its `conditions` block, marked "
@@ -1532,7 +1541,15 @@ def report_routes(src, route_paths, target):
                 frame, row, col = v.first_failure
                 where = f" at cell ({col},{row})" if col is not None else ""
                 print(f"      first failure: frame {frame}{where}")
-            if cond.type == "tileNearby":
+            if v.first_failure_sprite is not None:
+                # F12.14: a sprite instance is placed by its screen origin in
+                # the OAM stream, not by a grid cell.
+                frame, x, y = v.first_failure_sprite
+                print(f"      first failing sprite: OAM frame {frame} at ({x},{y})")
+            if cond.type in mep_conditions.SPRITE_TYPES:
+                print("      unintended hits: n/a — not counted for sprite and "
+                      "position conditions (ADR-0222)")
+            elif cond.type == "tileNearby":
                 if v.unintended:
                     frame, row, col = v.first_unintended
                     print(f"      unintended hits: {v.unintended}, first at "

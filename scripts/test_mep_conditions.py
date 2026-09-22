@@ -113,15 +113,24 @@ def test_a_frame_range_period_of_zero_is_refused():
 
 def test_the_types_a_recording_cannot_answer_are_named_not_guessed():
     for ctype, needle in [
-        (f"<condition>s,spriteNearby,8,0,{T},{PAL}", "vocabulary indexes"),
-        ("<condition>m,memoryCheck,0050,==,0060", "two watched addresses"),
         ("<condition>q,ppuMemoryCheckConstant,2000,==,01", "PPU memory"),
-        ("<condition>p,positionCheckX,>,80", "sprite stream, not the grid"),
+        ("<condition>q,ppuMemoryCheck,2000,==,2001", "PPU memory"),
+        ("<condition>m,memoryCheck,0050,==,0800", "outside the retained"),
     ]:
         c = C.parse_condition_line(ctype)
         check(not c.evaluable, f"{c.type} is not evaluable")
         check(needle in (c.not_evaluable_reason or ""),
               f"{c.type} says why", c.not_evaluable_reason)
+    # F12.14 (ADR-0222): the five sprite-side types and memoryCheck are
+    # evaluable types now; whether a *route* can answer them is per route.
+    for line in [f"<condition>s,spriteNearby,8,0,{T},{PAL}",
+                 f"<condition>s,spriteAtPosition,8,0,{T},{PAL}",
+                 "<condition>m,memoryCheck,0050,==,0060",
+                 "<condition>p,positionCheckX,>,80",
+                 "<condition>p,originPositionCheckY,==,80"]:
+        c = C.parse_condition_line(line)
+        check(c.evaluable, f"{c.type} is an evaluable type since F12.14",
+              c.not_evaluable_reason)
 
 
 # --- the recorded route ----------------------------------------------------
@@ -320,9 +329,215 @@ def test_a_type_the_recording_cannot_answer_is_not_evaluable_never_a_pass():
         c = C.parse_condition_line(f"<condition>s,spriteNearby,8,0,{T},{PAL}")
         v = C.evaluate(c, {(T, PAL)}, r)
         check(v.state == "not evaluable" and not v.evaluable,
-              "it is reported as not evaluable", v.state)
+              "a route with no OAM stream cannot answer a sprite condition", v.state)
+        check("MESEN_OAM_STREAM_DUMP" in v.reason, "and it names the missing stream", v.reason)
         check(v.held == 0 and v.failed == 0,
               "and it counts nothing, so it can never read as a pass")
+
+
+# --- F12.14 (ADR-0222 option A): the OAM stream -----------------------------
+
+S = "CC" * 16          # a sprite shape
+PALS = "0F162736"      # the sprite palette word
+
+
+def _oam(td, lines, name="oam.txt"):
+    (Path(td) / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _grid_with_t_at_cell(td, col, row, repeat=1, name="grid.txt"):
+    """A grid dump drawing T at one cell on one retained frame, repeated."""
+    lines = ["F 0", f"K 1 {T} {PAL}", f"{col * 8} {row * 8} 1"]
+    for _ in range(repeat - 1):
+        lines += ["F 0", f"{col * 8} {row * 8} 1"]
+    return _route(td, lines, name)
+
+
+def test_an_oam_dump_parses_into_frames_shapes_and_palettes():
+    with tempfile.TemporaryDirectory() as td:
+        _oam(td, [f"K 5 {S} {PAL}", "P 2 " + PALS,
+                  "0 3 129 0 5,10,20,2 5,40,40,255",
+                  "1 1 0 0 5,12,20,2"])
+        stream = C.load_oam_stream(Path(td) / "oam.txt")
+        check(stream.retained == 2 and stream.played == 4,
+              "two retained OAM frames standing for four played",
+              f"{stream.retained}/{stream.played}")
+        check(stream.has_tiles, "a dump with K lines resolves its sprites")
+        f0 = stream.frames[0]
+        check(f0.ports == (129, 0), "the two port bytes are kept (ADR-0181)", str(f0.ports))
+        check(f0.key_of(f0.entries[0]) == (S, PALS),
+              "a per-entry palette id resolves through the P line (ADR-0159)")
+        check(f0.key_of(f0.entries[1]) == (S, PAL),
+              "kUnknownPalette falls back to the shape's own first-seen palette")
+        check(list(f0.keys_covering(17, 27)) == [(S, PALS)],
+              "a sprite covers the 8x8 block at its origin")
+        check(list(f0.keys_covering(18, 20)) == [], "and nothing outside it")
+        check(stream.frames_between(3, 1) == [stream.frames[1]],
+              "the played-frame index finds the frame a span falls in")
+        check(stream.frames_between(0, 4) == stream.frames,
+              "a span over both frames returns both")
+
+
+def test_a_pre_f12_14_oam_dump_reports_no_tile_data():
+    with tempfile.TemporaryDirectory() as td:
+        _grid_with_t_at_cell(td, 2, 3)
+        _oam(td, ["0 1 0 0 3,10,20 4,18,20"])
+        r = C.load_route(Path(td) / "grid.txt")
+        check(r.oam is not None and not r.oam.has_tiles,
+              "a dump of bare node indexes parses but has no tile data")
+        c = C.parse_condition_line(f"<condition>s,spriteNearby,8,0,{S},{PALS}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(not v.evaluable and "OAM stream carries no tile data" in v.reason,
+              "and a sprite condition says so rather than guessing", v.reason)
+        check("vocabulary" not in (c.not_evaluable_reason or ""),
+              "the old 'vocabulary indexes' reason is retired")
+
+
+def test_oam_dumps_beside_a_route_are_read_with_it_not_as_routes():
+    with tempfile.TemporaryDirectory() as td:
+        _grid_with_t_at_cell(td, 2, 3)
+        _oam(td, [f"K 5 {S} {PALS}", "0 1 0 0 5,24,24,255"])
+        skipped = []
+        routes = list(C.iter_routes([td], on_skip=lambda p, w: skipped.append(p)))
+        check(len(routes) == 1 and not skipped,
+              "oam.txt is the route's OAM stream, not a second route",
+              f"routes={len(routes)} skipped={skipped}")
+        check(routes[0].oam is not None and routes[0].oam_aligned,
+              "the stream is attached and aligned with the grid")
+
+
+def test_sprite_nearby_on_a_background_key_reads_the_joined_oam_frame():
+    with tempfile.TemporaryDirectory() as td:
+        # T at cell (2,3) = pixel (16,24); the sprite S sits 8 px to its right.
+        _grid_with_t_at_cell(td, 2, 3)
+        _oam(td, [f"K 5 {S} {PAL}", "P 1 " + PALS, "0 1 0 0 5,24,24,1"])
+        r = C.load_route(Path(td) / "grid.txt")
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PALS}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "always held" and v.instances == 1,
+              "the sprite 8 px right of the tile satisfies spriteNearby 8,0",
+              f"{v.state} held={v.held} failed={v.failed}")
+        # HdPackSpriteNearbyCondition: PaletteColors must match too...
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PAL}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "never held", "a palette mismatch fails", v.state)
+        check(v.first_failure == (0, 3, 2), "and the failing cell is named", str(v.first_failure))
+        # ...unless ignorePalette (field 7) is set.
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PAL},Y")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "always held", "ignorePalette skips the palette", v.state)
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,-8,0,{S},{PALS}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "never held", "the offset is signed; nothing is on the left", v.state)
+
+
+def test_sprite_nearby_on_a_sprite_key_needs_no_join():
+    with tempfile.TemporaryDirectory() as td:
+        # The grid stands for five played frames, the OAM stream for one: the
+        # streams do not align, but a sprite key is evaluated in its own frame.
+        _grid_with_t_at_cell(td, 2, 3, repeat=5)
+        _oam(td, [f"K 5 {S} {PALS}", f"K 6 {U} {PAL}",
+                  "0 1 0 0 5,40,40,255 6,48,40,255"])
+        r = C.load_route(Path(td) / "grid.txt")
+        check(not r.oam_aligned, "the fixture's streams disagree on played frames")
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{U},{PAL}")
+        v = C.evaluate(c, {(S, PALS)}, r)
+        check(v.evaluable and v.state == "always held" and v.instances == 1,
+              "a sprite key's neighbour is read off the same OAM frame",
+              f"{v.state} {v.reason}")
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PALS}")
+        v = C.evaluate(c, {(U, PAL)}, r)
+        check(v.state == "never held" and v.first_failure_sprite == (0, 48, 40),
+              "a failing sprite instance is named by its OAM frame and origin",
+              f"{v.state} {v.first_failure_sprite}")
+
+
+def test_a_background_key_is_not_evaluable_when_the_streams_do_not_align():
+    with tempfile.TemporaryDirectory() as td:
+        _grid_with_t_at_cell(td, 2, 3, repeat=5)
+        _oam(td, [f"K 5 {S} {PALS}", "0 1 0 0 5,24,24,255"])
+        r = C.load_route(Path(td) / "grid.txt")
+        c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PALS}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(not v.evaluable and "played-frame counts (5 vs 1)" in v.reason,
+              "a background key's sprite condition refuses a join it cannot make",
+              v.reason)
+        check(v.held == 0 and v.failed == 0, "and counts nothing")
+
+
+def test_sprite_at_position_reads_the_absolute_pixel():
+    with tempfile.TemporaryDirectory() as td:
+        _grid_with_t_at_cell(td, 2, 3)
+        _oam(td, [f"K 5 {S} {PALS}", "0 1 0 0 5,100,120,255"])
+        r = C.load_route(Path(td) / "grid.txt")
+        c = C.parse_condition_line(f"<condition>a,spriteAtPosition,107,127,{S},{PALS}")
+        check(C.evaluate(c, {(T, PAL)}, r).state == "always held",
+              "the last pixel of the sprite's block is covered")
+        c = C.parse_condition_line(f"<condition>a,spriteAtPosition,108,120,{S},{PALS}")
+        check(C.evaluate(c, {(T, PAL)}, r).state == "never held",
+              "one pixel past it is not")
+
+
+def test_position_checks_use_the_loaders_decimal_operand_and_every_pixel():
+    c = C.parse_condition_line("<condition>p,positionCheckX,>=,32")
+    check(c.operand_a == 32 and c.operator == ">=",
+          "positionCheck reads its operand with std::stoi, i.e. decimal")
+    with tempfile.TemporaryDirectory() as td:
+        _grid_with_t_at_cell(td, 4, 5)   # pixel (32,40)
+        _oam(td, [f"K 5 {S} {PALS}", "0 1 0 0 5,32,40,255 5,30,40,255"])
+        r = C.load_route(Path(td) / "grid.txt")
+        v = C.evaluate(c, {(S, PALS)}, r)
+        check(v.instances == 2 and v.held == 1 and v.failed == 1,
+              "the sprite at x=32 holds on all 8 pixels; the one at x=30 is split, so it fails",
+              f"held={v.held} failed={v.failed}")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.state == "always held", "a background cell at x=32 holds too", v.state)
+        c = C.parse_condition_line("<condition>o,originPositionCheckY,==,40")
+        v = C.evaluate(c, {(S, PALS)}, r)
+        check(v.state == "always held" and v.instances == 2,
+              "originPositionCheck reads the tile origin, mirrored or not", v.state)
+        c = C.parse_condition_line("<condition>o,positionCheckY,<,40")
+        v = C.evaluate(c, {(S, PALS)}, r)
+        check(v.state == "never held", "y < 40 fails for a sprite whose origin is 40", v.state)
+    for bad in ["<condition>p,positionCheckX,>=,0x20",
+                "<condition>p,positionCheckX,>=,32,1",
+                "<condition>p,positionCheckX,=>,32"]:
+        try:
+            C.parse_condition_line(bad)
+            check(False, f"{bad!r} is refused")
+        except C.ConditionError:
+            check(True, f"{bad!r} is refused")
+
+
+def test_memory_check_compares_two_watched_bytes_masked():
+    c = C.parse_condition_line("<condition>m,memoryCheck,0030,==,0031")
+    check(c.operand_a == 0x30 and c.operand_b == 0x31 and c.evaluable,
+          "memoryCheck names two addresses, both hex")
+    with tempfile.TemporaryDirectory() as td:
+        r = _memory_route(td, [{0x30: 0x12, 0x31: 0x12},
+                               {0x30: 0x12, 0x31: 0x13},
+                               {0x30: 0xF1, 0x31: 0x01}])
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.held == 1 and v.failed == 2 and v.state == "mixed",
+              "equal on one frame of three", f"held={v.held} failed={v.failed}")
+        c = C.parse_condition_line("<condition>m,memoryCheck,0030,==,0031,0F")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.held == 2 and v.failed == 1,
+              "the mask is applied to both watched bytes (F1 & 0F == 01 & 0F)",
+              f"held={v.held} failed={v.failed}")
+        c = C.parse_condition_line("<condition>m,memoryCheck,0031,>,0030")
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(v.held == 1, "the operator is the loader's, operand order kept", str(v.held))
+    with tempfile.TemporaryDirectory() as td:
+        r = _two_frame_route(td)
+        v = C.evaluate(c, {(T, PAL)}, r)
+        check(not v.evaluable and v.reason == C.NO_MEMORY_STREAM,
+              "a route without an M plane cannot answer memoryCheck either")
+    try:
+        C.parse_condition_line("<condition>m,memoryCheck,0030,==,10000")
+        check(False, "a second address past FFFF is refused")
+    except C.ConditionError:
+        check(True, "a second address past FFFF is refused")
 
 
 # --- the sheet side --------------------------------------------------------
@@ -536,6 +751,15 @@ def main():
         test_the_mask_is_applied_to_the_read_byte_and_not_to_the_constant,
         test_a_memory_condition_is_counted_per_drawn_instance_of_its_key,
         test_a_short_or_broken_m_line_is_dropped_not_half_read,
+        test_an_oam_dump_parses_into_frames_shapes_and_palettes,
+        test_a_pre_f12_14_oam_dump_reports_no_tile_data,
+        test_oam_dumps_beside_a_route_are_read_with_it_not_as_routes,
+        test_sprite_nearby_on_a_background_key_reads_the_joined_oam_frame,
+        test_sprite_nearby_on_a_sprite_key_needs_no_join,
+        test_a_background_key_is_not_evaluable_when_the_streams_do_not_align,
+        test_sprite_at_position_reads_the_absolute_pixel,
+        test_position_checks_use_the_loaders_decimal_operand_and_every_pixel,
+        test_memory_check_compares_two_watched_bytes_masked,
     ]
     for t in tests:
         t()

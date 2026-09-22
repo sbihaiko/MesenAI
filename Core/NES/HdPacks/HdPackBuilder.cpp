@@ -1061,6 +1061,7 @@ void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
 	entry.Shape = shape;
 	entry.X = x;
 	entry.Y = y;
+	entry.Palette = PaletteIdFor(tile.PaletteColors); //ADR-0222: same table as the grid's
 	_frameOam.Entries.push_back(entry);
 }
 
@@ -1118,6 +1119,18 @@ MesenSheets::ShapeId HdPackBuilder::ShapeIdFor(const HdPpuTileInfo& tile)
 	return id;
 }
 
+//Palette id -> word, the inverse of _paletteIds; "P" lines of both dumps (ADR-0222).
+std::vector<uint32_t> HdPackBuilder::PaletteColorTable() const
+{
+	std::vector<uint32_t> paletteColors(MesenSheets::kUnknownPalette, 0);
+	for(const auto& entry : _paletteIds) {
+		if(entry.second < paletteColors.size()) {
+			paletteColors[entry.second] = entry.first;
+		}
+	}
+	return paletteColors;
+}
+
 //ADR-0153 §7: the recorded grid stream in the text format
 //scripts/spike_tile_sheets.py parses, written once at save time so threshold
 //tuning can iterate offline without rebuilding the core.
@@ -1136,12 +1149,7 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 	//carries (ADR-0159 amendment). It is written here, as a fourth field on the
 	//cell line plus a "P" line interning each palette word on first sight; a
 	//reader that predates this still parses the first three fields.
-	std::vector<uint32_t> paletteColors(MesenSheets::kUnknownPalette, 0);
-	for(const auto& entry : _paletteIds) {
-		if(entry.second < paletteColors.size()) {
-			paletteColors[entry.second] = entry.first;
-		}
-	}
+	std::vector<uint32_t> paletteColors = PaletteColorTable();
 	std::vector<bool> paletteEmitted(paletteColors.size(), false);
 	size_t frameIndex = 0;
 	for(const MesenSheets::GridFrame& frame : _gridFrames) {
@@ -1506,9 +1514,9 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	//serialises this same table rather than rebuilding it.
 	_poseStats = MesenSheets::BuildPoses(_oamFrames, vocab);
 
-	//Debug aid, sibling of MESEN_SHEET_GRID_DUMP: the retained OAM stream in
-	//vocabulary indexes, one line per frame, so a spike can measure pose
-	//succession off the same data BuildPoses reads. Not a pack file.
+	//Debug aid, sibling of MESEN_SHEET_GRID_DUMP: the retained OAM stream, self-
+	//describing since ADR-0222 (format: MesenSheets::WriteOamStreamDump) so that
+	//`mep_conditions.py` resolves a sprite to tile data and palette. Not a pack file.
 	#ifdef _MSC_VER
 	#pragma warning(push)
 	#pragma warning(disable : 4996)
@@ -1520,16 +1528,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	if(oamDumpPath && *oamDumpPath) {
 		ofstream dump(oamDumpPath, ios::out);
 		if(dump) {
-			for(const MesenSheets::OamFrame& frame : _oamFrames) {
-				//ADR-0181: the two port bytes follow the repeat count.
-				dump << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
-				for(const MesenSheets::OamEntry& entry : frame.Entries) {
-					MesenSheets::MetatileKey key;
-					key.Tiles[0] = entry.Shape;
-					dump << ' ' << vocab.Find(key) << ',' << (int)entry.X << ',' << (int)entry.Y;
-				}
-				dump << '\n';
-			}
+			MesenSheets::WriteOamStreamDump(dump, _oamFrames, _shapeTiles, PaletteColorTable());
 		}
 	}
 

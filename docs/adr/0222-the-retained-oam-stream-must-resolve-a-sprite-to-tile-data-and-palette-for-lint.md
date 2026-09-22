@@ -1,6 +1,16 @@
 # ADR-0222: The retained OAM stream must let lint resolve a sprite to its tile data and palette, so `spriteNearby`, `spriteAtPosition`, `positionCheck*` and `memoryCheck` stop reporting `not evaluable`
 
-- Status: **accepted 2026-09-22 — option A, not implemented.** User's picks
+- Status: **accepted 2026-09-22 — option A, shipped the same day as F12.14.** Go-ahead
+  to build, verbatim: *"dispara as frentes 1, 2, 3 e 4 em paralelo usando
+  workflows"* (frente 2 = this slice). Ships with unit tests covering the
+  decision (`core_unit_tests.cpp` ADR-0222 cases: a palette-only recolour is its
+  own frame; exact `K`/`P`/entry lines) and `scripts/test_mep_conditions.py`
+  (43 checks); measured on the F12.6a Contra route —
+  `docs/validation/f12.14-oam-dump-self-describing-2026-09-22.md`: every
+  authored condition reports a verdict, `nearThePlayer` = never held 0/749,
+  `livesMatch` (memoryCheck) = mixed. ADR-0169's wire was NOT changed: it
+  already carries the raw OAM attribute byte, so the palette is implicit there
+  (recorded as an amendment bullet in ADR-0169). Earlier the same day: user's picks
   through a structured question, verbatim: *"A: dump autodescritivo
   (Recommended)"* and *"So registrar (Recommended)"* — a decision and a request
   for work, with no same-turn implementation and no go-ahead to build sought or

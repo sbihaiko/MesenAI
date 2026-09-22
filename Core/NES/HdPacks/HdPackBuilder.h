@@ -335,6 +335,7 @@ private:
 	//visible at save time (the shape ids above wildcard the palette).
 	unordered_map<uint32_t, MesenSheets::PaletteId> _paletteIds;
 	MesenSheets::PaletteId PaletteIdFor(uint32_t paletteColors);
+	std::vector<uint32_t> PaletteColorTable() const;
 	void BuildSheets();
 	void EnforceCollapsedSheetFloor(MesenSheets::Vocabulary& vocab, const MesenSheets::TileLookup& lookup);
 	void WriteContextSheets(const string& folder, const MesenSheets::Vocabulary& vocab, const MesenSheets::TileLookup& lookup);
