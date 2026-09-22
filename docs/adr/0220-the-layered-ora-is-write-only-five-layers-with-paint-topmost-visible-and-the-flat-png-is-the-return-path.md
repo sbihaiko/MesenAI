@@ -1,11 +1,17 @@
 # ADR-0220: A layered `.ora` is written beside every surface, write-only for the toolchain, its five layers ordered so `paint` is the topmost visible one — and the flat PNG over the F12.4 name stays the only return path
 
-- Status: **proposed 2026-09-20. Not decided, and not implemented.** Nothing in
-  this file exists in code: no script under `scripts/` writes or reads a `.ora`,
-  `mep_lint.py` has no sentinel check, and the kit's surfaces are the PNG /
-  `*.orig.png` / `.json` triple ADR-0183 §2 describes. The PRD blocks Part A
-  slice **F12.11** on this contract, so a human has to accept it before the
-  slice starts; accepting it is a request for work, not a note.
+- Status: **accepted 2026-09-22 — not implemented.** User's decision, verbatim:
+  *"aceito o F12.11. nao implemente ainda."* — a decision and a request for
+  work, with no same-turn implementation and no go-ahead to build sought or
+  given. Nothing in this file exists in code yet: no script under `scripts/`
+  writes or reads a `.ora`, `mep_lint.py` has no sentinel check, and the kit's
+  surfaces are the PNG / `*.orig.png` / `.json` triple ADR-0183 §2 describes.
+  The pending slice is PRD Part A **F12.11**, whose prerequisites F12.3 and
+  F12.4 shipped 2026-09-19; its stop condition (2) is logged by a person with
+  GIMP and Krita, so the slice is not closable by an automated session alone.
+  Proposed 2026-09-20 and left so the same day by the user's decision; the
+  deferral's reason (no GIMP/Krita artist population measured) is unchanged
+  and F12.11 stays the second path beside F12.4, measured against it (§6).
 - Date: 2026-09-20
 - Related: PRD Part A F12.11 (this contract) and its prerequisites F12.3 and
   F12.4, F12.9 (the static page this ADR's four-layer case rides on), ADR-0183

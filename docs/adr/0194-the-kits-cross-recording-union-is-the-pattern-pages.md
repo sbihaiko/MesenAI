@@ -1,10 +1,11 @@
 # ADR-0194: The kit's cross-recording union is the pattern pages — "judged as a union" is a coverage metric, and figures, scenery and maps stay per recording
 
-- Status: proposed (2026-09-15) — awaiting the pick. Accepting this closes the
-  cross-recording union question and changes nothing in `scripts/`: no
-  generator gains a merge, and the alternative in "Alternatives" stays
-  unbuilt. The only thing that reopens it is the observation named in
-  "Consequences".
+- Status: **accepted 2026-09-22** — user's pick through a structured question,
+  verbatim: *"Aceitar (Recommended)"*. Accepting it closes the cross-recording
+  union question and changes nothing in `scripts/`: no generator gains a
+  merge, and the alternative in "Alternatives" stays unbuilt — so there is no
+  slice to implement and no go-ahead to seek. The only thing that reopens it
+  is the observation named in "Consequences". Proposed 2026-09-15.
 - Date: 2026-09-15
 - Related: ADR-0183 (§1 a kit is a projection, §2 the four surfaces, §3
   evidence vs inference, §4 the round-trip acceptance test), ADR-0184 (§2 the
