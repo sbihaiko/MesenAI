@@ -4038,6 +4038,197 @@ namespace
 			"BlocoP2: an unknown palette on either side still matches - same permissiveness as the rival test");
 	}
 
+	//--- issue #339 (ADR-0221, option B, F12.13): a variant may not add content
+	//the capture lacks ---
+	//
+	//Punch-Out!!'s pre-fight card: screen003 was frozen with a flat white block
+	//where STARRING / LITTLE MAC is drawn a second later. The later frame agrees
+	//on 919 of 960 cells (0.9573 >= kAnchorVariantAgree), so ADR-0159 §1 filed
+	//it as a variant and excluded the 41 text cells from the anchor pool by
+	//construction - the gate matched the frame with the text and the capture
+	//painted its white block over it. The kind test below runs *after* the
+	//ratio test: a frame whose changed cells include one where the capture is
+	//empty (kEmptyCell or a flat shape) and the frame is not, is a rival.
+
+	//The captured frame: SheetBlockScreen with a 3x13 flat block (shape 500)
+	//where the card's text will appear. 39 cells of 960 -> 0.959 agreement when
+	//the text frame differs on every one of them.
+	const ShapeId kFlatWhite = 500;
+
+	GridFrame AnchorCardScreen()
+	{
+		GridFrame screen = SheetBlockScreen(0, 3);
+		for(uint32_t r = 10; r < 13; r++) {
+			for(uint32_t c = 8; c < 21; c++) {
+				screen.Cells[r][c] = kFlatWhite;
+			}
+		}
+		return screen;
+	}
+
+	//The text frame: same screen, the block now carries 39 distinct glyphs.
+	GridFrame AnchorCardWithText()
+	{
+		GridFrame frame = AnchorCardScreen();
+		for(uint32_t r = 10; r < 13; r++) {
+			for(uint32_t c = 8; c < 21; c++) {
+				frame.Cells[r][c] = (ShapeId)(600 + r * 32 + c);
+			}
+		}
+		frame.FrameNumber = 1;
+		return frame;
+	}
+
+	//A plane that flags only shape 500 as flat; everything else is content.
+	std::vector<bool> AnchorFlatPlane()
+	{
+		std::vector<bool> plane(1024, false);
+		plane[kFlatWhite] = true;
+		return plane;
+	}
+
+	//Rarity-ordered candidates: three outside the block, one inside it.
+	std::vector<AnchorCandidate> AnchorCardCandidates()
+	{
+		return { { 2, 4, 1 }, { 20, 4, 2 }, { 26, 28, 3 }, { 11, 10, 4 } };
+	}
+
+	void TestAnchorAdditionMakesTheFrameARival()
+	{
+		std::vector<GridFrame> frames = { AnchorCardScreen(), AnchorCardWithText() };
+		std::vector<AnchorCandidate> candidates = AnchorCardCandidates();
+
+		//Control - the rule as it stood: with no flat plane the text frame is a
+		//variant (0.959 >= 0.90), the block cell is filtered out of the pool,
+		//and the gate is guaranteed to match the frame with the text (#339).
+		AnchorChoice before = SelectScreenAnchors(frames, 0, candidates);
+		Check(before.AdditionRivals == 0 && !AnchorPicked(before, 3),
+			"BlocoP3: without the flat plane the text frame is a variant and the block cell is never an anchor - the #339 gate");
+
+		//ADR-0221 B: the block is empty on the capture side and content on the
+		//frame side, so one addition files the frame as a rival, and the search
+		//has to separate them - which the block cell does.
+		AnchorChoice after = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(after.AdditionRivals == 1,
+			"BlocoP3: a frame that draws content into a cell the capture holds flat is filed as a rival",
+			"additionRivals=" + std::to_string(after.AdditionRivals));
+		Check(after.Rivals == 0 && AnchorPicked(after, 3),
+			"BlocoP3: the anchors then separate the capture from the frame with the text",
+			"rivals=" + std::to_string(after.Rivals));
+		Check(!after.UsedVolatileCell,
+			"BlocoP3: with the text frame a rival, the block cell is a stable cell, not a volatile fallback");
+	}
+
+	void TestAnchorContentForContentChangeStaysAVariant()
+	{
+		//The other half of a blink, a score digit: the capture has *something*
+		//in every cell the frame changes, so the frame is still a variant and
+		//ADR-0159 §1 keeps the changed cell out of the pool exactly as before.
+		GridFrame screen = AnchorCardScreen();
+		GridFrame blink = screen;
+		for(uint32_t r = 10; r < 13; r++) {
+			for(uint32_t c = 8; c < 21; c++) {
+				screen.Cells[r][c] = (ShapeId)(600 + r * 32 + c); //text drawn in both
+				blink.Cells[r][c] = (ShapeId)(700 + r * 32 + c);  //...in another colour phase
+			}
+		}
+		blink.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, blink };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCardCandidates(), {}, AnchorFlatPlane());
+		Check(choice.AdditionRivals == 0,
+			"BlocoP3: a content-for-content change is not an addition",
+			"additionRivals=" + std::to_string(choice.AdditionRivals));
+		Check(choice.Picked.size() == kAnchorCount && !AnchorPicked(choice, 3),
+			"BlocoP3: the frame stays a variant, so the cell it changes is still kept out of the anchor pool");
+	}
+
+	void TestAnchorBelowThresholdIsARivalBeforeTheKindTest()
+	{
+		//A frame that fails kAnchorVariantAgree was a rival already; the kind
+		//test never runs on it and never counts it. Nothing that was a rival
+		//becomes a variant.
+		GridFrame screen = AnchorCardScreen();
+		GridFrame rival = screen;
+		for(uint32_t r = 20; r < 26; r++) {
+			for(uint32_t c = 0; c < kGridCols; c++) {
+				rival.Cells[r][c] = (ShapeId)(800 + r * 32 + c); //a fifth of the frame
+			}
+		}
+		rival.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, rival };
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 26, 28, 3 }, { 22, 10, 4 } };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(choice.AdditionRivals == 0,
+			"BlocoP3: a frame below the agreement threshold is a rival by ratio, not counted as an addition",
+			"additionRivals=" + std::to_string(choice.AdditionRivals));
+		Check(choice.Rivals == 0,
+			"BlocoP3: ...and the anchors separate it as before",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAnchorUndrawnCellCountsAsEmpty()
+	{
+		//kEmptyCell - nothing drawn there at all - is empty with or without a
+		//plane; a frame that draws into it adds content.
+		GridFrame screen = AnchorCardScreen();
+		for(uint32_t r = 10; r < 13; r++) {
+			for(uint32_t c = 8; c < 21; c++) {
+				screen.Cells[r][c] = kEmptyCell;
+			}
+		}
+		std::vector<GridFrame> frames = { screen, AnchorCardWithText() };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCardCandidates());
+		Check(choice.AdditionRivals == 1,
+			"BlocoP3: content drawn into a cell the capture never drew is an addition even with no flat plane",
+			"additionRivals=" + std::to_string(choice.AdditionRivals));
+	}
+
+	void TestAnchorFrameThatBlanksACellStaysAVariant()
+	{
+		//The reverse direction is not #339: the frame goes flat where the
+		//capture has content, so the capture draws art over a blank cell -
+		//which is what owning a variant means. ADR-0221 B names additions only.
+		GridFrame screen = AnchorCardWithText();
+		screen.FrameNumber = 0;
+		GridFrame blanked = AnchorCardScreen();
+		blanked.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, blanked };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCardCandidates(), {}, AnchorFlatPlane());
+		Check(choice.AdditionRivals == 0,
+			"BlocoP3: a frame that blanks a cell the capture fills is still a variant",
+			"additionRivals=" + std::to_string(choice.AdditionRivals));
+	}
+
+	void TestFlatTileDataMatchesTheOverdrawToolsDefinition()
+	{
+		//"Empty" is the harness's word: one colour index per 8x8 cell. In CHR
+		//bytes that is each plane's eight rows all 0x00 or all 0xFF.
+		uint8_t colour0[16] = {};
+		uint8_t colour3[16];
+		memset(colour3, 0xFF, 16);
+		uint8_t colour1[16] = {};
+		memset(colour1, 0xFF, 8); //plane 0 set, plane 1 clear
+		uint8_t stripe[16] = {};
+		stripe[3] = 0xFF; //one row differs: two colours in the cell
+		uint8_t glyph[16] = {};
+		glyph[0] = 0x3C; //a byte that is neither 0x00 nor 0xFF: pixels differ within the row
+		Check(IsFlatTileData(colour0) && IsFlatTileData(colour3) && IsFlatTileData(colour1),
+			"BlocoP3: a tile whose every pixel is one colour index is flat, whatever the index");
+		Check(!IsFlatTileData(stripe) && !IsFlatTileData(glyph),
+			"BlocoP3: a tile with two colour indexes anywhere is content");
+
+		std::vector<SheetTileKey> shapes(3);
+		memcpy(shapes[1].TileData, colour3, 16);
+		memcpy(shapes[2].TileData, glyph, 16);
+		std::vector<bool> plane = FlatShapePlane(shapes);
+		Check(plane.size() == 3 && plane[0] && plane[1] && !plane[2],
+			"BlocoP3: FlatShapePlane flags exactly the flat shapes, indexed by shape id");
+	}
+
 	void TestSheetContactSheetGeometry()
 	{
 		Vocabulary vocab;
@@ -8190,6 +8381,12 @@ int main()
 	TestAnchorForcedRivalSeparatesTwoPendingScreens();
 	TestAnchorByteIdenticalFramesStillCollideEvenForced();
 	TestAnchorKeysComparePositionTileAndPalettePermissively();
+	TestAnchorAdditionMakesTheFrameARival();
+	TestAnchorContentForContentChangeStaysAVariant();
+	TestAnchorBelowThresholdIsARivalBeforeTheKindTest();
+	TestAnchorUndrawnCellCountsAsEmpty();
+	TestAnchorFrameThatBlanksACellStaysAVariant();
+	TestFlatTileDataMatchesTheOverdrawToolsDefinition();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();
 	TestSheetJsonCarriesTheGridDecision();

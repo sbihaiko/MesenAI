@@ -798,6 +798,35 @@ namespace MesenSheets
 			return true;
 		}
 
+		//ADR-0221 (option B): the *kind* of difference, checked after the ratio.
+		//#339's frame agreed with screen003 on 919 of 960 cells and still
+		//erased the game's text, because the 41 cells it changed were cells the
+		//capture held as a flat white block - content the capture lacks, so the
+		//capture's PNG paints nothing where the game now draws. A change from
+		//content to content (a score digit, a blink phase) is harmless: the
+		//capture has *something* there. A change from empty to content is an
+		//addition, and one addition is enough. The reverse (the frame blanks a
+		//cell the capture fills) is left alone - drawing art over a blank cell
+		//is what owning a variant means, not what #339 complains about.
+		bool IsEmptyShape(ShapeId shape, const std::vector<bool>& emptyShapes)
+		{
+			return shape == kEmptyCell || (shape < emptyShapes.size() && emptyShapes[shape]);
+		}
+
+		bool AddsContent(const GridFrame& screen, const GridFrame& other, const std::vector<bool>& emptyShapes)
+		{
+			for(uint32_t r = 0; r < kGridRows; r++) {
+				for(uint32_t c = 0; c < kGridCols; c++) {
+					ShapeId have = screen.Cells[r][c];
+					ShapeId got = other.Cells[r][c];
+					if(have != got && IsEmptyShape(have, emptyShapes) && !IsEmptyShape(got, emptyShapes)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
 		//How the palette plane is read (ADR-0159 amendment). An unknown id - no
 		//cell drawn there, a caller that carries no palette evidence at all,
 		//or a recording past the id space - is evidence of nothing, so it reads
@@ -883,7 +912,16 @@ namespace MesenSheets
 		}
 	}
 
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames)
+	std::vector<bool> FlatShapePlane(const std::vector<SheetTileKey>& shapes)
+	{
+		std::vector<bool> flat(shapes.size(), false);
+		for(size_t i = 0; i < shapes.size(); i++) {
+			flat[i] = IsFlatTileData(shapes[i].TileData);
+		}
+		return flat;
+	}
+
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames, const std::vector<bool>& emptyShapes)
 	{
 		AnchorChoice empty;
 		if(candidates.empty()) {
@@ -906,6 +944,7 @@ namespace MesenSheets
 		const GridFrame* screen = capturedIndex < frames.size() ? &frames[capturedIndex] : nullptr;
 		std::vector<const GridFrame*> variants;
 		std::vector<const GridFrame*> rivals;
+		uint32_t additionRivals = 0;
 		if(screen) {
 			for(size_t i = 0; i < frames.size(); i++) {
 				//A frame recorded under another fine scroll is not comparable
@@ -918,7 +957,13 @@ namespace MesenSheets
 				//IsScreenVariant entirely, never landing in `variants`.
 				bool forcedRival = std::find(forcedRivalFrames.begin(), forcedRivalFrames.end(), i) != forcedRivalFrames.end();
 				if(!forcedRival && IsScreenVariant(*screen, frames[i])) {
-					variants.push_back(&frames[i]);
+					//ADR-0221 option B: the kind test, after the ratio test.
+					if(AddsContent(*screen, frames[i], emptyShapes)) {
+						additionRivals++;
+						rivals.push_back(&frames[i]);
+					} else {
+						variants.push_back(&frames[i]);
+					}
 				} else {
 					rivals.push_back(&frames[i]);
 				}
@@ -954,6 +999,7 @@ namespace MesenSheets
 		}
 
 		AnchorChoice choice = GreedyAnchors(screen, rivals, candidates, stable);
+		choice.AdditionRivals = additionRivals;
 		if(choice.Picked.size() == kAnchorCount && choice.Rivals == 0) {
 			return choice;
 		}
@@ -963,6 +1009,7 @@ namespace MesenSheets
 		//than a screen that misses a variant, so widen the pool rather than
 		//ship an ambiguous condition set.
 		AnchorChoice wide = GreedyAnchors(screen, rivals, candidates, order);
+		wide.AdditionRivals = additionRivals;
 		if(wide.Picked.size() > choice.Picked.size() || wide.Rivals < choice.Rivals) {
 			for(size_t index : wide.Picked) {
 				wide.UsedVolatileCell |= std::find(stable.begin(), stable.end(), index) == stable.end();

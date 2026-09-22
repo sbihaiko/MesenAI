@@ -361,6 +361,32 @@ namespace MesenSheets
 	using ShapeId = uint16_t;
 	constexpr ShapeId kEmptyCell = 0xFFFF;
 
+	//ADR-0221 (option B, F12.13): what "empty" means for the variant kind test.
+	//The recorder hands *every* drawn tile a shape id (ShapeIdFor), so a cell
+	//the game fills with a single flat colour is not kEmptyCell in the grid -
+	//it is a shape whose 16 CHR bytes resolve every pixel to one colour index
+	//(each plane's eight row bytes all 0x00 or all 0xFF). That is the same
+	//"single flat colour per 8x8 cell" scripts/measure_capture_overdraw.py
+	//scores, chosen so the rule and its acceptance tool agree on the word. A
+	//kEmptyCell (nothing drawn there) is empty too. Palette-agnostic on
+	//purpose: two colour indexes that happen to map to one NES colour under
+	//some palette would read as "detail" here and "flat" in the tool, which
+	//errs toward the rival side - the safe one for #339.
+	inline bool IsFlatTileData(const uint8_t* tileData)
+	{
+		uint8_t plane0 = tileData[0];
+		uint8_t plane1 = tileData[8];
+		if((plane0 != 0x00 && plane0 != 0xFF) || (plane1 != 0x00 && plane1 != 0xFF)) {
+			return false;
+		}
+		for(int row = 1; row < 8; row++) {
+			if(tileData[row] != plane0 || tileData[8 + row] != plane1) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	//Which 4-colour NES palette a cell was drawn with, interned by the recorder
 	//in first-sight order (ADR-0159 amendment, 2026-09-05). A whole
 	//PaletteColors word per cell would triple the retained stream; an id only
