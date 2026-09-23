@@ -1246,6 +1246,19 @@ def test_patched_rom(root: Path):
         return
     ok("build + verify --strict round-trip a patched-ROM project, IPS and hashes included")
 
+    # PR #385 review: a well-formed but wrong <supportedRom> in the built
+    # manifest must fail against the hash the import recorded.
+    built_path = project / "textures" / "hires.txt"
+    wrong = "0" * 40
+    built_path.write_text("\n".join(f"<supportedRom>{wrong}" if ln.startswith("<supportedRom>")
+                                     else ln for ln in built) + "\n", encoding="utf-8")
+    rc, out = run_verify(src, project)
+    if rc != 1 or "is not the patched ROM the import computed" not in out or patched_whole not in out:
+        fail(f"verify should fail on a valid-looking but wrong <supportedRom>: {rc}\n{out}")
+    else:
+        ok("verify fails when the built <supportedRom> is not the patched hash the import recorded")
+    built_path.write_text("\n".join(built) + "\n", encoding="utf-8")
+
     (project / "textures" / "fix.ips").unlink()
     rc, out = run_verify(src, project)
     if rc != 1 or "<patch> file missing" not in out:

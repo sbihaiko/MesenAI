@@ -23,7 +23,8 @@ back as a set.
   applies the matching IPS in memory, writes the **patched** ROM's whole-file
   sha1 as the project's `<supportedRom>` (replacing the pack's own line, or
   inserting one right after `<scale>`), copies the IPS beside both manifests
-  (`auto/textures/` and `textures/`), carries the `<patch>` lines verbatim,
+  (`auto/textures/` and `textures/`), re-emits each `<patch>` line normalized
+  (the `/` path the IPS was copied to, uppercase sha1 — `mep_patch.emitted_line`),
   and prints "what this does not buy" on every such import. `verify` reports
   the `<patch>` lines, the written `<supportedRom>` and whether the IPS sits
   beside the built manifest, and fails when it does not. `read_index`

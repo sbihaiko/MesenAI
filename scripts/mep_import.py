@@ -1096,6 +1096,29 @@ def _rules_with_keys(pack: Pack, ver: int, scale: int, base: Path) -> tuple:
     return keys, blocks, first, tokens
 
 
+_IMPORT_PATCHED_RE = re.compile(r"^\| patched \| `([0-9A-Fa-f]{40})`")
+
+
+def _imported_patched_hashes(project: Path) -> set[str]:
+    """The patched ROM's whole-file sha1 as the import recorded it: the
+    `| patched |` row of IMPORT.md and the key source's `<supportedRom>`.
+    Two records so that a hand edit or a regression in one is caught by the
+    other; a set of more than one value is itself a mismatch."""
+    found = set()
+    note = project / "IMPORT.md"
+    if note.is_file():
+        for line in note.read_text(encoding="utf-8").splitlines():
+            m = _IMPORT_PATCHED_RE.match(line)
+            if m:
+                found.add(m.group(1).upper())
+    key_source = project / "auto" / "textures" / "hires.txt"
+    if key_source.is_file():
+        rom = Pack(project, key_source).supported_rom
+        if rom:
+            found.add(rom.strip().upper())
+    return found
+
+
 def verify_pack(src: Path, project: Path, strict: bool) -> int:
     """ADR-0198 §1's acceptance test, run against a project `build` has
     already rebuilt. Returns a process exit code."""
@@ -1153,8 +1176,15 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     patch_token_bad = [p.file for p in built.patches if p.file != p.rel]
     patch_missing = [p.file for p in built.patches
                      if p.file == p.rel and not (built_path.parent / p.rel).is_file()]
+    # The built <supportedRom> must be the patched hash the import computed,
+    # not merely 40 hex digits (PR #385 review): IMPORT.md's "patched" row is
+    # the import's own record, and the key source carries the same value into
+    # every rebuild. Either disagreeing with the built manifest fails.
+    expected_roms = sorted(_imported_patched_hashes(project)) if built.patches else []
     patch_bad_rom = (bool(built.patches)
-                     and not (built.supported_rom and _HEX40_RE.match(built.supported_rom)))
+                     and (not (built.supported_rom and _HEX40_RE.match(built.supported_rom))
+                          or not expected_roms
+                          or any(h != built.supported_rom.upper() for h in expected_roms)))
 
     token_delta = sum(1 for k in ins & outs if in_tokens[k] != out_tokens[k])
     print(f"source {source.hires}: {len(in_keys)} rule(s), {len(ins)} distinct key(s)")
@@ -1188,8 +1218,10 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
                          "copied to (the macOS/Linux loader resolves it as written)",
                          patch_token_bad),
                         ("<patch> file missing beside textures/hires.txt", patch_missing),
-                        ("<supportedRom> unreadable on a patched-ROM project",
-                         [built.supported_rom] if patch_bad_rom else [])):
+                        ("<supportedRom> is not the patched ROM the import computed",
+                         [f"{built.supported_rom or '(none)'} (imported: "
+                          f"{', '.join(expected_roms) or 'no record'})"]
+                         if patch_bad_rom else [])):
         for k in items[:10]:
             print(f"  {name}: {k}")
             failures += 1
