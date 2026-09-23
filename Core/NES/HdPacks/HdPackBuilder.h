@@ -129,6 +129,43 @@ private:
 	vector<PendingScreen> _pendingScreens;
 	void FinalizeScreenAnchors();
 
+	//ADR-0223 option A (F12.16): flat runs stay out of the rarity-ranked pool
+	//CaptureScreen builds (ADR-0050 still ranks "rarest non-flat" first), but
+	//every cell they cover is kept as a second, last-resort pool:
+	//MesenSheets::SelectScreenAnchors' last pass reaches for these only when
+	//no non-flat cell can separate the capture from an addition-rival
+	//(ADR-0221 option B's kind test) - the one-letter-later frame ADR-0223
+	//measured, which differs from its capture only on the flat backdrop.
+	//Usage = UINT32_MAX keeps every one of these cells out of the stable/wide
+	//passes (both order by ascending Usage and cap at kAnchorCandidateCap).
+	//Host-bound (touches ScreenRun/_frameRuns), so it stays out of
+	//ScreenStitcher; MesenSheets::FlatRunColumns (host-free) does the
+	//alignment arithmetic this loop is built around.
+	template<typename IsFlatFn>
+	void AppendFlatAnchorCells(PendingScreen& pending, uint8_t fineX, IsFlatFn isFlat)
+	{
+		for(size_t i = 0; i < _frameRuns.size(); i++) {
+			ScreenRun& run = _frameRuns[i];
+			if(!isFlat(run.Tile) || (run.Y & 7) != 0) {
+				continue;
+			}
+			uint16_t endX = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;
+			for(uint32_t c : MesenSheets::FlatRunColumns(run.X, endX, fineX)) {
+				MesenSheets::AnchorCandidate cell;
+				cell.Row = (uint32_t)run.Y >> 3;
+				cell.Col = c;
+				if(cell.Row >= MesenSheets::kGridRows) {
+					continue;
+				}
+				cell.Usage = UINT32_MAX;
+				pending.Cells.push_back(cell);
+				ScreenRun synth = run;
+				synth.X = (uint16_t)(c * 8 + fineX);
+				pending.Candidates.push_back(synth);
+			}
+		}
+	}
+
 	//F5.4e co-occurrence graph, now the evidence behind the tileNearby
 	//conditions BuildObjectSheets attaches (ADR-0190). During screen capture the
 	//per-frame background tile grid (_frameTileGrid/_frameTileSet) accumulates,

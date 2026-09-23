@@ -91,7 +91,22 @@ namespace MesenSheets
 		//captured frame holds empty. Reported so a recording can say how often
 		//the kind test, not the ratio, decided.
 		uint32_t AdditionRivals = 0;
+		//ADR-0223 option A (F12.16): true when the stable/wide passes above
+		//still left rivals standing and the last pass - stable cells plus the
+		//flat cells no variant changes - separated strictly more of them, so
+		//an "emptiness probe" (a <tileAtPosition> on a flat, otherwise-excluded
+		//tile) is part of `Picked`. Reported so a recording can say how many
+		//screens needed the last-resort pass.
+		bool UsedEmptinessProbe = false;
 	};
+
+	//ADR-0223 option A (F12.16): the grid columns a flat run spans, tile-
+	//boundary aligned to `fineX` - `startX`/`endX` are the run's own pixel
+	//span (endX exclusive; the caller has already checked the run's row is
+	//tile-aligned). Host-free arithmetic only, so HdPackBuilder's
+	//AppendFlatAnchorCells (the host-bound half, since it touches ScreenRun)
+	//can stay a thin loop around it.
+	std::vector<uint32_t> FlatRunColumns(uint32_t startX, uint32_t endX, uint8_t fineX);
 
 	//ADR-0221 (option B, F12.13): one flag per shape id, true when the shape's
 	//art is a flat tile (IsFlatTileData) - the "empty" side of the variant kind

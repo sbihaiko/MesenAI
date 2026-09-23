@@ -1905,6 +1905,8 @@ void HdPackBuilder::CaptureScreen()
 		return;
 	}
 
+	//ADR-0223 option A (F12.16): flat runs, excluded from `ranked` above, as a second candidate pool (AppendFlatAnchorCells, HdPackBuilder.h).
+	AppendFlatAnchorCells(pending, fineX, isFlat);
 	unique_ptr<HdPackBitmapInfo> bitmap(new HdPackBitmapInfo());
 	bitmap->PngName = relPath;
 	pending.BitmapIndex = _hdData.BackgroundFileData.size();
@@ -1991,7 +1993,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 	uint32_t volatileScreens = 0;
 	uint32_t ambiguousScreens = 0;
 	uint32_t skippedCollisions = 0;
-	uint32_t additionRivals = 0;
+	uint32_t additionRivals = 0, emptinessProbeScreens = 0; //ADR-0223 option A (F12.16)
 
 	//ADR-0217 Option C / ADR-0218 Option A: every *other* pending screen's own
 	//captured frame is a forced rival, bypassing IsScreenVariant - a screen
@@ -2026,7 +2028,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 		}
 		additionRivals += choice.AdditionRivals;
 		volatileScreens += choice.UsedVolatileCell ? 1 : 0;
-		ambiguousScreens += choice.Rivals > 0 ? 1 : 0;
+		ambiguousScreens += choice.Rivals > 0 ? 1 : 0; emptinessProbeScreens += choice.UsedEmptinessProbe ? 1 : 0;
 
 		//ADR-0217 Option A: a gate another committed capture already satisfies
 		//draws nothing new - GetLayerIndex would never reach this one. The PNG
@@ -2112,7 +2114,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 			std::to_string(ambiguousScreens) + " still matching another recorded screen, " +
 			std::to_string(skippedCollisions) + " skipped for an earlier capture's gate, " +
 			std::to_string(postHocDrops) + " dropped post-hoc, " +
-			std::to_string(additionRivals) + " frame(s) filed as rivals for adding content the capture lacks)");
+			std::to_string(additionRivals) + " frame(s) filed as rivals for adding content the capture lacks, " + std::to_string(emptinessProbeScreens) + " screen(s) gated on an emptiness probe)");
 	}
 	_pendingScreens.clear();
 }
