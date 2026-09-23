@@ -477,7 +477,8 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   refused) and written under the normalized manifest name — copied beside
   **both** manifests (`auto/textures/` and
   `textures/`), every `<patch>` line re-emitted with its file token as the
-  normalized `/`-separated path the IPS was copied to and its sha1 unchanged
+  normalized `/`-separated path the IPS was copied to and its sha1 uppercased
+  (the loader's key form; a lowercase digest changes spelling, not value)
   (a Windows `sub\fix.ips` carried verbatim never resolves on the
   macOS/Linux loader), and an `IMPORT.md` section with both hash pairs,
   record count, CHR growth and the namespace limit. Refusals, each naming

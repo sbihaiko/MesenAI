@@ -1071,7 +1071,7 @@ def _patched_note(p: dict) -> list:
         "patched whole-file sha1 (the form `HdPackBuilder` writes for the running ROM)"
         + (f"; the pack itself declared `{p['declared_supported_rom']}`." if p["declared_supported_rom"]
            else "; the pack declared none."),
-        f"The {p['entries']} `<patch>` line(s) are carried with their sha1 untouched and their file",
+        f"The {p['entries']} `<patch>` line(s) are carried with their sha1 uppercased (the loader's key form) and their file",
         f"token as the `/`-separated path the IPS was copied to (`{p['matched_rel']}`, the form",
         "every platform's loader resolves; a Windows `\\` would never resolve on macOS/Linux), and",
         "the IPS sits beside both manifests, so the fork applies it exactly as it does today — by the stock",

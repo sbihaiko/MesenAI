@@ -270,7 +270,7 @@ Three findings on the `<patch>` path, each fixed in `scripts/mep_patch.py` /
    (`generic_u8string`) names, so the IPS was never applied while import and
    `verify` (which normalized the token before the file check) reported
    success. `build_key_source` now re-emits every `<patch>` line as
-   `mep_patch.emitted_line` — the copied path, the sha1 untouched — and
+   `mep_patch.emitted_line` — the copied path, the sha1 uppercased — and
    `verify` checks the built token **as written**: it must equal its own
    normalized path and that exact file must exist. `/` resolves on Windows
    too (`FolderUtilities::CombinePath`), so the emitted line is portable.
