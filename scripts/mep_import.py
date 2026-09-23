@@ -554,6 +554,8 @@ def import_pack(src: Path, out: Path, force: bool, rom: Path | None = None) -> d
     if not 1 <= pack.scale <= 10:
         raise PackError(f"{pack.hires}: <scale>{pack.scale} is outside the loader's 1..10")
     patch = _resolve_patch(pack, rom)
+    if patch:
+        _patch_destinations(patch, out)  # refuse before anything is written
 
     normalize = pack.index_keyed
     if normalize:
@@ -642,6 +644,31 @@ def _resolve_patch(pack: Pack, rom: Path | None):
         raise PackError(f"{pack.hires}: {e}") from e
 
 
+def _patch_destinations(plan, out: Path) -> list[tuple[str, list[Path]]]:
+    """Where each IPS lands, and the check that it lands *inside* the project:
+    `(rel, [auto/textures/rel, textures/rel])` per IPS. `mep_patch` already
+    refused absolute paths, `..` components and files outside the source pack
+    (ADR-0006); this is the destination half of the same rule, so a `<patch>`
+    name that would make `layer / rel` resolve outside its layer (a symlinked
+    sub-folder in an `--out` reused with `--force`, for instance) is refused
+    naming the manifest line, before `import_pack` writes anything."""
+    line_of = {}
+    for e in plan.entries:
+        line_of.setdefault(e.rel, e.line)
+    layers = (out / "auto" / "textures", out / "textures")
+    result = []
+    for rel in plan.ips_files:
+        dsts = [layer / rel for layer in layers]
+        for dst in dsts:
+            # Against the project root, not the layer: a layer that is itself
+            # a symlink resolves *with* its target and would contain anything.
+            if not mep_patch.contained(dst, out):
+                raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} would be written "
+                                f"outside {out} — refused, nothing written (ADR-0006)")
+        result.append((rel, dsts))
+    return result
+
+
 def _copy_patches(pack: Pack, plan, out: Path) -> dict:
     """The IPS beside **both** manifests: `auto/textures/` so the key-source
     layer is whole (its `<patch>` lines cite the file), and `textures/` because
@@ -650,10 +677,9 @@ def _copy_patches(pack: Pack, plan, out: Path) -> dict:
     manifest's own folder (`HdPackLoader::ProcessPatchTag`), and a manifest
     whose patch is not beside it fails to load whole."""
     copied = 0
-    for rel in plan.ips_files:
+    for rel, dsts in _patch_destinations(plan, out):
         data = (pack.hires.parent / rel).read_bytes()
-        for layer in (out / "auto" / "textures", out / "textures"):
-            dst = layer / rel
+        for dst in dsts:
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)
         copied += 1

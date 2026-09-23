@@ -39,24 +39,73 @@ import hashlib
 import re
 from pathlib import Path
 
-# `<patch>file,sha1` — the file name may itself contain a comma (real packs
-# do), so the sha1 is the *last* token and the name is everything before it.
-# The same read mep_lint makes.
-PATCH_LINE_RE = re.compile(r"^<patch>(.*),\s*([0-9A-Fa-f]{40})\s*$")
+# `<patch>file,sha1`, read the way `HdPackLoader` reads it: the text after the
+# tag is split on **every** comma and each token trimmed (`StringUtilities::
+# Split(lineContent.substr(7), ',')` + `TrimTokens`), then `ProcessPatchTag`
+# requires at least two tokens, takes tokens[0] as the file and tokens[1] as
+# the sha1, and requires tokens[1] to be exactly 40 characters. A file name
+# with a comma therefore never registers at runtime: tokens[1] is the tail of
+# the name, not the hash (and from `<ver>109` on, three or more tokens fail
+# the line outright — `checkConstraintEx`). There is no older-`<ver>` form
+# without a sha1: `tokens.size() >= 2` is checked unconditionally.
+SHA1_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
+# A Windows drive (`C:` or `C:\`) or a UNC prefix — absolute on the platform
+# the pack may have been written on, so refused everywhere (ADR-0006).
+_WIN_ABSOLUTE_RE = re.compile(r"^(?:[A-Za-z]:|\\\\|//)")
 
 
 class PatchError(Exception):
     """Fatal, with a message a human can act on."""
 
 
-class PatchLine:
-    """One `<patch>` line: the file it names, the ROM sha1 it was made for,
-    and the manifest line it came from."""
+def safe_relative(name: str, line: int) -> str:
+    """The pack-relative path a `<patch>` file name denotes, in the form this
+    tool uses everywhere (`/`-separated), or a refusal.
 
-    __slots__ = ("file", "sha1", "line")
+    Backslashes are separators: Windows-authored packs write `sub\\fix.ips`,
+    and on Windows the loader's `FolderUtilities::CombinePath` treats them so
+    (on macOS/Linux the loader's `IndexPackFiles` indexes `/`-separated names,
+    so a `\\` there resolves only by luck). `mep_import` already normalizes
+    `<img>`/`<background>`/audio names this way. What is refused, before any
+    byte is read or written (ADR-0006, the MEI trust model's zip-traversal
+    rule, applied to a folder pack): an absolute path (POSIX, drive letter or
+    UNC), a `..` component anywhere, and an empty name. The loader itself
+    would happily `CombinePath` a `../x.ips` — which is exactly why the tool,
+    which *writes* under `--out`, must not."""
+    rel = name.strip().replace("\\", "/")
+    if not rel:
+        raise PatchError(f"line {line}: <patch> names no file")
+    if rel.startswith("/") or _WIN_ABSOLUTE_RE.match(rel):
+        raise PatchError(f"line {line}: <patch> file {name!r} is an absolute path; a patch must "
+                         "live inside the pack folder (ADR-0006)")
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if ".." in parts:
+        raise PatchError(f"line {line}: <patch> file {name!r} escapes the pack folder ('..' "
+                         "component); a patch must live inside the pack folder (ADR-0006)")
+    if not parts:
+        raise PatchError(f"line {line}: <patch> names no file")
+    return "/".join(parts)
+
+
+def contained(path: Path, root: Path) -> bool:
+    """True when `path`, symlinks followed, stays beneath `root`. Both are
+    resolved non-strictly so a destination that does not exist yet counts."""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+class PatchLine:
+    """One `<patch>` line: the file it names (verbatim, and normalized as
+    `rel`), the ROM sha1 it was made for, and the manifest line it came from."""
+
+    __slots__ = ("file", "rel", "sha1", "line")
 
     def __init__(self, file: str, sha1: str, line: int):
         self.file, self.sha1, self.line = file, sha1.upper(), line
+        self.rel = safe_relative(file, line)
 
 
 class PatchPlan:
@@ -79,18 +128,32 @@ class PatchPlan:
 
 
 def patch_lines(lines: list[str]) -> list[PatchLine]:
-    """Every `<patch>` line of a manifest, in file order, 1-based line numbers.
-    A `<patch>` whose fields do not parse is refused with its line cited: the
-    loader's `checkConstraint` fails the whole pack on it."""
+    """Every `<patch>` line of a manifest, in file order, 1-based line numbers,
+    tokenized exactly as `HdPackLoader::ProcessPatchTag` tokenizes it (see
+    `SHA1_RE`). A line the loader would not register is refused with its line
+    cited, rather than imported into a project whose IPS the runtime ignores:
+    fewer than two tokens ("Patch tag requires more parameters"), more than
+    two (a comma in the file name — tokens[1] is then not the hash, and from
+    `<ver>109` the loader fails the line on the count alone), or a second
+    token that is not a 40-hex sha1. Path rules: `safe_relative`."""
     out = []
     for i, raw in enumerate(lines):
         s = raw.strip()
         if not s.startswith("<patch>"):
             continue
-        m = PATCH_LINE_RE.match(s)
-        if not m:
+        tokens = [t.strip() for t in s[len("<patch>"):].split(",")]
+        if len(tokens) < 2:
+            raise PatchError(f"line {i + 1}: <patch> needs file,sha1 (40 hex) — the loader "
+                             f"never registers a patch line with one field: {s[:60]!r}")
+        if len(tokens) > 2:
+            raise PatchError(
+                f"line {i + 1}: <patch> has {len(tokens)} comma-separated fields, not 2: "
+                f"{s[:60]!r}. HdPackLoader splits the line on every comma and reads the second "
+                "field as the sha1, so a file name with a comma is never registered at runtime "
+                "(and <ver>109+ fails the line outright). Rename the patch file")
+        if not SHA1_RE.match(tokens[1]):
             raise PatchError(f"line {i + 1}: <patch> needs file,sha1 (40 hex): {s[:60]!r}")
-        out.append(PatchLine(m.group(1).strip(), m.group(2), i + 1))
+        out.append(PatchLine(tokens[0], tokens[1], i + 1))
     return out
 
 
@@ -194,8 +257,14 @@ def resolve(lines: list[str], folder: Path, rom: Path,
     - no `<patch>` line at all (the caller should not be here);
     - a `<patch>` file that is not in the pack — the loader's `checkConstraint`
       fails the whole pack on a missing patch, so every line's file must exist;
+    - a `<patch>` file that resolves (symlinks followed) outside the pack
+      folder, on top of the `safe_relative` rules already applied when the
+      lines were parsed (ADR-0006);
     - no line whose sha1 is the ROM's whole-file or No-Intro sha1 — the IPS was
-      made for another dump, and IPS does not relax (ADR-0145 (3));
+      made for another dump, and IPS does not relax (ADR-0145 (3)); when
+      several lines name the same sha1 the **last** one wins, as at runtime
+      (`HdPackLoader::ProcessPatchTag` assigns `PatchesByHash[sha1]` per line,
+      so each later line overwrites the earlier);
     - a file that is not an IPS, or an IPS the format does not allow;
     - a `<supportedRom>` the pack declares that is none of: the ROM's two
       hashes, the patched ROM's two hashes, or one of the pack's own `<patch>`
@@ -205,7 +274,10 @@ def resolve(lines: list[str], folder: Path, rom: Path,
     if not entries:
         raise PatchError("no <patch> line — nothing to resolve")
     for e in entries:
-        if not (folder / e.file.replace("\\", "/")).is_file():
+        if not contained(folder / e.rel, folder):
+            raise PatchError(f"line {e.line}: <patch> file {e.file!r} resolves outside the pack "
+                             f"folder {folder} — a patch must live inside the pack (ADR-0006)")
+        if not (folder / e.rel).is_file():
             raise PatchError(f"line {e.line}: <patch> file {e.file!r} is not in {folder} — "
                              "HdPackLoader fails the whole pack on a missing patch, so the "
                              "import refuses rather than write a project that cannot load")
@@ -218,7 +290,10 @@ def resolve(lines: list[str], folder: Path, rom: Path,
     stock_no_intro = no_intro_sha1(stock, suffix)
     matched, matched_by = None, None
     for form, digest in (("whole-file", stock_whole), ("No-Intro", stock_no_intro)):
-        matched = next((e for e in entries if e.sha1 == digest), None)
+        # Last entry wins for a repeated sha1: `HdPackLoader::ProcessPatchTag`
+        # does `_data->PatchesByHash[tokens[1]] = ...` once per line, in file
+        # order, so the runtime keeps the last assignment.
+        matched = next((e for e in reversed(entries) if e.sha1 == digest), None)
         if matched:
             matched_by = form
             break
@@ -230,7 +305,7 @@ def resolve(lines: list[str], folder: Path, rom: Path,
             f"<patch> line(s) name {declared}. The IPS was made for another dump, and an IPS "
             "carries no checksum of its own, so applying it here would be silently wrong — "
             "ADR-0145 (3): IPS does not relax. Pass the dump the pack was made for")
-    ips_path = folder / matched.file.replace("\\", "/")
+    ips_path = folder / matched.rel
     patched, records = apply_ips(stock, ips_path.read_bytes())
     plan = PatchPlan(
         rom=rom, entries=entries, matched=matched, matched_by=matched_by,
@@ -239,7 +314,7 @@ def resolve(lines: list[str], folder: Path, rom: Path,
         stock_size=len(stock), patched_size=len(patched),
         stock_chr_units=chr_units(stock), patched_chr_units=chr_units(patched),
         records=records,
-        ips_files=sorted({e.file.replace("\\", "/") for e in entries}))
+        ips_files=sorted({e.rel for e in entries}))
     if declared_supported_rom:
         want = declared_supported_rom.strip().upper()
         allowed = {stock_whole, stock_no_intro, plan.patched_whole, plan.patched_no_intro}

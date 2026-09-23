@@ -1330,6 +1330,108 @@ def test_patched_rom(root: Path):
         ok("`mep_import.py <pack> --out <project> --rom <dump>` prints the hashes and the limit")
 
 
+def test_patch_hardening(root: Path):
+    """PR #385 review (Codex): a `<patch>` name is data the tool must not
+    trust — no traversal out of the pack or the project (ADR-0006), the
+    loader's own token rules (a comma in the name never registers), and the
+    loader's last-wins for a repeated sha1 (`HdPackLoader::ProcessPatchTag`)."""
+    root = root / "hardening"
+    root.mkdir(parents=True, exist_ok=True)
+    rom = root / "Game.nes"
+    rom.write_bytes(STOCK_ROM)
+    stock_whole = sha1_hex(STOCK_ROM)
+    files = {"chr.png": cell_png(2, 1, 1), "fix.ips": CHR_ROM_IPS}
+
+    # Traversal: the payload really exists one level above the pack, so only
+    # the path rule (not a missing file) can refuse it. Nothing is written,
+    # the payload is untouched, and the message names the manifest line (6).
+    payload = root / "payload.ips"
+    payload.write_bytes(b"do not touch")
+    for label, name in (("../", "../payload.ips"),
+                        ("backslash", "..\\payload.ips"),
+                        ("dot-slash-dot-dot", "./sub/../../payload.ips"),
+                        ("absolute", str(payload)),
+                        ("drive letter", "C:\\payload.ips")):
+        lines = patched_lines(stock_whole)[:-1] + [f"<patch>{name},{stock_whole}"]
+        src = write_src(root / ("trav-" + label.replace("/", "").replace(" ", "-")), lines, files)
+        out = root / ("trav-out-" + label.replace("/", "").replace(" ", "-"))
+        try:
+            MI.import_pack(src, out, False, rom)
+        except MI.PackError as e:
+            msg = str(e)
+            if "line 6" not in msg or "ADR-0006" not in msg:
+                fail(f"traversal {label}: refused, but without the line and ADR-0006: {msg}")
+                continue
+        else:
+            fail(f"traversal {label}: <patch>{name} was imported")
+            continue
+        if out.exists() or payload.read_bytes() != b"do not touch":
+            fail(f"traversal {label}: something was written (out exists: {out.exists()})")
+            continue
+        ok(f"a <patch> path that escapes the pack ({label}) is refused naming line 6, "
+           "nothing written")
+
+    # A destination that escapes the project: `--out` reused with `--force`
+    # whose `textures/` is a symlink to somewhere else. The source side is
+    # clean, so only the destination check can catch it — before any write.
+    outside = root / "outside"
+    outside.mkdir()
+    out = root / "symlinked-out"
+    (out / "textures").parent.mkdir(parents=True, exist_ok=True)
+    (out / "textures").symlink_to(outside, target_is_directory=True)
+    (out / "keep.txt").write_text("x", encoding="utf-8")
+    src = write_src(root / "symlinked", patched_lines(stock_whole), files)
+    expect_error(lambda: MI.import_pack(src, out, True, rom), "outside",
+                 "a <patch> destination that resolves outside its layer")
+    if list(outside.iterdir()) or (out / "auto").exists():
+        fail("the symlinked destination received a write")
+    else:
+        ok("the destination check runs before any write")
+
+    # The loader splits on every comma: `<patch>foo,bar.ips,<sha1>` is three
+    # tokens, tokens[1] is 'bar.ips', and the IPS is never registered.
+    files_comma = dict(files)
+    files_comma["foo,bar.ips"] = CHR_ROM_IPS
+    lines = patched_lines(stock_whole)[:-1] + [f"<patch>foo,bar.ips,{stock_whole}"]
+    src = write_src(root / "comma", lines, files_comma)
+    out = root / "comma-out"
+    expect_error(lambda: MI.import_pack(src, out, False, rom), "every comma",
+                 "a <patch> file name containing a comma")
+    if out.exists():
+        fail("comma: something was written")
+    else:
+        ok("a comma <patch> name refuses with nothing written")
+    lines_lower = patched_lines(stock_whole)[:-1] + [f"<patch>fix.ips,{stock_whole.lower()}"]
+    src = write_src(root / "lowercase", lines_lower, files)
+    summary = MI.import_pack(src, root / "lowercase-out", False, rom)
+    if summary["patch"]["matched_line"] != 6:
+        fail(f"a lowercase sha1 (the loader uppercases) did not match: {summary['patch']}")
+    else:
+        ok("a lowercase sha1 matches, as the loader uppercases tokens[1]")
+
+    # Duplicate sha1: the loader assigns PatchesByHash[sha1] per line, so the
+    # last line wins. b.ips carries one more record than a.ips; the patched
+    # hash must be b's.
+    other_ips = CHR_ROM_IPS[:-3] + ips_record(200, b"LAST") + b"EOF"
+    patched_b = bytearray(PATCHED_ROM)
+    patched_b[200:204] = b"LAST"
+    files_dup = {"chr.png": cell_png(2, 1, 1), "a.ips": CHR_ROM_IPS, "b.ips": other_ips}
+    lines = patched_lines(stock_whole)[:-1] + [f"<patch>a.ips,{stock_whole}",
+                                               f"<patch>b.ips,{stock_whole}"]
+    src = write_src(root / "dup", lines, files_dup)
+    project = root / "dup-out"
+    p = MI.import_pack(src, project, False, rom)["patch"]
+    if (p["matched_file"], p["matched_line"], p["entries"], p["files"]) != ("b.ips", 7, 2, 2):
+        fail(f"duplicate sha1: expected the last line (b.ips, line 7) to win: {p}")
+    elif p["patched_whole"] != sha1_hex(bytes(patched_b)) or p["records"] != 4:
+        fail(f"duplicate sha1: the patched hash is not b.ips's: {p}")
+    elif not (project / "textures" / "a.ips").is_file() \
+            or not (project / "textures" / "b.ips").is_file():
+        fail("duplicate sha1: both IPS files must still be carried (both lines are)")
+    else:
+        ok("a repeated <patch> sha1 picks the last line, as HdPackLoader::ProcessPatchTag does")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -1350,6 +1452,7 @@ def main():
         test_index_cli(root)
         test_apply_ips()
         test_patched_rom(root)
+        test_patch_hardening(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)

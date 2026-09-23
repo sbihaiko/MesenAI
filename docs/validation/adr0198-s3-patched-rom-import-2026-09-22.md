@@ -238,3 +238,35 @@ pack's state, not the import's.
 - The `<ver>` fix is the one change to the §1 path in this slice; the 105
   unit checks cover it and the three F12.7 packs are unaffected (all at
   `<ver>` ≤ 103), but they were not re-run here.
+
+## 2026-09-23 — hardening after the PR #385 review (Codex), re-run
+
+Three findings on the `<patch>` path, each fixed in `scripts/mep_patch.py` /
+`scripts/mep_import.py` and covered by `scripts/test_mep_import.py`:
+
+1. **Traversal (P1).** A `<patch>` name is submitter data. `mep_patch.
+   safe_relative` now normalizes `\` to `/`, refuses absolute paths (POSIX,
+   drive letter, UNC) and any `..` component, and `resolve` refuses a file
+   that resolves (symlinks followed) outside the pack folder; `mep_import.
+   _patch_destinations` refuses a destination that resolves outside `--out`
+   (a symlinked `textures/` in a reused `--out --force`), **before** the
+   first write. The refusal names the manifest line and ADR-0006.
+2. **Duplicate sha1 (P2).** `HdPackLoader::ProcessPatchTag` assigns
+   `PatchesByHash[sha1]` once per line, so the last line wins at runtime;
+   `resolve` now picks the last matching entry too. The three Castlevania
+   lines target three distinct sha1s, so this run is unaffected.
+3. **Comma in the file name (P2).** The loader splits the tag on every comma
+   and reads the second token as the sha1, so `<patch>foo,bar.ips,<sha1>`
+   never registers (and fails outright from `<ver>109`). `patch_lines` now
+   tokenizes the same way and refuses any line that is not exactly two
+   fields; the earlier "the file name may itself contain a comma" reading
+   was wrong.
+
+Castlevania #143 re-run with the same pack, dump and pipeline: import rc 0
+(`akuogg.ips`, line 8517, whole-file match, 4 records, `<supportedRom>`
+`5D012C73…A1E9`, 3 `<patch>` lines carried, 1 IPS beside both manifests);
+build rc 0; verify **7 400 distinct keys, 0 missing, 0 unexpected extra,
+0 differ**, carried 1 406 lines, 0 missing, `IPS beside the built manifest:
+yes` → **OK**; `--strict` fails only on the 5 twins, as before; lint rc 0
+(0 errors, 22 warnings). `python3 scripts/test_mep_import.py`: **116 PASS,
+0 FAIL** (was 105); `make doc-checks` rc 0.
