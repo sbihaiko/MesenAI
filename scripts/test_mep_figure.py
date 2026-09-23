@@ -260,6 +260,43 @@ def test_cli_round_trip():
               "an unknown figure is exit 2")
 
 
+def test_the_figure_palette_band_follows_first_use_in_reading_order_and_is_labelled():
+    """The `palettes` band of a figure follows the same contract as a sheet's
+    (`artist_kit_assemble.py` says so to the artist): first use in reading
+    order, each group labelled with the cell index it belongs to."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=False)
+        # Node 0 (the first placed cell, at (0, 0)) wears a palette that sorts
+        # *after* the shared one, so hex order and reading order disagree.
+        T._patch_sp_tiles(pack_dir / "textures" / "sheets", 0,
+                          [{"tile": "F" * 32, "palette": "FF36160F"}])
+        group = json.loads((pack_dir / "textures" / "sheets" / "spr000.json").read_text(encoding="utf-8"))
+        for cell in group["cells"]:
+            if cell.get("metatile") == 0:
+                cell["tiles"] = [{"tile": "F" * 32, "palette": "FF36160F"}]
+        (pack_dir / "textures" / "sheets" / "spr000.json").write_text(json.dumps(group), encoding="utf-8")
+        seen = {}
+        real_write = F.ora_writer.write_surface
+
+        def spy(*a, **kw):
+            seen.update(kw)
+            return real_write(*a, **kw)
+        F.ora_writer.write_surface = spy
+        try:
+            doc = F.export_figure(E.Pack(pack_dir), "spr000", Path(td) / "figures")
+        finally:
+            F.ora_writer.write_surface = real_write
+        first = doc["cells"][0]
+        check(first["node"] == 0 and (first["x"], first["y"]) == (0, 0), "node 0 is the first cell in reading order")
+        labels = seen.get("swatch_labels")
+        check(labels and labels[0] == str(first["index"]),
+              "the leftmost group is labelled with the first cell's index", str(labels))
+        check(len(labels or ()) == 2 and labels[1] != labels[0],
+              "the shared palette is listed once, under the first cell that wears it", str(labels))
+        check(seen.get("swatches") == F.ora_writer.nes_swatches(["FF36160F", "0F0F0F0F"]),
+              "swatches follow first use in reading order, not hex order")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

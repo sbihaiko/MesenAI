@@ -834,6 +834,49 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   stage2-base 247 recorded + 102 filled of 512 (packed CHR RAM), Zelda 1 508 +
   453 of 1536 (linear CHR RAM). Stdlib only; `test_artist_chr_kit.py` covers it
   on a synthetic iNES image and pack.
+- `ora_writer.py` (F12.11, ADR-0220) - the one module every kit surface
+  writer goes through for its layered file: `compose_engine.Pack.export`
+  (sheets), `artist_map.py` (panoramas), `mep_figure.py` (figures) and
+  `write_chr_surface` (pattern pages) all call `write_surface` from the same
+  canvas they write the flat PNG and its `.orig.png` twin from, so the three
+  files cannot disagree. Beside `<name>.png` it writes `<name>.ora`
+  (OpenRaster: `mimetype` stored first, `stack.xml`, `data/*.png`,
+  `mergedimage.png`, `Thumbnails/thumbnail.png`), layers bottom-to-top
+  `orig` (the twin, visible, `edit-locked`), `context` (only where every cell
+  has a stage position, i.e. the `artist_map` panorama: the 1x stage at
+  opacity 0.5, ADR-0220 §3 as amended), `paint` (fully transparent, visible -
+  the topmost visible layer), `guides` (cell outlines, captions, a hatch over
+  every `seen: false` cell; hidden, `edit-locked`) and `palettes` (hidden,
+  `edit-locked`). Everything the module draws is one sentinel colour,
+  `#FF00FD` (`mep_sentinel.SENTINEL_RGBA`, no NES palette reaches it), and
+  `write_surface` refuses a canvas or twin that already carries it, so a
+  cell exported with `guides`/`palettes` still visible is caught by
+  `mep_lint.py` naming the cell. **Write-only** for the toolchain (ADR-0220
+  §1): nothing - rebuild, reload, lint - reads the `.ora` back; the flat PNG
+  over the F12.4 name stays the only return path, and no ADR permits adding
+  a reader. Captions go through `fit_text`: greedy word wrap inside the
+  canvas width, at most
+  `CAPTION_MAX_LINES = 2` lines, the last one cut with `...` - a caption
+  never runs past the canvas edge. The `palettes` band follows one
+  contract on every surface: `first_use_palettes(labelled_cells)` lists each
+  palette once, where it is **first used in the surface's reading order**
+  (row, then column: `compose_engine` sorts cells by `(y, x)`,
+  `artist_map.panorama_palettes` by `(y, x)` which is also the cell index,
+  `mep_figure.figure_palettes` by `(dy, dx)` as `export_figure` places them),
+  and labels the group with that first cell's `index` - `swatch_labels` is
+  always passed; a hex-sorted `nes_swatches(sorted({...}))` is the pattern
+  that was retired 2026-09-23, since it put the leftmost group under a cell
+  that never wore it. The artist page `artist_kit_assemble.py` writes states
+  the rule **select `paint` before the first stroke**, and the reason is
+  measured, not stylistic: GIMP 2.10 and Krita 5.3.4 both open an OpenRaster
+  file with the bottom layer, `orig`, active whatever the stack order; Krita
+  honours `edit-locked` and refuses the stroke, GIMP does not, and a stroke
+  on `orig` is lost on the next kit run (ADR-0220 §3). Verified by
+  `test_ora_writer.py` (layer order, flags, sentinel guard, `fit_text`,
+  first-use band and its labels), `test_compose_engine.py`,
+  `test_artist_map.py` and `test_mep_figure.py` (each caller's band order
+  and labels), `test_artist_chr_kit.py` and `test_artist_kit_assemble.py`
+  (the artist-page wording); all run by `make python-tests`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

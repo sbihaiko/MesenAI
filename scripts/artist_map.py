@@ -668,6 +668,19 @@ def build_panorama(region: Region, shapes, palettes, pack: Pack, scale: int):
     return painted, orig, cells, stats
 
 
+def panorama_palettes(cells):
+    """`(swatches, labels)` for the panorama's `palettes` band: first-use
+    order in the panorama's **reading order** (row, then column - the order
+    `build_panorama` emits cells, which is also their `index`), each group
+    labelled with the `index` of the first cell that wears it. Same contract
+    as `compose_engine.Pack.export` and `write_chr_surface`, so what
+    `artist_kit_assemble.py` tells the artist about the band holds for every
+    surface (2026-09-23 follow-up, defect (b))."""
+    return ora_writer.first_use_palettes(
+        (c["index"], [t.get("palette") for t in (c.get("tiles") or []) if t.get("palette")])
+        for c in sorted(cells, key=lambda c: (c["y"], c["x"])))
+
+
 def sidecar(name: str, cells, columns: int, scale: int, mode: str, stats, region: Region,
             pack_scale: int = 1):
     return {
@@ -1008,13 +1021,13 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
         rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
                   "w": CELL * scale, "h": CELL * scale,
                   "seen": False if c.get("paletteAttributed") else None} for c in cells]
-        swatches = ora_writer.nes_swatches(sorted({
-            t["palette"] for c in cells for t in c["tiles"] if t.get("palette")}))
+        swatches, swatch_labels = panorama_palettes(cells)
         # `orig` below stays the 1x panorama: the twin on disk grew by the
         # band, but rows/title/columns describe the stage, not the file.
         ora_writer.write_surface(
             map_dir, f"{name}.png", painted, orig, rects, context=orig,
-            captions=[(0, 0, f"{safe_stage} region {i}")], swatches=swatches)
+            captions=[(0, 0, f"{safe_stage} region {i}")],
+            swatches=swatches, swatch_labels=swatch_labels)
         columns = orig.width // CELL
         doc = sidecar(name, cells, columns, scale, orientation_of(region), stats, region,
                       pack.scale)

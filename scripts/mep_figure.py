@@ -187,6 +187,22 @@ def figure_caption(pack: E.Pack, figure: Figure, names=None):
 
 # ---- export ------------------------------------------------------------------
 
+def figure_palettes(pack: E.Pack, figure: Figure, cells):
+    """`(swatches, labels)` for the figure's `palettes` band: first-use order
+    in the figure's **reading order** (row `dy`, then column `dx` - the order
+    `export_figure` places cells), each group labelled the way the `guides`
+    layer labels the cell: its home-sheet `index`, else its position in the
+    figure. Same contract as `compose_engine.Pack.export` and
+    `artist_map.panorama_palettes` (2026-09-23 follow-up, defect (b))."""
+    labelled = []
+    for i, c in enumerate(cells):
+        home = home_cell(pack, figure, c["node"])
+        tiles = (home[1].get("tiles") or []) if home else []
+        labelled.append((c.get("index", i), [t.get("palette") for t in tiles
+                                             if isinstance(t, dict) and t.get("palette")]))
+    return ora_writer.first_use_palettes(labelled)
+
+
 def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> dict:
     """Write `<stem>.png`, `<stem>.orig.png`, `<stem>.json` into `out_dir`
     and return the sidecar document."""
@@ -242,15 +258,13 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
     out_dir.mkdir(parents=True, exist_ok=True)
     # ADR-0220 §1: the layered .ora from this same canvas, beside the pair.
     # Four layers — no `context`: a figure has no stage position (§3).
+    swatches, swatch_labels = figure_palettes(pack, figure, cells)
     ora_writer.write_surface(
         out_dir, name, canvas, canvas_1x,
         [{"index": c.get("index", i), "x": c["x"] * scale, "y": c["y"] * scale,
           "w": unit * scale, "h": unit * scale} for i, c in enumerate(cells)],
         captions=[(0, 0, f"{figure_id} {figure.pose_id or ''}".strip())],
-        swatches=ora_writer.nes_swatches(sorted({
-            t.get("palette") for c in cells
-            for t in (home_cell(pack, figure, c["node"])[1].get("tiles") or [])
-            if isinstance(t, dict) and t.get("palette")})))
+        swatches=swatches, swatch_labels=swatch_labels)
     doc = {
         "version": FIGURE_VERSION,
         "kind": "figure",
