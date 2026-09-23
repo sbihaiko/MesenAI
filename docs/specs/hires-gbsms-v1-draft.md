@@ -3,7 +3,9 @@
 **Status:** **v1-draft / proposal — pending review by the HDNes/Mesen
 community before any freeze** (ADR-0004). Nothing here is final; changes
 based on feedback are draft revisions, not breaking changes. Draft revision
-2 (2026-09-22) adds §7, a single NES-side additive tag (ADR-0224). ·
+2 (2026-09-22) adds §7, a single NES-side additive tag (ADR-0224); draft
+revision 3 (same day) declares §7's layer-3 edge and its scope for packs
+that do not opt in (ADR-0224, amended). ·
 **License for this spec:** CC0-1.0 ·
 **Golden file:** [`golden/hires-gbsms/hires.txt`](golden/hires-gbsms/hires.txt) ·
 **Validation:** `scripts/validate-specs.py`
@@ -134,6 +136,23 @@ file: a proposal, not a freeze.
   rebuilt from background tiles alone and is the case the tag exists for. A
   hand-written pack opts in by adding the line; nothing adds it to a pack
   whose author did not.
+- **Packs that do not opt in.** Opt-in is per pack and the default is off:
+  a pack without the line — every community pack in the catalog today, every
+  HD Mesen pack, every pack recorded before the tag existed — MUST render
+  byte-identically to the pre-tag draw order. An implementation MUST NOT
+  apply the behaviour globally or infer it from anything but the line. In a
+  stack of packs (a human layer over a recorded `auto/` layer) the flag is
+  ORed upward: if any layer carries the line the combined pack is opted in.
+- **Layer 3 (priority 30–39) — declared edge.** The tag restores the sprite
+  against the "behind foreground sprites" layer (20–29) only. A background
+  in the "foreground" layer (30–39) is drawn after the restored sprite and
+  after the front sprites, so where its image is opaque it covers the
+  restored behind-background pixel exactly as it covers a front sprite;
+  where its image is transparent the restored sprite shows through. A pack
+  whose only covering background is in layer 3 gets no restore at all — the
+  rule is about layer 2. This is the intended reading (a behind-background
+  sprite is never shown where a front sprite would be hidden), not an
+  oversight; ADR-0224's 2026-09-22 amendment records it.
 - **Scope.** NES only (`HdNesPack`). The GB/SMS renderers (§3) have their own
   priority model and do not read this tag. In a MEP pack it lives in
   `textures/hires.txt` (MEP v1 §5.1, ADR-0005); `pack.json` is not touched.

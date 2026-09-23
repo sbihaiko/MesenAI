@@ -266,13 +266,20 @@ With `bootstrap`, the pack builder writes **beside the ROM**:
 That folder is what every step below consumes. It is also a working pack — you
 can load it in the emulator as-is and see what you have.
 
-The generated `textures/hires.txt` opens with a bare `<bgPreservesBehindBgSprites>`
-line. It asks MesenAI to keep a behind-background sprite visible where the
-ROM's background is colour 0, even under a recorded `<background>` screen —
-without it, the screen paints over the sprite (ADR-0224). The recorder writes
-it on every pack it produces; a hand-written pack opts in by adding the same
-line. Other emulators do not know the tag and skip it, so the pack still
-loads there, only without the effect.
+The generated `textures/hires.txt` carries, in its header block right after
+the `<options>` line, a bare `<bgPreservesBehindBgSprites>` line. It asks
+MesenAI to keep a behind-background sprite visible where the ROM's background
+is colour 0, even under a recorded `<background>` screen — without it, the
+screen paints over the sprite (ADR-0224). It is opt-in per pack: the recorder
+writes it on every pack it produces; a hand-written pack opts in by adding
+the same line; a pack without the line — every community pack in the
+catalog today included — renders exactly as it always did. It is a tag rather
+than an `<options>` token because an unknown `<options>` token is a load
+error in Mesen 2 and HD Mesen, while an unknown tag is skipped, so the pack
+still loads there, only without the effect. One edge to know: the tag undoes
+the layer-2 screen only. If you add a **foreground** background (priority
+30–39) on top, it covers the restored sprite where it is opaque, the same way
+it covers any front sprite (ADR-0224, amended 2026-09-22).
 
 **Clear it before you record the same ROM again.** Anything already dressing
 this ROM — the `auto/` folder, but also a `mep/` layer beside it — makes the

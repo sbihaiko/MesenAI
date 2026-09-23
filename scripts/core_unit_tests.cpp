@@ -7334,9 +7334,10 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 //the loader-side line match, and the header tail the recorder writes. The
 //pixel cases below run the pass sequence of GetPixels as a model - backdrop,
 //behind-background sprite, ROM tile where its colour index is not 0, layer-2
-//<background>, the ADR-0224 re-apply, front sprite - over flat colours, with
-//the real predicate deciding the re-apply. The renderer itself is proven on
-//the headless render: a pack without the tag must come back byte-identical
+//<background>, the ADR-0224 re-apply, front sprite, layer-3 <background> -
+//over flat colours, with the real predicate deciding the re-apply. The
+//renderer itself is proven on the headless render: a pack without the tag
+//must come back byte-identical
 //(docs/validation/f12.15-behind-bg-sprites-2026-09-22.md).
 namespace
 {
@@ -7346,6 +7347,7 @@ namespace
 		bool FrontSprite = false;   //an opaque front sprite covers the pixel
 		uint8_t BgColorIndex = 0;   //the ROM's background colour index
 		bool Layer2Covers = true;   //a priority-20 <background> paints the pixel
+		bool Layer3Covers = false;  //a priority-30 <background> paints the pixel (opaque there)
 	};
 
 	constexpr uint32_t kBackdrop = 0xFF000000;
@@ -7353,6 +7355,7 @@ namespace
 	constexpr uint32_t kFrontSpriteColor = 0xFFFF0000;
 	constexpr uint32_t kTileColor = 0xFF0000FF;
 	constexpr uint32_t kScreenColor = 0xFFFFFFFF;
+	constexpr uint32_t kLayer3Color = 0xFFFFFF00;
 
 	uint32_t ModelGetPixels(const ModelPixel& p, bool packOptedIn)
 	{
@@ -7375,6 +7378,12 @@ namespace
 		}
 		if(p.FrontSprite) {
 			out = kFrontSpriteColor;
+		}
+		//Layer 3 (priority 30-39) runs last and unconditionally in GetPixels -
+		//after the re-apply and after the front sprites - so wherever its image
+		//is opaque it paints over both (ADR-0224, amended 2026-09-22).
+		if(p.Layer3Covers) {
+			out = kLayer3Color;
 		}
 		return out;
 	}
@@ -7434,6 +7443,39 @@ void TestBehindBgSpriteRuleLeavesFrontSpritesAlone()
 	ModelPixel noSprite;
 	Check(ModelGetPixels(noSprite, true) == ModelGetPixels(noSprite, false),
 		"BlocoP4: a pixel with no sprite renders the same with and without the tag");
+}
+
+//ADR-0224, amended 2026-09-22 (the layer-3 edge). The tag undoes only the
+//layer-2 paint; a layer-3 <background> is drawn after the re-apply and after
+//the front sprites, so where it is opaque it covers the restored pixel exactly
+//as it covers a front sprite. Pinned here so the declared edge cannot drift
+//in silence.
+void TestBehindBgSpriteRuleYieldsToALayer3Background()
+{
+	ModelPixel underForeground;
+	underForeground.BgSprite = true;
+	underForeground.Layer3Covers = true;
+	Check(ModelGetPixels(underForeground, true) == kLayer3Color,
+		"BlocoP4: with the tag, an opaque layer-3 background still paints over the restored behind-background sprite");
+	Check(ModelGetPixels(underForeground, false) == kLayer3Color,
+		"BlocoP4: without the tag the same pixel is layer 3 as well - the tag changes nothing under layer 3");
+
+	ModelPixel frontUnderForeground = underForeground;
+	frontUnderForeground.FrontSprite = true;
+	Check(ModelGetPixels(frontUnderForeground, true) == kLayer3Color,
+		"BlocoP4: a front sprite is covered by the same layer-3 pixel, so the restored sprite is not treated worse than a front one");
+
+	ModelPixel onlyLayer3;
+	onlyLayer3.BgSprite = true;
+	onlyLayer3.Layer2Covers = false;
+	onlyLayer3.Layer3Covers = true;
+	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 0, false) && ModelGetPixels(onlyLayer3, true) == kLayer3Color,
+		"BlocoP4: a layer-3 background with no layer-2 paint triggers no re-apply - the predicate is about layer 2 only");
+
+	ModelPixel transparentLayer3 = underForeground;
+	transparentLayer3.Layer3Covers = false;
+	Check(ModelGetPixels(transparentLayer3, true) == kBgSpriteColor,
+		"BlocoP4: where the layer-3 image is transparent the restored behind-background sprite shows through");
 }
 
 void TestBehindBgSpriteTagLineParsesAndWrites()
@@ -8865,6 +8907,7 @@ int main()
 	TestBehindBgSpriteRuleKeepsTheSpriteOverColourZero();
 	TestBehindBgSpriteRuleHidesTheSpriteUnderAnOpaqueBackground();
 	TestBehindBgSpriteRuleLeavesFrontSpritesAlone();
+	TestBehindBgSpriteRuleYieldsToALayer3Background();
 	TestBehindBgSpriteTagLineParsesAndWrites();
 	TestHdPackErrorDedupeLogsEachDistinctMessageOnce();
 	TestHdPackErrorDedupeIsPerLoad();
