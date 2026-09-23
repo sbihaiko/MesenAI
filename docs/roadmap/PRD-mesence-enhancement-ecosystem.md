@@ -263,6 +263,22 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   program (the paint step was a programmatic fill). Q1 (Core-inferred `label`)
   is still pending.
   [Log](../validation/adr0209-q2-q3-figure-export-2026-09-22.md).
+- **F12.17** (2026-09-23) — a legacy pack keyed against an IPS-patched ROM is
+  imported against the patched ROM (ADR-0198 §3, option (a); go-ahead
+  *"Construir já, em paralelo (Recommended)"*). `mep_import.py import --rom
+  <stock dump>` applies the IPS in memory (`scripts/mep_patch.py`, a mirror of
+  `IpsPatcher.cpp`), writes the patched whole-file sha1 as `<supportedRom>`,
+  carries the IPS and the `<patch>` lines, and prints what this does not buy:
+  the project lives in the patched ROM's key namespace, and stock-ROM
+  recordings do not land there. Castlevania #143: 7 400 keys, 0 missing /
+  extra / differ, lint rc 0; Metroid #148: 148 715 keys, 0 differ (lint rc 1
+  from the source pack's own 3 403 errors, partly the false positives of
+  issue #382). Mega Man #138 fails `verify` on the plain path too (issue
+  #381); Zelda, Zelda II and a Rev A Castlevania dump are refused per
+  ADR-0145 (3). Side fix: `<ver>108` is no longer lowered to 103. 105 import
+  tests; Sonnet verification PASS. Not exercised: a render in the emulator
+  and the ADR-0211 installer path.
+  [Log](../validation/adr0198-s3-patched-rom-import-2026-09-22.md).
 - **F12.13** (2026-09-22) — a variant may not add content the capture lacks
   (ADR-0221, option B), in `MesenSheets::SelectScreenAnchors` after the
   `kAnchorVariantAgree` test; go-ahead verbatim *"dispara as frentes 1, 2, 3 e
@@ -384,7 +400,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   Bomberman, the row's third bounded input, is not on this machine and was not
   downloaded — its 09-17 pass stands and is not restated as a new measurement.
   Five of the ten installed packs are refused for shipping a `<patch>`, naming
-  ADR-0198 §2; their import is §3's follow-up slice.
+  ADR-0198 §2; their import shipped as F12.17 (2026-09-23, §3).
   [Log](../validation/f12.7-legacy-pack-import-2026-09-19.md).
 - **F12.6b** (2026-09-19) — the recorder now keeps the console's internal RAM,
   so a `memoryCheckConstant` is a verdict instead of a shrug. ADR-0197 §3
@@ -1248,7 +1264,7 @@ files and in §3.
 | 0193 | accepted (2026-09-15); documented in the same change | `checks.yml` keeps **both** triggers, and the `push` on `main` is not an optimization to be cut: `pull_request` reports the five required checks before merge, and `push` is the only gate for the paths that bypass the ruleset — a direct push (admin `bypass_actors`, which is how `community-pack-catalog.yml` and a hand fix land) and a merge-commit/rebase tree the PR never tested (`strict_required_status_checks_policy: false`). Measured over the last 60 commits on `main`: 49 squash-merges, 7 merge-commit/rebase PRs, 4 with no PR at all. Reopening conditions in §5; the verifier asserts the `pull_request` + dispatch half and deliberately not the `push` one |
 | 0196 | accepted (2026-09-16), shipped as F12.5 (2026-09-19) | `<addition>` is a compose-editor export anchored on a pose's observed root cell; its target key is synthetic by construction and provably unmatched (CHR ROM: index past CHR; CHR RAM: reserved pattern + `$0D` palette, evidence check on the palette). Slice F12.5 |
 | 0197 | accepted (2026-09-16), §1–§2 shipped as F12.6a (2026-09-19), §3 shipped as F12.6b (2026-09-19); amends 0189 §4's scope to emission only | hand-authored conditions are admitted in sheets and `mep_lint.py --routes` evaluates them on every retained frame of every recording; the three refusals of 0189 §4 stand; the recorder retains `$0000`–`$07FF` per retained frame so `memoryCheckConstant` in that window is evaluable (§3). `spriteNearby` is still `not evaluable` — F12.6b widened the memory plane, not the sprite stream |
-| 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 pending | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3), which is the follow-up slice |
+| 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 shipped as F12.17 (2026-09-23) | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3, F12.17) |
 | 0209 | Q4 accepted and shipped as F12.8 (2026-09-19); Q1–Q3 accepted 2026-09-20 — (b), (e), (i); **Q2/Q3 shipped 2026-09-22** as `scripts/mep_figure.py export`/`import` ([log](../validation/adr0209-q2-q3-figure-export-2026-09-22.md): Contra `spr000`, 10 cells, keys 116 → 116, 0 lost / 0 added); **Q1 shipped 2026-09-22** as option (b) ([log](../validation/adr0209-q1-inferred-label-2026-09-22.md): `Core/NES/HdPacks/SheetLabels.h`, Contra 49/49 sidecars labelled, `mep_build` round-trip byte-identical), go-ahead verbatim *"vai com o Q1 da ADR-0209 em paralelo também"* | MesenAI owns **selection** and **return**, painting is delegated to the artist's own program; the `unsorted` remainder sheet gives every recorded shape a cell. Q1–Q3 answered the label author (the Core infers it at record time, the artist renames), the export unit (the `sprNNN` figure reassembled through its `evidence[]` offsets, not the cell) and the return path (F12.4's template, with this ADR adding only the launch and the reload trigger). Slices F12.9–F12.12 are bounded by its three constraints |
 | 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
 | 0214 | accepted (2026-09-19); protocol shipped, Fable run pending | a fresh Fable session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
