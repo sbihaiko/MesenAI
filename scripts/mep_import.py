@@ -1196,6 +1196,14 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     if audio_manifest.is_file():
         out_rest |= set(Pack(project, audio_manifest).audio)
     rest_missing, rest_extra = sorted(in_rest - out_rest), sorted(out_rest - in_rest)
+    # The `<patch>` lines are compared as a sequence too (PR #385 review): for
+    # a repeated sha1 the loader keeps the last line, so a reordered pair is a
+    # different runtime patch even when the set matches.
+    in_patch_seq = [_patch_as_emitted(s) for s in source.body if s.startswith("<patch>")]
+    out_patch_seq = [_patch_as_emitted(s) for s in built.body if s.startswith("<patch>")]
+    patch_order_bad = ([f"source {in_patch_seq} != built {out_patch_seq}"]
+                       if in_patch_seq != out_patch_seq and set(in_patch_seq) == set(out_patch_seq)
+                       else [])
     ambiguous = sorted(k for k, v in in_blocks.items() if len(v) > 1)
     # ADR-0198 §1's pixel half, read strictly: the art the built manifest draws
     # for a key must be the art the input's own first rule for that key draws,
@@ -1277,6 +1285,8 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     for name, items in (("missing from the import", sorted(missing)),
                         ("unexpected in the import", sorted(extra)),
                         ("carried line missing", rest_missing),
+                        ("<patch> lines reordered (a repeated sha1 keeps the last line at "
+                         "runtime)", patch_order_bad),
                         ("unexpected carried line", rest_extra),
                         ("pixels differ", pixel_bad),
                         ("<patch> file not found in the source pack", patch_source_missing),

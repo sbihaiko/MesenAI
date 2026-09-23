@@ -472,10 +472,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the **last** line, as the loader does). Outputs: the key source's and the
   built manifest's `<supportedRom>` is the **patched** ROM's whole-file sha1
   (`HdPackBuilder`'s form; inserted after `<scale>` when the pack declared
-  none). Two refusals happen before anything is written: a `<patch>` line
+  none). Three refusals happen before anything is written: a `<patch>` line
   that is indented or sits behind a `[condition]`, because the loader
-  dispatches the tag only at column 0; and a patch name that clashes with a
-  generated path, as a file or as a folder prefix. Every IPS — found the way
+  dispatches the tag only at column 0; a patch name that clashes with a
+  generated path, as a file or as a folder prefix; and any carried IPS —
+  not only the one `--rom` selects — that is not a valid IPS. `verify` also
+  compares the `<patch>` lines as an ordered sequence, since for a repeated
+  sha1 the loader keeps the last line. Every IPS — found the way
   `HdPackLoader::ResolvePackRelativePath` finds it (exact path, then a
   case-folded match; an ambiguous fold is refused) and written under the
   normalized manifest name — is copied beside **both** manifests

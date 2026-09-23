@@ -342,6 +342,15 @@ def resolve(lines: list[str], folder: Path, rom: Path,
             raise PatchError(f"line {e.line}: <patch> file {e.file!r} resolves outside the pack "
                              f"folder {folder} — a patch must live inside the pack (ADR-0006)")
         sources[e.rel] = src
+    # Every carried IPS, not only the one `--rom` selects, must be a valid IPS
+    # (PR #385 review): each is copied into the project and applied by the
+    # runtime to whichever ROM its sha1 names, so a malformed one would give a
+    # wrong ROM there. Parsed with the same reader, over an empty buffer.
+    for e in entries:
+        try:
+            apply_ips(b"", (folder / sources[e.rel]).read_bytes())
+        except PatchError as exc:
+            raise PatchError(f"line {e.line}: <patch> file {e.file!r}: {exc}") from exc
     try:
         stock = rom.read_bytes()
     except OSError as exc:

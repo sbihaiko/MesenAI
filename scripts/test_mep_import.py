@@ -1643,6 +1643,52 @@ def test_patch_case_fold(root: Path):
         ok("loader_source refuses to guess between two files that fold to the same name")
 
 
+def test_patch_every_ips_and_order(root: Path):
+    """PR #385 review, eighth round (Codex): every carried IPS is validated,
+    not only the one `--rom` selects; and `verify` compares the `<patch>`
+    lines as a sequence, since a repeated sha1 keeps the last line."""
+    root = root / "everyips"
+    root.mkdir(parents=True, exist_ok=True)
+    rom = root / "Game.nes"
+    rom.write_bytes(STOCK_ROM)
+    stock_whole = sha1_hex(STOCK_ROM)
+    other = "A" * 40
+    lines = patched_lines(stock_whole) + [f"<patch>bad.ips,{other}"]
+    src = write_src(root / "bad", lines, {"chr.png": cell_png(2, 1, 1), "fix.ips": CHR_ROM_IPS,
+                                          "bad.ips": b"PATCH" + ips_record(0, b"ab")})
+    dst = root / "bad-out"
+    expect_error(lambda: MI.import_pack(src, dst, False, rom), "bad.ips",
+                 "a malformed IPS on a <patch> line --rom does not select")
+    if dst.exists() and any(dst.iterdir()):
+        fail("a malformed unselected IPS left files behind")
+
+    lines = patched_lines(stock_whole)[:-1] + [f"<patch>alt.ips,{stock_whole}",
+                                               f"<patch>fix.ips,{stock_whole}"]
+    src = write_src(root / "order", lines, {"chr.png": cell_png(2, 1, 1), "fix.ips": CHR_ROM_IPS,
+                                            "alt.ips": CHR_ROM_IPS})
+    project = root / "order-proj"
+    MI.import_pack(src, project, False, rom)
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build exited {rc}:\n{out}")
+        return
+    rc, out = run_verify(src, project)
+    if rc != 0:
+        fail(f"verify on an ordered repeated-sha1 pair:\n{out}")
+        return
+    built_path = project / "textures" / "hires.txt"
+    built = built_path.read_text(encoding="utf-8").splitlines()
+    idx = [i for i, ln in enumerate(built) if ln.startswith("<patch>")]
+    swapped = list(built)
+    swapped[idx[0]], swapped[idx[1]] = built[idx[1]], built[idx[0]]
+    built_path.write_text("\n".join(swapped) + "\n", encoding="utf-8")
+    rc, out = run_verify(src, project)
+    if rc != 1 or "<patch> lines reordered" not in out:
+        fail(f"verify should fail on reordered repeated-sha1 <patch> lines: {rc}\n{out}")
+    else:
+        ok("verify fails when two <patch> lines for one sha1 are reordered")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -1666,6 +1712,7 @@ def main():
         test_patch_hardening(root)
         test_patch_path_normalization(root)
         test_patch_case_fold(root)
+        test_patch_every_ips_and_order(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)
