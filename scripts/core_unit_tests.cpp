@@ -6462,6 +6462,198 @@ namespace
 			"bytes=" + std::to_string(json.size()));
 	}
 
+	//--- ADR-0225 (F12.18): a pose keeps its pixel offsets ------------------
+
+	//SpriteGrouping's round-to-nearest-cell rule, restated so the invariant
+	//dx == ToCells(px) is checked against the ADR's formula, not the code.
+	int32_t PixelsToCells(int32_t pixels)
+	{
+		return (pixels + (pixels >= 0 ? 4 : -4)) / 8;
+	}
+
+	//Contra's player shape (docs/validation/contra-pose-offsets-and-flicker-
+	//2026-09-23.md §1): legs at y 14 under a torso shifted `torsoX` px right.
+	//OAM order puts the legs first, so they are the frontmost tiles.
+	OamFrame ContraRunFrame(uint32_t f, uint32_t torsoX, uint32_t repeat, bool legsFirst = true)
+	{
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = repeat;
+		uint32_t x0 = 100 + f;
+		uint32_t y0 = 80;
+		std::vector<OamEntry> legs = { OamAt(115, x0, y0 + 14), OamAt(116, x0 + 8, y0 + 14) };
+		std::vector<OamEntry> torso = { OamAt(111, x0 + torsoX, y0), OamAt(112, x0 + torsoX + 8, y0),
+			OamAt(113, x0 + torsoX, y0 + 8), OamAt(114, x0 + torsoX + 8, y0 + 8) };
+		const std::vector<OamEntry>& first = legsFirst ? legs : torso;
+		const std::vector<OamEntry>& second = legsFirst ? torso : legs;
+		frame.Entries.insert(frame.Entries.end(), first.begin(), first.end());
+		frame.Entries.insert(frame.Entries.end(), second.begin(), second.end());
+		return frame;
+	}
+
+	const PoseTile* PoseTileOf(const PoseEntry& pose, int32_t node)
+	{
+		for(const PoseTile& tile : pose.Tiles) {
+			if(node >= 0 && tile.Node == (uint32_t)node) {
+				return &tile;
+			}
+		}
+		return nullptr;
+	}
+
+	bool PoseCellsMatchPixels(const PoseStats& stats)
+	{
+		for(const PoseEntry& pose : stats.Poses) {
+			for(const PoseTile& tile : pose.Tiles) {
+				if(tile.Dx != PixelsToCells(tile.Px) || tile.Dy != PixelsToCells(tile.Py)) {
+					return false;
+				}
+			}
+		}
+		return !stats.Poses.empty();
+	}
+
+	//A +4 px torso rounds to a whole cell and a +3 px one to none: both are
+	//ToCells' worst cases, and both must keep their pixels.
+	void TestPoseTilesKeepTheirPixelOffsets()
+	{
+		std::vector<OamFrame> frames;
+		for(uint32_t f = 0; f < 3; f++) {
+			frames.push_back(ContraRunFrame(f, 4, 1));
+		}
+		for(uint32_t f = 3; f < 6; f++) {
+			frames.push_back(ContraRunFrame(f, 3, 1));
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		Check(stats.Poses.size() == 2, "BlocoP: a +4 px and a +3 px torso round to two different poses",
+			"poses=" + std::to_string(stats.Poses.size()));
+		Check(PoseCellsMatchPixels(stats), "BlocoP: every written tile holds dx == ToCells(px), dy == ToCells(py)", "");
+		if(stats.Poses.size() != 2) {
+			return;
+		}
+		int32_t torso = SpriteNodeOf(vocab, 111);
+		int32_t legs = SpriteNodeOf(vocab, 115);
+		int32_t legsEast = SpriteNodeOf(vocab, 116);
+		bool sawFour = false;
+		bool sawThree = false;
+		for(const PoseEntry& pose : stats.Poses) {
+			const PoseTile* t = PoseTileOf(pose, torso);
+			const PoseTile* l = PoseTileOf(pose, legs);
+			if(!t || !l) {
+				continue;
+			}
+			sawFour = sawFour || (t->Px == 4 && t->Py == 0 && t->Dx == 1 && t->Dy == 0);
+			sawThree = sawThree || (t->Px == 3 && t->Dx == 0);
+			Check(l->Px == 0 && l->Py == 14 && l->Dy == 2, "BlocoP: legs at y 14 write py 14 beside dy 2",
+				"px=" + std::to_string(l->Px) + " py=" + std::to_string(l->Py) + " dy=" + std::to_string(l->Dy));
+			Check(pose.Overlaps, "BlocoP: legs over the torso's last rows are an overlapping pose", "");
+			const PoseTile* e = PoseTileOf(pose, legsEast);
+			Check(l->Z == 0 && e && e->Z == 1 && t->Z == 2,
+				"BlocoP: z is the OAM rank, frontmost first",
+				"legs z=" + std::to_string(l->Z) + " torso z=" + std::to_string(t->Z));
+		}
+		Check(sawFour, "BlocoP: a +4 px torso writes dx 1 and px 4", "");
+		Check(sawThree, "BlocoP: a +3 px torso writes dx 0 and px 3", "");
+
+		std::string json = SerializePoses(vocab, stats);
+		JsonReader reader;
+		JsonValue root;
+		bool parsed = reader.Parse(json, root);
+		Check(parsed, "BlocoP: the pixel-offset sidecar is strict-valid JSON", reader.GetError());
+		const JsonValue* poses = parsed ? root.Get("poses") : nullptr;
+		bool allPixels = poses != nullptr;
+		bool allZ = poses != nullptr;
+		for(size_t p = 0; poses && p < poses->GetArray().size(); p++) {
+			const JsonValue* tiles = poses->GetArray()[p].Get("tiles");
+			for(size_t i = 0; tiles && i < tiles->GetArray().size(); i++) {
+				const JsonValue& tile = tiles->GetArray()[i];
+				const JsonValue* px = tile.Get("px");
+				const JsonValue* py = tile.Get("py");
+				allPixels = allPixels && px && py
+					&& tile.Get("dx")->GetNumber() == PixelsToCells((int32_t)px->GetNumber())
+					&& tile.Get("dy")->GetNumber() == PixelsToCells((int32_t)py->GetNumber());
+				allZ = allZ && tile.Get("z") != nullptr;
+			}
+		}
+		Check(allPixels, "BlocoP: every serialised tile carries px/py consistent with dx/dy", "");
+		Check(allZ, "BlocoP: an overlapping pose serialises z on every tile", "");
+	}
+
+	//+5 and +6 round to the same cells, so they are one pose; the layout
+	//seen in more RepeatCount-weighted frames supplies the pixels, and a tie
+	//goes to the smaller vector.
+	void TestPoseWritesItsMostSeenPixelLayout()
+	{
+		std::vector<OamFrame> frames;
+		frames.push_back(ContraRunFrame(0, 5, 4));
+		for(uint32_t f = 1; f < 4; f++) {
+			frames.push_back(ContraRunFrame(f, 6, 1));
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		int32_t torso = SpriteNodeOf(vocab, 111);
+		Check(stats.Poses.size() == 1 && stats.Poses[0].Frames == 7,
+			"BlocoP: layouts 1 px apart are one pose", "poses=" + std::to_string(stats.Poses.size()));
+		const PoseTile* t = stats.Poses.empty() ? nullptr : PoseTileOf(stats.Poses[0], torso);
+		Check(t && t->Px == 5, "BlocoP: the layout held 4 RepeatCount frames beats one seen in 3",
+			t ? "px=" + std::to_string(t->Px) : "no torso");
+
+		std::vector<OamFrame> tied;
+		for(uint32_t f = 0; f < 6; f++) {
+			tied.push_back(ContraRunFrame(f, f % 2 == 0 ? 6 : 5, 1));
+		}
+		Vocabulary tiedVocab = BuildSpriteVocabulary(tied);
+		PoseStats tiedStats = BuildPoses(tied, tiedVocab);
+		const PoseTile* tt = tiedStats.Poses.size() == 1 ? PoseTileOf(tiedStats.Poses[0], SpriteNodeOf(tiedVocab, 111)) : nullptr;
+		Check(tt && tt->Px == 5, "BlocoP: a layout tie goes to the lexicographically smallest vector",
+			tt ? "px=" + std::to_string(tt->Px) : "poses=" + std::to_string(tiedStats.Poses.size()));
+	}
+
+	//OAM order is not part of the modal key: the (px, py) vector wins, and z
+	//comes from the earliest retained frame that drew that vector - even when
+	//later frames drew it in another OAM order more often.
+	void TestPoseZComesFromTheEarliestFrameOfTheWinningLayout()
+	{
+		for(int legsFirstEarliest = 0; legsFirstEarliest < 2; legsFirstEarliest++) {
+			std::vector<OamFrame> frames;
+			frames.push_back(ContraRunFrame(0, 4, 1, legsFirstEarliest == 1));
+			frames.push_back(ContraRunFrame(1, 4, 1, legsFirstEarliest == 0));
+			frames.push_back(ContraRunFrame(2, 4, 1, legsFirstEarliest == 0));
+			Vocabulary vocab = BuildSpriteVocabulary(frames);
+			PoseStats stats = BuildPoses(frames, vocab);
+			const PoseTile* legs = stats.Poses.size() == 1 ? PoseTileOf(stats.Poses[0], SpriteNodeOf(vocab, 115)) : nullptr;
+			const PoseTile* torso = stats.Poses.size() == 1 ? PoseTileOf(stats.Poses[0], SpriteNodeOf(vocab, 111)) : nullptr;
+			bool expectLegsFront = legsFirstEarliest == 1;
+			Check(legs && torso && (expectLegsFront ? (legs->Z == 0 && torso->Z == 2) : (torso->Z == 0 && legs->Z == 4)),
+				std::string("BlocoP: z is the OAM order of the earliest frame with the winning layout (")
+					+ (expectLegsFront ? "legs" : "torso") + " first there, the other order twice later)",
+				legs && torso ? "legs z=" + std::to_string(legs->Z) + " torso z=" + std::to_string(torso->Z) : "no pose");
+		}
+	}
+
+	//A 2x2 block on whole cells overlaps nothing: no z in the file.
+	void TestNonOverlappingPoseWritesNoZ()
+	{
+		std::vector<OamFrame> frames;
+		for(uint32_t f = 0; f < 3; f++) {
+			OamFrame frame;
+			frame.FrameNumber = f;
+			frame.Entries.push_back(OamAt(121, 60, 60));
+			frame.Entries.push_back(OamAt(122, 68, 60));
+			frame.Entries.push_back(OamAt(123, 60, 68));
+			frame.Entries.push_back(OamAt(124, 68, 68));
+			frames.push_back(frame);
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		Check(stats.Poses.size() == 1 && !stats.Poses[0].Overlaps, "BlocoP: a whole-cell block is not an overlapping pose", "");
+		Check(PoseCellsMatchPixels(stats), "BlocoP: whole-cell tiles write px == dx * 8", "");
+		std::string json = SerializePoses(vocab, stats);
+		Check(json.find("\"px\": 8") != std::string::npos && json.find("\"z\"") == std::string::npos,
+			"BlocoP: a non-overlapping pose writes px/py and omits z", "");
+	}
+
 	//--- ADR-0174 / ADR-0175 (issues #174, #175) ----------------------------
 
 	//The shape issue #174 measured on Contra: one pair of legs sits under two
@@ -9036,6 +9228,10 @@ int main()
 	TestPoseListIsCappedAtTheMaximum();
 	TestPosesAreSortedByFramesDescending();
 	TestPoseSidecarRoundTrips();
+	TestPoseTilesKeepTheirPixelOffsets();
+	TestPoseWritesItsMostSeenPixelLayout();
+	TestPoseZComesFromTheEarliestFrameOfTheWinningLayout();
+	TestNonOverlappingPoseWritesNoZ();
 	TestPoseTrackFollowsAFigureAndBreaksAtTheLimit();
 	TestPoseCycleWithARepeatedSilhouetteHasPeriodSix();
 	TestTwoIdenticalRunsAreOneSequence();

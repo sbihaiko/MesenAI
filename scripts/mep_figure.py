@@ -61,7 +61,11 @@ import mep_build  # noqa: E402
 import ora_writer  # noqa: E402 — ADR-0220: the layered .ora beside the figure
 import sheet_repaint  # noqa: E402
 
-FIGURE_VERSION = 1
+# ADR-0225 §2: version 2 places cells at native-pixel offsets (`x`/`y` are 1x
+# pixels from the figure's top-left, `z` present when cells overlap). Import
+# still reads version 1 — its cells are on the 8 px grid, a special case.
+FIGURE_VERSION = 2
+FIGURE_VERSIONS_READ = (1, 2)
 FIGURE_SUFFIX = "-figure"
 _POSE_ID = re.compile(r"^pose\d{3,}$")
 
@@ -75,9 +79,10 @@ class FigureError(Exception):
 class Figure:
     """A resolved figure: its layout in cell units plus where it came from."""
 
-    __slots__ = ("id", "kind", "layout", "source", "pose_id", "group", "unplaced")
+    __slots__ = ("id", "kind", "layout", "source", "pose_id", "group", "unplaced", "pixels", "z")
 
-    def __init__(self, figure_id, kind, layout, source, pose_id=None, group=None, unplaced=()):
+    def __init__(self, figure_id, kind, layout, source, pose_id=None, group=None, unplaced=(),
+                 pixels=None, z=None):
         self.id = figure_id
         self.kind = kind            # "sprite" or "object"
         self.layout = layout        # {node: (dx, dy)} in cell units
@@ -85,6 +90,11 @@ class Figure:
         self.pose_id = pose_id
         self.group = group          # the sprNNN/objNNN Sheet, or None for a bare pose
         self.unplaced = tuple(unplaced)
+        # ADR-0225: {node: (px, py)} native pixels when a pose supplied the
+        # layout (poses.json px/py, or dx*unit on an older sidecar); None on
+        # the walk path, which only knows cells. {node: z} when tiles overlap.
+        self.pixels = pixels
+        self.z = dict(z or {})
 
 
 def _group_sheet(pack: E.Pack, stem: str):
@@ -102,7 +112,8 @@ def resolve_figure(pack: E.Pack, figure_id: str) -> Figure:
         pose = pack.poses.by_id(figure_id)
         if pose is None:
             raise FigureError(f"{figure_id}: no such pose in sheets/poses.json")
-        return Figure(figure_id, "sprite", pose.layout(), "pose", pose_id=pose.id)
+        return Figure(figure_id, "sprite", pose.layout(), "pose", pose_id=pose.id,
+                      pixels=pose.pixels, z=pose.z)
 
     sheet = _group_sheet(pack, figure_id)
     if sheet is None:
@@ -112,6 +123,7 @@ def resolve_figure(pack: E.Pack, figure_id: str) -> Figure:
     nodes = pack.group_nodes(figure_id)
     if not nodes:
         raise FigureError(f"{figure_id}: the group sheet has no cells")
+    pose = None
     if sheet.kind == "sprite":
         layout, source, pose = pack.figure_layout_detail(figure_id)
         pose_id = pose.id if pose is not None else None
@@ -121,7 +133,9 @@ def resolve_figure(pack: E.Pack, figure_id: str) -> Figure:
     unplaced = [n for n in nodes if n not in layout]
     if not layout:
         raise FigureError(f"{figure_id}: nothing could be laid out")
-    return Figure(figure_id, sheet.kind, layout, source, pose_id, sheet, unplaced)
+    return Figure(figure_id, sheet.kind, layout, source, pose_id, sheet, unplaced,
+                  pixels=pose.pixels if pose is not None else None,
+                  z=pose.z if pose is not None else None)
 
 
 def home_cell(pack: E.Pack, figure: Figure, node: int):
@@ -203,6 +217,102 @@ def figure_palettes(pack: E.Pack, figure: Figure, cells):
     return ora_writer.first_use_palettes(labelled)
 
 
+def figure_cells(pack: E.Pack, figure: Figure, origin=(0, 0), pose_id=None):
+    """`(cells, unresolved, unit)`: one sidecar entry per placed node of
+    `figure`, `x`/`y` in 1x native pixels from `origin` (ADR-0225 §2). A
+    pose-backed figure places each cell at its `px`/`py`; the walk path only
+    knows cells, so it places at `dx * unit`. `z` is copied when the pose
+    carries it (its tiles overlap)."""
+    unit = None
+    cells, unresolved, homes = [], [], []
+    placed = sorted(figure.layout.items(), key=lambda kv: (kv[1][1], kv[1][0], kv[0]))
+    for node, (dx, dy) in placed:
+        home = home_cell(pack, figure, node)
+        if home is None:
+            unresolved.append(node)
+            continue
+        sheet, cell = home
+        if unit is None:
+            unit = sheet.unit
+        elif sheet.unit != unit:
+            raise FigureError(f"{figure.id}: node {node} lives on {sheet.name} at unit "
+                              f"{sheet.unit}, the figure is at unit {unit}")
+        homes.append((node, dx, dy, sheet, cell))
+    if unit is None:
+        return [], unresolved, None
+    pixels = figure.pixels or {n: (dx * unit, dy * unit) for n, (dx, dy) in figure.layout.items()}
+    x0 = min(pixels[n][0] for n in figure.layout)
+    y0 = min(pixels[n][1] for n in figure.layout)
+    for node, dx, dy, sheet, cell in homes:
+        entry = {
+            "node": node, "dx": dx, "dy": dy,
+            "x": origin[0] + pixels[node][0] - x0, "y": origin[1] + pixels[node][1] - y0,
+            "sheet": sheet.json_path.name,
+            "sheetX": int(cell["x"]), "sheetY": int(cell["y"]),
+        }
+        if isinstance(cell.get("index"), int):
+            entry["index"] = cell["index"]
+        if node in figure.z:
+            entry["z"] = figure.z[node]
+        if pose_id is not None:
+            entry["pose"] = pose_id
+        cells.append(entry)
+    return cells, unresolved, unit
+
+
+def _overlaps(cells, unit):
+    """Per cell index, the other cells whose `unit` square shares a pixel."""
+    out = [[] for _ in cells]
+    for i, a in enumerate(cells):
+        for j in range(i + 1, len(cells)):
+            b = cells[j]
+            if abs(a["x"] - b["x"]) < unit and abs(a["y"] - b["y"]) < unit:
+                out[i].append(j)
+                out[j].append(i)
+    return out
+
+
+def _front_key(cells, i):
+    """Front-to-back order (ADR-0225 §1): lowest `z` first, then list order."""
+    return (cells[i].get("z", 0), i)
+
+
+def _paste_over(dst, src, x, y):
+    """Paste `src` skipping fully transparent pixels — how a sprite drawn in
+    front of another shows the one behind through its holes."""
+    for row in range(src.height):
+        for col in range(src.width):
+            o = src.offset(col, row)
+            if src.px[o + 3]:
+                d = dst.offset(x + col, y + row)
+                dst.px[d:d + 4] = src.px[o:o + 4]
+
+
+def compose_cells(pack: E.Pack, cells, unit, scale, home_of):
+    """`(canvas_1x, canvas)` for placed cells: sized to the cells' pixel
+    extent, drawn back to front so the frontmost opaque pixel wins where
+    cells overlap. No gutter inside a figure (ADR-0225 §2). `home_of(entry)`
+    returns the `(Sheet, cell)` an entry's art comes from."""
+    width = max(c["x"] for c in cells) + unit
+    height = max(c["y"] for c in cells) + unit
+    canvas_1x = sheet_repaint.Image(width, height)
+    canvas = sheet_repaint.Image(width * scale, height * scale)
+    overlaps = _overlaps(cells, unit)
+    for i in sorted(range(len(cells)), key=lambda i: _front_key(cells, i), reverse=True):
+        entry = cells[i]
+        sheet, cell = home_of(entry)
+        art = sheet.cell_image(cell)
+        painted = sheet.cell_image_painted(cell, scale) if scale > 1 else None
+        big = painted if painted is not None else art.upscale(scale)
+        if overlaps[i]:
+            _paste_over(canvas_1x, art, entry["x"], entry["y"])
+            _paste_over(canvas, big, entry["x"] * scale, entry["y"] * scale)
+        else:
+            canvas_1x.paste(art, entry["x"], entry["y"])
+            canvas.paste(big, entry["x"] * scale, entry["y"] * scale)
+    return canvas_1x, canvas
+
+
 def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> dict:
     """Write `<stem>.png`, `<stem>.orig.png`, `<stem>.json` into `out_dir`
     and return the sidecar document."""
@@ -215,45 +325,13 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
 
     xs = [p[0] for p in figure.layout.values()]
     ys = [p[1] for p in figure.layout.values()]
-    min_x, min_y = min(xs), min(ys)
-    cols, rows = max(xs) - min_x + 1, max(ys) - min_y + 1
+    cols, rows = max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
 
-    unit = None
-    cells = []
-    unresolved = []
-    placed = sorted(figure.layout.items(), key=lambda kv: (kv[1][1], kv[1][0], kv[0]))
-    for node, (dx, dy) in placed:
-        home = home_cell(pack, figure, node)
-        if home is None:
-            unresolved.append(node)
-            continue
-        sheet, cell = home
-        if unit is None:
-            unit = sheet.unit
-        elif sheet.unit != unit:
-            raise FigureError(f"{figure_id}: node {node} lives on {sheet.name} at unit "
-                              f"{sheet.unit}, the figure is at unit {unit}")
-        entry = {
-            "node": node, "dx": dx, "dy": dy,
-            "x": (dx - min_x) * unit, "y": (dy - min_y) * unit,
-            "sheet": sheet.json_path.name,
-            "sheetX": int(cell["x"]), "sheetY": int(cell["y"]),
-        }
-        if isinstance(cell.get("index"), int):
-            entry["index"] = cell["index"]
-        cells.append(entry)
+    cells, unresolved, unit = figure_cells(pack, figure)
     if not cells:
         raise FigureError(f"{figure_id}: no sheet shows any of its cells")
-
-    canvas_1x = sheet_repaint.Image(cols * unit, rows * unit)
-    canvas = sheet_repaint.Image(cols * unit * scale, rows * unit * scale)
-    for entry in cells:
-        sheet, cell = home_cell(pack, figure, entry["node"])
-        art = sheet.cell_image(cell)
-        canvas_1x.paste(art, entry["x"], entry["y"])
-        painted = sheet.cell_image_painted(cell, scale) if scale > 1 else None
-        canvas.paste(painted if painted is not None else art.upscale(scale),
-                     entry["x"] * scale, entry["y"] * scale)
+    canvas_1x, canvas = compose_cells(pack, cells, unit, scale,
+                                      lambda e: home_cell(pack, figure, e["node"]))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     # ADR-0220 §1: the layered .ora from this same canvas, beside the pair.
@@ -275,6 +353,9 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
         "unit": unit,
         "scale": scale,
         "size": [cols, rows],
+        # ADR-0225 §2: the 1x canvas is the figure's pixel extent; cells[]
+        # x/y are 1x native pixels (multiply by `scale` on the painted PNG).
+        "pixelSize": [canvas_1x.width, canvas_1x.height],
         "sheet": name,
         "reference": f"{stem}.orig.png",
         "assetName": N.asset_name_for(name),
@@ -284,6 +365,65 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
         "labelSource": label_source,
         "cells": cells,
         "unplaced": list(figure.unplaced),
+        "unresolved": unresolved,
+    }
+    (out_dir / f"{stem}.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    return doc
+
+
+def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str = "") -> dict:
+    """The kit's Figures surface as one composed view (ADR-0225 §2):
+    `rows` is `[[(pose, ox, oy), ...], ...]` — each pose drawn at pixel
+    precision with its top-left at `(ox, oy)` 1x pixels. Same three files and
+    sidecar as `export_figure`, so `import` returns paint to the sprite
+    vocabulary cells the poses came from. Returns the sidecar, or None when
+    no sheet draws any tile of any pose."""
+    scale = pack.scale
+    name = f"{stem}.png"
+    N.require_asset_name(name, where=f"figure rows {stem}")
+    cells, unresolved, unit = [], [], None
+    homes = {}
+    for row in rows:
+        for pose, ox, oy in row:
+            figure = Figure(pose.id, "sprite", pose.layout(), "pose", pose_id=pose.id,
+                            pixels=pose.pixels, z=pose.z)
+            placed, missing, u = figure_cells(pack, figure, (ox, oy), pose_id=pose.id)
+            unresolved += [n for n in missing if n not in unresolved]
+            if not placed:
+                continue
+            if unit is not None and u != unit:
+                raise FigureError(f"{stem}: {pose.id} is at unit {u}, the surface at unit {unit}")
+            unit = u
+            for entry in placed:
+                homes[id(entry)] = home_cell(pack, figure, entry["node"])
+            cells += placed
+    if not cells:
+        return None
+    canvas_1x, canvas = compose_cells(pack, cells, unit, scale, lambda e: homes[id(e)])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ora_writer.write_surface(
+        out_dir, name, canvas, canvas_1x,
+        [{"index": c.get("index", i), "x": c["x"] * scale, "y": c["y"] * scale,
+          "w": unit * scale, "h": unit * scale} for i, c in enumerate(cells)],
+        captions=[(0, 0, caption or stem)])
+    doc = {
+        "version": FIGURE_VERSION,
+        "kind": "figure",
+        "figure": stem,
+        "figureKind": "sprite",
+        "source": "poses",
+        "pose": None,
+        "poses": [p.id for row in rows for p, _x, _y in row],
+        "unit": unit,
+        "scale": scale,
+        "pixelSize": [canvas_1x.width, canvas_1x.height],
+        "sheet": name,
+        "reference": f"{stem}.orig.png",
+        "assetName": N.asset_name_for(name),
+        "label": caption or stem,
+        "labelSource": E.LABEL_SOURCE_ID if not caption else "names",
+        "cells": cells,
+        "unplaced": [],
         "unresolved": unresolved,
     }
     (out_dir / f"{stem}.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
@@ -300,8 +440,10 @@ def _load_figure_doc(png_path: Path):
         doc = json.loads(json_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise FigureError(f"{json_path.name}: not readable as JSON ({e})")
-    if not isinstance(doc, dict) or doc.get("version") != FIGURE_VERSION or doc.get("kind") != "figure":
-        raise FigureError(f"{json_path.name}: not a version {FIGURE_VERSION} figure sidecar")
+    if (not isinstance(doc, dict) or doc.get("version") not in FIGURE_VERSIONS_READ
+            or doc.get("kind") != "figure"):
+        raise FigureError(f"{json_path.name}: not a figure sidecar of a known version "
+                          f"({', '.join(str(v) for v in FIGURE_VERSIONS_READ)})")
     return doc
 
 
@@ -315,6 +457,72 @@ def _find_cell(sheet: E.Sheet, entry: dict):
         if idx is None and int(cell.get("x", -1)) == entry["sheetX"] and int(cell.get("y", -1)) == entry["sheetY"]:
             return cell
     return None
+
+
+def _owned_pixels(pack: E.Pack, entries, i, others, unit):
+    """ADR-0225 §3: the 1x pixels of cell `i` that are its own. A pixel no
+    other cell covers is its own; a shared pixel goes to the frontmost cell
+    (lowest `z`) whose original art is opaque there, else to the frontmost.
+    Returns a `unit`x`unit` list of booleans, row-major."""
+    arts = {}
+
+    def art(j):
+        if j not in arts:
+            e = entries[j]
+            sheet = _group_sheet(pack, Path(str(e["sheet"])).stem)
+            cell = _find_cell(sheet, e) if sheet is not None else None
+            arts[j] = sheet.cell_image(cell) if cell is not None else None
+        return arts[j]
+
+    me = entries[i]
+    owned = []
+    for ly in range(unit):
+        for lx in range(unit):
+            gx, gy = me["x"] + lx, me["y"] + ly
+            covering = [i] + [j for j in others
+                              if 0 <= gx - entries[j]["x"] < unit and 0 <= gy - entries[j]["y"] < unit]
+            if len(covering) == 1:
+                owned.append(True)
+                continue
+            covering.sort(key=lambda j: _front_key(entries, j))
+            owner = covering[0]
+            for j in covering:
+                a = art(j)
+                if a is not None and a.px[a.offset(gx - entries[j]["x"], gy - entries[j]["y"]) + 3]:
+                    owner = j
+                    break
+            owned.append(owner == i)
+    return owned
+
+
+def _differs(fig_cell, ref_cell, owned, unit, scale) -> bool:
+    """Was any pixel this cell owns painted? `owned` None means all of them."""
+    if owned is None:
+        return fig_cell.px != ref_cell.px
+    for k, mine in enumerate(owned):
+        if not mine:
+            continue
+        lx, ly = k % unit, k // unit
+        for dy in range(scale):
+            o = fig_cell.offset(lx * scale, ly * scale + dy)
+            if fig_cell.px[o:o + 4 * scale] != ref_cell.px[o:o + 4 * scale]:
+                return True
+    return False
+
+
+def _merge_owned(current, fig_cell, owned, unit, scale):
+    """The sheet cell after import: the figure's pixels where this cell owns
+    them, the sheet's own pixels where another cell covered it — the artist
+    could not have painted what they could not see (ADR-0225 §3)."""
+    out = current.clone()
+    for k, mine in enumerate(owned):
+        if not mine:
+            continue
+        lx, ly = k % unit, k // unit
+        for dy in range(scale):
+            o = fig_cell.offset(lx * scale, ly * scale + dy)
+            out.px[o:o + 4 * scale] = fig_cell.px[o:o + 4 * scale]
+    return out
 
 
 def import_figure(pack: E.Pack, png_path: Path) -> dict:
@@ -339,16 +547,24 @@ def import_figure(pack: E.Pack, png_path: Path) -> dict:
     unit = int(doc.get("unit") or 8)
 
     report = {"figure": doc.get("figure"), "scale": scale, "cells": 0, "painted": 0,
-              "written": 0, "alreadyApplied": 0, "sheets": []}
+              "written": 0, "alreadyApplied": 0, "sheets": [], "overlapped": 0}
+    entries = [e for e in (doc.get("cells") or []) if isinstance(e, dict)]
+    for e in entries:
+        e["x"], e["y"] = int(e["x"]), int(e["y"])
+    overlaps = _overlaps(entries, unit)
     canvases = {}   # sheet name -> (Sheet, Image, dirty)
-    for entry in doc.get("cells") or []:
+    for i, entry in enumerate(entries):
         report["cells"] += 1
-        x, y = int(entry["x"]), int(entry["y"])
-        if x + unit > twin.width or y + unit > twin.height:
+        x, y = entry["x"], entry["y"]
+        if x < 0 or y < 0 or x + unit > twin.width or y + unit > twin.height:
             raise FigureError(f"{png_path.name}: cell for node {entry.get('node')} falls outside the twin")
         fig_cell = figure.crop(x * scale, y * scale, unit * scale, unit * scale)
         ref_cell = twin.crop(x, y, unit, unit).upscale(scale)
-        if fig_cell.px == ref_cell.px:
+        # ADR-0225 §3: where cells overlap, a pixel belongs to one of them.
+        owned = _owned_pixels(pack, entries, i, overlaps[i], unit) if overlaps[i] else None
+        if owned is not None:
+            report["overlapped"] += 1
+        if not _differs(fig_cell, ref_cell, owned, unit, scale):
             continue  # not painted: ADR-0153 §3, the twin decides
         report["painted"] += 1
         sheet = _group_sheet(pack, Path(str(entry["sheet"])).stem)
@@ -369,10 +585,12 @@ def import_figure(pack: E.Pack, png_path: Path) -> dict:
         sx, sy = int(cell["x"]) * scale, int(cell["y"]) * scale
         if sx + unit * scale > img.width or sy + unit * scale > img.height:
             raise FigureError(f"{sheet.name}: cell ({cell['x']},{cell['y']}) falls outside the sheet")
-        if img.crop(sx, sy, unit * scale, unit * scale).px == fig_cell.px:
+        current = img.crop(sx, sy, unit * scale, unit * scale)
+        new_cell = fig_cell if owned is None else _merge_owned(current, fig_cell, owned, unit, scale)
+        if current.px == new_cell.px:
             report["alreadyApplied"] += 1
             continue
-        img.paste(fig_cell, sx, sy)
+        img.paste(new_cell, sx, sy)
         canvases[sheet.name][2] = True
         report["written"] += 1
     for sheet, img, dirty in canvases.values():

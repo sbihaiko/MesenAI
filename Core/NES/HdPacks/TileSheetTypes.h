@@ -664,6 +664,13 @@ namespace MesenSheets
 		uint32_t Node = 0;
 		int32_t Dx = 0;
 		int32_t Dy = 0;
+		//ADR-0225 §1: the tile's top-left in native pixels from the pose origin
+		//(Dx == ToCells(Px)), and its front-to-back OAM rank (0 = frontmost) -
+		//written as `z` only when the pose's tiles overlap. Deliberately NOT
+		//part of ==/<: identity stays on the rounded (Node, Dx, Dy) set.
+		int32_t Px = 0;
+		int32_t Py = 0;
+		int32_t Z = 0;
 
 		bool operator==(const PoseTile& o) const { return Node == o.Node && Dx == o.Dx && Dy == o.Dy; }
 		bool operator<(const PoseTile& o) const
@@ -690,6 +697,9 @@ namespace MesenSheets
 	struct PoseEntry
 	{
 		std::vector<PoseTile> Tiles;
+		//ADR-0225 §1: some pair of Tiles overlaps at pixel precision, so the
+		//sidecar writes each tile's Z.
+		bool Overlaps = false;
 		//Retained frames this silhouette was seen in, RepeatCount included -
 		//unlike the pair statistics, which ignore RepeatCount on purpose. A
 		//pose is a still, so a paused screen showing one really is evidence

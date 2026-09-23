@@ -322,14 +322,22 @@ class Pose:
     single OAM frame, normalised to its own top-left (ADR-0170 §1)."""
 
     __slots__ = ("id", "frames", "size", "tiles", "fusion_of", "variant_of", "hold", "next",
-                 "label", "label_source")
+                 "label", "label_source", "pixels", "z")
 
     def __init__(self, pose_id, frames, size, tiles, fusion_of=(), variant_of=None,
-                 hold=0, next_poses=(), label="", label_source=None):
+                 hold=0, next_poses=(), label="", label_source=None, pixels=None, z=None,
+                 unit=8):
         self.id = pose_id
         self.frames = frames
         self.size = size          # (cols, rows) in cells, as the file states it
         self.tiles = tiles        # {node: (dx, dy)}, 8 px cell offsets
+        # ADR-0225 §1: {node: (px, py)} native-pixel offsets from the pose
+        # origin. A sidecar recorded before the ADR has none, and reads as
+        # px = dx * unit — exactly the old layout, so consumers keep one path.
+        fallback = {n: (d[0] * unit, d[1] * unit) for n, d in tiles.items()}
+        self.pixels = {n: tuple(pixels.get(n, fallback[n])) for n in tiles} if pixels else fallback
+        # {node: rank}, 0 = frontmost; empty when the tiles do not overlap.
+        self.z = {n: int(z[n]) for n in tiles if n in z} if z else {}
         # ADR-0177: the pose ids this entry's tiles split into, when the
         # recorder classified it as two figures that touched. Empty means "not
         # classified" — a pack recorded before ADR-0177 has it empty
@@ -376,6 +384,20 @@ class Pose:
         xs = [p[0] for p in self.tiles.values()]
         ys = [p[1] for p in self.tiles.values()]
         return (max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+
+    def pixel_extent(self, tile=8):
+        """(w, h) in native pixels the tiles span at their pixel offsets
+        (ADR-0225 §2: a composed view's 1x canvas), from the pixel origin."""
+        if not self.pixels:
+            return (0, 0)
+        return (max(p[0] for p in self.pixels.values()) + tile,
+                max(p[1] for p in self.pixels.values()) + tile)
+
+    def paint_order(self):
+        """Nodes back-to-front: draw in this order so the frontmost tile
+        (lowest `z`) ends on top. Without `z` the tiles do not overlap and the
+        order is by node, for determinism."""
+        return sorted(self.tiles, key=lambda n: (-self.z.get(n, 0), n))
 
 
 class Overflow:
@@ -613,6 +635,9 @@ class Poses:
         else:
             size = None
         tiles = {}
+        pixels = {}
+        zs = {}
+        unit = getattr(owner, "unit", 8) or 8
         for t in (entry.get("tiles") or []):
             if not isinstance(t, dict):
                 continue
@@ -623,7 +648,15 @@ class Poses:
             if vocabulary is not None and node not in vocabulary:
                 owner.dropped_tiles += 1
                 continue
-            tiles.setdefault(node, (dx, dy))
+            if node in tiles:
+                continue
+            tiles[node] = (dx, dy)
+            # ADR-0225 §1: optional on read; absent means dx * unit.
+            px, py = t.get("px"), t.get("py")
+            if isinstance(px, int) and isinstance(py, int) and px >= 0 and py >= 0:
+                pixels[node] = (px, py)
+            if isinstance(t.get("z"), int):
+                zs[node] = t["z"]
         if not tiles:
             return None
         fusion = entry.get("fusionOf")
@@ -650,7 +683,7 @@ class Poses:
                 next_poses.append((target, count))
         label, label_source = read_label(entry)
         pose = Pose(pose_id, frames, size, tiles, fusion, variant_of, hold, next_poses,
-                    label, label_source)
+                    label, label_source, pixels, zs, unit)
         if size is None:
             pose.size = pose.extent()
         return pose
@@ -1350,19 +1383,22 @@ class Pack:
         A member whose art no sheet shows is skipped rather than blanked, the
         same rule ADR-0164 §3 sets for a missing pixel — a hole is honest, a
         black square is a lie about the recording."""
-        tiles = pose.tiles
-        if not tiles:
+        # ADR-0225 §2: a pose is a composed view, so its tiles sit at their
+        # native-pixel offsets (px/py, or dx*8 on an older sidecar), drawn
+        # back to front so the frontmost tile's opaque pixels win.
+        pixels = pose.pixels
+        if not pixels:
             return None
-        x0 = min(dx for dx, _dy in tiles.values())
-        y0 = min(dy for _dx, dy in tiles.values())
-        cols, rows = pose.extent()
-        img = sheet_repaint.Image(cols * 8, rows * 8)
-        for node, (dx, dy) in sorted(tiles.items()):
+        x0 = min(px for px, _py in pixels.values())
+        y0 = min(py for _px, py in pixels.values())
+        img = sheet_repaint.Image(max(px for px, _py in pixels.values()) - x0 + 8,
+                                  max(py for _px, py in pixels.values()) - y0 + 8)
+        for node in pose.paint_order():
             try:
                 art = self.node_art(node, sprite=True)
             except ComposeError:
                 continue
-            ox, oy = (dx - x0) * 8, (dy - y0) * 8
+            ox, oy = pixels[node][0] - x0, pixels[node][1] - y0
             for row in range(art.height):
                 for col in range(art.width):
                     px = art.get(col, row)
