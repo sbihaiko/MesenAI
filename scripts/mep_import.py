@@ -717,6 +717,17 @@ def _patch_destinations(pack: Pack, plan, out: Path) -> list[tuple[str, list[Pat
             if not mep_patch.contained(dst, out):
                 raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} would be written "
                                 f"outside {out} — refused, nothing written (ADR-0006)")
+            # PR #385 review: containment alone lets a symlink left in an
+            # `--out` reused with `--force` (`textures/fix.ips -> sheets/chr.png`)
+            # redirect the copy onto a path the import generates. Refuse any
+            # existing symlink between the layer and the destination.
+            depth = len(Path(rel).parts)
+            below_layer = [dst, *dst.parents[:depth - 1]]
+            link = next((q for q in below_layer if q.is_symlink()), None)
+            if link is not None:
+                raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} would be written "
+                                f"through the symlink {link} — refused, nothing written; "
+                                "remove it from the output folder (ADR-0006)")
         result.append((rel, dsts))
     return result
 

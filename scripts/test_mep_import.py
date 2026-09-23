@@ -1405,6 +1405,22 @@ def test_patch_hardening(root: Path):
     else:
         ok("the destination check runs before any write")
 
+    # A symlink *inside* the project that stays contained but lands on a
+    # generated path: `--force` over an out whose `textures/fix.ips` points at
+    # `sheets/chr.png`. Containment passes; only the symlink check stops the
+    # IPS bytes from replacing the sheet `_write_sheets` just wrote.
+    out = root / "symlinked-file-out"
+    (out / "textures" / "sheets").mkdir(parents=True)
+    (out / "textures" / "sheets" / "chr.png").write_bytes(b"sheet")
+    (out / "textures" / "fix.ips").symlink_to(out / "textures" / "sheets" / "chr.png")
+    src = write_src(root / "symlinked-file", patched_lines(stock_whole), files)
+    expect_error(lambda: MI.import_pack(src, out, True, rom), "symlink",
+                 "a <patch> destination that is a symlink inside the project")
+    if (out / "textures" / "sheets" / "chr.png").read_bytes() != b"sheet" or (out / "auto").exists():
+        fail("the symlinked patch destination was written through")
+    else:
+        ok("a contained symlink destination is refused before any write")
+
     # The loader splits on every comma: `<patch>foo,bar.ips,<sha1>` is three
     # tokens, tokens[1] is 'bar.ips', and the IPS is never registered.
     files_comma = dict(files)
