@@ -691,6 +691,49 @@ def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
               f"{art.width}x{art.height}")
 
 
+def test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_labelled():
+    """What `artist_kit_assemble.py` tells the artist about the `palettes`
+    band - first-use order, every group labelled - has to hold for the
+    panorama too, not only for the sheets `compose_engine` exports."""
+    with tempfile.TemporaryDirectory() as td:
+        camera = walk(1, 0, 25)
+        p = Path(td) / "grid.txt"
+        write_dump(p, camera)
+        frames, shapes, palettes = M.parse_grid_dump(p)
+        regions = M.stitch(frames, 0, 0)
+        pack = FakePack(all_keys(camera))
+        _img, _orig, cells, _stats = M.build_panorama(regions[0], shapes, palettes, pack, 1)
+        swatches, labels = M.panorama_palettes(cells)
+        expected_hex, expected_labels = [], []
+        for c in sorted(cells, key=lambda c: (c["y"], c["x"])):
+            for t in c["tiles"]:
+                if t["palette"] not in expected_hex:
+                    expected_hex.append(t["palette"])
+                    expected_labels.append(str(c["index"]))
+        check(labels == expected_labels, "each group is labelled with the first cell (reading order) that wears it",
+              f"{labels[:6]} vs {expected_labels[:6]}")
+        check(swatches == M.ora_writer.nes_swatches(expected_hex),
+              "the swatches follow first use in reading order, not hex order")
+        check(expected_hex != sorted(expected_hex), "the fixture tells the two orders apart")
+        check(len(labels) == len(swatches) > 1, "one label per swatch group", f"{len(labels)} / {len(swatches)}")
+
+        # And `generate` hands exactly that to the writer.
+        seen = {}
+        real_write, real_pack = M.ora_writer.write_surface, M.Pack
+
+        def spy(*a, **kw):
+            seen.update(kw)
+            return real_write(*a, **kw)
+        M.ora_writer.write_surface, M.Pack = spy, lambda _d: pack
+        try:
+            M.generate("s", p, Path(td) / "pack", Path(td) / "kit", 1, None, True)
+        finally:
+            M.ora_writer.write_surface, M.Pack = real_write, real_pack
+        check(seen.get("swatch_labels") == labels and seen.get("swatches") == swatches,
+              "generate passes the labelled first-use band to write_surface",
+              str(seen.get("swatch_labels", "missing"))[:60])
+
+
 def main():
     tests = [
         test_dump_parser_recovers_frames_shapes_and_collapsed_repeats,
@@ -711,6 +754,7 @@ def main():
         test_one_key_painted_two_ways_resolves_first_occurrence_and_reports_the_rest,
         test_a_painted_panorama_may_be_any_whole_upscale,
         test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one,
+        test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_labelled,
     ]
     for t in tests:
         t()

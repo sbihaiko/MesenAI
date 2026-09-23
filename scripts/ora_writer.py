@@ -117,18 +117,77 @@ def text_width(text: str, scale: int = 1) -> int:
     return (len(text) * (GLYPH_W + 1) - 1) * scale if text else 0
 
 
-def draw_text(img: Image, x: int, y: int, text: str, rgba, scale: int = 1):
+def line_height(scale: int = 1) -> int:
+    """One text line plus a one-glyph-pixel gap, in canvas pixels."""
+    return (GLYPH_H + 1) * scale
+
+
+ELLIPSIS = "..."
+# A caption sits on its row's top-left (ADR-0220 §3), so every line it wraps to
+# covers art on `guides`; two lines bound the damage, the rest is `...`.
+CAPTION_MAX_LINES = 2
+
+
+def fit_text(text: str, max_chars: int, max_lines: int = 1) -> list:
+    """Word-wrap `text` to at most `max_lines` lines of `max_chars` glyphs.
+
+    Greedy on spaces; a word longer than a line is split. When the text does
+    not fit, the last line ends in `...` so a reader knows it was cut — a
+    caption that silently ran off the canvas is what defect (a) of the
+    2026-09-23 F12.11 follow-up looked like. Never returns more lines than
+    asked, and never a line wider than `max_chars` (unless that is below the
+    ellipsis itself, when the one line is the ellipsis)."""
+    max_chars, max_lines = max(1, int(max_chars)), max(1, int(max_lines))
+    words = str(text).split()
+    lines, cur = [], ""
+    for word in words:
+        while len(word) > max_chars:
+            if cur:
+                lines.append(cur)
+                cur = ""
+            lines.append(word[:max_chars])
+            word = word[max_chars:]
+        if not cur:
+            cur = word
+        elif len(cur) + 1 + len(word) <= max_chars:
+            cur = f"{cur} {word}"
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    if len(lines) <= max_lines:
+        return lines
+    kept = lines[:max_lines]
+    last = kept[-1]
+    room = max_chars - len(ELLIPSIS)
+    kept[-1] = (last[:room].rstrip() + ELLIPSIS) if room > 0 else ELLIPSIS[:max_chars]
+    return kept
+
+
+def draw_text(img: Image, x: int, y: int, text: str, rgba, scale: int = 1,
+              max_width: int = None, max_lines: int = 1) -> int:
     """Uppercase 3x5 glyphs, each font pixel `scale` canvas pixels; an unknown
-    character draws as `?`. Clipped to the image."""
-    pen = x
-    for ch in text.upper():
-        rows = _GLYPHS.get(ch) or _GLYPHS["?"]
-        for gy, row in enumerate(rows):
-            for gx, bit in enumerate(row):
-                if bit != "#":
-                    continue
-                _fill_rect(img, pen + gx * scale, y + gy * scale, scale, scale, rgba)
-        pen += (GLYPH_W + 1) * scale
+    character draws as `?`. Clipped to the image. With `max_width` the text
+    is wrapped (`fit_text`) to that many canvas pixels and at most
+    `max_lines` lines, the overflow marked with `...`. Returns the number of
+    lines drawn."""
+    if max_width is not None:
+        pitch = (GLYPH_W + 1) * scale
+        lines = fit_text(text, max(1, (int(max_width) + scale) // pitch), max_lines)
+    else:
+        lines = [str(text)]
+    for i, line in enumerate(lines):
+        pen, ty = x, y + i * line_height(scale)
+        for ch in line.upper():
+            rows = _GLYPHS.get(ch) or _GLYPHS["?"]
+            for gy, row in enumerate(rows):
+                for gx, bit in enumerate(row):
+                    if bit != "#":
+                        continue
+                    _fill_rect(img, pen + gx * scale, ty + gy * scale, scale, scale, rgba)
+            pen += (GLYPH_W + 1) * scale
+    return len(lines)
 
 
 # --- drawing primitives -------------------------------------------------------
@@ -240,6 +299,28 @@ def nes_swatches(palette_hexes) -> list:
     return out
 
 
+def first_use_palettes(labelled_cells) -> tuple:
+    """`(swatches, labels)` for the `palettes` band, in **first-use order**.
+
+    `labelled_cells` is an iterable of `(label, palette_hexes)` — one entry
+    per cell, in the order the artist reads the sheet (the caller sorts; the
+    sidecar `index` or the CHR tile index is the label). A palette is listed
+    once, where it is first used, and the label beside its swatch group is
+    that first cell's — so the group nearest the band's left edge belongs to
+    the first cell that uses it, and every group can be traced to a cell by
+    the number in front of it. A sheet-wide `sorted(set(...))`, the previous
+    order, put the groups in hex order, which told the artist nothing about
+    which cell wears which palette (2026-09-23 follow-up, defect (b))."""
+    order, labels = [], []
+    for label, hexes in labelled_cells:
+        for hx in hexes or ():
+            hx = str(hx or "").strip().upper()
+            if len(hx) == 8 and hx not in order and nes_swatches([hx]):
+                order.append(hx)
+                labels.append(str(label))
+    return nes_swatches(order), labels
+
+
 # --- the surface --------------------------------------------------------------
 
 class Surface:
@@ -256,7 +337,8 @@ class Surface:
 
 
 def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(),
-                  wildcard: str = None, context: Image = None, font_scale: int = None) -> Surface:
+                  wildcard: str = None, context: Image = None, font_scale: int = None,
+                  caption_scale: int = None, swatch_labels=()) -> Surface:
     """Compose the layers for one surface and return them with the `.ora`.
 
     `painted` is the sheet at the pack's scale; `orig` its twin at 1x or at the
@@ -265,10 +347,19 @@ def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(
     `{"index", "x", "y", "w", "h", "seen"?}`; `captions` are `(x, y, text)` in
     canvas pixels drawn on `guides`; `swatches` are `[[(r,g,b)×n], …]` for the
     `palettes` band, or empty with `wildcard` naming what the band says
-    instead (a static page: `defaultTile = Y`). `context` is the 1x stitched
+    instead (a static page: `defaultTile = Y`); `swatch_labels`, when given,
+    is one short label per swatch group, knocked out of the band in front of
+    it (`first_use_palettes` pairs them). `context` is the 1x stitched
     map crop around the surface's subject, or None when no cell has a stage
     position (ADR-0220 §3) — when given, the canvas and the twin grow by a
-    context band below the grid and the crop is placed there at 1x."""
+    context band below the grid and the crop is placed there at 1x.
+
+    A caption is **fitted, never clipped**: it wraps to the canvas's right
+    edge and to at most `CAPTION_MAX_LINES` lines that fit between its `y`
+    and the next cell row below it; one that still does not fit ends in `...`
+    (`fit_text`). So a caption drawn in a band above a row cannot run over
+    that row's art; `caption_scale` (default `font_scale`) is the glyph size
+    it is drawn at."""
     if orig.width <= 0 or painted.width % orig.width or painted.height % orig.height:
         raise OraError(f"twin {orig.width}x{orig.height} does not divide the sheet "
                        f"{painted.width}x{painted.height}")
@@ -281,6 +372,7 @@ def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(
                        f"{mep_sentinel.SENTINEL_HEX}; the .ora guard would be blind — "
                        "amend ADR-0220 §4 with another triplet before generating this kit")
     font_scale = max(1, int(font_scale or twin_scale))
+    caption_scale = max(1, int(caption_scale or font_scale))
 
     # Canvas geometry, with the context band when there is one.
     W, H = painted.width, painted.height
@@ -313,10 +405,16 @@ def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(
         if r.get("seen") is False:
             _hatch_rect(guides, r["x"], r["y"], r["w"], r["h"], SENTINEL)
     for cx, cy, text in captions:
-        draw_text(guides, cx, cy, str(text), SENTINEL, font_scale)
+        # Fit between the caption's own top and the next cell row below it.
+        below = [r["y"] for r in rects if r["y"] > cy]
+        avail = (min(below) if below else H) - cy
+        draw_text(guides, cx, cy, str(text), SENTINEL, caption_scale,
+                  max_width=W - cx - caption_scale,
+                  max_lines=max(1, min(CAPTION_MAX_LINES, avail // line_height(caption_scale))))
     layers.append(("guides", guides, "hidden", "1.0", True))
 
-    layers.append(("palettes", _palettes_band(W, H, rects, list(swatches), wildcard, font_scale),
+    layers.append(("palettes", _palettes_band(W, H, rects, list(swatches), wildcard, font_scale,
+                                              list(swatch_labels)),
                    "hidden", "1.0", True))
 
     merged = orig_layer.clone()
@@ -329,12 +427,32 @@ def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(
     return Surface(grown, twin, ora, [name for name, *_ in layers])
 
 
-def _palettes_band(W, H, rects, swatches, wildcard, font_scale) -> Image:
-    """§4: one cell-tall band on the first cell row, sentinel background, each
-    swatch inset one pixel top and bottom and separated by a one-pixel
-    sentinel column; palettes separated by three. With no swatches the band
-    states `wildcard` as knocked-out glyphs. Every cell the band crosses holds
-    exact sentinel pixels, so a visible `palettes` fails the same check as a
+def _knockout_text(img: Image, x: int, y: int, text: str, fs: int) -> int:
+    """Glyphs cleared *out of* a sentinel fill (transparent, not a colour), so
+    a band that carries text stays sentinel-only. Returns the pen advance."""
+    pen = x
+    for ch in text.upper():
+        rows = _GLYPHS.get(ch) or _GLYPHS["?"]
+        for gy, row in enumerate(rows):
+            for gx, bit in enumerate(row):
+                if bit == "#":
+                    _clear_rect(img, pen + gx * fs, y + gy * fs, fs, fs)
+        pen += (GLYPH_W + 1) * fs
+    return pen - x
+
+
+def _palettes_band(W, H, rects, swatches, wildcard, font_scale, labels=()) -> Image:
+    """§4 (amended 2026-09-23): one cell-tall band on the first cell row,
+    sentinel background. Each palette is a group of swatches, one per colour
+    in `hires.txt` order, each swatch a quarter of the band wide, inset one
+    pixel top and bottom and separated from its neighbour by a one-pixel
+    sentinel column; groups are separated by three and, when `labels` are
+    given, each group is preceded by its label knocked out of the sentinel
+    (`first_use_palettes`: the first cell that uses it). A group that does
+    not fit is not drawn; `+N` is knocked out instead when there is room, so
+    the band never lies by omission. With no swatches the band states
+    `wildcard` as knocked-out glyphs. Every cell the band crosses holds exact
+    sentinel pixels, so a visible `palettes` fails the same check as a
     visible `guides`."""
     img = Image(W, H)
     if not rects:
@@ -342,30 +460,29 @@ def _palettes_band(W, H, rects, swatches, wildcard, font_scale) -> Image:
     first = min(rects, key=lambda r: (r["y"], r["x"]))
     top, band_h = first["y"], first["h"]
     _fill_rect(img, 0, top, W, band_h, SENTINEL)
+    fs = max(1, font_scale // 2) if swatches else font_scale
+    while fs > 1 and GLYPH_H * fs > band_h - 2:
+        fs -= 1
+    ty = top + max(1, (band_h - GLYPH_H * fs) // 2)
     if swatches:
-        sw = max(2, band_h - 2)
+        sw = max(2, band_h // 4)
         pen = 1
-        for pal in swatches:
+        for i, pal in enumerate(swatches):
+            label = str(labels[i]) if i < len(labels) else ""
+            need = (text_width(label, fs) + fs if label else 0) + len(pal) * (sw + 1)
+            if pen + need > W:
+                rest = f"+{len(swatches) - i}"
+                if pen + text_width(rest, fs) <= W:
+                    _knockout_text(img, pen, ty, rest, fs)
+                return img
+            if label:
+                pen += _knockout_text(img, pen, ty, label, fs) + fs
             for rgb in pal:
-                if pen + sw > W:
-                    return img
                 _fill_rect(img, pen, top + 1, sw, band_h - 2, (rgb[0], rgb[1], rgb[2], 0xFF))
                 pen += sw + 1
             pen += 2
         return img
-    text = (wildcard or "no palette observed").upper()
-    fs = font_scale
-    while fs > 1 and GLYPH_H * fs > band_h - 2:
-        fs -= 1
-    ty = top + max(1, (band_h - GLYPH_H * fs) // 2)
-    pen = 2 * fs
-    for ch in text:
-        rows = _GLYPHS.get(ch) or _GLYPHS["?"]
-        for gy, row in enumerate(rows):
-            for gx, bit in enumerate(row):
-                if bit == "#":
-                    _clear_rect(img, pen + gx * fs, ty + gy * fs, fs, fs)
-        pen += (GLYPH_W + 1) * fs
+    _knockout_text(img, 2 * fs, ty, wildcard or "no palette observed", fs)
     return img
 
 
@@ -432,7 +549,9 @@ def write_chr_surface(out_chr: Path, asset_name: str, hd: Image, orig, cells, pa
 
     Captions are each cell's tile index in hex (the sidecar's `index`, the
     same number `hires.txt` keys the tile by). Swatches are the palettes the
-    recording observed on this page; a page with none (a static page — every
+    recording observed on this page, in first-use order down the page and
+    labelled with the hex index of the first cell wearing each — the same
+    number the cell's caption shows; a page with none (a static page — every
     cell `fill`, `defaultTile = Y`, ADR-0219) says the wildcard instead.
 
     A recorded page's `empty` cells wear the recorder's unpainted fill
@@ -443,11 +562,12 @@ def write_chr_surface(out_chr: Path, asset_name: str, hd: Image, orig, cells, pa
     if orig is None:
         sheet_repaint.write_png(out_chr / asset_name, hd)
         return None
-    observed = [c.get("palette") for c in cells
-                if c.get("seen") is True or c.get("paletteObserved")]
-    swatches = nes_swatches(sorted({p for p in observed if p}))
+    swatches, labels = first_use_palettes(
+        (f"{int(c['index']):02X}", [c.get("palette")])
+        for c in sorted(cells, key=lambda c: (c["y"], c["x"]))
+        if c.get("seen") is True or c.get("paletteObserved"))
     captions = [(c["x"] + 1, c["y"] + 1, f"{int(c['index']):02X}") for c in cells
                 if c.get("state") not in ("empty",)]
     return write_surface(out_chr, asset_name, hd, orig, chr_rects(cells, page.cell_px),
-                         captions=captions, swatches=swatches,
+                         captions=captions, swatches=swatches, swatch_labels=labels,
                          wildcard=None if swatches else "defaultTile = Y")

@@ -23,6 +23,14 @@
   Proposed 2026-09-20 and left so the same day by the user's decision; the
   deferral's reason (no GIMP/Krita artist population measured) is unchanged
   and F12.11 stays the second path beside F12.4, measured against it (§6).
+  **Amended 2026-09-23:** stop condition (2) was partly measured by the user
+  in GIMP 2.10 and Krita 5.3.4 on one four-layer sheet — every layer named,
+  but both readers open the file with the bottom layer `orig` active, and no stack order makes both select
+  `paint` (§3 amendment); the user's decision, option (b), keeps the order and
+  documents "select `paint` before painting" in `ARTIST.md` and
+  `docs/remastering-a-game.md`. Two cosmetic defects found in the same session
+  are fixed with it: captions are fitted to the canvas (§3) and the `palettes`
+  band follows first use and is labelled (§4). `test_ora_writer.py` is 18.
 - Date: 2026-09-20
 - Related: PRD Part A F12.11 (this contract) and its prerequisites F12.3 and
   F12.4, F12.9 (the static page this ADR's four-layer case rides on), ADR-0183
@@ -244,6 +252,31 @@ writer already exposes. The row's Contra bounded input is therefore a
 four-layer file today, and stop condition (2) reads "five and four" as
 "panorama and figure page" once that source lands.
 
+*Amended 2026-09-23 (stop condition (2) measured; user's decision, option (b)).*
+**Both readers open the file with the bottom layer active, not the topmost
+visible one.** Measured by the user on the Contra kit's `usr000.ora`: GIMP 2.10
+(`file-openraster.py` inserts the layers in `stack.xml` order with no
+"set active" call, so the last inserted — the bottommost — stays active) and
+Krita 5.3.4 both land on `orig`, whatever the stack order. Of the two, only
+Krita honours `edit-locked`; GIMP lets a stroke land on the locked `orig`. No
+order fixes it for both: the only order that makes `paint` the active layer
+puts it at the *bottom*, where every stroke is hidden under `orig`. The
+decision is **(b) — keep the order of §3 (`orig`, [`context`,] `paint`,
+`guides`, `palettes`) and document the click**: `ARTIST.md` (written by
+`artist_kit_assemble.py`) and `docs/remastering-a-game.md` tell the artist to
+select `paint` in the Layers panel before the first stroke, and why. The
+second rule above stands as written — "topmost visible by construction" is
+still the strongest statement the file can make; this amendment records that it
+is not enough for the two readers we care about, and that the kit's page
+carries the missing half. The row's `guides` captions are also **fitted, never
+clipped** from this date: `ora_writer.draw_text` wraps a caption to the canvas's
+right edge, to at most two lines above the next cell row, at half the grid's
+glyph size on a composed sheet, ending in `...` when it still does not fit —
+the unwrapped fallback title of a figure sheet ran off the canvas edge over
+row 0 (F12.11 follow-up log, defect (a)). A caption still sits on its row's
+top-left, so the two lines do cover the top of row 0 on `guides`; that layer
+is hidden and sentinel-only, and bounding the lines bounds the cover.
+
 ### 4. The sentinel, and what catches a wrong export
 
 **The sentinel is `#FF00FF` at alpha 255, drawn opaque.** The argument for that
@@ -293,6 +326,20 @@ argument (no 6-bit-quantised NES channel reaches `0xFD` either) and collides
 with nothing the recorder writes. The triplet is spelled once, in
 `scripts/mep_sentinel.py`; the assertion, the `mep_lint.py` scan and the
 knock-out captions all read it from there.
+
+*Amended 2026-09-23 (F12.11 follow-up, defect (b)).* **The band is in first-use
+order and labelled.** The sheet-wide set of palettes used to be sorted by hex
+string, so the group nearest the band's left edge belonged to whichever palette
+sorted first, not to the first cell — read as "row 0's colours", it was wrong.
+Now `ora_writer.first_use_palettes` lists each palette once, where it is first
+used in reading order (row, then column), and knocks the first cell's label
+(`index`; the hex tile index on a CHR page) out of the sentinel in front of its
+group, so every group traces to a cell by the number before it. To make room,
+a swatch is a quarter of the band wide instead of square; the sentinel framing
+of this section is unchanged (one-pixel inset top and bottom, one-pixel sentinel
+column between swatches, three between groups), a group that does not fit is
+not drawn and `+N` is knocked out instead, so a first-row cell still holds
+exact sentinel pixels and a visible `palettes` still fails the lint.
 
 ### 5. Write-only, and the refusal is deliberate
 
@@ -356,6 +403,19 @@ not show a GIMP/Krita population.
 
 What we measure stays ours: file validity, layer order, refusal, pixel-exact
 result.
+
+*Amended 2026-09-23.* Stop condition (2) is **partly measured**: on one
+four-layer sheet (`usr000.ora`, Contra), every layer named in both readers;
+`paint` **not** selected by either (§3 amendment). Under the user's option (b)
+the "`paint` selected" clause is read as "`paint` selected after the
+documented click", since the file cannot achieve it. The condition is still
+**open**: it needs a person's log on the regenerated files, including a
+five-layer recorded surface (with `context`), which nobody has opened yet. Stop condition (4) is exercised end to end in the follow-up log
+(`docs/validation/f12.11-stop3-and-gimp-findings-2026-09-23.md` §2: a
+guides-visible export fails the lint one error per cell, a paint-only export
+passes with the tile-key set unchanged). Stop condition (3) stays unevaluated
+for the reason that log gives: the one cell painted so far is gated by
+`spriteNearby`, and the final-frame capture never landed on its pose.
 
 ## Consequences
 

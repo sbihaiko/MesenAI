@@ -510,6 +510,69 @@ def test_a_figure_export_lands_with_its_ora():
               "guides carry the cell grid and caption in the sentinel")
 
 
+# --- 2026-09-23 follow-up: captions fit, the palettes band follows first use --------
+
+def test_a_caption_is_fitted_to_the_canvas_never_clipped():
+    check(W.fit_text("alpha beta gamma", 10) == ["alpha b..."], "one line: cut with an ellipsis",
+          str(W.fit_text("alpha beta gamma", 10)))
+    check(W.fit_text("alpha beta gamma", 10, max_lines=2) == ["alpha beta", "gamma"],
+          "two lines: greedy word wrap", str(W.fit_text("alpha beta gamma", 10, max_lines=2)))
+    check(W.fit_text("abcdefghij", 4, max_lines=3) == ["abcd", "efgh", "ij"],
+          "a word longer than a line is split", str(W.fit_text("abcdefghij", 4, max_lines=3)))
+    check(W.fit_text("", 10) == [], "empty text draws nothing")
+    # A caption wider than the canvas wraps to its right edge and stops at the
+    # next cell row below it, so nothing lands past the canvas or under row 1.
+    orig, rects1x = _twin(cols=2, rows=2)
+    painted = orig.upscale(SCALE)
+    rects = [{**r, "x": r["x"] * SCALE, "y": r["y"] * SCALE,
+              "w": r["w"] * SCALE, "h": r["h"] * SCALE} for r in rects1x]
+    long = "figures no cycle or sequence ordered - 19 of them, seen in 4 frame(s) between them"
+    surface = W.build_surface(painted, orig, rects, captions=[(GUTTER * SCALE, GUTTER * SCALE, long)])
+    _, data = _members(surface.ora)
+    guides = _decode(data["data/guides.png"])
+    row1_top = min(r["y"] for r in rects if r["y"] > GUTTER * SCALE)
+    lit = [(x, y) for y in range(guides.height) for x in range(guides.width)
+           if guides.get(x, y)[3] and not _on_grid(x, y, rects)]
+    check(bool(lit), "the caption is drawn")
+    check(all(y < row1_top for _, y in lit), "no caption pixel reaches the next cell row",
+          f"lowest caption pixel y={max(y for _, y in lit) if lit else None} row1_top={row1_top}")
+    plain = Image(60, 20)
+    n = W.draw_text(plain, 0, 0, long, mep_sentinel.SENTINEL_RGBA, 1, max_width=40, max_lines=3)
+    check(n == 3 and any(plain.get(x, 2 * W.line_height(1))[3] for x in range(40)),
+          "the long caption wrapped onto the lines it was allowed", str(n))
+    check(all(plain.get(x, y)[3] == 0 for y in range(20) for x in range(40, 60)),
+          "draw_text with max_width never draws past it")
+
+
+def _on_grid(x, y, rects):
+    for r in rects:
+        inside = r["x"] <= x < r["x"] + r["w"] and r["y"] <= y < r["y"] + r["h"]
+        edge = x in (r["x"], r["x"] + r["w"] - 1) or y in (r["y"], r["y"] + r["h"] - 1)
+        if inside and edge:
+            return True
+    return False
+
+
+def test_palettes_band_follows_first_use_and_labels_each_group():
+    sw, labels = W.first_use_palettes([(3, ["FF36160F"]), (0, ["FF20000F", "FF36160F"]), (7, [None, "zz"])])
+    check(labels == ["3", "0"], "palettes are listed once, in the order first used, not by hex",
+          str(labels))
+    check(len(sw) == 2 and sw[0] == W.nes_swatches(["FF36160F"])[0], "the first group is the first cell's palette")
+    surface, rects = _surface(swatches=sw, swatch_labels=labels)
+    _, data = _members(surface.ora)
+    band = _decode(data["data/palettes.png"])
+    y0, h = rects[0]["y"], rects[0]["h"]
+    first_colour = next(band.get(x, y0 + 1) for x in range(band.width)
+                        if band.get(x, y0 + 1)[3] and band.get(x, y0 + 1) != mep_sentinel.SENTINEL_RGBA)
+    check(first_colour[:3] == sw[0][0], "the leftmost swatch is the first-used palette's first colour",
+          str(first_colour))
+    first_x = next(x for x in range(band.width) if band.get(x, y0 + 1)[:3] == sw[0][0])
+    holes = sum(1 for y in range(y0, y0 + h) for x in range(first_x) if band.get(x, y)[3] == 0)
+    check(holes > 0, "the label is knocked out of the sentinel in front of its group")
+    check(all(any(p == mep_sentinel.SENTINEL_RGBA for p in _pixels_in(band, r)) for r in rects if r["y"] == y0),
+          "a labelled band still leaves exact sentinel pixels in every first-row cell")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

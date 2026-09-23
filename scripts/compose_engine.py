@@ -1571,13 +1571,19 @@ class Pack:
         # canvas, so the sheet, its twin and the layered file cannot disagree.
         rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
                   "w": unit * scale, "h": unit * scale, "seen": c.get("seen")} for c in cells]
-        swatches = ora_writer.nes_swatches(sorted({
-            t.get("palette") for c in cells for t in (c.get("tiles") or [])
-            if isinstance(t, dict) and t.get("palette")}))
+        # The `palettes` band follows first use in reading order (row, then
+        # column), each group labelled with the first cell's `index` — a
+        # hex-sorted set put the leftmost group under a cell that never wore
+        # it (2026-09-23 follow-up, defect (b)).
+        swatches, swatch_labels = ora_writer.first_use_palettes(
+            (c["index"], [t.get("palette") for t in (c.get("tiles") or [])
+                          if isinstance(t, dict) and t.get("palette")])
+            for c in sorted(cells, key=lambda c: (c["y"], c["x"])))
         ora_writer.write_surface(
             to_dir, f"{name}.png", painted, canvas, rects,
             captions=[(x * scale, y * scale, text) for x, y, text in (captions or [])],
-            swatches=swatches, context=context)
+            swatches=swatches, swatch_labels=swatch_labels, context=context,
+            caption_scale=max(1, scale // 2))
         doc = {
             "version": SHEET_VERSION,
             "kind": kind,
