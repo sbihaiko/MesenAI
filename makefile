@@ -454,6 +454,7 @@ doc-checks: check-manifest
 	#Downloader hop/shape rules and the lint decompression cap (review pass 2026-09-06).
 	python3 scripts/test_fetch_pack.py
 	python3 scripts/test_mep_lint_caps.py
+	python3 scripts/test_mep_lint_usage.py
 	#F9.6 (ADR-0154): the external repaint's own suite -- stdlib-only Python,
 	#no model, no weights, no network (its diffusion backend is exercised only
 	#against a loopback stub and through its unavailable paths).

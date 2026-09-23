@@ -1627,6 +1627,9 @@ def report_routes(src, route_paths, target):
 
 
 def main(argv):
+    if "--help" in argv[1:] or "-h" in argv[1:]:
+        print(__doc__)
+        return 0
     if len(argv) < 2:
         print(__doc__)
         return 2
@@ -1660,6 +1663,10 @@ def main(argv):
         if not arg.startswith("--"):
             positional.append(arg)
         i += 1
+    if not positional:
+        # Flags alone (e.g. `--quiet`) name no pack: usage, not a traceback.
+        print(__doc__)
+        return 2
     target = Path(positional[0])
     rom_name = positional[1] if len(positional) > 1 else None
     if not target.exists():
