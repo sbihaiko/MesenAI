@@ -595,11 +595,10 @@ namespace Mesen.Debugger.Utilities
 		[IconFile("VideoRecorder")]
 		VideoRecorder,
 		MusicRecorder,
-		//ADR-0169: the live recorder/viewer pair, shaped like the three
-		//recorders above it (Record/Stop) so the Tools menu reads the same way.
+		//ADR-0169: the live recorder, shaped like the three recorders above it
+		//(Record/Stop) so the Tools menu reads the same way. The viewer is not
+		//in the menu (ADR-0169 section 4, amended 2026-09-23).
 		LiveRecorder,
-		[IconFile("SplitView")]
-		OpenLiveViewer,
 
 		[IconFile("HdPack")]
 		HdPacks,

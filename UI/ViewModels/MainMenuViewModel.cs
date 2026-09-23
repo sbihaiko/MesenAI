@@ -852,12 +852,15 @@ namespace Mesen.ViewModels
 		{
 			//Shaped like the Sound/Video/Music recorders above it (Record/Stop),
 			//with no dialog and no user-typed fields: the recorder publishes to
-			//the LiveRecordingFolder convention slot (ADR-0169) and Record opens
-			//the viewer (scripts/record_viewer.py) on that slot, so what starts
-			//recording is also what shows the game running. The ROM, the
-			//interval and the path are never typed - LiveRecordingSession keeps
-			//the recorder pointed at whatever ROM is open (its OnGameLoaded /
-			//OnEmulationStopped are wired in MainWindow's notification handler).
+			//the LiveRecordingFolder convention slot (ADR-0169), which feeds the
+			//artist kit. The ROM, the interval and the path are never typed -
+			//LiveRecordingSession keeps the recorder pointed at whatever ROM is
+			//open (its OnGameLoaded / OnEmulationStopped are wired in MainWindow's
+			//notification handler).
+			//
+			//No viewer entry, and Record opens nothing (ADR-0169 section 4,
+			//amended 2026-09-23): scripts/record_viewer.py is a developer and
+			//diagnostic tool run by hand, and it auto-attaches to the same slot.
 			return new MainMenuAction() {
 				ActionType = ActionType.LiveRecorder,
 				SubActions = new List<object> {
@@ -870,14 +873,6 @@ namespace Mesen.ViewModels
 						ActionType = ActionType.Stop,
 						IsEnabled = () => IsGameRunning && LiveRecordingSession.IsRecording,
 						OnClick = () => LiveRecordingSession.Stop()
-					},
-					new ContextMenuSeparator(),
-					new MainMenuAction() {
-						//Always available: the viewer is read-only, and reopening
-						//it after it was closed must not need a second recording.
-						ActionType = ActionType.OpenLiveViewer,
-						IsEnabled = () => !LiveRecordingSession.IsViewerRunning,
-						OnClick = () => LiveRecordingSession.OpenViewer()
 					}
 				}
 			};

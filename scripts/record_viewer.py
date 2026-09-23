@@ -28,8 +28,11 @@ The files in either directory are:
     palette.json     the 64 RGB colors this run renders with (written once)
     status.json      progress / done, and which ROM the frames are of
 
-By convention this tool attaches to the emulator's own slot, so there is
-nothing to type to watch a live session:
+This is a developer and diagnostic tool, run by hand: the emulator does not
+open it and has no menu entry for it (ADR-0169 section 4, amended 2026-09-23);
+Tools > Live Recorder > Record/Stop only drives the recorder. By convention
+this tool attaches to the emulator's own slot, so there is nothing to type to
+watch a live session:
 
     python3 scripts/record_viewer.py
 

@@ -76,7 +76,9 @@ not move data.
      `MESENCE_ACCURACY_ROM`. They are external contracts — a developer's shell
      profile, a CI job — and renaming one silently disables configuration
      somebody already set. Adding the new name as an alias is a separate,
-     additive change.
+     additive change. (2026-09-23: `MESENCE_RECORD_VIEWER` no longer exists —
+     the emulator stopped launching the live viewer, ADR-0169 §4 as amended
+     that day, so the override had nothing left to configure.)
    - **Identifiers written into produced files**: the VGM creator string
      (`VgmExporter.cpp`), the `emuVersion` field of a generated `.bk2`
      (`fm2_to_bk2.py`), and the `generator=mesence-bootstrap/1` stamp a pack
