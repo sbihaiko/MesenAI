@@ -861,20 +861,28 @@ namespace Mesen.ViewModels
 			//No viewer entry, and Record opens nothing (ADR-0169 section 4,
 			//amended 2026-09-23): scripts/record_viewer.py is a developer and
 			//diagnostic tool run by hand, and it auto-attaches to the same slot.
+			//The entries and their order come from the host-free
+			//LiveRecorderMenu.Entries (asserted in UI.Tests).
 			return new MainMenuAction() {
 				ActionType = ActionType.LiveRecorder,
-				SubActions = new List<object> {
-					new MainMenuAction() {
-						ActionType = ActionType.Record,
-						IsEnabled = () => IsGameRunning && !LiveRecordingSession.IsRecording,
-						OnClick = () => LiveRecordingSession.Start()
-					},
-					new MainMenuAction() {
-						ActionType = ActionType.Stop,
-						IsEnabled = () => IsGameRunning && LiveRecordingSession.IsRecording,
-						OnClick = () => LiveRecordingSession.Stop()
-					}
-				}
+				SubActions = LiveRecorderMenu.Entries.Select(GetLiveRecorderEntry).ToList<object>()
+			};
+		}
+
+		private MainMenuAction GetLiveRecorderEntry(LiveRecorderMenu.Entry entry)
+		{
+			return entry switch {
+				LiveRecorderMenu.Entry.Record => new MainMenuAction() {
+					ActionType = ActionType.Record,
+					IsEnabled = () => IsGameRunning && !LiveRecordingSession.IsRecording,
+					OnClick = () => LiveRecordingSession.Start()
+				},
+				LiveRecorderMenu.Entry.Stop => new MainMenuAction() {
+					ActionType = ActionType.Stop,
+					IsEnabled = () => IsGameRunning && LiveRecordingSession.IsRecording,
+					OnClick = () => LiveRecordingSession.Stop()
+				},
+				_ => throw new ArgumentOutOfRangeException(nameof(entry), entry, null)
 			};
 		}
 

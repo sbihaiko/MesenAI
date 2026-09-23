@@ -36,6 +36,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `spike_sound_driver`) are build output, not source - never `git add` them.
   `.gitignore` at the repo root lists all four by name, so none of them show
   as untracked after building.
+- `record_viewer.py` is a developer/diagnostic tool, **launched by hand
+  only** (ADR-0169 §4, amended 2026-09-23): the emulator UI never starts it
+  and Tools > Live Recorder offers only Record/Stop. With no argument it
+  attaches to the emulator's `<HomeFolder>/LiveRecording` slot, so nothing
+  needs typing. Do not add a UI launcher or a path-discovery hook for it;
+  the menu side is guarded by `UI.Tests/Recording/LiveRecorderMenuTests.cs`
+  and `UI.HeadlessTests/LiveRecorderMenuTests.cs`.
 
 ## Work Guidance
 
