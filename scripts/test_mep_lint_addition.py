@@ -167,6 +167,82 @@ def check_chr_rom_target_inside_chr():
           "an index the pack itself keys is not provably unmatched")
 
 
+# -- #382: keys compare by value, the loader's way -----------------------------
+
+REAL = ("00", "FF161927")
+SYNTH = ("0217", "FF000464")
+ROM_SIDECAR = {"cells": [{"index": 0, "synthetic": True,
+                          "tiles": [{"tile": "0" * 32, "palette": SYNTH[1],
+                                     "index": 0x217}]}]}
+
+
+def check_padded_index_tokens_are_one_key():
+    """`000`/`00` and `217`/`0217` are one CHR index at <ver>103+ —
+    HdPackLoader::ReadTileData FromHex's both — so an <addition> spelt the
+    legacy way is keyed by a <tile> rule mep_build re-spelt (#382)."""
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("000", REAL[1]), target=("217", SYNTH[1]))], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a legacy-padded anchor/target is keyed by the build's tokens: {messages(items, 'error')}")
+    items = pack([tile(("000", REAL[1])), tile(("217", SYNTH[1]), 8, 0),
+                  addition(anchor=REAL, target=("0217", SYNTH[1]))], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"and the other way round — the build's tokens cite legacy-padded rules: {messages(items, 'error')}")
+
+
+def check_padded_palette_is_one_key():
+    """The palette half is FromHex'd too, so a 7-digit spelling names the
+    8-digit key."""
+    items = pack([tile(("00", "0F161927")), tile(SYNTH, 8, 0),
+                  addition(anchor=("00", "F161927"), target=SYNTH)], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a 7-digit palette token is padded to the <tile> rule's 8: {messages(items, 'error')}")
+
+
+def check_chr_ram_pattern_is_never_an_index():
+    """32 hex digits are pattern data (ReadTileData: `size() >= 32`), so a
+    pattern of zeros ending in 01 does not key CHR index `01`, and the pattern
+    itself is untouched by the index re-spelling."""
+    pattern = ("0" * 30 + "01", "FF161927")
+    items = pack([tile(("01", "FF161927")), tile(TARGET, 8, 0), addition(anchor=pattern)],
+                 sidecar())
+    check(has(items, "error", "anchor " + pattern[0] + "/" + pattern[1] + " is keyed by no <tile> rule"),
+          "a 32-hex pattern is not conflated with the CHR index its digits spell")
+    items = pack([tile(ANCHOR), tile(TARGET, 8, 0),
+                  addition(anchor=(ANCHOR[0].lower(), ANCHOR[1]))], sidecar())
+    check(not messages(items, "error"),
+          f"a CHR RAM pattern compares case-insensitively and otherwise verbatim: {messages(items, 'error')}")
+
+
+def check_decimal_index_below_ver103():
+    """Below <ver>103 the loader reads a short tileData field with std::stoi —
+    decimal — so `10` is index 10 (`0A`), not 16. The tag itself needs 107+,
+    so the version rule is exercised on the shared helper and on the lint's
+    duplicate-<tile> pass, which keys by the same canonical form."""
+    check(mep_addition.canonical_key(("10", "FF161927"), 102) == ("0A", "FF161927"),
+          "at <ver>102 a short token is decimal: 10 -> index 0A")
+    check(mep_addition.canonical_key(("10", "FF161927"), 103) == ("10", "FF161927"),
+          "at <ver>103 the same token is hex: 10 -> index 10")
+    items = pack([tile(("9", "FF161927")), tile(("09", "FF161927"), 8, 0)], version=102)
+    check(has(items, "warning", "1 duplicate <tile>"),
+          "a <ver>102 pack's `9` and `09` are one decimal key — reported as a duplicate")
+    check(not any("Traceback" in m for m in messages(items)),
+          "a <ver>102 manifest lints without a crash")
+
+
+def check_unkeyed_index_anchor_still_reported():
+    """The by-value compare does not make every index keyed: an anchor whose
+    index no <tile> rule names is still ADR-0196 §4's first refusal."""
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("01", REAL[1]), target=("217", SYNTH[1]))], ROM_SIDECAR)
+    check(has(items, "error", "anchor 01/" + REAL[1] + " is keyed by no <tile> rule in this manifest"),
+          "an anchor index no <tile> rule keys is still an error, in the author's own spelling")
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("000", REAL[1]), target=("218", SYNTH[1]))], ROM_SIDECAR)
+    check(has(items, "error", "target 218/" + SYNTH[1] + " is keyed by no <tile> rule"),
+          "a target index no <tile> rule keys is still an error")
+
+
 # -- the tag's own limits ------------------------------------------------------
 
 def check_ignore_palette_refused():
@@ -213,6 +289,11 @@ def main():
     check_unreserved_palette()
     check_unreserved_pattern()
     check_chr_rom_target_inside_chr()
+    check_padded_index_tokens_are_one_key()
+    check_padded_palette_is_one_key()
+    check_chr_ram_pattern_is_never_an_index()
+    check_decimal_index_below_ver103()
+    check_unkeyed_index_anchor_still_reported()
     check_ignore_palette_refused()
     check_version_floor()
     check_condition_prefix_warns()
