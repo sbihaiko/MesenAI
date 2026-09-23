@@ -64,17 +64,15 @@ def safe_relative(name: str, line: int) -> str:
     tool uses everywhere (`/`-separated), or a refusal.
 
     Backslashes are separators: Windows-authored packs write `sub\\fix.ips`,
-    and on Windows the loader's `FolderUtilities::CombinePath` treats them so.
-    On macOS/Linux the same token never resolves: `HdPackLoader::
-    ResolvePackRelativePath` first opens `<pack>/sub\\fix.ips` verbatim
-    (`CheckFileExact` — a file literally named `sub\\fix.ips`, absent), then
-    looks the lowercased token up in `IndexPackFiles`, which indexes
-    `generic_u8string()` (`/`-separated) names — so `sub\\fix.ips` matches
-    nothing and the IPS is silently not applied. `/` works on every platform
-    (`CombinePath`'s own comment: Windows accepts forward slashes), so the
-    line a project **emits** carries `rel`, never the verbatim token
-    (`emitted_line`). `mep_import` already normalizes
-    `<img>`/`<background>`/audio names this way. What is refused, before any
+    and the loader agrees on every platform — `HdPackLoader::LoadPack`
+    replaces every `\\` with `/` on each manifest line before any tag is
+    parsed (commit 9615330b, 2026-08-27), so `sub\\fix.ips` and `sub/fix.ips`
+    are the same token at runtime. The `/` form is what this tool uses as its
+    canonical spelling (`rel`) because every repo tool can `exists()` it
+    without re-implementing the loader's rewrite, and because `mep_build`
+    already normalizes `<img>`/`<background>`/audio names the same way; it
+    is a portability choice for tooling, not a runtime necessity. What is
+    refused, before any
     byte is read or written (ADR-0006, the MEI trust model's zip-traversal
     rule, applied to a folder pack): an absolute path (POSIX, drive letter or
     UNC), a `..` component anywhere, and an empty name. The loader itself
@@ -137,12 +135,14 @@ class PatchLine:
 def emitted_line(entry: PatchLine) -> str:
     """The `<patch>` line a project carries: the **normalized** relative path
     (`rel`, `/`-separated — the path the IPS is copied to) and the sha1 as the
-    loader keys it (uppercase). Never the verbatim token: a Windows `\\` in
-    the manifest would make the copy land at `sub/fix.ips` while the runtime
-    on macOS/Linux looks for `sub\\fix.ips` and never applies the IPS
-    (`safe_relative`). `/` resolves on every platform, so this line is
-    portable. `verify` checks the built manifest's token against its own
-    `rel` so a mismatch cannot pass silently."""
+    loader keys it (uppercase). The loader would accept the source's `\\`
+    token just as well (it rewrites `\\` to `/` before parsing, see
+    `safe_relative`); the `/` form is the canonical one so that every repo
+    tool can resolve the path without re-implementing that rewrite, the way
+    `mep_build` normalizes `<background>`. `verify` compares the built
+    manifest's token to `rel` after the same `\\`→`/` rewrite, so either
+    spelling of the same path passes and only a genuinely different path
+    fails."""
     return f"<patch>{entry.rel},{entry.sha1}"
 
 

@@ -285,3 +285,25 @@ the built manifest: yes` → **OK**; `--strict` fails only on the 5 twins, as
 before; lint rc 0 (0 errors, 22 warnings). `python3
 scripts/test_mep_import.py`: **120 PASS, 0 FAIL** (was 116, then 105);
 `make doc-checks` rc 0.
+
+**Correction, 2026-09-23 (fourth review round, Codex).** Item 4's premise
+was wrong and is kept above as written for the record: `HdPackLoader::LoadPack`
+has replaced every `\` with `/` on each manifest line *before* any tag is
+dispatched since commit 9615330b (2026-08-27, `Core/NES/HdPacks/HdPackLoader.cpp`),
+so a built `<patch>sub\fix.ips,…` with the file at `sub/fix.ips` is
+runtime-valid on every platform — the IPS was never "silently not applied".
+What stands: the emitted line is still the normalized `/` path, now justified
+as the canonical spelling every repo tool can resolve without re-implementing
+the loader's rewrite (the way `mep_build` normalizes `<background>`), not as a
+runtime necessity. What changed: `verify` no longer fails a `\` token whose
+`\`→`/` form is its own normalized path; it resolves the file the loader's
+way (`\`→`/`, exact path, then case-folded — `mep_patch.loader_source`) and
+compares the built `<patch>` lines to the source's in that same form. In the
+same round `verify` stopped accepting mere existence of the IPS: both copies
+the import wrote — beside `textures/hires.txt` and under `auto/textures/` —
+must be byte-identical to the source pack's IPS (itself resolved the loader's
+way), each failure naming the file ("IPS bytes differ from the source pack's:
+textures/sub/fix.ips", "file missing in auto/textures"). `python3
+scripts/test_mep_import.py`: **133 PASS, 0 FAIL** (a `\` token at the `/`
+path now passes; truncated `textures/` copy, altered `auto/textures/` copy
+and missing `auto/textures/` copy each fail; intact passes again).

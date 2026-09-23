@@ -472,18 +472,21 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the **last** line, as the loader does). Outputs: the key source's and the
   built manifest's `<supportedRom>` is the **patched** ROM's whole-file sha1
   (`HdPackBuilder`'s form; inserted after `<scale>` when the pack declared
-  none; a `<patch>` line indented or behind a `[condition]` is refused, since
-  the loader dispatches the tag only at column 0 and a patch name that clashes
-  with a generated path — as a file or a folder prefix — is refused before
-  anything is written), every IPS — found the way `HdPackLoader::ResolvePackRelativePath`
-  finds it (exact path, then a case-folded match; an ambiguous fold is
-  refused) and written under the normalized manifest name — copied beside
-  **both** manifests (`auto/textures/` and
-  `textures/`), every `<patch>` line re-emitted with its file token as the
-  normalized `/`-separated path the IPS was copied to and its sha1 uppercased
-  (the loader's key form; a lowercase digest changes spelling, not value)
-  (a Windows `sub\fix.ips` carried verbatim never resolves on the
-  macOS/Linux loader), and an `IMPORT.md` section with both hash pairs,
+  none). Two refusals happen before anything is written: a `<patch>` line
+  that is indented or sits behind a `[condition]`, because the loader
+  dispatches the tag only at column 0; and a patch name that clashes with a
+  generated path, as a file or as a folder prefix. Every IPS — found the way
+  `HdPackLoader::ResolvePackRelativePath` finds it (exact path, then a
+  case-folded match; an ambiguous fold is refused) and written under the
+  normalized manifest name — is copied beside **both** manifests
+  (`auto/textures/` and `textures/`), every `<patch>` line is re-emitted
+  with its file token as the normalized `/`-separated path the IPS was copied
+  to and its sha1 uppercased (the loader's key form; a lowercase digest
+  changes spelling, not value). The `/` form is the canonical spelling every
+  repo tool can resolve, the way `mep_build` normalizes `<background>`; it is
+  not a runtime need — `HdPackLoader::LoadPack` rewrites `\` to `/` on every
+  manifest line before parsing (commit 9615330b), so a Windows `sub\fix.ips`
+  loads on every host. The import also writes an `IMPORT.md` section with both hash pairs,
   record count, CHR growth and the namespace limit. Refusals, each naming
   the manifest line and the rule (nothing written): no `--rom`; a dump none
   of the `<patch>` lines names (ADR-0145 (3): IPS does not relax); a
@@ -1111,7 +1114,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `verify`, the patched-ROM import (hash selection in the loader's order,
   `apply_ips` against `IpsPatcher`'s rules, `<supportedRom>` rewrite, IPS
   beside both manifests, `<patch>` token normalized to the copied path,
-  `verify` failing on a missing IPS or a token that is not that path), every
+  `verify` resolving the token the loader's way — `\`→`/`, exact, then
+  case-folded — and failing when either IPS copy is missing or its bytes
+  differ from the source pack's), every
   refusal named above, and the index read; PASS/FAIL per check, exit 0 only
   if all pass. No ROM, no PNG codec beyond the stdlib.
 - `python3 scripts/test_mei_rules.py` (F6.3b) - `mei_rules.py` leaf: constant

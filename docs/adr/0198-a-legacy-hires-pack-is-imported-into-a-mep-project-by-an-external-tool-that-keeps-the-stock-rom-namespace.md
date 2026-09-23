@@ -18,7 +18,8 @@
   `<supportedRom>` is the patched ROM's whole-file sha1, the IPS sits beside
   both manifests, each `<patch>` line is re-emitted normalized — the `/`-separated
   path the IPS was copied to and the uppercase sha1 (`mep_patch.emitted_line`;
-  a verbatim `\` token never resolves on macOS/Linux) — and the limit in
+  the canonical spelling every repo tool resolves — the loader itself rewrites
+  `\` to `/` before parsing, so this is not a runtime need) — and the limit in
   §3 is printed on every such import. Measured on the accepted packs whose
   stock dump is on this machine: Castlevania #143 round-trips with **0**
   differing keys and lints clean; Metroid #148 (the CHR RAM → CHR ROM case,

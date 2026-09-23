@@ -19,8 +19,9 @@ option (a)) and needs `--rom <the stock dump>`: the `<patch>` line whose sha1
 names that dump is applied in memory (`mep_patch.py`, mirroring
 `IpsPatcher`), the project's `<supportedRom>` becomes the patched ROM's hash,
 the IPS is carried beside both manifests, and the `<patch>` lines are carried
-with the same `/`-separated path the IPS was copied to (a Windows `\` token
-would never resolve on macOS/Linux — `mep_patch.emitted_line`) and their sha1
+with the same `/`-separated path the IPS was copied to (the canonical spelling
+every repo tool can resolve; the loader itself rewrites `\` to `/` before
+parsing, so a `\` token would load too — `mep_patch.emitted_line`) and their sha1
 untouched, so the fork matches them exactly as it does today (ADR-0145 (3)).
 Without `--rom`, or with a dump none of the `<patch>` lines names, the import
 is refused. What this does **not** buy is printed on every such import: the
@@ -476,10 +477,11 @@ def build_key_source(pack: Pack, normalize: bool, supported_rom: str | None = No
 
     Every `<patch>` line is re-emitted as `mep_patch.emitted_line`: the file
     token becomes the normalized `/`-separated path the IPS is copied to
-    (`_copy_patches`), the sha1 stays. The runtime on macOS/Linux resolves the
-    token verbatim (`HdPackLoader::ResolvePackRelativePath` + `IndexPackFiles`,
-    which indexes `/` names), so a Windows `sub\\fix.ips` carried as written
-    would be copied to `sub/fix.ips` and never applied."""
+    (`_copy_patches`), the sha1 stays. Not a runtime need — `HdPackLoader::
+    LoadPack` rewrites `\\` to `/` on every manifest line before parsing, so
+    a Windows `sub\\fix.ips` would load on every host — but the canonical
+    spelling: every repo tool can `exists()` it without re-implementing that
+    rewrite, and `mep_build` normalizes `<background>` names the same way."""
     out = []
     n = -1
     placed = supported_rom is None
@@ -1080,8 +1082,9 @@ def _patched_note(p: dict) -> list:
         + (f"; the pack itself declared `{p['declared_supported_rom']}`." if p["declared_supported_rom"]
            else "; the pack declared none."),
         f"The {p['entries']} `<patch>` line(s) are carried with their sha1 uppercased (the loader's key form) and their file",
-        f"token as the `/`-separated path the IPS was copied to (`{p['matched_rel']}`, the form",
-        "every platform's loader resolves; a Windows `\\` would never resolve on macOS/Linux), and",
+        f"token as the `/`-separated path the IPS was copied to (`{p['matched_rel']}`, the canonical",
+        "spelling every repo tool resolves; the loader rewrites `\\` to `/` itself, so this is portability",
+        "for tooling, not a runtime need), and",
         "the IPS sits beside both manifests, so the fork applies it exactly as it does today — by the stock",
         "ROM's sha1, never on a mismatch (ADR-0145 (3)). `mep_build.py pack . --rom <stock dump>`",
         "writes `targets[]` from the **stock** dump: the MEP matcher runs before the patch",
@@ -1185,9 +1188,10 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     # there verbatim — so the built side is read from both manifests. The
     # `<patch>` lines are the other exception: the import re-emits them with
     # the normalized path the IPS was copied to (`mep_patch.emitted_line`), so
-    # the source side is compared in that same form.
+    # both sides are compared in that same form — the loader rewrites `\` to
+    # `/` before parsing, so a `\` and a `/` spelling of one path are one line.
     in_rest = {_patch_as_emitted(s) for s in source.body} | set(source.audio)
-    out_rest = set(built.body) | set(built.audio)
+    out_rest = {_patch_as_emitted(s) for s in built.body} | set(built.audio)
     audio_manifest = project / "audio" / "hires.txt"
     if audio_manifest.is_file():
         out_rest |= set(Pack(project, audio_manifest).audio)
@@ -1202,14 +1206,41 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     # ADR-0198 §3: a patched-ROM project must still carry the IPS beside the
     # built manifest (the loader fails the whole pack without it) and a
     # <supportedRom> the loader can read — the `<patch>` lines themselves are
-    # compared above as carried lines. The token is checked **as written**,
-    # the way the macOS/Linux loader resolves it: it must be the normalized
-    # `/` path (`p.rel`), and that exact path must exist. A `\` token whose
-    # file sits at the `/` path would otherwise pass here and never apply at
-    # runtime (PR #385 review).
-    patch_token_bad = [p.file for p in built.patches if p.file != p.rel]
-    patch_missing = [p.file for p in built.patches
-                     if p.file == p.rel and not (built_path.parent / p.rel).is_file()]
+    # compared above as carried lines. The file is looked up the way the
+    # loader does it: `HdPackLoader::LoadPack` rewrites `\` to `/` on every
+    # manifest line before parsing (commit 9615330b), then
+    # `ResolvePackRelativePath` tries the exact path and falls back to the
+    # case-folded index (`mep_patch.loader_source`). So a `\` token whose file
+    # sits at the `/` path is valid and passes here; only a token that resolves
+    # to nothing fails (PR #385 review, fourth round).
+    #
+    # And it is not enough for a file to exist: a truncated or replaced IPS
+    # beside the built manifest would load and patch the ROM into something
+    # else. Both copies the import wrote — beside `textures/hires.txt`, which
+    # the loader reads, and under `auto/textures/`, which the key source cites
+    # and every rebuild copies from — must be byte-identical to the source
+    # pack's IPS, itself resolved the loader's way (PR #385 review).
+    patch_missing, patch_source_missing, patch_differs, patch_auto_missing, patch_auto_differs = \
+        [], [], [], [], []
+    auto_dir = project / "auto" / "textures"
+    for p in built.patches:
+        src_rel = mep_patch.loader_source(source.hires.parent, p.rel)
+        if src_rel is None:
+            patch_source_missing.append(p.file)
+            continue
+        src_bytes = (source.hires.parent / src_rel).read_bytes()
+        built_rel = mep_patch.loader_source(built_path.parent, p.rel)
+        if built_rel is None:
+            patch_missing.append(p.file)
+        elif (built_path.parent / built_rel).read_bytes() != src_bytes:
+            patch_differs.append(f"textures/{built_rel}")
+        auto_rel = mep_patch.loader_source(auto_dir, p.rel) if auto_dir.is_dir() else None
+        if auto_rel is None:
+            patch_auto_missing.append(p.file)
+        elif (auto_dir / auto_rel).read_bytes() != src_bytes:
+            patch_auto_differs.append(f"auto/textures/{auto_rel}")
+    patch_problems = (patch_missing or patch_source_missing or patch_differs
+                      or patch_auto_missing or patch_auto_differs)
     # The built <supportedRom> must be the patched hash the import computed,
     # not merely 40 hex digits (PR #385 review): IMPORT.md's "patched" row is
     # the import's own record, and the key source carries the same value into
@@ -1241,17 +1272,18 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
               + ("(the pack declared none)" if not source.supported_rom
                  else f"(the pack declared {source.supported_rom})")
               + "; IPS beside the built manifest: "
-              + ('yes' if not (patch_missing or patch_token_bad) else 'NO'))
+              + ('yes' if not patch_problems else 'NO'))
     failures = 0
     for name, items in (("missing from the import", sorted(missing)),
                         ("unexpected in the import", sorted(extra)),
                         ("carried line missing", rest_missing),
                         ("unexpected carried line", rest_extra),
                         ("pixels differ", pixel_bad),
-                        ("<patch> token is not the normalized /-separated path the IPS was "
-                         "copied to (the macOS/Linux loader resolves it as written)",
-                         patch_token_bad),
+                        ("<patch> file not found in the source pack", patch_source_missing),
                         ("<patch> file missing beside textures/hires.txt", patch_missing),
+                        ("<patch> IPS bytes differ from the source pack's", patch_differs),
+                        ("<patch> file missing in auto/textures", patch_auto_missing),
+                        ("<patch> IPS bytes differ from the source pack's", patch_auto_differs),
                         ("<supportedRom> is not the patched ROM the import computed",
                          [f"{built.supported_rom or '(none)'} (imported: "
                           f"{', '.join(expected_roms) or 'no record'})"]

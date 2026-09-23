@@ -41,9 +41,10 @@ Covers:
     `IpsPatcher` — stream order, RLE, growth, truncate), the key source's
     `<supportedRom>` becomes the patched whole-file sha1, the IPS lands beside
     both manifests, the emitted `<patch>` token is the same `/`-separated path
-    the IPS was copied to (a Windows `sub\\fix.ips` never resolves on the
-    macOS/Linux loader), build + verify round-trip, and `verify` fails when
-    the IPS is gone or the token is not that path. Refusals: no `--rom`, a
+    the IPS was copied to (the canonical spelling; the loader rewrites `\\`
+    to `/` itself, so either form loads), build + verify round-trip, and
+    `verify` fails when either IPS copy is gone or its bytes differ from the
+    source pack's. Refusals: no `--rom`, a
     dump none of the `<patch>` lines names
     (ADR-0145 (3)), a missing or non-IPS patch file, a truncated IPS, and a
     declared `<supportedRom>` that contradicts every hash in play (ADR-0211).
@@ -1449,13 +1450,14 @@ def test_patch_hardening(root: Path):
 
 
 def test_patch_path_normalization(root: Path):
-    """PR #385 review, second round (Codex): the emitted `<patch>` token must
-    be the same normalized path the IPS is copied to. On macOS/Linux the
-    loader resolves the token as written (`HdPackLoader::
-    ResolvePackRelativePath` opens it verbatim, then looks it up in
-    `IndexPackFiles`, which indexes `/`-separated names), so a Windows
-    `sub\\fix.ips` carried verbatim would be copied to `sub/fix.ips` and never
-    applied — while import and verify reported success."""
+    """PR #385 review, second and fourth rounds (Codex): the emitted `<patch>`
+    token is the normalized `/` path the IPS is copied to — the canonical
+    spelling every repo tool resolves — and `verify` looks the file up the
+    way the loader does. `HdPackLoader::LoadPack` rewrites `\\` to `/` on
+    every manifest line before parsing (commit 9615330b), so a built `\\`
+    token whose file sits at the `/` path is runtime-valid on every host and
+    must pass; the second round's claim that it "never resolves on
+    macOS/Linux" was wrong. Only a token that resolves to no file fails."""
     root = root / "pathnorm"
     root.mkdir(parents=True, exist_ok=True)
     rom = root / "Game.nes"
@@ -1503,26 +1505,65 @@ def test_patch_path_normalization(root: Path):
         return
     ok("build carries `<patch>sub/fix.ips` and verify passes it against the source's `\\` line")
 
-    # The trap the review found: the token says `\`, the file sits at `/`.
-    # The old check normalized the token before looking for the file, so this
-    # passed; now the token itself is compared with the normalized path.
+    # A built `\` token whose file sits at the `/` path: the loader rewrites
+    # `\` to `/` before parsing, so this loads on every host and verify must
+    # pass it (fourth round; the second round refused it on a wrong premise).
     built_path.write_text("\n".join(bad if ln == good else ln for ln in built) + "\n",
                           encoding="utf-8")
     rc, out = run_verify(src, project)
-    if rc != 1 or "not the normalized" not in out or "sub\\fix.ips" not in out \
-            or "IPS beside the built manifest: NO" not in out:
-        fail(f"verify should fail on a `\\` <patch> token whose file is at the `/` path: {rc}\n{out}")
+    if rc != 0 or "IPS beside the built manifest: yes" not in out:
+        fail(f"verify should pass a `\\` <patch> token whose file is at the `/` path (the loader "
+             f"rewrites `\\` to `/`): {rc}\n{out}")
     else:
-        ok("verify fails when the built <patch> token is not the path the IPS was copied to")
+        ok("verify passes a built `\\` <patch> token whose file sits at the `/` path (loader-equivalent lookup)")
 
-    # A `/` token whose file is elsewhere is still the plain missing-file case.
+    # A token whose file is elsewhere is the plain missing-file case.
     built_path.write_text("\n".join(built) + "\n", encoding="utf-8")
     (project / "textures" / "sub" / "fix.ips").rename(project / "textures" / "fix.ips")
     rc, out = run_verify(src, project)
-    if rc != 1 or "<patch> file missing" not in out or "not the normalized" in out:
-        fail(f"verify should report a missing file, not a token mismatch: {rc}\n{out}")
+    if rc != 1 or "<patch> file missing beside textures/hires.txt" not in out \
+            or "IPS beside the built manifest: NO" not in out:
+        fail(f"verify should report a missing file: {rc}\n{out}")
     else:
-        ok("a normalized <patch> token whose file moved is reported as missing, not as a token mismatch")
+        ok("a <patch> token whose file moved is reported as missing beside textures/hires.txt")
+    (project / "textures" / "fix.ips").rename(project / "textures" / "sub" / "fix.ips")
+
+    # PR #385 review (Codex): existence is not enough — the IPS bytes beside
+    # the built manifest and under auto/textures/ must be the source pack's.
+    built_ips = project / "textures" / "sub" / "fix.ips"
+    auto_ips = project / "auto" / "textures" / "sub" / "fix.ips"
+    original = built_ips.read_bytes()
+    built_ips.write_bytes(original[:-3])
+    rc, out = run_verify(src, project)
+    if rc != 1 or "IPS bytes differ from the source pack's: textures/sub/fix.ips" not in out \
+            or "IPS beside the built manifest: NO" not in out:
+        fail(f"verify should fail on a truncated IPS beside textures/hires.txt: {rc}\n{out}")
+    else:
+        ok("verify fails when the IPS beside textures/hires.txt is truncated")
+    built_ips.write_bytes(original)
+
+    altered = bytearray(original)
+    altered[6] ^= 0xFF
+    auto_ips.write_bytes(bytes(altered))
+    rc, out = run_verify(src, project)
+    if rc != 1 or "IPS bytes differ from the source pack's: auto/textures/sub/fix.ips" not in out \
+            or "textures/sub/fix.ips" not in out or "IPS beside the built manifest: NO" not in out:
+        fail(f"verify should fail on an altered auto/textures IPS: {rc}\n{out}")
+    else:
+        ok("verify fails when the auto/textures/ IPS differs from the source pack's")
+    auto_ips.unlink()
+    rc, out = run_verify(src, project)
+    if rc != 1 or "<patch> file missing in auto/textures: sub/fix.ips" not in out:
+        fail(f"verify should fail when the auto/textures IPS is missing: {rc}\n{out}")
+    else:
+        ok("verify fails when the auto/textures/ IPS is missing")
+    auto_ips.write_bytes(original)
+
+    rc, out = run_verify(src, project)
+    if rc != 0 or "IPS beside the built manifest: yes" not in out:
+        fail(f"verify should pass again once both IPS copies are intact: {rc}\n{out}")
+    else:
+        ok("verify passes once both IPS copies are byte-identical to the source pack's again")
 
 
 def test_patch_case_fold(root: Path):
