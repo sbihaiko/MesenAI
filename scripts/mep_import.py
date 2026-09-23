@@ -20,8 +20,8 @@ names that dump is applied in memory (`mep_patch.py`, mirroring
 `IpsPatcher`), the project's `<supportedRom>` becomes the patched ROM's hash,
 the IPS is carried beside both manifests, and the `<patch>` lines are carried
 with the same `/`-separated path the IPS was copied to (the canonical spelling
-every repo tool can resolve; the loader itself rewrites `\` to `/` before
-parsing, so a `\` token would load too — `mep_patch.emitted_line`) and their sha1
+every repo tool can resolve; the loader itself rewrites `\\` to `/` before
+parsing, so a `\\` token would load too — `mep_patch.emitted_line`) and their sha1
 untouched, so the fork matches them exactly as it does today (ADR-0145 (3)).
 Without `--rom`, or with a dump none of the `<patch>` lines names, the import
 is refused. What this does **not** buy is printed on every such import: the
@@ -477,7 +477,8 @@ def build_key_source(pack: Pack, normalize: bool, supported_rom: str | None = No
 
     Every `<patch>` line is re-emitted as `mep_patch.emitted_line`: the file
     token becomes the normalized `/`-separated path the IPS is copied to
-    (`_copy_patches`), the sha1 stays. Not a runtime need — `HdPackLoader::
+    (`_copy_patches`), the sha1 is re-emitted uppercase (`PatchLine`
+    uppercases it). The path rewrite is not a runtime need — `HdPackLoader::
     LoadPack` rewrites `\\` to `/` on every manifest line before parsing, so
     a Windows `sub\\fix.ips` would load on every host — but the canonical
     spelling: every repo tool can `exists()` it without re-implementing that
