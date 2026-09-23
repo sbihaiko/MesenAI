@@ -4286,16 +4286,25 @@ namespace
 
 	void TestAnchorFlatCellsNeverAppearInStableOrWideOutput()
 	{
-		//No non-flat candidate at all: the stable/wide passes' pool (`order`)
-		//is empty by construction (Usage == UINT32_MAX is filtered out before
-		//`order` is built), so they can pick nothing on their own - only the
-		//last pass, reported by UsedEmptinessProbe, ever resolves this case.
+		//A screen with *no* non-flat candidate is never captured in the first
+		//place: HdPackBuilder::CaptureScreen returns before AppendFlatAnchorCells
+		//ever runs when its non-flat `ranked` pool is empty (Codex review, PR
+		//#379 - ADR-0050 requires at least one non-flat anchor; a gate made only
+		//of emptiness probes would fire on every blank screen). So the realistic
+		//candidate list SelectScreenAnchors ever sees is one non-flat anchor
+		//(here, one that does not by itself discriminate) plus flat probes; the
+		//stable/wide passes' pool (`order`) still excludes Usage == UINT32_MAX
+		//by construction, so only the last pass, reported by UsedEmptinessProbe,
+		//separates the rival.
 		std::vector<GridFrame> frames = { AnchorCardScreen(), AnchorCardWithText() };
-		std::vector<AnchorCandidate> candidates = { { 11, 10, UINT32_MAX } };
+		std::vector<AnchorCandidate> candidates = {
+			{ 2, 4, 1 }, //one non-flat anchor, identical on both frames - does not discriminate
+			{ 11, 10, UINT32_MAX }, //the flat block cell, ADR-0223's probe
+		};
 
 		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
 		Check(choice.Rivals == 0 && choice.UsedEmptinessProbe,
-			"BlocoP5: with only a flat candidate, separation - when it happens - comes from the last pass alone",
+			"BlocoP5: with one non-flat anchor plus flat probes, separation comes from the last pass alone",
 			"rivals=" + std::to_string(choice.Rivals));
 	}
 
@@ -4327,6 +4336,41 @@ namespace
 		Check(choice.Rivals > 0,
 			"BlocoP5: without a usable probe the addition-rival stays unseparated",
 			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestSolidColourOneTileLandsInTheProbePool()
+	{
+		//Codex review, PR #379: HdPackBuilder::CaptureScreen/AppendFlatAnchorCells
+		//is not in the unit-test link set (HdPackBuilder.cpp), so the two halves
+		//of "a solid colour-1 tile lands in the probe pool with Usage =
+		//UINT32_MAX" are checked at the boundary each side owns. First, the
+		//shared predicate itself: a solid colour-1 tile (plane0 = 0xFF x8, plane1
+		//= 0x00 x8) is flat, exactly what AppendFlatAnchorCells (HdPackBuilder.h)
+		//now gates on via MesenSheets::IsFlatTileData instead of the old
+		//"all 16 bytes identical" lambda. This is one of the two margin cases
+		//the fix changes (Codex review, PR #379): under the old lambda this
+		//tile's 16 bytes are 8x0xFF followed by 8x0x00, so byte[8] != byte[0]
+		//and the lambda called it NOT flat - it would have stayed in `ranked`
+		//(the non-flat, rarity-ordered pool) instead of the probe pool. The new
+		//predicate moves it to the probe pool, exactly as ADR-0221/ADR-0223
+		//define "empty".
+		uint8_t colour1[16] = {};
+		memset(colour1, 0xFF, 8);
+		Check(IsFlatTileData(colour1),
+			"BlocoP5: a solid colour-1 tile (plane0=FFx8, plane1=00x8) is flat");
+
+		//Second, the stitcher side: once such a tile is handed over with
+		//Usage == UINT32_MAX (what AppendFlatAnchorCells always sets), it lands
+		//in the probe pool exactly like any other flat candidate - excluded from
+		//`order`/stable/wide, reachable only through the last pass.
+		std::vector<GridFrame> frames = { AnchorCardScreen(), AnchorCardWithText() };
+		std::vector<AnchorCandidate> candidates = {
+			{ 2, 4, 1 },
+			{ 11, 10, UINT32_MAX },
+		};
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(choice.Rivals == 0 && choice.UsedEmptinessProbe,
+			"BlocoP5: a Usage=UINT32_MAX candidate (as AppendFlatAnchorCells would hand a solid colour-1 tile) resolves only via the probe pass");
 	}
 
 	void TestSheetContactSheetGeometry()
@@ -8781,6 +8825,7 @@ int main()
 	TestAnchorNonFlatCellSeparatesWithoutAProbe();
 	TestAnchorFlatCellsNeverAppearInStableOrWideOutput();
 	TestAnchorProbeOnACellAVariantChangesIsNeverChosen();
+	TestSolidColourOneTileLandsInTheProbePool();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();
 	TestSheetJsonCarriesTheGridDecision();
