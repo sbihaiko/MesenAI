@@ -324,8 +324,10 @@ def render_markdown(kit: dict) -> str:
         "",
         "If the manifest carries a bare `<bgPreservesBehindBgSprites>` line, leave it: "
         "the recorder writes it so a recorded screen does not hide a behind-background "
-        "sprite over empty (colour-0) canvas (ADR-0224). It is not noise, and other "
-        "emulators simply ignore it.",
+        "sprite over empty (colour-0) canvas (ADR-0224). It is opt-in per pack - a pack "
+        "without the line renders as it always did - it is not noise, and other "
+        "emulators simply ignore it. It undoes the recorded screen only: a foreground "
+        "background you add at priority 30-39 still covers the sprite where it is opaque.",
     ])
     out.append("")
     out.append("## What is in here")

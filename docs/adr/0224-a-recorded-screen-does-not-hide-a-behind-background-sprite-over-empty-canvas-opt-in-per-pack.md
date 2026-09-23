@@ -13,10 +13,16 @@
   predicate, parse and writer have unit cases, `HdNesPack::GetPixels` has no
   direct unit test (outside the `core-unit-tests` link set), so the tag-on
   render path rests on the headless renders (0 `erased sprite` on 41–45 s,
-  36/36 + 9/9 byte-identical without the tag). Open edge: layer 3 with the
-  tag is untested. §2's "equivalently" form is what shipped
-  (`DrawBehindBgSprites` re-applied after layer 2 when
-  `HdBehindBgSpriteRule::KeepsBehindBgSprite` holds).
+  36/36 + 9/9 byte-identical without the tag). §2's "equivalently" form is
+  what shipped (`DrawBehindBgSprites` re-applied after layer 2 when
+  `HdBehindBgSpriteRule::KeepsBehindBgSprite` holds). **Amended
+  2026-09-22** (same day, user's choice verbatim: *"Tudo junto com a F12.16
+  (Recommended)"*): the layer-3 edge the Sonnet verification left open is
+  now a declared edge (§Amended below) pinned by a BlocoP4 model case;
+  Decision 5's docs are written; the "measure on the 30-ROM library" clause
+  under Consequences is answered by a dedicated tag-on/tag-off sweep over
+  F12.16's recorded packs
+  ([log](../validation/adr0224-30rom-tag-sweep-2026-09-22.md)).
 - Date: 2026-09-22
 - Related: issue #339 (its second cause), ADR-0223 (the first cause — the
   card's addition-rivals; this ADR closes what ADR-0223 says it cannot),
@@ -111,7 +117,8 @@ unless it opts in.
    re-applied after layer 2 on colour-0 background pixels. The issue-#328
    tile-suppression counters are scoped per draw and are not affected.
    Without the tag, byte-identical output to today's renderer — a unit test
-   asserts it.
+   asserts it. Layer 3 (priority 30–39) is not part of this rule: see
+   "Amended 2026-09-22" below.
 
 3. **The recorder writes the tag on every pack it produces**
    (`HdPackBuilder`, next to `<options>`), bootstrap `auto/` included, since a
@@ -145,7 +152,14 @@ unless it opts in.
   emulator documents; the spec entry is the answer.
 - **Render cost:** one extra branch per pixel per layer-2 background, only on
   packs with the tag and only on pixels with a behind-background sprite.
-  Measure on the 30-ROM library before and after, not assume.
+  Measure on the 30-ROM library before and after, not assume. *Measured
+  2026-09-23*
+  ([log](../validation/adr0224-30rom-tag-sweep-2026-09-22.md)): F12.16's
+  recorded packs (tag on) against copies with the line deleted (tag off),
+  30 ROMs x 4 timestamps, 234 480 frames per configuration — 3.711 vs
+  3.741 ms/frame whole-run, no consistent direction per ROM; `erased
+  background` 6 vs 6, `erased sprite` 1 vs 369 (4 ROMs change, none gets
+  worse); 110 of 120 frame pairs byte-identical.
 - **Re-record is not required.** Existing bootstrap packs on disk lack the
   tag and keep today's look until re-recorded; a user can add the line by
   hand. The catalog's accepted packs are unaffected until their authors opt
@@ -158,3 +172,60 @@ unless it opts in.
   `BackgroundPriority` alone, or a transparent sprite pixel would block the
   background. And do not gate on the *HD* tile's alpha — the rule is the
   hardware's, on the ROM's background colour index.
+
+## Amended 2026-09-22: layer 3 (priority 30–39) over a restored behind-background pixel
+
+The Sonnet verification of the F12.15 log left one edge open: §2 says
+nothing about what happens when a **layer-3** `<background>` also covers a
+pixel the tag just restored. Read off `HdNesPack::GetPixels` as shipped, the
+answer is fixed by pass order, not by any branch:
+
+1. backdrop → layer 0 → behind-background sprites → layer 1 → tile →
+   **layer 2** → the ADR-0224 re-apply (only when
+   `KeepsBehindBgSprite` holds, i.e. layer 2 actually painted the pixel) →
+   **front sprites** → **layer 3** → the issue-#328 suppression bookkeeping.
+2. Layer 3 runs **unconditionally, last**, through the same
+   `DrawBackgroundLayer` as every other layer. Where its image pixel is
+   opaque (`Alpha` blend) it replaces whatever is underneath — the restored
+   behind-background sprite pixel *and* any front sprite pixel alike; with
+   `Add`/`Subtract` it blends onto both alike. Where its image pixel is
+   transparent, the restored sprite shows through.
+3. With no layer-2 paint on the pixel (`layer2Painted == false`) the
+   predicate is false, nothing is re-applied, and layer 3 hides the sprite
+   exactly as it does today without the tag. The tag never fights layer 3.
+
+**Declared edge, proposed as intended.** The tag's contract is the layer a
+recorded screen lives in — layer 2, ADR-0050's priority 20, "behind
+foreground sprites" — and it restores the hardware's rule *for that layer
+only*. Layer 3 is the format's "foreground" layer, defined as above every
+sprite of either priority; letting the tag punch through it would show a
+behind-background sprite where a front sprite is hidden, a priority
+inversion no hardware rule supports. So: with the tag, a behind-background
+sprite over colour-0 canvas is treated by layer 3 exactly like a front sprite
+is, no better and no worse. This is what the code does and what this
+amendment declares it should do. The recorder writes no layer-3 background
+(a recorded `<background>` is priority 20), so no recorded pack meets the
+edge; only a hand-written pack that stacks a priority-30 image over a
+recorded screen can, and that author has asked for a foreground.
+
+**Alternative considered and not taken:** extend the predicate to "any
+layer ≥ 2 painted" and re-apply after layer 3 as well. Rejected for the
+inversion above; if a user wants it, that is a new decision, not this
+amendment. No open question remains for a human on this edge unless that
+preference is voiced.
+
+**Evidence.** `scripts/core_unit_tests.cpp` BlocoP4,
+`TestBehindBgSpriteRuleYieldsToALayer3Background`: the pass-order model
+gains a layer-3 step after the front sprites and pins (a) opaque layer 3 over
+a restored pixel → layer 3, with or without the tag; (b) the same over a
+front sprite → layer 3, so the restored sprite is not treated worse than a
+front one; (c) layer 3 with no layer-2 paint → no re-apply, layer 3; (d)
+transparent layer 3 → the restored sprite shows. `HdNesPack` itself stays
+outside the `make core-unit-tests` link set (needs `NesConsole`), as
+recorded in the Status line; the model is a model of the pass order, with
+the real predicate deciding. Stop condition (2) stays "partially met" for
+that reason — this amendment closes the *edge*, not the link-set gap.
+
+Docs carrying this edge: `docs/specs/hires-gbsms-v1-draft.md` §7 (draft
+revision 3), `docs/remastering-a-game.md`, and the F12.15 validation log's
+"What this log does not deliver".
