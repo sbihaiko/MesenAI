@@ -133,7 +133,12 @@ MESEN_POSE_TRACK_DUMP=run/full/tracks.txt \
     input=scripts/stages/contra/stage1-probe.txt state=run/stage1.mss
 ```
 
-Without the two variables neither `oam.txt` nor `tracks.txt` is written.
+The recording is made by `bootstrap`, not `hdpack`: `bootstrap` sets
+`BootstrapEnhancementFolder`, and the Core's bootstrap builder
+(`MepPackManager`, ADR-0049) records the auto pack into
+`run/full/Contra/auto/textures/` — where this run's `poses.json` sits —
+while `hdpack-off` keeps the installed pack from rendering. Without the two
+variables neither `oam.txt` nor `tracks.txt` is written.
 The `rec` run is the same command with `16` seconds and its own `run/rec/`
 prefix.
 Then read `textures/sheets/poses.json` and `adjacency.json` from the recorded
