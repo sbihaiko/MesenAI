@@ -140,13 +140,19 @@ private:
 	//passes (both order by ascending Usage and cap at kAnchorCandidateCap).
 	//Host-bound (touches ScreenRun/_frameRuns), so it stays out of
 	//ScreenStitcher; MesenSheets::FlatRunColumns (host-free) does the
-	//alignment arithmetic this loop is built around.
-	template<typename IsFlatFn>
-	void AppendFlatAnchorCells(PendingScreen& pending, uint8_t fineX, IsFlatFn isFlat)
+	//alignment arithmetic this loop is built around. "Flat" is
+	//MesenSheets::IsFlatTileData - the same per-plane predicate
+	//FlatShapePlane uses - not "all 16 bytes identical": a 0x55-striped tile
+	//is a candidate here (correctly, per ADR-0221/ADR-0223's "empty" is a
+	//uniform colour, not a uniform byte pattern), and a solid colour-1/2
+	//tile (all-0xFF or all-0x00 per plane) goes to the probe pool instead of
+	//the rarity ranking, at the margin from CaptureScreen's own predicate
+	//fix (Codex review, PR #379).
+	void AppendFlatAnchorCells(PendingScreen& pending, uint8_t fineX)
 	{
 		for(size_t i = 0; i < _frameRuns.size(); i++) {
 			ScreenRun& run = _frameRuns[i];
-			if(!isFlat(run.Tile) || (run.Y & 7) != 0) {
+			if(!MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0) {
 				continue;
 			}
 			uint16_t endX = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;

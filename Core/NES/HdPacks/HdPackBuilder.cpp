@@ -1847,20 +1847,15 @@ void HdPackBuilder::CaptureScreen()
 	//is what the bug is: a screen is captured the first time it holds still, so
 	//at this point every later variant of it - the next score digit, the other
 	//half of a blink - is still in the future.
-	auto isFlat = [](HdTileKey& k) {
-		for(int i = 1; i < 16; i++) {
-			if(k.TileData[i] != k.TileData[0]) {
-				return false;
-			}
-		}
-		return true;
-	};
 	vector<ScreenRun*> ranked;
 	for(ScreenRun& run : _frameRuns) {
 		//A candidate has to land on a whole grid cell: RecordGridFrame only keeps
 		//runs that start on a tile boundary and on a tile-aligned scanline, and a
 		//candidate the grid does not hold is one whose stability cannot be read.
-		if(isFlat(run.Tile) || (run.Y & 7) != 0 || run.X + 8 > 256) {
+		//"Flat" is MesenSheets::IsFlatTileData (Codex review, PR #379), the same
+		//predicate FlatShapePlane/AppendFlatAnchorCells use, not "all 16 bytes
+		//identical": a 0x55-striped tile is detail; solid colour-1/2 is a probe.
+		if(MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0 || run.X + 8 > 256) {
 			continue;
 		}
 		ranked.push_back(&run);
@@ -1899,14 +1894,18 @@ void HdPackBuilder::CaptureScreen()
 		pending.Candidates.push_back(*run);
 	}
 	if(pending.Candidates.empty()) {
-		//No tile on this frame can carry a condition, so there is nothing to gate
-		//a <background> on. Same outcome as before: the PNG stays, the line does
-		//not, and OnFrameEnd will not flag the grid frame as captured.
+		//No non-flat tile on this frame can carry a condition, so there is nothing
+		//to gate a <background> on. Stays even after ADR-0223 option A: a gate
+		//made only of emptiness probes would fire on every blank screen, worse
+		//than not drawing. ADR-0050 requires at least one non-flat anchor, not
+		//relaxed here (Codex review, PR #379) - probes only *add* to a non-flat
+		//set, never replace one. Same outcome otherwise: the PNG stays, the line
+		//does not, and OnFrameEnd will not flag the grid frame as captured.
 		return;
 	}
 
 	//ADR-0223 option A (F12.16): flat runs, excluded from `ranked` above, as a second candidate pool (AppendFlatAnchorCells, HdPackBuilder.h).
-	AppendFlatAnchorCells(pending, fineX, isFlat);
+	AppendFlatAnchorCells(pending, fineX);
 	unique_ptr<HdPackBitmapInfo> bitmap(new HdPackBitmapInfo());
 	bitmap->PngName = relPath;
 	pending.BitmapIndex = _hdData.BackgroundFileData.size();

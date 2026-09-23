@@ -8,8 +8,9 @@
   reads `erased background` = 0 on all 36 sweep points (374 before), the
   synthetic-pair unit cases pass (990/990), and the 30-ROM library was
   re-recorded — captures 193 -> 219, mean draw rate 0.2454 -> 0.2316, never-
-  firing 0 -> 0, 58 screens gated on an emptiness probe in 9 ROMs, 13 packs
-  with a changed `<condition>` line. One placement note: the flat-cell
+  firing 0 -> 0, 59 screens gated on an emptiness probe in 9 ROMs, 14 packs
+  with a changed `<condition>` line (after the Codex-review predicate fix;
+  58/13 before it). One placement note: the flat-cell
   expansion (`AppendFlatAnchorCells`) lives inline in `HdPackBuilder.h`
   because `HdPackBuilder.cpp` sits on its ADR-0137 ceiling. Original record: User's picks through a structured question,
   labels verbatim: *"A: probes como ultimo passo (Recommended)"* and
@@ -238,6 +239,16 @@ The kind test stays a counter in the log; #339's class of overdraw stays.
 
 ## Consequences
 
+- **A capture still needs at least one non-flat anchor** (decided at the
+  PR #379 Codex review, 2026-09-23): the probes are a last pass *on top of*
+  ADR-0050's non-flat pool, never a substitute for it. A screen whose only
+  candidates are flat is not captured, because a gate made only of emptiness
+  probes would fire on every blank screen — worse than not drawing.
+  `CaptureScreen` keeps its early return and says so. "Empty" is one
+  predicate everywhere, `MesenSheets::IsFlatTileData` (each plane all 0x00 or
+  all 0xFF), which at the margin moves a solid colour-1/2 tile into the probe
+  pool and lets a 0x55-striped tile back into the rarity ranking; measured:
+  nothing moved on Punch-Out!!, the library gained one probe (58 -> 59).
 - **Whatever is picked, ADR-0221's rule stays as shipped**: the kind test is
   what makes the addition frames rivals in the first place. F12.13's code is
   the prerequisite of A and B, not a competitor.

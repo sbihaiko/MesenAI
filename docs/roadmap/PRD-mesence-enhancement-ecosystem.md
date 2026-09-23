@@ -295,8 +295,10 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   numbers, reproduced. Library (30 ROMs): captures 193 -> 219 (Ice Climber
   4 -> 23, Pac-Man 17 -> 25, verified as distinct screens), mean draw rate
   0.2454 -> 0.2316 (more captures, each firing on fewer frames), never-firing
-  0 -> 0, 58 probes in 9 ROMs, 13 packs with a changed `<condition>` line.
-  8 unit cases, 990/990. Sonnet verification pass: every number reproduced.
+  0 -> 0, 59 probes in 9 ROMs, 14 packs with a changed `<condition>` line.
+  10 unit cases, 992/992. Codex review: one predicate for "empty"
+  (`IsFlatTileData`) at both call sites; a capture still needs a non-flat
+  anchor, recorded in ADR-0223's Consequences. Sonnet verification pass: every number reproduced.
   Closes issue #339's first cause; with F12.15 the issue's two causes are
   both addressed for packs recorded here.
   [Log](../validation/f12.16-emptiness-probes-2026-09-22.md).
