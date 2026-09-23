@@ -114,7 +114,9 @@ The Core side: `PoseTile` gains `Px`/`Py` (and the rank), **excluded** from
 the ordering and equality `BuildPoses` uses to sort, dedupe and merge —
 those stay on `(Node, Dx, Dy)`, or two frames of one pose would stop
 merging. Host-free in `SpriteGrouping` and covered by `core_unit_tests`
-(ADR-0126/ADR-0127): a +4 px offset writes `dx: 1, px: 4`; two frames whose
+(ADR-0126/ADR-0127): a +4 px offset writes `dx: 1, px: 4`, and the
+vertical axis is held to the same invariant (`dy == ToCells(py)`; Contra's
+legs at y 14 write `dy: 2, py: 14`); two frames whose
 layouts differ by 1 px are one pose and the most-seen layout wins; an
 overlapping pair gets `z`, a non-overlapping pose does not.
 
