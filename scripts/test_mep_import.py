@@ -1554,6 +1554,26 @@ def test_patch_case_fold(root: Path):
             return
     ok("a <patch> naming `sub/fix.ips` beside `SUB/Fix.IPS` resolves like the loader and lands as `sub/fix.ips`")
 
+    # PR #385 review: a patch named like a generated asset is refused before
+    # anything is written, instead of overwriting the sheet/image with IPS bytes.
+    # (A patch spelled like the pack's own `<img>` or `hires.txt` cannot be
+    # staged here: on a case-insensitive file system it *is* that file. The
+    # same rule covers it, by name, in `_generated_layer_paths`.)
+    for name in ("sheets/chr.png", "Sheets/Fix.ips"):
+        tag = name.replace("/", "_").replace(".", "_")
+        lines = patched_lines(stock_whole)[:-1] + [f"<patch>{name},{stock_whole}"]
+        src = write_src(root / f"clash-{tag}", lines, {"chr.png": cell_png(2, 1, 1), name: CHR_ROM_IPS})
+        dst = root / f"clash-{tag}-out"
+        expect_error(lambda: MI.import_pack(src, dst, False, rom), "collides with a file the import generates",
+                     f"a <patch> named {name!r}")
+        if dst.exists() and any(dst.iterdir()):
+            fail(f"a colliding <patch> {name!r} left files behind")
+    files, dirs = MI._generated_layer_paths(MI.open_pack(src))
+    if not {"hires.txt", "chr.png"} <= files or dirs != ("sheets/",):
+        fail(f"_generated_layer_paths misses a generated name: {sorted(files)} {dirs}")
+    else:
+        ok("_generated_layer_paths reserves hires.txt, every <img> and textures/sheets/")
+
     probe = root / "probe"
     probe.mkdir()
     (probe / "a.ips").write_bytes(b"x")

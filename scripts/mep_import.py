@@ -570,7 +570,7 @@ def import_pack(src: Path, out: Path, force: bool, rom: Path | None = None) -> d
         raise PackError(f"{pack.hires}: <scale>{pack.scale} is outside the loader's 1..10")
     patch = _resolve_patch(pack, rom)
     if patch:
-        _patch_destinations(patch, out)  # refuse before anything is written
+        _patch_destinations(pack, patch, out)  # refuse before anything is written
 
     normalize = pack.index_keyed
     if normalize:
@@ -659,7 +659,23 @@ def _resolve_patch(pack: Pack, rom: Path | None):
         raise PackError(f"{pack.hires}: {e}") from e
 
 
-def _patch_destinations(plan, out: Path) -> list[tuple[str, list[Path]]]:
+def _generated_layer_paths(pack: Pack) -> tuple[set[str], tuple[str, ...]]:
+    """What the import (and `build` after it) writes inside a layer, lowercased
+    `/` paths — so an IPS copy can never land on one: each layer's
+    `hires.txt`, every `<img>` and `<background>` the import copies beside
+    the key source, and the whole `sheets/` folder (sheets and sidecars)."""
+    files = {"hires.txt"}
+    files |= {r.replace("\\", "/").lower() for r in pack.imgs}
+    for raw in pack.body:
+        m = _BG_RE.match(raw.strip())
+        if m:
+            name = raw.strip()[m.end():].split(",")[0].strip().replace("\\", "/").lower()
+            if name:
+                files.add(name)
+    return files, ("sheets/",)
+
+
+def _patch_destinations(pack: Pack, plan, out: Path) -> list[tuple[str, list[Path]]]:
     """Where each IPS lands, and the check that it lands *inside* the project:
     `(rel, [auto/textures/rel, textures/rel])` per IPS. `mep_patch` already
     refused absolute paths, `..` components and files outside the source pack
@@ -671,8 +687,18 @@ def _patch_destinations(plan, out: Path) -> list[tuple[str, list[Path]]]:
     for e in plan.entries:
         line_of.setdefault(e.rel, e.line)
     layers = (out / "auto" / "textures", out / "textures")
+    generated, generated_dirs = _generated_layer_paths(pack)
     result = []
     for rel in plan.ips_files:
+        # PR #385 review: a patch named like an asset the import writes
+        # (`sheets/hero.png`, an `<img>`, `hires.txt`) would overwrite it and
+        # break the round trip; case-folded, since the file system may be.
+        low = rel.lower()
+        if low in generated or low.startswith(generated_dirs):
+            raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} collides with a file the "
+                            "import generates (a layer's hires.txt, an <img>/<background>, or "
+                            "textures/sheets/) — rename the patch in the source pack; nothing "
+                            "written")
         dsts = [layer / rel for layer in layers]
         for dst in dsts:
             # Against the project root, not the layer: a layer that is itself
@@ -692,7 +718,7 @@ def _copy_patches(pack: Pack, plan, out: Path) -> dict:
     manifest's own folder (`HdPackLoader::ProcessPatchTag`), and a manifest
     whose patch is not beside it fails to load whole."""
     copied = 0
-    for rel, dsts in _patch_destinations(plan, out):
+    for rel, dsts in _patch_destinations(pack, plan, out):
         # Read the file the loader would open (a case-folded `Fix.ips` ->
         # `fix.ips`), write it under the emitted name, so the project's token
         # resolves exactly on every host.
