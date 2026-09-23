@@ -97,6 +97,9 @@ def test_inferred_art_is_marked_in_the_page_an_artist_reads():
         check("ADR-0147" in text, "the page cites the layer rule it follows")
         check("<bgPreservesBehindBgSprites>" in text and "ADR-0224" in text,
               "the page tells the artist what the recorder's opt-in tag is, so it is not deleted as noise")
+        check("Select `paint` in the Layers panel before your first stroke" in text
+              and "`orig`, active" in text,
+              "the page tells the artist GIMP and Krita open the .ora with `orig` active (ADR-0220 §3, 2026-09-23)")
 
 
 def test_a_dropped_surface_keeps_its_reason():

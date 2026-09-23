@@ -563,8 +563,17 @@ three programs above open natively — the same picture as layers, bottom to top
 | `orig` | the `*.orig.png` twin, pixel for pixel | visible, locked |
 | `context` | the stage around the surface at 1x, at 50 % — only on a surface whose every cell has a stage position: today the stage panoramas (five layers); figure, scenery and CHR sheets have four until a recording writes where a sprite was seen on the stage (ADR-0220 §3, amended 2026-09-22) | visible, movable |
 | `paint` | empty — **the one layer you paint on**; it opens as the topmost visible layer | visible |
-| `guides` | cell grid, captions from the recording's ids or your `names.json`, a hatch over every cell nothing saw in play | **hidden**, locked |
-| `palettes` | a swatch strip of the palettes recorded for the sheet (a static page states `defaultTile = Y` instead) | **hidden**, locked |
+| `guides` | cell grid, captions from the recording's ids or your `names.json` (wrapped to the canvas, at most two lines, cut with `...` when they still do not fit), a hatch over every cell nothing saw in play | **hidden**, locked |
+| `palettes` | a swatch strip of the palettes recorded for the sheet, in the order they first appear reading down the sheet, each group labelled with the first cell that wears it (a static page states `defaultTile = Y` instead) | **hidden**, locked |
+
+**Select `paint` in the Layers panel before your first stroke.** Measured on
+2026-09-23: GIMP 2.10 and Krita 5.3 both open an OpenRaster file with the
+*bottom* layer active — `orig`, the locked reference — whatever the stack
+order, and no order fixes it: putting `paint` at the bottom would make it the
+active layer but would hide every stroke under `orig`. Krita honours the lock
+and refuses the stroke; GIMP ignores `edit-locked` and lets you paint on
+`orig`, where the work is discarded on the next kit run (ADR-0220 §3, amended
+2026-09-23). One click on `paint` before painting is the whole fix.
 
 **The `.ora` is a starting point; the flat PNG is the deliverable.** Paint on
 `paint`, then export a flat PNG over `<name>.png` — the F12.4 name in the table
