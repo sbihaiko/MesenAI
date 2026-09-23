@@ -273,7 +273,11 @@ is colour 0, even under a recorded `<background>` screen — without it, the
 screen paints over the sprite (ADR-0224). It is opt-in per pack: the recorder
 writes it on every pack it produces; a hand-written pack opts in by adding
 the same line; a pack without the line — every community pack in the
-catalog today included — renders exactly as it always did. It is a tag rather
+catalog today included — renders exactly as it always did when it loads on
+its own. The exception is a stack: when a pack without the line is the human
+`mep/` layer over a recorded `auto/` layer that carries it, the flag is ORed
+upward and the combined pack is opted in, so that pack's layer-2 screens stop
+hiding behind-background sprites too. It is a tag rather
 than an `<options>` token because an unknown `<options>` token is a load
 error in Mesen 2 and HD Mesen, while an unknown tag is skipped, so the pack
 still loads there, only without the effect. One edge to know: the tag undoes

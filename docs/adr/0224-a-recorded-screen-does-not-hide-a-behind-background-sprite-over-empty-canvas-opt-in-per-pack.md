@@ -20,7 +20,9 @@
   (Recommended)"*): the layer-3 edge the Sonnet verification left open is
   now a declared edge (§Amended below) pinned by a BlocoP4 model case;
   Decision 5's docs are written; the "measure on the 30-ROM library" clause
-  under Consequences is assigned to F12.16's re-recording, not to F12.15.
+  under Consequences is answered by a dedicated tag-on/tag-off sweep over
+  F12.16's recorded packs
+  ([log](../validation/adr0224-30rom-tag-sweep-2026-09-22.md)).
 - Date: 2026-09-22
 - Related: issue #339 (its second cause), ADR-0223 (the first cause — the
   card's addition-rivals; this ADR closes what ADR-0223 says it cannot),
@@ -150,11 +152,14 @@ unless it opts in.
   emulator documents; the spec entry is the answer.
 - **Render cost:** one extra branch per pixel per layer-2 background, only on
   packs with the tag and only on pixels with a behind-background sprite.
-  Measure on the 30-ROM library before and after, not assume. *Assigned
-  2026-09-22 to F12.16*: the F12.15 log measured Punch-Out!! alone
-  (whole-run wall clock, no difference inside the spread); the 30-ROM
-  before/after is folded into F12.16's re-recording of the library, which
-  produces the tagged packs anyway, rather than re-recording twice.
+  Measure on the 30-ROM library before and after, not assume. *Measured
+  2026-09-23*
+  ([log](../validation/adr0224-30rom-tag-sweep-2026-09-22.md)): F12.16's
+  recorded packs (tag on) against copies with the line deleted (tag off),
+  30 ROMs x 4 timestamps, 234 480 frames per configuration — 3.711 vs
+  3.741 ms/frame whole-run, no consistent direction per ROM; `erased
+  background` 6 vs 6, `erased sprite` 1 vs 369 (4 ROMs change, none gets
+  worse); 110 of 120 frame pairs byte-identical.
 - **Re-record is not required.** Existing bootstrap packs on disk lack the
   tag and keep today's look until re-recorded; a user can add the line by
   hand. The catalog's accepted packs are unaffected until their authors opt
