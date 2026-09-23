@@ -23,8 +23,8 @@ Covers:
     each `<tile>` key rewritten to the hex form `_index_token` emits, so
     the parsed key survives the round-trip even though the token *text*
     changes (ADR-0172) — the one place an import is not a copy;
-  * refusals, each naming what it refused: `<patch>` (ADR-0198 §2), an
-    unknown tag, a `[...]` prefix on a tag that takes none, a `<tile>` with
+  * refusals, each naming what it refused: `<patch>` without `--rom` (ADR-0198
+    §3), an unknown tag, a `[...]` prefix on a tag that takes none, a `<tile>` with
     too few fields, a malformed tileData/palette, a bitmap index out of
     range, a missing `<img>` PNG, a non-integer `<scale>`, a non-empty
     `--out` without `--force`, and — for an index-keyed pack — a construct
@@ -35,6 +35,16 @@ Covers:
     `exactCondition` cell, so the rebuild reproduces the input's rules and
     its pixels — with and without an unconditional rule in the pair;
   * the CLI: the bare-path form, `verify`, and `--force`;
+  * the **patched-ROM import** (ADR-0198 §3, option (a)): a pack with `<patch>`
+    needs `--rom`; the `<patch>` line whose sha1 is the dump's whole-file or
+    No-Intro sha1 is applied in memory (`mep_patch.apply_ips`, mirroring
+    `IpsPatcher` — stream order, RLE, growth, truncate), the key source's
+    `<supportedRom>` becomes the patched whole-file sha1, the IPS lands beside
+    both manifests, build + verify round-trip, and `verify` fails when the IPS
+    is gone. Refusals: no `--rom`, a dump none of the `<patch>` lines names
+    (ADR-0145 (3)), a missing or non-IPS patch file, a truncated IPS, and a
+    declared `<supportedRom>` that contradicts every hash in play (ADR-0211).
+    The limit statement is printed and written, in the wording per key form;
   * the **index read** (F12.12, ADR-0210 §3), which is the other direction:
     their `hires.txt` read as facts about the ROM, never as art. A CHR RAM
     game's new shapes are rendered from the pack's own pattern bytes at the
@@ -66,6 +76,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 import mep_build  # noqa: E402
 import mep_import as MI  # noqa: E402
+import mep_patch as MP  # noqa: E402
 
 FAILED = 0
 
@@ -363,6 +374,16 @@ def test_index_keyed(root: Path):
         return
     ok("<ver> is raised to 103 and the keys are rewritten to _index_token's hex width (ADR-0172)")
 
+    # A pack already above 103 keeps its own version: lowering <ver>108 to 103
+    # made the loader refuse every <addition> line (Metroid #148, 2026-09-22).
+    hi_lines = ["<ver>108"] + INDEX_LINES[1:]
+    _src, hi_project, hi_summary = imported_pack(root, "index108", hi_lines, INDEX_FILES)
+    hi_source = (hi_project / "auto" / "textures" / "hires.txt").read_text(encoding="utf-8")
+    if hi_summary["ver"] != 108 or "<ver>108" not in hi_source or "<ver>103" in hi_source:
+        fail(f"an index-keyed <ver>108 pack must keep <ver>108 in its key source: {hi_summary}")
+        return
+    ok("an index-keyed pack above 103 keeps its own <ver> (never lowered)")
+
     sidecar = json.loads((project / "textures" / "sheets" / "chr.json").read_text(encoding="utf-8"))
     entry = sidecar["cells"][0]["tiles"][0]
     if entry.get("index") != 5 or len(entry.get("tile", "")) != 32:
@@ -395,7 +416,8 @@ def test_refusals(root: Path):
         return write_src(root / name, lines, dict(art if files is None else files))
 
     for needle, what, lines, files in [
-        ("ADR-0198", "a <patch>", base + ["<patch>fix.ips"], None),
+        ("--rom", "a <patch> without --rom",
+         base + ["<patch>fix.ips," + "0" * 40], None),
         ("unknown tag", "an unknown tag", base + ["<frobnicate>1"], None),
         ("only <tile> and <background>", "a prefix on a tag that takes none",
          base + ["[C1]<bgm>0,1,ogg/x.ogg"], None),
@@ -880,7 +902,7 @@ def test_index_patch(root: Path):
     their = index_pack(root, "their", [
         "<ver>100",
         "<scale>2",
-        "<patch>chr-ram-to-rom.ips",
+        "<patch>chr-ram-to-rom.ips," + "0" * 40,
         f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",
     ])
     rom = make_rom(root, "ram.nes", chr_banks=0)
@@ -1054,6 +1076,260 @@ def test_index_cli(root: Path):
         ok("--force rewrites the index sheet")
 
 
+# --- the patched-ROM import (ADR-0198 §3, option (a)) -----------------------
+
+def fake_rom(prg_units=1, chr_units=0) -> bytes:
+    """A deterministic iNES file: 16-byte header, no trainer, `prg_units` 16
+    KiB PRG banks and `chr_units` 8 KiB CHR banks of a byte pattern."""
+    header = b"NES\x1a" + bytes((prg_units, chr_units)) + bytes(10)
+    body = bytes((i * 7 + 3) & 0xFF for i in range(prg_units * 0x4000 + chr_units * 0x2000))
+    return header + body
+
+
+def ips_record(address, data=b"", rle=None):
+    rec = address.to_bytes(3, "big")
+    if rle is not None:
+        run, value = rle
+        return rec + (0).to_bytes(2, "big") + run.to_bytes(2, "big") + bytes((value,))
+    return rec + len(data).to_bytes(2, "big") + data
+
+
+def ips_file(*records, truncate=None) -> bytes:
+    out = b"PATCH" + b"".join(records) + b"EOF"
+    if truncate is not None:
+        out += truncate.to_bytes(3, "big")
+    return out
+
+
+def sha1_hex(data: bytes) -> str:
+    import hashlib
+    return hashlib.sha1(data).hexdigest().upper()  # noqa: S324 - the loader's own key form
+
+
+# The hard case of ADR-0198 §3: a CHR RAM cartridge whose IPS declares one 8
+# KiB CHR ROM bank (header byte 5) and appends it, plus a small PRG write.
+STOCK_ROM = fake_rom(prg_units=1, chr_units=0)
+CHR_ROM_IPS = ips_file(
+    ips_record(5, b"\x01"),
+    ips_record(100, b"MEP!"),
+    ips_record(16 + 0x4000, rle=(0x2000, 0xAA)),
+)
+PATCHED_ROM = (STOCK_ROM[:5] + b"\x01" + STOCK_ROM[6:100] + b"MEP!" + STOCK_ROM[104:]
+               + b"\xAA" * 0x2000)
+
+
+def patched_lines(sha1: str, supported: str | None = None, keyed="index"):
+    lines = ["<ver>103", "<scale>1"]
+    if supported:
+        lines.append(f"<supportedRom>{supported}")
+    lines.append("<img>chr.png")
+    if keyed == "index":
+        lines += ["<tile>0,5," + PAL_A + ",0,0,1,N", "<tile>0,6," + PAL_B + ",8,0,1,N"]
+    else:
+        lines += ["<tile>0," + HEX_A + "," + PAL_A + ",0,0,1,N",
+                  "<tile>0," + HEX_B + "," + PAL_B + ",8,0,1,N"]
+    lines.append(f"<patch>fix.ips,{sha1}")
+    return lines
+
+
+def test_apply_ips():
+    """`mep_patch.apply_ips` against `IpsPatcher::PatchBuffer`'s rules."""
+    patched, records = MP.apply_ips(STOCK_ROM, CHR_ROM_IPS)
+    if patched != PATCHED_ROM or records != 3:
+        fail(f"apply_ips: {len(patched)} bytes / {records} records, expected "
+             f"{len(PATCHED_ROM)} / 3")
+    else:
+        ok("apply_ips grows the ROM to the furthest write and expands an RLE record")
+    if MP.chr_units(STOCK_ROM) != 0 or MP.chr_units(patched) != 1:
+        fail(f"chr_units: {MP.chr_units(STOCK_ROM)} -> {MP.chr_units(patched)}")
+    else:
+        ok("chr_units reads header byte 5 before and after the patch")
+    # Stream order, not address order: the later record wins; and the
+    # truncate offset after EOF cuts the output.
+    ips = ips_file(ips_record(20, b"\x11\x11"), ips_record(19, b"\x22\x22"), truncate=24)
+    out, n = MP.apply_ips(bytes(32), ips)
+    if out != bytes(19) + b"\x22\x22\x11" + bytes(2) or n != 2:
+        fail(f"stream order/truncate: {out.hex()} ({n} records)")
+    else:
+        ok("apply_ips applies records in stream order and honours the truncate offset")
+    for what, blob, needle in (
+            ("a BPS", b"BPS1" + bytes(20), "not an IPS"),
+            ("a truncated record", b"PATCH" + ips_record(0, b"ab")[:4], "truncated"),
+            ("no EOF", b"PATCH" + ips_record(0, b"ab"), "truncated")):
+        try:
+            MP.apply_ips(STOCK_ROM, blob)
+            fail(f"apply_ips accepted {what}")
+        except MP.PatchError as e:
+            if needle in str(e):
+                ok(f"apply_ips refuses {what}, naming {needle!r}")
+            else:
+                fail(f"apply_ips refused {what} with the wrong reason: {e}")
+    # No-Intro over bytes: header and trailing junk excluded, clamped to the
+    # declared PRG+CHR (ADR-0044); the whole-file hash sees both.
+    junk = STOCK_ROM + bytes(11)
+    if MP.no_intro_sha1(junk, ".nes") != MP.no_intro_sha1(STOCK_ROM, ".nes"):
+        fail("no_intro_sha1 changed with trailing junk")
+    elif MP.whole_file_sha1(junk) == MP.whole_file_sha1(STOCK_ROM):
+        fail("whole_file_sha1 ignored trailing junk")
+    else:
+        ok("no_intro_sha1 clamps to the declared payload while whole_file_sha1 sees the file")
+
+
+def test_patched_rom(root: Path):
+    root = root / "patched"
+    rom = root / "Game.nes"
+    root.mkdir(parents=True, exist_ok=True)
+    rom.write_bytes(STOCK_ROM)
+    stock_whole = sha1_hex(STOCK_ROM)
+    patched_whole = sha1_hex(PATCHED_ROM)
+    files = {"chr.png": cell_png(2, 1, 1), "fix.ips": CHR_ROM_IPS}
+
+    # Without --rom the pack is refused, naming the section and the flag.
+    src = write_src(root / "norom", patched_lines(stock_whole, stock_whole), files)
+    expect_error(lambda: MI.import_pack(src, root / "norom-out", False), "--rom",
+                 "a <patch> pack without --rom")
+
+    # With the stock dump: imported against the patched ROM.
+    src = write_src(root / "ok", patched_lines(stock_whole, stock_whole), files)
+    project = root / "ok-proj"
+    summary = MI.import_pack(src, project, False, rom)
+    p = summary["patch"]
+    if p is None or p["matched_by"] != "whole-file" or p["matched_line"] != 7:
+        fail(f"patch summary: {p}")
+        return
+    if (p["stock_whole"], p["patched_whole"]) != (stock_whole, patched_whole):
+        fail(f"hashes: {p['stock_whole']} / {p['patched_whole']}")
+        return
+    if not p["adds_chr_rom"] or p["patched_size"] != len(PATCHED_ROM) or p["records"] != 3:
+        fail(f"patch facts: {p}")
+        return
+    ok("a <patch> pack imports against the patched ROM: hashes, size and CHR growth measured")
+
+    key_source = (project / "auto" / "textures" / "hires.txt").read_text(encoding="utf-8")
+    sup = [ln for ln in key_source.splitlines() if ln.startswith("<supportedRom>")]
+    if sup != [f"<supportedRom>{patched_whole}"]:
+        fail(f"key source <supportedRom>: {sup}")
+        return
+    if f"<patch>fix.ips,{stock_whole}" not in key_source.splitlines():
+        fail("the <patch> line was not carried verbatim into the key source")
+        return
+    if not (project / "auto" / "textures" / "fix.ips").is_file() \
+            or not (project / "textures" / "fix.ips").is_file():
+        fail("the IPS is not beside both manifests")
+        return
+    note = (project / "IMPORT.md").read_text(encoding="utf-8")
+    if "does not buy" not in note or "patched ROM's key namespace" not in note \
+            or "never meet" not in note:
+        fail("IMPORT.md does not state the namespace limit")
+        return
+    if "never meet" not in " ".join(p["note"]):
+        fail(f"the CHR RAM -> CHR ROM wording is missing from the printed note: {p['note']}")
+        return
+    ok("<supportedRom> is the patched hash, the <patch> line and the IPS ride along, the "
+       "limit is written")
+
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build exited {rc}:\n{out}")
+        return
+    rc, out = run_verify(src, project, strict=True)
+    if rc != 0 or "patch: 1 <patch> line(s) carried" not in out \
+            or "IPS beside the built manifest: yes" not in out:
+        fail(f"verify --strict on a patched-ROM project:\n{out}")
+        return
+    built = (project / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    if f"<supportedRom>{patched_whole}" not in built or f"<patch>fix.ips,{stock_whole}" not in built:
+        fail("the built manifest lost the <supportedRom> or the <patch> line")
+        return
+    ok("build + verify --strict round-trip a patched-ROM project, IPS and hashes included")
+
+    (project / "textures" / "fix.ips").unlink()
+    rc, out = run_verify(src, project)
+    if rc != 1 or "<patch> file missing" not in out:
+        fail(f"verify should fail once the IPS is gone from textures/: {rc}\n{out}")
+    else:
+        ok("verify fails when the IPS is no longer beside the built manifest")
+
+    # Hash selection: a <patch> keyed by the No-Intro sha1 matches too, in
+    # the loader's own second-lookup order.
+    stock_no_intro = MP.no_intro_sha1(STOCK_ROM, ".nes")
+    src = write_src(root / "nointro", patched_lines(stock_no_intro), files)
+    summary = MI.import_pack(src, root / "nointro-proj", False, rom)
+    if summary["patch"]["matched_by"] != "No-Intro" or summary["patch"]["declared_supported_rom"]:
+        fail(f"No-Intro match: {summary['patch']['matched_by']}")
+    else:
+        key_source = (root / "nointro-proj" / "auto" / "textures" / "hires.txt").read_text(encoding="utf-8")
+        if key_source.splitlines()[2] != f"<supportedRom>{patched_whole}":
+            fail(f"a pack without <supportedRom> should get one after <scale>: "
+                 f"{key_source.splitlines()[:4]}")
+        else:
+            ok("a <patch> keyed by the No-Intro sha1 matches, and a missing <supportedRom> is "
+               "inserted after <scale>")
+
+    # A data-keyed pack with a code patch: imported, with the softer wording.
+    src = write_src(root / "data", patched_lines(stock_whole, keyed="data"), files)
+    summary = MI.import_pack(src, root / "data-proj", False, rom)
+    if "16 pattern bytes" not in " ".join(summary["patch"]["note"]):
+        fail(f"data-keyed wording: {summary['patch']['note']}")
+    else:
+        ok("a data-keyed <patch> pack imports with the 16-pattern-bytes limit wording")
+
+    # Refusals, each naming what it refused.
+    other = "F" * 40
+    for needle, what, lines, extra in (
+            ("ADR-0145", "an IPS made for another dump", patched_lines(other), {}),
+            ("not in", "a <patch> file that is not in the pack",
+             patched_lines(stock_whole), {"fix.ips": None}),
+            ("not an IPS", "a <patch> file that is a BPS",
+             patched_lines(stock_whole), {"fix.ips": b"BPS1" + bytes(20)}),
+            ("truncated", "a truncated IPS",
+             patched_lines(stock_whole), {"fix.ips": CHR_ROM_IPS[:-5]}),
+            ("ADR-0211", "a <supportedRom> that contradicts every hash",
+             patched_lines(stock_whole, other), {}),
+            ("needs file,sha1", "a <patch> without a sha1",
+             patched_lines(stock_whole)[:-1] + ["<patch>fix.ips"], {})):
+        fs = dict(files)
+        for k, v in extra.items():
+            if v is None:
+                fs.pop(k)
+            else:
+                fs[k] = v
+        src = write_src(root / ("refuse-" + needle.replace(" ", "-").replace(",", "")), lines, fs)
+        expect_error(lambda s=src: MI.import_pack(s, root / "unused", False, rom), needle, what)
+
+    # A declared <supportedRom> equal to the patched hash, or to another
+    # <patch> target, is not a contradiction (ADR-0211 rules 5-6).
+    for label, declared in (("the patched hash", patched_whole), ("a <patch> target", other)):
+        lines = patched_lines(stock_whole, declared) + [f"<patch>fix.ips,{other}"]
+        src = write_src(root / ("declared-" + label.replace(" ", "-")), lines, files)
+        try:
+            MI.import_pack(src, root / ("declared-proj-" + label.replace(" ", "-")), False, rom)
+            ok(f"a <supportedRom> equal to {label} is accepted")
+        except MI.PackError as e:
+            fail(f"a <supportedRom> equal to {label} was refused: {e}")
+
+    # --rom on a plain pack is a note, not an error.
+    src = write_src(root / "plain", DATA_LINES, DATA_FILES)
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        summary = MI.import_pack(src, root / "plain-proj", False, rom)
+    if summary["patch"] is not None or "was not needed" not in buf.getvalue():
+        fail(f"--rom on a plain pack: {summary['patch']} / {buf.getvalue()}")
+    else:
+        ok("--rom on a pack without <patch> is noted and otherwise ignored")
+
+    # The CLI prints the limit on every such import.
+    src = write_src(root / "cli", patched_lines(stock_whole, stock_whole), files)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        rc = MI.main(["import", str(src), "--out", str(root / "cli-proj"), "--rom", str(rom)])
+    out = buf.getvalue()
+    if rc != 0 or "what this does not buy" not in out or patched_whole not in out:
+        fail(f"CLI --rom: {rc}\n{out}")
+    else:
+        ok("`mep_import.py <pack> --out <project> --rom <dump>` prints the hashes and the limit")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -1072,6 +1348,8 @@ def main():
         test_index_opens_no_png(root)
         test_index_refusals(root)
         test_index_cli(root)
+        test_apply_ips()
+        test_patched_rom(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)

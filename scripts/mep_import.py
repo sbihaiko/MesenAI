@@ -13,10 +13,17 @@ ADR-0198 §1 fixes the acceptance test, and `verify` below is that test:
 (tileData, palette, condition), equals the input's, and whose every referenced
 pixel is identical. Rule order may differ; nothing else may.
 
-Scope: a pack that ships a `<patch>` is **refused**, naming ADR-0198 §2/§3 —
-its `<tile>` keys are bank indices of the *patched* ROM, so importing it as a
-plain project would write the wrong namespace silently. Plain packs first
-(§2); the patched-ROM import is a follow-up slice (§3 option (a)).
+Scope: a pack that ships a `<patch>` keys its `<tile>` lines against the
+*patched* ROM, so it is imported **against the patched ROM** (ADR-0198 §3,
+option (a)) and needs `--rom <the stock dump>`: the `<patch>` line whose sha1
+names that dump is applied in memory (`mep_patch.py`, mirroring
+`IpsPatcher`), the project's `<supportedRom>` becomes the patched ROM's hash,
+the IPS is carried beside both manifests, and the `<patch>` lines stay
+verbatim so the fork matches them exactly as it does today (ADR-0145 (3)).
+Without `--rom`, or with a dump none of the `<patch>` lines names, the import
+is refused. What this does **not** buy is printed on every such import: the
+project lives in the patched ROM's key namespace, and a recording made on the
+stock ROM does not land there.
 
 Posture, kept from the ADRs this slice sits on:
 
@@ -56,7 +63,7 @@ art (ADR-0210 §3), which is a different question from importing it: no PNG of
 that pack is opened, and no `<condition>` line is read. See `read_index`.
 
 Usage:
-  python3 mep_import.py <legacy pack folder> --out <project folder> [--force]
+  python3 mep_import.py <legacy pack folder> --out <project folder> [--force] [--rom X.nes]
   python3 mep_import.py verify <legacy pack folder> <project folder> [--strict]
   python3 mep_import.py index <their hires.txt> --pack <our auto/> --rom X.nes
 """
@@ -73,6 +80,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import mep_build
+import mep_patch
 
 # The sheet geometry every imported sheet uses: a 16-cell-wide grid of 8px
 # logical cells, no gutter — the shape the recorder's contact sheets have
@@ -81,6 +89,7 @@ _SHEET_COLUMNS = 16
 _HEX_DATA_RE = re.compile(r"^[0-9A-F]{32}$")
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
 _HEX_TOKEN_RE = re.compile(r"^[0-9A-F]+$")
+_HEX40_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
 _TAG_RE = re.compile(r"^(\[[^\]]*\])?(<[A-Za-z]+>)")
 # A line whose start looks like a tag: what an unknown tag is refused for.
 _TAG_START_RE = re.compile(r"^(\[[^\]]*\])?<")
@@ -89,11 +98,12 @@ _BG_RE = re.compile(r"^(\[[^\]]*\])?<background>")
 # The only two tags whose `[...]` prefix the loader gives a meaning.
 _PREFIXED_TAGS = frozenset({"<tile>", "<background>"})
 # HdPackLoader's own dispatch list — every tag it reads, and no other. Anything
-# else is refused (never dropped); `<patch>` is in the list and is refused
-# separately, by name, per ADR-0198 §2.
+# else is refused (never dropped). `<patch>` is read by `mep_patch.patch_lines`
+# and needs `--rom` at import time (ADR-0198 §3); the index read (ADR-0210 §3)
+# still refuses it by name.
 _KNOWN_TAGS = frozenset(
     {"<tile>", "<background>", "<condition>", "<img>", "<addition>", "<fallback>",
-     "<bgm>", "<sfx>"}
+     "<bgm>", "<sfx>", "<patch>"}
     | {f"<{t}>" for t in mep_build._HEADER_TAGS})
 # The version at which the loader reads a short tileData field as hex.
 # Below it the field is decimal (ReadTileData), so a hex-token key source
@@ -330,6 +340,12 @@ class Pack:
         self.imgs = [ln.strip()[5:].strip() for ln in self.lines if _IMG_RE.match(ln.strip())]
         self.ver = self._int_tag("<ver>", 100)
         self.scale = self._int_tag("<scale>", 1)
+        self.supported_rom = next((h[len("<supportedRom>"):].strip() for h in self.header
+                                   if h.startswith("<supportedRom>")), None)
+        try:
+            self.patches = mep_patch.patch_lines(self.lines)
+        except mep_patch.PatchError as e:
+            raise PackError(f"{hires}:{e}") from e
         self.index_keyed = any(len(raw.split(",")[1].strip()) < 32
                                for _cond, raw in tiles if len(raw.split(",")) >= 2)
         self._tile_lines = {}
@@ -387,12 +403,6 @@ class Pack:
                 self.strays.append(i + 1)
                 continue
             tag = m.group(2)
-            if tag == "<patch>":
-                raise PackError(
-                    f"{self.hires}:{i + 1}: this pack ships a <patch>. Its <tile> keys are bank "
-                    "indices of the patched ROM, a namespace the stock-ROM tools never meet, so "
-                    "ADR-0198 §2 refuses the import until §3's patched-ROM slice lands (see "
-                    "docs/adr/0198-*.md). Import a pack without <patch> first.")
             if tag not in _KNOWN_TAGS:
                 raise PackError(f"{self.hires}:{i + 1}: unknown tag {tag}; refusing it rather "
                                 "than dropping whatever it says (ADR-0198)")
@@ -453,28 +463,48 @@ def ver_sensitive_reason(pack: Pack) -> str | None:
     return None
 
 
-def build_key_source(pack: Pack, normalize: bool) -> list[str]:
+def build_key_source(pack: Pack, normalize: bool, supported_rom: str | None = None) -> list[str]:
     """The manifest `mep_build.py build` reads as its key source: the input's
-    own lines, with tileData rewritten to the form build looks up."""
+    own lines, with tileData rewritten to the form build looks up.
+
+    `supported_rom`, when given, is the patched ROM's whole-file sha1 (ADR-0198
+    §3): it replaces the pack's own `<supportedRom>` line, or is inserted right
+    after `<scale>` when the pack declared none. Nothing else in the header
+    moves."""
     out = []
     n = -1
+    placed = supported_rom is None
     for raw in pack.lines:
         s = raw.strip()
+        if supported_rom is not None and s.startswith("<supportedRom>"):
+            if not placed:
+                out.append(f"<supportedRom>{supported_rom}")
+                placed = True
+            continue
         m = mep_build._TILE_RE.match(s)
         if not normalize or not m or s.startswith("#"):
-            out.append(_raise_ver(raw) if normalize else raw)
+            out.append(_raise_ver(raw, pack.ver) if normalize else raw)
+            if not placed and s.startswith("<scale>"):
+                out.append(f"<supportedRom>{supported_rom}")
+                placed = True
             continue
         n += 1
         rule = pack.rules[n]
         f = [x.strip() for x in m.group(2).split(",")]
         f[1] = mep_build._index_token(rule.parsed_index(pack.ver)) if pack.index_keyed else f[1].upper()
         out.append(f"{m.group(1) or ''}<tile>{','.join(f)}")
+    if not placed:
+        # No <scale> line to anchor on: the header is whatever came first.
+        out.insert(0, f"<supportedRom>{supported_rom}")
     return out
 
 
-def _raise_ver(raw: str) -> str:
+def _raise_ver(raw: str, ver: int) -> str:
+    """Raise `<ver>` to 103 so the hex tokens are read as hex — never lower it:
+    a `<ver>108` pack keeps 108, or its `<addition>` lines and 106+ `<background>`
+    fields would be refused by the loader (found on Metroid #148, 2026-09-22)."""
     s = raw.strip()
-    return f"<ver>{_HEX_INDEX_VER}" if s.startswith("<ver>") else raw
+    return f"<ver>{max(ver, _HEX_INDEX_VER)}" if s.startswith("<ver>") else raw
 
 
 def lookup_attrs(lines: list[str]) -> dict:
@@ -517,12 +547,13 @@ def emitted_attrs(pack: Pack, attrs: dict, normalize: bool, split: set = frozens
 
 # --- the import -------------------------------------------------------------
 
-def import_pack(src: Path, out: Path, force: bool) -> dict:
+def import_pack(src: Path, out: Path, force: bool, rom: Path | None = None) -> dict:
     pack = open_pack(src)
     if not pack.rules:
         raise PackError(f"{pack.hires}: no <tile> entries to import")
     if not 1 <= pack.scale <= 10:
         raise PackError(f"{pack.hires}: <scale>{pack.scale} is outside the loader's 1..10")
+    patch = _resolve_patch(pack, rom)
 
     normalize = pack.index_keyed
     if normalize:
@@ -533,13 +564,13 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
                 f"rewritten to the hex form mep_build re-emits, but {reason} — the rewrite would "
                 "change how the loader reads that line, so ADR-0198 §1 refuses it rather than "
                 "import a pack whose keys or conditions shift")
-    key_lines = build_key_source(pack, normalize)
+    key_lines = build_key_source(pack, normalize, patch.patched_whole if patch else None)
     attrs = lookup_attrs(key_lines)
     # The whole read side first — every <img> decodes, every cell's PNG name
     # is usable, every planned crop fits its image — because a refusal must
     # not leave a half-written project behind: the retry would then hit the
     # non-empty--out guard instead of the real error.
-    plan, split = _plan_cells(pack)
+    cells, split = _plan_cells(pack)
     twins, problems = emitted_attrs(pack, attrs, normalize, {p for p, _c in split})
     if problems:
         first = problems[0]
@@ -549,7 +580,7 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
             "looks up) — the import refuses rather than drop a condition or a brightness "
             "(ADR-0198 §1)")
 
-    sources = _read_sources(pack, plan)
+    sources = _read_sources(pack, cells)
     if out.exists() and any(out.iterdir()) and not force:
         raise PackError(f"{out} exists and is not empty; pass --force to write into it")
     sheets_dir = out / "textures" / "sheets"
@@ -558,21 +589,23 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
     auto_dir.mkdir(parents=True, exist_ok=True)
     (auto_dir / "hires.txt").write_text("\n".join(key_lines) + "\n", encoding="utf-8")
 
-    sheets = _write_sheets(pack, plan, sources, sheets_dir)
+    sheets = _write_sheets(pack, cells, sources, sheets_dir)
     _copy_images(pack, auto_dir)
     backgrounds = _copy_backgrounds(pack, auto_dir)
     audio = _copy_audio(pack, out)
+    patched = _copy_patches(pack, patch, out) if patch else None
     (out / "IMPORT.md").write_text(
-        _import_note(pack, sheets, sum(len(v) for v in plan.values()), len(twins), split, normalize),
+        _import_note(pack, sheets, sum(len(v) for v in cells.values()), len(twins), split,
+                     normalize, patched),
         encoding="utf-8")
 
     return {
         "src": pack.hires,
         "strays": pack.strays,
         "rules": len(pack.rules),
-        "cells": sum(len(v) for v in plan.values()),
+        "cells": sum(len(v) for v in cells.values()),
         "sheets": sheets,
-        "images": len(plan),
+        "images": len(cells),
         "twins": len(twins),
         "split": split,
         "keyed": "index" if pack.index_keyed else "data",
@@ -580,7 +613,69 @@ def import_pack(src: Path, out: Path, force: bool) -> dict:
         "normalized": normalize,
         "backgrounds": backgrounds,
         "audio": audio,
+        "patch": patched,
         "out": out,
+    }
+
+
+def _resolve_patch(pack: Pack, rom: Path | None):
+    """ADR-0198 §3: a pack with `<patch>` is imported against the patched ROM,
+    which needs the stock dump at hand; without it the import is refused,
+    naming the section. A pack without `<patch>` ignores `--rom`, and says so:
+    a plain pack's namespace is the stock ROM's already."""
+    if not pack.patches:
+        if rom is not None:
+            print(f"note: {pack.hires} has no <patch>; --rom {rom.name} was not needed and was "
+                  "not read", file=sys.stderr)
+        return None
+    first = pack.patches[0]
+    if rom is None:
+        raise PackError(
+            f"{pack.hires}:{first.line}: this pack ships a <patch>, so its <tile> keys are keyed "
+            "against the ROM *after* the patch. ADR-0198 §3 imports it against that patched "
+            "ROM, which needs the stock dump the <patch> line was made for: pass --rom <dump>. "
+            f"The pack names {len(pack.patches)} <patch> target(s): "
+            f"{', '.join(sorted({p.sha1 for p in pack.patches}))}")
+    try:
+        return mep_patch.resolve(pack.lines, pack.hires.parent, rom, pack.supported_rom)
+    except mep_patch.PatchError as e:
+        raise PackError(f"{pack.hires}: {e}") from e
+
+
+def _copy_patches(pack: Pack, plan, out: Path) -> dict:
+    """The IPS beside **both** manifests: `auto/textures/` so the key-source
+    layer is whole (its `<patch>` lines cite the file), and `textures/` because
+    `build` carries the `<patch>` lines into `textures/hires.txt` and copies
+    nothing but backgrounds up — the loader resolves the patch from the
+    manifest's own folder (`HdPackLoader::ProcessPatchTag`), and a manifest
+    whose patch is not beside it fails to load whole."""
+    copied = 0
+    for rel in plan.ips_files:
+        data = (pack.hires.parent / rel).read_bytes()
+        for layer in (out / "auto" / "textures", out / "textures"):
+            dst = layer / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
+        copied += 1
+    return {
+        "rom": plan.rom,
+        "matched_line": plan.matched.line,
+        "matched_file": plan.matched.file,
+        "matched_by": plan.matched_by,
+        "entries": len(plan.entries),
+        "files": copied,
+        "records": plan.records,
+        "stock_whole": plan.stock_whole,
+        "stock_no_intro": plan.stock_no_intro,
+        "patched_whole": plan.patched_whole,
+        "patched_no_intro": plan.patched_no_intro,
+        "stock_size": plan.stock_size,
+        "patched_size": plan.patched_size,
+        "stock_chr_units": plan.stock_chr_units,
+        "patched_chr_units": plan.patched_chr_units,
+        "adds_chr_rom": plan.adds_chr_rom,
+        "declared_supported_rom": pack.supported_rom,
+        "note": mep_patch.namespace_note(plan, pack.index_keyed),
     }
 
 
@@ -823,7 +918,7 @@ def _copy_audio(pack: Pack, out: Path) -> int:
 
 
 def _import_note(pack: Pack, sheets: list, cells: int, twins: int, split: list,
-                 normalize: bool) -> str:
+                 normalize: bool, patched: dict | None = None) -> str:
     digest = hashlib.sha256(pack.hires.read_bytes()).hexdigest()
     lines = [
         "# Imported from a legacy HD pack",
@@ -877,7 +972,46 @@ def _import_note(pack: Pack, sheets: list, cells: int, twins: int, split: list,
             "```",
             "",
         ]
+    if patched:
+        lines += _patched_note(patched)
     return "\n".join(lines)
+
+
+def _patched_note(p: dict) -> list:
+    """The patched-ROM section of IMPORT.md (ADR-0198 §3): every hash the
+    import read or wrote, and what the project does not buy."""
+    chr_line = (f"CHR RAM -> {p['patched_chr_units'] * 8} KiB CHR ROM" if p["adds_chr_rom"]
+                else f"CHR units {p['stock_chr_units']} -> {p['patched_chr_units']}")
+    lines = [
+        "## Imported against the patched ROM (ADR-0198 §3, option (a))",
+        "",
+        f"This pack ships a `<patch>`, so its `<tile>` keys are keyed against the ROM *after*",
+        f"the patch. `{p['matched_file']}` (manifest line {p['matched_line']}, matched by the",
+        f"{p['matched_by']} sha1) was applied in memory to `{p['rom'].name}`:",
+        "",
+        "| | whole-file sha1 (`<supportedRom>` form) | No-Intro sha1 (`targets[]` form) | size | CHR |",
+        "|---|---|---|---|---|",
+        f"| stock `{p['rom'].name}` | `{p['stock_whole']}` | `{p['stock_no_intro']}` | "
+        f"{p['stock_size']} | {p['stock_chr_units']} |",
+        f"| patched | `{p['patched_whole']}` | `{p['patched_no_intro']}` | {p['patched_size']} | "
+        f"{p['patched_chr_units']} |",
+        "",
+        f"{p['records']} IPS record(s); {chr_line}. The key source's `<supportedRom>` is the",
+        "patched whole-file sha1 (the form `HdPackBuilder` writes for the running ROM)"
+        + (f"; the pack itself declared `{p['declared_supported_rom']}`." if p["declared_supported_rom"]
+           else "; the pack declared none."),
+        f"The {p['entries']} `<patch>` line(s) are carried verbatim and `{p['matched_file']}` sits",
+        "beside both manifests, so the fork applies it exactly as it does today — by the stock",
+        "ROM's sha1, never on a mismatch (ADR-0145 (3)). `mep_build.py pack . --rom <stock dump>`",
+        "writes `targets[]` from the **stock** dump: the MEP matcher runs before the patch",
+        "(`Emulator::InternalLoadRom`), so the patched hash is not what it compares against.",
+        "",
+        "**What this does not buy.**",
+        "",
+    ]
+    lines += [f"- {n}" for n in p["note"]]
+    lines.append("")
+    return lines
 
 
 # --- verification (the slice's stop rule) -----------------------------------
@@ -958,6 +1092,15 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     pixel_bad = [key for key in sorted(ins & outs)
                  if out_blocks.get(key, set()) != {in_first[key]}]
 
+    # ADR-0198 §3: a patched-ROM project must still carry the IPS beside the
+    # built manifest (the loader fails the whole pack without it) and a
+    # <supportedRom> the loader can read — the `<patch>` lines themselves are
+    # compared above as carried lines.
+    patch_missing = [p.file for p in built.patches
+                     if not (built_path.parent / p.file.replace("\\", "/")).is_file()]
+    patch_bad_rom = (bool(built.patches)
+                     and not (built.supported_rom and _HEX40_RE.match(built.supported_rom)))
+
     token_delta = sum(1 for k in ins & outs if in_tokens[k] != out_tokens[k])
     print(f"source {source.hires}: {len(in_keys)} rule(s), {len(ins)} distinct key(s)")
     print(f"built  {built_path}: {len(out_keys)} rule(s), {len(outs)} distinct key(s)")
@@ -973,12 +1116,21 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
         print(f"tokens: {token_delta} key(s) whose tileData *text* changed, e.g. "
               f"{sorted(in_tokens[example])[0]} -> {sorted(out_tokens[example])[0]} — "
               "`_index_token`'s hex width (ADR-0172); the parsed key is unchanged")
+    if built.patches:
+        print(f"patch: {len(built.patches)} <patch> line(s) carried; <supportedRom> "
+              f"{built.supported_rom or '(none)'} "
+              + ("(the pack declared none)" if not source.supported_rom
+                 else f"(the pack declared {source.supported_rom})")
+              + f"; IPS beside the built manifest: {'yes' if not patch_missing else 'NO'}")
     failures = 0
     for name, items in (("missing from the import", sorted(missing)),
                         ("unexpected in the import", sorted(extra)),
                         ("carried line missing", rest_missing),
                         ("unexpected carried line", rest_extra),
-                        ("pixels differ", pixel_bad)):
+                        ("pixels differ", pixel_bad),
+                        ("<patch> file missing beside textures/hires.txt", patch_missing),
+                        ("<supportedRom> unreadable on a patched-ROM project",
+                         [built.supported_rom] if patch_bad_rom else [])):
         for k in items[:10]:
             print(f"  {name}: {k}")
             failures += 1
@@ -1124,6 +1276,17 @@ def read_index(their: Path, pack_dir: Path, rom: Path) -> dict:
     theirs = _open_manifest(their)
     if not theirs.rules:
         raise PackError(f"{theirs.hires}: no <tile> entries to read")
+    if theirs.patches:
+        # Filter 2 (ADR-0210 §3): the keys of a pack with <patch> are bank
+        # indices of the patched ROM, a namespace this dump never produces.
+        # The import side admits such a pack against the patched ROM (ADR-0198
+        # §3); the index read, which is about *this* dump, does not.
+        first = theirs.patches[0]
+        raise PackError(
+            f"{theirs.hires}:{first.line}: this pack ships a <patch>, so its <tile> keys name the "
+            "patched ROM's tiles, not this dump's — ADR-0198 §2/§3 keeps it out of the stock-ROM "
+            "index read (ADR-0210 §3 filter 2). Import it against the patched ROM with "
+            "`mep_import.py <pack> --out <project> --rom <dump>` instead")
     chr_tiles = _rom_chr_tiles(rom)
     rom_sha1 = _check_supported_rom(ours, rom)
     if (chr_tiles > 0) != ours.index_keyed:
@@ -1394,13 +1557,17 @@ def _print_index_summary(plan: dict):
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="mep_import.py",
-        description="Import a legacy plain HD pack (hires.txt + PNGs, no <patch>) as a MEP "
-                    "project, per ADR-0198 §1.")
+        description="Import a legacy HD pack (hires.txt + PNGs) as a MEP project, per ADR-0198 "
+                    "§1; a pack with <patch> is imported against the patched ROM and needs "
+                    "--rom (ADR-0198 §3).")
     sub = p.add_subparsers(dest="cmd")
     imp = sub.add_parser("import", help="write the project (default)")
     imp.add_argument("pack", help="the legacy pack folder (holding hires.txt)")
     imp.add_argument("--out", required=True, help="the project folder to write")
     imp.add_argument("--force", action="store_true", help="write into a non-empty --out")
+    imp.add_argument("--rom", help="the stock dump a <patch> line was made for; the IPS is "
+                                   "applied in memory and the project keys against the result "
+                                   "(ADR-0198 §3). Required for a pack with <patch>")
     ver = sub.add_parser("verify", help="check a rebuilt project against the input (ADR-0198 §1)")
     ver.add_argument("pack")
     ver.add_argument("project")
@@ -1430,7 +1597,8 @@ def main(argv=None) -> int:
                                 Path(args.report).resolve() if args.report else None, args.force)
             _print_index_summary(summary)
             return 0
-        summary = import_pack(Path(args.pack).resolve(), Path(args.out).resolve(), args.force)
+        summary = import_pack(Path(args.pack).resolve(), Path(args.out).resolve(), args.force,
+                              Path(args.rom).resolve() if args.rom else None)
     except PackError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -1457,8 +1625,30 @@ def main(argv=None) -> int:
               f"{', '.join(str(n) for n in summary['strays'][:5])}")
     if summary["twins"]:
         print(f"  note: {summary['twins']} key(s) get an ADR-0189 §3 bare twin on the first build")
+    if summary["patch"]:
+        _print_patched(summary["patch"])
     print(f"  next: python3 mep_build.py build {summary['out']}")
     return 0
+
+
+def _print_patched(p: dict):
+    """The patched-ROM block of the import's output, limit included — ADR-0198
+    §3 asks for it on every such import, so it is not behind a flag."""
+    chr_line = (f"CHR RAM -> {p['patched_chr_units'] * 8} KiB CHR ROM" if p["adds_chr_rom"]
+                else f"CHR units {p['stock_chr_units']} -> {p['patched_chr_units']}")
+    print(f"  patched ROM (ADR-0198 §3): {p['matched_file']} (line {p['matched_line']}, matched by "
+          f"the {p['matched_by']} sha1) applied to {p['rom'].name}: {p['records']} record(s), "
+          f"{p['stock_size']} -> {p['patched_size']} bytes, {chr_line}")
+    print(f"    stock   whole-file {p['stock_whole']}  No-Intro {p['stock_no_intro']}")
+    print(f"    patched whole-file {p['patched_whole']}  No-Intro {p['patched_no_intro']}")
+    print(f"    <supportedRom> written: {p['patched_whole']}"
+          + (f" (the pack declared {p['declared_supported_rom']})" if p["declared_supported_rom"]
+             else " (the pack declared none)")
+          + f"; {p['entries']} <patch> line(s) carried verbatim, {p['files']} IPS file(s) beside "
+          "both manifests")
+    print("    what this does not buy:")
+    for n in p["note"]:
+        print(f"      - {n}")
 
 
 if __name__ == "__main__":
