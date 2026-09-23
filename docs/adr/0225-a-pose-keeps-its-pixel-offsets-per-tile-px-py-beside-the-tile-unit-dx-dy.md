@@ -92,7 +92,14 @@ silhouette is one the emulator actually drew.
 over the torso's last two rows). When any two tiles of the written layout
 overlap, every tile of that pose also gets `z`: its front-to-back rank in
 the supplying frame's OAM order (0 = frontmost, i.e. the lowest OAM index).
-`z` is omitted when nothing overlaps; a reader that finds no `z` treats the
+The supplying frame is the **earliest** retained
+frame whose layout equals the written `(px, py)` vector: several frames can
+share the vector with a different OAM order (a game that rotates sprite
+priority), and the mode alone would not pick one, so `z` would be
+unspecified. The earliest frame makes it deterministic and keeps the ranks
+ones the emulator actually drew; OAM order is deliberately not part of the
+modal key, so a priority rotation cannot split one layout's count. `z` is
+omitted when nothing overlaps; a reader that finds no `z` treats the
 tiles as non-overlapping. `z` is the one field beyond the user's pick, and
 it exists only because §3's import needs an owner for a shared pixel.
 

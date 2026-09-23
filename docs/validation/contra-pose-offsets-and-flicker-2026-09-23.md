@@ -14,10 +14,21 @@ already writes.
 - Driver: `scripts/stages/contra/stage1-probe.txt` — `104f R`, `30f -`,
   `104f L`, `30f -`, repeated. One port; A, B, Up, Down, Select and Start
   never pressed (`poses.json` `input.never`).
-- Recorder: `scripts/headless_record` built from `main` at the time
-  (ADR-0217/ADR-0218 recorder), with the OAM stream dumped per retained frame
+- Recorder: `scripts/headless_record` linked against
+  `InteropDLL/obj.osx-arm64/MesenCore.dylib`, sha256
+  `17ecf8264e2b275e090e2cc3e48c587afa02641f39658f6a537ae07bf4b38435`, built
+  2026-09-21 13:37 -03 — so **not** `main` at measurement time, as an earlier
+  draft of this log said. The build tree was `63562a9e` plus the then
+  uncommitted ADR-0221 option-B experiment, committed two minutes later as
+  `502b4f44` (`HdPackBuilder.cpp`, `ScreenStitcher.*`, `TileSheetTypes.h`;
+  never merged). Neither that commit nor anything merged between `63562a9e`
+  and `5a5bc84f` touches `SpriteGrouping.cpp` or `SpriteGrouping.h`, the
+  linker and pose code this log measures. The F12.19 implementation later
+  rebuilt the recorder from its branch and re-recorded the same driver: the
+  same retained stream (3 667 frames, 27 poses with identical tiles), which
+  corroborates the numbers below. The OAM stream is dumped per retained frame
   (`K <shape> <hex>` vocabulary lines, then one line per retained frame with
-  `(shape, x, y, palette)` entries) and the linker's tracks written as
+  `(shape, x, y, palette)` entries), and the linker's tracks are written as
   `frame:pose:held` runs, one track per line.
 - Two sidecars from the same driver: `rec` (963 retained frames, a short
   clean stretch) and `full` (3 667 retained frames, including the player's
@@ -109,9 +120,24 @@ sequences.
 
 ## Reproduction
 
-`python3 scripts/headless_record <rom> <seconds> …` with the stage-1 driver
-and the OAM dump enabled, then read `textures/sheets/poses.json` and
-`adjacency.json`. The measurement is a ~60-line stdlib script: for each pose
+`scripts/headless_record` is the native executable `make capture-tool`
+builds (not a Python script). The `full` run was, from a stage-1 save state
+minted per `docs/validation/f925-contra-matrix-2026-09-15.md` (`.mss` files
+are never versioned):
+
+```sh
+MESEN_OAM_STREAM_DUMP=run/full/oam.txt \
+MESEN_POSE_TRACK_DUMP=run/full/tracks.txt \
+  scripts/headless_record run/full/Contra.nes 61 run/full/rec \
+    bootstrap hdpack-off \
+    input=scripts/stages/contra/stage1-probe.txt state=run/stage1.mss
+```
+
+Without the two variables neither `oam.txt` nor `tracks.txt` is written.
+The `rec` run is the same command with `16` seconds and its own `run/rec/`
+prefix.
+Then read `textures/sheets/poses.json` and `adjacency.json` from the recorded
+pack. The measurement is a ~60-line stdlib script: for each pose
 in `cycles[0]`, take the first frame the linker put it on, keep the OAM
 entries whose shape is one of the pose's nodes, subtract the cluster's
 min x / min y, and compare with `dx*8`, `dy*8`. Single-frame tracks are the
