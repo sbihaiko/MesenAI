@@ -40,8 +40,11 @@ Covers:
     No-Intro sha1 is applied in memory (`mep_patch.apply_ips`, mirroring
     `IpsPatcher` — stream order, RLE, growth, truncate), the key source's
     `<supportedRom>` becomes the patched whole-file sha1, the IPS lands beside
-    both manifests, build + verify round-trip, and `verify` fails when the IPS
-    is gone. Refusals: no `--rom`, a dump none of the `<patch>` lines names
+    both manifests, the emitted `<patch>` token is the same `/`-separated path
+    the IPS was copied to (a Windows `sub\\fix.ips` never resolves on the
+    macOS/Linux loader), build + verify round-trip, and `verify` fails when
+    the IPS is gone or the token is not that path. Refusals: no `--rom`, a
+    dump none of the `<patch>` lines names
     (ADR-0145 (3)), a missing or non-IPS patch file, a truncated IPS, and a
     declared `<supportedRom>` that contradicts every hash in play (ADR-0211).
     The limit statement is printed and written, in the wording per key form;
@@ -1432,6 +1435,83 @@ def test_patch_hardening(root: Path):
         ok("a repeated <patch> sha1 picks the last line, as HdPackLoader::ProcessPatchTag does")
 
 
+def test_patch_path_normalization(root: Path):
+    """PR #385 review, second round (Codex): the emitted `<patch>` token must
+    be the same normalized path the IPS is copied to. On macOS/Linux the
+    loader resolves the token as written (`HdPackLoader::
+    ResolvePackRelativePath` opens it verbatim, then looks it up in
+    `IndexPackFiles`, which indexes `/`-separated names), so a Windows
+    `sub\\fix.ips` carried verbatim would be copied to `sub/fix.ips` and never
+    applied — while import and verify reported success."""
+    root = root / "pathnorm"
+    root.mkdir(parents=True, exist_ok=True)
+    rom = root / "Game.nes"
+    rom.write_bytes(STOCK_ROM)
+    stock_whole = sha1_hex(STOCK_ROM)
+    files = {"chr.png": cell_png(2, 1, 1), "sub/fix.ips": CHR_ROM_IPS}
+    lines = patched_lines(stock_whole)[:-1] + [f"<patch>sub\\fix.ips,{stock_whole}"]
+    src = write_src(root / "win", lines, files)
+    project = root / "win-proj"
+    summary = MI.import_pack(src, project, False, rom)
+    p = summary["patch"]
+    if (p["matched_file"], p["matched_rel"]) != ("sub\\fix.ips", "sub/fix.ips"):
+        fail(f"a backslash <patch> name: {p['matched_file']!r} / {p['matched_rel']!r}")
+        return
+    good, bad = f"<patch>sub/fix.ips,{stock_whole}", f"<patch>sub\\fix.ips,{stock_whole}"
+    key_source = (project / "auto" / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    if good not in key_source or bad in key_source:
+        fail(f"the key source's <patch> token was not normalized: "
+             f"{[ln for ln in key_source if ln.startswith('<patch>')]}")
+        return
+    if not (project / "auto" / "textures" / "sub" / "fix.ips").is_file() \
+            or not (project / "textures" / "sub" / "fix.ips").is_file():
+        fail("the IPS did not land at the normalized path beside both manifests")
+        return
+    note = (project / "IMPORT.md").read_text(encoding="utf-8")
+    if "`sub/fix.ips`" not in note:
+        fail("IMPORT.md does not name the normalized path the IPS was copied to")
+        return
+    ok("a Windows `sub\\fix.ips` <patch> is emitted as `sub/fix.ips`, the path the IPS lands at")
+
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build exited {rc}:\n{out}")
+        return
+    built_path = project / "textures" / "hires.txt"
+    built = built_path.read_text(encoding="utf-8").splitlines()
+    if good not in built or bad in built:
+        fail(f"build did not carry the normalized <patch> line: "
+             f"{[ln for ln in built if ln.startswith('<patch>')]}")
+        return
+    rc, out = run_verify(src, project)
+    if rc != 0 or "IPS beside the built manifest: yes" not in out \
+            or "carried line missing" in out:
+        fail(f"verify on a normalized nested <patch> path:\n{out}")
+        return
+    ok("build carries `<patch>sub/fix.ips` and verify passes it against the source's `\\` line")
+
+    # The trap the review found: the token says `\`, the file sits at `/`.
+    # The old check normalized the token before looking for the file, so this
+    # passed; now the token itself is compared with the normalized path.
+    built_path.write_text("\n".join(bad if ln == good else ln for ln in built) + "\n",
+                          encoding="utf-8")
+    rc, out = run_verify(src, project)
+    if rc != 1 or "not the normalized" not in out or "sub\\fix.ips" not in out \
+            or "IPS beside the built manifest: NO" not in out:
+        fail(f"verify should fail on a `\\` <patch> token whose file is at the `/` path: {rc}\n{out}")
+    else:
+        ok("verify fails when the built <patch> token is not the path the IPS was copied to")
+
+    # A `/` token whose file is elsewhere is still the plain missing-file case.
+    built_path.write_text("\n".join(built) + "\n", encoding="utf-8")
+    (project / "textures" / "sub" / "fix.ips").rename(project / "textures" / "fix.ips")
+    rc, out = run_verify(src, project)
+    if rc != 1 or "<patch> file missing" not in out or "not the normalized" in out:
+        fail(f"verify should report a missing file, not a token mismatch: {rc}\n{out}")
+    else:
+        ok("a normalized <patch> token whose file moved is reported as missing, not as a token mismatch")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -1453,6 +1533,7 @@ def main():
         test_apply_ips()
         test_patched_rom(root)
         test_patch_hardening(root)
+        test_patch_path_normalization(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)

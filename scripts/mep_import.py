@@ -18,8 +18,10 @@ Scope: a pack that ships a `<patch>` keys its `<tile>` lines against the
 option (a)) and needs `--rom <the stock dump>`: the `<patch>` line whose sha1
 names that dump is applied in memory (`mep_patch.py`, mirroring
 `IpsPatcher`), the project's `<supportedRom>` becomes the patched ROM's hash,
-the IPS is carried beside both manifests, and the `<patch>` lines stay
-verbatim so the fork matches them exactly as it does today (ADR-0145 (3)).
+the IPS is carried beside both manifests, and the `<patch>` lines are carried
+with the same `/`-separated path the IPS was copied to (a Windows `\` token
+would never resolve on macOS/Linux — `mep_patch.emitted_line`) and their sha1
+untouched, so the fork matches them exactly as it does today (ADR-0145 (3)).
 Without `--rom`, or with a dump none of the `<patch>` lines names, the import
 is refused. What this does **not** buy is printed on every such import: the
 project lives in the patched ROM's key namespace, and a recording made on the
@@ -470,16 +472,29 @@ def build_key_source(pack: Pack, normalize: bool, supported_rom: str | None = No
     `supported_rom`, when given, is the patched ROM's whole-file sha1 (ADR-0198
     §3): it replaces the pack's own `<supportedRom>` line, or is inserted right
     after `<scale>` when the pack declared none. Nothing else in the header
-    moves."""
+    moves.
+
+    Every `<patch>` line is re-emitted as `mep_patch.emitted_line`: the file
+    token becomes the normalized `/`-separated path the IPS is copied to
+    (`_copy_patches`), the sha1 stays. The runtime on macOS/Linux resolves the
+    token verbatim (`HdPackLoader::ResolvePackRelativePath` + `IndexPackFiles`,
+    which indexes `/` names), so a Windows `sub\\fix.ips` carried as written
+    would be copied to `sub/fix.ips` and never applied."""
     out = []
     n = -1
     placed = supported_rom is None
+    patches = iter(pack.patches)
     for raw in pack.lines:
         s = raw.strip()
         if supported_rom is not None and s.startswith("<supportedRom>"):
             if not placed:
                 out.append(f"<supportedRom>{supported_rom}")
                 placed = True
+            continue
+        if s.startswith("<patch>"):
+            # `pack.patches` is `mep_patch.patch_lines(pack.lines)`: one entry
+            # per `<patch>` line, in file order, so the two walk in step.
+            out.append(mep_patch.emitted_line(next(patches)))
             continue
         m = mep_build._TILE_RE.match(s)
         if not normalize or not m or s.startswith("#"):
@@ -687,6 +702,7 @@ def _copy_patches(pack: Pack, plan, out: Path) -> dict:
         "rom": plan.rom,
         "matched_line": plan.matched.line,
         "matched_file": plan.matched.file,
+        "matched_rel": plan.matched.rel,
         "matched_by": plan.matched_by,
         "entries": len(plan.entries),
         "files": copied,
@@ -1026,8 +1042,10 @@ def _patched_note(p: dict) -> list:
         "patched whole-file sha1 (the form `HdPackBuilder` writes for the running ROM)"
         + (f"; the pack itself declared `{p['declared_supported_rom']}`." if p["declared_supported_rom"]
            else "; the pack declared none."),
-        f"The {p['entries']} `<patch>` line(s) are carried verbatim and `{p['matched_file']}` sits",
-        "beside both manifests, so the fork applies it exactly as it does today — by the stock",
+        f"The {p['entries']} `<patch>` line(s) are carried with their sha1 untouched and their file",
+        f"token as the `/`-separated path the IPS was copied to (`{p['matched_rel']}`, the form",
+        "every platform's loader resolves; a Windows `\\` would never resolve on macOS/Linux), and",
+        "the IPS sits beside both manifests, so the fork applies it exactly as it does today — by the stock",
         "ROM's sha1, never on a mismatch (ADR-0145 (3)). `mep_build.py pack . --rom <stock dump>`",
         "writes `targets[]` from the **stock** dump: the MEP matcher runs before the patch",
         "(`Emulator::InternalLoadRom`), so the patched hash is not what it compares against.",
@@ -1104,8 +1122,11 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     # one) and rewrites nothing, so the sets must match exactly. The audio
     # references are the one set that moves folder on the way through — build
     # regenerates them into audio/hires.txt and keeps a seed ref whose OGG is
-    # there verbatim — so the built side is read from both manifests.
-    in_rest = set(source.body) | set(source.audio)
+    # there verbatim — so the built side is read from both manifests. The
+    # `<patch>` lines are the other exception: the import re-emits them with
+    # the normalized path the IPS was copied to (`mep_patch.emitted_line`), so
+    # the source side is compared in that same form.
+    in_rest = {_patch_as_emitted(s) for s in source.body} | set(source.audio)
     out_rest = set(built.body) | set(built.audio)
     audio_manifest = project / "audio" / "hires.txt"
     if audio_manifest.is_file():
@@ -1121,9 +1142,14 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     # ADR-0198 §3: a patched-ROM project must still carry the IPS beside the
     # built manifest (the loader fails the whole pack without it) and a
     # <supportedRom> the loader can read — the `<patch>` lines themselves are
-    # compared above as carried lines.
+    # compared above as carried lines. The token is checked **as written**,
+    # the way the macOS/Linux loader resolves it: it must be the normalized
+    # `/` path (`p.rel`), and that exact path must exist. A `\` token whose
+    # file sits at the `/` path would otherwise pass here and never apply at
+    # runtime (PR #385 review).
+    patch_token_bad = [p.file for p in built.patches if p.file != p.rel]
     patch_missing = [p.file for p in built.patches
-                     if not (built_path.parent / p.file.replace("\\", "/")).is_file()]
+                     if p.file == p.rel and not (built_path.parent / p.rel).is_file()]
     patch_bad_rom = (bool(built.patches)
                      and not (built.supported_rom and _HEX40_RE.match(built.supported_rom)))
 
@@ -1147,13 +1173,17 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
               f"{built.supported_rom or '(none)'} "
               + ("(the pack declared none)" if not source.supported_rom
                  else f"(the pack declared {source.supported_rom})")
-              + f"; IPS beside the built manifest: {'yes' if not patch_missing else 'NO'}")
+              + "; IPS beside the built manifest: "
+              + ('yes' if not (patch_missing or patch_token_bad) else 'NO'))
     failures = 0
     for name, items in (("missing from the import", sorted(missing)),
                         ("unexpected in the import", sorted(extra)),
                         ("carried line missing", rest_missing),
                         ("unexpected carried line", rest_extra),
                         ("pixels differ", pixel_bad),
+                        ("<patch> token is not the normalized /-separated path the IPS was "
+                         "copied to (the macOS/Linux loader resolves it as written)",
+                         patch_token_bad),
                         ("<patch> file missing beside textures/hires.txt", patch_missing),
                         ("<supportedRom> unreadable on a patched-ROM project",
                          [built.supported_rom] if patch_bad_rom else [])):
@@ -1169,6 +1199,16 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
         return 1
     print("OK: build on the imported project regenerates the input's rule set with identical pixels")
     return 0
+
+
+def _patch_as_emitted(body_line: str) -> str:
+    """A source body line in the form the import carries it: a `<patch>` line
+    becomes `mep_patch.emitted_line` (normalized path, uppercase sha1); any
+    other line is itself. `open_pack` already parsed every `<patch>` line, so
+    this cannot raise."""
+    if not body_line.startswith("<patch>"):
+        return body_line
+    return mep_patch.emitted_line(mep_patch.patch_lines([body_line])[0])
 
 
 def _token_as_built(rule: Rule, ver: int) -> str:
@@ -1670,8 +1710,9 @@ def _print_patched(p: dict):
     print(f"    <supportedRom> written: {p['patched_whole']}"
           + (f" (the pack declared {p['declared_supported_rom']})" if p["declared_supported_rom"]
              else " (the pack declared none)")
-          + f"; {p['entries']} <patch> line(s) carried verbatim, {p['files']} IPS file(s) beside "
-          "both manifests")
+          + f"; {p['entries']} <patch> line(s) carried (sha1 as written, file token as the "
+          f"/-separated path the IPS was copied to), {p['files']} IPS file(s) beside both "
+          "manifests")
     print("    what this does not buy:")
     for n in p["note"]:
         print(f"      - {n}")

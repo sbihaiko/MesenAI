@@ -63,9 +63,16 @@ def safe_relative(name: str, line: int) -> str:
     tool uses everywhere (`/`-separated), or a refusal.
 
     Backslashes are separators: Windows-authored packs write `sub\\fix.ips`,
-    and on Windows the loader's `FolderUtilities::CombinePath` treats them so
-    (on macOS/Linux the loader's `IndexPackFiles` indexes `/`-separated names,
-    so a `\\` there resolves only by luck). `mep_import` already normalizes
+    and on Windows the loader's `FolderUtilities::CombinePath` treats them so.
+    On macOS/Linux the same token never resolves: `HdPackLoader::
+    ResolvePackRelativePath` first opens `<pack>/sub\\fix.ips` verbatim
+    (`CheckFileExact` — a file literally named `sub\\fix.ips`, absent), then
+    looks the lowercased token up in `IndexPackFiles`, which indexes
+    `generic_u8string()` (`/`-separated) names — so `sub\\fix.ips` matches
+    nothing and the IPS is silently not applied. `/` works on every platform
+    (`CombinePath`'s own comment: Windows accepts forward slashes), so the
+    line a project **emits** carries `rel`, never the verbatim token
+    (`emitted_line`). `mep_import` already normalizes
     `<img>`/`<background>`/audio names this way. What is refused, before any
     byte is read or written (ADR-0006, the MEI trust model's zip-traversal
     rule, applied to a folder pack): an absolute path (POSIX, drive letter or
@@ -106,6 +113,18 @@ class PatchLine:
     def __init__(self, file: str, sha1: str, line: int):
         self.file, self.sha1, self.line = file, sha1.upper(), line
         self.rel = safe_relative(file, line)
+
+
+def emitted_line(entry: PatchLine) -> str:
+    """The `<patch>` line a project carries: the **normalized** relative path
+    (`rel`, `/`-separated — the path the IPS is copied to) and the sha1 as the
+    loader keys it (uppercase). Never the verbatim token: a Windows `\\` in
+    the manifest would make the copy land at `sub/fix.ips` while the runtime
+    on macOS/Linux looks for `sub\\fix.ips` and never applies the IPS
+    (`safe_relative`). `/` resolves on every platform, so this line is
+    portable. `verify` checks the built manifest's token against its own
+    `rel` so a mismatch cannot pass silently."""
+    return f"<patch>{entry.rel},{entry.sha1}"
 
 
 class PatchPlan:

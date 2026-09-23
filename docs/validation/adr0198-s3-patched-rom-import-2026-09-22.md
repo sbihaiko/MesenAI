@@ -261,12 +261,26 @@ Three findings on the `<patch>` path, each fixed in `scripts/mep_patch.py` /
    tokenizes the same way and refuses any line that is not exactly two
    fields; the earlier "the file name may itself contain a comma" reading
    was wrong.
+4. **Emitted `<patch>` path (P2, second round).** The IPS was copied to the
+   normalized `sub/fix.ips` but the `<patch>` line was carried verbatim, so a
+   Windows `sub\fix.ips` token reached the built manifest; on macOS/Linux
+   `HdPackLoader::ResolvePackRelativePath` opens the token as written and
+   then looks it up in `IndexPackFiles`, which indexes `/`-separated
+   (`generic_u8string`) names, so the IPS was never applied while import and
+   `verify` (which normalized the token before the file check) reported
+   success. `build_key_source` now re-emits every `<patch>` line as
+   `mep_patch.emitted_line` — the copied path, the sha1 untouched — and
+   `verify` checks the built token **as written**: it must equal its own
+   normalized path and that exact file must exist. `/` resolves on Windows
+   too (`FolderUtilities::CombinePath`), so the emitted line is portable.
 
-Castlevania #143 re-run with the same pack, dump and pipeline: import rc 0
-(`akuogg.ips`, line 8517, whole-file match, 4 records, `<supportedRom>`
-`5D012C73…A1E9`, 3 `<patch>` lines carried, 1 IPS beside both manifests);
-build rc 0; verify **7 400 distinct keys, 0 missing, 0 unexpected extra,
-0 differ**, carried 1 406 lines, 0 missing, `IPS beside the built manifest:
-yes` → **OK**; `--strict` fails only on the 5 twins, as before; lint rc 0
-(0 errors, 22 warnings). `python3 scripts/test_mep_import.py`: **116 PASS,
-0 FAIL** (was 105); `make doc-checks` rc 0.
+Castlevania #143 re-run with the same pack, dump and pipeline (after item 4,
+2026-09-23): import rc 0 (`akuogg.ips`, line 8517, whole-file match, 4
+records, `<supportedRom>` `5D012C73…A1E9`, 3 `<patch>` lines carried — all
+three already `/`-free single names, so their text is unchanged — 1 IPS
+beside both manifests); build rc 0; verify **7 400 distinct keys, 0 missing,
+0 unexpected extra, 0 differ**, carried 1 406 lines, 0 missing, `IPS beside
+the built manifest: yes` → **OK**; `--strict` fails only on the 5 twins, as
+before; lint rc 0 (0 errors, 22 warnings). `python3
+scripts/test_mep_import.py`: **120 PASS, 0 FAIL** (was 116, then 105);
+`make doc-checks` rc 0.

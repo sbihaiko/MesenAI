@@ -457,6 +457,45 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   all-green success (#253); map-vs-metatiles both-painted stays a logged
   precedence choice. `scripts/test_mep_build.py` is the acceptance test
   wired into `make doc-checks`, and asserts these halves.
+  `mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) turns a legacy plain HD
+  pack (`hires.txt` + PNGs) into a MEP project `mep_build.py build`
+  regenerates with the identical rule set and pixels: `import <pack> --out
+  <project> [--force] [--rom <stock dump>]`, `verify <pack> <project>
+  [--strict]` (ADR-0198 §1's acceptance test, run after `build`), and
+  `index` (ADR-0210 §3). **Patched-ROM import** (ADR-0198 §3, option (a);
+  the byte half lives in `mep_patch.py`, stdlib only, mirroring
+  `IpsPatcher::PatchBuffer` and `HdPackLoader::ProcessPatchTag`): a pack
+  with `<patch>` lines keys its `<tile>`s against the ROM *after* the
+  patch, so it is imported against that ROM. Inputs: `--rom <stock dump>`
+  and a pack whose `<patch>` line names that dump's whole-file or No-Intro
+  sha1 (the loader's own two lookups, in that order; a repeated sha1 keeps
+  the **last** line, as the loader does). Outputs: the key source's and the
+  built manifest's `<supportedRom>` is the **patched** ROM's whole-file sha1
+  (`HdPackBuilder`'s form; inserted after `<scale>` when the pack declared
+  none), every IPS copied beside **both** manifests (`auto/textures/` and
+  `textures/`), every `<patch>` line re-emitted with its file token as the
+  normalized `/`-separated path the IPS was copied to and its sha1 unchanged
+  (a Windows `sub\fix.ips` carried verbatim never resolves on the
+  macOS/Linux loader), and an `IMPORT.md` section with both hash pairs,
+  record count, CHR growth and the namespace limit. Refusals, each naming
+  the manifest line and the rule (nothing written): no `--rom`; a dump none
+  of the `<patch>` lines names (ADR-0145 (3): IPS does not relax); a
+  `<patch>` name that is absolute, has a `..` component, or resolves outside
+  the pack or the project (ADR-0006); a comma in the file name (the loader
+  splits on every comma); fewer or more than two tokens or a non-40-hex
+  sha1; a missing, non-IPS or truncated patch file; a declared
+  `<supportedRom>` that is none of the stock, patched or `<patch>` hashes
+  (ADR-0211). `--rom` on a pack without `<patch>` is a stderr note, not an
+  error. **Namespace limit**, printed on every such import and written to
+  `IMPORT.md`: the project lives in the patched ROM's key namespace, so a
+  recording made on the stock ROM (16-byte pattern keys, stock hash) does
+  not land in it — its author can paint and lint there, not record
+  (ADR-0198 §3). `mep_build.py pack . --rom <stock dump>` still writes
+  `targets[]` from the **stock** dump (the MEP matcher runs before the
+  patch). Verification: `python3 scripts/test_mep_import.py` (synthetic
+  pack, synthetic iNES + IPS; PASS/FAIL per check, exit 0 only if all
+  pass); the measured round-trips are in
+  `docs/validation/adr0198-s3-patched-rom-import-2026-09-22.md`.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a
@@ -1059,6 +1098,15 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   starts with the word `shipped` fails the row. A shipped slice loses its row
   and gains one line in the Part's shipped record (`docs/roadmap/AGENTS.md`).
   Its own fixtures live in `python3 scripts/test_verify_prd_live_rows.py`.
+- `python3 scripts/test_mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) -
+  `mep_import.py` + `mep_patch.py` on a synthetic legacy pack and a
+  synthetic iNES + IPS: data- and index-keyed round-trips through `build` +
+  `verify`, the patched-ROM import (hash selection in the loader's order,
+  `apply_ips` against `IpsPatcher`'s rules, `<supportedRom>` rewrite, IPS
+  beside both manifests, `<patch>` token normalized to the copied path,
+  `verify` failing on a missing IPS or a token that is not that path), every
+  refusal named above, and the index read; PASS/FAIL per check, exit 0 only
+  if all pass. No ROM, no PNG codec beyond the stdlib.
 - `python3 scripts/test_mei_rules.py` (F6.3b) - `mei_rules.py` leaf: constant
   shapes, `required_mei_pack_fields`/`mei_entry_conforms` per kind,
   `resolve_kind`'s mep-meta-first / Status-fallback / None-when-unmapped
