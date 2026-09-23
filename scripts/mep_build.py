@@ -95,6 +95,7 @@ import zlib
 from pathlib import Path
 
 import mep_addition  # ADR-0196: <addition> lines and their synthetic target keys
+import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as the loader does
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
 from mep_recipe_common import sha256_file
@@ -105,8 +106,8 @@ NES_VER = "107"
 # Header tags carried over verbatim from the key source.
 _HEADER_TAGS = ("ver", "scale", "system", "supportedRom", "options", "overscan")
 _TILE_RE = re.compile(r"^(\[[^\]]*\])?<tile>(.*)$")
-_BGM_RE = re.compile(r"^(\[[^\]]*\])?<bgm>(.*)$")
-_SFX_RE = re.compile(r"^(\[[^\]]*\])?<sfx>(.*)$")
+_BGM_RE = mep_carry.BGM_RE
+_SFX_RE = mep_carry.SFX_RE
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 
 
@@ -864,21 +865,9 @@ def _build_audio_manifest(folder: Path, system: str | None, seed: list) -> str |
     Returns the manifest text, or None when there is nothing to reference."""
     if system is not None and system != "nes":
         return None
-    # Keep only seed refs whose OGG actually exists in the audio/ layout; a
-    # dangling ref would ship an unregistered track (lint warning) and its id
-    # must be reclaimed, not held.
-    keep = []
-    for s in seed:
-        for rx, kind in ((_BGM_RE, "bgm"), (_SFX_RE, "sfx")):
-            m = rx.match(s)
-            if not m:
-                continue
-            fields = [f.strip() for f in m.group(2).split(",")]
-            if len(fields) >= 3 and (folder / "audio" / Path(fields[2])).exists():
-                keep.append(s)
-            else:
-                print(f"info: dropping {kind} ref {fields[2]} (no such file under audio/)")
-            break
+    # Keep only seed refs whose OGG actually exists in the audio/ layout (#381:
+    # resolved the way the loader resolves them, `\` included).
+    keep = mep_carry.keep_seed_refs(folder, seed)
     kept_refs = _bgm_sfx_refs(keep)
 
     def scan(sub: str, kind: str):
@@ -1437,32 +1426,10 @@ def cmd_build(args) -> int:
     textures_dir = folder / "textures"
     textures_dir.mkdir(parents=True, exist_ok=True)
 
-    # A background PNG referenced by the body that is not under textures/ yet
-    # is copied up from auto/textures (the author keeps their assets). The tag
-    # may carry a condition prefix ([cond]<background>...) — the only form the
-    # emulator writes for captured-screen backgrounds. A capture in neither
-    # layer is *retired*: its lines are dropped, so deleting the PNG is the way
-    # out of a capture (#344). ADR-0050/ADR-0156 still rule a present one.
-    _BG_TAG = re.compile(r"^(\[[^\]]*\])?<background>")
-    retired = {}
-    live_body = []
-    for b in body:
-        m = _BG_TAG.match(b)
-        name = b[m.end():].split(",")[0].strip() if m else ""
-        if name and not (textures_dir / name).exists():
-            auto_cand = folder / "auto" / "textures" / name
-            if not auto_cand.exists():
-                retired[name] = retired.get(name, 0) + 1
-                continue
-            (textures_dir / name).parent.mkdir(parents=True, exist_ok=True)
-            (textures_dir / name).write_bytes(auto_cand.read_bytes())
-            print(f"info: copied background {name} from auto/textures into textures/")
-        live_body.append(b)
-    body = live_body
-    if retired:
-        print(f"info: retired {len(retired)} captured screen(s) missing from textures/ and "
-              f"auto/textures/ — {sum(retired.values())} <background> line(s) dropped, so the "
-              f"frames they owned come from the sheets again (#344): {', '.join(sorted(retired)[:3])}")
+    # <background> lines: copied up from auto/textures when needed, retired
+    # (#344) when the PNG is in neither layer, resolved as the loader resolves
+    # them (#381). The rules live in mep_carry.
+    body = mep_carry.carry_backgrounds(folder, textures_dir, body)
     out_lines.extend(body)
 
     # Named after the captures are copied up, so the path printed is the one

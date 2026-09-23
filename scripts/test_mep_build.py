@@ -688,6 +688,52 @@ def screen_residency_tests(root: Path):
         ok("#344: retirement is idempotent — a rebuild neither re-adds nor re-reports it")
 
 
+def windows_path_carry_tests(root: Path):
+    """#381: a carried line whose file name uses `\\` resolves the way
+    HdPackLoader resolves it — the loader rewrites every `\\` to `/` before it
+    parses a tag, so `Backdrops\\shot.png` is `Backdrops/shot.png` to the
+    emulator on every OS. The build read the raw text, so on POSIX the name was
+    one literal file, never found, and the line was "retired" with an info log
+    (702 `<background>` lines on the Mega Man (USA) community pack). The
+    `<bgm>`/`<sfx>` seed filter had the same read."""
+    folder = make_author_folder(root, name="win-paths")
+    hires = folder / "textures" / "hires.txt"
+    kept = "<background>Backdrops\\shot.png,1,0,0,20"
+    gone = "[c]<background>Backdrops\\gone.png,1,0,0,20"
+    hires.write_text(hires.read_text(encoding="utf-8")
+                     + "<condition>c,memoryCheck,30,=,3\n" + kept + "\n" + gone + "\n"
+                     + "<bgm>0,7,Music\\theme.ogg\n", encoding="utf-8")
+    (folder / "auto" / "textures" / "Backdrops").mkdir(parents=True)
+    (folder / "auto" / "textures" / "Backdrops" / "shot.png").write_bytes(png(256, 240))
+    (folder / "audio" / "Music").mkdir()
+    (folder / "audio" / "Music" / "theme.ogg").write_bytes(b"")
+
+    out = run("build", str(folder))
+    if out is None:
+        return
+    body = [ln.strip() for ln in hires.read_text(encoding="utf-8").splitlines()]
+    if "<background>Backdrops/shot.png,1,0,0,20" not in body:
+        fail(f"a backslash <background> whose PNG exists did not survive the rebuild:\n{out}")
+    elif not (folder / "textures" / "Backdrops" / "shot.png").is_file():
+        fail("the backslash-named background was not copied up into textures/")
+    elif any("\\" in ln for ln in body):
+        fail("the rebuilt manifest still carries a backslash path")
+    else:
+        ok("#381: a Windows-style <background> resolves, is copied up, and is emitted as the "
+           "loader reads it")
+    if gone in body or "Backdrops/gone.png" in "\n".join(body):
+        fail("a backslash <background> with no PNG in either layer was not retired")
+    elif "warning: retired 1 captured screen(s)" not in out or "1 <background> line(s) dropped" not in out:
+        fail(f"the retirement is not a counted warning:\n{out}")
+    else:
+        ok("#381: retiring a carried line is a warning that counts the lines dropped")
+    audio = (folder / "audio" / "hires.txt").read_text(encoding="utf-8")
+    if "<bgm>0,7,Music/theme.ogg" not in audio or "Music\\theme.ogg" in audio:
+        fail(f"a backslash <bgm> seed ref was not kept under its normalized name:\n{audio}")
+    else:
+        ok("#381: a Windows-style <bgm> seed reference resolves and is emitted with '/'")
+
+
 def muted_paint_tests(root: Path):
     """#338 and #343: a painted cell that reaches nothing must say so.
 
@@ -975,6 +1021,7 @@ def sheet_round_trip_tests(root: Path):
 
     edited_precedence_tests(root)
     screen_residency_tests(root)
+    windows_path_carry_tests(root)
     muted_paint_tests(root)
     chr_rom_key_tests(root)
     flip_baked_key_tests(root)

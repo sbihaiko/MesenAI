@@ -83,6 +83,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import mep_build
+import mep_carry  # #381: carried names compared as HdPackLoader resolves them
 import mep_patch
 
 # The sheet geometry every imported sheet uses: a 16-cell-wide grid of 8px
@@ -867,12 +868,12 @@ def _write_sheets(pack: Pack, plan: dict, sources: dict, sheets_dir: Path) -> li
     pixel offset — 594 of Contra80s' rules start on an odd x)."""
     size = 8 * pack.scale
     written = []
+    stems = _sheet_stems(pack)
     for bitmap in sorted(plan):
         cells = plan[bitmap]
         if not cells:
             continue
-        name = Path(pack.imgs[bitmap].replace("\\", "/")).name
-        stem = name[:-4]
+        stem = stems[bitmap]
         source = _source_image(pack, bitmap, sources)
         columns = min(_SHEET_COLUMNS, len(cells))
         rows = (len(cells) + columns - 1) // columns
@@ -890,6 +891,40 @@ def _write_sheets(pack: Pack, plan: dict, sources: dict, sheets_dir: Path) -> li
             encoding="utf-8")
         written.append(stem)
     return written
+
+
+def _sheet_stems(pack: Pack) -> dict:
+    """`bitmap -> sheet stem`, one per `<img>` and unique across the manifest.
+
+    A sheet is written flat under `textures/sheets/` (F12.4: a paint program
+    reads a `/` in a surface name as a subfolder, so the name is a base name),
+    and the stem used to be the `<img>`'s own base name. A legacy pack may name
+    the same base name in two folders — the Mega Man (USA) community pack
+    (#138) draws `Sprite_Megaman_Base.png` and `Submerged\\Sprite_Megaman_Base.png`,
+    ten such pairs — and the later `<img>` then overwrote the earlier sheet,
+    sidecar and twin, silently dropping every key the first one carried (1 138
+    of the 1 209 keys #381 measured missing). A base name shared by several
+    `<img>` lines now takes its folder path as a prefix (`Submerged_Sprite_Megaman_Base`);
+    a unique one keeps the bare stem the earlier imports wrote, so no
+    already-imported project renames. Compared case-insensitively, because the
+    sheet lands on a file system that may be."""
+    rels = [r.replace("\\", "/") for r in pack.imgs]
+    seen: dict = {}
+    for rel in rels:
+        seen[Path(rel).name.lower()] = seen.get(Path(rel).name.lower(), 0) + 1
+    stems: dict = {}
+    taken: set = set()
+    for bitmap, rel in enumerate(rels):
+        p = Path(rel)
+        stem = p.name[:-4] if p.name.lower().endswith(".png") else p.stem
+        if seen[p.name.lower()] > 1:
+            stem = "_".join([*p.parts[:-1], stem])
+        base, n = stem, 2
+        while stem.lower() in taken:
+            stem, n = f"{base}_{n}", n + 1
+        taken.add(stem.lower())
+        stems[bitmap] = stem
+    return stems
 
 
 def _source_image(pack: Pack, bitmap: int, cache: dict) -> Image:
@@ -1197,16 +1232,18 @@ def verify_pack(src: Path, project: Path, strict: bool) -> int:
     # one) and rewrites nothing, so the sets must match exactly. The audio
     # references are the one set that moves folder on the way through — build
     # regenerates them into audio/hires.txt and keeps a seed ref whose OGG is
-    # there verbatim — so the built side is read from both manifests. The
-    # `<patch>` lines are the other exception: the import re-emits them with
-    # the normalized path the IPS was copied to (`mep_patch.emitted_line`), so
-    # both sides are compared in that same form — the loader rewrites `\` to
-    # `/` before parsing, so a `\` and a `/` spelling of one path are one line.
-    in_rest = {_patch_as_emitted(s) for s in source.body} | set(source.audio)
-    out_rest = {_patch_as_emitted(s) for s in built.body} | set(built.audio)
+    # there verbatim — so the built side is read from both manifests. Compared
+    # under the loader's own normalization (#381): HdPackLoader rewrites `\`
+    # to `/` on every line before it parses a tag, so a Windows-authored
+    # `<background>Backdrops\x.png` and the `Backdrops/x.png` build emits are
+    # one rule to the emulator, and equality here has to be the loader's. The
+    # `<patch>` lines are additionally read in the form the import re-emits
+    # them (`mep_patch.emitted_line`: the normalized path the IPS was copied to).
+    in_rest = {mep_carry.posix_ref(_patch_as_emitted(s)) for s in (*source.body, *source.audio)}
+    out_rest = {mep_carry.posix_ref(_patch_as_emitted(s)) for s in (*built.body, *built.audio)}
     audio_manifest = project / "audio" / "hires.txt"
     if audio_manifest.is_file():
-        out_rest |= set(Pack(project, audio_manifest).audio)
+        out_rest |= {mep_carry.posix_ref(s) for s in Pack(project, audio_manifest).audio}
     rest_missing, rest_extra = sorted(in_rest - out_rest), sorted(out_rest - in_rest)
     # The `<patch>` lines are compared as a sequence too (PR #385 review): for
     # a repeated sha1 the loader keeps the last line, so a reordered pair is a

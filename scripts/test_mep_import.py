@@ -575,6 +575,80 @@ def test_split_pattern_without_a_bare_rule(root: Path):
 
 # --- the CLI ----------------------------------------------------------------
 
+def test_windows_paths(root: Path):
+    """#381, both halves as measured on the Mega Man (USA) community pack.
+
+    1. A Windows-authored `<background>Backdrops\\x.png` / `<bgm>0,1,BGM\\x.ogg`
+       round-trips: the import copies the file under the `/` name, build
+       resolves the line the way HdPackLoader does and emits it with `/`, and
+       verify compares carried lines under that same normalization (702
+       backgrounds used to be "retired").
+    2. Two `<img>` lines with the same base name in different folders each get
+       a sheet of their own: the later one used to overwrite the earlier sheet,
+       sidecar and twin, dropping every key the first carried (1 138 keys)."""
+    lines = [
+        "<ver>100", "<scale>2", "<system>nes",
+        "<img>Sprites\\art.png",
+        "<img>Sub\\art.png",
+        "<tile>0," + HEX_A + "," + PAL_A + ",0,0,1,N",
+        "<tile>1," + HEX_B + "," + PAL_B + ",16,0,1,N",
+        "<background>Backdrops\\bg.png,1,0,0,20",
+        "<bgm>0,1,Music\\loop.ogg",
+    ]
+    files = {
+        "Sprites/art.png": cell_png(2, 1, 2, tag=0),
+        "Sub/art.png": cell_png(2, 1, 2, tag=8),
+        "Backdrops/bg.png": cell_png(1, 1, 1),
+        "Music/loop.ogg": b"OggS" + bytes(60),
+    }
+    src, project, summary = imported_pack(root, "winpaths", lines, files)
+    sheets = project / "textures" / "sheets"
+    if sorted(summary["sheets"]) != ["Sprites_art", "Sub_art"]:
+        fail(f"two <img> sharing a base name should import as two sheets, got {summary['sheets']}")
+        return
+    if not all((sheets / f"{s}{ext}").is_file()
+               for s in ("Sprites_art", "Sub_art") for ext in (".png", ".orig.png", ".json")):
+        fail(f"a sheet, twin or sidecar is missing under {sheets}")
+        return
+    ok("#381: <img> lines sharing a base name get folder-prefixed sheets instead of overwriting")
+    if summary["backgrounds"] != 1 or summary["audio"] != 1:
+        fail(f"summary: backgrounds={summary['backgrounds']} audio={summary['audio']}")
+        return
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build on the Windows-path import exited {rc}:\n{out}")
+        return
+    if "retired" in out:
+        fail(f"build retired a background whose PNG the import copied:\n{out}")
+        return
+    built = (project / "textures" / "hires.txt").read_text(encoding="utf-8")
+    audio = (project / "audio" / "hires.txt").read_text(encoding="utf-8")
+    if "<background>Backdrops/bg.png,1,0,0,20" not in built or "\\" in built:
+        fail(f"the rebuilt manifest does not carry the background under its '/' name:\n{built}")
+        return
+    if "<bgm>0,1,Music/loop.ogg" not in audio:
+        fail(f"the audio manifest does not carry the OGG under its '/' name:\n{audio}")
+        return
+    ok("#381: the backslash <background> and <bgm> are emitted as the loader resolves them")
+    rc, out = run_verify(src, project)
+    if rc != 0 or "0 missing, 0 unexpected extra" not in out:
+        fail(f"verify does not round-trip a Windows-authored pack:\n{out}")
+        return
+    ok("#381: verify compares carried lines under the loader's normalization — round-trip OK")
+
+    # The stem rule on its own: unique base names keep the bare stem every
+    # earlier import wrote; collisions are folder-prefixed, case-insensitively;
+    # a prefixed stem that still collides is numbered.
+    class Fake:
+        imgs = ["a.png", "x\\b.png", "y\\b.png", "y/B.png", "x_b.png", "x_b_2.png"]
+    stems = MI._sheet_stems(Fake())
+    want = {0: "a", 1: "x_b", 2: "y_b", 3: "y_B_2", 4: "x_b_2", 5: "x_b_2_2"}
+    if stems != want:
+        fail(f"_sheet_stems: {stems} != {want}")
+    else:
+        ok("#381: _sheet_stems keeps unique stems bare, prefixes collisions, numbers the rest")
+
+
 def test_cli(root: Path):
     src = write_src(root / "cli", DATA_LINES, DATA_FILES)
     project = root / "cli-proj"
@@ -1714,6 +1788,7 @@ def main():
         test_refusals(root)
         test_split_pattern_round_trips(root)
         test_split_pattern_without_a_bare_rule(root)
+        test_windows_paths(root)
         test_cli(root)
         test_index_render(root)
         test_index_chr_ram(root)
