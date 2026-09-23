@@ -1821,7 +1821,7 @@ def _print_patched(p: dict):
     print(f"    <supportedRom> written: {p['patched_whole']}"
           + (f" (the pack declared {p['declared_supported_rom']})" if p["declared_supported_rom"]
              else " (the pack declared none)")
-          + f"; {p['entries']} <patch> line(s) carried (sha1 as written, file token as the "
+          + f"; {p['entries']} <patch> line(s) carried (sha1 uppercased, file token as the "
           f"/-separated path the IPS was copied to), {p['files']} IPS file(s) beside both "
           "manifests")
     print("    what this does not buy:")
