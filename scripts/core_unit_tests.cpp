@@ -4231,6 +4231,104 @@ namespace
 			"BlocoP3: FlatShapePlane flags exactly the flat shapes, indexed by shape id");
 	}
 
+	//--- ADR-0223 (option A, F12.16): emptiness probes as a last anchor pass ---
+	//
+	//ADR-0221 B files an addition as a rival but cannot separate it when the
+	//only differing cell is flat on the capture side - ADR-0050 excludes flat
+	//tiles from the ranked candidate pool entirely, so the cell never reaches
+	//`order`, `stable` or `wide`. In these tests a flat candidate is exactly
+	//what HdPackBuilder::AppendFlatAnchorCells would hand SelectScreenAnchors:
+	//Usage == UINT32_MAX, a real (non-kEmptyCell) shape id.
+
+	void TestAnchorEmptinessProbeSeparatesWhenOnlyFlatCellDoes()
+	{
+		//The card screen003 case ADR-0223 measured: two useless normal
+		//candidates (identical on both frames) plus the flat block cell as the
+		//only thing that tells the capture and the text-added frame apart.
+		std::vector<GridFrame> frames = { AnchorCardScreen(), AnchorCardWithText() };
+		std::vector<AnchorCandidate> candidates = {
+			{ 2, 4, 1 },
+			{ 20, 4, 2 },
+			{ 11, 10, UINT32_MAX }, //the flat block cell, ADR-0223's probe
+		};
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(choice.AdditionRivals == 1,
+			"BlocoP5: the text frame is still filed as an addition-rival (ADR-0221 unchanged)");
+		Check(choice.Rivals == 0 && AnchorPicked(choice, 2),
+			"BlocoP5: the last pass reaches for the flat cell and separates the rival",
+			"rivals=" + std::to_string(choice.Rivals));
+		Check(choice.UsedEmptinessProbe,
+			"BlocoP5: the choice is reported as gated on an emptiness probe");
+	}
+
+	void TestAnchorNonFlatCellSeparatesWithoutAProbe()
+	{
+		//When a non-flat cell already separates the rival, the stable/wide
+		//passes succeed on their own and the last pass never runs.
+		GridFrame screen = AnchorCardScreen();
+		GridFrame rival = AnchorCardWithText();
+		rival.Cells[20][4] = (ShapeId)9001; //a non-flat cell that also differs
+		std::vector<GridFrame> frames = { screen, rival };
+		std::vector<AnchorCandidate> candidates = {
+			{ 2, 4, 1 },
+			{ 20, 4, 2 }, //discriminates on its own
+			{ 11, 10, UINT32_MAX },
+		};
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(choice.Rivals == 0,
+			"BlocoP5: the non-flat cell alone separates the rival",
+			"rivals=" + std::to_string(choice.Rivals));
+		Check(!choice.UsedEmptinessProbe,
+			"BlocoP5: no probe is needed, so none is reported as used");
+	}
+
+	void TestAnchorFlatCellsNeverAppearInStableOrWideOutput()
+	{
+		//No non-flat candidate at all: the stable/wide passes' pool (`order`)
+		//is empty by construction (Usage == UINT32_MAX is filtered out before
+		//`order` is built), so they can pick nothing on their own - only the
+		//last pass, reported by UsedEmptinessProbe, ever resolves this case.
+		std::vector<GridFrame> frames = { AnchorCardScreen(), AnchorCardWithText() };
+		std::vector<AnchorCandidate> candidates = { { 11, 10, UINT32_MAX } };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
+		Check(choice.Rivals == 0 && choice.UsedEmptinessProbe,
+			"BlocoP5: with only a flat candidate, separation - when it happens - comes from the last pass alone",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAnchorProbeOnACellAVariantChangesIsNeverChosen()
+	{
+		//A third frame is a genuine variant (ratio holds, no addition: its
+		//flat block cell is a *different* flat shape, still empty under the
+		//plane) that happens to change the same cell the addition-rival needs
+		//as a probe. ADR-0159 §1's stability filter excludes it from the flat
+		//pool exactly as it would a non-flat cell, so the rival stays
+		//unseparated and no probe is reported as used.
+		GridFrame screen = AnchorCardScreen();
+		GridFrame rival = AnchorCardWithText();
+		GridFrame variant = screen;
+		variant.Cells[11][10] = (ShapeId)501; //a different flat shape at the probe cell
+		variant.FrameNumber = 2;
+		std::vector<GridFrame> frames = { screen, rival, variant };
+		std::vector<AnchorCandidate> candidates = { { 11, 10, UINT32_MAX } };
+
+		std::vector<bool> plane = AnchorFlatPlane();
+		if(plane.size() <= 501) {
+			plane.resize(502, false);
+		}
+		plane[501] = true; //shape 501 also reads as empty, so `variant` is not an addition
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, plane);
+		Check(!choice.UsedEmptinessProbe,
+			"BlocoP5: a probe on a cell a variant changes is never chosen");
+		Check(choice.Rivals > 0,
+			"BlocoP5: without a usable probe the addition-rival stays unseparated",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
 	void TestSheetContactSheetGeometry()
 	{
 		Vocabulary vocab;
@@ -8679,6 +8777,10 @@ int main()
 	TestAnchorUndrawnCellCountsAsEmpty();
 	TestAnchorFrameThatBlanksACellStaysAVariant();
 	TestFlatTileDataMatchesTheOverdrawToolsDefinition();
+	TestAnchorEmptinessProbeSeparatesWhenOnlyFlatCellDoes();
+	TestAnchorNonFlatCellSeparatesWithoutAProbe();
+	TestAnchorFlatCellsNeverAppearInStableOrWideOutput();
+	TestAnchorProbeOnACellAVariantChangesIsNeverChosen();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();
 	TestSheetJsonCarriesTheGridDecision();

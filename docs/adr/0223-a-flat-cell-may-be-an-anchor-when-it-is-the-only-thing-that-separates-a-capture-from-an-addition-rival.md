@@ -1,7 +1,17 @@
 # ADR-0223: A flat cell may be an anchor when it is the only thing that separates a capture from an addition-rival ("emptiness probes")
 
-- Status: **accepted 2026-09-22 — option A, not implemented; slice F12.16,
-  sequenced after F12.15.** User's picks through a structured question,
+- Status: **accepted 2026-09-22 — option A, shipped the same day as PRD Part A
+  F12.16** ([log](../validation/f12.16-emptiness-probes-2026-09-22.md)),
+  after F12.15 as sequenced. Build go-ahead verbatim: *"faz o 2 usando o
+  sonnet"* (implemented and independently verified by Sonnet, by the user's
+  choice for this slice). All three stop conditions met: the Punch-Out!! card
+  reads `erased background` = 0 on all 36 sweep points (374 before), the
+  synthetic-pair unit cases pass (990/990), and the 30-ROM library was
+  re-recorded — captures 193 -> 219, mean draw rate 0.2454 -> 0.2316, never-
+  firing 0 -> 0, 58 screens gated on an emptiness probe in 9 ROMs, 13 packs
+  with a changed `<condition>` line. One placement note: the flat-cell
+  expansion (`AppendFlatAnchorCells`) lives inline in `HdPackBuilder.h`
+  because `HdPackBuilder.cpp` sits on its ADR-0137 ceiling. Original record: User's picks through a structured question,
   labels verbatim: *"A: probes como ultimo passo (Recommended)"* and
   *"Depois da F12.15 (Recommended)"*. Answers to *What a human has to pick*:
   (1) A; (2) yes — the draw-rate fall is the price of a gate that stops
