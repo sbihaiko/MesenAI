@@ -12,10 +12,14 @@
   code: `scripts/ora_writer.py` and `scripts/mep_sentinel.py`, called from
   `compose_engine.py`, `artist_chr_kit.py` and `mep_figure.py`; `mep_lint.py`
   fails a cell carrying the sentinel. Unit tests: `scripts/test_ora_writer.py`
-  (16). Stop conditions (1), (3) and (4) are met by the automated pass; **(2)
+  (16). Stop conditions (1) and (4) are met by the automated pass; **(2)
   — GIMP and Krita opening both files with every layer named and `paint`
   selected — is logged by a person** and had not been when this landed, so the
-  PRD row stays live until that log exists.
+  PRD row stays live until that log exists. **Corrected 2026-09-23:** this line
+  first counted (3) as met too, but no test or log exercises a stroke on
+  `paint` exported flat and reaching the game through F12.3 —
+  `test_ora_writer.py` covers the container, the layers and the sentinel
+  refusal only — so (3) is unevaluated (PR #384 review).
   Proposed 2026-09-20 and left so the same day by the user's decision; the
   deferral's reason (no GIMP/Krita artist population measured) is unchanged
   and F12.11 stays the second path beside F12.4, measured against it (§6).
