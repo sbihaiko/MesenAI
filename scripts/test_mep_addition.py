@@ -193,6 +193,23 @@ def check_canonical_key():
 
 # -- the tag ------------------------------------------------------------------
 
+def check_is_keyed():
+    """#386: a key is drawn when its exact key is keyed, or its tileData is
+    filed under the default (palette FFFFFFFF) key a defaultTile=Y rule adds."""
+    exact = {("1066", "0F162000")}
+    wild = exact | {A.default_key(("1066", "0F162000"))}
+    check(A.default_key(("1066", "0F162000")) == ("1066", A.DEFAULT_KEY_PALETTE),
+          "default_key keeps the tileData and swaps in palette FFFFFFFF")
+    check(A.is_keyed(("1066", "0F162000"), exact),
+          "the exact key is keyed")
+    check(not A.is_keyed(("1066", "0F162700"), exact),
+          "another palette is not keyed by a defaultTile=N rule")
+    check(A.is_keyed(("1066", "0F162700"), wild),
+          "any palette is keyed once the default key is in the set")
+    check(not A.is_keyed(("1067", "0F162700"), wild),
+          "the default key never reaches another index")
+
+
 def check_addition_line_round_trip():
     anchor = ("007EFFFFE3E70000007E817E9D18FFFF", "FF36160F")
     target = (A.chr_ram_target(1), A.RESERVED_PALETTE)
@@ -296,6 +313,7 @@ def main():
     check_index_token()
     check_parse_index()
     check_canonical_key()
+    check_is_keyed()
     check_addition_line_round_trip()
     check_target_verdict()
     check_plan_chr_ram()

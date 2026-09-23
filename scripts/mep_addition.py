@@ -132,6 +132,26 @@ def canonical_key(key, version: int):
     return (data, pal)
 
 
+# The palette of a tile's "default key" (`HdTileKey::GetKey(true)`): a
+# `defaultTile=Y` `<tile>` rule is also filed under its tileData with this
+# palette (`HdPackLoader::InitializeHdPack`), and `HdNesPack::GetMatchingTile`
+# falls back to that key when the exact `(tileData, palette)` has no rule — so
+# the rule draws its index (or pattern) under every palette (#386).
+DEFAULT_KEY_PALETTE = "FFFFFFFF"
+
+
+def default_key(key):
+    """`key`'s default (palette-wildcard) form. `key` is canonical."""
+    return (key[0], DEFAULT_KEY_PALETTE)
+
+
+def is_keyed(key, keyed) -> bool:
+    """True when a `<tile>` rule draws the canonical `key` at runtime: its
+    exact key is in `keyed`, or a `defaultTile=Y` rule filed its tileData
+    under the default key (`HdNesPack::GetMatchingTile`'s fallback)."""
+    return key in keyed or default_key(key) in keyed
+
+
 # -- the CHR RAM half ---------------------------------------------------------
 
 def chr_ram_target(ordinal: int) -> str:

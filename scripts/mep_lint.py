@@ -1045,6 +1045,10 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
             # ADR-0196 §4 needs the key set without its condition prefixes: an
             # <addition> cites a key, never a conditioned entry of it.
             keyed.add((data, pal))
+            # #386: a defaultTile=Y rule is also filed under the default key,
+            # so it draws its index under every palette (InitializeHdPack).
+            if len(tokens) > 6 and tokens[6].upper() in HDPACK_BOOL_TRUE:
+                keyed.add(mep_addition.default_key((data, pal)))
             if key in tile_keys:
                 dups.append((n, tile_keys[key]))
             else:
@@ -1229,6 +1233,10 @@ def lint_additions(src: Source, rel: str, folder: str, version: int, additions: 
     max_real = -1
     if index_keyed:
         for data, _pal in keyed:
+            # A default key (#386) always has its exact twin in `keyed`, which
+            # is what the synthetic marking names.
+            if _pal == mep_addition.DEFAULT_KEY_PALETTE:
+                continue
             if (data, _pal) in marked or data in marked_idx:
                 continue
             try:
@@ -1256,9 +1264,11 @@ def lint_additions(src: Source, rel: str, folder: str, version: int, additions: 
             rep.error(where, "<addition> sets ignorePalette on its target — ADR-0196 §3 keeps the palette half of a synthetic key load-bearing, and dropping it is what lets the key collide")
         if abs(dx) > 255 or abs(dy) > 239:
             rep.warning(where, f"<addition> offset ({dx},{dy}) is larger than the screen — HdNesPack::InsertAdditionalSprite drops every placement off-screen")
-        if anchor_key not in keyed:
+        # #386: "keyed" is what the runtime draws — the exact key, or a
+        # defaultTile=Y rule on the same tileData under any palette.
+        if not mep_addition.is_keyed(anchor_key, keyed):
             rep.error(where, f"<addition> anchor {anchor[0]}/{anchor[1]} is keyed by no <tile> rule in this manifest — the tag can never fire (ADR-0196 §4)")
-        if target_key not in keyed:
+        if not mep_addition.is_keyed(target_key, keyed):
             rep.error(where, f"<addition> target {target[0]}/{target[1]} is keyed by no <tile> rule — the overflow has no art to draw (ADR-0196 §4)")
         if sidecars and target_key not in marked and target_key[0] not in marked_idx:
             rep.error(where, f"<addition> target {target[0]}/{target[1]} is not marked synthetic in any sheet sidecar (ADR-0196 §4) — a key no recording observed has to say so, or it inflates coverage")
