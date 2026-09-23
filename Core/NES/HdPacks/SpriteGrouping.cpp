@@ -396,6 +396,13 @@ namespace MesenSheets
 		//ADR-0179 §1: greedy nearest-first linking of kept clusters between
 		//consecutive retained frames, within kPoseTrackMaxMove. Fills
 		//Hold/Next on the entries and returns the tracks as runs.
+		//ADR-0226: a cluster left without a partner stays a pending end for up
+		//to kPoseTrackMaxGap retained frames (each skipped frame carrying
+		//RepeatCount <= kPoseTrackGapMaxRepeats). Each frame links in passes,
+		//nearest-first within one pass: the previous frame's clusters first,
+		//then the pending ends by increasing age, against what is still
+		//unlinked. A bridged link adds the skipped frames' RepeatCount to the
+		//run it interrupts, so a run's Held keeps the game's cadence.
 		std::vector<std::vector<TrackRun>> LinkPoseTracks(const std::vector<OamFrame>& frames, const Vocabulary& vocab, std::vector<PoseEntry>& entries)
 		{
 			std::map<std::vector<PoseTile>, uint32_t> rankOf;
@@ -408,9 +415,14 @@ namespace MesenSheets
 				int32_t Y;
 				uint32_t Pose;
 				size_t Track;
+				//RepeatCount of the retained frames skipped since this cluster
+				//was seen (0 for the previous frame's clusters).
+				uint32_t Gap;
 			};
 			std::vector<std::vector<TrackRun>> tracks;
-			std::vector<Live> prev;
+			//ends[0]: the previous frame's clusters; ends[k]: clusters of the
+			//frame k+1 back that are still unlinked (pending, ADR-0226).
+			std::vector<std::vector<Live>> ends;
 			for(const OamFrame& frame : frames) {
 				std::vector<Live> cur;
 				for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
@@ -423,54 +435,64 @@ namespace MesenSheets
 					live.Y = cluster.Y;
 					live.Pose = it->second;
 					live.Track = (size_t)-1;
+					live.Gap = 0;
 					cur.push_back(live);
 				}
-				//Every candidate link, nearest first; ties broken by position in
-				//either frame so two saves of one stream link identically.
-				std::vector<std::tuple<int32_t, size_t, size_t>> links;
-				for(size_t pi = 0; pi < prev.size(); pi++) {
-					for(size_t ci = 0; ci < cur.size(); ci++) {
-						int32_t d = std::abs(prev[pi].X - cur[ci].X) + std::abs(prev[pi].Y - cur[ci].Y);
-						if(d <= kPoseTrackMaxMove) {
-							links.push_back(std::make_tuple(d, pi, ci));
-						}
-					}
-				}
-				std::sort(links.begin(), links.end());
-				std::vector<bool> prevUsed(prev.size(), false);
-				for(const std::tuple<int32_t, size_t, size_t>& link : links) {
-					size_t pi = std::get<1>(link);
-					size_t ci = std::get<2>(link);
-					if(prevUsed[pi] || cur[ci].Track != (size_t)-1) {
-						continue;
-					}
-					prevUsed[pi] = true;
-					cur[ci].Track = prev[pi].Track;
-					std::vector<TrackRun>& track = tracks[prev[pi].Track];
-					if(prev[pi].Pose == cur[ci].Pose) {
-						entries[cur[ci].Pose].Hold++;
-						track.back().Held += frame.RepeatCount;
-					} else {
-						std::vector<PoseLink>& next = entries[prev[pi].Pose].Next;
-						bool found = false;
-						for(PoseLink& edge : next) {
-							if(edge.Pose == cur[ci].Pose) {
-								edge.Count++;
-								found = true;
-								break;
+				std::vector<std::vector<bool>> endUsed(ends.size());
+				for(size_t age = 0; age < ends.size(); age++) {
+					std::vector<Live>& prev = ends[age];
+					endUsed[age].assign(prev.size(), false);
+					//Every candidate link, nearest first; ties broken by position in
+					//either frame so two saves of one stream link identically.
+					std::vector<std::tuple<int32_t, size_t, size_t>> links;
+					for(size_t pi = 0; pi < prev.size(); pi++) {
+						for(size_t ci = 0; ci < cur.size(); ci++) {
+							if(cur[ci].Track != (size_t)-1) {
+								continue; //claimed by an earlier (younger) pass
+							}
+							int32_t d = std::abs(prev[pi].X - cur[ci].X) + std::abs(prev[pi].Y - cur[ci].Y);
+							if(d <= kPoseTrackMaxMove) {
+								links.push_back(std::make_tuple(d, pi, ci));
 							}
 						}
-						if(!found) {
-							PoseLink edge;
-							edge.Pose = cur[ci].Pose;
-							edge.Count = 1;
-							next.push_back(edge);
+					}
+					std::sort(links.begin(), links.end());
+					for(const std::tuple<int32_t, size_t, size_t>& link : links) {
+						size_t pi = std::get<1>(link);
+						size_t ci = std::get<2>(link);
+						if(endUsed[age][pi] || cur[ci].Track != (size_t)-1) {
+							continue;
 						}
-						TrackRun run;
-						run.Frame = frame.FrameNumber;
-						run.Pose = cur[ci].Pose;
-						run.Held = frame.RepeatCount;
-						track.push_back(run);
+						endUsed[age][pi] = true;
+						cur[ci].Track = prev[pi].Track;
+						std::vector<TrackRun>& track = tracks[prev[pi].Track];
+						//ADR-0226 §1: the skipped frames belong to the run they interrupt.
+						track.back().Held += prev[pi].Gap;
+						if(prev[pi].Pose == cur[ci].Pose) {
+							entries[cur[ci].Pose].Hold++;
+							track.back().Held += frame.RepeatCount;
+						} else {
+							std::vector<PoseLink>& next = entries[prev[pi].Pose].Next;
+							bool found = false;
+							for(PoseLink& edge : next) {
+								if(edge.Pose == cur[ci].Pose) {
+									edge.Count++;
+									found = true;
+									break;
+								}
+							}
+							if(!found) {
+								PoseLink edge;
+								edge.Pose = cur[ci].Pose;
+								edge.Count = 1;
+								next.push_back(edge);
+							}
+							TrackRun run;
+							run.Frame = frame.FrameNumber;
+							run.Pose = cur[ci].Pose;
+							run.Held = frame.RepeatCount;
+							track.push_back(run);
+						}
 					}
 				}
 				for(Live& live : cur) {
@@ -483,7 +505,23 @@ namespace MesenSheets
 						live.Track = tracks.size() - 1;
 					}
 				}
-				prev = cur;
+				//Unlinked ends age by one frame - this one, now skipped - unless
+				//it was held too long to be flicker; the rest end their tracks.
+				std::vector<std::vector<Live>> aged(1, cur);
+				if(frame.RepeatCount <= kPoseTrackGapMaxRepeats) {
+					for(size_t age = 0; age < ends.size() && age < (size_t)kPoseTrackMaxGap; age++) {
+						std::vector<Live> still;
+						for(size_t pi = 0; pi < ends[age].size(); pi++) {
+							if(!endUsed[age][pi]) {
+								Live live = ends[age][pi];
+								live.Gap += frame.RepeatCount;
+								still.push_back(live);
+							}
+						}
+						aged.push_back(still);
+					}
+				}
+				ends.swap(aged);
 			}
 			for(PoseEntry& entry : entries) {
 				std::stable_sort(entry.Next.begin(), entry.Next.end(), [](const PoseLink& a, const PoseLink& b) {

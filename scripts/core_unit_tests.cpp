@@ -6173,8 +6173,9 @@ namespace
 		}
 	}
 
-	//A four-pose run, two frames a pose, seen twice with an empty frame
-	//between - the death animation shape.
+	//A four-pose run, two frames a pose, seen twice with two empty frames
+	//between - the death animation shape. Two frames, not one: ADR-0226
+	//bridges a single missing retained frame, which would join the passes.
 	void TestTwoIdenticalRunsAreOneSequence()
 	{
 		const ShapeId steps[4] = { 41, 51, 61, 71 };
@@ -6189,9 +6190,11 @@ namespace
 					frames.push_back(frame);
 				}
 			}
-			OamFrame empty;
-			empty.FrameNumber = n++;
-			frames.push_back(empty);
+			for(uint32_t gap = 0; gap < 2; gap++) {
+				OamFrame empty;
+				empty.FrameNumber = n++;
+				frames.push_back(empty);
+			}
 		}
 		Vocabulary vocab = BuildSpriteVocabulary(frames);
 		PoseStats stats = BuildPoses(frames, vocab);
@@ -6214,6 +6217,127 @@ namespace
 		Check(json.find("\"sequences\": [") != std::string::npos && json.find("\"seq000\"") != std::string::npos
 			&& json.find("\"cycles\"") == std::string::npos,
 			"BlocoP: sequences[] is written and cycles[] is absent", "");
+	}
+
+	//--- ADR-0226 (F12.19): the linker bridges one missing retained frame.
+
+	//The Contra run (six phases, one silhouette at two) drawn on every other
+	//retained frame only - respawn flicker. Each phase is drawn 4 times in 8
+	//emulated frames; every retained frame, drawn or empty, has RepeatCount 1.
+	void TestAFlickeringFigureIsOneTrackAndKeepsItsCadence()
+	{
+		const ShapeId phases[6] = { 41, 51, 61, 71, 51, 81 };
+		std::vector<OamFrame> frames;
+		for(uint32_t f = 0; f < 3 * 6 * 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = f;
+			if(f % 2 == 0) {
+				PushFigure(frame, phases[(f / 8) % 6], 100, 100);
+			}
+			frames.push_back(frame);
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		Check(stats.Poses.size() == 5 && stats.Tracks == 1,
+			"BlocoP: ADR-0226 - a figure drawn on every other retained frame is one track, not one per sighting",
+			"poses=" + std::to_string(stats.Poses.size()) + " tracks=" + std::to_string(stats.Tracks));
+		Check(stats.Cycles.size() == 1 && stats.Sequences.empty(),
+			"BlocoP: ADR-0226 - the flickering run is a cycle and no sequence",
+			"cycles=" + std::to_string(stats.Cycles.size()) + " sequences=" + std::to_string(stats.Sequences.size()));
+		if(stats.Cycles.size() != 1) {
+			return;
+		}
+		const PoseRun& cycle = stats.Cycles[0];
+		Check(cycle.Poses.size() == 6 && cycle.Repeats == 3,
+			"BlocoP: ADR-0226 - the flickering run is period 6, three turns",
+			"period=" + std::to_string(cycle.Poses.size()) + " repeats=" + std::to_string(cycle.Repeats));
+		bool allEight = cycle.Hold.size() == 6;
+		std::string holds;
+		for(uint32_t h : cycle.Hold) {
+			allEight = allEight && h == 8;
+			holds += std::to_string(h) + ",";
+		}
+		Check(allEight, "BlocoP: ADR-0226 - the skipped frames land in Held, so a phase drawn 4 times in 8 frames holds 8", holds);
+		//The entry's hold counts only links between drawn frames: pose000 (the
+		//silhouette at two phases) is drawn 4 times per phase, 3 links each.
+		Check(stats.Poses[0].Hold == 3 * 2 * 3,
+			"BlocoP: ADR-0226 - a pose's own hold counts only the frames it was drawn in",
+			"hold=" + std::to_string(stats.Poses[0].Hold));
+	}
+
+	//One held figure, five frames, a gap, five frames: a gap of one retained
+	//frame (RepeatCount <= 2) is bridged, two frames or RepeatCount 3 are not.
+	uint32_t TracksAcrossAGap(uint32_t gapFrames, uint32_t gapRepeats, uint32_t* held)
+	{
+		std::vector<OamFrame> frames;
+		uint32_t n = 0;
+		for(uint32_t side = 0; side < 2; side++) {
+			for(uint32_t f = 0; f < 5; f++) {
+				OamFrame frame;
+				frame.FrameNumber = n++;
+				PushFigure(frame, 31, 100 + 2 * f, 100);
+				frames.push_back(frame);
+			}
+			for(uint32_t g = 0; side == 0 && g < gapFrames; g++) {
+				OamFrame empty;
+				empty.FrameNumber = n;
+				empty.RepeatCount = gapRepeats;
+				n += gapRepeats;
+				frames.push_back(empty);
+			}
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		*held = stats.TrackRuns.empty() || stats.TrackRuns[0].empty() ? 0 : stats.TrackRuns[0][0].Held;
+		return stats.Tracks;
+	}
+
+	void TestTheLinkerBridgesOneShortGapOnly()
+	{
+		uint32_t held = 0;
+		uint32_t tracks = TracksAcrossAGap(1, 1, &held);
+		Check(tracks == 1 && held == 11, "BlocoP: ADR-0226 - one missing retained frame is bridged and counted in the run",
+			"tracks=" + std::to_string(tracks) + " held=" + std::to_string(held));
+		tracks = TracksAcrossAGap(1, kPoseTrackGapMaxRepeats, &held);
+		Check(tracks == 1 && held == 12, "BlocoP: ADR-0226 - a skipped frame of RepeatCount 2 is still bridged",
+			"tracks=" + std::to_string(tracks) + " held=" + std::to_string(held));
+		tracks = TracksAcrossAGap(2, 1, &held);
+		Check(tracks == 2 && held == 5, "BlocoP: ADR-0226 - two consecutive missing retained frames end the track",
+			"tracks=" + std::to_string(tracks) + " held=" + std::to_string(held));
+		tracks = TracksAcrossAGap(1, kPoseTrackGapMaxRepeats + 1, &held);
+		Check(tracks == 2 && held == 5, "BlocoP: ADR-0226 - a skipped frame of RepeatCount 3 is not bridged",
+			"tracks=" + std::to_string(tracks) + " held=" + std::to_string(held));
+	}
+
+	//A walks east 10 then 11 px while B, stationary, skips one frame. At the
+	//fourth frame B's pending end (9 px from A) is nearer A than A's own last
+	//position (11 px): linking all candidates at once would hand A to B's
+	//track. Pass 1 (adjacent frames) links A first; B then meets B (16 px).
+	void TestAFlickeringNeighbourDoesNotStealATrack()
+	{
+		std::vector<OamFrame> frames;
+		const int32_t ax[5] = { 100, 100, 110, 121, 121 };
+		const int32_t bx[5] = { 130, 130, -1, 146, 146 };
+		for(uint32_t f = 0; f < 5; f++) {
+			OamFrame frame;
+			frame.FrameNumber = f;
+			PushFigure(frame, 131, ax[f], 100);
+			if(bx[f] >= 0) {
+				PushFigure(frame, 141, bx[f], 100);
+			}
+			frames.push_back(frame);
+		}
+		Vocabulary vocab = BuildSpriteVocabulary(frames);
+		PoseStats stats = BuildPoses(frames, vocab);
+		//A swap would leave three tracks, one of them B-then-A. Both tracks
+		//hold all 5 frames (B: drawn 4, the skipped one added to its run).
+		bool onePosePerTrack = stats.TrackRuns.size() == 2;
+		for(const std::vector<PoseTrackRun>& track : stats.TrackRuns) {
+			onePosePerTrack = onePosePerTrack && track.size() == 1 && track[0].Held == 5;
+		}
+		Check(stats.Poses.size() == 2 && onePosePerTrack,
+			"BlocoP: ADR-0226 - the adjacent-frame pass links before the bridge, so tracks do not swap across the gap",
+			"poses=" + std::to_string(stats.Poses.size()) + " tracks=" + std::to_string(stats.TrackRuns.size()));
 	}
 
 	//P alone for five frames, then P plus a one-tile satellite (a shot) for
@@ -8915,6 +9039,9 @@ int main()
 	TestPoseTrackFollowsAFigureAndBreaksAtTheLimit();
 	TestPoseCycleWithARepeatedSilhouetteHasPeriodSix();
 	TestTwoIdenticalRunsAreOneSequence();
+	TestAFlickeringFigureIsOneTrackAndKeepsItsCadence();
+	TestTheLinkerBridgesOneShortGapOnly();
+	TestAFlickeringNeighbourDoesNotStealATrack();
 	TestAPosePlusASatelliteIsAVariantNotAFusion();
 	TestInputBlockCountsHeldButtonsAndNamesWhatWasNeverPressed();
 	TestACycleThatStopsOnAReleaseIsDrivenByThatPort();
