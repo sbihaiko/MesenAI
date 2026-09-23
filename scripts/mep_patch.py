@@ -49,6 +49,7 @@ from pathlib import Path
 # the line outright — `checkConstraintEx`). There is no older-`<ver>` form
 # without a sha1: `tokens.size() >= 2` is checked unconditionally.
 SHA1_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
+_CONDITIONED_PATCH_RE = re.compile(r"^\[[^\]]*\]<patch>")
 # A Windows drive (`C:` or `C:\`) or a UNC prefix — absolute on the platform
 # the pack may have been written on, so refused everywhere (ADR-0006).
 _WIN_ABSOLUTE_RE = re.compile(r"^(?:[A-Za-z]:|\\\\|//)")
@@ -176,8 +177,22 @@ def patch_lines(lines: list[str]) -> list[PatchLine]:
     out = []
     for i, raw in enumerate(lines):
         s = raw.strip()
+        line = raw.rstrip("\r\n")
+        # `HdPackLoader::LoadPack` dispatches on the raw line: `<patch>` must
+        # start at column 0, or right after a `[condition]` prefix it strips.
+        # An indented `<patch>` is ignored at runtime and a conditioned one is
+        # applied unconditionally; carrying either would change which ROM the
+        # project runs (PR #385 review), so both are refused, line cited.
+        if _CONDITIONED_PATCH_RE.match(line):
+            raise PatchError(f"line {i + 1}: <patch> behind a [condition] prefix: {s[:60]!r}. "
+                             "HdPackLoader strips the condition and applies the patch "
+                             "unconditionally; drop the prefix in the source pack")
         if not s.startswith("<patch>"):
             continue
+        if not line.startswith("<patch>"):
+            raise PatchError(f"line {i + 1}: indented <patch> line: {s[:60]!r}. HdPackLoader "
+                             "only reads a tag at column 0, so the source pack never applies "
+                             "this patch; remove the indentation (to apply it) or the line")
         tokens = [t.strip() for t in s[len("<patch>"):].split(",")]
         if len(tokens) < 2:
             raise PatchError(f"line {i + 1}: <patch> needs file,sha1 (40 hex) — the loader "

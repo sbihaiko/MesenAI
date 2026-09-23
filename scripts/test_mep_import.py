@@ -1559,15 +1559,30 @@ def test_patch_case_fold(root: Path):
     # (A patch spelled like the pack's own `<img>` or `hires.txt` cannot be
     # staged here: on a case-insensitive file system it *is* that file. The
     # same rule covers it, by name, in `_generated_layer_paths`.)
-    for name in ("sheets/chr.png", "Sheets/Fix.ips"):
+    # A file/folder prefix clash is the same refusal: a patch `sheets` is a
+    # file where the import creates a folder. (An `<img>`/patch prefix clash
+    # cannot exist inside one source folder; the check covers it by name.)
+    for name in ("sheets/chr.png", "Sheets/Fix.ips", "sheets"):
         tag = name.replace("/", "_").replace(".", "_")
         lines = patched_lines(stock_whole)[:-1] + [f"<patch>{name},{stock_whole}"]
         src = write_src(root / f"clash-{tag}", lines, {"chr.png": cell_png(2, 1, 1), name: CHR_ROM_IPS})
         dst = root / f"clash-{tag}-out"
-        expect_error(lambda: MI.import_pack(src, dst, False, rom), "collides with a file the import generates",
+        expect_error(lambda: MI.import_pack(src, dst, False, rom), "collides with",
                      f"a <patch> named {name!r}")
         if dst.exists() and any(dst.iterdir()):
             fail(f"a colliding <patch> {name!r} left files behind")
+    # PR #385 review: the loader dispatches `<patch>` only at column 0 (or
+    # right after a `[condition]` it strips), so an indented line is inert at
+    # runtime and a conditioned one is unconditional — both refused.
+    for label, line, needle in (("indented", f"  <patch>fix.ips,{stock_whole}", "indented <patch>"),
+                                ("conditioned", f"[c]<patch>fix.ips,{stock_whole}", "[condition]")):
+        lines = patched_lines(stock_whole)[:-1] + [line]
+        srcx = write_src(root / f"col-{label}", lines, {"chr.png": cell_png(2, 1, 1), "fix.ips": CHR_ROM_IPS})
+        dst = root / f"col-{label}-out"
+        expect_error(lambda: MI.import_pack(srcx, dst, False, rom), needle, f"a {label} <patch> line")
+        if dst.exists() and any(dst.iterdir()):
+            fail(f"a {label} <patch> line left files behind")
+
     files, dirs = MI._generated_layer_paths(MI.open_pack(src))
     if not {"hires.txt", "chr.png"} <= files or dirs != ("sheets/",):
         fail(f"_generated_layer_paths misses a generated name: {sorted(files)} {dirs}")

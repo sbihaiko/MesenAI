@@ -688,16 +688,24 @@ def _patch_destinations(pack: Pack, plan, out: Path) -> list[tuple[str, list[Pat
         line_of.setdefault(e.rel, e.line)
     layers = (out / "auto" / "textures", out / "textures")
     generated, generated_dirs = _generated_layer_paths(pack)
+    taken = generated | {d.rstrip("/") for d in generated_dirs}
     result = []
     for rel in plan.ips_files:
         # PR #385 review: a patch named like an asset the import writes
         # (`sheets/hero.png`, an `<img>`, `hires.txt`) would overwrite it and
-        # break the round trip; case-folded, since the file system may be.
+        # break the round trip — and a file/folder prefix clash (a patch
+        # `sheets`, a patch `foo` beside an `<img>foo/bar.png`, a patch
+        # `foo/bar.ips` beside an `<img>foo`, or two patches `a` and `a/b.ips`)
+        # would fail mid-write. Case-folded, since the file system may be.
         low = rel.lower()
-        if low in generated or low.startswith(generated_dirs):
-            raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} collides with a file the "
-                            "import generates (a layer's hires.txt, an <img>/<background>, or "
-                            "textures/sheets/) — rename the patch in the source pack; nothing "
+        others = {o.lower() for o in plan.ips_files if o != rel}
+        clash = next((t for t in sorted(taken | others)
+                      if low == t or low.startswith(t + "/") or t.startswith(low + "/")), None)
+        if clash is not None:
+            raise PackError(f"line {line_of[rel]}: <patch> file {rel!r} collides with {clash!r}, "
+                            "a path the import generates or writes (a layer's hires.txt, an "
+                            "<img>/<background>, textures/sheets/, or another patch) — as a file "
+                            "or as a folder prefix; rename the patch in the source pack; nothing "
                             "written")
         dsts = [layer / rel for layer in layers]
         for dst in dsts:
