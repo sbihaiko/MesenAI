@@ -104,6 +104,24 @@ def contained(path: Path, root: Path) -> bool:
     return True
 
 
+def loader_source(folder: Path, rel: str) -> str | None:
+    """The pack file `HdPackLoader::ResolvePackRelativePath` opens for `rel`:
+    the exact path when it exists, otherwise the one file whose
+    `/`-separated, lowercased pack-relative name equals `rel` lowercased
+    (`IndexPackFiles` + `_packFilesByLower`). A Windows-authored pack whose
+    manifest says `Fix.ips` beside a `fix.ips` loads on every host, so the
+    import must find it too. When two files fold to the same name the loader's
+    map keeps whichever the folder walk yields last; that walk order is not
+    specified, so an ambiguous fold is `None` here rather than a guess.
+    `None` also when nothing matches."""
+    if (folder / rel).is_file():
+        return rel
+    want = rel.lower()
+    hits = [f.relative_to(folder).as_posix() for f in folder.rglob("*")
+            if f.is_file() and f.relative_to(folder).as_posix().lower() == want]
+    return hits[0] if len(hits) == 1 else None
+
+
 class PatchLine:
     """One `<patch>` line: the file it names (verbatim, and normalized as
     `rel`), the ROM sha1 it was made for, and the manifest line it came from."""
@@ -133,7 +151,7 @@ class PatchPlan:
 
     __slots__ = ("rom", "entries", "matched", "matched_by", "stock_whole", "stock_no_intro",
                  "patched_whole", "patched_no_intro", "stock_size", "patched_size",
-                 "stock_chr_units", "patched_chr_units", "records", "ips_files")
+                 "stock_chr_units", "patched_chr_units", "records", "ips_files", "sources")
 
     def __init__(self, **kw):
         for k in self.__slots__:
@@ -275,7 +293,9 @@ def resolve(lines: list[str], folder: Path, rom: Path,
 
     - no `<patch>` line at all (the caller should not be here);
     - a `<patch>` file that is not in the pack — the loader's `checkConstraint`
-      fails the whole pack on a missing patch, so every line's file must exist;
+      fails the whole pack on a missing patch, so every line's file must exist,
+      found the way the loader finds it (`loader_source`: exact, then
+      case-folded); `plan.sources` maps each normalized name to the file read;
     - a `<patch>` file that resolves (symlinks followed) outside the pack
       folder, on top of the `safe_relative` rules already applied when the
       lines were parsed (ADR-0006);
@@ -292,14 +312,21 @@ def resolve(lines: list[str], folder: Path, rom: Path,
     entries = patch_lines(lines)
     if not entries:
         raise PatchError("no <patch> line — nothing to resolve")
+    sources = {}
     for e in entries:
         if not contained(folder / e.rel, folder):
             raise PatchError(f"line {e.line}: <patch> file {e.file!r} resolves outside the pack "
                              f"folder {folder} — a patch must live inside the pack (ADR-0006)")
-        if not (folder / e.rel).is_file():
-            raise PatchError(f"line {e.line}: <patch> file {e.file!r} is not in {folder} — "
-                             "HdPackLoader fails the whole pack on a missing patch, so the "
-                             "import refuses rather than write a project that cannot load")
+        src = loader_source(folder, e.rel)
+        if src is None:
+            raise PatchError(f"line {e.line}: <patch> file {e.file!r} is not in {folder} (nor "
+                             "under any case-folded spelling) — HdPackLoader fails the whole "
+                             "pack on a missing patch, so the import refuses rather than write a "
+                             "project that cannot load")
+        if not contained(folder / src, folder):
+            raise PatchError(f"line {e.line}: <patch> file {e.file!r} resolves outside the pack "
+                             f"folder {folder} — a patch must live inside the pack (ADR-0006)")
+        sources[e.rel] = src
     try:
         stock = rom.read_bytes()
     except OSError as exc:
@@ -324,7 +351,7 @@ def resolve(lines: list[str], folder: Path, rom: Path,
             f"<patch> line(s) name {declared}. The IPS was made for another dump, and an IPS "
             "carries no checksum of its own, so applying it here would be silently wrong — "
             "ADR-0145 (3): IPS does not relax. Pass the dump the pack was made for")
-    ips_path = folder / matched.rel
+    ips_path = folder / sources[matched.rel]
     patched, records = apply_ips(stock, ips_path.read_bytes())
     plan = PatchPlan(
         rom=rom, entries=entries, matched=matched, matched_by=matched_by,
@@ -333,7 +360,7 @@ def resolve(lines: list[str], folder: Path, rom: Path,
         stock_size=len(stock), patched_size=len(patched),
         stock_chr_units=chr_units(stock), patched_chr_units=chr_units(patched),
         records=records,
-        ips_files=sorted({e.rel for e in entries}))
+        ips_files=sorted({e.rel for e in entries}), sources=sources)
     if declared_supported_rom:
         want = declared_supported_rom.strip().upper()
         allowed = {stock_whole, stock_no_intro, plan.patched_whole, plan.patched_no_intro}

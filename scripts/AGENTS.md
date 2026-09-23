@@ -472,7 +472,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the **last** line, as the loader does). Outputs: the key source's and the
   built manifest's `<supportedRom>` is the **patched** ROM's whole-file sha1
   (`HdPackBuilder`'s form; inserted after `<scale>` when the pack declared
-  none), every IPS copied beside **both** manifests (`auto/textures/` and
+  none), every IPS — found the way `HdPackLoader::ResolvePackRelativePath`
+  finds it (exact path, then a case-folded match; an ambiguous fold is
+  refused) and written under the normalized manifest name — copied beside
+  **both** manifests (`auto/textures/` and
   `textures/`), every `<patch>` line re-emitted with its file token as the
   normalized `/`-separated path the IPS was copied to and its sha1 unchanged
   (a Windows `sub\fix.ips` carried verbatim never resolves on the

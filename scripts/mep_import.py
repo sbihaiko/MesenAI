@@ -693,7 +693,10 @@ def _copy_patches(pack: Pack, plan, out: Path) -> dict:
     whose patch is not beside it fails to load whole."""
     copied = 0
     for rel, dsts in _patch_destinations(plan, out):
-        data = (pack.hires.parent / rel).read_bytes()
+        # Read the file the loader would open (a case-folded `Fix.ips` ->
+        # `fix.ips`), write it under the emitted name, so the project's token
+        # resolves exactly on every host.
+        data = (pack.hires.parent / plan.sources[rel]).read_bytes()
         for dst in dsts:
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)

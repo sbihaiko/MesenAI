@@ -1512,6 +1512,48 @@ def test_patch_path_normalization(root: Path):
         ok("a normalized <patch> token whose file moved is reported as missing, not as a token mismatch")
 
 
+def test_patch_case_fold(root: Path):
+    """PR #385 review, third round (Codex): `HdPackLoader::
+    ResolvePackRelativePath` falls back to a case-insensitive lookup, so a
+    Windows-authored pack whose manifest says `sub/fix.ips` beside
+    `SUB/Fix.IPS` loads on a case-sensitive host. The import finds the same
+    file and writes it under the emitted name. On a case-insensitive file
+    system (APFS default) the exact lookup already succeeds; the fold path is
+    exercised on Linux CI."""
+    root = root / "casefold"
+    root.mkdir(parents=True, exist_ok=True)
+    rom = root / "Game.nes"
+    rom.write_bytes(STOCK_ROM)
+    stock_whole = sha1_hex(STOCK_ROM)
+    files = {"chr.png": cell_png(2, 1, 1), "SUB/Fix.IPS": CHR_ROM_IPS}
+    lines = patched_lines(stock_whole)[:-1] + [f"<patch>sub/fix.ips,{stock_whole}"]
+    src = write_src(root / "src", lines, files)
+    project = root / "proj"
+    summary = MI.import_pack(src, project, False, rom)
+    p = summary["patch"]
+    if p is None or p["matched_rel"] != "sub/fix.ips" or p["files"] != 1:
+        fail(f"a case-folded <patch> file was not resolved: {p}")
+        return
+    for layer in (project / "auto" / "textures", project / "textures"):
+        names = [f.relative_to(layer).as_posix() for f in layer.rglob("*") if f.suffix.lower() == ".ips"]
+        if names != ["sub/fix.ips"] or (layer / "sub" / "fix.ips").read_bytes() != CHR_ROM_IPS:
+            fail(f"the IPS did not land under the emitted name in {layer}: {names}")
+            return
+    ok("a <patch> naming `sub/fix.ips` beside `SUB/Fix.IPS` resolves like the loader and lands as `sub/fix.ips`")
+
+    probe = root / "probe"
+    probe.mkdir()
+    (probe / "a.ips").write_bytes(b"x")
+    if (probe / "A.IPS").exists():
+        ok("case-insensitive file system: the ambiguous-fold refusal is exercised on Linux CI")
+        return
+    (probe / "A.IPS").write_bytes(b"y")
+    if MP.loader_source(probe, "a.Ips") is not None:
+        fail("loader_source guessed between two files that fold to the same name")
+    else:
+        ok("loader_source refuses to guess between two files that fold to the same name")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="test-mep-import-") as tmp:
         root = Path(tmp)
@@ -1534,6 +1576,7 @@ def main():
         test_patched_rom(root)
         test_patch_hardening(root)
         test_patch_path_normalization(root)
+        test_patch_case_fold(root)
     if FAILED:
         print("\nFAILURES")
         sys.exit(1)
