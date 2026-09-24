@@ -851,6 +851,7 @@ cp -R out/by-stage/stage1/Contra/auto out/painted
 cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
 cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
+cp out/kit/scene/*.png  out/painted/textures/backgrounds/   # whole screens go back where they came from
 sh -c 'for f in out/kit/figures/usr*-figure.png; do
   [ -e "$f" ] || continue                                        # no figures: nothing to import
   python3 scripts/mep_figure.py import out/painted "$f" || exit 1  # figures are imported, not copied
@@ -878,6 +879,15 @@ It runs under `sh -c` so that `exit` leaves only that child — never your
 terminal — and so zsh's `no matches found` cannot abort a figure-less kit. A figure and its `sheets/usr*.png` row are the same tiles — paint one,
 not both; if both are painted, `build` stops with a `painted tile … lost to`
 error naming the tile (#399).
+
+A `scene/` screen is the pack's own whole-screen capture,
+`textures/backgrounds/screenNNN.png`, copied into the kit untouched; the
+manifest's `<background>` line draws it by that name on the frames it was
+frozen for, so a painted screen returns by copying it back under the same name.
+An unpainted one goes back unchanged. The block above lists every folder a
+kit can have, and a `cp` of a folder your kit lacks fails, so drop that line;
+the block in the kit's own `ARTIST.md` already names only the folders that kit
+has (#403).
 
 That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and
