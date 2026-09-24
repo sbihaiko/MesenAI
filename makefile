@@ -439,6 +439,9 @@ doc-checks: check-manifest
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
 	python3 scripts/test_mep_build.py
+	#ADR-0198 §1/§3 (F12.7, F12.17): legacy pack import, including the IPS-patched
+	#path's refusals and containment. Synthetic packs in a temp dir; no ROM.
+	python3 scripts/test_mep_import.py
 	#F12.2 (ADR-0216): the placer for a copied MEP sheet cell -- which sheet a
 	#loose background key goes on, the free slot, and the two-file grow whose
 	#half-written form silently blinds the build's painted-cell probe (#346).
