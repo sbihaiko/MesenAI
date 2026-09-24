@@ -714,6 +714,17 @@ Before issue #431 was fixed, the copy handed out `0F0F0F0F` here. That key
 built and linted clean and changed no pixel (Tetris 2: 0 magenta pixels, and
 274 432 with the live `0F281807`).
 
+**A tile the pack does not hold at all copies too.** If the loaded pack has no
+rule for the tile under any palette, you get the live palette. The on-screen
+message says the pack holds no rule for the tile and that the paste adds a
+new key. That key is the one the frame asks for, so painting it changes the
+frame, as any other cell does. Before the ADR-0215 amendment of 2026-09-24,
+the copy refused such a tile and you got no key. The copy still refuses one
+case: the pack keys the tile under two or more palettes that palette RAM
+holds, and none of them is live. The message lists them. Nothing on the frame
+says which one the paste should carry, so pick the tile where the frame draws
+it under one of the listed palettes, or on another frame.
+
 ### Which sheet a copied key goes on
 
 **The short path: let `mep_add_cell.py` place it.**

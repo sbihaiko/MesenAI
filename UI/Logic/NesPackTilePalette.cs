@@ -15,17 +15,19 @@ namespace Mesen.Logic
 	//linted clean and changed no pixel.
 	//
 	//So the copy asks the loaded pack which palettes it keys the tile under, and
-	//answers one of three ways - never a plausible key it knows cannot match:
+	//answers one of these ways - never a plausible key it knows cannot match:
 	//
 	//  - the live palette is one of them (or the pack keys it with a defaultTile
 	//    wildcard, which matches any palette): keep the live palette;
 	//  - the pack keys it under exactly one other palette that palette RAM holds
 	//    now: name that one, and say so, because that is the key a paste has to
 	//    carry to match;
-	//  - the pack holds no rule for the tile, or holds several that palette RAM
-	//    holds and the live palette is none of them: refuse and say which, because
-	//    "the pack does not hold this tile" is a better answer than a key that
-	//    cannot match;
+	//  - the pack holds several that palette RAM holds and the live palette is
+	//    none of them: refuse and list them, because nothing says which one the
+	//    paste should carry;
+	//  - the pack holds no rule for the tile (ADR-0215, amendment of 2026-09-24):
+	//    keep the live palette, the one the runtime asks for, and say that the
+	//    paste adds a new key;
 	//  - every palette the pack keys it under is one palette RAM does not hold
 	//    (#431: the fade a bootstrap recording saw): keep the live palette, the one
 	//    the runtime asks for, and say so.
@@ -37,7 +39,7 @@ namespace Mesen.Logic
 		LiveMatches,
 		//The pack keys this tile under one palette, and it is not the live one.
 		Substituted,
-		//The pack holds no rule for this tile at all.
+		//The pack holds no rule for this tile at all: the live palette is kept.
 		NoRule,
 		//Several rules, none of them the live palette.
 		Ambiguous,
@@ -61,7 +63,7 @@ namespace Mesen.Logic
 			Reason = reason;
 		}
 
-		public bool IsRefusal => Status == NesPackPaletteStatus.NoRule || Status == NesPackPaletteStatus.Ambiguous;
+		public bool IsRefusal => Status == NesPackPaletteStatus.Ambiguous;
 	}
 
 	public static class NesPackTilePalette
@@ -78,9 +80,12 @@ namespace Mesen.Logic
 			if(packPalettes == null) {
 				return new NesPackPaletteVerdict(NesPackPaletteStatus.Unchecked, livePalette, "");
 			}
+			//ADR-0215, amendment of 2026-09-24: no rule is not a refusal. The runtime
+			//asks for the tile under the live palette, so a new key carrying it does
+			//match (#431's E2E: 274 432 magenta pixels on Tetris 2).
 			if(packPalettes.Count == 0) {
-				return new NesPackPaletteVerdict(NesPackPaletteStatus.NoRule, 0,
-					"the loaded pack holds no rule for this tile, so no palette can make the paste match at run time");
+				return new NesPackPaletteVerdict(NesPackPaletteStatus.NoRule, livePalette,
+					$"the loaded pack holds no rule for this tile, so the live {livePalette:X8} is kept and the paste adds a new key");
 			}
 			foreach(uint palette in packPalettes) {
 				if(palette == livePalette || palette == DefaultTileWildcard) {

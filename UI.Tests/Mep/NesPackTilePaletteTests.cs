@@ -51,15 +51,39 @@ public class NesPackTilePaletteTests
 		Assert.False(verdict.IsRefusal);
 	}
 
-	//"If the pack does not hold the tile at all, saying so is a valid answer and
-	//better than a key that cannot match" - the user's own wording on #342.
+	//ADR-0215, amendment of 2026-09-24 (the user's go-ahead: "aceito sua sugestao.
+	//pode aplicar e rodar em paralelo"). #342 refused a tile the loaded pack
+	//holds no rule for, on the premise that no key could match. #431's E2E
+	//contradicted that premise: a new key carrying the live palette rendered
+	//274 432 magenta pixels on Tetris 2, because the live palette is the one the
+	//runtime asks for. The old behaviour here was a refusal (Palette 0,
+	//IsRefusal true).
 	[Fact]
-	public void A_tile_the_pack_does_not_hold_is_refused()
+	public void A_tile_the_pack_does_not_hold_copies_with_the_live_palette()
 	{
 		NesPackPaletteVerdict verdict = NesPackTilePalette.Resolve(MetroidLive, Array.Empty<uint>(), MetroidFrame);
 		Assert.Equal(NesPackPaletteStatus.NoRule, verdict.Status);
-		Assert.True(verdict.IsRefusal);
+		Assert.False(verdict.IsRefusal);
+		Assert.Equal(MetroidLive, verdict.Palette);
+		//The receipt says the pack has no rule for the tile, names the palette that
+		//went out, and says that pasting adds a new key.
 		Assert.Contains("holds no rule", verdict.Reason);
+		Assert.Contains("0F361506", verdict.Reason);
+		Assert.Contains("adds a new key", verdict.Reason);
+	}
+
+	//The same for a sprite: the live word leads with FF (transparent colour 0),
+	//and that word is the one handed out.
+	[Fact]
+	public void A_sprite_the_pack_does_not_hold_copies_with_its_live_sprite_palette()
+	{
+		const uint spriteLive = 0xFF162730;
+		NesPackPaletteVerdict verdict = NesPackTilePalette.Resolve(spriteLive, Array.Empty<uint>(),
+			new uint[] { 0xFF0F0F0F, spriteLive, 0xFF2A1A0F, 0xFF301606 });
+		Assert.Equal(NesPackPaletteStatus.NoRule, verdict.Status);
+		Assert.False(verdict.IsRefusal);
+		Assert.Equal(spriteLive, verdict.Palette);
+		Assert.Contains("FF162730", verdict.Reason);
 	}
 
 	[Fact]
