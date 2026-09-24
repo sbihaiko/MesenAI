@@ -37,7 +37,11 @@ that cell owns the key, else the owning crop of another sheet (a kit
 project's `usrNNN` row) and not the source. So `mep_build.py build` changes
 no rule, and *HD Packs > Reload Repainted Images* (F12.3, ADR-0212) shows the
 paint without reopening the ROM; an import that must re-point a key says so.
-A later `export` shows paint routed that way.
+A later `export` shows paint routed that way. A pack never built with the
+sheets it holds (a kit copied into a recording, a fresh recording whose
+flip-baked crops the first build un-bakes, ADR-0178) is refused before
+anything is written, naming the build to run first (#435): its plan would be
+made against twins that build is about to rewrite.
 
 Where the layout comes from is stated in the sidecar (`source`): `poses` when
 `sheets/poses.json` records the silhouette (ADR-0170 §4), `walk` when the pack
@@ -592,22 +596,41 @@ def _parse_owners(lines):
     return owners, index_keyed, version
 
 
-def manifest_owners(pack: E.Pack, scratch=None):
-    """`_parse_owners` of the manifest `mep_build.py build` makes of the pack
-    as it is right now, before this import — the manifest the running game
-    loaded when the artist followed build -> play. Built in a throwaway copy
-    (build rewrites sheets in place, ADR-0178). `({}, False, 0)` when the pack
-    has no manifest or does not build: then there is no owner to protect."""
+def _sheet_files(sheets_dir: Path) -> dict:
+    """`{name: bytes}` of every sheet PNG and sidecar in `sheets_dir`."""
+    return {p.name: p.read_bytes() for p in sorted(sheets_dir.iterdir())
+            if p.is_file() and p.suffix.lower() in (".png", ".json")}
+
+
+def probe_build(pack: E.Pack, scratch=None):
+    """`(owners, rewritten)`: `owners` is `_parse_owners` of the manifest
+    `mep_build.py build` makes of the pack as it is right now, before this
+    import — the manifest the running game loaded when the artist followed
+    build -> play. Built in a throwaway copy, because build rewrites sheets in
+    place (ADR-0178, #255). `rewritten` names the sheet files that build
+    changed: non-empty means the pack was never built with these sheets (a
+    kit copied in, a fresh recording), so the twins and sidecars a plan
+    reads are not the ones the next build slices (#435). `(({}, False, 0),
+    [])` when the pack has no manifest or does not build: then there is no
+    owner to protect."""
     textures = pack.sheets_dir.parent
     if pack.sheets_dir.name != "sheets" or not (textures / "hires.txt").is_file():
-        return {}, False, 0
+        return ({}, False, 0), []
     with tempfile.TemporaryDirectory(dir=scratch) as td:
         work = Path(td) / "control"
         shutil.copytree(textures.parent, work)
+        before = _sheet_files(work / "textures" / "sheets")
         if _quiet_build(work) != 0:
-            return {}, False, 0
+            return ({}, False, 0), []
+        after = _sheet_files(work / "textures" / "sheets")
         lines = (work / "textures" / "hires.txt").read_text(encoding="utf-8", errors="replace").splitlines()
-    return _parse_owners(lines)
+    rewritten = sorted(n for n in before if after.get(n) != before[n])
+    return _parse_owners(lines), rewritten
+
+
+def manifest_owners(pack: E.Pack, scratch=None):
+    """The `owners` half of `probe_build`."""
+    return probe_build(pack, scratch)[0]
 
 
 def _cell_keys(sheet: E.Sheet, cell: dict, index_keyed: bool, version: int):
@@ -824,7 +847,17 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
         current = img.crop(sx, sy, unit * scale, unit * scale)
         new_cell = fig_cell if owned is None else _merge_owned(current, fig_cell, owned, unit, scale)
         if manifest is None:
-            manifest = manifest_owners(pack, scratch)
+            manifest, rewritten = probe_build(pack, scratch)
+            if rewritten:
+                # #435: planning against sheets the next build rewrites (it
+                # un-bakes flip-baked crops, ADR-0178) sends paint to the wrong
+                # crop and re-points rules. Refuse before anything is written.
+                raise FigureError(
+                    f"{pack.sheets_dir.parent.parent}: this pack was not built with these sheets yet — "
+                    f"`mep_build.py build` still rewrites {', '.join(rewritten[:4])}"
+                    + (f" and {len(rewritten) - 4} more" if len(rewritten) > 4 else "")
+                    + ". Run python3 scripts/mep_build.py build on it first, then import again "
+                    "(nothing was written)")
         write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest)
         changed = put(sheet, new_cell, sx, sy) if write_source else False
         for other, ox, oy, lx, ly in routes:

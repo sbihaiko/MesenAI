@@ -698,10 +698,14 @@ or Part B §8. Dates below describe delivery, not a new validation run.
     a fresh Sonnet evaluator, who returned *"Run cycle identifiable and
     paintable unaided: yes"* with 0 stops. The phase order, a rest grid of
     Bill alone and the figure import all check out mechanically.
-  - One residue is filed as #435 (P2): the "When you are done" recipe
-    imports figures before any build, so a painted figure re-points rules
-    and *Reload Repainted Images* cannot show it. The paint still reaches
-    the pack.
+  - The one residue, #435, is fixed. The recipe imported figures before
+    any build, and the first build rewrites the recorder's mirrored
+    `usr*` crops in place, so the import re-pointed rules. The recipe now
+    builds once before the imports, and `mep_figure.py import` refuses
+    (exit 2, nothing written) when a build would still rewrite the pack's
+    sheets. On Contra the painted `hires.txt` is byte-identical to the
+    unpainted control
+    ([log](../validation/issue-435-kit-recipe-order-2026-09-24.md)).
   [Log](../validation/f12.19-flicker-tolerant-tracks-2026-09-23.md),
   [re-run cold read](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md).
 
