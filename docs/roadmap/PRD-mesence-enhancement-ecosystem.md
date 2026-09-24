@@ -917,11 +917,15 @@ image model under the player's own key produces a candidate skin for the
 `mep_build.py` slices into a pack. Whether any link of that chain holds is
 what the spikes measure.
 
-*Entry point amended 2026-09-23 (user's decision, verbatim: "Pelo nome, no
-kit").* The live viewer is a developer tool since ADR-0169 §4's 2026-09-23
-amendment, so the player does not point at the subject there: they **name**
-it from the artist kit — a figure row (`usrNNN`) or a pose/cycle id in
-`sheets/poses.json` — as ADR-0209 names a figure and hands it over. The
+*Entry point amended 2026-09-23 by ADR-0227 (user's decision, verbatim:
+"Pelo nome, no kit").* The live viewer is a developer tool since ADR-0169
+§4's 2026-09-23 amendment, so the player does not point at the subject
+there: they **name** it from the artist kit, and the subject is the set of
+kit ids they name (`usrNNN` grids, cycle/sequence ids, pose ids from
+`sheets/poses.json`). The kit has no notion of a character — one grid per
+cycle, and "rest" grids binned by box size — so "the whole subject" above
+means every pose the player named; the toolchain infers no membership, and
+automatic grouping is left open (ADR-0227 §4). The
 kit's figures are pixel-faithful since F12.18 (ADR-0225) and its cycle rows
 survive sprite flicker since F12.19 (ADR-0226). S10.b is unaffected: it
 measures layout fidelity on a contact sheet and does not depend on how the
@@ -1300,6 +1304,7 @@ files and in §3.
 | 0224 | **accepted 2026-09-22 — shipped the same day as F12.15** ([log](../validation/f12.15-behind-bg-sprites-2026-09-22.md)); stop condition (2) partially met. Opened and accepted from the F12.13 fight-screen trace through four structured questions (scope opt-in per pack, tool split in the same slice, ADR only at first, opt-in as a new hires.txt tag rather than an `<options>` token, which upstream loaders reject); build go-ahead *"libera a F12.15, dispara as três partes em paralelo. mergea o PR assim que puder e garante que t  tudo na main."* | a recorded screen must not hide a behind-background sprite where the ROM's background is colour 0; `<bgPreservesBehindBgSprites>` opts a pack in, the recorder writes it, community packs keep today's render; the overdraw tool must split background loss from sprite loss before pricing any gate rule |
 | 0225 | **accepted 2026-09-23 — implemented by F12.18 (dispatched, not yet on `main`)**; pick verbatim *"px/py por tile"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | a pose keeps its pixel offsets: per-tile `px`/`py` (and `z` on overlap) beside the tile-unit `dx`/`dy`, which stay; sheets keep ADR-0153's cells and gutter, composed views (`mep_figure.py`, kit figure rows, compose editor) place at pixel precision with no intra-figure gutter; amends 0170 §1 ([measurement](../validation/contra-pose-offsets-and-flicker-2026-09-23.md)) |
 | 0226 | **accepted 2026-09-23 — implemented by F12.19 (dispatched, not yet on `main`)**; pick verbatim *"Tolerar 1 frame"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | the pose-track linker bridges one missing retained frame (`kPoseTrackMaxGap = 1`, skipped frame `RepeatCount <= 2`), so respawn flicker does not shatter a track into single-frame tracks and the sequence fallback stops promoting the recording driver's period; the Contra kit is regenerated from a fresh recording; amends 0179 §1 |
+| 0227 | **accepted 2026-09-23 — reflected in Phase 10 "Idea under test" (no slice yet)**; decision verbatim *"Pelo nome, no kit"* | a Phase 10 subject is named from the artist kit as the set of kit ids the player names (`usrNNN`, cycle/sequence, pose ids); a rest grid counts only as the poses named from it; the toolchain infers no character membership, automatic grouping left open; amends Phase 10's viewer entry point |
 
 ### 7. Risks
 
