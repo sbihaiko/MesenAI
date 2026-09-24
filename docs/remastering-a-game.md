@@ -806,9 +806,14 @@ Two traps around it, both measured:
   and the key in two cases: a painted key another crop already owns
   (`... painted tile key(s) were already claimed by another crop ... (#343)`),
   and a painted key a capture also draws (`... also drawn by the captured
-  screen backgrounds/screenNNN.png ... (#338)`). Both are per sheet and count
+  screen(s) backgrounds/screenNNN.png, ... (#338)`). Both are per sheet and count
   only cells you actually painted, so silence about your sheet means the paint
-  did reach the manifest.
+  did reach the manifest. The capture line lists **every** live capture that
+  draws the key, found by looking for the tile in each capture's
+  `screenNNN.orig.png`, and that includes a cell `mep_add_cell.py` placed
+  (#422). A capture covers only the frames its probes match, so the one over
+  your frame is in the list, but not every capture in the list covers that
+  frame. Retire the one the runtime log names, or paint every capture listed.
 
 Finally: a frame a captured screen owns is drawn from `backgrounds/`, and on
 it no cell of any sheet reaches the screen. `build` warns that captures exist;

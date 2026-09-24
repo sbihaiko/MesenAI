@@ -64,6 +64,9 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
     probes rather than the whole frame, and a capture deleted from both layers
     is retired — its `<background>` line dropped and counted — instead of
     failing the build;
+  * #422: the #338 line also fires for a key a sheet shows (a cell
+    `mep_add_cell.py` placed), found in the capture's own `.orig.png`, and
+    names every live capture that draws the key, and only those;
   * ADR-0196 (F12.5): a sheet's `additions[]` overflow layer round-trips —
     the `<addition>` tag and the synthetic target's own `<tile>` rule come
     out of the same sheet cell, a rebuild re-emits rather than stacks them,
@@ -76,6 +79,7 @@ Wired into `make doc-checks`. Usage: python3 scripts/test_mep_build.py
 """
 
 import hashlib
+import json
 import shutil
 import struct
 import subprocess
@@ -812,6 +816,129 @@ def muted_paint_tests(root: Path):
         ok("#338: untouched sheets holding the same key are not warned about")
 
 
+# `Core/NES/NesDefaultVideoFilter.cpp`'s 2C02 row for the four colours of
+# PAL_HEX (0F 16 2A 30): the palette a recorded `screenNNN.orig.png` is drawn
+# with. The sheet fixtures above use a stand-in palette on purpose; a capture
+# has to carry the real colours, or it would not be the recorder's.
+CAPTURE_RGB = (0x000000, 0xB53120, 0x5CE430, 0xFFFEFF)
+
+
+def capture_png(shapes, scale: int = 1) -> bytes:
+    """A `screenNNN.orig.png`: a 256x240 backdrop with each (shape, x, y) of
+    `shapes` drawn in the 2C02 colours of PAL_HEX, nearest-upscaled by `scale`
+    exactly as `HdPackBuilder::CaptureScreen` writes the twin."""
+    pixels = [[0xFF101010] * 256 for _ in range(240)]
+    for shape, x, y in shapes:
+        data = tile_bytes(shape)
+        for row in range(8):
+            lo, hi = data[row], data[row + 8]
+            for col in range(8):
+                bit = 7 - col
+                c = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1)
+                pixels[y + row][x + col] = 0xFF000000 | CAPTURE_RGB[c]
+    return png_rgba(upscale(pixels, scale) if scale > 1 else pixels)
+
+
+def add_unsorted_cell(folder: Path, shape: int, chr_rom: bool):
+    """Give the pack an `unsorted` sheet, place `shape` on it with
+    `scripts/mep_add_cell.py` exactly as a reader pastes a copy line, and paint
+    the slot it reports. Returns the placer's output, or None on failure."""
+    global EMIT_TILE_INDEX
+    sheets = folder / "textures" / "sheets"
+    EMIT_TILE_INDEX = chr_rom
+    cells, pixels = contact_sheet(8, 1, 5, [{"count": 4, "context": "misc", "tiles": [18]}])
+    write_pair(sheets, "unsorted", pixels, 1)
+    (sheets / "unsorted.json").write_text(
+        serialize_sheet("unsorted", 8, 1, 5, "unsorted.png", "unsorted.orig.png", cells), encoding="utf-8")
+    EMIT_TILE_INDEX = False
+    tile = {"tile": tile_hex(shape), "palette": PAL_HEX}
+    if chr_rom:
+        tile["index"] = CHR_INDEX_BASE + shape
+    (folder.parent / f"{folder.name}-cell.json").write_text(json.dumps({"count": 1, "tiles": [tile]}), encoding="utf-8")
+    p = subprocess.run([PY, str(REPO / "scripts" / "mep_add_cell.py"), str(folder), str(folder.parent / f"{folder.name}-cell.json")],
+                       capture_output=True, text=True)
+    out = p.stdout + p.stderr
+    at = [ln for ln in out.splitlines() if "painted at" in ln]
+    if p.returncode != 0 or not at:
+        fail(f"mep_add_cell.py could not place the fixture cell (exit {p.returncode}):\n{out}")
+        return None
+    x, y = (int(v) for v in at[0].split("painted at", 1)[1].split("on", 1)[0].split(","))
+    paint(folder, "unsorted.png", x, y, 8)
+    return out
+
+
+def capture_shadow_tests(root: Path):
+    """#422: the #338 warning, for a cell `mep_add_cell.py` placed. Its key is
+    also on `metatiles.png`, so the recorder never marked it screen-resident
+    and `adjacency.json` carries no `screens[]` for it (ADR-0156 §1: a node a
+    sheet shows carries none) — yet a live capture draws it. The F14.2 cold
+    read hit this on 10 of 27 runs; the Mario Bros. repro is tile 403 under
+    `screen002`. Which capture draws the key is read off the capture's own
+    `.orig.png`, the only evidence a pack on disk has for a sheet-shown key."""
+    shape = 5  # on metatiles cell 1 (tiles 4..7), so the placer reports a claim
+    folder, _vocab, _cells = make_sheet_folder(root, "shadow-added-cell", chr_rom=True)
+    sheets = folder / "textures" / "sheets"
+    node = '{"tile": "%s", "palette": "%s", "index": %d}' % (tile_hex(shape), PAL_HEX, CHR_INDEX_BASE + shape)
+    (sheets / "adjacency.json").write_text(
+        '{"version": 1, "kind": "adjacency", "background": {"nodes": ['
+        f'{{"cell": 1, "count": 68, "context": "scene", "tiles": [{node}]}}], "edges": []}}}}',
+        encoding="utf-8")
+    backgrounds = folder / "textures" / "backgrounds"
+    backgrounds.mkdir(parents=True)
+    for name, shapes in (("screen001", [(9, 64, 64)]), ("screen002", [(shape, 0, 72), (shape, 8, 72)])):
+        (backgrounds / f"{name}.png").write_bytes(png(256, 240))
+        (backgrounds / f"{name}.orig.png").write_bytes(capture_png(shapes))
+    if add_unsorted_cell(folder, shape, chr_rom=True) is None:
+        return
+    out = run("build", str(folder))
+    if out is None:
+        return
+    shadow = [ln for ln in out.splitlines() if "(#338)" in ln]
+    if not shadow or "sheets/unsorted.png" not in shadow[0] or "backgrounds/screen002.png" not in shadow[0]:
+        fail(f"#422: a cell mep_add_cell.py placed and a capture draws got no (#338) line naming it:\n{out}")
+    else:
+        ok("#422: an added-and-painted cell a capture draws gets its (#338) line, naming the capture")
+    if len(shadow) != 1 or "backgrounds/screen001.png" in "".join(shadow):
+        fail(f"#422: the (#338) line names a capture that does not draw the key, or fired twice: {shadow}")
+    else:
+        ok("#422: the capture that does not draw the key is not named")
+
+    # Ice Climber / Pac-Man: build named a capture other than the one covering
+    # the frame. Here the adjacency provenance points at screen003 for the key,
+    # and screen004 (2x, fine x scroll 3 read off its tileAtPosition probe, rows
+    # one line down as Ice Climber draws them) also draws it; screen001 does
+    # not. Every capture that draws it is named.
+    folder, _vocab, _cells = make_sheet_folder(root, "shadow-which-capture")
+    sheets = folder / "textures" / "sheets"
+    node = '{"tile": "%s", "palette": "%s"}' % (tile_hex(shape), PAL_HEX)
+    (sheets / "adjacency.json").write_text(
+        '{"version": 1, "kind": "adjacency", "background": {"nodes": ['
+        '{"count": 2, "screens": [{"screen": "screen003", "x": 0, "y": 0}], '
+        f'"tiles": [{node}]}}], "edges": []}}}}', encoding="utf-8")
+    backgrounds = folder / "textures" / "backgrounds"
+    backgrounds.mkdir(parents=True)
+    for name, shapes in (("screen001", [(9, 64, 64)]), ("screen003", []), ("screen004", [(shape, 3 + 80, 17)])):
+        (backgrounds / f"{name}.png").write_bytes(png(512, 480))
+        (backgrounds / f"{name}.orig.png").write_bytes(capture_png(shapes, 2))
+    source = folder / "textures" / "hires.txt"
+    source.write_text(source.read_text(encoding="utf-8")
+                      + f"<condition>screen004_A,tileAtPosition,3,16,{tile_hex(9)},{PAL_HEX}\n", encoding="utf-8")
+    if add_unsorted_cell(folder, shape, chr_rom=False) is None:
+        return
+    out = run("build", str(folder))
+    if out is None:
+        return
+    shadow = "".join(ln for ln in out.splitlines() if "(#338)" in ln)
+    if "backgrounds/screen004.png" not in shadow:
+        fail(f"#422: the capture that draws the painted key (screen004) is not named:\n{out}")
+    elif "backgrounds/screen001.png" in shadow:
+        fail(f"#422: a capture that does not draw the key is named: {shadow}")
+    elif "backgrounds/screen003.png" not in shadow:
+        fail(f"#422: the recorder's own screens[] provenance was dropped: {shadow}")
+    else:
+        ok("#422: the (#338) line names every capture that draws the key, and only those")
+
+
 def sheet_alias_tests(root: Path):
     """ADR-0153 §3 alias pass (F9.7): a cell absorbs the vocabulary entries that
     render to the same pixels, and the build must emit a <tile> for every one of
@@ -1135,6 +1262,7 @@ def sheet_round_trip_tests(root: Path):
     screen_residency_tests(root)
     windows_path_carry_tests(root)
     muted_paint_tests(root)
+    capture_shadow_tests(root)
     chr_rom_key_tests(root)
     flip_baked_key_tests(root)
     mirror_h_pixel_key_tests(root)
