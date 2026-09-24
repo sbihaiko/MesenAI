@@ -880,9 +880,10 @@ without undocumented repairs.
 
 **Status:** drafted 2026-09-09 as a nine-slice product plan; **rewritten
 the same day after review** into the feasibility spikes below. **No product
-slice exists**; only the spikes ran. Nothing in this section is a decision: no module layout, sidecar
-format, tool contract, storage location, provider or emulator entry point
-is fixed here. **S10.c/S10.d shipped 2026-09-09; S10.a ran the same day and
+slice exists**; only the spikes ran. Only one thing in this section is a decision:
+the entry point, i.e. how the player chooses a subject, which ADR-0227 fixed on
+2026-09-23 (named from the artist kit). No module layout, sidecar format, tool
+contract, storage location or provider is fixed here. **S10.c/S10.d shipped 2026-09-09; S10.a ran the same day and
 failed** — its premise ("every pose the recorder saw") was not reachable from
 the sidecars available then. The user took that decision on 2026-09-11: **ADR-0170 is
 accepted and shipped as F9.19** (§3) — the recorder now writes pose
@@ -910,17 +911,17 @@ repaints a sheet at a higher resolution but keeps the drawing. None of them
 lets a player who cannot draw say "make Bill look like a chrome knight,
 keep the gun" and play the result.
 
-**Idea under test.** From the live viewer (ADR-0169) the player points at
-a subject, describes a restyle, and an external tool driven by a hosted
+**Idea under test.** The player names a subject from the artist kit
+(ADR-0227), describes a restyle, and an external tool driven by a hosted
 image model under the player's own key produces a candidate skin for the
-**whole subject** (every pose the recorder saw) that the unchanged
+**whole subject** (every pose the player named, ADR-0227 §3) that the unchanged
 `mep_build.py` slices into a pack. Whether any link of that chain holds is
 what the spikes measure.
 
 *Entry point amended 2026-09-23 by ADR-0227 (user's decision, verbatim:
-"Pelo nome, no kit").* The live viewer is a developer tool since ADR-0169
-§4's 2026-09-23 amendment, so the player does not point at the subject
-there: they **name** it from the artist kit, and the subject is the set of
+"Pelo nome, no kit"); it used to start from the live viewer.* The live
+viewer is a developer tool since ADR-0169 §4's 2026-09-23 amendment, so the
+player does not point at the subject there: they **name** it from the artist kit, and the subject is the set of
 kit ids they name (`usrNNN` grids, cycle/sequence ids, pose ids from
 `sheets/poses.json`). The kit has no notion of a character — one grid per
 cycle, and "rest" grids binned by box size — so "the whole subject" above
@@ -970,7 +971,9 @@ requirements.
 selection/export/paint evidence before promising a whole-subject studio, then write the ADRs — one
 decision each, by hand, via `/adr`: (i) whether and how a player's own key
 may send ROM-derived crops to a hosted model (amending ADR-0154 §2/§4, or
-not); (ii) the subject model and where studio data lives (outside `mep/`);
+not); (ii) where studio data lives (outside `mep/`) — how a subject is
+chosen is already ADR-0227, and only automatic grouping (ADR-0227 §4) would
+be a new subject-model decision;
 (iii) the tool contract and the validator as the gate; (iv) a reverse
 channel amending ADR-0169, only if a live preview is worth more than
 headless screenshots. Then slice the product work, one slice per task. If
