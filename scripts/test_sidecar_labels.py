@@ -138,19 +138,22 @@ def _grid_with_run(run_label, run_source, pose_label=""):
 
 def test_kit_captions_prefer_names_then_label_then_the_measured_tail():
     grid, _ = _grid_with_run(CYCLE_LABEL, "inferred")
-    check(K.grid_title(grid, K.Names()) == f"cycle000 — {CYCLE_LABEL}",
+    # Issue #400: a run caption always ends in its column order; pose001 is
+    # not on this one-cell grid, so its phase reads as "-".
+    order = " — plays columns 1 -"
+    check(K.grid_title(grid, K.Names()) == f"cycle000 — {CYCLE_LABEL}{order}",
           "with a label and no names the caption is the id beside the recorder's label",
           K.grid_title(grid, K.Names()))
     named = K.Names({"cycles": {"cycle000": "the player's run"}})
-    check(K.grid_title(grid, named) == "the player's run",
+    check(K.grid_title(grid, named) == "the player's run" + order,
           "a names.json entry still wins over the label", K.grid_title(grid, named))
     subject = K.Names({"poses": {"pose000": {"subject": "green-soldier"}}})
-    check(K.grid_title(grid, subject) == "green soldier — a 2-phase loop, seen 7 time(s)",
+    check(K.grid_title(grid, subject) == "green soldier — a 2-phase loop, seen 7 time(s)" + order,
           "a human subject wins over the label and keeps the measured tail",
           K.grid_title(grid, subject))
     bare, _ = _grid_with_run("", None)
-    check(K.grid_title(bare, K.Names()) == "cycle000 — a 2-phase loop, seen 7 time(s)",
-          "with no label at all the caption is exactly what it was before", K.grid_title(bare, K.Names()))
+    check(K.grid_title(bare, K.Names()) == "cycle000 — a 2-phase loop, seen 7 time(s)" + order,
+          "with no label at all the caption is what it was before, plus the order", K.grid_title(bare, K.Names()))
     single_pose = E.Pose("pose000", 412, (2, 3), {0: (0, 0)}, label=POSE_LABEL, label_source="inferred")
     rest = K.Grid("rest", "rest")
     rest.rows.append([K.Cell(single_pose, 0, 0)])
