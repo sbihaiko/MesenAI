@@ -274,8 +274,7 @@ public class CopyAsMepSheetCellTests
 			EmuApi.Pause();
 			Dispatcher.UIThread.RunJobs();
 
-			Assert.True(DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] _),
-				"the core published no scanline trace for the paused frame");
+			Assert.Equal(NesScanlineTraceStatus.Current, DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] _));
 			HashSet<(int Col, int Row)> drawn = DrawnCells(scroll);
 			Assert.True(drawn.Any(cell => cell.Col >= 32 || cell.Row >= 30),
 				$"precondition: {MultiNametableRom} at 2 s should draw cells outside nametable 0, and the " +
