@@ -201,7 +201,8 @@ def _recorded_done_steps(kit: dict) -> list:
     this kit actually has - a `cp` of a glob that matches nothing fails, and an
     artist runs these lines as written. Figures (ADR-0225 §2) are not copied at
     all: `mep_figure.py import` returns them onto the copy's sprite sheets, so
-    they get their own step between the copy and the build (#399). A `scene/`
+    they get their own step between the copy and the build (#399), after one
+    build of the copy so they plan against the sheets it slices (#435). A `scene/`
     screen is a verbatim copy of the pack's `textures/backgrounds/screenNNN.png`,
     which the manifest's `<background>` line draws by that name, so painted
     screens return by a plain copy back into that folder (#403). The figure
@@ -217,6 +218,11 @@ def _recorded_done_steps(kit: dict) -> list:
     if any(p.startswith("scene/") for p in paths):
         lines.append("cp <kit>/scene/*.png  <game>/painted/textures/backgrounds/")
     if figures:
+        # #435: build once before the imports. The build un-bakes flip-baked
+        # crops in place (ADR-0178), so an import before it plans against twins
+        # the build then rewrites and its paint re-points rules; `import`
+        # refuses such a pack, and `&&` keeps a failed build from reaching it.
+        lines.append("python3 scripts/mep_build.py build <game>/painted &&")
         # Fail fast: a `for` loop's status is its last iteration's, so a failed
         # import must exit the loop and `&&` must hold the build back. `sh -c`
         # keeps that `exit` out of the artist's own interactive shell.
@@ -250,7 +256,12 @@ def _recorded_done_steps(kit: dict) -> list:
             "`mep_figure.py import` writes what you painted on it into the copy's own "
             "sheets - the `usr*` row that draws each tile, so a rebuild changes no rule and "
             "*Reload Repainted Images* shows it (#413) - so it runs after the copy and "
-            "before the build. A figure you did not paint changes nothing, so importing "
+            "before the final build. The copy is built once before the import: that first "
+            "build rewrites some recorded sheets in place (it straightens sprites the "
+            "recording stored mirrored), and an import planned against the sheets before "
+            "that rewrite moves rules the reload cannot show; `import` refuses a copy that "
+            "was not built yet and says so, and writes nothing (#435). "
+            "A figure you did not paint changes nothing, so importing "
             "every one is safe; each prints how many cells it wrote, and the first import "
             "that fails stops the block before the build. A figure and its "
             "`sheets/usr*.png` row are the same tiles - paint either one, not both: if "

@@ -20,6 +20,7 @@ Run:  python3 scripts/test_mep_figure.py
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -434,6 +435,87 @@ def test_a_unit16_cell_owned_elsewhere_is_routed_and_the_manifest_holds():
         check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "unit-16 routed: the repainted pack builds")
         check((pack_dir / "textures" / "hires.txt").read_bytes() == manifest_before,
               "unit-16 routed: hires.txt is byte-identical (no rule moved)")
+
+
+def _two_halves(unit, left, right):
+    """An 8x8-grid-aligned cell whose left and right halves differ, so an H
+    mirror of it is a different picture (a solid cell is its own mirror)."""
+    img = T._solid(unit, left)
+    for y in range(0, unit, unit // 2):
+        img.paste(T._solid(unit // 2, right), unit // 2, y)
+    return img
+
+
+def _bake_mirror_into_group(pack_dir: Path, node: int):
+    """Make `spr000`'s `node` cell what the recorder writes for a sprite drawn
+    H-flipped (ADR-0178): the pixels (sheet and twin) carry the flip baked in,
+    the sidecar keys the flipped data with `source` + `mirror: H`. The
+    vocabulary cell of the same node holds the unflipped art. Only the first
+    `mep_build.py build` un-bakes the group cell (#255); until then its twin is
+    the mirror of the vocabulary's."""
+    sheets = pack_dir / "textures" / "sheets"
+    a, b = (10, 20, 30, 255), (200, 100, 50, 255)
+    tile, pal = _key(node)
+    flipped = bytes(int(f"{x:08b}"[::-1], 2) for x in bytes.fromhex(tile)).hex().upper()  # H mirror
+    for stem, left, right in (("sprites", a, b), ("spr000", b, a)):
+        doc = json.loads((sheets / f"{stem}.json").read_text(encoding="utf-8"))
+        cell = next(c for c in doc["cells"] if c.get("metatile") == node)
+        if stem == "spr000":
+            cell["tiles"] = [{"tile": flipped, "source": tile, "mirror": "H", "palette": pal}]
+            (sheets / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+        art = _two_halves(8, left, right)
+        for name, n in ((f"{stem}.orig.png", 1), (f"{stem}.png", SCALE)):
+            img = sheet_repaint.read_png(sheets / name)
+            img.paste(art if n == 1 else art.upscale(n), int(cell["x"]) * n, int(cell["y"]) * n)
+            sheet_repaint.write_png(sheets / name, img)
+
+
+def test_an_import_before_the_first_build_is_refused_and_the_recipe_holds_the_manifest():
+    """#435: the kit's "When you are done" recipe copied the kit sheets into a
+    copy of the recording and imported the figures before any build. The
+    build un-bakes flip-baked crops in place (ADR-0178, #255), so the twins
+    import compared were not the ones the build would slice: the owner's crop
+    looked like other art, the paint went to the vocabulary, and the build
+    re-pointed the key - *Reload Repainted Images* (ADR-0212) could not show
+    it. An import whose plan would be made against sheets the next build
+    rewrites is refused, untouched, with the build named; after one build
+    the same import routes the paint and the manifest holds."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        _bake_mirror_into_group(pack_dir, 1)
+        sheets = pack_dir / "textures" / "sheets"
+        control = Path(td) / "control"
+        shutil.copytree(pack_dir, control)
+        check(mep_build.main(["build", str(control), "--quiet"]) == 0, "the unpainted control builds")
+        manifest_control = (control / "textures" / "hires.txt").read_bytes()
+
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        before = _snapshot(sheets)
+        hires_before = (pack_dir / "textures" / "hires.txt").read_bytes()
+        try:
+            rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+            check(False, "an import before the first build is refused", json.dumps(rep))
+        except F.FigureError as e:
+            check("mep_build.py build" in str(e) and "spr000" in str(e),
+                  "an import before the first build is refused, naming the build and the sheet", str(e))
+        check(_snapshot(sheets) == before and (pack_dir / "textures" / "hires.txt").read_bytes() == hires_before,
+              "and the refused import wrote nothing")
+        check(F.main(["import", str(pack_dir), str(out / "pose000-figure.png")]) == 2,
+              "the CLI exits 2, so the recipe's fail-fast loop holds the build back")
+
+        # The recipe as it now reads: copy, build, import, build.
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the copy builds before the import")
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["written"] == 1 and rep["rerouted"] == 1 and rep["moves"] == 0 and rep["sheets"] == ["spr000.png"],
+              "after one build the paint is routed to the owner and no rule moves", json.dumps(rep))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+        check((pack_dir / "textures" / "hires.txt").read_bytes() == manifest_control,
+              "hires.txt is byte-identical to the unpainted control")
+        sx, sy = _cell_px(sheets, "spr000", 1)
+        check(sheet_repaint.read_png(sheets / "spr000.png").get(sx, sy) == (255, 0, 255, 255),
+              "and the paint is on the crop the manifest draws")
 
 
 def test_a_resized_figure_is_refused():

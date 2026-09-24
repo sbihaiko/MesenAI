@@ -255,11 +255,21 @@ def test_the_done_steps_import_painted_figures_between_copy_and_build():
                    if "scripts/mep_figure.py import <game>/painted" in c
                    and "<kit>/figures/usr*-figure.png" in c]
         copy = next((i for i, c in enumerate(cmds) if c.startswith("cp <kit>/sheets/")), None)
-        build = next((i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c), None)
+        builds = [i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c]
         check(len(imports) == 1, "a kit with figures names the figure import as a concrete "
               "command on the painted copy", str(cmds))
-        check(imports and copy is not None and build is not None and copy < imports[0] < build,
-              "the figure import runs after the sheet copy and before the build", str(cmds))
+        check(imports and copy is not None and builds and copy < imports[0] < builds[-1],
+              "the figure import runs after the sheet copy and before the final build", str(cmds))
+        # #435: the build un-bakes flip-baked crops in place (ADR-0178), so an
+        # import before it plans against twins the build then rewrites - the
+        # paint re-points rules and Reload Repainted Images cannot show it.
+        check(len(builds) == 2 and copy < builds[0] < imports[0],
+              "the copy is built once before the figure import, so the import plans against "
+              "the sheets the final build slices (#435)", str(cmds))
+        first = cmds[builds[0]] if builds else ""
+        check(first.rstrip().endswith("&&"), "a failed first build holds the imports back", first)
+        check("#435" in section and "build" in section.split("#435")[0][-400:],
+              "the done section says why the copy is built before the import (#435)")
         # Codex on #402: a `for` loop's status is its last iteration's, so an
         # import that fails mid-loop was masked and the build still ran.
         imp = cmds[imports[0]] if imports else ""

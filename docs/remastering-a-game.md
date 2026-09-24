@@ -562,7 +562,12 @@ does not hold), otherwise the sheet that does own it. On a kit project
 that is the kit's `usrNNN` row, not `sprites.png`. So the rebuild changes no
 rule in `hires.txt`, and the reload shows the paint. When an import has to
 re-point a tile anyway, it prints a note saying you need to reopen the ROM.
-A later `export` shows paint that was placed this way. `--verify` rebuilds a
+A later `export` shows paint that was placed this way. `import` refuses a pack
+that was never built with the sheets it holds (a kit just copied into a
+recording, or a fresh recording) and writes nothing: that first build
+straightens the sprite crops the recorder stored mirrored (ADR-0178), so a
+plan made before it would send paint to the wrong crop and move rules the
+reload cannot show (#435). Build once, then import. `--verify` rebuilds a
 throwaway copy, asserts the `(tileData, palette)` key set is unchanged, and
 says whether `hires.txt` is unchanged too, which is what the reload needs.
 The surface is at the pack's scale like every other sheet, and a resized
@@ -908,6 +913,7 @@ cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
 cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
 cp out/kit/scene/*.png  out/painted/textures/backgrounds/   # whole screens go back where they came from
+scripts/mep_build.py build out/painted &&    # once before the figures: import plans against the built sheets (#435)
 sh -c 'for f in out/kit/figures/usr*-figure.png; do
   [ -e "$f" ] || continue                                        # no figures: nothing to import
   python3 scripts/mep_figure.py import out/painted "$f" || exit 1  # figures are imported, not copied
@@ -922,7 +928,13 @@ failure is a build failure**, so exit 0 means both happened. 0 errors with
 warnings about the recorder's own sheet sizes is normal and is called out as
 such in the output.
 
-The figure loop runs after the sheet copy and before the build: a composed
+The figure loop runs after the sheet copy and a first build, and before the
+final build. The first build is not redundant: it rewrites some recorded sheets
+in place (it un-bakes the sprite crops the recorder stored mirrored,
+ADR-0178), and an import planned against the sheets before that rewrite sends
+paint to the wrong crop, so the final build re-points rules and *Reload
+Repainted Images* cannot show them. `import` refuses a copy that was not built
+yet, writes nothing, and names the build to run (#435). A composed
 figure (`<kit>/figures/usr*-figure.png`, ADR-0225) is a view, and
 `mep_figure.py import` writes what was painted on it into the copy's own
 sheets: the kit's `usrNNN` row that draws each tile (#413). An unpainted
