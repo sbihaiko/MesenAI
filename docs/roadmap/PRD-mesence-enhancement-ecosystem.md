@@ -1112,7 +1112,7 @@ investigation (`docs/validation/contra-pose-offsets-and-flicker-2026-09-23.md`):
 ADR-0225 keeps a pose's pixel offsets and ADR-0226 lets the track linker
 survive one missing frame. Both are accepted with the go-ahead *"pode
 implementar as duas ADRs em paralelo"* (2026-09-23) and dispatched in
-parallel, not yet on `main`; F12.17 is reserved for the patched-ROM import. Order: F12.19 first (it changes what
+parallel, not yet on `main`; F12.17 (the patched-ROM import) shipped separately. Order: F12.19 first (it changes what
 the recorder links, and its re-record is the input F12.18 measures on), then
 F12.18; one Contra re-record serves both, and the regenerated kit is a
 surface change under this phase's cold-read rule.

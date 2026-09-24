@@ -55,7 +55,7 @@ R in bursts.
 
 The current build on a clean stretch finds the real animation — `rec`: 3
 period-6 cycles (repeats 6, 4, 3); `full`: repeats 26 and 24 with
-`driver: "port1"` — because the stretches before the death and after the
+`driver: "port1"`, plus a third at 3 without one — because the stretches before the death and after the
 respawn each hold more than two turns. The flicker stretch contributed
 nothing to `repeats` and 61 junk tracks. A recording that dies early, or a
 game whose figure flickers longer, has no clean stretch and falls back to
