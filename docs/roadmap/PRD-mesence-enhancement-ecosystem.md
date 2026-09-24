@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day and F14.2 on 2026-09-24 (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -607,6 +607,27 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   state — how to record them is an open decision.
   [Log](../validation/f14.3-route-sets-2026-09-23.md),
   [start-state fix](../validation/issue-407-409-library-job-starts-2026-09-23.md).
+
+- **F14.2** (2026-09-24) — the 28-ROM cold read re-scored on current `main`
+  (go-ahead *"Sim, como recomendado (Recommended)"*). Same 28 ROMs and
+  briefing, packs re-recorded on one proven binary (`main` @ `f1749670`,
+  dylib sha256 `a39b3a9d…`), a fresh Opus evaluator per game, and
+  `f122_score_panel.py` on the pack each one left behind. **Criterion 3:
+  20/28** (was 13/28). 11 games need only the path, 9 also retire a capture
+  through #344, and 4 of the 20 could only pick a blank tile. Criterion 4 is
+  27/27 and criterion 2 27/27. Criterion 1 is void (contaminated) on every
+  run.
+  - 11 rows went fail to pass, 9 of them on the capture defect.
+  - 7 of the 8 failures share one cause: the copy resolves keys through the
+    scanline trace left over from before a state load, so it emits
+    wrong-bank indices or refuses the whole frame (P1; the GUI can hit it
+    too).
+  - The eighth, Zelda II, fails on two scan-harness defects: palettes are
+    checked against the bootstrap `auto/` pack, and the walk covers
+    nametable `$2000` only.
+  - Filed: #419 (the P1 trace defect), #420 and #421 (the two scan-harness
+    defects), and #422 (build's `(#338)` warning, from the passing runs).
+  [Log](../validation/f14.2-cold-read-rescore-2026-09-24.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -1213,7 +1234,9 @@ F14.1–F14.3, ADR-0229 opened `proposed` for F14.4, F14.5 as a measurement
 only, and the order in §5 item 6. **F14.1 and F14.3 are delivered** (2026-09-23, §3;
 their rows are removed): the painted round trip reached the running game
 pixel-exact through both paths, which closes F12.11 (3) and ADR-0209 Q2/Q3's
-"in-game reload not verified". The kit-figure reload gap F14.1 found is #413. The other rows are not started.
+"in-game reload not verified". The kit-figure reload gap F14.1 found is #413.
+**F14.2 is delivered** (2026-09-24, §3; its row is removed): criterion 3
+re-scored at 20/28. The other rows are not started.
 Two questions the review raised are already decided on open PR #397 and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
 an `<addition>` anchor is keyed (*"Manter como está"*, recorded as an
@@ -1225,8 +1248,9 @@ numbered those two F14.6 and F14.7, so F14.8 keeps its number.
 and each fix was measured against its own cause. Three things were never
 measured end to end: a painted cell reaching the running game through a
 paint-program export or a figure import, the 28-ROM cold read after every
-capture fix (criterion 3 is still 13/28, from
-`docs/validation/f12.2-opus-sweep-2026-09-19.md`), and how much of a pack the
+capture fix (criterion 3 was 13/28 in
+`docs/validation/f12.2-opus-sweep-2026-09-19.md`; F14.2 re-scored it at
+20/28, `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`), and how much of a pack the
 organised sheets can reach at all — 19.2 % (Castlevania) and 17.2 % (Zelda)
 of pack keys, because `ShapeIdFor` sees only the retained stream while
 `ProcessTile` emits a rule for everything the PPU draws (ADR-0209, "What (k)
@@ -1242,7 +1266,6 @@ verdict "no"), so F14.1 no longer re-records.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F14.2 | **Re-score the 28-ROM cold read on current `main`.** The F12.2 sweep's criterion 3 ("the paste works, the build works, the screen changes") predates ADR-0217/0218, F12.13, F12.15, F12.16 and #344's closure, each measured against its own cause only. | Go-ahead verbatim *"Sim, como recomendado (Recommended)"* (2026-09-23); follows ADR-0214. Runs only after #399, #400 and #401 merge. Bounded input: the same 28 ROMs and `docs/validation/f12.2-sweep-evaluator-briefing.md`, packs re-recorded on one proven binary, scored by `scripts/f122_score_panel.py`; the evaluator is a fresh Opus session per ROM. Stop when criterion 3 is re-scored on all 28 and every remaining failure has a named cause and either a bug on the board (`scripts/report-bug.sh`) or a stated non-goal. |
 | F14.4 | **Every drawn shape reaches the shape registry** (option (i) of ADR-0229), so the organised and `unsorted` sheets can reach the pack's keys and not only the retained stream's. | **ADR-0229 `proposed`**, options (i)–(iii); user leans (i), 2026-09-23, pending measurement. Not started until ADR-0229 is accepted. Bounded input: the Castlevania 60 s and Zelda 85 s runs ADR-0209 measured. The measurement that gates acceptance: pack coverage, grid-dump size and wall clock on both runs under option (i). Stop, once accepted, when the coverage figure is re-measured on both games with its cost and `mep_build` round-trips byte-identically. |
 | F14.5 | **Measure counter-locked scenery cycles** — the share of cycles (`PoseStats.Cycles` and background animation cycles) whose phase is constant against the global frame counter, over two recordings of the same route. Measurement only; nothing emits `frameRange`. | Scoped as a measurement only by the same decision (*"Sim, como recomendado (Recommended)"*, 2026-09-23); no ADR yet. The ADR on emitting `frameRange` (amending ADR-0189 §4) is written after these numbers. Bounded input: Metroid Norfair (`docs/validation/metroid-artist-workflow-evidence.md` §4) plus one Contra background animation. Stop when the share is logged per game and per axis in `docs/validation/`. |
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
@@ -1271,13 +1294,14 @@ verdict "no"), so F14.1 no longer re-records.
    on all 28 ROMs with Opus as the standing evaluator
    (`docs/validation/f12.2-opus-sweep-2026-09-19.md`: criterion 1 28/28,
    criterion 4 27/28, criterion 3 13/28 on the path as dispatched; F14.2
-   re-scores it). F12.5 still owes a hand-added overflow cell and F12.11 its
+   re-scored criterion 3 at 20/28 on 2026-09-24,
+   `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`). F12.5 still owes a hand-added overflow cell and F12.11 its
    stop condition (2); both are carried by Phase 14's F14.8. F12.11 (3) was
    met by F14.1 (2026-09-23, §3).
 6. **Phase 14, then Phase 13** (user's decision, verbatim: *"Sim, como
    recomendado (Recommended)"*, 2026-09-23): #399–#401 → F14.1 ∥ F14.3 (both delivered
    2026-09-23, §3) →
-   F14.2 → F14.4/F14.5 (measure before deciding: ADR-0229's figures for
+   F14.2 (delivered 2026-09-24, §3) → F14.4/F14.5 (measure before deciding: ADR-0229's figures for
    F14.4, the phase-constancy share for F14.5, and only then the ADRs) →
    Phase 13 R.1/R.2. F14.8 runs whenever a person is available.
 
