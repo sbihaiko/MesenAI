@@ -1495,6 +1495,23 @@ def test_patch_hardening(root: Path):
     else:
         ok("a contained symlink destination is refused before any write")
 
+    # The same, one folder down: `textures/sub` is a symlink onto
+    # `textures/sheets`, so `sub/fix.ips` would land beside the generated
+    # sheets. Only an intermediate component is a link, not the file itself.
+    out = root / "symlinked-dir-out"
+    (out / "textures" / "sheets").mkdir(parents=True)
+    (out / "textures" / "sub").symlink_to(out / "textures" / "sheets", target_is_directory=True)
+    files_sub = {k: v for k, v in files.items() if k != "fix.ips"}
+    files_sub["sub/fix.ips"] = files["fix.ips"]
+    lines_sub = patched_lines(stock_whole)[:-1] + [f"<patch>sub/fix.ips,{stock_whole}"]
+    src = write_src(root / "symlinked-dir", lines_sub, files_sub)
+    expect_error(lambda: MI.import_pack(src, out, True, rom), "symlink",
+                 "a nested <patch> destination under a symlinked folder inside the project")
+    if (out / "textures" / "sheets" / "fix.ips").exists() or (out / "auto").exists():
+        fail("the nested patch was written through the symlinked folder")
+    else:
+        ok("a symlinked intermediate folder is refused before any write")
+
     # The loader splits on every comma: `<patch>foo,bar.ips,<sha1>` is three
     # tokens, tokens[1] is 'bar.ips', and the IPS is never registered.
     files_comma = dict(files)
