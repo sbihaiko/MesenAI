@@ -631,6 +631,14 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   - Filed: #419 (the P1 trace defect), #420 and #421 (the two scan-harness
     defects), and #422 (build's `(#338)` warning, from the passing runs).
   [Log](../validation/f14.2-cold-read-rescore-2026-09-24.md).
+  - **Re-scored after #419–#421** (2026-09-24, `main` @ `4d9f73e2`): the 12
+    affected rows were re-recorded and re-dispatched. **Criterion 3 is now
+    26/28, with 0 blank-tile passes.** All 4 blank-tile passes now pick a
+    real shape, and 6 of the 8 failures pass. Gauntlet and Tetris 2 still
+    fail on #431: the copy substitutes a recorded fade palette the frame
+    never draws. Zelda passes only on a glyph, the same mechanism. Also
+    filed: #432, where parallel native-core tests race the scan's hand-over.
+    [Log](../validation/f14.2-rescore-after-419-421-2026-09-24.md).
 
 - **F14.5** (2026-09-24) — counter-locked cycles measured, nothing emitted
   (go-ahead *"Sim, como recomendado (Recommended)"*). Two recordings of each
@@ -1262,7 +1270,8 @@ their rows are removed): the painted round trip reached the running game
 pixel-exact through both paths, which closes F12.11 (3) and ADR-0209 Q2/Q3's
 "in-game reload not verified". The kit-figure reload gap F14.1 found (#413) was fixed 2026-09-24.
 **F14.2 is delivered** (2026-09-24, §3; its row is removed): criterion 3
-re-scored at 20/28. **F14.5 is delivered** (2026-09-24, §3; its row is
+re-scored at 20/28, then 26/28 after #419–#421 (0 blank-tile passes; #431
+holds the 2 failures). **F14.5 is delivered** (2026-09-24, §3; its row is
 removed): 0/6 Metroid sprite cycles and 3/3 Contra water tracks
 counter-locked, the latter only until the next load. The other rows are not
 started.
@@ -1279,7 +1288,8 @@ measured end to end: a painted cell reaching the running game through a
 paint-program export or a figure import, the 28-ROM cold read after every
 capture fix (criterion 3 was 13/28 in
 `docs/validation/f12.2-opus-sweep-2026-09-19.md`; F14.2 re-scored it at
-20/28, `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`), and how much of a pack the
+20/28, `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`, and 26/28
+after #419–#421, `docs/validation/f14.2-rescore-after-419-421-2026-09-24.md`), and how much of a pack the
 organised sheets can reach at all — 19.2 % (Castlevania) and 17.2 % (Zelda)
 of pack keys, because `ShapeIdFor` sees only the retained stream while
 `ProcessTile` emits a rule for everything the PPU draws (ADR-0209, "What (k)
@@ -1323,7 +1333,8 @@ verdict "no"), so F14.1 no longer re-records.
    (`docs/validation/f12.2-opus-sweep-2026-09-19.md`: criterion 1 28/28,
    criterion 4 27/28, criterion 3 13/28 on the path as dispatched; F14.2
    re-scored criterion 3 at 20/28 on 2026-09-24,
-   `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`). F12.5 still owes a hand-added overflow cell and F12.11 its
+   `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`, then 26/28 after
+   #419–#421, `docs/validation/f14.2-rescore-after-419-421-2026-09-24.md`). F12.5 still owes a hand-added overflow cell and F12.11 its
    stop condition (2); both are carried by Phase 14's F14.8. F12.11 (3) was
    met by F14.1 (2026-09-23, §3).
 6. **Phase 14, then Phase 13** (user's decision, verbatim: *"Sim, como
