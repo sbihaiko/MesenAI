@@ -3,7 +3,7 @@
 - Status: **accepted 2026-09-23** — implemented by PRD Part A slice
   **F12.19** (`docs/roadmap/PRD-mesence-enhancement-ecosystem.md`,
   Phase 12), which also regenerates the Contra kit from a fresh recording;
-  **in progress, not yet on `main`** at the time of writing. User's pick,
+  **implemented** (stop conditions 1–3 met; the kit's cold-read row, condition 4, still owed — `docs/validation/f12.19-flicker-tolerant-tracks-2026-09-23.md`). User's pick,
   verbatim: *"Tolerar 1 frame"*. Implementation go-ahead quoted verbatim
   (2026-09-23): *"pode implementar as duas ADRs em paralelo"* — the
   same-turn rule of CLAUDE.md applies: the change ships with §4's unit tests
@@ -55,7 +55,7 @@ R in bursts.
 
 The current build on a clean stretch finds the real animation — `rec`: 3
 period-6 cycles (repeats 6, 4, 3); `full`: repeats 26 and 24 with
-`driver: "port1"` — because the stretches before the death and after the
+`driver: "port1"`, plus a third at 3 without one — because the stretches before the death and after the
 respawn each hold more than two turns. The flicker stretch contributed
 nothing to `repeats` and 61 junk tracks. A recording that dies early, or a
 game whose figure flickers longer, has no clean stretch and falls back to

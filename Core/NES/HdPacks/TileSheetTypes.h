@@ -84,6 +84,13 @@ namespace MesenSheets
 	//whose top-left is nearest, within this Manhattan distance in pixels. A
 	//running actor moves a few px per frame; a teleport ends the track.
 	constexpr int32_t kPoseTrackMaxMove = 16;
+	//ADR-0226: a kept cluster with no partner in frame i+1 stays a pending
+	//track end for this many retained frames, so a figure drawn on every
+	//other frame (flicker, OAM sharing) is one track, not one per sighting.
+	//The skipped frame must carry RepeatCount <= kPoseTrackGapMaxRepeats: a
+	//figure gone across a long static frame has really left.
+	constexpr uint32_t kPoseTrackMaxGap = 1;
+	constexpr uint32_t kPoseTrackGapMaxRepeats = 2;
 	//A cycle is a period that repeats at least this many consecutive times
 	//on one track; the period is searched up to kPoseCycleMaxPeriod poses.
 	constexpr uint32_t kPoseCycleMinRepeats = 2;

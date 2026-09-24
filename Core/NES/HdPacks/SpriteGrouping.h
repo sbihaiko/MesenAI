@@ -63,7 +63,8 @@ namespace MesenSheets
 	//kept set is capped at kMaxPoses.
 	//ADR-0179 (F9.20) adds what the stream says about succession, without
 	//touching how a pose is found or ranked: kept clusters are linked frame
-	//to frame (nearest within kPoseTrackMaxMove) into tracks, each entry
+	//to frame (nearest within kPoseTrackMaxMove; ADR-0226 bridges one missing
+	//retained frame) into tracks, each entry
 	//gains Hold/Next, a kept pose that is another plus a sub-threshold
 	//remainder is a VariantOf it, and the tracks are scanned for cycles
 	//(period repeated >= kPoseCycleMinRepeats times, found on the sequence
