@@ -2,8 +2,9 @@
 
 - Status: accepted (2026-09-16) — §3 decided as option (a) with a reserved
   palette added to the reserved pattern; user's go-ahead quoted verbatim:
-  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
-  Phase 12, F12.5
+  "confirmo". Implemented as PRD Part A slice F12.5 (2026-09-19; Part A
+  §3); its hand-added overflow cell is still owed and is carried by Phase 14's
+  F14.8
 - Date: 2026-09-16
 - Related: ADR-0165 (composition editor, external stdlib tool), ADR-0171
   (the sprite layer's unit is the pose), ADR-0179 (`poses.json` succession),
