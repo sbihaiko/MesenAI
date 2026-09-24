@@ -2,9 +2,10 @@
 
 - Status: **accepted 2026-09-23** — implemented by PRD Part A slice
   **F12.18** (`docs/roadmap/PRD-mesence-enhancement-ecosystem.md`,
-  Phase 12), **implemented** — stop conditions 1–4 met; condition 5 (the kit
+  Phase 12), **implemented** — stop conditions 1, 2, 4 and 5 met; condition 3 reopened 2026-09-23 (the six-phase row showed five columns with no phase order — #400, and a re-run cold read, `docs/validation/f1219-contra-kit-coldread-2026-09-23.md`); condition 5 (the kit
   regenerated from one Contra re-record carrying F12.18 and F12.19 on the
-  same binary) still owed (`docs/validation/f1218-pose-pixel-offsets-2026-09-23.md`).
+  same binary) met 2026-09-23 (`docs/validation/f1218-pose-pixel-offsets-2026-09-23.md`,
+  `docs/validation/f1218-f1219-contra-rerecord-2026-09-23.md`).
   User's pick, verbatim: *"px/py por tile"*. Implementation go-ahead quoted
   verbatim (2026-09-23): *"pode implementar as duas ADRs em paralelo"* — the
   same-turn rule of CLAUDE.md applies: the change ships with unit tests

@@ -3,7 +3,7 @@
 - Status: **accepted 2026-09-23** — implemented by PRD Part A slice
   **F12.19** (`docs/roadmap/PRD-mesence-enhancement-ecosystem.md`,
   Phase 12), which also regenerates the Contra kit from a fresh recording;
-  **implemented** (stop conditions 1–3 met; the kit's cold-read row, condition 4, still owed — `docs/validation/f12.19-flicker-tolerant-tracks-2026-09-23.md`). User's pick,
+  **implemented** (stop conditions 1–3 met; the kit's cold-read row, condition 4, logged 2026-09-23 in `docs/validation/f1219-contra-kit-coldread-2026-09-23.md` with verdict "no" (#399–#401), stays open until a re-run cold read after those fixes — `docs/validation/f12.19-flicker-tolerant-tracks-2026-09-23.md`; (1)–(3) reproduced on the shared re-record, `docs/validation/f1218-f1219-contra-rerecord-2026-09-23.md`). User's pick,
   verbatim: *"Tolerar 1 frame"*. Implementation go-ahead quoted verbatim
   (2026-09-23): *"pode implementar as duas ADRs em paralelo"* — the
   same-turn rule of CLAUDE.md applies: the change ships with §4's unit tests
