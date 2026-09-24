@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2 and F14.5 on 2026-09-24 (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2 and F14.5 on 2026-09-24 (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -663,6 +663,48 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   - No issue filed.
   [Log](../validation/f14.5-counter-locked-cycles-2026-09-24.md).
 
+- **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
+  *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
+  paralelo"*, PR #395). The recorder writes per-tile `px`/`py` (and `z` on
+  overlap) beside `dx`/`dy`. The composed views (`mep_figure.py`, the kit's
+  Figures rows, the compose editor) place tiles at pixel precision.
+  - (1) Every tile carries `px`/`py`, with 0 violations of
+    `dx == ToCells(px)` or the `dy` twin.
+  - (2) All 11 run-cycle poses export 0 px off their OAM frame (they were
+    2–4 px off before).
+  - (4) A painted overlapping pose round-trips with 172 → 172 keys.
+  - (5) The Contra kit was regenerated from one re-record carrying both
+    ADRs.
+  - (3) was reopened by the first cold read (five columns for a six-phase
+    loop, no order; #400). It was met on 2026-09-24: on a fresh re-record
+    on `main` @ `89acdc10`, each cycle's caption and `playsColumns` state
+    "plays columns 1 2 3 1 4 5", and a fresh Sonnet cold reader read it
+    unprompted.
+  [Logs](../validation/f1218-pose-pixel-offsets-2026-09-23.md),
+  [re-record](../validation/f1218-f1219-contra-rerecord-2026-09-23.md),
+  [re-run cold read](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md).
+
+- **F12.19** (2026-09-24) — the pose-track linker tolerates one missing
+  retained frame (ADR-0226; pick *"Tolerar 1 frame"*, same go-ahead, PR
+  #394).
+  - (1) The ADR-0226 §4 unit tests pass.
+  - (2) On Contra stage 1, single-frame tracks in the flicker window fell
+    from 61 to 0, and the cycles went from 26/24/3 to 26/26/3.
+  - (3) `sequences[]` is empty.
+  - (4) The first cold read (2026-09-23) read "no" and filed #399, #400 and
+    #401. After those fixes and #413 merged, the kit was regenerated on
+    `main` @ `89acdc10` (27 poses, 6 fused per ADR-0228, 3 period-6 cycles,
+    every part `--verify` 0 lost / 0 added). The same briefing then went to
+    a fresh Sonnet evaluator, who returned *"Run cycle identifiable and
+    paintable unaided: yes"* with 0 stops. The phase order, a rest grid of
+    Bill alone and the figure import all check out mechanically.
+  - One residue is filed as #435 (P2): the "When you are done" recipe
+    imports figures before any build, so a painted figure re-points rules
+    and *Reload Repainted Images* cannot show it. The paint still reaches
+    the pack.
+  [Log](../validation/f12.19-flicker-tolerant-tracks-2026-09-23.md),
+  [re-run cold read](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md).
+
 
 ### 4. Roadmap — pending work, by slice
 
@@ -1125,9 +1167,8 @@ available in git and the logs.
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
 ("Gaps this table names"). Delivered (§3): F12.1, F12.3–F12.10 and
-F12.12–F12.17 (2026-09-17 to 2026-09-23), plus ADR-0209 Q1–Q3; F12.2's
-evaluator row closed 2026-09-19. F12.18 and F12.19 are merged (#395, #394)
-with their owed rows in flight. **F12.11 is the one open row:** ADR-0220 was
+F12.12–F12.19 (2026-09-17 to 2026-09-24), plus ADR-0209 Q1–Q3; F12.2's
+evaluator row closed 2026-09-19. **F12.11 is the one open row:** ADR-0220 was
 accepted and its code landed on 2026-09-22; stop condition (3) (the paint
 round trip through F12.3) was met by Phase 14's F14.1 on 2026-09-23 (§3),
 and (2) (GIMP and Krita, logged by a person) moves into F14.8. F12.1's scale reference moved F12.3's
@@ -1198,14 +1239,12 @@ tile normalization by similarity; embedding the Python toolchain in the UI.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) **Evaluator (ADR-0214, 2026-09-19):** a fresh Fable session pastes one cell and paints it without reading `hires.txt`, from `docs/validation/f12.2-fable-evaluator-briefing.md`. The dispatcher script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md` (S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them); handing it to Fable invalidates the run. Re-measures "Picking a tile's key by hand". A **mechanical** replay of setup S1–S4 and of P9–P14 exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. The remaining row is the Fable dispatch, not a calendar wait for a person. P15 and pointer-level discoverability are observations / not evaluated. **Closed 2026-09-19:** two fresh Fable sessions, one game each, both PASS — 0 hard stops, neither opened a `hires.txt`, magenta on screen in ~2 min (Zelda 1) and ~4 min (Contra). Criteria 3/5/6 re-derived mechanically from the packs they left behind, 0 magenta on an unpainted baseline at the same frame. Log: `docs/validation/f12.2-fable-panel-2026-09-19.md`. The same log is the argument for the protocol: round 1 stopped **both** sessions on the same two dispatcher defects (a copy table keyed in pixels while the tilemap is labelled in tiles, and a screenshot path that did not match the tool), neither reachable by any green suite. |
-| F12.18 | **A pose keeps its pixel offsets (ADR-0225).** The recorder writes per-tile `px`/`py` (native pixels from the pose origin; `z` only when tiles overlap) beside the unchanged `dx`/`dy`, `unit: 8` and `size`; readers fall back to `px = dx * unit` on an older sidecar. Sheets keep 8 px cells and ADR-0153's gutter; the **composed** views — `scripts/mep_figure.py export`/`import`, the kit's Figures rows (`scripts/artist_kit.py`), the composition editor's pose rendering — place tiles at pixel precision with no intra-figure gutter, and `import` returns an overlapped pixel to the frontmost cell whose `orig` pixel is opaque there. `PoseTile` gains `Px`/`Py`/rank outside the identity ordering; `mep_lint.py` warns when `dx != ToCells(px)` or `dy != ToCells(py)`, and `core_unit_tests` covers both axes. Bounded input: the Contra stage-1 recording (`scripts/stages/contra/stage1-probe.txt` driver) and the six phases of its run cycle (`docs/validation/contra-pose-offsets-and-flicker-2026-09-23.md` §1: torso +2..+4 px, legs at y 14). Stop when (1) every written tile carries `px`/`py`, `dx == ToCells(px)` holds in a unit test, and a sidecar without them still reads through the fallback; (2) `mep_figure.py export` of each run phase matches the recording's OAM frame pixel for pixel (today: up to 4 px off); (3) the kit's figure row shows the six phases with no intra-figure gutter and the row baseline intact; (4) a painted export round-trips through `import` and `mep_build.py build` with 0 errors and the key set unchanged (ADR-0183 §4), overlap handled as decided; (5) the Contra kit is regenerated from a fresh recording (shared with F12.19). One task. | **ADR-0225 accepted 2026-09-23** (*"px/py por tile"*); go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* (2026-09-23), implemented: stop conditions (1), (2) and (4) **met** — 290/290 tiles carry `px`/`py` with 0 invariant violations on both axes; 10/10 poses of the two player run cycles export pixel-identical to the OAM frame (2–4 px off before); kit rows with no intra-figure gutter on one baseline, but (3) is **reopened** 2026-09-23: the six-phase loop shows five columns and the kit gave no phase order, so a cold reader could not tell which phase repeats (`docs/validation/f1219-contra-kit-coldread-2026-09-23.md` (briefing: `docs/validation/f1219-contra-kit-coldread-briefing.md`)); the fix is #400 (PR #404), and (3) closes on a re-run cold read after it merges; a painted overlapping pose round-trips (172 → 172 keys). (5) **met** 2026-09-23 — one Contra stage-1 re-record on a single binary carrying F12.18 and F12.19 (dylib provenance proven) reproduces (1), (2) and (4) (292/292 tiles with `px`/`py`, 0 violations; 11/11 run-cycle poses 0 px off the OAM frame; painted `pose000` 172 → 172 keys) and regenerates the kit (every part `--verify` 0 lost / 0 added, `mep_lint` 0/0, `mep_build` 0 errors). 1028/1028 core tests. Logs: `docs/validation/f1218-pose-pixel-offsets-2026-09-23.md`, `docs/validation/f1218-f1219-contra-rerecord-2026-09-23.md`. |
-| F12.19 | **The pose-track linker tolerates one missing retained frame (ADR-0226).** `LinkPoseTracks` keeps a partnerless cluster pending for one frame and links it in a second nearest-first pass after the adjacent-frame pass, within the unchanged 16 px; `kPoseTrackMaxGap = 1`, the skipped frame's `RepeatCount` (<= `kPoseTrackGapMaxRepeats = 2`) is added to the run it interrupts so `hold` keeps the game's cadence; a two-frame gap still breaks the track. Nothing after the linker changes. The slice re-records Contra stage 1 with the new binary and regenerates the kit (the same recording serves F12.18). Bounded input: the Contra `full` stream of 2026-09-23 — 3 667 retained frames, 69 tracks of which 61 are single-frame tracks between retained frames 383 and 507 (respawn flicker), 3 period-6 cycles with `repeats` 26/24/3 (`docs/validation/contra-pose-offsets-and-flicker-2026-09-23.md` §2–§3). Stop when (1) the ADR-0226 §4 unit tests pass (one track across alternate frames, two tracks across a two-frame gap, `RepeatCount` 3 not bridged, cadence kept, no track swap across the gap); (2) on the re-recorded stream the flicker stretch yields 0 single-frame tracks (61 today) and the player's cycle `repeats` count rises by the turns run under invincibility; (3) the regenerated `poses.json` writes no `sequences[]` entry whose holds reproduce the driver's period (`[…, 30, …]` from `104f R / 30f - / 104f L`) — the old kit's `seq000`; (4) the Contra kit's figure rows are period-6 cycles and the regenerated surface gets its cold-read row. One task. | **ADR-0226 accepted 2026-09-23** (*"Tolerar 1 frame"*); go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* (2026-09-23), implemented (`LinkPoseTracks`, `kPoseTrackMaxGap = 1`): stop conditions (1)–(3) **met** — 1007/1007 core tests; Contra stage 1 single-frame tracks in the flicker window 61 → 0, cycle `repeats` 26/24/3 → 26/26/3, `sequences[]` empty; (4) half met — the kit's figure rows are the three period-6 cycles (reproduced on the shared re-record: 9 tracks, 0 single-frame tracks in the flicker window, `repeats` 26/26/3, 0 sequences), the cold-read row was logged 2026-09-23 (fresh Opus, ADR-0214; `docs/validation/f1219-contra-kit-coldread-2026-09-23.md` (briefing: `docs/validation/f1219-contra-kit-coldread-briefing.md`)) with the verdict *"run cycle identifiable and paintable unaided: no"*: five columns for a six-phase loop with no phase order (#400, PR #404), painted figures never routed back (#399, PR #402), and possible composites in the rest grid (#401). (4) stays **open** until those merge and a re-run cold read, with its own briefing, reads the period-6 rows as such. Logs: `docs/validation/f12.19-flicker-tolerant-tracks-2026-09-23.md`, `docs/validation/f1218-f1219-contra-rerecord-2026-09-23.md`. |
 
 **Added 2026-09-23 (F12.18, F12.19).** Two decisions from the Contra pose
 investigation (`docs/validation/contra-pose-offsets-and-flicker-2026-09-23.md`):
 ADR-0225 keeps a pose's pixel offsets and ADR-0226 lets the track linker
 survive one missing frame. Both are accepted with the go-ahead *"pode
-implementar as duas ADRs em paralelo"* (2026-09-23); their implementations landed (PRs #394, #395) and both slices stay open on the acceptance conditions above; F12.17 (the patched-ROM import) shipped separately. Order: F12.19 first (it changes what
+implementar as duas ADRs em paralelo"* (2026-09-23); their implementations landed (PRs #394, #395) and both slices were delivered on 2026-09-24 once the re-run cold read met F12.18 (3) and F12.19 (4) (§3); F12.17 (the patched-ROM import) shipped separately. Order: F12.19 first (it changes what
 the recorder links, and its re-record is the input F12.18 measures on), then
 F12.18; one Contra re-record serves both, and the regenerated kit is a
 surface change under this phase's cold-read rule.
@@ -1301,7 +1340,8 @@ kit defects the 2026-09-23 Contra kit cold read found (painted figures never
 routed back into the pack, no phase order on a folded cycle, composites in
 the rest grid; open PR #398 carries the log) — merge first. The Contra
 re-record and that cold read are done (F12.18 (5) met, F12.19 (4) logged,
-verdict "no"), so F14.1 no longer re-records.
+verdict "no"), so F14.1 no longer re-records. All three merged, and the
+re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-coldread-rerun-2026-09-24.md`).
 
 | Slice | Deliverable | Decision |
 |---|---|---|
@@ -1326,7 +1366,7 @@ verdict "no"), so F14.1 no longer re-records.
    work additionally depends on Phase 9 selection/export/paint evidence.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
-5. **Phase 12:** F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3).
+5. **Phase 12:** F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3).
    F12.2's evaluator row is **closed** — two fresh Fable sessions, both PASS
    (`docs/validation/f12.2-fable-panel-2026-09-19.md`), then the same protocol
    on all 28 ROMs with Opus as the standing evaluator
@@ -1415,8 +1455,8 @@ files and in §3.
 | 0222 | **accepted 2026-09-22, option A — shipped the same day as F12.14** ([log](../validation/f12.14-oam-dump-self-describing-2026-09-22.md)); go-ahead verbatim *"dispara as frentes 1, 2, 3 e 4 em paralelo usando workflows"*. Opened `proposed` the same day from the F12.6a/F12.6b logs' open item; three options for the sprite side (A self-describing OAM dump with `K`/`P` lines and a palette id per entry, B write the `ShapeId` and resolve against the grid dump of the same recording, C leave sprite conditions `not evaluable` and say so to the artist) plus `memoryCheck` from the existing `M` plane under any of them; four questions for a human | the retained OAM stream must let lint resolve a sprite to its `(tileData, palette)`, so `spriteNearby`, `spriteAtPosition`, `positionCheck*` and `memoryCheck` stop reporting `not evaluable` |
 | 0223 | **accepted 2026-09-22, option A — shipped the same day as F12.16** ([log](../validation/f12.16-emptiness-probes-2026-09-22.md)), after F12.15. Picks verbatim *"A: probes como ultimo passo (Recommended)"*, *"Depois da F12.15 (Recommended)"*; the fight-screen half went to ADR-0224. Opened `proposed` the same day. Opened from the F12.13 log, which measured that ADR-0221's option B fires (228 Punch-Out!! frames, 5 091 across the library) and changes no gate, because ADR-0050 excludes flat cells from the anchor pool and a one-letter-later frame differs from its capture only on a flat cell. Three options: A last-pass "emptiness probes" (prototype: 437 → 141 erased cells), B rank flat cells with everything else, C leave it. The fight-screen 41–45 s residue was traced the same day: every erased cell there is a behind-background sprite overpainted by the priority-20 layer in `HdNesPack::GetPixels`, so no gate rule reaches it and #339 has two causes; the render-path question is recorded as open | a flat cell may be an anchor when it is the only thing that separates a capture from an addition-rival — the human picks which option, and whether a flat probe may be emitted at all |
 | 0224 | **accepted 2026-09-22 — shipped the same day as F12.15** ([log](../validation/f12.15-behind-bg-sprites-2026-09-22.md)); stop condition (2) partially met. Opened and accepted from the F12.13 fight-screen trace through four structured questions (scope opt-in per pack, tool split in the same slice, ADR only at first, opt-in as a new hires.txt tag rather than an `<options>` token, which upstream loaders reject); build go-ahead *"libera a F12.15, dispara as três partes em paralelo. mergea o PR assim que puder e garante que t  tudo na main."* | a recorded screen must not hide a behind-background sprite where the ROM's background is colour 0; `<bgPreservesBehindBgSprites>` opts a pack in, the recorder writes it, community packs keep today's render; the overdraw tool must split background loss from sprite loss before pricing any gate rule |
-| 0225 | **accepted 2026-09-23 — implemented by F12.18 (implementation landed; slice open, condition 3 reopened pending #400 and a re-run cold read)**; pick verbatim *"px/py por tile"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | a pose keeps its pixel offsets: per-tile `px`/`py` (and `z` on overlap) beside the tile-unit `dx`/`dy`, which stay; sheets keep ADR-0153's cells and gutter, composed views (`mep_figure.py`, kit figure rows, compose editor) place at pixel precision with no intra-figure gutter; amends 0170 §1 ([measurement](../validation/contra-pose-offsets-and-flicker-2026-09-23.md)) |
-| 0226 | **accepted 2026-09-23 — implemented by F12.19 (implementation landed; slice open, condition 4 open: cold read logged "no", #399–#401, re-run owed)**; pick verbatim *"Tolerar 1 frame"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | the pose-track linker bridges one missing retained frame (`kPoseTrackMaxGap = 1`, skipped frame `RepeatCount <= 2`), so respawn flicker does not shatter a track into single-frame tracks and the sequence fallback stops promoting the recording driver's period; the Contra kit is regenerated from a fresh recording; amends 0179 §1 |
+| 0225 | **accepted 2026-09-23 — implemented by F12.18, delivered 2026-09-24 (condition 3 met by the re-run cold read, [log](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md))**; pick verbatim *"px/py por tile"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | a pose keeps its pixel offsets: per-tile `px`/`py` (and `z` on overlap) beside the tile-unit `dx`/`dy`, which stay; sheets keep ADR-0153's cells and gutter, composed views (`mep_figure.py`, kit figure rows, compose editor) place at pixel precision with no intra-figure gutter; amends 0170 §1 ([measurement](../validation/contra-pose-offsets-and-flicker-2026-09-23.md)) |
+| 0226 | **accepted 2026-09-23 — implemented by F12.19, delivered 2026-09-24 (condition 4 met: the re-run cold read after #399–#401 read "yes", [log](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md))**; pick verbatim *"Tolerar 1 frame"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | the pose-track linker bridges one missing retained frame (`kPoseTrackMaxGap = 1`, skipped frame `RepeatCount <= 2`), so respawn flicker does not shatter a track into single-frame tracks and the sequence fallback stops promoting the recording driver's period; the Contra kit is regenerated from a fresh recording; amends 0179 §1 |
 | 0227 | **accepted 2026-09-23 — reflected in Phase 10 "Idea under test" (no slice yet)**; decision verbatim *"Pelo nome, no kit"* | a Phase 10 subject is named from the artist kit as the set of kit ids the player names (`usrNNN` grids or the pose ids their `kit.json` records list); a rest grid counts only as the poses named from it; the toolchain infers no character membership, automatic grouping left open; amends Phase 10's viewer entry point |
 | 0228 | **accepted 2026-09-23 — implemented the same day** (issue #401, [log](../validation/issue-401-rest-grid-composites-2026-09-23.md)); pick verbatim *"Tratar como fundida (Recommended)"*, go-ahead verbatim *"pode corrigir o #400 e o #401 em paralelo também"* | a kept pose plus a remainder of `kPoseMinTiles` or more tiles is a fusion even when the remainder never stood alone, labelled with the one kept part (`"fusionOf": ["poseNNN"]`); a two-part ADR-0177 split still wins, and with ADR-0179 §4 every containment is either a variant or a fusion. Contra stage 1: fusions 2 → 6, the rest sheet loses its four Bill-plus-soldier composites, kit `--verify` 0 lost / 0 added. Amends ADR-0177 §1/§3/§4 |
 

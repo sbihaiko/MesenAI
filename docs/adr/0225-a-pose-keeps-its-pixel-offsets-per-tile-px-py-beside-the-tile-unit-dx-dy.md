@@ -10,6 +10,12 @@
   verbatim (2026-09-23): *"pode implementar as duas ADRs em paralelo"* — the
   same-turn rule of CLAUDE.md applies: the change ships with unit tests
   covering §1–§3 and the go-ahead is quoted in the PR body.
+  **Condition 3 met 2026-09-24** after #400: the kit was regenerated from a
+  fresh Contra re-record on `main` @ `89acdc10`, and each cycle's caption and
+  `playsColumns` state the six-phase order ("plays columns 1 2 3 1 4 5"). A
+  fresh cold reader read that order unprompted, with the verdict "yes"
+  (`docs/validation/f1219-contra-kit-coldread-rerun-2026-09-24.md`). All
+  five stop conditions are met, and F12.18 is delivered.
 - Date: 2026-09-23
 - Related: ADR-0170 (the pose sidecar; §1 rounds offsets with `ToCells`),
   ADR-0153 (§3 sheets are 8 px cells with a 1-cell gutter), ADR-0179 (cycles
