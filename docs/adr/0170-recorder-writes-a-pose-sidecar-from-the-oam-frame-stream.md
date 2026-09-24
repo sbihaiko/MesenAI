@@ -6,7 +6,8 @@
   (Phase 11 C.8):** the "loosen pose identity" revisit is closed — keep
   sets-equal identity; see Consequences. **Amended 2026-09-23 by
   ADR-0225:** a `tiles[]` entry gains optional `px`/`py` (pixel offsets from
-  the pose origin) beside `dx`/`dy`, which stay; identity is unchanged.
+  the pose origin) beside `dx`/`dy`, which stay; identity is unchanged —
+  implemented by PRD slice F12.18.
 - Date: 2026-09-09 (accepted 2026-09-11)
 - Related: ADR-0153 (§2 the mutual-predictability grouping criterion, §5 the
   retained-stream cap), ADR-0164 (§1 `sheets/adjacency.json`, §5 the sprite

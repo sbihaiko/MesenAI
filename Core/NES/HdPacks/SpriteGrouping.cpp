@@ -240,6 +240,33 @@ namespace MesenSheets
 			}
 		}
 
+		//ADR-0225 §1: renumber Z to 0..n-1 in OAM order after de-duplication
+		//dropped members, so the written rank has no holes.
+		void RankPoseTiles(std::vector<PoseTile>& tiles)
+		{
+			std::vector<size_t> order(tiles.size());
+			for(size_t i = 0; i < order.size(); i++) {
+				order[i] = i;
+			}
+			std::sort(order.begin(), order.end(), [&tiles](size_t a, size_t b) { return tiles[a].Z < tiles[b].Z; });
+			for(size_t rank = 0; rank < order.size(); rank++) {
+				tiles[order[rank]].Z = (int32_t)rank;
+			}
+		}
+
+		//ADR-0225 §1: do any two 8x8 tiles of a pixel layout share a pixel?
+		bool PoseTilesOverlap(const std::vector<PoseTile>& tiles)
+		{
+			for(size_t i = 0; i < tiles.size(); i++) {
+				for(size_t j = i + 1; j < tiles.size(); j++) {
+					if(std::abs(tiles[i].Px - tiles[j].Px) < 8 && std::abs(tiles[i].Py - tiles[j].Py) < 8) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
 		//---- ADR-0179 (F9.20) ---------------------------------------------
 
 		//One spatially connected cluster of a frame: its normalised tile set
@@ -300,18 +327,24 @@ namespace MesenSheets
 				for(size_t index : cluster.second) {
 					PoseTile tile;
 					tile.Node = nodes[index];
-					tile.Dx = ToCells(points[index].first - pc.X);
-					tile.Dy = ToCells(points[index].second - pc.Y);
+					tile.Px = points[index].first - pc.X;
+					tile.Py = points[index].second - pc.Y;
+					tile.Dx = ToCells(tile.Px);
+					tile.Dy = ToCells(tile.Py);
+					//cluster.second is in OAM order, so this is the OAM rank.
+					tile.Z = (int32_t)pc.Tiles.size();
 					pc.Tiles.push_back(tile);
 				}
 				//A set, not a list: two OAM entries of the same shape rounding
 				//onto one cell are one member, exactly as the S10.a ground
-				//truth counted them.
-				std::sort(pc.Tiles.begin(), pc.Tiles.end());
+				//truth counted them. Stable, so the member kept is the
+				//frontmost entry (ADR-0225: its pixels are the ones drawn).
+				std::stable_sort(pc.Tiles.begin(), pc.Tiles.end());
 				pc.Tiles.erase(std::unique(pc.Tiles.begin(), pc.Tiles.end()), pc.Tiles.end());
 				if(pc.Tiles.size() < kPoseMinTiles) {
 					continue;
 				}
+				RankPoseTiles(pc.Tiles);
 				out.push_back(pc);
 			}
 			return out;
@@ -1077,10 +1110,26 @@ namespace MesenSheets
 		//away is a different pose. Deliberate - a looser identity can merge two
 		//real poses, and that failure is invisible in the file (ADR-0170).
 		std::map<std::vector<PoseTile>, uint32_t> seen;
+		//ADR-0225 §1: per pose, the frames each pixel layout (the (Px, Py)
+		//vector in identity order) was seen in, and the cluster of the earliest
+		//retained frame that drew it - one occurrence supplies every tile's
+		//pixels and rank. OAM order is not part of the key: the vector wins
+		//by frames, then that earliest frame supplies Z.
+		std::map<std::vector<PoseTile>, std::map<std::vector<int32_t>, std::pair<uint32_t, std::vector<PoseTile>>>> layouts;
 		for(const OamFrame& frame : frames) {
 			stats.Frames += frame.RepeatCount;
 			for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
 				seen[cluster.Tiles] += frame.RepeatCount;
+				std::vector<int32_t> pixels;
+				for(const PoseTile& tile : cluster.Tiles) {
+					pixels.push_back(tile.Px);
+					pixels.push_back(tile.Py);
+				}
+				std::pair<uint32_t, std::vector<PoseTile>>& layout = layouts[cluster.Tiles][pixels];
+				if(layout.first == 0) {
+					layout.second = cluster.Tiles;
+				}
+				layout.first += frame.RepeatCount;
 			}
 		}
 
@@ -1091,7 +1140,16 @@ namespace MesenSheets
 				continue;
 			}
 			PoseEntry entry;
-			entry.Tiles = pose.first;
+			//Most-seen layout; the ordered map hands the lexicographically
+			//smallest vector out first, so a strict > breaks ties toward it.
+			uint32_t bestFrames = 0;
+			for(const auto& layout : layouts[pose.first]) {
+				if(layout.second.first > bestFrames) {
+					bestFrames = layout.second.first;
+					entry.Tiles = layout.second.second;
+				}
+			}
+			entry.Overlaps = PoseTilesOverlap(entry.Tiles);
 			entry.Frames = pose.second;
 			for(const PoseTile& tile : entry.Tiles) {
 				entry.Width = std::max(entry.Width, (uint32_t)(tile.Dx + 1));

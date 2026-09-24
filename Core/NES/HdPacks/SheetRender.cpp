@@ -804,7 +804,14 @@ namespace MesenSheets
 			for(size_t t = 0; t < pose.Tiles.size(); t++) {
 				const PoseTile& tile = pose.Tiles[t];
 				json << (t ? ", " : "");
-				json << "{ \"node\": " << tile.Node << ", \"dx\": " << tile.Dx << ", \"dy\": " << tile.Dy << " }";
+				json << "{ \"node\": " << tile.Node << ", \"dx\": " << tile.Dx << ", \"dy\": " << tile.Dy;
+				//ADR-0225 §1: native-pixel offsets beside the cells; `z` only
+				//when the layout overlaps.
+				json << ", \"px\": " << tile.Px << ", \"py\": " << tile.Py;
+				if(pose.Overlaps) {
+					json << ", \"z\": " << tile.Z;
+				}
+				json << " }";
 			}
 			json << "] }";
 		}

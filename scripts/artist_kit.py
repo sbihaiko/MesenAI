@@ -60,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 import mep_build  # noqa: E402 — the rebuild `--verify` runs and its <tile> regex
+import mep_figure  # noqa: E402 — ADR-0225 §2: the pixel-precise Figures view
 
 #The rest grid's shape. A cycle's row is as wide as the cycle is long (the row
 #*is* the animation, so wrapping it would break the promise this tool makes);
@@ -117,6 +118,7 @@ class Grid:
         self.name = None        # usrNNN, filled in by export
         self.boxes = []         # the figure box of each row, in 8 px cells
         self.columns = 0        # 8 px cells across the exported sheet
+        self.figure = None      # ADR-0225: figures/<usrNNN>-figure.png, when written
 
     @property
     def cells(self):
@@ -371,8 +373,71 @@ class KitBuilder:
                     out.append((node, ox + dx, oy + dy))
         return out, boxes
 
+    def drawable_pixels(self, pose):
+        """`{node: (px, py)}` of the drawable tiles, normalised to the drawn
+        figure's own pixel top-left (ADR-0225 §1; dx*8 on an older sidecar)."""
+        tiles = {n: pose.pixels[n] for n in pose.tiles if self._has_art(n)}
+        if not tiles:
+            return {}
+        x0 = min(px for px, _py in tiles.values())
+        y0 = min(py for _px, py in tiles.values())
+        return {n: (px - x0, py - y0) for n, (px, py) in tiles.items()}
+
+    def figure_rows(self, grid, unit: int = 8):
+        """`[[(pose, ox, oy), ...], ...]` in 1x pixels: the same rows and
+        columns as `placements`, each figure at pixel precision (ADR-0225 §2).
+        A row's box is its largest figure's pixel extent; figures are centred
+        and stand on the row's bottom edge (the baseline), and one empty cell
+        (`SLOT_GAP * unit` px) separates two boxes and two rows — the margin
+        between figures stays, only the gutter inside a figure is gone."""
+        gap = SLOT_GAP * unit
+        extents = {}
+        for cell in grid.cells:
+            px = self.drawable_pixels(cell.pose)
+            if px:
+                extents[id(cell)] = (max(x for x, _y in px.values()) + unit,
+                                     max(y for _x, y in px.values()) + unit)
+        out, top = [], 0
+        for row in grid.rows:
+            sizes = [extents[id(c)] for c in row if id(c) in extents]
+            if not sizes:
+                out.append([])
+                continue
+            box_w, box_h = max(w for w, _h in sizes), max(h for _w, h in sizes)
+            placed = []
+            for cell in row:
+                if id(cell) not in extents:
+                    continue
+                w, h = extents[id(cell)]
+                placed.append((cell.pose, cell.col * (box_w + gap) + (box_w - w) // 2,
+                               top + box_h - h))
+            out.append(placed)
+            top += box_h + gap
+        return out
+
 
 # ---- export ----------------------------------------------------------------
+
+def export_figure_rows(pack, builder, grid, figures_out: Path, names=None):
+    """ADR-0225 §2: the grid's rows as one composed view,
+    `<figures_out>/<usrNNN>-figure.png` (+ `.orig.png`, `.json`, `.ora`),
+    every phase at pixel precision. The usr sheet stays the cell-grid
+    mep_build input; this is the view an artist reads the figure in, and
+    `mep_figure.py import` returns paint from it to the sprite vocabulary."""
+    rows = builder.figure_rows(grid)
+    stem = mep_figure.figure_stem(grid.name)
+    # A pose on a row is its drawable tiles only, as on the usr sheet.
+    trimmed = [[(_drawable_pose(builder, p), x, y) for p, x, y in row] for row in rows]
+    doc = mep_figure.export_pose_rows(pack, trimmed, figures_out, stem,
+                                      caption=grid_title(grid, names) if names is not None else "")
+    if doc is not None:
+        grid.figure = f"figures/{doc['sheet']}"
+    return doc
+
+
+def _drawable_pose(builder, pose):
+    tiles = {n: xy for n, xy in pose.tiles.items() if builder._has_art(n)}
+    return E.Pose(pose.id, pose.frames, pose.size, tiles, pixels=pose.pixels, z=pose.z)
 
 def row_captions(grid, boxes, names, unit: int = 8):
     """`[(x, y, text)]` in 1x sheet pixels for the `.ora`'s `guides` layer
@@ -572,7 +637,7 @@ def grid_title(grid, names):
 # ---- the manifest fragment (artist-kit-contract.md) ------------------------
 
 def _file_record(grid, names):
-    return {
+    rec = {
         "path": f"sheets/{N.require_asset_name(grid.name + N.SURFACE_EXT, 'artist_kit.py')}",
         "title": grid_title(grid, names),
         "unit": "grid",
@@ -587,6 +652,10 @@ def _file_record(grid, names):
         #in one OAM frame, and no tile is filled in from the ROM or guessed.
         "seen": True,
     }
+    if getattr(grid, "figure", None):
+        #ADR-0225 §2: the same rows as one pixel-precise composed view.
+        rec["figure"] = grid.figure
+    return rec
 
 
 def _dropped(builder):
@@ -643,6 +712,12 @@ def _notes(pack, builder, grids, names, pack_arg):
         "phases of an animation (a torso that never moved); every phase shows it so the "
         "figure is whole, but the game has only one copy — paint it the same way everywhere, "
         "or the build keeps just one of your versions.",
+        "figures/usr*-figure.png shows the same rows as one composed view at pixel "
+        "precision (ADR-0225): each figure's tiles sit where the game draws them, with no "
+        "gap inside the figure, so a limb 2-4 px off the 8 px grid reads as attached. Paint "
+        "either surface, not both: python3 scripts/mep_figure.py import <pack> "
+        "figures/usrNNN-figure.png returns a painted view to the pack's sprite sheet; where "
+        "two tiles overlap, a pixel goes to the tile in front.",
         f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\" and run "
         f"python3 scripts/mep_build.py build \"{pack_arg}\".",
     ]
@@ -774,7 +849,8 @@ def verify(pack_dir: Path, sheets_out: Path, scratch=None):
 
 # ---- CLI -------------------------------------------------------------------
 
-def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg, names=None):
+def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg, names=None,
+              figures_out: Path = None):
     pack = E.Pack(pack_dir)
     builder = KitBuilder(pack, columns=columns, rows=rows)
     grids = builder.build()
@@ -782,6 +858,8 @@ def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg, names=N
     kept = []
     for grid in grids:
         if export_grid(pack, builder, grid, sheets_out, names) is not None:
+            if figures_out is not None:
+                export_figure_rows(pack, builder, grid, figures_out, names)
             kept.append(grid)
     return pack, builder, kept
 
@@ -823,7 +901,8 @@ def main(argv=None) -> int:
     try:
         names = Names.load(args.names)
         pack, builder, grids = build_kit(pack_dir, sheets_out, args.columns,
-                                         args.rows, str(pack_dir), names)
+                                         args.rows, str(pack_dir), names,
+                                         figures_out=out_dir / "figures")
     except (E.ComposeError, KitError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

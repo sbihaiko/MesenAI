@@ -1395,6 +1395,41 @@ def lint_sheet_sentinels(src: Source, hires_rel: str, rep: Report):
                                    f"layers and export the flat PNG again over {doc['sheet']}")
 
 
+def _to_cells(pixels: int) -> int:
+    """`SpriteGrouping::ToCells`: round a pixel offset to the nearest 8 px
+    cell, halves away from zero (C++ integer division truncates)."""
+    return int((pixels + (4 if pixels >= 0 else -4)) / 8)
+
+
+def lint_pose_offsets(src: Source, hires_rel: str, rep: Report):
+    """ADR-0225 Consequences: a `poses.json` tile carrying `px`/`py` must
+    round to its own `dx`/`dy` (`dx == ToCells(px)`). A warning, not an error
+    — the two are written from one frame, so a mismatch is a hand edit or a
+    broken writer, and a tile without `px` (every pre-ADR pack) is fine."""
+    rel = hires_rel[:-len("hires.txt")] + "sheets/poses.json"
+    if not src.exists(rel):
+        return
+    try:
+        doc = json.loads(src.text(rel))
+    except (ValueError, UnicodeDecodeError):
+        return
+    bad = []
+    for pose in (doc.get("poses") or []) if isinstance(doc, dict) else []:
+        if not isinstance(pose, dict):
+            continue
+        for tile in pose.get("tiles") or []:
+            if not isinstance(tile, dict):
+                continue
+            for cell_key, px_key in (("dx", "px"), ("dy", "py")):
+                cell, px = tile.get(cell_key), tile.get(px_key)
+                if isinstance(cell, int) and isinstance(px, int) and cell != _to_cells(px):
+                    bad.append(f"{pose.get('id')} node {tile.get('node')}: "
+                               f"{cell_key} {cell} != ToCells({px_key} {px})")
+    if bad:
+        rep.warning(rel, f"{len(bad)} pose tile offset(s) whose pixel and cell forms disagree "
+                         f"(ADR-0225 §1: dx == ToCells(px)), e.g. {bad[0]}")
+
+
 def lint_hires(src: Source, rel: str, rep: Report):
     head = src.text(rel)[:400]
     m = re.search(r"<ver>(\d+)", head)
@@ -1833,6 +1868,7 @@ def main(argv):
                     seen.add(hires)
                     lint_hires(src, hires, rep)
                     lint_sheet_sentinels(src, hires, rep)
+                    lint_pose_offsets(src, hires, rep)
 
         scan_bundled_patches(src, rep)
 
