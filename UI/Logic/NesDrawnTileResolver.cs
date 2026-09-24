@@ -40,7 +40,23 @@ namespace Mesen.Logic
 		BanksDisagree,
 		//Those scanlines resolve the tile's PPU page to something that is not CHR
 		//ROM (CHR RAM, mapper RAM): there is no bank in the key, nothing to fix.
-		NotChrRom
+		NotChrRom,
+		//Issue #419: the trace predates the last state load or reset - no frame
+		//has been drawn since, so it does not describe the frame on screen.
+		NotDrawnSinceLoad
+	}
+
+	//Issue #419: what the core says about its per-scanline trace, as
+	//`GetNesScanlineTrace` returns it. The values are the export's own.
+	public enum NesScanlineTraceStatus
+	{
+		//Not an NES game, or no ROM loaded: nothing was written.
+		Unavailable = 0,
+		//The trace describes the last whole frame the PPU drew.
+		Current = 1,
+		//No whole frame has been drawn since the last state load or reset, so
+		//the trace still holds whatever was there before it.
+		NotDrawnSinceLoad = 2
 	}
 
 	public readonly struct NesDrawnTileAddress
@@ -163,6 +179,29 @@ namespace Mesen.Logic
 			return ResolveAtScanlines(chrBankTrace, scanlines, ppuTileAddress);
 		}
 
+		//The one entry the copy actions use (HdPackCopyHelper), for a viewer that
+		//has a frame context: a tilemap cell when `tileMapAddress` is >= 0, else
+		//a sprite at `spriteY`.
+		//
+		//Issue #419: the traces are not part of a save state, so a trace the core
+		//marks NotDrawnSinceLoad is a well-formed record of the frame drawn BEFORE
+		//the load - it resolves cleanly and names the wrong bank (F14.2: Dr.
+		//Mario's cell (0,0) as 1276, not 252) or nothing at all (Super Mario
+		//Bros., Zelda). It is refused here, before it can resolve anything.
+		public static NesDrawnTileAddress Resolve(NesScanlineTraceStatus status, uint[] scrollTrace, uint[] chrBankTrace, int tileMapAddress, int spriteY, int spriteHeight, int ppuTileAddress)
+		{
+			if(status == NesScanlineTraceStatus.NotDrawnSinceLoad) {
+				return NotDrawnSinceLoad();
+			}
+			if(status != NesScanlineTraceStatus.Current) {
+				return NoTrace();
+			}
+			if(tileMapAddress >= 0) {
+				return ResolveTilemapTile(scrollTrace, chrBankTrace, tileMapAddress, ppuTileAddress);
+			}
+			return ResolveSpriteTile(chrBankTrace, spriteY, spriteHeight, ppuTileAddress);
+		}
+
 		//ADR-0215 OPEN 3: the Tile Viewer reading PPU memory has neither a row nor a
 		//frame context, so under the one rule it can only refuse.
 		public static NesDrawnTileAddress NoFrameContext()
@@ -170,6 +209,16 @@ namespace Mesen.Logic
 			return new NesDrawnTileAddress(NesDrawnTileStatus.NoFrameContext, -1, -1,
 				"the Tile Viewer has no row and no frame context, so nothing says which CHR bank drew this tile - " +
 				"pick it in the Tilemap or Sprite Viewer, or point the source at CHR ROM directly");
+		}
+
+		//Issue #419. The receipt names the way out, because it is one step: any
+		//whole frame drawn after the load gives the copy a trace of the frame on
+		//screen.
+		public static NesDrawnTileAddress NotDrawnSinceLoad()
+		{
+			return new NesDrawnTileAddress(NesDrawnTileStatus.NotDrawnSinceLoad, -1, -1,
+				"no frame has been drawn since the last state load or reset, so nothing says which CHR bank drew " +
+				"this tile - run one frame (the debugger's Run one frame, or unpause) and copy again");
 		}
 
 		public static NesDrawnTileAddress NoTrace()

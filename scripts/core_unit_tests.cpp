@@ -60,6 +60,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
+#include "NES/NesScanlineTraceValidity.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
@@ -9150,6 +9151,70 @@ void TestPosesSidecarCarriesInferredLabelsForPosesAndRuns()
 		"ADR-0209 Q1: labels do not break poses.json's determinism");
 }
 
+//Issue #419 (ADR-0215, amended 2026-09-24): the per-scanline trace the copy
+//actions resolve a key through is not part of a save state, so after a load
+//it still describes the frame drawn before the load. NesScanlineTraceValidity
+//is the core's record of whether it describes a whole frame drawn since the
+//last load or reset. The events are named after the two PPU points NesPpu
+//feeds them from: row 0's capture (pre-render line, cycle 257 - the first
+//write of a frame's trace) and the end of the visible frame (scanline 240,
+//where the frame is sent to the screen).
+void TestScanlineTraceDescribesNothingBeforeAFrameIsDrawn()
+{
+	NesScanlineTraceValidity trace;
+	Check(!trace.DescribesDrawnFrame(),
+		"#419: a trace no frame has written yet describes no drawn frame");
+}
+
+void TestScanlineTraceDescribesAFrameDrawnFromRowZeroToTheEnd()
+{
+	NesScanlineTraceValidity trace;
+	trace.OnRowZeroCaptured();
+	trace.OnVisibleFrameEnd();
+	Check(trace.DescribesDrawnFrame(),
+		"#419: a frame traced from row 0 to the end of the visible frame is described");
+}
+
+void TestAStateLoadInvalidatesTheScanlineTrace()
+{
+	NesScanlineTraceValidity trace;
+	trace.OnRowZeroCaptured();
+	trace.OnVisibleFrameEnd();
+	trace.Invalidate();
+	Check(!trace.DescribesDrawnFrame(),
+		"#419: after a state load the trace left from before it describes no drawn frame");
+}
+
+void TestAPartialFrameAfterALoadDoesNotRevalidateTheTrace()
+{
+	//A state saved mid-frame: the load lands after row 0 was captured, so the
+	//first end of frame after it closes a trace whose top rows predate the load.
+	NesScanlineTraceValidity trace;
+	trace.OnRowZeroCaptured();
+	trace.Invalidate();
+	trace.OnVisibleFrameEnd();
+	Check(!trace.DescribesDrawnFrame(),
+		"#419: the end of a frame whose row 0 was captured before the load does not revalidate the trace");
+
+	trace.OnRowZeroCaptured();
+	trace.OnVisibleFrameEnd();
+	Check(trace.DescribesDrawnFrame(),
+		"#419: the first whole frame drawn after the load revalidates the trace");
+}
+
+void TestTheScanlineTraceStaysValidAcrossFramesUntilTheNextLoad()
+{
+	NesScanlineTraceValidity trace;
+	trace.OnRowZeroCaptured();
+	trace.OnVisibleFrameEnd();
+	trace.OnRowZeroCaptured();
+	Check(trace.DescribesDrawnFrame(),
+		"#419: the next frame starting does not invalidate a trace that was valid");
+	trace.OnVisibleFrameEnd();
+	Check(trace.DescribesDrawnFrame(),
+		"#419: consecutive whole frames keep the trace valid");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -9446,6 +9511,12 @@ int main()
 	TestACellWithNoGroupingDataGetsNoLabel();
 	TestSheetSidecarCarriesTheInferredLabelWithItsProvenance();
 	TestPosesSidecarCarriesInferredLabelsForPosesAndRuns();
+
+	TestScanlineTraceDescribesNothingBeforeAFrameIsDrawn();
+	TestScanlineTraceDescribesAFrameDrawnFromRowZeroToTheEnd();
+	TestAStateLoadInvalidatesTheScanlineTrace();
+	TestAPartialFrameAfterALoadDoesNotRevalidateTheTrace();
+	TestTheScanlineTraceStaysValidAcrossFramesUntilTheNextLoad();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

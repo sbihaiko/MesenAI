@@ -162,7 +162,7 @@ public class ChrBankDiagnosticTests
 			//the exported traces and NesDrawnTileResolver - the answer the shipped
 			//copy action now gives. `drawn` lines carry the paused index and the
 			//resolved one side by side, which is the whole measurement.
-			if(DebugApi.GetNesScanlineTrace(out uint[] scroll, out uint[] chrBank)) {
+			if(DebugApi.GetNesScanlineTrace(out uint[] scroll, out uint[] chrBank) != NesScanlineTraceStatus.Unavailable) {
 				NesPpuState live = DebugApi.GetPpuState<NesPpuState>(CpuType.Nes);
 				byte[] liveVram = DebugApi.GetMemoryState(MemoryType.NesPpuMemory);
 				for(int row = 0; row < 30; row++) {

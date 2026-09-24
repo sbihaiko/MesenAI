@@ -304,18 +304,23 @@ extern "C"
 	//a scanline-aware GetAbsoluteAddress, because the decision that needs them
 	//(which scanline names a tilemap cell, and whether the scanlines agree) is
 	//a UI decision with its own unit tests - see UI/Logic/NesDrawnTileResolver.
-	//outScroll is 240 uint32, outChrBank is 240*32. False on a non-NES console
-	//or before a ROM is loaded, in which case neither buffer is written.
-	DllExport bool __stdcall GetNesScanlineTrace(uint32_t* outScroll, uint32_t* outChrBank)
+	//outScroll is 240 uint32, outChrBank is 240*32. Returns 0 on a non-NES
+	//console or before a ROM is loaded, in which case neither buffer is written.
+	//Otherwise both buffers are written and the return says whether they
+	//describe the frame on screen (issue #419): 1 when a whole frame has been
+	//drawn since the last state load or reset, 2 when not - neither trace is
+	//part of a save state, so after a load they hold the frame drawn before it.
+	//The values are UI/Logic/NesDrawnTileResolver.cs's NesScanlineTraceStatus.
+	DllExport int32_t __stdcall GetNesScanlineTrace(uint32_t* outScroll, uint32_t* outChrBank)
 	{
 		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
 		if(!nes || !nes->GetPpu() || !outScroll || !outChrBank) {
-			return false;
+			return 0;
 		}
 		auto lock = _emu->AcquireLock();
 		nes->GetPpu()->GetScanlineScrollTrace(outScroll);
 		nes->GetPpu()->GetScanlineChrBankTrace(outChrBank);
-		return true;
+		return nes->GetPpu()->ScanlineTraceDescribesDrawnFrame() ? 1 : 2;
 	}
 
 	//ADR-0215 / issue #342: which palettes does the loaded pack key this tile

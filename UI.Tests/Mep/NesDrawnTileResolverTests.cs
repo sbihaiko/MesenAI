@@ -240,4 +240,69 @@ public class NesDrawnTileResolverTests
 		Assert.Equal(NesDrawnTileStatus.NotChrRom, drawn.Status);
 		Assert.False(drawn.IsRefusal);
 	}
+
+	//Issue #419. A save state does not carry the per-scanline trace, so after a
+	//load the trace the core publishes is the one left from BEFORE the load: on
+	//F14.2's Dr. Mario state it was a boot frame mapping the background window
+	//to CHR $04000, which turned cell (0,0) into 1276 instead of 252. The trace
+	//itself is well-formed and resolves cleanly, which is exactly why the old
+	//path copied it - only the core's status says it does not describe the
+	//frame on screen, and the copy must refuse on it rather than resolve.
+	[Fact]
+	public void A_trace_left_from_before_a_state_load_is_refused_not_resolved()
+	{
+		uint[] leftOver = PatternTableTrace(0x00000, 0x04000);
+		NesDrawnTileAddress stale = NesDrawnTileResolver.Resolve(
+			NesScanlineTraceStatus.NotDrawnSinceLoad, UnscrolledScrollTrace(), leftOver,
+			tileMapAddress: 0x2000, spriteY: -1, spriteHeight: 0, ppuTileAddress: 0x1FC0);
+
+		Assert.Equal(NesDrawnTileStatus.NotDrawnSinceLoad, stale.Status);
+		Assert.True(stale.IsRefusal);
+		Assert.Equal(-1, stale.AbsoluteAddress);
+		Assert.Contains("state", stale.Reason);
+		Assert.Contains("frame", stale.Reason);
+	}
+
+	//The Sprite Viewer goes through the same status check - one rule in all
+	//three viewers (ADR-0215 OPEN 3).
+	[Fact]
+	public void A_sprite_copy_after_a_state_load_is_refused_too()
+	{
+		NesDrawnTileAddress stale = NesDrawnTileResolver.Resolve(
+			NesScanlineTraceStatus.NotDrawnSinceLoad, UnscrolledScrollTrace(), PatternTableTrace(0x00000, 0x00000),
+			tileMapAddress: -1, spriteY: 100, spriteHeight: 8, ppuTileAddress: 0x0040);
+
+		Assert.Equal(NesDrawnTileStatus.NotDrawnSinceLoad, stale.Status);
+		Assert.True(stale.IsRefusal);
+	}
+
+	//Once a frame has been drawn the same entry resolves exactly as before: the
+	//status gate adds a refusal, it changes no answer.
+	[Fact]
+	public void A_current_trace_resolves_through_the_same_entry()
+	{
+		NesDrawnTileAddress drawn = NesDrawnTileResolver.Resolve(
+			NesScanlineTraceStatus.Current, UnscrolledScrollTrace(), PatternTableTrace(0x00000, 0x00000),
+			tileMapAddress: 0x2000, spriteY: -1, spriteHeight: 0, ppuTileAddress: 0x1FC0);
+
+		Assert.Equal(NesDrawnTileStatus.Resolved, drawn.Status);
+		Assert.Equal(252, drawn.AbsoluteAddress / 16);
+
+		NesDrawnTileAddress sprite = NesDrawnTileResolver.Resolve(
+			NesScanlineTraceStatus.Current, UnscrolledScrollTrace(), PatternTableTrace(0x00000, 0x00000),
+			tileMapAddress: -1, spriteY: 100, spriteHeight: 8, ppuTileAddress: 0x0040);
+		Assert.Equal(NesDrawnTileStatus.Resolved, sprite.Status);
+		Assert.Equal(101, sprite.Scanline);
+	}
+
+	[Fact]
+	public void No_published_trace_is_still_its_own_refusal()
+	{
+		NesDrawnTileAddress none = NesDrawnTileResolver.Resolve(
+			NesScanlineTraceStatus.Unavailable, UnscrolledScrollTrace(), PatternTableTrace(0x00000, 0x00000),
+			tileMapAddress: 0x2000, spriteY: -1, spriteHeight: 0, ppuTileAddress: 0x1FC0);
+
+		Assert.Equal(NesDrawnTileStatus.NoTrace, none.Status);
+		Assert.True(none.IsRefusal);
+	}
 }

@@ -220,14 +220,16 @@ namespace Mesen.Interop
 		//emulator happens to hold. These are the two per-scanline traces ADR-0169
 		//keeps of the mapping that actually drew the frame. The decision they feed
 		//lives host-free in UI/Logic/NesDrawnTileResolver.cs.
-		[DllImport(DllPath, EntryPoint = "GetNesScanlineTrace")][return: MarshalAs(UnmanagedType.I1)]
-		private static extern bool GetNesScanlineTraceWrapper([In, Out] UInt32[] outScroll, [In, Out] UInt32[] outChrBank);
+		//Issue #419: the traces are not part of a save state, so the export also
+		//says whether they describe a frame drawn since the last load or reset.
+		[DllImport(DllPath, EntryPoint = "GetNesScanlineTrace")]
+		private static extern Int32 GetNesScanlineTraceWrapper([In, Out] UInt32[] outScroll, [In, Out] UInt32[] outChrBank);
 
-		public static bool GetNesScanlineTrace(out UInt32[] scrollTrace, out UInt32[] chrBankTrace)
+		public static NesScanlineTraceStatus GetNesScanlineTrace(out UInt32[] scrollTrace, out UInt32[] chrBankTrace)
 		{
 			scrollTrace = new UInt32[NesDrawnTileResolver.VisibleScanlines];
 			chrBankTrace = new UInt32[NesDrawnTileResolver.VisibleScanlines * NesDrawnTileResolver.PpuPageCount];
-			return DebugApi.GetNesScanlineTraceWrapper(scrollTrace, chrBankTrace);
+			return (NesScanlineTraceStatus)DebugApi.GetNesScanlineTraceWrapper(scrollTrace, chrBankTrace);
 		}
 
 		//ADR-0215 / issue #342: -1 when there is no pack to check against, else the

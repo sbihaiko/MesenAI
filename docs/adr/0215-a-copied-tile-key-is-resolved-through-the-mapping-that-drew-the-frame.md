@@ -264,3 +264,47 @@ the host-free unit tests, not the harness.
   loop a key the pack does not hold can never match at run time, and
   `mep_build` already says so for the repaint path (#253). This says it two
   steps earlier, where the artist can still act on it.
+
+## Amendment, 2026-09-24 (issue #419): a trace older than the last state load is refused
+
+The Correction above found that the trace is not part of a save state and drew
+the conclusion for the harness. It did not draw it for the copy itself, and
+F14.2 (`docs/validation/f14.2-cold-read-rescore-2026-09-24.md`, cause A) paid
+for that. Its scan loaded each `.mss` and copied without drawing a frame. It
+got Dr. Mario's cell (0,0) as 1276 instead of 252, and wrong-bank keys on
+Ninja Gaiden, Gauntlet, Tetris 2 and The Flintstones. Super Mario Bros. and
+The Legend of Zelda gave empty tables. All of it was silent. A person who
+pauses, loads a state and copies without unpausing gets the same trace.
+
+This applies the Decision's own rule ("where the drawing scanline is not
+knowable, the action says so rather than emitting a plausible wrong key") to
+one more case. No decision changes:
+
+- The core records whether the traces describe a whole frame drawn since the
+  last state load or reset (`Core/NES/NesScanlineTraceValidity.h`, fed by
+  `NesPpu`). A restore through `NesPpu::Serialize` or a `Reset` marks them
+  stale. A frame traced from row 0 (the pre-render line's cycle 257) through
+  scanline 240 marks them current again. A load that lands mid-frame
+  therefore needs the next whole frame, not the rest of the current one.
+- `GetNesScanlineTrace` now returns that status: 0 unavailable, 1 current,
+  2 not drawn since the load. It still writes both buffers when it answers 2,
+  so a diagnostic can see the leftover trace.
+- `NesDrawnTileResolver.Resolve` is the one entry the copy actions use. It
+  refuses a stale trace with `NotDrawnSinceLoad` in all three viewers, before
+  anything resolves, and the receipt says how to get out: run one frame, or
+  unpause. Like every other refusal in this ADR, the receipt text is inline
+  en-US. The UI ships only `resources.en.xml`, and no receipt in this code
+  path uses it.
+- Serializing the ~31 KB trace into every state and rewind snapshot was
+  rejected. It would describe a frame that the next emulated frame redraws
+  anyway, and it would change the save-state format for a debugger-only
+  consumer.
+
+Tests: `scripts/core_unit_tests.cpp` (the validity rules),
+`UI.Tests/Mep/NesDrawnTileResolverTests.cs` (the refusal), and
+`UI.HeadlessTests/CopyAfterStateLoadTests.cs`. The last one runs the real core
+on a synthetic NROM: a real `LoadStateFile` makes the copy refuse, and a drawn
+frame makes it copy again. The F12.2/F14.2 scan
+(`CopyAsMepSheetCellTests.cs`) now draws one frame after the load. The frame it
+reads is therefore the one after the state's, the only frame the trace can
+describe. Measurements: `docs/validation/issue-419-copy-after-state-load-2026-09-24.md`.
