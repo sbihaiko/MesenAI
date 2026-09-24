@@ -109,6 +109,18 @@ anchor that no `<tile>` rule keys, when a target key is not marked synthetic
 in the sidecar, or when a synthetic key fails the §3 check for the console's
 key kind.
 
+*Refined 2026-09-23 (#382/#386; user's decision, verbatim: "Manter como está").*
+"Keyed" is read the way `HdNesPack::GetMatchingTile` finds art: an anchor or
+target counts as keyed when a `<tile>` rule matches its CHR index by value
+(decimal below `<ver>103`, hex from 103) under its exact palette, or when a
+`defaultTile=Y` rule keys that index under any palette (the loader's
+palette-wildcard key). **A rule's `[condition]` prefix is not weighed:** a
+target whose only art sits behind a condition still counts as keyed, since
+lint does not evaluate conditions and cannot tell whether the rule's
+condition matches the context the `<addition>` fires in — art conditioned
+on purpose (a title screen) would otherwise be a false error. Measured on
+Metroid (USA), #148: one such target (`006/FF001431`, title-screen rules).
+
 ## Consequences
 
 - The comparison row "Extra tiles drawn on match" becomes measurable:

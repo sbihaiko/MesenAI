@@ -880,9 +880,10 @@ without undocumented repairs.
 
 **Status:** drafted 2026-09-09 as a nine-slice product plan; **rewritten
 the same day after review** into the feasibility spikes below. **No product
-slice exists**; only the spikes ran. Nothing in this section is a decision: no module layout, sidecar
-format, tool contract, storage location, provider or emulator entry point
-is fixed here. **S10.c/S10.d shipped 2026-09-09; S10.a ran the same day and
+slice exists**; only the spikes ran. Only one thing in this section is a decision:
+the entry point, i.e. how the player chooses a subject, which ADR-0227 fixed on
+2026-09-23 (named from the artist kit). No module layout, sidecar format, tool
+contract, storage location or provider is fixed here. **S10.c/S10.d shipped 2026-09-09; S10.a ran the same day and
 failed** — its premise ("every pose the recorder saw") was not reachable from
 the sidecars available then. The user took that decision on 2026-09-11: **ADR-0170 is
 accepted and shipped as F9.19** (§3) — the recorder now writes pose
@@ -910,12 +911,27 @@ repaints a sheet at a higher resolution but keeps the drawing. None of them
 lets a player who cannot draw say "make Bill look like a chrome knight,
 keep the gun" and play the result.
 
-**Idea under test.** From the live viewer (ADR-0169) the player points at
-a subject, describes a restyle, and an external tool driven by a hosted
+**Idea under test.** The player names a subject from the artist kit
+(ADR-0227), describes a restyle, and an external tool driven by a hosted
 image model under the player's own key produces a candidate skin for the
-**whole subject** (every pose the recorder saw) that the unchanged
+**whole subject** (every pose the player named, ADR-0227 §3) that the unchanged
 `mep_build.py` slices into a pack. Whether any link of that chain holds is
 what the spikes measure.
+
+*Entry point amended 2026-09-23 by ADR-0227 (user's decision, verbatim:
+"Pelo nome, no kit"); it used to start from the live viewer.* The live
+viewer is a developer tool since ADR-0169 §4's 2026-09-23 amendment, so the
+player does not point at the subject there: they **name** it from the artist kit, and the subject is the set of
+kit ids they name: pose ids from a grid's `kit.json` record, with a `usrNNN`
+grid as a shorthand for its poses. Whole-grid selection waits until the kit
+records the grid's kind (cycle, sequence or rest; ADR-0227 §2). The kit has no notion of a character — one grid per
+cycle, and "rest" grids binned by box size — so "the whole subject" above
+means every pose the player named; the toolchain infers no membership, and
+automatic grouping is left open (ADR-0227 §4). The
+kit's figures are pixel-faithful since F12.18 (ADR-0225) and its cycle rows
+survive sprite flicker since F12.19 (ADR-0226). S10.b is unaffected: it
+measures layout fidelity on a contact sheet and does not depend on how the
+subject is chosen.
 
 **Constraints that hold regardless of outcome.**
 - Part A §1 principle 5 as written: no model call, key or prompt in
@@ -956,7 +972,9 @@ requirements.
 selection/export/paint evidence before promising a whole-subject studio, then write the ADRs — one
 decision each, by hand, via `/adr`: (i) whether and how a player's own key
 may send ROM-derived crops to a hosted model (amending ADR-0154 §2/§4, or
-not); (ii) the subject model and where studio data lives (outside `mep/`);
+not); (ii) where studio data lives (outside `mep/`) — how a subject is
+chosen is already ADR-0227, and only automatic grouping (ADR-0227 §4) would
+be a new subject-model decision;
 (iii) the tool contract and the validator as the gate; (iv) a reverse
 channel amending ADR-0169, only if a live preview is worth more than
 headless screenshots. Then slice the product work, one slice per task. If
@@ -1301,6 +1319,7 @@ files and in §3.
 | 0224 | **accepted 2026-09-22 — shipped the same day as F12.15** ([log](../validation/f12.15-behind-bg-sprites-2026-09-22.md)); stop condition (2) partially met. Opened and accepted from the F12.13 fight-screen trace through four structured questions (scope opt-in per pack, tool split in the same slice, ADR only at first, opt-in as a new hires.txt tag rather than an `<options>` token, which upstream loaders reject); build go-ahead *"libera a F12.15, dispara as três partes em paralelo. mergea o PR assim que puder e garante que t  tudo na main."* | a recorded screen must not hide a behind-background sprite where the ROM's background is colour 0; `<bgPreservesBehindBgSprites>` opts a pack in, the recorder writes it, community packs keep today's render; the overdraw tool must split background loss from sprite loss before pricing any gate rule |
 | 0225 | **accepted 2026-09-23 — implemented by F12.18 (dispatched, not yet on `main`)**; pick verbatim *"px/py por tile"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | a pose keeps its pixel offsets: per-tile `px`/`py` (and `z` on overlap) beside the tile-unit `dx`/`dy`, which stay; sheets keep ADR-0153's cells and gutter, composed views (`mep_figure.py`, kit figure rows, compose editor) place at pixel precision with no intra-figure gutter; amends 0170 §1 ([measurement](../validation/contra-pose-offsets-and-flicker-2026-09-23.md)) |
 | 0226 | **accepted 2026-09-23 — implemented by F12.19 (dispatched, not yet on `main`)**; pick verbatim *"Tolerar 1 frame"*, go-ahead verbatim *"pode implementar as duas ADRs em paralelo"* | the pose-track linker bridges one missing retained frame (`kPoseTrackMaxGap = 1`, skipped frame `RepeatCount <= 2`), so respawn flicker does not shatter a track into single-frame tracks and the sequence fallback stops promoting the recording driver's period; the Contra kit is regenerated from a fresh recording; amends 0179 §1 |
+| 0227 | **accepted 2026-09-23 — reflected in Phase 10 "Idea under test" (no slice yet)**; decision verbatim *"Pelo nome, no kit"* | a Phase 10 subject is named from the artist kit as the set of kit ids the player names (`usrNNN` grids or the pose ids their `kit.json` records list); a rest grid counts only as the poses named from it; the toolchain infers no character membership, automatic grouping left open; amends Phase 10's viewer entry point |
 
 ### 7. Risks
 
@@ -1314,7 +1333,7 @@ files and in §3.
 | ADR files deleted by an unrelated commit go unnoticed (0130/0131/0136/0137, 2026-08-28) | restored (D1); `scripts/checks/verify_adr_refs.py` in `make doc-checks` fails on a dangling `ADR-NNNN` reference |
 | Scope explosion | phases independent; GitHub is the only backend; no telemetry |
 | Phase 10 sends ROM-derived art to a hosted model | only S10.b does, by hand, by the user, from their own account, with the files listed first; no tool in the repo automates a hosted call until an ADR reopens ADR-0192 and amends ADR-0154's remaining local-only contract |
-| Phase 10 spikes read as a product plan | the section names no modules, formats or product slices; ADRs are written after S10.a/S10.b report numbers |
+| Phase 10 spikes read as a product plan | the section names no modules, formats or product slices; ADRs that depend on spike results (egress, studio storage, tool contract, reverse channel) are written after S10.a/S10.b report numbers. ADR-0227 is the deliberate exception: it fixes only how a subject is chosen, which no spike measures |
 | Phase 9 judged by pixel metrics instead of legibility (F5.4e "shipped" green while emitting no sheet on any real game) | the human validation panel in Phase 9 is the acceptance gate. *Honest record:* F9.0–F9.17 shipped on spot checks, and every panel since has been a proxy or a builder — the "two golden games logged" rule has never been met once. For F9.18 it is still a person who did not build the feature. Phase 12 cold-reads are a fresh Fable session (ADR-0214), with `hires.txt` as a fail gate; that is not F9.18 and does not certify taste or return |
 | The PR gate regresses and stops compiling the Core or running the Python suite | Phase 11 C.1 shipped both as jobs in `.github/workflows/checks.yml`; its verifier protects the workflow contract, while local runs remain required when CI is unavailable |
 | The roadmap and the ADR Status lines drift behind `main` (three shipped rows in a live table, four "not yet in code" ADRs for shipped code, ADR ids missing from §6 — all found 2026-09-14) | Phase 11 C.2: a `doc-checks` script fails on a `shipped` row in a live table; ADR Status-line edits listed per PR; this file's header date is part of "done" (§ Process) |
