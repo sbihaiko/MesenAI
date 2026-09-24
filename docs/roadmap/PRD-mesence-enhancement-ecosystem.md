@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day and F14.2 on 2026-09-24 (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2 and F14.5 on 2026-09-24 (§3); F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -631,6 +631,29 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   - Filed: #419 (the P1 trace defect), #420 and #421 (the two scan-harness
     defects), and #422 (build's `(#338)` warning, from the passing runs).
   [Log](../validation/f14.2-cold-read-rescore-2026-09-24.md).
+
+- **F14.5** (2026-09-24) — counter-locked cycles measured, nothing emitted
+  (go-ahead *"Sim, como recomendado (Recommended)"*). Two recordings of each
+  route from power-on on `main` @ `4d9f73e2`, the second behind idle frames
+  (Metroid +37, Contra +92 at the stage load), read one frame at a time; a
+  cycle is counter-locked when its anchor phase has one residue mod its turn
+  length, against the PPU frame counter `frameRange` tests, across both
+  recordings. The sprite cycles come from a re-implementation that
+  reproduces the recorder's `poses.json` exactly.
+  - Metroid Norfair, sprites: **0/6**. Three cycles land on another phase
+    when the route shifts, and three drift even within one recording.
+  - Metroid Norfair, background: **nothing to measure**. No background tile
+    or palette changes in 2023 Norfair frames, so the reference pack's
+    `NorfairFrame`/`NorfairLava` `frameRange` rules animate static art.
+  - Contra stage 1: no sprite cycle on the route. The water palette
+    shimmer (3 tracks, one 32-frame animation) is **3/3** between the two
+    recordings; the menu and intro text blinks are 0/26, locked to Start
+    and to the stage load.
+  - A third Contra recording through a game over and continue moves the
+    shimmer 2 frames (of 32) against the PPU counter. The game's own counter
+    `$1A` stalls on loads, so the lock lasts only until the next load.
+  - No issue filed.
+  [Log](../validation/f14.5-counter-locked-cycles-2026-09-24.md).
 
 
 ### 4. Roadmap — pending work, by slice
@@ -1239,7 +1262,10 @@ their rows are removed): the painted round trip reached the running game
 pixel-exact through both paths, which closes F12.11 (3) and ADR-0209 Q2/Q3's
 "in-game reload not verified". The kit-figure reload gap F14.1 found (#413) was fixed 2026-09-24.
 **F14.2 is delivered** (2026-09-24, §3; its row is removed): criterion 3
-re-scored at 20/28. The other rows are not started.
+re-scored at 20/28. **F14.5 is delivered** (2026-09-24, §3; its row is
+removed): 0/6 Metroid sprite cycles and 3/3 Contra water tracks
+counter-locked, the latter only until the next load. The other rows are not
+started.
 Two questions the review raised are already decided on open PR #397 and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
 an `<addition>` anchor is keyed (*"Manter como está"*, recorded as an
@@ -1270,7 +1296,6 @@ verdict "no"), so F14.1 no longer re-records.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.4 | **Every drawn shape reaches the shape registry** (option (i) of ADR-0229), so the organised and `unsorted` sheets can reach the pack's keys and not only the retained stream's. | **ADR-0229 `proposed`**, options (i)–(iii); user leans (i), 2026-09-23, pending measurement. Not started until ADR-0229 is accepted. Bounded input: the Castlevania 60 s and Zelda 85 s runs ADR-0209 measured. The measurement that gates acceptance: pack coverage, grid-dump size and wall clock on both runs under option (i). Stop, once accepted, when the coverage figure is re-measured on both games with its cost and `mep_build` round-trips byte-identically. |
-| F14.5 | **Measure counter-locked scenery cycles** — the share of cycles (`PoseStats.Cycles` and background animation cycles) whose phase is constant against the global frame counter, over two recordings of the same route. Measurement only; nothing emits `frameRange`. | Scoped as a measurement only by the same decision (*"Sim, como recomendado (Recommended)"*, 2026-09-23); no ADR yet. The ADR on emitting `frameRange` (amending ADR-0189 §4) is written after these numbers. Bounded input: Metroid Norfair (`docs/validation/metroid-artist-workflow-evidence.md` §4) plus one Contra background animation. Stop when the share is logged per game and per axis in `docs/validation/`. |
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
 
 ### 5. Order of execution
@@ -1305,7 +1330,8 @@ verdict "no"), so F14.1 no longer re-records.
    recomendado (Recommended)"*, 2026-09-23): #399–#401 → F14.1 ∥ F14.3 (both delivered
    2026-09-23, §3) →
    F14.2 (delivered 2026-09-24, §3) → F14.4/F14.5 (measure before deciding: ADR-0229's figures for
-   F14.4, the phase-constancy share for F14.5, and only then the ADRs) →
+   F14.4, the phase-constancy share for F14.5 — delivered 2026-09-24, §3 —
+   and only then the ADRs) →
    Phase 13 R.1/R.2. F14.8 runs whenever a person is available.
 
 One implementation slice per task; architecture changes still require their
