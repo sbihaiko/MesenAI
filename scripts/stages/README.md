@@ -48,8 +48,12 @@ against, or the unattended job cannot use it:
   scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
   ```
 
-  As of 2026-09-19 only `mm3/` and `zelda/` are declared; the other four sets
-  are waiting for someone to run them once.
+  All six sets are declared since 2026-09-23 (F14.3,
+  `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
+  `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
+  authored on, and each was run once through the library job.
+  `scripts/test_library_job.py` fails if a folder here has no manifest, a
+  malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
 A game folder may also hold one **profile**:
 
