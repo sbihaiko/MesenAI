@@ -82,6 +82,7 @@ import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
+import mep_addition
 import mep_build
 import mep_patch
 
@@ -110,8 +111,9 @@ _KNOWN_TAGS = frozenset(
     | {f"<{t}>" for t in mep_build._HEADER_TAGS})
 # The version at which the loader reads a short tileData field as hex.
 # Below it the field is decimal (ReadTileData), so a hex-token key source
-# would be read as a different key.
-_HEX_INDEX_VER = 103
+# would be read as a different key. One constant and one parser, shared with
+# the lint (#382), so the import and the lint never disagree on an index.
+_HEX_INDEX_VER = mep_addition.HEX_INDEX_VERSION
 # Condition types whose parse the 100/101/102 -> 103 step changes.
 _MEMORY_COND_TYPES = ("memoryCheck", "ppuMemoryCheck",
                       "memoryCheckConstant", "ppuMemoryCheckConstant")
@@ -326,7 +328,7 @@ class Rule:
     def parsed_index(self, ver: int) -> int:
         """The CHR index this rule names, read the loader's own way: decimal
         below `<ver>103`, hex at 103+ (HdPackLoader::ReadTileData)."""
-        return int(self.token, 16) if ver >= _HEX_INDEX_VER else int(self.token, 10)
+        return mep_addition.parse_index(self.token, ver)
 
 
 class Pack:
@@ -835,7 +837,7 @@ def _plan_cells(pack: Pack) -> tuple:
 
 
 def _index_of(token: str, ver: int) -> int:
-    return int(token, 16) if ver >= _HEX_INDEX_VER else int(token, 10)
+    return mep_addition.parse_index(token, ver)
 
 
 def _read_sources(pack: Pack, plan: dict) -> dict:

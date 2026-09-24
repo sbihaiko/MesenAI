@@ -1037,10 +1037,18 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
                 rep.error(where, f"<tile> references nonexistent <img> #{idx}")
             elif imgs[idx] and scale and (x + 8 * scale > imgs[idx][0] or y + 8 * scale > imgs[idx][1]):
                 rep.warning(where, f"<tile> at ({x},{y}) is outside image #{idx} ({imgs[idx][0]}x{imgs[idx][1]}) — renders as fully transparent, load continues (HdPackTileInfo::Init bounds check)")
-            key = (tokens[1], tokens[2].upper(), tuple(sorted(used)))
+            # #382: compare the key as the loader parses it, not as the author
+            # spelt it — `000` and `00` are one CHR index at <ver>103+, and a
+            # short token is decimal below that (HdPackLoader::ReadTileData).
+            data, pal = mep_addition.canonical_key((tokens[1], tokens[2]), version)
+            key = (data, pal, tuple(sorted(used)))
             # ADR-0196 §4 needs the key set without its condition prefixes: an
             # <addition> cites a key, never a conditioned entry of it.
-            keyed.add((tokens[1].upper(), tokens[2].upper()))
+            keyed.add((data, pal))
+            # #386: a defaultTile=Y rule is also filed under the default key,
+            # so it draws its index under every palette (InitializeHdPack).
+            if len(tokens) > 6 and tokens[6].upper() in HDPACK_BOOL_TRUE:
+                keyed.add(mep_addition.default_key((data, pal)))
             if key in tile_keys:
                 dups.append((n, tile_keys[key]))
             else:
@@ -1181,11 +1189,12 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
                   + (f", {len(additions)} additions" if additions else ""))
 
 
-def synthetic_sidecar_keys(src: Source, folder: str):
+def synthetic_sidecar_keys(src: Source, folder: str, version: int):
     """The `(tileData, palette)` and CHR indices every sheet sidecar of this
     pack marks `synthetic` (ADR-0196 §1). Returns `(keys, indices, sidecars)`;
     `sidecars` is how many were read, so a caller can tell "marked nowhere"
-    from "this pack ships no sidecars at all"."""
+    from "this pack ships no sidecars at all". Keys come back in
+    `mep_addition.canonical_key` form so they compare with the manifest's."""
     keys, indices, seen = set(), set(), 0
     prefix = f"{folder}sheets/"
     for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
@@ -1202,9 +1211,8 @@ def synthetic_sidecar_keys(src: Source, folder: str):
             for entry in cell.get("tiles") or []:
                 if not isinstance(entry, dict):
                     continue
-                data = str(entry.get("tile") or "").strip().upper()
-                pal = str(entry.get("palette") or "").strip().upper()
-                keys.add((data, pal))
+                keys.add(mep_addition.canonical_key(
+                    (entry.get("tile") or "", entry.get("palette") or ""), version))
                 if isinstance(entry.get("index"), int):
                     indices.add(mep_addition.index_token(entry["index"]))
     return keys, indices, seen
@@ -1220,11 +1228,15 @@ def lint_additions(src: Source, rel: str, folder: str, version: int, additions: 
     form — a linter has no ROM, so a CHR ROM target is required to be past
     every index the pack's own manifest names, while `mep_build --rom` makes
     the header assertion the ADR states."""
-    marked, marked_idx, sidecars = synthetic_sidecar_keys(src, folder)
+    marked, marked_idx, sidecars = synthetic_sidecar_keys(src, folder, version)
     index_keyed = any(mep_addition.is_index_key(d) for d, _p in keyed)
     max_real = -1
     if index_keyed:
         for data, _pal in keyed:
+            # A default key (#386) always has its exact twin in `keyed`, which
+            # is what the synthetic marking names.
+            if _pal == mep_addition.DEFAULT_KEY_PALETTE:
+                continue
             if (data, _pal) in marked or data in marked_idx:
                 continue
             try:
@@ -1242,21 +1254,27 @@ def lint_additions(src: Source, rel: str, folder: str, version: int, additions: 
         except mep_addition.AdditionError as e:
             rep.error(where, f"<addition> {e}")
             continue
+        # #382: `keyed` holds canonical keys; the author's own spelling stays
+        # in `anchor`/`target` for the messages below.
+        anchor_key = mep_addition.canonical_key(anchor, version)
+        target_key = mep_addition.canonical_key(target, version)
         if ignore is not None and version < mep_addition.IGNORE_PALETTE_VERSION:
             rep.error(where, f"<addition> ignorePalette requires <ver>{mep_addition.IGNORE_PALETTE_VERSION}+, this pack declares {version}")
         if ignore:
             rep.error(where, "<addition> sets ignorePalette on its target — ADR-0196 §3 keeps the palette half of a synthetic key load-bearing, and dropping it is what lets the key collide")
         if abs(dx) > 255 or abs(dy) > 239:
             rep.warning(where, f"<addition> offset ({dx},{dy}) is larger than the screen — HdNesPack::InsertAdditionalSprite drops every placement off-screen")
-        if anchor not in keyed:
+        # #386: "keyed" is what the runtime draws — the exact key, or a
+        # defaultTile=Y rule on the same tileData under any palette.
+        if not mep_addition.is_keyed(anchor_key, keyed):
             rep.error(where, f"<addition> anchor {anchor[0]}/{anchor[1]} is keyed by no <tile> rule in this manifest — the tag can never fire (ADR-0196 §4)")
-        if target not in keyed:
+        if not mep_addition.is_keyed(target_key, keyed):
             rep.error(where, f"<addition> target {target[0]}/{target[1]} is keyed by no <tile> rule — the overflow has no art to draw (ADR-0196 §4)")
-        if sidecars and target not in marked and target[0] not in marked_idx:
+        if sidecars and target_key not in marked and target_key[0] not in marked_idx:
             rep.error(where, f"<addition> target {target[0]}/{target[1]} is not marked synthetic in any sheet sidecar (ADR-0196 §4) — a key no recording observed has to say so, or it inflates coverage")
         elif not sidecars:
             rep.warning(where, "this pack ships no sheet sidecars, so ADR-0196 §4's \"marked synthetic in the sidecar\" cannot be checked here")
-        why = mep_addition.target_verdict(target, index_keyed, max_real)
+        why = mep_addition.target_verdict(target_key, index_keyed, max_real)
         if why:
             rep.error(where, f"<addition> {why}")
 

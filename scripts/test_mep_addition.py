@@ -153,7 +153,62 @@ def check_index_token():
           "32 hex digits is pattern data, anything shorter is a CHR index")
 
 
+def check_parse_index():
+    """HdPackLoader::ReadTileData: decimal at <ver><=102, hex at 103+ (#382)."""
+    check(A.parse_index("10", 102) == 10 and A.parse_index("10", 103) == 16,
+          "the same token is decimal below <ver>103 and hex from it")
+    check(A.parse_index(" 1c0 ", 108) == 0x1C0,
+          "hex is case-insensitive and the token is stripped")
+    for bad, ver in (("0A", 102), ("-1", 108), ("0x10", 108), ("", 108)):
+        try:
+            A.parse_index(bad, ver)
+            check(False, f"{bad!r} at <ver>{ver} is refused")
+        except ValueError:
+            check(True, f"{bad!r} at <ver>{ver} is refused")
+
+
+def check_canonical_key():
+    """One spelling per loader key, so text that FromHex's alike compares
+    alike (#382)."""
+    pal = "FF161927"
+    check(A.canonical_key(("000", pal), 108) == ("00", pal)
+          and A.canonical_key(("0", pal), 108) == ("00", pal),
+          "000 and 0 are index 00")
+    check(A.canonical_key(("217", pal), 108) == ("0217", pal),
+          "217 is index 0217 — the shortest even hex width")
+    check(A.canonical_key(("10", pal), 102) == ("0A", pal),
+          "below <ver>103 the index is read as decimal first")
+    pattern = "007effffe3e70000007e817e9d18ffff"
+    check(A.canonical_key((pattern, pal), 108) == (pattern.upper(), pal),
+          "a 32-hex pattern is uppercased and otherwise left alone")
+    check(A.canonical_key((pattern + "00", pal), 108)[0] == pattern.upper(),
+          "the loader reads 16 byte pairs and ignores the rest of a longer pattern")
+    check(A.canonical_key(("0" * 30 + "01", pal), 108)[0] == "0" * 30 + "01",
+          "a pattern is never re-spelt as the index its digits would name")
+    check(A.canonical_key(("00", "F161927"), 108) == ("00", "0F161927"),
+          "the palette is FromHex'd too: padded to 8 digits")
+    check(A.canonical_key(("zz", "xx"), 108) == ("ZZ", "XX"),
+          "text no reading accepts comes back stripped and uppercased, for the caller's diagnostic")
+
+
 # -- the tag ------------------------------------------------------------------
+
+def check_is_keyed():
+    """#386: a key is drawn when its exact key is keyed, or its tileData is
+    filed under the default (palette FFFFFFFF) key a defaultTile=Y rule adds."""
+    exact = {("1066", "0F162000")}
+    wild = exact | {A.default_key(("1066", "0F162000"))}
+    check(A.default_key(("1066", "0F162000")) == ("1066", A.DEFAULT_KEY_PALETTE),
+          "default_key keeps the tileData and swaps in palette FFFFFFFF")
+    check(A.is_keyed(("1066", "0F162000"), exact),
+          "the exact key is keyed")
+    check(not A.is_keyed(("1066", "0F162700"), exact),
+          "another palette is not keyed by a defaultTile=N rule")
+    check(A.is_keyed(("1066", "0F162700"), wild),
+          "any palette is keyed once the default key is in the set")
+    check(not A.is_keyed(("1067", "0F162700"), wild),
+          "the default key never reaches another index")
+
 
 def check_addition_line_round_trip():
     anchor = ("007EFFFFE3E70000007E817E9D18FFFF", "FF36160F")
@@ -256,6 +311,9 @@ def main():
     check_chr_tile_count()
     check_chr_rom_target()
     check_index_token()
+    check_parse_index()
+    check_canonical_key()
+    check_is_keyed()
     check_addition_line_round_trip()
     check_target_verdict()
     check_plan_chr_ram()

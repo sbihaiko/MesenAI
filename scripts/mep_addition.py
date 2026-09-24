@@ -36,6 +36,7 @@ starting at 1 keeps the pattern half non-degenerate even before the palette
 half is considered.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -81,6 +82,74 @@ def is_index_key(token: str) -> bool:
     32 hex digits of pattern data — the loader's own cutoff
     (`HdPackLoader::ReadTileData`: 32 characters or more is CHR RAM)."""
     return len(str(token).strip()) < 32
+
+
+# The `<ver>` at which the loader reads a short tileData field as hex. Below
+# it the field is decimal (`HdPackLoader::ReadTileData`, `Version <= 102` ->
+# `std::stoi`), so the same text names a different index on either side.
+HEX_INDEX_VERSION = 103
+
+_HEX_TOKEN = re.compile(r"[0-9A-F]+\Z")
+_DEC_TOKEN = re.compile(r"[0-9]+\Z")
+
+
+def parse_index(token: str, version: int) -> int:
+    """The CHR index a short key token names, read the loader's own way:
+    decimal below `<ver>103`, hex at 103+ (`HdPackLoader::ReadTileData`).
+    Raises `ValueError` on text neither reading accepts."""
+    text = str(token).strip().upper()
+    if int(version) >= HEX_INDEX_VERSION:
+        if not _HEX_TOKEN.match(text):
+            raise ValueError(f"not a hexadecimal CHR index: {token}")
+        return int(text, 16)
+    if not _DEC_TOKEN.match(text):
+        raise ValueError(f"not a decimal CHR index: {token}")
+    return int(text, 10)
+
+
+def canonical_key(key, version: int):
+    """`(tileData, palette)` in the one spelling the loader's parse of `key`
+    maps to, so two tokens compare equal exactly when `HdPackLoader::
+    ReadTileData` builds the same `HdTileKey` from them (#382).
+
+    A CHR ROM index is re-spelt through `parse_index` (decimal below
+    `<ver>103`, hex at 103+) and `index_token`, so `000`, `00` and `0` are one
+    key at 103+. Pattern data (32+ hex digits) is kept as its first 32 digits,
+    uppercased — the loader reads exactly 16 byte pairs and ignores the rest.
+    The palette is `FromHex`'d, so it is padded to 8 digits. A token no
+    reading accepts is returned stripped and uppercased, unchanged otherwise,
+    so the caller's own diagnostic still names it."""
+    data, pal = (str(x).strip().upper() for x in key)
+    if is_index_key(data):
+        try:
+            data = index_token(parse_index(data, version))
+        except ValueError:
+            pass
+    else:
+        data = data[:32]
+    if _HEX_TOKEN.match(pal) and len(pal) <= 8:
+        pal = f"{int(pal, 16):08X}"
+    return (data, pal)
+
+
+# The palette of a tile's "default key" (`HdTileKey::GetKey(true)`): a
+# `defaultTile=Y` `<tile>` rule is also filed under its tileData with this
+# palette (`HdPackLoader::InitializeHdPack`), and `HdNesPack::GetMatchingTile`
+# falls back to that key when the exact `(tileData, palette)` has no rule — so
+# the rule draws its index (or pattern) under every palette (#386).
+DEFAULT_KEY_PALETTE = "FFFFFFFF"
+
+
+def default_key(key):
+    """`key`'s default (palette-wildcard) form. `key` is canonical."""
+    return (key[0], DEFAULT_KEY_PALETTE)
+
+
+def is_keyed(key, keyed) -> bool:
+    """True when a `<tile>` rule draws the canonical `key` at runtime: its
+    exact key is in `keyed`, or a `defaultTile=Y` rule filed its tileData
+    under the default key (`HdNesPack::GetMatchingTile`'s fallback)."""
+    return key in keyed or default_key(key) in keyed
 
 
 # -- the CHR RAM half ---------------------------------------------------------

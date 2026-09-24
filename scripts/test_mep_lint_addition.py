@@ -78,8 +78,8 @@ def has(items, level, needle):
     return any(needle in m for m in messages(items, level))
 
 
-def tile(key, x=0, y=0):
-    return f"<tile>0,{key[0]},{key[1]},{x},{y},1,N"
+def tile(key, x=0, y=0, default="N", prefix=""):
+    return f"{prefix}<tile>0,{key[0]},{key[1]},{x},{y},1,{default}"
 
 
 def addition(anchor=ANCHOR, offset=(16, -24), target=TARGET, extra="", prefix=""):
@@ -167,6 +167,146 @@ def check_chr_rom_target_inside_chr():
           "an index the pack itself keys is not provably unmatched")
 
 
+# -- #382: keys compare by value, the loader's way -----------------------------
+
+REAL = ("00", "FF161927")
+SYNTH = ("0217", "FF000464")
+ROM_SIDECAR = {"cells": [{"index": 0, "synthetic": True,
+                          "tiles": [{"tile": "0" * 32, "palette": SYNTH[1],
+                                     "index": 0x217}]}]}
+
+
+def check_padded_index_tokens_are_one_key():
+    """`000`/`00` and `217`/`0217` are one CHR index at <ver>103+ —
+    HdPackLoader::ReadTileData FromHex's both — so an <addition> spelt the
+    legacy way is keyed by a <tile> rule mep_build re-spelt (#382)."""
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("000", REAL[1]), target=("217", SYNTH[1]))], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a legacy-padded anchor/target is keyed by the build's tokens: {messages(items, 'error')}")
+    items = pack([tile(("000", REAL[1])), tile(("217", SYNTH[1]), 8, 0),
+                  addition(anchor=REAL, target=("0217", SYNTH[1]))], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"and the other way round — the build's tokens cite legacy-padded rules: {messages(items, 'error')}")
+
+
+def check_padded_palette_is_one_key():
+    """The palette half is FromHex'd too, so a 7-digit spelling names the
+    8-digit key."""
+    items = pack([tile(("00", "0F161927")), tile(SYNTH, 8, 0),
+                  addition(anchor=("00", "F161927"), target=SYNTH)], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a 7-digit palette token is padded to the <tile> rule's 8: {messages(items, 'error')}")
+
+
+def check_chr_ram_pattern_is_never_an_index():
+    """32 hex digits are pattern data (ReadTileData: `size() >= 32`), so a
+    pattern of zeros ending in 01 does not key CHR index `01`, and the pattern
+    itself is untouched by the index re-spelling."""
+    pattern = ("0" * 30 + "01", "FF161927")
+    items = pack([tile(("01", "FF161927")), tile(TARGET, 8, 0), addition(anchor=pattern)],
+                 sidecar())
+    check(has(items, "error", "anchor " + pattern[0] + "/" + pattern[1] + " is keyed by no <tile> rule"),
+          "a 32-hex pattern is not conflated with the CHR index its digits spell")
+    items = pack([tile(ANCHOR), tile(TARGET, 8, 0),
+                  addition(anchor=(ANCHOR[0].lower(), ANCHOR[1]))], sidecar())
+    check(not messages(items, "error"),
+          f"a CHR RAM pattern compares case-insensitively and otherwise verbatim: {messages(items, 'error')}")
+
+
+def check_decimal_index_below_ver103():
+    """Below <ver>103 the loader reads a short tileData field with std::stoi —
+    decimal — so `10` is index 10 (`0A`), not 16. The tag itself needs 107+,
+    so the version rule is exercised on the shared helper and on the lint's
+    duplicate-<tile> pass, which keys by the same canonical form."""
+    check(mep_addition.canonical_key(("10", "FF161927"), 102) == ("0A", "FF161927"),
+          "at <ver>102 a short token is decimal: 10 -> index 0A")
+    check(mep_addition.canonical_key(("10", "FF161927"), 103) == ("10", "FF161927"),
+          "at <ver>103 the same token is hex: 10 -> index 10")
+    items = pack([tile(("9", "FF161927")), tile(("09", "FF161927"), 8, 0)], version=102)
+    check(has(items, "warning", "1 duplicate <tile>"),
+          "a <ver>102 pack's `9` and `09` are one decimal key — reported as a duplicate")
+    check(not any("Traceback" in m for m in messages(items)),
+          "a <ver>102 manifest lints without a crash")
+
+
+def check_unkeyed_index_anchor_still_reported():
+    """The by-value compare does not make every index keyed: an anchor whose
+    index no <tile> rule names is still ADR-0196 §4's first refusal."""
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("01", REAL[1]), target=("217", SYNTH[1]))], ROM_SIDECAR)
+    check(has(items, "error", "anchor 01/" + REAL[1] + " is keyed by no <tile> rule in this manifest"),
+          "an anchor index no <tile> rule keys is still an error, in the author's own spelling")
+    items = pack([tile(REAL), tile(SYNTH, 8, 0),
+                  addition(anchor=("000", REAL[1]), target=("218", SYNTH[1]))], ROM_SIDECAR)
+    check(has(items, "error", "target 218/" + SYNTH[1] + " is keyed by no <tile> rule"),
+          "a target index no <tile> rule keys is still an error")
+
+
+# -- #386: a defaultTile=Y rule keys every palette of its index ---------------
+
+HIGH_SYNTH = ("2000", SYNTH[1])     # past Metroid's own 1066/1072 anchors
+HIGH_SIDECAR = {"cells": [{"index": 0, "synthetic": True,
+                           "tiles": [{"tile": "0" * 32, "palette": SYNTH[1],
+                                      "index": 0x2000}]}]}
+
+def check_default_tile_keys_every_palette():
+    """HdPackLoader::InitializeHdPack also files a defaultTile=Y rule under
+    its tileData with palette FFFFFFFF, and HdNesPack::GetMatchingTile falls
+    back to that key — so the rule draws its index under any palette, and an
+    anchor keyed only that way can fire (#386, Metroid's `1066/0F162700`)."""
+    items = pack([tile(("1066", "0F162000"), default="Y"), tile(HIGH_SYNTH, 8, 0),
+                  addition(anchor=("1066", "0F162700"), target=HIGH_SYNTH)], HIGH_SIDECAR)
+    check(not messages(items, "error"),
+          f"an anchor keyed only by a defaultTile=Y rule under another palette lints clean: {messages(items, 'error')}")
+    items = pack([tile(("1066", "0F162000"), default="yes",
+                       prefix="<condition>c1,frameRange,0,1\n[c1]"),
+                  tile(HIGH_SYNTH, 8, 0),
+                  addition(anchor=("1066", "0F162700"), target=HIGH_SYNTH)], HIGH_SIDECAR)
+    check(not messages(items, "error"),
+          f"any loader spelling of Y counts, and a condition prefix does not hide the key: {messages(items, 'error')}")
+
+
+def check_non_default_tile_keeps_palette():
+    """A defaultTile=N rule is filed under its exact key only, so the palette
+    half of the anchor check still bites."""
+    items = pack([tile(("1066", "0F162000")), tile(HIGH_SYNTH, 8, 0),
+                  addition(anchor=("1066", "0F162700"), target=HIGH_SYNTH)], HIGH_SIDECAR)
+    check(has(items, "error", "anchor 1066/0F162700 is keyed by no <tile> rule in this manifest"),
+          "an anchor keyed by a defaultTile=N rule under another palette is still an error")
+    items = pack([tile(("1067", "0F162000"), default="Y"), tile(HIGH_SYNTH, 8, 0),
+                  addition(anchor=("1066", "0F162700"), target=HIGH_SYNTH)], HIGH_SIDECAR)
+    check(has(items, "error", "anchor 1066/0F162700 is keyed by no <tile> rule"),
+          "a defaultTile=Y rule on another index keys nothing for this one")
+
+
+def check_default_tile_with_padded_index():
+    """The wildcard is filed under #382's canonical index, so `012E` on the
+    rule and `12E` on the anchor (Metroid's own spelling) are one key."""
+    items = pack([tile(("012E", "FF161920"), default="Y"), tile(SYNTH, 8, 0),
+                  addition(anchor=("12E", "FF161926"), target=SYNTH)], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a padded defaultTile=Y rule keys the unpadded anchor under any palette: {messages(items, 'error')}")
+    items = pack([tile(("12E", "FF161920"), default="Y"), tile(SYNTH, 8, 0),
+                  addition(anchor=("0012E", "FF161926"), target=SYNTH)], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"and the other way round: {messages(items, 'error')}")
+
+
+def check_default_tile_keys_target():
+    """The overflow sprite is drawn through GetMatchingTile too, so a target
+    whose index only a defaultTile=Y rule keys has art — but a synthetic
+    target's default key never widens the §3 "past the pack's own CHR" floor."""
+    items = pack([tile(REAL), tile((SYNTH[0], "FF000000"), 8, 0, default="Y"),
+                  addition(anchor=REAL, target=SYNTH)], ROM_SIDECAR)
+    check(not has(items, "error", "the overflow has no art to draw"),
+          f"a target keyed only by a defaultTile=Y rule has art: {messages(items, 'error')}")
+    items = pack([tile(REAL), tile(SYNTH, 8, 0, default="Y"),
+                  addition(anchor=REAL, target=SYNTH)], ROM_SIDECAR)
+    check(not messages(items, "error"),
+          f"a defaultTile=Y synthetic target is not counted as real CHR: {messages(items, 'error')}")
+
+
 # -- the tag's own limits ------------------------------------------------------
 
 def check_ignore_palette_refused():
@@ -213,6 +353,15 @@ def main():
     check_unreserved_palette()
     check_unreserved_pattern()
     check_chr_rom_target_inside_chr()
+    check_padded_index_tokens_are_one_key()
+    check_padded_palette_is_one_key()
+    check_chr_ram_pattern_is_never_an_index()
+    check_decimal_index_below_ver103()
+    check_unkeyed_index_anchor_still_reported()
+    check_default_tile_keys_every_palette()
+    check_non_default_tile_keeps_palette()
+    check_default_tile_with_padded_index()
+    check_default_tile_keys_target()
     check_ignore_palette_refused()
     check_version_floor()
     check_condition_prefix_warns()
