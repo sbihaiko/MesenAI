@@ -24,6 +24,7 @@ namespace Mesen.HeadlessTests;
 //A capture of the emulator frame (Core/Shared/Video/FrameCapture.h) cannot
 //answer this: the video filter's output buffer is the picture at its own base
 //size, and the letterbox only exists in the host window's layout.
+[Collection(NativeCoreCollection.Name)]
 public class RendererLetterboxTests
 {
 	//Deliberately not 4:3 and not 16:9, so whatever aspect ratio the core

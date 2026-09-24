@@ -59,6 +59,14 @@ headless builds a fresh `Application` per test — the second attach throws.
 
 ## Test hygiene
 
+- **Every test class that reaches the native core carries
+  `[Collection(NativeCoreCollection.Name)]`** (#432). The core is one
+  process-global emulator, and xUnit v3 runs classes in parallel, so two
+  classes calling `InitializeEmu`/`LoadRom`/`Stop` at once swap each other's
+  ROM. `NativeCoreCollectionGuardTests` walks the IL and fails when a class
+  that references `NativeCore` or an `Interop` P/Invoke type lacks it.
+  Core-free classes stay out of it and keep running in parallel.
+
 - A headless test must detect the defect it targets. If it would pass
   without the XAML under test, it is a property-getter assertion in
   disguise — strengthen it or delete it.

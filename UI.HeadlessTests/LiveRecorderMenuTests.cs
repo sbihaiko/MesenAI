@@ -28,6 +28,7 @@ namespace Mesen.HeadlessTests;
 //Needs a MainWindow, whose constructor calls EmuApi.InitDll(), so it runs only
 //where the native core is built (NativeCore) and self-skips on the core-less
 //CI runner like the other MainWindow tests.
+[Collection(NativeCoreCollection.Name)]
 public class LiveRecorderMenuTests
 {
 	private static MenuItem OpenSubmenu(ItemsControl parent, string header)
