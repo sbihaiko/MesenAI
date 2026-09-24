@@ -851,6 +851,9 @@ cp -R out/by-stage/stage1/Contra/auto out/painted
 cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
 cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
+for f in out/kit/figures/usr*-figure.png; do
+  python3 scripts/mep_figure.py import out/painted "$f"   # figures are imported, not copied
+done
 
 scripts/mep_build.py build out/painted       # regenerates hires.txt, then lints
 python3 scripts/mep_lint.py out/painted      # exit 0 = clean
@@ -861,6 +864,14 @@ and `audio/hires.txt` from `audio/bgm|sfx/`, then runs the linter — **a lint
 failure is a build failure**, so exit 0 means both happened. 0 errors with
 warnings about the recorder's own sheet sizes is normal and is called out as
 such in the output.
+
+The figure loop runs after the sheet copy and before the build: a composed
+figure (`<kit>/figures/usr*-figure.png`, ADR-0225) is a view, and
+`mep_figure.py import` writes what was painted on it into the copy's own
+sprite sheet. An unpainted figure writes nothing, so importing all of them is
+safe. A figure and its `sheets/usr*.png` row are the same tiles — paint one,
+not both; if both are painted, `build` stops with a `painted tile … lost to`
+error naming the tile (#399).
 
 That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and

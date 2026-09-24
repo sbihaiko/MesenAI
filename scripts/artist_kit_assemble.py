@@ -192,6 +192,54 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
     return kit
 
 
+def _kit_paths(kit: dict, key: str) -> list:
+    return [str(f.get(key) or "") for part in kit["parts"] for f in part["files"] if f.get(key)]
+
+
+def _recorded_done_steps(kit: dict) -> list:
+    """The copy-and-build commands for a recorded kit, naming only the folders
+    this kit actually has - a `cp` of a glob that matches nothing fails, and an
+    artist runs these lines as written. Figures (ADR-0225 §2) are not copied at
+    all: `mep_figure.py import` returns them onto the copy's sprite sheets, so
+    they get their own step between the copy and the build (#399)."""
+    paths = _kit_paths(kit, "path")
+    figures = _kit_paths(kit, "figure")
+    lines = ["cp -R <game>/auto <game>/painted"]
+    if any(p.startswith("sheets/") for p in paths):
+        lines.append("cp <kit>/sheets/*.png <kit>/sheets/*.json <game>/painted/textures/sheets/")
+    if any(p.startswith("chr/") for p in paths):
+        lines.append("cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/")
+    if figures:
+        lines.append("for f in <kit>/figures/usr*-figure.png; do "
+                     "python3 scripts/mep_figure.py import <game>/painted \"$f\"; done")
+    lines.append("python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal")
+    out = [
+        "The kit is a folder beside the recording, not the pack itself. To turn painted "
+        "work into a pack, copy the recording, drop your files into the copy and build it:",
+        "",
+        "```",
+        *lines,
+        "```",
+        "",
+        "Copy each sheet together with its `.json`: the JSON is the slicing contract that "
+        "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
+        "untouched reference, and painting it is how your work becomes invisible.",
+        "",
+    ]
+    if figures:
+        out.extend([
+            "Figures are not copied: `figures/usr*-figure.png` is a view, and "
+            "`mep_figure.py import` writes what you painted on it into the copy's own "
+            "sprite sheet, so it runs after the copy and before the build. A figure you "
+            "did not paint changes nothing, so importing every one is safe; each prints "
+            "how many cells it wrote. A figure and its `sheets/usr*.png` row are the same "
+            "tiles - paint either one, not both: if both are painted, the build stops "
+            "with a `painted tile ... lost to` error naming the tile, and you keep one.",
+            "",
+        ])
+    return out
+
+
 def render_markdown(kit: dict) -> str:
     out = [f"# Artist kit - {kit['title']}", ""]
     if kit.get("static"):
@@ -302,21 +350,7 @@ def render_markdown(kit: dict) -> str:
         "`<tile>` row per tile of the ROM, and the build regenerates "
         "`textures/hires.txt` from it. Leave every `.orig.png` in the kit - it is the "
         "untouched reference, and painting it is how your work becomes invisible.",
-    ] if kit.get("static") else [
-        "The kit is a folder beside the recording, not the pack itself. To turn painted "
-        "work into a pack, copy the recording, drop your files into the copy and build it:",
-        "",
-        "```",
-        "cp -R <game>/auto <game>/painted",
-        "cp <kit>/sheets/*.png <kit>/sheets/*.json <game>/painted/textures/sheets/",
-        "cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/",
-        "python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal",
-        "```",
-        "",
-        "Copy each sheet together with its `.json`: the JSON is the slicing contract that "
-        "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
-        "untouched reference, and painting it is how your work becomes invisible.",
-        "",
+    ] if kit.get("static") else _recorded_done_steps(kit) + [
         "Build the whole copy, not a folder holding only your sheets. A pack manifest also "
         "points at the recording's screen images, and a part-folder build fails on those "
         "references - measured, not guessed. Installing the finished pack as the human "

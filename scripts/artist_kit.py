@@ -718,8 +718,10 @@ def _notes(pack, builder, grids, names, pack_arg):
         "either surface, not both: python3 scripts/mep_figure.py import <pack> "
         "figures/usrNNN-figure.png returns a painted view to the pack's sprite sheet; where "
         "two tiles overlap, a pixel goes to the tile in front.",
-        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\" and run "
-        f"python3 scripts/mep_build.py build \"{pack_arg}\".",
+        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\", import "
+        f"each painted figure with python3 scripts/mep_figure.py import \"{pack_arg}\" "
+        f"figures/usrNNN-figure.png, then run python3 scripts/mep_build.py build \"{pack_arg}\" "
+        "- a figure left out of the import never reaches the pack (#399).",
     ]
     if builder.excluded_fusions or builder.excluded_blank or builder.excluded_hud:
         notes.append(
