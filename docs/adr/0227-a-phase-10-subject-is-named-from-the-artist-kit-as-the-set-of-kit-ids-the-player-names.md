@@ -37,12 +37,16 @@ ADR-0169 §4.
 1. **The entry point is the kit, by name.** The player picks a subject by
    naming entries from the artist kit, not by pointing in the live viewer
    or any other running surface.
-2. **A subject is the set of kit ids the player names.** Each id is one of:
-   a figure grid id (`usrNNN`), a cycle or sequence id, or a pose id from
-   `sheets/poses.json`. A pose named directly counts once, even when a named
-   grid or cycle also contains it. A rest grid counts only as the poses the
-   player names from it, never as the whole grid, because a rest grid is a
-   box-size bin and not a subject.
+2. **A subject is the set of kit ids the player names.** Each id is one
+   the assembled kit itself records: a figure grid id (`usrNNN`, the file
+   record in `kit.json`) or a pose id listed in that record. A cycle or
+   sequence is named through its `usrNNN` grid, not through its
+   `cycleNNN`/`seqNNN` id: the kit keeps no structured record of run ids
+   (the caption is prose, and `--names` replaces it), so a run id is not
+   selectable until the kit persists it. A pose named directly counts once,
+   even when a named grid also contains it. A rest grid counts only as the
+   poses the player names from it, never as the whole grid, because a rest
+   grid is a box-size bin and not a subject.
 3. **The toolchain infers no membership.** Phase 10's "whole subject" means
    every pose in the named set. If the player leaves out a pose of the
    character, it stays out, and the tool says which poses of each named
