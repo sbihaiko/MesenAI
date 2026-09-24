@@ -55,6 +55,22 @@ against, or the unattended job cannot use it:
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
+  The job produces each route's start state before recording it
+  (`library_job.start_plan`, issues #407/#408): a state a `.chain.txt` yields, or
+  one `navigation.json`'s `rooms[]` enters a room from, comes only from an exact
+  `mint-<stage>.txt` or from replaying the chain out of a state the job itself
+  produced; a `<stage>-probe` copies `<stage>`'s state; any other route takes
+  the longest mint that prefixes it. A route none of these reach is **not
+  recorded** and is listed in `library-report.md` with the reason, because
+  from power-on it records the attract demo under its name. Only a set with no
+  mint, no chain and no room state (`metroid/`) records from power-on. On a
+  checkout that leaves Contra with six routes: `stage1-boss`, `stage2-base` and
+  every `stage3-*`/`stage4-*` start from states that exist only under `runs/`,
+  and `stage3-waterfall.mss`, which every chain here descends from, cannot be
+  re-minted (below). The report also gives each route's retained frames, the
+  stage its start state is in (`navigation.json`'s RAM byte, when the set has
+  one) and the routes whose recordings are byte-identical to it (#409).
+
 A game folder may also hold one **profile**:
 
 - `navigation.json` — the navigation sweep of ADR-0184's 2026-09-14 amendment,

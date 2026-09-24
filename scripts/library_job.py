@@ -5,9 +5,13 @@ to be exact, and therefore the part that is tested. It answers two questions:
 
 * **`plan <roms-dir>`** — for every ROM in a folder, which driver records it,
   and why. Prints JSON on stdout; the shell reads it and does the recording.
+* **`starts <stage-dir>`** — how each route gets the state it starts from
+  (a mint, a replayed chain, a probe's copy, power-on) or why it cannot, as
+  steps the shell runs; `prune` then drops every route left without one.
 * **`report <out-dir>`** — after the job, one row per ROM: driver used,
   retained frames, `seen` %, figures / scenery / maps, the kit's `--verify`
-  result, and the ADR-0182 mechanism list where the route set declares one.
+  result, and the ADR-0182 mechanism list where the route set declares one;
+  then, per route-driven ROM, one row per route with its own evidence.
 
 Nothing here records or builds anything. It resolves, it reads what the job
 left on disk, and it writes Markdown — so the whole of it runs in a temp dir
@@ -138,46 +142,161 @@ def entry_scripts(stage_dir):
     return sorted(Path(stage_dir).glob("mint-*.txt"))
 
 
-def mint_plan(stage_dir):
-    """Which `mint-*.txt` mints the state for which recordable stage.
+CHAIN_SUFFIX = ".chain.txt"
+PROBE_SUFFIX = "-probe"
+NAVIGATION = "navigation.json"
+POWER_ON = "power-on"
 
-    `.mss` files are never versioned (`.gitignore`: a CHR RAM state carries the
-    game's graphics), so a checkout has the scripts and none of the states they
-    start from. Recording without minting first runs every stage from power-on
-    and keeps a title screen — measured, not supposed: the first F12.10 run kept
-    **1 retained frame per stage** on Mega Man 3 that way.
 
-    The naming rule is the one `scripts/stages/README.md` documents by example:
-    a mint's `save-state=` is named for the *stage that will use it*
-    (`mint-stage1.txt` -> `stage1-run.mss`), and a probe wants the same state
-    copied beside it as `<stage>-probe.mss`. So each recordable stage is served
-    by the **longest** mint whose name prefixes it — `stage1-water` takes
-    `mint-stage1-water` over `mint-stage1`, which is the whole point of having
-    both.
+def _chains(stage_dir):
+    """`{target: [(source, path)]}` for every `<a>-to-<b>.chain.txt`.
 
-    Returns `(pairs, unserved)`: `pairs` is `[(mint_path, [stage names])]` in
-    mint order, `unserved` is the recordable stages no mint prefixes. An
-    unserved stage is not an error — it may legitimately play from power-on, or
-    its state may come from a `.chain.txt` this job does not replay — but it is
-    reported, because a stage silently recorded from the title screen is the
-    failure this function exists to prevent.
+    A name holding `-to-` more than once is split at the first one whose two
+    halves are both non-empty; no versioned chain is ambiguous, and a chain that
+    cannot be split is simply not a transition this job knows how to replay.
+    """
+    out = {}
+    for p in sorted(Path(stage_dir).glob("*" + CHAIN_SUFFIX)):
+        name = p.name[:-len(CHAIN_SUFFIX)]
+        a, sep, b = name.partition("-to-")
+        if sep and a and b:
+            out.setdefault(b, []).append((a, p))
+    return out
+
+
+def _room_states(stage_dir):
+    """The states `navigation.json`'s `rooms[]` say a room is entered from.
+
+    ADR-0184 (amended 2026-09-14) and that file's own comment: a room the level
+    selector cannot reach "is its own session, entered from the save state that
+    is already in its room". So `stage1-boss` starts at the wall, not at the
+    stage-1 entry its name happens to share a prefix with (issue #408).
+    """
+    doc = _read_json(Path(stage_dir) / NAVIGATION)
+    rooms = doc.get("rooms") if isinstance(doc, dict) else None
+    out = set()
+    for room in rooms if isinstance(rooms, list) else []:
+        state = room.get("state") if isinstance(room, dict) else None
+        if isinstance(state, str) and state.endswith(".mss"):
+            out.add(state[:-len(".mss")])
+    return out
+
+
+def start_plan(stage_dir):
+    """How each recordable route gets the state it starts from (#407, #408).
+
+    A route `<stage>.txt` plays *from* `<stage>.mss` (`scripts/stages/README.md`),
+    and a checkout versions no state, so the job must produce each one or not
+    record the route. The sources, in the README's own terms:
+
+    * **its own state** — a state a `.chain.txt` produces, or one
+      `navigation.json` names as a room's entry. Only an exact
+      `mint-<stage>.txt`, or replaying the chain from a state this job can
+      itself produce, yields it. A mint that merely shares a prefix does not:
+      that is how `stage1-boss` came to record the stage-1 entry (#408).
+    * **a probe** — `<stage>-probe` starts from `<stage>`'s state, copied.
+    * **a mint** — the longest `mint-*.txt` whose name prefixes the route
+      (`mint-stage1.txt` -> `stage1-run`, `stage1-long`, `stage1-probe`).
+    * **power-on** — only in a set that ships no mint at all, whose routes boot
+      the game themselves (Metroid's `stage1-run`). In a set that mints its
+      states, a route nothing produces is **skipped and reported**: run from
+      power-on it records the attract demo and reads like a recording (#407).
+
+    Returns `{"steps": [...], "routes": {route: {...}}}`. A step is
+    `{"op": "mint", "script", "state"}`, `{"op": "chain", "script", "from",
+    "state"}` or `{"op": "copy", "from", "state"}`, in an order where every
+    `from` precedes its use. A route entry holds `start` (`mint <file>`, `chain
+    <file>`, `copy of <state>`, `power-on`, or `None` when skipped) and
+    `reason`.
     """
     stage_dir = Path(stage_dir)
+    routes = [p.stem for p in recordable_stages(stage_dir)]
     mints = {p.stem[len("mint-"):]: p for p in entry_scripts(stage_dir)}
-    served = {name: [] for name in mints}
-    unserved = []
-    for stage in recordable_stages(stage_dir):
-        name = stage.stem
-        best = None
-        for m in mints:
-            if (name == m or name.startswith(m + "-")) and (best is None or len(m) > len(best)):
-                best = m
-        if best is None:
-            unserved.append(name)
+    chains = _chains(stage_dir)
+    own = set(chains) | _room_states(stage_dir)
+    known = set(routes) | own | {a for srcs in chains.values() for a, _ in srcs}
+    memo, visiting = {}, set()
+
+    def resolve(name):
+        """`(producer, reason)`; producer is None when nothing yields it."""
+        if name in memo:
+            return memo[name]
+        if name in visiting:
+            return None, f"{name}.mss depends on itself through its chains"
+        visiting.add(name)
+        res = _resolve(name)
+        visiting.discard(name)
+        memo[name] = res
+        return res
+
+    def _resolve(name):
+        if name in own:
+            if name in mints:
+                return ("mint", mints[name]), ""
+            why = []
+            for src, path in chains.get(name, []):
+                prod, reason = resolve(src)
+                if prod:
+                    return ("chain", path, src), ""
+                why.append(f"{path.name} starts from {src}.mss; {reason}")
+            if not why:
+                why.append("navigation.json enters this room from its own "
+                           "state and no mint or chain produces it")
+            return None, "; ".join(why)
+        if name.endswith(PROBE_SUFFIX) and name[:-len(PROBE_SUFFIX)] in known:
+            base = name[:-len(PROBE_SUFFIX)]
+            prod, reason = resolve(base)
+            return (("copy", base), "") if prod else (None, f"a probe starts from {base}.mss; {reason}")
+        best = max((m for m in mints if name == m or name.startswith(m + "-")),
+                   key=len, default=None)
+        if best is not None:
+            return ("mint", mints[best]), ""
+        return None, (f"no mint-*.txt or .chain.txt produces {name}.mss")
+
+    # A set that ships no mint, no chain and no room state has no way to produce
+    # a state at all: its routes are their own entry scripts.
+    self_booting = not mints and not own
+    out_routes = {}
+    for r in routes:
+        prod, reason = resolve(r)
+        if prod is None and self_booting:
+            out_routes[r] = {"start": POWER_ON, "reason": (
+                "the set ships no mint or chain, so its routes boot the game themselves")}
         else:
-            served[best].append(name)
-    pairs = [(mints[m], sorted(served[m])) for m in sorted(mints) if served[m]]
-    return pairs, sorted(unserved)
+            out_routes[r] = {"start": None, "reason": reason}
+
+    # Steps: one run per mint (for the first state it yields), a copy for every
+    # other state that mint yields, then chains and probe copies once their
+    # source exists.
+    steps, done, minted = [], set(), {}
+
+    def emit(name):
+        if name in done:
+            return
+        prod = resolve(name)[0]
+        if prod[0] == "mint" and prod[1] in minted:
+            steps.append({"op": "copy", "from": minted[prod[1]], "state": name})
+        elif prod[0] == "mint":
+            minted[prod[1]] = name
+            steps.append({"op": "mint", "script": str(prod[1]), "state": name})
+        elif prod[0] == "chain":
+            emit(prod[2])
+            steps.append({"op": "chain", "script": str(prod[1]), "from": prod[2], "state": name})
+        else:
+            emit(prod[1])
+            steps.append({"op": "copy", "from": prod[1], "state": name})
+        done.add(name)
+
+    for r in routes:
+        prod = resolve(r)[0]
+        if prod is None:
+            continue
+        emit(r)
+        if prod[0] == "copy":
+            out_routes[r]["start"] = f"copy of {prod[1]}.mss"
+        else:
+            out_routes[r]["start"] = f"{prod[0]} {prod[1].name}"
+    return {"steps": steps, "routes": out_routes}
 
 
 def load_stage_sets(stages_root):
@@ -289,13 +408,18 @@ def plan_rom(rom, sets, seconds):
     if stage_set:
         row["game"] = stage_set["game"]
         row["mechanisms"] = stage_set["mechanisms"]
-        stages = recordable_stages(stage_set["dir"])
+        starts = start_plan(stage_set["dir"])["routes"]
+        stages = [r for r, v in starts.items() if v["start"]]
+        skipped = sorted(set(starts) - set(stages))
         if stages:
             row.update(driver=ROUTES, stages=str(stage_set["dir"]),
-                       stageCount=len(stages))
+                       stageCount=len(stages), routesSkipped=skipped)
             row["reason"] = (
                 f"route set {stage_set['name']}/ declares this No-Intro SHA1; "
                 f"{len(stages)} recordable stage(s)")
+            if skipped:
+                row["reason"] += (f"; {len(skipped)} route(s) skipped, their start "
+                                  "state cannot be produced from a checkout")
             if movie:
                 # Worth saying out loud: precedence was exercised, not assumed.
                 row["reason"] += f"; a movie also matched ({movie.name}) and (a) wins"
@@ -429,6 +553,44 @@ def _cell(v):
     return "-" if v is None else str(v)
 
 
+def _stages_cell(r):
+    n = _cell(r.get("stageCount") or None)
+    skipped = r.get("routesSkipped") or []
+    return f"{n} (+{len(skipped)} skipped)" if skipped else n
+
+
+def _route_sections(results):
+    """One table per route-driven ROM: how each route started and what it kept.
+
+    `seen %` cannot show a route that recorded the wrong thing (#409), so this
+    is where a mis-started route is visible: its start, the stage its start
+    state is in, its own retained frames, and any route whose recording is
+    byte-identical to it.
+    """
+    out = []
+    for r in results:
+        routes = r.get("routes")
+        if not isinstance(routes, list) or not routes:
+            continue
+        out += [f"## Routes: {r.get('name', '?')}", "",
+                "| route | start | stage at start | retained frames | silhouettes | same recording as |",
+                "|---|---|---|---|---|---|"]
+        for x in routes:
+            if not x.get("start"):
+                continue
+            out.append(
+                f"| {x['route']} | {x['start']} | {_cell(x.get('stageAtStart'))} "
+                f"| {_cell(x.get('retained'))} | {_cell(x.get('silhouettes'))} "
+                f"| {', '.join(x.get('sameAs') or []) or '-'} |")
+        skipped = [x for x in routes if not x.get("start")]
+        if skipped:
+            out += ["", f"Not recorded ({len(skipped)}) — no start state the job can produce, "
+                    "so a run would start at power-on and record the attract demo:", ""]
+            out += [f"- **{x['route']}** — {x.get('reason') or 'no reason recorded'}" for x in skipped]
+        out.append("")
+    return out
+
+
 def render_report(results, title="Library recording job"):
     """The Markdown the job writes as `library-report.md`."""
     lines = [
@@ -444,7 +606,7 @@ def render_report(results, title="Library recording job"):
     for r in results:
         lines.append(
             f"| {r.get('name','?')} | `{r.get('driver','?')}` | {r.get('status','?')} "
-            f"| {_cell(r.get('stageCount') or None)} | {_cell(r.get('retained'))} "
+            f"| {_stages_cell(r)} | {_cell(r.get('retained'))} "
             f"| {_cell(r.get('seen'))} | {_cell(r.get('figures'))} "
             f"| {_cell(r.get('scenery'))} | {_cell(r.get('maps'))} "
             f"| {_cell(r.get('verify'))} |")
@@ -457,6 +619,9 @@ def render_report(results, title="Library recording job"):
         "per-stage grid dump of about 190 MB, which this job deliberately does not",
         "request (`scripts/artist_map.py` builds one on demand).",
         "",
+    ]
+    lines += _route_sections(results)
+    lines += [
         "## Why each ROM got the driver it did",
         "",
     ]
@@ -486,6 +651,115 @@ def render_report(results, title="Library recording job"):
     return "\n".join(lines) + "\n"
 
 
+STARTS_FILE = "starts.json"
+
+
+def prune_unstarted(stage_dir, starts_path):
+    """Drop every route whose start state does not exist, and say why.
+
+    Runs after the job has executed `start_plan`'s steps, so it catches both a
+    route the plan could never start and one whose mint or chain failed at run
+    time. `record_stages.sh` records a `<stage>.txt` with no `.mss` from
+    power-on, which is the #407 failure, so the script itself is removed from
+    the job's working copy — never from the repository. Returns the number of
+    routes dropped.
+    """
+    stage_dir = Path(stage_dir)
+    doc = _read_json(starts_path) or {}
+    routes = doc.get("routes") or {}
+    dropped = 0
+    for name, info in routes.items():
+        if info.get("start") == POWER_ON:
+            continue
+        if info.get("start") and (stage_dir / f"{name}.mss").is_file():
+            continue
+        if info.get("start"):
+            info["reason"] = f"{info['start']} did not write {name}.mss (see mint.log)"
+            info["start"] = None
+        script = stage_dir / f"{name}.txt"
+        if script.is_file():
+            script.unlink()
+            dropped += 1
+    Path(starts_path).write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    return dropped
+
+
+def _poses_line(log):
+    """`(silhouettes, retained)` from the recorder's own `poses:` line."""
+    try:
+        text = Path(log).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+    found = (None, None)
+    for line in text.splitlines():
+        words = line.split()
+        if "poses:" in words and "retained" in words:
+            i, j = words.index("poses:"), words.index("retained")
+            if i + 1 < len(words) and words[i + 1].isdigit() and words[j - 1].isdigit():
+                found = (int(words[i + 1]), int(words[j - 1]))
+    return found
+
+
+def _stage_probe(stage_dir):
+    """`(address, {value: name})` from the set's `navigation.json`, or None.
+
+    That file's `navigation.address` is the published RAM byte holding the
+    current level (Contra `$0030`, ADR-0184 §5), which is the one reading that
+    says which stage a state is in rather than what its name hopes.
+    """
+    nav = (_read_json(Path(stage_dir) / NAVIGATION) or {}).get("navigation")
+    if not isinstance(nav, dict):
+        return None
+    try:
+        addr = int(str(nav.get("address")), 16)
+        names = {int(str(v["value"]), 16): str(v["name"]) for v in nav.get("values") or []}
+    except (KeyError, TypeError, ValueError):
+        return None
+    return addr, names
+
+
+def route_evidence(rom_out):
+    """Per-route evidence that each route played the stage it is named for (#409).
+
+    `seen %` is counted per surface and a CHR page is one surface, so on Contra
+    nine routes recording the attract demo left it at 87.6 either way. What a
+    recording already gives per route is read here instead: how it started
+    (`starts.json`), the recorder's retained frames and silhouettes, the stage
+    the start state is in by the set's RAM probe when it has one, and which
+    routes recorded **byte-identical** tile sets (`hires.txt`) — nine different
+    routes with one recording is the attract demo, not nine stages.
+    """
+    import hashlib as _h
+    rom_out = Path(rom_out)
+    routes = ((_read_json(rom_out / STARTS_FILE) or {}).get("routes")) or {}
+    work = rom_out / "stages-src"
+    probe = _stage_probe(work)
+    rows, prints = [], {}
+    for name in sorted(routes):
+        info = routes[name]
+        d = rom_out / "stages" / name
+        sil, ret = _poses_line(d / "mesen-home" / "mesen.log")
+        hires = sorted(d.glob("*/auto/textures/hires.txt"))
+        fp = _h.sha1(hires[0].read_bytes()).hexdigest() if hires else None  # noqa: S324
+        at_start = None
+        state = work / f"{name}.mss"
+        if probe and info.get("start") and info.get("start") != POWER_ON and state.is_file():
+            try:
+                import mss_ram
+                v = mss_ram.ram(state)[probe[0]]
+                at_start = f"{probe[1].get(v, '?')} (${probe[0]:04X}={v:02X})"
+            except (OSError, ValueError, IndexError, KeyError):
+                at_start = None
+        rows.append({"route": name, "start": info.get("start"), "reason": info.get("reason") or "",
+                     "retained": ret, "silhouettes": sil, "stageAtStart": at_start, "_fp": fp})
+        if fp and info.get("start"):
+            prints.setdefault(fp, []).append(name)
+    for r in rows:
+        fp = r.pop("_fp")
+        r["sameAs"] = [n for n in prints.get(fp, []) if n != r["route"]] if fp else []
+    return rows
+
+
 def collect_row(plan_path, index, results_path, rom_out, status):
     """Fold one ROM's outcome into `results.json`, appending as the job goes.
 
@@ -501,6 +775,14 @@ def collect_row(plan_path, index, results_path, rom_out, status):
     row["status"] = status
     row["retained"] = retained_frames(rom_out) or None
     row.update(kit_counts(Path(rom_out) / "kit"))
+    if row.get("driver") == ROUTES:
+        routes = route_evidence(rom_out)
+        if routes:
+            # What the job actually ran, which a failed mint can make less than
+            # what the plan promised.
+            row["routes"] = routes
+            row["stageCount"] = sum(1 for x in routes if x["start"])
+            row["routesSkipped"] = [x["route"] for x in routes if not x["start"]]
     existing = _read_json(results_path)
     existing = existing if isinstance(existing, list) else []
     existing.append(row)
@@ -517,8 +799,13 @@ def main(argv=None):
     p.add_argument("--stages", default=str(Path(__file__).resolve().parent / "stages"))
     p.add_argument("--seconds", type=int, default=60)
 
-    m = sub.add_parser("mints", help="mint script -> stages it serves, NUL-separated")
+    m = sub.add_parser("starts", help="start-state steps, NUL-separated; routes to --json")
     m.add_argument("stage_dir")
+    m.add_argument("--json", required=True, help="where to write the per-route starts")
+
+    q = sub.add_parser("prune", help="drop routes whose start state does not exist")
+    q.add_argument("stage_dir")
+    q.add_argument("starts")
 
     c = sub.add_parser("collect", help="append one ROM's result row to results.json")
     c.add_argument("plan")
@@ -538,12 +825,17 @@ def main(argv=None):
             print(json.dumps(build_plan(args.roms_dir, args.stages, args.seconds),
                              indent=2))
             return 0
-        if args.cmd == "mints":
-            pairs, unserved = mint_plan(args.stage_dir)
-            for mint, stages in pairs:
-                sys.stdout.write(str(mint) + "\0" + ",".join(stages) + "\0")
-            if unserved:
-                print("unserved: " + ", ".join(unserved), file=sys.stderr)
+        if args.cmd == "starts":
+            sp = start_plan(args.stage_dir)
+            Path(args.json).write_text(json.dumps({"routes": sp["routes"]}, indent=2),
+                                       encoding="utf-8")
+            for st in sp["steps"]:
+                for k in ("op", "script", "from", "state"):
+                    sys.stdout.write(str(st.get(k, "")) + "\0")
+            return 0
+        if args.cmd == "prune":
+            n = prune_unstarted(args.stage_dir, args.starts)
+            print(f"{n} route(s) not recorded: no start state", file=sys.stderr)
             return 0
         if args.cmd == "collect":
             return collect_row(args.plan, args.index, args.results,

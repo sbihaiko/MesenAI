@@ -11,7 +11,9 @@
 #
 # The driver per ROM is resolved by scripts/library_job.py, in this order:
 #   (a) routes - a scripts/stages/<game>/ set whose stage-set.json declares this
-#       ROM's No-Intro SHA1 -> record_stages.sh, one pack per stage
+#       ROM's No-Intro SHA1 -> record_stages.sh, one pack per stage. Each route's
+#       start state is minted (or chain-replayed) first; a route whose state
+#       cannot be produced is not recorded and is listed in the report
 #   (b) movie  - a .bk2 beside the ROM or in <set>/movies/ whose header SHA1 is
 #       this ROM's whole-file SHA1 -> headless_record ... movie=
 #   (c) entry  - a matched set with only an entry script -> one power-on run
@@ -27,7 +29,7 @@
 set -uo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 
@@ -92,31 +94,43 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
       rm -rf "$work"; mkdir -p "$work"
       cp "$stages"/*.txt "$work"/ 2>/dev/null || true
       cp "$stages"/*.json "$work"/ 2>/dev/null || true
-      # A mint's state is named for the stage that will *use* it
-      # (scripts/stages/README.md), and one mint may serve several stages -
-      # `<stage>.mss` and the probe's own copy. library_job.py does that
-      # pairing, by longest matching prefix, so it can be unit-tested.
+      # Every route plays *from* <stage>.mss (scripts/stages/README.md), and
+      # library_job.py decides where each one comes from, so it can be
+      # unit-tested: a mint (one run per mint, copied to every other route it
+      # serves), a chain replayed from a state this job produced, a probe's copy
+      # of its stage's state - or nothing. A route with no source is dropped from
+      # this working copy before recording and listed in the report (#407,
+      # #408): record_stages.sh would otherwise run it from power-on, and that
+      # records the attract demo under the route's name.
       minted=0; mintfail=0
-      while IFS= read -r -d '' mint && IFS= read -r -d '' servedlist; do
-        first="${servedlist%%,*}"
-        mkdir -p "$romout/mint/$first"
-        mintrom="$romout/mint/$first/$(basename "$rom")"
+      while IFS= read -r -d '' op && IFS= read -r -d '' script \
+            && IFS= read -r -d '' from && IFS= read -r -d '' state; do
+        # Each run gets its own folder, ROM and mesen-home, as record_stages.sh
+        # gives each stage.
+        mkdir -p "$romout/mint/$state"
+        mintrom="$romout/mint/$state/$(basename "$rom")"
         ln -f "$rom" "$mintrom" 2>/dev/null || cp "$rom" "$mintrom"
-        if "$record" "$mintrom" "$seconds" "$romout/mint/$first/rec" \
-             "input=$mint" "save-state=$work/$first.mss" \
-             >> "$romout/mint.log" 2>&1 && [ -s "$work/$first.mss" ]; then
-          minted=$((minted + 1))
-          # Every other stage this mint serves starts from the same state.
-          rest="${servedlist#*,}"
-          if [ "$rest" != "$servedlist" ]; then
-            IFS=',' read -ra more <<< "$rest"
-            for st in "${more[@]}"; do cp "$work/$first.mss" "$work/$st.mss"; done
-          fi
+        ok=1
+        case "$op" in
+          mint)
+            "$record" "$mintrom" "$seconds" "$romout/mint/$state/rec" \
+              "input=$script" "save-state=$work/$state.mss" >> "$romout/mint.log" 2>&1 || ok=0 ;;
+          chain)
+            [ -s "$work/$from.mss" ] && "$here/replay_chain.sh" "$mintrom" "$work/$from.mss" \
+              "$script" "$work/$state.mss" >> "$romout/mint.log" 2>&1 || ok=0 ;;
+          copy)
+            rm -rf "$romout/mint/$state"
+            [ -s "$work/$from.mss" ] && cp "$work/$from.mss" "$work/$state.mss" || ok=0 ;;
+        esac
+        if [ "$ok" = 1 ] && [ -s "$work/$state.mss" ]; then
+          [ "$op" = copy ] || minted=$((minted + 1))
         else
-          mintfail=$((mintfail + 1))
+          rm -f "$work/$state.mss"; mintfail=$((mintfail + 1))
+          echo "   could not produce $state.mss ($op)" >&2
         fi
-      done < <(python3 "$here/library_job.py" mints "$work" 2>>"$romout/mint.log")
-      [ "$mintfail" -gt 0 ] && echo "   $mintfail state(s) could not be minted" >&2
+      done < <(python3 "$here/library_job.py" starts "$work" --json "$romout/starts.json" \
+                 2>>"$romout/mint.log")
+      python3 "$here/library_job.py" prune "$work" "$romout/starts.json" 2>>"$romout/mint.log"
 
       if "$here/record_stages.sh" "$rom" "$work" "$romout/stages" "$seconds" \
            > "$romout/record.log" 2>&1; then
