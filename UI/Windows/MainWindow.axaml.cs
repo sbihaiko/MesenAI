@@ -427,6 +427,8 @@ namespace Mesen.Windows
 						_model.MainMenu.CheckForUpdate(this, true);
 					}
 				});
+
+				ConfigApi.CheckShaderSupport();
 			});
 		}
 
@@ -742,6 +744,13 @@ namespace Mesen.Windows
 			EmuApi.SetRendererSize(realWidth, realHeight);
 			_model.RendererSize = new Size(realWidth, realHeight);
 
+			//Upstream 3924215 also snapped width/height to whole device pixels
+			//here and rounded realWidth/realHeight up to even numbers (a shader
+			//line artifact). Both break the P.7 contract that the renderer is
+			//sized exactly by RendererViewportFit (RendererLetterboxTests), so
+			//they are held back pending a decision - see
+			//docs/validation/upstream-sync-3924215-2026-09-24.md.
+
 			if(WindowState == WindowState.FullScreen && !ConfigManager.Config.Video.UseExclusiveFullscreen && ConfigManager.Config.Video.EnableVariableRefreshRate) {
 				//When VRR is enabled, set the renderer to the same size as the monitor when in fullscreen mode
 				PixelRect bounds = ApplicationHelper.GetMainWindow()?.Screens.Primary?.Bounds ?? default;
@@ -757,6 +766,12 @@ namespace Mesen.Windows
 				_renderer.Width = width;
 				_renderer.Height = height;
 			}
+
+			//Position the renderer in the center
+			ContentControl container = this.GetControl<ContentControl>("RendererContainer");
+			Canvas.SetTop(container, _rendererPanel.Bounds.Height > _renderer.Height ? (_rendererPanel.Bounds.Height - _renderer.Height) / 2 : 0);
+			Canvas.SetLeft(container, _rendererPanel.Bounds.Width > _renderer.Width ? (_rendererPanel.Bounds.Width - _renderer.Width) / 2 : 0);
+
 			_model.SoftwareRenderer.Width = width;
 			_model.SoftwareRenderer.Height = height;
 		}

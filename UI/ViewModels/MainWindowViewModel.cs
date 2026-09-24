@@ -384,6 +384,12 @@ namespace Mesen.ViewModels
 			LoadRomHelper.PowerCycle();
 		}
 
+		protected override void DisposeView()
+		{
+			base.DisposeView();
+			MainMenu.Dispose();
+		}
+
 		public void Init(MainWindow wnd)
 		{
 			MainMenu.Initialize(wnd);

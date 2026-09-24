@@ -42,6 +42,7 @@ namespace Mesen.Utilities
 		public const string SpcExt = "spc";
 		public const string MidiExt = "mid";
 		public const string VgmExt = "vgm";
+		public const string ShaderExt = "slangp";
 
 		public static async Task<string?> OpenFile(string? initialFolder, Window? parent, params string[] extensions)
 		{
