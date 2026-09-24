@@ -20,6 +20,7 @@ the generated `index/<game>.md` states both numbers so a reader is never
 pointed at the wrong one again."""
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -86,9 +87,23 @@ def dump_coverage_tests(tmp):
         fail(f"dump_coverage on a full 960-row table returned {cells}, {coverage}")
 
     if f122.FULL_GRID_CELLS == 960:
-        ok("FULL_GRID_CELLS matches WalkTilemap's fixed 256x240-in-8x8-steps walk (32x30)")
+        ok("FULL_GRID_CELLS is the 256x240 screen in 8x8 cells (32x30)")
     else:
         fail(f"FULL_GRID_CELLS is {f122.FULL_GRID_CELLS}, expected 960")
+
+    # #421: the walk now covers all four nametables and keeps what the frame
+    # drew, and a scanline fetches 33 columns for the fine-X shift, so an
+    # unscrolled frame names nametable 0 (960 cells) plus column 0 of nametable
+    # 1 (30 cells) - measured on Bubble Bobble, Gauntlet and Tetris 2. The share
+    # handed to the evaluator is still "of the screen", so it stops at 1.0.
+    table = tmp / "fetched-33-columns.txt"
+    rows = [_row(col, row) for col in range(33) for row in range(30)]
+    table.write_text("\n".join(rows) + "\n")
+    cells, coverage = f122.dump_coverage(table)
+    if cells == 990 and coverage == 1.0:
+        ok("dump_coverage caps a 33-column (fine-X fetch) table at 1.0 of the screen")
+    else:
+        fail(f"dump_coverage on a 990-row table returned {cells}, {coverage}")
 
 
 def one_moment_gate_tests():
@@ -126,10 +141,161 @@ def one_moment_gate_tests():
         fail("one_moment ignored keys_on_frame once coverage was full")
 
 
+def scan_pack_tests(tmp):
+    """#420: the scan checks palettes against the pack the evaluator paints.
+
+    The copy asks the *loaded* pack which palettes it keys a tile under
+    (`NesPackTilePalette`, #342). The F14.2 scan ran with the recording's
+    bootstrap `auto/` beside the ROM and no `mep/`, so the loaded pack was
+    `auto/`, whose 8 192 `defaultTile=Y` rules are palette wildcards: Zelda II's
+    tile 28,0 copied with the live `0F301C15` while the baseline pack the
+    evaluator paints keys that tile only as `0F2B0F00`, and stale keys with no
+    baseline rule at all (Tetris 2, The Flintstones) passed. So while the scan
+    runs, the ROM's sibling folder must hold the baseline pack as `mep/` and no
+    `auto/`, and afterwards it must be exactly as it was.
+
+    `subprocess.run` is replaced, so no emulator runs: what is asserted is the
+    folder the scan's core would load its pack from."""
+    romdir = tmp / "romdir"
+    rom = romdir / "Game (1988).nes"
+    sibling = romdir / rom.stem
+    (sibling / "auto/textures").mkdir(parents=True)
+    rom.write_bytes(b"NES\x1a")
+    (sibling / "auto/textures/hires.txt").write_text(
+        "<ver>109\n<tile>0,178,0F301C15,0,0,1,Y\n")
+    (sibling / ".bootstrap").write_text("")
+    pack = tmp / "baseline"
+    (pack / "textures").mkdir(parents=True)
+    (pack / "textures/hires.txt").write_text("<ver>109\n<tile>0,178,0F2B0F00,0,0,1,N\n")
+    (pack / "pack.json").write_text("{}")
+    state = tmp / "state.mss"
+    state.write_bytes(b"MSS")
+    table = tmp / "table.txt"
+
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = kwargs.get("env") or {}
+        mep = sibling / "mep/textures/hires.txt"
+        seen["mep"] = mep.read_text() if mep.is_file() else None
+        seen["auto"] = (sibling / "auto").exists()
+        table.write_text("0,0\t" + json.dumps({"tile": SOLID_TILE, "palette": PAL}) + "\n")
+
+        class Done:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return Done()
+
+    real_run = f122.subprocess.run
+    f122.subprocess.run = fake_run
+    try:
+        f122.scan(rom, pack, state, table)
+    finally:
+        f122.subprocess.run = real_run
+
+    if seen.get("mep") == (pack / "textures/hires.txt").read_text():
+        ok("#420: the scan runs with the baseline pack installed as mep/ beside the ROM")
+    else:
+        fail(f"#420: the scan ran with mep/textures/hires.txt = {seen.get('mep')!r}, "
+             "not the baseline pack the evaluator paints")
+    if seen.get("auto") is False:
+        ok("#420: the bootstrap auto/ (defaultTile=Y wildcards) is out of the way during the scan")
+    else:
+        fail("#420: the bootstrap auto/ was beside the ROM during the scan, so its "
+             "defaultTile=Y wildcards accept any live palette")
+    if seen.get("env", {}).get("MESEN_F122_COPY_STATE") == str(state):
+        ok("#420: the scan still restores the dispatcher's state")
+    else:
+        fail("#420: the scan lost MESEN_F122_COPY_STATE")
+    after = sorted(p.name for p in sibling.iterdir())
+    if after == [".bootstrap", "auto"] and \
+            (sibling / "auto/textures/hires.txt").read_text().endswith(",Y\n"):
+        ok("#420: the sibling folder is restored exactly (auto/ back, no mep/ left behind)")
+    else:
+        fail(f"#420: after the scan the sibling folder holds {after}")
+
+    # A mep/ already beside the ROM (a previous run's leftover) is the
+    # evaluator's or another run's; the scan swaps it out and puts it back.
+    (sibling / "mep/textures").mkdir(parents=True)
+    (sibling / "mep/textures/hires.txt").write_text("leftover\n")
+    f122.subprocess.run = fake_run
+    try:
+        f122.scan(rom, pack, state, table)
+    finally:
+        f122.subprocess.run = real_run
+    if seen.get("mep") == (pack / "textures/hires.txt").read_text() and \
+            (sibling / "mep/textures/hires.txt").read_text() == "leftover\n":
+        ok("#420: a mep/ already beside the ROM is set aside for the scan and restored")
+    else:
+        fail("#420: a pre-existing mep/ was scanned against or lost")
+
+    # Measured on Super Mario Bros. (E2E, 2026-09-24): with auto/ set aside the
+    # core's bootstrap starts an audio recorder on ROM load and writes
+    # auto/audio/.recorder into the empty slot, so putting the real auto/ back
+    # by rename failed with "Directory not empty" and left it parked. Whatever
+    # the scan's own run wrote there is a by-product of the scan.
+    shutil.rmtree(sibling / "mep")
+
+    def recording_run(cmd, **kwargs):
+        (sibling / "auto/audio").mkdir(parents=True)
+        (sibling / "auto/audio/.recorder").write_text("")
+        return fake_run(cmd, **kwargs)
+
+    f122.subprocess.run = recording_run
+    try:
+        f122.scan(rom, pack, state, table)
+        raised = None
+    except OSError as ex:
+        raised = ex
+    finally:
+        f122.subprocess.run = real_run
+    after = sorted(p.name for p in sibling.iterdir())
+    if raised is None and after == [".bootstrap", "auto"] and \
+            (sibling / "auto/textures/hires.txt").is_file() and \
+            not (sibling / "auto/audio").exists():
+        ok("#420: an auto/ the core recreated during the scan is dropped and the real one restored")
+    else:
+        fail(f"#420: after a scan whose core recreated auto/ the sibling holds {after} ({raised})")
+        for leftover in ("auto.scan-aside", "mep.scan-aside"):
+            if (sibling / leftover).exists():
+                shutil.rmtree(sibling / "auto", ignore_errors=True)
+                (sibling / leftover).rename(sibling / leftover.split(".")[0])
+
+    # The scan failing (no table written) still restores the folder.
+
+    def failing_run(cmd, **kwargs):
+        if table.exists():
+            table.unlink()
+
+        class Done:
+            returncode = 1
+            stdout = "boom"
+            stderr = ""
+        return Done()
+
+    f122.subprocess.run = failing_run
+    try:
+        f122.scan(rom, pack, state, table)
+        fail("#420: a scan that wrote no table did not raise")
+    except f122.PrepareError:
+        pass
+    finally:
+        f122.subprocess.run = real_run
+    after = sorted(p.name for p in sibling.iterdir())
+    if after == [".bootstrap", "auto"]:
+        ok("#420: a failed scan still restores the sibling folder")
+    else:
+        fail(f"#420: after a failed scan the sibling folder holds {after}")
+
+
 def main() -> int:
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         dump_coverage_tests(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        scan_pack_tests(Path(tmp))
     one_moment_gate_tests()
     return 1 if FAILED else 0
 
