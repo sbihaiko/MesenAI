@@ -701,6 +701,19 @@ frame*, then copy again. Before issue #419 was fixed, this copy went through the
 record left from before the load and gave you a well-formed key from the wrong
 bank, or no key at all.
 
+**Which palette the copy carries.** The copy checks the tile against the pack
+you have loaded (ADR-0215). If the pack keys the tile under the palette the
+frame draws it with, you get that palette. If the pack keys it only under one
+*other* palette that palette RAM still holds, you get that one, and the
+on-screen message names both. A bootstrap recording often keys a tile only
+under the fade it saw while the title came in: Tetris 2's baseline has 474 of
+its 518 rules under the all-black `0F0F0F0F`. When palette RAM does not hold
+the recorded palette at all, you get the **live** palette. The message then
+says the paste adds a new key, and that key is the one the frame asks for.
+Before issue #431 was fixed, the copy handed out `0F0F0F0F` here. That key
+built and linted clean and changed no pixel (Tetris 2: 0 magenta pixels, and
+274 432 with the live `0F281807`).
+
 ### Which sheet a copied key goes on
 
 **The short path: let `mep_add_cell.py` place it.**

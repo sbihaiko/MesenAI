@@ -19,11 +19,16 @@ namespace Mesen.Logic
 	//
 	//  - the live palette is one of them (or the pack keys it with a defaultTile
 	//    wildcard, which matches any palette): keep the live palette;
-	//  - the pack keys it under exactly one other palette: name that one, and say
-	//    so, because that is the key a paste has to carry to match;
-	//  - the pack holds no rule for the tile, or holds several and the live
-	//    palette is none of them: refuse and say which, because "the pack does not
-	//    hold this tile" is a better answer than a key that cannot match.
+	//  - the pack keys it under exactly one other palette that palette RAM holds
+	//    now: name that one, and say so, because that is the key a paste has to
+	//    carry to match;
+	//  - the pack holds no rule for the tile, or holds several that palette RAM
+	//    holds and the live palette is none of them: refuse and say which, because
+	//    "the pack does not hold this tile" is a better answer than a key that
+	//    cannot match;
+	//  - every palette the pack keys it under is one palette RAM does not hold
+	//    (#431: the fade a bootstrap recording saw): keep the live palette, the one
+	//    the runtime asks for, and say so.
 	public enum NesPackPaletteStatus
 	{
 		//No pack loaded, so there is nothing to check the live palette against.
@@ -35,7 +40,10 @@ namespace Mesen.Logic
 		//The pack holds no rule for this tile at all.
 		NoRule,
 		//Several rules, none of them the live palette.
-		Ambiguous
+		Ambiguous,
+		//The pack keys this tile only under palettes palette RAM does not hold, so
+		//no pasted copy of them can match on this frame: the live palette is kept.
+		RecordedNotDrawn
 	}
 
 	public readonly struct NesPackPaletteVerdict
@@ -65,7 +73,7 @@ namespace Mesen.Logic
 
 		//`packPalettes` is null when there is no pack to ask (the export's -1), and
 		//empty when the pack holds no rule for this tile.
-		public static NesPackPaletteVerdict Resolve(uint livePalette, IReadOnlyList<uint>? packPalettes)
+		public static NesPackPaletteVerdict Resolve(uint livePalette, IReadOnlyList<uint>? packPalettes, IReadOnlyCollection<uint> framePalettes)
 		{
 			if(packPalettes == null) {
 				return new NesPackPaletteVerdict(NesPackPaletteStatus.Unchecked, livePalette, "");
@@ -79,14 +87,42 @@ namespace Mesen.Logic
 					return new NesPackPaletteVerdict(NesPackPaletteStatus.LiveMatches, livePalette, "");
 				}
 			}
-			if(packPalettes.Count == 1) {
-				return new NesPackPaletteVerdict(NesPackPaletteStatus.Substituted, packPalettes[0],
-					$"the pack keys this tile under {packPalettes[0]:X8}, not the {livePalette:X8} live in palette RAM now");
+			//#431: a recorded palette is a candidate only when palette RAM holds it for
+			//this layer now. A bootstrap recording keys most tiles under the fade it
+			//saw (Tetris 2: 474 of 518 rules under 0F0F0F0F); a key carrying a palette
+			//the frame cannot draw builds, lints and changes no pixel. The runtime asks
+			//for the tile under the live palette, so with no drawable candidate that is
+			//the key to hand out, and the receipt says why.
+			List<uint> drawable = packPalettes.Where(framePalettes.Contains).Distinct().ToList();
+			if(drawable.Count == 0) {
+				string recorded = string.Join(", ", packPalettes.Distinct().Select(p => p.ToString("X8")));
+				return new NesPackPaletteVerdict(NesPackPaletteStatus.RecordedNotDrawn, livePalette,
+					$"the pack keys this tile only under {recorded}, which palette RAM does not hold now, so the live " +
+					$"{livePalette:X8} is kept and the paste adds a new key");
 			}
-			string list = string.Join(", ", packPalettes.Select(p => p.ToString("X8")));
+			if(drawable.Count == 1) {
+				return new NesPackPaletteVerdict(NesPackPaletteStatus.Substituted, drawable[0],
+					$"the pack keys this tile under {drawable[0]:X8}, not the {livePalette:X8} live in palette RAM now");
+			}
+			string list = string.Join(", ", drawable.Select(p => p.ToString("X8")));
 			return new NesPackPaletteVerdict(NesPackPaletteStatus.Ambiguous, 0,
-				$"the pack keys this tile under {packPalettes.Count} palettes ({list}) and none is the {livePalette:X8} " +
-				"live in palette RAM now, so nothing here says which one the paste should carry");
+				$"the pack keys this tile under {drawable.Count} palettes palette RAM holds ({list}) and none is the " +
+				$"{livePalette:X8} live in palette RAM now, so nothing here says which one the paste should carry");
+		}
+
+		//The palette word as HdTileKey::PaletteColors packs it: color 0 in the high
+		//byte, then colors 1-3. A sprite's color 0 is transparent, so it is FF.
+		public static uint PaletteWord(UInt32[] rawPalette, int paletteIndex, bool forSprite)
+		{
+			int baseIndex = forSprite ? (paletteIndex + 4) * 4 : paletteIndex * 4;
+			uint color0 = forSprite ? 0xFFu : (rawPalette[0] & 0xFF);
+			return (color0 << 24) | ((rawPalette[baseIndex + 1] & 0xFF) << 16) | ((rawPalette[baseIndex + 2] & 0xFF) << 8) | (rawPalette[baseIndex + 3] & 0xFF);
+		}
+
+		//The four palettes one layer can draw with right now, packed as above.
+		public static uint[] FramePalettes(UInt32[] rawPalette, bool forSprite)
+		{
+			return Enumerable.Range(0, 4).Select(i => PaletteWord(rawPalette, i, forSprite)).ToArray();
 		}
 	}
 }

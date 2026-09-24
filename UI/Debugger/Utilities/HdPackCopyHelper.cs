@@ -178,9 +178,12 @@ namespace Mesen.Debugger.Utilities
 			}
 			key.TileData = sb.ToString();
 
-			uint live = ReadLivePalette(rawPalette, paletteIndex, forSprite);
+			//#431: the frame's own palettes go with the live one, so a recorded palette
+			//palette RAM does not hold (a fade the recording saw) is never handed out.
+			uint live = NesPackTilePalette.PaletteWord(rawPalette, paletteIndex, forSprite);
 			NesPackPaletteVerdict verdict = NesPackTilePalette.Resolve(
-				live, DebugApi.GetNesHdPackTilePalettes(key.TileIndex, bytes, tileAddr.Type == MemoryType.NesChrRam));
+				live, DebugApi.GetNesHdPackTilePalettes(key.TileIndex, bytes, tileAddr.Type == MemoryType.NesChrRam),
+				NesPackTilePalette.FramePalettes(rawPalette, forSprite));
 			if(verdict.IsRefusal) {
 				key.Note = verdict.Reason;
 				return false;
@@ -198,15 +201,6 @@ namespace Mesen.Debugger.Utilities
 			}
 			NesScanlineTraceStatus status = DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] chrBank);
 			return NesDrawnTileResolver.Resolve(status, scroll, chrBank, context.TileMapAddress, context.SpriteY, context.SpriteHeight, ppuTileAddress);
-		}
-
-		//The palette word as HdTileKey::PaletteColors packs it: color 0 in the high
-		//byte, then colors 1-3. A sprite's color 0 is transparent, so it is FF.
-		private static uint ReadLivePalette(UInt32[] rawPalette, int paletteIndex, bool forSprite)
-		{
-			int baseIndex = forSprite ? (paletteIndex + 4) * 4 : paletteIndex * 4;
-			uint color0 = forSprite ? 0xFFu : (rawPalette[0] & 0xFF);
-			return (color0 << 24) | ((rawPalette[baseIndex + 1] & 0xFF) << 16) | ((rawPalette[baseIndex + 2] & 0xFF) << 8) | (rawPalette[baseIndex + 3] & 0xFF);
 		}
 
 		public static HdPackCopyResult CopyToHdPackFormat(int address, MemoryType memoryType, UInt32[] palette, int paletteIndex, bool forSprite, HdPackCopyContext context, bool isLargeSprite = false)
