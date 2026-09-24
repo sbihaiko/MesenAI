@@ -1,9 +1,9 @@
 # ADR-0210: Sheet coverage is completed from the ROM's own CHR; a third-party index contributes palettes for CHR ROM games and the game's own pattern bytes for CHR RAM games — never a pixel of the other pack, and never conditions
 
-- Status: accepted (2026-09-20). User go-ahead, verbatim: *"Sim, implementar agora"*. Same-turn implementation requires unit tests covering the decision; see the implementing PR for that coverage and this quote repeated in its body.
-- Date: 2026-09-18 (amended 2026-09-20: Context item 2 retracted against the measurement — its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens, and the Consequences bullet that prescribed that reading is corrected; the Decision is unchanged. Amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted. Title amended the same day to agree with §3 — the earlier "never art" contradicted the CHR RAM clause, where the 16 pattern bytes in a key are the game's art and are rendered by us)
+- Status: accepted (2026-09-20). User go-ahead, verbatim: *"Sim, implementar agora"*. Same-turn implementation requires unit tests covering the decision; see the implementing PR for that coverage and this quote repeated in its body. **Amendment of 2026-09-24** (filter 2's per-shape verbatim guard, below): user go-ahead, verbatim: *"em paralelo, rode a emenda da ADR-0210"*. The amendment is implemented in the same turn, in `scripts/mep_import.py index`, with unit tests covering it (`scripts/test_mep_import.py`, `test_index_patch`); the quote is repeated in the implementing PR's body.
+- Date: 2026-09-18 (amended 2026-09-24: filter 2 no longer refuses a `<patch>` pack wholesale — each of its 32-hex keys is admitted only if its 16 pattern bytes are verbatim in the stock dump, index-keyed `<patch>` keys stay refused; the Decision's quoted CHR RAM gains corrected to what the filters admit, measured in `docs/validation/community-mapping-survey-2026-09-24.md` §1b and `docs/validation/adr0210-patch-verbatim-guard-2026-09-24.md`. Amended 2026-09-20: Context item 2 retracted against the measurement — its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens, and the Consequences bullet that prescribed that reading is corrected; the Decision is unchanged. Amended 2026-09-19: `defaultTile` already is the per-rule palette wildcard; the "what stays open" claim is retracted. Title amended the same day to agree with §3 — the earlier "never art" contradicted the CHR RAM clause, where the 16 pattern bytes in a key are the game's art and are rendered by us)
 - Related: ADR-0183 (the artist kit; "an observation, never a reading"), ADR-0209 Q4 (how coverage reaches 100%), ADR-0198 §2/§3 (patched-ROM key namespace), ADR-0145 (optimistic matcher), ADR-0153 (artist-legible sheets), MEP-v1 §5, PRD Part A F9.24, F12.2
-- Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR"
+- Supersedes / amends: corrects ADR-0209's Q4(m) premise — a `<tile>` key is *not* uniformly "16 bytes of original CHR". The 2026-09-24 amendment changes only this ADR's §3 filter 2: ADR-0198 §2/§3 now reaches the index read per key (index keys refused, 32-hex keys vetted against the stock bytes) instead of per pack; ADR-0198 itself, which governs the import, is unchanged
 
 ## Context
 
@@ -67,6 +67,23 @@ decision:
    however complete our shapes are — so the palette set, not the shape set, is
    the scarce resource there.
 
+4. **Added 2026-09-24, measured.** Filter 2 (below) as first written refused
+   every `<patch>` pack outright, and that threw away safe coverage. The
+   community mapping survey
+   (`docs/validation/community-mapping-survey-2026-09-24.md` §1b) ran the
+   shipped read on the 32-hex `<patch>` packs with their `<patch>` lines
+   stripped, then searched each new 16-byte shape verbatim in the stock dump.
+   Calibration: **100 % of our recorded shapes** are verbatim in the stock ROM
+   for Castlevania (2 673 / 2 673), Mega Man (3 350 / 3 350) and Zelda
+   (1 612 / 1 612), so for those games a verbatim shape is a stock shape, and
+   a shape absent from the ROM bytes is not. Of the new shapes, **249 / 257 /
+   44 are verbatim in stock** (+550); the rest (236 / 239 / 18) are not — and
+   all 239 of Mega Man's are found in the *patched* ROM, i.e. the patch
+   author's art. The quoted gains in §3 below (+485 / +483 / +53) were only
+   reachable with filter 2 lifted with no guard at all, which would import that
+   art. A 16-byte key is its own witness: whatever a patch did to the binary,
+   bytes the stock dump holds verbatim are the game's.
+
 The non-goal is stated up front: this ADR does not decide how a marked figure
 reaches the artist's editor (that is ADR-0209), and it does not import a single
 pixel, colour choice or upscale from anyone's pack.
@@ -106,7 +123,11 @@ never opened.
   through the same path a recorded key takes. This is the only static source of
   shape for these games, and it is a real gain — measured against our
   recordings: **Contra +2 585 shapes, Castlevania +485, Mega Man +483,
-  Zelda +53**.
+  Zelda +53**. *Corrected 2026-09-24:* the last three packs carry `<patch>`,
+  so those figures counted shapes filter 2 blocks. Under the amended filter 2
+  the admitted gain, against the F12.2 sweep recordings, is **Castlevania
+  +249, Mega Man +257, Zelda +44** (+550); Contra's pack has no `<patch>` and
+  is unaffected (+2 277 against the same sweep recording).
 - **CHR ROM game** (23 of 30): the shape half of the key is discarded (we have
   the CHR). Only the **palette set** is taken, and only for indices that exist
   in our dump.
@@ -116,9 +137,35 @@ over it:
 
 - **Index range.** Drop any key whose `TileIndex` is outside our CHR's tile
   count. This is what disqualifies the Ninja Gaiden pack wholesale.
-- **`<patch>` packs.** A pack carrying `<patch>` keys the patched ROM's
-  namespace (ADR-0198 §2/§3); its indices and its CHR RAM bytes both describe a
-  different binary. Drop it, as `scripts/mep_import.py` already does.
+- **`<patch>` packs — per key, amended 2026-09-24.** A pack carrying
+  `<patch>` keys the patched ROM's namespace (ADR-0198 §2/§3). What that means
+  depends on the key's form:
+  - **Index-keyed keys stay refused.** An index names a tile of the patched
+    ROM's CHR layout and carries no bytes to check, so an index-keyed
+    `<patch>` pack is refused whole, naming ADR-0198 §2/§3 (Zelda II's
+    `Revamp.ips` re-keys CHR ROM; Metroid's `mmm.ips` converts a CHR RAM game
+    to CHR ROM).
+  - **A 32-hex key is admitted only if its 16 pattern bytes occur verbatim in
+    the stock ROM dump** the read is resolved against (`--rom`, the dump the
+    recording's `<supportedRom>` names), searched over the ADR-0003 No-Intro
+    byte range (header and trainer skipped, clamped to the declared PRG+CHR),
+    at any byte offset. Every other key of that pack — the patch author's own
+    art, or a stock tile the game stores compressed — is refused and
+    **counted** in the run's report and in the index sheet's provenance, never
+    dropped silently.
+  - Nothing else changes: an admitted key is handled exactly like any other
+    CHR RAM index key (rendered from its own bytes, `source: index`,
+    `seen: false`, no condition, no pixel of that pack), and a pack without
+    `<patch>` gets no guard at all.
+
+  The guard's reach is limited on purpose. It only vets games whose CHR is
+  stored plain — CHR ROM, or a CHR RAM game whose tiles sit verbatim in PRG.
+  Contra's CHR is decompressed from PRG (1 834 of 2 337 recorded shapes, 78.5
+  %, are verbatim), so a `<patch>` pack for Contra would lose real stock
+  shapes to it; that cost is accepted rather than widening the guard to
+  anything not literally in the dump. The CHR ROM palettes-only rule is
+  untouched: a `<patch>` pack for a CHR ROM game is index-keyed and stays
+  refused.
 - **Conditions.** `<condition>` lines are **never** imported, at any coverage
   cost. A `memoryCheck` is the other author's *reading* of the machine, and
   ADR-0183 §3 is explicit that this recorder emits observations, never readings
@@ -192,3 +239,15 @@ Q4(k)'s remainder sheet is the answer, and no format change is involved.
   pack's tokens are decimal. Normalise the loader's way — branch on `<ver>`, as
   `Rule.parsed_index` does — or a pack that is entirely in range reads as
   two-thirds out of it. This is what the Context item 2 retraction above cost.
+- **Added 2026-09-24.** With the per-key `<patch>` guard, three more catalog
+  packs contribute shapes to the index read — measured on the survey's packs
+  against the F12.2 sweep recordings, **Castlevania +249, Mega Man +257,
+  Zelda +44** (1 268 keys), with **0 admitted shapes absent from the stock
+  dump** and 493 shapes refused and counted
+  (`docs/validation/adr0210-patch-verbatim-guard-2026-09-24.md`). Zelda II and
+  Metroid stay refused (index-keyed), and every non-`<patch>` result is byte
+  for byte what it was. The guard is a byte search, not a judgment: a
+  community tile that happens to equal 16 stock bytes somewhere in PRG would
+  pass it. For these games the calibration above makes that the right bet —
+  every recorded shape is verbatim — and the admitted cell still renders only
+  those stock bytes, never the pack's PNG.

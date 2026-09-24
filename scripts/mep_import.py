@@ -105,7 +105,7 @@ _PREFIXED_TAGS = frozenset({"<tile>", "<background>"})
 # HdPackLoader's own dispatch list — every tag it reads, and no other. Anything
 # else is refused (never dropped). `<patch>` is read by `mep_patch.patch_lines`
 # and needs `--rom` at import time (ADR-0198 §3); the index read (ADR-0210 §3)
-# still refuses it by name.
+# refuses an index-keyed `<patch>` pack by name and vets a 32-hex one per key.
 _KNOWN_TAGS = frozenset(
     {"<tile>", "<background>", "<condition>", "<img>", "<addition>", "<fallback>",
      "<bgm>", "<sfx>", "<patch>"}
@@ -1408,8 +1408,15 @@ def _token_as_built(rule: Rule, ver: int) -> str:
 #      whether that field is decimal (<= 102) or hex (103+); reading a
 #      `<ver>100` pack as hex is how a legitimate pack gets misread as aimed at
 #      another ROM (`int(field, 16)` is not a normalisation, it is a reading).
-#   2. **`<patch>`** — refused by name, naming ADR-0198 §2/§3: its keys are bank
-#      indices of the patched ROM, a namespace the stock-ROM tools never meet.
+#   2. **`<patch>`** — amended 2026-09-24. An index-keyed `<patch>` pack is
+#      still refused by name, naming ADR-0198 §2/§3: its keys are bank indices
+#      of the patched ROM, a namespace the stock-ROM tools never meet, and no
+#      byte search can vet an index. A 32-hex `<patch>` pack is read shape by
+#      shape: a key is admitted only when its 16 pattern bytes occur verbatim
+#      in the stock dump's No-Intro byte range (ADR-0003) — then they are the
+#      game's own bytes whatever the patch did — and every other key (the
+#      patch author's art, or a shape the dump stores compressed) is refused
+#      and counted (`patch_guard`, `dropped.not_in_stock_rom`).
 #   3. **Conditions** — a `[...]` prefix is dropped, never carried: the tile
 #      exists, the condition is the other author's claim about when it draws.
 
@@ -1504,17 +1511,19 @@ def read_index(their: Path, pack_dir: Path, rom: Path) -> dict:
     theirs = _open_manifest(their)
     if not theirs.rules:
         raise PackError(f"{theirs.hires}: no <tile> entries to read")
-    if theirs.patches:
-        # Filter 2 (ADR-0210 §3): the keys of a pack with <patch> are bank
-        # indices of the patched ROM, a namespace this dump never produces.
-        # The import side admits such a pack against the patched ROM (ADR-0198
-        # §3); the index read, which is about *this* dump, does not.
+    if theirs.patches and theirs.index_keyed:
+        # Filter 2 (ADR-0210 §3, amended 2026-09-24): the index keys of a pack
+        # with <patch> are bank indices of the patched ROM, a namespace this
+        # dump never produces, and an index carries no bytes to vet. The import
+        # side admits such a pack against the patched ROM (ADR-0198 §3); the
+        # index read, which is about *this* dump, does not. A 32-hex <patch>
+        # pack goes on, through the verbatim guard in `_read_index_shapes`.
         first = theirs.patches[0]
         raise PackError(
-            f"{theirs.hires}:{first.line}: this pack ships a <patch>, so its <tile> keys name the "
-            "patched ROM's tiles, not this dump's — ADR-0198 §2/§3 keeps it out of the stock-ROM "
-            "index read (ADR-0210 §3 filter 2). Import it against the patched ROM with "
-            "`mep_import.py <pack> --out <project> --rom <dump>` instead")
+            f"{theirs.hires}:{first.line}: this pack ships a <patch> and keys <tile> by CHR "
+            "index, so its keys name the patched ROM's tiles, not this dump's — ADR-0198 §2/§3 "
+            "keeps it out of the stock-ROM index read (ADR-0210 §3 filter 2). Import it against "
+            "the patched ROM with `mep_import.py <pack> --out <project> --rom <dump>` instead")
     chr_tiles = _rom_chr_tiles(rom)
     rom_sha1 = _check_supported_rom(ours, rom)
     if (chr_tiles > 0) != ours.index_keyed:
@@ -1605,9 +1614,22 @@ def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
     ignored"): two of their keys that name the same 16 bytes are one picture.
     The other palettes of that shape become the cell's `aliases`, which
     `mep_build`'s ADR-0153 §3 pass emits from the same crop — so every key
-    their manifest names is reachable, and none of them is drawn twice."""
+    their manifest names is reachable, and none of them is drawn twice.
+
+    **Filter 2's verbatim guard** (ADR-0210 §3, amended 2026-09-24): when
+    their pack carries `<patch>`, a shape our recording lacks is admitted only
+    if its 16 bytes occur verbatim in the stock dump's No-Intro byte range. A
+    shape the patch wrote is not there, so it is refused and counted — and so
+    is a stock shape the dump stores compressed, which is the guard's accepted
+    cost (Contra's case, were its pack patched)."""
     ours_shapes = _recorded_shapes(ours)
+    stock = None
+    if theirs.patches:
+        rom = plan["rom"]
+        stock = mep_patch.no_intro_body(rom.read_bytes(), rom.suffix.lower())
     shapes: dict = {}
+    refused: dict = {}
+    refused_rules = 0
     short = 0
     recorded = 0
     for rule in theirs.rules:
@@ -1617,6 +1639,13 @@ def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
         if rule.token in ours_shapes:
             recorded += 1
             continue
+        if stock is not None and rule.token not in shapes and (
+                rule.token in refused or bytes.fromhex(rule.token[:32]) not in stock):
+            pals = refused.setdefault(rule.token, [])
+            if rule.palette not in pals:
+                pals.append(rule.palette)
+            refused_rules += 1
+            continue
         pals = shapes.setdefault(rule.token, [])
         if rule.palette not in pals:
             pals.append(rule.palette)
@@ -1624,6 +1653,17 @@ def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
                      for shape, pals in shapes.items()]
     plan["palettes"] = sorted({p for pals in shapes.values() for p in pals})
     plan["dropped"] = {"short_key": short, "already_recorded": recorded}
+    if stock is not None:
+        # Rules, like the other `dropped` counters; the guard block counts
+        # shapes and distinct keys.
+        plan["dropped"]["not_in_stock_rom"] = refused_rules
+        plan["patch_guard"] = {
+            "patches": len(theirs.patches),
+            "admitted_shapes": len(shapes),
+            "admitted_keys": sum(len(p) for p in shapes.values()),
+            "not_in_stock_shapes": len(refused),
+            "not_in_stock_keys": sum(len(p) for p in refused.values()),
+        }
     plan["our_shapes"] = len(ours_shapes)
     plan["their_shapes"] = len({r.token for r in theirs.rules if len(r.token) >= 32})
     plan["shapes"] = len(shapes)
@@ -1701,6 +1741,9 @@ def _index_sidecar(plan: dict, columns: int) -> dict:
             "shapes": plan.get("their_shapes", 0),
             "conditionsRead": 0, "conditionedRules": plan["conditioned_rules"],
             "dropped": plan["dropped"],
+            # Present only for a `<patch>` pack: what the verbatim guard
+            # admitted and refused (ADR-0210 §3, amended 2026-09-24).
+            **({"patchGuard": plan["patch_guard"]} if "patch_guard" in plan else {}),
         },
         "cells": cells,
     }
@@ -1763,6 +1806,9 @@ def _print_index_summary(plan: dict):
                   "dump")
         print("  no sheet written: a CHR ROM game's shapes are already in the ROM, and this pack "
               "adds none")
+    elif not plan["cells"] and plan.get("patch_guard", {}).get("not_in_stock_shapes"):
+        print("  no shape admitted: every shape our recording lacks failed the verbatim guard "
+              "below — no sheet written")
     elif not plan["cells"]:
         print(f"  no shape here is new: our recording ({plan['ours_rules']} rule(s)) already holds "
               "every 32-hex shape this pack names — no sheet written")
@@ -1770,6 +1816,14 @@ def _print_index_summary(plan: dict):
         print(f"  wrote {', '.join('sheets/' + n for n in plan['written'])}: "
               f"{len(plan['cells'])} cell(s) rendered from the pack's own pattern bytes, "
               f"{plan['keys']} key(s) once built, {len(plan['palettes'])} palette(s)")
+    guard = plan.get("patch_guard")
+    if guard:
+        print(f"  this pack ships {guard['patches']} <patch> line(s): each new shape was admitted "
+              f"only if its 16 bytes are verbatim in the stock ROM's No-Intro range (ADR-0210 §3 "
+              f"filter 2, amended 2026-09-24) — {guard['admitted_shapes']} shape(s) / "
+              f"{guard['admitted_keys']} key(s) admitted, {guard['not_in_stock_shapes']} shape(s) "
+              f"/ {guard['not_in_stock_keys']} key(s) refused as not verbatim in the stock ROM "
+              "(the patch's own art, or tiles the dump stores compressed)")
     if dropped.get("short_key"):
         print(f"  {dropped['short_key']} rule(s) key a tile by CHR index in a CHR RAM game's "
               "namespace; skipped")

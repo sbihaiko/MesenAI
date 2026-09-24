@@ -57,7 +57,11 @@ Covers:
     ROM game takes the palette set and nothing else and says so. Each of the
     three mandatory filters has its own case — the index range against the
     loaded CHR (read the loader's own way, `<ver>` deciding decimal vs hex),
-    a `<patch>` pack refused by name, and `<condition>` lines never read — and
+    a `<patch>` pack vetted per key (ADR-0210 §3 as amended 2026-09-24: a
+    32-hex key admitted only when its 16 bytes are verbatim in the stock
+    dump's No-Intro range, the rest refused and counted; an index-keyed
+    `<patch>` pack refused whole; a pack without `<patch>` unchanged), and
+    `<condition>` lines never read — and
     the read never opens a PNG of the input pack (asserted with a trap), never
     touches the F12.8 `unsorted` sheet, and produces a sheet `mep_build.py
     build` slices back into rules with 0 errors.
@@ -68,6 +72,7 @@ python3 scripts/test_mep_import.py
 """
 
 import contextlib
+import hashlib
 import io
 import json
 import struct
@@ -973,25 +978,137 @@ def test_index_conditions(root: Path):
         ok("the rebuild carries no <condition> line and no condition prefix for those keys")
 
 
+def stock_ram_rom(root: Path, name: str, verbatim, junk=()) -> Path:
+    """A CHR RAM dump whose PRG carries each shape of `verbatim` as 16 plain
+    bytes at an odd offset (a CHR RAM game copies its tiles out of PRG; the
+    guard must not assume any alignment), plus `junk` shapes appended *after*
+    the PRG the header declares — outside the No-Intro byte range (ADR-0003),
+    so a shape that sits only there is not in the stock ROM."""
+    prg = bytearray(16384)
+    for i, s in enumerate(verbatim):
+        o = 101 + i * 37
+        prg[o:o + 16] = bytes.fromhex(shape_hex(s))
+    tail = b"".join(bytes.fromhex(shape_hex(s)) for s in junk)
+    rom = root / name
+    rom.parent.mkdir(parents=True, exist_ok=True)
+    rom.write_bytes(b"NES\x1a" + bytes([1, 0] + [0] * 10) + bytes(prg) + tail)
+    return rom
+
+
+def ips_writing(offset: int, data: bytes) -> bytes:
+    """A one-record IPS: `data` at file offset `offset`."""
+    return (b"PATCH" + offset.to_bytes(3, "big") + len(data).to_bytes(2, "big") + data
+            + b"EOF")
+
+
 def test_index_patch(root: Path):
-    """Filter 2: a pack carrying `<patch>` keys a namespace we never meet."""
+    """Filter 2, as amended 2026-09-24 (ADR-0210 §3): a pack carrying
+    `<patch>` is no longer refused wholesale. Each of its 32-hex keys is
+    admitted only when its 16 pattern bytes occur verbatim in the stock dump's
+    No-Intro byte range; the rest — the patch author's own art — is refused
+    and counted. An index-keyed `<patch>` pack stays refused whole."""
     root = root / "patch"
-    pack = ram_recording(root)
+    pack = ram_recording(root)                       # 1, 2 in the manifest; 3 on a sheet
+    # Stock shapes: 2 (recorded already), 5 and 6. Shape 8 sits past the PRG
+    # the header declares — trailing junk, not the stock ROM.
+    rom = stock_ram_rom(root, "ram.nes", verbatim=(2, 5, 6), junk=(8,))
+    # The patch writes shape 7 into the PRG: the patched ROM has it, the stock
+    # dump does not. That is the case the guard exists for.
+    ips = ips_writing(16 + 4000, bytes.fromhex(shape_hex(7)))
+    stock = rom.read_bytes()
+    patched, _records = MI.mep_patch.apply_ips(stock, ips)
+    if bytes.fromhex(shape_hex(7)) not in patched or bytes.fromhex(shape_hex(7)) in stock:
+        fail("fixture: shape 7 must be in the patched ROM and absent from the stock dump")
+        return
+    sha1 = hashlib.sha1(stock).hexdigest().upper()
     their = index_pack(root, "their", [
-        "<ver>100",
+        "<ver>106",
         "<scale>2",
-        "<patch>chr-ram-to-rom.ips," + "0" * 40,
-        f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",
-    ])
-    rom = make_rom(root, "ram.nes", chr_banks=0)
-    expect_error(lambda: MI.read_index(their / "hires.txt", pack, rom), "ADR-0198",
-                 "an index read of a pack carrying <patch>")
+        f"<patch>hack.ips,{sha1}",
+        f"<tile>0,{shape_hex(2)},{PAL_C},0,0,1,N",   # stock, and ours already: no cell
+        f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N",   # stock: admitted
+        f"<tile>0,{shape_hex(5)},{PAL_D},0,0,1,N",   # its second palette: an alias
+        "<condition>c,memoryCheck,3,4",
+        f"[c]<tile>0,{shape_hex(6)},{PAL_D},0,0,1,N",  # stock, conditioned: admitted bare
+        f"<tile>0,{shape_hex(7)},{PAL_C},0,0,1,N",   # patch art: refused
+        f"<tile>0,{shape_hex(7)},{PAL_D},0,0,1,N",   # patch art, second palette: refused
+        f"<tile>0,{shape_hex(8)},{PAL_C},0,0,1,N",   # only past the No-Intro range: refused
+    ], files={"hack.ips": ips})
+    try:
+        plan = MI.read_index(their / "hires.txt", pack, rom)
+    except MI.PackError as e:
+        fail(f"a 32-hex <patch> pack is still refused wholesale: {e}")
+        return
+    cells = [c["tile"] for c in plan["cells"]]
+    if cells != [shape_hex(5), shape_hex(6)]:
+        fail(f"the verbatim guard admitted {[c[:8] for c in cells]}, expected shapes 5 and 6 only")
+    else:
+        ok("a <patch> pack's 32-hex keys are admitted only when their 16 bytes are verbatim in "
+           "the stock dump: the stock shapes get cells, the patch's art does not")
+    guard = plan.get("patch_guard") or {}
+    want = {"patches": 1, "admitted_shapes": 2, "admitted_keys": 3,
+            "not_in_stock_shapes": 2, "not_in_stock_keys": 3}
+    if {k: guard.get(k) for k in want} != want:
+        fail(f"the guard's counts read {guard}, expected {want}")
+    else:
+        ok("the refused shapes are counted, never silently dropped: 2 shapes / 3 keys not in the "
+           "stock ROM, 2 shapes / 3 keys admitted")
+    if plan["dropped"].get("not_in_stock_rom") != 3 or plan["dropped"].get("already_recorded") != 1:
+        fail(f"dropped reads {plan['dropped']}")
+    else:
+        ok("the refusal rides in `dropped` (and so in the sidecar's origin) as not_in_stock_rom")
+    if plan["keys"] != 3 or sorted(plan["palettes"]) != sorted([PAL_C, PAL_D]):
+        fail(f"keys {plan['keys']}, palettes {plan['palettes']}")
+    else:
+        ok("only an admitted shape's keys and palettes reach the plan")
+
+    # Every admitted shape is verbatim in the stock dump — the E2E invariant.
+    body = stock[16:16 + 16384]
+    if any(bytes.fromhex(c) not in body for c in cells):
+        fail("a cell's bytes are absent from the stock dump's No-Intro range")
+    else:
+        ok("0 admitted shapes are absent from the stock dump")
+
     rc, out = run_index(their / "hires.txt", pack, rom)
-    if rc != 2 or not (pack / "textures" / "sheets").is_dir() \
-            or [p.name for p in (pack / "textures" / "sheets").iterdir() if "index" in p.name]:
+    if rc != 0 or "not verbatim in the stock ROM" not in out:
+        fail(f"the CLI run exited {rc} and/or did not report the guard:\n{out}")
+    else:
+        ok("the CLI run succeeds and says how many shapes the verbatim guard refused")
+    sidecar = pack / "textures" / "sheets" / "index.json"
+    doc = json.loads(sidecar.read_text()) if sidecar.is_file() else {"origin": {}, "cells": []}
+    if doc["origin"].get("dropped", {}).get("not_in_stock_rom") != 3 or len(doc["cells"]) != 2 \
+            or doc["origin"].get("patchGuard", {}).get("not_in_stock_shapes") != 2:
+        fail(f"the sidecar's origin does not carry the guard: {json.dumps(doc['origin'])[:300]}")
+    else:
+        ok("the sidecar's origin carries the guard's counts beside the two cells")
+
+    # Index-keyed keys from a <patch> pack stay refused: they are bank indices
+    # of the patched ROM, and no byte search can vet an index.
+    idx = index_pack(root, "idx", ["<ver>106", "<scale>2", f"<patch>hack.ips,{sha1}",
+                                   f"<tile>0,1F,{PAL_C},0,0,1,N"], files={"hack.ips": ips})
+    expect_error(lambda: MI.read_index(idx / "hires.txt", pack, rom), "ADR-0198",
+                 "an index-keyed <patch> pack against a CHR RAM recording")
+    chrrom = make_rom(root, "chrrom.nes", chr_banks=1)
+    idx_rec = write_pack(root, "idxrec", ["<ver>109", "<scale>2", "<tile>0,00,0F162A30,0,0,1,N"])
+    expect_error(lambda: MI.read_index(idx / "hires.txt", idx_rec, chrrom), "filter 2",
+                 "an index-keyed <patch> pack against a CHR ROM recording")
+    rc, out = run_index(idx / "hires.txt", idx_rec, chrrom)
+    if rc != 2 or [p.name for p in (idx_rec / "textures" / "sheets").iterdir() if "index" in p.name]:
         fail(f"the refused read exited {rc} and/or wrote a sheet:\n{out}")
     else:
         ok("the refusal exits 2 and writes nothing into the recording")
+
+    # A pack without <patch> is unchanged: no guard, so a shape absent from the
+    # stock bytes (a CHR decompressed from PRG, Contra's case) is still read.
+    plain = index_pack(root, "plain", ["<ver>106", "<scale>2",
+                                       f"<tile>0,{shape_hex(7)},{PAL_C},0,0,1,N",
+                                       f"<tile>0,{shape_hex(5)},{PAL_C},0,0,1,N"])
+    plan = MI.read_index(plain / "hires.txt", pack, rom)
+    if [c["tile"] for c in plan["cells"]] != [shape_hex(7), shape_hex(5)] \
+            or "patch_guard" in plan or "not_in_stock_rom" in plan["dropped"]:
+        fail(f"a pack without <patch> was filtered: {[c['tile'][:8] for c in plan['cells']]}")
+    else:
+        ok("a pack without <patch> is read exactly as before: no verbatim guard applies")
 
 
 def test_index_range(root: Path):

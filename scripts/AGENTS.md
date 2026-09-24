@@ -469,7 +469,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   regenerates with the identical rule set and pixels: `import <pack> --out
   <project> [--force] [--rom <stock dump>]`, `verify <pack> <project>
   [--strict]` (ADR-0198 §1's acceptance test, run after `build`), and
-  `index` (ADR-0210 §3). **Patched-ROM import** (ADR-0198 §3, option (a);
+  `index` (ADR-0210 §3). In `index`, filter 2 is per key since 2026-09-24:
+  a 32-hex key of a `<patch>` pack is admitted only when its 16 bytes are
+  verbatim in the stock `--rom`'s No-Intro range (`mep_patch.no_intro_body`),
+  the rest refused and counted (`patch_guard`, `dropped.not_in_stock_rom`,
+  the sheet's `origin.patchGuard`); an index-keyed `<patch>` pack is still
+  refused whole. **Patched-ROM import** (ADR-0198 §3, option (a);
   the byte half lives in `mep_patch.py`, stdlib only, mirroring
   `IpsPatcher::PatchBuffer` and `HdPackLoader::ProcessPatchTag`): a pack
   with `<patch>` lines keys its `<tile>`s against the ROM *after* the
@@ -1210,7 +1215,8 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `verify` resolving the token the loader's way — `\`→`/`, exact, then
   case-folded — and failing when either IPS copy is missing or its bytes
   differ from the source pack's), every
-  refusal named above, and the index read; PASS/FAIL per check, exit 0 only
+  refusal named above, and the index read (its `<patch>` verbatim guard
+  included); PASS/FAIL per check, exit 0 only
   if all pass. No ROM, no PNG codec beyond the stdlib.
 - `python3 scripts/test_mei_rules.py` (F6.3b) - `mei_rules.py` leaf: constant
   shapes, `required_mei_pack_fields`/`mei_entry_conforms` per kind,

@@ -212,9 +212,16 @@ def patch_lines(lines: list[str]) -> list[PatchLine]:
 def no_intro_sha1(data: bytes, suffix: str) -> str:
     """MEP-v1 §4 over bytes already in memory — the twin of
     `mep_build._no_intro_sha1(path)`, which this module cannot call because the
-    patched ROM never touches the disk. iNES: skip the 16-byte header and a
-    512-byte trainer, clamp to the PRG+CHR size the header declares (ADR-0044);
-    SNES copier header; everything else whole. 40 uppercase hex digits."""
+    patched ROM never touches the disk. 40 uppercase hex digits over
+    `no_intro_body`."""
+    return hashlib.sha1(no_intro_body(data, suffix)).hexdigest().upper()  # noqa: S324 - No-Intro identity hash is SHA-1 by contract (ADR-0003/ADR-0039)
+
+
+def no_intro_body(data: bytes, suffix: str) -> bytes:
+    """The No-Intro byte range (ADR-0003, MEP-v1 §4) of a ROM in memory. iNES:
+    skip the 16-byte header and a 512-byte trainer, clamp to the PRG+CHR size
+    the header declares (ADR-0044); SNES copier header; everything else whole.
+    The index read's verbatim guard (ADR-0210 §3) searches exactly this range."""
     end = len(data)
     offset = 0
     if suffix == ".nes" and data[:4] == b"NES\x1a" and len(data) >= 16:
@@ -229,7 +236,7 @@ def no_intro_sha1(data: bytes, suffix: str) -> str:
             end = declared
     elif suffix in {".sfc", ".smc", ".swc", ".fig", ".bs", ".st"} and len(data) % 1024 == 512:
         offset = 512
-    return hashlib.sha1(data[offset:end]).hexdigest().upper()  # noqa: S324 - No-Intro identity hash is SHA-1 by contract (ADR-0003/ADR-0039)
+    return data[offset:end]
 
 
 def whole_file_sha1(data: bytes) -> str:
