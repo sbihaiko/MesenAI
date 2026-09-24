@@ -73,6 +73,8 @@ public class CopyAsMepSheetCellTests
 	//8 KB of CHR ROM - the two sides of the `index` field ADR-0172 §2 defines.
 	private const string ChrRamRom = "The Legend of Zelda (1987) (Nintendo).nes";
 	private const string ChrRomRom = "Super Mario Bros. (1985) (Nintendo).nes";
+	//#421: a title screen drawn from two nametables at once (0 and 2).
+	private const string MultiNametableRom = "Zelda II - The Adventure of Link (1988) (Nintendo).nes";
 
 	[AvaloniaFact]
 	public void Copying_a_tilemap_tile_emits_the_one_line_cell_the_panel_promises()
@@ -221,6 +223,121 @@ public class CopyAsMepSheetCellTests
 		}
 	}
 
+	//#421: the scan above used to walk x < 256, y < 240 - nametable $2000 only -
+	//while the Tilemap Viewer shows all four nametables (512x480) and a frame is a
+	//window into whichever of them the scroll points at. F14.2 measured the cost:
+	//Zelda II's title draws nametable 0 rows 12-29 and nametable 2 below scanline
+	//~144, and its copy table held no non-blank shape that was on screen.
+	//
+	//"Drawn" is the copy's own rule (ADR-0215): a cell is on the frame when
+	//NesDrawnTileResolver.ScanlinesThatDrew finds a scanline whose loopy `v`
+	//fetched it, which is the same inversion HdPackCopyHelper runs before it
+	//answers, so the mirror tab of a mirrored nametable is not drawn and is not
+	//expected. Zelda II from power-on shows nametable 2 for the whole of its first
+	//six seconds (416 cells, measured), so two seconds here is not a race.
+	//
+	//The ROM is copied to a folder of its own first: with no pack beside it the
+	//palette check answers Unchecked (#342) and every drawn cell copies, so what
+	//this asserts is the walk, not which rules some pack happens to hold (the
+	//pack the scan checks against is #420's, in test_f122_prepare_evaluator.py).
+	[AvaloniaFact]
+	public void The_scan_offers_a_line_for_every_cell_the_frame_drew_from_any_nametable()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string folder = Environment.GetEnvironmentVariable(RomFolderVariable) ?? "";
+		Assert.SkipWhen(folder.Length == 0 || !Directory.Exists(folder),
+			$"{RomFolderVariable} is not set to a folder of NES ROMs. The library is never in the " +
+			"repo, so this test runs where the ROMs are and skips everywhere else.");
+		string library = Path.Combine(folder, MultiNametableRom);
+		Assert.SkipWhen(!File.Exists(library), $"{RomFolderVariable} does not hold '{MultiNametableRom}'.");
+
+		ClassicDesktopStyleApplicationLifetime lifetime = new();
+		Assert.SkipUnless(TryInstallDesktopLifetime(lifetime),
+			"this Avalonia build does not let a test install a desktop application lifetime, so " +
+			"ApplicationHelper.GetMainWindow() answers null and the clipboard write is unreachable.");
+
+		string bare = Path.Combine(Path.GetTempPath(), "mesen-421-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(bare);
+		string rom = Path.Combine(bare, MultiNametableRom);
+		File.Copy(library, rom);
+
+		EmuApi.InitDll();
+		EmuApi.InitializeEmu(ConfigManager.HomeFolder, IntPtr.Zero, IntPtr.Zero, true, true, true, true);
+		try {
+			ConfigApi.SetEmulationFlag(EmulationFlags.ConsoleMode, true);
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			ConfigApi.SetEmulationFlag(EmulationFlags.MaximumSpeed, true);
+			EmuApi.Resume();
+			Thread.Sleep(2000);
+			EmuApi.Pause();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] _),
+				"the core published no scanline trace for the paused frame");
+			HashSet<(int Col, int Row)> drawn = DrawnCells(scroll);
+			Assert.True(drawn.Any(cell => cell.Col >= 32 || cell.Row >= 30),
+				$"precondition: {MultiNametableRom} at 2 s should draw cells outside nametable 0, and the " +
+				$"trace names {drawn.Count} drawn cell(s), all in nametable 0");
+
+			TilemapViewerWindow window = new(CpuType.Nes);
+			lifetime.MainWindow = window;
+			try {
+				window.Show();
+				Dispatcher.UIThread.RunJobs();
+				TilemapViewerViewModel model = Assert.IsType<TilemapViewerViewModel>(window.DataContext);
+				model.RefreshData();
+				Dispatcher.UIThread.RunJobs();
+				model.SelectionRect = new Rect(0, 0, 8, 8);
+				Dispatcher.UIThread.RunJobs();
+				ContextMenuAction copy = FindCopyActionByLabel(window, SheetCellLabel);
+
+				HashSet<(int Col, int Row)> copied = WalkTilemap(model, copy, window)
+					.Select(line => (line.X / 8, line.Y / 8)).ToHashSet();
+
+				List<(int Col, int Row)> missing = drawn.Where(cell => !copied.Contains(cell))
+					.OrderBy(cell => cell.Row).ThenBy(cell => cell.Col).ToList();
+				Assert.True(missing.Count == 0,
+					$"{missing.Count} of the {drawn.Count} cells the frame drew have no copy line " +
+					$"(first: {string.Join(" ", missing.Take(8).Select(c => $"{c.Col},{c.Row}"))}) - " +
+					$"the walk visited {WalkPositions(model).Count()} position(s)");
+				List<(int Col, int Row)> undrawn = copied.Where(cell => !drawn.Contains(cell)).ToList();
+				Assert.True(undrawn.Count == 0,
+					$"{undrawn.Count} copy line(s) name a cell the frame did not draw " +
+					$"(first: {string.Join(" ", undrawn.Take(8).Select(c => $"{c.Col},{c.Row}"))})");
+			} finally {
+				lifetime.MainWindow = null;
+				window.Close();
+				Dispatcher.UIThread.RunJobs();
+			}
+		} finally {
+			EmuApi.Stop();
+			ConfigApi.SetEmulationFlag(EmulationFlags.MaximumSpeed, false);
+			ConfigApi.SetEmulationFlag(EmulationFlags.ConsoleMode, false);
+			TryInstallDesktopLifetime(null);
+			try {
+				Directory.Delete(bare, true);
+			} catch(IOException) {
+			}
+		}
+	}
+
+	//Every nametable cell a visible scanline fetched, in the Tilemap Viewer's own
+	//tile coordinates: nametable n sits at column (n & 1) * 32, row (n >> 1) * 30.
+	private static HashSet<(int Col, int Row)> DrawnCells(UInt32[] scroll)
+	{
+		HashSet<(int Col, int Row)> drawn = new();
+		for(int nametable = 0; nametable < 4; nametable++) {
+			for(int row = 0; row < 30; row++) {
+				for(int column = 0; column < 32; column++) {
+					if(NesDrawnTileResolver.ScanlinesThatDrew(scroll, nametable, row, column).Count > 0) {
+						drawn.Add(((nametable & 0x01) * 32 + column, (nametable >> 1) * 30 + row));
+					}
+				}
+			}
+		}
+		return drawn;
+	}
+
 	//Avalonia refuses `Application.ApplicationLifetime = ...` once the app is
 	//initialized ("It's not possible to change ApplicationLifetime after
 	//Application was initialized"), and Avalonia.Headless installs none at all.
@@ -342,19 +459,34 @@ public class CopyAsMepSheetCellTests
 	{
 		IClipboard? clipboard = window.Clipboard;
 		Assert.NotNull(clipboard);
-		for(int y = 0; y < 240; y += 8) {
-			for(int x = 0; x < 256; x += 8) {
-				clipboard.SetTextAsync("").GetAwaiter().GetResult();
-				model.SelectionRect = new Rect(x, y, 8, 8);
-				Dispatcher.UIThread.RunJobs();
-				Assert.NotNull(model.PreviewPanel);
+		foreach((int x, int y) in WalkPositions(model)) {
+			clipboard.SetTextAsync("").GetAwaiter().GetResult();
+			model.SelectionRect = new Rect(x, y, 8, 8);
+			Dispatcher.UIThread.RunJobs();
+			Assert.NotNull(model.PreviewPanel);
 
-				copy.OnClick();
-				Dispatcher.UIThread.RunJobs();
-				string text = clipboard.TryGetTextAsync().GetAwaiter().GetResult() ?? "";
-				if(text.Length > 0) {
-					yield return (x, y, text);
-				}
+			copy.OnClick();
+			Dispatcher.UIThread.RunJobs();
+			string text = clipboard.TryGetTextAsync().GetAwaiter().GetResult() ?? "";
+			if(text.Length > 0) {
+				yield return (x, y, text);
+			}
+		}
+	}
+
+	//#421: every tile of the picture the viewer shows - on the NES "Nametables"
+	//tab that is all four nametables, 512x480 - not just nametable $2000. Which of
+	//them the frame actually drew is the copy's to decide: a cell no visible
+	//scanline fetched is refused (NotDrawnThisFrame) and yields no line, exactly
+	//as it does for a person clicking it.
+	private static IEnumerable<(int X, int Y)> WalkPositions(TilemapViewerViewModel model)
+	{
+		PixelSize size = model.ViewerBitmap.PixelSize;
+		int stepX = Math.Max(model.GridSizeX, 1);
+		int stepY = Math.Max(model.GridSizeY, 1);
+		for(int y = 0; y < size.Height; y += stepY) {
+			for(int x = 0; x < size.Width; x += stepX) {
+				yield return (x, y);
 			}
 		}
 	}

@@ -74,11 +74,13 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   not on the screen you were given" is visible in the picture rather than a round
   trip the evaluator pays for;
 - `visible_window` answers the other half of the same question positionally: the
-  dump is one nametable and the screen is a window into two, so the frame's
-  non-blank blocks vote for the cell the screen's top-left sits at and the
-  tilemap gets a cyan box around the part it shows. Zelda II's 2026-09-19 run
-  picked row 0 - twelve rows above the window - and built, linted and rendered
-  it before anything said so;
+  screen is a window into the four nametables, so the frame's non-blank blocks
+  vote for the cell the screen's top-left sits at and the tilemap gets a cyan box
+  around the part it shows. Zelda II's 2026-09-19 run picked row 0 - twelve rows
+  above the window - and built, linted and rendered it before anything said so;
+- the scan walks all four nametables and keeps what the frame drew (#421), and
+  it checks palettes against the baseline pack the evaluator paints, installed
+  as `mep/` with the recording's `auto/` wildcards set aside (#420);
 - the frame is handed over twice. Tetris's halves were both right and came from
   different layers: the frame PNG is rendered with the pack installed, and a
   captured `<background>` frozen at a neighbouring moment paints an old scoreboard
@@ -120,9 +122,13 @@ SPRITE_KINDS = {"sprite", "sprites", "poses"}
 #non-blank keys in a corner is not a frame an artist can pick a shape off.
 MOMENT_BLOCKS = 0.50
 MOMENT_KEYS = 4
-#The scan walks the paused frame's full 256x240 in 8x8 steps - always this many
-#positions, on every game, regardless of how much of it the copy action actually
-#answers for (WalkTilemap in CopyAsMepSheetCellTests.cs).
+#The screen is 256x240, so this many 8x8 cells are on it. Since #421 the scan
+#walks all four nametables the Tilemap Viewer shows (512x480, `WalkPositions` in
+#CopyAsMepSheetCellTests.cs) and the copy itself refuses every cell no visible
+#scanline fetched, so a table holds the cells *this frame drew*, from whichever
+#nametable drew them, in the viewer's own coordinates (columns 0-63, rows 0-59).
+#A scanline fetches 33 columns for the fine-X shift, so a full table can name a
+#few more than this; `dump_coverage` caps the share at 1.0.
 FULL_GRID_CELLS = (256 // 8) * (240 // 8)
 #A third leg of the same gate, and the one the 2026-09-19 Sonnet sweep's
 #"coverage-count mismatch" finding was missing. `explained` in `moment_agreement`
@@ -416,13 +422,16 @@ def table_rows(table):
 def dump_coverage(table):
     """How much of the paused frame the copy action actually named a cell for.
 
-    `WalkTilemap` (`CopyAsMepSheetCellTests.cs`) always walks the full
-    `FULL_GRID_CELLS` positions of the 256x240 frame; a position is missing
-    from `table` when the copy refused it (`NesDrawnTileResolver`'s
-    `NotDrawnThisFrame`/`BanksDisagree`, most often a scrolled game whose
-    on-screen half-window belongs to a nametable this dump never touches).
-    This is the raw row count, with no repetition to inflate it - the number
-    an evaluator's own count of the dump file would get.
+    `WalkTilemap` (`CopyAsMepSheetCellTests.cs`) walks every cell of all four
+    nametables and keeps the ones the copy answered for; a cell the frame drew
+    is missing from `table` when the copy refused it (`NesDrawnTileResolver`'s
+    `BanksDisagree`, or the pack holding no rule for it - #342/#420). Before
+    #421 the walk covered nametable $2000 only, so a scrolled game lost the
+    whole part of its screen that another nametable drew. This is the raw row
+    count over the screen's `FULL_GRID_CELLS`, with no repetition to inflate
+    it - the number an evaluator's own count of the dump file would get -
+    capped at 1.0 because a scanline fetches a 33rd column for the fine-X
+    shift.
 
     Do not confuse this with `moment_agreement`'s "blocks explained": that one
     matches rendered *pixel patterns*, so a handful of rows whose design (a
@@ -433,7 +442,7 @@ def dump_coverage(table):
     Mike Tyson's Punch-Out!! claimed "793/960" from 32 rows (3%), and Ninja
     Gaiden claimed "828/960" from 30 rows (3%, every one of them column 0)."""
     cells = len(table_rows(table))
-    return cells, round(cells / FULL_GRID_CELLS, 3) if FULL_GRID_CELLS else 0.0
+    return cells, min(1.0, round(cells / FULL_GRID_CELLS, 3)) if FULL_GRID_CELLS else 0.0
 
 
 def tile_pixels(doc):
@@ -579,18 +588,50 @@ def render_screen(rom, state, out):
     return shots[-1]
 
 
-def scan(rom, state, table):
-    """S7: the copy action's answer for every tile of that frame."""
+def scan(rom, pack, state, table):
+    """S7: the copy action's answer for every tile of that frame.
+
+    The copy checks each tile's palette against the pack the core has loaded
+    (`NesPackTilePalette`, #342), so the pack beside the ROM during the scan
+    decides which keys the table offers. That has to be `pack`, the baseline
+    the evaluator's work copy is made from, and nothing else (#420). The
+    recording's bootstrap `auto/` is set aside: its `defaultTile=Y` rules are
+    palette wildcards, and under them Zelda II's tile 28,0 copied with the live
+    `0F301C15` although the baseline keys that tile only as `0F2B0F00`, while
+    stale keys with no baseline rule at all went through on Tetris 2 and The
+    Flintstones. A `mep/` already there is set aside too, and both come back
+    whatever the scan does."""
+    sibling = rom.parent / rom.stem
+    mep = sibling / "mep"
+    aside = [(sibling / "auto", sibling / "auto.scan-aside"),
+             (mep, sibling / "mep.scan-aside")]
+    for _, parked in aside:
+        if parked.exists():
+            raise PrepareError(f"{parked} is in the way - a previous scan did not clean up")
     env = dict(**{k: v for k, v in __import__("os").environ.items()})
     env["MESEN_F122_COPY_SCAN"] = str(rom)
     env["MESEN_F122_COPY_STATE"] = str(state)
     env["MESEN_F122_COPY_OUT"] = str(table)
-    proc = subprocess.run(
-        ["caffeinate", "-dimsu", "/Library/Developer/CommandLineTools/usr/bin/make",
-         "headless-ui-tests",
-         'CXX=/Library/Developer/CommandLineTools/usr/bin/clang++ -isysroot '
-         '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'],
-        cwd=str(REPO), capture_output=True, text=True, timeout=3600, env=env)
+    try:
+        for live, parked in aside:
+            if live.exists():
+                live.rename(parked)
+        shutil.copytree(pack, mep)
+        proc = subprocess.run(
+            ["caffeinate", "-dimsu", "/Library/Developer/CommandLineTools/usr/bin/make",
+             "headless-ui-tests",
+             'CXX=/Library/Developer/CommandLineTools/usr/bin/clang++ -isysroot '
+             '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'],
+            cwd=str(REPO), capture_output=True, text=True, timeout=3600, env=env)
+    finally:
+        shutil.rmtree(mep, ignore_errors=True)
+        for live, parked in aside:
+            if parked.exists():
+                #With auto/ gone the core's bootstrap can start recording into
+                #a fresh one on ROM load (Super Mario Bros.: auto/audio/.recorder),
+                #so whatever the scan's own run left in the slot is dropped.
+                shutil.rmtree(live, ignore_errors=True)
+                parked.rename(live)
     if not table.is_file():
         raise PrepareError(f"the scan wrote no table\n{proc.stdout[-1200:]}\n{proc.stderr[-800:]}")
     return len(table.read_text().splitlines())
@@ -643,13 +684,15 @@ WINDOW_BLOCKS = 8
 
 
 def visible_window(shot, table):
-    """Which cells of this one-nametable dump the frame actually shows.
+    """Where on the four-nametable tilemap the frame's top-left sits.
 
-    The tilemap is one nametable and the screen is a 32x30 window into *two* of
-    them, so a cell of the dump can be on screen, scrolled off, or replaced by a
-    cell of the nametable nobody dumped. Zelda II's 2026-09-19 run picked row 0
-    of the dump, built it, linted it, rendered it and got a byte-identical frame:
-    that row was 12 rows above the window.
+    The screen is a 32x30 window into the nametables, and the dump holds the
+    cells it drew in the Tilemap Viewer's coordinates (#421), so the window can
+    straddle two or four nametables. Zelda II's 2026-09-19 run picked row 0 of a
+    one-nametable dump, built it, linted it, rendered it and got a
+    byte-identical frame: that row was 12 rows above the window. A window that
+    wraps from the right-hand nametables back to column 0 splits its votes and
+    may not be measured.
 
     Every non-blank 8x8 block of the screen is looked up among the table's tiles,
     at each of the 64 fine-scroll alignments, and votes for the `(col, row)` the
@@ -730,9 +773,9 @@ def draw_tilemap(table, png, scale=TILEMAP_SCALE, cell=8, drawn=None, window=Non
     out (Zelda II, 2026-09-19).
 
     `window` is `visible_window`'s answer, drawn as a cyan box around the part of
-    this nametable the frame shows. Everything outside it is off screen: the
-    dump is one nametable and the screen is a window into two, so the box is the
-    only thing in the picture that states the scroll."""
+    the tilemap the frame shows. The picture is laid out like the Tilemap
+    Viewer's four nametables (#421), so the box is the only thing in it that
+    states the scroll."""
     rows = table_rows(table)
     if not rows:
         raise PrepareError(f"{table} holds no parseable cell")
@@ -872,7 +915,7 @@ def main(argv=None):
         log("frame", f"{rom.stem} at {seconds}s draws {drawn} background rule(s)")
         state, shot = mint(rom, pack, out, seconds, frames)
         log("mint", f"{state.name} + {shot.name}")
-        scan(rom, state, table)
+        scan(rom, pack, state, table)
         report["cells"], coverage = dump_coverage(table)
         report["dump_coverage"] = coverage
         log("scan", f"{report['cells']} tile(s) answered in {table.name} "
@@ -906,11 +949,10 @@ def main(argv=None):
     report["one_moment"] = one_moment(agreement, coverage)
     if report["dump_coverage"] < MOMENT_CELLS:
         log("warn", f"the copy table names only {report['cells']}/{FULL_GRID_CELLS} "
-                    f"({coverage:.1%}) of the frame's positions - most of it is "
-                    "likely off the nametable this dump describes (a scrolled "
-                    "game whose visible window is mostly the other nametable), "
-                    "so the pixel-match 'blocks explained' figure above overstates "
-                    "what the evaluator can actually paste from")
+                    f"({coverage:.1%}) of the frame's positions - the copy refused "
+                    "the rest (no rule in the baseline pack, or CHR banks that "
+                    "disagree), so the pixel-match 'blocks explained' figure above "
+                    "overstates what the evaluator can actually paste from")
     if not report["one_moment"]:
         log("warn", "no candidate second puts this pack's nametable on the screen "
                     "- the panel is handed over with the measurement above, and a "
@@ -919,7 +961,7 @@ def main(argv=None):
     window = visible_window(frames / f"{safe}-screen.png", table)
     report["window"] = window
     if window:
-        log("window", f"the frame's window into this nametable starts at cell "
+        log("window", f"the frame's window into the nametables starts at cell "
                       f"{window['col']},{window['row']} "
                       f"({window['agreeing']} of {window['matched']} non-blank "
                       f"block(s) of the frame agree)")
@@ -976,21 +1018,20 @@ def main(argv=None):
         f"that one counts a *pixel design* wherever it repeats (a brick, the blank "
         f"tile, tiled across the whole screen), so it can read high while this "
         f"count, the one the tilemap picture and the dump file actually cover, "
-        f"stays small on a scrolled frame. Trust this number for what you can "
+        f"stays small where the copy refuses most of the frame. Trust this number for what you can "
         f"paste; the tilemap picture is `{cols}x{lines_}` cells wide/tall for the "
         f"same reason.\n"
-        + (f"- The visible window: the tilemap is one nametable and the screen is "
-           f"a {window['cols']}x{window['rows']} window into two of them. The cyan "
-           f"box on the tilemap is the part of this nametable the frame shows; its "
-           f"top-left is cell `{window['col']},{window['row']}` and everything "
-           f"outside it is scrolled off. A side the box has no edge on is a side "
-           f"the window runs past this dump on, into the nametable it does not "
-           f"hold. Pick inside the box.\n"
+        + (f"- The visible window: the tilemap is laid out like the emulator's four "
+           f"nametables (columns 0-63, rows 0-59) and the screen is a "
+           f"{window['cols']}x{window['rows']} window into them. The cyan box on "
+           f"the tilemap is the part the frame shows; its top-left is cell "
+           f"`{window['col']},{window['row']}`. Pick inside the box.\n"
            if window else
            "- The visible window could not be measured on this frame, so the "
-           "tilemap carries no box: the dump is one nametable and the screen is a "
-           "window into two, and nothing here says which part you are looking "
-           "at.\n"),
+           "tilemap carries no box. It is laid out like the emulator's four "
+           "nametables (columns 0-63, rows 0-59) and holds only the cells this "
+           "frame drew, so every tile on it that is not dimmed is on your "
+           "screen.\n"),
         encoding="utf-8")
     report["index"] = str(index)
     log("index", str(index))
