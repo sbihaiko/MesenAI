@@ -730,7 +730,11 @@ def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest)
                 continue
             routes.append((other, ox, oy, lx, ly))
     write_source = self_owned or orphan or skipped or not routes
-    return write_source, routes, orphan or (write_source and (bool(routes) or skipped))
+    moves = orphan or (write_source and (bool(routes) or skipped))
+    # A cell holds up to four keys (unit 16). Once the source is written it
+    # emits every one of them, so routing any of them as well would leave two
+    # painted crops for one key, the ambiguity the build refuses (#253).
+    return write_source, [] if write_source else routes, moves
 
 
 def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:

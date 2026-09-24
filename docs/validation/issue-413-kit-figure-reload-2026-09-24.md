@@ -260,3 +260,61 @@ rebuilt recording, where `spr013` owns the key. The import still writes
 | 4 | `hires.txt` byte-identical painted vs unpainted | **met**: `c663fcca…90fb` on both |
 | 5 | `import --verify` 0 lost / 0 added | **met**: `172 -> 172, 0 lost, 0 added: PASS` |
 | 6 | Unit tests fail before and pass after | **met**: 5 of 5 mutations fail the suite; the restored file passes |
+
+## 9. Review follow-up (2026-09-24)
+
+**Finding.** A background cell (unit 16) emits up to four sub-tile keys.
+When their ownership was mixed, for example one key owned by the source crop
+and another cleanly owned by a different sheet, `plan_targets` returned
+`write_source=True` *and* a non-empty `routes`. The import then painted the
+source cell, which emits all four keys, and also the routed owner crop. That
+left two painted crops for one key, the ambiguity #253 names. On a sprite
+kind the build refuses it. On a background kind the build picks one crop by
+rank, and the other crop's paint for that key never reaches the screen
+(#343).
+
+**Fix.** Once the source is written, `plan_targets` routes nothing
+(`return write_source, [] if write_source else routes, moves`). The source
+already emits every key of the cell. `moves` is unchanged, so the import
+still reports that the next build re-points a rule and that the ROM has to
+be reopened.
+
+**Tests** (`scripts/test_mep_figure.py`, synthetic pack at scale 2, figure
+`obj010` beside an owner group `obj011` of the same rank):
+
+- `test_a_unit16_cell_with_mixed_ownership_is_written_once_and_reports_the_move`:
+  `obj011` owns K1 and `obj010` owns K0, K2 and K3. After the import only
+  `obj010.png` is written, `rerouted == 0` and `moves == 1`. No key has two
+  painted crops. `mep_build.py build` exits 0, every key of the cell is
+  drawn from `obj010.png`, and that sheet carries the paint.
+- `test_a_unit16_cell_owned_elsewhere_is_routed_and_the_manifest_holds`:
+  `obj011` owns all four keys, so all four sub-tiles are routed there
+  (`sourceLeft == 1`, `moves == 0`). `obj010.png` is untouched, each key has
+  exactly one painted crop, and the rebuilt `hires.txt` is byte-identical.
+
+**Mutation check.** With the edit reverted (`routes` returned
+unconditionally), the mixed case fails 4 checks: "only the source sheet is
+written", "nothing is routed…", "no key has two painted crops" (K1 painted
+on both `obj010.png` and `obj011.png`), and "every key … drawn from obj010"
+(K1 went to `obj011.png`). The build still exits 0 there, because both
+sheets are the `object` kind. With the edit restored, the suite passes.
+`test_pose_pixel_offsets.py` (all ok), `test_artist_kit_assemble.py` (16/16)
+and `test_artist_kit.py` (15/15) pass too.
+
+**Cost.** Once a painted cell is found, `import` builds the pack once on a
+throwaway copy (`manifest_owners`: one `copytree` and one `mep_build.py
+build`). An unpainted import builds nothing. Wall-clock time of
+`mep_figure.py import`, each run on a fresh scratch copy, median of 3 runs.
+Nothing under `runs/` was written.
+
+| pack | size | sheets | figure | no paint | one painted cell | bare `build` |
+|---|---|---|---|---|---|---|
+| Contra kit project `proj-ctrl` (§2) | 1.5 MB | 47 | `usr003-figure`, 50 cells | 0.08 s | 0.24 s | 0.14 s |
+| Zelda TAS kit (`runs/tas-zelda-20260914/kit4`), 18 maps | 24.5 MB | 117 | `obj000`, unit 16, 14 cells | 0.14 s | 1.50 s | 1.11 s |
+| Castlevania (`runs/spike-cv`), 3 maps | 20.1 MB | 117 | `spr000`, 8 cells | 0.12 s | 0.61 s | 0.37 s |
+
+The Castlevania recording does not build on current `main` (exit 2). So
+`manifest_owners` finds no owners there, and the import falls back to
+writing the source cell. The added time is still spent. On the largest
+recorded project the added cost is about 1.4 s per painted import, roughly
+one build. This is paid once per `import` call, not once per cell.
