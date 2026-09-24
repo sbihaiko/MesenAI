@@ -10,6 +10,9 @@
   label-don't-delete rule), issue #179
 - Supersedes / amends: ADR-0170 §1 — a `poses[]` entry gains an optional
   `fusionOf`; nothing about how a pose is found, identified or counted changes
+- Amended by: ADR-0228 (§1 — a kept pose plus a remainder of `kPoseMinTiles`
+  or more tiles is a fusion even when the remainder is not a kept pose; §3/§4 —
+  `fusionOf` then carries the one kept part)
 
 ## Context
 

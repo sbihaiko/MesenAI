@@ -13,7 +13,7 @@ needs no local rules beyond the root DOX.
 - `Core/NES/HdPacks/` — the bootstrap HD-pack builder and the sheet /
   pose recorder (`HdPackBuilder`, `SpriteGrouping`, `SheetRender`,
   `TileSheetTypes.h`). Decisions live in `docs/adr/` (ADR-0153, 0164,
-  0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190); this file only
+  0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190, 0228); this file only
   states the contracts a consumer relies on.
 - `Core/Shared/HeadlessInput*` — the `input=<script>` engine the headless
   harness drives the emulator with (see `scripts/AGENTS.md`).
@@ -52,7 +52,10 @@ needs no local rules beyond the root DOX.
   every `sprNNN`/`objNNN` group sheet; a cell with no grouping data keeps the
   empty `label` and no `labelSource`.
   Optional fields a reader must tolerate being absent: per entry
-  `fusionOf[]`, `next[]`, `variantOf`; top-level `cycles[]`, `sequences[]`
+  `fusionOf[]` (two kept parts, ADR-0177, or since ADR-0228 **one**: a kept
+  pose plus a remainder of `kPoseMinTiles` (4) or more tiles that never stood
+  alone - a reader must not assume two), `next[]`, `variantOf`; top-level
+  `cycles[]`, `sequences[]`
   (ADR-0179) and `input {frames, ports, held{}, never[]}` (ADR-0181 §2,
   written only when some button was ever held; `never` lists buttons and
   direction+action pairs no single port ever held at once); per `cycles[]`

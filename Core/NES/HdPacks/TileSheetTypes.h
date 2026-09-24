@@ -714,6 +714,8 @@ namespace MesenSheets
 		//so were clustered as one. Empty means *not classified as a fusion*,
 		//never *proved not to be one*. Both parts are kept poses themselves,
 		//and they may be the same pose twice (two copies side by side).
+		//ADR-0228: a single position when the entry is a kept pose plus a
+		//remainder of kPoseMinTiles or more tiles that never stood alone.
 		std::vector<uint32_t> FusionOf;
 		//ADR-0179 §2: retained-frame transitions on which this pose was linked
 		//to itself (the figure held still or moved without changing shape).
