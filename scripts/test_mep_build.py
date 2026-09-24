@@ -851,6 +851,118 @@ def sheet_alias_tests(root: Path):
         ok("every alias takes its art from the canonical cell's crop, so they cannot drift")
 
 
+def map_full_vocabulary_tests(root: Path):
+    """#416: a map placement names an absolute vocabulary index, and that is
+    not a `metatiles.json` cell (ADR-0164 §1). A recording places entries that
+    sit inside another cell's `aliases[]`, on `misc.json`, or on no sheet at
+    all because a captured screen owns them (ADR-0156). The build used to look
+    the index up in `metatiles.json` only and fall back to *array position*:
+    past the end the crop was dropped with a warning (Castlevania: 3), and
+    inside it the crop was emitted under another cell's keys without a word
+    (Castlevania: 22). Every such placement has to resolve to its own keys."""
+    folder, vocab, cells = make_sheet_folder(root, "map-full-vocab")
+    sheets = folder / "textures" / "sheets"
+    # Vocabulary entry 2 is routed to a captured screen: off metatiles.json,
+    # so position 2 of the array now holds entry 3. Entry 7 is an alias
+    # absorbed by cell 4, entry 8 is a misc cell.
+    kept = [dict(c, index=i) for i, c in enumerate(c for c in cells if c["metatile"] != 2)]
+    kept[3]["aliases"] = [{"metatile": 7, "tiles": [40, 41, 42, 43]}]
+    (sheets / "metatiles.json").write_text(
+        serialize_sheet("metatiles", 16, 1, 3, "metatiles.png", "metatiles.orig.png", kept),
+        encoding="utf-8")
+    misc_vocab = [{"count": 1, "context": "misc", "metatile": 8, "tiles": [30, 31, 32, 33]}]
+    misc_cells, misc_pixels = contact_sheet(16, 1, 1, misc_vocab)
+    write_pair(sheets, "misc", misc_pixels, 1)
+    (sheets / "misc.json").write_text(
+        serialize_sheet("misc", 16, 1, 1, "misc.png", "misc.orig.png", misc_cells), encoding="utf-8")
+    entries = {i: {"tiles": v["tiles"]} for i, v in enumerate(vocab)}
+    entries.update({7: {"tiles": [40, 41, 42, 43]}, 8: {"tiles": [30, 31, 32, 33]}})
+    nodes = ",\n      ".join(f'{{ "cell": {i}, "count": 1, "context": "scene", "tiles": {_tiles_json(e["tiles"])} }}'
+                             for i, e in sorted(entries.items()))
+    adjacency = sheets / "adjacency.json"
+    adjacency.write_text('{\n  "version": 1,\n  "kind": "adjacency",\n  "background": {\n'
+                         f'    "vocabulary": "metatiles.json",\n    "nodes": [\n      {nodes}\n    ],\n'
+                         '    "edges": []\n  }\n}\n', encoding="utf-8")
+    placements = [(0, 0, 5), (16, 0, 7), (0, 16, 2), (16, 16, 8)]
+    write_pair(sheets, "map-000", map_sheet(16, placements, entries, 32, 32), 1)
+    map_json = sheets / "map-000.json"
+    map_json.write_text(serialize_sheet("map", 16, 0, 1, "map-000.png", "map-000.orig.png", [],
+                                        placements=placements, mode="continuous"), encoding="utf-8")
+
+    out = run("build", str(folder))
+    if out is None:
+        return
+    imgs, tiles = parse_hires(folder / "textures" / "hires.txt")
+
+    def source(shape):
+        hit = tiles.get((tile_hex(shape), PAL_HEX))
+        return (imgs[hit[0]], hit[1], hit[2]) if hit else None
+
+    if "do not resolve" in out:
+        fail(f"#416: a placement of the recording's own vocabulary did not resolve:\n{out}")
+    else:
+        ok("#416: every placement resolves, aliases, misc and routed entries included")
+    if source(40) != ("sheets/map-000.png", 16, 0) or source(43) != ("sheets/map-000.png", 24, 8):
+        fail(f"#416: the alias placement was not sliced from the map: {source(40)}, {source(43)}")
+    else:
+        ok("#416: a placement of an alias entry is sliced from the map under the alias's keys")
+    if source(30) != ("sheets/map-000.png", 16, 16):
+        fail(f"#416: the misc placement was not sliced from the map: {source(30)}")
+    else:
+        ok("#416: a placement of a misc entry is sliced from the map under its own keys")
+    if source(8) != ("sheets/map-000.png", 0, 16) or source(11) != ("sheets/map-000.png", 8, 24):
+        fail(f"#416: the routed entry's placement did not resolve through adjacency.json: {source(8)}")
+    elif (source(12) or ("",))[0] != "sheets/metatiles.png":
+        fail(f"#416: entry 3's keys were taken from entry 2's map crop by array position: {source(12)}")
+    else:
+        ok("#416: a routed entry resolves through adjacency.json, never by array position")
+
+    # An index nothing names is still skipped, and the warning says which.
+    map_json.write_text(serialize_sheet("map", 16, 0, 1, "map-000.png", "map-000.orig.png", [],
+                                        placements=placements + [(0, 0, 99)], mode="continuous"),
+                        encoding="utf-8")
+    out = run("build", str(folder))
+    if out is None or "1 placement(s) do not resolve" not in out or "cell 99" not in out:
+        fail(f"#416: an index no sidecar names was not reported by index:\n{out}")
+    else:
+        ok("#416: an index no sidecar names is skipped, and the warning names it")
+
+    # A pack recorded before adjacency.json (ADR-0164) still resolves the
+    # alias and the misc entry from their sheets. It cannot resolve a routed
+    # entry, and must say so rather than borrow the keys of whatever sits at
+    # that position of metatiles.json.
+    adjacency.unlink()
+    out = run("build", str(folder))
+    if out is None:
+        return
+    imgs, tiles = parse_hires(folder / "textures" / "hires.txt")
+    if "2 placement(s) do not resolve" not in out or "cell 2, 99" not in out:
+        fail(f"#416: without adjacency.json the alias or misc entry stopped resolving from its sheet:\n{out}")
+    else:
+        ok("#416: without adjacency.json aliases and misc cells still resolve from their sheets")
+    if (source(12) or ("",))[0] != "sheets/metatiles.png":
+        fail(f"#416: without adjacency.json a routed entry borrowed another cell's keys: {source(12)}\n{out}")
+    else:
+        ok("#416: without adjacency.json a routed entry is reported, never resolved by array position")
+
+    # A vocabulary whose cells name no `metatile` at all (and no adjacency
+    # file) still resolves by array position, the only index it has.
+    legacy, _v, legacy_cells = make_sheet_folder(root, "map-legacy-vocab")
+    bare = [{k: v for k, v in c.items() if k != "metatile"} for c in legacy_cells]
+    (legacy / "textures" / "sheets" / "metatiles.json").write_text(
+        serialize_sheet("metatiles", 16, 1, 3, "metatiles.png", "metatiles.orig.png", bare),
+        encoding="utf-8")
+    out = run("build", str(legacy))
+    if out is None:
+        return
+    imgs, tiles = parse_hires(legacy / "textures" / "hires.txt")
+    hit = tiles.get((tile_hex(8), PAL_HEX))
+    if "do not resolve" in out or not hit or imgs[hit[0]] != "sheets/map-000.png" or hit[1:3] != (0, 16):
+        fail(f"#416: a vocabulary with no metatile ids no longer resolves by position: {hit}\n{out}")
+    else:
+        ok("#416: a vocabulary with no metatile ids still resolves by array position")
+
+
 def sheet_round_trip_tests(root: Path):
     # --- identity round-trip, precedence, null/short tiles[] ---
     folder, vocab, cells = make_sheet_folder(root, "sheets-1x")
@@ -2160,6 +2272,7 @@ def main() -> int:
 
         # --- ADR-0153 / F9.4: the artist-legible sheet round-trip ---
         sheet_alias_tests(root)
+        map_full_vocabulary_tests(root)
         sheet_round_trip_tests(root)
 
         # --- F9.10: sheets/ is the front door; chr/ is where the CHR-order

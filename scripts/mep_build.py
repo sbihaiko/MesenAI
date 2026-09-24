@@ -37,7 +37,8 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        are NOT 16-column grids — each cell carries the exact hires.txt key of
        every 8x8 tile inside it, so the build slices them back through
        `cells[]` (contact sheets) or `placements[]` (a stitched map, resolved
-       against the sibling `metatiles.json` vocabulary) and emits one <tile>
+       against the whole background vocabulary: the metatiles/hud/font/misc
+       sidecars plus `adjacency.json`, ADR-0164 §1) and emits one <tile>
        per resolved crop. `*.orig.png` twins are references: never sliced,
        never emitted. An artist can therefore paint a sheet in any image
        editor, re-run build, and see the change in the emulator without ever
@@ -501,34 +502,54 @@ def _sheet_scale(docs: list) -> int | None:
     return found
 
 
+# The sheets whose cells are entries of the background vocabulary a map places
+# (ADR-0153 §3). `unsorted` numbers a vocabulary of its own, so it is not one.
+_BACKGROUND_VOCAB_KINDS = ("metatiles", "hud", "font", "misc")
+
+
 def _vocabulary(sd: SheetDoc, sheets_dir: Path):
-    """The metatile vocabulary a map's `placements[].cell` indexes into: the
-    `cells[]` of the sibling metatiles.json (ADR-0153 §4/§6). Cells are keyed
-    by their `metatile` (the vocabulary index the builder wrote) and, as a
-    fallback, by their position in the array."""
-    meta = sheets_dir / "metatiles.json"
-    if not meta.is_file():
+    """`{vocabulary index: entry carrying tiles[]}` for a map's `placements[].cell`.
+
+    A placement names an absolute vocabulary index, and a vocabulary index is
+    not a `metatiles.json` cell (ADR-0164 §1, #416): hud/font/misc entries sit
+    on their own sheets, an alias rides inside its canonical cell's
+    `aliases[]` (F9.7), and a cell a captured screen owns is on no sheet at
+    all (ADR-0156). So the index resolves through `cells[].metatile` and
+    `aliases[].metatile` of every background sheet, then through the
+    background nodes of `adjacency.json`, which carry every entry's keys.
+    Array position in `metatiles.json` is used only when no cell names a
+    `metatile` at all: as a fallback beside real indexes it put another
+    cell's keys on the crop (22 placements of a Castlevania map)."""
+    by_vocab, by_position = {}, {}
+    for kind in _BACKGROUND_VOCAB_KINDS:
+        doc = _read_sidecar(sheets_dir / f"{kind}.json")
+        cells = doc.get("cells") if doc.get("kind") == kind else None
+        for pos, c in enumerate(cells if isinstance(cells, list) else []):
+            if not isinstance(c, dict):
+                continue
+            if kind == "metatiles":
+                by_position.setdefault(pos, c)
+            for entry in [c] + [a for a in c.get("aliases") or [] if isinstance(a, dict)]:
+                if isinstance(entry.get("metatile"), int):
+                    by_vocab.setdefault(entry["metatile"], entry)
+    background = _read_sidecar(sheets_dir / "adjacency.json").get("background")
+    for node in (background.get("nodes") if isinstance(background, dict) else None) or []:
+        if isinstance(node, dict) and isinstance(node.get("cell"), int):
+            by_vocab.setdefault(node["cell"], node)
+    vocab = by_vocab or by_position
+    if not vocab:
         print(f"warning: {sd.json_path.name}: no sibling metatiles.json to resolve placements against — sheet skipped")
         return None
+    return vocab
+
+
+def _read_sidecar(path: Path) -> dict:
+    """A sibling JSON sidecar as a dict; {} when it is missing or unreadable."""
     try:
-        doc = json.loads(meta.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        print(f"warning: metatiles.json is not readable ({e}) — {sd.json_path.name} skipped")
-        return None
-    cells = doc.get("cells") if isinstance(doc, dict) else None
-    if not isinstance(cells, list) or not cells:
-        print(f"warning: metatiles.json has no cells[] — {sd.json_path.name} skipped")
-        return None
-    by_index = {}
-    for pos, c in enumerate(cells):
-        if not isinstance(c, dict):
-            continue
-        by_index.setdefault(pos, c)
-    by_vocab = {}
-    for c in cells:
-        if isinstance(c, dict) and isinstance(c.get("metatile"), int):
-            by_vocab.setdefault(c["metatile"], c)
-    return by_vocab or by_index, by_index
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
 
 
 class _Bitmap:
@@ -754,25 +775,23 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
         vocab = _vocabulary(sd, sheets_dir)
         if vocab is None:
             return []
-        by_vocab, by_pos = vocab
-        unresolved = 0
+        unresolved = []
         for p in sd.doc.get("placements") or []:
-            if not isinstance(p, dict):
-                unresolved += 1
-                continue
             try:
                 px, py, idx = int(p["x"]), int(p["y"]), int(p["cell"])
             except (KeyError, TypeError, ValueError):
-                unresolved += 1
+                unresolved.append("?")
                 continue
-            cell = by_vocab.get(idx, by_pos.get(idx))
+            cell = vocab.get(idx)
             if cell is None:
-                unresolved += 1
+                unresolved.append(str(idx))
                 continue
             _cell_crops(cell.get("tiles"), px, py, per, scale, f"{sd.name} @({px},{py})", crops, skipped,
                         probe.edited(px, py, sd.unit))
         if unresolved:
-            print(f"warning: {sd.name}: {unresolved} placement(s) do not resolve in the metatile vocabulary — skipped")
+            print(f"warning: {sd.name}: {len(unresolved)} placement(s) do not resolve in the metatile vocabulary"
+                  f" (cell {', '.join(sorted(set(unresolved)))}: on no background sheet and not in adjacency.json)"
+                  " — skipped")
     else:
         for c in sd.cells:
             if not isinstance(c, dict):
