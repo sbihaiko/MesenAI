@@ -1321,6 +1321,42 @@ namespace MesenSheets
 		return plans;
 	}
 
+	//See SpriteGrouping.h (issue #415) for why the palette comes from OAM.
+	std::vector<uint32_t> SpriteNearbyPalettes(const std::vector<OamFrame>& frames, size_t shapeCount, const std::vector<uint32_t>& paletteColors)
+	{
+		//Per shape: palette id -> (frames seen, order of first sight).
+		std::vector<std::map<PaletteId, std::pair<uint64_t, uint64_t>>> seen(shapeCount);
+		uint64_t order = 0;
+		for(const OamFrame& frame : frames) {
+			for(const OamEntry& entry : frame.Entries) {
+				if(entry.Shape >= shapeCount || entry.Palette == kUnknownPalette || entry.Palette >= paletteColors.size()) {
+					continue;
+				}
+				if((paletteColors[entry.Palette] >> 24) != 0xFF) {
+					continue; //not a sprite palette word: no evidence for a sprite condition
+				}
+				std::map<PaletteId, std::pair<uint64_t, uint64_t>>& counts = seen[entry.Shape];
+				auto it = counts.find(entry.Palette);
+				if(it == counts.end()) {
+					it = counts.emplace(entry.Palette, std::make_pair((uint64_t)0, order++)).first;
+				}
+				it->second.first += frame.RepeatCount;
+			}
+		}
+
+		std::vector<uint32_t> palettes(shapeCount, 0);
+		for(size_t shape = 0; shape < shapeCount; shape++) {
+			const std::pair<uint64_t, uint64_t>* best = nullptr;
+			for(const auto& kv : seen[shape]) {
+				if(!best || kv.second.first > best->first || (kv.second.first == best->first && kv.second.second < best->second)) {
+					best = &kv.second;
+					palettes[shape] = paletteColors[kv.first];
+				}
+			}
+		}
+		return palettes;
+	}
+
 	uint32_t NextStemIndex(const std::vector<std::string>& names, const std::string& prefix, const std::string& separator)
 	{
 		uint32_t next = 0;

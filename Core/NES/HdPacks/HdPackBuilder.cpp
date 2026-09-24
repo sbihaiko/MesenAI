@@ -1651,7 +1651,7 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 		return;
 	}
 	uint32_t unit = vocab.Grid.Unit ? vocab.Grid.Unit : 8;
-
+	vector<uint32_t> oamPalettes = MesenSheets::SpriteNearbyPalettes(_oamFrames, _shapeTiles.size(), PaletteColorTable()); //issue #415
 	uint32_t index = 0;
 	for(const MesenSheets::SpriteNearbyPlan& plan : plans) {
 		if(plan.Node >= vocab.Entries.size() || plan.Target >= vocab.Entries.size()) {
@@ -1660,7 +1660,7 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 		//A sprite vocabulary entry is one shape at grid unit 8 (BuildSpriteVocabulary).
 		MesenSheets::ShapeId nodeShape = vocab.Entries[plan.Node].Key.Tiles[0];
 		MesenSheets::ShapeId targetShape = vocab.Entries[plan.Target].Key.Tiles[0];
-		if(nodeShape >= _shapeTiles.size() || targetShape >= _shapeTiles.size()) {
+		if(nodeShape >= _shapeTiles.size() || targetShape >= _shapeTiles.size() || !oamPalettes[targetShape]) {
 			continue;
 		}
 
@@ -1687,12 +1687,12 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 
 		HdPackSpriteNearbyCondition* cond = new HdPackSpriteNearbyCondition();
 		cond->Name = baseName + "_n" + std::to_string(index++);
-		//ignorePalette: the evidence is palette-wildcarded (a shape id is
-		//GetKey(true)), so the condition has to be as well, or a figure would
-		//stop matching itself the moment the game recoloured it. Requires HD
-		//Pack version 108+; the builder writes CurrentVersion.
+		//ignorePalette (HD Pack 108+): the evidence is palette-wildcarded (GetKey(true)),
+		//or a figure would stop matching itself once recoloured. The palette field still
+		//states an observation (issue #415): the anchor's commonest OAM palette, never its
+		//first-seen art's, which may be a background one; no OAM palette, no condition.
 		cond->Initialize((int32_t)(plan.Dx * (int32_t)unit), (int32_t)(plan.Dy * (int32_t)unit),
-			target.PaletteColors, tileIndex, tileData, true);
+			oamPalettes[targetShape], tileIndex, tileData, true);
 		_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
 		_spriteNearbyConditions++;
 
