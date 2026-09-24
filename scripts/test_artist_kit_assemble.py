@@ -259,6 +259,12 @@ def test_the_done_steps_import_painted_figures_between_copy_and_build():
               "command on the painted copy", str(cmds))
         check(imports and copy is not None and build is not None and copy < imports[0] < build,
               "the figure import runs after the sheet copy and before the build", str(cmds))
+        # Codex on #402: a `for` loop's status is its last iteration's, so an
+        # import that fails mid-loop was masked and the build still ran.
+        imp = cmds[imports[0]] if imports else ""
+        check("|| exit 1" in imp and imp.startswith("sh -c '") and imp.rstrip().endswith("&&"),
+              "a failed figure import exits its own `sh -c` child (never the artist's "
+              "terminal) and `&&` holds the build back", imp)
         check("not both" in section and "lost to" in section,
               "the done section says a figure and its sheet row are one surface, and what "
               "the build says when both are painted")

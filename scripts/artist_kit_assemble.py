@@ -210,8 +210,11 @@ def _recorded_done_steps(kit: dict) -> list:
     if any(p.startswith("chr/") for p in paths):
         lines.append("cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/")
     if figures:
-        lines.append("for f in <kit>/figures/usr*-figure.png; do "
-                     "python3 scripts/mep_figure.py import <game>/painted \"$f\"; done")
+        # Fail fast: a `for` loop's status is its last iteration's, so a failed
+        # import must exit the loop and `&&` must hold the build back. `sh -c`
+        # keeps that `exit` out of the artist's own interactive shell.
+        lines.append("sh -c 'for f in <kit>/figures/usr*-figure.png; do "
+                     "python3 scripts/mep_figure.py import <game>/painted \"$f\" || exit 1; done' &&")
     lines.append("python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal")
     out = [
         "The kit is a folder beside the recording, not the pack itself. To turn painted "
@@ -232,7 +235,8 @@ def _recorded_done_steps(kit: dict) -> list:
             "`mep_figure.py import` writes what you painted on it into the copy's own "
             "sprite sheet, so it runs after the copy and before the build. A figure you "
             "did not paint changes nothing, so importing every one is safe; each prints "
-            "how many cells it wrote. A figure and its `sheets/usr*.png` row are the same "
+            "how many cells it wrote, and the first import that fails stops the block "
+            "before the build. A figure and its `sheets/usr*.png` row are the same "
             "tiles - paint either one, not both: if both are painted, the build stops "
             "with a `painted tile ... lost to` error naming the tile, and you keep one.",
             "",
