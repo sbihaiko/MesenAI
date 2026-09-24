@@ -236,6 +236,58 @@ def test_two_surfaces_that_differ_only_in_case_stop_the_kit():
               "the same name in two folders is not a clash")
 
 
+def _done_block(page):
+    """The command block of "When you are done", one command per line."""
+    section = page.split("## When you are done", 1)[1].split("\n## ", 1)[0]
+    block = section.split("```", 2)[1]
+    return section, [line for line in block.splitlines() if line.strip()]
+
+
+def test_the_done_steps_import_painted_figures_between_copy_and_build():
+    # #399: ARTIST.md invited painting figures/usrNNN-figure.png, then the
+    # done steps only copied sheets/ and chr/ - every painted figure was lost.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3, "figure": "figures/usr000-figure.png"}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        imports = [i for i, c in enumerate(cmds)
+                   if "scripts/mep_figure.py import <game>/painted" in c
+                   and "<kit>/figures/usr*-figure.png" in c]
+        copy = next((i for i, c in enumerate(cmds) if c.startswith("cp <kit>/sheets/")), None)
+        build = next((i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c), None)
+        check(len(imports) == 1, "a kit with figures names the figure import as a concrete "
+              "command on the painted copy", str(cmds))
+        check(imports and copy is not None and build is not None and copy < imports[0] < build,
+              "the figure import runs after the sheet copy and before the build", str(cmds))
+        # Codex on #402: a `for` loop's status is its last iteration's, so an
+        # import that fails mid-loop was masked and the build still ran.
+        imp = cmds[imports[0]] if imports else ""
+        check("|| exit 1" in imp and imp.startswith("sh -c '") and imp.rstrip().endswith("&&"),
+              "a failed figure import exits its own `sh -c` child (never the artist's "
+              "terminal) and `&&` holds the build back", imp)
+        check("not both" in section and "lost to" in section,
+              "the done section says a figure and its sheet row are one surface, and what "
+              "the build says when both are painted")
+
+
+def test_the_done_steps_name_only_what_the_kit_has():
+    # A literal `cp` of a glob that matches nothing fails, and no figure step
+    # belongs in a kit that exported none.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[{"path": "sheets/usr000.png", "cells": 3}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check("mep_figure.py" not in section, "a kit without figures has no figure import step",
+              str(cmds))
+        check(not any("<kit>/chr/" in c for c in cmds), "a kit without pattern pages copies no chr/",
+              str(cmds))
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[{"path": "chr/Chr_0.png", "cells": 256}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check(any(c.startswith("cp <kit>/chr/") for c in cmds)
+              and not any("<kit>/sheets/" in c for c in cmds),
+              "a kit of pattern pages alone copies chr/ and no sheets/", str(cmds))
+
+
 def main():
     tests = [
         test_parts_are_ordered_most_recognisable_first,
@@ -250,6 +302,8 @@ def main():
         test_every_surface_carries_the_name_the_paint_program_exports_to,
         test_a_surface_a_paint_program_cannot_export_to_stops_the_kit,
         test_two_surfaces_that_differ_only_in_case_stop_the_kit,
+        test_the_done_steps_import_painted_figures_between_copy_and_build,
+        test_the_done_steps_name_only_what_the_kit_has,
     ]
     for t in tests:
         t()
