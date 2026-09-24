@@ -284,7 +284,7 @@ def test_names_caption_a_file_and_absence_falls_back_to_the_id():
         check("cycle000" in bare and "7 time(s)" in bare,
               "an unnamed grid falls back to its id and what was measured", bare)
         named = K.Names({"cycles": {"cycle000": "the player's run"}})
-        check(K.grid_title(grid, named) == "the player's run",
+        check(K.grid_title(grid, named) == "the player's run — plays columns 1 2 4",
               "a name from --names becomes the title", K.grid_title(grid, named))
 
 
@@ -302,7 +302,8 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
 
         one = K.Names({"subjects": {"green-soldier": "the green-uniformed enemy"},
                        "poses": {pid: {"subject": "green-soldier"} for pid in ids}})
-        check(K.grid_title(grid, one) == "green soldier — a 3-phase loop, seen 7 time(s)",
+        check(K.grid_title(grid, one)
+              == "green soldier — a 3-phase loop, seen 7 time(s) — plays columns 1 2 4",
               "one subject captions the sheet", K.grid_title(grid, one))
 
         # pose002 is alone under "player"; the rest are "green".
@@ -318,7 +319,7 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
         both = K.Names({"cycles": {"cycle000": "the player's run"},
                         "subjects": {"green-soldier": "the green-uniformed enemy"},
                         "poses": {pid: {"subject": "green-soldier"} for pid in ids}})
-        check(K.grid_title(grid, both) == "the player's run",
+        check(K.grid_title(grid, both) == "the player's run — plays columns 1 2 4",
               "a named run outranks its subjects", K.grid_title(grid, both))
 
         # A subject named for no pose on this sheet never reaches the caption.
@@ -327,6 +328,47 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
         check(K.grid_title(grid, elsewhere) == bare,
               "a subject belonging to no pose here changes nothing",
               K.grid_title(grid, elsewhere))
+
+
+def test_a_repeated_phase_says_which_column_plays_again():
+    """Issue #400: a loop whose phases 1 and 3 are one drawing is laid out in
+    fewer columns than it has phases, so the caption must state the order the
+    columns play in — otherwise one run reads like two merged animations. A
+    variant's column is played by no phase, and a phase drawn on an earlier
+    sheet has no column here at all."""
+    doc = _doc_with_cycle()
+    doc["poses"].append(_pose("pose005", 80, {3: (0, 0), 0: (0, 1)}))
+    doc["cycles"] = [
+        {"id": "cycle000", "period": 4, "repeats": 5,
+         "poses": ["pose001", "pose002", "pose001", "pose000"], "hold": [8, 8, 8, 8]},
+        {"id": "cycle001", "period": 2, "repeats": 3,
+         "poses": ["pose002", "pose005"], "hold": [8, 8]},
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), doc)
+        builder = K.KitBuilder(pack)
+        first, second = [g for g in builder.build() if g.kind == "cycle"]
+        ids = [c.pose.id for c in first.cells]
+        check(ids == ["pose001", "pose002", "pose000", "pose003"],
+              "the repeated phase is laid out once, the variant beside its base", str(ids))
+        check(K.playback_columns(first) == [1, 2, 1, 3],
+              "each phase maps to the column it plays from", str(K.playback_columns(first)))
+        title = K.grid_title(first, K.Names())
+        check(title.endswith("— plays columns 1 2 1 3 (column 1 plays twice)"),
+              "the caption states the column order and which column repeats", title)
+        named = K.grid_title(first, K.Names({"cycles": {"cycle000": "the run"}}))
+        check(named == "the run — plays columns 1 2 1 3 (column 1 plays twice)",
+              "a human name keeps the order after it", named)
+        check(K.playback_columns(second) == [None, 1] and
+              K.grid_title(second, K.Names()).endswith("— plays columns - 1"),
+              "a phase drawn on an earlier sheet reads as -", K.grid_title(second, K.Names()))
+        first.name = "usr000"
+        rec = K._file_record(first, K.Names())
+        check(rec["playsColumns"] == [1, 2, 1, 3] and rec["title"] == title,
+              "the fragment carries the same order as data, beside the caption", str(rec))
+        notes = " ".join(K._notes(pack, builder, [first, second], K.Names(), "p"))
+        check("plays columns" in notes and "playsColumns" in notes,
+              "the notes tell the artist how to read the order", notes[:200])
 
 
 def test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason():
@@ -357,6 +399,7 @@ def main():
         test_a_name_is_claimed_by_creating_it_so_two_writers_cannot_collide,
         test_names_caption_a_file_and_absence_falls_back_to_the_id,
         test_a_sheet_is_captioned_by_the_subject_it_holds,
+        test_a_repeated_phase_says_which_column_plays_again,
         test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason,
     ]
     for t in tests:

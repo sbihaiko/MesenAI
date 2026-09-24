@@ -590,6 +590,51 @@ def sheet_subjects(grid, names):
     return sorted(order, key=lambda s: (-counts[s], order.index(s)))
 
 
+def playback_columns(grid):
+    """The column (1-based, in figures) each phase of the grid's run plays
+    from, in the run's phase order; None for a phase with no column here.
+
+    Issue #400: `_take` lays a figure out once, so a loop whose phases 1 and 4 are
+    one drawing has fewer columns than phases, and a variant takes a column
+    no phase plays from. Read off the cells `_run_grid` placed — a phase's
+    pose may sit in a variant's column when it was placed beside its base —
+    and off `run.poses`, never off the pixels. Empty for a grid with no run."""
+    if grid.run is None or not grid.rows:
+        return []
+    column = {}
+    for cell in grid.rows[0]:
+        column.setdefault(cell.pose.id, cell.col + 1)
+    return [column.get(pid) for pid in grid.run.poses]
+
+
+def playback_clause(grid):
+    """`plays columns 1 2 3 1 4 5 (column 1 plays twice)`, or "" for no run.
+    A `-` is a phase this sheet does not draw (laid out on an earlier sheet,
+    or with no art at all); the notes say so once."""
+    order = playback_columns(grid)
+    if not order:
+        return ""
+    text = "plays columns " + " ".join(str(c) if c else "-" for c in order)
+    times = {2: "twice", 3: "three times"}
+    repeats = [f"column {c} plays {times.get(order.count(c), f'{order.count(c)} times')}"
+               for c in sorted({c for c in order if c and order.count(c) > 1})]
+    return f"{text} ({', '.join(repeats)})" if repeats else text
+
+
+def _run_title(grid, names, who):
+    run = grid.run
+    text, source = E.caption(run.id, run.label, run.label_source, names.run(run.id))
+    if source == E.LABEL_SOURCE_NAMES:
+        return text
+    kind = "loop" if grid.kind == "cycle" else "ordered run"
+    tail = f"a {len(run.poses)}-phase {kind}, seen {run.repeats} time(s)"
+    if who:
+        return f"{who} — {tail}"
+    if source != E.LABEL_SOURCE_ID:
+        return f"{run.id} — {text}"
+    return f"{run.id} — {tail}"
+
+
 def grid_title(grid, names):
     """The file's caption: what is on the sheet, then what the recording
     measured about it.
@@ -604,18 +649,12 @@ def grid_title(grid, names):
     With nothing at all the caption is the run/pose id plus the counts, which
     is the honest fallback and is never dressed up as a name."""
     who = ", ".join(names.subject_label(k) for k in sheet_subjects(grid, names))
-    run = grid.run
-    if run is not None:
-        text, source = E.caption(run.id, run.label, run.label_source, names.run(run.id))
-        if source == E.LABEL_SOURCE_NAMES:
-            return text
-        kind = "loop" if grid.kind == "cycle" else "ordered run"
-        tail = f"a {len(run.poses)}-phase {kind}, seen {run.repeats} time(s)"
-        if who:
-            return f"{who} — {tail}"
-        if source != E.LABEL_SOURCE_ID:
-            return f"{run.id} — {text}"
-        return f"{run.id} — {tail}"
+    if grid.run is not None:
+        # Issue #400: every run caption ends in the order its columns play in, so a
+        # row with fewer columns than phases says which column repeats.
+        order = playback_clause(grid)
+        head = _run_title(grid, names, who)
+        return f"{head} — {order}" if order else head
     cells = grid.cells
     if len(cells) == 1:
         pose = cells[0].pose
@@ -652,6 +691,10 @@ def _file_record(grid, names):
         #in one OAM frame, and no tile is filled in from the ROM or guessed.
         "seen": True,
     }
+    if grid.run is not None:
+        #Issue #400: the column each phase plays from, in phase order (null = a
+        #phase this sheet does not draw) — the caption's order, as data.
+        rec["playsColumns"] = playback_columns(grid)
     if getattr(grid, "figure", None):
         #ADR-0225 §2: the same rows as one pixel-precise composed view.
         rec["figure"] = grid.figure
@@ -703,8 +746,11 @@ def _notes(pack, builder, grids, names, pack_arg):
         "A figure is laid out once, on the first run that ordered it, so a row can hold fewer "
         "columns than its animation has phases: a phase whose silhouette repeats (the same "
         "drawing twice in one loop) is one column, and a phase already drawn on an earlier "
-        "sheet is not repeated here. files[].ids is always exactly what is on the sheet, in "
-        "reading order, row by row.",
+        "sheet is not repeated here. A cycle's or sequence's title ends in the order its "
+        "columns play in (\"plays columns 1 2 3 1 4 5 (column 1 plays twice)\"), counted "
+        "in figures from the left, and files[].playsColumns carries the same order; a - is a "
+        "phase this sheet does not draw. files[].ids is always exactly what is on the sheet, "
+        "in reading order, row by row.",
         "A column is a phase or a variant of the phase to its left — a variant is the same "
         "figure plus something small the recorder saw attached to it (a muzzle flash, a shot), "
         "and it sits immediately after the figure it varies (ADR-0179).",

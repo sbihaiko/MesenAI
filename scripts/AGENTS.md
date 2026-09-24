@@ -730,7 +730,14 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   entry the cycles did not already cover, then the remainder wrapped at
   `--columns`. A variant (ADR-0179 §4) is the column after the figure it
   varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why. A
-  figure is laid out once, so a row can be shorter than its animation. A sheet
+  figure is laid out once, so a row can be shorter than its animation, and so
+  a run's file carries `files[].playsColumns` (#400): the 1-based column, in
+  figures from the left, each phase of `run.poses` plays from, in phase order
+  - read off the placed cells, never off pixels - with `null` for a phase this
+  sheet does not draw (laid out on an earlier sheet, or no art). The caption
+  ends in the same order (`plays columns 1 2 3 1 4 5 (column 1 plays twice)`,
+  `-` for a `null`). There is no mirror mark: `poses.json` records no mirror
+  relation, so neither says a column is another one flipped. A sheet
   is captioned by the run's own `--names` entry, failing that by the
   **subjects** its poses are filed under in that file (most cells first, the
   key humanised - the `subjects` prose goes to `notes[]` once), and failing
