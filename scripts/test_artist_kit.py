@@ -116,6 +116,26 @@ def test_a_fusion_is_never_laid_out():
         check("pose004" in dropped, "the fragment's dropped[] says why", str(dropped))
 
 
+def test_a_one_part_fusion_is_dropped_and_says_so():
+    """ADR-0228: a kept pose plus tiles that never stood alone is a fusion with
+    a single named part; it is kept out of every grid like any fusion, and
+    dropped[] must not claim a second half was laid out."""
+    doc = _doc_with_cycle()
+    doc["poses"].append(_pose("pose005", 3, {0: (0, 0), 1: (0, 1), 3: (1, 0)},
+                              fusionOf=["pose000"]))
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), doc)
+        builder = K.KitBuilder(pack)
+        ids = {c.pose.id for g in builder.build() for c in g.cells}
+        check("pose005" not in ids, "a one-part fusion is in no grid", str(sorted(ids)))
+        whys = {d["path"]: d["why"] for d in K._dropped(builder)}
+        why = whys.get("pose005", "")
+        check("ADR-0228" in why and "pose000" in why and "both halves" not in why,
+              "dropped[] names the one part and cites ADR-0228", why)
+        check("ADR-0177" in whys.get("pose004", ""),
+              "a two-part fusion keeps the ADR-0177 wording", whys.get("pose004", ""))
+
+
 def test_every_figure_shares_the_rows_baseline():
     """The alignment the tool exists for: pad to one box, centre across, and
     put every figure's bottom row on the same line."""
@@ -390,6 +410,7 @@ def main():
         test_a_cycle_becomes_one_row_in_phase_order,
         test_a_variant_sits_next_to_its_base,
         test_a_fusion_is_never_laid_out,
+        test_a_one_part_fusion_is_dropped_and_says_so,
         test_every_figure_shares_the_rows_baseline,
         test_the_rest_grid_bins_by_box_so_a_row_is_uniform,
         test_the_exported_sheet_is_a_legal_composed_sheet,

@@ -706,6 +706,15 @@ def _dropped(builder):
     for pid in sorted(builder.excluded_fusions):
         pose = builder.poses.by_id(pid)
         parts = ", ".join(pose.fusion_of) if pose is not None else ""
+        if pose is not None and len(pose.fusion_of) == 1:
+            # ADR-0228: one kept part plus tiles that never stood alone.
+            out.append({"path": pid,
+                        "why": f"the recorder classified it as a figure ({parts}) touched by "
+                               f"another made of tiles never seen on their own — the figure is "
+                               f"laid out by itself and the other's tiles stay on the pack's "
+                               f"sprite sheets, so painting this one would paint a bystander "
+                               f"(ADR-0228)"})
+            continue
         out.append({"path": pid,
                     "why": f"the recorder classified it as two figures that touched "
                            f"({parts or 'a fusion'}) — both halves are laid out on their own, "

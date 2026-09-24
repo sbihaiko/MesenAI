@@ -130,6 +130,12 @@ namespace MesenSheets
 		//fusion when its tiles split, at some translation, into two entries the
 		//recorder *also* saw standing on their own. Both parts are kept poses,
 		//so both already cleared kPoseMinFrames.
+		//
+		//ADR-0228 (issue #401) closes the gap between that rule and ADR-0179
+		//§4's variant: a kept pose plus a remainder of kPoseMinTiles or more
+		//tiles is a fusion even when the remainder never stood alone (Bill's
+		//death tumble, only ever drawn over the soldier that killed him). It
+		//is labelled with the one kept part; a two-part split still wins.
 		void LabelPoseFusions(std::vector<PoseEntry>& entries)
 		{
 			//Tile set -> rank. A kept pose's Tiles are normalised (the smallest
@@ -175,6 +181,9 @@ namespace MesenSheets
 				}
 
 				bool labelled = false;
+				//ADR-0228: the first kept part (file order) that fits with a
+				//pose-sized remainder, used only when no two-part split exists.
+				int64_t onePart = -1;
 				for(uint32_t rank : candidates) {
 					const std::vector<PoseTile>& part = entries[rank].Tiles;
 					const PoseTile& head = part[0];
@@ -226,6 +235,9 @@ namespace MesenSheets
 
 						std::map<std::vector<PoseTile>, uint32_t>::const_iterator match = byTiles.find(rest);
 						if(match == byTiles.end()) {
+							if(onePart < 0) {
+								onePart = rank;
+							}
 							continue;
 						}
 						entries[bi].FusionOf.push_back(rank);
@@ -236,6 +248,9 @@ namespace MesenSheets
 					if(labelled) {
 						break;
 					}
+				}
+				if(!labelled && onePart >= 0) {
+					entries[bi].FusionOf.push_back((uint32_t)onePart);
 				}
 			}
 		}

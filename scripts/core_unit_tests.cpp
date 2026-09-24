@@ -5790,6 +5790,63 @@ namespace
 				"BlocoP: tiles that never stood alone are part of the figure, not a fusion",
 				"pose" + std::to_string(i) + " fusionOf=" + std::to_string(stats.Poses[i].FusionOf.size()));
 		}
+		//ADR-0228 leaves a sub-kPoseMinTiles remainder where ADR-0179 §4 put it.
+		Check(stats.Poses.size() == 2 && stats.Poses[1].VariantOf == 0,
+			"BlocoP: ADR-0228 - a kept pose plus a 3-tile remainder is still a variant",
+			stats.Poses.size() == 2 ? "variantOf=" + std::to_string(stats.Poses[1].VariantOf) : "");
+	}
+
+	//ADR-0228 (issue #401): the 5-tile figure of the test above, alone for 5
+	//frames, then touched for 3 by a `strangerTiles`-tile 2-column block that
+	//never stands alone - Bill's death tumble, only ever drawn over the soldier
+	//that killed him.
+	PoseStats PosePlusUnseenStranger(uint32_t strangerTiles, Vocabulary& vocab)
+	{
+		std::vector<OamFrame> frames;
+		uint32_t frameNumber = 0;
+		for(uint32_t f = 0; f < 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			frame.Entries.push_back(OamAt(21, 100, 100));
+			frame.Entries.push_back(OamAt(22, 108, 100));
+			frame.Entries.push_back(OamAt(23, 100, 108));
+			frame.Entries.push_back(OamAt(24, 108, 108));
+			frame.Entries.push_back(OamAt(25, 100, 116));
+			if(f >= 5) {
+				for(uint32_t t = 0; t < strangerTiles; t++) {
+					frame.Entries.push_back(OamAt((ShapeId)(61 + t), 116 + 8 * (t % 2), 100 + 8 * (t / 2)));
+				}
+			}
+			frames.push_back(frame);
+		}
+		vocab = BuildSpriteVocabulary(frames);
+		return BuildPoses(frames, vocab);
+	}
+
+	void TestAPosePlusAPoseSizedUnseenRemainderIsAFusion()
+	{
+		const uint32_t sizes[2] = { 8, kPoseMinTiles };
+		for(uint32_t size : sizes) {
+			Vocabulary vocab;
+			PoseStats stats = PosePlusUnseenStranger(size, vocab);
+			std::string what = std::to_string(size) + "-tile";
+			Check(stats.Poses.size() == 2 && stats.Poses[1].Tiles.size() == 5 + size,
+				"BlocoP: ADR-0228 - the figure alone and the figure plus an unseen " + what + " stranger are two entries",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				continue;
+			}
+			const PoseEntry& whole = stats.Poses[1];
+			Check(whole.FusionOf.size() == 1 && whole.FusionOf[0] == 0,
+				"BlocoP: ADR-0228 - a kept pose plus an unseen " + what + " remainder is a fusion of that pose",
+				"fusionOf=" + std::to_string(whole.FusionOf.size()));
+			Check(whole.VariantOf == -1 && stats.Poses[0].FusionOf.empty(),
+				"BlocoP: ADR-0228 - the one-part fusion is not a variant, and the part is not a fusion",
+				"variantOf=" + std::to_string(whole.VariantOf));
+			std::string json = SerializePoses(vocab, stats);
+			Check(json.find("\"fusionOf\": [\"pose000\"]") != std::string::npos,
+				"BlocoP: ADR-0228 - a one-part fusion serialises as a one-id fusionOf", "");
+		}
 	}
 
 	void TestTwoCopiesOfOneShapeAreAFusionOfItWithItself()
@@ -9222,6 +9279,7 @@ int main()
 	TestPoseClustersJoinAcrossEightPixelsAndNotNine();
 	TestAPoseThatSplitsIntoTwoPosesIsLabelledAFusion();
 	TestAFigurePlusALooseProjectileIsNotAFusion();
+	TestAPosePlusAPoseSizedUnseenRemainderIsAFusion();
 	TestTwoCopiesOfOneShapeAreAFusionOfItWithItself();
 	TestPoseFramesCountRepeatCount();
 	TestPoseThresholdsDropWhatTheyClaim();
