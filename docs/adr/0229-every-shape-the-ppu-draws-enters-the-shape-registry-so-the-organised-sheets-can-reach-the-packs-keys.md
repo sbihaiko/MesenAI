@@ -99,6 +99,45 @@ and confirm that `mep_build` round-trips the kit byte-identically
 (iii) are measured next. The decision is written here, by hand, after those
 numbers.
 
+### Measured 2026-09-23 on a prototype of (i) (not a decision)
+
+The prototype is a one-line hook in `ProcessTile` that calls `ShapeIdFor` on
+each new exact key. It is switched by `MESEN_ADR0229_REGISTER_ALL`, so both
+arms ran on one binary; it was not merged, and the log reproduces its diff. Full log, hashes and
+commands: `docs/validation/f14.4-adr0229-option-i-measurement-2026-09-23.md`.
+
+| | Castlevania before | after (i) | Zelda before | after (i) |
+|---|---|---|---|---|
+| pack coverage, shapes (this ADR's ratio) | 19.9 % | 19.9 % | 16.0 % | 16.0 % |
+| pack coverage, keys | 16.6 % | 16.6 % | 12.2 % | 12.2 % |
+| coverage of *drawn* shapes | 100 % | 100 % | 100 % | 100 % |
+| coverage of *drawn* keys | 84.7 % | 84.7 % | 45.6 % | 45.8 % |
+| registry size | 592 | 611 | 294 | 294 |
+| `unsorted` cells | 135 | 154 | 79 | 79 |
+| grid dump bytes (`K` lines) | 43.99 MB (342) | 43.82 MB (342) | 65.98 MB (190) | 65.93 MB (190) |
+| `sheets/` bytes | 2 355 708 | 2 361 332 | 781 664 | 780 254 |
+| wall clock, median of 4 (s) | 19.5 | 19.7 | 23.6 | 24.6 (inside the noise) |
+| `mep_build` round trip | 0 errors, byte-identical | same, same keys | 0 errors, byte-identical | same |
+
+What the numbers show:
+
+- The Context's premise does not hold on these runs. The 81–83 % the table
+  above calls the gap is almost entirely the bootstrap's PRG-scan
+  `defaultTile` export: tiles the recording never drew (Castlevania: 532 of
+  2 673 shapes drawn, Zelda: 260 of 1 620). Today's sheets already reach
+  every drawn shape.
+- The drawn keys that are still unreachable are extra palettes of shapes that
+  are already on a sheet. A cell carries one palette. (i) does not address
+  that gap.
+- The 19 shapes (i) added on Castlevania are unflipped forms of mirrored
+  sprites that are already reachable through the sidecar's `source` key
+  (ADR-0178). ADR-0209's 19.2 % did not credit `source`, and 19.9 % is the
+  same baseline with it credited.
+- As prototyped, (i) also shifts the organised output (ids and first-seen
+  palettes). Zelda's never-firing `spriteNearby` conditions, the ones that
+  name a background palette, go from 1 to 6.
+- The hook fits `HdPackBuilder.cpp`'s ADR-0137 ceiling with 0 lines to spare.
+
 ## Decision
 
 Not decided. The user leans (i) (2026-09-23); acceptance waits on the
