@@ -29,12 +29,15 @@ string an artist pastes as a Photoshop layer name, so the file the paint
 program exports is the file `import` reads.
 
 `import` is ADR-0209 Q3 (i) resolved by ADR-0213 §4 into (h): the same path,
-re-imported explicitly, no watcher. A cell is written into its source sheet
-only where the figure differs from the twin — an unpainted figure changes
-nothing, and a cell already carrying those pixels is left alone. The sheet
-then reaches the game the way every painted sheet does: `mep_build.py build`
-rewrites `hires.txt` to point the key at the painted cell, and *HD Packs >
-Reload Repainted Images* (F12.3, ADR-0212) shows it without reopening the ROM.
+re-imported explicitly, no watcher. A cell is written only where the figure
+differs from the twin — an unpainted figure changes nothing, and a cell
+already carrying those pixels is left alone. It is written where the pack's
+built `hires.txt` already draws its key from (#413): the source cell when
+that cell owns the key, else the owning crop of another sheet (a kit
+project's `usrNNN` row) and not the source. So `mep_build.py build` changes
+no rule, and *HD Packs > Reload Repainted Images* (F12.3, ADR-0212) shows the
+paint without reopening the ROM; an import that must re-point a key says so.
+A later `export` shows paint routed that way.
 
 Where the layout comes from is stated in the sidecar (`source`): `poses` when
 `sheets/poses.json` records the silhouette (ADR-0170 §4), `walk` when the pack
@@ -47,6 +50,8 @@ through `sheet_repaint`.
 """
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import shutil
@@ -57,6 +62,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import asset_names as N  # noqa: E402 — F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
+import mep_addition  # noqa: E402 — the one key spelling build and lint share
 import mep_build  # noqa: E402
 import ora_writer  # noqa: E402 — ADR-0220: the layered .ora beside the figure
 import sheet_repaint  # noqa: E402
@@ -288,11 +294,13 @@ def _paste_over(dst, src, x, y):
                 dst.px[d:d + 4] = src.px[o:o + 4]
 
 
-def compose_cells(pack: E.Pack, cells, unit, scale, home_of):
+def compose_cells(pack: E.Pack, cells, unit, scale, home_of, manifest=None):
     """`(canvas_1x, canvas)` for placed cells: sized to the cells' pixel
     extent, drawn back to front so the frontmost opaque pixel wins where
     cells overlap. No gutter inside a figure (ADR-0225 §2). `home_of(entry)`
-    returns the `(Sheet, cell)` an entry's art comes from."""
+    returns the `(Sheet, cell)` an entry's art comes from. With `manifest`
+    (`manifest_owners`), paint an earlier import routed to the sheet that owns
+    a cell's key is shown too (#413)."""
     width = max(c["x"] for c in cells) + unit
     height = max(c["y"] for c in cells) + unit
     canvas_1x = sheet_repaint.Image(width, height)
@@ -304,6 +312,8 @@ def compose_cells(pack: E.Pack, cells, unit, scale, home_of):
         art = sheet.cell_image(cell)
         painted = sheet.cell_image_painted(cell, scale) if scale > 1 else None
         big = painted if painted is not None else art.upscale(scale)
+        if manifest is not None:
+            big = routed_paint(pack, sheet, cell, scale, manifest, big)
         if overlaps[i]:
             _paste_over(canvas_1x, art, entry["x"], entry["y"])
             _paste_over(canvas, big, entry["x"] * scale, entry["y"] * scale)
@@ -331,7 +341,8 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
     if not cells:
         raise FigureError(f"{figure_id}: no sheet shows any of its cells")
     canvas_1x, canvas = compose_cells(pack, cells, unit, scale,
-                                      lambda e: home_cell(pack, figure, e["node"]))
+                                      lambda e: home_cell(pack, figure, e["node"]),
+                                      manifest_owners(pack))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     # ADR-0220 §1: the layered .ora from this same canvas, beside the pair.
@@ -525,10 +536,210 @@ def _merge_owned(current, fig_cell, owned, unit, scale):
     return out
 
 
-def import_figure(pack: E.Pack, png_path: Path) -> dict:
-    """Write the painted cells of a figure back into the sheets they came
-    from. Only a cell that differs from the `*.orig.png` twin is written; a
-    cell the sheet already holds is left alone. Returns a report."""
+# ---- return target: the crop the built manifest draws (#413) -----------------
+#
+# A figure's sidecar names the sheet each cell was *cut from* (for the kit's
+# own figures, always the `sprites` vocabulary). That is not necessarily the
+# sheet whose crop `hires.txt` points the key at: in a kit project the
+# untouched `usrNNN` row outranks the vocabulary (`_SHEET_RANK`), so it owns
+# the key. Writing the paint into the vocabulary cell made that cell "painted",
+# painted beats untouched (ADR-0153 §4), and the next build re-pointed the
+# key — a manifest change, which Reload Repainted Images (ADR-0212) cannot
+# apply. So import writes the paint where the build already draws the key
+# from, and leaves the source cell alone when another sheet owns every key it
+# emits: painting both would make the source a painted sprite crop that loses
+# its key, which the build refuses (#253).
+
+def _quiet_build(folder: Path) -> int:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        return mep_build.main(["build", str(folder), "--quiet"])
+
+
+def _parse_owners(lines):
+    """`(owners, index_keyed, version)` from a built `hires.txt`: `owners` maps
+    each canonical `(tileData, palette)` to the set of `(sheet png name, x, y)`
+    crops (sheet pixels at `<scale>`) its `<tile>` rules point at, over every
+    condition variant."""
+    version, images, owners = 0, [], {}
+    rules = []
+    for line in lines:
+        s = line.strip()
+        if s.startswith("<ver>"):
+            try:
+                version = int(s[5:].strip())
+            except ValueError:
+                pass
+        elif s.startswith("<img>"):
+            images.append(s[5:].strip())
+        else:
+            m = mep_build._TILE_RE.match(s)
+            if m:
+                rules.append([f.strip() for f in m.group(2).split(",")])
+    index_keyed = False
+    for f in rules:
+        if len(f) < 5:
+            continue
+        try:
+            img, x, y = int(f[0]), int(f[3]), int(f[4])
+        except ValueError:
+            continue
+        key = mep_addition.canonical_key((f[1], f[2]), version)
+        index_keyed = index_keyed or mep_addition.is_index_key(key[0])
+        rel = images[img] if 0 <= img < len(images) else ""
+        if rel.startswith("sheets/"):
+            owners.setdefault(key, set()).add((rel[len("sheets/"):], x, y))
+    return owners, index_keyed, version
+
+
+def manifest_owners(pack: E.Pack, scratch=None):
+    """`_parse_owners` of the manifest `mep_build.py build` makes of the pack
+    as it is right now, before this import — the manifest the running game
+    loaded when the artist followed build -> play. Built in a throwaway copy
+    (build rewrites sheets in place, ADR-0178). `({}, False, 0)` when the pack
+    has no manifest or does not build: then there is no owner to protect."""
+    textures = pack.sheets_dir.parent
+    if pack.sheets_dir.name != "sheets" or not (textures / "hires.txt").is_file():
+        return {}, False, 0
+    with tempfile.TemporaryDirectory(dir=scratch) as td:
+        work = Path(td) / "control"
+        shutil.copytree(textures.parent, work)
+        if _quiet_build(work) != 0:
+            return {}, False, 0
+        lines = (work / "textures" / "hires.txt").read_text(encoding="utf-8", errors="replace").splitlines()
+    return _parse_owners(lines)
+
+
+def _cell_keys(sheet: E.Sheet, cell: dict, index_keyed: bool, version: int):
+    """`[(key, lx, ly)]`: every key the build emits from `cell` (its own
+    `tiles[]` and every alias's, ADR-0153 §3), keyed the way the build keys
+    it (CHR index on an index-keyed game, ADR-0172; the unflipped `source`,
+    ADR-0178), with the 8x8 sub-tile's 1x offset inside the cell."""
+    per = 4 if sheet.unit >= 16 else 1
+    lists = [cell.get("tiles")] + [a.get("tiles") for a in cell.get("aliases") or [] if isinstance(a, dict)]
+    out = []
+    for tiles in lists:
+        if not isinstance(tiles, list):
+            continue
+        for i, t in enumerate(tiles[:per]):
+            if not isinstance(t, dict):
+                continue
+            data = str(t.get("tile") or "").strip().upper()
+            if index_keyed:
+                idx = t.get("index")
+                if not isinstance(idx, int) or idx < 0:
+                    continue
+                data = mep_addition.index_token(idx)
+            else:
+                src = str(t.get("source") or "").strip().upper()
+                data = src if mep_build._HEX_TILE_RE.match(src) else data
+            key = mep_addition.canonical_key((data, str(t.get("palette") or "")), version)
+            out.append((key, (i % 2) * 8, (i // 2) * 8))
+    return out
+
+
+def _twin_crop(sheet: E.Sheet, x: int, y: int, cache=None):
+    """The 8x8 1x crop of `sheet`'s `*.orig.png` at `(x, y)`, or None."""
+    if not sheet.orig_path or not sheet.orig_path.is_file():
+        return None
+    cache = {} if cache is None else cache
+    if sheet.orig_path not in cache:
+        cache[sheet.orig_path] = sheet_repaint.read_png(sheet.orig_path)
+    img = cache[sheet.orig_path]
+    if x < 0 or y < 0 or x + 8 > img.width or y + 8 > img.height:
+        return None
+    return img.crop(x, y, 8, 8)
+
+
+def _painted_over_twin(sheet: E.Sheet, img, px: int, py: int, pixels, scale: int, cache=None) -> bool:
+    """True when `img` (the sheet at `scale`) already carries paint at the
+    `pixels`-sized crop `(px, py)` — `_EditedProbe`'s test, against the
+    nearest upscale of the twin — and that paint is not `pixels`."""
+    current = img.crop(px, py, pixels.width, pixels.height)
+    if current.px == pixels.px or px % scale or py % scale:
+        return False
+    subs = []
+    for dy in range(0, pixels.height // scale, 8):
+        for dx in range(0, pixels.width // scale, 8):
+            subs.append((dx, dy, _twin_crop(sheet, px // scale + dx, py // scale + dy, cache)))
+    if any(t is None for _x, _y, t in subs):
+        return False
+    return any(current.crop(dx * scale, dy * scale, 8 * scale, 8 * scale).px != t.upscale(scale).px
+               for dx, dy, t in subs)
+
+
+def routed_paint(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest, big):
+    """`big` (the cell at `scale`) with each 8x8 sub-tile whose key another
+    sheet owns replaced by that owner's pixels, where the owner carries paint
+    — what `import` routed there (#413) — so a re-export shows it. Unpainted
+    owners leave `big` untouched, so an unpainted pack exports as before."""
+    write_source, routes, _moves = plan_targets(pack, sheet, cell, scale, manifest)
+    if write_source or not routes:
+        return big
+    out, cache = None, {}
+    for other, ox, oy, lx, ly in routes:
+        if other.scale != scale or not other.png_path.is_file():
+            continue
+        img = sheet_repaint.read_png(other.png_path)
+        if ox + 8 * scale > img.width or oy + 8 * scale > img.height:
+            continue
+        crop = img.crop(ox, oy, 8 * scale, 8 * scale)
+        twin = _twin_crop(other, ox // scale, oy // scale, cache)
+        if twin is None or crop.px == twin.upscale(scale).px:
+            continue
+        if out is None:
+            out = big.clone()
+        out.paste(crop, lx * scale, ly * scale)
+    return out if out is not None else big
+
+
+def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest):
+    """Where one painted cell goes: `(write_source, routes, moves)`.
+
+    `routes` is `[(owner Sheet, x, y, lx, ly)]` — each 8x8 crop another sheet
+    owns for a key this cell emits, with the sub-tile offset `(lx, ly)` of the
+    paint to copy there. An owner whose twin art is not the source's is
+    skipped (never paint over a different drawing). `write_source` says the
+    source cell is written: when it owns a key itself, when a key has no
+    owner at all, or when an owner had to be skipped — paint is never
+    dropped, even at the cost of a reopen. `moves` is True when this import
+    will re-point or add a rule at the next build (the reload then cannot
+    show it, ADR-0212)."""
+    owners, index_keyed, version = manifest
+    if not owners:
+        return True, [], False
+    by_name = {s.name: s for s in pack.sheets}
+    cx, cy = int(cell["x"]), int(cell["y"])
+    routes, self_owned, orphan, skipped, twins = [], False, False, False, {}
+    for key, lx, ly in _cell_keys(sheet, cell, index_keyed, version):
+        mine = (sheet.name, (cx + lx) * scale, (cy + ly) * scale)
+        found = owners.get(key) or set()
+        if not found:
+            orphan = True  # no rule draws this key today; painting it adds one
+        for owner in sorted(found):
+            if owner == mine:
+                self_owned = True
+                continue
+            other = by_name.get(owner[0])
+            ox, oy = owner[1], owner[2]
+            here = _twin_crop(sheet, cx + lx, cy + ly, twins)
+            there = (_twin_crop(other, ox // scale, oy // scale, twins)
+                     if other is not None and not ox % scale and not oy % scale else None)
+            if here is None or there is None or here.px != there.px:
+                skipped = True
+                continue
+            routes.append((other, ox, oy, lx, ly))
+    write_source = self_owned or orphan or skipped or not routes
+    return write_source, routes, orphan or (write_source and (bool(routes) or skipped))
+
+
+def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
+    """Write the painted cells of a figure back into the pack. Only a cell
+    that differs from the `*.orig.png` twin is written; a cell the sheet
+    already holds is left alone. The paint lands on the crop the pack's
+    built manifest already draws each key from (#413, `plan_targets`), so the
+    rebuild changes no rule and the in-place reload shows it. Returns a
+    report."""
     png_path = Path(png_path)
     if not png_path.is_file():
         raise FigureError(f"{png_path}: not a file")
@@ -547,12 +758,39 @@ def import_figure(pack: E.Pack, png_path: Path) -> dict:
     unit = int(doc.get("unit") or 8)
 
     report = {"figure": doc.get("figure"), "scale": scale, "cells": 0, "painted": 0,
-              "written": 0, "alreadyApplied": 0, "sheets": [], "overlapped": 0}
+              "written": 0, "alreadyApplied": 0, "sheets": [], "overlapped": 0,
+              "rerouted": 0, "sourceLeft": 0, "moves": 0, "overwrote": 0}
     entries = [e for e in (doc.get("cells") or []) if isinstance(e, dict)]
     for e in entries:
         e["x"], e["y"] = int(e["x"]), int(e["y"])
     overlaps = _overlaps(entries, unit)
-    canvases = {}   # sheet name -> (Sheet, Image, dirty)
+    canvases = {}   # sheet name -> [Sheet, Image, dirty]
+    manifest = None  # built on the first painted cell only: an unpainted import builds nothing
+    twins = {}
+
+    def canvas(sheet):
+        if sheet.name not in canvases:
+            if sheet.scale != scale:
+                raise FigureError(
+                    f"{sheet.name}: painted at {sheet.scale}x while the figure is at {scale}x — "
+                    "all sheets of a pack share one <scale>")
+            canvases[sheet.name] = [sheet, sheet_repaint.read_png(sheet.png_path), False]
+        return canvases[sheet.name]
+
+    def put(sheet, pixels, px, py):
+        """Paste `pixels` at sheet pixel `(px, py)`; True when anything changed."""
+        slot = canvas(sheet)
+        img = slot[1]
+        if px + pixels.width > img.width or py + pixels.height > img.height:
+            raise FigureError(f"{sheet.name}: crop ({px},{py}) falls outside the sheet")
+        if img.crop(px, py, pixels.width, pixels.height).px == pixels.px:
+            return False
+        if _painted_over_twin(sheet, img, px, py, pixels, scale, twins):
+            report["overwrote"] += 1  # paint already there, not this figure's
+        img.paste(pixels, px, py)
+        slot[2] = True
+        return True
+
     for i, entry in enumerate(entries):
         report["cells"] += 1
         x, y = entry["x"], entry["y"]
@@ -575,24 +813,26 @@ def import_figure(pack: E.Pack, png_path: Path) -> dict:
             raise FigureError(f"{entry['sheet']}: cell for node {entry.get('node')} is gone")
         if sheet.unit != unit:
             raise FigureError(f"{sheet.name}: unit {sheet.unit} does not match the figure's {unit}")
-        if sheet.name not in canvases:
-            if sheet.scale != scale:
-                raise FigureError(
-                    f"{sheet.name}: painted at {sheet.scale}x while the figure is at {scale}x — "
-                    "all sheets of a pack share one <scale>")
-            canvases[sheet.name] = [sheet, sheet_repaint.read_png(sheet.png_path), False]
-        _, img, _ = canvases[sheet.name]
+        img = canvas(sheet)[1]
         sx, sy = int(cell["x"]) * scale, int(cell["y"]) * scale
         if sx + unit * scale > img.width or sy + unit * scale > img.height:
             raise FigureError(f"{sheet.name}: cell ({cell['x']},{cell['y']}) falls outside the sheet")
         current = img.crop(sx, sy, unit * scale, unit * scale)
         new_cell = fig_cell if owned is None else _merge_owned(current, fig_cell, owned, unit, scale)
-        if current.px == new_cell.px:
+        if manifest is None:
+            manifest = manifest_owners(pack, scratch)
+        write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest)
+        changed = put(sheet, new_cell, sx, sy) if write_source else False
+        for other, ox, oy, lx, ly in routes:
+            sub = new_cell.crop(lx * scale, ly * scale, 8 * scale, 8 * scale)
+            changed = put(other, sub, ox, oy) or changed
+        if not changed:
             report["alreadyApplied"] += 1
             continue
-        img.paste(new_cell, sx, sy)
-        canvases[sheet.name][2] = True
         report["written"] += 1
+        report["rerouted"] += 1 if routes else 0
+        report["sourceLeft"] += 0 if write_source else 1
+        report["moves"] += 1 if moves else 0
     for sheet, img, dirty in canvases.values():
         if dirty:
             sheet_repaint.write_png(sheet.png_path, img)
@@ -618,15 +858,16 @@ def hires_keys(path: Path) -> set:
 
 
 def figure_sheet_bytes(pack: E.Pack, png_path: Path) -> dict:
-    """`{sheet png name: bytes}` for every sheet a figure's sidecar names, as
-    they are on disk right now — the control `verify` restores."""
-    doc = _load_figure_doc(Path(png_path))
-    out = {}
-    for entry in doc.get("cells") or []:
-        sheet = _group_sheet(pack, Path(str(entry.get("sheet") or "")).stem)
-        if sheet is not None and sheet.png_path.is_file() and sheet.name not in out:
-            out[sheet.name] = sheet.png_path.read_bytes()
-    return out
+    """`{sheet png name: bytes}` for every sheet the import may write, as they
+    are on disk right now — the control `verify` restores. That is every
+    sheet of the pack, not only the ones the figure's sidecar names: the
+    paint lands on whichever sheet owns the key (#413)."""
+    _load_figure_doc(Path(png_path))  # refuse a non-figure before snapshotting
+    return {s.name: s.png_path.read_bytes() for s in pack.sheets if s.png_path.is_file()}
+
+
+def _read_bytes(path: Path):
+    return path.read_bytes() if path.is_file() else None
 
 
 def verify(pack_dir: Path, restore=None, scratch=None) -> dict:
@@ -639,23 +880,31 @@ def verify(pack_dir: Path, restore=None, scratch=None) -> dict:
     `hires.txt` carries every CHR tile (ADR-0043) while a rebuild carries only
     what the sheets hold, so "keys on disk vs rebuilt" would fail on every
     first build for a reason that has nothing to do with the figure. That
-    drift is reported separately as `drift_from_recording`."""
+    drift is reported separately as `drift_from_recording`. Whether the two
+    rebuilt `hires.txt` are byte-identical is reported as
+    `manifest_unchanged` (#413): the in-place reload needs it, the key-set
+    round trip does not, so it informs rather than fails."""
     recorded = hires_keys(pack_dir / "textures" / "hires.txt")
     with tempfile.TemporaryDirectory(dir=scratch) as td:
         control = Path(td) / "control"
         shutil.copytree(pack_dir, control)
         for name, data in (restore or {}).items():
             (control / "textures" / "sheets" / name).write_bytes(data)
-        rc_control = mep_build.main(["build", str(control), "--quiet"])
+        rc_control = _quiet_build(control)
         before = hires_keys(control / "textures" / "hires.txt")
+        manifest_before = _read_bytes(control / "textures" / "hires.txt")
         work = Path(td) / "pack"
         shutil.copytree(pack_dir, work)
-        rc = mep_build.main(["build", str(work), "--quiet"])
+        rc = _quiet_build(work)
         after = hires_keys(work / "textures" / "hires.txt")
+        manifest_after = _read_bytes(work / "textures" / "hires.txt")
     report = {"errors": rc, "control_errors": rc_control,
               "keys_before": len(before), "keys_after": len(after),
               "lost": len(before - after), "added": len(after - before),
-              "drift_from_recording": len(recorded ^ before)}
+              "drift_from_recording": len(recorded ^ before),
+              # #413: an unchanged manifest is what lets Reload Repainted
+              # Images (ADR-0212) show the paint without reopening the ROM.
+              "manifest_unchanged": manifest_before is not None and manifest_before == manifest_after}
     report["ok"] = rc == 0 and report["lost"] == 0 and report["added"] == 0
     return report
 
@@ -692,17 +941,30 @@ def cmd_export(args) -> int:
 def cmd_import(args) -> int:
     pack = _open_pack(args.pack)
     restore = figure_sheet_bytes(pack, Path(args.figure_png)) if args.verify else None
-    report = import_figure(pack, Path(args.figure_png))
+    report = import_figure(pack, Path(args.figure_png), args.scratch)
     print(f"{report['figure']}: {report['cells']} cells, {report['painted']} painted, "
           f"{report['written']} written, {report['alreadyApplied']} already on the sheet")
+    if report["rerouted"]:
+        print(f"  {report['rerouted']} painted cell(s) written where the built hires.txt draws their "
+              f"key from; {report['sourceLeft']} of their source cell(s) left as they were, so no rule moves")
     for name in report["sheets"]:
         print(f"  wrote {pack.sheets_dir / name}")
-    if report["written"]:
+    if report["overwrote"]:
+        print(f"  note: {report['overwrote']} crop(s) already carried other paint — an earlier import "
+              "of this figure, or a paint on the sheet itself — and now carry this figure's; a figure "
+              "and its sheet row are the same tiles, paint one, not both")
+    if report["moves"]:
+        print(f"  note: {report['moves']} painted cell(s) will re-point a key in hires.txt at the next "
+              "build — reopen the ROM to see them; Reload Repainted Images cannot (ADR-0212)")
+    elif report["written"]:
         print("  next: python3 scripts/mep_build.py build <pack>, then HD Packs > Reload Repainted Images")
     if args.verify:
         v = verify(Path(args.pack), restore, args.scratch)
         print(f"verify: build errors {v['errors']}, keys {v['keys_before']} -> {v['keys_after']}, "
               f"{v['lost']} lost, {v['added']} added: {'PASS' if v['ok'] else 'FAIL'}")
+        print("  hires.txt " + ("unchanged by this import: Reload Repainted Images shows it"
+                                if v["manifest_unchanged"] else
+                                "changed by this import: reopen the ROM to see it (ADR-0212)"))
         if v["drift_from_recording"]:
             print(f"  ({v['drift_from_recording']} key(s) differ between the recorded hires.txt and a "
                   "rebuild without this figure — the bootstrap-vs-sheets drift ADR-0172 accepted, "

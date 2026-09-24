@@ -234,6 +234,96 @@ def test_round_trip_unpainted_paints_one_cell_and_rebuilds():
               "and against a control rebuilt without the paint", json.dumps(v))
 
 
+def _paint_node(out: Path, stem: str, doc: dict, node: int, color):
+    target = next(c for c in doc["cells"] if c["node"] == node)
+    fig = sheet_repaint.read_png(out / f"{stem}.png")
+    fig.paste(T._solid(8 * SCALE, color), target["x"] * SCALE, target["y"] * SCALE)
+    sheet_repaint.write_png(out / f"{stem}.png", fig)
+    return target
+
+
+def _cell_px(sheets: Path, sheet: str, node: int):
+    doc = json.loads((sheets / f"{sheet}.json").read_text(encoding="utf-8"))
+    cell = next(c for c in doc["cells"] if c.get("metatile") == node)
+    return int(cell["x"]) * SCALE, int(cell["y"]) * SCALE
+
+
+def test_a_figure_cut_from_the_vocabulary_lands_on_the_sheet_that_owns_the_key():
+    """#413: a pose figure maps every cell to `sprites.json`, but in the built
+    pack the untouched `spr000` group (rank 4) owns those keys. The paint must
+    land on the owner's crop, so the rebuild changes no rule and the in-place
+    reload (ADR-0212) can show it; writing `sprites.png` instead made it the
+    painted crop, which re-pointed the key (painted beats untouched)."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        sheets = pack_dir / "textures" / "sheets"
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        manifest_before = (pack_dir / "textures" / "hires.txt").read_bytes()
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        check(all(c["sheet"] == "sprites.json" for c in doc["cells"]),
+              "the pose figure's cells come from the sprite vocabulary", str(doc["cells"]))
+        before = _snapshot(sheets)
+        magenta = (255, 0, 255, 255)
+        _paint_node(out, "pose000-figure", doc, 1, magenta)
+
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["painted"] == 1 and rep["written"] == 1 and rep["sheets"] == ["spr000.png"],
+              "the painted cell is written into spr000.png, the sheet that owns its key", json.dumps(rep))
+        check(rep["rerouted"] == 1 and rep["sourceLeft"] == 1 and rep["moves"] == 0,
+              "and reported as routed, with the vocabulary cell left alone", json.dumps(rep))
+        after = _snapshot(sheets)
+        check(after["sprites.png"] == before["sprites.png"], "sprites.png is untouched")
+        sx, sy = _cell_px(sheets, "spr000", 1)
+        (Path(td) / "spr000.before.png").write_bytes(before["spr000.png"])
+        b_img = sheet_repaint.read_png(Path(td) / "spr000.before.png")
+        a_img = sheet_repaint.read_png(sheets / "spr000.png")
+        check(_differs_only_in(b_img, a_img, sx, sy, 8 * SCALE, 8 * SCALE) and a_img.get(sx, sy) == magenta,
+              "spr000.png differs only inside node 1's cell, which carries the paint", str(a_img.get(sx, sy)))
+
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+        check((pack_dir / "textures" / "hires.txt").read_bytes() == manifest_before,
+              "hires.txt is byte-identical to the build before the import (no rule moved)")
+
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["written"] == 0 and rep["alreadyApplied"] == 1, "importing it again is a no-op",
+              json.dumps(rep))
+        doc2 = F.export_figure(E.Pack(pack_dir), "pose000", Path(td) / "figures2")
+        fig2 = sheet_repaint.read_png(Path(td) / "figures2" / "pose000-figure.png")
+        t = next(c for c in doc2["cells"] if c["node"] == 1)
+        check(fig2.get(t["x"] * SCALE, t["y"] * SCALE) == magenta,
+              "a re-export shows the paint that was routed to spr000")
+
+        v = F.verify(pack_dir, restore={"spr000.png": before["spr000.png"]})
+        check(v["ok"] and v["manifest_unchanged"],
+              "verify: same key set, and the manifest is unchanged by the import", json.dumps(v))
+
+
+def test_an_owner_with_other_art_is_skipped_and_the_move_is_reported():
+    """Never paint over a different drawing: when the owning crop's twin is
+    not the source cell's, the source is written (paint is never dropped) and
+    the import says the next build re-points the key."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        sheets = pack_dir / "textures" / "sheets"
+        # spr000's node-1 cell gets other original art (twin and sheet alike).
+        sx, sy = _cell_px(sheets, "spr000", 1)
+        for name, n in (("spr000.orig.png", 1), ("spr000.png", SCALE)):
+            img = sheet_repaint.read_png(sheets / name)
+            img.paste(T._solid(8 * n, (1, 2, 3, 255)), sx // SCALE * n, sy // SCALE * n)
+            sheet_repaint.write_png(sheets / name, img)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        before = _snapshot(sheets)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["sheets"] == ["sprites.png"] and rep["moves"] == 1 and rep["rerouted"] == 0,
+              "the source sheet is written and the move is reported", json.dumps(rep))
+        v = F.verify(pack_dir, restore={"sprites.png": before["sprites.png"]})
+        check(not v["manifest_unchanged"], "verify reports the manifest change", json.dumps(v))
+
+
 def test_a_resized_figure_is_refused():
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack", with_poses=False)
