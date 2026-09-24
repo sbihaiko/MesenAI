@@ -201,7 +201,12 @@ def _recorded_done_steps(kit: dict) -> list:
     this kit actually has - a `cp` of a glob that matches nothing fails, and an
     artist runs these lines as written. Figures (ADR-0225 §2) are not copied at
     all: `mep_figure.py import` returns them onto the copy's sprite sheets, so
-    they get their own step between the copy and the build (#399)."""
+    they get their own step between the copy and the build (#399). A `scene/`
+    screen is a verbatim copy of the pack's `textures/backgrounds/screenNNN.png`,
+    which the manifest's `<background>` line draws by that name, so painted
+    screens return by a plain copy back into that folder (#403). The figure
+    loop stops at the first failed import: a `for` loop's status is its last
+    command's, so a later success would otherwise hide a lost figure."""
     paths = _kit_paths(kit, "path")
     figures = _kit_paths(kit, "figure")
     lines = ["cp -R <game>/auto <game>/painted"]
@@ -209,6 +214,8 @@ def _recorded_done_steps(kit: dict) -> list:
         lines.append("cp <kit>/sheets/*.png <kit>/sheets/*.json <game>/painted/textures/sheets/")
     if any(p.startswith("chr/") for p in paths):
         lines.append("cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/")
+    if any(p.startswith("scene/") for p in paths):
+        lines.append("cp <kit>/scene/*.png  <game>/painted/textures/backgrounds/")
     if figures:
         # Fail fast: a `for` loop's status is its last iteration's, so a failed
         # import must exit the loop and `&&` must hold the build back. `sh -c`
@@ -229,6 +236,14 @@ def _recorded_done_steps(kit: dict) -> list:
         "untouched reference, and painting it is how your work becomes invisible.",
         "",
     ]
+    if any(p.startswith("scene/") for p in paths):
+        out.extend([
+            "A `scene/` screen goes back into `textures/backgrounds/` under the same name: "
+            "it is the pack's own whole-screen capture, drawn by the manifest's "
+            "`<background>` line on the frames it was frozen for. A screen you did not "
+            "paint is copied back unchanged, so copying all of them is safe.",
+            "",
+        ])
     if figures:
         out.extend([
             "Figures are not copied: `figures/usr*-figure.png` is a view, and "

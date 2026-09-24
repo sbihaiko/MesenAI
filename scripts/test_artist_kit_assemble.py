@@ -10,6 +10,7 @@ Run:  python3 scripts/test_artist_kit_assemble.py
 """
 
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -288,6 +289,62 @@ def test_the_done_steps_name_only_what_the_kit_has():
               "a kit of pattern pages alone copies chr/ and no sheets/", str(cmds))
 
 
+def test_the_done_steps_return_painted_screens_to_the_backgrounds():
+    # #403: the background kit hands out scene/screenNNN.png and invites
+    # painting it, but the done steps never copied scene/ anywhere - measured
+    # on a Mega Man 3 recording: build exit 0, the painted pixel absent from the
+    # built pack's textures/backgrounds/screen001.png.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("background", files=[
+            {"path": "sheets/obj000.png", "cells": 2},
+            {"path": "scene/screen001.png", "unit": "scene", "cells": 1}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        scene = [i for i, c in enumerate(cmds)
+                 if c.startswith("cp <kit>/scene/") and c.endswith("<game>/painted/textures/backgrounds/")]
+        clone = next((i for i, c in enumerate(cmds) if c.startswith("cp -R <game>/auto")), None)
+        build = next((i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c), None)
+        check(len(scene) == 1, "a kit with scene/ screens copies them into the painted copy's "
+              "textures/backgrounds/", str(cmds))
+        check(scene and clone is not None and build is not None and clone < scene[0] < build,
+              "the screen copy runs after the recording copy and before the build", str(cmds))
+        check("textures/backgrounds/" in section and "<background>" in section,
+              "the done section says where a painted screen goes and what draws it")
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("background", files=[{"path": "sheets/obj000.png", "cells": 2}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check(not any("<kit>/scene/" in c or "backgrounds" in c for c in cmds),
+              "a kit without scene/ screens copies no scene/", str(cmds))
+
+
+def test_the_figure_loop_stops_at_the_first_failed_import():
+    # A `for` loop's status is its last command's: without a stop, a failed
+    # import followed by a good one exits 0 and the build runs on a copy that
+    # lost the first figure (Codex on #402).
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3, "figure": "figures/usr000-figure.png"}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        loop = next((c for c in cmds if c.startswith("sh -c 'for f in <kit>/figures/")), None)
+        check(loop is not None, "a kit with figures has a figure loop", str(cmds))
+        if loop is None:
+            return
+        figures = Path(td) / "figures"
+        figures.mkdir()
+        for name in ("usr000-figure.png", "usr001-figure.png"):
+            (figures / name).write_bytes(b"")
+        # The first import fails, the second succeeds, and a sentinel after the
+        # `&&` records whether the build would have run. The stand-in import
+        # lives inline because `sh -c` sees no function from the outer shell.
+        script = (loop.replace("<kit>", td)
+                      .replace("python3 scripts/mep_figure.py import <game>/painted",
+                               '[ -n "${f##*usr000*}" ] && :')
+                  + f"\ntouch {td}/after")
+        proc = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        check(proc.returncode != 0 and not (Path(td) / "after").exists(),
+              "a failed figure import stops the done steps even when a later import succeeds",
+              f"exit {proc.returncode}, after={(Path(td) / 'after').exists()}")
+
+
 def main():
     tests = [
         test_parts_are_ordered_most_recognisable_first,
@@ -304,6 +361,8 @@ def main():
         test_two_surfaces_that_differ_only_in_case_stop_the_kit,
         test_the_done_steps_import_painted_figures_between_copy_and_build,
         test_the_done_steps_name_only_what_the_kit_has,
+        test_the_done_steps_return_painted_screens_to_the_backgrounds,
+        test_the_figure_loop_stops_at_the_first_failed_import,
     ]
     for t in tests:
         t()
