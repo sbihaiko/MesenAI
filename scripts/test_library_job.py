@@ -419,6 +419,48 @@ def test_a_declared_mechanism_list_is_printed():
           "and the undeclared warning is not shown for a set that declared one")
 
 
+def test_every_versioned_stage_set_names_a_dump_and_routes_that_exist():
+    """The real `scripts/stages/`, not a fixture (F14.3).
+
+    A set is bound to the exact dump its routes were authored on (#314), so
+    each manifest must carry a well-formed No-Intro SHA1, no two sets may claim
+    one dump, and the set must hold at least one recordable route on disk.
+    Every folder must declare: an undeclared set is silently `static`, which is
+    what four of the six were until F14.3.
+    """
+    root = Path(__file__).resolve().parent / "stages"
+    sets, undeclared = L.load_stage_sets(root)
+    check(not undeclared, "every versioned stage folder has a stage-set.json",
+          f"undeclared: {undeclared}")
+    claimed = {}
+    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+        manifest = d / L.SET_MANIFEST
+        if not manifest.is_file():
+            continue
+        doc = json.loads(manifest.read_text(encoding="utf-8"))
+        hashes = (doc.get("rom") or {}).get("noIntroSha1")
+        ok_list = isinstance(hashes, list) and bool(hashes)
+        well_formed = ok_list and all(
+            isinstance(h, str) and len(h) == 40 and h == h.upper()
+            and all(c in "0123456789ABCDEF" for c in h) for h in hashes)
+        check(well_formed, f"{d.name}: rom.noIntroSha1 is a list of 40-hex upper-case SHA1s",
+              repr(hashes))
+        check(isinstance(doc.get("game"), str) and doc["game"].strip(),
+              f"{d.name}: names its game")
+        check(isinstance(doc.get("mechanisms", []), list),
+              f"{d.name}: mechanisms, when present, is a list")
+        for h in hashes if ok_list else []:
+            other = claimed.setdefault(str(h).upper(), d.name)
+            check(other == d.name, f"{d.name}: {h} is claimed by no other set",
+                  f"also claimed by {other}/")
+        routes = L.recordable_stages(d)
+        check(bool(routes) and all(p.is_file() and p.stat().st_size for p in routes),
+              f"{d.name}: holds at least one non-empty recordable route",
+              f"{[p.name for p in routes]}")
+    check(len(sets) >= 6, "all six golden sets resolve through load_stage_sets",
+          f"{sorted({s['name'] for s in sets.values()})}")
+
+
 def main():
     tests = [
         test_the_two_hashes_are_different_and_both_are_computed,
@@ -443,6 +485,7 @@ def main():
         test_retained_frames_come_from_the_recorders_own_line,
         test_the_report_names_the_driver_and_the_reason_for_every_rom,
         test_a_declared_mechanism_list_is_printed,
+        test_every_versioned_stage_set_names_a_dump_and_routes_that_exist,
     ]
     for t in tests:
         t()
