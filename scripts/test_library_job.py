@@ -258,6 +258,10 @@ def test_nothing_matching_is_static_with_its_chr_kind():
 # --- the states a route set needs -------------------------------------------
 
 
+def _starts(d):
+    return {r: v["start"] for r, v in L.start_plan(d)["routes"].items()}
+
+
 def test_a_mint_serves_the_stages_that_start_from_it():
     # The bug this exists for: `.mss` is never versioned, so a checkout has the
     # scripts and no states. The first F12.10 run recorded every Mega Man 3
@@ -265,13 +269,15 @@ def test_a_mint_serves_the_stages_that_start_from_it():
     with tempfile.TemporaryDirectory() as td:
         d = stage_set(Path(td), "game", ["A" * 40],
                       ["mint-stage1.txt", "stage1-run.txt", "stage1-probe.txt"])
-        pairs, unserved = L.mint_plan(d)
-        check(len(pairs) == 1, "one mint", str(pairs))
-        check(pairs[0][1] == ["stage1-probe", "stage1-run"],
-              "it serves both the stage and its probe — the README asks for the "
-              "state copied beside the probe as <stage>-probe.mss",
-              str(pairs[0][1]))
-        check(unserved == [], "nothing is left to run from power-on")
+        plan = L.start_plan(d)
+        check(_starts(d) == {"stage1-probe": "mint mint-stage1.txt",
+                             "stage1-run": "mint mint-stage1.txt"},
+              "the mint serves both the stage and its probe — the README asks "
+              "for the state copied beside the probe as <stage>-probe.mss",
+              str(_starts(d)))
+        ops = [s["op"] for s in plan["steps"]]
+        check(ops == ["mint", "copy"],
+              "one mint run, then a copy for the second route it serves", str(ops))
 
 
 def test_the_most_specific_mint_wins():
@@ -279,27 +285,196 @@ def test_the_most_specific_mint_wins():
         d = stage_set(Path(td), "game", ["A" * 40], [
             "mint-stage1.txt", "mint-stage1-water.txt",
             "stage1-run.txt", "stage1-water.txt"])
-        pairs = dict((m.name, s) for m, s in L.mint_plan(d)[0])
-        check(pairs["mint-stage1-water.txt"] == ["stage1-water"],
+        starts = _starts(d)
+        check(starts["stage1-water"] == "mint mint-stage1-water.txt",
               "the water state comes from the water mint, not from stage1 — "
-              "which is the whole reason both files exist",
-              str(pairs.get("mint-stage1-water.txt")))
-        check(pairs["mint-stage1.txt"] == ["stage1-run"],
-              "and stage1-run still comes from the general mint",
-              str(pairs.get("mint-stage1.txt")))
+              "which is the whole reason both files exist", str(starts))
+        check(starts["stage1-run"] == "mint mint-stage1.txt",
+              "and stage1-run still comes from the general mint", str(starts))
 
 
-def test_a_stage_no_mint_reaches_is_reported_not_silently_recorded():
-    # Contra's later stages come from a `.chain.txt`, which this job does not
-    # replay. Recording them from power-on would produce a title screen and a
-    # row that looks like a recording.
+def test_a_route_nothing_starts_is_skipped_not_recorded_from_power_on():
+    # #407: Contra's stage2-base has no mint and no chain. Run from power-on it
+    # recorded the attract demo, identical to eight other routes.
     with tempfile.TemporaryDirectory() as td:
         d = stage_set(Path(td), "game", ["A" * 40],
-                      ["mint-stage1.txt", "stage1-run.txt", "stage4-boss.txt"])
-        pairs, unserved = L.mint_plan(d)
-        check(unserved == ["stage4-boss"],
-              "the stage no mint reaches is named", str(unserved))
-        check(pairs[0][1] == ["stage1-run"], "and the others are unaffected")
+                      ["mint-stage1.txt", "stage1-run.txt", "stage2-base.txt"])
+        info = L.start_plan(d)["routes"]["stage2-base"]
+        check(info["start"] is None,
+              "a route no mint or chain produces is skipped", str(info))
+        check("stage2-base.mss" in info["reason"],
+              "and the reason names the state it lacks", info["reason"])
+        check(_starts(d)["stage1-run"] == "mint mint-stage1.txt",
+              "the other routes are unaffected")
+
+
+def test_a_chain_is_replayed_from_a_state_the_job_produced():
+    with tempfile.TemporaryDirectory() as td:
+        d = stage_set(Path(td), "game", ["A" * 40], [
+            "mint-stage1.txt", "stage1-run.txt", "stage1-run-to-stage2-base.chain.txt",
+            "stage2-base.txt", "stage2-base-probe.txt"])
+        plan = L.start_plan(d)
+        starts = _starts(d)
+        check(starts["stage2-base"] == "chain stage1-run-to-stage2-base.chain.txt",
+              "the chain's target starts from the chain", str(starts))
+        check(starts["stage2-base-probe"] == "copy of stage2-base.mss",
+              "and its probe from a copy of that state", str(starts))
+        order = [(s["op"], s["state"]) for s in plan["steps"]]
+        check(order.index(("mint", "stage1-run")) < order.index(("chain", "stage2-base"))
+              < order.index(("copy", "stage2-base-probe")),
+              "every step runs after the state it starts from exists", str(order))
+        chain = next(s for s in plan["steps"] if s["op"] == "chain")
+        check(chain["from"] == "stage1-run", "the chain starts from its <a>.mss", str(chain))
+
+
+def test_a_chain_from_a_state_nobody_can_mint_skips_everything_after_it():
+    # #407 as it is on disk: stage3-waterfall.mss cannot be re-minted from a
+    # checkout (README), so every chain below it is unreachable too.
+    with tempfile.TemporaryDirectory() as td:
+        d = stage_set(Path(td), "game", ["A" * 40], [
+            "mint-stage1.txt", "stage1-run.txt", "stage3-waterfall.txt",
+            "stage3-waterfall-to-stage3-boss.chain.txt", "stage3-boss.txt",
+            "stage3-boss-probe.txt"])
+        routes = L.start_plan(d)["routes"]
+        check(sorted(r for r, v in routes.items() if v["start"] is None)
+              == ["stage3-boss", "stage3-boss-probe", "stage3-waterfall"],
+              "the chain source, its target and the target's probe are skipped",
+              str(routes))
+        check("stage3-waterfall.mss" in routes["stage3-boss"]["reason"],
+              "the reason names the state the chain is missing",
+              routes["stage3-boss"]["reason"])
+        check(not any(s["op"] == "chain" for s in L.start_plan(d)["steps"]),
+              "and no chain is replayed from a state that does not exist")
+
+
+def test_a_room_with_its_own_state_is_not_served_by_a_prefix_mint():
+    # #408: `stage1-boss` shares mint-stage1's prefix, but navigation.json
+    # enters that room from its own state. Paired with the mint it recorded the
+    # stage-1 entry: 18 silhouettes against 155 from the wall state.
+    with tempfile.TemporaryDirectory() as td:
+        d = stage_set(Path(td), "game", ["A" * 40], [
+            "mint-stage1.txt", "stage1-run.txt", "stage1-long.txt", "stage1-boss.txt"])
+        (d / "navigation.json").write_text(json.dumps({"rooms": [
+            {"name": "stage1-boss", "state": "stage1-boss.mss", "input": "stage1-boss.txt"}]}),
+            encoding="utf-8")
+        starts = _starts(d)
+        check(starts["stage1-boss"] is None,
+              "the room is skipped: no exact mint and no chain yields its state",
+              str(starts))
+        check(starts["stage1-long"] == "mint mint-stage1.txt",
+              "stage1-long still starts at stage1-run's state, as every "
+              "measurement of it did (F12.6b, F12.14)", str(starts))
+        (d / "mint-stage1-boss.txt").write_text("60f -\n", encoding="utf-8")
+        check(_starts(d)["stage1-boss"] == "mint mint-stage1-boss.txt",
+              "an exact mint for the room does serve it")
+
+
+def test_a_set_with_no_way_to_make_a_state_boots_from_power_on():
+    # Metroid's stage1-run boots the game itself; it has no mint on purpose.
+    with tempfile.TemporaryDirectory() as td:
+        d = stage_set(Path(td), "game", ["A" * 40], ["stage1-run.txt"])
+        check(_starts(d) == {"stage1-run": L.POWER_ON},
+              "a set with no mint and no chain records its routes from power-on",
+              str(_starts(d)))
+
+
+def test_prune_drops_every_route_without_its_state_and_keeps_power_on():
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        for n in ("a", "b", "c", "d"):
+            (d / f"{n}.txt").write_text("60f -\n", encoding="utf-8")
+        (d / "a.mss").write_bytes(b"MSS")
+        starts = d / L.STARTS_FILE
+        starts.write_text(json.dumps({"routes": {
+            "a": {"start": "mint mint-a.txt", "reason": ""},
+            "b": {"start": "mint mint-b.txt", "reason": ""},   # its mint failed
+            "c": {"start": None, "reason": "nothing makes c.mss"},
+            "d": {"start": L.POWER_ON, "reason": "boots itself"}}}), encoding="utf-8")
+        n = L.prune_unstarted(d, starts)
+        left = sorted(p.stem for p in d.glob("*.txt"))
+        check(left == ["a", "d"] and n == 2,
+              "a route whose state is missing is not left for record_stages.sh "
+              "to run from power-on; a power-on route is kept", f"{left} {n}")
+        routes = json.loads(starts.read_text(encoding="utf-8"))["routes"]
+        check(routes["b"]["start"] is None and "b.mss" in routes["b"]["reason"],
+              "a mint that failed at run time is reported as a skip", str(routes["b"]))
+
+
+def test_the_real_contra_set_starts_only_what_a_checkout_can_produce():
+    root = Path(__file__).resolve().parent / "stages" / "contra"
+    starts = _starts(root)
+    skipped = sorted(r for r, v in starts.items() if v is None)
+    check(skipped == ["stage1-boss", "stage2-base", "stage3-boss", "stage3-boss-probe",
+                      "stage3-waterfall", "stage3-waterfall-probe", "stage4-base",
+                      "stage4-base-probe", "stage4-boss", "stage4-boss-probe"],
+          "the ten routes whose states live only under runs/ are skipped", str(skipped))
+    check(starts.get("stage1-long") == "mint mint-stage1.txt"
+          and starts.get("stage1-2p-probe") == "copy of stage1-2p.mss",
+          "and the six stage-1 routes start from their mints", str(starts))
+
+
+def _mss(path, ram):
+    """A save state `mss_ram.ram` can read, holding `ram` as internal RAM."""
+    import struct
+    import zlib
+    key = b"memoryManager.internalRam\0"
+    blob = key + struct.pack("<I", len(ram)) + bytes(ram)
+    name = b"g.nes"
+    data = (b"MSS" + struct.pack("<I", 1) + struct.pack("<I", 4) + struct.pack("<I", 0)
+            + bytes(20) + zlib.compress(b"\0" * 64)
+            + struct.pack("<I", len(name)) + name
+            + b"\0" + struct.pack("<II", len(blob), len(blob)) + blob)
+    Path(path).write_bytes(data)
+
+
+def test_per_route_evidence_shows_a_mis_started_route():
+    # #409: nine attract-demo routes left `seen %` at 87.6. The per-route rows
+    # show what it hides: identical recordings and the stage each start is in.
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "rom"
+        work = out / "stages-src"
+        work.mkdir(parents=True)
+        (work / "navigation.json").write_text(json.dumps({"navigation": {
+            "address": "0030", "values": [{"value": "00", "name": "stage1"},
+                                          {"value": "01", "name": "stage2"}]}}),
+            encoding="utf-8")
+        ram = bytearray(2048)
+        ram[0x30] = 1
+        _mss(work / "stage2-base.mss", ram)
+        routes = {"stage2-base": ("chain x.chain.txt", "T1", 3548, 358),
+                  "stage3-boss": (L.POWER_ON, "DEMO", 2973, 1058),
+                  "stage4-boss": (L.POWER_ON, "DEMO", 2973, 1058)}
+        for name, (start, tiles, ret, sil) in routes.items():
+            home = out / "stages" / name / "mesen-home"
+            home.mkdir(parents=True)
+            (home / "mesen.log").write_text(
+                f"[HD Pack Builder] poses: {sil} silhouettes from {ret} retained "
+                "OAM frames, 1 over the threshold\n", encoding="utf-8")
+            tex = out / "stages" / name / "g" / "auto" / "textures"
+            tex.mkdir(parents=True)
+            (tex / "hires.txt").write_text(tiles, encoding="utf-8")
+        (out / L.STARTS_FILE).write_text(json.dumps({"routes": dict(
+            {n: {"start": v[0], "reason": ""} for n, v in routes.items()},
+            **{"stage1-boss": {"start": None, "reason": "no state"}})}), encoding="utf-8")
+        ev = {r["route"]: r for r in L.route_evidence(out)}
+        check(ev["stage3-boss"]["sameAs"] == ["stage4-boss"],
+              "two routes with byte-identical recordings name each other",
+              str(ev["stage3-boss"]))
+        check(ev["stage2-base"]["sameAs"] == [], "a distinct recording names nobody")
+        check(ev["stage2-base"]["stageAtStart"] == "stage2 ($0030=01)",
+              "the start state's stage is read off the set's RAM probe",
+              str(ev["stage2-base"]["stageAtStart"]))
+        check(ev["stage2-base"]["retained"] == 3548 and ev["stage2-base"]["silhouettes"] == 358,
+              "retained frames and silhouettes are per route", str(ev["stage2-base"]))
+        row = {"name": "Contra", "driver": L.ROUTES, "status": "recorded",
+               "reason": "r", "noIntroSha1": "A" * 40, "chr": "CHR RAM",
+               "stageCount": 3, "routesSkipped": ["stage1-boss"],
+               "routes": list(ev.values())}
+        text = L.render_report([row])
+        check("## Routes: Contra" in text and "| stage3-boss | power-on |" in text
+              and "stage4-boss |" in text, "the report has a per-route table", text)
+        check("**stage1-boss** — no state" in text and "3 (+1 skipped)" in text,
+              "and lists every route it did not record, with the reason", text)
 
 
 def test_chain_and_mint_files_are_never_recorded_as_stages():
@@ -477,7 +652,14 @@ def main():
         test_nothing_matching_is_static_with_its_chr_kind,
         test_a_mint_serves_the_stages_that_start_from_it,
         test_the_most_specific_mint_wins,
-        test_a_stage_no_mint_reaches_is_reported_not_silently_recorded,
+        test_a_route_nothing_starts_is_skipped_not_recorded_from_power_on,
+        test_a_chain_is_replayed_from_a_state_the_job_produced,
+        test_a_chain_from_a_state_nobody_can_mint_skips_everything_after_it,
+        test_a_room_with_its_own_state_is_not_served_by_a_prefix_mint,
+        test_a_set_with_no_way_to_make_a_state_boots_from_power_on,
+        test_prune_drops_every_route_without_its_state_and_keeps_power_on,
+        test_the_real_contra_set_starts_only_what_a_checkout_can_produce,
+        test_per_route_evidence_shows_a_mis_started_route,
         test_chain_and_mint_files_are_never_recorded_as_stages,
         test_a_kit_that_was_never_produced_reads_as_absent_not_as_zero,
         test_seen_percent_is_weighted_by_cells_not_by_surfaces,
