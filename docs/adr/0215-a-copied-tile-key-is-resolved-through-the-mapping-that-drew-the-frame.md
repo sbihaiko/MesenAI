@@ -308,3 +308,65 @@ frame makes it copy again. The F12.2/F14.2 scan
 (`CopyAsMepSheetCellTests.cs`) now draws one frame after the load. The frame it
 reads is therefore the one after the state's, the only frame the trace can
 describe. Measurements: `docs/validation/issue-419-copy-after-state-load-2026-09-24.md`.
+
+## Amendment, 2026-09-24 (issue #431): a recorded palette is substituted only when palette RAM holds it
+
+The palette section's second bullet ("the pack keys it under exactly one other
+palette: emit that one") assumed that the recorded palette is one the frame
+can draw. A bootstrap recording breaks that assumption routinely: it keys most
+tiles under the fade it saw while the title came in. The Tetris 2 baseline of
+the F14.2 re-score (`docs/validation/f14.2-rescore-after-419-421-2026-09-24.md`)
+keys 474 of its 518 `<tile>` rules under the all-black `0F0F0F0F`, including
+tile `0x1170`. The copy substituted that palette on a frame fully faded in and
+drawn under `0F281807`. The pasted cell built and linted clean and rendered
+0 magenta pixels. The same cell with the live palette rendered 274 432.
+Gauntlet behaved the same way (1 023 of 1 023 lines).
+
+This applies the section's own rule ("never a plausible key it knows cannot
+match") to one more case. The three answers stay; only what counts as a
+candidate changes:
+
+- A palette the pack keys the tile under is a **candidate** only when palette
+  RAM holds it now for the same layer: one of the four background palettes for
+  a background tile, one of the four sprite palettes (color 0 packed as `FF`)
+  for a sprite. The words are packed the way `HdTileKey` packs them.
+- The live palette, or a `defaultTile` wildcard, among the pack's palettes:
+  keep the live palette (unchanged).
+- Exactly one candidate: substitute it (unchanged in shape; the fade no longer
+  qualifies).
+- Several candidates and none is live: refuse as `Ambiguous`, listing only the
+  candidates.
+- **No candidate** (new, `RecordedNotDrawn`): every palette the pack keys the
+  tile under is one the frame cannot draw. No paste of any of them can match on
+  this frame. The runtime asks for the tile under the live palette, so the copy
+  keeps the live palette and the receipt names the recorded palettes and says
+  that the paste adds a new key. This is not a refusal.
+- No rule at all for the tile is still `NoRule`, a refusal, as decided above.
+
+Why "palette RAM holds it" and not something stricter. The copy has no
+per-scanline palette trace (`_scanlineVideoRamAddr` and
+`_scanlineChrBankOffsets` are the only traces), so palette RAM at pause is the
+only evidence it can check. A palette that RAM holds on no slot of the layer is
+known not to be drawable now, and that is the case this amendment closes. Two
+residual cases remain, and both are stated rather than hidden:
+
+- On a frame whose palette RAM did not change between drawing and pause, every
+  cell is drawn under exactly the live palette. A candidate there sits on
+  another slot, so the substituted key matches where the frame draws the same
+  tile under that slot, not the clicked cell. The receipt names both palettes.
+  Removing the substitution altogether would contradict the bullet as decided,
+  and this amendment does not do that.
+- A substitution can be right for the clicked cell only when RAM changed after
+  the cell was drawn: a mid-frame palette swap, or a fade step written in
+  vblank. When RAM no longer holds the recorded palette on any slot, the copy
+  now keeps the live palette there too, and the receipt names the recorded one
+  so the artist can still choose it.
+
+Recording a per-scanline palette trace would settle both. It is not part of
+this amendment.
+
+Tests: `UI.Tests/Mep/NesPackTilePaletteTests.cs` (the Tetris 2 case, several
+recorded palettes none drawable, only drawable palettes count as candidates,
+the per-layer packing; the Metroid substitution still passes on a frame that
+holds `0F0F0F0F`). Measurements:
+`docs/validation/issue-431-fade-palette-copy-2026-09-24.md`.
