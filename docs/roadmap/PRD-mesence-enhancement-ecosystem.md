@@ -10,10 +10,10 @@ work lives in Part A, player-shell/chrome work lives in Part B — it is now
 expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
-the shipped record, and the pending slices: Phase 12 (paint loop,
-hand-authored conditions, the day-one block F12.9–F12.12), the ADR-0205
-replay slices, Phase 9's F9.18 human panel, the Phase 10 spike S10.b, and
-the manual/hardware-gated residue of the shipped phases. Phase 11
+the shipped record, and the pending slices: Phase 14 (proof at scale),
+Phase 12's open F12.11 row, the ADR-0205 replay slices (Phase 13),
+Phase 9's F9.18 human panel, the Phase 10 spike S10.b, and the
+manual/hardware-gated residue of the shipped phases. Phase 11
 consolidation is complete. Part B is the
 default-GUI roadmap: player
 chrome, Advanced GUI, pack identity (`pack_id`/`content_id`/version),
@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-20 — ADR-0219 accepted and **F12.9 shipped** with it; ADR-0210 §3 shipped as **F12.12**, bounded input measured the same day, which retracted ADR-0210's own "5 532 keys out of range" Context figure; the ADR-0217/ADR-0218 recorder change re-recorded and closed; ADR-0209's Q1–Q3 accepted and still not implemented; ADR-0220 left `proposed`, so F12.11 has not started; **2026-09-22** — ADR-0221 accepted as option B, opening **F12.13**, and ADR-0220 accepted, so **F12.11** is a pending slice; **F12.13 shipped** the same day with stop condition (1) **not met** — option B reclassifies but cannot move a gate because ADR-0050 excludes flat cells from the anchor pool, so ADR-0223 was left `proposed` for the follow-up; **F12.11 code landed** the same day, its row still live because stop condition (2) — GIMP and Krita, logged by a person — is open; ADR-0224 accepted (opt-in tag, renderer keeps behind-background sprites over colour-0 canvas) and **F12.15 shipped** the same day (stop condition (2) partially met, no direct `GetPixels` unit test); ADR-0223 accepted as option A and **F12.16 shipped** after F12.15 (card 374 -> 0 background cells; library 193 -> 219 captures); ADR-0194 accepted, nothing to build; ADR-0222 accepted as option A and **F12.14 shipped** the same day; ADR-0209 **Q2/Q3 shipped** as `mep_figure.py`, **Q1 shipped** later the same day (Core-inferred `label`, go-ahead *"vai com o Q1 da ADR-0209 em paralelo também"*)) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead; F14.4 waits on ADR-0229, `proposed`), Phase 12's **F12.11** (stop condition (2) needs a person; (3) moves into F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3), F12.2 is closed (evaluator row, 2026-09-19), and F12.18/F12.19 are merged with their owed rows in flight. Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -261,7 +261,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   exit 0. New module because `mep_build.py` and `sheet_repaint.py` sit at their
   line ceilings. Not verified: the in-game F12.3 reload and a real paint
   program (the paint step was a programmatic fill). Q1 (Core-inferred `label`)
-  is still pending.
+  shipped the same day (entry above).
   [Log](../validation/adr0209-q2-q3-figure-export-2026-09-22.md).
 - **F12.17** (2026-09-23) — a legacy pack keyed against an IPS-patched ROM is
   imported against the patched ROM (ADR-0198 §3, option (a); go-ahead
@@ -562,8 +562,8 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   unique in the pack (that is what these ADRs bought); it is simply not
   sufficient to identify the frame, since none of its three probes samples a
   cell that changed. Separating a capture from **frames** is a different
-  decision; it was taken on 2026-09-22 — ADR-0221, option B, pending as
-  **F12.13** (§4, Phase 12). Punch-Out!! (issue #339's game) is the clean case — all ten
+  decision; it was taken on 2026-09-22 — ADR-0221, option B, shipped the
+  same day as **F12.13** (entry above). Punch-Out!! (issue #339's game) is the clean case — all ten
   captures kept, none skipped, and the five credits screens that shared one
   probe triple now carry five distinct ones, which is ADR-0217 Option C
   separating rather than discarding. The cost is Option A's refusals, and it is
@@ -1019,27 +1019,16 @@ available in git and the logs.
 #### Phase 12 — Paint loop and hand-authored conditions
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
-("Gaps this table names"). **F12.1, F12.3, F12.4, F12.6a and F12.10 are delivered**
-(2026-09-17 and 2026-09-19, §3). F12.1's scale reference moved F12.3's premise —
-the load an artist waits for is a 13–16 s decode, not the 0.4 s parse — and
-F12.3 answered it with ADR-0212's per-image, in-place reload: a repainted sheet
-is back in the running game in 2 ms, without reopening the ROM. F12.4 then made
-the file name the join (ADR-0213), so the artist's own program exports onto the
-name the kit published. ADR-0196, ADR-0197 and ADR-0198 were accepted 2026-09-16 (§3 of
-each decided: reserved pattern + `$0D` palette; fixed `$0000`–`$07FF` window;
-import against the patched ROM with its cost stated); F12.5, F12.6a, F12.6b
-and F12.7 all shipped on 2026-09-19 (§3). The day-one block (F12.9–F12.12, added
-2026-09-19) is **no longer blocked on a missing decision**: ADR-0210 was accepted
-2026-09-20 and F12.12's code shipped the same day, ADR-0219 was accepted and
-**F12.9 shipped with it** on 2026-09-20 (§3), and only F12.11 still waits — on
-ADR-0220, which stays `proposed` by the user's decision of 2026-09-20 (no
-GIMP/Krita population is measured yet, and its stop condition (2) needs a person
-with both programs). The two rows that were code without a measurement were
-both measured on 2026-09-20 and are closed: F12.12's bounded input (2 583 cells
-from Contra80s, 0 shapes and 401 palettes from the Ninja Gaiden pack, and a
-retraction of ADR-0210's "5 532 out of range") and the ADR-0217/ADR-0218
-recorder change (**30 packs, 193 captures, 0 co-gated** across the whole bounded
-library, from 113 of 237 before) — §3 and their logs.
+("Gaps this table names"). Delivered (§3): F12.1, F12.3–F12.10 and
+F12.12–F12.17 (2026-09-17 to 2026-09-23), plus ADR-0209 Q1–Q3; F12.2's
+evaluator row closed 2026-09-19. F12.18 and F12.19 are merged (#395, #394)
+with their owed rows in flight. **F12.11 is the one open row:** ADR-0220 was
+accepted and its code landed on 2026-09-22; stop condition (3) (the paint
+round trip through F12.3) moves into Phase 14's F14.1, and (2) (GIMP and
+Krita, logged by a person) into F14.8. F12.1's scale reference moved F12.3's
+premise — the load an artist waits for is a 13–16 s decode, not the 0.4 s
+parse — and F12.3 answered it with ADR-0212's per-image, in-place reload: a
+repainted sheet is back in the running game in 2 ms, without reopening the ROM.
 
 **Why this phase.** The comparison table names seven rows where the
 inherited upstream toolchain still serves an author better than the layer
@@ -1144,34 +1133,14 @@ by the paint program; **nothing in the pack is ever read out of it**.
 |---|---|---|
 | F12.11 | **Layered surface for the paint program (OpenRaster).** Beside every surface PNG the kit writes `<name>.ora` — a zip with `stack.xml`, `mergedimage.png`, `Thumbnails/thumbnail.png` and one PNG per layer, written with `zipfile` + `xml.etree` and the PNG writer the generators already have. Layers, bottom to top — **five on a recorded surface, four on an F12.9 static page**: `orig` (the `*.orig.png` twin, `edit-locked`), `context` (the 1x stitched-map crop around a figure at 50 % opacity — only when a recording exists, absent on F12.9 pages), `paint` (fully transparent, the **selected** layer, the only one the artist touches), `guides` (cell grid, pose / cycle captions from `names.json` or the sidecar ids, hatch over `seen: false` cells — drawn in one sentinel colour outside every NES palette, `visibility="hidden"` for export), `palettes` (a swatch strip of the palettes recorded for that sheet, hidden). GIMP, Krita and MyPaint open `.ora` natively; Photoshop and Aseprite do not and stay on F12.4's per-layer asset names — **no `.psd` or `.aseprite` writer**, stated in `docs/remastering-a-game.md`. F12.11 is a second path beside F12.4, not its replacement: the artist evidence measured so far (Metroid, a spreadsheet user) does not show a GIMP/Krita population, so F12.4 stays the default path and this one is measured against it. **The return path does not change:** the artist exports a flat PNG over the F12.4 name; `sheet_repaint` keeps only cells that differ from `orig`, and `mep_lint.py` fails a cell that contains the sentinel colour (the guides layer was left visible) naming the cell. | **ADR-0220 accepted 2026-09-22 (*"aceito o F12.11. nao implemente ainda."*); code landed 2026-09-22 (`scripts/ora_writer.py`, `scripts/mep_sentinel.py`, 16 unit tests; build go-ahead *"dispara as frentes 1, 2, 3 e 4 em paralelo usando workflows"*), stop conditions (1) and (4) met by the automated pass; **(3) — a stroke on `paint`, exported flat, reaching the game through F12.3 — has no recorded run** (no test or log exercises that path yet), and **(2) — GIMP and Krita, logged by a person — is open**, so the row stays live. **2026-09-23 follow-up:** a person opened one four-layer sheet in GIMP 2.10 and Krita 5.3.4 — every layer named, but both readers open with `orig` active and no stack order fixes both, so by the user's option (b) the order stays and `ARTIST.md` / `docs/remastering-a-game.md` say "select `paint` before painting" (ADR-0220 amended); captions are fitted to the canvas and the `palettes` band follows first use; (2) still needs a person's log on the regenerated files including a five-layer surface, and (3) is still unevaluated (`docs/validation/f12.11-stop3-and-gimp-findings-2026-09-23.md`).** The ADR was needed before start because it adds a fifth file kind to ADR-0183 §2's surfaces and fixes the layer contract; it must also state that `.ora` is **write-only** for the toolchain (reading `paint` out of it is stdlib-trivial and is refused on purpose, or the sheet stops being the source of truth). Prerequisite chain, in full: F12.3 (the reload that shows it) → F12.4 (the name the flat export lands on) → F12.11; the SMB bounded input additionally needs F12.9. Bounded input: one Contra figure sheet (recorded, five layers) and one SMB static page from F12.9 (four layers). Stop when (1) `stack.xml` validates against the OpenRaster 0.0.5 schema shape the three programs read and each `.ora` round-trips through `zipfile` unchanged; (2) GIMP and Krita open both files with every layer named (five and four respectively) and `paint` selected — this row is logged by a person, per this phase's cold-read rule; (3) a stroke on `paint`, exported flat, reaches the game pixel-exact via F12.3 with the unchanged cells dropped; (4) the same export with `guides` left visible is refused by lint with the offending cell named. What we measure is ours: file validity, layer order, refusal, pixel-exact result. Re-measures "Painting, end to end" and the **"simple"** constraint: open one file, paint, export, look at the game. |
 
-**Order within this block.** F12.10 shipped first, on 2026-09-19 (§3), out of
-the order below: it needed no ADR, and paths (a)–(c) do not depend on F12.9.
-What F12.9 still owes it is path (d) — a ROM matching no route set resolves to
-`static` and produces no kit until then. F12.9 shipped on 2026-09-20 and closed that
-gap: a ROM matching no route set now produces a static kit, and F12.11's second
-bounded input (one SMB static page) exists. F12.12's gate — ADR-0210 accepted and
-its title made to agree with its §3 — was cleared on 2026-09-20, its code shipped
-the same day and its bounded input was measured the same day (§3), so its row is
-closed. F12.11 is the only one of the four still open: its chain is
-F12.3 → F12.4 → its own ADR → F12.11, the first two shipped on 2026-09-19, the
-third, ADR-0220, was left `proposed` by the user's decision of 2026-09-20 and
-**accepted on 2026-09-22**, and F12.11's code landed the same day with stop
-conditions (2) (a person's GIMP/Krita log) and (3) (the paint round-trip
-through F12.3) still unevaluated. Each slice is one task, and a
-slice that changes what the artist sees (F12.11) is not shipped until a person
-who did not build it logs its open-and-paint row.
-
-**Order.** F12.1, F12.3, F12.4 and F12.6a are delivered (2026-09-17,
-2026-09-19), and F12.5, F12.6b and F12.7 with them (2026-09-19). F12.6b
-closed half of what F12.6a's report left open:
-`memoryCheckConstant` is a verdict, `spriteNearby` and `memoryCheck` are still
-`not evaluable` and wait on the OAM-format decision, decided by ADR-0222 (accepted 2026-09-22, option A) and pending as **F12.14**. One
-slice per task. F12.8 shipped on 2026-09-19 (§3) and is not a
-prerequisite of any of them — it only guarantees that whatever surface those
-slices name, every recorded tile has one. F12.9–F12.12 (added 2026-09-19) follow the order
-stated in their own block, except that F12.10 shipped early (§3). Three of the
-four are now delivered — F12.9, F12.10 and F12.12 (§3) — and only **F12.11**
-remains open — its code landed 2026-09-22; stop conditions (2) (GIMP/Krita, a person's log) and (3) (paint round-trip through F12.3) are not evaluated yet. F12.9 also completed F12.10's path (d).
+**Order.** Of this block, F12.9, F12.10 and F12.12 are delivered (§3);
+F12.10 shipped first, and F12.9 completed its path (d), so a ROM matching no
+route set yields a static kit. F12.11's chain F12.3 → F12.4 → ADR-0220 →
+F12.11 is complete up to its two open stop conditions, now carried by F14.1
+and F14.8. F12.6b made `memoryCheckConstant` a verdict, and F12.14
+(ADR-0222, shipped 2026-09-22) made `spriteNearby` and `memoryCheck`
+evaluable. A slice that changes what the artist sees is not shipped until its
+cold-read row is logged (principles above).
 
 #### Phase 13 — Shared replays (ADR-0205)
 
@@ -1185,6 +1154,48 @@ sequence and bound the work.
 |---|---|---|
 | R.1 | **Publish.** The single *Record and share* action (ADR-0205 §2) producing a `.mmo` from power-on with the settings the ADR fixes; a `scripts/` lint that re-checks what the action guarantees (§3); the `[Replay]` Issue Form and title rule (§5); the author attaches the file to the issue in their own browser (§6); the workflow that validates the attachment and labels it. | ADR-0205 §1–§6 decided. Core/UI change for the action; stdlib for the lint; no new host — the attachment lives on the issue (§10). Bounded input: one Contra replay recorded by the action on the dev machine. Stop when the lint accepts the action's own output and refuses a `.mmo` recorded any other way with the §3 reason named, and the issue round-trips through the workflow into the label the ADR names. |
 | R.2 | **Consume.** The recordings catalog generated from accepted replay issues, listed in the client by loaded ROM and ranked by 👍 (§7); the structural gate that validates before listing (§8); removal by the author closing the issue, mirrored by `replay:removed` (§9). | ADR-0205 §7–§9 decided. Prerequisite: R.1 (there is nothing to list before something is published). Catalog script stdlib, client overlay in the UI project. Bounded input: the R.1 replay plus one closed issue. Stop when the client lists the open one for the matching ROM, hides it for any other ROM, and drops it within one catalog regeneration after the issue closes. |
+
+#### Phase 14 — Proof at scale
+
+**Status:** opened 2026-09-23 from the Phase 12 review of the same day. The
+user's decision on that review, verbatim: *"Sim, como recomendado
+(Recommended)"* — the numbering (Phase 13 is replays), the go-ahead for
+F14.1–F14.3, ADR-0229 opened `proposed` for F14.4, F14.5 as a measurement
+only, and the order in §5 item 6. Nothing in this phase is implemented yet.
+Two questions the review raised are already decided on open PR #397 and are
+not slices here: lint keeps not weighing `<tile>` conditions when it decides
+an `<addition>` anchor is keyed (*"Manter como está"*, recorded as an
+ADR-0196 §4 refinement), and Phase 10 names its subject from the kit (*"Pelo
+nome, no kit"*, the Phase 10 entry-point ADR on PR #397). The review
+numbered those two F14.6 and F14.7, so F14.8 keeps its number.
+
+**Why this phase.** Phase 12 built the artist surfaces one cause at a time,
+and each fix was measured against its own cause. Three things were never
+measured end to end: a painted cell reaching the running game through a
+paint-program export or a figure import, the 28-ROM cold read after every
+capture fix (criterion 3 is still 13/28, from
+`docs/validation/f12.2-opus-sweep-2026-09-19.md`), and how much of a pack the
+organised sheets can reach at all — 19.2 % (Castlevania) and 17.2 % (Zelda)
+of pack keys, because `ShapeIdFor` sees only the retained stream while
+`ProcessTile` emits a rule for everything the PPU draws (ADR-0209, "What (k)
+actually closed"). This phase closes the first two with bounded runs and
+measures the third before deciding it.
+
+**Prerequisite for the whole phase.** Issues #399, #400 and #401 — the three
+kit defects the 2026-09-23 Contra kit cold read found (painted figures never
+routed back into the pack, no phase order on a folded cycle, composites in
+the rest grid; open PR #398 carries the log) — merge first. The Contra
+re-record and that cold read are done (F12.18 (5) met, F12.19 (4) logged,
+verdict "no"), so F14.1 no longer re-records.
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| F14.1 | **The painted round trip in the running game.** One painted cell of the regenerated Contra kit reaches the running game pixel-exact through the F12.3 reload, twice: (a) a stroke on the `paint` layer of an F12.11 `.ora`, exported flat over the F12.4 name, and (b) a stroke on a `scripts/mep_figure.py export` figure, returned with `mep_figure.py import`. The paint program itself is not what this row measures — that is F12.11 (2), in F14.8. | Go-ahead verbatim *"Sim, como recomendado (Recommended)"* (2026-09-23); follows ADR-0220 (F12.11 (3)), ADR-0209 Q2/Q3 and ADR-0212. Prerequisite: #399 merged. May run in parallel with F14.3. Bounded input: the Contra stage-1 recording recipe of the 2026-09-23 re-record (mint with `scripts/stages/contra/mint-stage1.txt`, record with `stage1-probe.txt`, dylib provenance proven before recording; `.mss` is never versioned, so mint first), one unconditional cell, or a cell whose pose is known to be on screen at the compared frame — the 2026-09-23 attempt picked a `spriteNearby`-gated cell and compared only the final frame (`docs/validation/f12.11-stop3-and-gimp-findings-2026-09-23.md` §3.2). Use `headless_record`'s `replace=` and `reload-at-frame=` (emulated frames, not seconds). Stop when (1) path (a) renders pixel-exact at the compared frame after the reload, against an unpainted control of the same run that differs, with `sheet_repaint` dropping the unchanged cells — closes F12.11 (3); (2) path (b) does the same, and `mep_figure.py import --verify` reports 0 lost / 0 added keys — closes ADR-0209 Q2/Q3's "in-game F12.3 reload not verified"; (3) both runs are logged in `docs/validation/` with the binary hash and the frame compared. |
+| F14.2 | **Re-score the 28-ROM cold read on current `main`.** The F12.2 sweep's criterion 3 ("the paste works, the build works, the screen changes") predates ADR-0217/0218, F12.13, F12.15, F12.16 and #344's closure, each measured against its own cause only. | Go-ahead verbatim *"Sim, como recomendado (Recommended)"* (2026-09-23); follows ADR-0214. Runs only after #399, #400 and #401 merge. Bounded input: the same 28 ROMs and `docs/validation/f12.2-sweep-evaluator-briefing.md`, packs re-recorded on one proven binary, scored by `scripts/f122_score_panel.py`; the evaluator is a fresh Opus session per ROM. Stop when criterion 3 is re-scored on all 28 and every remaining failure has a named cause and either a bug on the board (`scripts/report-bug.sh`) or a stated non-goal. |
+| F14.3 | **Declare route sets for the four stage dirs that lack one.** `record_library.sh` falls back to `static` for games whose routes already exist: only `scripts/stages/mm3` and `scripts/stages/zelda` carry a `stage-set.json`. | Go-ahead verbatim *"Sim, como recomendado (Recommended)"* (2026-09-23); follows F12.10 and ADR-0182/0184. May run in parallel with F14.1. Bounded input: `contra`, `metroid`, `zelda2` and `excitebike`, each pinned to the dump its routes were authored on, never matched by folder name (#314). Stop when `scripts/record_library.sh` resolves `routes` for all six, every kit `--verify` reports 0 lost / 0 added, and `library-report.md` shows `seen %` per game. |
+| F14.4 | **Every drawn shape reaches the shape registry** (option (i) of ADR-0229), so the organised and `unsorted` sheets can reach the pack's keys and not only the retained stream's. | **ADR-0229 `proposed`**, options (i)–(iii); user leans (i), 2026-09-23, pending measurement. Not started until ADR-0229 is accepted. Bounded input: the Castlevania 60 s and Zelda 85 s runs ADR-0209 measured. The measurement that gates acceptance: pack coverage, grid-dump size and wall clock on both runs under option (i). Stop, once accepted, when the coverage figure is re-measured on both games with its cost and `mep_build` round-trips byte-identically. |
+| F14.5 | **Measure counter-locked scenery cycles** — the share of cycles (`PoseStats.Cycles` and background animation cycles) whose phase is constant against the global frame counter, over two recordings of the same route. Measurement only; nothing emits `frameRange`. | Scoped as a measurement only by the same decision (*"Sim, como recomendado (Recommended)"*, 2026-09-23); no ADR yet. The ADR on emitting `frameRange` (amending ADR-0189 §4) is written after these numbers. Bounded input: Metroid Norfair (`docs/validation/metroid-artist-workflow-evidence.md` §4) plus one Contra background animation. Stop when the share is logged per game and per axis in `docs/validation/`. |
+| F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
 
 ### 5. Order of execution
 
@@ -1204,20 +1215,19 @@ sequence and bound the work.
    work additionally depends on Phase 9 selection/export/paint evidence.
 4. **Manual/hardware residue:** native picker, audio listening, physical input
    and optional classical A/B when their prerequisites are available.
-5. **Phase 12:** F12.1, F12.3, F12.4, F12.5, F12.6a, F12.6b, F12.7 and
-   F12.10 are delivered (2026-09-17 and 2026-09-19, §3). F12.2's code is on `main` and
-   its evaluator row is **closed** — two fresh Fable sessions, both PASS
-   (`docs/validation/f12.2-fable-panel-2026-09-19.md`), and the same protocol
-   then ran on all 28 ROMs with Opus as the standing evaluator
+5. **Phase 12:** F12.1, F12.3–F12.10 and F12.12–F12.17 are delivered (§3).
+   F12.2's evaluator row is **closed** — two fresh Fable sessions, both PASS
+   (`docs/validation/f12.2-fable-panel-2026-09-19.md`), then the same protocol
+   on all 28 ROMs with Opus as the standing evaluator
    (`docs/validation/f12.2-opus-sweep-2026-09-19.md`: criterion 1 28/28,
-   criterion 4 27/28, criterion 3 13/28 on the path as dispatched). F12.5's stays open: the pane
-   is driven headlessly, but nobody has added an overflow cell by hand. Of the day-one block (F12.9–F12.12, added
-   2026-09-19), F12.10 shipped the same day — it needed no ADR and its paths
-   (a)–(c) did not depend on F12.9. What remains runs F12.9 → F12.11 → F12.12:
-   two gates are still open (ADR-0183 §1 amendment for F12.9, the `.ora` layer
-   contract for F12.11) and F12.12's cleared on 2026-09-20 with ADR-0210's
-   acceptance; F12.9 also completes F12.10's path (d),
-   which today resolves to `static` and produces no kit.
+   criterion 4 27/28, criterion 3 13/28 on the path as dispatched; F14.2
+   re-scores it). F12.5 still owes a hand-added overflow cell and F12.11 its
+   stop conditions (2) and (3); both are carried by Phase 14 (F14.8, F14.1).
+6. **Phase 14, then Phase 13** (user's decision, verbatim: *"Sim, como
+   recomendado (Recommended)"*, 2026-09-23): #399–#401 → F14.1 ∥ F14.3 →
+   F14.2 → F14.4/F14.5 (measure before deciding: ADR-0229's figures for
+   F14.4, the phase-constancy share for F14.5, and only then the ADRs) →
+   Phase 13 R.1/R.2. F14.8 runs whenever a person is available.
 
 One implementation slice per task; architecture changes still require their
 ADR. This documentation update records work and acceptance, not completed runs.
@@ -1278,8 +1288,9 @@ files and in §3.
 | 0197 | accepted (2026-09-16), §1–§2 shipped as F12.6a (2026-09-19), §3 shipped as F12.6b (2026-09-19); amends 0189 §4's scope to emission only | hand-authored conditions are admitted in sheets and `mep_lint.py --routes` evaluates them on every retained frame of every recording; the three refusals of 0189 §4 stand; the recorder retains `$0000`–`$07FF` per retained frame so `memoryCheckConstant` in that window is evaluable (§3). `spriteNearby` is still `not evaluable` — F12.6b widened the memory plane, not the sprite stream |
 | 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 shipped as F12.17 (2026-09-23) | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3, F12.17) |
 | 0209 | Q4 accepted and shipped as F12.8 (2026-09-19); Q1–Q3 accepted 2026-09-20 — (b), (e), (i); **Q2/Q3 shipped 2026-09-22** as `scripts/mep_figure.py export`/`import` ([log](../validation/adr0209-q2-q3-figure-export-2026-09-22.md): Contra `spr000`, 10 cells, keys 116 → 116, 0 lost / 0 added); **Q1 shipped 2026-09-22** as option (b) ([log](../validation/adr0209-q1-inferred-label-2026-09-22.md): `Core/NES/HdPacks/SheetLabels.h`, Contra 49/49 sidecars labelled, `mep_build` round-trip byte-identical), go-ahead verbatim *"vai com o Q1 da ADR-0209 em paralelo também"* | MesenAI owns **selection** and **return**, painting is delegated to the artist's own program; the `unsorted` remainder sheet gives every recorded shape a cell. Q1–Q3 answered the label author (the Core infers it at record time, the artist renames), the export unit (the `sprNNN` figure reassembled through its `evidence[]` offsets, not the cell) and the return path (F12.4's template, with this ADR adding only the launch and the reload trigger). Slices F12.9–F12.12 are bounded by its three constraints |
+| 0229 | **proposed 2026-09-23** — user leans (i), 2026-09-23, pending measurement (pack coverage, grid-dump size and wall clock on the Castlevania 60 s and Zelda 85 s runs); slice F14.4 | what the recorder hands the shape registry, so the organised and `unsorted` sheets can reach the pack's keys: (i) every shape `ProcessTile` draws, (ii) retune the retained-frame cap, (iii) leave it and document that the pattern pages carry every key. Answers the question ADR-0209 "What (k) actually closed" left open; placed beside 0209 for that reason |
 | 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
-| 0214 | accepted (2026-09-19); protocol shipped, Fable run pending | a fresh Fable session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
+| 0214 | accepted (2026-09-19), amended the same day (Opus replaces Fable); protocol in use — the two-game Fable panel and the 28-ROM Opus sweep both ran 2026-09-19 | a fresh Opus session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
 | 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, and the sweep extended the same day to the whole bounded library — **30 packs, 193 captures, 0 co-gated**, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Punch-Out!! (issue #339's game) keeps all ten captures and skips none — Option C separates rather than discards ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344
 | 0218 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, and the sweep extended the same day to the whole bounded library — **30 packs, 193 captures, 0 co-gated**, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Option B never fired (0 post-hoc drops on all four); the cost lands as Option A refusals, and it is large — Ice Climber goes from 25 captures to 4 ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a capture's anchors are chosen against every other capture already decided in the same recording; Option A is the avoidance pass, Option B the post-hoc drop with a build-time warning. Coordinated with ADR-0217, one change. Issue #349
 | 0219 | accepted (2026-09-20), shipped as F12.9 the same day | a kit may project over the ROM alone — every cell `fill`, `seen: false`, no play session — amending ADR-0183 §1 by reference. CHR ROM only; CHR RAM refused, pointing at ADR-0210 §3. Recording always wins, the recorder is untouched, and the ROM-SHA-1 pin is disabled by construction on that path. Slice F12.9

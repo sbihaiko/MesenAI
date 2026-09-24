@@ -12,9 +12,12 @@
   this Status line **and** in the PR body (user's decision, 2026-09-14). The
   tests exist (`UI.Tests/Mep/NesDrawnTileResolverTests.cs`,
   `UI.Tests/Mep/NesPackTilePaletteTests.cs`,
-  `UI.HeadlessTests/HdPackCopyReceiptTests.cs`) and the quotes are here, but
-  **no PR is open**, so the second half of the rule is unmet and stays unmet
-  until a PR carrying these quotes exists.
+  `UI.HeadlessTests/HdPackCopyReceiptTests.cs`) and the quotes are here.
+  *Updated 2026-09-23:* the change landed in PR #348 (merged 2026-09-20).
+  Its body names this ADR as accepted and implemented and states the three
+  picks, but paraphrased rather than in the wording quoted under each OPEN
+  below, so the PR-body half of the rule was met in substance, not
+  verbatim.
 - Date: 2026-09-19
 - Related: issue #341, issue #342 (the live palette, decided with this ADR),
   issue #340 (no receipt, decided with this ADR), ADR-0172 (the sidecar records
