@@ -922,8 +922,9 @@ what the spikes measure.
 "Pelo nome, no kit"); it used to start from the live viewer.* The live
 viewer is a developer tool since ADR-0169 §4's 2026-09-23 amendment, so the
 player does not point at the subject there: they **name** it from the artist kit, and the subject is the set of
-kit ids they name (`usrNNN` grids, or pose ids a grid's `kit.json` record
-lists; a cycle is named through its grid). The kit has no notion of a character — one grid per
+kit ids they name: pose ids from a grid's `kit.json` record, with a `usrNNN`
+grid as a shorthand for its poses. Whole-grid selection waits until the kit
+records the grid's kind (cycle, sequence or rest; ADR-0227 §2). The kit has no notion of a character — one grid per
 cycle, and "rest" grids binned by box size — so "the whole subject" above
 means every pose the player named; the toolchain infers no membership, and
 automatic grouping is left open (ADR-0227 §4). The

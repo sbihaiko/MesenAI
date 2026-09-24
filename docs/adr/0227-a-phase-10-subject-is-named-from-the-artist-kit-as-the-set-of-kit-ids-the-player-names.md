@@ -47,6 +47,15 @@ ADR-0169 §4.
    even when a named grid also contains it. A rest grid counts only as the
    poses the player names from it, never as the whole grid, because a rest
    grid is a box-size bin and not a subject.
+
+   The kit does not yet record which kind a grid is: `kit.json`'s file
+   record carries the path, the title, the unit, the dimensions and the pose
+   ids, but not `cycle`/`sequence`/`rest`. Until it does, a `usrNNN` id is
+   **not** selectable as a whole grid, and a subject is named by pose ids
+   only; a `usrNNN` is then a shorthand the tool expands to its pose ids and
+   shows back, never a whole-subject selection. Recording the grid kind in
+   the file record (for example, a `kind` field) is the first change Phase 10's
+   first product slice owes before whole-grid selection is offered.
 3. **The toolchain infers no membership.** Phase 10's "whole subject" means
    every pose in the named set. If the player leaves out a pose of the
    character, it stays out, and the tool says which poses of each named
