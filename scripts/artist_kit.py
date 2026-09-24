@@ -771,7 +771,8 @@ def _notes(pack, builder, grids, names, pack_arg):
         "precision (ADR-0225): each figure's tiles sit where the game draws them, with no "
         "gap inside the figure, so a limb 2-4 px off the 8 px grid reads as attached. Paint "
         "either surface, not both: python3 scripts/mep_figure.py import <pack> "
-        "figures/usrNNN-figure.png returns a painted view to the pack's sprite sheet; where "
+        "figures/usrNNN-figure.png returns a painted view to the sheet that draws each tile "
+        "in the built pack (the usrNNN row, so Reload Repainted Images shows it, #413); where "
         "two tiles overlap, a pixel goes to the tile in front.",
         f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\", import "
         f"each painted figure with python3 scripts/mep_figure.py import \"{pack_arg}\" "

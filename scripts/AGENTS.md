@@ -949,6 +949,26 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_artist_map.py` and `test_mep_figure.py` (each caller's band order
   and labels), `test_artist_chr_kit.py` and `test_artist_kit_assemble.py`
   (the artist-page wording); all run by `make python-tests`.
+- `mep_figure.py import` (ADR-0209 Q3, #413) writes a painted cell where
+  the pack's built `hires.txt` already draws its key from. It is not always
+  the sheet the figure sidecar names. `manifest_owners` builds a throwaway copy
+  of the pack as it is (only once a cell is painted) and maps each
+  `(tileData, palette)` to the `sheets/` crops its rules use. `plan_targets`
+  then does one of two things. If the source cell owns every key it emits, it
+  writes the source cell. Otherwise it copies each 8x8 sub-tile to the owner
+  crop and leaves the source alone. In a kit project the owner is the
+  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1).
+  Writing both is not an option: painted beats untouched (ADR-0153 §4)
+  re-points the key, and a painted sprite crop that loses its key is a build
+  error (#253). An owner whose `*.orig.png` art differs from the source's is
+  never painted over. In that case, or when a key has no owner, the source is
+  written and the report's `moves` says the next build re-points a rule, so
+  the reload (ADR-0212) cannot show it. `export_figure` overlays paint routed
+  to an owner, so a re-export shows it. `verify` reports `manifest_unchanged`
+  (byte-identical rebuilt `hires.txt`) beside the key-set check; it is
+  informational and does not fail the run. Covered by `test_mep_figure.py`;
+  measured on Contra in
+  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

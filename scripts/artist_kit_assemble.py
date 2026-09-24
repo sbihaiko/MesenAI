@@ -248,12 +248,14 @@ def _recorded_done_steps(kit: dict) -> list:
         out.extend([
             "Figures are not copied: `figures/usr*-figure.png` is a view, and "
             "`mep_figure.py import` writes what you painted on it into the copy's own "
-            "sprite sheet, so it runs after the copy and before the build. A figure you "
-            "did not paint changes nothing, so importing every one is safe; each prints "
-            "how many cells it wrote, and the first import that fails stops the block "
-            "before the build. A figure and its `sheets/usr*.png` row are the same "
-            "tiles - paint either one, not both: if both are painted, the build stops "
-            "with a `painted tile ... lost to` error naming the tile, and you keep one.",
+            "sheets - the `usr*` row that draws each tile, so a rebuild changes no rule and "
+            "*Reload Repainted Images* shows it (#413) - so it runs after the copy and "
+            "before the build. A figure you did not paint changes nothing, so importing "
+            "every one is safe; each prints how many cells it wrote, and the first import "
+            "that fails stops the block before the build. A figure and its "
+            "`sheets/usr*.png` row are the same tiles - paint either one, not both: if "
+            "both are painted, the figure's paint replaces the row's in each cell the "
+            "figure painted, and the import prints a note counting them.",
             "",
         ])
     return out

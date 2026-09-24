@@ -591,7 +591,10 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   dropped. Closes F12.11 (3) and ADR-0209 Q2/Q3's "in-game reload not
   verified". It found that a kit figure (`usrNNN-figure`, or a `poseNNN`
   export on the kit project) imports into `sprites.png`, re-points keys at
-  build time and therefore needs a ROM reopen (#413).
+  build time and therefore needed a ROM reopen (#413, fixed 2026-09-24:
+  `import` now writes paint into the crop that draws each key, so `hires.txt`
+  is unchanged and the reload shows it;
+  [log](../validation/issue-413-kit-figure-reload-2026-09-24.md)).
   [Log](../validation/f14.1-painted-round-trip-2026-09-23.md).
 
 - **F14.3** (2026-09-23) — route sets for the four stage dirs that lacked one
@@ -1234,7 +1237,7 @@ F14.1–F14.3, ADR-0229 opened `proposed` for F14.4, F14.5 as a measurement
 only, and the order in §5 item 6. **F14.1 and F14.3 are delivered** (2026-09-23, §3;
 their rows are removed): the painted round trip reached the running game
 pixel-exact through both paths, which closes F12.11 (3) and ADR-0209 Q2/Q3's
-"in-game reload not verified". The kit-figure reload gap F14.1 found is #413.
+"in-game reload not verified". The kit-figure reload gap F14.1 found (#413) was fixed 2026-09-24.
 **F14.2 is delivered** (2026-09-24, §3; its row is removed): criterion 3
 re-scored at 20/28. The other rows are not started.
 Two questions the review raised are already decided on open PR #397 and are

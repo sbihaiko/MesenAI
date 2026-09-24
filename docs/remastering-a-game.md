@@ -543,10 +543,17 @@ Then *HD Packs > Reload Repainted Images*, as above. `export` takes a
 saw in one frame (`sheets/poses.json`) or the ADR-0168 evidence walk a pack
 recorded before that sidecar falls back to — the walk is a guess, and any
 member it could not place is listed rather than drawn at a guessed spot.
-`import` writes only the cells that differ from the `.orig.png` twin, into the
-sheet each came from (the `sprNNN` sheet itself, or `sprites.png` for a member
-the group does not hold), and leaves everything else alone; `--verify` rebuilds
-a throwaway copy and asserts the `(tileData, palette)` key set is unchanged.
+`import` writes only the cells that differ from the `.orig.png` twin, and
+leaves everything else alone. Each painted cell goes where the built pack
+already draws its tile from (#413): the sheet it came from when that sheet owns
+the tile (the `sprNNN` sheet itself, or `sprites.png` for a member the group
+does not hold), otherwise the sheet that does own it. On a kit project
+that is the kit's `usrNNN` row, not `sprites.png`. So the rebuild changes no
+rule in `hires.txt`, and the reload shows the paint. When an import has to
+re-point a tile anyway, it prints a note saying you need to reopen the ROM.
+A later `export` shows paint that was placed this way. `--verify` rebuilds a
+throwaway copy, asserts the `(tileData, palette)` key set is unchanged, and
+says whether `hires.txt` is unchanged too, which is what the reload needs.
 The surface is at the pack's scale like every other sheet, and a resized
 figure is refused the same way. The figure also gets its `<id>-figure.ora`
 beside the pair — four layers, `paint` on top of the untouched figure, the cell
@@ -869,16 +876,19 @@ such in the output.
 The figure loop runs after the sheet copy and before the build: a composed
 figure (`<kit>/figures/usr*-figure.png`, ADR-0225) is a view, and
 `mep_figure.py import` writes what was painted on it into the copy's own
-sprite sheet. An unpainted figure writes nothing, so importing all of them is
+sheets: the kit's `usrNNN` row that draws each tile (#413). An unpainted
+figure writes nothing, so importing all of them is
 safe, and the `[ -e ]` guard skips the loop when the kit exported no
 figures (a background- or CHR-only kit), where the unmatched glob would
 otherwise reach `mep_figure.py` as a literal path. A failed import stops the
 block: a `for` loop's status is its last iteration's, so the loop exits on the
 first failure and `&&` keeps the build from running with a repaint missing.
 It runs under `sh -c` so that `exit` leaves only that child — never your
-terminal — and so zsh's `no matches found` cannot abort a figure-less kit. A figure and its `sheets/usr*.png` row are the same tiles — paint one,
-not both; if both are painted, `build` stops with a `painted tile … lost to`
-error naming the tile (#399).
+terminal — and so zsh's `no matches found` cannot abort a figure-less kit. A figure and its `sheets/usr*.png` row are the same tiles, so paint only
+one of them. If you paint both, the figure's paint replaces the row's in every
+cell the figure painted, and the import prints a note counting those cells
+(#413). Before #413 the build stopped instead, with a `painted tile … lost to`
+error (#399).
 
 A `scene/` screen is the pack's own whole-screen capture,
 `textures/backgrounds/screenNNN.png`, copied into the kit untouched; the

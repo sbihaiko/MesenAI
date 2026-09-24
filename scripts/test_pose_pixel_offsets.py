@@ -168,6 +168,11 @@ def test_import_returns_overlapped_pixels_to_the_front_cell():
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack")
         sheets = pack_dir / "textures" / "sheets"
+        # The overlap rule is under test, not where the paint lands (#413):
+        # without the spr000 group, sprites.png owns every key, so it is the
+        # sheet the import writes.
+        for p in sheets.glob("spr000*"):
+            p.unlink()
         # The leg (node 0) overlaps the torso (node 2) on cell-local x 4..7,
         # y 0..1. Its row 0 there is made transparent, so node 2 shows through
         # on that row and stays hidden behind the leg on row 1.

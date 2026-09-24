@@ -234,6 +234,208 @@ def test_round_trip_unpainted_paints_one_cell_and_rebuilds():
               "and against a control rebuilt without the paint", json.dumps(v))
 
 
+def _paint_node(out: Path, stem: str, doc: dict, node: int, color):
+    target = next(c for c in doc["cells"] if c["node"] == node)
+    fig = sheet_repaint.read_png(out / f"{stem}.png")
+    fig.paste(T._solid(8 * SCALE, color), target["x"] * SCALE, target["y"] * SCALE)
+    sheet_repaint.write_png(out / f"{stem}.png", fig)
+    return target
+
+
+def _cell_px(sheets: Path, sheet: str, node: int):
+    doc = json.loads((sheets / f"{sheet}.json").read_text(encoding="utf-8"))
+    cell = next(c for c in doc["cells"] if c.get("metatile") == node)
+    return int(cell["x"]) * SCALE, int(cell["y"]) * SCALE
+
+
+def test_a_figure_cut_from_the_vocabulary_lands_on_the_sheet_that_owns_the_key():
+    """#413: a pose figure maps every cell to `sprites.json`, but in the built
+    pack the untouched `spr000` group (rank 4) owns those keys. The paint must
+    land on the owner's crop, so the rebuild changes no rule and the in-place
+    reload (ADR-0212) can show it; writing `sprites.png` instead made it the
+    painted crop, which re-pointed the key (painted beats untouched)."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        sheets = pack_dir / "textures" / "sheets"
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        manifest_before = (pack_dir / "textures" / "hires.txt").read_bytes()
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        check(all(c["sheet"] == "sprites.json" for c in doc["cells"]),
+              "the pose figure's cells come from the sprite vocabulary", str(doc["cells"]))
+        before = _snapshot(sheets)
+        magenta = (255, 0, 255, 255)
+        _paint_node(out, "pose000-figure", doc, 1, magenta)
+
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["painted"] == 1 and rep["written"] == 1 and rep["sheets"] == ["spr000.png"],
+              "the painted cell is written into spr000.png, the sheet that owns its key", json.dumps(rep))
+        check(rep["rerouted"] == 1 and rep["sourceLeft"] == 1 and rep["moves"] == 0,
+              "and reported as routed, with the vocabulary cell left alone", json.dumps(rep))
+        after = _snapshot(sheets)
+        check(after["sprites.png"] == before["sprites.png"], "sprites.png is untouched")
+        sx, sy = _cell_px(sheets, "spr000", 1)
+        (Path(td) / "spr000.before.png").write_bytes(before["spr000.png"])
+        b_img = sheet_repaint.read_png(Path(td) / "spr000.before.png")
+        a_img = sheet_repaint.read_png(sheets / "spr000.png")
+        check(_differs_only_in(b_img, a_img, sx, sy, 8 * SCALE, 8 * SCALE) and a_img.get(sx, sy) == magenta,
+              "spr000.png differs only inside node 1's cell, which carries the paint", str(a_img.get(sx, sy)))
+
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+        check((pack_dir / "textures" / "hires.txt").read_bytes() == manifest_before,
+              "hires.txt is byte-identical to the build before the import (no rule moved)")
+
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["written"] == 0 and rep["alreadyApplied"] == 1, "importing it again is a no-op",
+              json.dumps(rep))
+        doc2 = F.export_figure(E.Pack(pack_dir), "pose000", Path(td) / "figures2")
+        fig2 = sheet_repaint.read_png(Path(td) / "figures2" / "pose000-figure.png")
+        t = next(c for c in doc2["cells"] if c["node"] == 1)
+        check(fig2.get(t["x"] * SCALE, t["y"] * SCALE) == magenta,
+              "a re-export shows the paint that was routed to spr000")
+
+        v = F.verify(pack_dir, restore={"spr000.png": before["spr000.png"]})
+        check(v["ok"] and v["manifest_unchanged"],
+              "verify: same key set, and the manifest is unchanged by the import", json.dumps(v))
+
+
+def test_an_owner_with_other_art_is_skipped_and_the_move_is_reported():
+    """Never paint over a different drawing: when the owning crop's twin is
+    not the source cell's, the source is written (paint is never dropped) and
+    the import says the next build re-points the key."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        sheets = pack_dir / "textures" / "sheets"
+        # spr000's node-1 cell gets other original art (twin and sheet alike).
+        sx, sy = _cell_px(sheets, "spr000", 1)
+        for name, n in (("spr000.orig.png", 1), ("spr000.png", SCALE)):
+            img = sheet_repaint.read_png(sheets / name)
+            img.paste(T._solid(8 * n, (1, 2, 3, 255)), sx // SCALE * n, sy // SCALE * n)
+            sheet_repaint.write_png(sheets / name, img)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        before = _snapshot(sheets)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["sheets"] == ["sprites.png"] and rep["moves"] == 1 and rep["rerouted"] == 0,
+              "the source sheet is written and the move is reported", json.dumps(rep))
+        v = F.verify(pack_dir, restore={"sprites.png": before["sprites.png"]})
+        check(not v["manifest_unchanged"], "verify reports the manifest change", json.dumps(v))
+
+
+def _k16(n):
+    return {"tile": f"{0xA0 + n:032X}", "palette": "0F0F0F0F"}
+
+
+def _make_unit16_pack(root: Path, owner_tiles) -> Path:
+    """`obj010` is the figure: node 10 (four sub-tile keys K0..K3) beside node
+    11. `obj011` holds node 10's art once more with `owner_tiles`; same rank
+    (object), later name, so the build hands it every key the two share."""
+    root = make_pack(root, with_poses=False)
+    sheets = root / "textures" / "sheets"
+    fig = [T._bg_cell(0, 10, 50), T._bg_cell(1, 11, 50)]
+    fig[0]["tiles"] = [_k16(i) for i in range(4)]
+    fig[1]["tiles"] = [_k16(i) for i in range(10, 14)]
+    T._write_sheet(sheets, "obj010", "object", fig, 16, 4, scale=SCALE,
+                   extra={"evidence": [{"a": 10, "b": 11, "dir": "E", "dx": 1, "dy": 0, "count": 50}]})
+    own = [T._bg_cell(0, 10, 50)]
+    own[0]["tiles"] = owner_tiles
+    T._write_sheet(sheets, "obj011", "object", own, 16, 4, scale=SCALE)
+    return root
+
+
+def _painted_crops(pack_dir: Path) -> dict:
+    """`{key: [(sheet, x, y)]}`: every 8x8 crop, across all sheets, that a
+    cell emits for `key` and whose pixels differ from its twin's upscale."""
+    pack = E.Pack(pack_dir)
+    out = {}
+    for sheet in pack.sheets:
+        if not sheet.png_path.is_file():
+            continue
+        img = sheet_repaint.read_png(sheet.png_path)
+        for cell in sheet.cells:
+            if not isinstance(cell, dict) or "x" not in cell:
+                continue
+            for key, lx, ly in F._cell_keys(sheet, cell, False, 109):
+                x, y = int(cell["x"]) + lx, int(cell["y"]) + ly
+                twin = F._twin_crop(sheet, x, y)
+                crop = img.crop(x * SCALE, y * SCALE, 8 * SCALE, 8 * SCALE)
+                if twin is not None and crop.px != twin.upscale(SCALE).px:
+                    out.setdefault(key, []).append((sheet.name, x, y))
+    return out
+
+
+def _rule_image(pack_dir: Path, tile: str, pal: str) -> str:
+    hires = (pack_dir / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    images = [ln.strip()[5:].strip() for ln in hires if ln.startswith("<img>")]
+    rule = next((ln for ln in hires if ln.startswith("<tile>") and f",{tile},{pal}," in ln), "")
+    return images[int(rule[6:].split(",")[0])] if rule else ""
+
+
+def _paint_unit16_node10(td: Path, pack_dir: Path, color):
+    out = td / "figures"
+    doc = F.export_figure(E.Pack(pack_dir), "obj010", out)
+    target = next(c for c in doc["cells"] if c["node"] == 10)
+    fig = sheet_repaint.read_png(out / "obj010-figure.png")
+    fig.paste(T._solid(16 * SCALE, color), target["x"] * SCALE, target["y"] * SCALE)
+    sheet_repaint.write_png(out / "obj010-figure.png", fig)
+    return out / "obj010-figure.png", doc
+
+
+def test_a_unit16_cell_with_mixed_ownership_is_written_once_and_reports_the_move():
+    """#413 review: node 10 owns K0/K2/K3 itself while `obj011` cleanly owns
+    K1. The source must be written (paint never dropped) and K1 must NOT be
+    routed as well — two painted crops for one key is the #253 ambiguity."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack_dir = _make_unit16_pack(td / "pack", [_k16(20), _k16(1)])
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "unit-16 mixed: the pack builds first")
+        check(_rule_image(pack_dir, _k16(1)["tile"], "0F0F0F0F").endswith("sheets/obj011.png")
+              and _rule_image(pack_dir, _k16(0)["tile"], "0F0F0F0F").endswith("sheets/obj010.png"),
+              "unit-16 mixed: K1 is drawn from obj011, K0 from obj010 before the import")
+        magenta = (255, 0, 255, 255)
+        png, _doc = _paint_unit16_node10(td, pack_dir, magenta)
+        rep = F.import_figure(E.Pack(pack_dir), png)
+        check(rep["painted"] == 1 and rep["written"] == 1 and rep["sheets"] == ["obj010.png"],
+              "unit-16 mixed: only the source sheet is written", json.dumps(rep))
+        check(rep["rerouted"] == 0 and rep["moves"] == 1,
+              "unit-16 mixed: nothing is routed and the import says a reopen is needed", json.dumps(rep))
+        painted = _painted_crops(pack_dir)
+        doubled = {k: v for k, v in painted.items() if len(v) > 1}
+        check(not doubled, "unit-16 mixed: no key has two painted crops", str(doubled))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "unit-16 mixed: the repainted pack builds")
+        homes = [_rule_image(pack_dir, _k16(i)["tile"], "0F0F0F0F") for i in range(4)]
+        check(all(h.endswith("sheets/obj010.png") for h in homes),
+              "unit-16 mixed: every key of the cell is drawn from obj010, the one crop that carries the paint", str(homes))
+        sx, sy = _cell_px(pack_dir / "textures" / "sheets", "obj010", 10)
+        img = sheet_repaint.read_png(pack_dir / "textures" / "sheets" / "obj010.png")
+        check(img.get(sx, sy) == magenta and img.get(sx + 15 * SCALE, sy + 15 * SCALE) == magenta,
+              "unit-16 mixed: obj010.png carries the paint")
+
+
+def test_a_unit16_cell_owned_elsewhere_is_routed_and_the_manifest_holds():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack_dir = _make_unit16_pack(td / "pack", [_k16(i) for i in range(4)])
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "unit-16 routed: the pack builds first")
+        manifest_before = (pack_dir / "textures" / "hires.txt").read_bytes()
+        before = _snapshot(pack_dir / "textures" / "sheets")
+        magenta = (255, 0, 255, 255)
+        png, _doc = _paint_unit16_node10(td, pack_dir, magenta)
+        rep = F.import_figure(E.Pack(pack_dir), png)
+        check(rep["sheets"] == ["obj011.png"] and rep["rerouted"] == 1 and rep["sourceLeft"] == 1
+              and rep["moves"] == 0, "unit-16 routed: all four keys land on obj011", json.dumps(rep))
+        after = _snapshot(pack_dir / "textures" / "sheets")
+        check(after["obj010.png"] == before["obj010.png"], "unit-16 routed: the source sheet is untouched")
+        painted = _painted_crops(pack_dir)
+        check(len(painted) == 4 and all(len(v) == 1 and v[0][0] == "obj011.png" for v in painted.values()),
+              "unit-16 routed: each key has exactly one painted crop, on obj011", str(painted))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "unit-16 routed: the repainted pack builds")
+        check((pack_dir / "textures" / "hires.txt").read_bytes() == manifest_before,
+              "unit-16 routed: hires.txt is byte-identical (no rule moved)")
+
+
 def test_a_resized_figure_is_refused():
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack", with_poses=False)

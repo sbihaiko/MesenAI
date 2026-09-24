@@ -266,9 +266,9 @@ def test_the_done_steps_import_painted_figures_between_copy_and_build():
         check("|| exit 1" in imp and imp.startswith("sh -c '") and imp.rstrip().endswith("&&"),
               "a failed figure import exits its own `sh -c` child (never the artist's "
               "terminal) and `&&` holds the build back", imp)
-        check("not both" in section and "lost to" in section,
+        check("not both" in section and "replaces the row's" in section,
               "the done section says a figure and its sheet row are one surface, and what "
-              "the build says when both are painted")
+              "happens when both are painted (#413: the figure's paint replaces the row's)")
 
 
 def test_the_done_steps_name_only_what_the_kit_has():
