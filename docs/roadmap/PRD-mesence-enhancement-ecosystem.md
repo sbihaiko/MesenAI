@@ -917,6 +917,16 @@ image model under the player's own key produces a candidate skin for the
 `mep_build.py` slices into a pack. Whether any link of that chain holds is
 what the spikes measure.
 
+*Entry point amended 2026-09-23 (user's decision, verbatim: "Pelo nome, no
+kit").* The live viewer is a developer tool since ADR-0169 §4's 2026-09-23
+amendment, so the player does not point at the subject there: they **name**
+it from the artist kit — a figure row (`usrNNN`) or a pose/cycle id in
+`sheets/poses.json` — as ADR-0209 names a figure and hands it over. The
+kit's figures are pixel-faithful since F12.18 (ADR-0225) and its cycle rows
+survive sprite flicker since F12.19 (ADR-0226). S10.b is unaffected: it
+measures layout fidelity on a contact sheet and does not depend on how the
+subject is chosen.
+
 **Constraints that hold regardless of outcome.**
 - Part A §1 principle 5 as written: no model call, key or prompt in
   `Core/`, `UI/` or the installer. If a studio exists it is an external
