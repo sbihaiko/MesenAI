@@ -15,6 +15,7 @@ namespace Mesen.HeadlessTests;
 //need no ROM and no native core - the Tile Viewer's refusal is decided before
 //any DebugApi call, which is itself the point: a viewer with no frame context
 //never has to ask the core anything.
+[NativeCoreFree("Copies with HdPackCopyContext.None(), which refuses before HdPackCopyHelper reads any tile through DebugApi.")]
 public class HdPackCopyReceiptTests
 {
 	private static readonly UInt32[] Palette = new UInt32[32];

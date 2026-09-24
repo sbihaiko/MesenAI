@@ -13,6 +13,7 @@ namespace Mesen.HeadlessTests;
 //covered host-free in UI.Tests; what is covered here is the step after it -
 //that ConfigWindow.axaml's per-tab IsVisible="{Binding !PlayerMode}" really
 //leaves exactly the video / audio / input tabs on screen.
+[NativeCoreFree("Opens ConfigWindow on the Input tab; only the Audio/Video tab view-models reach ConfigApi/EmuApi on construction.")]
 public class PlayerSettingsTabsTests
 {
 	//ConfigWindow.axaml's TabControl, in markup order. The two unnamed separator
