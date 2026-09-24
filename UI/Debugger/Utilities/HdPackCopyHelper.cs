@@ -196,13 +196,8 @@ namespace Mesen.Debugger.Utilities
 			if(!context.HasFrameContext) {
 				return NesDrawnTileResolver.NoFrameContext();
 			}
-			if(!DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] chrBank)) {
-				return NesDrawnTileResolver.NoTrace();
-			}
-			if(context.TileMapAddress >= 0) {
-				return NesDrawnTileResolver.ResolveTilemapTile(scroll, chrBank, context.TileMapAddress, ppuTileAddress);
-			}
-			return NesDrawnTileResolver.ResolveSpriteTile(chrBank, context.SpriteY, context.SpriteHeight, ppuTileAddress);
+			NesScanlineTraceStatus status = DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] chrBank);
+			return NesDrawnTileResolver.Resolve(status, scroll, chrBank, context.TileMapAddress, context.SpriteY, context.SpriteHeight, ppuTileAddress);
 		}
 
 		//The palette word as HdTileKey::PaletteColors packs it: color 0 in the high

@@ -424,6 +424,7 @@
     <ClInclude Include="Gameboy\GbsHeader.h" />
     <ClInclude Include="Gameboy\Input\GbController.h" />
     <ClInclude Include="NES\BaseNesPpu.h" />
+    <ClInclude Include="NES\NesScanlineTraceValidity.h" />
     <ClInclude Include="NES\BisqwitNtscFilter.h" />
     <ClInclude Include="NES\Debugger\DummyNesCpu.h" />
     <ClInclude Include="NES\Debugger\NesPpuTools.h" />

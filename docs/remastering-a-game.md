@@ -684,13 +684,22 @@ measured on 2026-09-19:
   flat palette, so the shapes read differently from the game's colours, and on a
   CHR-banked game it can draw the tile from a different bank than the PPU used
   for that scanline — Ninja Gaiden's viewer shows glyphs where the frame shows a
-  boulder. Issue #341 tracks the copy emitting a key from the wrong bank; until
-  it is fixed, check that the tile you copied is the shape you meant by its
-  coordinates, not by the thumbnail.
+  boulder. The copy itself names the bank the frame drew with (ADR-0215, #341),
+  so trust the copied key over the thumbnail, and check the tile by its
+  coordinates.
 
 If your repaint builds clean, lints clean and changes nothing, "the tile I picked
 is not on this frame" is the first thing to rule out — it is cheaper than
 bisecting the pack.
+
+**After loading a save state, run one frame before you copy.** The copy names a
+tile by the CHR bank the frame on screen drew it with, and a save state does
+not carry that record. Right after a load (or a reset), with nothing emulated
+since, the copy refuses with *no frame has been drawn since the last state load
+or reset* on the on-screen message. Unpause, or use the debugger's *Run one
+frame*, then copy again. Before issue #419 was fixed, this copy went through the
+record left from before the load and gave you a well-formed key from the wrong
+bank, or no key at all.
 
 ### Which sheet a copied key goes on
 

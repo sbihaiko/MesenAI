@@ -154,9 +154,10 @@ public class CopyAsMepSheetCellTests
 			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
 			if(state.Length > 0) {
 				//The dispatcher's own reference frame, restored rather than
-				//replayed: a .mss carries the PPU memory the scan reads, and
-				//nothing is emulated after the load, so the scan and the sandbox
-				//screenshot describe the same screen.
+				//replayed: a .mss carries the PPU memory the scan reads. One frame
+				//is drawn after the load (issue #419, see
+				//StepUntilTheTraceDescribesADrawnFrame), so the scan describes the
+				//frame after the sandbox screenshot's, not that exact frame.
 				EmuApi.Resume();
 				Thread.Sleep(500);
 				EmuApi.Pause();
@@ -168,6 +169,7 @@ public class CopyAsMepSheetCellTests
 				EmuApi.Pause();
 				Thread.Sleep(200);
 				EmuApi.Pause();
+				StepUntilTheTraceDescribesADrawnFrame();
 			} else {
 				//The same few emulated seconds the assertion above uses, so the
 				//scan describes a real screen and not whatever power-on left in VRAM.
@@ -272,8 +274,7 @@ public class CopyAsMepSheetCellTests
 			EmuApi.Pause();
 			Dispatcher.UIThread.RunJobs();
 
-			Assert.True(DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] _),
-				"the core published no scanline trace for the paused frame");
+			Assert.Equal(NesScanlineTraceStatus.Current, DebugApi.GetNesScanlineTrace(out UInt32[] scroll, out UInt32[] _));
 			HashSet<(int Col, int Row)> drawn = DrawnCells(scroll);
 			Assert.True(drawn.Any(cell => cell.Col >= 32 || cell.Row >= 30),
 				$"precondition: {MultiNametableRom} at 2 s should draw cells outside nametable 0, and the " +
@@ -336,6 +337,25 @@ public class CopyAsMepSheetCellTests
 			}
 		}
 		return drawn;
+	}
+
+	//Issue #419: a save state does not carry the per-scanline trace the copy
+	//resolves keys through (ADR-0215), so right after the load the copy refuses
+	//until a whole frame has been drawn - before the fix it resolved through the
+	//trace left from before the load and handed F14.2 wrong-bank keys and empty
+	//tables. So the scan draws the frame after the state's, one deterministic
+	//frame period at a time (a state saved mid-frame needs a second), and reads
+	//that frame: it is the one the trace and the screen then both describe.
+	private static void StepUntilTheTraceDescribesADrawnFrame()
+	{
+		DebugApi.InitializeDebugger();
+		for(int step = 0; step < 3 && DebugApi.GetNesScanlineTrace(out _, out _) != NesScanlineTraceStatus.Current; step++) {
+			DebugApi.Step(CpuType.Nes, 1, StepType.PpuFrame);
+			Thread.Sleep(300);
+			EmuApi.Pause();
+			Thread.Sleep(100);
+		}
+		Assert.Equal(NesScanlineTraceStatus.Current, DebugApi.GetNesScanlineTrace(out _, out _));
 	}
 
 	//Avalonia refuses `Application.ApplicationLifetime = ...` once the app is
