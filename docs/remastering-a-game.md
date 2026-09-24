@@ -425,6 +425,17 @@ in and asserts no `(tileData, palette)` key changed. It is the acceptance test â
 run it every time, and treat a failure as "the kit is wrong", never as "the
 verify is wrong".
 
+**What the sheets reach, and what only the pattern pages reach.** The
+organised sheets and `unsorted` give a cell to every shape the recording
+drew. Most of a recorded pack's `<tile>` keys are something else: tiles the
+game never drew during the recording, which the bootstrap exports from the
+ROM with `defaultTile=Y` (on a 60 s Castlevania run, 2 141 of 2 673 shapes).
+Those are on the `chr/` pattern pages only. A shape the game drew in several
+palettes also has **one** sheet cell, in the first palette it was seen in.
+Its other palettes are on the pattern pages too (on an 85 s Zelda run, 312 of
+574 drawn keys). Paint them there if they need their own art. ADR-0230,
+`proposed`, tracks giving those palettes a place on the sheets.
+
 ### The panorama is a CHR RAM surface
 
 On a CHR ROM game (Zelda II, Mega Man 3) the recorder keys every tile by its

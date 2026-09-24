@@ -1,6 +1,13 @@
 # ADR-0229: Every shape the PPU draws enters the shape registry, so the organised sheets can reach the pack's keys
 
-- Status: **proposed 2026-09-23** — user leans (i), 2026-09-23, pending
+- Status: **superseded 2026-09-24**, closed as option (iii) by the user's
+  decision of 2026-09-24, answering "What do we do with ADR-0229?" with the
+  option, verbatim, *"Reenquadrar (Recommended)"*: close this ADR as (iii)
+  and open a new `proposed` ADR for the real gap. Option (i) measured no
+  gain (pack shape coverage 19.9 → 19.9 % on Castlevania, 16.0 → 16.0 % on
+  Zelda; see "Measured 2026-09-23" below) and is not implemented. See
+  "Amendment 2026-09-24" at the end. Earlier status, kept as written:
+  **proposed 2026-09-23** — user leans (i), 2026-09-23, pending
   measurement. Opened by the user's decision on the 2026-09-23 Phase 12
   review, verbatim: *"Sim, como recomendado (Recommended)"*, which accepted
   opening this ADR as `proposed` with the three options below. Acceptance
@@ -20,6 +27,8 @@
 - Supersedes / amends: none yet. Option (i) would narrow ADR-0209's
   "What (k) actually closed" from an open question to a decided one; it
   changes no sheet layout and no sidecar schema.
+- Superseded by: ADR-0230 (a sheet cell reaches every palette its shape was
+  drawn in, the gap this ADR's measurement found; `proposed`)
 
 ## Context
 
@@ -154,3 +163,26 @@ measurement above.
   through the round trip, not copied.
 - Under (iii), the organised-sheet coverage figure stays near 18 % by design,
   and every artist-facing doc has to say so.
+
+## Amendment 2026-09-24: closed as (iii), superseded by ADR-0230
+
+Appended on the user's decision of 2026-09-24, verbatim *"Reenquadrar
+(Recommended)"*. The text above is kept as written.
+
+- **Option (i) is not adopted.** Its prototype reached no key today's sheets
+  do not already reach (19.9 → 19.9 % of shapes on Castlevania, 16.0 → 16.0 %
+  on Zelda), and it moved the organised output (ids, first-seen palettes). It
+  was never merged.
+- **Option (iii) is what this ADR closes as.** The organised and `unsorted`
+  sheets already give a cell to every shape the recording drew (100 % on both
+  games). The rest of the pack's keys are tiles the recording never drew: the
+  bootstrap's PRG-scan `defaultTile=Y` export (Castlevania 2 141 of 2 673
+  shapes, Zelda 1 360 of 1 620). They are reachable on the CHR pattern pages,
+  which are the kit's union (ADR-0194), and nowhere else by design.
+  `docs/remastering-a-game.md` ("Unpack the recording into a kit") documents
+  this split. Nothing changes in code.
+- **The remaining gap is a different question.** Drawn-key coverage is
+  84.7 % (Castlevania) and 45.6 % (Zelda) because a sheet cell carries the
+  shape's first-seen palette only. ADR-0230, `proposed`, takes that question,
+  with its own options and measurement. PRD slice F14.4 now measures for
+  ADR-0230.
