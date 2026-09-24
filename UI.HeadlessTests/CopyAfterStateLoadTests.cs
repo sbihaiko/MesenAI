@@ -28,6 +28,7 @@ namespace Mesen.HeadlessTests;
 //every scanline draws nametable 0 row 0 from column 0.
 //
 //Skips when the native core is not built (ADR-0150 §3), which is every CI run.
+[Collection(NativeCoreCollection.Name)]
 public class CopyAfterStateLoadTests
 {
 	private static readonly UInt32[] Palette = new UInt32[32];

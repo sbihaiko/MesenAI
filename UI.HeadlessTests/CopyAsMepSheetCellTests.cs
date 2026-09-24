@@ -59,6 +59,7 @@ namespace Mesen.HeadlessTests;
 //NativeCore (ADR-0150 §3, no core built = no ROM to read tiles out of) and the
 //ROM library, which is never in the repo. Point MESEN_NES_ROMS at a folder
 //holding the two ROMs below to run this locally.
+[Collection(NativeCoreCollection.Name)]
 public class CopyAsMepSheetCellTests
 {
 	private const string RomFolderVariable = "MESEN_NES_ROMS";

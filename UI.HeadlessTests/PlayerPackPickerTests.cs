@@ -25,6 +25,7 @@ namespace Mesen.HeadlessTests;
 //not set, so ArrowDown left the focus on the first choice while Tab moved it.
 //Fixed by adding XYFocus.NavigationModes="Enabled" to the PackPickerList
 //ItemsControl; the arrows below are the regression test for that fix.
+[Collection(NativeCoreCollection.Name)]
 public class PlayerPackPickerTests
 {
 	//Container, Name, Version, Author, License, Sections, Enabled, Origin(0=folder),

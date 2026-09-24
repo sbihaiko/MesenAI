@@ -36,6 +36,7 @@ namespace Mesen.HeadlessTests;
 //call), so an ordinary run and CI are unchanged. It stays evidence, not a
 //regression test: the contract on the decision is UI.Tests/Mep/
 //NesDrawnTileResolverTests.cs, which needs no ROM and no state.
+[Collection(NativeCoreCollection.Name)]
 public class ChrBankDiagnosticTests
 {
 	//How many frames to render from the restored state before reading the trace.
