@@ -610,12 +610,14 @@ def probe_build(pack: E.Pack, scratch=None):
     place (ADR-0178, #255). `rewritten` names the sheet files that build
     changed: non-empty means the pack was never built with these sheets (a
     kit copied in, a fresh recording), so the twins and sidecars a plan
-    reads are not the ones the next build slices (#435). `(({}, False, 0),
-    [])` when the pack has no manifest: then there is no owner to protect.
-    `rewritten` is `None` when the pack does not build: then neither the
-    owners nor the next build's sheets are known."""
+    reads are not the ones the next build slices (#435). A pack with no
+    `hires.txt` yet is probed the same way: the build writes one. `(({},
+    False, 0), [])` when the sheets are not a pack's `textures/sheets`: then
+    there is no build and no owner to protect. `rewritten` is `None` when the
+    pack does not build: then neither the owners nor the next build's sheets
+    are known."""
     textures = pack.sheets_dir.parent
-    if pack.sheets_dir.name != "sheets" or not (textures / "hires.txt").is_file():
+    if pack.sheets_dir.name != "sheets" or textures.name != "textures":
         return ({}, False, 0), []
     with tempfile.TemporaryDirectory(dir=scratch) as td:
         work = Path(td) / "control"

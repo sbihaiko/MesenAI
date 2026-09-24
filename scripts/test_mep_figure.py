@@ -545,6 +545,19 @@ def test_an_import_into_a_pack_that_does_not_build_is_refused():
             F._quiet_build = real_build
         check(_snapshot(sheets) == before, "and the refused import wrote nothing")
 
+        # #444 review: a pack with no hires.txt yet is probed too, not waved through.
+        (pack_dir / "textures" / "hires.txt").unlink()
+        F._quiet_build = lambda folder: 1
+        try:
+            try:
+                rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+                check(False, "a pack with no manifest that does not build is refused", json.dumps(rep))
+            except F.FigureError as e:
+                check("does not build" in str(e), "a pack with no manifest that does not build is refused", str(e))
+        finally:
+            F._quiet_build = real_build
+        check(_snapshot(sheets) == before, "and that refusal wrote nothing either")
+
 
 def test_a_resized_figure_is_refused():
     with tempfile.TemporaryDirectory() as td:
