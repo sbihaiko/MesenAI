@@ -729,7 +729,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   row *is* the loop, its columns the phases in order), one per `sequences[]`
   entry the cycles did not already cover, then the remainder wrapped at
   `--columns`. A variant (ADR-0179 §4) is the column after the figure it
-  varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why. A
+  varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why -
+  "two figures that touched" naming both parts, or, for a one-part
+  `fusionOf` (ADR-0228), a figure touched by tiles never seen on their own:
+  the figure is laid out by itself and the stray tiles stay on the pack's
+  sprite sheets, so painting the fusion would paint a bystander. A
   figure is laid out once, so a row can be shorter than its animation, and so
   a run's file carries `files[].playsColumns` (#400): the 1-based column, in
   figures from the left, each phase of `run.poses` plays from, in phase order
