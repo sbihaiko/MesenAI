@@ -852,6 +852,7 @@ cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
 cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
 for f in out/kit/figures/usr*-figure.png; do
+  [ -e "$f" ] || continue                                 # a kit without figures: nothing to import
   python3 scripts/mep_figure.py import out/painted "$f"   # figures are imported, not copied
 done
 
@@ -869,7 +870,9 @@ The figure loop runs after the sheet copy and before the build: a composed
 figure (`<kit>/figures/usr*-figure.png`, ADR-0225) is a view, and
 `mep_figure.py import` writes what was painted on it into the copy's own
 sprite sheet. An unpainted figure writes nothing, so importing all of them is
-safe. A figure and its `sheets/usr*.png` row are the same tiles — paint one,
+safe, and the `[ -e ]` guard skips the loop when the kit exported no
+figures (a background- or CHR-only kit), where the unmatched glob would
+otherwise reach `mep_figure.py` as a literal path. A figure and its `sheets/usr*.png` row are the same tiles — paint one,
 not both; if both are painted, `build` stops with a `painted tile … lost to`
 error naming the tile (#399).
 
