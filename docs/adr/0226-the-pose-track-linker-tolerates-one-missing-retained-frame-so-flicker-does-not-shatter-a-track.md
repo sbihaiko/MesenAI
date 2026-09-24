@@ -8,6 +8,13 @@
   (2026-09-23): *"pode implementar as duas ADRs em paralelo"* — the
   same-turn rule of CLAUDE.md applies: the change ships with §4's unit tests
   and the go-ahead is quoted in the PR body.
+  **Condition 4 met 2026-09-24** after #399, #400, #401 and #413 merged. The
+  kit was regenerated from a fresh Contra re-record on `main` @ `89acdc10`,
+  with 3 period-6 cycles (26/26/3) and every part's `--verify` 0 lost /
+  0 added. The same briefing then went to a fresh evaluator, who returned
+  "Run cycle identifiable and paintable unaided: yes" with 0 stops
+  (`docs/validation/f1219-contra-kit-coldread-rerun-2026-09-24.md`). All
+  four stop conditions are met, and F12.19 is delivered.
 - Date: 2026-09-23
 - Related: ADR-0179 (§1 track linking, §3 cycles and sequences, §6 tests),
   ADR-0181 (§3 `driver` is attributed over cycle windows — more windows per
