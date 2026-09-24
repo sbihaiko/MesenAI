@@ -610,18 +610,21 @@ def probe_build(pack: E.Pack, scratch=None):
     place (ADR-0178, #255). `rewritten` names the sheet files that build
     changed: non-empty means the pack was never built with these sheets (a
     kit copied in, a fresh recording), so the twins and sidecars a plan
-    reads are not the ones the next build slices (#435). `(({}, False, 0),
-    [])` when the pack has no manifest or does not build: then there is no
-    owner to protect."""
+    reads are not the ones the next build slices (#435). A pack with no
+    `hires.txt` yet is probed the same way: the build writes one. `(({},
+    False, 0), [])` when the sheets are not a pack's `textures/sheets`: then
+    there is no build and no owner to protect. `rewritten` is `None` when the
+    pack does not build: then neither the owners nor the next build's sheets
+    are known."""
     textures = pack.sheets_dir.parent
-    if pack.sheets_dir.name != "sheets" or not (textures / "hires.txt").is_file():
+    if pack.sheets_dir.name != "sheets" or textures.name != "textures":
         return ({}, False, 0), []
     with tempfile.TemporaryDirectory(dir=scratch) as td:
         work = Path(td) / "control"
         shutil.copytree(textures.parent, work)
         before = _sheet_files(work / "textures" / "sheets")
         if _quiet_build(work) != 0:
-            return ({}, False, 0), []
+            return ({}, False, 0), None
         after = _sheet_files(work / "textures" / "sheets")
         lines = (work / "textures" / "hires.txt").read_text(encoding="utf-8", errors="replace").splitlines()
     rewritten = sorted(n for n in before if after.get(n) != before[n])
@@ -848,6 +851,13 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
         new_cell = fig_cell if owned is None else _merge_owned(current, fig_cell, owned, unit, scale)
         if manifest is None:
             manifest, rewritten = probe_build(pack, scratch)
+            if rewritten is None:
+                # A plan made without the build's owners could re-point rules
+                # just as #435's did. Refuse before anything is written.
+                raise FigureError(
+                    f"{pack.sheets_dir.parent.parent}: this pack does not build — "
+                    "run python3 scripts/mep_build.py build on it, fix what it reports, "
+                    "then import again (nothing was written)")
             if rewritten:
                 # #435: planning against sheets the next build rewrites (it
                 # un-bakes flip-baked crops, ADR-0178) sends paint to the wrong

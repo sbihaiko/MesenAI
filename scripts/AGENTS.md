@@ -966,9 +966,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the reload (ADR-0212) cannot show it. `export_figure` overlays paint routed
   to an owner, so a re-export shows it. `verify` reports `manifest_unchanged`
   (byte-identical rebuilt `hires.txt`) beside the key-set check; it is
-  informational and does not fail the run. Covered by `test_mep_figure.py`;
-  measured on Contra in
-  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md`.
+  informational and does not fail the run. The throwaway build is also a
+  precondition (#435): `probe_build` diffs `textures/sheets/*.png|*.json`
+  across it, and a painted import is refused (`FigureError`, CLI exit 2,
+  nothing written) when that build rewrites any sheet file - the pack was
+  never built with these sheets, so its flip-baked crops (ADR-0178) are not
+  the twins the next build slices - or when the pack does not build at all.
+  Keep the guard: planning without it re-points rules the reload cannot
+  show. Covered by `test_mep_figure.py`; measured on Contra in
+  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
+  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
