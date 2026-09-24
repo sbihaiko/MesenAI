@@ -144,8 +144,12 @@ sheet legible to an artist. Coverage would not change, because the wildcard
 already matches. No tool consumes this today.
 
 Two cautions. SMB shares **0** palettes with our three SMB recordings (46
-against 9; the recordings agree with each other). The cause was not
-investigated, and every key-level SMB number here is 0 because of it. Pac-Man's
+against 9; the recordings agree with each other). The likely cause: the
+library's `Super Mario Bros. (1985) (Nintendo).nes` is not the No-Intro dump
+but the "SUPER MARIO BROS. REVISITED" hack (sha1 `155c2e0936e8b4a44950195b81a94257f42d5d93`,
+confirmed 2026-09-24), whose own palettes (magenta sky, olive ground) are what
+our recordings saw. Every key-level SMB number here is 0 because of it, and
+SMB should be re-measured against a stock dump before any conclusion. Pac-Man's
 pack declares a different dump (`E7D818E1…`, "Namco, US, 1993") from ours. Its
 indices all fall inside our CHR, but they are facts about another revision. The
 tool never compares *their* `<supportedRom>` with the dump. It checks only
