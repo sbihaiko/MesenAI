@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace Mesen.HeadlessTests;
@@ -20,4 +21,18 @@ namespace Mesen.HeadlessTests;
 public sealed class NativeCoreCollection
 {
 	public const string Name = "Native MesenCore (serial)";
+}
+
+//Review of #441. NativeCoreCollectionGuardTests follows calls into app code, but
+//not which branch a test's arguments select there. A class whose only core path
+//is such a branch - opening ConfigWindow on the Input tab, whose Audio tab would
+//enumerate devices through ConfigApi - carries this attribute with the reason,
+//instead of joining the serial collection. The guard rejects it on a class that
+//names the core itself, and when the walk no longer sees a path at all. CI backs
+//the claim: checks.yml runs this project with no core built, so a class marked
+//here that did reach MesenCore would fail there with DllNotFoundException.
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class NativeCoreFreeAttribute(string reason) : Attribute
+{
+	public string Reason { get; } = reason;
 }

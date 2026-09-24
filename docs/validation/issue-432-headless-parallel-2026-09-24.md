@@ -150,3 +150,50 @@ The dispatcher's copy table, with state:
   `Dispatcher.UIThread` from the core's thread between two isolated
   applications.
 - Seen once in 45 runs, so it was not filed as a bug.
+
+## Review follow-up (PR #441)
+
+- **Finding.** The guard followed calls only inside `UI.HeadlessTests`.
+  `EmuApi`, `DebugApi`, `ConfigApi` and `InputApi` live in the UI assembly.
+  So a test that reached the core only through app code was invisible, e.g.
+  one that builds `MainWindow`, whose constructor calls `EmuApi.InitDll()`.
+  All 8 serial classes happened to name `NativeCore` directly.
+- **Fix.** The walk now also follows direct calls into the UI assembly:
+  call/callvirt/newobj/ldftn operands, the static constructor of any app type
+  it touches, and the `MoveNext` of app async/iterator state machines. It
+  keeps a visited set and stops at 6 app-code calls deep
+  (`AppCallDepth`). The deepest real chain today is 4. A failure now prints
+  the call chain.
+- **What the walk does not model, on purpose.** It does not guess virtual
+  overrides or event handlers the framework may call later. Modeling them
+  would flag `ControllerHighlightTests`, because
+  `KeyBindingButton.OnPropertyChanged` calls `InputApi` for a property that
+  test never sets. It is also blind to which branch a test's arguments pick.
+- **Two classes are newly flagged. Neither reaches the core at runtime.**
+  - `PlayerSettingsTabsTests`: `ConfigWindow` → `ConfigViewModel` →
+    `SelectTab` → `AudioConfigViewModel` → `ConfigApi.GetAudioDevices`. The
+    test opens the Input tab, so the Audio branch never runs.
+  - `HdPackCopyReceiptTests`: `HdPackCopyHelper.CopyAsMepSheetCell` → `Copy`
+    → `TryReadTileKey` → `DebugApi.GetAbsoluteAddress`. With
+    `HdPackCopyContext.None()` it refuses before that read.
+  - Both now carry the new `[NativeCoreFree("<reason>")]` attribute
+    (`NativeCoreCollection.cs`) and stay parallel. The guard accepts it only
+    for a path through app code. It rejects the attribute on a class that
+    names the core itself, on a class that is also in the serial collection,
+    and on a class where the walk no longer finds any path (stale).
+  - CI backs the claim: `checks.yml` runs this project with no core built. A
+    `[NativeCoreFree]` class that really called `MesenCore` would fail there
+    with `DllNotFoundException`.
+- **No class newly needs the serial collection.** `ControllerHighlightTests`
+  stays unflagged.
+
+| Step | Result |
+|---|---|
+| Red: new self-test `A_class_that_reaches_the_core_only_through_app_code_is_flagged`, old walk | `Failed`. The fixture (`new MainWindow()`, no `[Fact]`, never run) was not flagged. |
+| Green: new walk | all 4 guard tests pass (main scan 34 ms, the rest ≤ 17 ms) |
+| Mutation: app-code following disabled | 3 guard tests fail, one of them reporting the stale `[NativeCoreFree]` |
+| Mutation: `[NativeCoreFree]` removed from `PlayerSettingsTabsTests` | `Failed`, printing the chain down to `ConfigApi.GetAudioDevices` |
+| `make headless-ui-tests`, twice (core built, no ROM env) | 24 passed, 4 skipped (ROM-gated), 0 failed. 4 s of test time each, 7.0 s and 6.5 s wall |
+| `make doc-checks` | pass |
+
+Both mutations were reverted after the run.
