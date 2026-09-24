@@ -4577,6 +4577,51 @@ namespace
 			"plans=" + std::to_string(plans.size()));
 	}
 
+	//Issue #415: a spriteNearby anchor names the palette its shape was seen
+	//with in OAM, never the palette of the shape's first-seen art. Zelda's
+	//blank tile (shape 0) was drawn as background with 09010001 before it
+	//reached OAM, and the condition carried that background palette.
+	void TestSpriteNearbyPaletteComesFromOam()
+	{
+		//Palette table: id 0 is a background word (backdrop byte in the top
+		//byte), ids 1 and 2 are sprite words (0xFF top byte).
+		std::vector<uint32_t> table(kUnknownPalette, 0);
+		table[0] = 0x09010001;
+		table[1] = 0xFF303B22;
+		table[2] = 0xFF292717;
+		auto entry = [](ShapeId shape, PaletteId pal) {
+			OamEntry e; e.Shape = shape; e.X = 10; e.Y = 20; e.Palette = pal; return e;
+		};
+		std::vector<OamFrame> frames(3);
+		//Shape 0: palette 1 seen first (2 frames), palette 2 later on 5 frames.
+		frames[0].Entries = { entry(0, 1), entry(1, 1) };
+		frames[0].RepeatCount = 2;
+		frames[1].Entries = { entry(0, 2) };
+		frames[1].RepeatCount = 5;
+		//Shape 1: a tie (2 vs 2) - the palette seen first wins. Shape 2 only
+		//ever carries a background word or an unknown id: no sprite evidence.
+		frames[2].Entries = { entry(1, 2), entry(2, 0), entry(2, kUnknownPalette) };
+		frames[2].RepeatCount = 2;
+
+		std::vector<uint32_t> pals = SpriteNearbyPalettes(frames, 4, table);
+		Check(pals.size() == 4, "Issue #415: one palette word per shape id", "size=" + std::to_string(pals.size()));
+		if(pals.size() != 4) {
+			return;
+		}
+		Check(pals[0] == 0xFF292717, "Issue #415: the sprite palette seen on the most OAM frames wins",
+			"pal=" + std::to_string(pals[0]));
+		Check(pals[1] == 0xFF303B22, "Issue #415: a tie goes to the palette seen first",
+			"pal=" + std::to_string(pals[1]));
+		Check(pals[2] == 0, "Issue #415: a background palette is never a spriteNearby palette (0 = emit nothing)",
+			"pal=" + std::to_string(pals[2]));
+		Check(pals[3] == 0, "Issue #415: a shape never seen in OAM has no palette",
+			"pal=" + std::to_string(pals[3]));
+		for(uint32_t pal : pals) {
+			Check(pal == 0 || (pal >> 24) == 0xFF, "Issue #415: every emitted palette is a sprite palette (FFxxxxxx)",
+				"pal=" + std::to_string(pal));
+		}
+	}
+
 	//A real group, straight out of BuildSprites, has to produce exactly
 	//cells-1 plans and never name a node twice - that is what bounds the
 	//emission at kSheetMaxObjectCells x groups instead of at vocabulary size.
@@ -9248,6 +9293,7 @@ int main()
 	TestSpriteGroupingAdmitsAShapeDrawnTwicePerFrame();
 	TestSpriteNearbyPlanIsASpanningTreeFromTheMostSeenCell();
 	TestSpriteNearbyPlanNeedsTwoPlacedCellsAndAnEdge();
+	TestSpriteNearbyPaletteComesFromOam();
 	TestSpriteNearbyPlanCoversEveryNonRootCellOnce();
 	TestNextStemIndexStartsAfterTheHighestStemInUse();
 	TestNextStemIndexNeverHandsBackANameInUse();
