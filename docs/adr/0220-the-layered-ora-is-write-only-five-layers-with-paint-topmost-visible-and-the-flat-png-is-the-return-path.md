@@ -20,6 +20,11 @@
   `paint` exported flat and reaching the game through F12.3 —
   `test_ora_writer.py` covers the container, the layers and the sentinel
   refusal only — so (3) is unevaluated (PR #384 review).
+  **Amended 2026-09-23:** (3) is met by PRD slice F14.1 — a stroke on the
+  `paint` layer of the Contra kit's `usr003.ora`, exported flat over
+  `usr003.png`, is pixel-exact in the running game after the F12.3 reload,
+  and the unchanged cells are dropped
+  (`docs/validation/f14.1-painted-round-trip-2026-09-23.md`). Only (2) is open.
   Proposed 2026-09-20 and left so the same day by the user's decision; the
   deferral's reason (no GIMP/Krita artist population measured) is unchanged
   and F12.11 stays the second path beside F12.4, measured against it (§6).
@@ -416,6 +421,9 @@ guides-visible export fails the lint one error per cell, a paint-only export
 passes with the tile-key set unchanged). Stop condition (3) stays unevaluated
 for the reason that log gives: the one cell painted so far is gated by
 `spriteNearby`, and the final-frame capture never landed on its pose.
+**Met 2026-09-23 by F14.1** with an unconditional-in-effect cell (all three
+of its rules point at the same crop) chosen from the compared frame itself;
+see the Status line.
 
 ## Consequences
 
