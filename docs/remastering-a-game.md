@@ -540,6 +540,7 @@ that, and bring it back onto the cells it came from (ADR-0209 Q3, the same
 explicit return path as any other surface):
 
 ```sh
+python3 scripts/mep_build.py build out/painted   # once, before the first import (#435)
 python3 scripts/mep_figure.py export out/painted spr000 --out out/kit/figures
 #   -> out/kit/figures/spr000-figure.png       paint this one
 #      out/kit/figures/spr000-figure.orig.png  never this one (the 1x reference)
@@ -567,7 +568,8 @@ that was never built with the sheets it holds (a kit just copied into a
 recording, or a fresh recording) and writes nothing: that first build
 straightens the sprite crops the recorder stored mirrored (ADR-0178), so a
 plan made before it would send paint to the wrong crop and move rules the
-reload cannot show (#435). Build once, then import. `--verify` rebuilds a
+reload cannot show (#435). Build once, then import. A pack that does not
+build at all is refused the same way. `--verify` rebuilds a
 throwaway copy, asserts the `(tileData, palette)` key set is unchanged, and
 says whether `hires.txt` is unchanged too, which is what the reload needs.
 The surface is at the pack's scale like every other sheet, and a resized

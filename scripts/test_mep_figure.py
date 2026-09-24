@@ -518,6 +518,34 @@ def test_an_import_before_the_first_build_is_refused_and_the_recipe_holds_the_ma
               "and the paint is on the crop the manifest draws")
 
 
+def test_an_import_into_a_pack_that_does_not_build_is_refused():
+    """#443 review: when the throwaway build fails, the probe can say neither
+    which crop owns a key nor whether the next build rewrites the sheets, so
+    a painted import would be planned blind - exactly the re-pointing #435
+    guards against. It is refused, untouched, like an unbuilt pack."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds once")
+        sheets = pack_dir / "textures" / "sheets"
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        before = _snapshot(sheets)
+        real_build = F._quiet_build
+        F._quiet_build = lambda folder: 1
+        try:
+            try:
+                rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+                check(False, "an import into a pack that does not build is refused", json.dumps(rep))
+            except F.FigureError as e:
+                check("does not build" in str(e), "an import into a pack that does not build is refused", str(e))
+            check(F.main(["import", str(pack_dir), str(out / "pose000-figure.png")]) == 2,
+                  "and the CLI exits 2")
+        finally:
+            F._quiet_build = real_build
+        check(_snapshot(sheets) == before, "and the refused import wrote nothing")
+
+
 def test_a_resized_figure_is_refused():
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack", with_poses=False)
