@@ -96,6 +96,7 @@ import zlib
 from pathlib import Path
 
 import mep_addition  # ADR-0196: <addition> lines and their synthetic target keys
+import mep_capture_scan  # #422: which live capture draws a painted key
 import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as the loader does
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
@@ -1251,6 +1252,7 @@ def cmd_build(args) -> int:
     # #343: every painted crop that emits no <tile> because another crop
     # already owns its key, as (sheet, data, palette, owner).
     muted = []
+    bitmaps = {}  # #422: emitted (data, palette) -> the tile bitmap a capture draws
     for sd in sheet_docs:
         try:
             crops = _slice_sheet(sd, scale, sheets_dir)
@@ -1262,6 +1264,7 @@ def cmd_build(args) -> int:
         repeats = 0
         pending_unflips = []
         for x, y, data, pal, edited, index, unflipped, mirror, authored in crops:
+            bitmap = data
             if index_keyed:
                 if index is None:
                     missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
@@ -1289,6 +1292,7 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
+            bitmaps.setdefault((data, pal), bitmap)
             variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
             for cond, rest in variants:
                 key = (cond, data, pal)
@@ -1368,9 +1372,10 @@ def cmd_build(args) -> int:
             winner[key] = (order, pos, score)
     kept = {(o, p) for o, p, _s in winner.values()}
 
-    # #338/#343: "did the cell I just painted reach the screen?" — measured in test_mep_build.py.
-    resident = {k: s for k, s in screen_resident_keys(sheets_dir).items()  # a retired capture (#344) warns about nothing
-                if (folder / "textures" / "backgrounds" / f"{s}.png").is_file()}
+    # #338/#343/#422: "did the cell I just painted reach the screen?" — measured in test_mep_build.py.
+    painted = {(e[0][1], e[0][2]): bitmaps.get((e[0][1], e[0][2])) for s in slots for e in s["entries"] if e[3]}
+    shadowed = mep_capture_scan.shadowing(folder / "textures", painted, screen_resident_keys(sheets_dir), body,
+                                          _png_pixels)
     lost_by = {}
     for rel, data, pal, other in muted:
         lost_by.setdefault(rel, {})[f"{data}/{pal}"] = other
@@ -1381,12 +1386,13 @@ def cmd_build(args) -> int:
             print(f"warning: {slot['rel']}: {len(lost)} painted tile key(s) were already claimed "
                   f"by another crop, so this sheet emits no <tile> for them and the paint cannot "
                   f"reach the screen — {sample} (#343)")
-        shadow = sorted({e[0][1] for e in slot["entries"] if e[3] and e[0][1] in resident})
-        if shadow:
-            print(f"warning: {slot['rel']}: {len(shadow)} painted tile key(s) are also drawn by the "
-                  f"captured screen backgrounds/{resident[shadow[0]]}.png, which wins over every "
-                  f"<tile> on the frames it was frozen for and only there (ADR-0050/ADR-0156) — "
-                  f"paint that capture too, or delete it to retire it (#338)")
+        hit = {(e[0][1], e[0][2]) for e in slot["entries"] if e[3] and (e[0][1], e[0][2]) in shadowed}
+        if hit:
+            shots = ", ".join(f"backgrounds/{s}.png" for s in sorted(set().union(*(shadowed[k] for k in hit))))
+            print(f"warning: {slot['rel']}: {len({k[0] for k in hit})} painted tile key(s) are also drawn by "
+                  f"the captured screen(s) {shots}, each of which wins over every <tile> on the frames it "
+                  f"was frozen for and only there (ADR-0050/ADR-0156) — paint that capture too, or delete "
+                  f"it to retire it (#338)")
 
     # #253: a painted *sprite* cell that loses to another sheet is an error — a
     # green build hid that the paint never reached the figure. Others: a choice.

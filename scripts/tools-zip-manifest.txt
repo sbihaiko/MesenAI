@@ -30,6 +30,7 @@ compose_engine.py
 fm2_to_bk2.py
 mep_addition.py
 mep_build.py
+mep_capture_scan.py
 mep_carry.py
 mep_compare.py
 mep_conditions.py
