@@ -425,7 +425,9 @@ def dump_coverage(table):
     `WalkTilemap` (`CopyAsMepSheetCellTests.cs`) walks every cell of all four
     nametables and keeps the ones the copy answered for; a cell the frame drew
     is missing from `table` when the copy refused it (`NesDrawnTileResolver`'s
-    `BanksDisagree`, or the pack holding no rule for it - #342/#420). Before
+    `BanksDisagree`, or the pack keying it under several drawable palettes,
+    none of them live - #342/#420; since ADR-0215's 2026-09-24 amendment a
+    tile the pack holds no rule for copies with the live palette). Before
     #421 the walk covered nametable $2000 only, so a scrolled game lost the
     whole part of its screen that another nametable drew. This is the raw row
     count over the screen's `FULL_GRID_CELLS`, with no repetition to inflate
@@ -950,8 +952,8 @@ def main(argv=None):
     if report["dump_coverage"] < MOMENT_CELLS:
         log("warn", f"the copy table names only {report['cells']}/{FULL_GRID_CELLS} "
                     f"({coverage:.1%}) of the frame's positions - the copy refused "
-                    "the rest (no rule in the baseline pack, or CHR banks that "
-                    "disagree), so the pixel-match 'blocks explained' figure above "
+                    "the rest (several drawable palettes in the baseline pack, "
+                    "none live, or CHR banks that disagree), so the pixel-match 'blocks explained' figure above "
                     "overstates what the evaluator can actually paste from")
     if not report["one_moment"]:
         log("warn", "no candidate second puts this pack's nametable on the screen "

@@ -18,6 +18,11 @@
   picks, but paraphrased rather than in the wording quoted under each OPEN
   below, so the PR-body half of the rule was met in substance, not
   verbatim.
+  *Amended 2026-09-24 (NoRule):* the user reversed the refusal of a tile the
+  loaded pack holds no rule for. The go-ahead, verbatim: *"aceito sua
+  sugestao. pode aplicar e rodar em paralelo"*. It is implemented in the same
+  turn, with unit tests in `UI.Tests/Mep/NesPackTilePaletteTests.cs`, and the
+  PR body must carry the same quote. See the last amendment below.
 - Date: 2026-09-19
 - Related: issue #341, issue #342 (the live palette, decided with this ADR),
   issue #340 (no receipt, decided with this ADR), ADR-0172 (the sidecar records
@@ -370,3 +375,72 @@ recorded palettes none drawable, only drawable palettes count as candidates,
 the per-layer packing; the Metroid substitution still passes on a frame that
 holds `0F0F0F0F`). Measurements:
 `docs/validation/issue-431-fade-palette-copy-2026-09-24.md`.
+
+## Amendment, 2026-09-24 (NoRule): a tile the pack holds no rule for copies with the live palette
+
+Decided by the user on 2026-09-24. The go-ahead, verbatim: *"aceito sua
+sugestao. pode aplicar e rodar em paralelo"*.
+
+This reverses one clause of the palette section. Its third bullet refused two
+cases: "the pack holds no rule for the tile, or holds several and the live
+palette is none of them". The first half, `NoRule`, is no longer a refusal. The
+Consequence bullet that begins "Refusing when the loaded pack holds no rule for
+a tile" is withdrawn with it. The text above stays as written, so the record
+shows what was decided and when.
+
+**Why the refusal was wrong.** Both passages rest on one premise: a key the
+pack does not hold "can never match at run time". That confuses the pack as
+loaded with the pack after the paste. The runtime looks the tile up under the
+palette the frame draws it with, which is the live palette. A paste that adds
+a rule for that key gives the lookup something to find. #431's E2E measured
+it (`docs/validation/issue-431-fade-palette-copy-2026-09-24.md`). On Tetris 2,
+tile `0x1170`, the pack held no rule under the live `0F281807`. A new cell
+with that key, painted magenta, built and linted clean and rendered
+**274 432** magenta pixels (268 cells of 32×32). The key the pack did hold,
+`0F0F0F0F`, rendered 0. For the tile the artist clicked, a key the pack does
+not hold was the only one that matched. The refusal therefore did not stop a
+wrong key. It stopped the one key that works, and it made "any tile you can
+see" narrower for no gain. Adding new art for a tile the recording never kept
+is part of the paint loop, not a mistake to catch.
+
+**The rule now.**
+
+- `NoRule` (the loaded pack answers with no palette for the tile) keeps the
+  live palette, packed as for any other copy (`FF` leads a sprite's word). The
+  copy succeeds. Its receipt says that the loaded pack holds no rule for the
+  tile, names the live palette, and says that the paste adds a new key.
+  `IsRefusal` is false.
+- `NoRule` stays a status of its own, apart from `Unchecked`, which means no
+  pack is loaded. Both emit the live palette. Only `NoRule` puts the "no
+  rule" clause on the receipt, so the artist knows the paste adds a key and
+  does not repaint one.
+- Everything else stands: `LiveMatches`, `Substituted`, `RecordedNotDrawn`
+  (the #431 amendment), and the refusals from the drawn-tile resolver
+  (`NotDrawnThisFrame`, `BanksDisagree`, `NotDrawnSinceLoad`, the Tile Viewer
+  with no frame context).
+
+**Why `Ambiguous` stays a refusal.** `Ambiguous` means the pack keys the tile
+under two or more palettes that palette RAM holds for the layer now (the #431
+amendment's candidates), and none of them is live. Here the pack is evidence
+*against* the live palette, which `NoRule` never is. The recording saw this
+tile drawn under the candidates on a frame like this one. The copy has no
+per-scanline palette trace, so it cannot tell whether the clicked cell was
+drawn under the live word or under a candidate. A candidate is possible after
+a mid-frame palette swap or a fade step written in vblank, the case the #431
+amendment names. With one candidate, the section already prefers the pack's
+evidence (`Substituted`). With several, neither the pack nor the frame picks
+one. The Decision's rule is to say so rather than emit a plausible guess. The
+live palette would be such a guess too: it is the one word the pack's
+evidence speaks against. `NoRule` has no such evidence, and the runtime's own
+lookup is exactly the live word, so nothing is being guessed. The go-ahead
+also covered `NoRule` only. Changing `Ambiguous` would be a separate decision,
+and this amendment does not make it.
+
+Tests: `UI.Tests/Mep/NesPackTilePaletteTests.cs`.
+`A_tile_the_pack_does_not_hold_is_refused` asserted the old refusal. It is
+replaced by `A_tile_the_pack_does_not_hold_copies_with_the_live_palette`
+(status, live palette, not a refusal, the receipt clauses) and
+`A_sprite_the_pack_does_not_hold_copies_with_its_live_sprite_palette`.
+`Several_recorded_palettes_and_no_match_is_refused_with_the_list` still pins
+`Ambiguous` as a refusal. Red, green, mutations and E2E:
+`docs/validation/adr0215-norule-copy-2026-09-24.md`.

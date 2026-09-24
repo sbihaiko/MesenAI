@@ -134,7 +134,9 @@ namespace Mesen.Debugger.Utilities
 		//ADR-0215: a PPU-space address is resolved through the CHR mapping that DREW
 		//the frame, never through `_chrPages` as the paused emulator holds it, and the
 		//palette is checked against the rules the loaded pack actually keys this tile
-		//under. Either check can refuse; `key.Note` then says why.
+		//under. Either check can refuse; `key.Note` then says why. A tile the pack
+		//holds no rule for is not refused: it goes out under the live palette, and
+		//`key.Note` says the paste adds a new key (ADR-0215, amendment of 2026-09-24).
 		private static bool TryReadTileKey(AddressInfo tileAddr, UInt32[] rawPalette, int paletteIndex, bool forSprite, HdPackCopyContext context, out TileKey key)
 		{
 			key = new TileKey() { TileData = "", Palette = "", TileIndex = MepSheetCell.UnknownIndex, Note = "", Scanline = -1 };
