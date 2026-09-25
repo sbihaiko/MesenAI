@@ -262,6 +262,45 @@ def test_a_hud_only_pose_is_kept_out_of_the_figure_grids():
         check("ADR-0173" in whys.get("pose001", ""), "dropped[] cites the ADR", str(whys))
 
 
+def test_a_pinned_pose_a_run_orders_is_an_actor_and_not_hud():
+    """Issue #493: on Excitebike the rider holds a fixed screen x while the track
+    scrolls, so every one of its nodes is screen-fixed (ADR-0173) and the kit was
+    dropping its wheel cycle as HUD. A pose a recorded run orders is a phase of an
+    animation the recorder saw repeat — that is an actor, and ADR-0173's own
+    known-false-positive class, never a bar. A pinned pose no run ordered is the
+    HUD it always was."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        doc = _poses_doc(extra_poses=[
+            _pose("pose001", 800, {2: (0, 0), 3: (0, 1)}),  # pinned, in no run: the HUD
+            _pose("pose002", 600, {2: (0, 0), 3: (0, 1)}),  # pinned, a cycle phase: the rider
+            _pose("pose003", 400, {2: (1, 0), 3: (1, 1)}),  # the rider's other phase
+        ])
+        doc["cycles"] = [{"id": "cycle000", "period": 2, "repeats": 768,
+                          "poses": ["pose002", "pose003"], "hold": [2, 2]}]
+        pack = _kit_pack(root, doc)
+        # Only 2 and 3: pose000 shares no node with the HUD pair, so it stays a figure.
+        adj_path = root / "textures" / "sheets" / "adjacency.json"
+        adj = json.loads(adj_path.read_text(encoding="utf-8"))
+        for node in adj["sprites"]["nodes"]:
+            if node["cell"] in (2, 3):
+                node["screenFixed"] = True
+        adj_path.write_text(json.dumps(adj), encoding="utf-8")
+        builder = K.KitBuilder(E.Pack(root))
+        check(builder.hud_classified, "the fixture's adjacency classifies HUD")
+        grids = builder.build()
+        laid = {c.pose.id for g in grids for c in g.cells}
+        check("pose001" not in laid, "a pinned pose no run ordered is still left out",
+              str(laid))
+        check({"pose002", "pose003"} <= laid,
+              "a pinned pose a recorded run orders is laid out as a figure", str(laid))
+        check(builder.excluded_hud == ["pose001"], "and only the HUD pose is reported",
+              str(builder.excluded_hud))
+        row = [c.pose.id for g in grids if g.kind == "cycle" for c in g.cells]
+        check(sorted(row) == ["pose002", "pose003"],
+              "the cycle lays out the pinned phases it ordered", str(row))
+
+
 def test_a_pack_that_never_classified_hud_says_so_instead_of_guessing():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -437,6 +476,7 @@ def main():
         test_the_exported_sheet_is_a_legal_composed_sheet,
         test_a_multi_row_grid_keeps_the_old_single_row_sidecar_shape,
         test_a_hud_only_pose_is_kept_out_of_the_figure_grids,
+        test_a_pinned_pose_a_run_orders_is_an_actor_and_not_hud,
         test_a_pack_that_never_classified_hud_says_so_instead_of_guessing,
         test_a_name_is_claimed_by_creating_it_so_two_writers_cannot_collide,
         test_names_caption_a_file_and_absence_falls_back_to_the_id,

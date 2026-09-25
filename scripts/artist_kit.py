@@ -152,18 +152,32 @@ class KitBuilder:
         # are painted, not a ground they stand on, and they are not figures.
         self.hud_nodes = {n for n, node in pack.adjacency.sp.items() if node.screen_fixed}
         self.hud_classified = _sprites_classify_screen_fixed(pack)
+        # #493: a run (ADR-0179) is the recorder's own statement that a *group*
+        # of poses repeats in order. A pinned pose a run ordered is a phase of an
+        # animation — Excitebike's rider, which holds a fixed screen x while the
+        # track scrolls, so every node of it is screen-fixed — and ADR-0173's own
+        # known-false-positive class, not the bar. A pinned pose no run ordered is
+        # HUD exactly as before.
+        self.animated = {pid for run in self.poses.cycles + self.poses.sequences
+                         for pid in run.poses}
         self.excluded_fusions = [p.id for p in self.poses.entries if p.fused]
         self.excluded_hud = [p.id for p in self.poses.entries
                              if not p.fused and self.is_hud(p)]
 
     def is_hud(self, pose) -> bool:
-        """Whether every drawn member of `pose` is a screen-pinned node.
+        """Whether `pose` is a screen-pinned node assembly that no run ordered.
 
         Whole-figure, not any-member: a figure that overlaps the life bar for a
         frame shares no node with it, but a pose built only out of pinned nodes
-        *is* the bar. On a pack recorded before ADR-0173 nothing is classified,
-        so nothing is excluded and the kit says so rather than guessing."""
+        *is* the bar. Pinned is a fact about a node (ADR-0173 labels, it does not
+        identify the HUD), so being pinned is not enough on its own: a run that
+        ordered the pose says the recorder saw that assembly animate, and an
+        animation is a figure. On a pack recorded before ADR-0173 nothing is
+        classified, so nothing is excluded and the kit says so rather than
+        guessing."""
         if not self.hud_classified:
+            return False
+        if pose.id in self.animated:
             return False
         tiles = self.drawable(pose)
         return bool(tiles) and all(n in self.hud_nodes for n in tiles)
@@ -722,8 +736,9 @@ def _dropped(builder):
     for pid in sorted(builder.excluded_hud):
         out.append({"path": pid,
                     "why": "every tile of it is a node the recorder saw pinned to the screen "
-                           "for the whole capture (ADR-0173) — a score digit, a life-bar "
-                           "segment: HUD, not a figure"})
+                           "for the whole capture, and no cycle or sequence ordered this "
+                           "assembly (ADR-0173) — a score digit, a life-bar segment: HUD, not "
+                           "a figure"})
     for pid in sorted(builder.excluded_blank):
         out.append({"path": pid,
                     "why": "no sheet of this pack draws a single tile of it — the pose sidecar "
