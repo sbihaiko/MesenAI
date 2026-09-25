@@ -101,6 +101,7 @@ import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as th
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
 import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
+import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 colour 0, sheet + twin in lockstep
 from mep_recipe_common import sha256_file
 
 # NES hires.txt version emitted for the texture and audio manifests (ver >=
@@ -266,107 +267,47 @@ def _png_write(path: Path, bmp: "_Bitmap") -> None:
         + chunk(b"IEND", b""))
 
 
-def _flip_bitmap_region(bmp: "_Bitmap", x: int, y: int, w: int, h: int, mirror: str) -> None:
-    """Un-bake an OAM mirror from a crop in place (#255 / ADR-0178). The run
-    time keys by the unflipped tile and mirrors the replacement art itself, so
-    a sheet cell that carried `source` + `mirror` must store unflipped pixels
-    under the source key — not the baked-flipped bitmap the kit showed."""
-    ch = bmp.channels
-    if "H" in mirror:
-        for row in range(y, y + h):
-            off = row * bmp.stride
-            for i in range(w // 2):
-                a = off + (x + i) * ch
-                b = off + (x + w - 1 - i) * ch
-                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
-                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
-    if "V" in mirror:
-        for col in range(x, x + w):
-            for i in range(h // 2):
-                a = (y + i) * bmp.stride + col * ch
-                b = (y + h - 1 - i) * bmp.stride + col * ch
-                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
-                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
-
-
-def _unflip_sheet_crops(png_path: Path, crops: list, scale: int,
-                        ref_path: Path | None = None) -> int:
-    """Apply pending mirror un-bakes to `png_path` and, in lockstep (#329), to
-    its 1x `*.orig.png` twin `ref_path`. Returns how many crops were rewritten.
+def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix) -> int:
+    """Apply `fix(sheet, twin_or_None)` to `png_path` and, in lockstep (#329),
+    to its 1x `*.orig.png` twin `ref_path`; `fix` returns how many crops it
+    rewrote, and both files are written only when that is not 0.
 
     The twin is the baseline ADR-0153 §4 diffs the sheet against to decide
     whether the artist painted a cell, so a mechanical rewrite of the sheet must
     land on it too: un-baking only the sheet left each corrected cell differing
     from a still-baked twin, so the next `build` read those cells as painted and
-    tripped #253 wherever one lost its key to a higher-ranked sheet. Un-baking is
-    a reflection, and nearest-neighbour upscaling commutes with it."""
-    if not crops:
-        return 0
+    tripped #253 wherever one lost its key to a higher-ranked sheet. Both fixes
+    (sheet_pixel_fixes) commute with nearest-neighbour upscaling."""
     bmp = _png_pixels(png_path)
     if bmp is None:
-        print(f"warning: {png_path.name}: cannot rewrite mirror crops — not an "
-              f"8-bit RGB/RGBA PNG; mirrored cells keep their baked pixels",
-              file=sys.stderr)
+        print(f"warning: {png_path.name}: cannot rewrite crops — not an 8-bit RGB/RGBA "
+              f"PNG; they keep the pixels the recorder drew", file=sys.stderr)
         return 0
     ref = _png_pixels(ref_path) if ref_path is not None else None
     if ref is not None and (ref.width * scale, ref.height * scale, ref.channels) != (bmp.width, bmp.height, bmp.channels):
         ref = None  # not this sheet's twin: _EditedProbe is blind here too
-    span = 8 * scale
-    for x, y, mirror in crops:
-        if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
-            continue
-        _flip_bitmap_region(bmp, x, y, span, span, mirror)
-        tx, ty = x // scale, y // scale
-        if ref is not None and tx + 8 <= ref.width and ty + 8 <= ref.height:
-            _flip_bitmap_region(ref, tx, ty, 8, 8, mirror)
-    _png_write(png_path, bmp)
-    if ref is not None:
-        _png_write(ref_path, ref)
-    return len(crops)
-
-
-def _sidecar_drop_mirrors(json_path: Path) -> int:
-    """After un-baking mirror crops into the sheet PNG, rewrite the sidecar so
-    a second `build` does not flip again (#255 idempotency). Each tile entry
-    that carried `source` + `mirror` becomes a plain unflipped entry: `tile`
-    is replaced by `source`, and both optional fields are removed."""
-    try:
-        doc = json.loads(json_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return 0
-    if not isinstance(doc, dict):
-        return 0
-    n = 0
-
-    def fix_tiles(tiles):
-        nonlocal n
-        if not isinstance(tiles, list):
-            return
-        for entry in tiles:
-            if not isinstance(entry, dict):
-                continue
-            src = str(entry.get("source") or "").strip().upper()
-            mir = str(entry.get("mirror") or "").strip().upper()
-            if not src or mir not in ("H", "V", "HV") or not _HEX_TILE_RE.match(src):
-                continue
-            entry["tile"] = src
-            entry.pop("source", None)
-            entry.pop("mirror", None)
-            n += 1
-
-    for cell in doc.get("cells") or []:
-        if not isinstance(cell, dict):
-            continue
-        fix_tiles(cell.get("tiles"))
-        for alias in cell.get("aliases") or []:
-            if isinstance(alias, dict):
-                fix_tiles(alias.get("tiles"))
-    if not n:
-        return 0
-    json_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    n = fix(bmp, ref)
+    if n:
+        _png_write(png_path, bmp)
+        if ref is not None:
+            _png_write(ref_path, ref)
     return n
 
 
+def _unflip(crops: list, scale: int):
+    """The ADR-0178 un-bake of `crops` [(x, y, mirror)] as a `_rewrite_sheet` fix."""
+    def fix(bmp, ref):
+        span, n = 8 * scale, 0
+        for x, y, mirror in crops:
+            if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
+                continue
+            F.flip_region(bmp, x, y, span, span, mirror)
+            n += 1
+            tx, ty = x // scale, y // scale
+            if ref is not None and tx + 8 <= ref.width and ty + 8 <= ref.height:
+                F.flip_region(ref, tx, ty, 8, 8, mirror)
+        return n
+    return fix
 
 
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
@@ -1258,32 +1199,39 @@ def cmd_build(args) -> int:
     # already owns its key, as (sheet, data, palette, owner).
     muted = []
     bitmaps = {}  # #422: emitted (data, palette) -> the tile bitmap a capture draws
+    sliced = []
     for sd in sheet_docs:
         try:
-            crops = _slice_sheet(sd, scale, sheets_dir)
+            sliced.append((sd, _slice_sheet(sd, scale, sheets_dir)))
         except BuildError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    # #456: the background crops that keep colour 0 transparent - every crop of
+    # a key the key source draws see-through, closed over shared crops.
+    see_through = F.see_through_places(
+        (((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]))
+         for sd, crops in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS for c in crops if c[3][:2] != "FF"),
+        F.KeySourceAlpha(source, _png_pixels).transparent)
+    for sd, crops in sliced:
         entries = []
         seen = {}
         repeats = 0
-        pending_unflips = []
+        pending_unflips, punches = [], {}
         for x, y, data, pal, edited, index, unflipped, mirror, authored, fold in crops:
             bitmap = data
-            if index_keyed:
-                if index is None:
-                    missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
-                    continue
-                data = _index_token(index)
-            elif unflipped is not None:
+            if index_keyed and index is None:
+                missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
+                continue
+            if index_keyed or unflipped is not None:
                 # ADR-0178: the recorded bitmap has the sprite's OAM flips baked
                 # in, and the run time keys by the unflipped data - it mirrors
                 # the replacement art itself. On a data-keyed (CHR RAM) game the
-                # baked form is a key nothing ever looks up. The pixels must be
-                # un-baked too (#255): storing the flipped bitmap under the
-                # source key makes the mirrored phase render garbled.
-                data = unflipped
-                if mirror and fold is None:  # a fold shares its cell's pixels: un-bake once
+                # baked form is a key nothing ever looks up; an index-keyed (CHR
+                # ROM, ADR-0172) game keys by the index, which no flip changes.
+                # Either way the pixels must be un-baked (#255, #457): storing
+                # the flipped bitmap makes the mirrored phase render garbled.
+                data = _index_token(index) if index_keyed else unflipped
+                if unflipped is not None and mirror and fold is None:  # a fold shares its cell's pixels: un-bake once
                     pending_unflips.append((x, y, mirror))
             elif (sd.kind in _FLIPPABLE_SHEET_KINDS
                   and (data, pal) not in keysrc_attrs
@@ -1297,6 +1245,8 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
+            if (sd.name, x, y) in see_through and (x, y) not in punches:
+                punches[(x, y)] = (unflipped or bitmap, pal)  # the pixels the crop holds once un-baked
             bitmaps.setdefault((data, pal), bitmap)
             variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
             variants = variants if fold is None else [(c, [fold] + list(r[1:])) for c, r in variants]
@@ -1316,17 +1266,23 @@ def cmd_build(args) -> int:
                     continue
                 seen[key] = len(entries)
                 entries.append(row)
+        # The twin is the "was this painted?" baseline: same rewrite (#329).
+        twin = str(sd.doc.get("reference") or "").strip()
+        twin = sheets_dir / twin if twin else None
         if pending_unflips:
-            # The twin is the "was this painted?" baseline: same un-bake (#329).
-            twin = str(sd.doc.get("reference") or "").strip()
-            n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale, sheets_dir / twin if twin else None)
+            n = _rewrite_sheet(sd.png_path, twin, scale, _unflip(pending_unflips, scale))
             if n:
                 # Drop source/mirror from the sidecar so a second build does not
                 # un-bake the already-corrected pixels again (#255 idempotency).
-                dropped = _sidecar_drop_mirrors(sd.json_path)
+                dropped = F.sidecar_drop_mirrors(sd.json_path)
                 print(f"info: {sd.name}: un-baked {n} mirror crop(s) so the source "
                       f"key stores the pixels the run time will mirror"
                       + (f"; cleared {dropped} sidecar mirror field(s)" if dropped else ""))
+        n = punches and _rewrite_sheet(sd.png_path, twin, scale, lambda bmp, ref: sum(
+            F.punch_backdrop(bmp, ref, px, py, scale, t, p) for (px, py), (t, p) in punches.items()))
+        if n:
+            print(f"info: {sd.name}: {n} background crop(s) keep colour 0 transparent, as the "
+                  f"recording draws them over a behind-background sprite (#456)")
         if repeats:
             print(f"info: {sd.name}: {repeats} crop(s) repeat a tile key already taken by an earlier crop of the same sheet")
         rel = f"sheets/{sd.name}"

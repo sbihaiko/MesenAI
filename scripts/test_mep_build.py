@@ -48,6 +48,12 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
   * #255: a sprite sheet cell with `source` + `mirror: H` stores unflipped
     pixels under the unflipped source key (ADR-0178 — the run time mirrors
     the replacement art itself);
+  * #457: an index-keyed (CHR ROM) mirror cell is un-baked like a CHR RAM
+    one, sheet and twin in lockstep, and a second build leaves it alone;
+  * #456: a background key the recording keeps transparent at colour 0 is
+    rebuilt transparent there (sheet and twin), an opaque key and the
+    artist's paint stay opaque, and a second build is byte-identical, also
+    when two keys share a crop (a bank-swapping game's alias);
   * #256: every `[condition]` rule keeps its unconditional fallback twin in
     the rebuilt `hires.txt`, so a condition miss still shows the painted art;
   * #253: a painted sprite sheet whose cells lose to another sheet fails the
@@ -1326,6 +1332,10 @@ def sheet_round_trip_tests(root: Path):
     flip_baked_key_tests(root)
     mirror_h_pixel_key_tests(root)
     mirror_unbake_idempotency_tests(root)
+    index_keyed_unflip_tests(root)
+    backdrop_transparency_tests(root)
+    backdrop_shared_crop_tests(root)
+    backdrop_unbake_and_sprite_tests(root)
     condition_fallback_twin_tests(root)
     authored_condition_round_trip_tests(root)
     painted_sprite_ownership_tests(root)
@@ -1644,6 +1654,294 @@ def mirror_unbake_idempotency_tests(root: Path):
         ok("#329: a genuinely painted sprite cell that loses its key still fails #253")
     else:
         fail(f"#329: #253 no longer fires for a real paint conflict: {out3}")
+
+
+def _one_cell_sidecar(kind: str, stem: str, entries) -> str:
+    """A unit-8 sidecar with one cell per `entries` item, laid out in a row at
+    x = 8 * i, gutter 0. Each item is the raw JSON of that cell's tile entry."""
+    cells = ",\n".join(
+        f'    {{ "index": {i}, "x": {8 * i}, "y": 0, "count": 1, "context": "scene", '
+        f'"label": "", "tiles": [{e}] }}' for i, e in enumerate(entries))
+    return ("{\n" '  "version": 1,\n' f'  "kind": "{kind}",\n' '  "gridUnit": 8,\n'
+            '  "gridPhase": { "x": 0, "y": 0 },\n'
+            '  "gridConsistency": { "chosen": 0.8300, "alt8x8": 0.4100 },\n'
+            '  "cell": { "w": 8, "h": 8 },\n' '  "gutter": 0,\n'
+            f'  "columns": {len(entries)},\n' f'  "sheet": "{stem}.png",\n'
+            f'  "reference": "{stem}.orig.png",\n' f'  "cells": [\n{cells}\n  ]\n' "}\n")
+
+
+def index_keyed_unflip_tests(root: Path):
+    """#457: on a CHR ROM game (index keys, ADR-0172) a mirrored sprite cell
+    must be un-baked exactly like on a CHR RAM game (ADR-0178, #255). The key
+    is the index either way, but the run time still mirrors the replacement
+    art itself, so a crop left baked is drawn flipped twice: Glass Joe torn."""
+    folder = root / "index-keyed-unflip"
+    sheets = folder / "textures" / "sheets"
+    sheets.mkdir(parents=True)
+    shape = 3
+    index = CHR_INDEX_BASE + shape
+    token = f"{index:02X}"
+    pixels = blank(8, 8)
+    render_tile_hflipped(shape, pixels, 0, 0, 8, 8)
+    write_pair(sheets, "spr000", pixels, 1)  # sheet and twin both baked, as recorded
+    src = tile_hex(shape)
+    (sheets / "spr000.json").write_text(_one_cell_sidecar("sprite", "spr000", [
+        f'{{ "tile": "{flip_hex(src)}", "palette": "{PAL_HEX}", "index": {index}, '
+        f'"source": "{src}", "mirror": "H" }}']), encoding="utf-8")
+    (folder / "textures" / "hires.txt").write_text(
+        "\n".join(["<ver>107", "<scale>1", "<system>nes",
+                   "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+                   f"<tile>0,{token},{PAL_HEX},0,0,1,N"]) + "\n", encoding="utf-8")
+    want = blank(8, 8)
+    render_tile(shape, want, 0, 0, 8, 8)
+
+    def crop_of_key():
+        imgs, tiles = parse_hires(folder / "textures" / "hires.txt")
+        entry = tiles.get((token, PAL_HEX))
+        if entry is None:
+            return None
+        return crop(png_read(sheets / Path(imgs[entry[0]]).name), entry[1], entry[2], 8)
+
+    if run("build", str(folder)) is None:
+        return
+    got = crop_of_key()
+    if got == want:
+        ok("#457: an index-keyed mirror-H sprite cell stores the unflipped art under its index key")
+    else:
+        mirrored = got == pixels
+        fail(f"#457: the crop under index key {token} is not the unflipped art"
+             f"{' (it is still the baked mirror)' if mirrored else ''}")
+        return
+    twin = png_read(sheets / "spr000.orig.png")
+    if twin == want:
+        ok("#457: the *.orig.png twin is un-baked in lockstep on an index-keyed pack (#329)")
+    else:
+        fail("#457: the twin still holds the baked mirror, so the next build reads the cell as painted")
+    if run("build", str(folder)) is None:
+        return
+    entry = json_loads((sheets / "spr000.json").read_text(encoding="utf-8"))["cells"][0]["tiles"][0]
+    if crop_of_key() == want and "mirror" not in entry and entry.get("index") == index:
+        ok("#457: a second build leaves the index-keyed crop unflipped and the sidecar plain (idempotent)")
+    else:
+        fail(f"#457: the second build re-flipped the crop or kept the mirror field: {entry}")
+
+
+def _render_bg(shape: int, transparent0: bool):
+    """RenderTile at 1x; `transparent0` is what HdPackBuilder::GenerateHdTile
+    writes for a background key drawn over a behind-background sprite
+    (`TransparencyRequired`): colour index 0 left at alpha 0."""
+    out = blank(8, 8)
+    render_tile(shape, out, 0, 0, 8, 8)
+    if transparent0:
+        data = tile_bytes(shape)
+        for r in range(8):
+            for c in range(8):
+                if not ((data[r] >> (7 - c)) & 1 or (data[r + 8] >> (7 - c)) & 1):
+                    out[r][c] = 0
+    return out
+
+
+def backdrop_transparency_tests(root: Path):
+    """#456: a background key the recording keeps transparent at colour 0 (a
+    behind-background sprite was drawn over it, `TransparencyRequired`) has to
+    stay transparent in the rebuilt pack. The sheet shows colour 0 as the
+    opaque backdrop, so a rebuilt `textures/` layer that copied it painted the
+    floor over Glass Joe. Keys the recording draws opaque stay opaque, and a
+    colour-0 pixel the artist repainted is paint, not backdrop."""
+    folder = root / "backdrop-transparency"
+    tex = folder / "textures"
+    sheets = tex / "sheets"
+    sheets.mkdir(parents=True)
+    shapes = [21, 22, 23]  # A: transparent in the recording, B: opaque, C: transparent and painted
+    need = [True, False, True]
+    # The key source is the recording: its own crops, at its own <scale>.
+    source = blank(24, 8)
+    for i, s in enumerate(shapes):
+        for r, row in enumerate(_render_bg(s, need[i])):
+            source[r][8 * i:8 * i + 8] = row
+    (tex / "old.png").write_bytes(png_rgba(source))
+    (tex / "hires.txt").write_text("\n".join(
+        ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+         "<img>old.png"] + [f"<tile>0,{tile_hex(s)},{PAL_HEX},{8 * i},0,1,N" for i, s in enumerate(shapes)])
+        + "\n", encoding="utf-8")
+    # The sheet: every colour index opaque, as SheetRender draws a background cell.
+    sheet = blank(24, 8)
+    for i, s in enumerate(shapes):
+        for r, row in enumerate(_render_bg(s, False)):
+            sheet[r][8 * i:8 * i + 8] = row
+    write_pair(sheets, "metatiles", sheet, 1)
+    (sheets / "metatiles.json").write_text(_one_cell_sidecar("metatiles", "metatiles", [
+        f'{{ "tile": "{tile_hex(s)}", "palette": "{PAL_HEX}" }}' for s in shapes]), encoding="utf-8")
+    # The artist repaints one colour-0 pixel of C (and one ink pixel).
+    zero_c = next((r, c) for r in range(8) for c in range(8) if _render_bg(23, True)[r][c] == 0)
+    ink_c = next((r, c) for r in range(8) for c in range(8) if _render_bg(23, True)[r][c] != 0)
+    painted = png_read(sheets / "metatiles.png")
+    for r, c in (zero_c, ink_c):
+        painted[r][16 + c] = 0xFFA020F0
+    (sheets / "metatiles.png").write_bytes(png_rgba(painted))
+
+    if run("build", str(folder)) is None:
+        return
+    imgs, tiles = parse_hires(tex / "hires.txt")
+
+    def crop_of(shape):
+        e = tiles.get((tile_hex(shape), PAL_HEX))
+        return None if e is None else crop(png_read(sheets / Path(imgs[e[0]]).name), e[1], e[2], 8)
+
+    def opaque(px):
+        return sum(1 for row in (px or []) for p in row if p >> 24 == 0xFF)
+
+    want_c = _render_bg(23, True)
+    for r, c in (zero_c, ink_c):
+        want_c[r][c] = 0xFFA020F0
+    got_a, got_b, got_c = crop_of(21), crop_of(22), crop_of(23)
+    if got_a == _render_bg(21, True):
+        ok("#456: a key the recording draws transparent at colour 0 is rebuilt transparent there")
+    else:
+        fail(f"#456: key A's rebuilt crop is not the recording's transparency "
+             f"({opaque(got_a)} of 64 px opaque, want {opaque(_render_bg(21, True))})")
+    if got_b == _render_bg(22, False):
+        ok("#456: a key the recording draws opaque keeps its opaque backdrop")
+    else:
+        fail(f"#456: key B (opaque in the recording) changed in the rebuild ({opaque(got_b)} of 64 px opaque)")
+    if got_c == want_c:
+        ok("#456: a repainted colour-0 pixel stays paint; the untouched backdrop of that key goes transparent")
+    else:
+        fail(f"#456: key C mixed up the artist's paint and the backdrop "
+             f"({opaque(got_c)} of 64 px opaque, want {opaque(want_c)})")
+    twin = png_read(sheets / "metatiles.orig.png")
+    if crop(twin, 0, 0, 8) == _render_bg(21, True) and crop(twin, 8, 0, 8) == _render_bg(22, False):
+        ok("#456: the *.orig.png twin gets the same transparency, so the cell still reads as unpainted")
+    else:
+        fail("#456: the twin was not updated in lockstep with the sheet")
+
+    def digest():
+        return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(folder.rglob("*")) if p.is_file()}
+
+    before = digest()
+    if run("build", str(folder)) is None:
+        return
+    after = digest()
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    if changed:
+        fail(f"#456: a second build over its own output rewrote {changed}")
+    else:
+        ok("#456: a second build over its own output is byte-identical")
+
+
+def backdrop_shared_crop_tests(root: Path):
+    """#456 idempotency on a bank-swapping game: one drawing under two CHR
+    indexes is one cell with an alias (F9.7), so the two keys share a crop.
+    Only the first key is see-through in the recording; clearing the shared
+    crop makes the second see-through in the rebuilt manifest, which the next
+    build reads as its key source. So the first build has to clear the second
+    key's other crops as well, or the second build rewrites the pack
+    (Punch-Out!!: EA and 96 under 1130260F)."""
+    folder = root / "backdrop-shared-crop"
+    tex = folder / "textures"
+    sheets = tex / "sheets"
+    sheets.mkdir(parents=True)
+    shape, k1, k2 = 21, 0x50, 0x51
+    source = blank(16, 8)
+    for i, t in enumerate((True, False)):
+        for r, row in enumerate(_render_bg(shape, t)):
+            source[r][8 * i:8 * i + 8] = row
+    (tex / "old.png").write_bytes(png_rgba(source))
+    (tex / "hires.txt").write_text("\n".join(
+        ["<ver>109", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+         "<img>old.png", f"<tile>0,{k1:02X},{PAL_HEX},0,0,1,N", f"<tile>0,{k2:02X},{PAL_HEX},8,0,1,N"])
+        + "\n", encoding="utf-8")
+    sheet = blank(16, 8)
+    for i in range(2):
+        for r, row in enumerate(_render_bg(shape, False)):
+            sheet[r][8 * i:8 * i + 8] = row
+    write_pair(sheets, "metatiles", sheet, 1)
+    entry = '{{ "tile": "{0}", "palette": "{1}", "index": {2} }}'
+    side = _one_cell_sidecar("metatiles", "metatiles", [
+        entry.format(tile_hex(shape), PAL_HEX, k1), entry.format(tile_hex(shape), PAL_HEX, k2)])
+    alias = f'"aliases": [{{ "metatile": 9, "tiles": [{entry.format(tile_hex(shape), PAL_HEX, k2)}] }}], '
+    side = side.replace('"context": "scene", "label"', f'"context": "scene", {alias}"label"', 1)
+    (sheets / "metatiles.json").write_text(side, encoding="utf-8")
+
+    if run("build", str(folder)) is None:
+        return
+    got = png_read(sheets / "metatiles.png")
+    if crop(got, 8, 0, 8) == _render_bg(shape, True):
+        ok("#456: a key that shares a cleared crop has its other crops cleared in the same build")
+    else:
+        fail("#456: the second key's own cell kept its opaque backdrop after the shared crop was cleared")
+
+    def digest():
+        return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(folder.rglob("*")) if p.is_file()}
+
+    before = digest()
+    if run("build", str(folder)) is None:
+        return
+    after = digest()
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    if changed:
+        fail(f"#456: with a shared crop, a second build over its own output rewrote {changed}")
+    else:
+        ok("#456: with a shared crop, a second build over its own output is byte-identical")
+
+
+def backdrop_unbake_and_sprite_tests(root: Path):
+    """#456 with #255: a mirrored cell is un-baked before its colour 0 is
+    cleared, so the colour-0 positions are the unflipped tile's - the baked
+    tile's would clear ink and leave backdrop, and the next build, reading a
+    plain sidecar, would clear again. A sprite sheet is not a background crop
+    and is never punched (test_mep_figure's #435 recipe caught both)."""
+    folder = root / "backdrop-unbake-sprite"
+    tex = folder / "textures"
+    sheets = tex / "sheets"
+    sheets.mkdir(parents=True)
+    bg, spr = 3, 5  # bg is asymmetric: #457 proves its mirror differs
+    source = blank(16, 8)
+    for i, s in enumerate((bg, spr)):
+        for r, row in enumerate(_render_bg(s, True)):
+            source[r][8 * i:8 * i + 8] = row
+    (tex / "old.png").write_bytes(png_rgba(source))
+    (tex / "hires.txt").write_text("\n".join(
+        ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+         "<img>old.png", f"<tile>0,{tile_hex(bg)},{PAL_HEX},0,0,1,N", f"<tile>0,{tile_hex(spr)},{PAL_HEX},8,0,1,N"])
+        + "\n", encoding="utf-8")
+    baked = blank(8, 8)
+    render_tile_hflipped(bg, baked, 0, 0, 8, 8)
+    write_pair(sheets, "metatiles", baked, 1)
+    (sheets / "metatiles.json").write_text(_one_cell_sidecar("metatiles", "metatiles", [
+        f'{{ "tile": "{flip_hex(tile_hex(bg))}", "palette": "{PAL_HEX}", '
+        f'"source": "{tile_hex(bg)}", "mirror": "H" }}']), encoding="utf-8")
+    sprite = _render_bg(spr, False)
+    write_pair(sheets, "spr000", sprite, 1)
+    (sheets / "spr000.json").write_text(_one_cell_sidecar("sprite", "spr000", [
+        f'{{ "tile": "{tile_hex(spr)}", "palette": "{PAL_HEX}" }}']), encoding="utf-8")
+
+    if run("build", str(folder)) is None:
+        return
+    if crop(png_read(sheets / "metatiles.png"), 0, 0, 8) == _render_bg(bg, True):
+        ok("#456: an un-baked mirror cell clears colour 0 at the unflipped tile's positions")
+    else:
+        fail("#456: the un-baked mirror cell was punched at the baked tile's colour-0 positions")
+    if png_read(sheets / "spr000.png") == sprite:
+        ok("#456: a sprite sheet is not a background crop and keeps its pixels")
+    else:
+        fail("#456: a sprite sheet crop was punched as if it were a background crop")
+
+    def digest():
+        return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(folder.rglob("*")) if p.is_file()}
+
+    before = digest()
+    if run("build", str(folder)) is None:
+        return
+    after = digest()
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    if changed:
+        fail(f"#456: after an un-bake, a second build over its own output rewrote {changed}")
+    else:
+        ok("#456: after an un-bake, a second build over its own output is byte-identical")
 
 
 def painted_sprite_ownership_tests(root: Path):
