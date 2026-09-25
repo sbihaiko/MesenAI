@@ -198,6 +198,34 @@ def legacy_guard_case(root: Path):
           f"body key -> {sheet}, {magenta} magenta px")
 
 
+def recorded_rule_case(root: Path):
+    """#464 with ADR-0231: the blank key shares its crop with a painted spark,
+    and the recording has both keys on a real recorded page. The spark's paint
+    does not make the blank key claimed, so it keeps its recorded rule."""
+    folder = make_folder(root, "recorded", [])
+    textures = folder / "textures"
+    page = canvas([(0, 0, 0xFF102030), (8, 0, 0xFF304050)], w=16, h=8)
+    (textures / "chr").mkdir()
+    (textures / "chr" / "Chr_0.png").write_bytes(png_rgba(page))
+    blank_rule = f"0,{BLANK},{SPR_PAL},0,0,1,N,700001,0"
+    lines = ["<ver>107", "<scale>1", "<system>nes",
+             "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B", "<img>chr/Chr_0.png",
+             f"<tile>{blank_rule}", f"<tile>0,{SPARK},{SPR_PAL},8,0,1,N,700002,0"]
+    (textures / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_sheet(textures / "sheets", "usr017", "sprite", [(1, 1, BLANK, SPR_PAL), (1, 1, SPARK, SPR_PAL)],
+                [(1, 1, SPARK_RGB)], paint=[(1, 1)])
+    code, out = build(folder)
+    check(code == 0, "#464/ADR-0231: the build with a recording and a painted shared crop passes", out)
+    imgs, tiles = parse_hires(textures / "hires.txt")
+    blank, spark = tiles.get((BLANK, SPR_PAL)), tiles.get((SPARK, SPR_PAL))
+    check(blank is not None and imgs[blank[0]] == "chr/Chr_0.png" and blank[3][1:] == blank_rule.split(",")[1:],
+          "#464/ADR-0231: a blank key in a painted cell keeps its recorded rule",
+          f"blank key -> {blank and (imgs[blank[0]], blank[3])}")
+    check(spark is not None and imgs[spark[0]] == "sheets/usr017.png",
+          "#464/ADR-0231: the painted spark in the same crop points at the sheet crop",
+          f"spark key -> {spark and imgs[spark[0]]}")
+
+
 def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="mep-build-blank-"))
     try:
@@ -206,6 +234,7 @@ def main() -> int:
         same_sheet_repeat_case(root)
         guard_cases(root)
         legacy_guard_case(root)
+        recorded_rule_case(root)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print(f"{len(FAILED)} failure(s)")

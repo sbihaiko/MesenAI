@@ -1791,8 +1791,10 @@ def backdrop_transparency_tests(root: Path):
     imgs, tiles = parse_hires(tex / "hires.txt")
 
     def crop_of(shape):
+        # An untouched key (A, B) keeps the recorded rule on old.png (ADR-0231),
+        # so resolve each <img> against textures/, not sheets/.
         e = tiles.get((tile_hex(shape), PAL_HEX))
-        return None if e is None else crop(png_read(sheets / Path(imgs[e[0]]).name), e[1], e[2], 8)
+        return None if e is None else crop(png_read(tex / imgs[e[0]]), e[1], e[2], 8)
 
     def opaque(px):
         return sum(1 for row in (px or []) for p in row if p >> 24 == 0xFF)
@@ -2336,9 +2338,12 @@ def pack_extra_data_tests(root: Path, rom: Path):
     else:
         ok("pack carries the root `id` across a rebuild, on disk and in the zip (ADR-0140)")
 
+    # The key source is a recording (no page of its own here): the first
+    # build keeps it as textures/hires.recorded.txt before overwriting it,
+    # usable rules or not (ADR-0231 §2, PR #472 review), and it ships.
     want = ["pack.json", "audio/bgm/01.ogg", "audio/hires.txt", "audio/sfx/03.ogg",
             "studio/candidates/skin.png", "studio/transcript.jsonl",
-            "textures/hires.txt", "textures/sheets/objects.png"]
+            "textures/hires.recorded.txt", "textures/hires.txt", "textures/sheets/objects.png"]
     if names != want:
         fail(f"pack zip membership changed:\n  got  {names}\n  want {want}")
     else:

@@ -50,6 +50,23 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        beats untouched; among painted cells - and among untouched ones - the
        static kind rank decides.
 
+       ADR-0231 (#447): the key an *untouched* cell wins does not point at
+       its crop. A sheet crop is the raw tile upscaled nearest-neighbour,
+       while the recording's own rule points at a pattern page that went
+       through the pack's scale filter (xBRZ by default), so pointing it at
+       the crop changed what an unpainted rebuild rendered. The build re-emits
+       the recording's rule for that key instead, byte for byte except the
+       `<img>` index; only a painted cell points at its crop. The recording is
+       read from `textures/hires.recorded.txt` (a snapshot the first build
+       takes before overwriting a recorded `hires.txt`, usable rules or
+       not), else `auto/textures/hires.txt`, else the key source when a
+       build did not write it, else a recorded `textures/hires.txt` under a
+       `--source` build (`mep_recorded.py`). A page found only beside that
+       recording (`auto/textures/` in a `mep_import` project) is copied up
+       into `textures/`, where the emitted `<img>` resolves. A rule whose
+       page is missing, or a recording at another `<scale>`, falls back to
+       the crop, counted in the build output.
+
 pack   writes `pack.json` at the folder root from the folder tree and the
        given identity (MEP-v1 §3.1), then zips the whole folder with a
        deterministic layout (fixed timestamps, STORED, 0o644, lexical
@@ -100,6 +117,7 @@ import mep_capture_scan  # #422: which live capture draws a painted key
 import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as the loader does
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
+import mep_recorded  # ADR-0231 (#447): an untouched cell keeps the recorded rule
 import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
 import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 colour 0, sheet + twin in lockstep
 from mep_recipe_common import sha256_file
@@ -797,79 +815,6 @@ def _emit_sheet_comment(sheet_rel: str, kind: str, tiles: int, sidecar: str) -> 
     ]
 
 
-def _bgm_sfx_refs(lines):
-    """Files already referenced by <bgm>/<sfx> as (kind, stem) -> (album,
-    track, filename)."""
-    known = {}
-    for s in lines:
-        for rx, kind in ((_BGM_RE, "bgm"), (_SFX_RE, "sfx")):
-            m = rx.match(s)
-            if not m:
-                continue
-            fields = [f.strip() for f in m.group(2).split(",")]
-            if len(fields) >= 3:
-                known[(kind, Path(fields[2]).stem)] = (fields[0], fields[1], fields[2])
-    return known
-
-
-def _next_free_id(ids, start=1):
-    n = start
-    while n in ids:
-        n += 1
-    return n
-
-
-def _build_audio_manifest(folder: Path, system: str | None, seed: list) -> str | None:
-    """Regenerates audio/hires.txt from `seed` (previous manifest or the key
-    source's own <bgm>/<sfx>) plus the OGGs under audio/bgm/ and audio/sfx/
-    that are not referenced yet.
-
-    NES-only: GB/SMS/GG OGG replacement is frozen (ADR-0041) and mep_lint has
-    no audio tags for the ver>=200 format, so a non-NES pack returns None.
-    Seed refs whose OGG no longer exists are dropped (their track id is
-    reclaimed); a digit-named OGG's id is honoured only when free, else the
-    next free id is used — so the manifest never carries two <bgm>/<sfx>
-    entries with the same album*256+track id.
-
-    Returns the manifest text, or None when there is nothing to reference."""
-    if system is not None and system != "nes":
-        return None
-    # Keep only seed refs whose OGG actually exists in the audio/ layout (#381:
-    # resolved the way the loader resolves them, `\` included).
-    keep = mep_carry.keep_seed_refs(folder, seed)
-    kept_refs = _bgm_sfx_refs(keep)
-
-    def scan(sub: str, kind: str):
-        entries = []
-        known = dict(kept_refs)
-        used_ids = {int(t) for (k, _), (a, t, _) in known.items() if k == kind and a == "0" and t.isdigit()}
-        d = folder / "audio" / sub
-        if not d.is_dir():
-            return entries
-        for f in sorted(d.glob("*.ogg")):
-            stem = f.stem
-            if (kind, stem) in known:
-                continue  # already referenced
-            album = 0
-            if stem.isdigit():
-                track = int(stem)
-                if track in used_ids:
-                    print(f"info: {kind} id {track} already taken — using next free id for {f.name}")
-                    track = _next_free_id(used_ids)
-            else:
-                track = _next_free_id(used_ids)
-            used_ids.add(track)
-            entries.append(f"<{kind}>{album},{track},{sub}/{f.name}")
-        return entries
-
-    keep += scan("bgm", "bgm")
-    keep += scan("sfx", "sfx")
-    if not keep:
-        return None
-    return f"<ver>{NES_VER}\n" + "\n".join(keep) + "\n"
-
-
-
 def screen_resident_keys(sheets_dir: Path):
     """`{tile key: capture name}` — every tile a captured screen also draws.
 
@@ -1107,6 +1052,7 @@ def cmd_build(args) -> int:
                   f"re-scale the sheets by a whole factor or pass --scale {sheet_scale}", file=sys.stderr)
             return 2
 
+    recorded = mep_recorded.load(folder, source, lines, scale, _png_size, _TILE_RE)
     try:
         cell_sizes = [_sheet_layout(p, scale) for p in sheets]
     except BuildError as e:
@@ -1398,7 +1344,7 @@ def cmd_build(args) -> int:
     emitted = 0
     rebuilt_keys = set()
     for order, slot in enumerate(slots):
-        live = [(pos, e) for pos, e in enumerate(slot["entries"]) if (order, pos) in kept]
+        live = recorded.take([(pos, e) for pos, e in enumerate(slot["entries"]) if (order, pos) in kept])
         if not live and not slot["always"]:
             print(f"info: {slot['rel']} contributes no tile of its own — no <img> emitted")
             continue
@@ -1411,6 +1357,9 @@ def cmd_build(args) -> int:
             rebuilt_keys.add((_key[1], _key[2]))
         emitted += len(live)
         img_index += 1
+    n, img_index, keys = recorded.emit(out_lines, img_index)
+    emitted, rebuilt_keys = emitted + n, rebuilt_keys | keys
+    recorded.report()
 
     # ADR-0196: the overflow layer. The synthetic targets' `<tile>` rules were
     # emitted above out of the sheets' own cells; this writes the tags at them.
@@ -1492,7 +1441,7 @@ def cmd_build(args) -> int:
         seed = [ln for ln in existing_audio.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
     if system is not None and system != "nes":
         print(f"info: audio manifest skipped — OGG replacement is NES-only (got <system>{system})")
-    audio_manifest = _build_audio_manifest(folder, system, seed)
+    audio_manifest = mep_carry.build_audio_manifest(folder, system, seed, NES_VER)
     if audio_manifest:
         (folder / "audio").mkdir(parents=True, exist_ok=True)
         (folder / "audio" / "hires.txt").write_text(audio_manifest, encoding="utf-8")
@@ -1702,8 +1651,9 @@ def cmd_rename_audio_id(args) -> int:
 
 def _is_sheet_img(rel: str) -> bool:
     """Whether a manifest `<img>` is one of the author sheets `build`
-    regenerates. `cmd_build` emits `sheets/<name>` and nothing else, so this
-    is also the test for "this manifest was written by `build`" (#218)."""
+    regenerates (#218). Since ADR-0231 a build also re-emits recorded pages
+    for untouched cells, under `mep_recorded.MARK`; `check-coverage` counts
+    those `<img>`s as build output too."""
     return rel.replace("\\", "/").lower().startswith("sheets/")
 
 
@@ -1818,6 +1768,8 @@ def cmd_check_coverage(args) -> int:
         return 2
 
     base_keys, base_unresolved = _manifest_keys(baseline)
+    # ADR-0231: a build's re-emitted recorded rules are its output as much as its sheet crops.
+    kept_imgs = mep_recorded.section_imgs(baseline.read_text(encoding="utf-8", errors="replace").splitlines())
     # A baseline kept outside the pack — the natural "copy the manifest aside
     # before painting" move — has none of the PNGs next to it, so every key
     # resolved against its own folder and the check passed over an empty
@@ -1834,7 +1786,7 @@ def cmd_check_coverage(args) -> int:
         # which answers with "relocate the baseline" and exit 2 instead of
         # reporting the loss (review on #223).
         declared_sheets = {rel for _key, _reason, rel in alt_unresolved
-                           if rel and _is_sheet_img(rel)}
+                           if rel and (_is_sheet_img(rel) or rel in kept_imgs)}
         if alt_keys or declared_sheets:
             print(f"info: the baseline is a copy kept outside the pack; its <img> paths were "
                   f"resolved against {candidate.parent} instead of {baseline.parent}")
@@ -1850,7 +1802,7 @@ def cmd_check_coverage(args) -> int:
     # ever touched (ADR-0189, Consequences). Only the baseline's sheet-derived
     # keys are the rebuild's responsibility, so only those are compared.
     off_sheet = {k: rel for k, (rel, _art) in base_keys.items()
-                 if not _is_sheet_img(rel)}
+                 if not (_is_sheet_img(rel) or rel in kept_imgs)}
     base_keys = {k: v for k, v in base_keys.items() if k not in off_sheet}
     if not base_keys and detached:
         # Every sheet-derived key the baseline declared is gone from the pack
@@ -1896,7 +1848,7 @@ def cmd_check_coverage(args) -> int:
     for key, reason, rel in base_unresolved:
         # Only the sheet-derived half of the baseline is under comparison
         # (above), so only its unresolved keys are worth a line.
-        if rel and not _is_sheet_img(rel):
+        if rel and not (_is_sheet_img(rel) or rel in kept_imgs):
             continue
         if detached:
             gone.append((key, reason))

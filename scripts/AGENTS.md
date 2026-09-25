@@ -496,6 +496,35 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   data is not blank (its colour 0 is the drawn backdrop) and keeps the
   ordinary rule. Covered by `scripts/test_mep_build_blank_key.py`, also
   wired into `make doc-checks`.
+  **An untouched
+  cell keeps the recorded rule** (ADR-0231, #447, `mep_recorded.py`). A
+  cell equal to its `*.orig.png` twin whose key the recording has does not
+  point at its crop. Its crop is nearest-neighbour, while the recorded
+  `chr/` page went through the scale filter. Instead the build re-emits the
+  recording's line byte for byte, with only the `<img>` index remapped.
+  Those lines go under the `# mep_build: rules kept as recorded for
+  untouched cells` comment, in the recording's order. Only a painted cell
+  points at its crop. The recording is read from
+  `textures/hires.recorded.txt`, else `auto/textures/hires.txt`, else the
+  key source itself when no build wrote it, else a recorded
+  `textures/hires.txt` under a `--source` build. In those two cases the
+  first build copies it to `hires.recorded.txt` before overwriting it,
+  even when none of its rules is usable yet (a page missing). A recorded
+  page is looked up under `textures/`, else beside the manifest the
+  recording came from; one found only there (`auto/textures/chr/…` in a
+  `mep_import` project) is copied up into `textures/` when a kept rule
+  names it, since the loader resolves an `<img>` in the layer that names it
+  (PR #472 review). A rule whose page is missing in both, whose crop is out of bounds or whose `<scale>`
+  differs falls back to the crop, as does a key the recording never had,
+  and the build prints the count and the reason. `check-coverage` counts
+  the `<img>` lines under that comment as build output. The key set is
+  unchanged. So the first paint of a cell (or reverting it) re-points a
+  key and needs a ROM reopen, and later repaints reload in place.
+  `scripts/test_mep_build_recorded.py` asserts this. The audio-manifest
+  helpers live in `mep_carry.py` (`build_audio_manifest`), moved there to
+  keep `mep_build.py` under its line ceiling. "Untouched" is read from
+  the entry's claim flag, so a blank sprite key in a painted cell keeps
+  its recorded rule too (#464).
   **Sidecar palette fields (ADR-0230, F14.9; producer contract in
   `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
   "brightness"}]`. For each fold, `build` emits one extra exact
