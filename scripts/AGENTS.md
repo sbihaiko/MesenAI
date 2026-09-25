@@ -831,8 +831,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   that voted fixed, and a tied row is an abstention rather than a "moving"
   vote. Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
   being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
-  position and `(tileData, palette)` key - so the panorama is addressable *and*
-  a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
+  position and `(tileData, palette)` key, so the panorama is addressable. It is
+  **not** a `textures/sheets/` drop-in: the ADR-0220 §3 context band makes the
+  PNG and its `.orig.png` twin taller than the grid `cells[]` describe, and
+  `mep_build` refuses that size (#451). The only way back is `--slice`
+  (ADR-0220 §5), and `--verify` goes through `--slice` too, so the ADR-0183 §4
+  round trip exercises the artist's path.
   `--slice` cuts a painted strip back into that sheet: one key sits at many
   positions and a pack holds one art per key, so **first occurrence in (y, x)
   order wins** and every disagreeing position is printed, split into "both
