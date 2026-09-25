@@ -63,7 +63,11 @@ needs no local rules beyond the root DOX.
   scanline it was drawn on (`MesenSheets::LayOutGridRuns`), not only from a
   cell's origin scanline; the grid cell itself still takes the origin's
   tile, so a tile drawn only off it gets its cell on `unsorted.png` when no
-  other sheet claims it.
+  other sheet claims it. A sprite pixel on screen row 0 makes no rule
+  either (#479, `OamFetchLatch::SpriteRowIsPlaced`). No OAM entry covers
+  row 0, because a sprite is drawn one line below its Y byte. What the PPU
+  draws there is secondary OAM left over from line 239, fetched on the
+  pre-render line, so the latch can never register it.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
   from `PoseStats` and nothing in it is computed at serialisation time — with
   one named exception: the `label` beside each pose and run is a *rendering*

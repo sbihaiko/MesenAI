@@ -128,3 +128,32 @@ measurement; #468/#476/#473 moved it on `main` itself.
   checks.
 - `make python-tests`: 61 passed, 0 failed (on `main` at `2c464ec4`).
 - `make doc-checks`: passes.
+
+## After merging #483 and #487 into this branch
+
+#483 (#470/#471) feeds `ShapeIdFor` the background tiles of every scanline
+(`MesenSheets::LayOutGridRuns`), not only a cell's origin. A background fetch
+bakes no flips, so on a CHR ROM game one index always carries the same drawn
+data and every scanline of it keys to the same `HdShapeKey`: the off-origin
+runs add no shape, and only a mirrored sprite of that index is a new one.
+`TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape` pins that.
+
+Re-run on a clean build of the merge (`origin/main` at `bc988553`), same
+states and routes as above:
+
+| Measure | Punch-Out!! fight 1 | Castlevania stage 1 |
+|---|---|---|
+| Sidecar sprite indexes / with more than one orientation | 406 / **57** | n/a (CHR RAM) |
+| Drawn keys / sheet keys | 1623 / 1623 | 433 / 433 |
+| Sheet keys never drawn / drawn keys with no cell | 0 / 0 | 0 / 0 |
+| `sheet_keys_audit.py` | 833 entries, 0 leftover | 573 entries, 0 leftover |
+| `artist_kit.py --verify` | PASS, 1623 keys, 0 lost, 0 invented | |
+
+The sprite index count drops from 415 to 406 because #470 no longer records
+all-zero sprite tiles, and the drawn keys drop because #479 makes no rule on
+screen row 0. The kit's figure grouping moved with those key sets: pose005
+now sits on `usr005`, pose023 stays on `usr011`, and both are whole and
+facing the way the game drew them.
+
+Suites on the merge: `core-unit-tests` 1167/1167, `python-tests` 62 passed,
+`doc-checks` passes.

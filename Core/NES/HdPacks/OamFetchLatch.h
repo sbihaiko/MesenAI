@@ -245,6 +245,18 @@ public:
 		return h;
 	}
 
+	//Issue #479: whether a sprite pixel DrawPixel sees on screen row `scanline`
+	//may make a <tile> rule - true exactly on the rows an OAM entry can be
+	//latched on. OAM draws a sprite one line below its Y byte, so no entry
+	//covers row 0 (OnSpriteFetch's first fetch is for row 1). What the PPU
+	//draws there comes from the pre-render line's fetch of secondary OAM left
+	//over from line 239 - Excitebike's frame 9 draws eight copies of tile $00
+	//at x 0 that way - so a rule for it is a key no sheet can carry.
+	static bool SpriteRowIsPlaced(int scanline)
+	{
+		return scanline >= 1 && scanline <= 239;
+	}
+
 private:
 	HdPpuTileInfo _tiles[SlotCount] = {};
 	uint8_t _x[SlotCount] = {};
