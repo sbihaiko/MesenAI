@@ -283,6 +283,16 @@ recolours only unobserved palettes (ADR-0183 §3).
    the cell. The rules are emitted painted or not. Unpainted, each rule must
    render what the recording drew for that key, so the round trip holds.
    Every emitted key is an observed one, so there is no wildcard.
+   A fold qualifies for `folds` only when its Brightness reproduces the
+   recorded key exactly: the cell's crop scaled by that one multiplier must
+   equal the crop the recording drew for the fold's palette. `fold_measure`
+   is a least-squares fit and can leave a residual. A fold admitted only
+   because its hue drift is under the 25° gate, with a nonzero residual (the
+   measured Zelda fade steps are the case), is not reproducible by
+   Brightness. It is emitted as its own cell under item 1 instead, so no key
+   renders other than what was recorded (refined 2026-09-24 on the #448
+   review; the cell counts in the acceptance list move accordingly and are
+   stated).
 3. **The fold test measures against the cell.** `compute_folds`' drift test
    currently measures a step against the brightest step of its group, and
    so refuses 83 of Zelda's fade steps. It is measured against the cell's
@@ -294,8 +304,9 @@ F14.4 log:
 
 - drawn-key coverage 100 % on both games, with 0 unobserved keys in the
   rebuilt `hires.txt`;
-- cell growth at most the measured "(c) folded" count (+61 / +76), give or
-  take the criterion change of item 3, stated;
+- cell growth at most the measured "(c) folded" count (+61 / +76), plus
+  the folds item 2 sends back to cells and give or take the criterion
+  change of item 3, all stated;
 - the ADR-0183 §4 round trip: 0 build errors, a byte-identical second build,
   and an unpainted kit that renders what the recording drew;
 - unit tests in the recorder's host-free headers and in `mep_build`,

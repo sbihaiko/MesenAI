@@ -663,8 +663,9 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   - No issue filed.
   [Log](../validation/f14.5-counter-locked-cycles-2026-09-24.md).
 
-- **F14.4** (2026-09-24) — ADR-0230's palette gap measured. Nothing is
-  decided or shipped, and the ADR stays `proposed`. The Castlevania 60 s and
+- **F14.4** (2026-09-24) — ADR-0230's palette gap measured. F14.4 itself
+  decided and shipped nothing; the user accepted ADR-0230's hybrid on the
+  numbers the same day, and F14.9 implements it. The Castlevania 60 s and
   Zelda 85 s runs on `main` @ `90703652`, dylib provenance proven,
   reproduce ADR-0229's 96 / 312 missing drawn keys exactly.
   - Folds vs colourways, pairwise against the cell's palette with
