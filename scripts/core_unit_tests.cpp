@@ -10015,6 +10015,7 @@ namespace MmcLatchFrame
 				[&](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
 					h.AbsoluteAddr = mmc2.Absolute(h.TileAddr);
 					tile.TileIndex = h.AbsoluteAddr / 16;
+					tile.TileData[0] = 0x80; //art that draws: a blank half is never recorded (#470)
 					return true;
 				});
 			if(!rowsFetched) {
@@ -10080,6 +10081,7 @@ void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
 	auto resolve = [](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
 		h.AbsoluteAddr = 0x05000 | (h.TileAddr & 0x0FFF);
 		tile.TileIndex = h.AbsoluteAddr / 16;
+		tile.TileData[0] = 0x80; //art that draws (#470)
 		return true;
 	};
 	latch.OnSpriteFetch(99, true, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000, resolve);
@@ -10112,6 +10114,7 @@ void TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites()
 			[&](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
 				h.AbsoluteAddr = mmc2.Absolute(h.TileAddr);
 				tile.TileIndex = h.AbsoluteAddr / 16;
+				tile.TileData[0] = 0x80; //art that draws (#470)
 				return true;
 			});
 		for(int i = 0; i < 64; i++) {
@@ -10302,6 +10305,142 @@ void TestAPageWithItsUsableSlotsFullRefusesATile()
 	}
 	Check(!displaced && !beyond, "#460: a page whose 64 usable slots are full refuses a displaced tile");
 	Check(!loaded && !beyond, "#460: a page whose 64 usable slots are full refuses a loaded CHR RAM tile");
+}
+
+//Issue #471: RecordGridFrame fills a cell from the scanline at its origin
+//(y % 8 == 0), and only interned the shapes of those scanlines. Punch-Out!!
+//draws background tile 00FD only on a cell's last scanline (y % 8 == 7), a
+//one-line raster effect, so its <tile> rules had no sheet cell. Every shape
+//the frame drew must reach the registry; a cell still takes its origin's.
+void TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline()
+{
+	struct Run { uint16_t X; uint16_t Y; HdPpuTileInfo Tile; };
+	auto tile = [](int32_t index, uint32_t palette) {
+		HdPpuTileInfo t = {};
+		t.TileIndex = index;
+		t.PaletteColors = palette;
+		t.TileData[0] = (uint8_t)index;
+		return t;
+	};
+	std::vector<Run> runs;
+	runs.push_back({ 0, 0, tile(0x0010, 0x112A0F36) });
+	runs.push_back({ 0, 7, tile(0x0010, 0x112A0F36) });
+	runs.push_back({ 16, 7, tile(0x00FD, 0x112A1436) });  //the last scanline of row 0 only
+	runs.push_back({ 0, 8, tile(0x0011, 0x112A0F36) });
+	runs.push_back({ 40, 13, tile(0x0012, 0x112A2536) }); //mid-cell only
+	std::vector<int32_t> interned;
+	std::vector<uint32_t> palettes;
+	MesenSheets::GridFrame frame;
+	MesenSheets::LayOutGridRuns(runs, frame,
+		[&](const HdPpuTileInfo& t) { interned.push_back(t.TileIndex); return (MesenSheets::ShapeId)(interned.size() - 1); },
+		[&](uint32_t c) { palettes.push_back(c); return (MesenSheets::PaletteId)0; });
+	auto has = [&](int32_t index) { return std::find(interned.begin(), interned.end(), index) != interned.end(); };
+	std::string got;
+	char b[8];
+	for(int32_t i : interned) {
+		snprintf(b, sizeof(b), "%04X ", i);
+		got += b;
+	}
+	Check(has(0x00FD), "#471: a tile drawn only on a cell's last scanline reaches the shape registry", "interned " + got);
+	Check(has(0x0012), "#471: a tile drawn only inside a cell reaches the shape registry", "interned " + got);
+	Check(interned.size() >= 2 && interned[0] == 0x0010 && interned[1] == 0x0011,
+		"#471: the origin scanlines are interned first, in draw order, as before", "interned " + got);
+	Check(frame.Cells[0][2] == 0 && frame.Cells[1][0] == 1 && frame.Cells[0][2] == frame.Cells[0][0] && frame.Cells[1][5] == 1 && palettes.size() == 2,
+		"#471: a cell still takes the shape at its origin scanline, and only origin runs intern a palette");
+}
+
+//Issue #470: a fully transparent sprite half (all 16 bytes zero, colour 0 on
+//every pixel) was a sheet key every time the latch recorded it, but a <tile>
+//rule only when it happened to be the highest-priority active shifter at its
+//first dot (NesPpu::GetPixelColor). Punch-Out!!'s blank latch tiles 1CFD,
+//1DFD, 1FFD and 1FFF were named by the sheets and never emitted. The loader
+//never draws such a tile (HdNesPack::DrawTile returns on IsFullyTransparent,
+//InitializeFallbackTiles skips it), so neither side records it: the latch
+//hands no blank half, and no blank bank of a half, to the registry, and
+//DrawPixel writes no rule for one (OamFetchLatch::IsFullyTransparent).
+namespace BlankHalfFrame
+{
+	//Bank $1C holds blank art in this model; every other bank draws.
+	void Fill(HdPpuTileInfo& tile, int32_t absoluteAddr)
+	{
+		memset(tile.TileData, 0, sizeof(tile.TileData));
+		if(((absoluteAddr >> 12) & 0xFF) != 0x1C) {
+			tile.TileData[3] = 0x18;
+		}
+	}
+
+	//One 8x8 sprite `tile` at x, rows 100-107, decoded at cycle 257 from bank
+	//`decodeBank`, whose row 0 is read from `topBank` and rows 1-7 from
+	//`restBank`; beside it a drawn neighbour, $80 from bank $05.
+	MmcLatchFrame::Result Run(uint8_t tile, uint8_t x, int32_t decodeBank, int32_t topBank, int32_t restBank)
+	{
+		uint8_t oam[256];
+		OamFetchLatchModel::ClearOam(oam);
+		OamFetchLatchModel::SetSprite(oam, 0, 99, tile, 0, x);
+		OamFetchLatchModel::SetSprite(oam, 1, 99, 0x80, 0, (uint8_t)(x + 8));
+		OamFetchLatch latch;
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			latch.OnSpriteFetch(line, true, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000,
+				[&](OamFetchLatch::Half& h, HdPpuTileInfo& t) {
+					int32_t bank = (h.TileAddr >> 4) == tile ? decodeBank : 0x05;
+					h.AbsoluteAddr = (bank << 12) | (h.TileAddr & 0x0FF0);
+					t.TileIndex = h.AbsoluteAddr / 16;
+					Fill(t, h.AbsoluteAddr);
+					return true;
+				});
+			int row = line - 99;
+			if(row >= 0 && row < 8) {
+				uint16_t addr = (uint16_t)((tile << 4) + row);
+				latch.OnRowFetch(line, x, addr, false, ((row == 0 ? topBank : restBank) << 12) | addr);
+				uint16_t other = (uint16_t)((0x80 << 4) + row);
+				latch.OnRowFetch(line, (uint8_t)(x + 8), other, false, (0x05 << 12) | other);
+			}
+		}
+		MmcLatchFrame::Result r;
+		latch.ForEachLatched(
+			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
+			[](int32_t abs, HdPpuTileInfo& t) { t.TileIndex = abs / 16; Fill(t, abs); },
+			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); });
+		return r;
+	}
+
+	std::string Describe(const MmcLatchFrame::Result& r)
+	{
+		std::string out = "named ";
+		char b[8];
+		for(const MmcLatchFrame::Named& n : r.Sprites) {
+			snprintf(b, sizeof(b), "%04X ", n.Index);
+			out += b;
+		}
+		out += "extra ";
+		for(int32_t i : r.ExtraIndexes) {
+			snprintf(b, sizeof(b), "%04X ", i);
+			out += b;
+		}
+		return out;
+	}
+}
+
+void TestAFullyTransparentSpriteHalfNeverReachesTheRegistry()
+{
+	using namespace BlankHalfFrame;
+	MmcLatchFrame::Result plain = Run(0xFD, 40, 0x1C, 0x1C, 0x1C);
+	Check(plain.Sprites.size() == 1 && plain.Sprites[0].Index == 0x0580 && plain.ExtraIndexes.empty(),
+		"#470: a blank sprite half (1CFD) is never recorded; its drawn neighbour (0580) is", Describe(plain));
+	MmcLatchFrame::Result rebanked = Run(0xFD, 40, 0x05, 0x1C, 0x1C);
+	Check(rebanked.Sprites.size() == 1 && rebanked.Sprites[0].Index == 0x0580 && rebanked.ExtraIndexes.empty(),
+		"#470: a half decoded from a drawn bank but read from a blank one is not recorded", Describe(rebanked));
+	MmcLatchFrame::Result blankTop = Run(0xFE, 88, 0x1C, 0x1C, 0x05);
+	Check(blankTop.Sprites.size() == 1 && blankTop.Sprites[0].Index == 0x0580 && blankTop.ExtraIndexes == std::vector<int32_t>{ 0x05FE },
+		"#470: a half whose top row read blank art places no sprite, but the drawn bank its other rows read (05FE) still reaches the sheets", Describe(blankTop));
+	MmcLatchFrame::Result blankRest = Run(0xFE, 88, 0x05, 0x05, 0x1C);
+	Check(blankRest.Sprites.size() == 2 && blankRest.Sprites[0].Index == 0x05FE && blankRest.ExtraIndexes.empty(),
+		"#470: a drawn half keeps its entry, and the blank bank its other rows read (1CFE) is not a sheet key", Describe(blankRest));
+	HdPpuTileInfo t = {};
+	Check(OamFetchLatch::IsFullyTransparent(t), "#470: all-zero tile data is fully transparent");
+	t.TileData[15] = 0x01;
+	Check(!OamFetchLatch::IsFullyTransparent(t), "#470: one opaque pixel (a high-plane bit) is not");
 }
 
 int main()
@@ -10638,6 +10777,8 @@ int main()
 	TestTheOamLatchNamesAHalfByTheBankItsTopRowWasReadFrom();
 	TestTheOamLatchKeepsItsGuaranteesWithTheRowLog();
 	TestTheRowLogNamesEachOverlappingEntryByItsOwnFetches();
+	TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline();
+	TestAFullyTransparentSpriteHalfNeverReachesTheRegistry();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 
