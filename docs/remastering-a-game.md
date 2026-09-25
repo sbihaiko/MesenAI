@@ -1025,20 +1025,34 @@ has (#403).
 
 A build of a pack with painted cells prints one `report:` row per key of every
 cell whose pixels differ from its `.orig.png` twin, and per key of every cell
-`mep_add_cell.py` placed — the cells you touched, and nothing else. Each row
-names the sidecar, the cell's `index`, the key, the crop the paint sits at, and
-the `<tile>` line the build wrote for it:
+`mep_add_cell.py` placed — the cells you touched, and nothing else:
 
 ```
-report: sheets/unsorted.json cell 3 painted — tile 0117 palette 0F202020 at crop 40,40: <tile>0,0117,0F202020,40,40,1,N
+report: sheets/unsorted.json cell 3 painted — tile 01D5 pattern C0C0C0C0C0C0C0C03F3F3F3F3F3F3F3F palette 0F202909 at crop 40,40: <tile>0,01D5,0F202909,40,40,1,N
 ```
 
 **That row, not the manifest, is how you confirm a paste or a repaint landed.**
 The `<tile>` text at the end is the rule as it went into `hires.txt`, byte for
 byte, so a round trip is checked by reading the build's own output — no
-`grep`, no `cat`, no opening a generated file. The crop is in the sheet's own
-pixels at the pack's `<scale>`, the same coordinates the rule carries, which is
-where you painted.
+`grep`, no `cat`, no opening a generated file.
+
+Field by field: the sidecar's name; the cell's `index`, the `cells[]` ordinal
+`mep_add_cell.py` prints at paste time; `painted` or `added` (you painted the
+cell, or a tool placed it and you have not painted it yet); `tile`, the key the
+manifest is keyed by; `pattern`; the `palette` that key sits under; the
+`at crop` x,y in the sheet's own pixels at the pack's `<scale>`, which is where
+you painted; and after the colon the `<tile>` line the build wrote, verbatim.
+
+`pattern` is there because a CHR ROM pack's manifest is keyed by the tile's CHR
+index (ADR-0172) — `01D5` — while *Copy as MEP sheet cell* puts the 32-hex
+pattern on the clipboard. They are the same key, so `pattern` is the string to
+match against your clipboard and `tile` the one to match against the `<tile>`
+line beside it: that pair is the whole round trip, with no file to open. A
+sprite cell the recorder stored with its flip baked in is named by the un-baked
+key the run time looks up — its `"source"` (ADR-0178) — not by the flipped
+pixels beside it in the sidecar. On a pack keyed by pattern — a CHR RAM pack —
+the row has no `pattern` field, because there `tile` already *is* the 32 hex
+(`tile 00025F7C70604060003F7F7F7F7F7F7F`).
 
 Three things a row can tell you besides "it landed":
 
