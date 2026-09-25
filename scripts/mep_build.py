@@ -267,7 +267,7 @@ def _png_write(path: Path, bmp: "_Bitmap") -> None:
         + chunk(b"IEND", b""))
 
 
-def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix) -> int:
+def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix, alpha: bool = False) -> int:
     """Apply `fix(sheet, twin_or_None)` to `png_path` and, in lockstep (#329),
     to its 1x `*.orig.png` twin `ref_path`; `fix` returns how many crops it
     rewrote, and both files are written only when that is not 0.
@@ -277,13 +277,16 @@ def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix) -> 
     land on it too: un-baking only the sheet left each corrected cell differing
     from a still-baked twin, so the next `build` read those cells as painted and
     tripped #253 wherever one lost its key to a higher-ranked sheet. Both fixes
-    (sheet_pixel_fixes) commute with nearest-neighbour upscaling."""
+    (sheet_pixel_fixes) commute with nearest-neighbour upscaling. `alpha`
+    gives an RGB sheet and twin the alpha channel a transparency fix needs."""
     bmp = _png_pixels(png_path)
     if bmp is None:
         print(f"warning: {png_path.name}: cannot rewrite crops — not an 8-bit RGB/RGBA "
               f"PNG; they keep the pixels the recorder drew", file=sys.stderr)
         return 0
     ref = _png_pixels(ref_path) if ref_path is not None else None
+    if alpha:
+        bmp, ref = F.with_alpha(bmp), F.with_alpha(ref)
     if ref is not None and (ref.width * scale, ref.height * scale, ref.channels) != (bmp.width, bmp.height, bmp.channels):
         ref = None  # not this sheet's twin: _EditedProbe is blind here too
     n = fix(bmp, ref)
@@ -1207,16 +1210,18 @@ def cmd_build(args) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
     # #456: the background crops that keep colour 0 transparent - every crop of
-    # a key the key source draws see-through, closed over shared crops.
-    see_through = F.see_through_places(
-        (((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]))
-         for sd, crops in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS for c in crops if c[3][:2] != "FF"),
-        F.KeySourceAlpha(source, _png_pixels).transparent)
+    # a key the key source draws see-through, closed over shared crops. The
+    # crop's (unflipped) bitmap says where colour 0 is, an index key cannot.
+    bg = [((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]),
+           c[6] or c[2]) for sd, crops in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS
+          for c in crops if c[3][:2] != "FF"]
+    see_through = F.see_through_places(((place, key) for place, key, _t in bg), F.KeySourceAlpha(
+        source, _png_pixels, {key: tile for _p, key, tile in reversed(bg)}).transparent)
     for sd, crops in sliced:
         entries = []
         seen = {}
         repeats = 0
-        pending_unflips, punches = [], {}
+        pending_unflips, unflip_at, punches = [], set(), {}
         for x, y, data, pal, edited, index, unflipped, mirror, authored, fold in crops:
             bitmap = data
             if index_keyed and index is None:
@@ -1231,7 +1236,9 @@ def cmd_build(args) -> int:
                 # Either way the pixels must be un-baked (#255, #457): storing
                 # the flipped bitmap makes the mirrored phase render garbled.
                 data = _index_token(index) if index_keyed else unflipped
-                if unflipped is not None and mirror and fold is None:  # a fold shares its cell's pixels: un-bake once
+                # A fold or an alias shares its cell's pixels: un-bake each crop once.
+                if unflipped is not None and mirror and fold is None and (x, y) not in unflip_at:
+                    unflip_at.add((x, y))
                     pending_unflips.append((x, y, mirror))
             elif (sd.kind in _FLIPPABLE_SHEET_KINDS
                   and (data, pal) not in keysrc_attrs
@@ -1279,7 +1286,7 @@ def cmd_build(args) -> int:
                       f"key stores the pixels the run time will mirror"
                       + (f"; cleared {dropped} sidecar mirror field(s)" if dropped else ""))
         n = punches and _rewrite_sheet(sd.png_path, twin, scale, lambda bmp, ref: sum(
-            F.punch_backdrop(bmp, ref, px, py, scale, t, p) for (px, py), (t, p) in punches.items()))
+            F.punch_backdrop(bmp, ref, px, py, scale, t, p) for (px, py), (t, p) in punches.items()), alpha=True)
         if n:
             print(f"info: {sd.name}: {n} background crop(s) keep colour 0 transparent, as the "
                   f"recording draws them over a behind-background sprite (#456)")

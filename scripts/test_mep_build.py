@@ -49,11 +49,14 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
     pixels under the unflipped source key (ADR-0178 — the run time mirrors
     the replacement art itself);
   * #457: an index-keyed (CHR ROM) mirror cell is un-baked like a CHR RAM
-    one, sheet and twin in lockstep, and a second build leaves it alone;
+    one, sheet and twin in lockstep, a crop an alias shares is un-baked once,
+    and a second build leaves it alone;
   * #456: a background key the recording keeps transparent at colour 0 is
     rebuilt transparent there (sheet and twin), an opaque key and the
     artist's paint stay opaque, and a second build is byte-identical, also
-    when two keys share a crop (a bank-swapping game's alias);
+    when two keys share a crop (a bank-swapping game's alias); a translucent
+    brush pixel in the key source is not the signature, and an RGB sheet
+    gains the alpha channel it needs;
   * #256: every `[condition]` rule keeps its unconditional fallback twin in
     the rebuilt `hires.txt`, so a condition miss still shows the painted art;
   * #253: a painted sprite sheet whose cells lose to another sheet fails the
@@ -1336,6 +1339,9 @@ def sheet_round_trip_tests(root: Path):
     backdrop_transparency_tests(root)
     backdrop_shared_crop_tests(root)
     backdrop_unbake_and_sprite_tests(root)
+    index_keyed_alias_unflip_tests(root)
+    backdrop_translucent_paint_tests(root)
+    backdrop_rgb_sheet_tests(root)
     condition_fallback_twin_tests(root)
     authored_condition_round_trip_tests(root)
     painted_sprite_ownership_tests(root)
@@ -1942,6 +1948,118 @@ def backdrop_unbake_and_sprite_tests(root: Path):
         fail(f"#456: after an un-bake, a second build over its own output rewrote {changed}")
     else:
         ok("#456: after an un-bake, a second build over its own output is byte-identical")
+
+
+def index_keyed_alias_unflip_tests(root: Path):
+    """#457 (PR #475 review): an index-keyed sprite cell whose alias carries
+    the same `source` + `mirror` shares the cell's crop. The crop has to be
+    un-baked once: queued twice it was mirrored back to the baked pixels,
+    while the sidecar lost both mirror fields, so no later build could fix it."""
+    folder = root / "index-keyed-alias-unflip"
+    sheets = folder / "textures" / "sheets"
+    sheets.mkdir(parents=True)
+    shape = 3
+    i1, i2 = CHR_INDEX_BASE + shape, CHR_INDEX_BASE + shape + 0x20
+    pixels = blank(8, 8)
+    render_tile_hflipped(shape, pixels, 0, 0, 8, 8)
+    write_pair(sheets, "spr000", pixels, 1)
+    src = tile_hex(shape)
+    entry = '{{ "tile": "{0}", "palette": "{1}", "index": {2}, "source": "{3}", "mirror": "H" }}'
+    side = _one_cell_sidecar("sprite", "spr000", [entry.format(flip_hex(src), PAL_HEX, i1, src)])
+    alias = f'"aliases": [{{ "metatile": 9, "tiles": [{entry.format(flip_hex(src), PAL_HEX, i2, src)}] }}], '
+    (sheets / "spr000.json").write_text(
+        side.replace('"context": "scene", "label"', f'"context": "scene", {alias}"label"', 1), encoding="utf-8")
+    (folder / "textures" / "hires.txt").write_text("\n".join(
+        ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B"]
+        + [f"<tile>0,{i:02X},{PAL_HEX},0,0,1,N" for i in (i1, i2)]) + "\n", encoding="utf-8")
+    want = blank(8, 8)
+    render_tile(shape, want, 0, 0, 8, 8)
+    if run("build", str(folder)) is None:
+        return
+    if png_read(sheets / "spr000.png") == want and png_read(sheets / "spr000.orig.png") == want:
+        ok("#457: a crop a cell and its alias share is un-baked once, sheet and twin")
+    else:
+        baked = png_read(sheets / "spr000.png") == pixels
+        fail(f"#457: the shared crop is not the unflipped art{' (still the baked mirror)' if baked else ''}")
+
+
+def backdrop_translucent_paint_tests(root: Path):
+    """#456 (PR #475 review): on a rebuild the key source's `<img>` is the
+    artist's own sheet, so a translucent brush pixel is not the recorder's
+    `TransparencyRequired` signature (alpha 0 at a colour-0 position). Such a
+    key keeps its opaque backdrop."""
+    folder = root / "backdrop-translucent-paint"
+    tex = folder / "textures"
+    sheets = tex / "sheets"
+    sheets.mkdir(parents=True)
+    shape = 22
+    base = _render_bg(shape, False)
+    write_pair(sheets, "metatiles", base, 1)
+    (sheets / "metatiles.json").write_text(_one_cell_sidecar("metatiles", "metatiles", [
+        f'{{ "tile": "{tile_hex(shape)}", "palette": "{PAL_HEX}" }}']), encoding="utf-8")
+    zero = _render_bg(shape, True)
+    painted = [row[:] for row in base]
+    ink = next((r, c) for r in range(8) for c in range(8) if zero[r][c] != 0)
+    back = next((r, c) for r in range(8) for c in range(8) if zero[r][c] == 0)
+    for r, c in (ink, back):
+        painted[r][c] = 0x80A020F0  # a soft brush: half alpha, not the recorder's alpha 0
+    (sheets / "metatiles.png").write_bytes(png_rgba(painted))
+    (tex / "hires.txt").write_text("\n".join(
+        ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+         "<img>sheets/metatiles.png", f"<tile>0,{tile_hex(shape)},{PAL_HEX},0,0,1,N"]) + "\n", encoding="utf-8")
+    if run("build", str(folder)) is None:
+        return
+    got = png_read(sheets / "metatiles.png")
+    if got == painted and png_read(sheets / "metatiles.orig.png") == base:
+        ok("#456: a translucent brush pixel in the key source does not make its key see-through")
+    else:
+        cleared = sum(1 for row in got for p in row if p >> 24 == 0)
+        fail(f"#456: a translucent brush pixel was read as the recorder's transparency ({cleared} px cleared)")
+
+
+def png_rgb(pixels) -> bytes:
+    """`png_rgba` without the alpha channel (colour type 2), as an editor saves an opaque sheet."""
+    rgba = png_rgba(pixels)
+    height, width = len(pixels), len(pixels[0])
+    raw = bytearray()
+    for row in pixels:
+        raw.append(0)
+        for p in row:
+            raw += bytes(((p >> 16) & 0xFF, (p >> 8) & 0xFF, p & 0xFF))
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    return (rgba[:8] + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
+
+
+def backdrop_rgb_sheet_tests(root: Path):
+    """#456 (PR #475 review): an opaque working sheet saved as 8-bit RGB (no
+    alpha channel), with its twin, still gets colour 0 cleared on a
+    see-through key - the sheet gains the alpha channel it needs."""
+    folder = root / "backdrop-rgb-sheet"
+    tex = folder / "textures"
+    sheets = tex / "sheets"
+    sheets.mkdir(parents=True)
+    shape = 21
+    (tex / "old.png").write_bytes(png_rgba(_render_bg(shape, True)))
+    (tex / "hires.txt").write_text("\n".join(
+        ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
+         "<img>old.png", f"<tile>0,{tile_hex(shape)},{PAL_HEX},0,0,1,N"]) + "\n", encoding="utf-8")
+    for name in ("metatiles.png", "metatiles.orig.png"):
+        (sheets / name).write_bytes(png_rgb(_render_bg(shape, False)))
+    (sheets / "metatiles.json").write_text(_one_cell_sidecar("metatiles", "metatiles", [
+        f'{{ "tile": "{tile_hex(shape)}", "palette": "{PAL_HEX}" }}']), encoding="utf-8")
+    if run("build", str(folder)) is None:
+        return
+    kinds = [(sheets / n).read_bytes()[25] for n in ("metatiles.png", "metatiles.orig.png")]
+    if kinds != [6, 6]:
+        fail(f"#456: an RGB sheet kept its opaque colour 0 (PNG colour types {kinds}, want RGBA)")
+    elif png_read(sheets / "metatiles.png") == _render_bg(shape, True) == png_read(sheets / "metatiles.orig.png"):
+        ok("#456: an RGB sheet and its twin gain alpha and keep colour 0 transparent")
+    else:
+        fail("#456: an RGB sheet was converted but colour 0 was not cleared")
 
 
 def painted_sprite_ownership_tests(root: Path):

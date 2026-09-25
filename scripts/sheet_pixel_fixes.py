@@ -18,9 +18,12 @@ Two corrections live here:
   (`HdPackBuilder` `TransparencyRequired`, `HdPackTileInfo::ToRgb`), and that
   is what lets the sprite show through, as it does on hardware. A rebuilt
   crop that kept the opaque backdrop hid the sprite (Punch-Out!!: Glass Joe).
-  `KeySourceAlpha` reads which keys the key source draws with a transparent
-  pixel; `punch_backdrop` clears colour 0 in those crops wherever the sheet
+  `KeySourceAlpha` reads which keys the key source draws with an alpha-0
+  pixel at a colour-0 position (the recorder's signature, never a translucent
+  brush); `punch_backdrop` clears colour 0 in those crops wherever the sheet
   still holds the twin's backdrop colour, so the artist's own paint stays.
+  An RGB sheet gains an alpha channel first (`with_alpha`). The contract -
+  inputs, side effects, exclusions, verification - is in `scripts/AGENTS.md`.
 
 Stdlib only; the PNG decoder is `mep_build._png_pixels`, passed in.
 """
@@ -103,14 +106,21 @@ def sidecar_drop_mirrors(json_path: Path) -> int:
 
 
 class KeySourceAlpha:
-    """Which `(tile, palette)` keys the key source draws with at least one
-    transparent pixel, read off the crops its own `<img>`/`<tile>` lines point
-    at, at its own `<scale>`. On a recording that is exactly the background
-    keys `TransparencyRequired` marked; on a manifest a previous build wrote,
-    it is the crops that build already corrected, so a rebuild keeps them."""
+    """Which `(tile, palette)` keys the key source draws with the recorder's
+    `TransparencyRequired` signature: a fully transparent (alpha 0) pixel at a
+    colour-0 position of the key's tile, read off the crops its own
+    `<img>`/`<tile>` lines point at, at its own `<scale>`. On a recording that
+    is exactly the background keys `TransparencyRequired` marked; on a
+    manifest a previous build wrote, it is the crops that build already
+    corrected, so a rebuild keeps them. A translucent brush pixel (alpha
+    1..254) or an alpha-0 pixel over the tile's ink is the artist's paint, not
+    the signature (PR #475 review). `bitmaps` maps a key to its 32-hex tile
+    bitmap - on a CHR ROM game the key is an index, which carries no pixels;
+    a key missing from it that is itself 32-hex data is its own bitmap."""
 
-    def __init__(self, source: Path, decode):
+    def __init__(self, source: Path, decode, bitmaps=None):
         self._decode = decode
+        self._bitmaps = bitmaps or {}
         self._dir = Path(source).parent
         self._imgs, self._rules, self._images, self._known = [], {}, {}, {}
         self._scale = 1
@@ -134,10 +144,12 @@ class KeySourceAlpha:
 
     def transparent(self, key) -> bool:
         if key not in self._known:
-            self._known[key] = any(self._crop_has_alpha(f) for f in self._rules.get(key, ()))
+            tile = self._bitmaps.get(key) or key[0]
+            zeros = _colour0_positions(tile) if _HEX_TILE_RE.match(tile or "") else ()
+            self._known[key] = bool(zeros) and any(self._crop_has_alpha(f, zeros) for f in self._rules.get(key, ()))
         return self._known[key]
 
-    def _crop_has_alpha(self, fields) -> bool:
+    def _crop_has_alpha(self, fields, zeros) -> bool:
         try:
             bmp, x, y = self._image(int(fields[0])), int(fields[3]), int(fields[4])
         except ValueError:
@@ -145,11 +157,32 @@ class KeySourceAlpha:
         span = 8 * self._scale
         if bmp is None or bmp.channels != 4 or x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
             return False
-        for row in range(y, y + span):
-            off = row * bmp.stride + x * 4 + 3
-            if any(a != 255 for a in bmp.raw[off:off + span * 4:4]):
-                return True
+        n = self._scale
+        for r, c in zeros:
+            for row in range(y + r * n, y + r * n + n):
+                off = row * bmp.stride + (x + c * n) * 4 + 3
+                if 0 in bmp.raw[off:off + n * 4:4]:
+                    return True
         return False
+
+
+def _colour0_positions(tile_hex: str) -> list:
+    """The (row, column) of every colour-0 pixel of a 32-hex 2bpp NES tile."""
+    data = bytes.fromhex(tile_hex)
+    return [(r, c) for r in range(8) for c in range(8)
+            if not ((data[r] >> (7 - c)) & 1 or (data[r + 8] >> (7 - c)) & 1)]
+
+
+def with_alpha(bmp):
+    """`bmp` as 8-bit RGBA: an RGB bitmap (an editor's opaque working sheet)
+    gains a fully opaque alpha channel so `punch_backdrop` can clear colour 0
+    in it (#456). RGBA and None come back as they are."""
+    if bmp is None or bmp.channels != 3:
+        return bmp
+    raw = bytearray(len(bmp.raw) // 3 * 4)
+    raw[0::4], raw[1::4], raw[2::4] = bmp.raw[0::3], bmp.raw[1::3], bmp.raw[2::3]
+    raw[3::4] = b"\xff" * (len(raw) // 4)
+    return type(bmp)(bmp.width, bmp.height, 4, raw)
 
 
 def see_through_places(placed, transparent) -> set:
@@ -192,24 +225,20 @@ def punch_backdrop(bmp, ref, x: int, y: int, scale: int, tile_hex: str, palette:
         ref = None
     argb = palette_folds.DEFAULT_PALETTE_ARGB[palette_folds.palette_entries(palette)[0]]
     fallback = bytes(((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, 0xFF))
-    data = bytes.fromhex(tile_hex)
     changed = 0
-    for r in range(8):
-        for c in range(8):
-            if (data[r] >> (7 - c)) & 1 or (data[r + 8] >> (7 - c)) & 1:
+    for r, c in _colour0_positions(tile_hex):
+        back = fallback
+        if ref is not None:
+            o = (ty + r) * ref.stride + (tx + c) * 4
+            back = bytes(ref.raw[o:o + 4])
+            if back[3] != 0xFF:
                 continue
-            back = fallback
-            if ref is not None:
-                o = (ty + r) * ref.stride + (tx + c) * 4
-                back = bytes(ref.raw[o:o + 4])
-                if back[3] != 0xFF:
-                    continue
-                ref.raw[o:o + 4] = _CLEAR
-                changed = 1
-            for dy in range(scale):
-                row = (y + r * scale + dy) * bmp.stride + (x + c * scale) * 4
-                for p in range(row, row + scale * 4, 4):
-                    if bmp.raw[p:p + 4] == back:
-                        bmp.raw[p:p + 4] = _CLEAR
-                        changed = 1
+            ref.raw[o:o + 4] = _CLEAR
+            changed = 1
+        for dy in range(scale):
+            row = (y + r * scale + dy) * bmp.stride + (x + c * scale) * 4
+            for p in range(row, row + scale * 4, 4):
+                if bmp.raw[p:p + 4] == back:
+                    bmp.raw[p:p + 4] = _CLEAR
+                    changed = 1
     return changed
