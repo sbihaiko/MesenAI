@@ -338,6 +338,12 @@ def free_slot_tests(tmp: Path):
            "while the cell's own index is its ordinal")
     else:
         fail(f"tiles[] was rewritten: {cell['tiles']}")
+    # #511: the marker `mep_build` reads to report this cell's rule by name,
+    # before (and after) the artist paints it.
+    if cell.get("addedBy") == "mep_add_cell":
+        ok("the placed cell carries `addedBy: mep_add_cell`, so the build reports the rule it produced (#511)")
+    else:
+        fail(f"the placed cell carries no addedBy marker: {cell.get('addedBy')!r}")
     if {p.name: p.read_bytes() for p in sheets.glob("*.png")} == pngs:
         ok("filling a free slot rewrites no PNG at all")
     else:

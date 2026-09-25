@@ -59,6 +59,12 @@ paste time, rather than by `build` two steps later; the report names the sheet
 and whether that cell was painted, read through `mep_build`'s own
 `_EditedProbe` so it cannot disagree with the build.
 
+**The marker the build reads (#511).** The placed cell carries
+`"addedBy": "mep_add_cell"`. A pasted cell's pixels equal its `.orig.png` twin
+until the artist paints it, so `mep_build` cannot tell it apart from a cell the
+recorder wrote — the marker is what lets the build's `report:` row name the
+rule a just-pasted key produced, before any paint. Nothing else reads it.
+
 **The `index` trap.** A whole-cell payload carries the word twice: the cell's
 ordinal in its sheet, and — inside `tiles[]` — the tile's absolute CHR index
 (ADR-0172 §2). This tool sets the cell's `index` itself and carries
@@ -402,8 +408,12 @@ def place(sheets_dir: Path, docs, sd, payload, scale: int, label: str, dry_run: 
            f"slot: cell index {index} at col {col}, row {row} -> x {x}, y {y} "
            f"(painted at {x * scale}, {y * scale} on {sd.png_path.name})"]
 
+    # #511: `addedBy` is the marker `mep_build` reads to report this cell's rule
+    # by name even before it is painted — a pasted cell equals its `.orig.png`
+    # twin until the artist paints it, so "was this cell touched?" alone would
+    # not tell the build to say anything about it.
     cell = {"index": index, "x": x, "y": y, "count": payload["count"],
-            "context": prevailing_context(sd)}
+            "context": prevailing_context(sd), "addedBy": "mep_add_cell"}
     if label:
         cell["label"] = label
     # ADR-0216: `tiles[].index` is the tile's absolute CHR index (ADR-0172 §2)

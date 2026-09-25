@@ -241,6 +241,13 @@ def _recorded_done_steps(kit: dict) -> list:
         "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
         "untouched reference, and painting it is how your work becomes invisible.",
         "",
+        "With cells painted, the build prints one `report:` row per key of every cell you "
+        "painted (and of every cell `mep_add_cell.py` placed), naming the `<tile>` rule "
+        "that cell produced, its crop and the sheet it is on (#511). **That row is how you "
+        "confirm a repaint landed** - there is nothing to look up in the generated "
+        "`textures/hires.txt`. A row that says no `<tile>` means another crop already owns "
+        "the key, so that paint reaches nothing.",
+        "",
     ]
     if any(p.startswith("scene/") for p in paths):
         out.extend([

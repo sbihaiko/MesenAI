@@ -5,7 +5,9 @@ ADR-0214 §4 hands criteria 3, 5 and 6 to a machine even though the run itself
 is cold: the evaluator says what it picked and pastes what the viewer copied,
 and this reads the result back. It never decides criterion 1 (whether the
 action was findable) or criterion 4 (`hires.txt` never opened) - those are
-facts about the evaluator and live in the log.
+facts about the evaluator and live in the log. This read of the manifest is
+the machine's; the evaluator's own criterion 5 comes from the build's
+`report:` row (#511), and the two must name the same `<tile>`.
 
 What it does, in the panel script's own step order:
 
