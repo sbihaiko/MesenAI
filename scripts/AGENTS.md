@@ -1101,13 +1101,18 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   flipped: it already matches the figure. Without this, the kit's figures,
   cut from the recording before the #435 first build, were the mirror of
   120 of Simon's 140 non-blank cells, and paint landed mirrored in game. A
-  figure exported before #463 has no `mirror`; re-export it. Covered by
+  figure exported before #463 has no `mirror`; re-export it. An overlapped
+  cell that is routed takes the pixels it does not own from the owner crop
+  it is pasted onto, not from its source crop (#478). A key repeats across
+  the poses of one figure, and the source crop's recorded art would erase
+  paint an earlier instance had already routed there. Covered by
   `test_mep_figure.py`; measured on Contra in
   `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
   `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
   Castlevania in
   `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
-  and `docs/validation/issue-463-figure-mirror-2026-09-25.md`.
+  and `docs/validation/issue-463-figure-mirror-2026-09-25.md` and
+  `docs/validation/issue-478-routed-cell-owner-merge-2026-09-25.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

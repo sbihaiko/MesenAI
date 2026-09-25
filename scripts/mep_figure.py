@@ -654,6 +654,11 @@ def _merge_owned(current, fig_cell, owned, unit, scale):
     return out
 
 
+def _sub_mask(owned, lx, ly, unit):
+    """The 8x8 slice of a `unit`x`unit` ownership mask at 1x offset `(lx, ly)`."""
+    return [owned[(ly + y) * unit + lx + x] for y in range(8) for x in range(8)]
+
+
 # ---- return target: the crop the built manifest draws (#413) -----------------
 #
 # A figure's sidecar names the sheet each cell was *cut from* (for the kit's
@@ -1003,6 +1008,16 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
         changed = put(sheet, new_cell, sx, sy) if write_source else False
         for other, ox, oy, lx, ly in routes:
             sub = new_cell.crop(lx * scale, ly * scale, 8 * scale, 8 * scale)
+            if owned is not None:
+                # #478: the pixels this cell does not own come from the crop
+                # the paint lands on, not from the source crop - an earlier
+                # instance of the key may already have routed paint there.
+                dst = canvas(other)[1]
+                if ox + 8 * scale > dst.width or oy + 8 * scale > dst.height:
+                    raise FigureError(f"{other.name}: crop ({ox},{oy}) falls outside the sheet")
+                sub = _merge_owned(dst.crop(ox, oy, 8 * scale, 8 * scale),
+                                   fig_cell.crop(lx * scale, ly * scale, 8 * scale, 8 * scale),
+                                   _sub_mask(owned, lx, ly, unit), 8, scale)
             changed = put(other, sub, ox, oy) or changed
         if not changed:
             report["alreadyApplied"] += 1
