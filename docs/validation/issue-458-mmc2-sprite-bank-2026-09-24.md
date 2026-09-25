@@ -78,7 +78,9 @@ and the bank of each fetched row.
     `rebank` when that bank differs from the cycle-257 decode. It gives every
     other bank the rows came from to `emitBank`.
   - Which halves are recorded, and with which PPUCTRL and palette, is still
-    decided at cycle 257 exactly as in #450.
+    decided exactly as in #450 (since the PR #468 review: decoded at the
+    cycle-257 fetch, recorded once a row of the half is drawn with sprites
+    showing, with that row's palette).
   - A half none of whose rows was fetched (the 8-per-line limit) keeps its
     cycle-257 bank.
 - **`Core/NES/HdPacks/HdBuilderPpu.h`**:
@@ -213,6 +215,47 @@ The `<tile>` rule bodies are the same 9847 in every run.
 
 **Excitebike (40 s, play script) and Super Mario Bros. (30 s, attract).** The
 pack, OAM dump and grid dump are byte-identical to #450 alone.
+
+## PR #468 review, carried into the row log
+
+The #468 review (Codex 4100239580) moved the draw gate from PPUMASK at cycle
+257 to the row the half is drawn on. The same premise applies to the row log:
+only a row that showed sprites makes a `<tile>` rule, so only such a row may
+name a half's bank or add an extra bank. `SpriteFetchLog::HideRow` marks a
+row PPUMASK hid (the latch calls it from `OnSpriteFetch`), and a fetch for a
+hidden row, or for row 240 (fetched on line 239, never on screen), no longer
+matches. Codex 4100239586 on #468 (resolve CHR at the slot's real fetch) is
+this issue; the row log is the fix.
+
+**Red** (new case, against this branch rebased on the reviewed #450),
+verbatim:
+
+```
+FAIL  PR #468: a half whose top row drew no sprite is named by the bank of its first drawn row (1E80): named 0580 0581 extra 1E80 1E81 
+FAIL  PR #468: no bank comes from a hidden row or from the row-240 fetch: named 0580 0581 extra 1E80 1E81 
+1130/1132 cases passed
+```
+
+**Green:** 1132/1132.
+
+**Mutations:**
+
+| Mutation | Result |
+|---|---|
+| `Draws` ignores hidden rows | 2 fail (1130/1132) |
+| `Draws` accepts the row-240 fetch | 1 fails (1131/1132): `no bank comes from a hidden row or from the row-240 fetch: named 1E80 0581 extra 1E81` |
+| `ForEachLatched` never renames by the row log (4100239586) | 1 fails (1131/1132): `the latch names the sprite after a latch tile by the bank its top row read (1E80), not the cycle-257 mapping (0580): got 2 sprite(s): 05FD 0580` |
+
+**E2E on the chain head** (same commands as above, private relinked copies;
+`MesenCore.dylib` sha256: pre-review #450 `296282dd…c34f`, reviewed #450
+`62b87c0b…d99a`, this head `748b125d…1403`):
+
+- Castlevania stage 1, 80 s from `stage1.mss`: `sheet_keys_audit.py` 590
+  entries, 0 leftover on every build. Pack, OAM dump and grid dump are
+  byte-identical across all three.
+- Excitebike, 40 s (`mint-stage1.txt` then `stage1-run.txt` from power-on):
+  260 entries, 0 leftover. Pack, OAM dump and grid dump are byte-identical
+  across all three.
 
 ## What is left, and why it is not this bug
 

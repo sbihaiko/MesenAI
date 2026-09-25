@@ -10090,6 +10090,57 @@ void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
 	Check(named == 0x0580, "#458: a cleared latch forgets the rows of the frame before (a state load clears it too)");
 }
 
+//PR #468 review, carried into the row log: only a row that showed sprites
+//makes a <tile> rule, so only such a row may name a half or add a bank to it.
+//A fetch whose row drew no sprite (PPUMASK hid them) or that is for row 240
+//(fetched on line 239, never on screen) names nothing.
+void TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites()
+{
+	uint8_t oam[256];
+	OamFetchLatchModel::ClearOam(oam);
+	OamFetchLatchModel::SetSprite(oam, 0, 99, 0x80, 0, 48);  //rows 100-107
+	OamFetchLatchModel::SetSprite(oam, 1, 232, 0x81, 0, 100); //rows 233-239 on screen, row 240 fetched on line 239
+	Mmc2LeftLatchModel mmc2;
+	OamFetchLatch latch;
+	latch.Clear();
+	for(int line = 0; line < 240; line++) {
+		//A bank switch lands after line 99's fetch and another one on line
+		//239 only; row 100 is drawn with sprites hidden.
+		mmc2.LatchFd = (line >= 100 && line < 200) || line == 239;
+		latch.OnSpriteFetch(line, line != 100, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000,
+			[&](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+				h.AbsoluteAddr = mmc2.Absolute(h.TileAddr);
+				tile.TileIndex = h.AbsoluteAddr / 16;
+				return true;
+			});
+		for(int i = 0; i < 64; i++) {
+			const uint8_t* e = oam + i * 4;
+			int row = line - e[0];
+			if(e[0] < 0xEF && row >= 0 && row < 8) {
+				mmc2.FetchRow(latch, line, e[3], e[1], (uint8_t)row);
+			}
+		}
+	}
+	std::vector<int32_t> named, extra;
+	latch.ForEachLatched(
+		[&](uint8_t, uint8_t, const HdPpuTileInfo& tile) { named.push_back(tile.TileIndex); },
+		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
+		[&](const HdPpuTileInfo& tile) { extra.push_back(tile.TileIndex); });
+	auto hex = [](const std::vector<int32_t>& v) {
+		std::string out;
+		char b[8];
+		for(int32_t x : v) {
+			snprintf(b, sizeof(b), "%04X ", x);
+			out += b;
+		}
+		return out.empty() ? std::string("(none)") : out;
+	};
+	Check(named.size() == 2 && named[0] == 0x1E80, "PR #468: a half whose top row drew no sprite is named by the bank of its first drawn row (1E80)",
+		"named " + hex(named) + "extra " + hex(extra));
+	Check(named.size() == 2 && named[1] == 0x0581 && extra.empty(), "PR #468: no bank comes from a hidden row or from the row-240 fetch",
+		"named " + hex(named) + "extra " + hex(extra));
+}
+
 void TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame()
 {
 	SpriteFetchLog log;
@@ -10430,6 +10481,7 @@ int main()
 	TestTheOamLatchNamesAHalfByTheBankItsTopRowWasReadFrom();
 	TestTheOamLatchKeepsItsGuaranteesWithTheRowLog();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
+	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

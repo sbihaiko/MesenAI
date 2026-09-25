@@ -37,7 +37,8 @@
 //sprite fetched after a latch sprite on the same line comes from the new
 //bank, and a latch tile's own rows 1-7 do too. So the latch also keeps the
 //per-row log of what each fetch read (OnRowFetch), and ForEachLatched names
-//each half by the bank of its topmost fetched row, handing every other bank
+//each half by the bank of its topmost fetched row that showed sprites (a row
+//PPUMASK hid made no <tile> rule, PR #468 review), handing every other bank
 //its rows came from to `emitBank`. A half no row of which was fetched (the
 //8-per-line limit) keeps the bank of its cycle-257 decode. Host-free (ADR-0127): HdBuilderPpu
 //supplies the per-half CHR/palette reads through `resolve`, and
@@ -97,6 +98,9 @@ public:
 	{
 		if(line < 0 || line > 239) {
 			return;
+		}
+		if(!rowShown) {
+			_rows.HideRow((uint32_t)line);
 		}
 		if(rowShown && _pending.any()) {
 			for(uint32_t slot = 0; slot < SlotCount; slot++) {

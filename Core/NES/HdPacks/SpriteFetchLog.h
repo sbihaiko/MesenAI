@@ -18,6 +18,7 @@
 //bank its rows came from is a key the `<tile>` rules carry too. Host-free and
 //header-only (HdBuilderPpu.h is not on the Makefile's CUTSRC list).
 #include <algorithm>
+#include <bitset>
 #include <cstdint>
 #include <vector>
 
@@ -32,6 +33,16 @@ public:
 	void Clear()
 	{
 		_fetches.clear();
+		_hiddenRows.reset();
+	}
+
+	//PR #468 review: screen row `row` drew no sprite (PPUMASK hid them), so it
+	//made no <tile> rule and none of the fetches for it names a bank.
+	void HideRow(uint32_t row)
+	{
+		if(row < ScreenRows) {
+			_hiddenRows.set(row);
+		}
 	}
 
 	//One fetched sprite row. `scanline` is the PPU scanline the fetch ran on
@@ -49,7 +60,7 @@ public:
 	//sits at `spriteX`, its top row is drawn on screen line `screenY`, and
 	//`patternAddr` is the PPU-space address of its tile. Its eight rows are
 	//fetched on scanlines screenY-1 .. screenY+6; the first of them that was
-	//fetched names the bank, which is the bank of the topmost row the `<tile>`
+	//fetched (for a row that showed sprites, see HideRow) names the bank, which is the bank of the topmost row the `<tile>`
 	//rule recorded. `fallbackAddr` is the address through the mapping in effect
 	//now, used only when no row of the half was fetched this frame (a sprite
 	//the 8-per-line limit dropped on every row).
@@ -88,12 +99,21 @@ private:
 		uint8_t SpriteX;
 	};
 
-	static bool Draws(const Fetch& fetch, uint8_t spriteX, uint32_t screenY, uint16_t patternAddr)
+	static constexpr uint32_t ScreenRows = 240;
+
+	//A fetch on scanline S is for screen row S + 1: it counts only when that
+	//row is on screen (the fetch on line 239 is for row 240) and showed sprites.
+	bool Draws(const Fetch& fetch, uint8_t spriteX, uint32_t screenY, uint16_t patternAddr) const
 	{
 		int32_t first = (int32_t)screenY - 1;
-		return fetch.SpriteX == spriteX && fetch.TileBase == (uint16_t)(patternAddr & 0xFFF0) && fetch.Scanline >= first && fetch.Scanline <= first + 7;
+		if(fetch.SpriteX != spriteX || fetch.TileBase != (uint16_t)(patternAddr & 0xFFF0) || fetch.Scanline < first || fetch.Scanline > first + 7) {
+			return false;
+		}
+		uint32_t row = (uint32_t)(fetch.Scanline + 1);
+		return row < ScreenRows && !_hiddenRows[row];
 	}
 
 	//In fetch order, so scanline order: the first match is the topmost row.
 	std::vector<Fetch> _fetches;
+	std::bitset<ScreenRows> _hiddenRows;
 };
