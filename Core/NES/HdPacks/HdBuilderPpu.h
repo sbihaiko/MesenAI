@@ -244,7 +244,7 @@ public:
 		NesPpu::WriteRam(addr, value);
 	}
 
-	void Serialize(Serializer& s)
+	void Serialize(Serializer& s) override
 	{
 		NesPpu::Serialize(s);
 		if(!s.IsSaving()) {
