@@ -20,11 +20,24 @@ unplaced) is what makes the placer exist at all. What is asserted here:
     sprite sheet — the one destination the rule forbids, since a background
     key put there never reaches the background (ADR-0178 §6).
 
-  * **OPEN 3(a), growing.** `cells[]` is dense and row-major on all 78
-    free-form sheets of those 30 packs (verified 2026-09-19: index == position
-    and `x,y` == `gutter + col*pitch, gutter + row*pitch` on every one), so the
-    free slots are the tail of the last partial row. On `unsorted`, 5 of the 27
-    packs have none and 7 more have exactly one, so growing is the common path.
+  * **OPEN 3(a), growing.** The free slots of a sheet are the ones no cell's
+    `x,y` claims, and the placer takes the first of them in row-major order:
+    on a dense `cells[]` that is the tail of the last partial row, which is the
+    arithmetic the ADR states, and on a sparse one it is the first hole. The
+    2026-09-19 measurement behind "`cells[]` is dense and row-major on all 78
+    free-form sheets" does not survive the 16-game F14.2 retest of 2026-09-25
+    (#503): Mario Bros.'s `unsorted` holds 30 cells at indices 0..29 while rows
+    1 and 2 carry only columns 0..2 (the sidecar as the repro copies it, before
+    the paste), so the slot after the last cell — the
+    dense `len(cells)`, `x1,y55` — is already taken by cell 20, and pasting
+    there grew `unsorted.png` 184x256 -> 184x292 against a logical height of 64
+    and made `build` exit 2. A **hole** in a row the sidecar describes is a
+    free slot like any other and needs no growth at all (ADR-0216 OPEN 3: "a
+    free slot of the existing last row changes neither file"); only when every
+    described slot is claimed does the sheet gain a row, and then the logical
+    size and both images move together by exactly one row pitch.
+    `sparse_slot_tests` is the case that fails on the pre-#503 rule.
+
     Appending a row changes the logical size the sidecar describes, and
     `mep_build` pins the pack's `<scale>` on `<sheet>.png` being an exact
     integer multiple of it while `_EditedProbe` needs `<sheet>.orig.png` to be
@@ -106,26 +119,31 @@ def solid(width, height, channels, value):
 
 def write_sheet(sheets: Path, stem: str, kind: str, unit: int, gutter: int, columns: int,
                 shapes, scale: int = 1, palette: str = PAL, chr_index: bool = True,
-                paint_cell: int = -1):
+                paint_cell: int = -1, slots=None):
     """One ADR-0153 v1 sidecar plus its PNG and pixel-exact `*.orig.png` twin.
 
     `shapes` is one shape id per cell; the cell grid is dense row-major, which
-    is how every generated free-form sheet is laid out. `paint_cell` differs
-    one cell from the twin, i.e. makes `_EditedProbe` call it painted."""
+    is how a generated free-form sheet is laid out. `slots` overrides that with
+    one `(col, row)` per cell, which is how a **recorded** sheet comes out: its
+    `cells[]` skips slots, so `len(cells)` does not name a free one (#503). The
+    PNG still spans every row the sidecar describes. `paint_cell` differs one
+    cell from the twin, i.e. makes `_EditedProbe` call it painted."""
     pitch = unit + gutter
-    rows = (len(shapes) + columns - 1) // columns
+    if slots is None:
+        slots = [(i % columns, i // columns) for i in range(len(shapes))]
+    rows = max(row for _col, row in slots) + 1
     lw, lh = columns * pitch + gutter, rows * pitch + gutter
     per = 4 if unit >= 16 else 1
     cells = []
-    for i, shape in enumerate(shapes):
+    for i, (shape, (col, row)) in enumerate(zip(shapes, slots)):
         tiles = [{"tile": tile_hex(shape + k), "palette": palette} for k in range(per)]
         if chr_index:
             for k, t in enumerate(tiles):
                 # Deliberately far from any cell ordinal: ADR-0216's one trap is
                 # the two `index` fields being confused for one another.
                 t["index"] = 400 + shape * 4 + k
-        cells.append({"index": i, "x": gutter + (i % columns) * pitch,
-                      "y": gutter + (i // columns) * pitch, "count": per,
+        cells.append({"index": i, "x": gutter + col * pitch,
+                      "y": gutter + row * pitch, "count": per,
                       "context": "misc", "label": "", "tiles": tiles})
     doc = {"version": 1, "kind": kind, "gridUnit": unit, "gridPhase": {"x": 0, "y": 0},
            "cell": {"w": unit, "h": unit}, "gutter": gutter, "columns": columns,
@@ -189,6 +207,7 @@ def main() -> int:
         payload_tests()
         destination_tests(tmp)
         free_slot_tests(tmp)
+        sparse_slot_tests(tmp)
         grow_tests(tmp)
         half_write_tests(tmp)
         claim_tests(tmp)
@@ -332,9 +351,112 @@ def free_slot_tests(tmp: Path):
         fail("--dry-run wrote to the pack")
 
 
+# --- #503: a recorded sidecar is not dense ------------------------------------
+
+
+def sparse_slot_tests(tmp: Path):
+    """The slot is the first the described grid leaves unclaimed, not
+    `len(cells)`. Columns 2, unit 8, gutter 1 -> pitch 9, and four cells at
+    (col 0,row 2), (col 1,row 0), (col 1,row 1), (col 1,row 2). The grid below
+    is drawn by position, not by `cell.index`; the digit in each slot is the
+    cell's index — cell 0 sits in the bottom-left corner, cells 1..3 down the
+    right column — and `.` is the slot no cell claims:
+
+      .  1        <- rows 0 and 1 of column 0 are the holes
+      .  2
+      0  3
+
+    `len(cells)` is 4, so the dense slot index 4 is (col 0, row 2) = x1,y19 —
+    cell 0's own slot — and it is also the first index of a row the old rule
+    called new, so the placer grew `unsorted.png` by a row that the lowest cell
+    (y19) does not describe: the logical height stays 28 while the PNG gains 9
+    rows of pixels, and `build` exits 2 with #503's own size error. The holes
+    are in rows `_logical_size` already describes, which is what makes them
+    free without growing anything (y19 + 8 + gutter 1 = 28, the twin's height).
+    """
+    pack = make_pack(tmp / "sparse", [
+        dict(stem="unsorted", kind="unsorted", unit=8, gutter=1, columns=2, shapes=[20, 21, 22, 23],
+             slots=[(0, 2), (1, 0), (1, 1), (1, 2)]),
+    ], scale=2)
+    sheets = pack / "textures" / "sheets"
+    before_cells = json.loads((sheets / "unsorted.json").read_text())["cells"]
+    pngs = {p.name: p.read_bytes() for p in sheets.glob("*.png")}
+    if run(pack, CELL_PAYLOAD) != 0:
+        fail("#503: the placer refused a sheet with a free hole in it")
+        return
+    after = json.loads((sheets / "unsorted.json").read_text())["cells"]
+    new = after[-1]
+    taken = {(c["x"], c["y"]) for c in before_cells}
+    if (new.get("x"), new.get("y")) not in taken:
+        ok("#503: the pasted cell lands on an x,y no existing cell occupies")
+    else:
+        held = [c["index"] for c in before_cells if (c["x"], c["y"]) == (new.get("x"), new.get("y"))]
+        fail(f"#503: the pasted cell landed on x{new.get('x')},y{new.get('y')} — the slot of "
+             f"cell {held} (the dense `len(cells)` slot), not the free hole")
+    if (new.get("x"), new.get("y")) == (1, 1) and new.get("index") == 4:
+        ok("the free slot is the first unclaimed one in row-major order, and the new cell's "
+           "ordinal is still the length of cells[]")
+    else:
+        fail(f"#503: the new cell is at x{new.get('x')},y{new.get('y')} index {new.get('index')}, "
+             "expected the hole x1,y1 at index 4")
+    if after[:4] == before_cells:
+        ok("#503: no existing cell was moved, re-indexed or overwritten")
+    else:
+        fail(f"#503: the existing cells changed: {after[:4]} against {before_cells}")
+    if {p.name: p.read_bytes() for p in sheets.glob("*.png")} == pngs:
+        ok("a hole in a described row needs no grow: neither PNG is rewritten (ADR-0216 OPEN 3(a): "
+           "a free slot changes neither file)")
+    else:
+        fail("#503: filling a hole in a described row grew a PNG")
+    done = subprocess.run([PY, str(MEP_BUILD), "build", str(pack)], capture_output=True, text=True)
+    hires = (pack / "textures" / "hires.txt").read_text()
+    crop = [ln for ln in hires.splitlines() if tile_hex(90) in ln and ln.startswith("<tile>")]
+    if done.returncode == 0 and tile_hex(90) in hires:
+        ok("mep_build build re-reads the pack the hole was filled in and carries the key "
+           "(exit 0, the size error of #503 is gone)")
+    else:
+        fail(f"build exited {done.returncode}; new key in hires.txt: {tile_hex(90) in hires}\n"
+             f"{(done.stdout + done.stderr)[-1500:]}")
+    # The cell has to reach the screen where it was pasted, not merely build:
+    # x1,y1 at scale 2 is the 2,2 crop.
+    if crop and f",2,2," in crop[0]:
+        ok("#503: the placed key is carried at the hole's own crop (x1,y1 -> 2,2 at scale 2)")
+    else:
+        fail(f"#503: the placed key's <tile> line reads {crop}")
+
+    # A grid whose every slot is claimed still grows, and grows by exactly one
+    # whole row pitch in both files — the cells are not in row-major order,
+    # which is the only difference from `grow_tests` above.
+    full = make_pack(tmp / "sparse-full", [
+        dict(stem="unsorted", kind="unsorted", unit=8, gutter=1, columns=2, shapes=[20, 21, 22, 23],
+             slots=[(1, 0), (1, 1), (0, 0), (0, 1)]),
+    ], scale=2)
+    full_sheets = full / "textures" / "sheets"
+    before_png = mep_build._png_pixels(full_sheets / "unsorted.png")
+    before_ref = mep_build._png_pixels(full_sheets / "unsorted.orig.png")
+    if run(full, CELL_PAYLOAD) != 0:
+        fail("#503: the placer refused a full sheet whose cells are out of order")
+        return
+    after_png = mep_build._png_pixels(full_sheets / "unsorted.png")
+    after_ref = mep_build._png_pixels(full_sheets / "unsorted.orig.png")
+    added = json.loads((full_sheets / "unsorted.json").read_text())["cells"][-1]
+    if (after_ref.height == before_ref.height + 9 and after_png.height == before_png.height + 18
+            and (added.get("x"), added.get("y")) == (1, 19)):
+        ok("a grid with no unclaimed slot grows by exactly one row pitch, in both files, at "
+           "x1,y19")
+    else:
+        fail(f"#503: full sheet grew to {after_png.width}x{after_png.height} / "
+             f"{after_ref.width}x{after_ref.height} with the cell at "
+             f"x{added.get('x')},y{added.get('y')}")
+    done = subprocess.run([PY, str(MEP_BUILD), "build", str(full)], capture_output=True, text=True)
+    if done.returncode == 0:
+        ok("the grown sparse sheet builds: the logical size moved with both images")
+    else:
+        fail(f"build exited {done.returncode} on the grown sparse sheet:\n"
+             f"{(done.stdout + done.stderr)[-1500:]}")
+
+
 # --- OPEN 3(a): growing -------------------------------------------------------
-
-
 def grow_tests(tmp: Path):
     # columns 2 with 4 cells: the grid is exactly full, which is the state 5 of
     # the sweep's 27 unsorted sheets are already in.
