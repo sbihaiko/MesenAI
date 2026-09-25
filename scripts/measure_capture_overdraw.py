@@ -297,10 +297,12 @@ class Recording:
         self.sprite_source = "ram-line" if self.has_ram else ("oam-dump" if self.oam_path else "none")
 
     def _load_oam(self):
-        frames, _shapes = parse_oam_dump(self.oam_path)
+        frames, _shapes, _has_visibility = parse_oam_dump(self.oam_path)
         self._oam_by_played = []
         for f in frames:
-            boxes = [(x, y) for _shape, x, y, _pal in f.entries]
+            # ADR-0234 appends two fields to an entry, so index rather than
+            # unpack: the boxes are the first three whatever the dump's age.
+            boxes = [(e[1], e[2]) for e in f.entries]
             self._oam_by_played.extend([boxes] * max(1, f.repeat))
 
     def locate(self, shot_rgb: np.ndarray):

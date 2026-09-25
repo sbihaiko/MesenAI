@@ -1001,7 +1001,7 @@ void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t interna
 //and because HdBuilderPpu applies the OAM flip bits to TileData before calling
 //in, the left and right halves of a mirrored figure are distinct shapes and can
 //sit side by side on the sheet instead of collapsing into one cell.
-void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
+void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile, MesenSheets::SpriteDrawing drawing)
 {
 	if(!_captureScreens || _oamFrames.size() >= MesenSheets::kMaxSheetFrames || _frameOam.Entries.size() >= 128) {
 		return;
@@ -1015,6 +1015,12 @@ void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
 	entry.X = x;
 	entry.Y = y;
 	entry.Palette = PaletteIdFor(tile.PaletteColors); //ADR-0222: same table as the grid's
+	//ADR-0234: none of these is part of entry identity (OamEntry::operator==
+	//compares shape, x, y and palette), so a frame that only changes how much
+	//of a hidden half shows still collapses into RepeatCount.
+	entry.BehindBg = drawing.BehindBg;
+	entry.VisiblePixels = drawing.VisiblePixels;
+	entry.HiddenPixels = drawing.HiddenPixels;
 	_frameOam.Entries.push_back(entry);
 }
 
