@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """Regression test for the 2026-09-19 Sonnet sweep's "coverage-count mismatch"
-finding (`docs/validation/f12.2-sonnet-sweep-2026-09-19.md`).
+finding (`docs/validation/f12.2-sonnet-sweep-2026-09-19.md`) and for #494.
+
+The second one is a frame the *recorder* had already claimed: a pack's
+`textures/backgrounds/screenNNN.png` is an opaque picture of the whole screen
+drawn at priority 20, i.e. after the `<tile>` layer (ADR-0050, ADR-0156), so on
+a second it matches, every `<tile>` rule under it is invisible and no painted
+cell can ever reach the game. `choose_frame` scores a candidate by *counting
+probe colours* found on its frame, and that count is fooled: the probe paints
+each rule `(255, g, b)` and upscaled art carries pixels that match those by
+coincidence - which the capture's own pixels then hide. Tetris 2's F14.2
+re-score is the measured case (its 40 s frame is `screen002.png`, its chosen
+cell (14,18) is under it, and painting it changed no pixel).
 
 The sweep's index for Contra said "the copy table explains 692/930 of the
 frame's 8x8 blocks" while the actual `tilemap-copy/Contra*.txt` held 90 rows
@@ -12,12 +23,14 @@ designs*, which repeat across a screen (a brick, the blank tile) far more
 often than the dump has rows for, so a near-empty dump can still "explain"
 most of the frame.
 
-This does not touch the native emulator or `mep_build.py` - `f122_prepare_
-evaluator.py` is sweep/dev tooling, and the fix is entirely inside it:
+Neither fix touches the native emulator or `mep_build.py` - `f122_prepare_
+evaluator.py` is sweep/dev tooling, and both are entirely inside it:
 `dump_coverage()` counts the dump's own rows against the frame's fixed
 `FULL_GRID_CELLS`, `one_moment()` gates on it as a third, independent leg, and
 the generated `index/<game>.md` states both numbers so a reader is never
-pointed at the wrong one again."""
+pointed at the wrong one again; for #494 the candidate probe repaints each
+recorded screen flat, and a candidate whose frame one of them owns is dropped
+with the screen's name instead of being ranked on a coincidence."""
 
 import json
 import shutil
@@ -139,6 +152,113 @@ def one_moment_gate_tests():
         ok("one_moment still rejects on keys_on_frame regardless of coverage")
     else:
         fail("one_moment ignored keys_on_frame once coverage was full")
+
+
+def capture_owned_tests(tmp):
+    """#494: a second a recorded screen owns cannot host a panel.
+
+    The fixture is Tetris 2's shape in miniature: one `<tile>` rule whose key
+    the panel would paste from the cell the capture covers, one outside it, and
+    a recorded screen 64x32 at scale 4 - the frame's top-left 2x1 cells. Two
+    candidate seconds are offered: 40 s, whose frame is that screen (with one
+    stray pixel of a rule's own probe colour on it, the coincidence the colour
+    count reads as "that rule is drawn here"), and 20 s, whose frame draws a
+    rule for real. `subprocess.run` is replaced, so no emulator runs: the
+    "Core" below is the two facts the probe asks it for - a recorded screen's
+    painted PNG is what the frame shows where it lands, and a `<tile>` rule is
+    its crop's colour."""
+    romdir = tmp / "romdir"
+    rom = romdir / "Game (1993) (Nintendo).nes"
+    (romdir / rom.stem).mkdir(parents=True)
+    rom.write_bytes(b"NES\x1a")
+    pack = tmp / "pack"
+    (pack / "textures/sheets").mkdir(parents=True)
+    (pack / "textures/backgrounds").mkdir(parents=True)
+    _repaint = f122._repaint
+    _repaint.write_png(pack / "textures/sheets/unsorted.png",
+                       _repaint.Image(128, 128, bytearray(b"\x10\x20\x30\xff" * (128 * 128))))
+    _repaint.write_png(pack / "textures/backgrounds/screen001.png",
+                       _repaint.Image(64, 32, bytearray(b"\x00\x00\x00\xff" * (64 * 32))))
+    (pack / "textures/hires.txt").write_text(
+        "<ver>109\n<scale>4\n"
+        "<img>sheets/unsorted.png\n"
+        "<tile>0,23,0F262A12,0,0,1,N\n"
+        "<tile>0,23,0F2A3036,64,64,1,N\n"
+        "<condition>screen001_A,tileAtPosition,0,0,23,0F262A12\n"
+        "[screen001_A]<background>backgrounds/screen001.png,1,0,0,20\n")
+    out = tmp / "prepare"
+    out.mkdir()
+    sibling = romdir / rom.stem
+
+    def painted(rel, x, y):
+        """The colour `paint_probe` gave one crop of the probe pack it installed."""
+        img = _repaint.read_png(sibling / "mep/textures" / rel)
+        off = img.offset(x, y)
+        return bytes(img.px[off:off + 3])
+
+    def paint(target, x0, y0, x1, y1, rgb):
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                off = target.offset(x, y)
+                target.px[off:off + 4] = bytes(rgb) + b"\xff"
+
+    def fake_run(cmd, **kwargs):
+        seconds = int(cmd[4])
+        shots = Path(cmd[5]).parent / "mesen-home/Screenshots"
+        shots.mkdir(parents=True, exist_ok=True)
+        if "hdpack-off" in cmd:
+            #Not one colour, or the probe would call the frame a blank screen.
+            img = _repaint.Image(256, 240, bytearray(b"".join(
+                bytes((x % 256, 0x30, 0x30, 0xff)) for y in range(240) for x in range(256))))
+        else:
+            img = _repaint.Image(1024, 960, bytearray(b"\x30\x30\x30\xff" * (1024 * 960)))
+            if seconds == 40:
+                cap = _repaint.read_png(sibling / "mep/textures/backgrounds/screen001.png")
+                for y in range(cap.height):
+                    for x in range(cap.width):
+                        src, off = cap.offset(x, y), img.offset(x, y)
+                        img.px[off:off + 4] = cap.px[src:src + 4]
+                #The rule at crop 0,0 is under the capture: the game drew it and
+                #the screen PNG hid it, and this one pixel is all a colour count
+                #can still find of it.
+                paint(img, 200, 200, 201, 201, painted("sheets/unsorted.png", 0, 0))
+            else:
+                paint(img, 5 * 32, 5 * 32, 6 * 32, 6 * 32,
+                      painted("sheets/unsorted.png", 64, 64))
+        _repaint.write_png(shots / "shot.png", img)
+
+        class Done:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return Done()
+
+    real_run = f122.subprocess.run
+    f122.subprocess.run = fake_run
+    try:
+        ranked = f122.choose_frame(rom, pack, out, [40, 20])
+    finally:
+        f122.subprocess.run = real_run
+    picked = [r[0] for r in ranked]
+    if picked == [20]:
+        ok("#494: choose_frame drops the second a recorded screen owns and keeps the next-best")
+    else:
+        fail(f"#494: choose_frame ranked {picked}, expected [20] - 40 s is "
+             "backgrounds/screen001.png and every cell it covers is invisible to a paint")
+
+    #A game whose every sampled second is owned is handed over by nobody: the
+    #panel has no frame to be won on, and saying so is the only honest answer.
+    f122.subprocess.run = fake_run
+    try:
+        f122.choose_frame(rom, pack, out, [40])
+        fail("#494: choose_frame handed over a frame a recorded screen owns")
+    except f122.PrepareError as ex:
+        if "screen001" in str(ex):
+            ok("#494: a game whose candidates are all owned is refused, naming the screen")
+        else:
+            fail(f"#494: the refusal does not name the recorded screen: {ex}")
+    finally:
+        f122.subprocess.run = real_run
 
 
 def scan_pack_tests(tmp):
@@ -296,6 +416,8 @@ def main() -> int:
         dump_coverage_tests(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         scan_pack_tests(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        capture_owned_tests(Path(tmp))
     one_moment_gate_tests()
     return 1 if FAILED else 0
 
