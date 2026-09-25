@@ -5220,6 +5220,58 @@ namespace
 			"BlocoP: a vertical flip moves the top row to the bottom");
 	}
 
+	//#474: HdPackBuilder::ShapeIdFor interns every drawn tile under HdShapeKey.
+	//HdBuilderPpu bakes the OAM flips into TileData, so on a CHR ROM game (where
+	//HdTileKey compares the index only) one index drawn flipped and unflipped
+	//used to collapse into the first sighting's orientation, and every OAM
+	//entry of the other orientation named the wrong art (Punch-Out!! pose005,
+	//pose023). This runs the same interning ShapeIdFor does, on the same key.
+	void TestShapeKeySeparatesAChrRomTileDrawnInBothOrientations()
+	{
+		std::unordered_map<HdShapeKey, ShapeId, HdShapeKey> ids;
+		auto intern = [&ids](const HdPpuTileInfo& tile) {
+			HdShapeKey key(tile.GetKey(true));
+			auto it = ids.find(key);
+			if(it != ids.end()) {
+				return it->second;
+			}
+			ShapeId id = (ShapeId)ids.size();
+			ids[key] = id;
+			return id;
+		};
+		auto sprite = [](bool chrRam, int32_t index, bool h, bool v, uint32_t palette) {
+			HdPpuTileInfo tile;
+			tile.IsChrRamTile = chrRam;
+			tile.TileIndex = chrRam ? -1 : index;
+			tile.PaletteColors = palette;
+			for(int i = 0; i < 16; i++) {
+				tile.TileData[i] = (uint8_t)(0x01 << (i % 3)); //asymmetric on both axes
+			}
+			ApplyTileFlips(tile.TileData, h, v); //what HdBuilderPpu hands RecordSprite
+			tile.HorizontalMirroring = h;
+			tile.VerticalMirroring = v;
+			return tile;
+		};
+
+		ShapeId plain = intern(sprite(false, 0x2A, false, false, 0xFF0F1626));
+		ShapeId mirrorH = intern(sprite(false, 0x2A, true, false, 0xFF0F1626));
+		ShapeId mirrorHV = intern(sprite(false, 0x2A, true, true, 0xFF0F1626));
+		Check(plain != mirrorH && plain != mirrorHV && mirrorH != mirrorHV,
+			"#474: a CHR ROM tile drawn in three orientations is three shapes, each with its own baked art");
+		Check(intern(sprite(false, 0x2A, true, false, 0xFF0F1626)) == mirrorH,
+			"#474: a second sighting in the same orientation reuses its shape");
+		Check(intern(sprite(false, 0x2A, false, false, 0xFF0F3037)) == plain,
+			"#474: the shape stays palette-wildcarded");
+		Check(intern(sprite(false, 0x2B, false, false, 0xFF0F1626)) != plain,
+			"#474: two CHR ROM indexes with the same art stay two shapes (ADR-0172)");
+
+		ids.clear();
+		ShapeId ramPlain = intern(sprite(true, 0, false, false, 0xFF0F1626));
+		ShapeId ramMirror = intern(sprite(true, 0, true, false, 0xFF0F1626));
+		Check(ramPlain != ramMirror && intern(sprite(true, 0, false, false, 0xFF0F3037)) == ramPlain,
+			"#474: a CHR RAM tile is keyed by its drawn data, exactly as before");
+	}
+
 	//ADR-0173 (issue #167): a HUD bar is drawn at a handful of fixed pixels for
 	//the whole capture, so its bottom edge lands in several quantised bands at
 	//once and joins every one of them. This fixture is that shape against a
@@ -10468,6 +10520,7 @@ int main()
 	TestSheetJsonCarriesTheChrIndex();
 	TestSheetJsonCarriesTheUnflippedTileData();
 	TestTileFlipsAreTheirOwnInverse();
+	TestShapeKeySeparatesAChrRomTileDrawnInBothOrientations();
 	TestScreenFixedSpritesAreLabelledNotDeleted();
 	TestAdjacencySpriteStatsCarryFloorsAndCoFrames();
 	TestAdjacencySpritePairOffsetsArePrunedWithDenominatorsKept();

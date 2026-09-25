@@ -107,6 +107,26 @@ struct HdPpuTileInfo : public HdTileKey
 	uint8_t PaletteOffset = 0;
 };
 
+//#474: the recorder's shape identity (HdPackBuilder::ShapeIdFor), and the
+//hasher for its map. HdTileKey is the run time's key: on a CHR ROM game it
+//compares the index only, because the run time mirrors the replacement art
+//itself. A shape is a drawing, though - HdBuilderPpu bakes the OAM flips into
+//TileData so a figure's mirrored halves are distinct shapes (ADR-0178) - so one
+//index drawn both ways must be two shapes, or every OAM entry of the second
+//orientation names the first one's art. The drawn data joins the index here,
+//which makes CHR ROM behave as CHR RAM (keyed by that data) always has. The
+//hash stays HdTileKey's: the two orientations of an index share a bucket.
+struct HdShapeKey : public HdTileKey
+{
+	HdShapeKey() = default;
+	explicit HdShapeKey(const HdTileKey& key) : HdTileKey(key) {}
+
+	bool operator==(const HdShapeKey& other) const
+	{
+		return HdTileKey::operator==(other) && (IsChrRamTile || memcmp(TileData, other.TileData, sizeof(TileData)) == 0);
+	}
+};
+
 struct HdPpuPixelInfo
 {
 	HdPpuTileInfo Tile = {};

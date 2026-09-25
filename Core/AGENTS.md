@@ -43,6 +43,15 @@ needs no local rules beyond the root DOX.
   cell's `(index | source | tile, palette)` - alias tiles included - must
   resolve to a `<tile>` line (condition-prefixed or not) of the pack's own
   `hires.txt`.
+- **Shape identity (#474).** `HdPackBuilder::ShapeIdFor` interns every drawn
+  tile under `HdShapeKey` (`HdData.h`), palette-wildcarded. On a CHR RAM game
+  the key is the drawn data. On a CHR ROM game it is the CHR index **plus**
+  the drawn data, because `HdBuilderPpu` bakes the OAM flips into a sprite's
+  `TileData` (ADR-0178). A consumer must therefore expect one CHR index to
+  appear as several shapes, one per orientation drawn, each with its own `K`
+  line art in the grid and OAM dumps. Their sidecar entries share `index`, and
+  the flipped ones carry `source`/`mirror`. `HdTileKey` remains the run
+  time's key, where one index still serves every orientation.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
   from `PoseStats` and nothing in it is computed at serialisation time — with
   one named exception: the `label` beside each pose and run is a *rendering*
