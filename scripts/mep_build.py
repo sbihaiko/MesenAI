@@ -1255,20 +1255,22 @@ def cmd_build(args) -> int:
             if (sd.name, x, y) in see_through and (x, y) not in punches:
                 punches[(x, y)] = (unflipped or bitmap, pal)  # the pixels the crop holds once un-baked
             bitmaps.setdefault((data, pal), bitmap)
+            # #464: a fully transparent sprite tile never claims its key by paint (the paint is another key's).
+            claim = edited and not mep_addition.is_blank_sprite(bitmap, pal)
             variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
             variants = variants if fold is None else [(c, [fold] + list(r[1:])) for c, r in variants]
             for cond, rest in variants:
                 key = (cond, data, pal)
-                row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)
+                row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), claim, not edited)
                 at = seen.get(key)
                 if at is not None:
                     # The same metatile placed twice on one sheet: only one crop
                     # can own the key, and a painted instance beats an untouched
                     # one.
                     repeats += 1
-                    if edited and not entries[at][3]:
+                    if (claim, not edited) > entries[at][3:5]:
                         entries[at] = row
-                    elif edited:
+                    elif claim:
                         muted.append((f"sheets/{sd.name}", data, pal, f"sheets/{sd.name}"))
                     continue
                 seen[key] = len(entries)
@@ -1325,7 +1327,7 @@ def cmd_build(args) -> int:
         for pos, entry in enumerate(slot["entries"]):
             key = entry[0]
             edited = entry[3] if len(entry) > 3 else True
-            score = (1 if edited else 0, slot["rank"], order)
+            score = (1 if edited else 0, entry[4] if len(entry) > 4 else not edited, slot["rank"], order)  # #464
             prev = winner.get(key)
             if prev is not None:
                 why = "painted" if edited and not prev[2][0] else "precedence"

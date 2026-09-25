@@ -434,6 +434,8 @@ doc-checks: check-manifest
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
 	python3 scripts/test_mep_build.py
+	#464: a blank sprite key never claims paint through a crop it shares.
+	python3 scripts/test_mep_build_blank_key.py
 	#ADR-0198 §1/§3 (F12.7, F12.17): legacy pack import, including the IPS-patched
 	#path's refusals and containment. Synthetic packs in a temp dir; no ROM.
 	python3 scripts/test_mep_import.py
