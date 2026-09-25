@@ -56,8 +56,8 @@ scripts/headless_record <work>/PunchOut.nes 34 <work>/mint/mint screenshot \
 
 That stops at frame 2044, at the bell, in 4.0 s of wall time.
 
-The duration `34` matters. `scripts/record_library.sh` does not run this
-command: it runs every mint for the batch's `<seconds>` (60 s by default), and
+The duration `34` matters. Before #465 `scripts/record_library.sh` did not run this
+command: it ran every mint for the batch's `<seconds>` (60 s by default), and
 `save-state=` is written at the run's frame target. Run that way (checked with
 the job itself on 2026-09-24), `fight1.mss` is saved at frame 3 607, about 26 s
 into the round, and the job's 60 s `fight1` recording reaches the count-out and
@@ -65,8 +65,10 @@ keeps only 355 frames. Padding the mint so the bell lands on frame 3 607 does
 not fix it: the RNG state differs (35 RAM bytes at the bell), and a 70 s
 recording from the padded state misses 255 of the 1 655 drawn keys measured
 here. The job needs to end a mint where its script ends; that is a tooling
-issue (#465), not a property of this set. Until #465 is fixed, mint this set
-by hand as above.
+issue (#465), not a property of this set. **Fixed 2026-09-25:** the job now
+runs this mint for 34 s, stops at frame 2 044 with the same RAM as the command
+above run from the repository root, and its 60 s `fight1` run keeps 633 frames
+(`docs/validation/issue-465-mint-at-script-end-2026-09-25.md`).
 
 `fight1.txt` is a blind combination loop: jabs and body blows to both sides,
 dodges and a duck, as an 18-line, 310-frame block. The measurement below ran

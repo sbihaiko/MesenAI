@@ -12,7 +12,8 @@
 # The driver per ROM is resolved by scripts/library_job.py, in this order:
 #   (a) routes - a scripts/stages/<game>/ set whose stage-set.json declares this
 #       ROM's No-Intro SHA1 -> record_stages.sh, one pack per stage. Each route's
-#       start state is minted (or chain-replayed) first; a route whose state
+#       start state is minted (or chain-replayed) first - a mint runs for its
+#       own script's length, not [seconds] (#465); a route whose state
 #       cannot be produced is not recorded and is listed in the report
 #   (b) movie  - a .bk2 beside the ROM or in <set>/movies/ whose header SHA1 is
 #       this ROM's whole-file SHA1 -> headless_record ... movie=
@@ -29,7 +30,7 @@
 set -uo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 
@@ -103,8 +104,12 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
       # #408): record_stages.sh would otherwise run it from power-on, and that
       # records the attract demo under the route's name.
       minted=0; mintfail=0
+      # A mint runs for its own script's length (`mintsecs`), never the batch's
+      # <seconds>: headless_record saves `save-state=` at its frame target, so
+      # a 60 s mint parked every state at frame 3607 (#465).
       while IFS= read -r -d '' op && IFS= read -r -d '' script \
-            && IFS= read -r -d '' from && IFS= read -r -d '' state; do
+            && IFS= read -r -d '' from && IFS= read -r -d '' state \
+            && IFS= read -r -d '' mintsecs; do
         # Each run gets its own folder, ROM and mesen-home, as record_stages.sh
         # gives each stage.
         mkdir -p "$romout/mint/$state"
@@ -113,7 +118,7 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
         ok=1
         case "$op" in
           mint)
-            "$record" "$mintrom" "$seconds" "$romout/mint/$state/rec" \
+            [ -n "$mintsecs" ] && "$record" "$mintrom" "$mintsecs" "$romout/mint/$state/rec" \
               "input=$script" "save-state=$work/$state.mss" >> "$romout/mint.log" 2>&1 || ok=0 ;;
           chain)
             [ -s "$work/$from.mss" ] && "$here/replay_chain.sh" "$mintrom" "$work/$from.mss" \

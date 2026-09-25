@@ -4,7 +4,7 @@
 # docs/validation/punchout-deep-measurement-2026-09-24.md ran 18 full blocks (5580 f);
 # this file is their first 3582 frames byte for byte. To rebuild that script:
 #   for i in $(seq 18); do grep -v '^#' fight1.txt | head -n 18; done > <run>/input.txt
-# Mint fight1.mss by hand (see mint-fight1.txt and #465), not through record_library.sh.
+# fight1.mss comes from mint-fight1.txt run for 34 s, which record_library.sh does (#465).
 20f UA
 14f -
 20f UB
