@@ -10093,6 +10093,49 @@ void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
 	Check(named == 0x0580, "#458: a cleared latch forgets the rows of the frame before (a state load clears it too)");
 }
 
+//Issue #479: the sprite <tile> rule (HdBuilderPpu::DrawPixel) and the sheet
+//registry (OamFetchLatch) must agree on which screen rows a sprite can be
+//drawn on. OAM places a sprite one line below its Y byte, so no entry can
+//cover row 0; the pixels the PPU draws there come from the pre-render
+//line's fetch of secondary OAM left over from line 239 - Excitebike's
+//frame 9 draws eight copies of tile $00 at x 0 that way, and its rule
+//(`1,00,FF20160F`) was the one drawn key with no sheet cell.
+void TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace()
+{
+	using namespace OamFetchLatchModel;
+	bool placeable[240] = {};
+	for(int large = 0; large < 2; large++) {
+		for(int y = 0; y < 256; y++) {
+			uint8_t oam[256];
+			ClearOam(oam);
+			SetSprite(oam, 0, (uint8_t)y, 0x10, 0x00, 40);
+			OamFetchLatch latch;
+			std::vector<Entry> got = RunFrame(latch, oam, [large](int) {
+				LineState s;
+				s.LargeSprites = large != 0;
+				return s;
+			});
+			for(const Entry& e : got) {
+				for(int row = e.Y; row < e.Y + 8 && row < 240; row++) {
+					placeable[row] = true;
+				}
+			}
+		}
+	}
+	std::string disagree;
+	for(int line = 0; line < 240; line++) {
+		if(OamFetchLatch::SpriteRowIsPlaced(line) != placeable[line]) {
+			disagree += std::to_string(line) + (placeable[line] ? "(latch only) " : "(rule only) ");
+		}
+	}
+	Check(disagree.empty(), "Issue #479: the sprite rule gate admits a screen row iff an OAM entry can be latched on it",
+		"rows " + disagree);
+	Check(!OamFetchLatch::SpriteRowIsPlaced(0) && OamFetchLatch::SpriteRowIsPlaced(1) && OamFetchLatch::SpriteRowIsPlaced(239),
+		"Issue #479: row 0 (leftover pre-render sprites) makes no sprite rule; rows 1-239 do");
+	Check(!OamFetchLatch::SpriteRowIsPlaced(-1) && !OamFetchLatch::SpriteRowIsPlaced(240),
+		"Issue #479: the pre-render line and row 240 are never drawn rows");
+}
+
 //PR #468 review, carried into the row log: only a row that showed sprites
 //makes a <tile> rule, so only such a row may name a half or add a bank to it.
 //A fetch whose row drew no sprite (PPUMASK hid them) or that is for row 240
@@ -10781,6 +10824,7 @@ int main()
 	TestAFullyTransparentSpriteHalfNeverReachesTheRegistry();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
+	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

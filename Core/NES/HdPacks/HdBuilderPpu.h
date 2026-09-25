@@ -158,7 +158,9 @@ public:
 					}
 				}
 
-				if(spriteInfoEx.AbsoluteTileAddr >= 0) {
+				//#479: row 0's sprites are pre-render leftovers no OAM entry
+				//placed, so they make no rule (OamFetchLatch::SpriteRowIsPlaced).
+				if(spriteInfoEx.AbsoluteTileAddr >= 0 && OamFetchLatch::SpriteRowIsPlaced(_scanline)) {
 					HdPpuTileInfo sprite = {};
 					sprite.TileIndex = (isChrRam ? (spriteInfoEx.TileAddr & _chrRamIndexMask) : spriteInfoEx.AbsoluteTileAddr) / 16;
 					sprite.PaletteColors = ReadPaletteRam(_lastSprite->PaletteOffset + 3) | (ReadPaletteRam(_lastSprite->PaletteOffset + 2) << 8) | (ReadPaletteRam(_lastSprite->PaletteOffset + 1) << 16) | 0xFF000000;
