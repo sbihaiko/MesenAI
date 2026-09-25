@@ -510,15 +510,22 @@ def _owned_pixels(pack: E.Pack, entries, i, others, unit):
     return owned
 
 
-def _is_blank(sheet: E.Sheet, cell: dict) -> bool:
+def _is_blank(sheet: E.Sheet, cell: dict, cache=None) -> bool:
     """True when the cell's recorded art (its `*.orig.png` crop) is fully
     transparent: a tile of colour 0 only, which the NES never draws (#452).
-    A sheet with no usable twin is not called blank."""
-    try:
-        art = sheet.cell_image(cell)
-    except E.ComposeError:
+    A sheet with no usable twin is not called blank. `cache` (orig path ->
+    decoded twin, `_twin_crop`'s) keeps a figure import to one decode per
+    twin instead of one per painted cell (#466 review)."""
+    if not sheet.orig_path or not sheet.orig_path.is_file():
         return False
-    return not any(art.px[3::4])
+    cache = {} if cache is None else cache
+    if sheet.orig_path not in cache:
+        cache[sheet.orig_path] = sheet_repaint.read_png(sheet.orig_path)
+    img, unit = cache[sheet.orig_path], sheet.unit
+    x, y = int(cell["x"]), int(cell["y"])
+    if x < 0 or y < 0 or x + unit > img.width or y + unit > img.height:
+        return False
+    return not any(img.crop(x, y, unit, unit).px[3::4])
 
 
 def _blank_record(entry: dict, cell: dict) -> dict:
@@ -739,7 +746,7 @@ def routed_paint(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest,
     return out if out is not None else big
 
 
-def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest):
+def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest, twins=None):
     """Where one painted cell goes: `(write_source, routes, moves)`.
 
     `routes` is `[(owner Sheet, x, y, lx, ly)]` — each 8x8 crop another sheet
@@ -750,13 +757,15 @@ def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest)
     owner at all, or when an owner had to be skipped — paint is never
     dropped, even at the cost of a reopen. `moves` is True when this import
     will re-point or add a rule at the next build (the reload then cannot
-    show it, ADR-0212)."""
+    show it, ADR-0212). `twins` is the caller's decoded-twin cache (orig
+    path -> image), so an import decodes each twin once (#466 review)."""
     owners, index_keyed, version = manifest
     if not owners:
         return True, [], False
     by_name = {s.name: s for s in pack.sheets}
     cx, cy = int(cell["x"]), int(cell["y"])
-    routes, self_owned, orphan, skipped, twins = [], False, False, False, {}
+    routes, self_owned, orphan, skipped = [], False, False, False
+    twins = {} if twins is None else twins
     for key, lx, ly in _cell_keys(sheet, cell, index_keyed, version):
         mine = (sheet.name, (cx + lx) * scale, (cy + ly) * scale)
         found = owners.get(key) or set()
@@ -861,7 +870,7 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
         cell = _find_cell(sheet, entry)
         if cell is None:
             raise FigureError(f"{entry['sheet']}: cell for node {entry.get('node')} is gone")
-        if _is_blank(sheet, cell):
+        if _is_blank(sheet, cell, twins):
             # #452: the NES draws nothing for an all-transparent tile, so
             # paint on it can only be a neighbour's ink spilling into its rect.
             report["blank"].append(_blank_record(entry, cell))
@@ -894,7 +903,7 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
                     + (f" and {len(rewritten) - 4} more" if len(rewritten) > 4 else "")
                     + ". Run python3 scripts/mep_build.py build on it first, then import again "
                     "(nothing was written)")
-        write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest)
+        write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest, twins)
         changed = put(sheet, new_cell, sx, sy) if write_source else False
         for other, ox, oy, lx, ly in routes:
             sub = new_cell.crop(lx * scale, ly * scale, 8 * scale, 8 * scale)

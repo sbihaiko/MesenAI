@@ -630,6 +630,39 @@ def test_a_fully_transparent_tile_is_never_painted_and_the_skip_is_reported():
               "the CLI reports the skipped tile with its key", text)
 
 
+def test_import_decodes_each_reference_twin_once():
+    """#466 review: the blank check re-read and decoded a sheet's whole
+    `*.orig.png` once per painted cell, so a 138-cell figure decoded the same
+    twin 138 times. Import decodes each twin once, whatever the cell count."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        fig = sheet_repaint.read_png(out / "pose000-figure.png")
+        for py in range(fig.height):
+            for px in range(fig.width):
+                fig.set(px, py, (255, 0, 255, 255))
+        sheet_repaint.write_png(out / "pose000-figure.png", fig)
+        sheets = (pack_dir / "textures" / "sheets").resolve()
+        reads = {}
+        real_read = sheet_repaint.read_png
+
+        def spy(path, *a, **kw):
+            path = Path(path)
+            if path.name.endswith(".orig.png") and path.resolve().parent == sheets:
+                reads[path.name] = reads.get(path.name, 0) + 1
+            return real_read(path, *a, **kw)
+        sheet_repaint.read_png = spy
+        try:
+            rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        finally:
+            sheet_repaint.read_png = real_read
+        check(rep["painted"] == len(doc["cells"]) >= 2, "several cells of one sheet are painted", json.dumps(rep))
+        check(reads and max(reads.values()) <= 2,
+              "each pack twin is decoded at most twice (the scale probe and the import)", json.dumps(reads))
+
+
 def test_a_resized_figure_is_refused():
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack", with_poses=False)
