@@ -12,8 +12,9 @@ needs no local rules beyond the root DOX.
 
 - `Core/NES/HdPacks/` — the bootstrap HD-pack builder and the sheet /
   pose recorder (`HdPackBuilder`, `SpriteGrouping`, `SheetRender`,
-  `TileSheetTypes.h`). Decisions live in `docs/adr/` (ADR-0153, 0164,
-  0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190, 0228); this file only
+  `SheetColourways.h`, `TileSheetTypes.h`). Decisions live in `docs/adr/`
+  (ADR-0153, 0164, 0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190,
+  0228, 0230); this file only
   states the contracts a consumer relies on.
 - `Core/Shared/HeadlessInput*` — the `input=<script>` engine the headless
   harness drives the emulator with (see `scripts/AGENTS.md`).
@@ -82,6 +83,51 @@ needs no local rules beyond the root DOX.
   at read time, so a definition placed after its consumers never binds), and
   the emitted conditions parse back through `HdPackLoader` with 0 errors —
   checked, with a negative control, as the third leg of the slice's acceptance.
+- **Sheet emission is deferred, except for maps (ADR-0230, F14.9).**
+  `HdPackBuilder::WriteSheetFiles` hands every built sheet to
+  `MesenSheets::QueueSheet`. A sheet `SheetWritesImmediately` accepts (a map
+  with no cells) is written right away with no folds, and its canvas is never
+  held. A map canvas can reach `kMaxMapPixels` (256 MB at 1x), and the
+  variant pass cannot touch a map (PR #461). Every other sheet is copied
+  into `_pendingSheets`. At the end of `BuildSheets`, `FlushSheetFiles`
+  plans once over all of them (`PlanPaletteCells`). `FlushPendingSheets`
+  then lays out, writes and frees them **one at a time**, so save-time peak
+  memory stays near the old "one sheet at a time" bound. The file set and
+  bytes do not depend on the order sheets are written in. The memory
+  contract is pinned by
+  `TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten`.
+- **Every palette a shape was drawn in reaches a sheet sidecar (ADR-0230).**
+  A shape is interned palette-wildcarded, so its cell shows the first palette
+  seen. Each other palette `hires.txt` carries for the same key
+  (`WrittenPalettesByShape`: a variant evicted from its CHR page slot is
+  not drawn) becomes exactly one of two things:
+  - **`tiles[].folds: [{"palette", "brightness"}]`** on the cell's tile
+    entry, only when the fold is **exact**. The cell's own crop, scaled by
+    one loader Brightness, must rebuild every painted pixel on the render
+    palette (`FoldIsExact`, with `LoaderBrightness` =
+    `HdPackLoader`'s `(int)(stof(text)*255)`, applied as
+    `HdNesPack::AdjustBrightness` does). `brightness` is a number in
+    [0, 4], written as `"%.4f"` with trailing zeros dropped
+    (`FoldBrightnessText`), and never names the entry's own palette. A fade
+    whose least-squares Brightness leaves a residual is **not** a fold
+    (the #448 refinement).
+  - **A variant cell**: `"variantOf": <base cell index>`, no `metatile`,
+    and a fresh cell `index`. It is rendered from the recorded art in its
+    own palette, in rows inserted directly beneath the base cell's grid row
+    and in the base cell's column, so a cycle's columns keep their order.
+    It goes on the highest-ranked non-map sheet that holds a shape with that
+    `hires.txt` key (first sheet, then first cell, on ties). A map placement
+    never resolves to it. On an `object`/`sprite` sheet, the blanks the
+    inserted rows leave are listed in `emptySlots` (ADR-0175).
+  - A sidecar with neither field is byte-identical to the pre-ADR-0230
+    schema. Round-trip invariant: every drawn key is named by some sidecar
+    entry, as a cell key or as a fold, and no sidecar names an undrawn key.
+    `mep_build` twice gives a byte-identical `hires.txt`.
+  - The fold predicate `ClassifyPaletteRelation` ports
+    `scripts/palette_folds.py`'s `palette_relation`. Both are checked
+    against `docs/specs/golden/sheets/palette-relation-cases.txt`, by
+    `core_unit_tests` and by `scripts/test_palette_folds.py`. Change the
+    definition in both, and regenerate the vectors only on purpose.
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
   shape and a palette word, `M` carries the frame's internal RAM, then
@@ -105,8 +151,9 @@ needs no local rules beyond the root DOX.
   written from `BuildObjectSheets` *ahead of* its early-outs, because a
   recording with a populated table and no inferred objects is exactly the one
   worth studying.
-- Host-free rule (ADR-0127): `SpriteGrouping` and `SheetRender` take data
-  and return data; file, env and log access stay in `HdPackBuilder`, so
+- Host-free rule (ADR-0127): `SpriteGrouping`, `SheetRender` and
+  `SheetColourways.h` take data and return data; file, env and log access
+  stay in `HdPackBuilder`, so
   `scripts/core_unit_tests.cpp` can cover the rules without an emulator.
 - **Movie row ↔ device list need not match in width.**
   `MesenMovie::SetInput` (also used by `BizHawkMovie`) walks one

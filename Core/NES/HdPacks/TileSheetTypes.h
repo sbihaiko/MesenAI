@@ -1013,6 +1013,11 @@ namespace MesenSheets
 		//would need the vocabulary the artist never receives.
 		std::vector<uint32_t> Aliases;
 		std::vector<MetatileKey> AliasKeys;
+		//ADR-0230 (F14.9): the Index of the cell this one is a palette variant
+		//of - the same shapes drawn in another palette the recording saw - or
+		//-1 for an ordinary cell. A variant carries no vocabulary index
+		//(Metatile stays -1) so a map placement never resolves to it.
+		int32_t VariantOf = -1;
 	};
 
 	//0xAARRGGBB, alpha 0 outside a cell (gutters and padding stay transparent).

@@ -492,6 +492,64 @@ def paint(folder: Path, png_name: str, x: int, y: int, size: int, color: int = 0
     path.write_bytes(png_rgba(px))
 
 
+def sheet_fold_tests(root: Path):
+    """ADR-0230 Decision item 2 (F14.9): a sidecar tile entry's `folds` are
+    palettes the cell reproduces exactly at one Brightness. Build emits one
+    exact defaultTile=N rule per fold, on the cell's own crop, painted or not,
+    and a sidecar without the field builds as it always did."""
+    def with_folds(folder, folds_by_shape):
+        # SerializeSheet lists a shape's folds on its entry in every sheet.
+        for path in sorted((folder / "textures" / "sheets").glob("*.json")):
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            for cell in doc.get("cells") or []:
+                for entry in cell.get("tiles") or []:
+                    for shape, folds in folds_by_shape.items():
+                        if entry and entry.get("tile") == tile_hex(shape):
+                            entry["folds"] = folds
+            path.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+
+    folder, _v, _c = make_sheet_folder(root, "sheet-folds")
+    plain_folder, _v, _c = make_sheet_folder(root, "sheet-folds-plain")
+    with_folds(folder, {0: [{"palette": "0f0f0f0f", "brightness": 0}],
+                        5: [{"palette": "0F162A0F", "brightness": 1}, {"palette": "0F062A30", "brightness": 0.75}]})
+    if run("build", str(folder)) is None or run("build", str(plain_folder)) is None:
+        return
+    hires = folder / "textures" / "hires.txt"
+    first = hires.read_bytes()
+    _imgs, tiles = parse_hires(hires)
+    base, fold = tiles.get((tile_hex(0), PAL_HEX)), tiles.get((tile_hex(0), "0F0F0F0F"))
+    if not fold or fold[:3] != base[:3] or fold[3][5:7] != ["0", "N"]:
+        fail(f"a fold is not an exact Brightness rule on its cell's crop: {fold} vs {base}")
+    else:
+        ok("ADR-0230: a fold emits a defaultTile=N rule at its Brightness on the cell's own crop")
+    inert, dim = tiles.get((tile_hex(5), "0F162A0F")), tiles.get((tile_hex(5), "0F062A30"))
+    if not inert or not dim or inert[3][5] != "1" or dim[3][5] != "0.75" or inert[:3] != tiles[(tile_hex(5), PAL_HEX)][:3]:
+        fail(f"every fold of an entry gets its own rule: {inert} {dim}")
+    else:
+        ok("ADR-0230: every fold of an entry gets its own rule, in the palette it names")
+    if tiles[(tile_hex(0), PAL_HEX)][3][5:7] != ["0.5", "Y"]:
+        fail(f"a fold changed its base key's own rule: {tiles[(tile_hex(0), PAL_HEX)]}")
+    else:
+        ok("ADR-0230: the base key keeps the fields the key source carries")
+    _p, plain = parse_hires(plain_folder / "textures" / "hires.txt")
+    if set(tiles) - set(plain) != {(tile_hex(0), "0F0F0F0F"), (tile_hex(5), "0F162A0F"), (tile_hex(5), "0F062A30")}:
+        fail(f"folds added more than their own keys: {sorted(set(tiles) ^ set(plain))}")
+    else:
+        ok("ADR-0230: a sidecar without folds builds exactly the keys it always did")
+    if run("build", str(folder)) is None or hires.read_bytes() != first:
+        fail("a second build of a pack with folds is not byte-identical")
+    else:
+        ok("ADR-0230: a second build of a pack with folds is byte-identical")
+
+    bad, _v, _c = make_sheet_folder(root, "sheet-folds-bad")
+    with_folds(bad, {0: [{"palette": PAL_HEX, "brightness": 1}]})
+    out = run("build", str(bad), expect=1)
+    if out is None or "repeats the entry's own palette" not in out:
+        fail(f"a fold naming the entry's own palette was not refused by the lint gate: {out}")
+    else:
+        ok("ADR-0230: a malformed fold fails the lint gate instead of vanishing")
+
+
 def edited_precedence_tests(root: Path):
     """ADR-0153 §4: a cell claims a tile key only when it was actually painted,
     measured against the `*.orig.png` twin. This is what lets PRD Phase 9
@@ -1259,6 +1317,7 @@ def sheet_round_trip_tests(root: Path):
         fail(f"adjacency sidecar: {out}")
 
     edited_precedence_tests(root)
+    sheet_fold_tests(root)
     screen_residency_tests(root)
     windows_path_carry_tests(root)
     muted_paint_tests(root)
