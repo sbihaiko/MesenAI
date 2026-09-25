@@ -1,0 +1,30 @@
+# Super Mario Bros. 3 - World 1-1, 60 s from the state mint-stage1.txt writes
+# (frame 1023: small Mario at the level's start, x = 24, timer 300, 4 lives).
+#
+# The opening is the run's whole action, because World 1-1's first screen is
+# the only part of the level a blind script survives: walk right into the two
+# Goombas that walk toward Mario and come down on them (jumping late is a
+# death, not a stomp - walking right for 240 f without a jump dies on the
+# first Goomba at ~frame 180), then walk back to the level's start and pace
+# there for the rest of the minute. Right of the ? blocks the first screen
+# ends in a Piranha Plant's pipe (progress ~340): a script that keeps walking
+# right lands on the plant and dies between 7 s and 8 s, and every blind
+# "walk N frames, jump, repeat" shape (N = 40..600) is dead by 25 s.
+#
+# The two long holds every loop are the point of the tail: 400 f of Right and
+# 400 f of Left are far more than the two turns of the walk cycle ADR-0179
+# section 3 asks for (the pace covers progress 16..339, the level's first
+# screen). Measured on this script, 60 s from the state: 4 lives (unchanged),
+# score 200 (the two Goombas), timer 220, and the level still running.
+60f R
+20f RA
+40f R
+300f L
+400f L
+400f R
+400f L
+400f R
+400f L
+400f R
+400f L
+380f R

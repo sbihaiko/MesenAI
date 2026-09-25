@@ -1,0 +1,8 @@
+{
+  "game": "Ninja Gaiden",
+  "rom": {
+    "noIntroSha1": ["15F245161179AB1959B7DC20E82ADD024D23AA3D"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Ninja Gaiden (1989) (Tecmo).nes from the user's ROM library (whole-file SHA1 CA513F841D75EFEB33BB8099FB02BEEB39F6BB9C), computed with the README's mep_build._no_intro_sha1 command on the copy of that dump the routes were authored and recorded on. Not yet run through scripts/record_library.sh, so the pin is the dump the hand mint and the 60 s recordings in this session used, not a library-job pass."
+}

@@ -1,0 +1,8 @@
+{
+  "game": "Super Mario Bros. 3",
+  "rom": {
+    "noIntroSha1": ["BB894D104C796F69BA16587EB66C0275F5C2FC02"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Super Mario Bros. 3 (1988) (Nintendo).nes from the user's ROM library (whole-file SHA1 6BD518E85EB46A4252AF07910F61036E84B020D1, a plain iNES header, mapper 4/MMC3, 256K PRG + 128K CHR), computed with the README's _no_intro_sha1 command. mint-stage1.txt and stage1-run.txt were authored and recorded on this dump; the title screen, the World 1 map and World 1-1 (Goombas, ? blocks, the Piranha Plant's pipe) are the retail ones. The old library's SMB1 file is a hack under a misleading name - this set's SHA1 is not that file's, and nothing here was measured against it."
+}

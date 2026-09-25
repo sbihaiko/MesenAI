@@ -1,0 +1,41 @@
+# Super Mario Bros. 3 - power-on to the first frame of player control in
+# World 1-1 (frame 1020). The route is the manual's own: the title's curtain
+# and logo -> Start for the mode-select menu -> Start for "1 PLAYER GAME" ->
+# the World 1 map, where Mario lands on the START panel -> Right to the panel
+# beside it -> Up onto the panel marked "1" -> A to enter World 1-1 ("Move
+# Mario to the square with the '1' in it and press the A Button"). Right alone
+# from the START panel stops one panel later, and A on the START panel does
+# nothing: the entry is the panel, not the button.
+#
+# The map fades out from ~frame 990 and the playfield fades in from ~1005;
+# holding Right from frame 1010 already moves Mario, so control begins with
+# the level. The script ends at 1020, and the minted state lands on 1023:
+# headless_record writes save-state= at the run's frame target, and
+# record_library.sh mints for the smallest whole number of seconds whose
+# target covers the script (mint_seconds_for_frames, #465) - 17 s here,
+# round(17 * 60.0988) + 1 = 1023. By hand:
+#   scripts/headless_record <rom> 17 <mint>/mint input=mint-stage1.txt \
+#     save-state=<work>/stage1-run.mss
+
+# power-on: the curtain, the logo, the running Mario
+300f -
+# title -> "1 PLAYER GAME / 2 PLAYER GAME"
+10f T
+# the mode-select menu
+120f -
+# -> the World 1 map (Mario on the START panel)
+10f T
+# the map fades in
+300f -
+# START panel -> the panel to its right
+60f R
+# Mario settles
+40f -
+# up onto the panel marked "1"
+60f U
+# Mario settles
+40f -
+# enter World 1-1
+20f A
+# the map fades out, the level fades in
+60f -

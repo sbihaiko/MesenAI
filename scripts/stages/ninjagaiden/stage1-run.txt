@@ -1,0 +1,119 @@
+# Ninja Gaiden: 60 s of Act 1-1 from the state mint-stage1.txt writes (the job
+# mints it at frame 1082; the first frame of player control is 1075 - that file
+# has both). Ten repeats of a 360-frame block: walk right, slash, jump forward,
+# walk back left, slash, jump back = 3 600 frames, the batch's 60 s.
+#
+# The direction holds are 120 frames. The recorder reads the walk out of this
+# very run as two period-3 cycles of hold [4,4,4], i.e. a 12-frame turn, driven
+# by port 1 (cycle000 x70, cycle001 x49), so one hold is ten turns - well past
+# the two ADR-0179 sec. 3 needs.
+#
+# Oscillating inside the first screen is what keeps Ryu alive, and the proof is
+# the RAM: lives $0076 stays 2 and timer $0063 falls monotonically 149 -> 92
+# for the whole run, while the score climbs (kills connect). Holding Right from
+# the same state, blind, instead loses a life at about 27 s - $0063 jumps back
+# to 150 and $0076 goes 2 -> 1 - and is down to 0 lives by 60 s.
+#
+# What the run never holds (poses.json input.never): Select, Start, Up, Down,
+# Left+B, Right+B. The slash is always a standing one, so this sidecar cannot
+# hold a moving attack; the jump slashes are Right+A and Left+A.
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
+120f R
+6f B
+14f -
+20f RA
+20f -
+120f L
+6f B
+14f -
+20f LA
+20f -
