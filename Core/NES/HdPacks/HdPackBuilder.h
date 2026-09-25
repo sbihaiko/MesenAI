@@ -4,6 +4,7 @@
 #include "NES/HdPacks/TileSheetTypes.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetRender.h"
+#include "NES/HdPacks/SheetColourways.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/NesTypes.h"
 #include "Shared/SettingTypes.h"
@@ -367,6 +368,12 @@ private:
 	//remainder sheet at the end of BuildSheets knows what is left. Cleared per
 	//BuildSheets run - it describes one save, not the object's lifetime.
 	std::set<MesenSheets::ShapeId> _claimedShapes;
+	//ADR-0230 (F14.9): every sheet of this save, held by WriteSheetFiles until
+	//FlushSheetFiles has seen all of them - a shape's palette variant joins
+	//the highest-ranked sheet that holds the shape, which is only known once
+	//every sheet is built. Cleared by the flush.
+	std::vector<MesenSheets::PendingSheet> _pendingSheets;
+	void FlushSheetFiles();
 	bool _sheetsBuilt = false;
 	unordered_set<uint32_t> _sheetObjectShapes; //shape hashes inside an inferred object
 	vector<uint32_t> _shapeHashes;              //shape id -> shape hash

@@ -300,7 +300,12 @@ doc-checks: check-manifest
 	# tested there); what is here is the OnFrameEnd/RecordGridFrame parameter,
 	# the per-retained-frame copy, and the line WriteGridDump emits. A ratchet
 	# again from 2282.
-	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2428
+	# Amended 2026-09-24 (ADR-0137, twelfth amendment; ADR-0230, F14.9):
+	# 2428 -> 2438 for queueing the sheets and FlushSheetFiles. The plan,
+	# layout and written-slot filter are host-free in SheetColourways.h (unit
+	# tested); the write block moved here from WriteSheetFiles. A ratchet again
+	# from 2438.
+	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2438
 	# Amended 2026-09-16 (ADR-0137, third amendment): the artist_chr_kit.py
 	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
 	# dedup, which added a function and the prose that explains it. The other

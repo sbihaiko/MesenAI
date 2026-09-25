@@ -1,11 +1,22 @@
 # ADR-0230: A sheet cell reaches every palette its shape was drawn in
 
 - Status: **accepted 2026-09-24**, decided as the hybrid in "Decision"
-  below and pending implementation as PRD Part A slice **F14.9**
-  (`docs/roadmap/PRD-mesence-enhancement-ecosystem.md`, Phase 14). User's
-  decision and go-ahead, verbatim: *"aceito sua sugestão. pode aplicar e
-  rodar em paralelo"*. The same-turn implementation must ship with unit
-  tests covering the decision, and this quote goes in its PR body.
+  below, **and implemented by F14.9** the same day (PRD Part A, Phase 14,
+  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` §3). User's decision
+  and go-ahead, verbatim: *"aceito sua sugestão. pode aplicar e rodar em
+  paralelo"*. The same-turn implementation ships with unit tests covering
+  the decision, and this quote goes in its PR body. Acceptance
+  (`docs/validation/f14.9-adr0230-implementation-2026-09-24.md`):
+  - drawn-key coverage is 100 % on both games (Castlevania 628/628, Zelda
+    574/574), with 0 unobserved keys;
+  - Castlevania gains +67 variant cells: 61 colourway cells plus 6 cells for
+    residual folds. Zelda gains +127: 45 colourway cells plus 82 cells for
+    residual folds (125 residual-fold keys), the fade steps item 2's
+    refinement sends back to cells;
+  - exact folds: 29 on Castlevania and 142 on Zelda;
+  - the round trip is clean, and the second build is byte-identical;
+  - `HdPackBuilder.cpp`'s ceiling is amended 2428 → 2438 (ADR-0137, twelfth
+    amendment).
   History: opened `proposed` by the user's decision on ADR-0229, verbatim
   *"Reenquadrar (Recommended)"*. The measurement slice F14.4 was delivered
   2026-09-24 ("Measured 2026-09-24" below,

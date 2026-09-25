@@ -64,6 +64,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 import mep_addition  # ADR-0196 <addition> tags and their synthetic target keys
+import palette_folds  # ADR-0230 item 2: sidecar `folds` validation
 import mep_conditions  # ADR-0197 authored conditions and their evaluation over routes
 import mep_content_id  # ADR-0139 tree content_id of the discovered pack root
 import mep_errata  # ADR-0152 reviewed known-missing declarations, shared with the smoke gate
@@ -1430,6 +1431,32 @@ def lint_pose_offsets(src: Source, hires_rel: str, rep: Report):
                          f"(ADR-0225 §1: dx == ToCells(px)), e.g. {bad[0]}")
 
 
+def lint_sheet_folds(src: Source, hires_rel: str, rep: Report):
+    """ADR-0230 Decision item 2 (F14.9): a `sheets/*.json` tile entry may list
+    `folds` - other palettes the recording drew the shape in that the cell
+    reproduces exactly at one Brightness; mep_build.py emits one defaultTile=N
+    rule per item. A malformed item is an **error**, because build would skip
+    it and the key it names would silently fall back to the ROM. An entry
+    without the field - every sidecar before F14.9 - is fine. A variant cell's
+    `variantOf` must name a cell index of the same sheet (warning)."""
+    prefix = hires_rel[:-len("hires.txt")] + "sheets/"
+    for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
+        try:
+            doc = json.loads(src.text(name))
+        except (ValueError, UnicodeDecodeError):
+            continue
+        cells = doc.get("cells") if isinstance(doc, dict) else None
+        cells = [c for c in cells if isinstance(c, dict)] if isinstance(cells, list) else []
+        indexes = {c.get("index") for c in cells}
+        for cell in cells:
+            if "variantOf" in cell and cell["variantOf"] not in indexes:
+                rep.warning(name, f"cell index {cell.get('index')}: variantOf {cell['variantOf']!r} "
+                                  "names no cell of this sheet (ADR-0230)")
+            for i, entry in enumerate(cell.get("tiles") or []):
+                for problem in palette_folds.entry_folds(entry)[1]:
+                    rep.error(name, f"cell index {cell.get('index')} tile {i}: {problem} (ADR-0230 item 2)")
+
+
 def lint_hires(src: Source, rel: str, rep: Report):
     head = src.text(rel)[:400]
     m = re.search(r"<ver>(\d+)", head)
@@ -1869,6 +1896,7 @@ def main(argv):
                     lint_hires(src, hires, rep)
                     lint_sheet_sentinels(src, hires, rep)
                     lint_pose_offsets(src, hires, rep)
+                    lint_sheet_folds(src, hires, rep)
 
         scan_bundled_patches(src, rep)
 

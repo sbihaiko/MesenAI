@@ -70,6 +70,7 @@
 #include "NES/HdPacks/SheetGrouping.h"
 #include "NES/HdPacks/SheetLabels.h"
 #include "NES/HdPacks/SheetRender.h"
+#include "NES/HdPacks/SheetColourways.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/HdPacks/OggFadeRamp.h"
 #include "NES/HdPacks/OggLoopStream.h"
@@ -9215,6 +9216,317 @@ void TestTheScanlineTraceStaysValidAcrossFramesUntilTheNextLoad()
 		"#419: consecutive whole frames keep the trace valid");
 }
 
+//--- ADR-0230 (F14.9): a sheet cell reaches every palette its shape was drawn in
+
+//The 2C02 table SheetColourways decides folds on, widened to the 512-entry
+//render palette RenderTile indexes (0x00RRGGBB, emphasis rows repeated).
+MesenSheets::NesPalette ColourwayPalette()
+{
+	static uint32_t palette[512];
+	for(uint32_t i = 0; i < 512; i++) {
+		palette[i] = MesenSheets::kFoldReferencePalette[i & 0x3F] & 0x00FFFFFF;
+	}
+	return palette;
+}
+
+//Hex (32 chars) -> 16 bytes of tile data.
+void ColourwayTileBytes(const std::string& hex, uint8_t out[16])
+{
+	for(int i = 0; i < 16; i++) {
+		out[i] = (uint8_t)std::stoul(hex.substr((size_t)i * 2, 2), nullptr, 16);
+	}
+}
+
+MesenSheets::SheetTileKey ColourwayTile(const std::string& hex, uint32_t palette)
+{
+	MesenSheets::SheetTileKey tile;
+	ColourwayTileBytes(hex, tile.TileData);
+	memcpy(tile.SourceTileData, tile.TileData, 16);
+	tile.PaletteColors = palette;
+	return tile;
+}
+
+//Zelda's fade shape (paints colours 2 and 3) and a shape painting all four.
+const char* kRampTile = "7F80808080808080FFFFFFFFFFFFFFFF";
+const char* kFourColourTile = "CCCCCCCCCCCCCCCCF0F0F0F0F0F0F0F0";
+
+void TestPaletteRelationPortMatchesTheSharedVectors()
+{
+	using namespace MesenSheets;
+	std::ifstream in("docs/specs/golden/sheets/palette-relation-cases.txt");
+	Check(in.good(), "ADR-0230: the shared palette-relation vectors are readable");
+	const char* names[] = { "inert", "fade", "brighter", "colourway" };
+	int rows = 0;
+	int bad = 0;
+	std::string line;
+	std::string firstBad;
+	while(std::getline(in, line)) {
+		if(line.empty() || line[0] == '#') {
+			continue;
+		}
+		std::vector<std::string> f;
+		std::stringstream ss(line);
+		std::string field;
+		while(std::getline(ss, field, '\t')) {
+			f.push_back(field);
+		}
+		if(f.size() < 6) {
+			continue;
+		}
+		rows++;
+		uint8_t data[16];
+		ColourwayTileBytes(f[0], data);
+		PaletteRelationResult r = ClassifyPaletteRelation(data, (uint32_t)std::stoul(f[1], nullptr, 16), (uint32_t)std::stoul(f[2], nullptr, 16));
+		bool ok = f[3] == names[(int)r.Relation] && std::fabs(r.Brightness - std::stod(f[4])) <= 5e-5 && std::fabs(r.Drift - std::stod(f[5])) <= 5e-3;
+		if(!ok && bad++ == 0) {
+			firstBad = line + " -> " + names[(int)r.Relation] + " " + std::to_string(r.Brightness) + " " + std::to_string(r.Drift);
+		}
+	}
+	Check(rows >= 40, "ADR-0230: the shared vector file carries the cases", std::to_string(rows));
+	Check(bad == 0, "ADR-0230: ClassifyPaletteRelation reproduces every shared vector (palette_folds.palette_relation)", firstBad);
+}
+
+void TestAFoldIsExactOnlyWhenOneBrightnessRebuildsTheRecordedPixels()
+{
+	using namespace MesenSheets;
+	uint8_t ramp[16];
+	ColourwayTileBytes(kRampTile, ramp);
+	NesPalette pal = ColourwayPalette();
+
+	//Colour 0 differs, but the ramp never paints it: inert, Brightness 1.
+	PaletteRelationResult inert = ClassifyPaletteRelation(ramp, 0x3617270F, 0x0F17270F);
+	Check(inert.Relation == PaletteRelation::Inert && FoldBrightnessText(inert.Brightness) == "1",
+		"ADR-0230: a palette differing only where the pattern is unpainted is inert");
+	Check(FoldIsExact(ramp, 0x3617270F, 0x0F17270F, LoaderBrightness("1"), pal),
+		"ADR-0230: an inert fold at Brightness 1 rebuilds the recorded pixels exactly");
+
+	PaletteRelationResult black = ClassifyPaletteRelation(ramp, 0x3617270F, 0x0F0F0F0F);
+	Check(black.Relation == PaletteRelation::Fade && FoldBrightnessText(black.Brightness) == "0",
+		"ADR-0230: a fade to black measures Brightness 0");
+	Check(FoldIsExact(ramp, 0x3617270F, 0x0F0F0F0F, LoaderBrightness("0"), pal),
+		"ADR-0230: the fade to black is exact");
+
+	//The #448 case: a Zelda fade step is inside the 25 degree gate, but the
+	//least-squares Brightness leaves a residual.
+	PaletteRelationResult step = ClassifyPaletteRelation(ramp, 0x3617270F, 0x3617170F);
+	Check(step.Relation == PaletteRelation::Fade && step.Drift <= kHueDriftGateDegrees,
+		"ADR-0230: the Zelda fade step is a fold by the hue-drift gate");
+	Check(!FoldIsExact(ramp, 0x3617270F, 0x3617170F, LoaderBrightness(FoldBrightnessText(step.Brightness)), pal),
+		"ADR-0230 (#448 refinement): but no single Brightness rebuilds it - it is a residual fold");
+
+	Check(FoldBrightnessText(0.59506) == "0.5951" && FoldBrightnessText(1.0) == "1" && FoldBrightnessText(0.75) == "0.75",
+		"ADR-0230: the Brightness column text is four decimals with trailing zeroes dropped");
+	Check(LoaderBrightness("1") == 255 && LoaderBrightness("0.5") == 127,
+		"ADR-0230: LoaderBrightness is HdPackLoader's (int)(stof * 255)");
+}
+
+//Three sheets: an unsorted one (rank 0) and a misc one (rank 2) both hold
+//the ramp shape, a map sheet holds it too and must never own a variant.
+std::vector<MesenSheets::PendingSheet> ColourwaySheets()
+{
+	using namespace MesenSheets;
+	auto sheet = [](const std::string& kind, const std::vector<ShapeId>& shapes, uint32_t columns) {
+		PendingSheet p;
+		p.BaseName = kind;
+		p.Doc.Kind = kind;
+		p.Doc.Grid.Unit = 8;
+		p.Doc.CellWidth = p.Doc.CellHeight = 8;
+		p.Doc.Columns = columns;
+		uint32_t rows = ((uint32_t)shapes.size() + columns - 1) / columns;
+		p.Image.Reset(kSheetGutter + columns * (8 + kSheetGutter), kSheetGutter + rows * (8 + kSheetGutter));
+		for(size_t i = 0; i < shapes.size(); i++) {
+			SheetCell c;
+			c.Index = (uint32_t)i;
+			c.X = (int32_t)(kSheetGutter + (i % columns) * (8 + kSheetGutter));
+			c.Y = (int32_t)(kSheetGutter + (i / columns) * (8 + kSheetGutter));
+			for(ShapeId& t : c.Key.Tiles) {
+				t = kEmptyCell;
+			}
+			c.Key.Tiles[0] = shapes[i];
+			p.Doc.Cells.push_back(c);
+		}
+		return p;
+	};
+	std::vector<PendingSheet> sheets;
+	sheets.push_back(sheet("unsorted", { 0 }, 1));
+	sheets.push_back(sheet("misc", { 1, 0, 2 }, 2));
+	PendingSheet map = sheet("map", { 0 }, 1);
+	map.Doc.IsMap = true;
+	sheets.push_back(map);
+	return sheets;
+}
+
+std::vector<MesenSheets::SheetTileKey> ColourwayShapes()
+{
+	return { ColourwayTile(kRampTile, 0x3617270F), ColourwayTile(kFourColourTile, 0x0F0B1B2B), ColourwayTile(kFourColourTile, 0x0F001030) };
+}
+
+void TestAnExactFoldGoesToFoldsAndAResidualFoldToAVariantCell()
+{
+	using namespace MesenSheets;
+	std::vector<PendingSheet> sheets = ColourwaySheets();
+	std::vector<SheetTileKey> shapes = ColourwayShapes();
+	std::vector<std::vector<uint32_t>> drawn = {
+		{ 0x3617270F, 0x0F17270F, 0x0F0F0F0F, 0x3617170F, 0x3617370F, 0x3617170F },
+		{ 0x0F0B1B2B, 0x0F171626 },
+		{ 0x0F001030 },
+	};
+	PaletteCellPlan plan = PlanPaletteCells(sheets, shapes, drawn, ColourwayPalette());
+
+	Check(plan.ExactFoldKeys == 2 && plan.Folds.count(0) && plan.Folds[0].size() == 2,
+		"ADR-0230: the inert and the fade-to-black keys are exact folds, listed on the shape",
+		std::to_string(plan.ExactFoldKeys));
+	Check(plan.Folds[0][0].Palette == 0x0F17270F && plan.Folds[0][0].Brightness == "1" &&
+		plan.Folds[0][1].Palette == 0x0F0F0F0F && plan.Folds[0][1].Brightness == "0",
+		"ADR-0230: each fold carries the palette and the Brightness text mep_build writes");
+	Check(plan.ResidualFoldKeys == 2,
+		"ADR-0230 (#448 refinement): the two Zelda fade steps with a residual are not folds",
+		std::to_string(plan.ResidualFoldKeys));
+	Check(plan.ColourwayKeys == 1 && plan.UnplacedKeys == 0,
+		"ADR-0230: the red of a green shape is a colourway key",
+		std::to_string(plan.ColourwayKeys));
+	Check(plan.Cells.size() == 3 && plan.VariantTiles.size() == 3,
+		"ADR-0230: every residual fold and colourway key becomes its own variant cell (a repeat is decided once)",
+		std::to_string(plan.Cells.size()));
+
+	size_t residualCells = 0;
+	for(const PaletteCellPlan::Cell& cell : plan.Cells) {
+		residualCells += cell.Colourway ? 0 : 1;
+		Check(cell.Sheet == 1, "ADR-0230: a variant cell joins the highest-ranked non-map sheet holding the shape");
+		const SheetTileKey* v = plan.Variant(cell.Key.Tiles[0]);
+		Check(v && v->PaletteColors == cell.Palette, "ADR-0230: a variant cell's tile is its shape in the key's palette");
+	}
+	Check(residualCells == 2, "ADR-0230: residual-fold cells are told apart from colourway cells", std::to_string(residualCells));
+	Check(plan.Cells[0].BaseCell == 0 && plan.Cells[0].Colourway && plan.Cells[1].BaseCell == 1,
+		"ADR-0230: cells are laid out in sheet, base cell, palette order");
+	Check(plan.Variant((ShapeId)shapes.size() + 3) == nullptr && plan.Variant(0) == nullptr,
+		"ADR-0230: Variant resolves only the ids the plan minted");
+}
+
+void TestAVariantJoinsTheBestSheetOfAnyShapeWithItsKey()
+{
+	using namespace MesenSheets;
+	//Shape 3 is shape 0 recorded with an OAM flip baked in (ADR-0178): the same
+	//hires.txt key, so one decision covers both, and its hud sheet (rank 5)
+	//outranks the misc sheet (rank 2) shape 0 sits on.
+	std::vector<PendingSheet> sheets = ColourwaySheets();
+	std::vector<SheetTileKey> shapes = ColourwayShapes();
+	SheetTileKey flipped = shapes[0];
+	ApplyTileFlips(flipped.TileData, true, false);
+	flipped.Mirrors = 1;
+	shapes.push_back(flipped);
+	PendingSheet hud = sheets[0];
+	hud.Doc.Kind = "hud";
+	hud.Doc.Cells[0].Key.Tiles[0] = 3;
+	sheets.push_back(hud);
+	std::vector<std::vector<uint32_t>> drawn = { { 0x3617170F }, {}, {}, { 0x3617170F } };
+	PaletteCellPlan plan = PlanPaletteCells(sheets, shapes, drawn, ColourwayPalette());
+	Check(plan.Cells.size() == 1 && plan.ResidualFoldKeys == 1,
+		"ADR-0230: two shapes sharing a hires.txt key make one decision for it", std::to_string(plan.Cells.size()));
+	Check(plan.Cells.size() == 1 && plan.Cells[0].Sheet == 3,
+		"ADR-0230: the variant goes beside the highest-ranked sheet any of them sits on");
+}
+
+void TestVariantCellsSitBesideTheirBaseAndKeepTheColumns()
+{
+	using namespace MesenSheets;
+	std::vector<PendingSheet> sheets = ColourwaySheets();
+	std::vector<SheetTileKey> shapes = ColourwayShapes();
+	std::vector<std::vector<uint32_t>> drawn = { { 0x3617170F, 0x3617070F }, { 0x0F171626 }, {} };
+	PaletteCellPlan plan = PlanPaletteCells(sheets, shapes, drawn, ColourwayPalette());
+	TileLookup lookup = [&](ShapeId id) { return id < shapes.size() ? &shapes[id] : plan.Variant(id); };
+	sheets[1].Doc.Kind = "object";
+	SheetImage before = sheets[1].Image;
+	ApplyPaletteCells(sheets, plan, lookup, ColourwayPalette());
+	const SheetJsonDoc& doc = sheets[1].Doc;
+	int32_t stride = 8 + (int32_t)kSheetGutter;
+
+	//Row 0 is [shape1 | shape0]; shape0 has two variants, shape1 one, so two
+	//rows go in beneath it and the old row 1 (shape2) moves down by two.
+	Check(doc.Cells.size() == 6, "ADR-0230: three variant cells were inserted", std::to_string(doc.Cells.size()));
+	Check(sheets[1].Image.Height == before.Height + 2 * (uint32_t)stride,
+		"ADR-0230: the sheet grows by the rows its most-varied cell needs");
+	const SheetCell* third = nullptr;
+	const SheetCell* base = nullptr;
+	std::vector<const SheetCell*> ofShape0;
+	for(const SheetCell& c : doc.Cells) {
+		if(c.Key.Tiles[0] == 2) {
+			third = &c;
+		}
+		if(c.Key.Tiles[0] == 0) {
+			base = &c;
+		}
+		if(c.VariantOf == 1) {
+			ofShape0.push_back(&c);
+		}
+	}
+	Check(third && third->Y == (int32_t)kSheetGutter + 3 * stride, "ADR-0230: the rows below move down whole");
+	Check(base && base->Index == 1 && ofShape0.size() == 2 && ofShape0[0]->X == base->X && ofShape0[0]->Y == base->Y + stride && ofShape0[1]->Y == base->Y + 2 * stride,
+		"ADR-0230: a cell's variants stack beneath it, in its own column");
+	Check(ofShape0.size() == 2 && ofShape0[0]->Metatile == -1 && ofShape0[0]->Index >= 3 && ofShape0[0]->Count == 0,
+		"ADR-0230: a variant cell carries no vocabulary index and a fresh cell index");
+
+	//The variant's pixels are the shape in the new palette, not a copy of the base.
+	bool rendered = false;
+	if(base && ofShape0.size() == 2) {
+		uint32_t basePixel = sheets[1].Image.Row((uint32_t)base->Y)[base->X];
+		uint32_t variantPixel = sheets[1].Image.Row((uint32_t)ofShape0[0]->Y)[ofShape0[0]->X];
+		rendered = basePixel == before.Row((uint32_t)base->Y)[base->X] && variantPixel != basePixel && variantPixel != 0;
+	}
+	Check(rendered,
+		"ADR-0230: the variant cell is rendered in its own palette");
+
+	//ADR-0175: on an object sheet the blank slots of the inserted rows are stated.
+	bool blankStated = std::find(doc.EmptySlots.begin(), doc.EmptySlots.end(), SheetSlot{ 0, 2 }) != doc.EmptySlots.end();
+	bool filledNotStated = std::find(doc.EmptySlots.begin(), doc.EmptySlots.end(), SheetSlot{ 1, 1 }) == doc.EmptySlots.end();
+	Check(blankStated && filledNotStated, "ADR-0230: an object sheet lists the blanks the inserted rows leave (ADR-0175)");
+
+	std::string json = SerializeSheet(doc, lookup, &plan.Folds);
+	Check(json.find("\"variantOf\": 1") != std::string::npos, "ADR-0230: the sidecar names a variant cell's base cell");
+	Check(sheets[0].Doc.Cells.size() == 1 && sheets[2].Doc.Cells.size() == 1,
+		"ADR-0230: the lower-ranked and the map sheet are untouched");
+}
+
+void TestTheSidecarListsFoldsOnlyWhereThereAreSome()
+{
+	using namespace MesenSheets;
+	std::vector<PendingSheet> sheets = ColourwaySheets();
+	std::vector<SheetTileKey> shapes = ColourwayShapes();
+	TileLookup lookup = [&](ShapeId id) { return id < shapes.size() ? &shapes[id] : nullptr; };
+	std::string bare = SerializeSheet(sheets[1].Doc, lookup);
+	ShapeFolds none;
+	Check(bare == SerializeSheet(sheets[1].Doc, lookup, &none) && bare.find("folds") == std::string::npos && bare.find("variantOf") == std::string::npos,
+		"ADR-0230: with no folds and no variants the sidecar is byte-identical to the old schema");
+	ShapeFolds folds;
+	folds[0].push_back({ 0x0F0F0F0F, "0" });
+	std::string json = SerializeSheet(sheets[1].Doc, lookup, &folds);
+	Check(json.find("\"palette\": \"3617270F\", \"folds\": [{ \"palette\": \"0F0F0F0F\", \"brightness\": 0 }]") != std::string::npos,
+		"ADR-0230: a folded shape's tile entry lists its folds", json.substr(0, 400));
+	size_t n = 0;
+	for(size_t at = json.find("\"folds\""); at != std::string::npos; at = json.find("\"folds\"", at + 1)) {
+		n++;
+	}
+	Check(n == 1, "ADR-0230: only the folded shape's entry carries the list", std::to_string(n));
+}
+
+void TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn()
+{
+	//AddTile evicts a variant whose CHR page slot another one took, so it
+	//never gets a <tile> line; such a variant is not a drawn palette.
+	struct Tile { uint32_t PaletteColors; };
+	Tile kept { 0x0F161A30 }, evicted { 0x0F021230 }, other { 0x0F272830 };
+	std::map<uint32_t, std::map<uint32_t, std::vector<Tile*>>> banks;
+	banks[0][kept.PaletteColors] = { &kept };
+	banks[1][other.PaletteColors] = { &other, nullptr };
+	std::map<int, std::vector<Tile*>> variants;
+	variants[10] = { &kept, &evicted, nullptr };
+	variants[11] = { &other };
+	auto keyOf = [](MesenSheets::ShapeId s) { return (int)s + 10; };
+	std::vector<std::vector<uint32_t>> drawn = MesenSheets::WrittenPalettesByShape(3, banks, variants, keyOf);
+	Check(drawn.size() == 3 && drawn[0] == std::vector<uint32_t>{ 0x0F161A30 }, "ADR-0230: an evicted variant is not a drawn palette of its shape");
+	Check(drawn[1] == std::vector<uint32_t>{ 0x0F272830 } && drawn[2].empty(), "ADR-0230: each shape gets its own written variants, a shape with none gets none");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -9517,6 +9829,14 @@ int main()
 	TestAStateLoadInvalidatesTheScanlineTrace();
 	TestAPartialFrameAfterALoadDoesNotRevalidateTheTrace();
 	TestTheScanlineTraceStaysValidAcrossFramesUntilTheNextLoad();
+
+	TestPaletteRelationPortMatchesTheSharedVectors();
+	TestAFoldIsExactOnlyWhenOneBrightnessRebuildsTheRecordedPixels();
+	TestAnExactFoldGoesToFoldsAndAResidualFoldToAVariantCell();
+	TestAVariantJoinsTheBestSheetOfAnyShapeWithItsKey();
+	TestVariantCellsSitBesideTheirBaseAndKeepTheColumns();
+	TestTheSidecarListsFoldsOnlyWhereThereAreSome();
+	TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
