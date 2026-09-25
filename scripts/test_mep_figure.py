@@ -327,6 +327,93 @@ def test_an_owner_with_other_art_is_skipped_and_the_move_is_reported():
         check(not v["manifest_unchanged"], "verify reports the manifest change", json.dumps(v))
 
 
+RECORDED_PAGE = "chr/Chr_0.png"
+
+
+def _recorded_pack(root: Path, with_poses: bool) -> Path:
+    """`make_pack` with the key source replaced by a recording (ADR-0231): every
+    key is drawn from the recorder's own pattern page, so the built manifest
+    names no `sheets/` image at all and no key has a sheet owner (#498's shape).
+    The recorded crops carry colours no sheet cell has, standing in for the
+    scale filter the recorder's pages went through."""
+    root = make_pack(root, with_poses=with_poses)
+    textures = root / "textures"
+    keys = [_key(n) for n in SPRITE_NODES] + [(T._tiles()[0]["tile"], T._tiles()[0]["palette"])]
+    span = 8 * SCALE
+    page = sheet_repaint.Image(16 * span, 4 * span)
+    lines = ["<ver>109", f"<scale>{SCALE}", "<system>nes",
+             "<supportedRom>0000000000000000000000000000000000000000", f"<img>{RECORDED_PAGE}"]
+    for i, (tile, pal) in enumerate(keys):
+        x, y = (i % 16) * span, (i // 16) * span
+        for py in range(y, y + span):
+            for px in range(x, x + span):
+                page.set(px, py, (9 + i, 200, 30, 255))
+        lines.append(f"<tile>0,{tile},{pal},{x},{y},1,N,0,{i}")
+    (textures / "chr").mkdir(parents=True, exist_ok=True)
+    sheet_repaint.write_png(textures / RECORDED_PAGE, page)
+    (textures / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return root
+
+
+def _advice(text: str):
+    """The CLI's closing `next:` lines."""
+    return [ln for ln in text.splitlines() if ln.strip().startswith("next:")]
+
+
+def _cli_import(pack_dir: Path, out: Path) -> tuple:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = F.main(["import", str(pack_dir), str(out / "pose000-figure.png"), "--verify"])
+    return rc, buf.getvalue()
+
+
+def test_the_closing_advice_follows_what_the_import_did_to_hires_txt():
+    """#502, from #498's evidence: on a pack whose recording covers every key
+    (ADR-0231) the built manifest names no `sheets/` image, so `plan_targets`
+    found no owner and reported `moves=0`. The import still writes the source
+    cell, which re-points the key onto the sheet, and `--verify` said so in the
+    same run: the CLI closed with "next: ... Reload Repainted Images" under a
+    line reading "hires.txt changed by this import", and the artist who
+    followed the printed advice saw no change in game. The advice follows the
+    manifest fact — the one the same run measures — in both directions."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = _recorded_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recorded pack builds")
+        pack = E.Pack(pack_dir)
+        manifest = F.manifest_owners(pack)
+        check(not manifest[0], "no sheet owner: the manifest names only the recorded page (#498)",
+              str(manifest[0]))
+        sheet = next(s for s in pack.sheets if s.name == "sprites.png")
+        cell = next(c for c in sheet.cells if c.get("metatile") == 1)
+        check(F.plan_targets(pack, sheet, cell, SCALE, manifest)[2],
+              "the plan says the next build moves a key, so the reload cannot show the paint")
+        out = Path(td) / "figures"
+        doc = F.export_figure(pack, "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rc, text = _cli_import(pack_dir, out)
+        check(rc == 0 and "hires.txt changed by this import" in text,
+              "verify reports that the import changed hires.txt", text)
+        advice = _advice(text)
+        check(advice and all("reopen the ROM" in ln for ln in advice),
+              "so the closing advice is a ROM reopen, not a reload", text)
+
+    with tempfile.TemporaryDirectory() as td:
+        # The other direction: a pack whose built manifest draws the key from
+        # the sheet the import routes the paint to, so nothing moves (the #413
+        # shape) and the reload really does show the paint.
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the plain pack builds")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rc, text = _cli_import(pack_dir, out)
+        check(rc == 0 and "hires.txt unchanged by this import" in text,
+              "verify reports that the import left hires.txt alone", text)
+        advice = _advice(text)
+        check(advice and all("Reload Repainted Images" in ln for ln in advice),
+              "so the closing advice is still the reload", text)
+
+
 def _k16(n):
     return {"tile": f"{0xA0 + n:032X}", "palette": "0F0F0F0F"}
 

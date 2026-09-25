@@ -1088,7 +1088,14 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   error (#253). An owner whose `*.orig.png` art differs from the source's is
   never painted over. In that case, or when a key has no owner, the source is
   written and the report's `moves` says the next build re-points a rule, so
-  the reload (ADR-0212) cannot show it. `export_figure` overlays paint routed
+  the reload (ADR-0212) cannot show it. A built manifest with no `sheets/`
+  image at all is the same case, not a free one (#502): ADR-0231 keeps a
+  recorded key on `chr/`, so a pack whose recording covers every key has no
+  owner for anything, and writing the source re-points the key onto its crop.
+  The CLI's closing `next:` line follows that fact — `moves` without
+  `--verify`, the manifest change the same run measured with it — so the
+  advice never contradicts the `hires.txt changed/unchanged` line printed
+  above it. `export_figure` overlays paint routed
   to an owner, so a re-export shows it. `verify` reports `manifest_unchanged`
   (byte-identical rebuilt `hires.txt`) beside the key-set check; it is
   informational and does not fail the run. The throwaway build is also a
