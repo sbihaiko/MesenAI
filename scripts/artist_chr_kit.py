@@ -100,7 +100,12 @@ Honesty rules this tool keeps:
   marked `seen: false` in `Chr_<n>.json`, amber in `Chr_<n>.legend.png`, and
   counted in the manifest fragment;
 * a filled cell's *palette* is a guess — see `--fill-rules` — and by default no
-  `hires.txt` rule is emitted for it at all.
+  `hires.txt` rule is emitted for it at all;
+* a cell holding the bootstrap's own ROM export (a `defaultTile=Y` row, which on
+  a CHR ROM game `AddRomTiles` writes onto the real bank pages) is a ROM fill,
+  `origin: romExport`, `seen: false`, amber — the run never drew that key — but
+  its pixels are copied byte for byte and no rule is emitted, because its `Y`
+  row already draws from it (#449).
 
 Output follows the shared kit contract
 (`runs/golden-20260913-f922/artist-kit-contract.md`): pages under `<out>/chr/`,
@@ -212,6 +217,21 @@ class TileRow:
         if self.tile_data is not None:
             return (self.tile_data, self.palette)
         return (f"#{self.tile_index}", self.palette)
+
+    @property
+    def exported(self) -> bool:
+        """True for a row the bootstrap seeded from the ROM, not one the run drew.
+
+        `HdPackBuilder` sets `DefaultTile = true` only in its static exports,
+        `AddRomTiles` (CHR ROM, onto the real bank's pages) and `AddPrgScanTiles`
+        (CHR RAM, onto its synthetic `0x504247xx` pages); every tile the run draws
+        is created by `CaptureOrCapPaletteVariant` with `DefaultTile = false`. So
+        a `Y` row is the ROM export and an `N` row is recorded evidence (#449).
+        One blind spot, in the conservative direction: a tile drawn under exactly
+        the export's neutral palette `0F001030` bumps the export's usage rather
+        than adding a row, and `hires.txt` records no usage, so it reads as an
+        export — never the other way round."""
+        return (self.default_tile or "N").upper() == "Y"
 
 
 class Pack:
@@ -503,11 +523,16 @@ class Bank:
         self.is_chr_ram = self.primary.is_chr_ram
         self.layout = self.primary.layout
         self.kind = self._kind()
-        # index -> (page, slot) of the recorded art, best rank first
+        # index -> (page, slot) of the art the run drew, best rank first, and
+        # of the bootstrap's ROM export for an index the run never drew (#449).
         self.art: dict[int, tuple] = {}
+        self.exported: dict[int, tuple] = {}
         for page in self.pages:
-            for slot in page.rows:
-                self.art.setdefault(page.index_of_slot(slot), (page, slot))
+            for slot, row in page.rows.items():
+                where = self.exported if row.exported else self.art
+                where.setdefault(page.index_of_slot(slot), (page, slot))
+        for index in self.art:
+            self.exported.pop(index, None)
         # index -> donation dict, from a second recording of the same ROM. Only
         # ever set for an index this pack's own `art` does not hold.
         self.donated: dict[int, dict] = {}
@@ -527,6 +552,11 @@ class Bank:
         if (self.id & PRG_SCAN_BANK_MASK) == PRG_SCAN_BANK_TAG:
             return "prgScan"
         return "chrRam" if self.is_chr_ram else "chrRom"
+
+    def holds_row(self, index: int) -> bool:
+        """The rank-0 page already has a `<tile>` row drawing from this cell, so
+        its pixels are copied through and nothing may be pasted over them."""
+        return self.primary.slot_of_index(index) in self.primary.rows
 
     def fill_palette(self):
         """The palette a ROM fill is rendered under.
@@ -847,7 +877,7 @@ def attach_donors(banks: list[Bank], donors: list[Donor]) -> list[str]:
                 continue
             paired.add((donor.label, bank.id))
             for index in sorted(src.art):
-                if index in bank.art or index in bank.donated:
+                if index in bank.art or index in bank.donated or bank.holds_row(index):
                     continue
                 page, slot = src.art[index]
                 bank.donated[index] = {"donor": donor, "page": page, "slot": slot}
@@ -875,7 +905,7 @@ def fill_from_chr_rom(bank: Bank, rom: Rom):
     """CHR ROM: the bank *is* 4 KB of the file, so every index is readable."""
     base = bank.id * 256
     for index in range(256):
-        if index in bank.art or index in bank.donated:
+        if index in bank.art or index in bank.donated or bank.holds_row(index):
             continue
         data = rom.chr_tile(base + index)
         if data is None:
@@ -934,7 +964,7 @@ def fill_from_prg(bank: Bank, rom: Rom, stats):
         return
 
     for j in range(256):
-        if j in bank.art or j in bank.donated:
+        if j in bank.art or j in bank.donated or bank.holds_row(j):
             continue
         best = None
         for b, support in trusted:
@@ -1075,7 +1105,19 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
             index = page.index_of_slot(slot)
             x, y = page.xy(slot)
             entry = {"slot": slot, "index": index, "x": x, "y": y}
-            if slot in page.rows:
+            if slot in page.rows and page.rows[slot].exported:
+                # The bootstrap's ROM export (#449): the pattern is the ROM's and
+                # the run never drew this key, so it is a ROM fill. Its pixels
+                # stay byte for byte, because its `Y` row draws from this cell.
+                row = page.rows[slot]
+                entry.update(state="fill", seen=False, palette=row.palette,
+                             origin="romExport")
+                if row.tile_data:
+                    entry["tileData"] = row.tile_data
+                else:
+                    entry["tileIndex"] = row.tile_index
+                states[slot] = "fill"
+            elif slot in page.rows:
                 row = page.rows[slot]
                 entry.update(state="evidence", seen=True, palette=row.palette)
                 if row.tile_data:
@@ -1315,8 +1357,8 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
     `textures/sheets/` alone and ignores `textures/chr/` entirely — a naive
     before/after on its output would pass no matter what this tool wrote:
 
-    1. every recorded cell of every emitted page is byte-identical to the
-       recorded page — that is what makes the pack's existing `<tile>` rules
+    1. every recorded cell of every emitted page, and every cell holding the
+       bootstrap's ROM export (#449), is byte-identical to the recorded page — that is what makes the pack's existing `<tile>` rules
        render exactly what they rendered before. A folded cell is checked the
        same way: folding changes what the kit *says* about a cell, never its
        pixels, so a pack rebuilt from an unpainted kit is unchanged;
@@ -1345,7 +1387,8 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
             sidecar = json.loads((out_chr / (png.name[:-4] + ".json")).read_text())
             n = sidecar["scale"] * 8
             for cell in sidecar["cells"]:
-                if cell["state"] not in ("evidence", "folded"):
+                if (cell["state"] not in ("evidence", "folded")
+                        and cell.get("origin") != "romExport"):
                     continue
                 result["cells_checked"] += 1
                 x, y = cell["x"], cell["y"]
@@ -1585,7 +1628,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     real_cells = 256 * len(real)
     recorded = sum(len(b.art) for b in real)
     donated = sum(len(b.donated) for b in real)
-    filled = sum(len(b.fills) for b in real)
+    # A cell a rule could be emitted for, and on top of it the bootstrap's ROM
+    # export of an index the run never drew (#449): a ROM fill that already has
+    # its `Y` row, so it counts as filled but never as a rule.
+    ruleable = sum(len(b.fills) for b in real)
+    filled = ruleable + sum(1 for b in real for i in b.exported if b.holds_row(i))
     guessed = sum(f["paletteGuessed"] for f in files)
     total = collections.Counter()
     for f in files:
@@ -1608,7 +1655,9 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "Green in Chr_<n>.legend.png is a cell the run recorded on this page; "
         "olive is a cell this bank recorded on a lower-ranked page, moved up "
         "(same pattern, another palette — still evidence); violet is a cell "
-        "folded onto another cell, which is the one to paint; amber is a ROM fill; "
+        "folded onto another cell, which is the one to paint; amber is a ROM fill "
+        "(including the bootstrap's own ROM export, `origin: romExport`, which "
+        "the run never drew); "
         "red is a cell nothing could fill. Every non-green cell is spelled out "
         "in Chr_<n>.json, and a ROM fill is `seen: false` there.",
         "A ROM fill is rendered nearest-neighbour under the bank's most-recorded "
@@ -1618,7 +1667,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         f"recorded. --fill-rules={fill_rules} emitted {len(rules)} <tile> row(s), "
         "into chr/fill-rules.hires.txt and never into the pack. The safe count "
         f"(palette already observed for that pattern) is {len(rules) if fill_rules == 'observed' else '-'}"
-        f"; the permissive count (a rule per fill) would be {filled}. A rule with "
+        f"; the permissive count (a rule per fill) would be {ruleable}. A rule with "
         "a wrong palette never matches and is harmless, but one that does match "
         "would put a nearest-neighbour guess on screen in place of the pack's "
         "filtered art, and a sprite/background misread would punch a transparent "
@@ -1709,7 +1758,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
             "fill": total["fill"], "empty": total["empty"],
             "folded": total["folded"],
             "paletteGuessed": guessed,
-            "rulesSafe": filled - guessed, "rulesPermissive": filled,
+            "rulesSafe": ruleable - guessed, "rulesPermissive": ruleable,
             "rulesEmitted": len(rules), "fillRules": fill_rules,
         },
         "fold": {
@@ -1758,7 +1807,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
               f"{done:.0f}% complete")
         for d in donors:
             print(f"  --also {d.label}: {d.cells} cell(s) donated")
-        print(f"  <tile> rules: safe {filled - guessed}, permissive {filled}, "
+        print(f"  <tile> rules: safe {ruleable - guessed}, permissive {ruleable}, "
               f"emitted {len(rules)} (--fill-rules={fill_rules}); "
               f"palette guessed on {guessed} filled cell(s)")
     return fragment
