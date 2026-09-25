@@ -98,6 +98,16 @@ namespace MesenSheets
 		//tile) is part of `Picked`. Reported so a recording can say how many
 		//screens needed the last-resort pass.
 		bool UsedEmptinessProbe = false;
+		//ADR-0235 (F14.10, issue #499): `Rivals > 0` after every pass - the gate
+		//still matches a frame the run time applies it to, and no cell the pick
+		//could reach separates the two. ADR-0159 §1 widens to the volatile cells
+		//first and that is the last thing it can do, so the capture is refused
+		//the way a gate collision already is (the PNG stays on disk, the
+		//<background> line is not written): an anchor that never draws costs a
+		//gap, one that draws the wrong screen whole costs the screen. Always
+		//false without grid evidence - a capture past the retention cap has no
+		//rivals to reason about and keeps ADR-0050's plain rarity pick.
+		bool Rejected = false;
 	};
 
 	//ADR-0223 option A (F12.16): the grid columns a flat run spans, tile-

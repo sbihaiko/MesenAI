@@ -407,6 +407,11 @@ namespace MesenSheets
 	//instead of anchoring on nothing.
 	constexpr PaletteId kUnknownPalette = 0xFF;
 
+	//ADR-0235 (F14.10, issue #499): "this row carries no per-row evidence", so
+	//it reads at the frame's own FineX - the behaviour every recording had
+	//before the plane below existed.
+	constexpr uint8_t kRowFineXDominant = 0xFF;
+
 	//One recorded background frame: which shape sat at every 8x8 cell origin.
 	//FineX is the sub-tile x scroll the cells were aligned to (0..7), so two
 	//frames of the same screen at different scroll offsets compare equal.
@@ -420,6 +425,20 @@ namespace MesenSheets
 		//compares PaletteColors and fails on it. This plane is the evidence for
 		//that one case: +960 B on a 1920 B frame, ~2.8 KB retained per frame.
 		PaletteId Palettes[kGridRows][kGridCols];
+		//ADR-0235 (F14.10, issue #499): the fine scroll each row's cells were
+		//fetched at. The run time reads ScreenTiles[y*256+x] - the tile *covering*
+		//that absolute pixel - and a tile covers `x` from
+		//x - ((x - phase) % 8), where the phase is this row's, not the frame's.
+		//FineX above is the frame's dominant phase (the most common run start,
+		//i.e. the playfield's) and the cells are laid out relative to it; on a
+		//frame whose rows disagree - a fixed status bar over a scrolling
+		//playfield, Ninja Gaiden's stage 1 - nothing else carries the bar's own
+		//phase, and reading the bar's row relative to the playfield's puts the
+		//tile the probe names one cell off. That is the evidence hole ADR-0235
+		//closes; kRowFineXDominant means "no per-row evidence", which reads as
+		//FineX and is exactly the pre-ADR-0235 behaviour, so a stream (or a
+		//synthetic frame) recorded without this plane is unchanged.
+		uint8_t RowFineX[kGridRows];
 		uint8_t FineX = 0;
 		uint32_t FrameNumber = 0;
 		//How many consecutive recorded frames were identical to this one. The
@@ -436,11 +455,19 @@ namespace MesenSheets
 		void Clear()
 		{
 			for(uint32_t r = 0; r < kGridRows; r++) {
+				RowFineX[r] = kRowFineXDominant;
 				for(uint32_t c = 0; c < kGridCols; c++) {
 					Cells[r][c] = kEmptyCell;
 					Palettes[r][c] = kUnknownPalette;
 				}
 			}
+		}
+
+		//ADR-0235: the phase row `row`'s cells were fetched at, or the frame's
+		//own dominant FineX when the row carries no per-row evidence.
+		uint8_t RowPhase(uint32_t row) const
+		{
+			return row < kGridRows && RowFineX[row] != kRowFineXDominant ? RowFineX[row] : FineX;
 		}
 		uint32_t DrawnCells() const
 		{
@@ -460,9 +487,49 @@ namespace MesenSheets
 		//using SameCells: for it a recoloured tile is the same subject.
 		bool SamePalettedCells(const GridFrame& o) const
 		{
-			return SameCells(o) && memcmp(Palettes, o.Palettes, sizeof(Palettes)) == 0;
+			//The per-row phases take part (ADR-0235): two frames that laid out to
+			//the same cells but fetched a row at another phase are not twins - the
+			//anchor rule reads that row at the same cell and a different absolute
+			//pixel - and collapsing them would throw the second one's evidence
+			//away, the same trap the palette plane above was added for.
+			return SameCells(o) && memcmp(Palettes, o.Palettes, sizeof(Palettes)) == 0 &&
+				memcmp(RowFineX, o.RowFineX, sizeof(RowFineX)) == 0;
 		}
 	};
+
+	//ADR-0235 (F14.10, issue #499): the absolute pixel a grid cell's tile starts
+	//at - the inverse of LayOutGridRuns' mapping, so the probe a candidate names
+	//(its row and column) can be expressed the way the run time reads it. It is
+	//negative for a cell that cannot exist: column 0 of a row fetched at another
+	//phase lands left of the screen when the frame's dominant phase is coarser.
+	inline int32_t CellOriginX(const GridFrame& frame, uint32_t row, uint32_t col)
+	{
+		int32_t phase = (int32_t)frame.RowPhase(row);
+		int32_t x = (int32_t)col * 8 + phase;
+		return frame.FineX < (uint8_t)phase ? x - 8 : x;
+	}
+
+	//ADR-0235: the column of `frame`'s row that holds the tile the run time reads
+	//at absolute pixel `x` - the one covering it, whose origin is x rounded down
+	//to the row's own fetch phase. Negative when the grid carries no cell there
+	//(the row starts to the right of the pixel), which the caller reads as "no
+	//evidence", never as "matches". Identical to the probe's own column whenever
+	//the row was fetched at the frame's dominant phase, which is every frame
+	//whose rows agree.
+	inline int32_t CoveringGridCol(const GridFrame& frame, uint32_t row, uint32_t x)
+	{
+		int32_t phase = (int32_t)frame.RowPhase(row);
+		int32_t delta = ((int32_t)x - phase) % 8;
+		if(delta < 0) {
+			delta += 8;
+		}
+		int32_t origin = (int32_t)x - delta;
+		int32_t aligned = (origin - phase) / 8;
+		if(aligned < 0) {
+			return -1;
+		}
+		return aligned + (frame.FineX < (uint8_t)phase ? 1 : 0);
+	}
 
 	//HdPackBuilder::RecordGridFrame's layout of one frame's background runs
 	//onto `frame` (a run is HdPackBuilder::ScreenRun: X, Y and the HdPpuTileInfo
@@ -479,9 +546,17 @@ namespace MesenSheets
 	void LayOutGridRuns(const std::vector<Run>& runs, GridFrame& frame, ShapeFor&& shapeFor, PaletteFor&& paletteFor)
 	{
 		uint32_t fineCounts[8] = {};
+		//ADR-0235: the same count, kept per row. A frame whose rows all start on
+		//one phase - every ordinary frame - gives every row the frame's own
+		//value; a row fetched at another one (a status bar over a scrolled
+		//playfield) keeps its own, which is what the run time's read needs.
+		uint32_t rowCounts[kGridRows][8] = {};
 		for(const Run& run : runs) {
 			if(run.X != 0) {
 				fineCounts[run.X & 7]++;
+				if((run.Y & 7) == 0 && (run.Y >> 3) < kGridRows) {
+					rowCounts[run.Y >> 3][run.X & 7]++;
+				}
 			}
 		}
 		uint8_t fine = 0;
@@ -491,6 +566,18 @@ namespace MesenSheets
 			}
 		}
 		frame.FineX = fine;
+		//A row no run starts on (X == 0 only, or nothing drawn) has no phase
+		//evidence of its own and reads at the frame's: the count defaults to 0,
+		//which is also what the frame-level rule does above.
+		for(uint32_t row = 0; row < kGridRows; row++) {
+			uint8_t phase = 0;
+			for(uint8_t i = 1; i < 8; i++) {
+				if(rowCounts[row][i] > rowCounts[row][phase]) {
+					phase = i;
+				}
+			}
+			frame.RowFineX[row] = phase;
+		}
 		for(size_t i = 0; i < runs.size(); i++) {
 			const Run& run = runs[i];
 			if((run.Y & 7) != 0) {

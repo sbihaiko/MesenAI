@@ -4379,6 +4379,195 @@ namespace
 			"BlocoP5: a Usage=UINT32_MAX candidate (as AppendFlatAnchorCells would hand a solid colour-1 tile) resolves only via the probe pass");
 	}
 
+	//ADR-0235 (F14.10, issue #499): a probe's evidence is the tile the run time
+	//reads at the probe's *absolute* pixel. The condition is
+	//ScreenTiles[y*256+x] - the tile that covers that pixel, which starts at
+	//x - ((x - phase) % 8) with the phase the *row* was fetched at, not the
+	//frame's dominant FineX. On a frame whose rows all share one phase - every
+	//ordinary frame - the two are the same number and nothing here is
+	//observable; on a frame that does not (a fixed status bar over a scrolling
+	//playfield, Ninja Gaiden's stage 1) they are a cell apart, which is what let
+	//screen001's gate report itself unambiguous on the frames it draws stale.
+	//The frames below are built through LayOutGridRuns, so the bar row's phase,
+	//the frame's dominant FineX and the cell each glyph lands in all come from
+	//the code under test.
+	namespace MixedFineScrollFrame
+	{
+		struct Run { uint16_t X; uint16_t Y; HdPpuTileInfo Tile; };
+
+		HdPpuTileInfo Glyph(int32_t index)
+		{
+			HdPpuTileInfo t = {};
+			t.TileIndex = index;
+			t.PaletteColors = 0x0F001032;
+			t.TileData[0] = (uint8_t)index;
+			return t;
+		}
+
+		//`bar` is the status bar's row 3 as (absolute X, glyph) pairs; every
+		//other row carries one run from `playfieldX`, which is what makes the
+		//frame's dominant fine scroll the playfield's - LayOutGridRuns counts run
+		//starts, and 27 playfield rows outnumber the bar's handful.
+		GridFrame Frame(const std::vector<std::pair<uint16_t, int32_t>>& bar, uint16_t playfieldX, std::map<int32_t, ShapeId>& ids)
+		{
+			std::vector<Run> runs;
+			for(const std::pair<uint16_t, int32_t>& g : bar) {
+				runs.push_back({ g.first, 24, Glyph(g.second) });
+			}
+			for(uint16_t row = 2; row < kGridRows; row++) {
+				if(row != 3) {
+					runs.push_back({ playfieldX, (uint16_t)(row * 8), Glyph(900) });
+				}
+			}
+			GridFrame frame;
+			LayOutGridRuns(runs, frame,
+				[&ids](const HdPpuTileInfo& t) {
+					auto it = ids.find(t.TileIndex);
+					if(it != ids.end()) {
+						return it->second;
+					}
+					ShapeId id = (ShapeId)ids.size();
+					ids[t.TileIndex] = id;
+					return id;
+				},
+				[](uint32_t) { return (PaletteId)0; });
+			return frame;
+		}
+	}
+
+	void TestAnchorReadsAProbeAtTheRowItsOwnFetchPhase()
+	{
+		//The capture is an ordinary aligned frame: every row fetched at fine 0,
+		//so the frame's dominant FineX is 0 and the bar's glyph is at column 4
+		//(pixel 32). The frame the gate is applied to has a playfield at fine 7
+		//and the *same* bar - a bar that does not scroll keeps its own phase, so
+		//the run time reads pixel 32 of the bar's row off a tile boundary at 32
+		//and lands on the very glyph the capture holds there. Read the bar's row
+		//relative to the playfield's FineX instead and the tile that covers the
+		//pixel is computed one cell to the left: a different letter, and a gate
+		//that reports itself unambiguous.
+		std::map<int32_t, ShapeId> ids;
+		std::vector<std::pair<uint16_t, int32_t>> bar = {
+			{ 0, 100 }, { 8, 101 }, { 16, 102 }, { 24, 103 }, { 32, 104 }, { 40, 105 }
+		};
+		std::vector<GridFrame> frames = {
+			MixedFineScrollFrame::Frame(bar, 0, ids),
+			MixedFineScrollFrame::Frame(bar, 7, ids),
+		};
+		Check(frames[0].FineX == 0 && frames[1].FineX == 7,
+			"F14.10: the two frames' dominant fine scrolls are the playfield's",
+			"fineX=" + std::to_string(frames[0].FineX) + "/" + std::to_string(frames[1].FineX));
+		Check(frames[1].Cells[3][4] == frames[0].Cells[3][4],
+			"F14.10: the unscrolled bar's glyph lands in the same cell in both frames - the cell index is not what moves",
+			"cells=" + std::to_string(frames[0].Cells[3][4]) + "/" + std::to_string(frames[1].Cells[3][4]));
+
+		std::vector<AnchorCandidate> candidates = { { 3, 1, 1 }, { 3, 9, 1 }, { 3, 17, 1 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rivals == 1,
+			"F14.10: a frame at another fine scroll whose bar row still matches the probe is a rival",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAnchorReadsARowAtAnotherPhaseThanTheFramesOwn()
+	{
+		//The other half, and the one the capture's own column cannot express: the
+		//bar is fetched at fine 5 here (a bar drawn at another scroll), so the
+		//glyph the capture holds at pixel 32 - four glyphs along - covers pixels
+		//29..36 in this frame. The run time reads it; reading the *capture's*
+		//column instead reads the glyph one cell to the right, which is a plain
+		//separating probe that does not separate anything.
+		std::map<int32_t, ShapeId> ids;
+		std::vector<std::pair<uint16_t, int32_t>> captureBar = {
+			{ 0, 100 }, { 8, 101 }, { 16, 102 }, { 24, 103 }, { 32, 104 }, { 40, 105 }
+		};
+		std::vector<std::pair<uint16_t, int32_t>> rivalBar = {
+			{ 5, 101 }, { 13, 102 }, { 21, 103 }, { 29, 104 }, { 37, 105 }
+		};
+		std::vector<GridFrame> frames = {
+			MixedFineScrollFrame::Frame(captureBar, 0, ids),
+			MixedFineScrollFrame::Frame(rivalBar, 7, ids),
+		};
+		Check(frames[1].FineX == 7 && frames[1].Cells[3][3] == frames[0].Cells[3][4],
+			"F14.10: the rival's bar holds the capture's pixel-32 glyph at its own cell 3",
+			"fineX=" + std::to_string(frames[1].FineX) + " cells=" + std::to_string(frames[0].Cells[3][4]) + "/" + std::to_string(frames[1].Cells[3][3]));
+
+		std::vector<AnchorCandidate> candidates = { { 3, 1, 1 }, { 3, 9, 1 }, { 3, 17, 1 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rivals == 1,
+			"F14.10: a bar row fetched at another phase is read at that phase, not at the capture's column",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAnchorRefusesAGateThatStillMatchesARecordedFrame()
+	{
+		//ADR-0235 §2: a gate whose probes still match a frame the run time applies
+		//it to draws the wrong screen whole. ADR-0159 §1 widens the pool to the
+		//volatile cells first, and when even that leaves a rival there is nothing
+		//left to widen: the capture is refused, the way a gate collision already
+		//is - the PNG stays, the <background> line does not.
+		std::map<int32_t, ShapeId> ids;
+		std::vector<std::pair<uint16_t, int32_t>> bar = {
+			{ 0, 100 }, { 8, 101 }, { 16, 102 }, { 24, 103 }, { 32, 104 }, { 40, 105 }
+		};
+		std::vector<GridFrame> frames = {
+			MixedFineScrollFrame::Frame(bar, 0, ids),
+			MixedFineScrollFrame::Frame(bar, 7, ids),
+		};
+		std::vector<AnchorCandidate> candidates = { { 3, 1, 1 }, { 3, 9, 1 }, { 3, 17, 1 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rejected,
+			"F14.10: a gate that still matches a recorded frame is refused");
+
+		//...and the refusal is the rival's doing, not a blanket rule: a frame at
+		//the same other fine scroll whose bar draws *other* glyphs is separated
+		//by the same three probes, so its gate is still written.
+		std::map<int32_t, ShapeId> other;
+		std::vector<GridFrame> separated = {
+			MixedFineScrollFrame::Frame(bar, 0, other),
+			MixedFineScrollFrame::Frame({ { 0, 200 }, { 8, 201 }, { 16, 202 }, { 24, 203 }, { 32, 204 }, { 40, 205 } }, 7, other),
+		};
+		AnchorChoice written = SelectScreenAnchors(separated, 0, candidates);
+		Check(written.Rivals == 0 && !written.Rejected,
+			"F14.10: a gate its probes do separate is still written",
+			"rivals=" + std::to_string(written.Rivals));
+	}
+
+	void TestAnchorKeepsARivalWhosePixelTheGridCannotShow()
+	{
+		//A grid cell can only be recorded where it fits inside the 256-pixel
+		//line. The bar's last tile starts at pixel 248: the aligned capture
+		//records it at dumped 248, but in a frame whose dominant fine scroll is
+		//the playfield's 7 that same tile would land at dumped 255, and the
+		//layout drops it - cell and all. The run still covers the pixel and the
+		//run time still reads the bar's tile there, so the probe cannot be
+		//*shown* to hold on that frame; ADR-0235 §2 reads missing evidence the
+		//way PaletteMayMatch already reads an unknown palette - the rival stays
+		//counted. Reading it as a separation is what kept screen001's gate: the
+		//greedy picked the one cell the grid could not answer for, and the gate
+		//fired on the very frame it was supposed to separate from.
+		std::map<int32_t, ShapeId> ids;
+		std::vector<std::pair<uint16_t, int32_t>> bar = {
+			{ 0, 100 }, { 8, 101 }, { 16, 102 }, { 24, 103 }, { 32, 104 }, { 40, 105 }, { 248, 150 }
+		};
+		std::vector<GridFrame> frames = {
+			MixedFineScrollFrame::Frame(bar, 0, ids),
+			MixedFineScrollFrame::Frame(bar, 7, ids),
+		};
+		Check(frames[0].FineX == 0 && frames[1].FineX == 7 && frames[0].Cells[3][31] != kEmptyCell,
+			"F14.10: the aligned capture records the bar's last tile at pixel 248",
+			"fineX=" + std::to_string(frames[0].FineX) + "/" + std::to_string(frames[1].FineX) +
+				" cell=" + std::to_string(frames[0].Cells[3][31]));
+		Check(frames[1].Cells[3][31] == kEmptyCell && frames[1].Cells[3][30] == frames[0].Cells[3][30],
+			"F14.10: the bar's last tile is recorded in the aligned capture and dropped from the frame at fine 7",
+			"cells=" + std::to_string(frames[0].Cells[3][31]) + "/" + std::to_string(frames[1].Cells[3][31]));
+
+		std::vector<AnchorCandidate> candidates = { { 3, 31, 1 } };
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(choice.Rivals == 1 && choice.Rejected,
+			"F14.10: a probe whose pixel the grid cannot show in a rival is not evidence that the gate separates",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
 	void TestSheetContactSheetGeometry()
 	{
 		Vocabulary vocab;
@@ -11057,6 +11246,10 @@ int main()
 	TestAnchorFlatCellsNeverAppearInStableOrWideOutput();
 	TestAnchorProbeOnACellAVariantChangesIsNeverChosen();
 	TestSolidColourOneTileLandsInTheProbePool();
+	TestAnchorReadsAProbeAtTheRowItsOwnFetchPhase();
+	TestAnchorReadsARowAtAnotherPhaseThanTheFramesOwn();
+	TestAnchorRefusesAGateThatStillMatchesARecordedFrame();
+	TestAnchorKeepsARivalWhosePixelTheGridCannotShow();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();
 	TestSheetJsonCarriesTheGridDecision();

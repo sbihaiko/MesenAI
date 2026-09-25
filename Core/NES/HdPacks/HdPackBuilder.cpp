@@ -1837,17 +1837,29 @@ void HdPackBuilder::CaptureScreen()
 	pending.HasGridFrame = _gridFrameLive && !_gridFrames.empty();
 	pending.GridFrameIndex = pending.HasGridFrame ? _gridFrames.size() - 1 : 0;
 	uint8_t fineX = pending.HasGridFrame ? _gridFrames.back().FineX : 0;
+	//ADR-0235 (F14.10, issue #499): the candidate's column is the cell the run
+	//time reads the run's pixel in - derived from the *row's* fetch phase, not
+	//the frame's dominant FineX. A run the dominant phase would have skipped (a
+	//status bar over a scrolling playfield) is a candidate like any other, and
+	//the column it lands in is the one the grid put it in, so `Cells[Row][Col]`
+	//below is the shape the condition names.
+	const MesenSheets::GridFrame* grid = pending.HasGridFrame ? &_gridFrames.back() : nullptr;
 	for(ScreenRun* run : ranked) {
 		if(pending.Candidates.size() >= MaxAnchorCandidates) {
 			break;
 		}
-		int32_t offset = (int32_t)run->X - (int32_t)fineX;
-		if(pending.HasGridFrame && (offset < 0 || (offset & 7) != 0)) {
+		uint32_t row = (uint32_t)run->Y >> 3;
+		uint8_t phase = grid ? grid->RowPhase(row) : 0;
+		int32_t offset = (int32_t)run->X - (int32_t)phase;
+		if(grid && (offset < 0 || (offset & 7) != 0)) {
+			//The row's own phase is what its cells were laid out from, so a run
+			//that does not start on it is not a cell the grid holds, and its
+			//evidence cannot be read.
 			continue;
 		}
 		MesenSheets::AnchorCandidate cell;
-		cell.Row = (uint32_t)run->Y >> 3;
-		cell.Col = (uint32_t)(pending.HasGridFrame ? offset >> 3 : run->X >> 3);
+		cell.Row = row;
+		cell.Col = (uint32_t)(grid ? MesenSheets::CoveringGridCol(*grid, row, run->X) : (int32_t)(run->X >> 3));
 		if(cell.Row >= MesenSheets::kGridRows || cell.Col >= MesenSheets::kGridCols) {
 			continue;
 		}
@@ -1868,7 +1880,7 @@ void HdPackBuilder::CaptureScreen()
 	}
 
 	//ADR-0223 option A (F12.16): flat runs, excluded from `ranked` above, as a second candidate pool (AppendFlatAnchorCells, HdPackBuilder.h).
-	AppendFlatAnchorCells(pending, fineX);
+	AppendFlatAnchorCells(pending, grid, fineX);
 	unique_ptr<HdPackBitmapInfo> bitmap(new HdPackBitmapInfo());
 	bitmap->PngName = relPath;
 	pending.BitmapIndex = _hdData.BackgroundFileData.size();
@@ -1956,6 +1968,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 	uint32_t ambiguousScreens = 0;
 	uint32_t skippedCollisions = 0;
 	uint32_t additionRivals = 0, emptinessProbeScreens = 0; //ADR-0223 option A (F12.16)
+	uint32_t rejectedScreens = 0; //ADR-0235 §2 (F14.10)
 
 	//ADR-0217 Option C / ADR-0218 Option A: every *other* pending screen's own
 	//captured frame is a forced rival, bypassing IsScreenVariant - a screen
@@ -1991,6 +2004,21 @@ void HdPackBuilder::FinalizeScreenAnchors()
 		additionRivals += choice.AdditionRivals;
 		volatileScreens += choice.UsedVolatileCell ? 1 : 0;
 		ambiguousScreens += choice.Rivals > 0 ? 1 : 0; emptinessProbeScreens += choice.UsedEmptinessProbe ? 1 : 0;
+
+		//ADR-0235 §2 (F14.10, issue #499): the pick ran out of evidence with a
+		//rival still standing - the gate matches a frame the run time applies it
+		//to, and no cell it could reach separates the two. ADR-0159 §1 widens to
+		//the volatile cells first and that is the last thing it can do, so the
+		//capture is refused exactly like a collision below: the PNG stays on disk
+		//(CaptureScreen wrote it at capture time), the <background> line does
+		//not, and the cells ADR-0156 routed to it render vanilla. A gap in one
+		//screen's art instead of the wrong screen drawn whole, which is the
+		//trade ADR-0159 §1 already states - this only makes it load-bearing.
+		if(choice.Rejected) {
+			rejectedScreens++;
+			MessageManager::Log("[HDPack] bootstrap: " + pending.RelPath + " still matches a recorded frame and no probe separates it, no <background> written");
+			continue;
+		}
 
 		//ADR-0217 Option A: a gate another committed capture already satisfies
 		//draws nothing new - GetLayerIndex would never reach this one. The PNG
@@ -2077,6 +2105,12 @@ void HdPackBuilder::FinalizeScreenAnchors()
 			std::to_string(skippedCollisions) + " skipped for an earlier capture's gate, " +
 			std::to_string(postHocDrops) + " dropped post-hoc, " +
 			std::to_string(additionRivals) + " frame(s) filed as rivals for adding content the capture lacks, " + std::to_string(emptinessProbeScreens) + " screen(s) gated on an emptiness probe)");
+	}
+	if(rejectedScreens > 0) {
+		//Its own line so the anchored-line format above stays byte-identical for
+		//the tooling that parses it (ADR-0223's cost read), and countable on its
+		//own.
+		MessageManager::Log("[HDPack] bootstrap: " + std::to_string(rejectedScreens) + " screen(s) refused for a surviving rival (ADR-0235)");
 	}
 	_pendingScreens.clear();
 }

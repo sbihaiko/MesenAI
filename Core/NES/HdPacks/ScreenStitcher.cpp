@@ -835,11 +835,42 @@ namespace MesenSheets
 		//degradation as an out-of-range capturedIndex - back to the pre-amendment
 		//behaviour, never to no anchors and never to an anchor the evidence does
 		//not support.
-		bool PaletteMayMatch(const GridFrame& screen, const GridFrame& other, uint32_t row, uint32_t col)
+		bool PaletteMayMatch(const GridFrame& screen, const GridFrame& other, uint32_t row, uint32_t screenCol, uint32_t otherCol)
 		{
-			PaletteId want = screen.Palettes[row][col];
-			PaletteId got = other.Palettes[row][col];
+			PaletteId want = screen.Palettes[row][screenCol];
+			PaletteId got = other.Palettes[row][otherCol];
 			return want == kUnknownPalette || got == kUnknownPalette || want == got;
+		}
+
+		//ADR-0235 (F14.10, issue #499): does `other` satisfy `screen`'s probe on
+		//cell (row, col)? The condition compares the tile the run time reads at
+		//the probe's *absolute* pixel, so the other frame's cell is the one
+		//covering that pixel - the probe's own column whenever the row was
+		//fetched at the same phase in both frames, which is every pair of frames
+		//whose rows agree, and a neighbouring one when they do not. Reading the
+		//probe's column regardless is what made screen001's gate report itself
+		//unambiguous on the frames it draws stale: the bar's row was read
+		//relative to the playfield's fine scroll, one cell off, so a frame the
+		//run time draws the capture on looked like a frame it does not.
+		//The grid cannot always answer: a row fetched at another phase keeps its
+		//last tile past dumped 255, where the layout drops it whole, and the
+		//coarser-than-the-row case starts left of column 0. A pixel the grid
+		//carries no cell for has not been *shown* to differ, so it reads as
+		//satisfied - the way PaletteMayMatch already reads an unknown palette,
+		//against the separation and never for it. Reading missing evidence as a
+		//separation is what kept screen001's gate alive in the first place.
+		bool SatisfiesProbe(const GridFrame& screen, const GridFrame& other, uint32_t row, uint32_t col)
+		{
+			int32_t x = CellOriginX(screen, row, col);
+			if(x < 0) {
+				return true;
+			}
+			int32_t otherCol = CoveringGridCol(other, row, (uint32_t)x);
+			if(otherCol < 0 || otherCol >= (int32_t)kGridCols || other.Cells[row][otherCol] == kEmptyCell) {
+				return true;
+			}
+			return other.Cells[row][otherCol] == screen.Cells[row][col] &&
+				PaletteMayMatch(screen, other, row, col, (uint32_t)otherCol);
 		}
 
 		bool AnchorFarEnough(const AnchorCandidate& candidate, const std::vector<const AnchorCandidate*>& picked)
@@ -876,11 +907,10 @@ namespace MesenSheets
 					uint32_t survivors = 0;
 					if(screen) {
 						//A rival satisfies the condition only when the tile *and*
-						//its palette match, which is what tileAtPosition compares.
-						ShapeId wanted = screen->Cells[candidate.Row][candidate.Col];
+						//its palette match, which is what tileAtPosition compares -
+						//read at the probe's absolute pixel, per row (ADR-0235).
 						for(const GridFrame* rival : alive) {
-							survivors += rival->Cells[candidate.Row][candidate.Col] == wanted &&
-								PaletteMayMatch(*screen, *rival, candidate.Row, candidate.Col) ? 1 : 0;
+							survivors += SatisfiesProbe(*screen, *rival, candidate.Row, candidate.Col) ? 1 : 0;
 						}
 					}
 					if(bestPos == left.size() || survivors < bestSurvivors) {
@@ -893,11 +923,9 @@ namespace MesenSheets
 				}
 				const AnchorCandidate& chosen = candidates[left[bestPos]];
 				if(screen) {
-					ShapeId wanted = screen->Cells[chosen.Row][chosen.Col];
 					std::vector<const GridFrame*> kept;
 					for(const GridFrame* rival : alive) {
-						if(rival->Cells[chosen.Row][chosen.Col] == wanted &&
-							PaletteMayMatch(*screen, *rival, chosen.Row, chosen.Col)) {
+						if(SatisfiesProbe(*screen, *rival, chosen.Row, chosen.Col)) {
 							kept.push_back(rival);
 						}
 					}
@@ -964,10 +992,25 @@ namespace MesenSheets
 		uint32_t additionRivals = 0;
 		if(screen) {
 			for(size_t i = 0; i < frames.size(); i++) {
-				//A frame recorded under another fine scroll is not comparable
-				//here: the grid is cut relative to FineX, so its cell (r, c) is
-				//not the pixel a tileAtPosition condition would read.
-				if(i == capturedIndex || frames[i].FineX != screen->FineX) {
+				if(i == capturedIndex) {
+					continue;
+				}
+				//ADR-0235 (F14.10, issue #499): a frame recorded under another
+				//fine scroll is a rival, and never a variant. Before this it was
+				//skipped entirely - the grid is cut relative to FineX, so cell
+				//(r, c) is not the pixel a tileAtPosition condition reads, and
+				//ADR-0159 §3 read that as "not comparable". But the run time
+				//applies the gate to every fine scroll: skipping them is what let
+				//screen001's gate be written, and fired, on 90 frames of Ninja
+				//Gaiden's stage 1 that it draws stale. The comparability argument
+				//is answered by reading each probe at the cell covering its
+				//absolute pixel, per row (SatisfiesProbe) - which is the read the
+				//run time makes, whatever the row's phase. It cannot be a variant:
+				//the variant kind test (IsScreenVariant/AddsContent) is a
+				//same-fine-scroll, same-layout question, and a frame at another
+				//scroll is a different picture of the same screen.
+				if(frames[i].FineX != screen->FineX) {
+					rivals.push_back(&frames[i]);
 					continue;
 				}
 				//ADR-0217 Option C / ADR-0218 Option A: a forced rival skips
@@ -1006,8 +1049,7 @@ namespace MesenSheets
 				}
 				bool survives = true;
 				for(const GridFrame* variant : variants) {
-					if(variant->Cells[candidate.Row][candidate.Col] != wanted ||
-						!PaletteMayMatch(*screen, *variant, candidate.Row, candidate.Col)) {
+					if(!SatisfiesProbe(*screen, *variant, candidate.Row, candidate.Col)) {
 						survives = false;
 						break;
 					}
@@ -1075,6 +1117,14 @@ namespace MesenSheets
 				}
 			}
 		}
+		//ADR-0235 §2 (F14.10): every pass has run and a rival still satisfies the
+		//set, so there is no separating pick left to make. Reported rather than
+		//written: the caller withholds the <background> line, the way it already
+		//does for a gate collision. `screen` is null only when the capture has no
+		//grid evidence at all (past the retention cap), which leaves `rivals`
+		//empty by construction - the degradation to ADR-0050's plain rarity pick
+		//must not turn into a refusal.
+		best.Rejected = best.Rivals > 0;
 		return best;
 	}
 
@@ -1085,8 +1135,16 @@ namespace MesenSheets
 			const AnchorCandidate& candidate = candidates[index];
 			AnchorKey key;
 			key.Row = candidate.Row;
-			key.Col = candidate.Col;
-			key.FineX = frame.FineX;
+			//ADR-0235: the key speaks in the pixel the condition carries, so it
+			//stays the same key whatever phase the row was fetched at - the
+			//header's invariant (TileX = Col*8 + FineX) holds by construction,
+			//and two captures whose probes land on the same pixel still collide
+			//on it. A cell that cannot exist (negative origin) keeps the
+			//candidate's own column, which is what the collision pass compared
+			//before this plane existed.
+			int32_t x = CellOriginX(frame, candidate.Row, candidate.Col);
+			key.Col = x >= 0 ? (uint32_t)(x >> 3) : candidate.Col;
+			key.FineX = x >= 0 ? (uint8_t)(x & 7) : frame.FineX;
 			key.Tile = frame.Cells[candidate.Row][candidate.Col];
 			key.Palette = frame.Palettes[candidate.Row][candidate.Col];
 			keys.push_back(key);

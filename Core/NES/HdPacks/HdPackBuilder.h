@@ -156,25 +156,37 @@ private:
 	//tile (all-0xFF or all-0x00 per plane) goes to the probe pool instead of
 	//the rarity ranking, at the margin from CaptureScreen's own predicate
 	//fix (Codex review, PR #379).
-	void AppendFlatAnchorCells(PendingScreen& pending, uint8_t fineX)
+	void AppendFlatAnchorCells(PendingScreen& pending, const MesenSheets::GridFrame* grid, uint8_t fineX)
 	{
 		for(size_t i = 0; i < _frameRuns.size(); i++) {
 			ScreenRun& run = _frameRuns[i];
 			if(!MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0) {
 				continue;
 			}
+			uint32_t row = (uint32_t)run.Y >> 3;
+			if(row >= MesenSheets::kGridRows) {
+				continue;
+			}
+			//ADR-0235 (F14.10): the *row's* fetch phase, the same value
+			//CaptureScreen derives its own candidates' columns with - the frame's
+			//dominant FineX would put a flat cell of a status bar row in the
+			//neighbouring column, and the probe it becomes would name a pixel the
+			//grid does not hold that shape at.
+			uint8_t phase = grid ? grid->RowPhase(row) : fineX;
 			uint16_t endX = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;
-			for(uint32_t c : MesenSheets::FlatRunColumns(run.X, endX, fineX)) {
+			for(uint32_t c : MesenSheets::FlatRunColumns(run.X, endX, phase)) {
 				MesenSheets::AnchorCandidate cell;
-				cell.Row = (uint32_t)run.Y >> 3;
-				cell.Col = c;
-				if(cell.Row >= MesenSheets::kGridRows) {
+				cell.Row = row;
+				uint16_t origin = (uint16_t)(c * 8 + phase);
+				int32_t col = grid ? MesenSheets::CoveringGridCol(*grid, row, origin) : (int32_t)c;
+				if(col < 0 || col >= (int32_t)MesenSheets::kGridCols) {
 					continue;
 				}
+				cell.Col = (uint32_t)col;
 				cell.Usage = UINT32_MAX;
 				pending.Cells.push_back(cell);
 				ScreenRun synth = run;
-				synth.X = (uint16_t)(c * 8 + fineX);
+				synth.X = origin;
 				pending.Candidates.push_back(synth);
 			}
 		}
