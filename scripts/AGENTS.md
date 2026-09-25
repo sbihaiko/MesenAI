@@ -476,8 +476,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   key source itself when no build wrote it, else a recorded
   `textures/hires.txt` under a `--source` build. In those two cases the
   first build copies it to `hires.recorded.txt` before overwriting it,
-  even when none of its rules is usable yet (a page missing). A rule
-  whose page is missing, whose crop is out of bounds or whose `<scale>`
+  even when none of its rules is usable yet (a page missing). A recorded
+  page is looked up under `textures/`, else beside the manifest the
+  recording came from; one found only there (`auto/textures/chr/…` in a
+  `mep_import` project) is copied up into `textures/` when a kept rule
+  names it, since the loader resolves an `<img>` in the layer that names it
+  (PR #472 review). A rule whose page is missing in both, whose crop is out of bounds or whose `<scale>`
   differs falls back to the crop, as does a key the recording never had,
   and the build prints the count and the reason. `check-coverage` counts
   the `<img>` lines under that comment as build output. The key set is

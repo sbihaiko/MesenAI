@@ -107,6 +107,18 @@ A manifest counts as a recording when it has `<tile>` rules, names no
 `sheets/` image, does not carry the section comment above, and is not a
 pages-only manifest (ADR-0219).
 
+A recorded page is looked up under `textures/` first, then beside the
+manifest the recording was read from. HdPackLoader resolves an `<img>`
+against the folder of the `hires.txt` that names it, and a pack zip's
+`textures/` section cannot reach the `auto/` layer next to it. So a page
+found only beside the recording, as `auto/textures/chr/Chr_N.png` is in
+every `mep_import` project, is copied up into `textures/` when a kept rule
+names it, the same way a `<background>` is copied up from `auto/textures/`
+(#344). The emitted `<img>` then resolves inside the layer that names it,
+and `mep_lint` passes on the result (PR #472 review). The `<img>` line is
+written with `/` separators, as `mep_carry` writes a carried name; the
+loader reads `\` as `/`, so this changes nothing at run time.
+
 The kit's `chr/Chr_N.png` pages overwrite the recorded pages in that recipe.
 They hold every recorded crop byte for byte at the same position (3 779 of
 3 779 on Castlevania), so the recorded rules still resolve.
@@ -117,7 +129,8 @@ A recorded rule is used only where it still means what it meant. Otherwise
 the untouched cell falls back to its sheet crop, as before this ADR, and the
 build prints how many cells did and why. Fallback cases:
 
-- the page the rule names is missing under `textures/`;
+- the page the rule names is missing both under `textures/` and beside the
+  recording (§2);
 - its crop lies outside that page;
 - the recording's `<scale>` is not the build's;
 - the key was never recorded (the sheets brought it — 7 keys on the

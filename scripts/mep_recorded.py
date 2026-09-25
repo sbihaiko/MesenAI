@@ -26,9 +26,16 @@ is copied to (1) first — before any of its rules is checked, so a build that
 can use none of them right now (a page missing) still keeps it.
 
 A recorded rule is used only where it still means what it meant: the page it
-names exists under `textures/`, its crop lies inside that page, and the
-recording's `<scale>` is the build's. Everything else falls back to the sheet
-crop, and the build says how many did.
+names exists, its crop lies inside that page, and the recording's `<scale>` is
+the build's. Everything else falls back to the sheet crop, and the build says
+how many did.
+
+A page is looked up under `textures/` first, then beside the manifest the
+recording was read from. HdPackLoader resolves an `<img>` against the folder
+of the `hires.txt` naming it, and a zip section cannot reach a sibling layer,
+so a page found only beside the recording (`auto/textures/chr/…` in every
+`mep_import` project) is copied up into `textures/` when a kept rule names it
+— the way `mep_carry` copies a `<background>` up (PR #472 review).
 """
 
 from pathlib import Path
@@ -78,6 +85,8 @@ class Recorded:
         self.label = label
         self.reason = reason
         self.imgs = []
+        self.textures = None  # the layer the build emits into
+        self.found = {}  # <img> path -> the file its crops were checked against
         self.rules = {}  # (cond, DATA, PAL) -> (order, img index, cond, fields)
         self.used = []
         self.fallback = 0
@@ -104,14 +113,30 @@ class Recorded:
             return 0, img_index, set()
         used = sorted(set((r[0], r[1]) for r in self.used))
         pages = sorted({img for _o, img in used})
+        self._copy_up(pages)
         where = {img: img_index + i for i, img in enumerate(pages)}
         out_lines.append(f"{MARK}, from {self.label} (ADR-0231, #447)")
-        out_lines.extend(f"<img>{self.imgs[img]}" for img in pages)
+        # The `/` spelling, as `mep_carry` emits a carried name: HdPackLoader
+        # reads `\\` as `/`, and a page copied up lives under the `/` name.
+        out_lines.extend("<img>" + self.imgs[img].replace("\\", "/") for img in pages)
         rows = sorted({r[0]: r for r in self.used}.values())
         for _order, img, cond, fields in rows:
             out_lines.append(f"{cond}<tile>{','.join([str(where[img])] + fields[1:])}")
         keys = {(f[1].upper(), f[2].upper()) for _o, _i, _c, f in rows}
         return len(rows), img_index + len(pages), keys
+
+    def _copy_up(self, pages) -> None:
+        """Copy every page a kept rule names that lives only beside the
+        recording into `textures/`, where the emitted `<img>` line resolves."""
+        for img in pages:
+            rel = self.imgs[img].replace("\\", "/")
+            src, dst = self.found[self.imgs[img]], self.textures / rel
+            if src == dst:
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+            print(f"info: copied recorded page {rel} into textures/ from "
+                  f"{src.parent.as_posix()}, so the kept rules that name it resolve (ADR-0231)")
 
     def report(self) -> None:
         kept = len({r[0] for r in self.used})
@@ -121,12 +146,22 @@ class Recorded:
         if not self.fallback:
             return
         why = self.reason or (f"{self.label} has no usable rule for them (the key was never "
-                              f"recorded, or its page is missing from textures/)")
+                              f"recorded, or its page is missing)")
         print(f"info: {self.fallback} untouched cell rule(s) point at the sheet crop, which is "
               f"nearest-neighbour and so not the recorded art — {why} (#447)")
 
 
-def _read_rules(rec: Recorded, lines, textures: Path, png_size, scale: int, tile_re) -> None:
+def _page(textures: Path, beside: Path, rel: str) -> Path:
+    """Where a recorded `<img>` is: `textures/` wins, else beside the recording."""
+    rel = rel.replace("\\", "/")
+    upper = textures / rel
+    if rel.startswith("/") or ".." in rel.split("/"):
+        return upper  # never copy from, or into, a path outside the layer
+    return upper if upper.is_file() or not (beside / rel).is_file() else beside / rel
+
+
+def _read_rules(rec: Recorded, lines, textures: Path, beside: Path, png_size, scale: int,
+                tile_re) -> None:
     sizes, span = {}, 8 * scale
     for order, line in enumerate(lines):
         s = line.strip()
@@ -145,7 +180,8 @@ def _read_rules(rec: Recorded, lines, textures: Path, png_size, scale: int, tile
             continue
         rel = rec.imgs[img]
         if rel not in sizes:
-            sizes[rel] = png_size(textures / rel)
+            rec.found[rel] = _page(textures, beside, rel)
+            sizes[rel] = png_size(rec.found[rel])
         size = sizes[rel]
         if size is None or x < 0 or y < 0 or x + span > size[0] or y + span > size[1]:
             continue
@@ -175,6 +211,7 @@ def load(folder: Path, source: Path, source_lines, scale: int, png_size, tile_re
     if path is None:
         return Recorded(reason=f"there is no recording to keep them from (no textures/{SNAPSHOT}, "
                                f"no auto/textures/hires.txt, and the key source was written by a build)")
+    beside = path.parent
     if path not in (snap, auto):
         # Snapshot before reading any rule: a build that can use none of them
         # (a page missing, every crop out of bounds, another <scale>) still
@@ -186,8 +223,9 @@ def load(folder: Path, source: Path, source_lines, scale: int, png_size, tile_re
         print(f"info: kept the recording as textures/{SNAPSHOT} before overwriting it, so every "
               f"later build can still re-emit its rules (ADR-0231)")
     rec = Recorded()
+    rec.textures = textures
     rec_scale = next((h.strip()[7:].strip() for h in lines if h.strip().startswith("<scale>")), "1")
-    _read_rules(rec, lines, textures, png_size, int(rec_scale) if rec_scale.isdigit() else 1, tile_re)
+    _read_rules(rec, lines, textures, beside, png_size, int(rec_scale) if rec_scale.isdigit() else 1, tile_re)
     try:
         rec.label = path.relative_to(folder).as_posix()
     except ValueError:

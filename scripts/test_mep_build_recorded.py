@@ -27,6 +27,9 @@ holds crops that differ from the sheet's on purpose (the xBRZ stand-in):
     the build says how many did;
   * a pack that keeps the recording in `auto/textures/` reads it from there
     and writes no snapshot;
+  * a `mep_import` project, whose recorded pages live only under
+    `auto/textures/`, gets them copied up into `textures/`, so every emitted
+    `<img>` resolves in the layer that names it and the pack lints;
   * `check-coverage` still treats an unpainted build as a sheet-derived
     baseline.
 
@@ -327,6 +330,54 @@ def auto_layout_test(root: Path):
         ok("#447: a pack that keeps the recording in auto/textures/ reads it from there, no snapshot")
 
 
+def imported_layout_test(root: Path):
+    """Codex #472: the layout `mep_import.py` writes keeps the recording *and*
+    its pages under `auto/textures/` only; the upper `textures/` holds just the
+    sheets. HdPackLoader resolves every `<img>` against the folder of the
+    `hires.txt` that names it, so the emitted upper layer must carry the pages
+    it points at: the build copies them up, and the pack still lints."""
+    folder, rules = make_recorded_pack(root, "imported")
+    textures, auto = folder / "textures", folder / "auto" / "textures"
+    (auto / "chr").mkdir(parents=True)
+    (textures / "hires.txt").rename(auto / "hires.txt")
+    (textures / PAGE).rename(auto / PAGE)
+    (textures / "chr").rmdir()
+    out = run("build", str(folder))
+    if out is None:
+        return
+    _imgs, got = by_key(textures / "hires.txt")
+    bad = [f"{c}{k[:8]}" for (c, k), body in rules.items()
+           if (got.get((c, k, T.PAL_HEX)) or ("", []))[0] != PAGE
+           or got[(c, k, T.PAL_HEX)][1][1:] != body.split(",")[1:]]
+    if bad:
+        fail(f"#447: a mep_import project (recording and pages only under auto/textures/) did not "
+             f"re-emit {len(bad)} of {len(rules)} recorded rules: {bad[:4]}")
+        return
+    missing = [rel for rel in parse_rules(textures / "hires.txt")[0] if not (textures / rel).is_file()]
+    if missing:
+        fail(f"#447: the emitted textures/hires.txt names <img> files absent from textures/: {missing}")
+        return
+    if (textures / PAGE).read_bytes() != (auto / PAGE).read_bytes():
+        fail(f"#447: textures/{PAGE} is not the recorded page from auto/textures/")
+        return
+    cache = {}
+    differ = [f"{c}{k[:8]}" for (c, k), body in rules.items()
+              if crop_at(textures, PAGE, *map(int, got[(c, k, T.PAL_HEX)][1][3:5]), cache)
+              != [[page_color(int(body.split(",")[3]) // SPAN
+                              + 16 * (int(body.split(",")[4]) // SPAN))] * SPAN] * SPAN]
+    if differ:
+        fail(f"#447: {len(differ)} kept rules of a mep_import project render other pixels than the "
+             f"recording: {differ[:4]}")
+        return
+    lint = subprocess.run([PY, str(MEP_BUILD.parent / "mep_lint.py"), str(folder)],
+                          capture_output=True, text=True)
+    if lint.returncode != 0:
+        fail(f"#447: the built mep_import project does not lint:\n{(lint.stdout + lint.stderr)[-800:]}")
+    else:
+        ok("#447: a mep_import project re-emits the recorded rules, its pages are copied up into "
+           "textures/, and the pack lints")
+
+
 def chr_rom_test(root: Path):
     folder, rules = make_recorded_pack(root, "chr-rom", chr_rom=True)
     if run("build", str(folder)) is None:
@@ -425,6 +476,7 @@ def main() -> int:
         key_set_test(root)
         other_scale_test(root)
         auto_layout_test(root)
+        imported_layout_test(root)
         chr_rom_test(root)
         coverage_baseline_test(root)
         restored_page_test(root)
