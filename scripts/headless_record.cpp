@@ -133,7 +133,8 @@
 //guarantee of ADR-0157: read the "capture finished" line for the frame the run
 //actually ended on rather than assuming it.
 //A scratch home folder is created next to the output; the NES game database
-//is copied into it automatically when the tool runs from the repo root.
+//is copied into it from the checkout this binary was built in, found from the
+//binary's own path and never from the cwd (issue #477).
 #include "Core/Shared/SettingTypes.h"
 #include "Core/Shared/Video/FrameCapture.h"
 //ADR-0169: the live sprite layer is published as data - OAM, palette and the
@@ -164,6 +165,9 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 struct TimingInfoAbi
 {
@@ -581,6 +585,34 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 }
 
 
+//Issue #477: the folder this binary lives in. Anything the run reads from the
+//checkout resolves from here, because a path relative to the cwd made the run
+//depend on where the caller stood - record_library.sh, record_stages.sh and
+//replay_chain.sh never cd, and a run from outside the repo root loaded an
+//empty game DB and minted a different state. argv[0] is only the fallback: a
+//bare name found through PATH does not locate the file.
+static std::filesystem::path ExecutableDir(const char* argv0)
+{
+	std::error_code error;
+#ifdef __APPLE__
+	char buffer[4096];
+	uint32_t size = sizeof(buffer);
+	if(_NSGetExecutablePath(buffer, &size) == 0) {
+		std::filesystem::path exe = std::filesystem::canonical(buffer, error);
+		if(!error) {
+			return exe.parent_path();
+		}
+	}
+#else
+	std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", error);
+	if(!error) {
+		return exe.parent_path();
+	}
+#endif
+	std::filesystem::path fallback = std::filesystem::canonical(argv0, error);
+	return error ? std::filesystem::path() : fallback.parent_path();
+}
+
 int main(int argc, char** argv)
 {
 	if(argc < 4) {
@@ -869,10 +901,28 @@ int main(int argc, char** argv)
 	}
 
 	//NES mapper detection wants the game DB in the home folder; copy it from
-	//the repo checkout when available (silently skipped elsewhere).
-	std::filesystem::path repoDb = "UI/Dependencies/MesenNesDB.txt";
-	if(std::filesystem::exists(repoDb) && !std::filesystem::exists(home / "MesenNesDB.txt")) {
-		std::filesystem::copy_file(repoDb, home / "MesenNesDB.txt");
+	//the checkout next to this binary (scripts/../UI/Dependencies), or from a
+	//copy beside the binary itself. Resolved from the binary, never the cwd
+	//(issue #477); a run with no DB anywhere says so instead of silently
+	//falling back to the iNES header.
+	if(!std::filesystem::exists(home / "MesenNesDB.txt")) {
+		std::filesystem::path exeDir = ExecutableDir(argv[0]);
+		const std::filesystem::path candidates[] = {
+			exeDir / ".." / "UI" / "Dependencies" / "MesenNesDB.txt",
+			exeDir / "MesenNesDB.txt",
+		};
+		bool copied = false;
+		for(const std::filesystem::path& candidate : candidates) {
+			if(!exeDir.empty() && std::filesystem::exists(candidate)) {
+				std::filesystem::copy_file(candidate, home / "MesenNesDB.txt");
+				copied = true;
+				break;
+			}
+		}
+		if(!copied) {
+			fprintf(stderr, "warning: no MesenNesDB.txt found from %s - NES games load without the game database\n",
+				exeDir.string().c_str());
+		}
 	}
 
 	InitDll();

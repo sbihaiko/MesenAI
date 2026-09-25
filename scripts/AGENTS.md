@@ -73,6 +73,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `roles_probe.cpp` / `headless_record.cpp` / `spike_sound_driver.cpp` run
   the emulator headless against a real ROM; they link `InteropDLL`'s shared
   lib and need `make core` first.
+- `headless_record` copies the NES game DB into its per-run `mesen-home`
+  from the binary's own location (`scripts/../UI/Dependencies/MesenNesDB.txt`,
+  else `MesenNesDB.txt` beside the binary), **never from the cwd** (issue
+  #477): the recording scripts do not `cd`, and a cwd-relative lookup loaded
+  an empty DB outside the repo root, dropped the board/input overrides and
+  minted a different state. With no DB found it warns on stderr. Nothing in
+  the tool may read a checkout file through a cwd-relative path;
+  `test_headless_record_cwd.py` runs the built binary from a temp cwd and
+  the repo root and asserts both load the same non-empty DB (it skips when
+  the binary is not built).
 - **Navigation sweep (ADR-0184, amended 2026-09-14)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
