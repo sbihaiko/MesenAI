@@ -10255,7 +10255,10 @@ void TestALatchTileReadFromTwoBanksNamesBoth()
 namespace MmcLatchFrame
 {
 	struct Named { uint8_t X; uint8_t Y; int32_t Index; };
-	struct Result { std::vector<Named> Sprites; std::vector<int32_t> ExtraIndexes; };
+	//#520: `Placements` is what the 4-arg ForEachLatched hands `emitPlaced` - the
+	//artless halves, as bare positions. Production's 4th lambda is
+	//HdBuilderPpu's call to HdPackBuilder::RecordSpritePlacement.
+	struct Result { std::vector<Named> Sprites; std::vector<int32_t> ExtraIndexes; std::vector<std::pair<uint8_t, uint8_t>> Placements; };
 
 	//`rowsFetched` false leaves the row log empty - a sprite the 8-per-line
 	//limit hid on every row. The latch is reset to $FE at the start of every
@@ -10741,17 +10744,21 @@ namespace BlankHalfFrame
 			}
 		}
 		MmcLatchFrame::Result r;
+		//The 4-arg overload, exactly as HdBuilderPpu calls it (#520): `emit` and
+		//`emitBank` name shapes, `emitPlaced` names the bare position of a half
+		//whose art is blank.
 		latch.ForEachLatched(
 			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
 			[](int32_t abs, HdPpuTileInfo& t) { t.TileIndex = abs / 16; Fill(t, abs); },
-			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); });
+			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); },
+			[&](uint8_t sx, uint8_t sy) { r.Placements.push_back(std::make_pair(sx, sy)); });
 		return r;
 	}
 
 	std::string Describe(const MmcLatchFrame::Result& r)
 	{
 		std::string out = "named ";
-		char b[8];
+		char b[16];
 		for(const MmcLatchFrame::Named& n : r.Sprites) {
 			snprintf(b, sizeof(b), "%04X ", n.Index);
 			out += b;
@@ -10759,6 +10766,11 @@ namespace BlankHalfFrame
 		out += "extra ";
 		for(int32_t i : r.ExtraIndexes) {
 			snprintf(b, sizeof(b), "%04X ", i);
+			out += b;
+		}
+		out += "placed ";
+		for(const std::pair<uint8_t, uint8_t>& p : r.Placements) {
+			snprintf(b, sizeof(b), "(%u,%u) ", p.first, p.second);
 			out += b;
 		}
 		return out;
@@ -10784,6 +10796,182 @@ void TestAFullyTransparentSpriteHalfNeverReachesTheRegistry()
 	Check(OamFetchLatch::IsFullyTransparent(t), "#470: all-zero tile data is fully transparent");
 	t.TileData[15] = 0x01;
 	Check(!OamFetchLatch::IsFullyTransparent(t), "#470: one opaque pixel (a high-plane bit) is not");
+}
+
+//#520: the latch's own contract at the seam production uses. HdBuilderPpu's
+//OnBeforeSendFrame passes four callbacks - `emit` -> RecordSprite, `rebank`,
+//`emitBank` -> RecordSpriteBank and `emitPlaced` -> RecordSpritePlacement - and
+//the pose pass is only reached by the fourth. These two halves are the whole
+//rule: a blank half is handed to `emitPlaced` and to nobody else, an opaque half
+//to `emit` and never to `emitPlaced`.
+void TestTheLatchHandsABlankHalfToThePlacementCallbackAlone()
+{
+	using namespace BlankHalfFrame;
+	//Sprite 0 is $FD, read from bank $1C, which this model fills with zeroes;
+	//sprite 1 is the drawn neighbour $80 beside it.
+	MmcLatchFrame::Result r = Run(0xFD, 40, 0x1C, 0x1C, 0x1C);
+	Check(r.Placements.size() == 1 && r.Placements[0].first == 40 && r.Placements[0].second == 100,
+		"#520: the blank half reaches emitPlaced, at its own position and once", Describe(r));
+	Check(r.Sprites.size() == 1 && r.Sprites[0].Index == 0x0580,
+		"#520: and it never reaches emit, so it names no shape", Describe(r));
+
+	//The control: the same two halves with drawn art. The latch hands both to
+	//`emit`, and `emitPlaced` stays empty - the callback is not a second copy.
+	MmcLatchFrame::Result drawn = Run(0xFD, 40, 0x05, 0x05, 0x05);
+	Check(drawn.Sprites.size() == 2 && drawn.Placements.empty(),
+		"#520 control: an opaque half reaches emit only, never emitPlaced", Describe(drawn));
+}
+
+//#520: the figure a game places with a fully transparent half, as Bubble
+//Bobble's screen full of 8x16 bubbles is drawn - two sprites side by side, each
+//one art in its lower half and nothing in its upper one. `withBlanks` is the
+//difference #470 made to the OAM stream: the recorder stopped keeping the
+//artless halves, and these four cells became two.
+//
+//The artless half is written as the loader's own "nothing here" shape,
+//`kEmptyCell`, which every shape-keyed consumer already skips - it names no art
+//and can never be a sheet cell or a `<tile>` rule.
+std::vector<OamFrame> BlankHalfFigureFrames(uint32_t frames, bool withBlanks)
+{
+	std::vector<OamFrame> out;
+	for(uint32_t f = 0; f < frames; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		uint32_t x0 = 40 + f * 2;
+		uint32_t y0 = 90;
+		if(withBlanks) {
+			for(uint32_t i = 0; i < 2; i++) {
+				//The entry production records for a blank half (#520), so this
+				//fixture and RecordSpritePlacement cannot drift apart.
+				frame.Entries.push_back(MesenSheets::PlacementEntry((uint8_t)(x0 + i * 8), (uint8_t)y0));
+			}
+		}
+		for(uint32_t i = 0; i < 2; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = (uint8_t)(x0 + i * 8);
+			art.Y = (uint8_t)(y0 + 8);
+			frame.Entries.push_back(art);
+		}
+		out.push_back(frame);
+	}
+	return out;
+}
+
+void TestAPoseKeepsAFigureWhoseHalfIsArtless()
+{
+	std::vector<OamFrame> frames = BlankHalfFigureFrames(6, true);
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	Check(vocab.Entries.size() == 1, "#520: an artless placement names no vocabulary node",
+		"entries=" + std::to_string(vocab.Entries.size()));
+
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.PosesFound == 1,
+		"#520: the artless halves are the two cells that make the pair a figure, so it is a silhouette",
+		"found=" + std::to_string(stats.PosesFound) + " kept=" + std::to_string(stats.Poses.size()));
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 2,
+		"#520: the pose holds what the game draws - two tiles, never the transparent ones",
+		stats.Poses.empty() ? "no pose" : "tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	if(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 2) {
+		//ADR-0170 §1: normalised to the drawn figure's own top-left, so a
+		//transparent cell above it cannot move the origin.
+		Check(stats.Poses[0].Tiles[0].Dx == 0 && stats.Poses[0].Tiles[0].Dy == 0 &&
+			stats.Poses[0].Tiles[1].Dx == 1 && stats.Poses[0].Tiles[1].Dy == 0,
+			"#520: the pair reads left to right at dy 0, from the drawn top-left",
+			"t0=" + std::to_string(stats.Poses[0].Tiles[0].Dx) + "," + std::to_string(stats.Poses[0].Tiles[0].Dy) +
+			" t1=" + std::to_string(stats.Poses[0].Tiles[1].Dx) + "," + std::to_string(stats.Poses[0].Tiles[1].Dy));
+	}
+	Check(stats.Tracks > 0, "#520: the linker follows the figure, so the track count is not zero",
+		"tracks=" + std::to_string(stats.Tracks));
+
+	//The control is what #470's stream leaves behind: the same two drawn tiles
+	//with no placement above them. ADR-0170 §2's floor counts the tiles the
+	//cluster holds, and two cells are below it - so the figure disappears.
+	PoseStats alone = BuildPoses(BlankHalfFigureFrames(6, false), vocab);
+	Check(alone.PosesFound == 0, "#520 control: two cells alone stay under the kPoseMinTiles floor",
+		"found=" + std::to_string(alone.PosesFound));
+
+	//...and the floor still counts cells, not entries: four artless halves that
+	//all round onto one cell are one member, so they make no figure either.
+	std::vector<OamFrame> collapsed;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		for(uint32_t i = 0; i < 4; i++) {
+			OamEntry blank;
+			blank.Shape = kEmptyCell;
+			blank.X = (uint8_t)(40 + i);
+			blank.Y = (uint8_t)90;
+			frame.Entries.push_back(blank);
+		}
+		OamEntry art;
+		art.Shape = 7;
+		art.X = 40;
+		art.Y = 98;
+		frame.Entries.push_back(art);
+		collapsed.push_back(frame);
+	}
+	PoseStats degenerated = BuildPoses(collapsed, vocab);
+	Check(degenerated.PosesFound == 0,
+		"#520: artless cells that collapse onto one cell are one member, not four tiles",
+		"found=" + std::to_string(degenerated.PosesFound));
+}
+
+//#520 review: ADR-0170 §2's floor counts the *cells* a cluster holds, and a cell
+//is one cell however many entries sit on it - two shapes (ADR-0225 §1) or a
+//drawn tile and an artless half. Summing the drawn set and the artless set
+//counts such a cell twice, so a three-cell figure passes as a four-cell one and
+//transient junk gets a silhouette: the opposite of what the floor is for.
+void TestThePoseFloorCountsCellsNotTheSumOfTwoSets()
+{
+	//Three drawn cells, with the artless half the game placed stacked on one of
+	//them. Three cells, so no silhouette.
+	std::vector<OamFrame> stacked;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		const uint8_t xs[3] = { 40, 48, 40 };
+		const uint8_t ys[3] = { 90, 90, 98 };
+		for(int i = 0; i < 3; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = xs[i];
+			art.Y = ys[i];
+			frame.Entries.push_back(art);
+		}
+		frame.Entries.push_back(MesenSheets::PlacementEntry(40, 90));
+		stacked.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(stacked);
+	PoseStats s = BuildPoses(stacked, vocab);
+	Check(s.PosesFound == 0,
+		"#520: three drawn cells plus an artless half on one of them are three cells, under the floor",
+		"found=" + std::to_string(s.PosesFound) + " kept=" + std::to_string(s.Poses.size()));
+
+	//The union is still counted where the cells really are distinct: two drawn
+	//and two artless, none sharing a cell, are four.
+	std::vector<OamFrame> apart;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		for(uint32_t i = 0; i < 2; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = (uint8_t)(40 + i * 8);
+			art.Y = (uint8_t)98;
+			frame.Entries.push_back(art);
+			frame.Entries.push_back(MesenSheets::PlacementEntry((uint8_t)(40 + i * 8), 90));
+		}
+		apart.push_back(frame);
+	}
+	PoseStats u = BuildPoses(apart, vocab);
+	Check(u.PosesFound == 1 && u.Poses.size() == 1 && u.Poses[0].Tiles.size() == 2,
+		"#520 control: four distinct cells - two drawn, two artless - are a figure",
+		"found=" + std::to_string(u.PosesFound) + " tiles=" + std::to_string(u.Poses.empty() ? 0 : (int)u.Poses[0].Tiles.size()));
 }
 
 //ADR-0232 (#467): a fake $0000-$1FFF pattern space for the bank-id tests. `Write`
@@ -11267,6 +11455,9 @@ int main()
 	TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline();
 	TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape();
 	TestAFullyTransparentSpriteHalfNeverReachesTheRegistry();
+	TestTheLatchHandsABlankHalfToThePlacementCallbackAlone();
+	TestThePoseFloorCountsCellsNotTheSumOfTwoSets();
+	TestAPoseKeepsAFigureWhoseHalfIsArtless();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();

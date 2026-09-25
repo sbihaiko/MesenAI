@@ -65,7 +65,10 @@ public:
 				mapper->CopyChrTile((uint32_t)absoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
 				ApplyFlips(sprite.TileData, sprite.HorizontalMirroring, sprite.VerticalMirroring);
 			},
-			[this](const HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSpriteBank(sprite); });
+			[this](const HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSpriteBank(sprite); },
+			//#520: a blank half names no shape and reaches no sheet, but it is
+			//a half the PPU placed and the pose pass reads the placement.
+			[this](uint8_t x, uint8_t y) { _hdPackBuilder->RecordSpritePlacement(x, y); });
 		_oamLatch.Clear();
 		return nullptr;
 	}

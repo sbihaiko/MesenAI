@@ -571,6 +571,16 @@ namespace MesenSheets
 	//purpose, so without it the OAM stream could settle the shape half of a
 	//spriteNearby condition and never its colour half. It is part of entry
 	//identity: two frames that differ only in sprite colour are two frames.
+	//One sprite half the PPU placed: the shape it was drawn from, its screen
+	//origin in pixels, and the palette its row was drawn in.
+	//
+	//#520: Shape == kEmptyCell is an *artless placement* - a half whose 16 bytes
+	//are all zero, which #470 (IsFullyTransparent) keeps out of the shape
+	//registry because the loader never draws one and no `<tile>` rule can exist
+	//for it. The cell is still part of the figure the game drew, which is what
+	//ADR-0170 §1 segments, so the OAM stream carries it with no shape rather
+	//than dropping it. Every shape-keyed consumer already skips kEmptyCell:
+	//BuildSpriteVocabulary, Accumulate, SpriteNearbyPalettes and the stream dump.
 	struct OamEntry
 	{
 		ShapeId Shape = kEmptyCell;
@@ -580,6 +590,25 @@ namespace MesenSheets
 
 		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y && Palette == o.Palette; }
 	};
+
+	//#520: the OAM entry an *artless placement* is - a sprite half the PPU
+	//placed whose 16 bytes are all zero (#470's IsFullyTransparent). It names no
+	//shape, so it reaches no sheet cell, no `<tile>` rule and no vocabulary node;
+	//it is a cell of the figure the game drew, which is what ADR-0170 §1
+	//segments. `HdPackBuilder::RecordSpritePlacement` is the only production
+	//caller and this is the only thing it builds, so a reader can pin the entry
+	//host-free, without HdPackBuilder.cpp in the unit-test link set (ADR-0127).
+	inline OamEntry PlacementEntry(uint8_t x, uint8_t y)
+	{
+		OamEntry entry;
+		entry.Shape = kEmptyCell;
+		entry.X = x;
+		entry.Y = y;
+		//No art was drawn, so no palette was observed on the half. The pose pass
+		//reads positions; the palette-keyed passes skip kUnknownPalette.
+		entry.Palette = kUnknownPalette;
+		return entry;
+	}
 
 	//One frame's OAM, in OAM order. Consecutive identical frames collapse into
 	//RepeatCount and the stream is capped at kMaxSheetFrames, exactly like
@@ -625,6 +654,14 @@ namespace MesenSheets
 		std::vector<bool> paletteEmitted(paletteColors.size(), false);
 		for(const OamFrame& frame : frames) {
 			for(const OamEntry& entry : frame.Entries) {
+				//#520: an artless placement (kEmptyCell, #470's fully
+				//transparent half) names no art, so there is nothing for the
+				//dump to resolve it to - and ADR-0222's contract is that every
+				//entry the dump lists does resolve to tile data and palette.
+				//The pose pass reads it; this dump does not carry it.
+				if(entry.Shape == kEmptyCell) {
+					continue;
+				}
 				if(entry.Shape < shapeTiles.size() && !shapeEmitted[entry.Shape]) {
 					shapeEmitted[entry.Shape] = true;
 					out << "K " << entry.Shape << ' ';
@@ -644,6 +681,9 @@ namespace MesenSheets
 			}
 			out << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
 			for(const OamEntry& entry : frame.Entries) {
+				if(entry.Shape == kEmptyCell) {
+					continue; //#520: an artless placement resolves to nothing
+				}
 				out << ' ' << entry.Shape << ',' << (int)entry.X << ',' << (int)entry.Y << ',' << (uint32_t)entry.Palette;
 			}
 			out << '\n';
