@@ -31,7 +31,9 @@ recorded format and does not contradict an ADR.
   with the state at that moment.
 - A sprite half is latched the first time one of its rows is fetched with
   rendering on and PPUMASK sprites enabled. The latch decodes it with the
-  PPUCTRL, CHR mapping and palette of that fetch.
+  PPUCTRL, CHR mapping and palette of that fetch. (Amended by the PR #468
+  review below: the draw gate and the palette now come from the row the half
+  is drawn on.)
 - `OnBeforeSendFrame` hands the latched halves to `RecordSprite` in the same
   order as before: OAM index, then the top half first.
 - It still reads OAM, not secondary OAM, so sprites hidden by the 8-per-line
@@ -93,3 +95,53 @@ measurement's `hires.txt` exactly (sha256 `1b84b252…`).
   and ad-hoc signed.
 - `nm` on the base finds `CaptureOam` and no latch symbol. On the fix and the final binary it finds
   2 `OamFetchLatch`/`LatchFetchedSprites` symbols and no `CaptureOam`.
+
+## PR #468 review (2026-09-24)
+
+Three Codex findings on the cycle-257 latch. Two are fixed here; the third is
+#458, fixed on the stacked branch `fix/458-mmc2-bank`.
+
+- **Row-level draw evidence (4100239580).** The latch gated a half on
+  PPUMASK's sprite bit at cycle 257. With the background on, rendering stays
+  on and the PPU fetches sprites whatever that bit says; the bit only decides,
+  pixel by pixel, whether the next row shows them, and that is also what
+  `DrawPixel`'s `<tile>` rule follows. Now `HdBuilderPpu::DrawPixel` notes
+  whether any pixel of the row was drawn with rendering on and sprites
+  enabled. The latch decodes at cycle 257 of line R-1 when rendering is on
+  (the fetch), and records the half at cycle 257 of line R only if row R
+  showed sprites.
+- **Palette at draw time (4100239590).** The PPU reads palette RAM as it
+  draws. `DrawPixel` snapshots the four sprite palettes at the row's first
+  sprite-enabled pixel, and a half takes the palette of the row that records
+  it, not the one at its fetch.
+- **CHR bank at the slot's real fetch (4100239586).** This is #458. The
+  stacked branch logs the absolute CHR address of every row fetch
+  (`SpriteFetchLog`) and names each half by the bank of its topmost fetched
+  row.
+
+A frame that holds PPUMASK and palette RAM steady records exactly what it did
+before; the four #450 cases pass unchanged, with their timelines split into
+"at cycle 257" and "on the row" states.
+
+**Red** (three new cases, harness wired as the pre-review `HdBuilderPpu`:
+fetch gated on rendering and sprites at cycle 257, palette read at the
+fetch), verbatim:
+
+```
+FAIL  PR #468: a half drawn on rows that show sprites is recorded though PPUMASK hid sprites at each of its fetches: got (none)
+FAIL  PR #468: a half fetched with sprites on but drawn on no row that shows sprites is not recorded: got (24,151,0420,FF162730) (32,31,0430,FF162730) 
+FAIL  PR #468: a half carries the palette its rows were drawn in (FF30201A), not the one at its fetch: got (24,100,0420,FF0A1A2A) 
+1106/1109 cases passed
+```
+
+**Green:** 1109/1109.
+
+**Mutations:**
+
+| Mutation | Result |
+|---|---|
+| The latch records pending halves whether or not their row showed sprites | 2 fail (1107/1109): the #450 partly-drawn case and the hidden-row case |
+| The latch keeps the palette read at the fetch | 1 fails (1108/1109): the palette case |
+
+The E2E for these changes was run on the chain head, `fix/458-mmc2-bank`
+(see its validation log).

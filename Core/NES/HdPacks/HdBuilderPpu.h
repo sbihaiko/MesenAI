@@ -17,6 +17,10 @@ private:
 	//#450: the frame's sprite halves, each decoded when the PPU fetched it
 	//(see OnBeforeSendFrame and OamFetchLatch).
 	OamFetchLatch _oamLatch;
+	//PR #468 review: whether the row being drawn showed sprites at any pixel,
+	//and the sprite palettes it drew with, handed to _oamLatch at cycle 257.
+	bool _spriteRowShown = false;
+	uint32_t _spriteRowPalettes[4] = {};
 	uint32_t _chrRamBankSize = 0;
 	uint32_t _chrRamIndexMask = 0;
 	vector<uint32_t> _bankHashes;
@@ -38,8 +42,8 @@ public:
 	//capture is on.
 	//Each half is latched at its sprite fetch, not read here at frame end
 	//(#450): a half is recorded only if one of its rows was fetched with
-	//rendering on and sprites enabled, under the PPUCTRL, CHR mapping and
-	//palette of that fetch. That keeps #183's rule - power-on, with OAM all
+	//rendering on and then drawn with sprites showing, under the PPUCTRL and
+	//CHR mapping of that fetch and the palette of that row. That keeps #183's rule - power-on, with OAM all
 	//zero, palette RAM at its boot values and rendering still disabled,
 	//records nothing - and adds the mid-frame case #183's per-pixel gate let
 	//through: Castlevania switching PPUCTRL to 8x8 and turning rendering off
@@ -92,6 +96,13 @@ public:
 
 	void DrawPixel()
 	{
+		if(!_spriteRowShown && _prevRenderingEnabled && _mask.SpritesEnabled) {
+			_spriteRowShown = true;
+			for(uint8_t i = 0; i < 4; i++) {
+				uint8_t offset = 0x10 | (i << 2);
+				_spriteRowPalettes[i] = ReadPaletteRam(offset + 3) | (ReadPaletteRam(offset + 2) << 8) | (ReadPaletteRam(offset + 1) << 16) | 0xFF000000;
+			}
+		}
 		if(IsRenderingEnabled() || ((_videoRamAddr & 0x3F00) != 0x3F00)) {
 			BaseMapper* mapper = _console->GetMapper();
 			bool isChrRam = !mapper->HasChrRom();
@@ -180,12 +191,15 @@ private:
 
 	//#450: the sprite halves the PPU fetches for the next screen row, decoded
 	//now - the moment the PPU itself reads PPUCTRL for them - with the CHR
-	//and palette this fetch sees.
+	//this fetch sees. The row just drawn hands over whether it showed sprites
+	//and its palettes, which record the halves fetched for it.
 	void LatchFetchedSprites()
 	{
 		BaseMapper* mapper = _console->GetMapper();
 		bool isChrRam = !mapper->HasChrRom();
-		_oamLatch.OnSpriteFetch(_scanline, _prevRenderingEnabled && _mask.SpritesEnabled, _spriteRam, _control.LargeSprites, _control.SpritePatternAddr,
+		bool rowShown = _spriteRowShown;
+		_spriteRowShown = false;
+		_oamLatch.OnSpriteFetch(_scanline, rowShown, _spriteRowPalettes, _prevRenderingEnabled, _spriteRam, _control.LargeSprites, _control.SpritePatternAddr,
 			[&](const OamFetchLatch::Half& h, HdPpuTileInfo& sprite) {
 				int32_t absoluteTileAddr = mapper->GetPpuAbsoluteAddress(h.TileAddr).Address;
 				if(absoluteTileAddr < 0) {
@@ -193,7 +207,7 @@ private:
 				}
 				sprite = {};
 				sprite.TileIndex = (isChrRam ? (h.TileAddr & _chrRamIndexMask) : (uint32_t)absoluteTileAddr) / 16;
-				sprite.PaletteColors = ReadPaletteRam(h.PaletteOffset + 3) | (ReadPaletteRam(h.PaletteOffset + 2) << 8) | (ReadPaletteRam(h.PaletteOffset + 1) << 16) | 0xFF000000;
+				//PaletteColors comes from the row the half is drawn on.
 				sprite.IsChrRamTile = isChrRam;
 				mapper->CopyChrTile((uint32_t)absoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
 				ApplyFlips(sprite.TileData, h.HorizontalMirror, h.VerticalMirror);
@@ -224,6 +238,7 @@ public:
 			//#450: halves latched before a load belong to a frame the loaded
 			//timeline never drew.
 			_oamLatch.Clear();
+			_spriteRowShown = false;
 		}
 	}
 
