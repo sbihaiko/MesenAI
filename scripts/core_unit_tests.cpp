@@ -63,6 +63,7 @@
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
+#include "NES/HdPacks/OamFetchLatch.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
@@ -9596,6 +9597,183 @@ void TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten()
 	Check(got == expected, "PR #461: sheet-at-a-time output is identical to laying every sheet out at once");
 }
 
+//Issue #450: the recorder's OAM snapshot must name the (tile, palette) the
+//PPU fetched, not whatever PPUCTRL/OAM/palette hold when the frame ends. The
+//model drives OamFetchLatch the way HdBuilderPpu does - one call per visible
+//scanline at the start of its sprite fetch (cycle 257), with that moment's
+//state - and reads back what the frame would hand to RecordSprite.
+namespace OamFetchLatchModel
+{
+	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; };
+
+	struct LineState
+	{
+		bool SpritesDrawn = true;
+		bool LargeSprites = false;
+		uint16_t SpritePatternAddr = 0;
+	};
+
+	//Every OAM slot parked off-screen (Y = 0xEF), as a game does.
+	void ClearOam(uint8_t* oam)
+	{
+		memset(oam, 0, 256);
+		for(int i = 0; i < 64; i++) {
+			oam[i * 4] = 0xEF;
+		}
+	}
+
+	void SetSprite(uint8_t* oam, int index, uint8_t y, uint8_t tile, uint8_t attributes, uint8_t x)
+	{
+		oam[index * 4] = y;
+		oam[index * 4 + 1] = tile;
+		oam[index * 4 + 2] = attributes;
+		oam[index * 4 + 3] = x;
+	}
+
+	//stateForLine(line) gives the PPU state at cycle 257 of each visible line.
+	template<typename StateFor>
+	std::vector<Entry> RunFrame(OamFetchLatch& latch, const uint8_t* oam, StateFor&& stateForLine)
+	{
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			LineState s = stateForLine(line);
+			latch.OnSpriteFetch(line, s.SpritesDrawn, oam, s.LargeSprites, s.SpritePatternAddr,
+				[](const OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+					tile.TileIndex = h.TileAddr;
+					return true;
+				});
+		}
+		std::vector<Entry> out;
+		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) {
+			out.push_back({ x, y, (uint16_t)tile.TileIndex });
+		});
+		return out;
+	}
+
+	std::string Describe(const std::vector<Entry>& entries)
+	{
+		std::string s;
+		char buf[32];
+		for(const Entry& e : entries) {
+			snprintf(buf, sizeof(buf), "(%u,%u,%04X) ", e.X, e.Y, e.TileAddr);
+			s += buf;
+		}
+		return s.empty() ? "(none)" : s;
+	}
+}
+
+void TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched()
+{
+	//Castlevania's cut from the gate screen to stage 1 (frame 658): the game
+	//writes PPUCTRL=$00 and PPUMASK=$00 at line 0, cycles 240-252. Sprites
+	//were on for the first pixels of line 0, but no sprite row is drawn on
+	//line 0 and every later fetch happens with rendering off - the frame
+	//drew no sprite at all, whatever OAM and PPUCTRL say at frame end.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 37, 0x21, 0x00, 64);
+	SetSprite(oam, 1, 22, 0x44, 0x02, 128);
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int) {
+		LineState s;
+		s.SpritesDrawn = false;
+		s.LargeSprites = false;
+		return s;
+	});
+	Check(got.empty(), "Issue #450: a frame whose rendering stopped before any sprite fetch records no sprite",
+		"got " + Describe(got));
+}
+
+void TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch()
+{
+	//The same cut, seen one step later: 8x16 sprites draw the top of the
+	//frame, then the game turns rendering off and switches PPUCTRL to 8x8 for
+	//the next screen. The sprite drawn above the switch keeps its 8x16 halves;
+	//the one below it was never drawn and must not appear as an 8x8 half.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x00, 40);  //rows 21-36, drawn
+	SetSprite(oam, 1, 150, 0x22, 0x01, 90); //rows 151-166, after the switch
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		s.SpritesDrawn = line < 100;
+		s.LargeSprites = line < 100;
+		s.SpritePatternAddr = line < 100 ? 0x0000 : 0x1000;
+		return s;
+	});
+	bool ok = got.size() == 2
+		&& got[0].X == 40 && got[0].Y == 21 && got[0].TileAddr == 0x1100
+		&& got[1].X == 40 && got[1].Y == 29 && got[1].TileAddr == 0x1110;
+	Check(ok, "Issue #450: an 8x16 sprite drawn before a mid-frame PPUCTRL switch keeps both halves, and an undrawn one is absent",
+		"got " + Describe(got));
+}
+
+void TestOamLatchKeepsASpriteWhoseLowerRowsDrawAfterSpritesTurnOn()
+{
+	//Sprites enabled from line 104 on: a sprite whose rows straddle that line
+	//is partly drawn and is recorded (with the half the drawn rows belong
+	//to); a sprite wholly above it is not.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 10, 0x30, 0x00, 8);   //rows 11-26, never drawn
+	SetSprite(oam, 1, 100, 0x30, 0x00, 16); //rows 101-116, drawn from row 105
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		s.SpritesDrawn = line >= 104;
+		s.LargeSprites = true;
+		return s;
+	});
+	bool ok = got.size() == 2
+		&& got[0].X == 16 && got[0].Y == 101 && got[0].TileAddr == 0x0300
+		&& got[1].X == 16 && got[1].Y == 109 && got[1].TileAddr == 0x0310;
+	Check(ok, "Issue #450: a partly drawn sprite is recorded and a sprite above the enable line is not",
+		"got " + Describe(got));
+}
+
+void TestOamLatchMatchesTheFrameEndDecodeWhenNothingChangesMidFrame()
+{
+	//Every frame that does not touch the PPU mid-frame must record exactly
+	//what the frame-end decode recorded: OAM order, halves top first, a
+	//vertical flip swapping the 8x16 parts, parked sprites skipped, and a
+	//bottom half that would start at row 240 dropped.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 50, 0x13, 0x80, 30);  //vflip: bottom part first on screen
+	SetSprite(oam, 3, 0x00, 0x20, 0x00, 7); //rows 1-16
+	SetSprite(oam, 5, 0xE7, 0x08, 0x40, 9); //top half rows 232-239, bottom off-screen
+	SetSprite(oam, 9, 0xF0, 0x02, 0x00, 1); //parked
+	OamFetchLatch latch;
+	std::vector<Entry> large = RunFrame(latch, oam, [](int) {
+		LineState s;
+		s.LargeSprites = true;
+		return s;
+	});
+	bool largeOk = large.size() == 5
+		&& large[0].Y == 51 && large[0].TileAddr == 0x1130
+		&& large[1].Y == 59 && large[1].TileAddr == 0x1120
+		&& large[2].X == 7 && large[2].Y == 1 && large[2].TileAddr == 0x0200
+		&& large[3].X == 7 && large[3].Y == 9 && large[3].TileAddr == 0x0210
+		&& large[4].X == 9 && large[4].Y == 232 && large[4].TileAddr == 0x0080;
+	Check(largeOk, "Issue #450: a steady 8x16 frame records the frame-end decode unchanged", "got " + Describe(large));
+
+	std::vector<Entry> small = RunFrame(latch, oam, [](int) {
+		LineState s;
+		s.SpritePatternAddr = 0x1000;
+		return s;
+	});
+	bool smallOk = small.size() == 3
+		&& small[0].Y == 51 && small[0].TileAddr == 0x1130
+		&& small[1].Y == 1 && small[1].TileAddr == 0x1200
+		&& small[2].Y == 232 && small[2].TileAddr == 0x1080;
+	Check(smallOk, "Issue #450: a steady 8x8 frame records the frame-end decode unchanged", "got " + Describe(small));
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -9907,6 +10085,11 @@ int main()
 	TestTheSidecarListsFoldsOnlyWhereThereAreSome();
 	TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn();
 	TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten();
+
+	TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched();
+	TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch();
+	TestOamLatchKeepsASpriteWhoseLowerRowsDrawAfterSpritesTurnOn();
+	TestOamLatchMatchesTheFrameEndDecodeWhenNothingChangesMidFrame();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

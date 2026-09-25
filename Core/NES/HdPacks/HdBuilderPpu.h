@@ -3,6 +3,7 @@
 #include "NES/HdPacks/HdNesPpu.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/HdPacks/HdPackBuilder.h"
+#include "NES/HdPacks/OamFetchLatch.h"
 #include "Shared/Video/VideoDecoder.h"
 #include "Shared/RewindManager.h"
 #include "Utilities/BitUtilities.h"
@@ -13,9 +14,9 @@ class HdBuilderPpu final : public NesPpu<HdBuilderPpu>
 private:
 	HdPackBuilder* _hdPackBuilder = nullptr;
 	bool _needChrHash = false;
-	//#183: set when PPUMASK had sprites on at any pixel of the frame being
-	//drawn; the OAM snapshot is taken only for such a frame (see OnBeforeSendFrame).
-	bool _spritesEnabledThisFrame = false;
+	//#450: the frame's sprite halves, each decoded when the PPU fetched it
+	//(see OnBeforeSendFrame and OamFetchLatch).
+	OamFetchLatch _oamLatch;
 	uint32_t _chrRamBankSize = 0;
 	uint32_t _chrRamIndexMask = 0;
 	vector<uint32_t> _bankHashes;
@@ -32,23 +33,24 @@ public:
 	//F9.5 (ADR-0153 §2): one OAM snapshot per frame for the sprite sheets. Read
 	//from OAM rather than from DrawPixel because the sheet wants the figure the
 	//game *placed*, not the pixels that survived the 8-sprite limit and the
-	//background priority bit. Runs once a frame, before NesConsole closes the
-	//frame on the builder, and is a no-op unless screen capture is on.
-	//Only for a frame that drew with sprites enabled (#183): with PPUMASK
-	//sprites off nothing in OAM is drawn, so DrawPixel never records a <tile>
-	//for it and a sheet cell taken from it would name a key the pack never
-	//emits. The case that showed it is power-on - OAM all zero, palette RAM at
-	//its boot values (sprite palette 0 = 01 34 03), rendering still disabled -
-	//which put tile 0 under palette FF013403 on every golden sheet. The bit is
-	//sampled per drawn pixel, not here at frame end, because a game may flip
-	//PPUMASK mid-frame: enabling sprites in the last hblank must not admit a
-	//frame that drew none, and disabling them late must not drop one that did.
+	//background priority bit. Handed over once a frame, before NesConsole
+	//closes the frame on the builder; RecordSprite is a no-op unless screen
+	//capture is on.
+	//Each half is latched at its sprite fetch, not read here at frame end
+	//(#450): a half is recorded only if one of its rows was fetched with
+	//rendering on and sprites enabled, under the PPUCTRL, CHR mapping and
+	//palette of that fetch. That keeps #183's rule - power-on, with OAM all
+	//zero, palette RAM at its boot values and rendering still disabled,
+	//records nothing - and adds the mid-frame case #183's per-pixel gate let
+	//through: Castlevania switching PPUCTRL to 8x8 and turning rendering off
+	//at line 0 of a screen cut, after which a frame-end decode named 8x8
+	//halves the PPU never drew.
 	void* OnBeforeSendFrame()
 	{
-		if(_spritesEnabledThisFrame) {
-			CaptureOam();
-		}
-		_spritesEnabledThisFrame = false;
+		_oamLatch.ForEachLatched([this](uint8_t x, uint8_t y, HdPpuTileInfo& sprite) {
+			_hdPackBuilder->RecordSprite(x, y, sprite);
+		});
+		_oamLatch.Clear();
 		return nullptr;
 	}
 
@@ -83,11 +85,13 @@ public:
 	__forceinline void ProcessScanline()
 	{
 		ProcessScanlineImpl();
+		if(_cycle == 257 && _scanline >= 0) {
+			LatchFetchedSprites();
+		}
 	}
 
 	void DrawPixel()
 	{
-		_spritesEnabledThisFrame |= _mask.SpritesEnabled;
 		if(IsRenderingEnabled() || ((_videoRamAddr & 0x3F00) != 0x3F00)) {
 			BaseMapper* mapper = _console->GetMapper();
 			bool isChrRam = !mapper->HasChrRom();
@@ -174,51 +178,31 @@ private:
 		MesenSheets::ApplyTileFlips(tileData, horizontalMirror, verticalMirror);
 	}
 
-	void CaptureOam()
+	//#450: the sprite halves the PPU fetches for the next screen row, decoded
+	//now - the moment the PPU itself reads PPUCTRL for them - with the CHR
+	//and palette this fetch sees.
+	void LatchFetchedSprites()
 	{
 		BaseMapper* mapper = _console->GetMapper();
 		bool isChrRam = !mapper->HasChrRom();
-		uint32_t halves = _control.LargeSprites ? 2 : 1;
-		for(uint32_t i = 0; i < 64; i++) {
-			uint8_t spriteY = _spriteRam[i * 4];
-			//239 and up is how a game parks a sprite off-screen
-			if(spriteY >= 0xEF) {
-				continue;
-			}
-			uint8_t tileIndex = _spriteRam[i * 4 + 1];
-			uint8_t attributes = _spriteRam[i * 4 + 2];
-			uint8_t spriteX = _spriteRam[i * 4 + 3];
-			uint8_t paletteOffset = ((attributes & 0x03) << 2) | 0x10;
-			bool horizontalMirror = (attributes & 0x40) != 0;
-			bool verticalMirror = (attributes & 0x80) != 0;
-
-			for(uint32_t half = 0; half < halves; half++) {
-				//An 8x16 sprite is recorded as its two 8x8 halves, top half first
-				//on screen whichever way the sprite is flipped.
-				uint32_t part = verticalMirror ? (halves - 1 - half) : half;
-				uint16_t tileAddr = _control.LargeSprites
-					? (uint16_t)((((tileIndex & 0x01) << 12) | ((tileIndex & ~0x01) << 4)) + part * 16)
-					: (uint16_t)(_control.SpritePatternAddr | (tileIndex << 4));
-				int32_t absoluteTileAddr = mapper->GetPpuAbsoluteAddress(tileAddr).Address;
-				uint32_t y = spriteY + 1 + half * 8;
-				if(absoluteTileAddr < 0 || y >= 240) {
-					continue;
+		_oamLatch.OnSpriteFetch(_scanline, _prevRenderingEnabled && _mask.SpritesEnabled, _spriteRam, _control.LargeSprites, _control.SpritePatternAddr,
+			[&](const OamFetchLatch::Half& h, HdPpuTileInfo& sprite) {
+				int32_t absoluteTileAddr = mapper->GetPpuAbsoluteAddress(h.TileAddr).Address;
+				if(absoluteTileAddr < 0) {
+					return false;
 				}
-
-				HdPpuTileInfo sprite = {};
-				sprite.TileIndex = (isChrRam ? (tileAddr & _chrRamIndexMask) : (uint32_t)absoluteTileAddr) / 16;
-				sprite.PaletteColors = ReadPaletteRam(paletteOffset + 3) | (ReadPaletteRam(paletteOffset + 2) << 8) | (ReadPaletteRam(paletteOffset + 1) << 16) | 0xFF000000;
+				sprite = {};
+				sprite.TileIndex = (isChrRam ? (h.TileAddr & _chrRamIndexMask) : (uint32_t)absoluteTileAddr) / 16;
+				sprite.PaletteColors = ReadPaletteRam(h.PaletteOffset + 3) | (ReadPaletteRam(h.PaletteOffset + 2) << 8) | (ReadPaletteRam(h.PaletteOffset + 1) << 16) | 0xFF000000;
 				sprite.IsChrRamTile = isChrRam;
 				mapper->CopyChrTile((uint32_t)absoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
-				ApplyFlips(sprite.TileData, horizontalMirror, verticalMirror);
+				ApplyFlips(sprite.TileData, h.HorizontalMirror, h.VerticalMirror);
 				//ADR-0178: recorded, not just consumed - HdPackBuilder un-bakes
 				//them to recover the key the run time actually looks up.
-				sprite.HorizontalMirroring = horizontalMirror;
-				sprite.VerticalMirroring = verticalMirror;
-
-				_hdPackBuilder->RecordSprite(spriteX, (uint8_t)y, sprite);
-			}
-		}
+				sprite.HorizontalMirroring = h.HorizontalMirror;
+				sprite.VerticalMirroring = h.VerticalMirror;
+				return true;
+			});
 	}
 
 public:
@@ -237,6 +221,9 @@ public:
 		NesPpu::Serialize(s);
 		if(!s.IsSaving()) {
 			_needChrHash = true;
+			//#450: halves latched before a load belong to a frame the loaded
+			//timeline never drew.
+			_oamLatch.Clear();
 		}
 	}
 

@@ -441,6 +441,7 @@
     <ClInclude Include="NES\HdPacks\HdPackConditions.h" />
     <ClInclude Include="NES\HdPacks\HdPackErrorDedupe.h" />
     <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h" />
+    <ClInclude Include="NES\HdPacks\OamFetchLatch.h" />
     <ClInclude Include="NES\HdPacks\HdPackLoader.h" />
     <ClInclude Include="NES\HdPacks\HdVideoFilter.h" />
     <ClInclude Include="NES\HdPacks\IOggSource.h" />
