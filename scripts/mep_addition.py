@@ -84,6 +84,16 @@ def is_index_key(token: str) -> bool:
     return len(str(token).strip()) < 32
 
 
+def is_blank_sprite(tile_data: str, palette: str) -> bool:
+    """True for a sprite tile the NES draws as fully transparent: all 16 bytes
+    of pattern data zero (colour 0 everywhere) under a sprite palette key,
+    whose first byte `HdBuilderPpu` sets to FF. A background tile with the same
+    data is not blank - its colour 0 is the backdrop, which the NES draws.
+    `mep_build` never lets such a key claim paint (#464, ADR-0153 §4)."""
+    data = str(tile_data).strip()
+    return len(data) == 32 and data.strip("0") == "" and str(palette).strip().upper().startswith("FF")
+
+
 # The `<ver>` at which the loader reads a short tileData field as hex. Below
 # it the field is decimal (`HdPackLoader::ReadTileData`, `Version <= 102` ->
 # `std::stoi`), so the same text names a different index on either side.

@@ -484,7 +484,18 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   sheet fails the build with an ownership error instead of a silent
   all-green success (#253); map-vs-metatiles both-painted stays a logged
   precedence choice. `scripts/test_mep_build.py` is the acceptance test
-  wired into `make doc-checks`, and asserts these halves.
+  wired into `make doc-checks`, and asserts these halves. A **blank sprite
+  key** (32 zero hex digits under an `FF......` sprite palette,
+  `mep_addition.is_blank_sprite`: the NES draws nothing) never claims its
+  key by paint, even when its cell differs from the twin. A composed kit
+  sheet can place it in the same rect as another tile (Castlevania
+  `usr017`), so that paint belongs to the other key. It falls back to the
+  untouched rule, and among its untouched crops one whose cell nobody
+  painted wins before the kind rank; it is never counted as muted paint
+  (#464, ADR-0153 §4 amendment 2026-09-25). A background tile with the same
+  data is not blank (its colour 0 is the drawn backdrop) and keeps the
+  ordinary rule. Covered by `scripts/test_mep_build_blank_key.py`, also
+  wired into `make doc-checks`.
   **Sidecar palette fields (ADR-0230, F14.9; producer contract in
   `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
   "brightness"}]`. For each fold, `build` emits one extra exact
