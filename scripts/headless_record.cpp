@@ -1433,6 +1433,11 @@ int main(int argc, char** argv)
 	}
 
 	bool captureFailed = false;
+	//Issue #506: set when the HUD capture froze the emulation thread on the
+	//emulator's run lock (see the capture block). The lock is released just
+	//before Stop(), on this thread, because Stop() joins the thread that is
+	//waiting for it.
+	bool emulatorFrozen = false;
 	if(capture) {
 		//F9.15: the frame never reaches the disk. Two calls, because the size
 		//of the capture is only known after it is taken and the pixels must
@@ -1466,14 +1471,14 @@ int main(int argc, char** argv)
 				//   DisplayMessage below and disables it again, so the queue
 				//   gains exactly that one toast and nothing the resumed run may
 				//   throw at the OSD in the meantime.
-				//2. The capture is taken *while the emulator is running*, not on
+				//2. The capture is taken with the emulator *not paused*, not on
 				//   the paused frame the captures above used. SystemHud::Draw
 				//   paints the pause icon on every paused frame - its one
 				//   always-on element - so a paused HUD capture could never read
 				//   blank=1, and blank=0 would not mean a message was queued.
-				//   Resuming here (the run's pause latch was consumed when it
-				//   stopped at its target frame, so the emulator runs until
-				//   re-armed below) drops that icon from the draw.
+				//   Clearing the pause flag (the run's pause latch was consumed
+				//   when it stopped at its target frame) drops that icon from
+				//   the draw - without letting a frame run, see below.
 				//Together they restore the ADR's meaning for blank: uniform
 				//transparent = no message, anything else = one is queued.
 				bool queuedToast = !hudMessageTitle.empty();
@@ -1482,19 +1487,55 @@ int main(int argc, char** argv)
 					DisplayMessage((char*)hudMessageTitle.c_str(), (char*)hudMessageText.c_str(), (char*)"");
 					HeadlessSetOsdEnabled(false);
 				}
+				//Issue #506: the resume above is for the pause icon alone, and it
+				//must not move the run. It did: the stop was re-armed only after
+				//the HUD read, at whatever frame the emulation thread had reached
+				//by then, so a loaded machine put "capture finished", the last
+				//sync-trace sample and the save-state 1-6 frames past the target
+				//while the frame capture above stayed fixed on the paused frame.
+				//The emulation thread is frozen on the emulator's own run lock
+				//instead of left running: with the pause flag cleared, IsPaused()
+				//is false, so SystemHud::Draw skips the pause icon and `blank`
+				//keeps the meaning ADR-0167 gave it, and the thread cannot take a
+				//frame, so the counter, the console state and the state this run
+				//writes all stay on the frame it parked on. The lock is held to
+				//the end of the run (released just before Stop(), which needs the
+				//thread able to leave the lock wait to be joined).
+				HeadlessLockEmulator();
+				emulatorFrozen = true;
 				Resume();
 				if(queuedToast) {
-					//The run's pause latch was consumed, so the emulator is now
-					//running frames. Give the decode pipeline a moment to run its
-					//first UpdateFrame(s) after the resume before capturing: a HUD
-					//capture taken in the first instants after Resume() would
-					//occasionally miss the just-queued toast (observed ~1/3 of
-					//runs with no settle, 0/N with this one) - the same class of
-					//decode-thread transient the 200ms settle above drains before
-					//the frame capture. 100ms is comfortably inside the toast's
-					//3000ms lifetime.
+					//The run is frozen, not paused: no frame runs, but the toast's
+					//fade-in and expiry are wall-clock (MessageInfo::GetOpacity),
+					//so a moment still has to pass before the capture. Its reason
+					//was a decode-thread transient observed before this freeze -
+					//the capture read the HUD surface before the just-queued
+					//toast was in the queue (~1/3 of runs with no settle, 0/N with
+					//this one). 100ms is comfortably inside the toast's 3000ms
+					//lifetime.
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				}
+				//Issue #506 test seam: the wall clock this read costs was the
+				//run's frame error, so a case that wants to prove it no longer is
+				//has to be able to make the read slow on purpose. Off unless the
+				//variable is set - nothing else in the harness reads it, and it
+				//changes no behaviour of its own.
+#ifdef _MSC_VER
+				//getenv is not deprecated, MSVC's CRT just says so (C4996), and
+				//this file is built by the makefile only - the guard keeps the
+				//option open without a bare disable.
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
+				if(const char* hudReadDelay = std::getenv("HEADLESS_HUD_CAPTURE_DELAY_MS")) {
+					uint32_t delayMs = (uint32_t)std::strtoul(hudReadDelay, nullptr, 10);
+					if(delayMs > 0) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+					}
+				}
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 				uint32_t hudWidth = 0, hudHeight = 0, hudPixelCount = 0;
 				if(!HeadlessCaptureHud(width, height, &hudWidth, &hudHeight, &hudPixelCount)) {
 					fprintf(stderr, "hud capture failed: degenerate size %ux%u\n", width, height);
@@ -1511,11 +1552,6 @@ int main(int argc, char** argv)
 							hudWidth, hudHeight, FrameCaptureMath::Checksum(hudPixels.data(), hudPixelCount), hudBorders.IsBlank ? 1 : 0);
 					}
 				}
-				//Re-arm the pause latch at the frame the run has reached so the
-				//emulator parks again (within a frame of this call) instead of
-				//free-running into the tail's Stop(). Nothing after this reads
-				//the frame count as a contract, but the run should end parked.
-				HeadlessSetPauseFrame(HeadlessGetFrameCount());
 			}
 		}
 	}
@@ -1662,6 +1698,16 @@ int main(int argc, char** argv)
 		GetLog(log.data(), (uint32_t)log.size());
 		log.resize(strlen(log.c_str()));
 		printf("--- core log ---\n%s--- end log ---\n", log.c_str());
+	}
+	if(emulatorFrozen) {
+		//Issue #506: the run was ended by freezing the emulation thread rather
+		//than by parking it, so release it here - the count is still the frame
+		//the run parked on, and the stop armed on that frame parks the emulator
+		//again within one frame of the release, exactly as a plain run ends.
+		//Everything that reads the frame count, the trace or the state has
+		//already run, so what Stop() cuts short is one frame nobody asked for.
+		HeadlessSetPauseFrame(HeadlessGetFrameCount());
+		HeadlessUnlockEmulator();
 	}
 	Stop();
 	Release();
