@@ -64,6 +64,7 @@
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/OamFetchLatch.h"
+#include "NES/HdPacks/SpriteFetchLog.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
@@ -9866,6 +9867,240 @@ void TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn()
 		"got " + Describe(got));
 }
 
+//--- Issue #458: a sprite is named by the CHR bank its fetch read ----------
+
+//A two-bank model of the MMC2 left-half latch, just enough to drive the log
+//the way HdBuilderPpu does: fetching the high plane of row 0 of pattern $FD
+//($0FD8) selects the $FD bank for every later fetch, $FE ($0FE8) the $FE bank
+//(MMC2.h's NotifyVramAddressChange). Banks $05 and $1E are the two
+//Punch-Out!! used.
+struct Mmc2LeftLatchModel
+{
+	uint32_t FdBank = 0x1E;
+	uint32_t FeBank = 0x05;
+	bool LatchFd = false;
+
+	int32_t Absolute(uint16_t patternAddr) const
+	{
+		return (int32_t)(((LatchFd ? FdBank : FeBank) << 12) | (patternAddr & 0x0FFF));
+	}
+
+	static void Log(SpriteFetchLog& log, int32_t scanline, uint8_t x, uint16_t addr, int32_t abs) { log.Record(scanline, x, addr, abs); }
+	static void Log(OamFetchLatch& latch, int32_t scanline, uint8_t x, uint16_t addr, int32_t abs) { latch.OnRowFetch(scanline, x, addr, abs); }
+
+	//One 8x8 sprite row fetched on `scanline`, logged the way
+	//StoreSpriteInformation logs it: resolved *before* the latch reacts to it.
+	template<typename Sink>
+	void FetchRow(Sink& log, int32_t scanline, uint8_t x, uint8_t tile, uint8_t row)
+	{
+		uint16_t addr = (uint16_t)((tile << 4) + row);
+		Log(log, scanline, x, addr, Absolute(addr));
+		if(row == 0 && tile == 0xFD) {
+			LatchFd = true;
+		} else if(row == 0 && tile == 0xFE) {
+			LatchFd = false;
+		}
+	}
+
+	//An 8x8 sprite whose top row is drawn on screen line `screenY`: each of its
+	//eight rows is fetched on the scanline before the one that draws it.
+	template<typename Sink>
+	void FetchSprite(Sink& log, uint32_t screenY, uint8_t x, uint8_t tile)
+	{
+		for(uint8_t row = 0; row < 8; row++) {
+			FetchRow(log, (int32_t)(screenY - 1 + row), x, tile, row);
+		}
+	}
+};
+
+void TestASpriteIsNamedByTheBankItsFetchReadNotTheBankLeftAtFrameEnd()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	mmc2.FetchSprite(log, 96, 128, 0x80);  //Glass Joe's tile $80, latch on $FE: bank $05
+	mmc2.FetchSprite(log, 160, 40, 0xFD);  //a latch tile further down flips to bank $1E
+	int32_t frameEnd = mmc2.Absolute(0x0800);
+	Check(frameEnd == 0x1E800, "#458: the model leaves the latch on bank $1E at frame end", std::to_string(frameEnd));
+	int32_t named = log.Resolve(128, 96, 0x0800, frameEnd);
+	Check(named == 0x05800, "#458: the sprite drawn from bank $05 is named 0580, not 1E80",
+		"got index " + std::to_string(named / 16) + ", want " + std::to_string(0x0580));
+}
+
+void TestTheSameTileBeforeAndAfterALatchSwitchIsNamedTwice()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	mmc2.FetchSprite(log, 40, 16, 0x81);   //bank $05
+	mmc2.FetchSprite(log, 60, 16, 0xFD);   //latch -> $1E
+	mmc2.FetchSprite(log, 80, 200, 0x81);  //bank $1E
+	int32_t frameEnd = mmc2.Absolute(0x0810);
+	Check(log.Resolve(16, 40, 0x0810, frameEnd) == 0x05810, "#458: the copy fetched before the switch is named from bank $05");
+	Check(log.Resolve(200, 80, 0x0810, frameEnd) == 0x1E810, "#458: the copy fetched after the switch is named from bank $1E");
+	Check(log.Resolve(16, 60, 0x0FD0, frameEnd) == 0x05FD0, "#458: the latch tile itself is named from the bank it was read from, $05");
+}
+
+void TestASpriteSplitByALatchSwitchIsNamedByItsTopRow()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	for(uint8_t row = 0; row < 8; row++) {
+		mmc2.FetchRow(log, 99 + row, 64, 0x82, row);
+		if(row == 3) {
+			mmc2.FetchRow(log, 99 + row, 120, 0xFD, 0); //a latch sprite on the same scanline
+		}
+	}
+	Check(log.Resolve(64, 100, 0x0820, mmc2.Absolute(0x0820)) == 0x05820, "#458: a half drawn from two banks is named by the bank of its first row");
+}
+
+void TestTheLowerHalfOfA8x16SpriteIsResolvedOnItsOwnRows()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	//8x16 tile pair $80/$81 at $0000: the top half's rows are fetched on
+	//scanlines 49-56, the bottom half's on 57-64, with the latch flipping between.
+	for(uint8_t row = 0; row < 8; row++) {
+		mmc2.FetchRow(log, 49 + row, 72, 0x80, row);
+	}
+	mmc2.LatchFd = true;
+	for(uint8_t row = 0; row < 8; row++) {
+		mmc2.FetchRow(log, 57 + row, 72, 0x81, row);
+	}
+	Check(log.Resolve(72, 50, 0x0800, -1) == 0x05800, "#458: the top half of an 8x16 sprite keeps the bank of its own rows");
+	Check(log.Resolve(72, 58, 0x0810, -1) == 0x1E810, "#458: the bottom half of an 8x16 sprite keeps the bank of its own rows");
+	Check(log.Resolve(72, 58, 0x0800, -1) == -1, "#458: a tile is never matched on rows another tile was fetched on");
+}
+
+void TestALatchTileReadFromTwoBanksNamesBoth()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	mmc2.LatchFd = true;
+	//$FE's row 0 is read from the $FD bank and trips the latch, so rows 1-7
+	//come from the $FE bank: the <tile> rules carry 1EFE and 05FE.
+	mmc2.FetchSprite(log, 120, 88, 0xFE);
+	std::vector<int32_t> banks;
+	log.FetchedAddresses(88, 120, 0x0FE0, banks);
+	Check(banks == std::vector<int32_t>{ 0x1EFE0, 0x05FE0 }, "#458: a latch tile read from two banks names both, its top row's first",
+		std::to_string(banks.size()) + " address(es)");
+	Check(log.Resolve(88, 120, 0x0FE0, -1) == 0x1EFE0, "#458: the entry itself is still named by its top row's bank");
+	mmc2.FetchSprite(log, 140, 88, 0x80);
+	log.FetchedAddresses(88, 140, 0x0800, banks);
+	Check(banks == std::vector<int32_t>{ 0x05800 }, "#458: a sprite read from one bank names one address");
+	log.FetchedAddresses(89, 140, 0x0800, banks);
+	Check(banks.empty(), "#458: an unfetched half names no address");
+}
+
+//The same bank question one level up: OamFetchLatch decodes a half at cycle
+//257 with the mapping of that moment (#450) and must still hand it over under
+//the bank its rows were read from. One frame of the model, run the way
+//HdBuilderPpu runs it: at cycle 257 of each line the latch decodes through the
+//current mapping, then the line's sprite rows are fetched in OAM order.
+namespace MmcLatchFrame
+{
+	struct Named { uint8_t X; uint8_t Y; int32_t Index; };
+	struct Result { std::vector<Named> Sprites; std::vector<int32_t> ExtraIndexes; };
+
+	//`rowsFetched` false leaves the row log empty - a sprite the 8-per-line
+	//limit hid on every row. The latch is reset to $FE at the start of every
+	//line (the background fetches' doing, in this model).
+	//`spritesShown` false draws every row with PPUMASK hiding sprites.
+	Result Run(OamFetchLatch& latch, const uint8_t* oam, bool spritesShown, bool rowsFetched)
+	{
+		Mmc2LeftLatchModel mmc2;
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			mmc2.LatchFd = false;
+			latch.OnSpriteFetch(line, spritesShown, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000,
+				[&](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+					h.AbsoluteAddr = mmc2.Absolute(h.TileAddr);
+					tile.TileIndex = h.AbsoluteAddr / 16;
+					return true;
+				});
+			if(!rowsFetched) {
+				continue;
+			}
+			for(int i = 0; i < 64; i++) {
+				const uint8_t* e = oam + i * 4;
+				int row = line - e[0];
+				if(e[0] < 0xEF && row >= 0 && row < 8) {
+					mmc2.FetchRow(latch, line, e[3], e[1], (uint8_t)row);
+				}
+			}
+		}
+		Result r;
+		latch.ForEachLatched(
+			[&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) { r.Sprites.push_back({ x, y, tile.TileIndex }); },
+			[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
+			[&](const HdPpuTileInfo& tile) { r.ExtraIndexes.push_back(tile.TileIndex); });
+		return r;
+	}
+
+	//Sprite 0 is latch tile $FD, sprite 1 Glass Joe's $80 beside it on the same
+	//lines. On the first line sprite 0's row 0 trips the latch, so sprite 1's
+	//row 0 is read from bank $1E although cycle 257 still mapped bank $05.
+	void Oam(uint8_t* oam)
+	{
+		OamFetchLatchModel::ClearOam(oam);
+		OamFetchLatchModel::SetSprite(oam, 0, 99, 0xFD, 0, 40);
+		OamFetchLatchModel::SetSprite(oam, 1, 99, 0x80, 0, 48);
+	}
+}
+
+void TestTheOamLatchNamesAHalfByTheBankItsTopRowWasReadFrom()
+{
+	uint8_t oam[256];
+	MmcLatchFrame::Oam(oam);
+	OamFetchLatch latch;
+	MmcLatchFrame::Result r = MmcLatchFrame::Run(latch, oam, true, true);
+	bool ok = r.Sprites.size() == 2 && r.Sprites[0].Index == 0x05FD && r.Sprites[1].Index == 0x1E80;
+	char got[96];
+	snprintf(got, sizeof(got), "got %zu sprite(s): %04X %04X", r.Sprites.size(), r.Sprites.empty() ? 0 : r.Sprites[0].Index, r.Sprites.size() < 2 ? 0 : r.Sprites[1].Index);
+	Check(ok, "#458: the latch names the sprite after a latch tile by the bank its top row read (1E80), not the cycle-257 mapping (0580)", got);
+	Check(r.ExtraIndexes == std::vector<int32_t>{ 0x0580 }, "#458: the rows of that sprite read from the other bank reach the sheets as 0580, once",
+		std::to_string(r.ExtraIndexes.size()) + " extra key(s)");
+}
+
+void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
+{
+	uint8_t oam[256];
+	MmcLatchFrame::Oam(oam);
+	OamFetchLatch latch;
+	MmcLatchFrame::Result hidden = MmcLatchFrame::Run(latch, oam, true, false);
+	Check(hidden.Sprites.size() == 2 && hidden.Sprites[1].Index == 0x0580 && hidden.ExtraIndexes.empty(),
+		"#458: a half no row of which was fetched is still recorded (ADR-0153 §2), under its cycle-257 bank");
+	MmcLatchFrame::Result off = MmcLatchFrame::Run(latch, oam, false, true);
+	Check(off.Sprites.empty() && off.ExtraIndexes.empty(), "#458: row fetches do not admit a half whose rows showed no sprites (#450, PR #468 review)");
+	latch.Clear();
+	Mmc2LeftLatchModel mmc2;
+	mmc2.LatchFd = true;
+	mmc2.FetchSprite(latch, 100, 48, 0x80); //a previous frame's rows, from bank $1E
+	latch.Clear();
+	int32_t named = -1;
+	auto resolve = [](OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+		h.AbsoluteAddr = 0x05000 | (h.TileAddr & 0x0FFF);
+		tile.TileIndex = h.AbsoluteAddr / 16;
+		return true;
+	};
+	latch.OnSpriteFetch(99, true, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000, resolve);
+	latch.OnSpriteFetch(100, true, OamFetchLatchModel::kSteadyPalettes, false, oam, false, 0x0000, resolve); //row 100 drawn
+	latch.ForEachLatched(
+		[&](uint8_t x, uint8_t, const HdPpuTileInfo& tile) { if(x == 48) { named = tile.TileIndex; } },
+		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
+		[](const HdPpuTileInfo&) {});
+	Check(named == 0x0580, "#458: a cleared latch forgets the rows of the frame before (a state load clears it too)");
+}
+
+void TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame()
+{
+	SpriteFetchLog log;
+	Mmc2LeftLatchModel mmc2;
+	mmc2.FetchSprite(log, 96, 128, 0x80);
+	Check(log.Resolve(129, 96, 0x0800, 0x1E800) == 0x1E800, "#458: an entry at another x was not fetched and keeps the current mapping");
+	Check(log.Resolve(128, 112, 0x0800, 0x1E800) == 0x1E800, "#458: an entry on other lines was not fetched and keeps the current mapping");
+	log.Clear();
+	Check(log.Resolve(128, 96, 0x0800, 0x1E800) == 0x1E800, "#458: a cleared log holds nothing of the previous frame");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -10185,6 +10420,16 @@ int main()
 	TestOamLatchKeepsAHalfWhoseRowShowsSpritesThoughTheBitWasOffAtItsFetch();
 	TestOamLatchDropsAHalfFetchedWithSpritesOnButHiddenOnEveryRow();
 	TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn();
+
+
+	TestASpriteIsNamedByTheBankItsFetchReadNotTheBankLeftAtFrameEnd();
+	TestTheSameTileBeforeAndAfterALatchSwitchIsNamedTwice();
+	TestASpriteSplitByALatchSwitchIsNamedByItsTopRow();
+	TestTheLowerHalfOfA8x16SpriteIsResolvedOnItsOwnRows();
+	TestALatchTileReadFromTwoBanksNamesBoth();
+	TestTheOamLatchNamesAHalfByTheBankItsTopRowWasReadFrom();
+	TestTheOamLatchKeepsItsGuaranteesWithTheRowLog();
+	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

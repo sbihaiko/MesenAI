@@ -51,9 +51,20 @@ public:
 	//halves the PPU never drew.
 	void* OnBeforeSendFrame()
 	{
-		_oamLatch.ForEachLatched([this](uint8_t x, uint8_t y, HdPpuTileInfo& sprite) {
-			_hdPackBuilder->RecordSprite(x, y, sprite);
-		});
+		//#458: each half is named by the bank its topmost row was read from;
+		//rows read from another bank (after an MMC2/MMC4 latch tile) give
+		//their key a shape too, without placing the sprite a second time.
+		BaseMapper* mapper = _console->GetMapper();
+		_oamLatch.ForEachLatched(
+			[this](uint8_t x, uint8_t y, HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSprite(x, y, sprite); },
+			[mapper](int32_t absoluteTileAddr, HdPpuTileInfo& sprite) {
+				if(!sprite.IsChrRamTile) {
+					sprite.TileIndex = absoluteTileAddr / 16;
+				}
+				mapper->CopyChrTile((uint32_t)absoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
+				ApplyFlips(sprite.TileData, sprite.HorizontalMirroring, sprite.VerticalMirroring);
+			},
+			[this](const HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSpriteBank(sprite); });
 		_oamLatch.Clear();
 		return nullptr;
 	}
@@ -63,6 +74,9 @@ public:
 		NesSpriteInfoEx& info = _exSpriteInfo[_spriteIndex];
 		info.TileAddr = tileAddr;
 		info.AbsoluteTileAddr = _mapper->GetPpuAbsoluteAddress(info.TileAddr).Address;
+		//#458: the bank this row really came from, for OamFetchLatch to name
+		//the half by (the <tile> rule is keyed by the same address).
+		_oamLatch.OnRowFetch(_scanline, sprite.SpriteX, tileAddr, info.AbsoluteTileAddr);
 		info.HorizontalMirror = horizontalMirror;
 		info.VerticalMirror = verticalMirror;
 		info.OffsetY = lineOffset;
@@ -200,11 +214,12 @@ private:
 		bool rowShown = _spriteRowShown;
 		_spriteRowShown = false;
 		_oamLatch.OnSpriteFetch(_scanline, rowShown, _spriteRowPalettes, _prevRenderingEnabled, _spriteRam, _control.LargeSprites, _control.SpritePatternAddr,
-			[&](const OamFetchLatch::Half& h, HdPpuTileInfo& sprite) {
+			[&](OamFetchLatch::Half& h, HdPpuTileInfo& sprite) {
 				int32_t absoluteTileAddr = mapper->GetPpuAbsoluteAddress(h.TileAddr).Address;
 				if(absoluteTileAddr < 0) {
 					return false;
 				}
+				h.AbsoluteAddr = absoluteTileAddr & ~0x0F;
 				sprite = {};
 				sprite.TileIndex = (isChrRam ? (h.TileAddr & _chrRamIndexMask) : (uint32_t)absoluteTileAddr) / 16;
 				//PaletteColors comes from the row the half is drawn on.

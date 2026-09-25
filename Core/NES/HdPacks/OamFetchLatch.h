@@ -2,6 +2,7 @@
 #include "pch.h"
 #include <bitset>
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/SpriteFetchLog.h"
 
 //Issue #450. The recorder's per-frame OAM snapshot (F9.5, ADR-0153 §2) used to
 //decode every sprite at frame end: OAM, PPUCTRL's sprite size and pattern
@@ -28,7 +29,17 @@
 //priority is still recorded (ADR-0153 §2's reason for reading OAM at all).
 //A frame that holds its PPU state steady records exactly what the frame-end
 //decode did, in the same order (OAM index, then top half first); that is what
-//keeps every other recording unchanged. Host-free (ADR-0127): HdBuilderPpu
+//keeps every other recording unchanged.
+//
+//Issue #458: cycle 257 fixes *which* halves a frame drew and their PPUCTRL and
+//palette, but not always the CHR bank. MMC2/MMC4 flip their latch on the
+//fetch of pattern $FD/$FE, which lands inside the sprite fetch window: a
+//sprite fetched after a latch sprite on the same line comes from the new
+//bank, and a latch tile's own rows 1-7 do too. So the latch also keeps the
+//per-row log of what each fetch read (OnRowFetch), and ForEachLatched names
+//each half by the bank of its topmost fetched row, handing every other bank
+//its rows came from to `emitBank`. A half no row of which was fetched (the
+//8-per-line limit) keeps the bank of its cycle-257 decode. Host-free (ADR-0127): HdBuilderPpu
 //supplies the per-half CHR/palette reads through `resolve`, and
 //scripts/core_unit_tests.cpp drives the latch with synthetic frames.
 class OamFetchLatch
@@ -48,12 +59,23 @@ public:
 		uint8_t PaletteOffset = 0;
 		bool HorizontalMirror = false;
 		bool VerticalMirror = false;
+		//Set by the host's `resolve`: the absolute CHR address it decoded the
+		//half from, -1 when it does not say (then the row log always renames).
+		int32_t AbsoluteAddr = -1;
 	};
 
 	void Clear()
 	{
 		_latched.reset();
 		_pending.reset();
+		_rows.Clear();
+	}
+
+	//#458: one sprite row as the PPU fetched it (StoreSpriteInformation), on
+	//`scanline`, with the absolute CHR address that fetch read.
+	void OnRowFetch(int32_t scanline, uint8_t spriteX, uint16_t patternAddr, int32_t absoluteAddr)
+	{
+		_rows.Record(scanline, spriteX, patternAddr, absoluteAddr);
 	}
 
 	//Called at cycle 257 of every visible scanline `line` (0-239).
@@ -111,12 +133,41 @@ public:
 				_x[slot] = h.X;
 				_y[slot] = h.Y;
 				_paletteIndex[slot] = (uint8_t)((h.PaletteOffset >> 2) & 0x03);
+				_tileAddr[slot] = h.TileAddr;
+				_abs[slot] = h.AbsoluteAddr;
 				_pending.set(slot);
 			}
 		}
 	}
 
-	//The frame's latched halves in OAM order, top half first.
+	//The frame's latched halves in OAM order, top half first, each named by
+	//the bank of its topmost fetched row (#458). `rebank(absoluteAddr, tile)`
+	//re-reads a tile from another CHR address, keeping its palette and flips;
+	//`emitBank(tile)` receives the half as read from each further bank its
+	//rows came from - a key the <tile> rules carry, but not a second sprite.
+	template<typename Emit, typename Rebank, typename EmitBank>
+	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
+	{
+		for(uint32_t slot = 0; slot < SlotCount; slot++) {
+			if(!_latched[slot]) {
+				continue;
+			}
+			HdPpuTileInfo& tile = _tiles[slot];
+			_rows.FetchedAddresses(_x[slot], _y[slot], _tileAddr[slot], _banks);
+			if(!_banks.empty() && _banks[0] != _abs[slot]) {
+				rebank(_banks[0], tile);
+			}
+			emit(_x[slot], _y[slot], tile);
+			for(size_t i = 1; i < _banks.size(); i++) {
+				HdPpuTileInfo other = tile;
+				rebank(_banks[i], other);
+				emitBank(other);
+			}
+		}
+	}
+
+	//The same, for a caller that only wants the halves as decoded (the row
+	//log is not consulted).
 	template<typename Emit>
 	void ForEachLatched(Emit&& emit)
 	{
@@ -154,7 +205,11 @@ private:
 	uint8_t _x[SlotCount] = {};
 	uint8_t _y[SlotCount] = {};
 	uint8_t _paletteIndex[SlotCount] = {};
+	uint16_t _tileAddr[SlotCount] = {};
+	int32_t _abs[SlotCount] = {};
 	std::bitset<SlotCount> _latched;
 	//Decoded at the last fetch, recorded once their row is drawn.
 	std::bitset<SlotCount> _pending;
+	SpriteFetchLog _rows;
+	std::vector<int32_t> _banks;
 };

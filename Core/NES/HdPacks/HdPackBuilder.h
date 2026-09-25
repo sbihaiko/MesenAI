@@ -459,6 +459,16 @@ public:
 	//F9.5: one on-screen sprite, post-flip shape, screen origin in pixels.
 	//Gated on screen capture like the background grid, and a no-op otherwise.
 	void RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile);
+	//#458: the same OAM half's art from a second CHR bank - rows the PPU read
+	//after a latch tile switched banks inside the sprite. Registered as a shape
+	//so its key reaches a sheet, but never as an OAM entry, which would place
+	//the sprite twice. Same gates as RecordSprite.
+	void RecordSpriteBank(const HdPpuTileInfo& tile)
+	{
+		if(_captureScreens && _oamFrames.size() < MesenSheets::kMaxSheetFrames) {
+			ShapeIdFor(tile);
+		}
+	}
 	//ADR-0181 §1: `buttons` is the packed button byte of ports 1 and 2 at
 	//frame end (NesController::ToByte order), 0 for a port without a pad;
 	//it rides on the retained OamFrame and never enters frame identity.
