@@ -6,6 +6,7 @@
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
+#include "NES/HdPacks/ChrPageSlots.h"
 #include "NES/BaseMapper.h"
 #include "NES/BaseNesPpu.h"
 #include "NES/NesConstants.h"
@@ -492,25 +493,11 @@ void HdPackBuilder::AddTile(HdPackTileInfo* tile, uint32_t usageCount)
 			_blankTilePalette++;
 		}
 	} else {
-		if(tile->TileIndex >= 0) {
-			paletteMap[palette][tile->TileIndex % 256] = tile;
-		} else {
-			//FIXME: This will result in data loss if more than 256 tiles of the same palette exist in the hires.txt file
-			//Currently this way to prevent issues when loading a CHR RAM HD pack into the recorder (because TileIndex is -1 in that case)
-			bool placed = false;
-			for(int i = 0; i < 256; i++) {
-				if(paletteMap[palette][i] == nullptr) {
-					paletteMap[palette][i] = tile;
-					placed = true;
-					break;
-				}
-			}
-			if(!placed) {
-				//The tile keeps its hires.txt entry but is drawn on no sheet.
-				//Counted so SaveHdPack can refuse to sweep the old fragments a
-				//re-record would otherwise orphan (ADR-0160 §3 guard).
-				_droppedTiles++;
-			}
+		if(!MesenSheets::PlaceTileOnChrPage(paletteMap, palette, tile->TileIndex, tile, _options.ChrRamBankSize / 16)) {
+			//The tile keeps its hires.txt entry but is drawn on no sheet.
+			//Counted so SaveHdPack can refuse to sweep the old fragments a
+			//re-record would otherwise orphan (ADR-0160 §3 guard).
+			_droppedTiles++;
 		}
 	}
 
