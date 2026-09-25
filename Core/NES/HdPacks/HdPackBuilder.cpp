@@ -1204,7 +1204,7 @@ void HdPackBuilder::WriteSheetFiles(const string& folder, const string& baseName
 	}
 	doc.SheetFile = baseName + ".png";
 	doc.ReferenceFile = _writeReferences ? baseName + ".orig.png" : "";
-	_pendingSheets.push_back({ folder, baseName, image, doc }); //written by FlushSheetFiles (ADR-0230)
+	MesenSheets::QueueSheet(_pendingSheets, folder, baseName, image, doc, [&](const string& f, const string& b, const MesenSheets::SheetImage& i, const MesenSheets::SheetJsonDoc& d, const MesenSheets::ShapeFolds* folds) { WriteSheetOutputs(f, b, i, d, lookup, folds); });
 
 	//ADR-0209 Q4(k): this is the one funnel every sheet passes through, so it
 	//is where "the artist has a surface for this shape" becomes true. The
@@ -1218,27 +1218,27 @@ void HdPackBuilder::WriteSheetFiles(const string& folder, const string& baseName
 	}
 }
 
-//ADR-0230 (F14.9): every drawn palette of a shape reaches a sheet - an exact
-//fold on the cell's sidecar entry, else a variant cell beside it (host-free,
-//unit-tested in SheetColourways.h). The .png ships at pack scale, the
-//.orig.png twin and the sidecar at 1x.
+//Pack-scale .png (the artist's canvas), 1:1 .orig.png twin, 1x sidecar.
+void HdPackBuilder::WriteSheetOutputs(const string& folder, const string& baseName, const MesenSheets::SheetImage& image, const MesenSheets::SheetJsonDoc& doc, const MesenSheets::TileLookup& lookup, const MesenSheets::ShapeFolds* folds)
+{
+	MesenSheets::SheetImage scaled = MesenSheets::Upscale(image, _hdData.Scale);
+	PNGHelper::WritePNG(FolderUtilities::CombinePath(folder, doc.SheetFile), scaled.Pixels.data(), scaled.Width, scaled.Height, 32);
+	if(_writeReferences) { //WritePNG only reads the buffer; the cast saves a 1x canvas copy
+		PNGHelper::WritePNG(FolderUtilities::CombinePath(folder, doc.ReferenceFile), const_cast<uint32_t*>(image.Pixels.data()), image.Width, image.Height, 32);
+	}
+	ofstream(FolderUtilities::CombinePath(folder, baseName + ".json"), ios::out) << MesenSheets::SerializeSheet(doc, lookup, folds);
+}
+
+//ADR-0230 (F14.9): an exact fold on the cell's sidecar entry, else a variant
+//cell beside it; laid out, written and freed a sheet at a time (SheetColourways.h).
 void HdPackBuilder::FlushSheetFiles()
 {
 	auto keyOf = [this](MesenSheets::ShapeId s) { return ShapeLookupKey(s); };
 	vector<vector<uint32_t>> drawn = MesenSheets::WrittenPalettesByShape(_shapeTiles.size(), _tilesByChrBankByPalette, _paletteVariantsByShape, keyOf);
 	MesenSheets::PaletteCellPlan plan = MesenSheets::PlanPaletteCells(_pendingSheets, _shapeTiles, drawn, _palette);
 	MesenSheets::TileLookup lookup = [this, &plan](MesenSheets::ShapeId id) { return id < _shapeTiles.size() ? &_shapeTiles[id] : plan.Variant(id); };
-	MesenSheets::ApplyPaletteCells(_pendingSheets, plan, lookup, _palette);
-	for(MesenSheets::PendingSheet& sheet : _pendingSheets) {
-		MesenSheets::SheetImage scaled = MesenSheets::Upscale(sheet.Image, _hdData.Scale);
-		PNGHelper::WritePNG(FolderUtilities::CombinePath(sheet.Folder, sheet.Doc.SheetFile), scaled.Pixels.data(), scaled.Width, scaled.Height, 32);
-		if(_writeReferences) {
-			PNGHelper::WritePNG(FolderUtilities::CombinePath(sheet.Folder, sheet.Doc.ReferenceFile), sheet.Image.Pixels.data(), sheet.Image.Width, sheet.Image.Height, 32);
-		}
-		ofstream(FolderUtilities::CombinePath(sheet.Folder, sheet.BaseName + ".json"), ios::out) << MesenSheets::SerializeSheet(sheet.Doc, lookup, &plan.Folds);
-	}
+	MesenSheets::FlushPendingSheets(_pendingSheets, plan, lookup, _palette, [&](const string& f, const string& b, const MesenSheets::SheetImage& i, const MesenSheets::SheetJsonDoc& d, const MesenSheets::ShapeFolds* folds) { WriteSheetOutputs(f, b, i, d, lookup, folds); });
 	MessageManager::Log("[HD Pack Builder] palette variants (ADR-0230): " + std::to_string(plan.Cells.size()) + " variant cells (" + std::to_string(plan.ColourwayKeys) + " colourway keys, " + std::to_string(plan.ResidualFoldKeys) + " residual folds), " + std::to_string(plan.ExactFoldKeys) + " exact folds, " + std::to_string(plan.UnplacedKeys) + " unplaced");
-	_pendingSheets.clear();
 }
 
 //F9.1-F9.3 (ADR-0153): the whole sheet inference, once, at save time.

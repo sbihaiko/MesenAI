@@ -9527,6 +9527,75 @@ void TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn()
 	Check(drawn[1] == std::vector<uint32_t>{ 0x0F272830 } && drawn[2].empty(), "ADR-0230: each shape gets its own written variants, a shape with none gets none");
 }
 
+//PR #461 review: the variant pass must not raise the save's peak memory. A map
+//(up to kMaxMapPixels) is written the moment it is built and never held; the
+//sheets that are held are written and released one at a time, and what the
+//flush writes is exactly what laying every sheet out at once would give.
+void TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten()
+{
+	using namespace MesenSheets;
+	std::vector<PendingSheet> built = ColourwaySheets();
+	std::vector<SheetTileKey> shapes = ColourwayShapes();
+	PendingSheet map = built[2];
+	map.BaseName = "map-000";
+	map.Doc.Cells.clear(); //a stitched map carries placements, not cells
+	map.Doc.Placements.push_back({ 0, 0, 0 });
+	map.Image.Reset(4096, 1024);
+
+	std::vector<std::string> written;
+	std::vector<bool> heldFolds;
+	std::vector<PendingSheet> pending;
+	bool flushing = false;
+	size_t releaseChecks = 0;
+	SheetWriter write = [&](const std::string&, const std::string& baseName, const SheetImage& image, const SheetJsonDoc&, const ShapeFolds* folds) {
+		written.push_back(baseName + ":" + std::to_string(image.Width) + "x" + std::to_string(image.Height));
+		heldFolds.push_back(folds != nullptr);
+		for(size_t i = 0; flushing && i < pending.size(); i++) {
+			const PendingSheet& p = pending[i];
+			//Every sheet before the one being written is already released.
+			if(&p.Image == &image) {
+				break;
+			}
+			releaseChecks++;
+			Check(p.Image.Pixels.empty() && p.Image.Width == 0, "PR #461: a flushed sheet's canvas is released before the next one is written", p.BaseName);
+		}
+	};
+	QueueSheet(pending, "", built[0].BaseName, built[0].Image, built[0].Doc, write);
+	QueueSheet(pending, "", map.BaseName, map.Image, map.Doc, write);
+	QueueSheet(pending, "", built[1].BaseName, built[1].Image, built[1].Doc, write);
+	Check(written == std::vector<std::string>{ "map-000:4096x1024" } && heldFolds == std::vector<bool>{ false },
+		"PR #461: a map sheet is written the moment it is queued, before any plan exists", written.empty() ? "" : written[0]);
+	bool noMapHeld = pending.size() == 2;
+	for(const PendingSheet& p : pending) {
+		noMapHeld = noMapHeld && !p.Doc.IsMap;
+	}
+	Check(noMapHeld, "PR #461: the pending queue holds no map canvas", std::to_string(pending.size()));
+	Check(!SheetWritesImmediately(built[2].Doc) && !SheetWritesImmediately(built[1].Doc),
+		"PR #461: a sheet with cells waits for the plan, even one marked as a map");
+
+	std::vector<std::vector<uint32_t>> drawn = { { 0x3617170F, 0x3617070F }, { 0x0F171626 }, {} };
+	PaletteCellPlan plan = PlanPaletteCells(pending, shapes, drawn, ColourwayPalette());
+	TileLookup lookup = [&](ShapeId id) { return id < shapes.size() ? &shapes[id] : plan.Variant(id); };
+	std::vector<PendingSheet> atOnce = pending;
+	ApplyPaletteCells(atOnce, plan, lookup, ColourwayPalette());
+	std::vector<std::string> expected, got;
+	for(const PendingSheet& p : atOnce) {
+		expected.push_back(SerializeSheet(p.Doc, lookup, &plan.Folds) + std::to_string(p.Image.Height));
+	}
+	written.clear();
+	heldFolds.clear();
+	SheetWriter capture = [&](const std::string& folder, const std::string& baseName, const SheetImage& image, const SheetJsonDoc& doc, const ShapeFolds* folds) {
+		write(folder, baseName, image, doc, folds);
+		got.push_back(SerializeSheet(doc, lookup, folds) + std::to_string(image.Height));
+	};
+	flushing = true;
+	FlushPendingSheets(pending, plan, lookup, ColourwayPalette(), capture);
+	Check(written.size() == 2 && heldFolds == std::vector<bool>{ true, true } && pending.empty(),
+		"PR #461: the flush writes every held sheet with the plan's folds and empties the queue", std::to_string(written.size()));
+	Check(releaseChecks == 1, "PR #461: the release was checked when the second held sheet was written", std::to_string(releaseChecks));
+	Check(got == expected, "PR #461: sheet-at-a-time output is identical to laying every sheet out at once");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -9837,6 +9906,7 @@ int main()
 	TestVariantCellsSitBesideTheirBaseAndKeepTheColumns();
 	TestTheSidecarListsFoldsOnlyWhereThereAreSome();
 	TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn();
+	TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

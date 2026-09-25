@@ -368,12 +368,15 @@ private:
 	//remainder sheet at the end of BuildSheets knows what is left. Cleared per
 	//BuildSheets run - it describes one save, not the object's lifetime.
 	std::set<MesenSheets::ShapeId> _claimedShapes;
-	//ADR-0230 (F14.9): every sheet of this save, held by WriteSheetFiles until
-	//FlushSheetFiles has seen all of them - a shape's palette variant joins
-	//the highest-ranked sheet that holds the shape, which is only known once
-	//every sheet is built. Cleared by the flush.
+	//ADR-0230 (F14.9): every non-map sheet of this save, held by WriteSheetFiles
+	//until FlushSheetFiles has seen all of them - a shape's palette variant
+	//joins the highest-ranked sheet that holds the shape, which is only known
+	//once every sheet is built. A map never takes a variant, so it is written
+	//at once and never held (PR #461: a map canvas can reach 256 MB). The
+	//flush writes and frees them one at a time and leaves this empty.
 	std::vector<MesenSheets::PendingSheet> _pendingSheets;
 	void FlushSheetFiles();
+	void WriteSheetOutputs(const string& folder, const string& baseName, const MesenSheets::SheetImage& image, const MesenSheets::SheetJsonDoc& doc, const MesenSheets::TileLookup& lookup, const MesenSheets::ShapeFolds* folds);
 	bool _sheetsBuilt = false;
 	unordered_set<uint32_t> _sheetObjectShapes; //shape hashes inside an inferred object
 	vector<uint32_t> _shapeHashes;              //shape id -> shape hash

@@ -21,7 +21,8 @@
 //
 //Everything here is host-free and inline: HdPackBuilder.cpp is not in the
 //unit-test link set and sits at its ADR-0137 line ceiling, so it only collects
-//the drawn palettes and calls PlanPaletteCells / ApplyPaletteCells.
+//the drawn palettes and calls QueueSheet / PlanPaletteCells /
+//FlushPendingSheets.
 //
 //The fold predicate is a faithful port of scripts/palette_folds.py
 //(artist_chr_kit's painted_indices, fade_related, fold_measure and its gate),
@@ -301,6 +302,33 @@ namespace MesenSheets
 		SheetJsonDoc Doc;
 	};
 
+	//Writes one sheet's files: the .png at pack scale, the .orig.png twin and
+	//the sidecar at 1x. `folds` is null for a sheet written before the plan.
+	using SheetWriter = std::function<void(const std::string& folder, const std::string& baseName, const SheetImage& image, const SheetJsonDoc& doc, const ShapeFolds* folds)>;
+
+	//Whether a sheet can be written the moment it is built (PR #461 review). A
+	//map never owns a variant (PlanPaletteCells skips it), never takes a row
+	//(InsertVariantCells skips it), and with no cells it has no tile entry a
+	//fold could ride on - so the flush could change nothing in its files, and
+	//holding its canvas (up to kMaxMapPixels, 256 MB at 1x) until then would
+	//only raise the save's peak memory above what it was before ADR-0230.
+	inline bool SheetWritesImmediately(const SheetJsonDoc& doc)
+	{
+		return doc.IsMap && doc.Cells.empty();
+	}
+
+	//The one entry point of a built sheet: written now through `write` when the
+	//variant pass cannot touch it, else copied into `pending` for
+	//FlushPendingSheets. Only a deferred sheet is ever copied.
+	inline void QueueSheet(std::vector<PendingSheet>& pending, const std::string& folder, const std::string& baseName, const SheetImage& image, const SheetJsonDoc& doc, const SheetWriter& write)
+	{
+		if(SheetWritesImmediately(doc)) {
+			write(folder, baseName, image, doc, nullptr);
+			return;
+		}
+		pending.push_back({ folder, baseName, image, doc });
+	}
+
 	struct PaletteCellPlan
 	{
 		//A variant cell to insert beneath cell BaseCell of sheet Sheet.
@@ -548,22 +576,41 @@ namespace MesenSheets
 			}
 			std::sort(doc.EmptySlots.begin(), doc.EmptySlots.end(), [](const SheetSlot& a, const SheetSlot& b) { return a.Row != b.Row ? a.Row < b.Row : a.Col < b.Col; });
 		}
-		doc.Cells = cells;
-		image = out;
+		doc.Cells = std::move(cells);
+		image = std::move(out);
 	}
 
-	//Applies a plan to the pending sheets: every sheet with variant cells gets
-	//them inserted and rendered. `lookup` must resolve the variant ids too.
+	//Inserts and renders sheet `d`'s variant cells. `lookup` must resolve the
+	//variant ids too.
+	inline void ApplyPaletteCellsTo(PendingSheet& sheet, size_t d, const PaletteCellPlan& plan, const TileLookup& lookup, NesPalette palette)
+	{
+		std::vector<std::pair<size_t, MetatileKey>> variants;
+		for(const PaletteCellPlan::Cell& cell : plan.Cells) {
+			if(cell.Sheet == d) {
+				variants.push_back({ cell.BaseCell, cell.Key });
+			}
+		}
+		InsertVariantCells(sheet.Doc, sheet.Image, variants, lookup, palette);
+	}
+
+	//Applies a plan to every pending sheet at once (the unit tests' view).
 	inline void ApplyPaletteCells(std::vector<PendingSheet>& sheets, const PaletteCellPlan& plan, const TileLookup& lookup, NesPalette palette)
 	{
 		for(size_t d = 0; d < sheets.size(); d++) {
-			std::vector<std::pair<size_t, MetatileKey>> variants;
-			for(const PaletteCellPlan::Cell& cell : plan.Cells) {
-				if(cell.Sheet == d) {
-					variants.push_back({ cell.BaseCell, cell.Key });
-				}
-			}
-			InsertVariantCells(sheets[d].Doc, sheets[d].Image, variants, lookup, palette);
+			ApplyPaletteCellsTo(sheets[d], d, plan, lookup, palette);
 		}
+	}
+
+	//Lays out, writes and releases the pending sheets one at a time, so only one
+	//sheet ever holds its grown canvas and each canvas is freed as soon as its
+	//files are on disk (PR #461 review). Empties `pending`.
+	inline void FlushPendingSheets(std::vector<PendingSheet>& pending, const PaletteCellPlan& plan, const TileLookup& lookup, NesPalette palette, const SheetWriter& write)
+	{
+		for(size_t d = 0; d < pending.size(); d++) {
+			ApplyPaletteCellsTo(pending[d], d, plan, lookup, palette);
+			write(pending[d].Folder, pending[d].BaseName, pending[d].Image, pending[d].Doc, &plan.Folds);
+			pending[d].Image = SheetImage();
+		}
+		std::vector<PendingSheet>().swap(pending);
 	}
 }

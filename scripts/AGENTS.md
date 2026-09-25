@@ -464,6 +464,33 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   all-green success (#253); map-vs-metatiles both-painted stays a logged
   precedence choice. `scripts/test_mep_build.py` is the acceptance test
   wired into `make doc-checks`, and asserts these halves.
+  **Sidecar palette fields (ADR-0230, F14.9; producer contract in
+  `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
+  "brightness"}]`. For each fold, `build` emits one extra exact
+  `defaultTile=N` rule: the same crop, the key source's other fields, the
+  fold's palette, and that Brightness as the last field. This happens
+  whether or not the cell was painted. A fold is exact by construction: the
+  recorder lists it only when that one Brightness rebuilds the recorded
+  pixels. So a consumer must never recompute or widen it, and never turn a
+  residual fade into a fold. A cell carrying `variantOf` is an ordinary
+  cell for `build`: its own tiles, its own palette, one rule per key. It
+  has no `metatile`, so no map placement resolves to it. `mep_lint`
+  (`lint_sheet_folds`) reports a malformed `folds` list as an error
+  (`palette_folds.entry_folds`: 8-hex palette, numeric brightness in
+  [0, 4], not the entry's own palette, no repeats). It reports a
+  `variantOf` that names no cell index of the same sheet as a warning.
+  `palette_folds.py` (stdlib only, shipped in
+  `scripts/tools-zip-manifest.txt` because `mep_build`/`mep_lint` import
+  it) is the single Python definition of a fold. `artist_chr_kit.py`
+  imports it too, and anchors its pattern-page folds on the sheet cells'
+  palettes (`sheet_fold_anchors`, ADR-0230 item 3).
+  `docs/specs/golden/sheets/palette-relation-cases.txt` holds the shared
+  vectors. `test_palette_folds.py` checks them against
+  `palette_relation`, and `core_unit_tests` checks them against the C++
+  port. Change both sides together. Round-trip invariants
+  (`test_mep_build.py` `sheet_fold_tests`, `test_mep_lint_folds.py`): a
+  sidecar with no `folds` and no `variantOf` builds exactly as before, and
+  a second `build` is byte-identical.
   `mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) turns a legacy plain HD
   pack (`hires.txt` + PNGs) into a MEP project `mep_build.py build`
   regenerates with the identical rule set and pixels: `import <pack> --out
