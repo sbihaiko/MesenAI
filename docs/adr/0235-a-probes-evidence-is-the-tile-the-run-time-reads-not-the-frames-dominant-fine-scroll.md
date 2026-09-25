@@ -1,18 +1,19 @@
 # ADR-0235: A probe's evidence is the tile the run time reads, not the frame's dominant fine scroll
 
-- Status: accepted (2026-09-25) — **option 2**, in its cheaper form: the
-  recorder records, at capture time, the tile each probe's own absolute pixel
-  reads (the way `HdPackTileAtPositionCondition` reads it at run time), instead
-  of deriving the probe's column from the frame's single dominant `FineX`.
-  Owner's pick, verbatim: *"Opção 2: corrigir o gravador (Recommended)"*. The
-  option as presented to the owner: no run-time cost; an ambiguous gate becomes
-  visible and a capture with no separating probe is refused; packs already
-  written are **not** re-recorded; the change is measured on the 30-ROM library
-  before it merges. **Not implemented yet** — build go-ahead, verbatim (2026-09-25):
-  *"pode implementar a F14.10 com o DeepSeek"*; implemented by PRD slice F14.10. This records the measurement the owner asked for, verbatim: *"Não
-  mergear A; medir retenção (Recommended)"*; retaining more frames (option 1)
-  was measured and does not fix #499. The option-A branch
-  (`feat/adr0233-fine-scroll-rivals`) is **not to be merged**.
+- Status: superseded (2026-09-25) — option 2 was picked first
+  (*"Opção 2: corrigir o gravador (Recommended)"*; build go-ahead *"pode
+  implementar a F14.10 com o DeepSeek"*), implemented on branch
+  `feat/f1410-probe-evidence` and measured
+  (`docs/validation/f1410-probe-evidence-2026-09-25.md`): per-row reading
+  alone refuses 97 of 219 library captures and does **not** close #499; it
+  closed only with an extra "missing evidence is not separation" rule, at
+  219 → 87 captures and 68 883 → 35 265 drawn frames. That branch is **not
+  merged** and slice F14.10 is dropped; the owner then picked option 3.
+  Earlier, verbatim: *"Não mergear A; medir retenção (Recommended)"* —
+  retaining more frames (option 1) was measured and does not fix #499; the
+  option-A branch (`feat/adr0233-fine-scroll-rivals`) is **not to be merged**.
+- Superseded by: ADR-0236 (option 3, the render-time guard). This ADR's
+  Context and measurements stay the evidence it rests on.
 - Supersedes: ADR-0233 (its option A is dropped, and its premise — that the
   frames the gate wrongly fires on were never retained — is falsified here).
 - Date: 2026-09-25
@@ -30,8 +31,8 @@
   `SamePalettedCells`, `HdTileKey`), `Core/NES/HdPacks/HdNesPack.cpp`
   (`GetLayerIndex`), `Core/NES/HdPacks/HdPackConditions.h`
   (`HdPackTileAtPositionCondition`)
-- Amends: ADR-0159 §3 (a probe's column is no longer derived from the frame's
-  one `FineX` for rows fetched at another fine scroll, e.g. a fixed status bar).
+- Amends: nothing in force — option 2's amendment of ADR-0159 §3 (per-row
+  probe column) did not ship.
 
 ## Context
 
@@ -174,7 +175,7 @@ HUD, a raster effect — and no amount of retained frames changes that.
 
 ## Decision
 
-**Option 2 picked (2026-09-25), capture-time record of each probe's own tile.** The four options as measured: (The options below are the ones the
+**Superseded by ADR-0236 (option 3).** The four options as measured: (The options below are the ones the
 measurement leaves standing; A and B are not combinable into a fix for #499
 in the way ADR-0233 assumed.)
 
@@ -234,6 +235,8 @@ A capture never overwrites a live cell whose content it does not carry.
   horizontally with a fixed status bar can produce it.
 
 ## What a human has to pick
+
+*Resolved 2026-09-25 by ADR-0236: option 3.*
 
 1. Whether #499 is fixed by option 3 (render time), by option 2 (a recorder
    whose evidence matches the run time, and a refusal or a wider probe search

@@ -8,7 +8,7 @@
   whole scene vocabulary — the cells the screen surface owns are left off it)
   and ADR-0050 (its screens stop being a parallel artefact and become the
   primary surface for the content they cover)
-- Amended by: ADR-0159 (lifts this ADR's non-goal on changing what `CaptureScreen` captures and its anchors)
+- Amended by: ADR-0159 (lifts this ADR's non-goal on changing what `CaptureScreen` captures and its anchors); ADR-0236 (2026-09-25: a capture that carries the per-cell record owns a cell only on frames whose live key there equals the recorded one — pending slice F14.11)
 
 ## Context
 
