@@ -425,6 +425,19 @@ It follows `HdPackLoader`'s token rules (`<tile>` index decimal at `<ver>` ≤ 1
 condition tile token decimal at `<ver>` < 104, and ≥ 32 hex characters meaning
 pattern bytes).
 
+## Follow-up (2026-09-24)
+
+Expansion (b)1 was taken the same day. ADR-0210 §3 filter 2 was amended on the
+user's go-ahead (*"em paralelo, rode a emenda da ADR-0210"*): a `<patch>`
+pack's 32-hex keys are now admitted one by one when their 16 bytes are verbatim
+in the stock dump, and index-keyed `<patch>` packs stay refused. The ADR's
+quoted Castlevania/Mega Man/Zelda gains were corrected in the same amendment.
+Re-running this survey's inputs with the shipped code reproduced §1b exactly:
+**+550 shapes** (249 / 257 / 44), 0 of them absent from the stock dump, Zelda
+II and Metroid still refused, and every non-`<patch>` pack's result unchanged.
+Log: `docs/validation/adr0210-patch-verbatim-guard-2026-09-24.md`. The §1 table
+above describes the tool as it was before the amendment.
+
 ## Suites
 
 - `make doc-checks` — exit 0.
