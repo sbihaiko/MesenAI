@@ -1,8 +1,8 @@
 # Castlevania deep measurement: gameplay recording, palette gap, kit, round trip (2026-09-24)
 
 Castlevania joins the deep measurements. Until now its only numbers came from
-the F14.4 palette-gap run (`f14.4-adr0230-palette-gap-measurement-2026-09-24.md`,
-on branch `docs/adr0230-measured-accepted` when this was written). That run was
+the F14.4 palette-gap run
+(`docs/validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md`). That run was
 60 s from power-on with no input, i.e. the title screen and the attract demo. This
 log records **stage 1 played**: Simon walks right from the castle gate through
 the entrance hall, whipping, crouch-whipping and jumping, past candles,
@@ -17,7 +17,7 @@ in `scripts/stages/castlevania/`.
 
 | Step | Result |
 |---|---|
-| 1. Record | 80 s of stage 1 from a minted state, 4 809 frames (4 768 scripted). Two passes produced **byte-identical packs** (`diff -r` clean; `hires.txt` sha256 `1b84b252…a298`). Simon loses one life at about 55 s and respawns at the start of the hall. |
+| 1. Record | 80 s of stage 1 from a minted state, 4 809 frames (4 768 scripted; the versioned route keeps the first 3 576, see Step 1). Two passes produced **byte-identical packs** (`diff -r` clean; `hires.txt` sha256 `1b84b252…a298`). Simon loses one life at about 55 s and respawns at the start of the hall. |
 | 2. Palette gap | Drawn-key coverage is **75.4 %** (341 of 452; 111 missing). Idle was **84.7 %** (532 of 628; 96 missing), reproduced exactly on this binary. Colourways are **91 of 111** (88 of them sprites). Idle had 61 of 96. |
 | 3. Kit | 4 parts, 148 files, 14 312 cells. Simon's walk is a **4-phase loop, 7 frames per phase (28-frame period), ×30**. The whip is 3 figures plus 4 loose whip-segment figures. The CHR RAM pattern pages are 93 % complete (302 recorded, 176 ROM fill, 34 red). The sprites, background and CHR parts all verify. **The map part fails `--verify`** (bug B2). |
 | 4. Round trip | One figure cell painted magenta (848 px) and imported after a first build (#435). Both rebuilds had 0 errors. `hires.txt` is byte-identical to the unpainted control and the key set is the same (348 = 348). **In game, 848 px change and 672 are exactly `#FF00FF` on Simon's torso at frame 2766.** Painting the whole figure instead fails the build (bug B3). |
@@ -50,15 +50,34 @@ The routes are new, in `scripts/stages/castlevania/` with a `stage-set.json`.
   player-controlled gate screen of stage 1. Minted with
   `headless_record Castlevania.nes 6 <mint>/mint input=mint-stage1.txt save-state=stage1.mss`
   (frame 361). The `.mss` is not versioned.
-- `stage1-run.txt`: 16 repeats of `60f R` / `2f B` / `24f -` / `60f R` /
-  `2f DB` / `24f D` / `60f R` / `10f RA` / `30f R` / `2f B` / `24f -`. That is
-  walk, whip, walk, crouch-whip, walk, jump, whip. 4 768 frames (79.3 s).
+- **The library job does not mint at frame 361.** `scripts/record_library.sh`
+  runs every mint for the batch's `<seconds>` (60 s by default), and
+  `save-state=` is written at the run's frame target, so the job's
+  `stage1-run.mss` is at frame 3 607, 54 s of idle later, with the timer at
+  0255 instead of 0300 and a different screen showing. Run through the job on 2026-09-24, the
+  set records the whole 3 576-frame route from there (3 586 retained frames,
+  487 silhouettes, 90.6 % seen), but that is not the recording measured below.
+  Ending a mint where its script ends is a tooling fix, not a change to this
+  set.
+- `stage1-run.txt`: 12 repeats of a 298-frame block, `60f R` / `2f B` /
+  `24f -` / `60f R` / `2f DB` / `24f D` / `60f R` / `10f RA` / `30f R` /
+  `2f B` / `24f -`. That is walk, whip, walk, crouch-whip, walk, jump, whip.
+  3 576 frames (59.5 s), so it fits the 60 s (3 606-frame) budget
+  `scripts/record_library.sh` and `record_stages.sh` run every route for
+  (`scripts/stages/README.md`: a route is <= 3 600 frames).
+- **The 80 s measurement below used 16 repeats of the same block (4 768
+  frames, 79.3 s).** Its first 3 576 frames are the versioned route byte for
+  byte; the other 1 192 frames are 4 more copies of the block, which a 60 s
+  batch run would cut. To reproduce the 80 s numbers exactly, write the block
+  16 times into a scratch input script, e.g.
+  `{ cat scripts/stages/castlevania/stage1-run.txt; head -n 44 scripts/stages/castlevania/stage1-run.txt; } > <run>/input.txt`
+  (the 12 blocks plus 44 lines = 4 more blocks), and pass that as `input=`.
 
 ```sh
 export MESEN_SHEET_GRID_DUMP=<run>/grid-dump.txt MESEN_OAM_STREAM_DUMP=<run>/oam-dump.txt \
        MESEN_POSE_TRACK_DUMP=<run>/pose-dump.txt
 headless_record <run>/Castlevania.nes 80 <run>/rec bootstrap hdpack-off log \
-  state=stage1.mss input=scripts/stages/castlevania/stage1-run.txt
+  state=stage1.mss input=<run>/input.txt   # the 16-block script above
 ```
 
 - Both passes: `result: ok`, frames 361 → 5 170, wall clock 23.8 s and 24.7 s.
@@ -78,8 +97,9 @@ headless_record <run>/Castlevania.nes 80 <run>/rec bootstrap hdpack-off log \
 
 ## Step 2: palette gap, gameplay against idle
 
-The method is F14.4's, with the scripts copied unchanged except for the
-worktree path: `measure.py` for coverage and `f144_analyze.py` for the
+The method is F14.4's, with its scratch scripts copied unchanged except for
+the worktree path (neither script is versioned; the F14.4 log describes what
+they count): `measure.py` for coverage and `f144_analyze.py` for the
 fold/colourway split with `artist_chr_kit`'s own predicates. The idle column
 is F14.4's 60 s power-on run, **re-recorded on this binary** (wall 17.2 s). It
 reproduces F14.4 exactly.
