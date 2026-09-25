@@ -83,9 +83,27 @@ def test_a_dangling_variant_of_is_a_warning():
           "a variantOf naming no cell of the sheet is a warning", str(items))
 
 
+def test_an_unhashable_index_or_variant_of_is_reported_not_raised():
+    """#461 review: a malformed sidecar whose `index` or `variantOf` is not a
+    scalar (e.g. `[]`) must reach the Report, not crash lint with TypeError."""
+    for name, cells, needle in (
+            ("index []", [dict(cell(0), index=[]), cell(1)], "index []"),
+            ("index {}", [dict(cell(0), index={}), cell(1)], "index {}"),
+            ("variantOf []", [cell(0), cell(1, variantOf=[])], "variantOf []"),
+            ("variantOf {}", [cell(0), cell(1, variantOf={})], "variantOf {}")):
+        try:
+            items = lint(cells)
+        except TypeError as exc:
+            check(False, f"a sidecar with {name} is reported, not raised", f"TypeError: {exc}")
+            continue
+        check(len(items) == 1 and items[0][0] == "warning" and needle in items[0][2],
+              f"a sidecar with {name} is reported as one warning", str(items))
+
+
 def main():
     tests = [test_a_sidecar_without_folds_is_clean, test_well_formed_folds_are_clean,
-             test_each_malformed_fold_is_an_error, test_a_dangling_variant_of_is_a_warning]
+             test_each_malformed_fold_is_an_error, test_a_dangling_variant_of_is_a_warning,
+             test_an_unhashable_index_or_variant_of_is_reported_not_raised]
     for t in tests:
         t()
     print(f"\n{len(tests)} tests, {len(_FAILURES)} failure(s)")

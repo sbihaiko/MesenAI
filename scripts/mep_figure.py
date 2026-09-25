@@ -510,6 +510,33 @@ def _owned_pixels(pack: E.Pack, entries, i, others, unit):
     return owned
 
 
+def _is_blank(sheet: E.Sheet, cell: dict, cache=None) -> bool:
+    """True when the cell's recorded art (its `*.orig.png` crop) is fully
+    transparent: a tile of colour 0 only, which the NES never draws (#452).
+    A sheet with no usable twin is not called blank. `cache` (orig path ->
+    decoded twin, `_twin_crop`'s) keeps a figure import to one decode per
+    twin instead of one per painted cell (#466 review)."""
+    if not sheet.orig_path or not sheet.orig_path.is_file():
+        return False
+    cache = {} if cache is None else cache
+    if sheet.orig_path not in cache:
+        cache[sheet.orig_path] = sheet_repaint.read_png(sheet.orig_path)
+    img, unit = cache[sheet.orig_path], sheet.unit
+    x, y = int(cell["x"]), int(cell["y"])
+    if x < 0 or y < 0 or x + unit > img.width or y + unit > img.height:
+        return False
+    return not any(img.crop(x, y, unit, unit).px[3::4])
+
+
+def _blank_record(entry: dict, cell: dict) -> dict:
+    """What import reports for a skipped blank tile: where it is and the
+    `tileData/palette` keys its cell emits."""
+    keys = [f"{str(t.get('tile') or '').upper()}/{str(t.get('palette') or '').upper()}"
+            for t in cell.get("tiles") or [] if isinstance(t, dict)]
+    return {"node": entry.get("node"), "pose": entry.get("pose"), "sheet": entry.get("sheet"),
+            "index": cell.get("index"), "keys": keys}
+
+
 def _differs(fig_cell, ref_cell, owned, unit, scale) -> bool:
     """Was any pixel this cell owns painted? `owned` None means all of them."""
     if owned is None:
@@ -719,7 +746,7 @@ def routed_paint(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest,
     return out if out is not None else big
 
 
-def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest):
+def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest, twins=None):
     """Where one painted cell goes: `(write_source, routes, moves)`.
 
     `routes` is `[(owner Sheet, x, y, lx, ly)]` — each 8x8 crop another sheet
@@ -730,13 +757,15 @@ def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest)
     owner at all, or when an owner had to be skipped — paint is never
     dropped, even at the cost of a reopen. `moves` is True when this import
     will re-point or add a rule at the next build (the reload then cannot
-    show it, ADR-0212)."""
+    show it, ADR-0212). `twins` is the caller's decoded-twin cache (orig
+    path -> image), so an import decodes each twin once (#466 review)."""
     owners, index_keyed, version = manifest
     if not owners:
         return True, [], False
     by_name = {s.name: s for s in pack.sheets}
     cx, cy = int(cell["x"]), int(cell["y"])
-    routes, self_owned, orphan, skipped, twins = [], False, False, False, {}
+    routes, self_owned, orphan, skipped = [], False, False, False
+    twins = {} if twins is None else twins
     for key, lx, ly in _cell_keys(sheet, cell, index_keyed, version):
         mine = (sheet.name, (cx + lx) * scale, (cy + ly) * scale)
         found = owners.get(key) or set()
@@ -768,8 +797,9 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
     that differs from the `*.orig.png` twin is written; a cell the sheet
     already holds is left alone. The paint lands on the crop the pack's
     built manifest already draws each key from (#413, `plan_targets`), so the
-    rebuild changes no rule and the in-place reload shows it. Returns a
-    report."""
+    rebuild changes no rule and the in-place reload shows it. A cell whose
+    recorded art is fully transparent is never written, whatever covers its
+    rect (#452), and is listed under `blank`. Returns a report."""
     png_path = Path(png_path)
     if not png_path.is_file():
         raise FigureError(f"{png_path}: not a file")
@@ -789,7 +819,7 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
 
     report = {"figure": doc.get("figure"), "scale": scale, "cells": 0, "painted": 0,
               "written": 0, "alreadyApplied": 0, "sheets": [], "overlapped": 0,
-              "rerouted": 0, "sourceLeft": 0, "moves": 0, "overwrote": 0}
+              "rerouted": 0, "sourceLeft": 0, "moves": 0, "overwrote": 0, "blank": []}
     entries = [e for e in (doc.get("cells") or []) if isinstance(e, dict)]
     for e in entries:
         e["x"], e["y"] = int(e["x"]), int(e["y"])
@@ -834,13 +864,18 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
             report["overlapped"] += 1
         if not _differs(fig_cell, ref_cell, owned, unit, scale):
             continue  # not painted: ADR-0153 §3, the twin decides
-        report["painted"] += 1
         sheet = _group_sheet(pack, Path(str(entry["sheet"])).stem)
         if sheet is None:
             raise FigureError(f"{entry['sheet']}: no such sheet under {pack.sheets_dir}")
         cell = _find_cell(sheet, entry)
         if cell is None:
             raise FigureError(f"{entry['sheet']}: cell for node {entry.get('node')} is gone")
+        if _is_blank(sheet, cell, twins):
+            # #452: the NES draws nothing for an all-transparent tile, so
+            # paint on it can only be a neighbour's ink spilling into its rect.
+            report["blank"].append(_blank_record(entry, cell))
+            continue
+        report["painted"] += 1
         if sheet.unit != unit:
             raise FigureError(f"{sheet.name}: unit {sheet.unit} does not match the figure's {unit}")
         img = canvas(sheet)[1]
@@ -868,7 +903,7 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
                     + (f" and {len(rewritten) - 4} more" if len(rewritten) > 4 else "")
                     + ". Run python3 scripts/mep_build.py build on it first, then import again "
                     "(nothing was written)")
-        write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest)
+        write_source, routes, moves = plan_targets(pack, sheet, cell, scale, manifest, twins)
         changed = put(sheet, new_cell, sx, sy) if write_source else False
         for other, ox, oy, lx, ly in routes:
             sub = new_cell.crop(lx * scale, ly * scale, 8 * scale, 8 * scale)
@@ -996,6 +1031,12 @@ def cmd_import(args) -> int:
               f"key from; {report['sourceLeft']} of their source cell(s) left as they were, so no rule moves")
     for name in report["sheets"]:
         print(f"  wrote {pack.sheets_dir / name}")
+    if report["blank"]:
+        print(f"  {len(report['blank'])} fully transparent tile(s) skipped: the NES draws nothing there, "
+              "so paint over them is a neighbour's and stays off the sheet (#452)")
+        for b in report["blank"]:
+            print(f"    {b['sheet']} cell {b['index']} (node {b['node']}"
+                  + (f", {b['pose']}" if b["pose"] else "") + f"): {', '.join(b['keys']) or '?'}")
     if report["overwrote"]:
         print(f"  note: {report['overwrote']} crop(s) already carried other paint — an earlier import "
               "of this figure, or a paint on the sheet itself — and now carry this figure's; a figure "

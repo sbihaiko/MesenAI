@@ -774,10 +774,12 @@ def _notes(pack, builder, grids, names, pack_arg):
         "figures/usrNNN-figure.png returns a painted view to the sheet that draws each tile "
         "in the built pack (the usrNNN row, so Reload Repainted Images shows it, #413); where "
         "two tiles overlap, a pixel goes to the tile in front.",
-        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\", import "
-        f"each painted figure with python3 scripts/mep_figure.py import \"{pack_arg}\" "
-        f"figures/usrNNN-figure.png, then run python3 scripts/mep_build.py build \"{pack_arg}\" "
-        "- a figure left out of the import never reaches the pack (#399).",
+        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\", build "
+        f"once with python3 scripts/mep_build.py build \"{pack_arg}\" (import refuses a copy "
+        "not yet built with these sheets, #435), import each painted figure with python3 "
+        f"scripts/mep_figure.py import \"{pack_arg}\" figures/usrNNN-figure.png, then run "
+        f"python3 scripts/mep_build.py build \"{pack_arg}\" again - a figure left out of the "
+        "import never reaches the pack (#399).",
     ]
     if builder.excluded_fusions or builder.excluded_blank or builder.excluded_hud:
         notes.append(

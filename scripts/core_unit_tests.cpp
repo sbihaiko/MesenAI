@@ -72,6 +72,7 @@
 #include "NES/HdPacks/SheetLabels.h"
 #include "NES/HdPacks/SheetRender.h"
 #include "NES/HdPacks/SheetColourways.h"
+#include "NES/HdPacks/ChrPageSlots.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/HdPacks/OggFadeRamp.h"
 #include "NES/HdPacks/OggLoopStream.h"
@@ -9512,8 +9513,8 @@ void TestTheSidecarListsFoldsOnlyWhereThereAreSome()
 
 void TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn()
 {
-	//AddTile evicts a variant whose CHR page slot another one took, so it
-	//never gets a <tile> line; such a variant is not a drawn palette.
+	//A variant with no CHR page slot never gets a <tile> line, so it is not a
+	//drawn palette. Since #460 that is only a variant a full page refused.
 	struct Tile { uint32_t PaletteColors; };
 	Tile kept { 0x0F161A30 }, evicted { 0x0F021230 }, other { 0x0F272830 };
 	std::map<uint32_t, std::map<uint32_t, std::vector<Tile*>>> banks;
@@ -9866,6 +9867,101 @@ void TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn()
 		"got " + Describe(got));
 }
 
+void TestALaterTileNeverEvictsAnEarlierOneFromItsChrPageSlot()
+{
+	//Issue #460: on CHR RAM the bank is keyed by a hash that can outlive the
+	//bank's contents, so two different tiles may ask for the same slot. The
+	//later one used to overwrite the earlier, which then had no <tile> line
+	//although the PPU drew it.
+	struct Tile { int Id; };
+	Tile first { 1 }, later { 2 }, third { 3 };
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[1] = std::vector<Tile*>(256, nullptr);
+	std::vector<Tile*>& page = bank[1];
+	Check(MesenSheets::PlaceTileOnChrPage(bank, 1, 95, &first, 256) && page[95] == &first, "#460: a tile takes the slot of its CHR index");
+	bool placed = MesenSheets::PlaceTileOnChrPage(bank, 1, 95, &later, 256);
+	Check(page[95] == &first, "#460: a later tile does not evict the earlier one from its slot");
+	Check(placed && page[0] == &later, "#460: the later tile takes a free slot of its page instead");
+	Check(MesenSheets::PlaceTileOnChrPage(bank, 1, 95, &first, 256) && page[95] == &first && page[1] == nullptr, "#460: re-filing a tile already in its slot changes nothing");
+	Check(MesenSheets::PlaceTileOnChrPage(bank, 1, -1, &third, 256) && page[1] == &third, "#460: a loaded CHR RAM tile (index -1) takes the first free slot");
+}
+
+void TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank()
+{
+	//SortByUsageFrequency packs each slot index across the bank's pages into
+	//the first pages, so the bank writes as many PNGs as its fullest column
+	//holds tiles. Filing the displaced tile in the least-filled column keeps
+	//that count, so fixing the eviction adds no chr/Chr_*.png.
+	struct Tile { int Id; };
+	Tile first { 1 }, later { 2 }, b0 { 3 }, b1 { 4 };
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[1] = std::vector<Tile*>(256, nullptr);
+	bank[2] = std::vector<Tile*>(256, nullptr);
+	MesenSheets::PlaceTileOnChrPage(bank, 2, 0, &b0, 256);
+	MesenSheets::PlaceTileOnChrPage(bank, 2, 1, &b1, 256);
+	MesenSheets::PlaceTileOnChrPage(bank, 1, 95, &first, 256);
+	bool placed = MesenSheets::PlaceTileOnChrPage(bank, 1, 95, &later, 256);
+	Check(placed && bank[1][2] == &later && bank[1][0] == nullptr && bank[1][1] == nullptr, "#460: a displaced tile skips a column another page already fills");
+	Check(bank[2][0] == &b0 && bank[2][1] == &b1 && bank[1][95] == &first, "#460: filing a displaced tile moves no other tile");
+}
+
+void TestAFullChrPageRefusesATileInsteadOfEvictingOne()
+{
+	struct Tile { int Id; };
+	std::vector<Tile> tiles(257);
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[1] = std::vector<Tile*>(256, nullptr);
+	for(int i = 0; i < 256; i++) {
+		MesenSheets::PlaceTileOnChrPage(bank, 1, i, &tiles[i], 256);
+	}
+	bool placed = MesenSheets::PlaceTileOnChrPage(bank, 1, 7, &tiles[256], 256);
+	Check(!placed, "#460: a full page reports the tile it could not file, so AddTile counts it as dropped");
+	Check(bank[1][7] == &tiles[7], "#460: a full page keeps every tile it already holds");
+}
+
+void TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage()
+{
+	//PR #473 review: with a 1 KB (or 2 KB) CHR RAM bank size a page has only
+	//ChrRamBankSize / 16 usable slots, because DrawTile offsets page N of a PNG
+	//by that stride. A tile filed at slot 64 or above would overlap the next
+	//page's cells, or fall past the PNG buffer on the last page of a PNG.
+	struct Tile { int Id; };
+	std::vector<Tile> other(64);
+	Tile first { 1 }, later { 2 };
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[1] = std::vector<Tile*>(256, nullptr);
+	bank[2] = std::vector<Tile*>(256, nullptr);
+	for(int i = 0; i < 64; i++) {
+		MesenSheets::PlaceTileOnChrPage(bank, 2, i, &other[i], 64);
+	}
+	MesenSheets::PlaceTileOnChrPage(bank, 1, 5, &first, 64);
+	bool placed = MesenSheets::PlaceTileOnChrPage(bank, 1, 5, &later, 64);
+	bool beyond = false;
+	for(int i = 64; i < 256; i++) {
+		beyond = beyond || bank[1][i] != nullptr;
+	}
+	Check(placed && bank[1][0] == &later && !beyond, "#460: with 64 usable slots a displaced tile never lands at slot 64 or above");
+}
+
+void TestAPageWithItsUsableSlotsFullRefusesATile()
+{
+	struct Tile { int Id; };
+	std::vector<Tile> tiles(66);
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[1] = std::vector<Tile*>(256, nullptr);
+	for(int i = 0; i < 64; i++) {
+		MesenSheets::PlaceTileOnChrPage(bank, 1, i, &tiles[i], 64);
+	}
+	bool displaced = MesenSheets::PlaceTileOnChrPage(bank, 1, 7, &tiles[64], 64);
+	bool loaded = MesenSheets::PlaceTileOnChrPage(bank, 1, -1, &tiles[65], 64);
+	bool beyond = false;
+	for(int i = 64; i < 256; i++) {
+		beyond = beyond || bank[1][i] != nullptr;
+	}
+	Check(!displaced && !beyond, "#460: a page whose 64 usable slots are full refuses a displaced tile");
+	Check(!loaded && !beyond, "#460: a page whose 64 usable slots are full refuses a loaded CHR RAM tile");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -10177,6 +10273,11 @@ int main()
 	TestTheSidecarListsFoldsOnlyWhereThereAreSome();
 	TestOnlyAVariantThatKeptItsPageSlotCountsAsDrawn();
 	TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten();
+	TestALaterTileNeverEvictsAnEarlierOneFromItsChrPageSlot();
+	TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank();
+	TestAFullChrPageRefusesATileInsteadOfEvictingOne();
+	TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage();
+	TestAPageWithItsUsableSlotsFullRefusesATile();
 
 	TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched();
 	TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch();

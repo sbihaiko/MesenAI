@@ -1447,9 +1447,18 @@ def lint_sheet_folds(src: Source, hires_rel: str, rep: Report):
             continue
         cells = doc.get("cells") if isinstance(doc, dict) else None
         cells = [c for c in cells if isinstance(c, dict)] if isinstance(cells, list) else []
-        indexes = {c.get("index") for c in cells}
+        # A cell index is an int; anything else (e.g. an unhashable `[]`) is
+        # reported, never hashed - it would crash the set below (#461 review).
+        def is_index(v):
+            return isinstance(v, int) and not isinstance(v, bool)
+        indexes = {c.get("index") for c in cells if is_index(c.get("index"))}
         for cell in cells:
-            if "variantOf" in cell and cell["variantOf"] not in indexes:
+            if "index" in cell and not is_index(cell["index"]):
+                rep.warning(name, f"cell index {cell['index']!r} is not an integer (ADR-0230)")
+            if "variantOf" in cell and not is_index(cell["variantOf"]):
+                rep.warning(name, f"cell index {cell.get('index')!r}: variantOf {cell['variantOf']!r} "
+                                  "is not a cell index (ADR-0230)")
+            elif "variantOf" in cell and cell["variantOf"] not in indexes:
                 rep.warning(name, f"cell index {cell.get('index')}: variantOf {cell['variantOf']!r} "
                                   "names no cell of this sheet (ADR-0230)")
             for i, entry in enumerate(cell.get("tiles") or []):

@@ -265,9 +265,11 @@ namespace MesenSheets
 
 	//The palettes hires.txt will carry for each shape id: every recorded
 	//variant of the shape's key that still owns a CHR page slot. SaveHdPack
-	//writes <tile> lines from the pages only, and AddTile evicts a variant
-	//whose slot another one took, so a variant off the pages was never
-	//drawn as far as the pack is concerned. `banks` is the recorder's
+	//writes <tile> lines from the pages only, so a variant off the pages was
+	//never drawn as far as the pack is concerned. Since #460 AddTile no
+	//longer evicts a variant whose slot another one wanted, so the only
+	//variant left off is one a full page refused (counted as dropped by
+	//AddTile). `banks` is the recorder's
 	//bank -> palette -> page-of-tile-pointers map, `variants` its key ->
 	//tile-pointers map, `keyOf` a shape id's key in it. Templated so the
 	//recorder's types never have to be linked into the unit tests.

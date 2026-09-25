@@ -44,4 +44,5 @@ mep_sentinel.py
 ora_writer.py
 pack_id_rules.py
 palette_folds.py
+sheet_pixel_fixes.py
 sheet_repaint.py

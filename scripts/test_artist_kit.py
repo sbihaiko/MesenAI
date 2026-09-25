@@ -405,6 +405,27 @@ def test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason():
                   "a pack with no poses.json is refused, with the fix in the message", str(e))
 
 
+def test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build():
+    """#453: the sprite notes' "Rebuild after painting" bullet still said copy
+    -> import -> build after #435/#444 made `import` refuse a copy never built
+    with the kit sheets (exit 2). It must give the same order as ARTIST.md's
+    "When you are done" recipe: copy, build, import, build."""
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), _doc_with_cycle())
+        builder = K.KitBuilder(pack)
+        notes = K._notes(pack, builder, builder.build(), K.Names(), "PACK")
+        bullet = next((n for n in notes if n.startswith("Rebuild after painting")), "")
+        check(bullet, "the sprite notes carry a Rebuild after painting bullet", str(notes)[-300:])
+        build = 'python3 scripts/mep_build.py build "PACK"'
+        steps = [bullet.find('copy sheets/usr* into "PACK/textures/sheets/"'), bullet.find(build),
+                 bullet.find('python3 scripts/mep_figure.py import "PACK"'), bullet.rfind(build)]
+        check(-1 not in steps and steps == sorted(steps) and steps[1] < steps[2] < steps[3],
+              "the bullet reads copy, build, import, build", f"{steps} in {bullet!r}")
+        check(bullet.count(build) == 2, "it names the build twice, before and after the import",
+              bullet)
+        check("#435" in bullet, "and says why the first build comes before the import", bullet)
+
+
 def main():
     tests = [
         test_a_cycle_becomes_one_row_in_phase_order,
@@ -422,6 +443,7 @@ def main():
         test_a_sheet_is_captioned_by_the_subject_it_holds,
         test_a_repeated_phase_says_which_column_plays_again,
         test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason,
+        test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build,
     ]
     for t in tests:
         t()
