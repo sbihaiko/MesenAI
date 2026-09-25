@@ -19,6 +19,8 @@ real silhouette. What is asserted:
 Run:  python3 scripts/test_mep_figure.py
 """
 
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -557,6 +559,75 @@ def test_an_import_into_a_pack_that_does_not_build_is_refused():
         finally:
             F._quiet_build = real_build
         check(_snapshot(sheets) == before, "and that refusal wrote nothing either")
+
+
+def _blank_node(pack_dir: Path, node: int):
+    """Make `node`'s cell fully transparent (all colour 0) on every sprite
+    sheet, twin and painted sheet alike: the blank sprite tile a game parks
+    in a metasprite (Castlevania's `0000...` in Simon's walk, #452)."""
+    sheets = pack_dir / "textures" / "sheets"
+    for stem in ("sprites", "spr000"):
+        doc = json.loads((sheets / f"{stem}.json").read_text(encoding="utf-8"))
+        cell = next(c for c in doc["cells"] if c.get("metatile") == node)
+        cell["tiles"] = [{"tile": "0" * 32, "palette": "0F0F0F0F"}]
+        (sheets / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+        for name, n in ((f"{stem}.orig.png", 1), (f"{stem}.png", SCALE)):
+            img = sheet_repaint.read_png(sheets / name)
+            img.paste(T._solid(8 * n, (0, 0, 0, 0)), int(cell["x"]) * n, int(cell["y"]) * n)
+            sheet_repaint.write_png(sheets / name, img)
+    hires = pack_dir / "textures" / "hires.txt"
+    tile, pal = _key(node)
+    hires.write_text(hires.read_text(encoding="utf-8").replace(f",{tile},{pal},", f",{'0' * 32},0F0F0F0F,"),
+                     encoding="utf-8")
+
+
+def _cell_rect(sheets: Path, png: str, node: int):
+    x, y = _cell_px(sheets, png[:-len(".png")], node)
+    return sheet_repaint.read_png(sheets / png).crop(x, y, 8 * SCALE, 8 * SCALE).px
+
+
+def test_a_fully_transparent_tile_is_never_painted_and_the_skip_is_reported():
+    """#452: painting over a whole figure put paint on the blank member tile
+    (its rect overlaps the body tiles at pixel precision, ADR-0225), import
+    wrote it into two sheets as two different pictures and the build failed
+    with #253's "painted tile ... lost to ...". The NES draws nothing for an
+    all-transparent tile, so import skips it and says so."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        _blank_node(pack_dir, 2)
+        sheets = pack_dir / "textures" / "sheets"
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        check(any(c["node"] == 2 for c in doc["cells"]), "the blank member is part of the exported figure")
+        fig = sheet_repaint.read_png(out / "pose000-figure.png")
+        magenta = (255, 0, 255, 255)
+        for py in range(fig.height):
+            for px in range(fig.width):
+                fig.set(px, py, magenta)  # paint over the whole figure, holes included
+        sheet_repaint.write_png(out / "pose000-figure.png", fig)
+        before = {n: _cell_rect(sheets, n, 2) for n in ("sprites.png", "spr000.png")}
+
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        skipped = rep.get("blank") or []
+        check([b.get("node") for b in skipped] == [2],
+              "the all-transparent tile is skipped and named in the report", json.dumps(rep))
+        check(rep["painted"] == len(doc["cells"]) - 1 and rep["written"] == len(doc["cells"]) - 1,
+              "every other painted cell is still written", json.dumps(rep))
+        after = {n: _cell_rect(sheets, n, 2) for n in ("sprites.png", "spr000.png")}
+        check(after == before, "no sheet carries paint on the blank tile's cell",
+              str([n for n in after if after[n] != before[n]]))
+        check(sheet_repaint.read_png(sheets / "spr000.png").get(*_cell_px(sheets, "spr000", 1)) == magenta,
+              "while a body tile carries the paint")
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0,
+              "the repainted pack builds (no #253 conflict on the blank key)")
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = F.main(["import", str(pack_dir), str(out / "pose000-figure.png")])
+        text = buf.getvalue()
+        check(rc == 0 and "1 fully transparent tile(s) skipped" in text and "0" * 32 in text,
+              "the CLI reports the skipped tile with its key", text)
 
 
 def test_a_resized_figure_is_refused():
