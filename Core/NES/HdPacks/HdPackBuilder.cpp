@@ -1043,7 +1043,7 @@ void HdPackBuilder::RecordOamFrame()
 //first exact variant seen becomes the shape's drawable art.
 MesenSheets::ShapeId HdPackBuilder::ShapeIdFor(const HdPpuTileInfo& tile)
 {
-	HdTileKey shapeKey = tile.GetKey(true);
+	HdShapeKey shapeKey(tile.GetKey(true));
 	auto it = _shapeIds.find(shapeKey);
 	if(it != _shapeIds.end()) {
 		return it->second;

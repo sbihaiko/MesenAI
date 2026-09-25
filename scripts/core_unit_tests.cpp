@@ -5221,6 +5221,58 @@ namespace
 			"BlocoP: a vertical flip moves the top row to the bottom");
 	}
 
+	//#474: HdPackBuilder::ShapeIdFor interns every drawn tile under HdShapeKey.
+	//HdBuilderPpu bakes the OAM flips into TileData, so on a CHR ROM game (where
+	//HdTileKey compares the index only) one index drawn flipped and unflipped
+	//used to collapse into the first sighting's orientation, and every OAM
+	//entry of the other orientation named the wrong art (Punch-Out!! pose005,
+	//pose023). This runs the same interning ShapeIdFor does, on the same key.
+	void TestShapeKeySeparatesAChrRomTileDrawnInBothOrientations()
+	{
+		std::unordered_map<HdShapeKey, ShapeId, HdShapeKey> ids;
+		auto intern = [&ids](const HdPpuTileInfo& tile) {
+			HdShapeKey key(tile.GetKey(true));
+			auto it = ids.find(key);
+			if(it != ids.end()) {
+				return it->second;
+			}
+			ShapeId id = (ShapeId)ids.size();
+			ids[key] = id;
+			return id;
+		};
+		auto sprite = [](bool chrRam, int32_t index, bool h, bool v, uint32_t palette) {
+			HdPpuTileInfo tile;
+			tile.IsChrRamTile = chrRam;
+			tile.TileIndex = chrRam ? -1 : index;
+			tile.PaletteColors = palette;
+			for(int i = 0; i < 16; i++) {
+				tile.TileData[i] = (uint8_t)(0x01 << (i % 3)); //asymmetric on both axes
+			}
+			ApplyTileFlips(tile.TileData, h, v); //what HdBuilderPpu hands RecordSprite
+			tile.HorizontalMirroring = h;
+			tile.VerticalMirroring = v;
+			return tile;
+		};
+
+		ShapeId plain = intern(sprite(false, 0x2A, false, false, 0xFF0F1626));
+		ShapeId mirrorH = intern(sprite(false, 0x2A, true, false, 0xFF0F1626));
+		ShapeId mirrorHV = intern(sprite(false, 0x2A, true, true, 0xFF0F1626));
+		Check(plain != mirrorH && plain != mirrorHV && mirrorH != mirrorHV,
+			"#474: a CHR ROM tile drawn in three orientations is three shapes, each with its own baked art");
+		Check(intern(sprite(false, 0x2A, true, false, 0xFF0F1626)) == mirrorH,
+			"#474: a second sighting in the same orientation reuses its shape");
+		Check(intern(sprite(false, 0x2A, false, false, 0xFF0F3037)) == plain,
+			"#474: the shape stays palette-wildcarded");
+		Check(intern(sprite(false, 0x2B, false, false, 0xFF0F1626)) != plain,
+			"#474: two CHR ROM indexes with the same art stay two shapes (ADR-0172)");
+
+		ids.clear();
+		ShapeId ramPlain = intern(sprite(true, 0, false, false, 0xFF0F1626));
+		ShapeId ramMirror = intern(sprite(true, 0, true, false, 0xFF0F1626));
+		Check(ramPlain != ramMirror && intern(sprite(true, 0, false, false, 0xFF0F3037)) == ramPlain,
+			"#474: a CHR RAM tile is keyed by its drawn data, exactly as before");
+	}
+
 	//ADR-0173 (issue #167): a HUD bar is drawn at a handful of fixed pixels for
 	//the whole capture, so its bottom edge lands in several quantised bands at
 	//once and joins every one of them. This fixture is that shape against a
@@ -10393,6 +10445,50 @@ void TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline()
 		"#471: a cell still takes the shape at its origin scanline, and only origin runs intern a palette");
 }
 
+//#474 x #471: ShapeIdFor is fed every scanline's background runs, not only a
+//cell's origin. A CHR ROM background tile carries its raw CHR data (no flips
+//are baked into a background fetch), so every scanline of one index yields the
+//same HdShapeKey and the off-origin runs add no shape; only a sprite drawn in
+//another orientation, whose baked data differs, is a new one.
+void TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape()
+{
+	struct Run { uint16_t X; uint16_t Y; HdPpuTileInfo Tile; };
+	auto chr = [](int32_t index, uint32_t palette) {
+		HdPpuTileInfo t = {};
+		t.TileIndex = index;
+		t.PaletteColors = palette;
+		for(int i = 0; i < 16; i++) {
+			t.TileData[i] = (uint8_t)(0x01 << (i % 3));
+		}
+		return t;
+	};
+	std::unordered_map<HdShapeKey, MesenSheets::ShapeId, HdShapeKey> ids;
+	auto intern = [&ids](const HdPpuTileInfo& tile) {
+		HdShapeKey key(tile.GetKey(true));
+		auto it = ids.find(key);
+		if(it != ids.end()) {
+			return it->second;
+		}
+		MesenSheets::ShapeId id = (MesenSheets::ShapeId)ids.size();
+		ids[key] = id;
+		return id;
+	};
+	std::vector<Run> runs;
+	for(uint16_t y = 0; y < 8; y++) {
+		runs.push_back({ 0, y, chr(0x2A, 0x112A0F36) });
+	}
+	runs.push_back({ 8, 3, chr(0x2B, 0x112A0F36) }); //off-origin only
+	MesenSheets::GridFrame frame;
+	MesenSheets::LayOutGridRuns(runs, frame, intern, [](uint32_t) { return (MesenSheets::PaletteId)0; });
+	Check(ids.size() == 2 && frame.Cells[0][0] == 0,
+		"#474/#471: a CHR ROM background tile's off-origin scanlines reuse its origin's shape",
+		std::to_string(ids.size()) + " shapes");
+	HdPpuTileInfo flipped = chr(0x2A, 0x112A0F36);
+	MesenSheets::ApplyTileFlips(flipped.TileData, true, false);
+	flipped.HorizontalMirroring = true;
+	Check(intern(flipped) == 2, "#474/#471: the same index drawn as a mirrored sprite is still its own shape");
+}
+
 //Issue #470: a fully transparent sprite half (all 16 bytes zero, colour 0 on
 //every pixel) was a sheet key every time the latch recorded it, but a <tile>
 //rule only when it happened to be the highest-priority active shifter at its
@@ -10786,6 +10882,7 @@ int main()
 	TestSheetJsonCarriesTheChrIndex();
 	TestSheetJsonCarriesTheUnflippedTileData();
 	TestTileFlipsAreTheirOwnInverse();
+	TestShapeKeySeparatesAChrRomTileDrawnInBothOrientations();
 	TestScreenFixedSpritesAreLabelledNotDeleted();
 	TestAdjacencySpriteStatsCarryFloorsAndCoFrames();
 	TestAdjacencySpritePairOffsetsArePrunedWithDenominatorsKept();
@@ -10961,6 +11058,7 @@ int main()
 	TestTheOamLatchKeepsItsGuaranteesWithTheRowLog();
 	TestTheRowLogNamesEachOverlappingEntryByItsOwnFetches();
 	TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline();
+	TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape();
 	TestAFullyTransparentSpriteHalfNeverReachesTheRegistry();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();

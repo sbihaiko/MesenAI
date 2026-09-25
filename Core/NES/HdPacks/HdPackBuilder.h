@@ -368,7 +368,7 @@ private:
 	//reads memory, so 2 KB inside the struct would be paid on every pass.
 	vector<uint8_t> _gridRam;
 	uint32_t _screenResidentCells = 0; //cells the screen surface owns (ADR-0156)
-	unordered_map<HdTileKey, MesenSheets::ShapeId> _shapeIds;
+	unordered_map<HdShapeKey, MesenSheets::ShapeId, HdShapeKey> _shapeIds; //#474: index + drawn data
 	vector<MesenSheets::SheetTileKey> _shapeTiles; //drawable art per shape id
 	//ADR-0209 Q4(k) (F12.8): every shape id some sheet already put on a
 	//canvas, accumulated by WriteSheetFiles as each sheet is written, so the
