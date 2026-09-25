@@ -825,6 +825,9 @@
     <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
+    <ClInclude Include="NES\HdPacks\SpriteFetchLog.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
     <ClInclude Include="NES\HdPacks\OamFetchLatch.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
