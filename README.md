@@ -280,18 +280,20 @@ A project that measures its own claims should say what is and isn't shipped.
   on NES only until the GB/SMS `hires.txt` extension freezes.
 - The headless recorder, all four drivers, coverage measurement, the four-surface
   kit, `mep_build`/`mep_lint`, the composition editor, auto-attached
-  `spriteNearby`/`tileNearby` conditions, 15 validated community packs
-  auto-installing.
+  `spriteNearby`/`tileNearby` and hand-written conditions checked against
+  recorded routes, the in-place reload of repainted images, importing a legacy
+  `hires.txt` pack, 15 validated community packs auto-installing.
 - A CI gate on every push: the structural suite, the Python tool suites and a
-  headless boot of the real core. 813 dependency-free C++ unit tests and a C#
+  headless boot of the real core. 1193 dependency-free C++ unit tests and a C#
   xUnit suite run locally.
 
 **Not yet, and named as such**
-- Hot reload of a pack without reopening the ROM; copying a tile from the
-  viewers straight into a sheet; `<addition>` overflow art from the editor;
-  hand-written conditions validated against recorded routes; importing an
-  existing `hires.txt` pack into the toolchain. These are **Phase 12** of the
-  [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md), opened from a
+- Two limits stand by design, not as gaps: a changed `hires.txt` still needs the
+  ROM reopened — the in-place reload covers repainted images — and the layered
+  `.ora` is write-only, so the flat PNG stays the return path. Otherwise
+  **Phase 12** is delivered, with only human rows left; the live phase is
+  **14**, proof at scale, of the
+  [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
   [side-by-side with upstream](docs/hd-pack-toolchain-comparison.md) that says
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
