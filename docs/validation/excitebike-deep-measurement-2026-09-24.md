@@ -120,9 +120,11 @@ headless_record <run>/Excitebike.nes 90 <run>/rec bootstrap hdpack-off log \
 
 ## Step 2: the palette gap (F14.4 method)
 
-The method is the one in `f14.4-adr0230-palette-gap-measurement-2026-09-24.md`
-and `f14.4-adr0229-option-i-measurement-2026-09-23.md`. Their scratch
-scripts were copied and adapted to a CHR ROM key:
+The method is the one in
+`docs/validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md` and
+`docs/validation/f14.4-adr0229-option-i-measurement-2026-09-23.md`. Their
+scratch scripts are not versioned (those logs describe what they count); they
+were copied from the session scratchpad and adapted to a CHR ROM key:
 
 - A key is a distinct `(index, palette)` on a `<tile>` line, with condition
   prefixes ignored.
