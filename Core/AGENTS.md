@@ -52,6 +52,18 @@ needs no local rules beyond the root DOX.
   line art in the grid and OAM dumps. Their sidecar entries share `index`, and
   the flipped ones carry `source`/`mirror`. `HdTileKey` remains the run
   time's key, where one index still serves every orientation.
+- **The shape registry and the `<tile>` rules name the same keys (#470,
+  #471).** A fully transparent sprite tile (all 16 bytes zero,
+  `OamFetchLatch::IsFullyTransparent`) is recorded by neither: `DrawPixel`
+  writes no rule for it and `OamFetchLatch::ForEachLatched` hands no such
+  half, and no such extra bank of a half, to `RecordSprite` /
+  `RecordSpriteBank`, so a blank half is not an OAM entry either. The
+  loader never draws one (`HdNesPack::DrawTile` returns on
+  `IsFullyTransparent`). A background tile's shape is registered from every
+  scanline it was drawn on (`MesenSheets::LayOutGridRuns`), not only from a
+  cell's origin scanline; the grid cell itself still takes the origin's
+  tile, so a tile drawn only off it gets its cell on `unsorted.png` when no
+  other sheet claims it.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
   from `PoseStats` and nothing in it is computed at serialisation time — with
   one named exception: the `label` beside each pose and run is a *rendering*

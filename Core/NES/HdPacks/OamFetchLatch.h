@@ -166,6 +166,7 @@ public:
 	//re-reads a tile from another CHR address, keeping its palette and flips;
 	//`emitBank(tile)` receives the half as read from each further bank its
 	//rows came from - a key the <tile> rules carry, but not a second sprite.
+	//Neither receives a fully transparent tile (#470, IsFullyTransparent).
 	template<typename Emit, typename Rebank, typename EmitBank>
 	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
 	{
@@ -178,11 +179,17 @@ public:
 			if(!_banks.empty() && _banks[0] != _abs[slot]) {
 				rebank(_banks[0], tile);
 			}
-			emit(_x[slot], _y[slot], tile);
+			//#470: a blank half places no sprite, and a blank bank is no key;
+			//a drawn bank of a blank half still is (its rows made rules).
+			if(!IsFullyTransparent(tile)) {
+				emit(_x[slot], _y[slot], tile);
+			}
 			for(size_t i = 1; i < _banks.size(); i++) {
 				HdPpuTileInfo other = tile;
 				rebank(_banks[i], other);
-				emitBank(other);
+				if(!IsFullyTransparent(other)) {
+					emitBank(other);
+				}
 			}
 		}
 	}
@@ -197,6 +204,23 @@ public:
 				emit(_x[slot], _y[slot], _tiles[slot]);
 			}
 		}
+	}
+
+	//Issue #470: a sprite tile whose 16 bytes are all zero draws colour 0 -
+	//transparent - on every pixel. The loader never draws one
+	//(HdNesPack::DrawTile returns on IsFullyTransparent, and
+	//InitializeFallbackTiles skips blank tiles), and the PPU makes a <tile>
+	//rule of one only when it happens to be the highest-priority active
+	//shifter at its first dot. So neither the registry (ForEachLatched) nor
+	//the rules (HdBuilderPpu::DrawPixel) record one: both use this test.
+	static bool IsFullyTransparent(const HdPpuTileInfo& tile)
+	{
+		for(uint8_t b : tile.TileData) {
+			if(b != 0) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	//An 8x16 sprite is two 8x8 halves, top half first on screen whichever way

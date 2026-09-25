@@ -944,11 +944,8 @@ MesenSheets::PaletteId HdPackBuilder::PaletteIdFor(uint32_t paletteColors)
 }
 
 //F9.1 (ADR-0153 §5): turn this frame's background runs into a compact
-//GridFrame. Ported from the spike's frame_grid (scripts/spike_tile_sheets.py):
-//run starts sit on tile boundaries, so the most common (x % 8) among non-zero
-//run starts is the frame's fine x scroll, and cells are laid out relative to
-//it - two frames of the same screen at different sub-tile offsets then compare
-//equal. Consecutive duplicates collapse into RepeatCount and the stream is
+//GridFrame (the layout is MesenSheets::LayOutGridRuns, host-free and unit
+//tested). Consecutive duplicates collapse into RepeatCount and the stream is
 //capped at kMaxSheetFrames, so a long session costs late-game vocabulary,
 //never correctness.
 void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize)
@@ -961,50 +958,8 @@ void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t interna
 		return;
 	}
 
-	uint32_t fineCounts[8] = {};
-	for(const ScreenRun& run : _frameRuns) {
-		if(run.X != 0) {
-			fineCounts[run.X & 7]++;
-		}
-	}
-	uint8_t fine = 0;
-	for(uint8_t i = 1; i < 8; i++) {
-		if(fineCounts[i] > fineCounts[fine]) {
-			fine = i;
-		}
-	}
-
 	MesenSheets::GridFrame frame;
-	frame.FineX = fine;
-	for(size_t i = 0; i < _frameRuns.size(); i++) {
-		const ScreenRun& run = _frameRuns[i];
-		if((run.Y & 7) != 0) {
-			continue;
-		}
-		uint32_t row = (uint32_t)run.Y >> 3;
-		if(row >= MesenSheets::kGridRows) {
-			continue;
-		}
-		//The run ends where the next run on the same scanline starts
-		uint32_t xEnd = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;
-		int32_t offset = ((int32_t)run.X - (int32_t)fine) % 8;
-		if(offset < 0) {
-			offset += 8;
-		}
-		uint32_t cx = offset == 0 ? run.X : run.X + (8 - offset);
-		MesenSheets::ShapeId shape = ShapeIdFor(run.Tile);
-		if(shape == MesenSheets::kEmptyCell) {
-			continue;
-		}
-		MesenSheets::PaletteId palette = PaletteIdFor(run.Tile.PaletteColors);
-		for(; cx + 8 <= 256 && cx < xEnd; cx += 8) {
-			int32_t col = ((int32_t)cx - (int32_t)fine) / 8;
-			if(col >= 0 && col < (int32_t)MesenSheets::kGridCols) {
-				frame.Cells[row][col] = shape;
-				frame.Palettes[row][col] = palette;
-			}
-		}
-	}
+	MesenSheets::LayOutGridRuns(_frameRuns, frame, [this](const HdPpuTileInfo& t) { return ShapeIdFor(t); }, [this](uint32_t c) { return PaletteIdFor(c); });
 
 	//De-duplicate on drawing *and* colours (ADR-0159 amendment): a frame that
 	//only recolours the screen is the evidence the anchor rule is missing, so
