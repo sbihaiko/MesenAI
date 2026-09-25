@@ -1,0 +1,8 @@
+{
+  "game": "Castlevania",
+  "rom": {
+    "noIntroSha1": ["3DCB69A8C861C041AEB56C04E39ADF6D332EDA3A"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Castlevania (1987) (Konami).nes from the user's ROM library (whole-file SHA1 7A20C44F302FB2F1B7ADFFA6B619E3E1CAE7B546, the dump the F14.4 and ADR-0229 logs measured). mint-stage1.txt reaches the player-controlled start of stage 1 at frame 361 (6 s); stage1-run.txt walks right and whips from that state. Both were run on this dump by docs/validation/castlevania-deep-measurement-2026-09-24.md, twice, with byte-identical packs."
+}

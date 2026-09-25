@@ -456,7 +456,28 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `mirror`, build also un-bakes those pixels into the sheet PNG so the
   source key stores the art the run time will mirror, then rewrites the
   sidecar to a plain unflipped entry so a second build is idempotent
-  (#255). Every `[condition]` rule from the key source keeps its
+  (#255). The same un-bake runs on an index-keyed (CHR ROM, ADR-0172) pack:
+  the key is the index, but the run time still mirrors the art (#457). Each
+  physical crop is un-baked once, however many entries (an alias, a fold)
+  share it - twice would re-bake it while the sidecar lost the mirror.
+  **Colour 0 on background crops (#456, `sheet_pixel_fixes.py`).** Input:
+  the key source (`textures/hires.txt`) and the crops its `<img>`/`<tile>`
+  lines point at, at its `<scale>`. A background key is see-through when
+  one of those crops has an alpha-0 pixel at a colour-0 position of the
+  key's tile - the recorder's `TransparencyRequired` signature. On a CHR
+  ROM game the tile comes from the sheet crop, since an index key has no
+  pixels. A translucent brush pixel (alpha 1..254), or alpha 0 over ink,
+  is paint and never marks a key. Side effect: in every background crop of
+  a see-through key, and of any key sharing one of those crops (closed to
+  a fixed point), `build` sets each colour-0 pixel that still equals the
+  twin's backdrop (no twin: palette entry 0 of the default NES
+  palette) to alpha 0. It rewrites both the authored sheet PNG and
+  its `*.orig.png` twin in lockstep (#329). An RGB sheet and twin are
+  written back as RGBA. Exclusions: sprite sheets (`sprite`, `sprites`),
+  `FF`-prefixed palettes, and a colour-0 pixel the artist repainted (it no
+  longer equals the twin). A twin pixel already at alpha 0 is skipped, so
+  a second build over its own output is byte-identical. Verification:
+  `test_mep_build.py` (`backdrop_*`, `index_keyed_*` tests). Every `[condition]` rule from the key source keeps its
   unconditional fallback twin in the rebuilt `hires.txt` (synthesised when
   the source omitted it) so a condition miss still shows the painted art
   (#256 / ADR-0189 §3). A painted sprite sheet whose cells lose to another
@@ -858,8 +879,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   that voted fixed, and a tied row is an abstention rather than a "moving"
   vote. Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
   being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
-  position and `(tileData, palette)` key - so the panorama is addressable *and*
-  a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
+  position and `(tileData, palette)` key, so the panorama is addressable. It is
+  **not** a `textures/sheets/` drop-in: the ADR-0220 §3 context band makes the
+  PNG and its `.orig.png` twin taller than the grid `cells[]` describe, and
+  `mep_build` refuses that size (#451). The only way back is `--slice`
+  (ADR-0220 §5), and `--verify` goes through `--slice` too, so the ADR-0183 §4
+  round trip exercises the artist's path.
   `--slice` cuts a painted strip back into that sheet: one key sits at many
   positions and a pack holds one art per key, so **first occurrence in (y, x)
   order wins** and every disagreeing position is printed, split into "both
@@ -901,7 +926,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   most-recorded palette, which is a guess and says so. Writes
   `<out>/chr/Chr_<n>.png` + `.orig.png` + `.legend.png` (green recorded, olive
   moved up, amber ROM fill, red hole) + `.json` (every cell's state, `seen`,
-  origin and PRG offset), plus the `kit-part-chr.json` fragment. `hires.txt` is
+  origin and PRG offset), plus the `kit-part-chr.json` fragment. A cell whose
+  row is `defaultTile=Y` is the bootstrap's own ROM export (`AddRomTiles` on
+  the real CHR ROM pages, `AddPrgScanTiles` on the synthetic ones; every tile
+  the run draws is written `N`), so it is `fill` / `origin: romExport` /
+  `seen: false`, amber, counted as ROM fill and never folded, with its pixels
+  copied byte for byte and no rule emitted (#449). `hires.txt` is
   never touched: `--fill-rules` writes its rows to `chr/fill-rules.hires.txt`
   and defaults to `none`, because a rule for a filled cell either never matches
   (harmless) or re-binds a key the pack already owns. `--also <other recorded
@@ -1005,9 +1035,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   never built with these sheets, so its flip-baked crops (ADR-0178) are not
   the twins the next build slices - or when the pack does not build at all.
   Keep the guard: planning without it re-points rules the reload cannot
-  show. Covered by `test_mep_figure.py`; measured on Contra in
+  show. A cell whose `*.orig.png` art is fully transparent (a blank sprite
+  tile, which the NES never draws) is never written, whatever paint covers
+  its rect. It is listed in the report's `blank` array and printed by the
+  CLI (#452). Without this check, Castlevania's blank tile took body paint
+  and the build failed #253's guard. Covered by `test_mep_figure.py`;
+  measured on Contra in
   `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
-  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`.
+  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  Castlevania in
+  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
