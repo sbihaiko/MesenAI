@@ -471,13 +471,22 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
     return doc
 
 
-def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str = "") -> dict:
+def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str = "",
+                     home=None) -> dict:
     """The kit's Figures surface as one composed view (ADR-0225 §2):
     `rows` is `[[(pose, ox, oy), ...], ...]` — each pose drawn at pixel
     precision with its top-left at `(ox, oy)` 1x pixels. Same three files and
-    sidecar as `export_figure`, so `import` returns paint to the sprite
-    vocabulary cells the poses came from. Returns the sidecar, or None when
-    no sheet draws any tile of any pose."""
+    sidecar as `export_figure`. Returns the sidecar, or None when no sheet
+    draws any tile of any pose.
+
+    `home` is `{pose id: {node: (sidecar name, cell index, x, y)}}`: the cell
+    of the sheet the caller is laying these rows out on that holds that node
+    (#498). The kit passes it, so a painted figure comes back to the `usrNNN`
+    row — where ARTIST.md sends the artist — instead of the `sprites`
+    vocabulary cell the art was cut from, which no artist is meant to paint
+    (ADR-0153 §3). A node it does not name keeps that vocabulary cell, and
+    only the *return* target changes: the art still comes from `home_cell`,
+    since the caller's sheet is a kit file and not part of `pack`."""
     scale = pack.scale
     name = f"{stem}.png"
     N.require_asset_name(name, where=f"figure rows {stem}")
@@ -496,6 +505,9 @@ def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str 
             unit = u
             for entry in placed:
                 homes[id(entry)] = home_cell(pack, figure, entry["node"])
+                target = (home or {}).get(pose.id, {}).get(entry["node"])
+                if target is not None:
+                    entry["sheet"], entry["index"], entry["sheetX"], entry["sheetY"] = target
             cells += placed
     if not cells:
         return None

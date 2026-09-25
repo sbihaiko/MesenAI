@@ -68,6 +68,7 @@ import mep_figure  # noqa: E402 — ADR-0225 §2: the pixel-precise Figures view
 DEFAULT_COLUMNS = 6      # the artist's reference sheet runs six phases wide
 DEFAULT_ROWS = 8         # rows per sheet before a continuation sheet is opened
 SLOT_GAP = 1             # empty cells between two figure boxes, as `pose_cells` uses
+FIGURE_UNIT = 8          # a pose tile: the unit of every sprite cell (`poses.json`'s own)
 
 
 class KitError(Exception):
@@ -119,6 +120,7 @@ class Grid:
         self.boxes = []         # the figure box of each row, in 8 px cells
         self.columns = 0        # 8 px cells across the exported sheet
         self.figure = None      # ADR-0225: figures/<usrNNN>-figure.png, when written
+        self.home = {}          # #498: {pose id: {node: (json name, index, x, y)}}
 
     @property
     def cells(self):
@@ -348,8 +350,10 @@ class KitBuilder:
     # -- layout ------------------------------------------------------------
 
     def placements(self, grid):
-        """`[(node, cx, cy)]` for a grid, in cell coordinates, plus the per-row
-        boxes it used.
+        """`[(pose id, node, cx, cy)]` for a grid, in cell coordinates, plus the
+        per-row boxes it used. The pose is carried because one node can be laid
+        out twice on a sheet — a tile two phases share is emitted in both cells
+        — so `(pose, node)` is what names a cell, and `node` alone does not.
 
         A figure is padded to **its own row's** box, centred horizontally and
         aligned on its bottom row — poses of one animation share a baseline the
@@ -384,7 +388,7 @@ class KitBuilder:
                 ox = cell.col * (box_w + SLOT_GAP) + (box_w - cols) // 2
                 oy = tops[r] + (box_h - rows)
                 for node, (dx, dy) in sorted(tiles.items(), key=lambda kv: (kv[1][1], kv[1][0])):
-                    out.append((node, ox + dx, oy + dy))
+                    out.append((cell.pose.id, node, ox + dx, oy + dy))
         return out, boxes
 
     def drawable_pixels(self, pose):
@@ -397,7 +401,7 @@ class KitBuilder:
         y0 = min(py for _px, py in tiles.values())
         return {n: (px - x0, py - y0) for n, (px, py) in tiles.items()}
 
-    def figure_rows(self, grid, unit: int = 8):
+    def figure_rows(self, grid, unit: int = FIGURE_UNIT):
         """`[[(pose, ox, oy), ...], ...]` in 1x pixels: the same rows and
         columns as `placements`, each figure at pixel precision (ADR-0225 §2).
         A row's box is its largest figure's pixel extent; figures are centred
@@ -437,13 +441,15 @@ def export_figure_rows(pack, builder, grid, figures_out: Path, names=None):
     `<figures_out>/<usrNNN>-figure.png` (+ `.orig.png`, `.json`, `.ora`),
     every phase at pixel precision. The usr sheet stays the cell-grid
     mep_build input; this is the view an artist reads the figure in, and
-    `mep_figure.py import` returns paint from it to the sprite vocabulary."""
+    `mep_figure.py import` returns paint from it to the cells `export_grid`
+    laid that same figure out on (#498)."""
     rows = builder.figure_rows(grid)
     stem = mep_figure.figure_stem(grid.name)
     # A pose on a row is its drawable tiles only, as on the usr sheet.
     trimmed = [[(_drawable_pose(builder, p), x, y) for p, x, y in row] for row in rows]
     doc = mep_figure.export_pose_rows(pack, trimmed, figures_out, stem,
-                                      caption=grid_title(grid, names) if names is not None else "")
+                                      caption=grid_title(grid, names) if names is not None else "",
+                                      home=grid.home)
     if doc is not None:
         grid.figure = f"figures/{doc['sheet']}"
     return doc
@@ -453,7 +459,7 @@ def _drawable_pose(builder, pose):
     tiles = {n: xy for n, xy in pose.tiles.items() if builder._has_art(n)}
     return E.Pose(pose.id, pose.frames, pose.size, tiles, pixels=pose.pixels, z=pose.z)
 
-def row_captions(grid, boxes, names, unit: int = 8):
+def row_captions(grid, boxes, names, unit: int = FIGURE_UNIT):
     """`[(x, y, text)]` in 1x sheet pixels for the `.ora`'s `guides` layer
     (ADR-0220 §3): one caption per row at the row's top-left — the sheet title
     on the first row (a `--names` caption or the ids and counts, ADR-0183 §5),
@@ -484,7 +490,7 @@ def export_grid(pack, builder, grid, out_dir: Path, names=None):
     cells, boxes = builder.placements(grid)
     if not cells:
         return None
-    nodes = [n for n, _cx, _cy in cells]
+    nodes = [n for _p, n, _cx, _cy in cells]
     anchors = []
     for pose in grid.poses():
         anchor = pack.pose_anchor(pose)
@@ -493,7 +499,8 @@ def export_grid(pack, builder, grid, out_dir: Path, names=None):
     name = claim_name(pack, out_dir)
     try:
         pack.export("sprite", nodes, seed=anchors[0] if anchors else None,
-                    locked=anchors[1:], to_dir=out_dir, placements=cells,
+                    locked=anchors[1:], to_dir=out_dir,
+                    placements=[(n, cx, cy) for _p, n, cx, cy in cells],
                     poses=[p.id for p in grid.poses()], name=name,
                     captions=row_captions(grid, boxes, names))
     except Exception:
@@ -501,7 +508,19 @@ def export_grid(pack, builder, grid, out_dir: Path, names=None):
         raise
     grid.name = name
     grid.boxes = boxes
-    grid.columns = max(cx for _n, cx, _cy in cells) + 1
+    grid.columns = max(cx for _p, _n, cx, _cy in cells) + 1
+    # #498: where a painted figure comes back to. The Figures view is this
+    # sheet's rows at pixel precision, so a cell's paint belongs on this
+    # sheet's own cell for the same (pose, node) — which is the surface
+    # ARTIST.md sends the artist to. Without it the figure sidecar named the
+    # `sprites` vocabulary cell it was *cut from*, and an import that finds no
+    # owner in the built manifest (every untouched cell keeps its recorded
+    # `chr/` rule, ADR-0231) wrote the paint into `sheets/sprites.png`, the one
+    # sheet ARTIST.md tells the artist not to paint at all.
+    grid.home = {}
+    for index, (pose_id, node, cx, cy) in enumerate(cells):
+        x, y = E.cell_origin(cx, cy, FIGURE_UNIT)
+        grid.home.setdefault(pose_id, {})[node] = (f"{name}.json", index, x, y)
     return name
 
 

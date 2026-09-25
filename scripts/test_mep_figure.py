@@ -636,6 +636,92 @@ def test_pixel_ownership_reads_a_mirrored_cell_in_the_figure_orientation():
               f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
 
 
+def _kit_row(pack_dir: Path, stem: str = "usr000") -> str:
+    """Give the pack a `usrNNN` sheet holding `spr000`'s cells: what a kit
+    copies into the pack copy it is built from (#498), so a figure's `home`
+    can name a row that is not the vocabulary."""
+    sheets = pack_dir / "textures" / "sheets"
+    doc = json.loads((sheets / "spr000.json").read_text(encoding="utf-8"))
+    doc["sheet"], doc["reference"], doc["composed"] = f"{stem}.png", f"{stem}.orig.png", True
+    (sheets / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+    for suffix in (".png", ".orig.png"):
+        shutil.copy2(sheets / f"spr000{suffix}", sheets / f"{stem}{suffix}")
+    return stem
+
+
+def _recorded_key_source(pack_dir: Path, nodes=SPRITE_NODES):
+    """Point every key's rule at a `chr/` page, which is what a recorder
+    writes. It is the state #498 is reachable from: with no `sheets/` rule for
+    a key and the untouched cell back to its `*.orig.png` twin, the built
+    manifest keeps the recorded rule (ADR-0231), so no sheet owns the key and
+    an import has only the cell the figure names to fall back to."""
+    sheets = pack_dir / "textures" / "sheets"
+    (pack_dir / "textures" / "chr").mkdir(parents=True, exist_ok=True)
+    sheet_repaint.write_png(pack_dir / "textures" / "chr" / "Chr_00.png",
+                            T._solid(16, (10, 20, 30, 255)))
+    lines = ["<ver>109", f"<scale>{SCALE}", "<img>chr/Chr_00.png"]
+    for node in nodes:
+        tile, pal = _key(node)
+        lines.append(f"<tile>0,{tile},{pal},0,0,1,N")
+    (pack_dir / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_a_home_override_lands_on_the_kit_row_with_the_flip_and_the_mask_intact():
+    """#498 with #463 and ADR-0225 §3 in play: the cell a figure's `home` names
+    may be a flip-baked crop the first build un-bakes, and it may be overlapped
+    by another cell. The override moves the *return* target only - the paint
+    lands in the `usrNNN` cell, un-baked the way the build un-baked the crop
+    (ADR-0178, #463), and the shared pixels still go to whoever owns them."""
+    magenta = (255, 0, 255, 255)
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=False)
+        sheets = pack_dir / "textures" / "sheets"
+        # Node 1 in front, its true art opaque on the right half only, node 0
+        # behind and 4 px to its right - the fused, mirrored pair of the test
+        # above, so the cell `home` names is both flipped and half-owned.
+        _bake_recorded_mirror(pack_dir, 1, _two_halves(8, (0, 0, 0, 0), (200, 100, 50, 255)))
+        T._write_poses(sheets, {"version": 1, "unit": 8, "frames": 10, "poses": [
+            {"id": "pose000", "frames": 10, "size": [2, 1], "tiles": [
+                {"node": 1, "dx": 0, "dy": 0, "px": 0, "py": 0, "z": 0},
+                {"node": 0, "dx": 1, "dy": 0, "px": 4, "py": 0, "z": 1}]}]})
+        _kit_row(pack_dir)
+        _recorded_key_source(pack_dir)
+        row = json.loads((sheets / "usr000.json").read_text(encoding="utf-8"))
+        cell = next(c for c in row["cells"] if c.get("metatile") == 1)
+        out = Path(td) / "figures"
+        pose = E.Pack(pack_dir).poses.by_id("pose000")
+        doc = F.export_pose_rows(E.Pack(pack_dir), [[(pose, 0, 0)]], out, "usr000-figure",
+                                 home={"pose000": {1: ("usr000.json", cell["index"],
+                                                       cell["x"], cell["y"])}})
+        cells = {c["node"]: c for c in doc["cells"]}
+        # Node 0 is not named, so it keeps the art source it always had: the
+        # `sprites` vocabulary cell `_node_home` prefers (#498's cause).
+        check(cells[1]["sheet"] == "usr000.json" and cells[0]["sheet"] == "sprites.json",
+              "the home moves the node it names and leaves the others where they were",
+              json.dumps({n: c["sheet"] for n, c in cells.items()}))
+        check(cells[1].get("mirror") == ["H"], "and the flip the crop carries is still recorded",
+              json.dumps(cells[1].get("mirror")))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recipe's first build")
+        fig = sheet_repaint.read_png(out / "usr000-figure.png")
+        for py in range(cells[1]["y"] * SCALE, (cells[1]["y"] + 8) * SCALE):
+            for px in range(cells[1]["x"] * SCALE, (cells[1]["x"] + 8) * SCALE):
+                if fig.get(px, py)[3]:
+                    fig.set(px, py, magenta)
+        sheet_repaint.write_png(out / "usr000-figure.png", fig)
+        # Node 1's box shares its left 4 columns with node 0's, so painting it
+        # paints both cells; only node 1's is a flip-baked crop, and only
+        # node 1's `home` is the kit row.
+        rep = F.import_figure(E.Pack(pack_dir), out / "usr000-figure.png")
+        check(rep["painted"] == 2 and "usr000.png" in rep["sheets"] and rep["unmirrored"] == 1,
+              "the paint is written to the kit row, un-mirrored (#463)", json.dumps(rep))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+        drawn = _drawn_crop(pack_dir, 1)
+        left, right = drawn.get(0, 0), drawn.get(4 * SCALE, 0)
+        check(left == (0, 0, 0, 0) and right == magenta,
+              "the kit cell stores the paint un-baked and takes it only where it owns the pixel",
+              f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
+
+
 def test_a_routed_overlapped_cell_keeps_the_paint_an_earlier_instance_routed():
     """#478: node 1 appears twice in one figure (as a key repeats across the
     poses of a kit figure) - alone, then behind node 0, which covers its
