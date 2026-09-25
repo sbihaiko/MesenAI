@@ -74,6 +74,7 @@
 #include "NES/HdPacks/SheetRender.h"
 #include "NES/HdPacks/SheetColourways.h"
 #include "NES/HdPacks/ChrPageSlots.h"
+#include "NES/HdPacks/ChrBankHashes.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/HdPacks/OggFadeRamp.h"
 #include "NES/HdPacks/OggLoopStream.h"
@@ -10486,6 +10487,141 @@ void TestAFullyTransparentSpriteHalfNeverReachesTheRegistry()
 	Check(!OamFetchLatch::IsFullyTransparent(t), "#470: one opaque pixel (a high-plane bit) is not");
 }
 
+//ADR-0232 (#467): a fake $0000-$1FFF pattern space for the bank-id tests. `Write`
+//is what a $2007 write into CHR RAM does to the recorder: the byte changes and
+//the PPU reports the write to the bank hashes with its v register.
+struct FakeChrRam
+{
+	std::vector<uint8_t> Bytes = std::vector<uint8_t>(0x2000, 0);
+	MesenSheets::ChrBankHashes Hashes { 0x1000 };
+	void Write(uint16_t addr, uint8_t value)
+	{
+		Hashes.OnVideoMemoryWrite(addr);
+		Bytes[addr] = value;
+	}
+	uint32_t Draw(uint16_t tileAddr)
+	{
+		return Hashes.BankIdOf(tileAddr, [this](uint16_t a) { return Bytes[a]; });
+	}
+};
+
+void TestAChrRamBankIdFollowsTheChrState()
+{
+	FakeChrRam chr;
+	uint32_t powerOn = chr.Draw(0x0010);
+	Check(powerOn == 0, "ADR-0232: the all-zero power-on bank's id is 0");
+	chr.Write(0x0010, 0x3C);
+	uint32_t afterUpload = chr.Draw(0x0010);
+	Check(afterUpload != powerOn, "ADR-0232: a CHR write between two draws gives the second draw another bank id");
+	Check(chr.Draw(0x1010) == 0, "ADR-0232: a write to bank 0 leaves bank 1's id alone");
+	chr.Write(0x1FF0, 0x81);
+	Check(chr.Draw(0x0010) == afterUpload && chr.Draw(0x1010) != 0, "ADR-0232: a write to bank 1 moves bank 1's id and keeps bank 0's");
+	chr.Write(0x0010, 0x00);
+	Check(chr.Draw(0x0010) == powerOn, "ADR-0232: the id names the contents, so restoring the bytes restores the id");
+	uint32_t recomputes = chr.Hashes.Recomputes();
+	chr.Write(0x2000, 0x55);
+	chr.Write(0x3F00, 0x0F);
+	chr.Draw(0x0010);
+	Check(chr.Hashes.Recomputes() == recomputes, "ADR-0232: a nametable or palette write does not mark the banks stale");
+	chr.Hashes.MarkStale();
+	chr.Draw(0x0010);
+	Check(chr.Hashes.Recomputes() == recomputes + 1, "ADR-0232: a state load (MarkStale) rehashes at the next draw");
+
+	//NesPpu commits a $2007 write a few PPU cycles after the CPU write. A tile
+	//drawn in that window must not settle the bank's id without the byte.
+	chr.Hashes.OnVideoMemoryWrite(0x0020);
+	auto read = [&chr](uint16_t a) { return chr.Bytes[a]; };
+	uint32_t beforeCommit = chr.Hashes.BankIdOf(0x0010, read, true);
+	chr.Bytes[0x0020] = 0x99;
+	uint32_t afterCommit = chr.Hashes.BankIdOf(0x0010, read, false);
+	Check(beforeCommit == powerOn && afterCommit != powerOn, "ADR-0232: a tile drawn while the CHR write is pending leaves the id stale, so the next tile sees the committed byte");
+}
+
+void TestAChrRamBankIdIsRehashedPerDrawnTileNotPerWrite()
+{
+	//Option (c1): a forced-blank upload writes thousands of CHR bytes with no
+	//tile drawn in between. Rehashing on each of them was ~4 % of Castlevania's
+	//recording time; the hash must wait for a tile.
+	FakeChrRam chr;
+	chr.Draw(0x0000);
+	uint32_t base = chr.Hashes.Recomputes();
+	for(uint32_t i = 0; i < 0x2000; i++) {
+		chr.Write((uint16_t)i, (uint8_t)(i * 7 + 1));
+	}
+	Check(chr.Hashes.Recomputes() == base, "ADR-0232: 8 192 CHR writes and no drawn tile rehash nothing");
+	uint32_t uploaded = chr.Draw(0x0000);
+	Check(chr.Hashes.Recomputes() == base + 1, "ADR-0232: the first tile after the upload rehashes once");
+	for(int i = 0; i < 100; i++) {
+		chr.Draw((uint16_t)(i * 16));
+	}
+	Check(chr.Hashes.Recomputes() == base + 1, "ADR-0232: tiles drawn with no CHR write in between reuse the hashes");
+	uint32_t draws = 0;
+	for(int frame = 0; frame < 10; frame++) {
+		for(int w = 0; w < 50; w++) {
+			chr.Write((uint16_t)(frame * 64 + w), (uint8_t)(frame + w));
+		}
+		for(int t = 0; t < 3; t++) {
+			chr.Draw((uint16_t)(t * 16));
+			draws++;
+		}
+	}
+	Check(chr.Hashes.Recomputes() - (base + 1) <= draws && chr.Hashes.Recomputes() - (base + 1) == 10, "ADR-0232: rehashes are bounded by drawn tiles (one per write burst), not by the 500 writes");
+	std::vector<uint8_t> snapshot = chr.Bytes;
+	uint32_t eager = MesenSheets::HashChrBank([&snapshot](uint16_t a) { return snapshot[a]; }, 0, 0x1000);
+	Check(chr.Draw(0x0000) == eager && uploaded != eager, "ADR-0232: the lazy id equals an eager hash of the bank as the tile reads it");
+}
+
+void TestTheChrPageGuardStillHoldsOnAChrRamHashCollision()
+{
+	//The rotating sum gives byte k a rotation of (4096 - k) mod 32, so two
+	//tiles 32 bytes apart (indices of the same parity) swap without changing
+	//the hash. Two real CHR states then share a bank id, and the #460 guard is
+	//what keeps the second state's tile from evicting the first's.
+	std::vector<uint8_t> a(0x1000, 0), b;
+	for(int i = 0; i < 16; i++) {
+		a[0x20 + i] = (uint8_t)(0x11 * (i + 1));
+		a[0x40 + i] = (uint8_t)(0x80 >> (i & 7));
+	}
+	b = a;
+	for(int i = 0; i < 16; i++) {
+		std::swap(b[0x20 + i], b[0x40 + i]);
+	}
+	uint32_t ha = MesenSheets::HashChrBank([&a](uint16_t x) { return a[x]; }, 0, 0x1000);
+	uint32_t hb = MesenSheets::HashChrBank([&b](uint16_t x) { return b[x]; }, 0, 0x1000);
+	Check(a != b && ha == hb, "ADR-0232: two CHR states differing by a same-parity tile swap share a bank id");
+	struct Tile { int Id; };
+	Tile fromA { 1 }, fromB { 2 };
+	std::map<uint32_t, std::vector<Tile*>> bank;
+	bank[7] = std::vector<Tile*>(256, nullptr);
+	MesenSheets::PlaceTileOnChrPage(bank, 7, 2, &fromA, 256);
+	bool placed = MesenSheets::PlaceTileOnChrPage(bank, 7, 2, &fromB, 256);
+	Check(bank[7][2] == &fromA && placed && bank[7][0] == &fromB, "ADR-0232: on a colliding bank id the #460 guard keeps both tiles");
+}
+
+void TestAPreFixChrRamTileIsRecognisedAndRehomed()
+{
+	uint8_t drawn[16] = { 0x3C, 0x42 };
+	uint8_t blank[16] = {};
+	Check(MesenSheets::IsPreFixChrRamTile(true, 0, drawn), "ADR-0232: a CHR RAM tile with bank 0 and set pattern bits was recorded before the fix");
+	Check(!MesenSheets::IsPreFixChrRamTile(true, 0, blank), "ADR-0232: an all-zero tile on bank 0 is the power-on bank's, not a pre-fix tile");
+	Check(!MesenSheets::IsPreFixChrRamTile(true, 0x1234, drawn), "ADR-0232: a tile with a real bank id is not a pre-fix tile");
+	Check(!MesenSheets::IsPreFixChrRamTile(false, 0, drawn), "ADR-0232: a CHR ROM tile's bank 0 is its bank number, never pre-fix");
+	struct Tile { int Id; };
+	Tile old { 1 }, other { 2 };
+	std::map<uint32_t, std::vector<Tile*>> bank0;
+	bank0[5] = std::vector<Tile*>(256, nullptr);
+	bank0[6] = std::vector<Tile*>(256, nullptr);
+	bank0[6][40] = &old;
+	bank0[5][40] = &other;
+	Check(MesenSheets::RemoveTileFromChrPages(bank0, &old) && bank0[6][40] == nullptr && bank0[5][40] == &other, "ADR-0232: a re-homed tile leaves its old slot and only that slot");
+	Check(!MesenSheets::RemoveTileFromChrPages(bank0, &old), "ADR-0232: removing a tile no page holds reports false");
+	Check(MesenSheets::RehomesOnRedraw(true, true, 0, 0x1234), "ADR-0232: in a pre-fix pack a bank-0 tile drawn again from a real bank moves, blank or not");
+	Check(!MesenSheets::RehomesOnRedraw(false, true, 0, 0x1234), "ADR-0232: in a pack recorded since the fix bank 0 is the real power-on bank and never moves");
+	Check(!MesenSheets::RehomesOnRedraw(true, true, 0x99, 0x1234), "ADR-0232: a tile with a real bank id never moves");
+	Check(!MesenSheets::RehomesOnRedraw(true, true, 0, 0), "ADR-0232: a tile drawn again from an all-zero bank stays on 0");
+	Check(!MesenSheets::RehomesOnRedraw(true, false, 0, 0x1234), "ADR-0232: a CHR ROM tile never moves");
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -10802,6 +10938,10 @@ int main()
 	TestAFullChrPageRefusesATileInsteadOfEvictingOne();
 	TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage();
 	TestAPageWithItsUsableSlotsFullRefusesATile();
+	TestAChrRamBankIdFollowsTheChrState();
+	TestAChrRamBankIdIsRehashedPerDrawnTileNotPerWrite();
+	TestTheChrPageGuardStillHoldsOnAChrRamHashCollision();
+	TestAPreFixChrRamTileIsRecognisedAndRehomed();
 
 	TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched();
 	TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch();

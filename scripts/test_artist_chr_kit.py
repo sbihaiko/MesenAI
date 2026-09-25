@@ -1182,6 +1182,72 @@ def test_the_fragment_says_it_is_static_and_names_the_rom():
               "no donor counter is emitted", str(frag["totals"].keys()))
 
 
+# --- ADR-0232: the bank id names a CHR state, or a pack predates it ----------
+
+
+def banks_of(td: Path, pages):
+    """`pages` is [(name, {slot: (data, palette, index)}, bank_id)]."""
+    pack = td / "pack"
+    chr_dir = pack / "textures" / "chr"
+    chr_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["<ver>109", f"<scale>{SCALE}", "<supportedRom>" + "0" * 40]
+    lines += [f"<img>chr/{name}.png" for name, _, _ in pages]
+    for i, (name, cells, bank) in enumerate(pages):
+        page = blank_page()
+        for slot, (data, palette, _) in cells.items():
+            draw_cell(page, slot, data, palette)
+        write_png(chr_dir / f"{name}.png", page)
+        lines.append(f"#chr/{name}.png")
+        lines += chr_ram_rows_for(bank)(i, cells)
+    (pack / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    p = K.Pack(pack)
+    return {b.primary.name: b for b in K.collect_banks(p, K.collect_pages(p))}
+
+
+def test_real_chr_ram_bank_ids_leave_the_older_recorder_regroup():
+    with tempfile.TemporaryDirectory() as td:
+        blank = bytes(16)
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 1445542316),
+            ("Chr_1", {i: (tile_bytes(i + 64), PAL_A, i) for i in range(20)}, 557798520),
+            # the power-on bank: all zero, so its id is 0 and it draws only blank tiles
+            ("Chr_2", {0: (blank, PAL_B, 0)}, 0),
+        ])
+        check(all(b.identity_known for b in banks.values()),
+              "ADR-0232: a pack with real bank ids has no bank of unknown identity",
+              str({n: b.identity_known for n, b in banks.items()}))
+        check(not any("older recorder" in n for b in banks.values() for n in b.notes),
+              "ADR-0232: and no bank carries the older-recorder note")
+        check(banks["Chr_0"].id == 1445542316 and banks["Chr_2"].id == 0,
+              "ADR-0232: each bank keeps the id it was recorded under, the power-on one included")
+
+
+def test_an_all_zero_bank_id_pack_is_still_regrouped_as_an_older_recording():
+    with tempfile.TemporaryDirectory() as td:
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 0),
+            ("Chr_1", {i: (packed_tile(i), PAL_A, i) for i in range(20)}, 0),
+        ])
+        check(banks and not any(b.identity_known for b in banks.values()),
+              "ADR-0232: a pack recorded before the fix keeps the structural regroup",
+              str({n: b.identity_known for n, b in banks.items()}))
+        check(len(banks) == 2, "ADR-0232: its two contradicting pages stay two banks", str(list(banks)))
+
+
+def test_a_rerecorded_pack_regroups_only_its_pre_fix_pages():
+    with tempfile.TemporaryDirectory() as td:
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 1445542316),
+            ("Chr_1", {i: (packed_tile(i), PAL_A, i) for i in range(20)}, 0),
+        ])
+        real, old = banks["Chr_0"], banks["Chr_1"]
+        check(real.identity_known and real.id == 1445542316,
+              "ADR-0232: in a re-recorded pack the real bank keeps its identity")
+        check(not old.identity_known and any("older recorder" in n for n in old.notes),
+              "ADR-0232: the pre-fix bank-0 page beside it is regrouped, never presented as a known bank",
+              str(old.notes))
+
+
 def main():
     tests = [
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
@@ -1230,6 +1296,9 @@ def main():
         test_the_static_path_never_starts_an_emulator,
         test_verify_reports_the_build_and_the_rule_count,
         test_the_fragment_says_it_is_static_and_names_the_rom,
+        test_real_chr_ram_bank_ids_leave_the_older_recorder_regroup,
+        test_an_all_zero_bank_id_pack_is_still_regrouped_as_an_older_recording,
+        test_a_rerecorded_pack_regroups_only_its_pre_fix_pages,
     ]
     for t in tests:
         t()

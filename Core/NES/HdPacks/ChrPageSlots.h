@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <vector>
+#include "NES/HdPacks/ChrBankHashes.h"
 
 //Issue #460: where HdPackBuilder::AddTile files a tile on a CHR page. A bank
 //holds one 256-slot page per palette, and SaveHdPack serializes each page slot
@@ -14,10 +15,11 @@ namespace MesenSheets
 	//false when it got no slot, i.e. when it will have no <tile> line.
 	//
 	//A tile goes to the slot of its CHR index while that slot is free. A taken
-	//slot is never overwritten: on CHR RAM the bank is keyed by a hash that
-	//HdBuilderPpu does not refresh when the game rewrites CHR RAM, so a later,
-	//different tile can ask for the same slot, and overwriting it cost the
-	//earlier tile its <tile> line although the PPU drew it. On CHR RAM,
+	//slot is never overwritten: on CHR RAM the bank is keyed by a content hash
+	//that can collide (ChrBankHashes.h), and a pack recorded before ADR-0232
+	//keys every tile under bank 0, so a later, different tile can ask for the
+	//same slot, and overwriting it cost the earlier tile its <tile> line
+	//although the PPU drew it. On CHR RAM,
 	//hires.txt keys a tile by its data and palette, so the slot only decides
 	//where the cell sits in chr/Chr_*.png.
 	//
@@ -79,5 +81,22 @@ namespace MesenSheets
 		}
 		page[best] = tile;
 		return true;
+	}
+
+	//ADR-0232: takes `tile` off whichever page of `bank` holds it, so a tile
+	//recorded before the fix (IsPreFixChrRamTile) can be filed again under the
+	//bank it is drawn from on a re-record. False when no page holds it.
+	template<typename T>
+	bool RemoveTileFromChrPages(std::map<uint32_t, std::vector<T*>>& bank, T* tile)
+	{
+		for(auto& page : bank) {
+			for(T*& slot : page.second) {
+				if(slot == tile) {
+					slot = nullptr;
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 }

@@ -12,10 +12,10 @@ needs no local rules beyond the root DOX.
 
 - `Core/NES/HdPacks/` — the bootstrap HD-pack builder and the sheet /
   pose recorder (`HdPackBuilder`, `SpriteGrouping`, `SheetRender`,
-  `SheetColourways.h`, `ChrPageSlots.h`, `TileSheetTypes.h`). Decisions
-  live in `docs/adr/`
+  `SheetColourways.h`, `ChrPageSlots.h`, `ChrBankHashes.h`,
+  `TileSheetTypes.h`). Decisions live in `docs/adr/`
   (ADR-0153, 0164, 0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190,
-  0228, 0230); this file only
+  0228, 0230, 0232); this file only
   states the contracts a consumer relies on.
 - `Core/Shared/HeadlessInput*` — the `input=<script>` engine the headless
   harness drives the emulator with (see `scripts/AGENTS.md`).
@@ -151,9 +151,9 @@ needs no local rules beyond the root DOX.
   (`ChrPageSlots.h`) on its bank's 256-slot page for its palette; `SaveHdPack`
   writes one `<tile>` line per filled slot, cell by cell into
   `chr/Chr_*.png`. A tile takes the slot of its CHR index while that slot is
-  free. When a different tile already holds it (on CHR RAM the bank hash
-  `HdBuilderPpu` keys by is not refreshed when the game rewrites CHR RAM,
-  #467), the earlier tile keeps the slot and its `<tile>` line, and the
+  free. When a different tile already holds it (on CHR RAM the bank hash can
+  collide, see below, and a pack recorded before ADR-0232 files every tile
+  under bank 0), the earlier tile keeps the slot and its `<tile>` line, and the
   newcomer moves to the free slot of the same page whose column (that slot
   index across the bank's pages) holds the fewest tiles, lowest index first,
   so the bank's PNG count does not grow while any column has room. A loaded
@@ -169,7 +169,35 @@ needs no local rules beyond the root DOX.
   `TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank`,
   `TestAFullChrPageRefusesATileInsteadOfEvictingOne`,
   `TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage` and
-  `TestAPageWithItsUsableSlotsFullRefusesATile`.
+  `TestAPageWithItsUsableSlotsFullRefusesATile`, and on a real collision by
+  `TestTheChrPageGuardStillHoldsOnAChrRamHashCollision`.
+- **A CHR RAM bank id names the CHR state a tile was drawn from (ADR-0232,
+  #467).** The trailing bank field of a CHR RAM `<tile>` line, and the bank
+  whose `chr/Chr_*.png` pages hold its cell, is the rotating-sum hash
+  (`MesenSheets::HashChrBank`) of the 4 KB bank the tile was read from, as it
+  read when the tile was drawn. `HdBuilderPpu::WriteRam` (an `override` since
+  ADR-0232; the old `WriteRAM` overrode nothing) marks the hashes stale on a
+  `$2007` write below `$2000`, a state load does too, and
+  `MesenSheets::ChrBankHashes` rehashes only when a tile is next recorded, and
+  again while a `$2007` write is still pending (NesPpu commits it a few PPU
+  cycles late). So rehashes are bounded by drawn tiles, not by upload bytes.
+  An all-zero bank hashes to 0 and draws only blank tiles, so a non-blank CHR
+  RAM tile on bank 0 comes from a pack recorded before the fix
+  (`IsPreFixChrRamTile`). A re-record over a pack holding any such tile
+  moves each of its bank-0 tiles, blank ones included, to its real bank when
+  it is drawn again (`RehomesOnRedraw`, `RemoveTileFromChrPages`, then
+  `AddTile`), leaves the rest on bank 0, and logs the counts at save
+  (`[HD Pack Builder] ADR-0232: ...`). A pack recorded since the fix never
+  moves a tile: its bank 0 is the real all-zero bank. The hash is
+  weak: two tiles whose indices have the same parity swap without changing
+  it, which is why the #460 guard stays. The run time never matches on
+  `ChrBankId`. CHR ROM tiles are unaffected: their bank is the CHR ROM bank
+  number. Consumers: `scripts/artist_chr_kit.py` groups pages by this id and
+  regroups structurally only the pages `recorded_before_bank_fix` names (or
+  every CHR RAM page, when the whole pack is on 0). Pinned by
+  `TestAChrRamBankIdFollowsTheChrState`,
+  `TestAChrRamBankIdIsRehashedPerDrawnTileNotPerWrite` and
+  `TestAPreFixChrRamTileIsRecognisedAndRehomed`.
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
   shape and a palette word, `M` carries the frame's internal RAM, then
@@ -194,7 +222,8 @@ needs no local rules beyond the root DOX.
   recording with a populated table and no inferred objects is exactly the one
   worth studying.
 - Host-free rule (ADR-0127): `SpriteGrouping`, `SheetRender`,
-  `SheetColourways.h` and `ChrPageSlots.h` take data and return data; file, env and log access
+  `SheetColourways.h`, `ChrPageSlots.h` and `ChrBankHashes.h` take data and
+  return data; file, env and log access
   stay in `HdPackBuilder`, so
   `scripts/core_unit_tests.cpp` can cover the rules without an emulator.
 - **Movie row ↔ device list need not match in width.**

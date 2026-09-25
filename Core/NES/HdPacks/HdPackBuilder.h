@@ -103,6 +103,13 @@ private:
 	//ADR-0160 §3 guard: tiles AddTile could not place on a CHR page (the
 	//">256 tiles of one palette" FIXME path). Non-zero disables PruneLegacyChrFiles.
 	uint32_t _droppedTiles = 0;
+	//ADR-0232: whether a re-record loaded a pack recorded before the bank id
+	//followed the CHR state (every tile filed under bank 0), its bank-0 CHR
+	//RAM tiles, and how many of them this session drew again and moved to
+	//their real bank (MesenSheets::RehomesOnRedraw).
+	bool _preFixPack = false;
+	uint32_t _bank0TilesLoaded = 0;
+	uint32_t _preFixTilesRehomed = 0;
 	//Issue #164: how many rarity-ranked candidates a screen carries to save
 	//time. The selection itself looks at kAnchorCandidateCap of them; the rest
 	//are there for the spread constraint to fall back on.
