@@ -65,11 +65,19 @@ keeps only 355 frames. Padding the mint so the bell lands on frame 3 607 does
 not fix it: the RNG state differs (35 RAM bytes at the bell), and a 70 s
 recording from the padded state misses 255 of the 1 655 drawn keys measured
 here. The job needs to end a mint where its script ends; that is a tooling
-issue, not a property of this set. Until then, mint this set by hand as above.
+issue (#465), not a property of this set. Until #465 is fixed, mint this set
+by hand as above.
 
-`fight1.txt` (5580 f) is a blind combination loop: jabs and body blows to both
-sides, dodges and a duck. Because it never reacts to Glass Joe's tells, it
-loses:
+`fight1.txt` is a blind combination loop: jabs and body blows to both sides,
+dodges and a duck, as an 18-line, 310-frame block. The measurement below ran
+18 blocks (5580 f). The versioned file keeps only their first 3582 frames (208
+lines, byte for byte), so it fits the 3600-frame budget the library job runs a
+route for (`scripts/stages/README.md`). That trimmed route stops before the
+count-out; a 60 s recording from it was not measured, so the numbers below are
+the 70 s script's. To rebuild that script, repeat the block 18 times:
+`for i in $(seq 18); do grep -v '^#' scripts/stages/punchout/fight1.txt | head -n 18; done > <run>/input.txt`,
+and pass it as `input=` in the command below. Because the route never reacts
+to Glass Joe's tells, it loses:
 
 - Little Mac goes down around 60 s after the state;
 - he is counted out around 70 s.
@@ -80,7 +88,7 @@ screen. Both passes used this command:
 ```sh
 MESEN_SHEET_GRID_DUMP=… MESEN_OAM_STREAM_DUMP=… MESEN_POSE_TRACK_DUMP=… \
 scripts/headless_record runs/<n>/PunchOut.nes 70 runs/<n>/rec bootstrap hdpack-off log \
-  input=scripts/stages/punchout/fight1.txt state=<work>/fight1.mss
+  input=<run>/input.txt state=<work>/fight1.mss
 ```
 
 Each pass covered 4208 frames (2044–6251), taking 17.3 s of capture and 19.7 s

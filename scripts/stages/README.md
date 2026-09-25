@@ -376,13 +376,16 @@ screen and the circuit card — and idles 660 f through the ring introduction,
 so `save-state=` writes `fight1.mss` as the bell rings (the headless run takes
 34 s and stops at frame 2044).
 
-`fight1.txt` (5580 f) repeats an 18x block of jabs and body blows to both
+`fight1.txt` (3582 f) repeats a 310-frame block of jabs and body blows to both
 sides (`UA`, `UB`, `A`, `B`), dodges (`L`, `R`) and a duck (`D`), with 14–20 f
-of release between them. It is blind — it never reads Glass Joe's tells — so
-it loses: Little Mac is knocked down around 60 s from the state and counted
-out around 70 s. Record at most 70 s from `fight1.mss`; past that the run
-records the "you lost" screen. Two 70 s passes gave a byte-identical
-`hires.txt` and `auto/` (docs/validation/punchout-deep-measurement-2026-09-24.md).
+of release between them, cut to fit the 3600-frame budget. It is blind — it
+never reads Glass Joe's tells — so it loses: Little Mac is knocked down around
+60 s from the state and counted out around 70 s. Record at most 70 s from
+`fight1.mss`; past that the run records the "you lost" screen. Two 70 s passes
+of the block repeated 18 times (5580 f; the file's header rebuilds it) gave a
+byte-identical `hires.txt` and `auto/`
+(docs/validation/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
+route stops before the count-out and was not measured.
 
 **Not yet through the library job.** `record_library.sh` runs every mint for
 the batch's `<seconds>` (60 s by default), and `headless_record` writes
@@ -390,7 +393,7 @@ the batch's `<seconds>` (60 s by default), and `headless_record` writes
 saves `fight1.mss` at frame 3 607, about 26 s into the round (clock 1:15), and
 its 60 s `fight1` run reaches the count-out and keeps 355 frames, most of them
 the loss (measured 2026-09-24). Mint by hand with `34` as above until the job
-can end a mint where its script ends. Padding the mint so the bell lands on
+can end a mint where its script ends (#465). Padding the mint so the bell lands on
 frame 3 607 was tried and does not help: the fight it starts is not the
 measured one (35 RAM bytes differ at the bell; 255 of the measured 1 655 drawn
 keys are missing from a 70 s recording made from it).
