@@ -92,7 +92,7 @@ if ! grep -q "dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj" "$WORKFLOWS/
 fi
 # InteropDLL/MesenCore may appear in a comment explaining the invariant, but
 # never in a step that runs. Only non-comment lines are inspected.
-if grep -vE "^\\s*#" "$WORKFLOWS/checks.yml" | grep -qE "InteropDLL|MesenCore"; then
+if grep -vE "^\\s*#" "$WORKFLOWS/checks.yml" | grep -E "InteropDLL|MesenCore" >/dev/null; then
   fail "$WORKFLOWS/checks.yml builds or links InteropDLL/MesenCore outside a comment; the host-free jobs must never do that (ADR-0131)"
 fi
 if [ "$(grep -c "dotnet-version: 10.x" "$WORKFLOWS/checks.yml")" -lt 2 ]; then
@@ -147,7 +147,7 @@ if [ "$guard_count" -gt 1 ]; then
   fail "$WORKFLOWS/build.yml carries the event guard $guard_count times; only ADR-0204's publish job may have it - every build job's upload must publish on a 'prod' pull request too (ADR-0200, ADR-0203)"
 fi
 if [ "$guard_count" -eq 1 ]; then
-  guard_line="$(grep -n "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml" | head -1 | cut -d: -f1)"
+  guard_line="$(grep -n "github.event_name != 'pull_request'" "$WORKFLOWS/build.yml" | sed -n '1p' | cut -d: -f1)"
   publish_line="$(awk '/^  publish:/{print NR; exit}' "$WORKFLOWS/build.yml")"
   if [ -z "$publish_line" ] || [ "$guard_line" -lt "$publish_line" ]; then
     fail "$WORKFLOWS/build.yml's event guard sits outside the publish job; a build job gated that way would run every leg of a 'prod' pull request and publish no artifact (ADR-0200, ADR-0203, ADR-0204)"
@@ -193,7 +193,7 @@ if ! grep -q "os: macos-15}" "$WORKFLOWS/build.yml" && ! grep -qE 'os: macos-15\
 fi
 # The old job also had a comment recalling the deleted macos-15-intel leg;
 # only a non-comment line naming it as an actual matrix entry should fail.
-if grep -vE "^\\s*#" "$WORKFLOWS/build.yml" | grep -q "macos-15-intel"; then
+if grep -vE "^\\s*#" "$WORKFLOWS/build.yml" | grep "macos-15-intel" >/dev/null; then
   fail "$WORKFLOWS/build.yml's macos job carries a macos-15-intel leg; ADR-0203 keeps this Apple-Silicon-only, the published release is arm64"
 fi
 # The CI macOS leg must not carry distribution signing - that is

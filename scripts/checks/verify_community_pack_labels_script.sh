@@ -47,11 +47,15 @@ if [ "$UNIQUE_NAME_COUNT" -ne "$EXPECTED_COUNT" ]; then
   fail "LABELS array has $UNIQUE_NAME_COUNT unique names, expected $EXPECTED_COUNT (duplicate/typo'd label name?)"
 fi
 
+# Membership is read with a full-read grep, never `grep -q`: -q exits on the
+# first match, the writer still holding data is killed by SIGPIPE, and under
+# `pipefail` the pipeline reports 141 - which this check read as "label
+# missing" (issue #516, seen twice under load). Same for every test below.
 for expected in "${EXPECTED_NAMES[@]}"; do
-  printf '%s\n' "$NAMES" | grep -qxF "$expected" || fail "LABELS array is missing expected label: $expected"
+  printf '%s\n' "$NAMES" | grep -xF "$expected" >/dev/null || fail "LABELS array is missing expected label: $expected"
 done
 
-printf '%s\n' "$ENTRIES" | grep -qF '"assets:external|' || \
+printf '%s\n' "$ENTRIES" | grep -F '"assets:external|' >/dev/null || \
   fail "LABELS array is missing the assets:external content-index entry"
 
 echo "PASS: scripts/ensure_community_pack_labels.sh LABELS array has all $EXPECTED_COUNT expected entries, including assets:external"

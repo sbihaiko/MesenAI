@@ -54,7 +54,7 @@ run_capture() {
 		exit 1
 	}
 	local png
-	png="$(find "$out" -name '*.png' | head -1)"
+	png="$(find "$out" -name '*.png' | sed -n '1p')"
 	if [ -z "$png" ]; then
 		echo "error: no screenshot produced for filter=$filter; log:" >&2
 		cat "$out/log.txt" >&2

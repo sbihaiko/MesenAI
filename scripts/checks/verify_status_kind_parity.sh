@@ -51,7 +51,7 @@ assert_single_pair() {
     fail "$label pairing ($status_literal -> $kind_literal) defined $count time(s) in scripts/, expected exactly 1:
 $matches"
   fi
-  if ! printf '%s\n' "$matches" | grep -qF "$RULES_FILE"; then
+  if ! printf '%s\n' "$matches" | grep -F "$RULES_FILE" >/dev/null; then
     fail "$label pairing ($status_literal -> $kind_literal) is defined outside mei_rules.py: $matches"
   fi
   echo "OK: $label pairing ($status_literal -> $kind_literal) defined exactly once, in $(basename "$RULES_FILE")"
@@ -65,10 +65,10 @@ grep -qE '^(import mei_rules|from mei_rules import)' "$ENTRY_FILE" \
   || fail "mei_catalog_entry.py does not import mei_rules"
 grep -q 'STATUS_TO_KIND' "$ENTRY_FILE" \
   || fail "mei_catalog_entry.py imports mei_rules but never references STATUS_TO_KIND"
-if grep -F -- "$STATUS_MEP" "$ENTRY_FILE" | grep -qF -- "$KIND_MEP"; then
+if grep -F -- "$STATUS_MEP" "$ENTRY_FILE" | grep -F -- "$KIND_MEP" >/dev/null; then
   fail "mei_catalog_entry.py hardcodes the mep pairing instead of importing mei_rules.STATUS_TO_KIND"
 fi
-if grep -F -- "$STATUS_HD" "$ENTRY_FILE" | grep -qF -- "$KIND_HD"; then
+if grep -F -- "$STATUS_HD" "$ENTRY_FILE" | grep -F -- "$KIND_HD" >/dev/null; then
   fail "mei_catalog_entry.py hardcodes the hd-legacy pairing instead of importing mei_rules.STATUS_TO_KIND"
 fi
 

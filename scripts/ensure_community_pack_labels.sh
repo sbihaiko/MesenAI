@@ -37,7 +37,7 @@ for entry in "${LABELS[@]}"; do
   # so parallel triage runs calling this script at once can't race on a missing
   # label (check-then-create would otherwise let two runs create the same label
   # and one would error with "already exists").
-  if gh label list --repo "$REPO" --json name -q '.[].name' | grep -qx "$name"; then
+  if gh label list --repo "$REPO" --json name -q '.[].name' | grep -x "$name" >/dev/null; then
     echo "Already exists: $name"
   else
     gh label create "$name" --repo "$REPO" --color "$color" --description "$description" --force

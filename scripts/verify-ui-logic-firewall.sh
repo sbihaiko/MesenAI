@@ -63,13 +63,13 @@ for file in "${scanFiles[@]}"; do
 	# mirror (e.g. "counterpart to EmuApi.GetMepPackList()") in prose, which
 	# is not an actual dependency - only code outside comments must stay
 	# Avalonia/EmuApi-free.
-	if sed -E 's|//.*$||' "$file" | grep -qE 'Avalonia|EmuApi'; then
+	if sed -E 's|//.*$||' "$file" | grep -E 'Avalonia|EmuApi' >/dev/null; then
 		echo "ERROR: $file references Avalonia or EmuApi in code - UI/Logic/*.cs must stay BCL-only (plus System.IO.Compression) so it dual-compiles into UI.Tests." >&2
 		fail=1
 	fi
 	# ADR-0138 §53: the three-layer rule also holds upward - Logic never
 	# reaches into the host-aware Services layer or issues HTTP itself.
-	if sed -E 's|//.*$||' "$file" | grep -qE 'Mesen\.Services|System\.Net\.Http|HttpClient'; then
+	if sed -E 's|//.*$||' "$file" | grep -E 'Mesen\.Services|System\.Net\.Http|HttpClient' >/dev/null; then
 		echo "ERROR: $file references Mesen.Services/HttpClient - UI/Logic/*.cs is the host-free decision layer; network orchestration belongs in UI/Services/*.cs." >&2
 		fail=1
 	fi
@@ -81,7 +81,7 @@ while IFS= read -r -d '' file; do
 	case "$file" in
 		UI/Services/*|UI/ViewModels/UpdatePromptViewModel.cs) continue ;;
 	esac
-	if sed -E 's|//.*$||' "$file" | grep -qE 'HttpClient'; then
+	if sed -E 's|//.*$||' "$file" | grep -E 'HttpClient' >/dev/null; then
 		echo "ERROR: $file uses HttpClient outside UI/Services/ - the network boundary is UI/Services/*.cs (ADR-0138 §37/§53)." >&2
 		fail=1
 	fi

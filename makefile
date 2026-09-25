@@ -418,6 +418,13 @@ doc-checks: check-manifest
 	#live row whose Decision cell opens with "shipped" is a contract breach.
 	python3 scripts/checks/verify_prd_live_rows.py
 	python3 scripts/test_verify_prd_live_rows.py
+	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
+	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
+	#141, which a check reads as a missing string - verify_community_pack_
+	#labels_script.sh flaked twice that way under load. The test reruns that
+	#check against an oversized LABELS array (deterministic 141 before the fix)
+	#and then scans every script under scripts/ so the pattern cannot come back.
+	python3 scripts/test_check_pipeline_sigpipe.py
 	#Unit tests for the community-pack pipeline's leaf modules (stdlib-only,
 	#no network/PAT/ROM): the MEI/recipe/content-id/identity/meta/rules
 	#interpreters and dispatch keep their own golden/PASS-style checks.
