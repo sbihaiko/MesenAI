@@ -1073,7 +1073,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   then does one of two things. If the source cell owns every key it emits, it
   writes the source cell. Otherwise it copies each 8x8 sub-tile to the owner
   crop and leaves the source alone. In a kit project the owner is the
-  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1).
+  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1) — and
+  that row is what the *fallback* writes too, because `export_pose_rows`
+  names it in each cell's sidecar (#498): a kit built from the recording's
+  own `chr/` rules has every untouched cell keeping its recorded rule
+  (ADR-0231), so no sheet owns those keys and the cell the figure names is
+  the only answer left. Naming the `sprites` vocabulary cell there put the
+  artist's paint into `sheets/sprites.png` — the one sheet ARTIST.md tells
+  them not to paint at all (ADR-0153 §3) — and the next build warned about
+  it. Only the return target is affected: the figure's art still comes from
+  `home_cell`, since a kit sheet is not part of the pack being exported from.
   Writing both is not an option: painted beats untouched (ADR-0153 §4)
   re-points the key, and a painted sprite crop that loses its key is a build
   error (#253). An owner whose `*.orig.png` art differs from the source's is

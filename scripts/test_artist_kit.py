@@ -11,7 +11,10 @@ surface worth anything: what it writes is legal `mep_build` input.
 Run:  python3 scripts/test_artist_kit.py
 """
 
+import contextlib
+import io
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -19,8 +22,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import artist_kit as K  # noqa: E402
 import compose_engine as E  # noqa: E402
+import mep_build  # noqa: E402 — the rebuild the import's plan is made against
+import mep_figure as F  # noqa: E402 — the Figures surface and its import
 import sheet_repaint  # noqa: E402 — to read the exported PNG back
-from test_compose_engine import (make_pack, mep_build_load,  # noqa: E402
+from test_compose_engine import (_solid, make_pack, mep_build_load,  # noqa: E402
                                  _write_spr_group, _write_poses, _poses_doc)
 
 _FAILURES = []
@@ -48,6 +53,24 @@ def _kit_pack(root: Path, doc):
     _write_spr_group(sheets)
     _write_poses(sheets, doc)
     return E.Pack(root)
+
+
+def _recorded_key_source(root: Path):
+    """Turn `_kit_pack`'s fixture into a *recording*: every sprite key's rule
+    points at a `chr/` page, which is what a real recorder writes. It is the
+    state that makes #498 reachable — with no `sheets/` rule for the key, the
+    first build keeps the recorded rule for every untouched cell (ADR-0231,
+    `mep_recorded`), so no sheet owns the key and an import has to fall back to
+    the cell the figure names. Without it the fixture's sheets are the only key
+    source and the vocabulary sheet already owns every key, which is the case
+    #413 fixed and not the one this test is about."""
+    textures = root / "textures"
+    (textures / "chr").mkdir(parents=True, exist_ok=True)
+    sheet_repaint.write_png(textures / "chr" / "Chr_00.png", _solid(16, (10, 20, 30, 255)))
+    palette = json.loads((textures / "sheets" / "sprites.json").read_text())["cells"][0]["tiles"][0]["palette"]
+    (textures / "hires.txt").write_text(
+        "\n".join(["<ver>109", "<scale>1", "<img>chr/Chr_00.png",
+                   f"<tile>0,{'F' * 32},{palette},0,0,1,N"]) + "\n", encoding="utf-8")
 
 
 # The fixture's sprite nodes are 0..3 (node 4 has no sheet art, so it is the
@@ -147,12 +170,12 @@ def test_every_figure_shares_the_rows_baseline():
         check(boxes == [(2, 2)], "the row's box is that row's largest figure", str(boxes))
         box = boxes[0]
         by_col = {}
-        for node, cx, cy in cells:
+        for _pose_id, _node, cx, cy in cells:
             by_col.setdefault(cx // (box[0] + K.SLOT_GAP), []).append(cy)
         bottoms = {slot: max(ys) for slot, ys in by_col.items()}
         check(len(set(bottoms.values())) == 1,
               "every figure of the row ends on one baseline", str(bottoms))
-        check(all(cy < box[1] + K.SLOT_GAP for _n, _cx, cy in cells),
+        check(all(cy < box[1] + K.SLOT_GAP for _p, _n, _cx, cy in cells),
               "a one-row grid stays inside one box height", str(cells))
 
 
@@ -465,6 +488,75 @@ def test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build():
         check("#435" in bullet, "and says why the first build comes before the import", bullet)
 
 
+def _build(pack_dir: Path) -> int:
+    """`mep_build.py build --quiet`, with its report kept out of this suite's."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        return mep_build.main(["build", str(pack_dir), "--quiet"])
+
+
+def _rule_image(hires: Path, key: str) -> str:
+    """The `<img>` path the rule carrying `key` points at (`""` when no rule does)."""
+    lines = hires.read_text(encoding="utf-8").splitlines()
+    images = [ln.strip()[5:].strip() for ln in lines if ln.startswith("<img>")]
+    rule = next((ln for ln in lines if ln.startswith("<tile>") and f",{key}," in ln), "")
+    return images[int(rule[6:].split(",")[0])] if rule else ""
+
+
+def test_a_painted_figure_returns_to_the_kit_row_and_not_the_vocabulary():
+    """#498: the Figures view is the `usrNNN` row's rows, so a painted figure
+    comes back to that row — the surface ARTIST.md sends the artist to, and
+    the one #413 already promises. Naming the `sprites` vocabulary cell the
+    art was cut from instead wrote the paint into `sheets/sprites.png`, the
+    sheet ARTIST.md says not to paint (ADR-0153 §3), on every pack whose built
+    manifest owns none of the key (an untouched cell keeps its recorded `chr/`
+    rule, ADR-0231)."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        root = td / "pack"
+        pack = _kit_pack(root, _doc_with_cycle())
+        _recorded_key_source(root)
+        kit = td / "kit"
+        K.build_kit(root, kit / "sheets", K.DEFAULT_COLUMNS, K.DEFAULT_ROWS, str(root),
+                    figures_out=kit / "figures")
+        figures = sorted((kit / "figures").glob("usr*-figure.json"))
+        check(len(figures) == 1, "the cycle becomes one figure surface", str(figures))
+        doc = json.loads(figures[0].read_text(encoding="utf-8"))
+        usr = figures[0].name[:-len("-figure.json")]
+        check(doc["cells"] and all(c["sheet"] == f"{usr}.json" for c in doc["cells"]),
+              "every cell of the figure names the kit row that lays it out", str(doc["cells"]))
+
+        work = td / "work"
+        shutil.copytree(root, work)
+        for src in sorted((kit / "sheets").glob("usr*")):
+            shutil.copy2(src, work / "textures" / "sheets" / src.name)
+        check(_build(work) == 0, "the copy builds")
+        before = {p.name: p.read_bytes() for p in (work / "textures" / "sheets").glob("*.png")}
+        magenta = (255, 0, 255, 255)
+        target = next(c for c in doc["cells"] if c["node"] == 2)
+        node_key = "F" * 32  # the fixture's vocabulary keys every node alike
+        fig = sheet_repaint.read_png(kit / "figures" / f"{usr}-figure.png")
+        fig.paste(_solid(E.GUTTER, magenta),  # one 1x pixel, blown up by the figure's scale
+                  target["x"] * doc["scale"], target["y"] * doc["scale"])
+        sheet_repaint.write_png(kit / "figures" / f"{usr}-figure.png", fig)
+
+        rep = F.import_figure(E.Pack(work), kit / "figures" / f"{usr}-figure.png")
+        check(rep["written"] == 1 and rep["sheets"] == [f"{usr}.png"],
+              "the paint is written into the kit row the figure names", json.dumps(rep))
+        after = {p.name: p.read_bytes() for p in (work / "textures" / "sheets").glob("*.png")}
+        check(after["sprites.png"] == before["sprites.png"],
+              "the raw sprite vocabulary is never painted (ADR-0153 §3)")
+        cell = next(c for c in json.loads((work / "textures" / "sheets" / f"{usr}.json")
+                                         .read_text())["cells"] if c["metatile"] == 2)
+        img = sheet_repaint.read_png(work / "textures" / "sheets" / f"{usr}.png")
+        check(img.get(cell["x"] * doc["scale"], cell["y"] * doc["scale"]) == magenta,
+              "and inside that node's own cell of it", str(cell))
+
+        check(_build(work) == 0, "the repainted pack builds")
+        image = _rule_image(work / "textures" / "hires.txt", node_key)
+        check(image.endswith(f"sheets/{usr}.png"),
+              "the first paint moves the key onto the artist's sheet (ADR-0231)", image)
+
+
 def main():
     tests = [
         test_a_cycle_becomes_one_row_in_phase_order,
@@ -484,6 +576,7 @@ def main():
         test_a_repeated_phase_says_which_column_plays_again,
         test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason,
         test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build,
+        test_a_painted_figure_returns_to_the_kit_row_and_not_the_vocabulary,
     ]
     for t in tests:
         t()
