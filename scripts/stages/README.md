@@ -51,7 +51,9 @@ against, or the unattended job cannot use it:
   All six sets are declared since 2026-09-23 (F14.3,
   `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
   `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
-  authored on, and each was run once through the library job.
+  authored on, and each was run once through the library job. `punchout/`
+  (2026-09-24) is pinned to the library dump it was authored and recorded on
+  by hand (below); it has not been through the library job.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
@@ -362,3 +364,24 @@ where the screen does not scroll) reads Link's walk cleanly — 9 poses, 2 cycle
 period 3, hold [4,4,4], 117 repeats each — but **attributes no driver**, and the
 60 f-hold shape (x20, 100 repeats) does not either. On this game the probe is
 worth running as a clean-cycle measurement; it answered nothing about the pad.
+
+## Punch-Out!!: a route that loses on schedule (2026-09-24)
+
+`punchout/` records the first Minor Circuit fight (Glass Joe) of Mike Tyson's
+Punch-Out!! (MMC2, CHR ROM). `mint-fight1.txt` (1990 f) waits out the boot,
+presses Start ten times 120 f apart — through the title, the password/new-game
+screen and the circuit card — and idles 660 f through the ring introduction,
+so `save-state=` writes `fight1.mss` as the bell rings (the headless run takes
+34 s and stops at frame 2044).
+
+`fight1.txt` (5580 f) repeats an 18x block of jabs and body blows to both
+sides (`UA`, `UB`, `A`, `B`), dodges (`L`, `R`) and a duck (`D`), with 14–20 f
+of release between them. It is blind — it never reads Glass Joe's tells — so
+it loses: Little Mac is knocked down around 60 s from the state and counted
+out around 70 s. Record at most 70 s from `fight1.mss`; past that the run
+records the "you lost" screen. Two 70 s passes gave a byte-identical
+`hires.txt` and `auto/` (docs/validation/punchout-deep-measurement-2026-09-24.md).
+
+Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
+background tiles**, so the kit's figures cover the opponent and Mac shows up
+only on the pattern pages and the BG sheets.
