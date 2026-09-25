@@ -429,7 +429,9 @@ def replay(ctx, game, key):
 
     #P13 - build, and read the pasted key back out of hires.txt. That read-back
     #is the panel's criterion 5: the round trip is the key coming out as a
-    #<tile> whose x,y is the painted crop.
+    #<tile> whose x,y is the painted crop. This is the machine's read - the
+    #evaluator's own answer is the build's `report:` row (#511), which must
+    #name the same line, and which this replay can compare once it is captured.
     rc, errors, secs, _ = build(pack)
     out["P13"] = f"rc={rc}, {len(errors)} error(s), {secs:.0f}s"
     if rc != 0:

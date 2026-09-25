@@ -535,6 +535,26 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   keep `mep_build.py` under its line ceiling. "Untouched" is read from
   the entry's claim flag, so a blank sprite key in a painted cell keeps
   its recorded rule too (#464).
+  **The cell report (#511, `report_cells`).** After the `built …` line a
+  build prints one `report:` row per key of every sheet cell the artist
+  touched — painted (its crop differs from the `*.orig.png` twin) or
+  marked `addedBy` by `mep_add_cell.py`, which is the only way to name a
+  cell that was placed and not yet painted. A row names the sidecar, the
+  cell's `index`, the key **as the emission loop keyed by** (the ADR-0172
+  index token on a CHR ROM pack, else the ADR-0178 un-baked `source`,
+  else the sidecar's `tile`), the painted crop in sheet pixels, and the
+  `<tile>` line the build wrote for it, verbatim. That is what makes
+  criterion 5 of the F14.2 cold read checkable from the tool's own output
+  instead of a read of `textures/hires.txt` (a criterion-4 fail, and why
+  4 of 5 runs went looking). Ownership is read from the same `winner` map
+  the emission used — the winning entry must sit in the cell's own slot
+  and its crop must be one the cell produced, because two sheets can put
+  a shape at the same x,y — so a key another crop took prints "produced
+  no rule for this cell" (#343) rather than the winner's line. A sheet
+  whose twin is missing or unreadable records no cells: it cannot tell
+  painted from untouched. Rows are capped at `REPORT_CAP` (20) with
+  `report: ... and N more`. Asserted in `test_mep_build_recorded.py`
+  (`cell_rule_report_test`); the marker itself in `test_mep_add_cell.py`.
   **Sidecar palette fields (ADR-0230, F14.9; producer contract in
   `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
   "brightness"}]`. For each fold, `build` emits one extra exact

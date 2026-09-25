@@ -726,14 +726,22 @@ def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, 
                         data, fpal, edited, idx, src, mirror, condition, bright))
 
 
-def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
+def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path):
     """(x, y, tileData, palette, edited, index, source, mirror, condition, fold
     brightness or None) for every 8x8
     crop the sheet resolves, in sheet pixels at `scale`. `edited` says the
     crop's cell differs from the `*.orig.png` twin, i.e. the artist actually
     painted it. Crops that fall outside the PNG are dropped with a warning
-    rather than emitting a tile that would render transparent."""
+    rather than emitting a tile that would render transparent.
+
+    Returns `(crops, cells)`: `cells` is one record per cell the artist touched
+    — painted, or placed by a tool that marked it (`addedBy`, #511) — which
+    `report_cells` turns into the build's report line. None are recorded for a
+    `blind` sheet (no twin: painted and untouched cannot be told apart, and the
+    build already says so) or for a map (its crops are placements, so there is
+    no cell ordinal to name)."""
     crops = []
+    cells = []
     skipped = []
     per = sd.tiles_per_cell
     probe = _EditedProbe(sd, scale, sheets_dir)
@@ -742,7 +750,7 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
     if sd.kind == "map":
         vocab = _vocabulary(sd, sheets_dir)
         if vocab is None:
-            return []
+            return [], []
         unresolved = []
         for p in sd.doc.get("placements") or []:
             try:
@@ -771,8 +779,22 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
                 skipped.append(sd.name)
                 continue
             painted = probe.edited(cx, cy, sd.unit)
+            authored = mep_conditions.cell_condition(c)
+            before = len(crops)
             _cell_crops(c.get("tiles"), cx, cy, per, scale, f"{sd.name} cell {c.get('index')}", crops, skipped,
-                        painted, mep_conditions.cell_condition(c))
+                        painted, authored)
+            # #511: the cells the report names. A cell nobody painted and no
+            # tool added is not a question anybody asked, and a fold carries a
+            # Brightness (index 9), so it is not a key of its own here.
+            if not probe.blind and (painted or str(c.get("addedBy") or "").strip()):
+                own = crops[before:]
+                cells.append({"index": c.get("index"), "crop": (cx * scale, cy * scale),
+                              "painted": painted, "crops": {(cr[0], cr[1]) for cr in own},
+                              "condition": f"[{authored[0]}]" if authored and authored[0] else "",
+                              # (data, palette, index, source): the sidecar's key and
+                              # the two fields that can replace it (ADR-0172/0178).
+                              "keys": list(dict.fromkeys(
+                                  (cr[2], cr[3], cr[5], cr[6]) for cr in own if cr[9] is None))})
             # ADR-0153 §3 alias pass (F9.7): a bank-swapping mapper delivers the
             # same drawing under several tile keys, so the sheet carries one cell
             # per *subject* and lists the keys it absorbed. The artist paints the
@@ -796,7 +818,57 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
     inside = [c for c in crops if c[0] >= 0 and c[1] >= 0 and c[0] + span <= w and c[1] + span <= h]
     if len(inside) != len(crops):
         print(f"warning: {sd.name}: {len(crops) - len(inside)} crop(s) fall outside the {w}x{h} image — dropped")
-    return inside
+    return inside, cells
+
+
+# #511: how many report rows the build prints before it counts the rest.
+REPORT_CAP = 20
+
+
+def report_cells(out_lines, sliced, slots, winner, index_keyed: bool) -> None:
+    """Issue #511: the artist's own answer to "did the cell I painted reach the
+    manifest?", so nobody has to open `textures/hires.txt` to find out — a read
+    the F14.2 cold read counts as a criterion-4 fail, and the reason 4 of its 5
+    runs went looking there.
+
+    One row per key of every sheet cell the artist touched (painted, or placed
+    by `mep_add_cell.py`, which marks it `addedBy`), naming the sheet, the cell
+    index, the key, the painted crop and the `<tile>` line this build wrote for
+    it — the rule as it went into the manifest, which is what criterion 5 asks.
+    Only a rule the cell itself owns is shown; the ownership comes from the
+    same `winner` map the emission used. The rows are capped (a pack painted
+    wholesale is not a report) and the rest counted. Silence means no cell was
+    painted."""
+    by_cond = {}
+    for line in out_lines:
+        m = _TILE_RE.match(line.strip())
+        if not m:
+            continue
+        f = [x.strip() for x in m.group(2).split(",")]
+        if len(f) < 6:
+            continue
+        by_cond.setdefault((m.group(1) or "", f[1].upper(), f[2].upper()), line.strip())
+    rows = [(sd, c, k) for sd, _crops, cells in sliced for c in cells for k in c["keys"]]
+    if not rows:
+        return
+    print(f"report: {len(rows)} key(s) from the sheet cell(s) you painted or added:")
+    for sd, c, (data, pal, idx, src) in rows[:REPORT_CAP]:
+        # The key the emission loop keyed by: ADR-0172's CHR index, else the
+        # ADR-0178 un-baked source, else the sidecar's own tile.
+        tile = _index_token(idx) if index_keyed and idx is not None else (src or data)
+        at = winner.get((c["condition"], tile, pal)) or winner.get(("", tile, pal))
+        # The winning entry is this cell's only if it sits in the cell's own slot
+        # and its crop is one the cell produced: two sheets can share an x,y.
+        mine = at is not None and at[0] == c["slot"] and tuple(
+            int(v) for v in slots[at[0]]["entries"][at[1]][2][3:5]) in c["crops"]
+        line = (by_cond.get((c["condition"], tile, pal)) or by_cond.get(("", tile, pal))) if mine else ""
+        print(f"report: sheets/{sd.json_path.name} cell {c['index']} "
+              f"{'painted' if c['painted'] else 'added'} — tile {tile} palette {pal} "
+              f"at crop {c['crop'][0]},{c['crop'][1]}: "
+              + (line or "no <tile> — this key produced no rule for this cell (another crop may "
+                         "already own it, #343)"))
+    if len(rows) > REPORT_CAP:
+        print(f"report: ... and {len(rows) - REPORT_CAP} more")
 
 
 def _emit_comment(sheet_rel: str, cell: int) -> list:
@@ -1151,7 +1223,8 @@ def cmd_build(args) -> int:
     sliced = []
     for sd in sheet_docs:
         try:
-            sliced.append((sd, _slice_sheet(sd, scale, sheets_dir)))
+            crops, touched = _slice_sheet(sd, scale, sheets_dir)
+            sliced.append((sd, crops, touched))
         except BuildError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
@@ -1159,11 +1232,11 @@ def cmd_build(args) -> int:
     # a key the key source draws see-through, closed over shared crops. The
     # crop's (unflipped) bitmap says where colour 0 is, an index key cannot.
     bg = [((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]),
-           c[6] or c[2]) for sd, crops in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS
+           c[6] or c[2]) for sd, crops, _touched in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS
           for c in crops if c[3][:2] != "FF"]
     see_through = F.see_through_places(((place, key) for place, key, _t in bg), F.KeySourceAlpha(
         source, _png_pixels, {key: tile for _p, key, tile in reversed(bg)}).transparent)
-    for sd, crops in sliced:
+    for sd, crops, _touched in sliced:
         entries = []
         seen = {}
         repeats = 0
@@ -1395,6 +1468,13 @@ def cmd_build(args) -> int:
     hires.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
     print(f"built {hires} — {emitted} tile(s), {img_index} sheet(s), scale {scale}"
           + (f" ({len(sheet_docs)} ADR-0153 sheet(s))" if sheet_docs else ""))
+    # #511: what the artist painted or added, and the rule each one produced.
+    # The legacy 16-column sheets take the first slots and have no cells, so a
+    # sheet doc's slot order is its own position past them.
+    for order, (_sd, _crops, touched) in enumerate(sliced):
+        for c in touched:
+            c["slot"] = order + len(sheets)
+    report_cells(out_lines, sliced, slots, winner, index_keyed)
 
     # A bare survivor count reads as damage: the golden Mega Man 3 bootstrap
     # goes from 10057 keys to 644 and the tool used to announce the 644 as if
