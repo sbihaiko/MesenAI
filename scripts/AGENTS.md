@@ -982,9 +982,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   never built with these sheets, so its flip-baked crops (ADR-0178) are not
   the twins the next build slices - or when the pack does not build at all.
   Keep the guard: planning without it re-points rules the reload cannot
-  show. Covered by `test_mep_figure.py`; measured on Contra in
+  show. A cell whose `*.orig.png` art is fully transparent (a blank sprite
+  tile, which the NES never draws) is never written, whatever paint covers
+  its rect. It is listed in the report's `blank` array and printed by the
+  CLI (#452). Without this check, Castlevania's blank tile took body paint
+  and the build failed #253's guard. Covered by `test_mep_figure.py`;
+  measured on Contra in
   `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
-  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`.
+  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  Castlevania in
+  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
