@@ -42,8 +42,20 @@ fully transparent rule per palette to the pack, and each one draws nothing.
 
 - `OamFetchLatch::ForEachLatched` hands no blank half to `emit`
   (`RecordSprite`) and no blank bank to `emitBank` (`RecordSpriteBank`). A
-  blank half is not an OAM entry either. A drawn bank of a blank half is still
+  drawn bank of a blank half is still
   a key, because its rows made rules.
+  **Amended by #520 (2026-09-25):** the second sentence of this bullet read "a
+  blank half is not an OAM entry either", and that is what broke Bubble Bobble.
+  A blank half names no *shape* and reaches no sheet cell and no `<tile>` rule,
+  but it is still a cell of the figure the PPU drew: ADR-0170 §1 segments the
+  OAM stream, and a game may build a figure out of halves that are half blank
+  (Bubble Bobble's 8x16 bubbles). Dropping them took two of a four-cell
+  figure's cells, the cluster fell under ADR-0170 §2's floor, and the ROM went
+  from 78 silhouettes and 395 tracks to 0 of each. The half now reaches
+  `HdPackBuilder::RecordSpritePlacement` as a bare `(x, y)` and enters the
+  stream with `Shape == kEmptyCell` - a placement, never a shape. The
+  registry ↔ rules agreement this document measures is unchanged: nothing
+  shape-keyed sees `kEmptyCell`.
 - `HdBuilderPpu::DrawPixel` makes no sprite rule for a blank tile.
 
 ## #471: a background tile drawn only off a cell's origin scanline

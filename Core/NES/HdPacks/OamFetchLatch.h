@@ -167,8 +167,17 @@ public:
 	//`emitBank(tile)` receives the half as read from each further bank its
 	//rows came from - a key the <tile> rules carry, but not a second sprite.
 	//Neither receives a fully transparent tile (#470, IsFullyTransparent).
-	template<typename Emit, typename Rebank, typename EmitBank>
-	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
+	//
+	//#520: a blank half is still a half the PPU placed, and `emitPlaced` gets
+	//exactly those, as a bare (x, y) - no tile, because it has no art to name.
+	//It is not a sprite (it reaches `emit` never, so no shape is registered and
+	//no sheet cell or `<tile>` rule can exist for it) but it is a *placement*,
+	//and the pose pass reads the placements: Bubble Bobble draws every figure
+	//as two 8x16 sprites whose upper half is blank, so dropping the blank halves
+	//took two of a four-cell figure's cells and the cluster fell under
+	//ADR-0170 §2's floor - 78 silhouettes and 395 tracks became 0.
+	template<typename Emit, typename Rebank, typename EmitBank, typename EmitPlaced>
+	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank, EmitPlaced&& emitPlaced)
 	{
 		for(uint32_t slot = 0; slot < SlotCount; slot++) {
 			if(!_latched[slot]) {
@@ -183,6 +192,8 @@ public:
 			//a drawn bank of a blank half still is (its rows made rules).
 			if(!IsFullyTransparent(tile)) {
 				emit(_x[slot], _y[slot], tile);
+			} else {
+				emitPlaced(_x[slot], _y[slot]);
 			}
 			for(size_t i = 1; i < _banks.size(); i++) {
 				HdPpuTileInfo other = tile;
@@ -194,8 +205,22 @@ public:
 		}
 	}
 
-	//The same, for a caller that only wants the halves as decoded (the row
-	//log is not consulted).
+	//The same, for a caller that wants the shapes and not the placements (#520):
+	//`emitPlaced` is a no-op, so a blank half is handed to nobody at all. What
+	//reaches `emit` and `emitBank` is unchanged - #470's filter still holds, and
+	//so does the bank pass.
+	template<typename Emit, typename Rebank, typename EmitBank>
+	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
+	{
+		ForEachLatched(emit, rebank, emitBank, [](uint8_t, uint8_t) {});
+	}
+
+	//The raw latch as the PPU filled it: no row log, no bank pass, and **no
+	//#470 filter** - a fully transparent half is emitted like any other, so a
+	//caller here sees a half the production path drops. Its only caller is
+	//`OamFetchLatchModel::RunFrame` (`scripts/core_unit_tests.cpp`), which reads
+	//back the halves of a modelled frame as fetched. Production goes through the
+	//4-arg overload above.
 	template<typename Emit>
 	void ForEachLatched(Emit&& emit)
 	{

@@ -379,20 +379,32 @@ namespace MesenSheets
 		//vocabulary knows, DSU-joined within kPoseMaxGap on both axes, each
 		//cluster normalised to its own top-left at round-to-nearest cell and
 		//reduced to a set. Clusters under kPoseMinTiles are not returned.
+		//
+		//#520: an artless placement (Shape == kEmptyCell) takes part in both -
+		//it is a cell of the cluster, so it can carry the figure over the floor,
+		//and it is where two OAM entries of one sprite overlap - but it holds no
+		//tile, so it never appears in the pose or in the file.
 		std::vector<PoseCluster> SegmentFrame(const OamFrame& frame, const Vocabulary& vocab)
 		{
 			std::vector<PoseCluster> out;
 			//An unknown shape is skipped rather than clustered: it would move
 			//the top-left and so shift every offset in the pose.
 			std::vector<std::pair<int32_t, int32_t>> points;
-			std::vector<uint32_t> nodes;
+			std::vector<int32_t> nodes;
 			for(const OamEntry& entry : frame.Entries) {
 				int32_t node = vocab.Find(SpriteKey(entry.Shape));
 				if(node < 0) {
-					continue;
+					//#520: kEmptyCell is a half the PPU placed whose art is
+					//blank (#470). It names no node - there is no art to name -
+					//but it is one of the cells of the figure, so it joins with
+					//node -1 and holds its cell without holding a tile.
+					if(entry.Shape != kEmptyCell) {
+						continue;
+					}
+					node = -1;
 				}
 				points.push_back(std::make_pair((int32_t)entry.X, (int32_t)entry.Y));
-				nodes.push_back((uint32_t)node);
+				nodes.push_back(node);
 			}
 			if(points.size() < kPoseMinTiles) {
 				return out;
@@ -414,16 +426,43 @@ namespace MesenSheets
 					continue;
 				}
 				PoseCluster pc;
-				pc.X = points[cluster.second[0]].first;
-				pc.Y = points[cluster.second[0]].second;
+				//#520: the origin is the drawn figure's own top-left. A blank
+				//half occupies screen space but says nothing about where the
+				//silhouette starts, so it never moves the origin - the same
+				//figure is the same pose whatever transparent cells sit above
+				//or beside it.
+				pc.X = 0;
+				pc.Y = 0;
+				bool anyDrawn = false;
 				for(size_t index : cluster.second) {
-					pc.X = std::min(pc.X, points[index].first);
-					pc.Y = std::min(pc.Y, points[index].second);
+					if(nodes[index] < 0) {
+						continue;
+					}
+					if(!anyDrawn) {
+						pc.X = points[index].first;
+						pc.Y = points[index].second;
+						anyDrawn = true;
+					} else {
+						pc.X = std::min(pc.X, points[index].first);
+						pc.Y = std::min(pc.Y, points[index].second);
+					}
+				}
+				if(!anyDrawn) {
+					continue; //nothing was drawn here, so there is no silhouette
 				}
 				pc.Tiles.reserve(cluster.second.size());
+				//#520: the cells of the cluster that hold no art. They are
+				//members - ADR-0225 §1's two-entries-one-cell rule is about the
+				//cell, and two artless cells are two cells - but they are not
+				//tiles, so they never enter the pose's tile set or the file.
+				std::set<std::pair<int32_t, int32_t>> artlessCells;
 				for(size_t index : cluster.second) {
+					if(nodes[index] < 0) {
+						artlessCells.insert(std::make_pair(ToCells(points[index].first - pc.X), ToCells(points[index].second - pc.Y)));
+						continue;
+					}
 					PoseTile tile;
-					tile.Node = nodes[index];
+					tile.Node = (uint32_t)nodes[index];
 					tile.Px = points[index].first - pc.X;
 					tile.Py = points[index].second - pc.Y;
 					tile.Dx = ToCells(tile.Px);
@@ -438,7 +477,21 @@ namespace MesenSheets
 				//frontmost entry (ADR-0225: its pixels are the ones drawn).
 				std::stable_sort(pc.Tiles.begin(), pc.Tiles.end());
 				pc.Tiles.erase(std::unique(pc.Tiles.begin(), pc.Tiles.end()), pc.Tiles.end());
-				if(pc.Tiles.size() < kPoseMinTiles) {
+				//ADR-0170 §2 counts the cells the cluster holds, and it was
+				//calibrated on a stream where a transparent half was one of
+				//them: #470 took those out of the stream and a figure the game
+				//draws in four cells became two, under the floor (#520). So the
+				//count is the cluster's cells, drawn and artless alike, and it is
+				//the *union* of them: pc.Tiles is a set of (Node, Dx, Dy) and
+				//holds two entries for a cell two shapes were drawn on (ADR-0225
+				//§1), and an artless half on a cell some art already holds adds no
+				//cell either. Summing the two sets would count those cells twice
+				//and let a three-cell figure pass as a four-cell one.
+				std::set<std::pair<int32_t, int32_t>> cells = artlessCells;
+				for(const PoseTile& tile : pc.Tiles) {
+					cells.insert(std::make_pair(tile.Dx, tile.Dy));
+				}
+				if(cells.size() < kPoseMinTiles) {
 					continue;
 				}
 				RankPoseTiles(pc.Tiles);

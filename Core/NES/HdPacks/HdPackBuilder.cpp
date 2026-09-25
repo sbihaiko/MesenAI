@@ -1018,6 +1018,32 @@ void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
 	_frameOam.Entries.push_back(entry);
 }
 
+//#520: see HdPackBuilder.h. #470 stopped recording a fully transparent half at
+//all, which was right about the sheet and the `<tile>` rules - it has no art to
+//name - and wrong about the OAM stream, which ADR-0170 §1 segments and which
+//never promised that every cell it holds is drawable. Bubble Bobble draws every
+//figure as two 8x16 sprites with a blank upper half: four cells became two, the
+//cluster fell under ADR-0170 §2's kPoseMinTiles floor, and the ROM that used to
+//report 78 silhouettes and 395 tracks reported 0 of each (issue #520). The cell
+//comes back here, carrying kEmptyCell - the same "nothing here" shape the
+//loader's fallback tiles use - and nothing else in the pipeline changes:
+//BuildSpriteVocabulary skips it, so it is no vocabulary node and so reaches no
+//sheet; Accumulate and SpriteNearbyPalettes skip it; WriteOamStreamDump leaves
+//it out, because ADR-0222's dump exists to resolve a sprite to tile data and
+//palette and this half has neither. `_shapeTiles` never grows for it, so
+//`ShapeIdFor` still answers kEmptyCell for a blank tile and RecordSprite still
+//refuses it: #470's agreement between the registry and the rules is untouched.
+void HdPackBuilder::RecordSpritePlacement(uint8_t x, uint8_t y)
+{
+	if(!_captureScreens || _oamFrames.size() >= MesenSheets::kMaxSheetFrames || _frameOam.Entries.size() >= 128) {
+		return;
+	}
+	//The entry is built by the host-free helper the suite pins
+	//(MesenSheets::PlacementEntry), so the shape of what production records here
+	//is not a private detail of this file.
+	_frameOam.Entries.push_back(MesenSheets::PlacementEntry(x, y));
+}
+
 //De-duplication mirrors RecordGridFrame: a screen that holds still must not
 //manufacture the evidence the grouping criterion asks for.
 void HdPackBuilder::RecordOamFrame()

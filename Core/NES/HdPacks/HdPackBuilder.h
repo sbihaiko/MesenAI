@@ -466,6 +466,13 @@ public:
 	//F9.5: one on-screen sprite, post-flip shape, screen origin in pixels.
 	//Gated on screen capture like the background grid, and a no-op otherwise.
 	void RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile);
+	//#520: a half the PPU placed whose 16 bytes are all zero (#470's
+	//IsFullyTransparent). It names no shape, so it reaches no sheet cell and no
+	//`<tile>` rule - but it is one of the cells of the figure the game drew, and
+	//the OAM stream is what ADR-0170 §1 segments. Recorded as a placement with
+	//the loader's own "nothing here" shape (kEmptyCell), which
+	//BuildSpriteVocabulary and the adjacency accumulator already skip.
+	void RecordSpritePlacement(uint8_t x, uint8_t y);
 	//#458: the same OAM half's art from a second CHR bank - rows the PPU read
 	//after a latch tile switched banks inside the sprite. Registered as a shape
 	//so its key reaches a sheet, but never as an OAM entry, which would place
