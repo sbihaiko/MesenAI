@@ -37,7 +37,7 @@ session scratchpad and is not versioned. This log keeps the numbers.
    difference from the unpainted control. The painted and unpainted
    rebuilds have byte-identical `hires.txt` and the same 337 keys
    (ADR-0183 §4), and a third build is byte-identical to the second.
-5. **One real defect (draft below, not filed).** On a CHR ROM recording,
+5. **One real defect, filed as #449.** On a CHR ROM recording,
    `artist_chr_kit.py` counts the bootstrap's own ROM export
    (`defaultTile=Y`, never drawn) as recorded evidence. It marks 175 cells
    `seen: true` that belong to indices the run never drew, and reports
@@ -281,7 +281,7 @@ Two things a reader should know, neither of them a defect:
   cells show the recorder's magenta.
 - The rank-0 pages wear `0F001030`, the bootstrap's neutral palette. That
   is the palette of the ROM export. ARTIST.md marks both pages "inferred -
-  check it". **But their cells claim to be evidence** (defect draft below).
+  check it". **But their cells claim to be evidence** (#449, below).
 
 ### Contact sheet
 
@@ -345,44 +345,30 @@ python3 scripts/mep_build.py build <p>/painted   # and once more, to check idemp
   first build rewrites no sheet, so the #435 guard does not refuse. The
   import writes the same single cell, and a build then gives the same
   byte-identical `hires.txt`. It only disagrees with ARTIST.md's own "When
-  you are done" block. It is a documentation inconsistency and was not
-  filed.
+  you are done" block. It is a documentation inconsistency, filed as
+  #453.
 
-## Defect found (draft, not filed)
+## Defect found: #449
 
-**Title:** `artist_chr_kit counts the bootstrap's CHR ROM defaultTile export as recorded evidence (seen: true)`
+Filed as #449, "artist_chr_kit counts the bootstrap's CHR ROM defaultTile
+export as recorded evidence (seen: true)". The issue carries the repro;
+the measured facts are:
 
-**Body (draft):**
-
-> On a CHR ROM recording, the bootstrap's `AddRomTiles` writes one
-> `defaultTile=Y` row per CHR tile under the neutral palette `0F001030`.
-> Those rows land on the real bank pages (`Chr_00_0`, `Chr_01_0`), not on a
-> synthetic page the way the CHR RAM PRG scan does (`0x504247xx`, which the
-> kit leaves alone). `artist_chr_kit.py` treats them as this recording's
-> evidence.
->
-> Repro (Excitebike, `main` `46b9136a`): record 90 s from
-> `scripts/stages/excitebike` (mint, then `stage1-probe` + `stage1-run`,
-> `bootstrap hdpack-off`). Then run `artist_chr_kit.py <pack> --rom
-> <rom> --out <kit> --verify` and compare each `chr/Chr_*.json` cell with
-> `state: evidence` against the pack's `hires.txt` flags for its
-> `(tileIndex, palette)`.
->
-> Expected: a cell whose key has only `defaultTile=Y` rows, and whose index
-> the run never drew in any palette, is not `seen: true`. It is not green
-> in the legend ("a cell the run recorded"), and the "recorded" total counts
-> only drawn indices.
->
-> Observed: 175 cells (64 on `Chr_00_0`, 97 on `Chr_01_0`, 14 in the blank
-> bucket) belong to indices never drawn in any palette, yet carry
-> `state: evidence, seen: true`. Another 337 are the `Y` row of an index that
-> was drawn, but only under another palette. The log says "recorded 498 (97%)"
-> while the run drew 337 of 512 indices (66 %). ARTIST.md does label both rank-0
-> pages "inferred - check it", but the per-cell contract (`seen: false` for
-> anything never seen in play) is broken for the whole page. Pixels and the
-> round trip are unaffected: `--verify` still passes 868 → 868.
->
-> Suggested priority: P2 (misleading provenance on the artist's surface).
+- On a CHR ROM recording, the bootstrap's `AddRomTiles` writes one
+  `defaultTile=Y` row per CHR tile under the neutral palette `0F001030`.
+  Those rows land on the real bank pages (`Chr_00_0`, `Chr_01_0`), not on a
+  synthetic page the way the CHR RAM PRG scan does (`0x504247xx`, which the
+  kit leaves alone). `artist_chr_kit.py` treats them as this recording's
+  evidence.
+- 175 cells (64 on `Chr_00_0`, 97 on `Chr_01_0`, 14 in the blank bucket)
+  belong to indices never drawn in any palette, yet carry
+  `state: evidence, seen: true`. Another 337 are the `Y` row of an index
+  that was drawn, but only under another palette. The log says "recorded
+  498 (97%)" while the run drew 337 of 512 indices (66 %).
+- ARTIST.md does label both rank-0 pages "inferred - check it", but the
+  per-cell contract (`seen: false` for anything never seen in play) is
+  broken for the whole page. Pixels and the round trip are unaffected:
+  `--verify` still passes 868 → 868.
 
 The spike script compared every `evidence` cell's key with the pack's
 `defaultTile` flags: 356 cells `N`, 337 `Y` only for an index drawn in
