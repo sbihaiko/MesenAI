@@ -493,7 +493,7 @@ void HdPackBuilder::AddTile(HdPackTileInfo* tile, uint32_t usageCount)
 			_blankTilePalette++;
 		}
 	} else {
-		if(!MesenSheets::PlaceTileOnChrPage(paletteMap, palette, tile->TileIndex, tile)) {
+		if(!MesenSheets::PlaceTileOnChrPage(paletteMap, palette, tile->TileIndex, tile, _options.ChrRamBankSize / 16)) {
 			//The tile keeps its hires.txt entry but is drawn on no sheet.
 			//Counted so SaveHdPack can refuse to sweep the old fragments a
 			//re-record would otherwise orphan (ADR-0160 §3 guard).

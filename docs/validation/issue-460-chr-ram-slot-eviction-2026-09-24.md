@@ -130,6 +130,44 @@ The coverage and round-trip method is the F14.9 log's.
   from the instrumented run of the fixed code. That makes two passes per
   game.
 
+## Follow-up: usable slots per page (PR #473 review)
+
+- **Finding.** With a 1 KB or 2 KB `ChrRamBankSize`, `DrawTile` offsets page
+  N of a PNG by `256 / (0x1000 / ChrRamBankSize)` cells, i.e. 64 or 128. So
+  only the first `ChrRamBankSize / 16` slots of a page are usable.
+  - The column search scanned all 256 slots. Once the low columns were taken
+    across palettes, a displaced tile could land at slot 64/128 or above.
+  - That cell overlaps a later page of the same PNG. On the last page of a
+    PNG it falls past the PNG buffer.
+  - A 4 KB bank (the default, and what `headless_record` records with) has
+    256 usable slots, so it was never affected.
+- **Fix.** `PlaceTileOnChrPage` takes the usable-slot count
+  (`_options.ChrRamBankSize / 16`, the stride the blank-tile path already
+  used). The own-slot lookup, the index -1 search, the column search and the
+  full-page test all stay inside it.
+- **Red first.** Two tests were added, and the parameter was first threaded
+  through unused. `make core-unit-tests`:
+
+  ```
+  FAIL  #460: with 64 usable slots a displaced tile never lands at slot 64 or above
+  FAIL  #460: a page whose 64 usable slots are full refuses a displaced tile
+  FAIL  #460: a page whose 64 usable slots are full refuses a loaded CHR RAM tile
+  1110/1113 cases passed
+  ```
+
+- **Green.** 1113/1113.
+- **Mutations.** Each was applied, run and reverted:
+
+| Mutation | Result |
+|---|---|
+| the column search scans all 256 slots again | killed, 3 failures |
+| the index -1 search scans all 256 slots again | killed, 2 failures |
+
+- **E2E.** Castlevania 60 s, same recipe, rebuilt binary: 630 drawn keys
+  (0 lost), 21 `chr/Chr_*.png` pages, and `hires.txt` sha256 `e51ca7a2…`,
+  byte-identical to the run above. That is expected, because the recording
+  uses a 4 KB bank.
+
 ## Binary provenance
 
 - The `HdPackBuilder.o` object was deleted before each rebuild, because the
@@ -146,5 +184,5 @@ The coverage and round-trip method is the F14.9 log's.
 - `Core/NES/HdPacks/HdPackBuilder.cpp`: 2438 → 2425 lines, under its
   ceiling. The ceiling itself is unchanged.
 - `Core/NES/HdPacks/SheetColourways.h` (comment)
-- `scripts/core_unit_tests.cpp`: 3 tests.
+- `scripts/core_unit_tests.cpp`: 5 tests (2 from the PR #473 review).
 - `Core/Core.vcxproj`: lists the new header.

@@ -30,29 +30,36 @@ namespace MesenSheets
 	//
 	//A loaded CHR RAM tile (index -1) keeps taking the first free slot, as it
 	//always has.
+	//
+	//Only the first `usableSlots` slots of a page are ever filled: with a 1 KB
+	//or 2 KB ChrRamBankSize, DrawTile offsets page N of a PNG by
+	//ChrRamBankSize / 16 cells, so a slot past that stride would overlap the
+	//next page's cells, or fall outside the PNG on its last page. A page is
+	//full once those slots are.
 	template<typename T>
-	bool PlaceTileOnChrPage(std::map<uint32_t, std::vector<T*>>& bank, uint32_t palette, int32_t tileIndex, T* tile)
+	bool PlaceTileOnChrPage(std::map<uint32_t, std::vector<T*>>& bank, uint32_t palette, int32_t tileIndex, T* tile, size_t usableSlots)
 	{
 		std::vector<T*>& page = bank[palette];
+		size_t slots = usableSlots < page.size() ? usableSlots : page.size();
 		if(tileIndex < 0) {
-			for(T*& slot : page) {
-				if(slot == nullptr) {
-					slot = tile;
+			for(size_t i = 0; i < slots; i++) {
+				if(page[i] == nullptr) {
+					page[i] = tile;
 					return true;
 				}
 			}
 			return false;
 		}
 
-		T*& own = page[tileIndex % page.size()];
+		T*& own = page[tileIndex % slots];
 		if(own == nullptr || own == tile) {
 			own = tile;
 			return true;
 		}
 
-		size_t best = page.size();
+		size_t best = slots;
 		size_t bestCount = 0;
-		for(size_t i = 0; i < page.size(); i++) {
+		for(size_t i = 0; i < slots; i++) {
 			if(page[i] != nullptr) {
 				continue;
 			}
@@ -62,12 +69,12 @@ namespace MesenSheets
 					count++;
 				}
 			}
-			if(best == page.size() || count < bestCount) {
+			if(best == slots || count < bestCount) {
 				best = i;
 				bestCount = count;
 			}
 		}
-		if(best == page.size()) {
+		if(best == slots) {
 			return false;
 		}
 		page[best] = tile;

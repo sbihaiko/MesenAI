@@ -141,14 +141,19 @@ needs no local rules beyond the root DOX.
   newcomer moves to the free slot of the same page whose column (that slot
   index across the bank's pages) holds the fewest tiles, lowest index first,
   so the bank's PNG count does not grow while any column has room. A loaded
-  CHR RAM tile (index -1) takes the first free slot. A full page refuses the
+  CHR RAM tile (index -1) takes the first free slot. Only a page's first
+  `ChrRamBankSize / 16` slots are usable (64/128/256 for 1/2/4 KB), because
+  `DrawTile` offsets each page of a PNG by that stride; every search above
+  stays inside them, and a page is full once they are. A full page refuses the
   tile: it gets no `<tile>` line and is counted in `_droppedTiles`, which
   makes `SaveHdPack` keep the old fragments (ADR-0160 §3 guard). Consumers
   must therefore not read a tile's CHR index from its cell position in
   `chr/Chr_*.png` for a relocated tile; `hires.txt` is the authority. Pinned
   by `TestALaterTileNeverEvictsAnEarlierOneFromItsChrPageSlot`,
-  `TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank` and
-  `TestAFullChrPageRefusesATileInsteadOfEvictingOne`.
+  `TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank`,
+  `TestAFullChrPageRefusesATileInsteadOfEvictingOne`,
+  `TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage` and
+  `TestAPageWithItsUsableSlotsFullRefusesATile`.
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
   shape and a palette word, `M` carries the frame's internal RAM, then
