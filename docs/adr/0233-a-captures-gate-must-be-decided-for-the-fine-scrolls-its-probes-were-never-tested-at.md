@@ -1,10 +1,29 @@
 # ADR-0233: Decide how a capture is gated when its probes were never tested against the frames it draws on (other fine scrolls, surviving rivals)
 
-- Status: accepted (2026-09-25) — option A alone; B and C are re-opened only
-  on A's measured numbers. Owner's pick, verbatim: *"A sozinha, mede, depois
-  decide B (Recommended)"*. Not implemented yet; pending slice (see
-  "Decision"). The env-gated measurement switches used to take the numbers
-  below were reverted and are not part of this change (see "Reproducing").
+- Status: accepted (2026-09-25) — option A alone, **shipped 2026-09-25**
+  ([validation record](../validation/adr0233-option-a-2026-09-25.md)); B and C
+  are re-opened only on A's measured numbers, and A's numbers do re-open B.
+  Owner's pick, verbatim: *"A sozinha, mede, depois decide B (Recommended)"*;
+  build go-ahead, verbatim: *"pode implementar a opção A com o DeepSeek"*.
+  Measured on HEAD plus the render trace (the env-gated measurement switches
+  were reverted again and are not part of this change; see "Reproducing"):
+  **A does not close #499.** Ninja Gaiden's `stage1-run` render trace is
+  byte-identical, 3611 of 3611 lines — the 31 s frame is still
+  `backgrounds/screen001.png` at a 25348-pixel difference, the final frame
+  checksum is still `0x78B3AA36`, and the HUD still reads TIMER 149 / SCORE
+  000000 where the game shows 120 / 000100. What A did move on that route:
+  the gate firings the replay finds at another fine scroll drop 4853 → 2315,
+  captures written 15 → 13, of them never reaching the screen 3 → 1, and 3
+  screens now carry an emptiness probe. Castlevania is the one route whose
+  render moves (drawn 2043 → 2027, stale 448 → 433; 16 of 3609 trace lines),
+  and the Punch-Out!! card route does not move at all (all 3606 common lines
+  identical). The 30-ROM library's render-trace draw rate moves 0.6380 →
+  **0.6397**, so §3's ±25 % stop condition is not approached; its stale count
+  rises 2 988 → 3 153, a +165 net that is one screen — F-1 Race's `screen002`,
+  +202, against −37 over the other 29 games — and that is a same-`FineX`
+  regression, not the widened universe paying off badly: on F-1 Race neither
+  pack's gates match any frame at another fine scroll, and option A's new
+  greedy path matches 41 more same-`FineX` frames than the old one.
 - Date: 2026-09-25
 - Related: issue #499 (Ninja Gaiden HUD frozen by a captured
   `<background>`), issue #339 (Punch-Out!! card, the same class),
@@ -265,4 +284,9 @@ A capture never overwrites a live cell whose content it does not carry.
   tree, because no accepted decision needs them yet. The slice that
   implements an option should add the trace (or an equivalent) as its
   acceptance tool. The session's scripts, commands and raw outputs are in the
-  git-ignored `runs/499-measure/` of the working copy that produced them.
+  git-ignored `runs/499-measure/` of the working copy that produced them, and
+  the option-A slice's are in the git-ignored `runs/0233/` of this one
+  (`run-trios.sh`, `run-hud.sh`, `library_sweep.py`, `lib_summary.py`,
+  `gate_models.py`, the raw render traces under `lib/`, and `RESULTS.md`), with
+  the same two switches applied again and reverted before the change was
+  finalized.

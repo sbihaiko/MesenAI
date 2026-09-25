@@ -81,7 +81,9 @@ namespace MesenSheets
 		std::vector<size_t> Picked;
 		//Recorded frames that are *not* variants of this screen and still
 		//satisfy all of the picked conditions - i.e. frames where this screen
-		//would be drawn over content it is not a picture of.
+		//would be drawn over content it is not a picture of. Since ADR-0233
+		//option A every retained frame at another fine scroll is in here,
+		//evaluated at the cell covering each probe's absolute pixel.
 		uint32_t Rivals = 0;
 		//No stable triple could tell the screen apart, so the pick fell back to
 		//cells a variant may change (a combinatorial screen: a Tetris board).
@@ -122,11 +124,20 @@ namespace MesenSheets
 	//ADR-0050's plain rarity-and-spread greedy, which is also what an empty
 	//stream yields.
 	//
+	//The variant/rival split is a *same-fine-scroll* question (ADR-0159 §3,
+	//ADR-0233 §2). A frame at another `FineX` is a rival unconditionally, and
+	//never a variant: it draws the capture about a cell off, so it skips
+	//IsScreenVariant and AddsContent entirely (ADR-0233 option A, issue #499).
+	//GreedyAnchors then evaluates each probe on it at the cell that covers the
+	//probe's absolute pixel, `x = Col*8 + captured.FineX` - the read the
+	//run-time `tileAtPosition` condition makes on every frame.
+	//
 	//`forcedRivalFrames` (ADR-0217 Option C, ADR-0218 Option A): indices into
 	//`frames` that must classify as rivals regardless of IsScreenVariant - a
 	//frame another pending screen is itself anchored on is, by definition, a
 	//different picture someone chose to capture separately, however close the
-	//raw pixels sit.
+	//raw pixels sit. A forced rival at another `FineX` takes the same remap as
+	//any other.
 	//
 	//`emptyShapes` (ADR-0221 option B, F12.13): FlatShapePlane's output. A frame
 	//that clears kAnchorVariantAgree is a *variant* only when every cell it

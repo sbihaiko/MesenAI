@@ -4344,6 +4344,171 @@ namespace
 			"rivals=" + std::to_string(choice.Rivals));
 	}
 
+	//--- ADR-0233 option A: the rival universe does not stop at the capture's FineX ---
+	//
+	//#499 is the hole these cover. `GridFrame` is cut relative to the frame's
+	//own fine scroll, so a frame at another `FineX` was not comparable cell by
+	//cell and used to be skipped outright: the gate was proven against 5.6 % of
+	//the frames it runs on, while the run-time `tileAtPosition` condition reads
+	//`ScreenTiles` at its own absolute pixel on *every* frame. Under A such a
+	//frame is a rival, never a variant, and a probe is evaluated on it at the
+	//cell covering the probe's pixel: `x = col*8 + capture.FineX`, so column
+	//`(x - rival.FineX) div 8` of the rival's grid.
+
+	//One flat colour everywhere: no probe can separate anything on content, so
+	//a difference in the outcome is the fine scroll and nothing else.
+	GridFrame AnchorUniformScreen(ShapeId shape)
+	{
+		GridFrame frame;
+		for(uint32_t r = 0; r < kGridRows; r++) {
+			for(uint32_t c = 0; c < kGridCols; c++) {
+				frame.Cells[r][c] = shape;
+			}
+		}
+		return frame;
+	}
+
+	void TestAnchorAnotherFineScrollIsARivalNotAVariant()
+	{
+		//The #499 shape in its smallest form: a capture at fine 0 and a frame
+		//whose every cell is the capture's own, one fine scroll later. Every
+		//probe matches it at the remapped column, so the gate ships ambiguous
+		//- and the recorder
+		//now *says* so. Before A the frame was skipped with the other 94.4 % of
+		//the stream and the screen was reported clean.
+		GridFrame screen = AnchorUniformScreen(500);
+		GridFrame twin = screen;
+		twin.FineX = 7;
+		twin.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, twin };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates());
+		Check(choice.Rivals == 1,
+			"BlocoP6: a frame at another fine scroll is a rival of the capture, however identical its grid",
+			"rivals=" + std::to_string(choice.Rivals));
+		Check(choice.Picked.size() == kAnchorCount,
+			"BlocoP6: ...and an ambiguous screen still gets its three conditions rather than none",
+			"picked=" + std::to_string(choice.Picked.size()));
+	}
+
+	void TestAnchorFineScrollRivalIsReadAtTheCoveringCell()
+	{
+		//The remap, pinned in both directions. The capture is flat 500
+		//everywhere; the fine-7 twin differs from it on exactly one cell,
+		//(row 10, col 19) - the cell that covers pixel 160 (candidate 2's
+		//column 20 at fine 0: (160 - 7) div 8 = 19). Read that way, candidate 2
+		//separates the twin and is picked first; read at the capture's own
+		//column 20 the twin matches everywhere and candidate 0 is picked, in
+		//rarity order, against a rival it cannot see.
+		GridFrame screen = AnchorUniformScreen(500);
+		GridFrame twin = screen;
+		twin.Cells[10][19] = 999;
+		twin.FineX = 7;
+		twin.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, twin };
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 10, 20, 3 } };
+
+		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
+		Check(!choice.Picked.empty() && choice.Picked[0] == 2,
+			"BlocoP6: a probe on a fine-scroll rival is read at the cell covering its absolute pixel",
+			"first=" + std::to_string(choice.Picked.empty() ? 99 : choice.Picked[0]));
+		Check(choice.Rivals == 0,
+			"BlocoP6: ...so the probe that carries the difference separates the rival",
+			"rivals=" + std::to_string(choice.Rivals));
+	}
+
+	void TestAnchorFineScrollRemapAtTheGridEdges()
+	{
+		//Both edges of the same arithmetic. Left: with the capture at the
+		//coarser fine scroll, a probe in column 0 can sit left of the rival's
+		//first column - (0 - 7) div 8 is negative - and the rival's grid has no
+		//cell there, so the probe reads as "no match" and separates it.
+		//Right: with the capture at the finer scroll, the same probe lands in
+		//the rival's column 0 ((7 - 0) div 8 = 0) and is read normally.
+		GridFrame screen = AnchorUniformScreen(500);
+		GridFrame twin = screen;
+		twin.FineX = 7;
+		twin.FrameNumber = 1;
+		std::vector<GridFrame> frames = { screen, twin };
+		std::vector<AnchorCandidate> candidates = { { 2, 4, 1 }, { 20, 4, 2 }, { 26, 0, 3 } };
+
+		AnchorChoice left = SelectScreenAnchors(frames, 0, candidates);
+		Check(!left.Picked.empty() && left.Picked[0] == 2 && left.Rivals == 0,
+			"BlocoP6: a probe left of the rival's grid is not a hit, so it separates the rival",
+			"first=" + std::to_string(left.Picked.empty() ? 99 : left.Picked[0]) + " rivals=" + std::to_string(left.Rivals));
+
+		GridFrame fineScreen = AnchorUniformScreen(500);
+		fineScreen.FineX = 7;
+		GridFrame fineTwin = fineScreen;
+		fineTwin.FineX = 0;
+		fineTwin.Cells[26][0] = 999; //the cell the fine screen's column 0 covers there
+		fineTwin.FrameNumber = 1;
+		std::vector<GridFrame> fineFrames = { fineScreen, fineTwin };
+
+		AnchorChoice right = SelectScreenAnchors(fineFrames, 0, candidates);
+		Check(!right.Picked.empty() && right.Picked[0] == 2 && right.Rivals == 0,
+			"BlocoP6: a probe at the rival's own column 0 is read there",
+			"first=" + std::to_string(right.Picked.empty() ? 99 : right.Picked[0]) + " rivals=" + std::to_string(right.Rivals));
+	}
+
+	void TestAnchorSameFineScrollVariantsAreUntouched()
+	{
+		//ADR-0233 §2: "a capture owns its variants" is not re-opened - only
+		//rivals widen. The widened universe must not change what the stability
+		//filter does with a same-FineX variant, so the cell a variant changes
+		//is still kept out of the anchor pool, with or without a rival at
+		//another fine scroll in the same stream.
+		GridFrame screen = SheetBlockScreen(0, 3);
+		screen.Cells[2][4] = 900; //the digit: drawn once, so ranked first
+		GridFrame variant = screen;
+		variant.Cells[2][4] = 902;
+		variant.FrameNumber = 1;
+
+		std::vector<GridFrame> alone = { screen, variant };
+		AnchorChoice before = SelectScreenAnchors(alone, 0, AnchorCandidates());
+		Check(!AnchorPicked(before, 0) && AnchorPicked(before, 1),
+			"BlocoP6: the cell a same-fine-scroll variant changes is still kept out of the pool",
+			"rivals=" + std::to_string(before.Rivals));
+
+		GridFrame twin = screen;
+		twin.FineX = 7;
+		twin.FrameNumber = 2;
+		std::vector<GridFrame> widened = { screen, variant, twin };
+		AnchorChoice after = SelectScreenAnchors(widened, 0, AnchorCandidates());
+		Check(!AnchorPicked(after, 0) && AnchorPicked(after, 1),
+			"BlocoP6: ...and a rival at another fine scroll does not move it",
+			"rivals=" + std::to_string(after.Rivals));
+	}
+
+	void TestAnchorFineScrollFrameIsNeverAnAdditionRival()
+	{
+		//ADR-0233 §1: a frame at another fine scroll skips IsScreenVariant and
+		//AddsContent entirely - the fine scroll alone makes it a rival. So a
+		//frame that redraws the capture's flat block with content is not
+		//*counted* as an addition when its fine scroll differs; that count is
+		//what the kind test decided between variant and rival at the same one.
+		GridFrame text = AnchorCardWithText();
+		std::vector<GridFrame> sameScroll = { AnchorCardScreen(), text };
+		AnchorChoice control = SelectScreenAnchors(sameScroll, 0, AnchorCardCandidates(), {}, AnchorFlatPlane());
+		Check(control.AdditionRivals == 1,
+			"BlocoP6: at the capture's own fine scroll the text frame is still counted as an addition",
+			"additionRivals=" + std::to_string(control.AdditionRivals));
+
+		text.FineX = 7;
+		std::vector<GridFrame> otherScroll = { AnchorCardScreen(), text };
+		AnchorChoice choice = SelectScreenAnchors(otherScroll, 0, AnchorCardCandidates(), {}, AnchorFlatPlane());
+		Check(choice.AdditionRivals == 0,
+			"BlocoP6: at another fine scroll it is a rival by the fine scroll, never an addition",
+			"additionRivals=" + std::to_string(choice.AdditionRivals));
+
+		//ADR-0217 Option C's forced rivals reach the same frame, and the remap
+		//is the one above: forcing the index changes nothing.
+		AnchorChoice forced = SelectScreenAnchors(otherScroll, 0, AnchorCardCandidates(), { 1 }, AnchorFlatPlane());
+		Check(forced.Picked == choice.Picked && forced.Rivals == choice.Rivals,
+			"BlocoP6: a forced rival at another fine scroll takes the same remap",
+			"forced=" + std::to_string(forced.Rivals) + " unforced=" + std::to_string(choice.Rivals));
+	}
+
 	void TestSolidColourOneTileLandsInTheProbePool()
 	{
 		//Codex review, PR #379: HdPackBuilder::CaptureScreen/AppendFlatAnchorCells
@@ -10853,6 +11018,11 @@ int main()
 	TestAnchorNonFlatCellSeparatesWithoutAProbe();
 	TestAnchorFlatCellsNeverAppearInStableOrWideOutput();
 	TestAnchorProbeOnACellAVariantChangesIsNeverChosen();
+	TestAnchorAnotherFineScrollIsARivalNotAVariant();
+	TestAnchorFineScrollRivalIsReadAtTheCoveringCell();
+	TestAnchorFineScrollRemapAtTheGridEdges();
+	TestAnchorSameFineScrollVariantsAreUntouched();
+	TestAnchorFineScrollFrameIsNeverAnAdditionRival();
 	TestSolidColourOneTileLandsInTheProbePool();
 	TestSheetContactSheetGeometry();
 	TestSheetUpscaleIsNearestNeighbour();

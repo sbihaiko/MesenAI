@@ -2,9 +2,37 @@
 
 - Status: accepted — reflected in `Core/NES/HdPacks/{ScreenStitcher,HdPackBuilder,TileSheetTypes}`; the code landed with the measurement, this ADR records the decision behind it
 - Date: 2026-09-05
-- Amended: 2026-09-05 (palette-swapped variants; see below); 2026-09-22 (ADR-0221 narrows §1's definition of *variant*; see below)
+- Amended: 2026-09-05 (palette-swapped variants; see below); 2026-09-22 (ADR-0221 narrows §1's definition of *variant*; see below); 2026-09-25 (ADR-0233 option A lifts §3's same-`FineX` limit on the rival universe; see below)
 - Related: ADR-0162 (the accuracy harness reuses `FrameCapture.h`), ADR-0050 (bootstrap `<background>` capture), ADR-0153 (sheets), ADR-0156 (screen residency), PRD Part A Phase 9, issue #164, `Core/NES/HdPacks/ScreenStitcher.cpp`, `Core/NES/HdPacks/HdPackBuilder.cpp`, `scripts/spike_anchor_stability.py`
 - Amends: ADR-0050 §Decision, the clause "up to three `tileAtPosition` anchors (rarest non-flat tiles on screen, ≥ 64 px apart)" — both the criterion and the moment it is applied. Lifts ADR-0156 §Non-goals' exclusion of "changing what `CaptureScreen` captures, or its anchors".
+
+## Amended 2026-09-25: the rival universe no longer stops at the capture's `FineX`
+
+ADR-0233 (accepted 2026-09-25, option A; shipped the same day) amends §3's
+second half — the clause *"A frame is a variant or a rival of the captured
+frame only under the **same `FineX`**"*. That clause read as a comparability
+rule: the grid is cut relative to `FineX`, so a frame at another fine scroll
+is not the pixel a `tileAtPosition` reads, cell for cell. But the run-time
+condition reads `ScreenTiles` at its own absolute pixel on **every** frame,
+so the gate was being proven against a fraction of the frames it runs on and
+the rest were skipped — issue #499, a Ninja Gaiden capture taken at fine 0
+drawing over fine-7 frames for 19 s and freezing the HUD.
+
+Every retained frame at another `FineX` is now a rival of every capture, and
+never a variant — it draws the capture about a cell off, so `IsScreenVariant`
+and `AddsContent` do not apply to it. Each probe is evaluated on such a rival
+at the cell covering the probe's absolute pixel,
+`x = Col*8 + captured.FineX`: column `(x - rival.FineX) div 8` of the rival's
+grid, and "no match" when that column falls outside the grid. §1's stability
+filter, the variant definition (ADR-0221) and ADR-0223's emptiness-probe pass
+are untouched, because variants stay same-`FineX`.
+
+Measured on the three 60 s routes and the 30-ROM library, before and after
+(ADR-0233's Status line carries the numbers; validation record:
+`docs/validation/adr0233-option-a-2026-09-25.md`). The widening did **not**
+close #499: Ninja Gaiden's render trace came out byte-identical, so the load
+this clause was expected to carry is on the greedy search, not on the
+universe.
 
 ## Amended 2026-09-22: a variant may not add content the capture lacks
 
