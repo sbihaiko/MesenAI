@@ -131,6 +131,8 @@ HdPackBuilder::HdPackBuilder(Emulator* emu, PpuModel ppuModel, bool isChrRam, Hd
 			}
 			//Mark the tiles in the first PNGs as higher usage (preserves order when adding new tiles to an existing set)
 			AddTile(tile, 0xFFFFFFFF - tile->BitmapIndex);
+			_preFixPack |= MesenSheets::IsPreFixChrRamTile(tile->IsChrRamTile, tile->ChrBankId, tile->TileData);
+			_bank0TilesLoaded += (tile->IsChrRamTile && tile->ChrBankId == 0) ? 1 : 0;
 
 			//F5.4b follow-up (b) (ADR-0132): seed the per-shape palette-variant map
 			//from the on-disk pack, so the cap is a per-shape total across sessions.
@@ -577,6 +579,14 @@ void HdPackBuilder::ProcessTile(uint32_t x, uint32_t y, uint16_t tileAddr, HdPpu
 	HdTileKey exactKey = tile.GetKey(false);
 	auto result = _tileUsageCount.find(exactKey);
 	if(result != _tileUsageCount.end()) {
+		auto owner = _tilesByKey.find(exactKey);
+		//ADR-0232: a tile a pre-fix recorder filed under bank 0, drawn again, moves to the bank it is drawn from.
+		if(owner != _tilesByKey.end() && MesenSheets::RehomesOnRedraw(_preFixPack, owner->second->IsChrRamTile, owner->second->ChrBankId, chrBankHash) && MesenSheets::RemoveTileFromChrPages(_tilesByChrBankByPalette[0], owner->second)) {
+			owner->second->ChrBankId = chrBankHash;
+			owner->second->TileIndex = tile.TileIndex;
+			AddTile(owner->second, result->second);
+			_preFixTilesRehomed++;
+		}
 		UpdateTileUsage(exactKey, result, transparencyRequired);
 	} else {
 		CaptureOrCapPaletteVariant(x, y, tileAddr, tile, chrBankHash, transparencyRequired);
@@ -2313,6 +2323,9 @@ void HdPackBuilder::SaveHdPack()
 		MessageManager::Log("[HD Pack Builder] " + std::to_string(_droppedTiles) + " tile(s) could not be placed on a CHR page (>256 tiles for one palette); legacy top-level CHR files were left in place");
 	} else {
 		PruneLegacyChrFiles();
+	}
+	if(_preFixPack) {
+		MessageManager::Log("[HD Pack Builder] ADR-0232: this pack was recorded before the CHR bank-id fix; " + std::to_string(_preFixTilesRehomed) + " of its " + std::to_string(_bank0TilesLoaded) + " bank-0 CHR RAM tile(s) were drawn again and moved to their bank; the rest stay on bank 0, where artist_chr_kit regroups them as an older recording's (record into an empty folder for a clean layout)");
 	}
 
 	delete[] pngBuffer;

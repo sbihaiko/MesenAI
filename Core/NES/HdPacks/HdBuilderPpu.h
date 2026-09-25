@@ -4,6 +4,7 @@
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/OamFetchLatch.h"
+#include "NES/HdPacks/ChrBankHashes.h"
 #include "Shared/Video/VideoDecoder.h"
 #include "Shared/RewindManager.h"
 #include "Utilities/BitUtilities.h"
@@ -13,7 +14,6 @@ class HdBuilderPpu final : public NesPpu<HdBuilderPpu>
 {
 private:
 	HdPackBuilder* _hdPackBuilder = nullptr;
-	bool _needChrHash = false;
 	//#450: the frame's sprite halves, each decoded when the PPU fetched it
 	//(see OnBeforeSendFrame and OamFetchLatch).
 	OamFetchLatch _oamLatch;
@@ -21,9 +21,10 @@ private:
 	//and the sprite palettes it drew with, handed to _oamLatch at cycle 257.
 	bool _spriteRowShown = false;
 	uint32_t _spriteRowPalettes[4] = {};
-	uint32_t _chrRamBankSize = 0;
 	uint32_t _chrRamIndexMask = 0;
-	vector<uint32_t> _bankHashes;
+	//ADR-0232: the CHR RAM bank id of each recorded tile, rehashed only when a
+	//tile is about to be recorded after a CHR write or a state load.
+	MesenSheets::ChrBankHashes _bankHashes;
 
 	NesSpriteInfoEx _exSpriteInfo[64] = {};
 	NesTileInfoEx _previousTileEx = {};
@@ -129,20 +130,12 @@ public:
 				backgroundColor = (((_lowBitShift << _xScroll) & 0x8000) >> 15) | (((_highBitShift << _xScroll) & 0x8000) >> 14);
 			}
 
-			if(_needChrHash) {
-				uint16_t addr = 0;
-				_bankHashes.clear();
-				while(addr < 0x2000) {
-					uint32_t hash = 0;
-					for(uint16_t i = 0; i < _chrRamBankSize; i++) {
-						hash += mapper->DebugReadVram(i + addr);
-						hash = (hash << 1) | (hash >> 31);
-					}
-					_bankHashes.push_back(hash);
-					addr += _chrRamBankSize;
-				}
-				_needChrHash = false;
-			}
+			//A CHR ROM tile's bank is its CHR ROM bank number, which
+			//HdPackBuilder derives from the address, so it never reads this.
+			bool writePending = _ppuMemoryDataWriteStateMachine > 0;
+			auto bankIdOf = [this, mapper, isChrRam, writePending](uint16_t tileAddr) -> uint32_t {
+				return isChrRam ? _bankHashes.BankIdOf(tileAddr, [mapper](uint16_t a) { return mapper->DebugReadVram(a); }, writePending) : 0;
+			};
 
 			bool hasBgSprite = false;
 			if(_lastSprite && _mask.SpritesEnabled) {
@@ -168,7 +161,7 @@ public:
 					//#470: a fully transparent sprite tile makes no rule, just as
 					//OamFetchLatch gives it no sheet key.
 					if(!OamFetchLatch::IsFullyTransparent(sprite)) {
-						_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, spriteInfoEx.AbsoluteTileAddr, sprite, mapper, false, _bankHashes[spriteInfoEx.TileAddr / _chrRamBankSize], false);
+						_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, spriteInfoEx.AbsoluteTileAddr, sprite, mapper, false, bankIdOf(spriteInfoEx.TileAddr), false);
 					}
 				}
 			}
@@ -185,7 +178,7 @@ public:
 					tile.IsChrRamTile = isChrRam;
 					mapper->CopyChrTile(lastTileEx.AbsoluteTileAddr & 0xFFFFFFF0, tile.TileData);
 
-					_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, lastTileEx.AbsoluteTileAddr, tile, mapper, false, _bankHashes[lastTileEx.TileAddr / _chrRamBankSize], hasBgSprite);
+					_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, lastTileEx.AbsoluteTileAddr, tile, mapper, false, bankIdOf(lastTileEx.TileAddr), hasBgSprite);
 					_hdPackBuilder->ProcessBgPixel(_cycle - 1, _scanline, tile, (uint8_t)backgroundColor);
 				}
 			}
@@ -239,12 +232,14 @@ private:
 	}
 
 public:
-	void WriteRAM(uint16_t addr, uint8_t value)
+	//ADR-0232 (#467): spelled WriteRAM from the 2022 port until 2026-09, which
+	//overrode nothing, so a CHR write never marked the banks stale and every
+	//tile of a power-on recording carried the all-zero bank's id, 0. The
+	//`override` is what keeps it an override.
+	void WriteRam(uint16_t addr, uint8_t value) override
 	{
 		if(GetRegisterID(addr) == PpuRegisters::VideoMemoryData) {
-			if(_videoRamAddr < 0x2000) {
-				_needChrHash = true;
-			}
+			_bankHashes.OnVideoMemoryWrite(_videoRamAddr);
 		}
 		NesPpu::WriteRam(addr, value);
 	}
@@ -253,7 +248,7 @@ public:
 	{
 		NesPpu::Serialize(s);
 		if(!s.IsSaving()) {
-			_needChrHash = true;
+			_bankHashes.MarkStale();
 			//#450: halves latched before a load belong to a frame the loaded
 			//timeline never drew.
 			_oamLatch.Clear();
@@ -262,11 +257,9 @@ public:
 	}
 
 public:
-	HdBuilderPpu(NesConsole* console, HdPackBuilder* hdPackBuilder, uint32_t chrRamBankSize) : NesPpu(console)
+	HdBuilderPpu(NesConsole* console, HdPackBuilder* hdPackBuilder, uint32_t chrRamBankSize) : NesPpu(console), _bankHashes(chrRamBankSize)
 	{
 		_hdPackBuilder = hdPackBuilder;
-		_chrRamBankSize = chrRamBankSize;
 		_chrRamIndexMask = chrRamBankSize - 1;
-		_needChrHash = true;
 	}
 };

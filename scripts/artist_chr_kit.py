@@ -584,6 +584,16 @@ def bank_identity_unknown(pages) -> bool:
     return bool(real) and not any(p.chr_bank_id for p in real)
 
 
+def recorded_before_bank_fix(page) -> bool:
+    """ADR-0232: a CHR RAM page the recorder filed under bank 0 while that id
+    was a constant. Since the fix, 0 is the id of an all-zero bank, which only
+    ever draws an all-zero tile, so a bank-0 page with any set pattern bit
+    comes from an older recording — or from the part of a re-recorded pack
+    that this session never drew again, beside pages with real ids."""
+    return (page.is_chr_ram and page.chr_bank_id == 0
+            and any(r.tile_data and r.tile_data.strip("0") for r in page.rows.values()))
+
+
 def _regroup_without_hashes(pages):
     """Recover the bank partition of a pack whose CHR bank hashes are all zero.
 
@@ -615,7 +625,7 @@ def collect_banks(pack: Pack, pages: list[Page]) -> list[Bank]:
         # The blank-tile bucket borrows a real bank's ids; keep it on its own.
         if p.chr_bank_id is None or p.name.startswith("Chr_FFFFFFFF"):
             groups["?" + p.name].append(p)
-        elif unknown and p.is_chr_ram and not p.chr_bank_id:
+        elif (unknown and p.is_chr_ram and not p.chr_bank_id) or recorded_before_bank_fix(p):
             homeless.append(p)
         else:
             groups[p.chr_bank_id].append(p)

@@ -968,9 +968,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   The recorder's own synthetic pages are recognised and copied through
   untouched: the PRG scan it already writes (`AddPrgScanTiles`, bank ids
   `0x504247xx`) and the blank-tile bucket (`Chr_FFFFFFFF_*`). Packs recorded
-  before the builder filled in the CHR bank hash carry 0 on every page; their
-  banks are recovered as the largest sets of pages that never disagree about a
-  tile index. Palette RGBA is read off the pack's own reference pages rather
+  before ADR-0232 (the recorder's bank hash never followed the CHR state)
+  carry 0 on every page; their banks are recovered as the largest sets of
+  pages that never disagree about a tile index, and are never paired with an
+  `--also` donor. A re-record over such a pack keeps bank 0 on the tiles it
+  did not draw again, beside pages with real ids; only those bank-0 pages
+  with a non-blank tile (`recorded_before_bank_fix`) are regrouped, and a
+  bank-0 page of blank tiles is the real power-on bank. Palette RGBA is read off the pack's own reference pages rather
   than assumed, so a custom palette completes correctly; a fill is rendered
   nearest-neighbour (the recorder smooths its own cells) under the bank's
   most-recorded palette, which is a guess and says so. Writes
