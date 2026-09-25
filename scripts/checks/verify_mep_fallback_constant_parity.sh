@@ -42,7 +42,7 @@ extract_int() {
   if [ -z "$line" ]; then
     fail "$lang: constant '$literal_name' not found (or has no numeric value) in $file"
   fi
-  value="$(grep -oE '=[[:space:]]*[0-9]+' <<<"$line" | head -n1 | grep -oE '[0-9]+')"
+  value="$(grep -oE '=[[:space:]]*[0-9]+' <<<"$line" | sed -n '1p' | grep -oE '[0-9]+')"
   if [ -z "$value" ]; then
     fail "$lang: constant '$literal_name' found but could not parse an integer in $file: $line"
   fi

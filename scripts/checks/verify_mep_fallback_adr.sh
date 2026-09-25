@@ -48,7 +48,7 @@ require "references ADR-0049" "ADR-0049"
 grep -qiE "additive|last-priority|lowest-priority|fourth" "$ADR" \
   || fail "does not describe the rule as a last-priority addition (additive/last-priority)"
 grep -qiE "precedence" "$ADR" || fail "does not mention the precedence chain"
-echo "$FLAT" | grep -qiE "without reordering|never reorder|not reordered|unchanged.*precedence|precedence.*unchanged" \
+echo "$FLAT" | grep -iE "without reordering|never reorder|not reordered|unchanged.*precedence|precedence.*unchanged" >/dev/null \
   || fail "does not explicitly state that the existing precedence is NOT reordered"
 
 # (b) pure, I/O-free function; PrepareZip's outFolder contract held fixed

@@ -134,7 +134,7 @@ jobs:
             fi
 
             body=$(gh issue view "$issue_number" --repo "$REPO" --json body -q '.body')
-            pack_url=$(printf '%s\n' "$body" | grep -Eo 'https?://[^ ")]+' | head -n1 || true)
+            pack_url=$(printf '%s\n' "$body" | grep -Eo 'https?://[^ ")]+' | sed -n '1p' || true)
             if [ -z "$pack_url" ]; then
               echo "::warning::issue #$issue_number has no detectable pack URL in the body - skipping"
               continue

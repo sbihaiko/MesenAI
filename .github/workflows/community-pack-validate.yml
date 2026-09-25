@@ -1159,17 +1159,20 @@ jobs:
           # COMMENT_ID whenever the match isn't on the first page (30
           # comments/page by default). Emitting one bare `.id` per match
           # instead makes every page's output just more lines in the same
-          # stream, so `head -n1` alone is well-defined across any number
+          # stream, so the first line alone is well-defined across any number
           # of pages. Restricting to `.user.login == "$OWNER"` (PROJECT_PAT
           # is a classic PAT, so API-authored comments are attributed to
           # its owning account) stops a submitter's own issue text from
-          # ever being mistaken for the bot's provenance comment, and
-          # `head -n1` (oldest first, GitHub's default order) always keeps
+          # ever being mistaken for the bot's provenance comment, and the
+          # first line (oldest first, GitHub's default order) always keeps
           # the FIRST such comment so a later injected marker can never
-          # take its place.
+          # take its place. That first line is taken with `sed -n '1p'`, not
+          # `head -n1`: `head` exits on its first line, gh gets SIGPIPE, and
+          # under `set -o pipefail` this assignment would abort the step on
+          # exit 141 (#516).
           COMMENT_ID=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" --paginate \
             --jq ".[] | select((.user.login == \"$OWNER\") and (.body | test(\"<!-- mep-meta -->\"))) | .id" \
-            | head -n1)
+            | sed -n '1p')
           # The identity carried forward above is read out of that same
           # comment. A gh failure leaves the file empty, which the parser
           # reads as "no prior metadata" — never a hard failure of a pass

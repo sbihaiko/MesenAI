@@ -110,7 +110,7 @@ record_one() {
 
 	# F9.13: "sheets N, screens N" says nothing about whether the run got past
 	# the menus, so ask the criterion and print its reason when it says no.
-	probe=$(python3 "$ROOT/scripts/gameplay_probe.py" "$out" 2>/dev/null | head -1 || true)
+	probe=$(python3 "$ROOT/scripts/gameplay_probe.py" "$out" 2>/dev/null | sed -n '1p' || true)
 	verdict=$(printf '%s' "$probe" | cut -f1)
 	local exited=""
 	[ "$rc" -ne 0 ] && exited=" [truncated run, recorder exited $rc -- see $stage/$name.log]"

@@ -83,7 +83,7 @@ jobs:
           # Re-run protection: an open PR on today's sync branch already
           # represents this upstream state.
           if gh pr list --repo "$GITHUB_REPOSITORY" --head "$BR" \
-              --state open --json number --jq 'length' | grep -q '^[1-9]'; then
+              --state open --json number --jq 'length' | grep '^[1-9]' >/dev/null; then
             echo "::notice::sync PR for $BR is already open — leaving it alone."
             exit 0
           fi
@@ -106,7 +106,7 @@ jobs:
             # open one issue only when no other "Manual upstream sync needed" issue exists.
             if ! gh issue list --repo "$GITHUB_REPOSITORY" \
                 --search 'in:title "Manual upstream sync needed"' \
-                --state open --json number --jq 'length' | grep -q '^[1-9]'; then
+                --state open --json number --jq 'length' | grep '^[1-9]' >/dev/null; then
               { echo "A scheduled upstream sync stopped on conflicts that need a human decision."
                 echo
                 echo "Merge-base: $MERGE_BASE"

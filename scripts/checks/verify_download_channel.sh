@@ -50,20 +50,20 @@ else
   # 1. Shape: it runs after every build job, publishes nothing on a pull
   #    request, and is allowed to write releases.
   for need in windows macos linux appimage; do
-    if ! printf '%s\n' "$PUBLISH_CODE" | grep -qE "^    needs:.*\b$need\b|^    needs: \[.*\b$need\b"; then
+    if ! printf '%s\n' "$PUBLISH_CODE" | grep -E "^    needs:.*\b$need\b|^    needs: \[.*\b$need\b" >/dev/null; then
       fail "$WORKFLOW's publish job does not depend on '$need'; it would publish a partial matrix (ADR-0204 §1)"
     fi
   done
-  if ! printf '%s\n' "$PUBLISH_CODE" | grep -q "github.event_name != 'pull_request'"; then
+  if ! printf '%s\n' "$PUBLISH_CODE" | grep "github.event_name != 'pull_request'" >/dev/null; then
     fail "$WORKFLOW's publish job lost its event guard; a pull request run executes at refs/pull/N/merge and would publish unmerged code (ADR-0204 §1)"
   fi
-  if ! printf '%s\n' "$PUBLISH_CODE" | grep -qE "^      contents: write"; then
+  if ! printf '%s\n' "$PUBLISH_CODE" | grep -E "^      contents: write" >/dev/null; then
     fail "$WORKFLOW's publish job has no 'contents: write' permission; gh release upload fails with 403 without it (ADR-0204 §1)"
   fi
-  if ! printf '%s\n' "$PUBLISH_CODE" | grep -q -- "--prerelease"; then
+  if ! printf '%s\n' "$PUBLISH_CODE" | grep -- "--prerelease" >/dev/null; then
     fail "$WORKFLOW's publish job no longer marks the rolling release a pre-release; releases/latest would start resolving to a CI build instead of mesence-v0.1.0 (ADR-0204 §2)"
   fi
-  if ! printf '%s\n' "$PUBLISH_CODE" | grep -q -- "--clobber"; then
+  if ! printf '%s\n' "$PUBLISH_CODE" | grep -- "--clobber" >/dev/null; then
     fail "$WORKFLOW's publish job no longer uploads with --clobber; the second publish fails on the asset already existing (ADR-0204 §2)"
   fi
 fi
@@ -91,7 +91,7 @@ fi
 for asset in MesenAI-ci-linux-x64.zip MesenAI-ci-linux-x64.AppImage \
              MesenAI-ci-linux-arm64.zip MesenAI-ci-linux-arm64.AppImage \
              MesenAI-ci-macos-arm64.zip MesenAI-ci-windows-x64-aot.zip; do
-  if ! printf '%s\n' "$workflow_assets" | grep -qx "$asset"; then
+  if ! printf '%s\n' "$workflow_assets" | grep -x "$asset" >/dev/null; then
     fail "$WORKFLOW no longer stages '$asset' (ADR-0204 §3); the README links it"
   fi
 done
