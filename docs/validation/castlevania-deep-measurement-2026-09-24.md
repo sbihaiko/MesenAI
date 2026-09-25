@@ -1,5 +1,7 @@
 # Castlevania deep measurement: gameplay recording, palette gap, kit, round trip (2026-09-24)
 
+> Re-measured on `main` `ceab80a9` (2026-09-25): see [deep-remeasure-ceab80a9-2026-09-25.md](deep-remeasure-ceab80a9-2026-09-25.md).
+
 Castlevania joins the deep measurements. Until now its only numbers came from
 the F14.4 palette-gap run
 (`docs/validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md`). That run was
