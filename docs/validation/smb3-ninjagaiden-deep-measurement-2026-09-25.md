@@ -84,6 +84,53 @@ Figures by eye: two small-Mario walk cycles (`cycle000` 2 × 199 and
 `cycle001` 2 × 187, both driver port1), a Goomba walk, four Piranha Plant
 sequences and a 7-figure rest grid.
 
+### A4 follow-up (2026-09-25): what one stroke on a cell costs
+
+The painted cell above is a whole-cell stroke. Four arms on that same pack,
+state and 3 s frame grade what a smaller one costs. Each re-runs the same
+pipeline — kit copy, `mep_build build`, `mep_figure import`, `mep_build
+build`, 3 s headless run from `stage1.mss` — and differs only in what was
+painted on `figures/usr001-figure.png`, the `pose000` node 18 cell
+(Mario's head, the cell of the row above).
+
+| Arm | Painted on that cell | On-screen px that differ | magenta | never touched |
+|---|---|---|---|---|
+| Control (recorded rules) | — | — | — | — |
+| Rebuild without painting | 0 px (the figure PNG written back unchanged) | **0** | 0 | 0 |
+| One pixel | 1 px at (20, 4) | **106** | 1 | 105 |
+| One 4×4 block | 16 px at (20, 4) | **116** | 16 | 100 |
+| Whole cell | 576 px | **598** | 576 | 22 |
+
+- Taken with `rt.sh <tag> <mode>`, `paint2.py` and `cmp.py` in
+  `/Users/bihaiko/deep-new/runs/a4-analysis/` (the whole-cell arm is this
+  measurement's own painted arm, `deep-smb3/rt/painted`). `cmp.py` counts a
+  pixel as magenta only at exactly `(255, 0, 255)`; each arm's
+  `SMB3_000.png` is compared against the control's. The screenshot is
+  1024 × 960 (4×), and every diff sits in the same box,
+  (456, 652)-(479, 679).
+- The no-paint arm is a true control: its rebuilt `textures/hires.txt` is
+  byte-identical to the control's (944 lines, 0 differing). What painting
+  changes in the manifest is one key's rule — `[spr001_n1]<tile>0,14C4,
+  FF16360F,256,40,1,N` moves from the recorded page to `sheets/sprites.png`
+  — which is ADR-0231 §1: the whole 8×8 tile stops being the filtered page
+  and becomes the sheet cell.
+- The counts are what that whole-tile swap predicts, not a local edit:
+  83 of the tile's px are where the sheet's nearest-neighbour and the
+  page's xBRZ disagree, and 22 more are px the sheet cell does not draw at
+  all. So 1 + 83 + 22 = 106, and 576 + 22 = 598. The 4×4 block is 116
+  because 5 of its 16 px were already among the 83: 16 + (83 − 5) + 22.
+  The 22 are the same 22 in all three arms — measured, a subset of both the
+  onepx arm's 105 and the block arm's 100.
+- Those 22 are **measured** to be pixels the sheet cell leaves fully
+  transparent (alpha 0) and the recorded page inks, so the painted tile
+  draws the backdrop there. That the page's ink is the scale filter's soft
+  edge is **attributed, not proven** — by analogy with Excitebike's A4, and
+  the opaque-count gap between the `chr/` and sheet crops is 12, not 22.
+- One caveat carried from the arms: SMB3's capture frame count jitters
+  between replays of the same state (see "What this does NOT prove"), but
+  pixels outside the painted box were identical, and all four arms show the
+  same box.
+
 ## Ninja Gaiden
 
 | Metric | Value |
@@ -122,7 +169,7 @@ the landing pose `pose003` (hold 164, 494 frames).
 | #449 (CHR kit `seen:true` on a never-drawn index) | absent: 381 cells = the 358 drawn keys, 0 never-drawn | absent: 183 cells, all drawn |
 | #493 (moving figure classified as HUD) | not seen: 0 HUD-excluded; the SMB3 HUD is BG | **present**: `pose003` (8 tiles, all `screenFixed: true`) left out as HUD |
 | #498 / Excitebike A3 (import lands in `sheets/sprites.png`) | **present**, with the warning | **present**, without the warning |
-| Excitebike A4 (painting drops the xBRZ fringe) | present: 22 extra px | present: 9 extra px |
+| Excitebike A4 (a painted cell swaps the whole tile to nearest-neighbour, so more px change than were painted) | present: whole-cell stroke 598 px (576 magenta + **22 attributed** to the xBRZ fringe) — see the A4 follow-up | present: whole-cell stroke 905 px (896 magenta + **9 attributed** to the xBRZ fringe) |
 | B1 / Punch-Out!! C | absent | absent |
 | B2 (`artist_map --verify`) | n/a (CHR ROM refusal) | n/a |
 | B3 (blank member tiles) | not exercised | not exercised |
@@ -177,9 +224,10 @@ the landing pose `pose003` (hold 164, 494 frames).
   not audited pose by pose. The orange 1×2 tile pair under the plant's stem
   on the figure sheets (not seen in the game frames checked) is not
   identified.
-- A4's size: SMB3's 22 non-magenta changed px are attributed to the xBRZ
-  fringe by analogy only; the opaque-count gap between the `chr/` and sheet
-  crops is 12, not 22.
+- A4's size: the non-magenta changed px a whole-cell stroke leaves (SMB3's
+  22, Ninja Gaiden's 9) are attributed to the xBRZ fringe by analogy only;
+  for SMB3 the opaque-count gap between the `chr/` and sheet crops is 12,
+  not 22.
 - SMB3's CHR kit "recorded 243" against 240 drawn indices is not
   reconciled. #499's extent (how many of the 3 606 frames get a stale
   capture) was not measured.
