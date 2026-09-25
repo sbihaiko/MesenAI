@@ -7,7 +7,7 @@
   below were reverted and are not part of this change (see "Reproducing").
 - Date: 2026-09-25
 - Related: issue #499 (Ninja Gaiden HUD frozen by a captured
-  `<background>`), issue #339 (Punch-Out!! card, the same class),
+  `<background>`), issue #339 (Punch-Out!! card, the same lineage, a different cause),
   ADR-0050 (bootstrap `<background>` capture), ADR-0156 (a captured screen
   owns the cells it covers), ADR-0159 (anchors chosen at save time, §1
   stability filter and §3 same-`FineX` universe), ADR-0217 and ADR-0218 (gate
@@ -40,7 +40,8 @@ to cause it. Each is a rule working as written.
    counts a frame as a variant or rival only when it has the capture's
    `FineX`. `SelectScreenAnchors` skips every other frame. The run-time
    condition reads `ScreenTiles` on every frame, at every fine scroll.
-   `screen001` was captured at fine 0. Frame 2946 is at fine 7.
+   `screen001` was captured at fine 0; 201 of the 3 607 played frames share
+   it (5.6 %). Frame 2946 is at fine 7.
 
 The lineage is #339. ADR-0217/0218 separated each capture from the other
 captures. ADR-0221 separated it from frames that *add* content. ADR-0223 let a
@@ -112,7 +113,7 @@ Re-recorded with and without the switch:
 
 "Tool mean draw rate" is ADR-0223's stop-condition metric
 (`scripts/measure_capture_draw_rate.py --rom`). The tool's own never-firing
-count is 0 in every arm. That number is inflated, and so is its draw rate:
+count is 0 in every arm. It undercounts, and so does its draw rate:
 the tool looks a probe up at its exact pixel, so it can fire only on frames
 at the capture's own fine scroll, the same blind spot as the recorder. An
 offline replay that reads the covering cell instead, as the run time does,
@@ -170,8 +171,10 @@ retained frames at the capture's own fine scroll, and nothing about the rest.
 ### A. The rival universe stops at `FineX` (amends ADR-0159 §3)
 
 Every retained frame at another fine scroll becomes a rival of every capture.
-None of them can be a variant, because a frame that has scrolled even 1 px
-draws the capture about a cell off. The probe on such a rival is evaluated the
+None of them can be a variant, because at another fine scroll the capture's
+image is misaligned with the live plane, and a grid cell `Cells[r][c]` is not
+the pixel `HdPackTileAtPositionCondition` reads (`ScreenTiles` at the probe's
+absolute offset). The probe on such a rival is evaluated the
 way the run time evaluates it: the cell covering the probe's absolute pixel,
 `x = col × 8 + capture.FineX`, which is column `(x − rival.FineX) div 8` of
 the rival's grid.
@@ -180,8 +183,9 @@ the rival's grid.
   skip `IsScreenVariant`/`AddsContent`"), and `GreedyAnchors` with
   `PaletteMayMatch` (a per-rival column remap at the probe cell). ADR-0217's
   forced rivals at another `FineX` take the same remap. `IsScreenVariant`,
-  `AddsContent`, the stability filter and ADR-0223's last pass are
-  untouched, because variants stay same-`FineX`. The evidence model is the
+  `AddsContent` and the stability filter are untouched, because variants stay
+  same-`FineX`. ADR-0223's last pass keeps its code but runs `GreedyAnchors`
+  over the widened rival set, so it inherits the new universe. The evidence model is the
   existing grid with one lookup that knows the fine scroll. It is not a
   second model: the analysis that preceded this ADR overestimated the
   change.
@@ -222,8 +226,9 @@ some frame the gate would otherwise fire on.
   neither A nor B touches. Those are variants the capture owns under
   ADR-0159 §1 and ADR-0217 answer (1).
 - **Against:** for the other-fine-scroll frames it needs A's remap to know
-  which frames the gate fires on, so it is A plus a predicate, not a cheaper
-  alternative. It revokes "a capture owns its variants", and its draw-rate
+  which frames the gate fires on, so for the #499 hole it is A plus a
+  predicate, not a cheaper alternative. C alone (ADR-0221's C) remains the
+  only option that reaches the 136 same-`FineX` frames. It revokes "a capture owns its variants", and its draw-rate
   cost is still unmeasured, which is why ADR-0221 did not pick it.
 
 ### D. Render time (ADR-0221 option D)
@@ -240,7 +245,8 @@ A capture never overwrites a live cell whose content it does not carry.
 ### What a human has to pick
 
 1. Which option, or which combination. A and B compose (A first, B for what
-   A leaves ambiguous). C needs A. D is independent of all three.
+   A leaves ambiguous). C alone addresses only same-`FineX` stale frames; for
+   the other-fine-scroll hole it needs A. D is independent of all three.
 2. If A: does "a capture owns its variants" stay same-`FineX` only? This ADR
    assumes it does.
 3. The stop condition. The proposal is: Ninja Gaiden's 31 s frame shows
