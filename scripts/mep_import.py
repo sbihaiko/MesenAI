@@ -1567,6 +1567,18 @@ def read_index(their: Path, pack_dir: Path, rom: Path) -> dict:
     return plan
 
 
+def _shape_key(token: str) -> str | None:
+    """The shape a CHR RAM `tileData` token names, as the loader reads it.
+
+    `HdPackLoader::ReadTileData` treats any token of 32 or more characters as
+    a CHR RAM key and fills `TileData[16]` from its first 32 characters only,
+    ignoring the rest. So `<32` is an index key (None here), and a longer token
+    is the same tile as its 32-character prefix: keying, the verbatim guard and
+    the rendered cell all read that prefix, never the raw token (an odd-length
+    suffix would otherwise reach `bytes.fromhex` in `render_pattern`)."""
+    return token[:32] if len(token) >= 32 else None
+
+
 def _recorded_shapes(pack: Pack) -> set:
     """Every 32-hex `tileData` our recording already holds: the keys its
     manifest lists **and** the keys its own sheets carry.
@@ -1583,7 +1595,7 @@ def _recorded_shapes(pack: Pack) -> set:
     `source` — the un-flipped form ADR-0178 makes build emit for a sprite crop
     whose recorded bitmap has its OAM flips baked in (five more keys of the
     bounded input are on a recorded sheet only in that form)."""
-    shapes = {r.token for r in pack.rules if len(r.token) >= 32}
+    shapes = {_shape_key(r.token) for r in pack.rules if len(r.token) >= 32}
     docs, _claimed = mep_build._load_sheet_docs(pack.hires.parent / "sheets")
     for sd in docs:
         # This tool's own surface is not part of the recording: excluding it
@@ -1603,7 +1615,7 @@ def _recorded_shapes(pack: Pack) -> set:
                     for field in ("tile", "source"):
                         token = str(entry.get(field) or "").strip().upper()
                         if len(token) >= 32:
-                            shapes.add(token)
+                            shapes.add(_shape_key(token))
     return shapes
 
 
@@ -1633,20 +1645,21 @@ def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
     short = 0
     recorded = 0
     for rule in theirs.rules:
-        if len(rule.token) < 32:
+        shape = _shape_key(rule.token)
+        if shape is None:
             short += 1
             continue
-        if rule.token in ours_shapes:
+        if shape in ours_shapes:
             recorded += 1
             continue
-        if stock is not None and rule.token not in shapes and (
-                rule.token in refused or bytes.fromhex(rule.token[:32]) not in stock):
-            pals = refused.setdefault(rule.token, [])
+        if stock is not None and shape not in shapes and (
+                shape in refused or bytes.fromhex(shape) not in stock):
+            pals = refused.setdefault(shape, [])
             if rule.palette not in pals:
                 pals.append(rule.palette)
             refused_rules += 1
             continue
-        pals = shapes.setdefault(rule.token, [])
+        pals = shapes.setdefault(shape, [])
         if rule.palette not in pals:
             pals.append(rule.palette)
     plan["cells"] = [{"tile": shape, "palette": pals[0], "aliases": pals[1:]}
@@ -1665,7 +1678,7 @@ def _read_index_shapes(ours: Pack, theirs: Pack, plan: dict):
             "not_in_stock_keys": sum(len(p) for p in refused.values()),
         }
     plan["our_shapes"] = len(ours_shapes)
-    plan["their_shapes"] = len({r.token for r in theirs.rules if len(r.token) >= 32})
+    plan["their_shapes"] = len({_shape_key(r.token) for r in theirs.rules if len(r.token) >= 32})
     plan["shapes"] = len(shapes)
     # What a rebuild emits: one rule per key of theirs that is new to us.
     plan["keys"] = sum(len(p) for p in shapes.values())

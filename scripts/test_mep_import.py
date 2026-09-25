@@ -1111,6 +1111,76 @@ def test_index_patch(root: Path):
         ok("a pack without <patch> is read exactly as before: no verbatim guard applies")
 
 
+def test_index_long_token(root: Path):
+    """A `tileData` token longer than 32 hex characters is loader-valid:
+    `HdPackLoader::ReadTileData` takes any token of 32 or more characters as a
+    CHR RAM key and reads only its first 32 (`TileData[i]` from
+    `substr(i * 2, 2)`, i < 16), ignoring the rest. The index read must key a
+    shape by those same 16 bytes — the verbatim guard vets that value, the cell
+    carries it, and an odd-length suffix never reaches `render_pattern()`
+    (Codex review on PR #446)."""
+    root = root / "longtok"
+    pack = ram_recording(root)                       # 1, 2 in the manifest; 3 on a sheet
+    rom = stock_ram_rom(root, "ram.nes", verbatim=(2, 5, 6))
+    ips = ips_writing(16 + 4000, bytes.fromhex(shape_hex(7)))
+    sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+    their = index_pack(root, "their", [
+        "<ver>106",
+        "<scale>2",
+        f"<patch>hack.ips,{sha1}",
+        f"<tile>0,{shape_hex(2)}F,{PAL_C},0,0,1,N",     # ours already, once normalized
+        f"<tile>0,{shape_hex(5)}ABC,{PAL_C},0,0,1,N",   # stock prefix, odd suffix
+        f"<tile>0,{shape_hex(5)}00,{PAL_D},0,0,1,N",    # same 16 bytes: an alias
+        f"<tile>0,{shape_hex(7)}5,{PAL_C},0,0,1,N",     # patch art, odd suffix: refused
+        f"<tile>0,{shape_hex(7)},{PAL_D},0,0,1,N",      # the same shape, bare: refused
+    ], files={"hack.ips": ips})
+    try:
+        plan = MI.read_index(their / "hires.txt", pack, rom)
+    except (MI.PackError, ValueError) as e:
+        fail(f"an over-long <patch> token broke the read: {e!r}")
+        return
+    cells = [(c["tile"], c["palette"], c["aliases"]) for c in plan["cells"]]
+    if cells != [(shape_hex(5), PAL_C, [PAL_D])]:
+        fail(f"over-long tokens were not keyed by the loader's 16 bytes: {cells}")
+    else:
+        ok("an over-long token is keyed by its first 32 hex characters, the loader's 16 bytes: "
+           "two spellings of one shape are one cell")
+    guard = plan.get("patch_guard") or {}
+    want = {"admitted_shapes": 1, "admitted_keys": 2,
+            "not_in_stock_shapes": 1, "not_in_stock_keys": 2}
+    if {k: guard.get(k) for k in want} != want or plan["dropped"].get("already_recorded") != 1:
+        fail(f"the guard vetted the raw token, not the normalized key: {guard}, "
+             f"dropped {plan['dropped']}")
+    else:
+        ok("the verbatim guard and the recorded-shape exclusion both read the normalized key")
+    try:
+        rc, out = run_index(their / "hires.txt", pack, rom)
+    except ValueError as e:
+        rc, out = -1, repr(e)
+    doc_path = pack / "textures" / "sheets" / "index.json"
+    doc = json.loads(doc_path.read_text()) if doc_path.is_file() else {"cells": []}
+    tiles = [t["tile"] for c in doc["cells"] for t in c.get("tiles", [])]
+    if rc != 0 or tiles != [shape_hex(5)]:
+        fail(f"the CLI run on an odd-length token exited {rc}, sidecar tiles {tiles}:\n{out}")
+    else:
+        ok("the CLI run renders the cell and the sidecar carries the 32-hex key")
+
+    # Pre-existing: a pack without <patch> takes the same path, unguarded.
+    plain_pack = ram_recording(root, "plainrec")
+    plain = index_pack(root, "plain", ["<ver>106", "<scale>2",
+                                       f"<tile>0,{shape_hex(7)}ABC,{PAL_C},0,0,1,N"])
+    try:
+        rc, out = run_index(plain / "hires.txt", plain_pack, rom)
+        plan = MI.read_index(plain / "hires.txt", plain_pack, rom)
+        cells = [c["tile"] for c in plan["cells"]]
+    except ValueError as e:
+        rc, out, cells = -1, repr(e), []
+    if rc != 0 or cells != [shape_hex(7)]:
+        fail(f"a plain pack's odd-length token: exit {rc}, cells {cells}:\n{out}")
+    else:
+        ok("a pack without <patch> normalizes an over-long token the same way")
+
+
 def test_index_range(root: Path):
     """Filter 1: the index range against the loaded CHR, read the loader's own
     way — `<ver>` decides whether that field is decimal or hex."""
@@ -1928,6 +1998,7 @@ def main():
         test_index_chr_ram(root)
         test_index_conditions(root)
         test_index_patch(root)
+        test_index_long_token(root)
         test_index_range(root)
         test_index_opens_no_png(root)
         test_index_refusals(root)
