@@ -95,6 +95,13 @@ First hit wins (`scripts/mep_recorded.py`):
    painted`), where the recording lives nowhere else. The first build
    overwrites that file, so before it does, its bytes are copied to (1) and
    the build says so.
+4. **`textures/hires.txt`** when a `--source` that is not a recording keyed
+   the build but that file is one: the build overwrites it all the same.
+
+The copy to (1) is taken before any recorded rule is checked, so a build
+that can use none of them right now (its only page missing, every crop out
+of bounds) still keeps the recording, and restoring the page brings the
+rules back (PR #472 review).
 
 A manifest counts as a recording when it has `<tile>` rules, names no
 `sheets/` image, does not carry the section comment above, and is not a

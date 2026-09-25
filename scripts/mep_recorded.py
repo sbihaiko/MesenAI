@@ -17,8 +17,13 @@ Where the recording is read from, first hit wins:
 1. `textures/hires.recorded.txt` — the snapshot this module writes;
 2. `auto/textures/hires.txt` — the layered project (`mep_import`, the
    ADR-0183 §4 round trip), which no build ever rewrites;
-3. the build's own key source, when a build did not write it. The first build
-   overwrites that file, so its bytes are copied to (1) first.
+3. the build's own key source, when a build did not write it;
+4. `textures/hires.txt`, when a `--source` that is not a recording keyed the
+   build but that file is one.
+
+A build overwrites `textures/hires.txt`, so a recording read from (3) or (4)
+is copied to (1) first — before any of its rules is checked, so a build that
+can use none of them right now (a page missing) still keeps it.
 
 A recorded rule is used only where it still means what it meant: the page it
 names exists under `textures/`, its crop lies inside that page, and the
@@ -160,18 +165,29 @@ def load(folder: Path, source: Path, source_lines, scale: int, png_size, tile_re
                 break
     if path is None and looks_recorded(source_lines):
         path, lines = source, source_lines
+    output = textures / "hires.txt"
+    if path is None and output.is_file() and output != source:
+        # A `--source` that is not a recording: the build still overwrites a
+        # recorded `textures/hires.txt`, so that is the recording to keep.
+        text = output.read_text(encoding="utf-8", errors="replace").splitlines()
+        if looks_recorded(text):
+            path, lines = output, text
     if path is None:
         return Recorded(reason=f"there is no recording to keep them from (no textures/{SNAPSHOT}, "
                                f"no auto/textures/hires.txt, and the key source was written by a build)")
-    rec = Recorded()
-    rec_scale = next((h.strip()[7:].strip() for h in lines if h.strip().startswith("<scale>")), "1")
-    _read_rules(rec, lines, textures, png_size, int(rec_scale) if rec_scale.isdigit() else 1, tile_re)
-    if path == source and path != snap and rec.rules:
-        # The label names the snapshot, so a second build writes the same bytes.
-        snap.write_bytes(source.read_bytes())
+    if path not in (snap, auto):
+        # Snapshot before reading any rule: a build that can use none of them
+        # (a page missing, every crop out of bounds, another <scale>) still
+        # overwrites `hires.txt`, and the rules must come back once the page
+        # does (#472 review). The label names the snapshot, so a second build
+        # writes the same bytes.
+        snap.write_bytes(path.read_bytes())
         path = snap
         print(f"info: kept the recording as textures/{SNAPSHOT} before overwriting it, so every "
               f"later build can still re-emit its rules (ADR-0231)")
+    rec = Recorded()
+    rec_scale = next((h.strip()[7:].strip() for h in lines if h.strip().startswith("<scale>")), "1")
+    _read_rules(rec, lines, textures, png_size, int(rec_scale) if rec_scale.isdigit() else 1, tile_re)
     try:
         rec.label = path.relative_to(folder).as_posix()
     except ValueError:

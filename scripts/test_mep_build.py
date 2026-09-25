@@ -1861,9 +1861,12 @@ def pack_extra_data_tests(root: Path, rom: Path):
     else:
         ok("pack carries the root `id` across a rebuild, on disk and in the zip (ADR-0140)")
 
+    # The key source is a recording (no page of its own here): the first
+    # build keeps it as textures/hires.recorded.txt before overwriting it,
+    # usable rules or not (ADR-0231 §2, PR #472 review), and it ships.
     want = ["pack.json", "audio/bgm/01.ogg", "audio/hires.txt", "audio/sfx/03.ogg",
             "studio/candidates/skin.png", "studio/transcript.jsonl",
-            "textures/hires.txt", "textures/sheets/objects.png"]
+            "textures/hires.recorded.txt", "textures/hires.txt", "textures/sheets/objects.png"]
     if names != want:
         fail(f"pack zip membership changed:\n  got  {names}\n  want {want}")
     else:

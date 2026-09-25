@@ -360,6 +360,62 @@ def coverage_baseline_test(root: Path):
         ok("#447: check-coverage accepts an unpainted build (recorded rules) as a sheet-derived baseline")
 
 
+def restored_page_test(root: Path):
+    """Codex #472: a build that can use none of the recorded rules (the only
+    page is missing) still overwrites `hires.txt`, so it must snapshot the
+    recording first; restoring the page brings the recorded rules back."""
+    folder, rules = make_recorded_pack(root, "restored-page")
+    textures = folder / "textures"
+    recording = (textures / "hires.txt").read_bytes()
+    page = (textures / PAGE).read_bytes()
+    (textures / PAGE).unlink()
+    if run("build", str(folder)) is None:
+        return
+    snap = textures / SNAPSHOT
+    if not snap.is_file() or snap.read_bytes() != recording:
+        fail(f"#447: a build that could use no recorded rule overwrote hires.txt without keeping "
+             f"the recording as textures/{SNAPSHOT}")
+    else:
+        ok(f"#447: a build that can use no recorded rule still keeps the recording as textures/{SNAPSHOT}")
+    (textures / PAGE).write_bytes(page)
+    if run("build", str(folder)) is None:
+        return
+    _imgs, got = by_key(textures / "hires.txt")
+    bad = [f"{c}{k[:8]}" for (c, k), body in rules.items()
+           if (got.get((c, k, T.PAL_HEX)) or ("", []))[0] != PAGE
+           or got[(c, k, T.PAL_HEX)][1][1:] != body.split(",")[1:]]
+    if bad:
+        fail(f"#447: after the missing page was restored, {len(bad)} of {len(rules)} untouched cells "
+             f"did not come back to the recorded rule: {bad[:4]}")
+    else:
+        ok("#447: restoring a missing page brings every untouched cell back to its recorded rule")
+
+
+def external_source_test(root: Path):
+    """A build keyed from a `--source` that is not a recording (here, one a
+    build wrote) still overwrites a recorded `textures/hires.txt`: the
+    recording is kept before that happens."""
+    folder, rules = make_recorded_pack(root, "external-source")
+    textures = folder / "textures"
+    recording = (textures / "hires.txt").read_bytes()
+    ext = root / "external-source.hires.txt"
+    ext.write_bytes(recording + b"# mep_build: rules kept as recorded for untouched cells\n")
+    if run("build", str(folder), "--source", str(ext)) is None:
+        return
+    snap = textures / SNAPSHOT
+    if not snap.is_file() or snap.read_bytes() != recording:
+        fail(f"#447: a --source build overwrote a recorded textures/hires.txt without keeping it "
+             f"as textures/{SNAPSHOT}")
+        return
+    if run("build", str(folder)) is None:
+        return
+    _imgs, got = by_key(textures / "hires.txt")
+    if any((got.get((c, k, T.PAL_HEX)) or ("",))[0] != PAGE for (c, k) in rules):
+        fail("#447: a build after a --source build lost the recorded rules")
+    else:
+        ok("#447: a --source build keeps a recorded textures/hires.txt, and later builds re-emit its rules")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -371,6 +427,8 @@ def main() -> int:
         auto_layout_test(root)
         chr_rom_test(root)
         coverage_baseline_test(root)
+        restored_page_test(root)
+        external_source_test(root)
     return 1 if FAILED else 0
 
 

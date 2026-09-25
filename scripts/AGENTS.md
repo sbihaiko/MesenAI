@@ -473,8 +473,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   untouched cells` comment, in the recording's order. Only a painted cell
   points at its crop. The recording is read from
   `textures/hires.recorded.txt`, else `auto/textures/hires.txt`, else the
-  key source itself when no build wrote it. In that last case the first
-  build copies it to `hires.recorded.txt` before overwriting it. A rule
+  key source itself when no build wrote it, else a recorded
+  `textures/hires.txt` under a `--source` build. In those two cases the
+  first build copies it to `hires.recorded.txt` before overwriting it,
+  even when none of its rules is usable yet (a page missing). A rule
   whose page is missing, whose crop is out of bounds or whose `<scale>`
   differs falls back to the crop, as does a key the recording never had,
   and the build prints the count and the reason. `check-coverage` counts

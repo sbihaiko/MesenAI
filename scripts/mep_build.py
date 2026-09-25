@@ -58,9 +58,10 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        the recording's rule for that key instead, byte for byte except the
        `<img>` index; only a painted cell points at its crop. The recording is
        read from `textures/hires.recorded.txt` (a snapshot the first build
-       takes before overwriting a recorded `hires.txt`), else
-       `auto/textures/hires.txt`, else the key source when a build did not
-       write it (`mep_recorded.py`). A rule whose page is missing, or a
+       takes before overwriting a recorded `hires.txt`, usable rules or
+       not), else `auto/textures/hires.txt`, else the key source when a
+       build did not write it, else a recorded `textures/hires.txt` under a
+       `--source` build (`mep_recorded.py`). A rule whose page is missing, or a
        recording at another `<scale>`, falls back to the crop, counted in the
        build output.
 
