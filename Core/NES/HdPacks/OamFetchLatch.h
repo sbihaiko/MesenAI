@@ -57,7 +57,7 @@ public:
 	struct Half
 	{
 		uint8_t Sprite = 0;
-		uint8_t Half = 0;
+		uint8_t HalfIndex = 0;
 		uint16_t TileAddr = 0;
 		uint8_t X = 0;
 		uint8_t Y = 0;
@@ -231,7 +231,7 @@ public:
 		uint8_t tileIndex = entry[1];
 		uint8_t attributes = entry[2];
 		h.Sprite = sprite;
-		h.Half = half;
+		h.HalfIndex = half;
 		h.X = entry[3];
 		h.Y = (uint8_t)(entry[0] + 1 + half * 8);
 		h.PaletteOffset = ((attributes & 0x03) << 2) | 0x10;
