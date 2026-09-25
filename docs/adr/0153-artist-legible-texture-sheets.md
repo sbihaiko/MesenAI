@@ -271,6 +271,12 @@ so every one of its cells counts as painted and it relies on its static rank
 alone. Every override is logged, tagged `(painted)`, `(untouched)` or
 `(precedence)`.
 
+*Amended 2026-09-24 by ADR-0231 (#447):* an untouched cell that wins a key no
+longer emits its nearest-neighbour crop when the recording has that key. The
+recording's own rule is re-emitted, pointing at the recorded pattern page.
+Only a painted cell points at its crop. The painted/untouched test itself is
+unchanged.
+
 A static rank alone cannot work here: `map > metatiles` breaks PRD Phase 9
 validation test 3 ("make every bush purple" from `metatiles.png`), and
 `metatiles > map` breaks test 4 (the seam test, painted on the map). Only "who

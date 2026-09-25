@@ -254,8 +254,10 @@ def _recorded_done_steps(kit: dict) -> list:
         out.extend([
             "Figures are not copied: `figures/usr*-figure.png` is a view, and "
             "`mep_figure.py import` writes what you painted on it into the copy's own "
-            "sheets - the `usr*` row that draws each tile, so a rebuild changes no rule and "
-            "*Reload Repainted Images* shows it (#413) - so it runs after the copy and "
+            "sheets - the `usr*` row that draws each tile (#413). A cell painted for the "
+            "first time moves its tile off the recorded art, so that build needs a ROM "
+            "reopen and the import says so (ADR-0231). Later repaints of it only need "
+            "*Reload Repainted Images*. The import runs after the copy and "
             "before the final build. The copy is built once before the import: that first "
             "build rewrites some recorded sheets in place (it straightens sprites the "
             "recording stored mirrored), and an import planned against the sheets before "
@@ -318,7 +320,12 @@ def render_markdown(kit: dict) -> str:
         "Open the surface in the program you already use, paint on it, and save "
         "back over the same file - then ask the running game for it with **HD Packs "
         "> Reload Repainted Images**. You do not reopen the ROM and you do not lose "
-        "where you are standing.",
+        "where you are standing. One exception: until you paint a sheet cell, its tile "
+        "draws the recorded art (the filtered `chr/` page), so an unpainted rebuild "
+        "shows exactly what was recorded (ADR-0231). The first stroke on a cell, or "
+        "painting it back to the original, moves that tile onto your sheet. Rebuild "
+        "and reopen the ROM once, and after that the reload is enough. Painting a "
+        "`chr/` page always reloads in place.",
         "",
         "Each surface's file name is also the name to export to, so the save is one "
         "shortcut after the first time:",

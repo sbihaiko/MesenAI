@@ -93,6 +93,12 @@ fills, and only for observed keys). Every generator implements `--verify` and
 prints the counts. This is the same check the composition editor's export
 already passes (measured 2026-09-13: 618 keys before and after, 0 errors).
 
+*Amended 2026-09-24 by ADR-0231 (#447):* key parity is not enough. Every rule
+emitted for an untouched sheet cell (one equal to its `*.orig.png` twin) must
+also render the recorded pixels, so an unpainted rebuild draws exactly what
+was recorded. `mep_build` meets this by re-emitting the recording's own rule
+for such a cell.
+
 ### 5. Naming comes from the data, or from a human, never from a generator
 
 A caption is built from the recording's own ids and counts. A human-written

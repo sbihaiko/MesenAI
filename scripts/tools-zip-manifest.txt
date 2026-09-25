@@ -39,6 +39,7 @@ mep_errata.py
 mep_figure.py
 mep_lint.py
 mep_recipe_common.py
+mep_recorded.py
 mep_render_audio.py
 mep_sentinel.py
 ora_writer.py

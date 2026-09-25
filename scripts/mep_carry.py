@@ -109,3 +109,77 @@ def keep_seed_refs(folder: Path, seed: list) -> list:
                       "(no such file under audio/)")
             break
     return keep
+
+
+# Split out of mep_build (ADR-0231 made room under its ADR-0137 line ceiling):
+# the audio manifest is the other thing `build` regenerates from carried refs.
+def bgm_sfx_refs(lines):
+    """Files already referenced by <bgm>/<sfx> as (kind, stem) -> (album,
+    track, filename)."""
+    known = {}
+    for s in lines:
+        for rx, kind in ((BGM_RE, "bgm"), (SFX_RE, "sfx")):
+            m = rx.match(s)
+            if not m:
+                continue
+            fields = [f.strip() for f in m.group(2).split(",")]
+            if len(fields) >= 3:
+                known[(kind, Path(fields[2]).stem)] = (fields[0], fields[1], fields[2])
+    return known
+
+
+def next_free_id(ids, start=1):
+    n = start
+    while n in ids:
+        n += 1
+    return n
+
+
+def build_audio_manifest(folder: Path, system: str | None, seed: list, ver: str) -> str | None:
+    """Regenerates audio/hires.txt from `seed` (previous manifest or the key
+    source's own <bgm>/<sfx>) plus the OGGs under audio/bgm/ and audio/sfx/
+    that are not referenced yet.
+
+    NES-only: GB/SMS/GG OGG replacement is frozen (ADR-0041) and mep_lint has
+    no audio tags for the ver>=200 format, so a non-NES pack returns None.
+    Seed refs whose OGG no longer exists are dropped (their track id is
+    reclaimed); a digit-named OGG's id is honoured only when free, else the
+    next free id is used — so the manifest never carries two <bgm>/<sfx>
+    entries with the same album*256+track id.
+
+    Returns the manifest text, or None when there is nothing to reference."""
+    if system is not None and system != "nes":
+        return None
+    # Keep only seed refs whose OGG actually exists in the audio/ layout (#381:
+    # resolved the way the loader resolves them, `\` included).
+    keep = keep_seed_refs(folder, seed)
+    kept_refs = bgm_sfx_refs(keep)
+
+    def scan(sub: str, kind: str):
+        entries = []
+        known = dict(kept_refs)
+        used_ids = {int(t) for (k, _), (a, t, _) in known.items() if k == kind and a == "0" and t.isdigit()}
+        d = folder / "audio" / sub
+        if not d.is_dir():
+            return entries
+        for f in sorted(d.glob("*.ogg")):
+            stem = f.stem
+            if (kind, stem) in known:
+                continue  # already referenced
+            album = 0
+            if stem.isdigit():
+                track = int(stem)
+                if track in used_ids:
+                    print(f"info: {kind} id {track} already taken — using next free id for {f.name}")
+                    track = next_free_id(used_ids)
+            else:
+                track = next_free_id(used_ids)
+            used_ids.add(track)
+            entries.append(f"<{kind}>{album},{track},{sub}/{f.name}")
+        return entries
+
+    keep += scan("bgm", "bgm")
+    keep += scan("sfx", "sfx")
+    if not keep:
+        return None
+    return f"<ver>{ver}\n" + "\n".join(keep) + "\n"

@@ -509,6 +509,15 @@ and painting it is how your work becomes invisible.
 running game for it with *HD Packs > Reload Repainted Images*** — you do not
 reopen the ROM and you do not lose where you are standing (F12.3, ADR-0212).
 
+There is one exception: the **first** time you paint a sheet cell, or when you
+paint it back to its `.orig.png` state. Until you paint it, a sheet cell's
+tile renders the recorded art. That is the recorder's own pattern page, run
+through the pack's scale filter, because an unpainted rebuild must draw exactly
+what was recorded (ADR-0231, #447). Your first stroke moves that tile's rule
+onto the sheet you painted, so rebuild and reopen the ROM once. After that,
+repainting the same cell reloads in place. Painting a `chr/` page never
+re-points anything and always reloads in place.
+
 Each surface's file name is also the name to export to, so after the first save
 it is one shortcut (F12.4, ADR-0213). `kit.json` carries that name per surface
 as `assetName`:
@@ -560,9 +569,12 @@ leaves everything else alone. Each painted cell goes where the built pack
 already draws its tile from (#413): the sheet it came from when that sheet owns
 the tile (the `sprNNN` sheet itself, or `sprites.png` for a member the group
 does not hold), otherwise the sheet that does own it. On a kit project
-that is the kit's `usrNNN` row, not `sprites.png`. So the rebuild changes no
-rule in `hires.txt`, and the reload shows the paint. When an import has to
-re-point a tile anyway, it prints a note saying you need to reopen the ROM.
+that is the kit's `usrNNN` row, not `sprites.png`. So once a cell has been
+painted, repainting it changes no rule in `hires.txt`, and the reload shows the
+paint. A cell painted for the first time still re-points its tile from the
+recorded page to the sheet (ADR-0231, see above). The import prints a note
+when that happens: "N painted cell(s) will re-point a key in hires.txt at the
+next build — reopen the ROM to see them".
 A later `export` shows paint that was placed this way. `import` refuses a pack
 that was never built with the sheets it holds (a kit just copied into a
 recording, or a fresh recording) and writes nothing: that first build

@@ -463,7 +463,27 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   sheet fails the build with an ownership error instead of a silent
   all-green success (#253); map-vs-metatiles both-painted stays a logged
   precedence choice. `scripts/test_mep_build.py` is the acceptance test
-  wired into `make doc-checks`, and asserts these halves.
+  wired into `make doc-checks`, and asserts these halves. **An untouched
+  cell keeps the recorded rule** (ADR-0231, #447, `mep_recorded.py`). A
+  cell equal to its `*.orig.png` twin whose key the recording has does not
+  point at its crop. Its crop is nearest-neighbour, while the recorded
+  `chr/` page went through the scale filter. Instead the build re-emits the
+  recording's line byte for byte, with only the `<img>` index remapped.
+  Those lines go under the `# mep_build: rules kept as recorded for
+  untouched cells` comment, in the recording's order. Only a painted cell
+  points at its crop. The recording is read from
+  `textures/hires.recorded.txt`, else `auto/textures/hires.txt`, else the
+  key source itself when no build wrote it. In that last case the first
+  build copies it to `hires.recorded.txt` before overwriting it. A rule
+  whose page is missing, whose crop is out of bounds or whose `<scale>`
+  differs falls back to the crop, as does a key the recording never had,
+  and the build prints the count and the reason. `check-coverage` counts
+  the `<img>` lines under that comment as build output. The key set is
+  unchanged. So the first paint of a cell (or reverting it) re-points a
+  key and needs a ROM reopen, and later repaints reload in place.
+  `scripts/test_mep_build_recorded.py` asserts this. The audio-manifest
+  helpers live in `mep_carry.py` (`build_audio_manifest`), moved there to
+  keep `mep_build.py` under its line ceiling.
   `mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) turns a legacy plain HD
   pack (`hires.txt` + PNGs) into a MEP project `mep_build.py build`
   regenerates with the identical rule set and pixels: `import <pack> --out
