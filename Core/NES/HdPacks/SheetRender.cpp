@@ -642,6 +642,20 @@ namespace MesenSheets
 					<< (i < stats.NodeFrames.size() ? stats.NodeFrames[i] : 0u)
 					<< ", \"screenFixed\": "
 					<< ((i < stats.ScreenFixed.size() && stats.ScreenFixed[i]) ? "true" : "false")
+					//ADR-0234: the mask verdict and the three numbers behind it,
+					//written for every node so a reader can second-guess it.
+					//`mask` says the game draws this shape as a mask at least
+					//once; the counts say how often and how much of it showed.
+					<< ", \"behindBgAppearances\": "
+					<< (i < stats.BehindBgAppearances.size() ? stats.BehindBgAppearances[i] : 0u)
+					<< ", \"maskAppearances\": "
+					<< (i < stats.MaskAppearances.size() ? stats.MaskAppearances[i] : 0u)
+					<< ", \"visiblePixels\": "
+					<< (i < stats.VisiblePixels.size() ? stats.VisiblePixels[i] : 0u)
+					<< ", \"hiddenPixels\": "
+					<< (i < stats.HiddenPixels.size() ? stats.HiddenPixels[i] : 0u)
+					<< ", \"mask\": "
+					<< ((i < stats.Mask.size() && stats.Mask[i]) ? "true" : "false")
 					<< ", \"tiles\": ";
 				AppendTiles(json, entry.Key, sprites.Grid.Unit, lookup);
 				json << " }";

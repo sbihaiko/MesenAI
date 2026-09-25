@@ -371,9 +371,64 @@ namespace MesenSheets
 		struct PoseCluster
 		{
 			std::vector<PoseTile> Tiles;
+			//ADR-0234: whether the entry that supplied each tile drew a pixel
+			//of it in this frame - parallel to Tiles, so an appearance the
+			//background hid is not lost before BuildPoses can weigh it.
+			std::vector<uint8_t> Visible;
+			//#520: the cells of the cluster that hold no art, in cell
+			//coordinates relative to the cluster's top-left. They are members of
+			//the figure for ADR-0170 §2's floor, but they are not tiles, so they
+			//stay out of Tiles and out of the pose. Carried out of SegmentFrame
+			//because ADR-0234 re-applies that floor to the reduced pose, and the
+			//unit of the floor is cells: a two-tile figure whose other two cells
+			//are blank halves is a figure, and a floor counted in tiles would
+			//throw it away again after the mask reduction.
+			std::set<std::pair<int32_t, int32_t>> ArtlessCells;
 			int32_t X = 0;
 			int32_t Y = 0;
 		};
+
+		//ADR-0234 (issue #505): per cluster identity, whether each of its tiles
+		//was drawn visibly in at least one of the frames that cluster was seen
+		//in. A tile that never was is what the background hid for the whole
+		//life of that pose, and only then does it leave the pose.
+		using PoseVisibility = std::map<std::vector<PoseTile>, std::vector<uint8_t>>;
+
+		//The pose a cluster contributes to the recording: its tiles minus the
+		//ones this map says never showed. The same reduction is applied by the
+		//pose pass and by the track linker, so a pose and its cycles agree.
+		std::vector<PoseTile> VisiblePoseTiles(const std::vector<PoseTile>& tiles, const PoseVisibility& visible)
+		{
+			PoseVisibility::const_iterator it = visible.find(tiles);
+			if(it == visible.end()) {
+				return tiles;
+			}
+			std::vector<PoseTile> out;
+			for(size_t i = 0; i < tiles.size(); i++) {
+				if(i >= it->second.size() || it->second[i]) {
+					out.push_back(tiles[i]);
+				}
+			}
+			return out;
+		}
+
+		//ADR-0170 §2's floor, in the unit #520 re-based it on: the distinct cells
+		//a figure holds, drawn and artless alike. ADR-0234 applies it a second
+		//time to the reduced pose, so the count has to be taken the same way
+		//there - counting only the tiles left after a mask is removed would put a
+		//figure with blank halves back under the floor. Measured on Bubble
+		//Bobble's attract recording: 41 of its 67 poses hold fewer than
+		//kPoseMinTiles drawn tiles and are figures only because their blank
+		//halves are cells, so a tile-count floor here drops most of a game's
+		//poses rather than the one tile the mask rule removed.
+		size_t PoseCellCount(const std::vector<PoseTile>& tiles, const std::set<std::pair<int32_t, int32_t>>& artlessCells)
+		{
+			std::set<std::pair<int32_t, int32_t>> cells = artlessCells;
+			for(const PoseTile& tile : tiles) {
+				cells.insert(std::make_pair(tile.Dx, tile.Dy));
+			}
+			return cells.size();
+		}
 
 		//The ADR-0170 §1 segmentation of one retained frame: entries the
 		//vocabulary knows, DSU-joined within kPoseMaxGap on both axes, each
@@ -384,13 +439,41 @@ namespace MesenSheets
 		//it is a cell of the cluster, so it can carry the figure over the floor,
 		//and it is where two OAM entries of one sprite overlap - but it holds no
 		//tile, so it never appears in the pose or in the file.
+		//
+		//ADR-0234: every entry is segmented, and each tile carries whether its
+		//entry showed a pixel. Dropping a hidden entry here would cut the
+		//figure it belongs to into a variant per occlusion (Punch-Out!!'s
+		//second E2E: 34 poses became 101), so the exclusion happens once the
+		//cluster's whole life is known - see VisiblePoseTiles.
 		std::vector<PoseCluster> SegmentFrame(const OamFrame& frame, const Vocabulary& vocab)
 		{
 			std::vector<PoseCluster> out;
 			//An unknown shape is skipped rather than clustered: it would move
 			//the top-left and so shift every offset in the pose.
-			std::vector<std::pair<int32_t, int32_t>> points;
-			std::vector<int32_t> nodes;
+			//
+			//ADR-0234: one segmented appearance is one record, so the drawing
+			//fact below can never drift out of step with the position it
+			//describes. #520 made the placements a second source of appearances
+			//here - they carry no vocabulary node (`Node < 0`) and no drawing
+			//facts at all - and such a placement fills one of these like any
+			//other, never a vector of its own: an appearance nothing is known
+			//about is not a mask (IsMaskEntry needs `hiddenPixels > 0`), so it
+			//stays Shown and keeps counting toward the pose floor.
+			struct Segmented
+			{
+				int32_t X = 0;
+				int32_t Y = 0;
+				//-1 for a placement: a cell of the figure with no tile of its own
+				//(#520). It carries the cluster over the floor and is skipped
+				//everywhere a tile is wanted.
+				int32_t Node = 0;
+				//0 takes this appearance out of the pose it belongs to: a mask
+				//the background hid for the whole life of that pose. A placement
+				//never is one - IsMaskEntry needs `hiddenPixels > 0` - and the
+				//default says so.
+				uint8_t Shown = 1;
+			};
+			std::vector<Segmented> entries;
 			for(const OamEntry& entry : frame.Entries) {
 				int32_t node = vocab.Find(SpriteKey(entry.Shape));
 				if(node < 0) {
@@ -403,22 +486,29 @@ namespace MesenSheets
 					}
 					node = -1;
 				}
-				points.push_back(std::make_pair((int32_t)entry.X, (int32_t)entry.Y));
-				nodes.push_back(node);
+				Segmented segmented;
+				segmented.X = (int32_t)entry.X;
+				segmented.Y = (int32_t)entry.Y;
+				segmented.Node = node;
+				//ADR-0234: read off this appearance alone. A placement, whose
+				//drawing facts are at their defaults, comes out Shown - the
+				//clause that keeps it a cell of the figure instead of a mask.
+				segmented.Shown = IsMaskEntry(entry.BehindBg, entry.VisiblePixels, entry.HiddenPixels) ? 0 : 1;
+				entries.push_back(segmented);
 			}
-			if(points.size() < kPoseMinTiles) {
+			if(entries.size() < kPoseMinTiles) {
 				return out;
 			}
-			Dsu sets(points.size());
-			for(size_t i = 0; i < points.size(); i++) {
-				for(size_t j = i + 1; j < points.size(); j++) {
-					if(std::abs(points[i].first - points[j].first) <= kPoseMaxGap && std::abs(points[i].second - points[j].second) <= kPoseMaxGap) {
+			Dsu sets(entries.size());
+			for(size_t i = 0; i < entries.size(); i++) {
+				for(size_t j = i + 1; j < entries.size(); j++) {
+					if(std::abs(entries[i].X - entries[j].X) <= kPoseMaxGap && std::abs(entries[i].Y - entries[j].Y) <= kPoseMaxGap) {
 						sets.Union((uint32_t)i, (uint32_t)j);
 					}
 				}
 			}
 			std::map<uint32_t, std::vector<size_t>> clusters;
-			for(size_t i = 0; i < points.size(); i++) {
+			for(size_t i = 0; i < entries.size(); i++) {
 				clusters[sets.Find((uint32_t)i)].push_back(i);
 			}
 			for(const std::pair<const uint32_t, std::vector<size_t>>& cluster : clusters) {
@@ -435,16 +525,16 @@ namespace MesenSheets
 				pc.Y = 0;
 				bool anyDrawn = false;
 				for(size_t index : cluster.second) {
-					if(nodes[index] < 0) {
+					if(entries[index].Node < 0) {
 						continue;
 					}
 					if(!anyDrawn) {
-						pc.X = points[index].first;
-						pc.Y = points[index].second;
+						pc.X = entries[index].X;
+						pc.Y = entries[index].Y;
 						anyDrawn = true;
 					} else {
-						pc.X = std::min(pc.X, points[index].first);
-						pc.Y = std::min(pc.Y, points[index].second);
+						pc.X = std::min(pc.X, entries[index].X);
+						pc.Y = std::min(pc.Y, entries[index].Y);
 					}
 				}
 				if(!anyDrawn) {
@@ -456,27 +546,48 @@ namespace MesenSheets
 				//cell, and two artless cells are two cells - but they are not
 				//tiles, so they never enter the pose's tile set or the file.
 				std::set<std::pair<int32_t, int32_t>> artlessCells;
+				//ADR-0234: parallel to pc.Tiles, so a tile's visibility travels
+				//with the member the de-duplication below keeps.
+				std::vector<uint8_t> memberShown;
+				memberShown.reserve(cluster.second.size());
 				for(size_t index : cluster.second) {
-					if(nodes[index] < 0) {
-						artlessCells.insert(std::make_pair(ToCells(points[index].first - pc.X), ToCells(points[index].second - pc.Y)));
+					if(entries[index].Node < 0) {
+						artlessCells.insert(std::make_pair(ToCells(entries[index].X - pc.X), ToCells(entries[index].Y - pc.Y)));
 						continue;
 					}
 					PoseTile tile;
-					tile.Node = (uint32_t)nodes[index];
-					tile.Px = points[index].first - pc.X;
-					tile.Py = points[index].second - pc.Y;
+					tile.Node = (uint32_t)entries[index].Node;
+					tile.Px = entries[index].X - pc.X;
+					tile.Py = entries[index].Y - pc.Y;
 					tile.Dx = ToCells(tile.Px);
 					tile.Dy = ToCells(tile.Py);
 					//cluster.second is in OAM order, so this is the OAM rank.
 					tile.Z = (int32_t)pc.Tiles.size();
 					pc.Tiles.push_back(tile);
+					memberShown.push_back(entries[index].Shown);
 				}
 				//A set, not a list: two OAM entries of the same shape rounding
 				//onto one cell are one member, exactly as the S10.a ground
 				//truth counted them. Stable, so the member kept is the
-				//frontmost entry (ADR-0225: its pixels are the ones drawn).
-				std::stable_sort(pc.Tiles.begin(), pc.Tiles.end());
-				pc.Tiles.erase(std::unique(pc.Tiles.begin(), pc.Tiles.end()), pc.Tiles.end());
+				//frontmost entry (ADR-0225: its pixels are the ones drawn) -
+				//and its visibility travels with it, so a hidden entry that
+				//loses the cell to a visible one does not hide the tile.
+				std::vector<size_t> order(pc.Tiles.size());
+				for(size_t i = 0; i < order.size(); i++) {
+					order[i] = i;
+				}
+				std::stable_sort(order.begin(), order.end(), [&pc](size_t a, size_t b) { return pc.Tiles[a] < pc.Tiles[b]; });
+				std::vector<PoseTile> tiles;
+				pc.Visible.clear();
+				for(size_t i = 0; i < order.size(); i++) {
+					size_t index = order[i];
+					if(!tiles.empty() && tiles.back() == pc.Tiles[index]) {
+						continue;
+					}
+					tiles.push_back(pc.Tiles[index]);
+					pc.Visible.push_back(memberShown[index]);
+				}
+				pc.Tiles = tiles;
 				//ADR-0170 §2 counts the cells the cluster holds, and it was
 				//calibrated on a stream where a transparent half was one of
 				//them: #470 took those out of the stream and a figure the game
@@ -487,17 +598,57 @@ namespace MesenSheets
 				//§1), and an artless half on a cell some art already holds adds no
 				//cell either. Summing the two sets would count those cells twice
 				//and let a three-cell figure pass as a four-cell one.
-				std::set<std::pair<int32_t, int32_t>> cells = artlessCells;
-				for(const PoseTile& tile : pc.Tiles) {
-					cells.insert(std::make_pair(tile.Dx, tile.Dy));
-				}
-				if(cells.size() < kPoseMinTiles) {
+				pc.ArtlessCells = artlessCells;
+				if(PoseCellCount(pc.Tiles, pc.ArtlessCells) < kPoseMinTiles) {
 					continue;
 				}
 				RankPoseTiles(pc.Tiles);
 				out.push_back(pc);
 			}
 			return out;
+		}
+
+		//ADR-0234: what the OAM stream says about how each sprite shape was
+		//drawn, summed over the retained frames. VisiblePixels is how many
+		//pixels of its own the shape put on screen, HiddenPixels how many it
+		//lost to an opaque background, BehindBgAppearances counts the
+		//appearances that carried the OAM priority bit and MaskAppearances the
+		//ones IsMaskEntry hid. The pose pass reads the predicate off each entry
+		//and the adjacency label reads these sums, so the two cannot disagree
+		//about what a mask is.
+		struct NodeVisibility
+		{
+			std::vector<uint32_t> VisiblePixels;
+			std::vector<uint32_t> HiddenPixels;
+			std::vector<uint32_t> BehindBgAppearances;
+			std::vector<uint32_t> MaskAppearances;
+		};
+
+		NodeVisibility AccumulateNodeVisibility(const std::vector<OamFrame>& frames, const Vocabulary& vocab)
+		{
+			NodeVisibility vis;
+			vis.VisiblePixels.assign(vocab.Entries.size(), 0);
+			vis.HiddenPixels.assign(vocab.Entries.size(), 0);
+			vis.BehindBgAppearances.assign(vocab.Entries.size(), 0);
+			vis.MaskAppearances.assign(vocab.Entries.size(), 0);
+			for(const OamFrame& frame : frames) {
+				for(const OamEntry& entry : frame.Entries) {
+					int32_t node = vocab.Find(SpriteKey(entry.Shape));
+					if(node < 0) {
+						continue;
+					}
+					size_t i = (size_t)node;
+					vis.VisiblePixels[i] += entry.VisiblePixels;
+					vis.HiddenPixels[i] += entry.HiddenPixels;
+					if(entry.BehindBg) {
+						vis.BehindBgAppearances[i]++;
+					}
+					if(IsMaskEntry(entry.BehindBg, entry.VisiblePixels, entry.HiddenPixels)) {
+						vis.MaskAppearances[i]++;
+					}
+				}
+			}
+			return vis;
 		}
 
 		//Does `part`, translated so that its head lands on `at` (a tile of
@@ -586,7 +737,7 @@ namespace MesenSheets
 		//then the pending ends by increasing age, against what is still
 		//unlinked. A bridged link adds the skipped frames' RepeatCount to the
 		//run it interrupts, so a run's Held keeps the game's cadence.
-		std::vector<std::vector<TrackRun>> LinkPoseTracks(const std::vector<OamFrame>& frames, const Vocabulary& vocab, std::vector<PoseEntry>& entries)
+		std::vector<std::vector<TrackRun>> LinkPoseTracks(const std::vector<OamFrame>& frames, const Vocabulary& vocab, std::vector<PoseEntry>& entries, const PoseVisibility& visible)
 		{
 			std::map<std::vector<PoseTile>, uint32_t> rankOf;
 			for(size_t i = 0; i < entries.size(); i++) {
@@ -609,7 +760,14 @@ namespace MesenSheets
 			for(const OamFrame& frame : frames) {
 				std::vector<Live> cur;
 				for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
-					std::map<std::vector<PoseTile>, uint32_t>::const_iterator it = rankOf.find(cluster.Tiles);
+					//ADR-0234: the same reduction BuildPoses keyed the poses
+					//with, and the same floor in the same unit, so a frame links
+					//to the pose it helped define.
+					std::vector<PoseTile> tiles = VisiblePoseTiles(cluster.Tiles, visible);
+					if(PoseCellCount(tiles, cluster.ArtlessCells) < kPoseMinTiles) {
+						continue;
+					}
+					std::map<std::vector<PoseTile>, uint32_t>::const_iterator it = rankOf.find(tiles);
 					if(it == rankOf.end()) {
 						continue; //below the ADR-0170 §2 thresholds: invisible to the linker
 					}
@@ -971,6 +1129,30 @@ namespace MesenSheets
 		}
 	}
 
+	//ADR-0234 (issue #505): which sprite-vocabulary nodes the game draws as a
+	//mask at least once - a tile placed behind the background to hide
+	//something in front of it, which put none of its own pixels on screen and
+	//so is not part of any figure. This is the label the adjacency sidecar
+	//carries with its counts; the pose clusters do not read it, because they
+	//drop the mask *appearances* (SegmentFrame's IsMaskEntry) rather than the
+	//shape - SMB3 draws the very same 16 pattern bytes in front and fully
+	//visible on 11 frames of the intro card, and those appearances are tiles
+	//like any other. Nothing is deleted here either: the vocabulary, the
+	//sheets and adjacency.json keep the node.
+	//
+	//A pack recorded before this ADR carries neither fact (BehindBg false
+	//everywhere, VisiblePixels 0), so the priority half of the predicate keeps
+	//every node of such a stream out of the class and its poses are unchanged.
+	std::vector<uint8_t> SelectMaskNodes(const std::vector<OamFrame>& frames, const Vocabulary& vocab)
+	{
+		NodeVisibility vis = AccumulateNodeVisibility(frames, vocab);
+		std::vector<uint8_t> mask(vocab.Entries.size(), 0);
+		for(size_t node = 0; node < mask.size(); node++) {
+			mask[node] = vis.MaskAppearances[node] > 0 ? 1 : 0;
+		}
+		return mask;
+	}
+
 	Vocabulary BuildSpriteVocabulary(const std::vector<OamFrame>& frames)
 	{
 		std::map<ShapeId, uint32_t> counts;
@@ -1153,6 +1335,17 @@ namespace MesenSheets
 			stats.Positions[node] = (uint32_t)seenPositions[node].size();
 		}
 		stats.NodeFrames = std::move(nodeFrames);
+		//ADR-0234: the mask label and the three numbers behind it, from the
+		//same accumulation SelectMaskNodes reads.
+		NodeVisibility visibility = AccumulateNodeVisibility(frames, vocab);
+		stats.BehindBgAppearances = visibility.BehindBgAppearances;
+		stats.VisiblePixels = visibility.VisiblePixels;
+		stats.HiddenPixels = visibility.HiddenPixels;
+		stats.MaskAppearances = visibility.MaskAppearances;
+		stats.Mask.resize(vocab.Entries.size());
+		for(size_t node = 0; node < vocab.Entries.size(); node++) {
+			stats.Mask[node] = visibility.MaskAppearances[node] > 0 ? 1 : 0;
+		}
 		//ADR-0173: screen furniture - a HUD bar, a menu icon - is drawn at a
 		//handful of fixed pixels for the whole capture, so its bottom edge lands
 		//in several quantised bands at once and joins every one of them as a
@@ -1268,21 +1461,51 @@ namespace MesenSheets
 		std::map<std::vector<PoseTile>, std::map<std::vector<int32_t>, std::pair<uint32_t, std::vector<PoseTile>>>> layouts;
 		//ADR-0228 (issue #504): the screen positions each silhouette was seen at,
 		//so that LabelPoseFusions can tell a figure standing alone from one the
-		//screen edge cut in half.
+		//screen edge cut in half. Keyed by the pose's own tiles, i.e. the reduced
+		//set below - the same key `seen` and the entries carry, so a fusion label
+		//finds the origins of the pose it is labelling.
 		PoseOrigins origins;
+		//ADR-0234: one pass to learn which tiles each cluster ever drew
+		//visibly, then the usual accumulation over the clusters reduced to
+		//those tiles. A cluster whose tile was hidden in every frame of its
+		//life is the same pose without it, and the frames of both forms add up
+		//into one pose - which is what keeps the mask out of the figures
+		//without inventing an occlusion variant per frame.
+		PoseVisibility visible;
+		for(const OamFrame& frame : frames) {
+			for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
+				std::vector<uint8_t>& flags = visible[cluster.Tiles];
+				if(flags.size() != cluster.Tiles.size()) {
+					flags.assign(cluster.Tiles.size(), 0);
+				}
+				for(size_t i = 0; i < flags.size() && i < cluster.Visible.size(); i++) {
+					flags[i] = (uint8_t)(flags[i] | cluster.Visible[i]);
+				}
+			}
+		}
 		for(const OamFrame& frame : frames) {
 			stats.Frames += frame.RepeatCount;
 			for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
-				seen[cluster.Tiles] += frame.RepeatCount;
-				origins[cluster.Tiles].insert(std::make_pair(cluster.X, cluster.Y));
+				std::vector<PoseTile> tiles = VisiblePoseTiles(cluster.Tiles, visible);
+				//ADR-0234 applies ADR-0170 §2's floor again to the reduced pose,
+				//in the unit #520 re-based it on - the figure's cells, of which
+				//the artless placements are some (see PoseCellCount).
+				if(PoseCellCount(tiles, cluster.ArtlessCells) < kPoseMinTiles) {
+					continue;
+				}
+				seen[tiles] += frame.RepeatCount;
+				//ADR-0228: the origins belong to the pose the file will carry, so
+				//they are keyed by the reduced set - the mask's cell is not part
+				//of where this figure stood.
+				origins[tiles].insert(std::make_pair(cluster.X, cluster.Y));
 				std::vector<int32_t> pixels;
-				for(const PoseTile& tile : cluster.Tiles) {
+				for(const PoseTile& tile : tiles) {
 					pixels.push_back(tile.Px);
 					pixels.push_back(tile.Py);
 				}
-				std::pair<uint32_t, std::vector<PoseTile>>& layout = layouts[cluster.Tiles][pixels];
+				std::pair<uint32_t, std::vector<PoseTile>>& layout = layouts[tiles][pixels];
 				if(layout.first == 0) {
-					layout.second = cluster.Tiles;
+					layout.second = tiles;
 				}
 				layout.first += frame.RepeatCount;
 			}
@@ -1329,7 +1552,7 @@ namespace MesenSheets
 		//what repetition finds on them (§3). All three read only the kept
 		//table and the stream; none changes a pose or its rank.
 		LabelPoseVariants(kept);
-		std::vector<std::vector<TrackRun>> tracks = LinkPoseTracks(frames, vocab, kept);
+		std::vector<std::vector<TrackRun>> tracks = LinkPoseTracks(frames, vocab, kept, visible);
 		stats.Poses = kept;
 		FindPoseRuns(tracks, frames, stats);
 		stats.Input = BuildInputStats(frames);

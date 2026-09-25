@@ -61,6 +61,7 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
+#include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/OamFetchLatch.h"
@@ -9089,12 +9090,14 @@ void TestOamStreamDumpIsSelfDescribing()
 		"ADR-0222: a palette word is interned on first sight as P <id> <8 hex>", lines.size() > 1 ? lines[1] : "");
 	Check(lines.size() > 2 && lines[2] == "K 0 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0F001020",
 		"ADR-0222: the second shape follows, in entry order", lines.size() > 2 ? lines[2] : "");
-	Check(lines.size() > 3 && lines[3] == "0 3 129 0 1,10,20,2 0,5,6,255",
-		"ADR-0222: <frame> <repeat> <port1> <port2> then <shape>,<x>,<y>,<pal>; kUnknownPalette has no P line",
+	Check(lines.size() > 3 && lines[3] == "0 3 129 0 1,10,20,2,0,0,0 0,5,6,255,0,0,0",
+		//ADR-0234 appends the entry's visible-pixel tally, its priority bit and
+		//the pixels the background hid.
+		"ADR-0222: <frame> <repeat> <port1> <port2> then <shape>,<x>,<y>,<pal>,<visible>,<bg>,<hidden>; kUnknownPalette has no P line",
 		lines.size() > 3 ? lines[3] : "");
 	Check(lines.size() > 4 && lines[4] == "P 1 0F112233",
 		"ADR-0222: a palette first seen on a later frame is interned before that frame's line", lines.size() > 4 ? lines[4] : "");
-	Check(lines.size() > 5 && lines[5] == "1 1 129 0 1,10,20,1",
+	Check(lines.size() > 5 && lines[5] == "1 1 129 0 1,10,20,1,0,0,0",
 		"ADR-0222: a shape already interned is not re-emitted", lines.size() > 5 ? lines[5] : "");
 }
 
@@ -9862,7 +9865,7 @@ void TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten()
 //state - and reads back what the frame would hand to RecordSprite.
 namespace OamFetchLatchModel
 {
-	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; uint32_t Palette; };
+	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; uint32_t Palette; bool BehindBg = false; uint8_t VisiblePixels = 0; uint8_t HiddenPixels = 0; };
 
 	//The sprite palettes a line uses unless a test says otherwise, one per
 	//attribute palette index, in HdPpuTileInfo::PaletteColors form.
@@ -9916,8 +9919,8 @@ namespace OamFetchLatchModel
 				});
 		}
 		std::vector<Entry> out;
-		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) {
-			out.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors });
+		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+			out.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
 		});
 		return out;
 	}
@@ -10290,7 +10293,7 @@ namespace MmcLatchFrame
 		}
 		Result r;
 		latch.ForEachLatched(
-			[&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) { r.Sprites.push_back({ x, y, tile.TileIndex }); },
+			[&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { r.Sprites.push_back({ x, y, tile.TileIndex }); },
 			[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 			[&](const HdPpuTileInfo& tile) { r.ExtraIndexes.push_back(tile.TileIndex); });
 		return r;
@@ -10346,7 +10349,7 @@ void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
 	latch.OnSpriteFetch(99, true, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000, resolve);
 	latch.OnSpriteFetch(100, true, OamFetchLatchModel::kSteadyPalettes, false, oam, false, 0x0000, resolve); //row 100 drawn
 	latch.ForEachLatched(
-		[&](uint8_t x, uint8_t, const HdPpuTileInfo& tile) { if(x == 48) { named = tile.TileIndex; } },
+		[&](uint8_t x, uint8_t, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { if(x == 48) { named = tile.TileIndex; } },
 		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 		[](const HdPpuTileInfo&) {});
 	Check(named == 0x0580, "#458: a cleared latch forgets the rows of the frame before (a state load clears it too)");
@@ -10429,7 +10432,7 @@ void TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites()
 	}
 	std::vector<int32_t> named, extra;
 	latch.ForEachLatched(
-		[&](uint8_t, uint8_t, const HdPpuTileInfo& tile) { named.push_back(tile.TileIndex); },
+		[&](uint8_t, uint8_t, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { named.push_back(tile.TileIndex); },
 		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 		[&](const HdPpuTileInfo& tile) { extra.push_back(tile.TileIndex); });
 	auto hex = [](const std::vector<int32_t>& v) {
@@ -10748,7 +10751,7 @@ namespace BlankHalfFrame
 		//`emitBank` name shapes, `emitPlaced` names the bare position of a half
 		//whose art is blank.
 		latch.ForEachLatched(
-			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
+			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t, OamFetchLatch::Drawing) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
 			[](int32_t abs, HdPpuTileInfo& t) { t.TileIndex = abs / 16; Fill(t, abs); },
 			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); },
 			[&](uint8_t sx, uint8_t sy) { r.Placements.push_back(std::make_pair(sx, sy)); });
@@ -11109,6 +11112,538 @@ void TestAPreFixChrRamTileIsRecognisedAndRehomed()
 	Check(!MesenSheets::RehomesOnRedraw(true, false, 0, 0x1234), "ADR-0232: a CHR ROM tile never moves");
 }
 
+//ADR-0234 (issue #505): a sprite the game draws behind the background only to
+//hide something in front of it - SMB3's piranha-plant pipe mask - is placed by
+//the game and never shows a pixel of its own. The recorder carries each OAM
+//entry's priority bit and how many of its pixels reached the screen, labels a
+//node that never did as a mask, and keeps it out of the pose clusters.
+namespace MaskSpriteFixture
+{
+	//The BlocoP OAM entry helper, with the three facts ADR-0234 adds. A behind
+	//background entry that drew pixels is a figure (ADR-0224); the default
+	//`hiddenPixels` of `visiblePixels` keeps that shape reading as one.
+	OamEntry OamWith(ShapeId shape, uint32_t x, uint32_t y, bool behindBg, uint8_t visiblePixels, int hiddenPixels = -1)
+	{
+		OamEntry entry;
+		entry.Shape = shape;
+		entry.X = (uint8_t)x;
+		entry.Y = (uint8_t)y;
+		entry.BehindBg = behindBg;
+		entry.VisiblePixels = visiblePixels;
+		entry.HiddenPixels = (uint8_t)(hiddenPixels < 0 ? visiblePixels : hiddenPixels);
+		return entry;
+	}
+
+	//One frame of a sprite, in the OamFetchLatchModel's timeline: the PPU state
+	//at cycle 257 of every visible line, so the latch decodes the half the way
+	//HdBuilderPpu does.
+	template<typename StateFor>
+	void DriveFrame(OamFetchLatch& latch, const uint8_t* oam, StateFor&& stateForLine)
+	{
+		using namespace OamFetchLatchModel;
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			LineState s = stateForLine(line);
+			latch.OnSpriteFetch(line, s.SpritesShownOnRow, s.PalettesOnRow, s.RenderingAt257, oam, s.LargeSprites, s.SpritePatternAddr,
+				[&](const OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+					tile.TileIndex = h.TileAddr;
+					tile.PaletteColors = s.PalettesAt257[(h.PaletteOffset >> 2) & 0x03];
+					return true;
+				});
+		}
+	}
+}
+
+void TestTheOamLatchCarriesThePriorityBitOfEachHalf()
+{
+	//OAM attribute bit 5 is the priority bit, and it is the one fact ADR-0234
+	//needs from the attribute byte: OamFetchLatch::Decode reads that byte for
+	//the palette id and the two flips and used to drop it.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //bit 5: behind the background
+	SetSprite(oam, 1, 20, 0x22, 0x00, 60); //in front of it
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int) { return LineState(); });
+	Check(got.size() == 2, "ADR-0234: both sprites of the line are latched", Describe(got));
+	if(got.size() != 2) {
+		return;
+	}
+	Check(got[0].BehindBg && !got[1].BehindBg,
+		"ADR-0234: the latch keeps the OAM priority bit of each half",
+		std::to_string(got[0].BehindBg ? 1 : 0) + "/" + std::to_string(got[1].BehindBg ? 1 : 0));
+}
+
+void TestTheOamLatchCountsOnlyThePixelsAHalfPutOnScreen()
+{
+	//The tally is the second half of the mask evidence, and the host reports
+	//it: HdBuilderPpu::DrawPixel calls OnSpritePixel with the PPU's own verdict
+	//for the dot (NesPpu::GetPixelColor), so a behind-background half that put
+	//pixels on screen counts them and one whose pixels an opaque background took
+	//counts those instead. The half is found by the same identity the fetch log
+	//uses (x, tile base, top row), so no OAM slot has to travel.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	SetSprite(oam, 1, 20, 0x22, 0x20, 56); //rows 21-28, behind it too
+	SetSprite(oam, 2, 60, 0x33, 0x00, 72); //rows 61-68, in front
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	//The frame's pixels: the first half was never output, the second was
+	//output 8 times, the front one 5 times.
+	for(int i = 0; i < 8; i++) {
+		latch.OnSpritePixel(56, 0x220, 21, MesenSheets::SpritePixelVerdictOf(1, true, 0, true));
+	}
+	for(int i = 0; i < 5; i++) {
+		latch.OnSpritePixel(72, 0x330, 61, MesenSheets::SpritePixelVerdictOf(1, true, 0, false));
+	}
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 3, "ADR-0234: the frame latches its three halves", Describe(counted));
+	if(counted.size() != 3) {
+		return;
+	}
+	Check(counted[0].VisiblePixels == 0,
+		"ADR-0234: a behind-background half the background always covered reports no visible pixel",
+		std::to_string(counted[0].VisiblePixels));
+	Check(counted[1].VisiblePixels == 8,
+		"ADR-0234: a half that put 8 pixels on screen reports 8",
+		std::to_string(counted[1].VisiblePixels));
+	Check(counted[2].VisiblePixels == 5 && !counted[2].BehindBg,
+		"ADR-0234: a front half that put 5 pixels on screen reports 5",
+		std::to_string(counted[2].VisiblePixels));
+}
+
+//ADR-0234 review round (issue #505): the tally's two facts are the PPU's
+//verdict for one dot, and neither of them is a read of `_lastSprite`. That
+//pointer is the highest-priority *active* shifter, opaque or not: a
+//transparent sprite pixel leaves it set, and so do the leftmost-8-columns clip
+//and the pre-render line's leftovers. Counting on it alone credits a sprite
+//with pixels it never contended for. NesPpu::GetPixelColor states the verdict
+//where it decides the pixel, from the three things it decides it with.
+namespace SpritePixelVerdictFixture
+{
+	std::string Describe(MesenSheets::SpritePixelVerdict v)
+	{
+		return std::string("drawn=") + (v.Drawn ? "1" : "0") + " hidden=" + (v.Hidden ? "1" : "0");
+	}
+
+	void CheckVerdict(const char* what, MesenSheets::SpritePixelVerdict v, bool drawn, bool hidden)
+	{
+		Check(v.Drawn == drawn && v.Hidden == hidden, what, Describe(v));
+	}
+}
+
+void TestASpritePixelOnlyCountsWhenThePpuPutsItOnScreen()
+{
+	using SpritePixelVerdictFixture::CheckVerdict;
+	CheckVerdict("ADR-0234: a transparent sprite pixel (colour 0) contends for nothing",
+		MesenSheets::SpritePixelVerdictOf(0, true, 3, true), false, false);
+	CheckVerdict("ADR-0234: a transparent sprite pixel over the backdrop contends for nothing either",
+		MesenSheets::SpritePixelVerdictOf(0, true, 0, false), false, false);
+	CheckVerdict("ADR-0234: an opaque behind-background pixel an opaque background covers is a hidden contender",
+		MesenSheets::SpritePixelVerdictOf(2, true, 3, true), false, true);
+	CheckVerdict("ADR-0234: over the backdrop a behind-background pixel is drawn",
+		MesenSheets::SpritePixelVerdictOf(2, true, 0, true), true, false);
+	CheckVerdict("ADR-0234: a front pixel is drawn over an opaque background",
+		MesenSheets::SpritePixelVerdictOf(2, true, 3, false), true, false);
+	CheckVerdict("ADR-0234: with the emulator's sprite layer off no sprite pixel is drawn or hidden",
+		MesenSheets::SpritePixelVerdictOf(2, false, 3, true), false, false);
+	//Over the backdrop the background-priority bit cannot hide anything, so
+	//the layer toggle is the only fact left that can keep the pixel off the
+	//screen - the case that tells it apart from the priority bit.
+	CheckVerdict("ADR-0234: a front pixel over the backdrop is not drawn with the sprite layer off",
+		MesenSheets::SpritePixelVerdictOf(2, false, 0, false), false, false);
+}
+
+void TestTheTallyIgnoresADotTheSpriteNeverContendedFor()
+{
+	//The same rule at the tally: HdBuilderPpu::DrawPixel runs for every pixel of
+	//the line, transparent ones included, so what it hands over is the verdict,
+	//not a boolean. A transparent dot is counted neither way, an opaque dot the
+	//background covered is the hidden count, an opaque dot that reached the
+	//buffer is the visible one.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	//Nine dots of one line: six transparent, one the sprite drew, two the
+	//background took.
+	for(int i = 0; i < 6; i++) {
+		latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(0, true, 3, true));
+	}
+	latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(4, true, 0, true));
+	for(int i = 0; i < 2; i++) {
+		latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(2, true, 3, true));
+	}
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 1, "ADR-0234: the frame latches its one half", Describe(counted));
+	if(counted.size() != 1) {
+		return;
+	}
+	Check(counted[0].VisiblePixels == 1,
+		"ADR-0234: only the dot the sprite put on screen is a visible pixel",
+		std::to_string(counted[0].VisiblePixels));
+	Check(counted[0].HiddenPixels == 2,
+		"ADR-0234: the dots the background took are the hidden count, a transparent dot is neither",
+		std::to_string(counted[0].HiddenPixels));
+}
+
+void TestADotThatContendedForNothingCannotPushOutOneThatDid()
+{
+	//The guard `OnSpritePixel` opens with is what keeps the tally a table of
+	//contenders: a verdict with neither flag is not a dot this half contended
+	//for, and taking a slot for it would let 128 dots nothing drew evict the
+	//handful that did - the table is bounded by SlotCount, not by the frame's
+	//pixels. Issue #520 makes this reachable from outside: a composition
+	//placement (kEmptyCell, no vocabulary node, no drawing facts) is an
+	//appearance nothing is known about, and reporting it must change nothing.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	MesenSheets::SpritePixelVerdict nothing = MesenSheets::SpritePixelVerdictOf(0, true, 3, true);
+	for(uint32_t i = 0; i < OamFetchLatch::SlotCount; i++) {
+		latch.OnSpritePixel((uint8_t)i, (uint16_t)(0x1000 + i * 16), (int32_t)i, nothing);
+	}
+	latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(4, true, 0, true));
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 1 && counted[0].VisiblePixels == 1,
+		"ADR-0234: a slot of the tally is a dot the sprite contended for, not a dot nothing drew",
+		Describe(counted));
+}
+
+void TestTheOamDumpCarriesThePixelTallyAndThePriorityBit()
+{
+	//ADR-0234 amends ADR-0222's entry token: two fields are appended, so a
+	//reader written for the four-field form still resolves shape, x, y and
+	//palette out of the same token.
+	std::vector<OamFrame> frames;
+	OamFrame frame;
+	frame.FrameNumber = 0;
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 24, 40, true, 0));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 32, 40, false, 12));
+	frames.push_back(frame);
+	std::vector<SheetTileKey> shapes(5);
+	std::vector<uint32_t> palettes(2, 0xFF0F3627);
+	std::ostringstream out;
+	MesenSheets::WriteOamStreamDump(out, frames, shapes, palettes);
+	std::string frameLine;
+	std::istringstream in(out.str());
+	std::string line;
+	while(std::getline(in, line)) {
+		if(!line.empty() && line[0] >= '0' && line[0] <= '9') {
+			frameLine = line;
+		}
+	}
+	//The whole line, so the field count is pinned: a reader that stops at the
+	//six-field form a review round found this test accepting would read the
+	//hidden count as the next entry.
+	Check(frameLine == "0 1 0 0 3,24,40,255,0,1,0 4,32,40,255,12,0,12",
+		"ADR-0234: every entry token carries all seven fields, tally and priority bit",
+		frameLine);
+}
+
+void TestAMaskNodeIsLabelledAndKeptOutOfThePoseClusters()
+{
+	//The plant: a four-tile figure plus one tile at a fixed spot the game draws
+	//behind the background to hide the stem. The mask never draws a pixel, so
+	//it is not part of the figure - the pose that reaches the artist is the
+	//plant's own four tiles.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	int32_t figureNode = SpriteNodeOf(vocab, 2);
+	Check(maskNode >= 0 && (size_t)maskNode < mask.size() && mask[maskNode] == 1,
+		"ADR-0234: a behind-background node that never drew a pixel is labelled a mask",
+		"node=" + std::to_string(maskNode));
+	Check(figureNode >= 0 && (size_t)figureNode < mask.size() && mask[figureNode] == 0,
+		"ADR-0234: a figure that drew pixels is not labelled",
+		"node=" + std::to_string(figureNode));
+
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1, "ADR-0234: the mask leaves one figure behind",
+		"poses=" + std::to_string(stats.Poses.size()));
+	if(stats.Poses.size() != 1) {
+		return;
+	}
+	Check(!PoseHoldsNode(stats.Poses[0], maskNode),
+		"ADR-0234: the mask tile is not a member of the pose",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	Check(PoseHoldsNode(stats.Poses[0], figureNode) && stats.Poses[0].Tiles.size() == 4,
+		"ADR-0234: the figure keeps its own four tiles",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	//Nothing is deleted: the shape is still in the vocabulary every sheet is
+	//built from (ADR-0229, ADR-0173's label-don't-delete rule).
+	Check(maskNode >= 0, "ADR-0234: the mask shape stays in the sprite vocabulary");
+}
+
+//The four-tile figure the ADR-0234 fixtures hang a mask on, one frame of it.
+void AddFigure(OamFrame& frame, int32_t top)
+{
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+}
+
+void TestATileHiddenForTheWholeLifeOfAPoseLeavesIt()
+{
+	//The pipe mask proper: a fifth tile the game draws behind the background,
+	//hidden in every frame the figure is seen in. The pose the artist gets is
+	//the figure's own four tiles, and the mask's shape stays in the vocabulary
+	//and in the sheets (ADR-0173: label, never delete).
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		AddFigure(frame, top);
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1, "ADR-0234: the figure survives the mask",
+		"poses=" + std::to_string(stats.Poses.size()));
+	if(stats.Poses.size() != 1) {
+		return;
+	}
+	Check(stats.Poses[0].Tiles.size() == 4 && !PoseHoldsNode(stats.Poses[0], maskNode),
+		"ADR-0234: a tile the background hid for the pose's whole life leaves it",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	Check(maskNode >= 0, "ADR-0234: the shape stays in the vocabulary all the same");
+}
+
+void TestATileThatShowsInOneFrameOfAPoseStays()
+{
+	//The second E2E's lesson, measured on Punch-Out!!: a half that is behind
+	//the background in every appearance and hidden in most of them is still
+	//art the artist can see, and a rule that drops it per frame cuts one
+	//figure into a variant per occlusion (34 poses became 101). The verdict is
+	//therefore a property of the pose, not of the frame: the tile stays unless
+	//it never once showed in any frame the pose was seen in.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		AddFigure(frame, top);
+		//Behind the background throughout, and it shows for two of the frames.
+		bool shows = f >= 6;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true,
+			(uint8_t)(shows ? 64 : 0), shows ? 0 : 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 5,
+		"ADR-0234: one visible frame keeps the tile in the pose",
+		"poses=" + std::to_string(stats.Poses.size()) +
+			(stats.Poses.empty() ? "" : " tiles=" + std::to_string(stats.Poses[0].Tiles.size())));
+	//The label and its counts still say what the game does with the shape, so
+	//a reader can see that this pose's fifth tile is mostly hidden.
+	SpriteAdjacencyStats adj = AccumulateSpriteAdjacency(frames, vocab);
+	Check(maskNode >= 0 && (size_t)maskNode < adj.Mask.size() && adj.Mask[maskNode] == 1,
+		"ADR-0234: the shape is still labelled as one drawn as a mask",
+		"node=" + std::to_string(maskNode));
+	Check((size_t)maskNode < adj.MaskAppearances.size() && adj.MaskAppearances[maskNode] == 6
+		&& adj.BehindBgAppearances[maskNode] == 8 && adj.VisiblePixels[maskNode] == 128
+		&& adj.HiddenPixels[maskNode] == 384,
+		"ADR-0234: and the sidecar carries the counts the verdict came from",
+		maskNode >= 0 ? ("mask=" + std::to_string(adj.MaskAppearances[maskNode]) + " behind=" +
+			std::to_string(adj.BehindBgAppearances[maskNode]) + " visible=" +
+			std::to_string(adj.VisiblePixels[maskNode]) + " hidden=" +
+			std::to_string(adj.HiddenPixels[maskNode])) : "no node");
+}
+
+void TestABehindBackgroundSpriteThePpuNeverDrewIsNotAMask()
+{
+	//The second E2E of ADR-0234: Punch-Out!! records 463 sprite nodes and 78
+	//of them are behind the background with no pixel shown - its fighters are
+	//drawn in two passes and the PPU's 8-per-line limit leaves most of the
+	//second pass unfetched. A rule that reads "behind the background and no
+	//pixel shown" calls all 78 masks and its poses go from 34 to 101.
+	//
+	//A half that never contended for a pixel was not hidden by the background:
+	//it is a sprite the game placed and the PPU dropped, which ADR-0153 §2
+	//records on purpose. The hidden-pixel count is what tells the two apart.
+	//
+	//Issue #520 reads the same clause from the other side: an appearance that
+	//carries no drawing facts at all - the composition placements it hands
+	//SegmentFrame - is `behindBg, 0, 0` too, and this test is what pins that it
+	//is a tile of the figure rather than a mask to be dropped.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+		//Behind the background, and the PPU never gave it a pixel to lose.
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 0));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t node = SpriteNodeOf(vocab, 9);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a behind-background half the PPU never drew is not a mask",
+		"node=" + std::to_string(node));
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 5,
+		"ADR-0234: and it stays a tile of the figure the game placed",
+		"poses=" + std::to_string(stats.Poses.size()) +
+			(stats.Poses.empty() ? "" : " tiles=" + std::to_string(stats.Poses[0].Tiles.size())));
+}
+
+void TestABehindBackgroundSpriteThatDrewIsStillPartOfAFigure()
+{
+	//ADR-0224's measured case: Punch-Out!!'s behind-background sprites are
+	//real figure halves that show over colour-0 canvas. The priority bit alone
+	//must never cost a figure its tiles.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, true, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, true, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 40));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t node = SpriteNodeOf(vocab, 2);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a behind-background sprite that drew pixels is not a mask",
+		"node=" + std::to_string(node));
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 4,
+		"ADR-0234: its figure keeps all four tiles",
+		"poses=" + std::to_string(stats.Poses.size()));
+}
+
+void TestAFrontSpriteThePpuNeverDrewIsNotAMask()
+{
+	//A sprite in front of the background that a higher-priority sprite kept
+	//off the screen is a figure the game placed and the PPU dropped - not a
+	//mask. The priority bit is what tells the two apart, which is why the rule
+	//needs both facts.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 0));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 0));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 20));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 20));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t node = SpriteNodeOf(vocab, 2);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a front sprite that never reached the screen is not a mask",
+		"node=" + std::to_string(node));
+}
+
+void TestAnOamStreamWithNoVisibilityEvidenceLabelsNoMask()
+{
+	//A pack recorded before ADR-0234 carries neither fact, so every entry
+	//reads as "in front, never measured" - and a rule that needs the priority
+	//bit classifies nothing. Old recordings keep their poses.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.Entries.push_back(OamAt(2, 100, 100));
+		frame.Entries.push_back(OamAt(1, 108, 100));
+		frame.Entries.push_back(OamAt(3, 100, 108));
+		frame.Entries.push_back(OamAt(4, 108, 108));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	bool any = false;
+	for(uint8_t flag : mask) {
+		any = any || flag != 0;
+	}
+	Check(!any, "ADR-0234: a stream with no priority bit and no tally labels no mask");
+}
+
+void TestTheAdjacencySidecarLabelsAMaskNodeWithItsEvidence()
+{
+	//ADR-0173's shape: the verdict travels with the two numbers behind it, so
+	//a reader that disagrees with the classification has the evidence.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, 100, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, 100, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, 108, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 108, 108, true, 0, 64));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	SpriteAdjacencyStats stats = AccumulateSpriteAdjacency(frames, vocab);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	Check(maskNode >= 0 && (size_t)maskNode < stats.Mask.size() && stats.Mask[maskNode] == 1,
+		"ADR-0234: the adjacency statistics label the mask node",
+		"node=" + std::to_string(maskNode));
+	if(maskNode < 0 || (size_t)maskNode >= stats.Mask.size()) {
+		return;
+	}
+	Check(stats.BehindBgAppearances[maskNode] == 6 && stats.MaskAppearances[maskNode] == 6
+		&& stats.VisiblePixels[maskNode] == 0,
+		"ADR-0234: the label travels with its three numbers",
+		"behind=" + std::to_string(stats.BehindBgAppearances[maskNode]) + " mask=" +
+		std::to_string(stats.MaskAppearances[maskNode]) + " visible=" +
+		std::to_string(stats.VisiblePixels[maskNode]));
+	int32_t frontNode = SpriteNodeOf(vocab, 2);
+	Check(frontNode >= 0 && (size_t)frontNode < stats.Mask.size() && stats.Mask[frontNode] == 0
+		&& stats.VisiblePixels[frontNode] == 180,
+		"ADR-0234: a drawn node carries its pixel count and no label",
+		"visible=" + std::to_string(frontNode >= 0 ? stats.VisiblePixels[frontNode] : 0));
+}
+
 int main()
 {
 	TestSilentChannelNotSfx();
@@ -11442,6 +11977,21 @@ int main()
 	TestOamLatchKeepsAHalfWhoseRowShowsSpritesThoughTheBitWasOffAtItsFetch();
 	TestOamLatchDropsAHalfFetchedWithSpritesOnButHiddenOnEveryRow();
 	TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn();
+
+	TestTheOamLatchCarriesThePriorityBitOfEachHalf();
+	TestTheOamLatchCountsOnlyThePixelsAHalfPutOnScreen();
+	TestASpritePixelOnlyCountsWhenThePpuPutsItOnScreen();
+	TestTheTallyIgnoresADotTheSpriteNeverContendedFor();
+	TestADotThatContendedForNothingCannotPushOutOneThatDid();
+	TestTheOamDumpCarriesThePixelTallyAndThePriorityBit();
+	TestAMaskNodeIsLabelledAndKeptOutOfThePoseClusters();
+	TestABehindBackgroundSpriteThatDrewIsStillPartOfAFigure();
+	TestATileHiddenForTheWholeLifeOfAPoseLeavesIt();
+	TestATileThatShowsInOneFrameOfAPoseStays();
+	TestABehindBackgroundSpriteThePpuNeverDrewIsNotAMask();
+	TestAFrontSpriteThePpuNeverDrewIsNotAMask();
+	TestAnOamStreamWithNoVisibilityEvidenceLabelsNoMask();
+	TestTheAdjacencySidecarLabelsAMaskNodeWithItsEvidence();
 
 
 	TestASpriteIsNamedByTheBankItsFetchReadNotTheBankLeftAtFrameEnd();
