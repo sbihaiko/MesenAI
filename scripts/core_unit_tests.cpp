@@ -5952,6 +5952,209 @@ namespace
 		}
 	}
 
+	//ADR-0228 (issue #504, SMB3's Piranha Plant): the whole figure is two columns
+	//of four, seen for 8 frames well inside the screen. Its left column turns up
+	//on its own for 5 frames at `columnX` only. At 248 the whole figure would
+	//start its right column at 256 - past the screen - so those frames never show
+	//the column standing alone; the screen edge cut it off.
+	PoseStats PoseEdgeClippedColumn(uint32_t columnX, Vocabulary& vocab)
+	{
+		std::vector<OamFrame> out;
+		uint32_t frameNumber = 0;
+		for(uint32_t f = 0; f < 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), 100, 100 + row * 8));
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), 108, 100 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		for(uint32_t f = 0; f < 5; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), columnX, 100 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		vocab = BuildSpriteVocabulary(out);
+		return BuildPoses(out, vocab);
+	}
+
+	void TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenIsNotAFusion()
+	{
+		//The control: the same two entries, but the column alone is seen at 200,
+		//where the whole figure would fit on screen. That is the column standing
+		//alone, so the whole stays a fusion of it.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeClippedColumn(200, vocab);
+			bool fused = stats.Poses.size() == 2 && stats.Poses[0].Tiles.size() == 8
+				&& stats.Poses[0].FusionOf.size() == 1 && stats.Poses[0].FusionOf[0] == 1;
+			Check(fused,
+				"BlocoP: ADR-0228 - a part seen alone inside the screen is still a fusion",
+				"poses=" + std::to_string(stats.Poses.size()) + " fusionOf="
+					+ std::to_string(stats.Poses.empty() ? 0 : stats.Poses[0].FusionOf.size()));
+		}
+		//The defect: at 248 every frame of the column alone has the figure's right
+		//column outside the visible screen, so there is no frame in which the
+		//recorder saw the column as a figure. The whole is one figure.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeClippedColumn(248, vocab);
+			Check(stats.Poses.size() == 2,
+				"BlocoP: ADR-0228 - the whole figure and its clipped column are two entries",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				return;
+			}
+			Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+				"BlocoP: ADR-0228 - a part only ever seen cut by the screen edge is not a second figure",
+				"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+					+ std::to_string(stats.Poses[0].FusionOf.size()));
+			Check(stats.Poses[1].FusionOf.empty(),
+				"BlocoP: ADR-0228 - the clipped column is not a fusion of anything either",
+				"fusionOf=" + std::to_string(stats.Poses[1].FusionOf.size()));
+		}
+	}
+
+	//ADR-0228 §6 (issue #504): a figure of two 4-tile blocks whose second sits
+	//`restDx`/`restDy` cells from the first - (1, 0) to the right of it, (-1, 0) to
+	//the left, (0, -4) above, (0, 4) below. The first block is an entry of its own,
+	//drawn `partFrames` times at (`partX`, `partY`) and `altFrames` times at
+	//(`altX`, `altY`); the second is an entry too when `restFrames` is non-zero,
+	//drawn at (`restX`, `restY`). The whole figure is drawn eight times with its
+	//own top-left at (100, 100), so it outranks both blocks.
+	PoseStats PoseEdgeHalves(Vocabulary& vocab, int32_t restDx, int32_t restDy, uint32_t partX, uint32_t partY, uint32_t partFrames, uint32_t restX, uint32_t restY, uint32_t restFrames, uint32_t altX = 0, uint32_t altY = 0, uint32_t altFrames = 0)
+	{
+		std::vector<OamFrame> out;
+		uint32_t frameNumber = 0;
+		uint32_t baseX = (uint32_t)(100 - std::min(0, restDx) * 8);
+		uint32_t baseY = (uint32_t)(100 - std::min(0, restDy) * 8);
+		for(uint32_t f = 0; f < 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), baseX, baseY + row * 8));
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), baseX + restDx * 8, baseY + restDy * 8 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		const uint32_t appearances[2][3] = { { partX, partY, partFrames }, { altX, altY, altFrames } };
+		for(const uint32_t (&appearance)[3] : appearances) {
+			for(uint32_t f = 0; f < appearance[2]; f++) {
+				OamFrame frame;
+				frame.FrameNumber = frameNumber++;
+				for(uint32_t row = 0; row < 4; row++) {
+					frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), appearance[0], appearance[1] + row * 8));
+				}
+				out.push_back(frame);
+			}
+		}
+		for(uint32_t f = 0; f < restFrames; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), restX, restY + row * 8));
+			}
+			out.push_back(frame);
+		}
+		vocab = BuildSpriteVocabulary(out);
+		return BuildPoses(out, vocab);
+	}
+
+	void TestAPoseWhosePartIsOnlyEverSeenClippedByAScreenEdgeIsNotAFusion()
+	{
+		//ADR-0228 §6: each of the four edges in turn. The first block is its own
+		//entry, seen only while the second lies past that edge - right of it at
+		//248 (the second would start at 256), left of it at 0 (the second would end
+		//before 0), above it at y=0, below it at y=208 (its last row is 240).
+		struct Edge
+		{
+			const char* Name;
+			int32_t RestDx;
+			int32_t RestDy;
+			uint32_t PartX;
+			uint32_t PartY;
+		};
+		const Edge edges[4] = {
+			{ "right", 1, 0, 248, 100 },
+			{ "left", -1, 0, 0, 100 },
+			{ "top", 0, -4, 100, 0 },
+			{ "bottom", 0, 4, 100, 208 },
+		};
+		for(const Edge& edge : edges) {
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, edge.RestDx, edge.RestDy, edge.PartX, edge.PartY, 5, 0, 0, 0);
+			Check(stats.Poses.size() == 2,
+				std::string("BlocoP: ADR-0228 - the figure and the block seen alone at the ") + edge.Name + " edge are two entries",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				continue;
+			}
+			Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+				std::string("BlocoP: ADR-0228 - a block only ever seen cut by the ") + edge.Name + " edge is not a second figure",
+				"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+					+ std::to_string(stats.Poses[0].FusionOf.size()));
+		}
+	}
+
+	void TestAPoseWhoseClippedPartIsAlsoSeenClearOfTheEdgesStaysAFusion()
+	{
+		//ADR-0228 §6 the other way: one appearance clear of all four edges is the
+		//block standing on its own, whatever the clipped ones were. The first case
+		//is the same fixture without that appearance.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 5, 0, 0, 0);
+			Check(stats.Poses.size() == 2 && stats.Poses[0].FusionOf.empty(),
+				"BlocoP: ADR-0228 - the block seen only at the right edge is not a figure of its own",
+				"poses=" + std::to_string(stats.Poses.size()) + " fusionOf="
+					+ std::to_string(stats.Poses.empty() ? 0 : stats.Poses[0].FusionOf.size()));
+		}
+		{
+			//Three of its five appearances are the clipped ones; the other two are
+			//at x=180, where the figure's second block would have been on screen.
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 3, 0, 0, 0, 180, 100, 2);
+			Check(stats.Poses.size() == 2,
+				"BlocoP: ADR-0228 - a block seen both cut and clear is still one entry",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				return;
+			}
+			Check(stats.Poses[0].FusionOf.size() == 1 && stats.Poses[0].FusionOf[0] == 1,
+				"BlocoP: ADR-0228 - one appearance clear of the edges keeps the whole a fusion of the block",
+				"fusionOf=" + std::to_string(stats.Poses[0].FusionOf.size()));
+		}
+	}
+
+	void TestATwoPartSplitWhoseHalvesAreBothEdgeClippedIsNotAFusion()
+	{
+		//ADR-0228 §2's two-part split, on the same fixture: the figure is the first
+		//block plus the second, and both are kept poses seen on their own. At the
+		//right edge only the first is drawn (the second would start at 256); at the
+		//left edge only the second (the first would end before 0). Neither half was
+		//ever seen as a figure, so this split is the screen's doing too.
+		Vocabulary vocab;
+		PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 5, 0, 100, 5);
+		Check(stats.Poses.size() == 3,
+			"BlocoP: ADR-0228 - the figure and its two clipped halves are three entries",
+			"poses=" + std::to_string(stats.Poses.size()));
+		if(stats.Poses.size() != 3) {
+			return;
+		}
+		Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+			"BlocoP: ADR-0228 - a two-part split whose halves are both cut by a screen edge is not a fusion",
+			"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+				+ std::to_string(stats.Poses[0].FusionOf.size()));
+		Check(stats.Poses[1].FusionOf.empty() && stats.Poses[2].FusionOf.empty(),
+			"BlocoP: ADR-0228 - neither clipped half is a fusion of anything",
+			"fusionOf=" + std::to_string(stats.Poses[1].FusionOf.size())
+				+ "/" + std::to_string(stats.Poses[2].FusionOf.size()));
+	}
+
 	void TestTwoCopiesOfOneShapeAreAFusionOfItWithItself()
 	{
 		//ADR-0177 §1: the two parts may be the same pose. Two identical
@@ -10895,6 +11098,10 @@ int main()
 	TestAPoseThatSplitsIntoTwoPosesIsLabelledAFusion();
 	TestAFigurePlusALooseProjectileIsNotAFusion();
 	TestAPosePlusAPoseSizedUnseenRemainderIsAFusion();
+	TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenIsNotAFusion();
+	TestAPoseWhosePartIsOnlyEverSeenClippedByAScreenEdgeIsNotAFusion();
+	TestAPoseWhoseClippedPartIsAlsoSeenClearOfTheEdgesStaysAFusion();
+	TestATwoPartSplitWhoseHalvesAreBothEdgeClippedIsNotAFusion();
 	TestTwoCopiesOfOneShapeAreAFusionOfItWithItself();
 	TestPoseFramesCountRepeatCount();
 	TestPoseThresholdsDropWhatTheyClaim();

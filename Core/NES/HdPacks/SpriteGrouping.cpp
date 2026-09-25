@@ -136,7 +136,81 @@ namespace MesenSheets
 		//tiles is a fusion even when the remainder never stood alone (Bill's
 		//death tumble, only ever drawn over the soldier that killed him). It
 		//is labelled with the one kept part; a two-part split still wins.
-		void LabelPoseFusions(std::vector<PoseEntry>& entries)
+		//
+		//ADR-0228 (issue #504) adds the one way "never stood alone" can be the
+		//screen's doing rather than the game's: a part drawn only while its own
+		//figure was cut by a screen edge was never seen as a figure either. The
+		//NES draws no entry the edge cut, so the frame shows the part and nothing
+		//else - the same shape as Bill's tumble, and no more evidence than it.
+		//SMB3's Piranha Plant is the case: half of it is the whole file's
+		//`pose017`, seen in 17 frames at x=248..255, every one of them with the
+		//plant's other half starting at x=256.
+
+		//The visible screen in pixels, and in the 8 px cells a pose lives on.
+		constexpr int32_t kPoseScreenPixelsX = 256;
+		constexpr int32_t kPoseScreenPixelsY = 240;
+		constexpr int32_t kPoseScreenCellsX = kPoseScreenPixelsX / 8;
+		constexpr int32_t kPoseScreenCellsY = kPoseScreenPixelsY / 8;
+
+		//Where each silhouette sat on screen, in pixels, over the recording. The
+		//pose file states a silhouette's tiles and never where it was drawn, so a
+		//reader that wants to ask about the screen edge has to bring this with it.
+		using PoseOrigins = std::map<std::vector<PoseTile>, std::set<std::pair<int32_t, int32_t>>>;
+
+		//ADR-0228 (issue #504): was `part` only ever drawn with its own figure cut
+		//by a screen edge? `rest` is the whole's other tiles at this split's
+		//placement (`shift`), and one occurrence is enough to answer no.
+		//
+		//Two facts have to hold at *every* frame the part appeared in. Its own
+		//bounds must reach or pass a screen edge - a part drawn clear of all four
+		//edges was seen standing on its own, whatever the rest of the whole was
+		//doing. And at least one of the rest's tiles must land past that same edge,
+		//so that what the frame could not show is what the split calls the whole's
+		//other part. A rest tile that would have been visible and was not drawn is
+		//real evidence and keeps the label.
+		bool PartOnlyEverSeenClippedByTheScreenEdge(const std::vector<PoseTile>& part, const std::vector<PoseTile>& rest, int32_t shiftX, int32_t shiftY, const PoseOrigins& origins)
+		{
+			PoseOrigins::const_iterator seen = origins.find(part);
+			if(seen == origins.end() || seen->second.empty()) {
+				return false;
+			}
+			//A pose's tiles are normalised to its own top-left, so the part's
+			//extent is its largest tile offset plus one tile.
+			int32_t partWidth = 0;
+			int32_t partHeight = 0;
+			for(const PoseTile& member : part) {
+				partWidth = std::max(partWidth, member.Px + 8);
+				partHeight = std::max(partHeight, member.Py + 8);
+			}
+			for(const std::pair<int32_t, int32_t>& origin : seen->second) {
+				bool left = origin.first <= 0;
+				bool right = origin.first + partWidth >= kPoseScreenPixelsX;
+				bool top = origin.second <= 0;
+				bool bottom = origin.second + partHeight >= kPoseScreenPixelsY;
+				if(!left && !right && !top && !bottom) {
+					return false;
+				}
+				//The whole's own cell origin here is the part's less the shift.
+				int32_t wholeX = ToCells(origin.first) - shiftX;
+				int32_t wholeY = ToCells(origin.second) - shiftY;
+				bool cut = false;
+				for(const PoseTile& member : rest) {
+					int32_t x = wholeX + member.Dx;
+					int32_t y = wholeY + member.Dy;
+					if((left && x < 0) || (right && x >= kPoseScreenCellsX)
+						|| (top && y < 0) || (bottom && y >= kPoseScreenCellsY)) {
+						cut = true;
+						break;
+					}
+				}
+				if(!cut) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		void LabelPoseFusions(std::vector<PoseEntry>& entries, const PoseOrigins& origins)
 		{
 			//Tile set -> rank. A kept pose's Tiles are normalised (the smallest
 			//Dx and the smallest Dy are both 0) and sorted, so the vector is
@@ -219,6 +293,14 @@ namespace MesenSheets
 							}
 						}
 						if(rest.size() < (size_t)kPoseMinTiles) {
+							continue;
+						}
+						//ADR-0228 (issue #504): a part that was only ever drawn
+						//with the rest of the figure past a screen edge never
+						//stood alone, so this split is the edge's doing and not
+						//two figures touching. Skip the candidate; another one
+						//may still carry the entry.
+						if(PartOnlyEverSeenClippedByTheScreenEdge(part, rest, shiftX, shiftY, origins)) {
 							continue;
 						}
 						int32_t restX = rest[0].Dx;
@@ -1131,10 +1213,15 @@ namespace MesenSheets
 		//pixels and rank. OAM order is not part of the key: the vector wins
 		//by frames, then that earliest frame supplies Z.
 		std::map<std::vector<PoseTile>, std::map<std::vector<int32_t>, std::pair<uint32_t, std::vector<PoseTile>>>> layouts;
+		//ADR-0228 (issue #504): the screen positions each silhouette was seen at,
+		//so that LabelPoseFusions can tell a figure standing alone from one the
+		//screen edge cut in half.
+		PoseOrigins origins;
 		for(const OamFrame& frame : frames) {
 			stats.Frames += frame.RepeatCount;
 			for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
 				seen[cluster.Tiles] += frame.RepeatCount;
+				origins[cluster.Tiles].insert(std::make_pair(cluster.X, cluster.Y));
 				std::vector<int32_t> pixels;
 				for(const PoseTile& tile : cluster.Tiles) {
 					pixels.push_back(tile.Px);
@@ -1184,7 +1271,7 @@ namespace MesenSheets
 		if(kept.size() > kMaxPoses) {
 			kept.resize(kMaxPoses);
 		}
-		LabelPoseFusions(kept);
+		LabelPoseFusions(kept, origins);
 		//ADR-0179: variants by containment (§4), then the tracks (§1-2) and
 		//what repetition finds on them (§3). All three read only the kept
 		//table and the stream; none changes a pose or its rank.

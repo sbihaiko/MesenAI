@@ -9,12 +9,21 @@
   change ships with the unit tests of §4, and both quotes also go in the PR
   body. Evidence:
   `docs/validation/issue-401-rest-grid-composites-2026-09-23.md`.
+  **Amended 2026-09-25 by issue #504:** §1's containment test gained the
+  screen-edge gate of §6, implemented the same day in
+  `Core/NES/HdPacks/SpriteGrouping.cpp` (`LabelPoseFusions`,
+  `PartOnlyEverSeenClippedByTheScreenEdge`) with the `BlocoP` cases §6 names. The
+  task's instruction, verbatim: *"A narrow refinement is fine: then also amend
+  ADR-0228 in place per .claude/skills/adr/SKILL.md (dated note on Status line +
+  the refined rule + evidence), without changing its Decision otherwise."* This
+  refines §1 rather than reversing it: a part the recorder saw clear of all four
+  screen edges even once still labels the entry.
 - Date: 2026-09-23
 - Related: ADR-0170 §1 (the pose sidecar and `kPoseMinTiles`), ADR-0173 (the
   label-don't-delete rule), ADR-0174 (`poses[]` on a `sprNNN` sidecar),
   ADR-0179 §4 (`variantOf`), ADR-0183 §2 (the Figures surface excludes
   fusions), ADR-0209 Q4 (the `unsorted` sheet), ADR-0225 (the `px`/`py` layout
-  the evidence was read from), issue #401
+  the evidence was read from), issue #401, issue #504 (§6, the screen-edge gate)
 - Supersedes / amends: amends ADR-0177 §1 (a fusion no longer requires the
   remainder to be a kept pose) and §3/§4 (`FusionOf` / `fusionOf` may carry one
   part instead of two). Leaves ADR-0179 §4 unchanged; this ADR takes the case
@@ -112,6 +121,61 @@ threshold beyond the existing `kPoseMinTiles`; anything at run time.
    fusion is kept out of every grid and that `dropped[]` names the one part
    and cites this ADR, not ADR-0177's "both halves are laid out".
 
+6. **A part the screen edge cut is not a part (issue #504).** §1's containment
+   test gains one gate. A candidate `A` that fits inside `B` at translation `t`
+   is skipped — in §1's one-part remainder and in §2's two-part split alike —
+   when `A` was never once drawn clear of the screen. Both have to hold at
+   *every* frame `A` appeared in:
+
+   - `A`'s own bounds reached or passed one of the four edges of the 256x240
+     screen; and
+   - at least one tile of `B \ translate(A, t)` would have sat past **that same**
+     edge.
+
+   The NES draws no entry a screen edge cut, so at such a frame the frame could
+   not have shown the rest of the figure: `A` alone is the edge's doing, not a
+   figure standing on its own. One appearance clear of all four edges, or one
+   where the other part would have been on screen and was not drawn, is real
+   evidence and keeps the label.
+
+   `poses.json` states a silhouette's tiles and never where it was drawn, so the
+   recorder carries the per-appearance positions in memory from the segmentation
+   it already runs (`BuildPoses` → `PoseOrigins`) and hands them to
+   `LabelPoseFusions`. **No field is added to the OAM dump or to the sidecar**,
+   which is what makes this a refinement of §1 and not a change of format.
+
+   Measured on the SMB3 World 1-1 route (`scripts/stages/smb3`, 2185 retained
+   frames): fusions go from **13 of 37 to 2 of 37**, and `pose004` — the Piranha
+   Plant, 475 frames, the file's most-seen pose — is laid out as a figure instead
+   of being listed as touched by another. All 13 labels ran through `pose017`, the
+   plant's half, 17 frames, every one of them at x=248..255 with the plant's other
+   half starting at x=256. The two that stay are `pose013` and `pose024`, whose
+   parts (`pose026`, `pose015`) are seen clear of every edge. Castlevania's
+   stage-1 route (`scripts/stages/castlevania`, 3554 retained frames) is unchanged
+   at 99 of 211, so the gate cost no measured pack a label.
+
+   Every one of those 13 parts also carries the pipe-mask nodes 0/1 (issue #505),
+   which no decision excludes from the cluster yet. The gate reads the part's
+   screen positions and the split's geometry, so the mask does not move it: were
+   #505 to drop nodes 0/1 from the cluster, `pose017` would be the plant's column
+   alone at the same x, and the same gate would fire.
+
+   Tests (`scripts/core_unit_tests.cpp`, `BlocoP`). `TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenEdgeIsNotAFusion`
+   is the issue's case: the two-column figure of §5 with its left column alone at
+   x=200 keeps its one-part fusion, and with that column alone only at x=248 —
+   where its other half would start at 256 — the figure is not labelled at all.
+   `TestAPoseWhosePartIsOnlyEverSeenClippedByAScreenEdgeIsNotAFusion` runs the
+   same fixture against each of the four edges (the other half past the right
+   edge at x=248, past the left at x=0, above at y=0, below at y=208).
+   `TestAPoseWhoseClippedPartIsAlsoSeenClearOfTheEdgesStaysAFusion` pins the other
+   direction: the same five appearances with two of them clear of every edge keep
+   the label, naming the block. `TestATwoPartSplitWhoseHalvesAreBothEdgeClippedIsNotAFusion`
+   is §2's branch, with both halves kept poses and both seen only at an edge.
+   Disabling the gate turns all four edge cases, the clipped-only half of the
+   third test and the two-part test red (7 cases, `runs/504-mutation2.txt`); the
+   "one appearance clear of the edges" case is a positive control and cannot move
+   under a gate that only withholds labels.
+
 ## Consequences
 
 - On the Contra stage-1 re-record, fusions go from 2 to 6 (`pose018`,
@@ -143,7 +207,18 @@ threshold beyond the existing `kPoseMinTiles`; anything at run time.
   one suggestion, and the entry stays reachable by id. A figure mislabelled
   as two costs less than two figures offered as one.
 - The pass stays inside ADR-0177's cost bound: the same candidate index and
-  the same containment test, with one extra rank remembered per entry.
+  the same containment test, with one extra rank remembered per entry. §6 adds
+  one set of positions per silhouette, bounded by the frames it appeared in, and
+  one edge test per candidate placement — no new asymptotic term.
 - A pack recorded before this ADR keeps its old labels until it is
   re-recorded; nothing breaks. `fusionOf` was always a list with no length a
-  reader could rely on.
+  reader could rely on. §6's gate is in the recorder too, so it is the same
+  re-record.
+- **§6 buys one figure back at the price of a real fusion it can no longer see
+  (issue #504).** An actor that only ever stopped flush against a screen edge,
+  with another actor just past it, is indistinguishable in this file from one
+  figure the edge cut — and the label is now withheld. The trade is the mirror of
+  the one above, and it was the one the artist paid: the kit had excluded the
+  plant's most-seen pose. Measured, it costs nothing on Castlevania's stage-1
+  recording (99 of 211 fusions before and after), and `poses.json`'s schema does
+  not move, so a reader of §3 above is unaffected.
