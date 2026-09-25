@@ -2,9 +2,20 @@
 
 - Status: accepted (2026-09-25) — option A alone; B and C are re-opened only
   on A's measured numbers. Owner's pick, verbatim: *"A sozinha, mede, depois
-  decide B (Recommended)"*. Not implemented yet; pending slice (see
-  "Decision"). The env-gated measurement switches used to take the numbers
-  below were reverted and are not part of this change (see "Reproducing").
+  decide B (Recommended)"*; build go-ahead, verbatim: *"pode implementar a
+  opção A com o DeepSeek"*. **Option A was implemented and measured, and is
+  not shipped** ([validation record](../validation/adr0233-option-a-2026-09-25.md);
+  code kept on branch `feat/adr0233-fine-scroll-rivals`). It does not close
+  #499 — the 31 s frame is byte-identical — and it regresses F-1 Race (stale
+  frames 3 → 205, a same-`FineX` greedy path change, not a remap bug), for a
+  library draw rate of 0.6380 → 0.6397. The cause A cannot reach: after A,
+  `screen001`'s gate matches **no retained frame** at another fine scroll; the
+  frames it wrongly fires on were never retained (950 of 3 607), so every
+  option that reasons over retained frames (A, B, C) is blind to them. Owner's
+  decision on those numbers, verbatim: *"Não mergear A; medir retenção
+  (Recommended)"* — next, measure whether retaining more frames closes #499,
+  with option D as the fallback. The env-gated measurement switches are not
+  part of any change (see "Reproducing").
 - Date: 2026-09-25
 - Related: issue #499 (Ninja Gaiden HUD frozen by a captured
   `<background>`), issue #339 (Punch-Out!! card, the same lineage, a different cause),
