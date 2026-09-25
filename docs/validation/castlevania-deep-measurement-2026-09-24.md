@@ -57,8 +57,11 @@ The routes are new, in `scripts/stages/castlevania/` with a `stage-set.json`.
   0255 instead of 0300 and a different screen showing. Run through the job on 2026-09-24, the
   set records the whole 3 576-frame route from there (3 586 retained frames,
   487 silhouettes, 90.6 % seen), but that is not the recording measured below.
-  Ending a mint where its script ends is a tooling fix, not a change to this
-  set.
+  Ending a mint where its script ends is a tooling fix (#465), not a change to
+  this set. Until #465 is fixed, mint this set by hand with the 6 s command
+  above, saving to `<work>/stage1-run.mss` in a copy of the set, then record
+  with `scripts/record_stages.sh <rom> <work> <out> 60`. The header of
+  `mint-stage1.txt` says the same.
 - `stage1-run.txt`: 12 repeats of a 298-frame block, `60f R` / `2f B` /
   `24f -` / `60f R` / `2f DB` / `24f D` / `60f R` / `10f RA` / `30f R` /
   `2f B` / `24f -`. That is walk, whip, walk, crouch-whip, walk, jump, whip.

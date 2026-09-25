@@ -1,3 +1,9 @@
+# Castlevania: power-on to the player-controlled start of stage 1 (frame 361, 6 s).
+# Mint this state BY HAND until #465 is fixed: record_library.sh runs a mint for
+# the whole batch budget (60 s) and saves at that frame target, so its state
+# lands at frame 3607, not here. Manual procedure (copy the set to <work> first):
+#   scripts/headless_record <rom> 6 <mint>/mint input=mint-stage1.txt save-state=<work>/stage1-run.mss
+#   scripts/record_stages.sh <rom> <work> <out> 60
 120f -
 20f T
 180f -
