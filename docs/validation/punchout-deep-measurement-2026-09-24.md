@@ -56,6 +56,17 @@ scripts/headless_record <work>/PunchOut.nes 34 <work>/mint/mint screenshot \
 
 That stops at frame 2044, at the bell, in 4.0 s of wall time.
 
+The duration `34` matters. `scripts/record_library.sh` does not run this
+command: it runs every mint for the batch's `<seconds>` (60 s by default), and
+`save-state=` is written at the run's frame target. Run that way (checked with
+the job itself on 2026-09-24), `fight1.mss` is saved at frame 3 607, about 26 s
+into the round, and the job's 60 s `fight1` recording reaches the count-out and
+keeps only 355 frames. Padding the mint so the bell lands on frame 3 607 does
+not fix it: the RNG state differs (35 RAM bytes at the bell), and a 70 s
+recording from the padded state misses 255 of the 1 655 drawn keys measured
+here. The job needs to end a mint where its script ends; that is a tooling
+issue, not a property of this set. Until then, mint this set by hand as above.
+
 `fight1.txt` (5580 f) is a blind combination loop: jabs and body blows to both
 sides, dodges and a duck. Because it never reacts to Glass Joe's tells, it
 loses:
@@ -120,18 +131,26 @@ Each missing key was classified by comparing it with its shape's cell:
 Run through `compute_folds`, 315 of the 652 missing keys fold and 337 stay
 their own colourway.
 
-The split by side makes the point clearly:
+The split by side, first as fold *candidates* (the pairwise class above:
+inert, fade or brighter) and then as the folds `compute_folds` actually
+accepts. The accepted columns add up to the headline 315 / 337; the 9 no-cell
+keys count as their own colourway there.
 
-| Side | fold | colourway (incl. refused) | no cell |
-|---|---|---|---|
-| BG | 475 | 69 | 3 |
-| Sprite | 24 | 75 | 6 |
+| Side | missing keys | fold candidates | colourway (incl. refused) | no cell | **accepted folds** | **own colourway** (incl. no cell) |
+|---|---|---|---|---|---|---|
+| BG | 547 | 475 | 69 | 3 | **304** | **243** |
+| Sprite | 105 | 24 | 75 | 6 | **11** | **94** |
+| Total | 652 | 499 | 144 | 9 | **315** | **337** |
 
-- **On the BG side the gap is almost all fade.** That fits the fight's palette
-  fades and Little Mac's tired recolour of the same tiles.
-- **On the sprite side it is mostly true colourways.** That fits Glass Joe's
-  palette changes, for example when he is hit. The keys were not attributed to
-  individual events one by one.
+Of the 499 candidates, `compute_folds` accepts 315 and keeps 184 as their own
+colourway (171 BG, 13 sprite). No key outside the candidates folds.
+
+- **On the BG side the gap is mostly fade.** 475 of 547 missing keys are fade
+  candidates and 304 of them fold. That fits the fight's palette fades and
+  Little Mac's tired recolour of the same tiles.
+- **On the sprite side it is mostly true colourways.** Only 11 of 105 missing
+  keys fold. That fits Glass Joe's palette changes, for example when he is
+  hit. The keys were not attributed to individual events one by one.
 
 The fold statistics were inert 54, fade 279, kept 1262 and refused 52.
 

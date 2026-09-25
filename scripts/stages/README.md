@@ -53,7 +53,9 @@ against, or the unattended job cannot use it:
   `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
   authored on, and each was run once through the library job. `punchout/`
   (2026-09-24) is pinned to the library dump it was authored and recorded on
-  by hand (below); it has not been through the library job.
+  by hand (below); run through the library job once (2026-09-24), it does not
+  reproduce that recording, because the job mints its state at the wrong
+  frame (below).
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
@@ -381,6 +383,17 @@ it loses: Little Mac is knocked down around 60 s from the state and counted
 out around 70 s. Record at most 70 s from `fight1.mss`; past that the run
 records the "you lost" screen. Two 70 s passes gave a byte-identical
 `hires.txt` and `auto/` (docs/validation/punchout-deep-measurement-2026-09-24.md).
+
+**Not yet through the library job.** `record_library.sh` runs every mint for
+the batch's `<seconds>` (60 s by default), and `headless_record` writes
+`save-state=` at the run's frame target, not where the script ends. So the job
+saves `fight1.mss` at frame 3 607, about 26 s into the round (clock 1:15), and
+its 60 s `fight1` run reaches the count-out and keeps 355 frames, most of them
+the loss (measured 2026-09-24). Mint by hand with `34` as above until the job
+can end a mint where its script ends. Padding the mint so the bell lands on
+frame 3 607 was tried and does not help: the fight it starts is not the
+measured one (35 RAM bytes differ at the bell; 255 of the measured 1 655 drawn
+keys are missing from a 70 s recording made from it).
 
 Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
 background tiles**, so the kit's figures cover the opponent and Mac shows up
