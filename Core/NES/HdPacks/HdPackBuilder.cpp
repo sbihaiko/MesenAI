@@ -5,6 +5,8 @@
 #include <set>
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdNesPack.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
+#include "NES/HdPacks/ChrPageSlots.h"
 #include "NES/BaseMapper.h"
 #include "NES/BaseNesPpu.h"
 #include "NES/NesConstants.h"
@@ -129,6 +131,8 @@ HdPackBuilder::HdPackBuilder(Emulator* emu, PpuModel ppuModel, bool isChrRam, Hd
 			}
 			//Mark the tiles in the first PNGs as higher usage (preserves order when adding new tiles to an existing set)
 			AddTile(tile, 0xFFFFFFFF - tile->BitmapIndex);
+			_preFixPack |= MesenSheets::IsPreFixChrRamTile(tile->IsChrRamTile, tile->ChrBankId, tile->TileData);
+			_bank0TilesLoaded += (tile->IsChrRamTile && tile->ChrBankId == 0) ? 1 : 0;
 
 			//F5.4b follow-up (b) (ADR-0132): seed the per-shape palette-variant map
 			//from the on-disk pack, so the cap is a per-shape total across sessions.
@@ -491,25 +495,11 @@ void HdPackBuilder::AddTile(HdPackTileInfo* tile, uint32_t usageCount)
 			_blankTilePalette++;
 		}
 	} else {
-		if(tile->TileIndex >= 0) {
-			paletteMap[palette][tile->TileIndex % 256] = tile;
-		} else {
-			//FIXME: This will result in data loss if more than 256 tiles of the same palette exist in the hires.txt file
-			//Currently this way to prevent issues when loading a CHR RAM HD pack into the recorder (because TileIndex is -1 in that case)
-			bool placed = false;
-			for(int i = 0; i < 256; i++) {
-				if(paletteMap[palette][i] == nullptr) {
-					paletteMap[palette][i] = tile;
-					placed = true;
-					break;
-				}
-			}
-			if(!placed) {
-				//The tile keeps its hires.txt entry but is drawn on no sheet.
-				//Counted so SaveHdPack can refuse to sweep the old fragments a
-				//re-record would otherwise orphan (ADR-0160 §3 guard).
-				_droppedTiles++;
-			}
+		if(!MesenSheets::PlaceTileOnChrPage(paletteMap, palette, tile->TileIndex, tile, _options.ChrRamBankSize / 16)) {
+			//The tile keeps its hires.txt entry but is drawn on no sheet.
+			//Counted so SaveHdPack can refuse to sweep the old fragments a
+			//re-record would otherwise orphan (ADR-0160 §3 guard).
+			_droppedTiles++;
 		}
 	}
 
@@ -589,6 +579,14 @@ void HdPackBuilder::ProcessTile(uint32_t x, uint32_t y, uint16_t tileAddr, HdPpu
 	HdTileKey exactKey = tile.GetKey(false);
 	auto result = _tileUsageCount.find(exactKey);
 	if(result != _tileUsageCount.end()) {
+		auto owner = _tilesByKey.find(exactKey);
+		//ADR-0232: a tile a pre-fix recorder filed under bank 0, drawn again, moves to the bank it is drawn from.
+		if(owner != _tilesByKey.end() && MesenSheets::RehomesOnRedraw(_preFixPack, owner->second->IsChrRamTile, owner->second->ChrBankId, chrBankHash) && MesenSheets::RemoveTileFromChrPages(_tilesByChrBankByPalette[0], owner->second)) {
+			owner->second->ChrBankId = chrBankHash;
+			owner->second->TileIndex = tile.TileIndex;
+			AddTile(owner->second, result->second);
+			_preFixTilesRehomed++;
+		}
 		UpdateTileUsage(exactKey, result, transparencyRequired);
 	} else {
 		CaptureOrCapPaletteVariant(x, y, tileAddr, tile, chrBankHash, transparencyRequired);
@@ -870,7 +868,7 @@ void HdPackBuilder::EnableScreenCapture()
 	_screensSeen.clear();
 }
 
-void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2])
+void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2], const uint8_t* internalRam, uint32_t internalRamSize)
 {
 	if(!_captureScreens) {
 		return;
@@ -884,7 +882,7 @@ void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2])
 
 	//F9.1 (ADR-0153): keep this frame's background grid for the sheet inference
 	//that runs once at save time.
-	RecordGridFrame();
+	RecordGridFrame(internalRam, internalRamSize);
 
 	//F9.5: close the OAM snapshot HdBuilderPpu filled in during this frame.
 	RecordOamFrame();
@@ -956,14 +954,11 @@ MesenSheets::PaletteId HdPackBuilder::PaletteIdFor(uint32_t paletteColors)
 }
 
 //F9.1 (ADR-0153 §5): turn this frame's background runs into a compact
-//GridFrame. Ported from the spike's frame_grid (scripts/spike_tile_sheets.py):
-//run starts sit on tile boundaries, so the most common (x % 8) among non-zero
-//run starts is the frame's fine x scroll, and cells are laid out relative to
-//it - two frames of the same screen at different sub-tile offsets then compare
-//equal. Consecutive duplicates collapse into RepeatCount and the stream is
+//GridFrame (the layout is MesenSheets::LayOutGridRuns, host-free and unit
+//tested). Consecutive duplicates collapse into RepeatCount and the stream is
 //capped at kMaxSheetFrames, so a long session costs late-game vocabulary,
 //never correctness.
-void HdPackBuilder::RecordGridFrame()
+void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize)
 {
 	//Set again below once this frame really is _gridFrames.back(); a dropped
 	//frame (empty runs, or the retention cap) must never let CaptureScreen
@@ -973,50 +968,8 @@ void HdPackBuilder::RecordGridFrame()
 		return;
 	}
 
-	uint32_t fineCounts[8] = {};
-	for(const ScreenRun& run : _frameRuns) {
-		if(run.X != 0) {
-			fineCounts[run.X & 7]++;
-		}
-	}
-	uint8_t fine = 0;
-	for(uint8_t i = 1; i < 8; i++) {
-		if(fineCounts[i] > fineCounts[fine]) {
-			fine = i;
-		}
-	}
-
 	MesenSheets::GridFrame frame;
-	frame.FineX = fine;
-	for(size_t i = 0; i < _frameRuns.size(); i++) {
-		const ScreenRun& run = _frameRuns[i];
-		if((run.Y & 7) != 0) {
-			continue;
-		}
-		uint32_t row = (uint32_t)run.Y >> 3;
-		if(row >= MesenSheets::kGridRows) {
-			continue;
-		}
-		//The run ends where the next run on the same scanline starts
-		uint32_t xEnd = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;
-		int32_t offset = ((int32_t)run.X - (int32_t)fine) % 8;
-		if(offset < 0) {
-			offset += 8;
-		}
-		uint32_t cx = offset == 0 ? run.X : run.X + (8 - offset);
-		MesenSheets::ShapeId shape = ShapeIdFor(run.Tile);
-		if(shape == MesenSheets::kEmptyCell) {
-			continue;
-		}
-		MesenSheets::PaletteId palette = PaletteIdFor(run.Tile.PaletteColors);
-		for(; cx + 8 <= 256 && cx < xEnd; cx += 8) {
-			int32_t col = ((int32_t)cx - (int32_t)fine) / 8;
-			if(col >= 0 && col < (int32_t)MesenSheets::kGridCols) {
-				frame.Cells[row][col] = shape;
-				frame.Palettes[row][col] = palette;
-			}
-		}
-	}
+	MesenSheets::LayOutGridRuns(_frameRuns, frame, [this](const HdPpuTileInfo& t) { return ShapeIdFor(t); }, [this](uint32_t c) { return PaletteIdFor(c); });
 
 	//De-duplicate on drawing *and* colours (ADR-0159 amendment): a frame that
 	//only recolours the screen is the evidence the anchor rule is missing, so
@@ -1028,6 +981,15 @@ void HdPackBuilder::RecordGridFrame()
 	}
 	frame.FrameNumber = (uint32_t)_gridFrames.size();
 	_gridFrames.push_back(frame);
+	//F12.6b (ADR-0197 §3): the RAM plane grows with the frame it belongs to, so
+	//the two stay parallel whatever the caller hands over - a console with no
+	//internal RAM leaves zeroes rather than a shorter plane, which would
+	//silently re-index every frame after it.
+	_gridRam.resize((size_t)_gridFrames.size() * MesenSheets::kRetainedRamSize, 0);
+	if(internalRam) {
+		uint32_t n = std::min(internalRamSize, MesenSheets::kRetainedRamSize);
+		memcpy(_gridRam.data() + (_gridFrames.size() - 1) * MesenSheets::kRetainedRamSize, internalRam, n);
+	}
 	//ADR-0166: keep the screen-stem plane parallel; a stem is filled in only
 	//when OnFrameEnd's capture of this frame actually succeeds.
 	_screenStems.push_back("");
@@ -1052,6 +1014,7 @@ void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
 	entry.Shape = shape;
 	entry.X = x;
 	entry.Y = y;
+	entry.Palette = PaletteIdFor(tile.PaletteColors); //ADR-0222: same table as the grid's
 	_frameOam.Entries.push_back(entry);
 }
 
@@ -1080,7 +1043,7 @@ void HdPackBuilder::RecordOamFrame()
 //first exact variant seen becomes the shape's drawable art.
 MesenSheets::ShapeId HdPackBuilder::ShapeIdFor(const HdPpuTileInfo& tile)
 {
-	HdTileKey shapeKey = tile.GetKey(true);
+	HdShapeKey shapeKey(tile.GetKey(true));
 	auto it = _shapeIds.find(shapeKey);
 	if(it != _shapeIds.end()) {
 		return it->second;
@@ -1109,6 +1072,18 @@ MesenSheets::ShapeId HdPackBuilder::ShapeIdFor(const HdPpuTileInfo& tile)
 	return id;
 }
 
+//Palette id -> word, the inverse of _paletteIds; "P" lines of both dumps (ADR-0222).
+std::vector<uint32_t> HdPackBuilder::PaletteColorTable() const
+{
+	std::vector<uint32_t> paletteColors(MesenSheets::kUnknownPalette, 0);
+	for(const auto& entry : _paletteIds) {
+		if(entry.second < paletteColors.size()) {
+			paletteColors[entry.second] = entry.first;
+		}
+	}
+	return paletteColors;
+}
+
 //ADR-0153 §7: the recorded grid stream in the text format
 //scripts/spike_tile_sheets.py parses, written once at save time so threshold
 //tuning can iterate offline without rebuilding the core.
@@ -1127,16 +1102,24 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 	//carries (ADR-0159 amendment). It is written here, as a fourth field on the
 	//cell line plus a "P" line interning each palette word on first sight; a
 	//reader that predates this still parses the first three fields.
-	std::vector<uint32_t> paletteColors(MesenSheets::kUnknownPalette, 0);
-	for(const auto& entry : _paletteIds) {
-		if(entry.second < paletteColors.size()) {
-			paletteColors[entry.second] = entry.first;
-		}
-	}
+	std::vector<uint32_t> paletteColors = PaletteColorTable();
 	std::vector<bool> paletteEmitted(paletteColors.size(), false);
+	size_t frameIndex = 0;
 	for(const MesenSheets::GridFrame& frame : _gridFrames) {
+		//F12.6b (ADR-0197 §3): the RAM window of this retained frame, written
+		//once and not once per repeat. The repeats below re-emit the cell body
+		//so a reader that counts played frames can, but the memory of a frame
+		//that held still is the memory of the frame it collapsed into, and
+		//4 KB of hex per *played* frame would be six times the file for no
+		//further evidence. A reader collapses repeats on the "F" line, so the
+		//line belongs to the first one.
+		size_t ramAt = frameIndex * MesenSheets::kRetainedRamSize;
+		frameIndex++;
 		for(uint32_t repeat = 0; repeat < frame.RepeatCount; repeat++) {
 			dump << "F " << frame.FrameNumber << '\n';
+			if(repeat == 0 && ramAt + MesenSheets::kRetainedRamSize <= _gridRam.size()) {
+				dump << "M " << MesenSheets::RamDumpLine(_gridRam.data() + ramAt, MesenSheets::kRetainedRamSize) << '\n';
+			}
 			for(uint32_t row = 0; row < MesenSheets::kGridRows; row++) {
 				for(uint32_t col = 0; col < MesenSheets::kGridCols; col++) {
 					MesenSheets::ShapeId id = frame.Cells[row][col];
@@ -1173,20 +1156,41 @@ void HdPackBuilder::WriteSheetFiles(const string& folder, const string& baseName
 	}
 	doc.SheetFile = baseName + ".png";
 	doc.ReferenceFile = _writeReferences ? baseName + ".orig.png" : "";
+	MesenSheets::QueueSheet(_pendingSheets, folder, baseName, image, doc, [&](const string& f, const string& b, const MesenSheets::SheetImage& i, const MesenSheets::SheetJsonDoc& d, const MesenSheets::ShapeFolds* folds) { WriteSheetOutputs(f, b, i, d, lookup, folds); });
 
-	//The .png ships at the pack scale (the canvas the artist paints on); the
-	//F5.4d .orig.png twin stays 1:1, and the sidecar JSON keeps 1x logical
-	//coordinates so mep_build.py can slice either one.
+	//ADR-0209 Q4(k): this is the one funnel every sheet passes through, so it
+	//is where "the artist has a surface for this shape" becomes true. The
+	//remainder sheet reads the complement at the end of BuildSheets.
+	for(const MesenSheets::SheetCell& cell : doc.Cells) {
+		for(MesenSheets::ShapeId shape : cell.Key.Tiles) {
+			if(shape != MesenSheets::kEmptyCell) {
+				_claimedShapes.insert(shape);
+			}
+		}
+	}
+}
+
+//Pack-scale .png (the artist's canvas), 1:1 .orig.png twin, 1x sidecar.
+void HdPackBuilder::WriteSheetOutputs(const string& folder, const string& baseName, const MesenSheets::SheetImage& image, const MesenSheets::SheetJsonDoc& doc, const MesenSheets::TileLookup& lookup, const MesenSheets::ShapeFolds* folds)
+{
 	MesenSheets::SheetImage scaled = MesenSheets::Upscale(image, _hdData.Scale);
 	PNGHelper::WritePNG(FolderUtilities::CombinePath(folder, doc.SheetFile), scaled.Pixels.data(), scaled.Width, scaled.Height, 32);
-	if(_writeReferences) {
-		//WritePNG only reads the buffer (it converts into its own byte array);
-		//the const_cast saves a full-canvas copy of the 1x reference.
+	if(_writeReferences) { //WritePNG only reads the buffer; the cast saves a 1x canvas copy
 		PNGHelper::WritePNG(FolderUtilities::CombinePath(folder, doc.ReferenceFile), const_cast<uint32_t*>(image.Pixels.data()), image.Width, image.Height, 32);
 	}
+	ofstream(FolderUtilities::CombinePath(folder, baseName + ".json"), ios::out) << MesenSheets::SerializeSheet(doc, lookup, folds);
+}
 
-	ofstream json(FolderUtilities::CombinePath(folder, baseName + ".json"), ios::out);
-	json << MesenSheets::SerializeSheet(doc, lookup);
+//ADR-0230 (F14.9): an exact fold on the cell's sidecar entry, else a variant
+//cell beside it; laid out, written and freed a sheet at a time (SheetColourways.h).
+void HdPackBuilder::FlushSheetFiles()
+{
+	auto keyOf = [this](MesenSheets::ShapeId s) { return ShapeLookupKey(s); };
+	vector<vector<uint32_t>> drawn = MesenSheets::WrittenPalettesByShape(_shapeTiles.size(), _tilesByChrBankByPalette, _paletteVariantsByShape, keyOf);
+	MesenSheets::PaletteCellPlan plan = MesenSheets::PlanPaletteCells(_pendingSheets, _shapeTiles, drawn, _palette);
+	MesenSheets::TileLookup lookup = [this, &plan](MesenSheets::ShapeId id) { return id < _shapeTiles.size() ? &_shapeTiles[id] : plan.Variant(id); };
+	MesenSheets::FlushPendingSheets(_pendingSheets, plan, lookup, _palette, [&](const string& f, const string& b, const MesenSheets::SheetImage& i, const MesenSheets::SheetJsonDoc& d, const MesenSheets::ShapeFolds* folds) { WriteSheetOutputs(f, b, i, d, lookup, folds); });
+	MessageManager::Log("[HD Pack Builder] palette variants (ADR-0230): " + std::to_string(plan.Cells.size()) + " variant cells (" + std::to_string(plan.ColourwayKeys) + " colourway keys, " + std::to_string(plan.ResidualFoldKeys) + " residual folds), " + std::to_string(plan.ExactFoldKeys) + " exact folds, " + std::to_string(plan.UnplacedKeys) + " unplaced");
 }
 
 //F9.1-F9.3 (ADR-0153): the whole sheet inference, once, at save time.
@@ -1196,6 +1200,7 @@ void HdPackBuilder::BuildSheets()
 		return;
 	}
 	_sheetsBuilt = true;
+	_claimedShapes.clear();
 
 	#ifdef _MSC_VER
 	#pragma warning(push)
@@ -1242,6 +1247,14 @@ void HdPackBuilder::BuildSheets()
 	//same vocabulary - the per-frame silhouettes adjacency.json's pairwise
 	//totals throw away.
 	WritePoseFile(folder, spriteVocab);
+	//ADR-0209 Q4(k) (F12.8): last, because it is the complement of every sheet
+	//above - a shape reaches unsorted.png only when nothing better claimed it.
+	MesenSheets::SheetImage unsortedImage;
+	MesenSheets::SheetJsonDoc unsortedDoc;
+	if(MesenSheets::BuildUnsortedSheet(_shapeTiles.size(), _claimedShapes, lookup, _palette, unsortedImage, unsortedDoc)) {
+		WriteSheetFiles(folder, "unsorted", unsortedImage, unsortedDoc, lookup);
+	}
+	FlushSheetFiles();
 
 	MessageManager::Log("[HD Pack Builder] sheets: grid unit " + std::to_string(vocab.Grid.Unit) +
 		" (phase " + std::to_string(vocab.Grid.PhaseX) + "," + std::to_string(vocab.Grid.PhaseY) +
@@ -1465,9 +1478,9 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	//serialises this same table rather than rebuilding it.
 	_poseStats = MesenSheets::BuildPoses(_oamFrames, vocab);
 
-	//Debug aid, sibling of MESEN_SHEET_GRID_DUMP: the retained OAM stream in
-	//vocabulary indexes, one line per frame, so a spike can measure pose
-	//succession off the same data BuildPoses reads. Not a pack file.
+	//Debug aid, sibling of MESEN_SHEET_GRID_DUMP: the retained OAM stream, self-
+	//describing since ADR-0222 (format: MesenSheets::WriteOamStreamDump) so that
+	//`mep_conditions.py` resolves a sprite to tile data and palette. Not a pack file.
 	#ifdef _MSC_VER
 	#pragma warning(push)
 	#pragma warning(disable : 4996)
@@ -1479,16 +1492,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	if(oamDumpPath && *oamDumpPath) {
 		ofstream dump(oamDumpPath, ios::out);
 		if(dump) {
-			for(const MesenSheets::OamFrame& frame : _oamFrames) {
-				//ADR-0181: the two port bytes follow the repeat count.
-				dump << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
-				for(const MesenSheets::OamEntry& entry : frame.Entries) {
-					MesenSheets::MetatileKey key;
-					key.Tiles[0] = entry.Shape;
-					dump << ' ' << vocab.Find(key) << ',' << (int)entry.X << ',' << (int)entry.Y;
-				}
-				dump << '\n';
-			}
+			MesenSheets::WriteOamStreamDump(dump, _oamFrames, _shapeTiles, PaletteColorTable());
 		}
 	}
 
@@ -1610,7 +1614,7 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 		return;
 	}
 	uint32_t unit = vocab.Grid.Unit ? vocab.Grid.Unit : 8;
-
+	vector<uint32_t> oamPalettes = MesenSheets::SpriteNearbyPalettes(_oamFrames, _shapeTiles.size(), PaletteColorTable()); //issue #415
 	uint32_t index = 0;
 	for(const MesenSheets::SpriteNearbyPlan& plan : plans) {
 		if(plan.Node >= vocab.Entries.size() || plan.Target >= vocab.Entries.size()) {
@@ -1619,7 +1623,7 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 		//A sprite vocabulary entry is one shape at grid unit 8 (BuildSpriteVocabulary).
 		MesenSheets::ShapeId nodeShape = vocab.Entries[plan.Node].Key.Tiles[0];
 		MesenSheets::ShapeId targetShape = vocab.Entries[plan.Target].Key.Tiles[0];
-		if(nodeShape >= _shapeTiles.size() || targetShape >= _shapeTiles.size()) {
+		if(nodeShape >= _shapeTiles.size() || targetShape >= _shapeTiles.size() || !oamPalettes[targetShape]) {
 			continue;
 		}
 
@@ -1646,12 +1650,12 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 
 		HdPackSpriteNearbyCondition* cond = new HdPackSpriteNearbyCondition();
 		cond->Name = baseName + "_n" + std::to_string(index++);
-		//ignorePalette: the evidence is palette-wildcarded (a shape id is
-		//GetKey(true)), so the condition has to be as well, or a figure would
-		//stop matching itself the moment the game recoloured it. Requires HD
-		//Pack version 108+; the builder writes CurrentVersion.
+		//ignorePalette (HD Pack 108+): the evidence is palette-wildcarded (GetKey(true)),
+		//or a figure would stop matching itself once recoloured. The palette field still
+		//states an observation (issue #415): the anchor's commonest OAM palette, never its
+		//first-seen art's, which may be a background one; no OAM palette, no condition.
 		cond->Initialize((int32_t)(plan.Dx * (int32_t)unit), (int32_t)(plan.Dy * (int32_t)unit),
-			target.PaletteColors, tileIndex, tileData, true);
+			oamPalettes[targetShape], tileIndex, tileData, true);
 		_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
 		_spriteNearbyConditions++;
 
@@ -1806,20 +1810,15 @@ void HdPackBuilder::CaptureScreen()
 	//is what the bug is: a screen is captured the first time it holds still, so
 	//at this point every later variant of it - the next score digit, the other
 	//half of a blink - is still in the future.
-	auto isFlat = [](HdTileKey& k) {
-		for(int i = 1; i < 16; i++) {
-			if(k.TileData[i] != k.TileData[0]) {
-				return false;
-			}
-		}
-		return true;
-	};
 	vector<ScreenRun*> ranked;
 	for(ScreenRun& run : _frameRuns) {
 		//A candidate has to land on a whole grid cell: RecordGridFrame only keeps
 		//runs that start on a tile boundary and on a tile-aligned scanline, and a
 		//candidate the grid does not hold is one whose stability cannot be read.
-		if(isFlat(run.Tile) || (run.Y & 7) != 0 || run.X + 8 > 256) {
+		//"Flat" is MesenSheets::IsFlatTileData (Codex review, PR #379), the same
+		//predicate FlatShapePlane/AppendFlatAnchorCells use, not "all 16 bytes
+		//identical": a 0x55-striped tile is detail; solid colour-1/2 is a probe.
+		if(MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0 || run.X + 8 > 256) {
 			continue;
 		}
 		ranked.push_back(&run);
@@ -1858,12 +1857,18 @@ void HdPackBuilder::CaptureScreen()
 		pending.Candidates.push_back(*run);
 	}
 	if(pending.Candidates.empty()) {
-		//No tile on this frame can carry a condition, so there is nothing to gate
-		//a <background> on. Same outcome as before: the PNG stays, the line does
-		//not, and OnFrameEnd will not flag the grid frame as captured.
+		//No non-flat tile on this frame can carry a condition, so there is nothing
+		//to gate a <background> on. Stays even after ADR-0223 option A: a gate
+		//made only of emptiness probes would fire on every blank screen, worse
+		//than not drawing. ADR-0050 requires at least one non-flat anchor, not
+		//relaxed here (Codex review, PR #379) - probes only *add* to a non-flat
+		//set, never replace one. Same outcome otherwise: the PNG stays, the line
+		//does not, and OnFrameEnd will not flag the grid frame as captured.
 		return;
 	}
 
+	//ADR-0223 option A (F12.16): flat runs, excluded from `ranked` above, as a second candidate pool (AppendFlatAnchorCells, HdPackBuilder.h).
+	AppendFlatAnchorCells(pending, fineX);
 	unique_ptr<HdPackBitmapInfo> bitmap(new HdPackBitmapInfo());
 	bitmap->PngName = relPath;
 	pending.BitmapIndex = _hdData.BackgroundFileData.size();
@@ -1883,18 +1888,131 @@ void HdPackBuilder::CaptureScreen()
 //capture time, so the pick happens here instead: once, at save time, over the
 //whole stream. See TileSheetTypes.h for the measurement and for why "prefer
 //stable cells" on its own is the wrong lever.
+//
+//ADR-0217/ADR-0218: post-hoc collision detector for whatever the write-time
+//checks below cannot rule out (a screen past the retention cap, with no grid
+//evidence to key on). Downcasts because by this point all that survives is
+//the serialized HdPackCondition - a background built some other way (a
+//loaded pack's own conditions) returns empty and is never treated as a
+//collision.
+namespace
+{
+	struct ConditionKey
+	{
+		int32_t X = 0;
+		int32_t Y = 0;
+		int32_t TileIndex = 0;
+		uint32_t PaletteColors = 0;
+		uint8_t TileData[16] = {};
+
+		bool operator==(const ConditionKey& o) const
+		{
+			return X == o.X && Y == o.Y && TileIndex == o.TileIndex && PaletteColors == o.PaletteColors &&
+				memcmp(TileData, o.TileData, sizeof(TileData)) == 0;
+		}
+		bool operator<(const ConditionKey& o) const
+		{
+			if(X != o.X) return X < o.X;
+			if(Y != o.Y) return Y < o.Y;
+			if(TileIndex != o.TileIndex) return TileIndex < o.TileIndex;
+			if(PaletteColors != o.PaletteColors) return PaletteColors < o.PaletteColors;
+			return memcmp(TileData, o.TileData, sizeof(TileData)) < 0;
+		}
+	};
+
+	vector<ConditionKey> ConditionKeysOf(const HdBackgroundInfo& bg)
+	{
+		vector<ConditionKey> keys;
+		for(HdPackCondition* cond : bg.Conditions) {
+			HdPackBaseTileCondition* tile = dynamic_cast<HdPackBaseTileCondition*>(cond);
+			if(!tile) {
+				return {};
+			}
+			ConditionKey key;
+			key.X = tile->TileX;
+			key.Y = tile->TileY;
+			key.TileIndex = tile->TileIndex;
+			key.PaletteColors = tile->PaletteColors;
+			memcpy(key.TileData, tile->TileData, sizeof(key.TileData));
+			keys.push_back(key);
+		}
+		return keys;
+	}
+
+	bool SameConditionKeys(vector<ConditionKey> a, vector<ConditionKey> b)
+	{
+		if(a.empty() || a.size() != b.size()) {
+			return false;
+		}
+		std::sort(a.begin(), a.end());
+		std::sort(b.begin(), b.end());
+		return a == b;
+	}
+}
+
 void HdPackBuilder::FinalizeScreenAnchors()
 {
 	uint32_t volatileScreens = 0;
 	uint32_t ambiguousScreens = 0;
+	uint32_t skippedCollisions = 0;
+	uint32_t additionRivals = 0, emptinessProbeScreens = 0; //ADR-0223 option A (F12.16)
+
+	//ADR-0217 Option C / ADR-0218 Option A: every *other* pending screen's own
+	//captured frame is a forced rival, bypassing IsScreenVariant - a screen
+	//someone captured separately is a different picture, however close the raw
+	//pixels sit. One shared set per call: "every other capture" (ADR-0217)
+	//already covers "every earlier one" (ADR-0218), so one mechanism serves both.
+	//ADR-0221 option B (F12.13): the flat-shape plane the variant kind test reads.
+	vector<bool> flatShapes = MesenSheets::FlatShapePlane(_shapeTiles);
+	vector<size_t> allCapturedFrames;
+	for(const PendingScreen& p : _pendingScreens) {
+		if(p.HasGridFrame) {
+			allCapturedFrames.push_back(p.GridFrameIndex);
+		}
+	}
+
+	//ADR-0217 Option A: each committed screen's anchor keys (AnchorKeysOf, host-
+	//free). A screen past the retention cap has no grid frame to key on and is
+	//not tracked here; ADR-0218 Option B's post-hoc pass is its only safety net.
+	vector<vector<MesenSheets::AnchorKey>> committedKeys;
+
 	for(PendingScreen& pending : _pendingScreens) {
 		size_t captured = pending.HasGridFrame ? pending.GridFrameIndex : _gridFrames.size();
-		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells);
+		vector<size_t> forcedRivals;
+		for(size_t frame : allCapturedFrames) {
+			if(frame != captured) {
+				forcedRivals.push_back(frame);
+			}
+		}
+		MesenSheets::AnchorChoice choice = MesenSheets::SelectScreenAnchors(_gridFrames, captured, pending.Cells, forcedRivals, flatShapes);
 		if(choice.Picked.empty() || pending.BitmapIndex >= _hdData.BackgroundFileData.size()) {
 			continue;
 		}
+		additionRivals += choice.AdditionRivals;
 		volatileScreens += choice.UsedVolatileCell ? 1 : 0;
-		ambiguousScreens += choice.Rivals > 0 ? 1 : 0;
+		ambiguousScreens += choice.Rivals > 0 ? 1 : 0; emptinessProbeScreens += choice.UsedEmptinessProbe ? 1 : 0;
+
+		//ADR-0217 Option A: a gate another committed capture already satisfies
+		//draws nothing new - GetLayerIndex would never reach this one. The PNG
+		//stays on disk (CaptureScreen already wrote it at capture time); only
+		//the <background> line is withheld - a missing draw instead of a
+		//silent wrong one.
+		vector<MesenSheets::AnchorKey> keys;
+		if(pending.HasGridFrame) {
+			keys = MesenSheets::AnchorKeysOf(_gridFrames[captured], choice, pending.Cells);
+			bool collides = false;
+			for(const vector<MesenSheets::AnchorKey>& existing : committedKeys) {
+				if(MesenSheets::SameAnchorKeys(keys, existing)) {
+					collides = true;
+					break;
+				}
+			}
+			if(collides) {
+				skippedCollisions++;
+				MessageManager::Log("[HDPack] bootstrap: " + pending.RelPath + " matches an earlier capture's gate, no <background> written");
+				continue;
+			}
+		}
 
 		HdBackgroundInfo bg = {};
 		bg.Data = _hdData.BackgroundFileData[pending.BitmapIndex].get();
@@ -1920,12 +2038,45 @@ void HdPackBuilder::FinalizeScreenAnchors()
 			bg.Conditions.push_back(cond);
 			_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
 		}
+		if(!keys.empty()) {
+			committedKeys.push_back(std::move(keys));
+		}
 		_hdData.BackgroundsByPriority[bg.Priority].push_back(bg);
 	}
+
+	//ADR-0218 Option B: the fallback for whatever the avoidance pass above (and
+	//ADR-0217's forced-rival search) still cannot separate - byte-identical
+	//frames, picks kAnchorMinSpread keeps apart, or a screen with no grid
+	//evidence to key on above. One pass over the finalized set, before
+	//BuildSheets(); on a collision the later entry loses (removed from
+	//BackgroundsByPriority only - its conditions and PNG are left alone, so
+	//nothing already referenced becomes a dangling pointer).
+	uint32_t postHocDrops = 0;
+	for(vector<HdBackgroundInfo>& backgrounds : _hdData.BackgroundsByPriority) {
+		for(size_t i = 0; i < backgrounds.size(); i++) {
+			vector<ConditionKey> keys = ConditionKeysOf(backgrounds[i]);
+			if(keys.empty()) {
+				continue;
+			}
+			for(size_t j = i + 1; j < backgrounds.size(); ) {
+				if(SameConditionKeys(keys, ConditionKeysOf(backgrounds[j]))) {
+					postHocDrops++;
+					MessageManager::Log("[HDPack] bootstrap: " + backgrounds[j].Data->PngName + " collides with another capture's gate, dropped (post-hoc)");
+					backgrounds.erase(backgrounds.begin() + j);
+				} else {
+					j++;
+				}
+			}
+		}
+	}
+
 	if(!_pendingScreens.empty()) {
 		MessageManager::Log("[HDPack] bootstrap: " + std::to_string(_pendingScreens.size()) + " screen(s) anchored (" +
 			std::to_string(volatileScreens) + " on a cell a variant may change, " +
-			std::to_string(ambiguousScreens) + " still matching another recorded screen)");
+			std::to_string(ambiguousScreens) + " still matching another recorded screen, " +
+			std::to_string(skippedCollisions) + " skipped for an earlier capture's gate, " +
+			std::to_string(postHocDrops) + " dropped post-hoc, " +
+			std::to_string(additionRivals) + " frame(s) filed as rivals for adding content the capture lacks, " + std::to_string(emptinessProbeScreens) + " screen(s) gated on an emptiness probe)");
 	}
 	_pendingScreens.clear();
 }
@@ -2154,10 +2305,8 @@ void HdPackBuilder::SaveHdPack()
 		_hdData.OptionFlags |= (int)HdPackOptions::AutomaticFallbackTiles;
 	}
 
-	if(_hdData.OptionFlags != 0) {
-		//Terminated, and built without a trailing comma: see HdPackOptionsToString.
-		ss << "<options>" << HdPackOptionsToString(_hdData.OptionFlags) << std::endl;
-	}
+	//The <options> line, then ADR-0224's <bgPreservesBehindBgSprites> on every recorded pack.
+	HdBehindBgSpriteRule::WriteHeaderTail(ss, _hdData.OptionFlags);
 
 	ss << tileRows.str();
 
@@ -2174,6 +2323,9 @@ void HdPackBuilder::SaveHdPack()
 		MessageManager::Log("[HD Pack Builder] " + std::to_string(_droppedTiles) + " tile(s) could not be placed on a CHR page (>256 tiles for one palette); legacy top-level CHR files were left in place");
 	} else {
 		PruneLegacyChrFiles();
+	}
+	if(_preFixPack) {
+		MessageManager::Log("[HD Pack Builder] ADR-0232: this pack was recorded before the CHR bank-id fix; " + std::to_string(_preFixTilesRehomed) + " of its " + std::to_string(_bank0TilesLoaded) + " bank-0 CHR RAM tile(s) were drawn again and moved to their bank; the rest stay on bank 0, where artist_chr_kit regroups them as an older recording's (record into an empty folder for a clean layout)");
 	}
 
 	delete[] pngBuffer;

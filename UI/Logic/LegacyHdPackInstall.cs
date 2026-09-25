@@ -287,5 +287,104 @@ namespace Mesen.Logic
 			}
 			return HdLegacyOutputFolderVerdict.Proceed;
 		}
+
+		//What a pack's own `<supportedRom>` line says about the ROM in hand
+		//(ADR-0211 - the guard for issue #314, where a Contra pack installed
+		//under Bomberman was stamped with Bomberman's hash and matched cleanly
+		//forever after).
+		public enum SupportedRomVerdict
+		{
+			NotDeclared,  // no <supportedRom>, or not a 40-hex sha1: install unchanged (ADR-0145's optimism is about absent evidence)
+			Matches,      // declares the loaded ROM, in either hash form: install, and stamp the declared value
+			PatchTarget,  // declares the hash of the ROM *after* one of the pack's own <patch> lines (ADR-0198 §2): install
+			Contradicts   // declares a different ROM: refuse the install
+		}
+
+		//What `textures/hires.txt` declares about the ROM it was made for: the
+		//`<supportedRom>` hash, plus the hashes its own `<patch>` lines target.
+		//The second list exists because a patching pack (Zelda Remastered)
+		//legitimately declares the *patched* ROM's hash in both places, which
+		//matches no unpatched dump and is not a contradiction.
+		public sealed class SupportedRomDeclaration
+		{
+			public string Declared { get; init; } = "";
+			public IReadOnlyList<string> PatchTargets { get; init; } = Array.Empty<string>();
+		}
+
+		//Reads the two tags out of a hires.txt, host-free (the caller supplies
+		//the lines). Anything that is not a 40-hex sha1 is dropped rather than
+		//guessed at - an unparseable declaration is treated as no declaration,
+		//so a malformed line can never refuse an install.
+		public static SupportedRomDeclaration ReadSupportedRom(IEnumerable<string> hiresLines)
+		{
+			string declared = "";
+			List<string> patchTargets = new();
+			foreach(string raw in hiresLines) {
+				string line = raw.Trim();
+				if(line.StartsWith("<supportedRom>", StringComparison.Ordinal)) {
+					if(declared.Length == 0) {
+						string value = NormalizeSha1(line.Substring("<supportedRom>".Length));
+						if(value.Length > 0) {
+							declared = value;
+						}
+					}
+				} else if(line.StartsWith("<patch>", StringComparison.Ordinal)) {
+					//<patch>file.ips,<40-hex sha1 of the ROM the patch is for>
+					foreach(string field in line.Substring("<patch>".Length).Split(',')) {
+						string value = NormalizeSha1(field);
+						if(value.Length > 0) {
+							patchTargets.Add(value);
+						}
+					}
+				}
+			}
+			return new SupportedRomDeclaration { Declared = declared, PatchTargets = patchTargets };
+		}
+
+		//A 40-hex sha1, upper-cased, or "" when the text is anything else.
+		private static string NormalizeSha1(string text)
+		{
+			string value = text.Trim();
+			if(value.Length != 40) {
+				return "";
+			}
+			foreach(char c in value) {
+				if(!Uri.IsHexDigit(c)) {
+					return "";
+				}
+			}
+			return value.ToUpperInvariant();
+		}
+
+		//ADR-0211: decides whether a declared <supportedRom> contradicts the
+		//loaded ROM. Pure - the coordinator reads the file and acts on the
+		//verdict.
+		//
+		//Both hash forms of the loaded ROM are accepted, because both
+		//conventions exist in the wild: HdPackBuilder writes the whole-file
+		//sha1 (header included) and community packs sometimes carry the
+		//No-Intro body hash instead (ADR-0044) - NesConsole already tries both
+		//when matching a <patch> line, and an installer stricter than the
+		//loader would refuse packs the loader then happily applies. What is
+		//never done is comparing one form against the other: they are
+		//different hashes of the same ROM.
+		public static SupportedRomVerdict DecideSupportedRom(
+			SupportedRomDeclaration declaration, string loadedNoIntroSha1, string loadedWholeFileSha1)
+		{
+			string declared = NormalizeSha1(declaration.Declared);
+			if(declared.Length == 0) {
+				return SupportedRomVerdict.NotDeclared;
+			}
+			if(declared.Equals(NormalizeSha1(loadedWholeFileSha1), StringComparison.Ordinal) ||
+			   declared.Equals(NormalizeSha1(loadedNoIntroSha1), StringComparison.Ordinal)) {
+				return SupportedRomVerdict.Matches;
+			}
+			foreach(string target in declaration.PatchTargets) {
+				if(declared.Equals(NormalizeSha1(target), StringComparison.Ordinal)) {
+					return SupportedRomVerdict.PatchTarget;
+				}
+			}
+			return SupportedRomVerdict.Contradicts;
+		}
 	}
 }

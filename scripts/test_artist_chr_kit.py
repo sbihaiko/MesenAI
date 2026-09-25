@@ -17,6 +17,7 @@ under `runs/` is touched.
 Run:  python3 scripts/test_artist_chr_kit.py
 """
 
+import collections
 import hashlib
 import json
 import sys
@@ -138,11 +139,15 @@ def write_pack(root: Path, scale: int, images, rows, rom_sha1="0" * 40):
     (root / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def chr_rom_rows(image_index, cells):
+def chr_rom_rows(image_index, cells, default_tile="N"):
+    """A recorded CHR ROM row. `N` is what the recorder writes for a tile the
+    run drew (`HdPackBuilder::CaptureOrCapPaletteVariant` sets
+    `DefaultTile = false`); `Y` is only ever the bootstrap's own ROM export
+    (`AddRomTiles`), which `bootstrap_export_fixture` builds (#449)."""
     out = []
     for slot, (_, palette, index) in sorted(cells.items()):
         x, y = (slot % 16) * CELL, (slot // 16) * CELL
-        out.append(f"<tile>{image_index},{index:02X},{palette},{x},{y},1,Y")
+        out.append(f"<tile>{image_index},{index:02X},{palette},{x},{y},1,{default_tile}")
     return out
 
 
@@ -167,6 +172,29 @@ def chr_rom_fixture(td: Path):
     rank0 = {i: (tile_bytes(i), PAL_A, i) for i in range(100)}
     rank1 = {i: (tile_bytes(i), PAL_B, i) for i in range(200, 210)}
     write_pack(pack, SCALE, [("Chr_00_0", rank0), ("Chr_00_1", rank1)], chr_rom_rows)
+    return pack, rom
+
+
+EXPORTED = range(240)       # indices the bootstrap exported from the ROM
+DRAWN = range(100)          # indices the run drew
+
+
+def bootstrap_export_fixture(td: Path):
+    """A CHR ROM recording the way the bootstrap writes one (issue #449).
+
+    `AddRomTiles` seeds one `defaultTile=Y` row per CHR tile under the neutral
+    ramp `0F001030`, before the run draws anything, and those rows land on the
+    real bank's pages. Here they fill the rank-0 page for indices 0..239 (the
+    builder skips a few, as it did 14 times on Excitebike), and the run drew
+    indices 0..99 under PAL_A, which the recorder wrote as `N` rows on rank 1."""
+    chr_rom = b"".join(tile_bytes(i) for i in range(512))
+    rom = td / "game.nes"
+    rom.write_bytes(ines(lcg(16384, 7), chr_rom))
+    pack = td / "pack"
+    export = {i: (tile_bytes(i), K.STATIC_FILL_PALETTE, i) for i in EXPORTED}
+    drawn = {i: (tile_bytes(i), PAL_A, i) for i in DRAWN}
+    write_pack(pack, SCALE, [("Chr_00_0", export), ("Chr_00_1", drawn)],
+               lambda i, cells: chr_rom_rows(i, cells, "Y" if i == 0 else "N"))
     return pack, rom
 
 
@@ -458,6 +486,59 @@ def test_a_cell_from_a_lower_rank_page_is_moved_up_and_still_evidence():
         check(page.crop(c["x"], c["y"], CELL, CELL).px
               == src.crop(c["x"], c["y"], CELL, CELL).px,
               "the moved-up pixels are copied, not re-rendered")
+
+
+def test_the_bootstraps_rom_export_is_a_rom_fill_not_evidence():
+    # Issue #449: on Excitebike the kit marked 175 cells of indices the run
+    # never drew `evidence, seen: true` (green) and logged "recorded 498 (97%)"
+    # where the run drew 337 of 512 indices.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = bootstrap_export_fixture(td)
+        frag = K.run(pack, rom, td / "kit", None, "none", False, True)
+        doc = sidecar(td / "kit", "Chr_00_0")
+        cells = {c["index"]: c for c in doc["cells"]}
+        exported = [cells[i] for i in EXPORTED]
+        check(all(c["state"] == "fill" and c["seen"] is False for c in exported),
+              "a cell holding only the bootstrap's ROM export is a fill, seen: false",
+              str(collections.Counter((c["state"], c["seen"]) for c in exported)))
+        check(all(c.get("origin") == "romExport" for c in exported),
+              "and it says the bootstrap exported it from the ROM",
+              str({c.get("origin") for c in exported}))
+        check(not any(c["seen"] for c in doc["cells"] if c["index"] not in DRAWN),
+              "no cell of an index the run never drew is seen: true")
+        t = frag["totals"]
+        check((t["recorded"], t["filled"], t["unrecoverable"]) == (100, 156, 0),
+              "recorded counts only the indices the run drew; the export is ROM fill",
+              f"recorded={t['recorded']} filled={t['filled']} "
+              f"unrecoverable={t['unrecoverable']}")
+        legend = read_png(td / "kit" / "chr" / "Chr_00_0.legend.png")
+        check(legend.get(0, 0) == K.LEGEND_FILL,
+              "the legend paints an exported cell amber, not green", str(legend.get(0, 0)))
+        rank1 = sidecar(td / "kit", "Chr_00_1")
+        check(rank1["counts"]["evidence"] == len(DRAWN),
+              "the cells the run drew stay evidence", str(rank1["counts"]))
+
+
+def test_an_exported_cell_keeps_its_pixels_and_gets_no_extra_rule():
+    # The export's `Y` row is already in hires.txt and draws from this cell, so
+    # the cell is copied byte for byte (and verify checks it), and no fill rule
+    # is emitted for it: only the 16 indices nobody wrote a row for get one.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = bootstrap_export_fixture(td)
+        frag = K.run(pack, rom, td / "kit-all", None, "all", False, True)
+        check(frag["totals"]["rulesEmitted"] == 256 - len(EXPORTED),
+              "a fill rule is emitted only for a cell with no recorded row",
+              str(frag["totals"]["rulesEmitted"]))
+        K.run(pack, rom, td / "kit", None, "none", False, True)
+        result = K.verify(K.Pack(pack), td / "kit" / "chr", quiet=True)
+        check(result["cells_differing"] == 0
+              and result["cells_checked"] == len(EXPORTED) + len(DRAWN),
+              "every cell with a recorded row, exported or drawn, is byte-identical",
+              str(result))
+        check(result["lost"] == 0 and result["rebuildIdentical"],
+              "and the pack round-trips unchanged", str(result))
 
 
 def test_recorded_cells_come_out_byte_identical():
@@ -920,11 +1001,260 @@ def test_a_recording_listed_twice_is_ignored_and_the_first_one_donates():
               "and each repeat is named rather than silently dropped", str(repeats))
 
 
+
+# --- the static projection (ADR-0219, PRD F12.9) ----------------------------
+
+
+def static_rom(td: Path, banks: int = 2, name: str = "static.nes") -> Path:
+    """A CHR ROM game and nothing else: no pack, no recording, no kit."""
+    chr_rom = b"".join(tile_bytes(i) for i in range(banks * 256))
+    rom = td / name
+    rom.write_bytes(ines(lcg(16384, 3), chr_rom))
+    return rom
+
+
+def run_static(td: Path, rom: Path, **kw) -> dict:
+    out = kw.pop("out", td / "kit")
+    K.run(td / "nothing-here", rom, out, None, "all", kw.pop("verify", False),
+          True, static=True, scale=kw.pop("scale", SCALE), **kw)
+    return json.loads((out / "kit-part-chr.json").read_text())
+
+
+def test_a_static_kit_has_one_page_per_4kb_bank_and_every_cell_is_a_fill():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td, banks=2)
+        frag = run_static(td, rom)
+        pages = sorted(f["path"] for f in frag["files"])
+        doc = sidecar(td / "kit", "Chr_00_0")
+        counts = doc["counts"]
+        check(len(frag["files"]) == 512 // 256, "page count is CHR size / 4 KB",
+              f"{len(frag['files'])} page(s) for 512 tiles: {pages}")
+        check(counts["fill"] == 256 and counts["evidence"] == 0 and counts["empty"] == 0,
+              "every cell of a static page is a fill", str(counts))
+        check(all(c["seen"] is False for c in doc["cells"]),
+              "every static cell is seen: false")
+        check(frag["totals"]["fill"] == 512 and frag["totals"]["evidence"] == 0,
+              "the fragment counts every tile of the file as a fill",
+              str(frag["totals"]))
+
+
+def test_a_static_cell_carries_the_roms_own_bytes():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        doc = sidecar(td / "kit", "Chr_01_0")
+        wrong = [c for c in doc["cells"]
+                 if c["tileData"] != tile_bytes(256 + c["index"]).hex().upper()]
+        check(not wrong, "bank 1 cell N is CHR tile 256+N",
+              f"{len(wrong)} cell(s) differ, first: {wrong[:1]}")
+
+
+def test_every_static_rule_is_the_palette_wildcard():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        rows = [ln for ln in (td / "kit" / "chr" / "fill-rules.hires.txt")
+                .read_text().splitlines() if ln.startswith("<tile>")]
+        check(len(rows) == 512, "one <tile> rule per tile of the CHR", str(len(rows)))
+        check(all(r.endswith(",Y") for r in rows),
+              "every static rule carries defaultTile=Y (ADR-0210's wildcard)",
+              next((r for r in rows if not r.endswith(",Y")), ""))
+
+
+def test_the_static_manifest_carries_the_header_a_build_needs():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        run_static(td, rom)
+        lines = (td / "kit" / "chr" / "fill-rules.hires.txt").read_text().splitlines()
+        sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+        check(lines[0] == K.PAGES_ONLY_MARK,
+              "the first line marks the file as a pages-only manifest", lines[0])
+        check(f"<supportedRom>{sha1}" in lines,
+              "the manifest records the ROM it was read from")
+        check(f"<scale>{SCALE}" in lines and f"<ver>{K.PACK_VERSION}" in lines,
+              "the manifest declares ver and scale")
+        check(sum(1 for ln in lines if ln.startswith("<img>")) == 2,
+              "one <img> per page")
+
+
+def test_a_recorded_run_writes_no_static_header_and_no_marker():
+    """The static path must leave the recorded path's bytes alone."""
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = chr_rom_fixture(td)
+        K.run(pack, rom, td / "kit", None, "all", False, True)
+        text = (td / "kit" / "chr" / "fill-rules.hires.txt").read_text()
+        check(K.PAGES_ONLY_MARK not in text and "<supportedRom>" not in text,
+              "a recorded kit's fill-rules file is unchanged by ADR-0219",
+              text.splitlines()[0])
+
+
+def test_a_chr_ram_rom_is_refused_and_points_at_the_index_import():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = td / "ram.nes"
+        rom.write_bytes(ines(lcg(32768, 5), b""))
+        try:
+            run_static(td, rom)
+            check(False, "a CHR RAM ROM is refused by --static", "it ran")
+        except K.ChrKitError as e:
+            check("F12.12" in str(e) and "mep_import" in str(e),
+                  "the CHR RAM refusal names the only static source of shape", str(e))
+
+
+def test_a_folder_that_holds_a_recording_is_never_projected_over():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = chr_rom_fixture(td)
+        try:
+            K.run(pack, rom, td / "kit", None, "all", False, True, static=True)
+            check(False, "a recorded folder is refused by --static", "it ran")
+        except K.ChrKitError as e:
+            check("hires.txt" in str(e), "the refusal names the recording it found",
+                  str(e))
+
+
+def test_also_is_refused_on_the_static_path():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        try:
+            run_static(td, rom, also=["anything"])
+            check(False, "--also with --static is refused", "it ran")
+        except K.ChrKitError as e:
+            check("--also" in str(e), "the refusal names --also", str(e))
+
+
+def test_the_static_path_never_starts_an_emulator():
+    """ADR-0219's tool contract: the generator acquires no play session.
+
+    Asserted by trapping the one door this module has to any other program —
+    `subprocess` — for the whole run."""
+    import subprocess as real_subprocess
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        calls = []
+
+        class Trap:
+            def __getattr__(self, name):
+                def fail(*a, **kw):
+                    calls.append((name, a))
+                    raise AssertionError(f"subprocess.{name} on the static path")
+                return fail
+
+        K.subprocess = Trap()
+        try:
+            run_static(td, rom)
+        finally:
+            K.subprocess = real_subprocess
+        check(not calls, "no subprocess is spawned while a static kit is built",
+              str(calls))
+
+
+def test_verify_reports_the_build_and_the_rule_count():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        frag = run_static(td, rom, verify=True)
+        v = frag["verify"]
+        check(v["ran"] and v["built"] and v["errors"] == 0,
+              "a pages-only pack builds with 0 errors", str(v))
+        check(v["rules"] == v["expectedRules"] == 512 and v["wildcard"] == 512,
+              "the rebuilt manifest has one Y rule per CHR tile", str(v))
+
+
+def test_the_fragment_says_it_is_static_and_names_the_rom():
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        rom = static_rom(td)
+        frag = run_static(td, rom)
+        sha1 = hashlib.sha1(rom.read_bytes()).hexdigest().upper()
+        check(frag.get("static") is True and frag["romSha1"] == sha1,
+              "the fragment carries static and the ROM's sha1", str(frag.get("romSha1")))
+        check(frag["notes"][0].startswith("NOTHING ON THESE PAGES WAS SEEN IN PLAY"),
+              "the first note says no play session happened", frag["notes"][0][:60])
+        check(not any("donated" in k for k in frag["totals"]),
+              "no donor counter is emitted", str(frag["totals"].keys()))
+
+
+# --- ADR-0232: the bank id names a CHR state, or a pack predates it ----------
+
+
+def banks_of(td: Path, pages):
+    """`pages` is [(name, {slot: (data, palette, index)}, bank_id)]."""
+    pack = td / "pack"
+    chr_dir = pack / "textures" / "chr"
+    chr_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["<ver>109", f"<scale>{SCALE}", "<supportedRom>" + "0" * 40]
+    lines += [f"<img>chr/{name}.png" for name, _, _ in pages]
+    for i, (name, cells, bank) in enumerate(pages):
+        page = blank_page()
+        for slot, (data, palette, _) in cells.items():
+            draw_cell(page, slot, data, palette)
+        write_png(chr_dir / f"{name}.png", page)
+        lines.append(f"#chr/{name}.png")
+        lines += chr_ram_rows_for(bank)(i, cells)
+    (pack / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    p = K.Pack(pack)
+    return {b.primary.name: b for b in K.collect_banks(p, K.collect_pages(p))}
+
+
+def test_real_chr_ram_bank_ids_leave_the_older_recorder_regroup():
+    with tempfile.TemporaryDirectory() as td:
+        blank = bytes(16)
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 1445542316),
+            ("Chr_1", {i: (tile_bytes(i + 64), PAL_A, i) for i in range(20)}, 557798520),
+            # the power-on bank: all zero, so its id is 0 and it draws only blank tiles
+            ("Chr_2", {0: (blank, PAL_B, 0)}, 0),
+        ])
+        check(all(b.identity_known for b in banks.values()),
+              "ADR-0232: a pack with real bank ids has no bank of unknown identity",
+              str({n: b.identity_known for n, b in banks.items()}))
+        check(not any("older recorder" in n for b in banks.values() for n in b.notes),
+              "ADR-0232: and no bank carries the older-recorder note")
+        check(banks["Chr_0"].id == 1445542316 and banks["Chr_2"].id == 0,
+              "ADR-0232: each bank keeps the id it was recorded under, the power-on one included")
+
+
+def test_an_all_zero_bank_id_pack_is_still_regrouped_as_an_older_recording():
+    with tempfile.TemporaryDirectory() as td:
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 0),
+            ("Chr_1", {i: (packed_tile(i), PAL_A, i) for i in range(20)}, 0),
+        ])
+        check(banks and not any(b.identity_known for b in banks.values()),
+              "ADR-0232: a pack recorded before the fix keeps the structural regroup",
+              str({n: b.identity_known for n, b in banks.items()}))
+        check(len(banks) == 2, "ADR-0232: its two contradicting pages stay two banks", str(list(banks)))
+
+
+def test_a_rerecorded_pack_regroups_only_its_pre_fix_pages():
+    with tempfile.TemporaryDirectory() as td:
+        banks = banks_of(Path(td), [
+            ("Chr_0", {i: (tile_bytes(i), PAL_A, i) for i in range(30)}, 1445542316),
+            ("Chr_1", {i: (packed_tile(i), PAL_A, i) for i in range(20)}, 0),
+        ])
+        real, old = banks["Chr_0"], banks["Chr_1"]
+        check(real.identity_known and real.id == 1445542316,
+              "ADR-0232: in a re-recorded pack the real bank keeps its identity")
+        check(not old.identity_known and any("older recorder" in n for n in old.notes),
+              "ADR-0232: the pre-fix bank-0 page beside it is regrouped, never presented as a known bank",
+              str(old.notes))
+
+
 def main():
     tests = [
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
         test_a_filled_cell_carries_the_rom_bytes_and_is_marked_unseen,
         test_a_cell_from_a_lower_rank_page_is_moved_up_and_still_evidence,
+        test_the_bootstraps_rom_export_is_a_rom_fill_not_evidence,
+        test_an_exported_cell_keeps_its_pixels_and_gets_no_extra_rule,
         test_recorded_cells_come_out_byte_identical,
         test_the_fill_palette_is_read_off_the_pack_not_assumed,
         test_chr_ram_fills_only_what_a_prg_block_explains,
@@ -955,6 +1285,20 @@ def main():
         test_a_palette_that_gets_brighter_is_never_a_fade_downwards,
         test_only_the_indices_the_pattern_paints_are_compared,
         test_the_fold_is_reported_per_page_and_per_pack_and_changes_no_pixel,
+        test_a_static_kit_has_one_page_per_4kb_bank_and_every_cell_is_a_fill,
+        test_a_static_cell_carries_the_roms_own_bytes,
+        test_every_static_rule_is_the_palette_wildcard,
+        test_the_static_manifest_carries_the_header_a_build_needs,
+        test_a_recorded_run_writes_no_static_header_and_no_marker,
+        test_a_chr_ram_rom_is_refused_and_points_at_the_index_import,
+        test_a_folder_that_holds_a_recording_is_never_projected_over,
+        test_also_is_refused_on_the_static_path,
+        test_the_static_path_never_starts_an_emulator,
+        test_verify_reports_the_build_and_the_rule_count,
+        test_the_fragment_says_it_is_static_and_names_the_rom,
+        test_real_chr_ram_bank_ids_leave_the_older_recorder_regroup,
+        test_an_all_zero_bank_id_pack_is_still_regrouped_as_an_older_recording,
+        test_a_rerecorded_pack_regroups_only_its_pre_fix_pages,
     ]
     for t in tests:
         t()

@@ -86,7 +86,33 @@ namespace MesenSheets
 		//No stable triple could tell the screen apart, so the pick fell back to
 		//cells a variant may change (a combinatorial screen: a Tetris board).
 		bool UsedVolatileCell = false;
+		//ADR-0221 (option B): frames that cleared kAnchorVariantAgree and were
+		//still filed as rivals because they draw content into a cell the
+		//captured frame holds empty. Reported so a recording can say how often
+		//the kind test, not the ratio, decided.
+		uint32_t AdditionRivals = 0;
+		//ADR-0223 option A (F12.16): true when the stable/wide passes above
+		//still left rivals standing and the last pass - stable cells plus the
+		//flat cells no variant changes - separated strictly more of them, so
+		//an "emptiness probe" (a <tileAtPosition> on a flat, otherwise-excluded
+		//tile) is part of `Picked`. Reported so a recording can say how many
+		//screens needed the last-resort pass.
+		bool UsedEmptinessProbe = false;
 	};
+
+	//ADR-0223 option A (F12.16): the grid columns a flat run spans, tile-
+	//boundary aligned to `fineX` - `startX`/`endX` are the run's own pixel
+	//span (endX exclusive; the caller has already checked the run's row is
+	//tile-aligned). Host-free arithmetic only, so HdPackBuilder's
+	//AppendFlatAnchorCells (the host-bound half, since it touches ScreenRun)
+	//can stay a thin loop around it.
+	std::vector<uint32_t> FlatRunColumns(uint32_t startX, uint32_t endX, uint8_t fineX);
+
+	//ADR-0221 (option B, F12.13): one flag per shape id, true when the shape's
+	//art is a flat tile (IsFlatTileData) - the "empty" side of the variant kind
+	//test. Built once per save from the recorder's shape table; the stitcher is
+	//host-free and only sees ids, so the builder hands it this plane.
+	std::vector<bool> FlatShapePlane(const std::vector<SheetTileKey>& shapes);
 
 	//The F9.9 follow-up to ADR-0050's anchor rule (see TileSheetTypes.h for the
 	//measurement): prefer cells no variant of this screen changes, and inside
@@ -95,5 +121,45 @@ namespace MesenSheets
 	//written from; out of range (no retained grid frame for it) degrades to
 	//ADR-0050's plain rarity-and-spread greedy, which is also what an empty
 	//stream yields.
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates);
+	//
+	//`forcedRivalFrames` (ADR-0217 Option C, ADR-0218 Option A): indices into
+	//`frames` that must classify as rivals regardless of IsScreenVariant - a
+	//frame another pending screen is itself anchored on is, by definition, a
+	//different picture someone chose to capture separately, however close the
+	//raw pixels sit.
+	//
+	//`emptyShapes` (ADR-0221 option B, F12.13): FlatShapePlane's output. A frame
+	//that clears kAnchorVariantAgree is a *variant* only when every cell it
+	//changes is non-empty in the captured frame too; one cell where the capture
+	//is empty (kEmptyCell, or a shape flagged here) and the frame is not makes
+	//it a *rival*, whatever the ratio. The kind test runs after the ratio test,
+	//so nothing that was a rival becomes a variant. An empty plane (a caller
+	//with no shape table) degrades to "only kEmptyCell is empty".
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames = {}, const std::vector<bool>& emptyShapes = {});
+
+	//ADR-0217 Option A / ADR-0218 Option B: a screen's picked anchors, reduced
+	//to what GetLayerIndex actually reads - independent of any HdPackCondition
+	//object or its name. Two screens whose keys are the same set (regardless
+	//of pick order) are indistinguishable at read time: the second one is
+	//permanently unreachable. FineX is part of the key because it is part of
+	//the real pixel X a <background>'s tileAtPosition condition carries
+	//(TileX = Col*8 + FineX) - two screens agreeing on (row, col) at different
+	//scroll offsets are not actually the same condition.
+	struct AnchorKey
+	{
+		uint32_t Row = 0;
+		uint32_t Col = 0;
+		uint8_t FineX = 0;
+		ShapeId Tile = 0;
+		PaletteId Palette = kUnknownPalette;
+	};
+
+	//Reads `choice.Picked` against `frame`'s own cells - the frame the screen
+	//was captured from.
+	std::vector<AnchorKey> AnchorKeysOf(const GridFrame& frame, const AnchorChoice& choice, const std::vector<AnchorCandidate>& candidates);
+
+	//True when `a` and `b` are the same set of keys, order-independent, an
+	//unknown palette on either side matching anything (same permissiveness as
+	//the rival test inside SelectScreenAnchors itself).
+	bool SameAnchorKeys(std::vector<AnchorKey> a, std::vector<AnchorKey> b);
 }

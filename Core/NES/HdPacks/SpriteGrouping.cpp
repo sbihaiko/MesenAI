@@ -130,6 +130,12 @@ namespace MesenSheets
 		//fusion when its tiles split, at some translation, into two entries the
 		//recorder *also* saw standing on their own. Both parts are kept poses,
 		//so both already cleared kPoseMinFrames.
+		//
+		//ADR-0228 (issue #401) closes the gap between that rule and ADR-0179
+		//§4's variant: a kept pose plus a remainder of kPoseMinTiles or more
+		//tiles is a fusion even when the remainder never stood alone (Bill's
+		//death tumble, only ever drawn over the soldier that killed him). It
+		//is labelled with the one kept part; a two-part split still wins.
 		void LabelPoseFusions(std::vector<PoseEntry>& entries)
 		{
 			//Tile set -> rank. A kept pose's Tiles are normalised (the smallest
@@ -175,6 +181,9 @@ namespace MesenSheets
 				}
 
 				bool labelled = false;
+				//ADR-0228: the first kept part (file order) that fits with a
+				//pose-sized remainder, used only when no two-part split exists.
+				int64_t onePart = -1;
 				for(uint32_t rank : candidates) {
 					const std::vector<PoseTile>& part = entries[rank].Tiles;
 					const PoseTile& head = part[0];
@@ -226,6 +235,9 @@ namespace MesenSheets
 
 						std::map<std::vector<PoseTile>, uint32_t>::const_iterator match = byTiles.find(rest);
 						if(match == byTiles.end()) {
+							if(onePart < 0) {
+								onePart = rank;
+							}
 							continue;
 						}
 						entries[bi].FusionOf.push_back(rank);
@@ -237,7 +249,37 @@ namespace MesenSheets
 						break;
 					}
 				}
+				if(!labelled && onePart >= 0) {
+					entries[bi].FusionOf.push_back((uint32_t)onePart);
+				}
 			}
+		}
+
+		//ADR-0225 §1: renumber Z to 0..n-1 in OAM order after de-duplication
+		//dropped members, so the written rank has no holes.
+		void RankPoseTiles(std::vector<PoseTile>& tiles)
+		{
+			std::vector<size_t> order(tiles.size());
+			for(size_t i = 0; i < order.size(); i++) {
+				order[i] = i;
+			}
+			std::sort(order.begin(), order.end(), [&tiles](size_t a, size_t b) { return tiles[a].Z < tiles[b].Z; });
+			for(size_t rank = 0; rank < order.size(); rank++) {
+				tiles[order[rank]].Z = (int32_t)rank;
+			}
+		}
+
+		//ADR-0225 §1: do any two 8x8 tiles of a pixel layout share a pixel?
+		bool PoseTilesOverlap(const std::vector<PoseTile>& tiles)
+		{
+			for(size_t i = 0; i < tiles.size(); i++) {
+				for(size_t j = i + 1; j < tiles.size(); j++) {
+					if(std::abs(tiles[i].Px - tiles[j].Px) < 8 && std::abs(tiles[i].Py - tiles[j].Py) < 8) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		//---- ADR-0179 (F9.20) ---------------------------------------------
@@ -300,18 +342,24 @@ namespace MesenSheets
 				for(size_t index : cluster.second) {
 					PoseTile tile;
 					tile.Node = nodes[index];
-					tile.Dx = ToCells(points[index].first - pc.X);
-					tile.Dy = ToCells(points[index].second - pc.Y);
+					tile.Px = points[index].first - pc.X;
+					tile.Py = points[index].second - pc.Y;
+					tile.Dx = ToCells(tile.Px);
+					tile.Dy = ToCells(tile.Py);
+					//cluster.second is in OAM order, so this is the OAM rank.
+					tile.Z = (int32_t)pc.Tiles.size();
 					pc.Tiles.push_back(tile);
 				}
 				//A set, not a list: two OAM entries of the same shape rounding
 				//onto one cell are one member, exactly as the S10.a ground
-				//truth counted them.
-				std::sort(pc.Tiles.begin(), pc.Tiles.end());
+				//truth counted them. Stable, so the member kept is the
+				//frontmost entry (ADR-0225: its pixels are the ones drawn).
+				std::stable_sort(pc.Tiles.begin(), pc.Tiles.end());
 				pc.Tiles.erase(std::unique(pc.Tiles.begin(), pc.Tiles.end()), pc.Tiles.end());
 				if(pc.Tiles.size() < kPoseMinTiles) {
 					continue;
 				}
+				RankPoseTiles(pc.Tiles);
 				out.push_back(pc);
 			}
 			return out;
@@ -396,6 +444,13 @@ namespace MesenSheets
 		//ADR-0179 §1: greedy nearest-first linking of kept clusters between
 		//consecutive retained frames, within kPoseTrackMaxMove. Fills
 		//Hold/Next on the entries and returns the tracks as runs.
+		//ADR-0226: a cluster left without a partner stays a pending end for up
+		//to kPoseTrackMaxGap retained frames (each skipped frame carrying
+		//RepeatCount <= kPoseTrackGapMaxRepeats). Each frame links in passes,
+		//nearest-first within one pass: the previous frame's clusters first,
+		//then the pending ends by increasing age, against what is still
+		//unlinked. A bridged link adds the skipped frames' RepeatCount to the
+		//run it interrupts, so a run's Held keeps the game's cadence.
 		std::vector<std::vector<TrackRun>> LinkPoseTracks(const std::vector<OamFrame>& frames, const Vocabulary& vocab, std::vector<PoseEntry>& entries)
 		{
 			std::map<std::vector<PoseTile>, uint32_t> rankOf;
@@ -408,9 +463,14 @@ namespace MesenSheets
 				int32_t Y;
 				uint32_t Pose;
 				size_t Track;
+				//RepeatCount of the retained frames skipped since this cluster
+				//was seen (0 for the previous frame's clusters).
+				uint32_t Gap;
 			};
 			std::vector<std::vector<TrackRun>> tracks;
-			std::vector<Live> prev;
+			//ends[0]: the previous frame's clusters; ends[k]: clusters of the
+			//frame k+1 back that are still unlinked (pending, ADR-0226).
+			std::vector<std::vector<Live>> ends;
 			for(const OamFrame& frame : frames) {
 				std::vector<Live> cur;
 				for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
@@ -423,54 +483,64 @@ namespace MesenSheets
 					live.Y = cluster.Y;
 					live.Pose = it->second;
 					live.Track = (size_t)-1;
+					live.Gap = 0;
 					cur.push_back(live);
 				}
-				//Every candidate link, nearest first; ties broken by position in
-				//either frame so two saves of one stream link identically.
-				std::vector<std::tuple<int32_t, size_t, size_t>> links;
-				for(size_t pi = 0; pi < prev.size(); pi++) {
-					for(size_t ci = 0; ci < cur.size(); ci++) {
-						int32_t d = std::abs(prev[pi].X - cur[ci].X) + std::abs(prev[pi].Y - cur[ci].Y);
-						if(d <= kPoseTrackMaxMove) {
-							links.push_back(std::make_tuple(d, pi, ci));
-						}
-					}
-				}
-				std::sort(links.begin(), links.end());
-				std::vector<bool> prevUsed(prev.size(), false);
-				for(const std::tuple<int32_t, size_t, size_t>& link : links) {
-					size_t pi = std::get<1>(link);
-					size_t ci = std::get<2>(link);
-					if(prevUsed[pi] || cur[ci].Track != (size_t)-1) {
-						continue;
-					}
-					prevUsed[pi] = true;
-					cur[ci].Track = prev[pi].Track;
-					std::vector<TrackRun>& track = tracks[prev[pi].Track];
-					if(prev[pi].Pose == cur[ci].Pose) {
-						entries[cur[ci].Pose].Hold++;
-						track.back().Held += frame.RepeatCount;
-					} else {
-						std::vector<PoseLink>& next = entries[prev[pi].Pose].Next;
-						bool found = false;
-						for(PoseLink& edge : next) {
-							if(edge.Pose == cur[ci].Pose) {
-								edge.Count++;
-								found = true;
-								break;
+				std::vector<std::vector<bool>> endUsed(ends.size());
+				for(size_t age = 0; age < ends.size(); age++) {
+					std::vector<Live>& prev = ends[age];
+					endUsed[age].assign(prev.size(), false);
+					//Every candidate link, nearest first; ties broken by position in
+					//either frame so two saves of one stream link identically.
+					std::vector<std::tuple<int32_t, size_t, size_t>> links;
+					for(size_t pi = 0; pi < prev.size(); pi++) {
+						for(size_t ci = 0; ci < cur.size(); ci++) {
+							if(cur[ci].Track != (size_t)-1) {
+								continue; //claimed by an earlier (younger) pass
+							}
+							int32_t d = std::abs(prev[pi].X - cur[ci].X) + std::abs(prev[pi].Y - cur[ci].Y);
+							if(d <= kPoseTrackMaxMove) {
+								links.push_back(std::make_tuple(d, pi, ci));
 							}
 						}
-						if(!found) {
-							PoseLink edge;
-							edge.Pose = cur[ci].Pose;
-							edge.Count = 1;
-							next.push_back(edge);
+					}
+					std::sort(links.begin(), links.end());
+					for(const std::tuple<int32_t, size_t, size_t>& link : links) {
+						size_t pi = std::get<1>(link);
+						size_t ci = std::get<2>(link);
+						if(endUsed[age][pi] || cur[ci].Track != (size_t)-1) {
+							continue;
 						}
-						TrackRun run;
-						run.Frame = frame.FrameNumber;
-						run.Pose = cur[ci].Pose;
-						run.Held = frame.RepeatCount;
-						track.push_back(run);
+						endUsed[age][pi] = true;
+						cur[ci].Track = prev[pi].Track;
+						std::vector<TrackRun>& track = tracks[prev[pi].Track];
+						//ADR-0226 §1: the skipped frames belong to the run they interrupt.
+						track.back().Held += prev[pi].Gap;
+						if(prev[pi].Pose == cur[ci].Pose) {
+							entries[cur[ci].Pose].Hold++;
+							track.back().Held += frame.RepeatCount;
+						} else {
+							std::vector<PoseLink>& next = entries[prev[pi].Pose].Next;
+							bool found = false;
+							for(PoseLink& edge : next) {
+								if(edge.Pose == cur[ci].Pose) {
+									edge.Count++;
+									found = true;
+									break;
+								}
+							}
+							if(!found) {
+								PoseLink edge;
+								edge.Pose = cur[ci].Pose;
+								edge.Count = 1;
+								next.push_back(edge);
+							}
+							TrackRun run;
+							run.Frame = frame.FrameNumber;
+							run.Pose = cur[ci].Pose;
+							run.Held = frame.RepeatCount;
+							track.push_back(run);
+						}
 					}
 				}
 				for(Live& live : cur) {
@@ -483,7 +553,23 @@ namespace MesenSheets
 						live.Track = tracks.size() - 1;
 					}
 				}
-				prev = cur;
+				//Unlinked ends age by one frame - this one, now skipped - unless
+				//it was held too long to be flicker; the rest end their tracks.
+				std::vector<std::vector<Live>> aged(1, cur);
+				if(frame.RepeatCount <= kPoseTrackGapMaxRepeats) {
+					for(size_t age = 0; age < ends.size() && age < (size_t)kPoseTrackMaxGap; age++) {
+						std::vector<Live> still;
+						for(size_t pi = 0; pi < ends[age].size(); pi++) {
+							if(!endUsed[age][pi]) {
+								Live live = ends[age][pi];
+								live.Gap += frame.RepeatCount;
+								still.push_back(live);
+							}
+						}
+						aged.push_back(still);
+					}
+				}
+				ends.swap(aged);
 			}
 			for(PoseEntry& entry : entries) {
 				std::stable_sort(entry.Next.begin(), entry.Next.end(), [](const PoseLink& a, const PoseLink& b) {
@@ -1039,10 +1125,26 @@ namespace MesenSheets
 		//away is a different pose. Deliberate - a looser identity can merge two
 		//real poses, and that failure is invisible in the file (ADR-0170).
 		std::map<std::vector<PoseTile>, uint32_t> seen;
+		//ADR-0225 §1: per pose, the frames each pixel layout (the (Px, Py)
+		//vector in identity order) was seen in, and the cluster of the earliest
+		//retained frame that drew it - one occurrence supplies every tile's
+		//pixels and rank. OAM order is not part of the key: the vector wins
+		//by frames, then that earliest frame supplies Z.
+		std::map<std::vector<PoseTile>, std::map<std::vector<int32_t>, std::pair<uint32_t, std::vector<PoseTile>>>> layouts;
 		for(const OamFrame& frame : frames) {
 			stats.Frames += frame.RepeatCount;
 			for(const PoseCluster& cluster : SegmentFrame(frame, vocab)) {
 				seen[cluster.Tiles] += frame.RepeatCount;
+				std::vector<int32_t> pixels;
+				for(const PoseTile& tile : cluster.Tiles) {
+					pixels.push_back(tile.Px);
+					pixels.push_back(tile.Py);
+				}
+				std::pair<uint32_t, std::vector<PoseTile>>& layout = layouts[cluster.Tiles][pixels];
+				if(layout.first == 0) {
+					layout.second = cluster.Tiles;
+				}
+				layout.first += frame.RepeatCount;
 			}
 		}
 
@@ -1053,7 +1155,16 @@ namespace MesenSheets
 				continue;
 			}
 			PoseEntry entry;
-			entry.Tiles = pose.first;
+			//Most-seen layout; the ordered map hands the lexicographically
+			//smallest vector out first, so a strict > breaks ties toward it.
+			uint32_t bestFrames = 0;
+			for(const auto& layout : layouts[pose.first]) {
+				if(layout.second.first > bestFrames) {
+					bestFrames = layout.second.first;
+					entry.Tiles = layout.second.second;
+				}
+			}
+			entry.Overlaps = PoseTilesOverlap(entry.Tiles);
 			entry.Frames = pose.second;
 			for(const PoseTile& tile : entry.Tiles) {
 				entry.Width = std::max(entry.Width, (uint32_t)(tile.Dx + 1));
@@ -1208,6 +1319,42 @@ namespace MesenSheets
 			}
 		}
 		return plans;
+	}
+
+	//See SpriteGrouping.h (issue #415) for why the palette comes from OAM.
+	std::vector<uint32_t> SpriteNearbyPalettes(const std::vector<OamFrame>& frames, size_t shapeCount, const std::vector<uint32_t>& paletteColors)
+	{
+		//Per shape: palette id -> (frames seen, order of first sight).
+		std::vector<std::map<PaletteId, std::pair<uint64_t, uint64_t>>> seen(shapeCount);
+		uint64_t order = 0;
+		for(const OamFrame& frame : frames) {
+			for(const OamEntry& entry : frame.Entries) {
+				if(entry.Shape >= shapeCount || entry.Palette == kUnknownPalette || entry.Palette >= paletteColors.size()) {
+					continue;
+				}
+				if((paletteColors[entry.Palette] >> 24) != 0xFF) {
+					continue; //not a sprite palette word: no evidence for a sprite condition
+				}
+				std::map<PaletteId, std::pair<uint64_t, uint64_t>>& counts = seen[entry.Shape];
+				auto it = counts.find(entry.Palette);
+				if(it == counts.end()) {
+					it = counts.emplace(entry.Palette, std::make_pair((uint64_t)0, order++)).first;
+				}
+				it->second.first += frame.RepeatCount;
+			}
+		}
+
+		std::vector<uint32_t> palettes(shapeCount, 0);
+		for(size_t shape = 0; shape < shapeCount; shape++) {
+			const std::pair<uint64_t, uint64_t>* best = nullptr;
+			for(const auto& kv : seen[shape]) {
+				if(!best || kv.second.first > best->first || (kv.second.first == best->first && kv.second.second < best->second)) {
+					best = &kv.second;
+					palettes[shape] = paletteColors[kv.first];
+				}
+			}
+		}
+		return palettes;
 	}
 
 	uint32_t NextStemIndex(const std::vector<std::string>& names, const std::string& prefix, const std::string& separator)

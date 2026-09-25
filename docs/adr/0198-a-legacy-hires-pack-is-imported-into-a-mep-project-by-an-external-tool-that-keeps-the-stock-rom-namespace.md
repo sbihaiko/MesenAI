@@ -2,8 +2,34 @@
 
 - Status: accepted (2026-09-16) — §3 decided as option (a), import against
   the patched ROM, with its cost stated; user's go-ahead quoted verbatim:
-  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
-  Phase 12, F12.7 (plain packs first, per §2)
+  "confirmo". §1 **shipped** as PRD Part A §4, Phase 12, F12.7
+  (`scripts/mep_import.py` + `scripts/test_mep_import.py`): written 2026-09-17
+  (`docs/validation/f12-7-legacy-pack-import-2026-09-17.md` — rule set exact
+  everywhere, pixel half missed on a pack that keys one pattern at several
+  crops) and completed 2026-09-19, once F12.6a's per-cell condition
+  (ADR-0197 §1) made that association expressible: each such rule now gets its
+  own `exactCondition` cell, and Ninja Gaiden, Contra80s and Super Mario Bros.
+  round-trip with **0** differing keys
+  (`docs/validation/f12.7-legacy-pack-import-2026-09-19.md`). §3 **shipped**
+  2026-09-22 on the user's build go-ahead, quoted verbatim: "Construir já, em
+  paralelo (Recommended)" — `scripts/mep_import.py --rom <stock dump>` plus
+  `scripts/mep_patch.py` (stdlib IPS applier mirroring `IpsPatcher`, the two
+  hash forms, the `<patch>` lookup in `NesConsole`'s order); the project's
+  `<supportedRom>` is the patched ROM's whole-file sha1, the IPS sits beside
+  both manifests, each `<patch>` line is re-emitted normalized — the `/`-separated
+  path the IPS was copied to and the uppercase sha1 (`mep_patch.emitted_line`;
+  the canonical spelling every repo tool resolves — the loader itself rewrites
+  `\` to `/` before parsing, so this is not a runtime need) — and the limit in
+  §3 is printed on every such import. Measured on the accepted packs whose
+  stock dump is on this machine: Castlevania #143 round-trips with **0**
+  differing keys and lints clean; Metroid #148 (the CHR RAM → CHR ROM case,
+  150 199 rules) round-trips with **0** differing keys but lints as its
+  source pack does (ADR-0196 `<addition>` refusals the pack already has);
+  Mega Man #138 imports but does not round-trip for
+  a reason that predates §3 (identical without its `<patch>` lines); Zelda
+  #139, Zelda II #141 and a Castlevania Rev A dump are refused because no
+  `<patch>` line names the dump (ADR-0145 (3))
+  (`docs/validation/adr0198-s3-patched-rom-import-2026-09-22.md`)
 - Date: 2026-09-16
 - Related: ADR-0005 (MEP textures is an envelope over `hires.txt`), ADR-0145
   (optimistic matching; IPS does not relax), ADR-0003/ADR-0039 (No-Intro

@@ -7,11 +7,12 @@ The fork's planning lives in one consolidated PRD under this folder:
 - `PRD-mesence-enhancement-ecosystem.md` — the single roadmap, organised
   as two Parts. Part A is the pack/core roadmap (vision, legal principles,
   standards, compact delivery record, and remaining work: Phase 9 painting
-  verification, human panel and bounded coverage; Phase 10 feasibility.
+  verification, F9.18's human panel and bounded coverage; Phase 10 feasibility.
   Phase 11 consolidation is complete; its proxy experiment is not human
-  product acceptance). Part B is the default-GUI roadmap (player chrome,
+  product acceptance. Phase 12 artist-surface cold-reads are a fresh Opus
+  session, ADR-0214, amended 2026-09-19). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
-  quick-enhancements panel, with P.1-local identity integration still open). Each Part carries its own header `Status`,
+  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row and the ADR-0205 replay slices (Phase 13). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface.
 

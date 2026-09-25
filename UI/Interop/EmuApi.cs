@@ -106,6 +106,12 @@ namespace Mesen.Interop
 		public static string GetMepSiblingFolder() { return Utf8Utilities.CallStringApi(GetMepSiblingFolderWrapper, 4096); }
 		[DllImport(DllPath, EntryPoint = "GetMepRomSha1")] private static extern void GetMepRomSha1Wrapper(IntPtr outSha1, Int32 maxLength);
 		public static string GetMepRomSha1() { return Utf8Utilities.CallStringApi(GetMepRomSha1Wrapper, 100); }
+
+		//ADR-0211: whole-file SHA-1 (header included) - what an HD pack's
+		//<supportedRom> declares. Not interchangeable with GetMepRomSha1()
+		//above, which is the No-Intro body hash (ADR-0003).
+		[DllImport(DllPath, EntryPoint = "GetMepRomFileSha1")] private static extern void GetMepRomFileSha1Wrapper(IntPtr outSha1, Int32 maxLength);
+		public static string GetMepRomFileSha1() { return Utf8Utilities.CallStringApi(GetMepRomFileSha1Wrapper, 100); }
 		[DllImport(DllPath)] public static extern void SetMepPackEnabled([MarshalAs(UnmanagedType.LPUTF8Str)] string containerName, [MarshalAs(UnmanagedType.I1)] bool enabled);
 
 		//P.3 (PRD Part B §5): records the per-ROM-sha1 preferred pack_id
@@ -162,6 +168,18 @@ namespace Mesen.Interop
 		public static Int32 RefreshMepLocalIdentities()
 		{
 			return RefreshMepLocalIdentitiesWrapper();
+		}
+
+		//F12.3 (ADR-0212): asks the loaded NES pack to re-decode the images an
+		//artist repainted on disk. Returns at once - the work happens on the
+		//emulation thread at the next frame boundary, so this is safe to call
+		//from the UI thread. False means no NES console is loaded. The outcome
+		//goes to the [MEP] log, because it is not known yet when this returns.
+		[DllImport(DllPath, EntryPoint = "RequestMepImageReload")]
+		[return: MarshalAs(UnmanagedType.I1)] private static extern bool RequestMepImageReloadWrapper();
+		public static bool RequestMepImageReload()
+		{
+			return RequestMepImageReloadWrapper();
 		}
 
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);

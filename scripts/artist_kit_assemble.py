@@ -20,6 +20,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
+
 # The order an artist should open the kit in, most recognisable first. A part
 # missing from the kit is simply skipped - the four generators run separately
 # and a kit assembled from one of them is still a kit.
@@ -115,24 +118,70 @@ def _verify_line(fragment: dict) -> str:
             f"{before} tile keys before, {after} after, {lost} lost, {added} added{tail}")
 
 
+def _name_surfaces(fragment: dict) -> None:
+    """Stamp each surface with the name the artist's paint program exports to.
+
+    F12.4 / ADR-0213. `path` is relative to the kit (`sheets/usr000.png`) but a
+    Photoshop layer name reads `/` as a subfolder under its own `-assets`
+    folder, so what an artist pastes is the base name alone. The generators
+    already refuse an unusable name at write time; this is the last gate before
+    the kit claims one, and it also catches the rule that only exists *between*
+    names: two surfaces in one folder that differ by case are one file on the
+    artist's machine.
+    """
+    by_folder = {}
+    for entry in fragment.get("files") or []:
+        path = str(entry.get("path") or "")
+        if not path:
+            continue
+        name = N.asset_name_for(path)
+        reasons = N.check_asset_name(name)
+        if reasons:
+            raise KitError(
+                f"{fragment.get('part', '?')}: `{path}` cannot be painted - "
+                + "; ".join(reasons))
+        entry["assetName"] = name
+        by_folder.setdefault(path[: -len(name)], []).append(name)
+    for folder, names in sorted(by_folder.items()):
+        clashes = N.check_asset_set(names)
+        if clashes:
+            raise KitError(
+                f"{fragment.get('part', '?')}: {folder or './'} - "
+                + "; ".join(clashes))
+
+
 def build_kit(kit_dir: Path, title: str = "") -> dict:
     fragments = load_fragments(kit_dir)
     if not fragments:
         raise KitError(f"no kit-part-*.json fragment in {kit_dir}")
     packs = {f.get("pack") for f in fragments if f.get("pack")}
+    # A static kit's `pack` is an output location that may not even exist, so
+    # the ROM is what names it (ADR-0219).
+    static_rom = next((f.get("rom") for f in fragments
+                       if f.get("static") and f.get("rom")), "")
     kit = {
         "version": 1,
-        "title": title or (sorted(packs)[0] if packs else kit_dir.name),
+        "title": title or static_rom or (sorted(packs)[0] if packs else kit_dir.name),
         "packs": sorted(p for p in packs if p),
         "parts": [],
         "totals": {"files": 0, "cells": 0, "inferred_files": 0, "dropped": 0},
     }
+    # A kit is static only when *every* part of it is: one recorded part means a
+    # recording exists, and the first line must not deny it.
+    if fragments and all(f.get("static") for f in fragments):
+        kit["static"] = True
+        kit["rom"] = next((f.get("rom") for f in fragments if f.get("rom")), "")
     for fragment in fragments:
+        _name_surfaces(fragment)
         counts = _count(fragment)
         for key, value in counts.items():
             kit["totals"][key] += value
         kit["parts"].append({
             "part": fragment["part"],
+            # ADR-0219: a part projected over the ROM alone, with no recording.
+            # Carried up so ARTIST.md's first line can say so before anything
+            # else, and absent on every recorded part.
+            **({"static": True} if fragment.get("static") else {}),
             "generator": fragment.get("generator", ""),
             "counts": counts,
             "verify": fragment.get("verify", {}),
@@ -143,14 +192,116 @@ def build_kit(kit_dir: Path, title: str = "") -> dict:
     return kit
 
 
+def _kit_paths(kit: dict, key: str) -> list:
+    return [str(f.get(key) or "") for part in kit["parts"] for f in part["files"] if f.get(key)]
+
+
+def _recorded_done_steps(kit: dict) -> list:
+    """The copy-and-build commands for a recorded kit, naming only the folders
+    this kit actually has - a `cp` of a glob that matches nothing fails, and an
+    artist runs these lines as written. Figures (ADR-0225 §2) are not copied at
+    all: `mep_figure.py import` returns them onto the copy's sprite sheets, so
+    they get their own step between the copy and the build (#399), after one
+    build of the copy so they plan against the sheets it slices (#435). A `scene/`
+    screen is a verbatim copy of the pack's `textures/backgrounds/screenNNN.png`,
+    which the manifest's `<background>` line draws by that name, so painted
+    screens return by a plain copy back into that folder (#403). The figure
+    loop stops at the first failed import: a `for` loop's status is its last
+    command's, so a later success would otherwise hide a lost figure."""
+    paths = _kit_paths(kit, "path")
+    figures = _kit_paths(kit, "figure")
+    lines = ["cp -R <game>/auto <game>/painted"]
+    if any(p.startswith("sheets/") for p in paths):
+        lines.append("cp <kit>/sheets/*.png <kit>/sheets/*.json <game>/painted/textures/sheets/")
+    if any(p.startswith("chr/") for p in paths):
+        lines.append("cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/")
+    if any(p.startswith("scene/") for p in paths):
+        lines.append("cp <kit>/scene/*.png  <game>/painted/textures/backgrounds/")
+    if figures:
+        # #435: build once before the imports. The build un-bakes flip-baked
+        # crops in place (ADR-0178), so an import before it plans against twins
+        # the build then rewrites and its paint re-points rules; `import`
+        # refuses such a pack, and `&&` keeps a failed build from reaching it.
+        lines.append("python3 scripts/mep_build.py build <game>/painted &&")
+        # Fail fast: a `for` loop's status is its last iteration's, so a failed
+        # import must exit the loop and `&&` must hold the build back. `sh -c`
+        # keeps that `exit` out of the artist's own interactive shell.
+        lines.append("sh -c 'for f in <kit>/figures/usr*-figure.png; do "
+                     "python3 scripts/mep_figure.py import <game>/painted \"$f\" || exit 1; done' &&")
+    lines.append("python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal")
+    out = [
+        "The kit is a folder beside the recording, not the pack itself. To turn painted "
+        "work into a pack, copy the recording, drop your files into the copy and build it:",
+        "",
+        "```",
+        *lines,
+        "```",
+        "",
+        "Copy each sheet together with its `.json`: the JSON is the slicing contract that "
+        "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
+        "untouched reference, and painting it is how your work becomes invisible.",
+        "",
+    ]
+    if any(p.startswith("scene/") for p in paths):
+        out.extend([
+            "A `scene/` screen goes back into `textures/backgrounds/` under the same name: "
+            "it is the pack's own whole-screen capture, drawn by the manifest's "
+            "`<background>` line on the frames it was frozen for. A screen you did not "
+            "paint is copied back unchanged, so copying all of them is safe.",
+            "",
+        ])
+    if figures:
+        out.extend([
+            "Figures are not copied: `figures/usr*-figure.png` is a view, and "
+            "`mep_figure.py import` writes what you painted on it into the copy's own "
+            "sheets - the `usr*` row that draws each tile (#413). A cell painted for the "
+            "first time moves its tile off the recorded art, so that build needs a ROM "
+            "reopen and the import says so (ADR-0231). Later repaints of it only need "
+            "*Reload Repainted Images*. The import runs after the copy and "
+            "before the final build. The copy is built once before the import: that first "
+            "build rewrites some recorded sheets in place (it straightens sprites the "
+            "recording stored mirrored), and an import planned against the sheets before "
+            "that rewrite moves rules the reload cannot show; `import` refuses a copy that "
+            "was not built yet and says so, and writes nothing (#435). "
+            "The figure keeps showing every sprite the way the game draws it, flipped ones "
+            "included: paint it as you see it, and `import` straightens your paint on "
+            "those cells the way the build straightened their tiles, so it lands the right "
+            "way round in game (#463). "
+            "A figure you did not paint changes nothing, so importing "
+            "every one is safe; each prints how many cells it wrote, and the first import "
+            "that fails stops the block before the build. A figure and its "
+            "`sheets/usr*.png` row are the same tiles - paint either one, not both: if "
+            "both are painted, the figure's paint replaces the row's in each cell the "
+            "figure painted, and the import prints a note counting them.",
+            "",
+        ])
+    return out
+
+
 def render_markdown(kit: dict) -> str:
     out = [f"# Artist kit - {kit['title']}", ""]
-    out.append(
-        "Everything here was generated from a recording of the game being played. "
-        "Nothing was drawn by hand, and nothing was invented: a caption comes from "
-        "the recording's own data, and anything inferred rather than seen is marked "
-        "as such."
-    )
+    if kit.get("static"):
+        # ADR-0219 / PRD F12.9: the first line, before anything else, because
+        # every later sentence of this page is about what a recording gives an
+        # artist and this kit had none.
+        rom = kit.get("rom") or "the ROM"
+        out.append(
+            f"**Nothing here was seen in play.** Every page was read straight out of "
+            f"{rom}'s own pattern tables, with no recording at all: the shapes are "
+            "exact, the colours are a placeholder, and each cell says `seen: false` "
+            "in its sidecar. There is no figure sheet, no scenery sheet and no stage "
+            "map in this kit - those come from what a run observed, and nothing was "
+            "observed. Record the game and generate the kit again to get them; a "
+            "recorded cell always wins over one of these."
+        )
+    else:
+        out.append(
+            "Everything here was generated from a recording of the game being played. "
+            "Nothing was drawn by hand, and nothing was invented: a caption comes from "
+            "the recording's own data (a default name the recorder inferred is marked "
+            "`inferred` in its sidecar, and a name you put in names.json wins over it), "
+            "and anything inferred rather than seen is marked as such."
+        )
     out.append("")
     out.append("## Before you paint")
     out.append("")
@@ -167,23 +318,82 @@ def render_markdown(kit: dict) -> str:
         "vocabulary the recorder dumps, not a surface (ADR-0153 §3).",
     ])
     out.append("")
+    out.append("## Open, paint, save")
+    out.append("")
+    out.extend([
+        "Open the surface in the program you already use, paint on it, and save "
+        "back over the same file - then ask the running game for it with **HD Packs "
+        "> Reload Repainted Images**. You do not reopen the ROM and you do not lose "
+        "where you are standing. One exception: until you paint a sheet cell, its tile "
+        "draws the recorded art (the filtered `chr/` page), so an unpainted rebuild "
+        "shows exactly what was recorded (ADR-0231). The first stroke on a cell, or "
+        "painting it back to the original, moves that tile onto your sheet. Rebuild "
+        "and reopen the ROM once, and after that the reload is enough. Painting a "
+        "`chr/` page always reloads in place.",
+        "",
+        "Each surface's file name is also the name to export to, so the save is one "
+        "shortcut after the first time:",
+        "",
+        "| program | the one step |",
+        "|---|---|",
+        "| GIMP | *File > Overwrite `<name>.png`* |",
+        "| Aseprite | *File > Export* once, then *Repeat last export* |",
+        "| Krita | *File > Export* once, then *File > Export* again over the same path |",
+        "| Photoshop | *File > Generate > Image Assets*, with your layer named exactly "
+        "`<name>.png` (the `assetName` in `kit.json`) |",
+        "",
+        "Photoshop is the one exception and it is worth knowing before you start: its "
+        "generator always writes into a `<document>-assets` folder beside the `.psd` "
+        "and that location cannot be changed. The file it writes has the right name, "
+        "so copying it over the kit's copy is the whole difference. The other three "
+        "overwrite the kit file directly.",
+        "",
+        "### The layered file (GIMP, Krita, MyPaint)",
+        "",
+        "Beside every surface there is also a `<name>.ora` - the same picture as "
+        "layers, for a program that opens OpenRaster: `orig` (the untouched reference, "
+        "locked), `paint` (empty - the one you paint on; it is the topmost visible "
+        "layer when the file opens), `guides` (the cell grid, the captions and a hatch "
+        "over every cell nothing was seen in play, hidden) and `palettes` (the colours "
+        "the recording saw on this sheet, in the order they first appear reading down "
+        "the sheet, each group labelled with the first cell that wears it, hidden). "
+        "**Select `paint` in the Layers panel before your first stroke**: GIMP 2.10 and "
+        "Krita 5 both open an OpenRaster file with the bottom layer, `orig`, active, "
+        "whatever the stack order; Krita refuses a stroke there because `orig` is "
+        "locked, GIMP does not, and a stroke on `orig` is lost on the next kit run. "
+        "A stage panorama also carries "
+        "`context` - the stage at 1x, at half strength, below the grid, a reference "
+        "you may move - so it has five layers; a figure, scenery or pattern page has "
+        "four, because nothing recorded says where on the stage its cells were seen.",
+        "",
+        "The `.ora` is a **starting point, not the deliverable**. Paint on `paint`, "
+        "then export a flat PNG over `<name>.png` - the name in the table above - "
+        "exactly as you would without it. Nothing reads the `.ora` back: not the "
+        "rebuild, not the reload, not the lint. Keep `guides` and `palettes` hidden "
+        "when you export; both are drawn in one magenta (`#FF00FD`) no NES palette "
+        "reaches, and a cell that carries that colour is refused by "
+        "`python3 scripts/mep_lint.py`, which names the cell. Photoshop and Aseprite "
+        "do not open `.ora`; they stay on the per-surface names above, and there is no "
+        "`.psd`, `.aseprite` or `.kra` in the kit.",
+    ])
+    out.append("")
     out.append("## When you are done")
     out.append("")
     out.extend([
-        "The kit is a folder beside the recording, not the pack itself. To turn painted "
-        "work into a pack, copy the recording, drop your files into the copy and build it:",
+        "The kit is a folder, not the pack itself. There is no recording to copy here, "
+        "so the pack is the pages and nothing else:",
         "",
         "```",
-        "cp -R <game>/auto <game>/painted",
-        "cp <kit>/sheets/*.png <kit>/sheets/*.json <game>/painted/textures/sheets/",
-        "cp <kit>/chr/*.png    <kit>/chr/*.json    <game>/painted/textures/chr/",
+        "mkdir -p <game>/painted/textures",
+        "cp -R <kit>/chr <game>/painted/textures/",
         "python3 scripts/mep_build.py build <game>/painted   # 0 errors means it is legal",
         "```",
         "",
-        "Copy each sheet together with its `.json`: the JSON is the slicing contract that "
-        "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
+        "`chr/fill-rules.hires.txt` travels with the pages: it is the manifest, one "
+        "`<tile>` row per tile of the ROM, and the build regenerates "
+        "`textures/hires.txt` from it. Leave every `.orig.png` in the kit - it is the "
         "untouched reference, and painting it is how your work becomes invisible.",
-        "",
+    ] if kit.get("static") else _recorded_done_steps(kit) + [
         "Build the whole copy, not a folder holding only your sheets. A pack manifest also "
         "points at the recording's screen images, and a part-folder build fails on those "
         "references - measured, not guessed. Installing the finished pack as the human "
@@ -192,6 +402,15 @@ def render_markdown(kit: dict) -> str:
         "",
         "A stage map is not copied: it is sliced back into tiles, because a pack stores "
         "tiles and the map is a picture of them. Run the slicer named in the map section.",
+    ])
+    out.extend([
+        "",
+        "If the manifest carries a bare `<bgPreservesBehindBgSprites>` line, leave it: "
+        "the recorder writes it so a recorded screen does not hide a behind-background "
+        "sprite over empty (colour-0) canvas (ADR-0224). It is opt-in per pack - a pack "
+        "without the line renders as it always did - it is not noise, and other "
+        "emulators simply ignore it. It undoes the recorded screen only: a foreground "
+        "background you add at priority 30-39 still covers the sprite where it is opaque.",
     ])
     out.append("")
     out.append("## What is in here")

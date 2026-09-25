@@ -26,9 +26,9 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        source: `--source`, else `textures/hires.txt` (a prior build), else
        `auto/textures/hires.txt` (the emulator bootstrap, F5.2). The sheets
        replace the art; the keys and the header tags (ver/scale/system/
-       supportedRom/options/overscan) are carried over. Background tags are
-       preserved; a background PNG missing under `textures/` but present
-       under `auto/textures/` is copied up (the author keeps their assets).
+       supportedRom/options/overscan) are carried over. A background PNG
+       missing under `textures/` but present under `auto/textures/` is copied
+       up; one missing from both is retired and its tag dropped (#344).
        <bgm>/<sfx> never live in the textures manifest — they belong to the
        audio section (MEP-v1 §2.1 rule 6), so build moves them there.
 
@@ -37,7 +37,8 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        are NOT 16-column grids — each cell carries the exact hires.txt key of
        every 8x8 tile inside it, so the build slices them back through
        `cells[]` (contact sheets) or `placements[]` (a stitched map, resolved
-       against the sibling `metatiles.json` vocabulary) and emits one <tile>
+       against the whole background vocabulary: the metatiles/hud/font/misc
+       sidecars plus `adjacency.json`, ADR-0164 §1) and emits one <tile>
        per resolved crop. `*.orig.png` twins are references: never sliced,
        never emitted. An artist can therefore paint a sheet in any image
        editor, re-run build, and see the change in the emulator without ever
@@ -48,6 +49,23 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        was actually painted, measured against its `*.orig.png` twin. Painted
        beats untouched; among painted cells - and among untouched ones - the
        static kind rank decides.
+
+       ADR-0231 (#447): the key an *untouched* cell wins does not point at
+       its crop. A sheet crop is the raw tile upscaled nearest-neighbour,
+       while the recording's own rule points at a pattern page that went
+       through the pack's scale filter (xBRZ by default), so pointing it at
+       the crop changed what an unpainted rebuild rendered. The build re-emits
+       the recording's rule for that key instead, byte for byte except the
+       `<img>` index; only a painted cell points at its crop. The recording is
+       read from `textures/hires.recorded.txt` (a snapshot the first build
+       takes before overwriting a recorded `hires.txt`, usable rules or
+       not), else `auto/textures/hires.txt`, else the key source when a
+       build did not write it, else a recorded `textures/hires.txt` under a
+       `--source` build (`mep_recorded.py`). A page found only beside that
+       recording (`auto/textures/` in a `mep_import` project) is copied up
+       into `textures/`, where the emitted `<img>` resolves. A rule whose
+       page is missing, or a recording at another `<scale>`, falls back to
+       the crop, counted in the build output.
 
 pack   writes `pack.json` at the folder root from the folder tree and the
        given identity (MEP-v1 §3.1), then zips the whole folder with a
@@ -94,7 +112,14 @@ import zipfile
 import zlib
 from pathlib import Path
 
+import mep_addition  # ADR-0196: <addition> lines and their synthetic target keys
+import mep_capture_scan  # #422: which live capture draws a painted key
+import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as the loader does
+import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
+import mep_recorded  # ADR-0231 (#447): an untouched cell keeps the recorded rule
+import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
+import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 colour 0, sheet + twin in lockstep
 from mep_recipe_common import sha256_file
 
 # NES hires.txt version emitted for the texture and audio manifests (ver >=
@@ -103,8 +128,8 @@ NES_VER = "107"
 # Header tags carried over verbatim from the key source.
 _HEADER_TAGS = ("ver", "scale", "system", "supportedRom", "options", "overscan")
 _TILE_RE = re.compile(r"^(\[[^\]]*\])?<tile>(.*)$")
-_BGM_RE = re.compile(r"^(\[[^\]]*\])?<bgm>(.*)$")
-_SFX_RE = re.compile(r"^(\[[^\]]*\])?<sfx>(.*)$")
+_BGM_RE = mep_carry.BGM_RE
+_SFX_RE = mep_carry.SFX_RE
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 
 
@@ -194,6 +219,10 @@ def _sheet_layout(path: Path, scale: int) -> int:
 # is logged, so a surprising win is visible in the build output rather than
 # silent.
 _SHEET_RANK = {
+    # ADR-0209 Q4(k) and ADR-0210 §3: the remainder sheet and the third-party
+    # index sheet each hold keys no other sheet can, so neither rank decides
+    # anything - a stale overlapping sheet still loses to the specific surface.
+    "unsorted": 0, "index": 0,
     "metatiles": 1,
     "sprites": 1,
     "misc": 2,
@@ -214,11 +243,9 @@ _FLIPPABLE_SHEET_KINDS = frozenset({"sprite", "sprites"})
 _HEX_TILE_RE = re.compile(r"^[0-9A-F]{32}$")
 
 
-def _is_index_key(token: str) -> bool:
-    """Whether a `<tile>`'s key field names a CHR index rather than 16 bytes
-    of tile data. HdPackLoader::ReadTileData draws the line at 32 characters:
-    anything shorter is an index, and the pack is a CHR ROM game's."""
-    return len(token.strip()) < 32
+# "Is this key a CHR index?" and "how wide is an index written?" live in `mep_addition`, so build/lint/editor spell a key one way (ADR-0196).
+_is_index_key = mep_addition.is_index_key
+_index_token = mep_addition.index_token
 
 
 def _unflips(data: str) -> set:
@@ -258,118 +285,50 @@ def _png_write(path: Path, bmp: "_Bitmap") -> None:
         + chunk(b"IEND", b""))
 
 
-def _flip_bitmap_region(bmp: "_Bitmap", x: int, y: int, w: int, h: int, mirror: str) -> None:
-    """Un-bake an OAM mirror from a crop in place (#255 / ADR-0178). The run
-    time keys by the unflipped tile and mirrors the replacement art itself, so
-    a sheet cell that carried `source` + `mirror` must store unflipped pixels
-    under the source key — not the baked-flipped bitmap the kit showed."""
-    ch = bmp.channels
-    if "H" in mirror:
-        for row in range(y, y + h):
-            off = row * bmp.stride
-            for i in range(w // 2):
-                a = off + (x + i) * ch
-                b = off + (x + w - 1 - i) * ch
-                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
-                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
-    if "V" in mirror:
-        for col in range(x, x + w):
-            for i in range(h // 2):
-                a = (y + i) * bmp.stride + col * ch
-                b = (y + h - 1 - i) * bmp.stride + col * ch
-                bmp.raw[a:a + ch], bmp.raw[b:b + ch] = (
-                    bytes(bmp.raw[b:b + ch]), bytes(bmp.raw[a:a + ch]))
+def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix, alpha: bool = False) -> int:
+    """Apply `fix(sheet, twin_or_None)` to `png_path` and, in lockstep (#329),
+    to its 1x `*.orig.png` twin `ref_path`; `fix` returns how many crops it
+    rewrote, and both files are written only when that is not 0.
 
-
-def _unflip_sheet_crops(png_path: Path, crops: list, scale: int) -> int:
-    """Apply pending mirror un-bakes to `png_path`. Returns how many crops
-    were rewritten; 0 when the PNG could not be decoded (left untouched)."""
-    if not crops:
-        return 0
+    The twin is the baseline ADR-0153 §4 diffs the sheet against to decide
+    whether the artist painted a cell, so a mechanical rewrite of the sheet must
+    land on it too: un-baking only the sheet left each corrected cell differing
+    from a still-baked twin, so the next `build` read those cells as painted and
+    tripped #253 wherever one lost its key to a higher-ranked sheet. Both fixes
+    (sheet_pixel_fixes) commute with nearest-neighbour upscaling. `alpha`
+    gives an RGB sheet and twin the alpha channel a transparency fix needs."""
     bmp = _png_pixels(png_path)
     if bmp is None:
-        print(f"warning: {png_path.name}: cannot rewrite mirror crops — not an "
-              f"8-bit RGB/RGBA PNG; mirrored cells keep their baked pixels",
-              file=sys.stderr)
+        print(f"warning: {png_path.name}: cannot rewrite crops — not an 8-bit RGB/RGBA "
+              f"PNG; they keep the pixels the recorder drew", file=sys.stderr)
         return 0
-    span = 8 * scale
-    for x, y, mirror in crops:
-        if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
-            continue
-        _flip_bitmap_region(bmp, x, y, span, span, mirror)
-    _png_write(png_path, bmp)
-    return len(crops)
-
-
-def _sidecar_drop_mirrors(json_path: Path) -> int:
-    """After un-baking mirror crops into the sheet PNG, rewrite the sidecar so
-    a second `build` does not flip again (#255 idempotency). Each tile entry
-    that carried `source` + `mirror` becomes a plain unflipped entry: `tile`
-    is replaced by `source`, and both optional fields are removed."""
-    try:
-        doc = json.loads(json_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return 0
-    if not isinstance(doc, dict):
-        return 0
-    n = 0
-
-    def fix_tiles(tiles):
-        nonlocal n
-        if not isinstance(tiles, list):
-            return
-        for entry in tiles:
-            if not isinstance(entry, dict):
-                continue
-            src = str(entry.get("source") or "").strip().upper()
-            mir = str(entry.get("mirror") or "").strip().upper()
-            if not src or mir not in ("H", "V", "HV") or not _HEX_TILE_RE.match(src):
-                continue
-            entry["tile"] = src
-            entry.pop("source", None)
-            entry.pop("mirror", None)
-            n += 1
-
-    for cell in doc.get("cells") or []:
-        if not isinstance(cell, dict):
-            continue
-        fix_tiles(cell.get("tiles"))
-        for alias in cell.get("aliases") or []:
-            if isinstance(alias, dict):
-                fix_tiles(alias.get("tiles"))
-    if not n:
-        return 0
-    json_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    ref = _png_pixels(ref_path) if ref_path is not None else None
+    if alpha:
+        bmp, ref = F.with_alpha(bmp), F.with_alpha(ref)
+    if ref is not None and (ref.width * scale, ref.height * scale, ref.channels) != (bmp.width, bmp.height, bmp.channels):
+        ref = None  # not this sheet's twin: _EditedProbe is blind here too
+    n = fix(bmp, ref)
+    if n:
+        _png_write(png_path, bmp)
+        if ref is not None:
+            _png_write(ref_path, ref)
     return n
 
 
-def _index_token(index: int) -> str:
-    """The index in the width HexUtilities::ToHex writes it — 2, 4, 6 or 8
-    digits. The loader parses any width, but matching the emulator's own form
-    keeps a rebuilt manifest diffable against the bootstrap's."""
-    for digits in (2, 4, 6):
-        if index < (1 << (4 * digits)):
-            return f"{index:0{digits}X}"
-    return f"{index:08X}"
-
-
-def _condition_variants(raw_variants):
-    """(cond, rest) rows for one (tile, palette), with the unconditional
-    fallback twin ADR-0189 §3 / #256 requires. `raw_variants` is the list
-    collected from the key source, or None when the key is unknown."""
-    if not raw_variants:
-        return [("", ["1", "N"])]
-    by_cond = {}
-    for cond, rest in raw_variants:
-        by_cond.setdefault(cond, list(rest))
-    if any(c for c in by_cond) and "" not in by_cond:
-        # Recorder always writes the bare twin after each [condition] rule;
-        # synthesise it from the first conditional's trailing fields when the
-        # key source lost it (or a hand-edited manifest omitted it).
-        by_cond[""] = list(next(v for c, v in by_cond.items() if c))
-    # Conditionals first, bare twin last — matches HdPackBuilder's order and
-    # GetMatchingTile's "first passing entry" walk.
-    return sorted(by_cond.items(), key=lambda kv: (0 if kv[0] else 1, kv[0]))
+def _unflip(crops: list, scale: int):
+    """The ADR-0178 un-bake of `crops` [(x, y, mirror)] as a `_rewrite_sheet` fix."""
+    def fix(bmp, ref):
+        span, n = 8 * scale, 0
+        for x, y, mirror in crops:
+            if x < 0 or y < 0 or x + span > bmp.width or y + span > bmp.height:
+                continue
+            F.flip_region(bmp, x, y, span, span, mirror)
+            n += 1
+            tx, ty = x // scale, y // scale
+            if ref is not None and tx + 8 <= ref.width and ty + 8 <= ref.height:
+                F.flip_region(ref, tx, ty, 8, 8, mirror)
+        return n
+    return fix
 
 
 _HEX_PAL_RE = re.compile(r"^[0-9A-F]{8}$")
@@ -387,6 +346,8 @@ class SheetDoc:
         self.gutter = int(doc.get("gutter") or 0)
         self.columns = max(1, int(doc.get("columns") or 1))
         self.cells = doc.get("cells") or []
+        self.conditions = doc.get("conditions") or []  # ADR-0197 §1, authored
+        self.additions = doc.get("additions") or []    # ADR-0196 §1, overflow layer
         self.rank = _SHEET_RANK[self.kind]
 
     @property
@@ -505,34 +466,54 @@ def _sheet_scale(docs: list) -> int | None:
     return found
 
 
+# The sheets whose cells are entries of the background vocabulary a map places
+# (ADR-0153 §3). `unsorted` numbers a vocabulary of its own, so it is not one.
+_BACKGROUND_VOCAB_KINDS = ("metatiles", "hud", "font", "misc")
+
+
 def _vocabulary(sd: SheetDoc, sheets_dir: Path):
-    """The metatile vocabulary a map's `placements[].cell` indexes into: the
-    `cells[]` of the sibling metatiles.json (ADR-0153 §4/§6). Cells are keyed
-    by their `metatile` (the vocabulary index the builder wrote) and, as a
-    fallback, by their position in the array."""
-    meta = sheets_dir / "metatiles.json"
-    if not meta.is_file():
+    """`{vocabulary index: entry carrying tiles[]}` for a map's `placements[].cell`.
+
+    A placement names an absolute vocabulary index, and a vocabulary index is
+    not a `metatiles.json` cell (ADR-0164 §1, #416): hud/font/misc entries sit
+    on their own sheets, an alias rides inside its canonical cell's
+    `aliases[]` (F9.7), and a cell a captured screen owns is on no sheet at
+    all (ADR-0156). So the index resolves through `cells[].metatile` and
+    `aliases[].metatile` of every background sheet, then through the
+    background nodes of `adjacency.json`, which carry every entry's keys.
+    Array position in `metatiles.json` is used only when no cell names a
+    `metatile` at all: as a fallback beside real indexes it put another
+    cell's keys on the crop (22 placements of a Castlevania map)."""
+    by_vocab, by_position = {}, {}
+    for kind in _BACKGROUND_VOCAB_KINDS:
+        doc = _read_sidecar(sheets_dir / f"{kind}.json")
+        cells = doc.get("cells") if doc.get("kind") == kind else None
+        for pos, c in enumerate(cells if isinstance(cells, list) else []):
+            if not isinstance(c, dict):
+                continue
+            if kind == "metatiles":
+                by_position.setdefault(pos, c)
+            for entry in [c] + [a for a in c.get("aliases") or [] if isinstance(a, dict)]:
+                if isinstance(entry.get("metatile"), int):
+                    by_vocab.setdefault(entry["metatile"], entry)
+    background = _read_sidecar(sheets_dir / "adjacency.json").get("background")
+    for node in (background.get("nodes") if isinstance(background, dict) else None) or []:
+        if isinstance(node, dict) and isinstance(node.get("cell"), int):
+            by_vocab.setdefault(node["cell"], node)
+    vocab = by_vocab or by_position
+    if not vocab:
         print(f"warning: {sd.json_path.name}: no sibling metatiles.json to resolve placements against — sheet skipped")
         return None
+    return vocab
+
+
+def _read_sidecar(path: Path) -> dict:
+    """A sibling JSON sidecar as a dict; {} when it is missing or unreadable."""
     try:
-        doc = json.loads(meta.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        print(f"warning: metatiles.json is not readable ({e}) — {sd.json_path.name} skipped")
-        return None
-    cells = doc.get("cells") if isinstance(doc, dict) else None
-    if not isinstance(cells, list) or not cells:
-        print(f"warning: metatiles.json has no cells[] — {sd.json_path.name} skipped")
-        return None
-    by_index = {}
-    for pos, c in enumerate(cells):
-        if not isinstance(c, dict):
-            continue
-        by_index.setdefault(pos, c)
-    by_vocab = {}
-    for c in cells:
-        if isinstance(c, dict) and isinstance(c.get("metatile"), int):
-            by_vocab.setdefault(c["metatile"], c)
-    return by_vocab or by_index, by_index
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
 
 
 class _Bitmap:
@@ -648,10 +629,17 @@ class _EditedProbe:
     is compared against the twin upscaled by N — the cheaper direction, since
     it needs no resampling decision and no whole-image allocation.
 
-    With no usable twin (`"reference": ""`, a missing or unreadable file, a
-    size that is not exactly N x the sheet's) there is nothing to diff against,
-    so every cell of that sheet counts as edited and the static rank decides,
-    exactly as before this rule existed."""
+    With no usable twin (`"reference": ""`, a missing or unreadable file)
+    there is nothing to diff against, so every cell of that sheet counts as
+    edited and the static rank decides, exactly as before this rule existed.
+
+    A twin that *is* readable but the wrong size is a different case (#346):
+    the sheet and its twin are meant to grow together (ADR-0153 §3), one PNG
+    at a time, so a size mismatch between two files that both exist is not
+    "no evidence" — it is proof the pair was half-grown. Falling back to
+    blind here would ring the same silent bell #346 was filed over: every
+    cell of the sheet counts as painted and `_SHEET_RANK` decides cells
+    nobody touched, with the build staying green. This one refuses instead."""
 
     def __init__(self, sd: "SheetDoc", scale: int, sheets_dir: Path):
         self.scale = scale
@@ -674,9 +662,10 @@ class _EditedProbe:
         elif (self.orig.width * scale != self.sheet.width
               or self.orig.height * scale != self.sheet.height
               or self.orig.channels != self.sheet.channels):
-            self.reason = (f"reference twin {ref} is {self.orig.width}x{self.orig.height}, "
-                           f"not {self.sheet.width // scale}x{self.sheet.height // scale}")
-            self.sheet = self.orig = None
+            raise BuildError(
+                f"{sd.name}: reference twin {ref} is {self.orig.width}x{self.orig.height}, "
+                f"not {self.sheet.width // scale}x{self.sheet.height // scale} — "
+                f"{sd.name} and {ref} must grow together (#346)")
 
     @property
     def blind(self) -> bool:
@@ -699,7 +688,7 @@ class _EditedProbe:
 
 
 def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, out: list, skipped: list,
-                edited: bool = True):
+                edited: bool = True, condition=None):
     """One 8x8 crop per resolved entry of `tiles[]`, row-major inside the cell
     at the same offsets RenderMetatile drew them. A null/short/malformed entry
     means that sub-tile had no art: it is skipped, and the entries after it do
@@ -730,12 +719,16 @@ def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, 
         src = src if _HEX_TILE_RE.match(src) else None
         mirror = str(entry.get("mirror") or "").strip().upper()
         mirror = mirror if mirror in ("H", "V", "HV") else None
-        out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
-                    data, pal, edited, idx, src, mirror))
+        # ADR-0230: one more crop per exact fold - the same pixels, keyed by the
+        # fold's palette, carrying the Brightness that rebuilds it (last field).
+        for fpal, bright in [(pal, None)] + palette_folds.entry_folds(entry)[0]:
+            out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
+                        data, fpal, edited, idx, src, mirror, condition, bright))
 
 
 def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
-    """(x, y, tileData, palette, edited, index, source, mirror) for every 8x8
+    """(x, y, tileData, palette, edited, index, source, mirror, condition, fold
+    brightness or None) for every 8x8
     crop the sheet resolves, in sheet pixels at `scale`. `edited` says the
     crop's cell differs from the `*.orig.png` twin, i.e. the artist actually
     painted it. Crops that fall outside the PNG are dropped with a warning
@@ -750,25 +743,23 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
         vocab = _vocabulary(sd, sheets_dir)
         if vocab is None:
             return []
-        by_vocab, by_pos = vocab
-        unresolved = 0
+        unresolved = []
         for p in sd.doc.get("placements") or []:
-            if not isinstance(p, dict):
-                unresolved += 1
-                continue
             try:
                 px, py, idx = int(p["x"]), int(p["y"]), int(p["cell"])
             except (KeyError, TypeError, ValueError):
-                unresolved += 1
+                unresolved.append("?")
                 continue
-            cell = by_vocab.get(idx, by_pos.get(idx))
+            cell = vocab.get(idx)
             if cell is None:
-                unresolved += 1
+                unresolved.append(str(idx))
                 continue
             _cell_crops(cell.get("tiles"), px, py, per, scale, f"{sd.name} @({px},{py})", crops, skipped,
                         probe.edited(px, py, sd.unit))
         if unresolved:
-            print(f"warning: {sd.name}: {unresolved} placement(s) do not resolve in the metatile vocabulary — skipped")
+            print(f"warning: {sd.name}: {len(unresolved)} placement(s) do not resolve in the metatile vocabulary"
+                  f" (cell {', '.join(sorted(set(unresolved)))}: on no background sheet and not in adjacency.json)"
+                  " — skipped")
     else:
         for c in sd.cells:
             if not isinstance(c, dict):
@@ -781,7 +772,7 @@ def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
                 continue
             painted = probe.edited(cx, cy, sd.unit)
             _cell_crops(c.get("tiles"), cx, cy, per, scale, f"{sd.name} cell {c.get('index')}", crops, skipped,
-                        painted)
+                        painted, mep_conditions.cell_condition(c))
             # ADR-0153 §3 alias pass (F9.7): a bank-swapping mapper delivers the
             # same drawing under several tile keys, so the sheet carries one cell
             # per *subject* and lists the keys it absorbed. The artist paints the
@@ -824,109 +815,14 @@ def _emit_sheet_comment(sheet_rel: str, kind: str, tiles: int, sidecar: str) -> 
     ]
 
 
-def _bgm_sfx_refs(lines):
-    """Files already referenced by <bgm>/<sfx> as (kind, stem) -> (album,
-    track, filename)."""
-    known = {}
-    for s in lines:
-        for rx, kind in ((_BGM_RE, "bgm"), (_SFX_RE, "sfx")):
-            m = rx.match(s)
-            if not m:
-                continue
-            fields = [f.strip() for f in m.group(2).split(",")]
-            if len(fields) >= 3:
-                known[(kind, Path(fields[2]).stem)] = (fields[0], fields[1], fields[2])
-    return known
+def screen_resident_keys(sheets_dir: Path):
+    """`{tile key: capture name}` — every tile a captured screen also draws.
 
-
-def _next_free_id(ids, start=1):
-    n = start
-    while n in ids:
-        n += 1
-    return n
-
-
-def _build_audio_manifest(folder: Path, system: str | None, seed: list) -> str | None:
-    """Regenerates audio/hires.txt from `seed` (previous manifest or the key
-    source's own <bgm>/<sfx>) plus the OGGs under audio/bgm/ and audio/sfx/
-    that are not referenced yet.
-
-    NES-only: GB/SMS/GG OGG replacement is frozen (ADR-0041) and mep_lint has
-    no audio tags for the ver>=200 format, so a non-NES pack returns None.
-    Seed refs whose OGG no longer exists are dropped (their track id is
-    reclaimed); a digit-named OGG's id is honoured only when free, else the
-    next free id is used — so the manifest never carries two <bgm>/<sfx>
-    entries with the same album*256+track id.
-
-    Returns the manifest text, or None when there is nothing to reference."""
-    if system is not None and system != "nes":
-        return None
-    # Keep only seed refs whose OGG actually exists in the audio/ layout; a
-    # dangling ref would ship an unregistered track (lint warning) and its id
-    # must be reclaimed, not held.
-    keep = []
-    for s in seed:
-        for rx, kind in ((_BGM_RE, "bgm"), (_SFX_RE, "sfx")):
-            m = rx.match(s)
-            if not m:
-                continue
-            fields = [f.strip() for f in m.group(2).split(",")]
-            if len(fields) >= 3 and (folder / "audio" / Path(fields[2])).exists():
-                keep.append(s)
-            else:
-                print(f"info: dropping {kind} ref {fields[2]} (no such file under audio/)")
-            break
-    kept_refs = _bgm_sfx_refs(keep)
-
-    def scan(sub: str, kind: str):
-        entries = []
-        known = dict(kept_refs)
-        used_ids = {int(t) for (k, _), (a, t, _) in known.items() if k == kind and a == "0" and t.isdigit()}
-        d = folder / "audio" / sub
-        if not d.is_dir():
-            return entries
-        for f in sorted(d.glob("*.ogg")):
-            stem = f.stem
-            if (kind, stem) in known:
-                continue  # already referenced
-            album = 0
-            if stem.isdigit():
-                track = int(stem)
-                if track in used_ids:
-                    print(f"info: {kind} id {track} already taken — using next free id for {f.name}")
-                    track = _next_free_id(used_ids)
-            else:
-                track = _next_free_id(used_ids)
-            used_ids.add(track)
-            entries.append(f"<{kind}>{album},{track},{sub}/{f.name}")
-        return entries
-
-    keep += scan("bgm", "bgm")
-    keep += scan("sfx", "sfx")
-    if not keep:
-        return None
-    return f"<ver>{NES_VER}\n" + "\n".join(keep) + "\n"
-
-
-
-def screen_shadowed_cells(sheets_dir: Path, docs: list):
-    """Cells whose art a captured screen covers, per sheet.
-
-    A bootstrap pack draws whole captured screens as `<background>` layers
-    (ADR-0050) at a priority above every `<tile>`, and ADR-0156 makes such a
-    screen the owner of the cells it covers. So on a scene a capture covers,
-    painting `metatiles.png` or `map-NNN.png` changes nothing on screen — the
-    file to paint is `backgrounds/screenNNN.png`. That is by design, and
-    invisible: an artist repaints a sheet, rebuilds, sees the old scene and has
-    no way to tell why. This reports it.
-
-    Returns `{sheet name: (count, first screen)}`. Empty is the normal answer
-    for a pack recorded since ADR-0156, which keeps a covered cell off the
-    sheets in the first place — then the scene is simply not in `sheets/` at
-    all, and `captured_screen_note` is what tells the artist where it lives.
-    Also empty when the pack carries no `adjacency.json` or no screen-resident
-    node (ADR-0166 records `screens[]`; a pack recorded before it says nothing,
-    and silence is not evidence of coverage)."""
+    ADR-0050/ADR-0156: a capture owns the frames it was frozen for, so a cell
+    whose key it also draws is painted in vain there. Keyed on the tile (the
+    32-hex bitmap, plus the CHR index token for a CHR ROM game), never on the
+    `metatile` cell id a pasted cell does not carry (#338). Empty for a pack
+    with no `adjacency.json`/`screens[]` — silence is not evidence."""
     adjacency = Path(sheets_dir) / "adjacency.json"
     if not adjacency.is_file():
         return {}
@@ -934,44 +830,131 @@ def screen_shadowed_cells(sheets_dir: Path, docs: list):
         doc = json.loads(adjacency.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return {}
-    nodes = ((doc.get("background") or {}).get("nodes")) or []
     resident = {}
-    for n in nodes:
-        if not isinstance(n, dict):
+    for n in ((doc.get("background") or {}).get("nodes")) or []:
+        screens = n.get("screens") if isinstance(n, dict) else None
+        if not screens or not isinstance(screens[0], dict):
             continue
-        screens = n.get("screens") or []
-        cell = n.get("cell")
-        if screens and isinstance(cell, int) and isinstance(screens[0], dict):
-            resident[cell] = screens[0].get("screen")
-    if not resident:
-        return {}
-    out = {}
-    for sd in docs:
-        if sd.kind not in ("metatiles", "map", "object", "misc"):
-            continue
-        hits = [resident[c["metatile"]] for c in (sd.cells or [])
-                if isinstance(c, dict) and c.get("metatile") in resident]
-        if hits:
-            out[sd.name] = (len(hits), hits[0])
-    return out
+        for t in n.get("tiles") or []:
+            if not isinstance(t, dict):
+                continue
+            resident.setdefault(str(t.get("tile") or "").upper(), screens[0].get("screen"))
+            if isinstance(t.get("index"), int) and t["index"] >= 0:
+                resident.setdefault(_index_token(t["index"]), screens[0].get("screen"))
+    resident.pop("", None)  # a sidecar entry with no bitmap
+    return resident
 
 
 
 def captured_screen_note(textures_dir: Path):
     """`(count, first capture name)` for the `<background>` captures a pack
-    carries, or None.
-
-    ADR-0050 has the bootstrap freeze static screens as whole-screen
-    `<background>` layers, and the host draws them above every `<tile>`. On a
-    scene one covers, the sheets are not the surface: repainting
-    `metatiles.png` or `map-NNN.png` and rebuilding leaves the game looking
-    exactly as before, with nothing to explain why. The F9.18 panel rehearsal
-    lost its seam test to precisely this."""
+    carries, or None. The F9.18 panel rehearsal lost its seam test to a scene
+    a capture owned, so a pack that has any is worth saying so out loud."""
     backgrounds = Path(textures_dir) / "backgrounds"
     if not backgrounds.is_dir():
         return None
     shots = sorted(p for p in backgrounds.glob("screen*.png") if not _is_reference_png(p))
     return (len(shots), shots[0].stem) if shots else None
+
+
+# First line of a static kit's manifest and of the `hires.txt` a pages-only
+# build writes from it (ADR-0219). `scripts/artist_chr_kit.py` writes it; the
+# two spellings must stay identical, which is why each file names the other.
+PAGES_ONLY_MARK = "# mep-pages-only 1"
+
+
+def _is_pages_only(path: Path) -> bool:
+    """True when `path` is a manifest this build path owns."""
+    if not path.is_file():
+        return False
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        return fh.readline().strip() == PAGES_ONLY_MARK
+
+
+def cmd_build_pages_only(folder: Path, source: Path, args) -> int:
+    """Build a pack that holds only CHR pages — a static kit's `chr/` output.
+
+    ADR-0219 / PRD F12.9. The normal build maps a key source's tile keys onto
+    the cells of `textures/sheets/`, in sheet order: the sheets decide where a
+    key is painted. A pages-only pack has no sheets and no recording, and its
+    manifest (`chr/fill-rules.hires.txt`) already carries every key *with* the
+    image it belongs to and the crop inside it — the page is the surface. So
+    this path validates and emits rather than slicing, and the only thing it
+    rewrites is `<scale>`.
+
+    It is deliberately not a fallback for a pack that merely happens to be
+    missing its sheets: the caller reaches it only when there is no
+    `textures/sheets/` at all *and* the static manifest is present."""
+    text = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    header, tiles, _audio, _body = _parse_source(text)
+    images = [ln.strip()[5:].strip() for ln in text if ln.strip().startswith("<img>")]
+    if not tiles:
+        print(f"error: {source} has no <tile> entries", file=sys.stderr)
+        return 2
+    if not images:
+        print(f"error: {source} has no <img> entries — a pages-only manifest names "
+              "the page each key is painted on", file=sys.stderr)
+        return 2
+
+    src_scale = next((int(h[7:].strip()) for h in header if h.startswith("<scale>")), None)
+    scale = args.scale if args.scale is not None else (src_scale if src_scale else 1)
+    if scale < 1 or scale > 10:
+        print(f"error: scale {scale} out of range (1..10)", file=sys.stderr)
+        return 2
+
+    textures = folder / "textures"
+    sizes = []
+    for rel in images:
+        path = textures / rel
+        if not path.is_file():
+            print(f"error: {rel}: named by the manifest and not in the pack", file=sys.stderr)
+            return 2
+        try:
+            sizes.append(_png_size(path))
+        except BuildError as e:
+            print(f"error: {rel}: {e}", file=sys.stderr)
+            return 2
+
+    cell = 8 * scale
+    rows = []
+    for k, (cond, raw) in enumerate(tiles):
+        f = [x.strip() for x in raw.split(",")]
+        if len(f) < 6:
+            print(f"error: <tile> #{k} has only {len(f)} fields: {raw}", file=sys.stderr)
+            return 2
+        img = int(f[0])
+        if img < 0 or img >= len(images):
+            print(f"error: <tile> #{k} points at <img> {img}, and the manifest names "
+                  f"{len(images)}", file=sys.stderr)
+            return 2
+        x, y = int(f[3]), int(f[4])
+        w, h = sizes[img]
+        if x < 0 or y < 0 or x + cell > w or y + cell > h:
+            print(f"error: <tile> #{k} crops ({x},{y}) {cell}x{cell} outside "
+                  f"{images[img]} ({w}x{h}) — the page was resized, or the scale is "
+                  f"not {scale}", file=sys.stderr)
+            return 2
+        rows.append(f"{cond}<tile>" + ",".join(f))
+
+    out = [PAGES_ONLY_MARK]
+    out += [h if not h.startswith("<scale>") else f"<scale>{scale}" for h in header]
+    if not any(h.startswith("<ver>") for h in out):
+        out.insert(1, f"<ver>{NES_VER}")
+    if not any(h.startswith("<scale>") for h in out):
+        out.append(f"<scale>{scale}")
+    out.append("")
+    out += [f"<img>{rel}" for rel in images]
+    out.append("")
+    out.append(f"# {len(rows)} <tile> row(s) carried over from "
+               f"{source.relative_to(textures)} — a pages-only pack: every key is "
+               "painted on the CHR page it names, and none of them was seen in play.")
+    out += rows
+    (textures / "hires.txt").write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    wildcard = sum(1 for r in rows if r.rstrip().endswith(",Y"))
+    print(f"pages-only pack: {len(images)} page(s), {len(rows)} <tile> rule(s) "
+          f"({wildcard} defaultTile=Y) at scale {scale} -> textures/hires.txt")
+    return 0
 
 
 def cmd_build(args) -> int:
@@ -980,6 +963,23 @@ def cmd_build(args) -> int:
         print(f"error: {folder} is not a directory", file=sys.stderr)
         return 2
     scale = args.scale
+
+    # ADR-0219 / PRD F12.9: a pack holding only CHR pages, their sidecars and
+    # the static manifest beside them. There is nothing to slice and no
+    # recording to take attributes from, so it takes its own path.
+    static_manifest = folder / "textures" / "chr" / "fill-rules.hires.txt"
+    if (args.source is None and not (folder / "textures" / "sheets").is_dir()
+            and _is_pages_only(static_manifest)):
+        existing = folder / "textures" / "hires.txt"
+        # A rebuild overwrites the manifest this path wrote before; a recording
+        # is never overwritten, because a pack that has one is not a pages-only
+        # pack and its `hires.txt` is the evidence, not an output.
+        if existing.is_file() and not _is_pages_only(existing):
+            print(f"error: {existing.relative_to(folder)} was not built from these pages "
+                  "— refusing to overwrite a recorded manifest with a pages-only build",
+                  file=sys.stderr)
+            return 2
+        return cmd_build_pages_only(folder, static_manifest, args)
 
     # --- key source (where the tile keys come from) ---
     source = Path(args.source).resolve() if args.source else None
@@ -1052,6 +1052,7 @@ def cmd_build(args) -> int:
                   f"re-scale the sheets by a whole factor or pass --scale {sheet_scale}", file=sys.stderr)
             return 2
 
+    recorded = mep_recorded.load(folder, source, lines, scale, _png_size, _TILE_RE)
     try:
         cell_sizes = [_sheet_layout(p, scale) for p in sheets]
     except BuildError as e:
@@ -1067,11 +1068,6 @@ def cmd_build(args) -> int:
         print(f"info: legacy sheets hold {total_cells} cell(s) of the {len(tiles)} key(s); the rest come from the ADR-0153 sheets")
     if total_cells > len(tiles):
         print(f"info: sheets hold {total_cells} cell(s), only {len(tiles)} are referenced; trailing cells stay unused")
-
-    for name, (count, screen) in sorted(screen_shadowed_cells(sheets_dir, sheet_docs).items()):
-        print(f"warning: {name}: {count} cell(s) are covered by the captured screen "
-              f"backgrounds/{screen}.png, which draws over every <tile> (ADR-0050/ADR-0156) — "
-              f"paint that capture to change those cells; painting this sheet will not show in game")
 
     offsets = []
     acc = 0
@@ -1148,31 +1144,47 @@ def cmd_build(args) -> int:
     # ADR-0178: crops of a pack recorded before the ADR, recognised - never
     # repaired - by the un-flip test below.
     baked_flip = {}
+    # #343: every painted crop that emits no <tile> because another crop
+    # already owns its key, as (sheet, data, palette, owner).
+    muted = []
+    bitmaps = {}  # #422: emitted (data, palette) -> the tile bitmap a capture draws
+    sliced = []
     for sd in sheet_docs:
         try:
-            crops = _slice_sheet(sd, scale, sheets_dir)
+            sliced.append((sd, _slice_sheet(sd, scale, sheets_dir)))
         except BuildError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    # #456: the background crops that keep colour 0 transparent - every crop of
+    # a key the key source draws see-through, closed over shared crops. The
+    # crop's (unflipped) bitmap says where colour 0 is, an index key cannot.
+    bg = [((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]),
+           c[6] or c[2]) for sd, crops in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS
+          for c in crops if c[3][:2] != "FF"]
+    see_through = F.see_through_places(((place, key) for place, key, _t in bg), F.KeySourceAlpha(
+        source, _png_pixels, {key: tile for _p, key, tile in reversed(bg)}).transparent)
+    for sd, crops in sliced:
         entries = []
         seen = {}
         repeats = 0
-        pending_unflips = []
-        for x, y, data, pal, edited, index, unflipped, mirror in crops:
-            if index_keyed:
-                if index is None:
-                    missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
-                    continue
-                data = _index_token(index)
-            elif unflipped is not None:
+        pending_unflips, unflip_at, punches = [], set(), {}
+        for x, y, data, pal, edited, index, unflipped, mirror, authored, fold in crops:
+            bitmap = data
+            if index_keyed and index is None:
+                missing_index[sd.name] = missing_index.get(sd.name, 0) + 1
+                continue
+            if index_keyed or unflipped is not None:
                 # ADR-0178: the recorded bitmap has the sprite's OAM flips baked
                 # in, and the run time keys by the unflipped data - it mirrors
                 # the replacement art itself. On a data-keyed (CHR RAM) game the
-                # baked form is a key nothing ever looks up. The pixels must be
-                # un-baked too (#255): storing the flipped bitmap under the
-                # source key makes the mirrored phase render garbled.
-                data = unflipped
-                if mirror:
+                # baked form is a key nothing ever looks up; an index-keyed (CHR
+                # ROM, ADR-0172) game keys by the index, which no flip changes.
+                # Either way the pixels must be un-baked (#255, #457): storing
+                # the flipped bitmap makes the mirrored phase render garbled.
+                data = _index_token(index) if index_keyed else unflipped
+                # A fold or an alias shares its cell's pixels: un-bake each crop once.
+                if unflipped is not None and mirror and fold is None and (x, y) not in unflip_at:
+                    unflip_at.add((x, y))
                     pending_unflips.append((x, y, mirror))
             elif (sd.kind in _FLIPPABLE_SHEET_KINDS
                   and (data, pal) not in keysrc_attrs
@@ -1186,30 +1198,46 @@ def cmd_build(args) -> int:
                 # are correct and that re-recording cannot fix.
                 baked_flip[sd.name] = baked_flip.get(sd.name, 0) + 1
                 continue
-            variants = _condition_variants(keysrc_attrs.get((data, pal)))
+            if (sd.name, x, y) in see_through and (x, y) not in punches:
+                punches[(x, y)] = (unflipped or bitmap, pal)  # the pixels the crop holds once un-baked
+            bitmaps.setdefault((data, pal), bitmap)
+            # #464: a fully transparent sprite tile never claims its key by paint (the paint is another key's).
+            claim = edited and not mep_addition.is_blank_sprite(bitmap, pal)
+            variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
+            variants = variants if fold is None else [(c, [fold] + list(r[1:])) for c, r in variants]
             for cond, rest in variants:
                 key = (cond, data, pal)
-                row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)
+                row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), claim, not edited)
                 at = seen.get(key)
                 if at is not None:
                     # The same metatile placed twice on one sheet: only one crop
                     # can own the key, and a painted instance beats an untouched
                     # one.
                     repeats += 1
-                    if edited and not entries[at][3]:
+                    if (claim, not edited) > entries[at][3:5]:
                         entries[at] = row
+                    elif claim:
+                        muted.append((f"sheets/{sd.name}", data, pal, f"sheets/{sd.name}"))
                     continue
                 seen[key] = len(entries)
                 entries.append(row)
+        # The twin is the "was this painted?" baseline: same rewrite (#329).
+        twin = str(sd.doc.get("reference") or "").strip()
+        twin = sheets_dir / twin if twin else None
         if pending_unflips:
-            n = _unflip_sheet_crops(sd.png_path, pending_unflips, scale)
+            n = _rewrite_sheet(sd.png_path, twin, scale, _unflip(pending_unflips, scale))
             if n:
                 # Drop source/mirror from the sidecar so a second build does not
                 # un-bake the already-corrected pixels again (#255 idempotency).
-                dropped = _sidecar_drop_mirrors(sd.json_path)
+                dropped = F.sidecar_drop_mirrors(sd.json_path)
                 print(f"info: {sd.name}: un-baked {n} mirror crop(s) so the source "
                       f"key stores the pixels the run time will mirror"
                       + (f"; cleared {dropped} sidecar mirror field(s)" if dropped else ""))
+        n = punches and _rewrite_sheet(sd.png_path, twin, scale, lambda bmp, ref: sum(
+            F.punch_backdrop(bmp, ref, px, py, scale, t, p) for (px, py), (t, p) in punches.items()), alpha=True)
+        if n:
+            print(f"info: {sd.name}: {n} background crop(s) keep colour 0 transparent, as the "
+                  f"recording draws them over a behind-background sprite (#456)")
         if repeats:
             print(f"info: {sd.name}: {repeats} crop(s) repeat a tile key already taken by an earlier crop of the same sheet")
         rel = f"sheets/{sd.name}"
@@ -1223,62 +1251,76 @@ def cmd_build(args) -> int:
         for name, count in sorted(baked_flip.items()):
             print(f"error: {name}: {count} crop(s) carry a flip-baked tile key the run time "
                   f"never looks up, and the unflipped twin is in this game's key source — "
-                  f"repainting them would do nothing; re-record the pack with a build that "
-                  f"has ADR-0178", file=sys.stderr)
+                  f"repainting them would do nothing; record the pack again into an EMPTY "
+                  f"folder, never in place (ADR-0178, #337)", file=sys.stderr)
         return 2
 
     if missing_index:
         for name, count in sorted(missing_index.items()):
             print(f"error: {name}: {count} crop(s) carry no tile index, but this game's keys are "
-                  f"index-based (CHR ROM) — the rebuilt pack would match nothing at run time; "
-                  f"re-record the pack with a build that has ADR-0172", file=sys.stderr)
+                  f"index-based (CHR ROM) — the rebuild would match nothing; record the pack again "
+                  f"into an EMPTY folder, never in place (ADR-0172, #337)", file=sys.stderr)
         return 2
 
     # Precedence (ADR-0153 §4): a cell only claims a tile key when it was
     # actually painted, measured against the `*.orig.png` twin. A painted cell
     # always beats an untouched one, whatever their kinds; between two painted
     # cells - and between two untouched ones - the static rank decides, ties
-    # broken by emission order (later wins). Every override is logged, so
-    # nothing silently disappears. A painted *sprite* cell that still loses is
-    # an error (#253): figure sheets (`usrNNN`, kind sprite) are what the
-    # artist repaints, and a green build used to hide that the paint never
-    # reached the rendered figure. Map-vs-metatiles both-painted stays a
-    # logged precedence choice, not a failure.
+    # broken by emission order (later wins). Every override is logged, and
+    # every painted crop that loses a key joins `muted` for the reports below.
     winner = {}
-    painted_losses = []
     for order, slot in enumerate(slots):
         for pos, entry in enumerate(slot["entries"]):
             key = entry[0]
             edited = entry[3] if len(entry) > 3 else True
-            score = (1 if edited else 0, slot["rank"], order)
+            score = (1 if edited else 0, entry[4] if len(entry) > 4 else not edited, slot["rank"], order)  # #464
             prev = winner.get(key)
             if prev is not None:
                 why = "painted" if edited and not prev[2][0] else "precedence"
                 if score < prev[2]:
                     lost = "untouched" if prev[2][0] and not edited else "precedence"
                     print(f"info: {slot['rel']} loses tile {key[1]}/{key[2]} to {slots[prev[0]]['rel']} ({lost})")
-                    if edited and slot.get("kind") in _FLIPPABLE_SHEET_KINDS:
-                        painted_losses.append((slot["rel"], key[1], key[2], slots[prev[0]]["rel"]))
+                    if edited:
+                        muted.append((slot["rel"], key[1], key[2], slots[prev[0]]["rel"]))
                     continue
-                if prev[2][0] and slots[prev[0]].get("kind") in _FLIPPABLE_SHEET_KINDS:
-                    painted_losses.append((slots[prev[0]]["rel"], key[1], key[2], slot["rel"]))
+                if prev[2][0]:
+                    muted.append((slots[prev[0]]["rel"], key[1], key[2], slot["rel"]))
                 print(f"info: {slot['rel']} overrides tile {key[1]}/{key[2]} from {slots[prev[0]]['rel']} ({why})")
             winner[key] = (order, pos, score)
     kept = {(o, p) for o, p, _s in winner.values()}
 
-    if painted_losses:
-        # Dedup (sheet, data, pal) — condition variants of the same crop share
-        # one artist decision and should not flood the report.
-        seen_loss = set()
-        for rel, data, pal, other in painted_losses:
-            sig = (rel, data, pal)
-            if sig in seen_loss:
-                continue
-            seen_loss.add(sig)
-            print(f"error: {rel}: painted tile {data}/{pal} lost to {other} — "
-                  f"the repaint cannot affect that key at run time; paint the "
-                  f"sheet that owns it, or remove the overlapping claim (#253)",
-                  file=sys.stderr)
+    # #338/#343/#422: "did the cell I just painted reach the screen?" — measured in test_mep_build.py.
+    painted = {(e[0][1], e[0][2]): bitmaps.get((e[0][1], e[0][2])) for s in slots for e in s["entries"] if e[3]}
+    shadowed = mep_capture_scan.shadowing(folder / "textures", painted, screen_resident_keys(sheets_dir), body,
+                                          _png_pixels)
+    lost_by = {}
+    for rel, data, pal, other in muted:
+        lost_by.setdefault(rel, {})[f"{data}/{pal}"] = other
+    for slot in slots:
+        lost = lost_by.get(slot["rel"]) or {}
+        if lost:
+            sample = ", ".join(f"{k} (to {o})" for k, o in list(lost.items())[:3])
+            print(f"warning: {slot['rel']}: {len(lost)} painted tile key(s) were already claimed "
+                  f"by another crop, so this sheet emits no <tile> for them and the paint cannot "
+                  f"reach the screen — {sample} (#343)")
+        hit = {(e[0][1], e[0][2]) for e in slot["entries"] if e[3] and (e[0][1], e[0][2]) in shadowed}
+        if hit:
+            shots = ", ".join(f"backgrounds/{s}.png" for s in sorted(set().union(*(shadowed[k] for k in hit))))
+            print(f"warning: {slot['rel']}: {len({k[0] for k in hit})} painted tile key(s) are also drawn by "
+                  f"the captured screen(s) {shots}, each of which wins over every <tile> on the frames it "
+                  f"was frozen for and only there (ADR-0050/ADR-0156) — paint that capture too, or delete "
+                  f"it to retire it (#338)")
+
+    # #253: a painted *sprite* cell that loses to another sheet is an error — a
+    # green build hid that the paint never reached the figure. Others: a choice.
+    kind_of = {s["rel"]: s.get("kind") for s in slots}
+    fatal = [(rel, k, o) for rel, lost in sorted(lost_by.items())
+             if kind_of.get(rel) in _FLIPPABLE_SHEET_KINDS for k, o in lost.items() if o != rel]
+    for rel, k, other in fatal:
+        print(f"error: {rel}: painted tile {k} lost to {other} — the repaint cannot affect "
+              f"that key at run time; paint the sheet that owns it, or remove the "
+              f"overlapping claim (#253)", file=sys.stderr)
+    if fatal:
         return 1
 
     # HdPackLoader resolves a "[name]" prefix at the moment it reads the line
@@ -1290,13 +1332,19 @@ def cmd_build(args) -> int:
     # ever cite conditions, never define them.
     condition_defs = [b for b in body if b.startswith("<condition>")]
     body = [b for b in body if not b.startswith("<condition>")]
+    # ADR-0197 §1: a sheet's own authored definitions join the inherited ones,
+    # still above the first <tile> that cites them. A name defined by both the
+    # key source and a sheet keeps the sheet's - the human wrote it last.
+    authored_defs = mep_conditions.definition_lines(sd.doc for sd in sheet_docs)
+    named = {d.split(",")[0] for d in authored_defs}
+    condition_defs = [d for d in condition_defs if d.split(",")[0] not in named] + authored_defs
 
     out_lines = list(out_header) + condition_defs
     img_index = 0
     emitted = 0
     rebuilt_keys = set()
     for order, slot in enumerate(slots):
-        live = [(pos, e) for pos, e in enumerate(slot["entries"]) if (order, pos) in kept]
+        live = recorded.take([(pos, e) for pos, e in enumerate(slot["entries"]) if (order, pos) in kept])
         if not live and not slot["always"]:
             print(f"info: {slot['rel']} contributes no tile of its own — no <img> emitted")
             continue
@@ -1309,40 +1357,39 @@ def cmd_build(args) -> int:
             rebuilt_keys.add((_key[1], _key[2]))
         emitted += len(live)
         img_index += 1
-    out_lines.extend(body)
+    n, img_index, keys = recorded.emit(out_lines, img_index)
+    emitted, rebuilt_keys = emitted + n, rebuilt_keys | keys
+    recorded.report()
+
+    # ADR-0196: the overflow layer. The synthetic targets' `<tile>` rules were
+    # emitted above out of the sheets' own cells; this writes the tags at them.
+    body, synthetic_keys, rc = mep_addition.emit_additions(
+        getattr(args, "rom", None), sheet_docs, index_keyed, out_lines, body)
+    if rc:
+        return rc
 
     textures_dir = folder / "textures"
     textures_dir.mkdir(parents=True, exist_ok=True)
 
-    # A background PNG referenced by the body that is not under textures/
-    # yet is copied up from auto/textures (the author keeps their assets).
-    # The tag may carry a condition prefix ([cond]<background>...) — the only
-    # form the emulator writes for captured-screen backgrounds.
-    _BG_TAG = re.compile(r"^(\[[^\]]*\])?<background>")
-    for b in body:
-        m = _BG_TAG.match(b)
-        if not m:
-            continue
-        name = b[m.end():].split(",")[0].strip()
-        if not name:
-            continue
-        target = textures_dir / name
-        if target.exists():
-            continue
-        auto_cand = folder / "auto" / "textures" / name
-        if auto_cand.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(auto_cand.read_bytes())
-            print(f"info: copied background {name} from auto/textures into textures/")
+    # <background> lines: copied up from auto/textures when needed, retired
+    # (#344) when the PNG is in neither layer, resolved as the loader resolves
+    # them (#381). The rules live in mep_carry.
+    body = mep_carry.carry_backgrounds(folder, textures_dir, body)
+    out_lines.extend(body)
 
     # Named after the captures are copied up, so the path printed is the one
-    # the artist will actually open.
+    # the artist will actually open. #339: the gate is a few tileAtPosition
+    # probes, not the whole frame, so "the frames it was frozen for" is the
+    # recorder's claim and a neighbour can satisfy the same probes.
     captures = captured_screen_note(textures_dir)
     if captures:
         count, first = captures
-        print(f"info: {count} captured screen(s) in textures/backgrounds/ draw over every <tile> on the "
-              f"scenes they cover (ADR-0050) — to repaint one of those scenes edit "
-              f"backgrounds/{first}.png, not the sheets")
+        print(f"info: {count} captured screen(s) in textures/backgrounds/ override every <tile> on "
+              f"the frames each was frozen for, and only there (ADR-0050) — for one of those, edit "
+              f"backgrounds/{first}.png. Each is gated on a few tileAtPosition probes, not on the "
+              f"whole frame, so a neighbouring frame that matches those probes gets the capture too "
+              f"and loses whatever the game drew elsewhere on it (#339); delete the PNG to retire "
+              f"the capture and hand its frames back to the sheets (#344).")
 
     hires = textures_dir / "hires.txt"
     hires.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
@@ -1369,7 +1416,9 @@ def cmd_build(args) -> int:
             source_keys.add((f[1].upper(), f[2].upper()))
     carried = len(source_keys & rebuilt_keys)
     dropped_keys = len(source_keys - rebuilt_keys)
-    added_keys = len(rebuilt_keys - source_keys)
+    # ADR-0196's Consequences: a synthetic target is a key no recording saw, so
+    # it is counted on its own line above, never as "new key(s) the sheets brought".
+    added_keys = len(rebuilt_keys - source_keys - synthetic_keys)
     print(f"tile keys: {len(source_keys)} in the key source ({src_label}) -> {carried} carried, "
           f"{dropped_keys} dropped"
           + (f", {added_keys} new key(s) the sheets brought" if added_keys else ""))
@@ -1392,7 +1441,7 @@ def cmd_build(args) -> int:
         seed = [ln for ln in existing_audio.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
     if system is not None and system != "nes":
         print(f"info: audio manifest skipped — OGG replacement is NES-only (got <system>{system})")
-    audio_manifest = _build_audio_manifest(folder, system, seed)
+    audio_manifest = mep_carry.build_audio_manifest(folder, system, seed, NES_VER)
     if audio_manifest:
         (folder / "audio").mkdir(parents=True, exist_ok=True)
         (folder / "audio" / "hires.txt").write_text(audio_manifest, encoding="utf-8")
@@ -1602,8 +1651,9 @@ def cmd_rename_audio_id(args) -> int:
 
 def _is_sheet_img(rel: str) -> bool:
     """Whether a manifest `<img>` is one of the author sheets `build`
-    regenerates. `cmd_build` emits `sheets/<name>` and nothing else, so this
-    is also the test for "this manifest was written by `build`" (#218)."""
+    regenerates (#218). Since ADR-0231 a build also re-emits recorded pages
+    for untouched cells, under `mep_recorded.MARK`; `check-coverage` counts
+    those `<img>`s as build output too."""
     return rel.replace("\\", "/").lower().startswith("sheets/")
 
 
@@ -1718,6 +1768,8 @@ def cmd_check_coverage(args) -> int:
         return 2
 
     base_keys, base_unresolved = _manifest_keys(baseline)
+    # ADR-0231: a build's re-emitted recorded rules are its output as much as its sheet crops.
+    kept_imgs = mep_recorded.section_imgs(baseline.read_text(encoding="utf-8", errors="replace").splitlines())
     # A baseline kept outside the pack — the natural "copy the manifest aside
     # before painting" move — has none of the PNGs next to it, so every key
     # resolved against its own folder and the check passed over an empty
@@ -1734,7 +1786,7 @@ def cmd_check_coverage(args) -> int:
         # which answers with "relocate the baseline" and exit 2 instead of
         # reporting the loss (review on #223).
         declared_sheets = {rel for _key, _reason, rel in alt_unresolved
-                           if rel and _is_sheet_img(rel)}
+                           if rel and (_is_sheet_img(rel) or rel in kept_imgs)}
         if alt_keys or declared_sheets:
             print(f"info: the baseline is a copy kept outside the pack; its <img> paths were "
                   f"resolved against {candidate.parent} instead of {baseline.parent}")
@@ -1750,7 +1802,7 @@ def cmd_check_coverage(args) -> int:
     # ever touched (ADR-0189, Consequences). Only the baseline's sheet-derived
     # keys are the rebuild's responsibility, so only those are compared.
     off_sheet = {k: rel for k, (rel, _art) in base_keys.items()
-                 if not _is_sheet_img(rel)}
+                 if not (_is_sheet_img(rel) or rel in kept_imgs)}
     base_keys = {k: v for k, v in base_keys.items() if k not in off_sheet}
     if not base_keys and detached:
         # Every sheet-derived key the baseline declared is gone from the pack
@@ -1796,7 +1848,7 @@ def cmd_check_coverage(args) -> int:
     for key, reason, rel in base_unresolved:
         # Only the sheet-derived half of the baseline is under comparison
         # (above), so only its unresolved keys are worth a line.
-        if rel and not _is_sheet_img(rel):
+        if rel and not (_is_sheet_img(rel) or rel in kept_imgs):
             continue
         if detached:
             gone.append((key, reason))
@@ -1897,6 +1949,7 @@ def main(argv=None) -> int:
     b.add_argument("--scale", type=int, help="cell size = 8*scale (default: the key source's <scale>, else 2)")
     b.add_argument("--source", help="hires.txt carrying the tile keys (default: textures/hires.txt, then auto/textures/hires.txt)")
     b.add_argument("--quiet", action="store_true", help="suppress lint info findings")
+    b.add_argument("--rom", help="the ROM this pack was recorded from; needed only to serialize an ADR-0196 overflow layer on a CHR ROM game, whose synthetic target index is asserted past the iNES header's CHR size")
     b.set_defaults(func=cmd_build)
     pk = sub.add_parser("pack", help="write pack.json and zip the folder deterministically")
     pk.add_argument("folder")

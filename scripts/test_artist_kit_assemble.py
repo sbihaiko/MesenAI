@@ -10,6 +10,7 @@ Run:  python3 scripts/test_artist_kit_assemble.py
 """
 
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -95,6 +96,11 @@ def test_inferred_art_is_marked_in_the_page_an_artist_reads():
         check("mep_build.py build" in text and "cp -R" in text,
               "the page says to build a copy of the recording, not the recording itself")
         check("ADR-0147" in text, "the page cites the layer rule it follows")
+        check("<bgPreservesBehindBgSprites>" in text and "ADR-0224" in text,
+              "the page tells the artist what the recorder's opt-in tag is, so it is not deleted as noise")
+        check("Select `paint` in the Layers panel before your first stroke" in text
+              and "`orig`, active" in text,
+              "the page tells the artist GIMP and Krita open the .ora with `orig` active (ADR-0220 §3, 2026-09-23)")
 
 
 def test_a_dropped_surface_keeps_its_reason():
@@ -171,6 +177,184 @@ def test_writing_the_kit_produces_both_files():
               "ARTIST.md is written and titled")
 
 
+def test_every_surface_carries_the_name_the_paint_program_exports_to():
+    # F12.4 / ADR-0213. The manifest's `path` is kit-relative, but what an
+    # artist pastes into Photoshop is the base name: a `/` in a layer name is a
+    # subfolder under Photoshop's own -assets folder.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3},
+            {"path": "chr/Chr_0.png", "cells": 256},
+        ]))
+        kit = A.build_kit(root)
+        got = [f["assetName"] for f in kit["parts"][0]["files"]]
+        check(got == ["usr000.png", "Chr_0.png"],
+              "each surface carries the layer name to paste, base name only",
+              str(got))
+        page = A.render_markdown(kit)
+        check("Reload Repainted Images" in page,
+              "the page names the F12.3 action that puts the save on screen")
+        check("-assets" in page and "cannot be changed" in page,
+              "the page states Photoshop's -assets folder rather than implying "
+              "an in-place overwrite it does not do")
+
+
+def test_a_surface_a_paint_program_cannot_export_to_stops_the_kit():
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/run,walk.png", "cells": 1}]))
+        try:
+            A.build_kit(root)
+            check(False, "a comma in a surface name stops the kit", "it built")
+        except A.KitError as exc:
+            check("comma" in str(exc) and "run,walk.png" in str(exc),
+                  "a comma in a surface name stops the kit, naming the file "
+                  "and the reader it would break", str(exc))
+
+
+def test_two_surfaces_that_differ_only_in_case_stop_the_kit():
+    # The one rule that does not exist per name: on the artist's macOS or
+    # Windows machine these are one file, so the kit would silently lose one.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[
+            {"path": "chr/Chr_0.png", "cells": 1},
+            {"path": "chr/chr_0.png", "cells": 1},
+        ]))
+        try:
+            A.build_kit(root)
+            check(False, "a case-only clash stops the kit", "it built")
+        except A.KitError as exc:
+            check("differ only in case" in str(exc),
+                  "a case-only clash inside one folder stops the kit", str(exc))
+    # The same two names in *different* folders are two files everywhere.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[
+            {"path": "chr/Chr_0.png", "cells": 1},
+            {"path": "sheets/chr_0.png", "cells": 1},
+        ]))
+        kit = A.build_kit(root)
+        check(len(kit["parts"][0]["files"]) == 2,
+              "the same name in two folders is not a clash")
+
+
+def _done_block(page):
+    """The command block of "When you are done", one command per line."""
+    section = page.split("## When you are done", 1)[1].split("\n## ", 1)[0]
+    block = section.split("```", 2)[1]
+    return section, [line for line in block.splitlines() if line.strip()]
+
+
+def test_the_done_steps_import_painted_figures_between_copy_and_build():
+    # #399: ARTIST.md invited painting figures/usrNNN-figure.png, then the
+    # done steps only copied sheets/ and chr/ - every painted figure was lost.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3, "figure": "figures/usr000-figure.png"}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        imports = [i for i, c in enumerate(cmds)
+                   if "scripts/mep_figure.py import <game>/painted" in c
+                   and "<kit>/figures/usr*-figure.png" in c]
+        copy = next((i for i, c in enumerate(cmds) if c.startswith("cp <kit>/sheets/")), None)
+        builds = [i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c]
+        check(len(imports) == 1, "a kit with figures names the figure import as a concrete "
+              "command on the painted copy", str(cmds))
+        check(imports and copy is not None and builds and copy < imports[0] < builds[-1],
+              "the figure import runs after the sheet copy and before the final build", str(cmds))
+        # #435: the build un-bakes flip-baked crops in place (ADR-0178), so an
+        # import before it plans against twins the build then rewrites - the
+        # paint re-points rules and Reload Repainted Images cannot show it.
+        check(len(builds) == 2 and copy < builds[0] < imports[0],
+              "the copy is built once before the figure import, so the import plans against "
+              "the sheets the final build slices (#435)", str(cmds))
+        first = cmds[builds[0]] if builds else ""
+        check(first.rstrip().endswith("&&"), "a failed first build holds the imports back", first)
+        check("#435" in section and "build" in section.split("#435")[0][-400:],
+              "the done section says why the copy is built before the import (#435)")
+        # Codex on #402: a `for` loop's status is its last iteration's, so an
+        # import that fails mid-loop was masked and the build still ran.
+        imp = cmds[imports[0]] if imports else ""
+        check("|| exit 1" in imp and imp.startswith("sh -c '") and imp.rstrip().endswith("&&"),
+              "a failed figure import exits its own `sh -c` child (never the artist's "
+              "terminal) and `&&` holds the build back", imp)
+        check("not both" in section and "replaces the row's" in section,
+              "the done section says a figure and its sheet row are one surface, and what "
+              "happens when both are painted (#413: the figure's paint replaces the row's)")
+
+
+def test_the_done_steps_name_only_what_the_kit_has():
+    # A literal `cp` of a glob that matches nothing fails, and no figure step
+    # belongs in a kit that exported none.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[{"path": "sheets/usr000.png", "cells": 3}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check("mep_figure.py" not in section, "a kit without figures has no figure import step",
+              str(cmds))
+        check(not any("<kit>/chr/" in c for c in cmds), "a kit without pattern pages copies no chr/",
+              str(cmds))
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("chr", files=[{"path": "chr/Chr_0.png", "cells": 256}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check(any(c.startswith("cp <kit>/chr/") for c in cmds)
+              and not any("<kit>/sheets/" in c for c in cmds),
+              "a kit of pattern pages alone copies chr/ and no sheets/", str(cmds))
+
+
+def test_the_done_steps_return_painted_screens_to_the_backgrounds():
+    # #403: the background kit hands out scene/screenNNN.png and invites
+    # painting it, but the done steps never copied scene/ anywhere - measured
+    # on a Mega Man 3 recording: build exit 0, the painted pixel absent from the
+    # built pack's textures/backgrounds/screen001.png.
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("background", files=[
+            {"path": "sheets/obj000.png", "cells": 2},
+            {"path": "scene/screen001.png", "unit": "scene", "cells": 1}]))
+        section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        scene = [i for i, c in enumerate(cmds)
+                 if c.startswith("cp <kit>/scene/") and c.endswith("<game>/painted/textures/backgrounds/")]
+        clone = next((i for i, c in enumerate(cmds) if c.startswith("cp -R <game>/auto")), None)
+        build = next((i for i, c in enumerate(cmds) if "mep_build.py build <game>/painted" in c), None)
+        check(len(scene) == 1, "a kit with scene/ screens copies them into the painted copy's "
+              "textures/backgrounds/", str(cmds))
+        check(scene and clone is not None and build is not None and clone < scene[0] < build,
+              "the screen copy runs after the recording copy and before the build", str(cmds))
+        check("textures/backgrounds/" in section and "<background>" in section,
+              "the done section says where a painted screen goes and what draws it")
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("background", files=[{"path": "sheets/obj000.png", "cells": 2}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        check(not any("<kit>/scene/" in c or "backgrounds" in c for c in cmds),
+              "a kit without scene/ screens copies no scene/", str(cmds))
+
+
+def test_the_figure_loop_stops_at_the_first_failed_import():
+    # A `for` loop's status is its last command's: without a stop, a failed
+    # import followed by a good one exits 0 and the build runs on a copy that
+    # lost the first figure (Codex on #402).
+    with tempfile.TemporaryDirectory() as td:
+        root = _kit(td, _fragment("sprites", files=[
+            {"path": "sheets/usr000.png", "cells": 3, "figure": "figures/usr000-figure.png"}]))
+        _section, cmds = _done_block(A.render_markdown(A.build_kit(root)))
+        loop = next((c for c in cmds if c.startswith("sh -c 'for f in <kit>/figures/")), None)
+        check(loop is not None, "a kit with figures has a figure loop", str(cmds))
+        if loop is None:
+            return
+        figures = Path(td) / "figures"
+        figures.mkdir()
+        for name in ("usr000-figure.png", "usr001-figure.png"):
+            (figures / name).write_bytes(b"")
+        # The first import fails, the second succeeds, and a sentinel after the
+        # `&&` records whether the build would have run. The stand-in import
+        # lives inline because `sh -c` sees no function from the outer shell.
+        script = (loop.replace("<kit>", td)
+                      .replace("python3 scripts/mep_figure.py import <game>/painted",
+                               '[ -n "${f##*usr000*}" ] && :')
+                  + f"\ntouch {td}/after")
+        proc = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        check(proc.returncode != 0 and not (Path(td) / "after").exists(),
+              "a failed figure import stops the done steps even when a later import succeeds",
+              f"exit {proc.returncode}, after={(Path(td) / 'after').exists()}")
+
+
 def main():
     tests = [
         test_parts_are_ordered_most_recognisable_first,
@@ -182,6 +366,13 @@ def main():
         test_a_gained_key_is_only_passed_when_it_came_from_the_pack,
         test_an_empty_or_broken_kit_fails_loudly,
         test_writing_the_kit_produces_both_files,
+        test_every_surface_carries_the_name_the_paint_program_exports_to,
+        test_a_surface_a_paint_program_cannot_export_to_stops_the_kit,
+        test_two_surfaces_that_differ_only_in_case_stop_the_kit,
+        test_the_done_steps_import_painted_figures_between_copy_and_build,
+        test_the_done_steps_name_only_what_the_kit_has,
+        test_the_done_steps_return_painted_screens_to_the_backgrounds,
+        test_the_figure_loop_stops_at_the_first_failed_import,
     ]
     for t in tests:
         t()

@@ -126,7 +126,7 @@ namespace Mesen.Debugger.Utilities
 
 		[ObservableProperty] public partial string TooltipText { get; set; } = "";
 
-		private static SimpleCommand _emptyCommand = new SimpleCommand(() => { });
+		private SimpleCommand _emptyCommand = new SimpleCommand(() => { });
 
 		private SimpleCommand? _clickCommand;
 		public SimpleCommand? ClickCommand
@@ -134,7 +134,7 @@ namespace Mesen.Debugger.Utilities
 			get
 			{
 				Update();
-				return _clickCommand ?? ContextMenuAction._emptyCommand;
+				return _clickCommand ?? _emptyCommand;
 			}
 		}
 
@@ -201,6 +201,7 @@ namespace Mesen.Debugger.Utilities
 						action.Dispose();
 					}
 				}
+				_subActions = null;
 			}
 		}
 	}
@@ -261,6 +262,9 @@ namespace Mesen.Debugger.Utilities
 	public class ContextMenuSeparator : ContextMenuAction
 	{
 		public override string Name => "-";
+		protected override string InternalShortcutText => Header;
+
+		public string Header { get; set; } = "";
 
 		public ContextMenuSeparator()
 		{
@@ -595,11 +599,10 @@ namespace Mesen.Debugger.Utilities
 		[IconFile("VideoRecorder")]
 		VideoRecorder,
 		MusicRecorder,
-		//ADR-0169: the live recorder/viewer pair, shaped like the three
-		//recorders above it (Record/Stop) so the Tools menu reads the same way.
+		//ADR-0169: the live recorder, shaped like the three recorders above it
+		//(Record/Stop) so the Tools menu reads the same way. The viewer is not
+		//in the menu (ADR-0169 section 4, amended 2026-09-23).
 		LiveRecorder,
-		[IconFile("SplitView")]
-		OpenLiveViewer,
 
 		[IconFile("HdPack")]
 		HdPacks,
@@ -609,6 +612,10 @@ namespace Mesen.Debugger.Utilities
 		HdPackBuilder,
 		[IconFile("HdPack")]
 		EnhancementPacks,
+		//F12.3 (ADR-0212): re-decode the pack images an artist repainted on
+		//disk, without reopening the ROM.
+		[IconFile("Refresh")]
+		ReloadPackImages,
 
 		[IconFile("LogWindow")]
 		LogWindow,
@@ -851,6 +858,8 @@ namespace Mesen.Debugger.Utilities
 
 		[IconFile("HdPack")]
 		CopyToHdPackFormat,
+		[IconFile("HdPack")]
+		CopyToMepSheetCell,
 
 		[IconFile("Find")]
 		CheatDatabase,
@@ -884,5 +893,20 @@ namespace Mesen.Debugger.Utilities
 		ResetProfilerData,
 		[IconFile("Copy")]
 		CopyToClipboard,
+
+		[IconFile("Television")]
+		Shader,
+		[IconFile("Folder")]
+		ShaderFolder,
+		[IconFile("Folder")]
+		LoadShader,
+		[IconFile("Close")]
+		ClearShader,
+		AllShaders,
+		[IconFile("Settings")]
+		ShaderSettings,
+		[IconFile("Help")]
+		NoShadersFound,
+		OpenShaderFolder
 	}
 }

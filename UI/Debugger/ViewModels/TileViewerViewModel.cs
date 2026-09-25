@@ -188,7 +188,20 @@ namespace Mesen.Debugger.ViewModels
 					OnClick = () => {
 						int address = GetSelectedTileAddress();
 						if(address >= 0) {
-							HdPackCopyHelper.CopyToHdPackFormat(address, Config.Source, RawPalette, SelectedPalette, false);
+							//ADR-0215 OPEN 3: no row, no frame - so a PPU-memory source refuses.
+							//A CHR ROM/CHR RAM source needs no resolution: the address is already absolute.
+							HdPackCopyHelper.Announce(HdPackCopyHelper.CopyToHdPackFormat(address, Config.Source, RawPalette, SelectedPalette, false, HdPackCopyContext.None()));
+						}
+					}
+				},
+				new ContextMenuAction() {
+					ActionType = ActionType.CopyToMepSheetCell,
+					IsVisible = () => CpuType == CpuType.Nes,
+					IsEnabled = () => GetSelectedTileAddress() >= 0 && HdPackCopyHelper.IsActionAllowed(Config.Source),
+					OnClick = () => {
+						int address = GetSelectedTileAddress();
+						if(address >= 0) {
+							HdPackCopyHelper.Announce(HdPackCopyHelper.CopyAsMepSheetCell(address, Config.Source, RawPalette, SelectedPalette, false, HdPackCopyContext.None()));
 						}
 					}
 				}

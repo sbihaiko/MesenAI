@@ -1,0 +1,8 @@
+{
+  "game": "Metroid",
+  "rom": {
+    "noIntroSha1": ["FDBFC7871962F72A1EF57E5A7E456164FB93430B"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Metroid (USA).nes from the user's ROM library, the dump stage1-run.txt was written for (whole-file SHA1 ECF39EC5A33E6A6F832F03E8FFC61C5D53F4F90B, docs/validation/metroid-artist-workflow-evidence.md). The route boots from power-on itself, so it has no mint. Verified by the F14.3 library run (docs/validation/f14.3-route-sets-2026-09-23.md)."
+}

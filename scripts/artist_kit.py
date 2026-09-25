@@ -57,8 +57,10 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 import mep_build  # noqa: E402 — the rebuild `--verify` runs and its <tile> regex
+import mep_figure  # noqa: E402 — ADR-0225 §2: the pixel-precise Figures view
 
 #The rest grid's shape. A cycle's row is as wide as the cycle is long (the row
 #*is* the animation, so wrapping it would break the promise this tool makes);
@@ -116,6 +118,7 @@ class Grid:
         self.name = None        # usrNNN, filled in by export
         self.boxes = []         # the figure box of each row, in 8 px cells
         self.columns = 0        # 8 px cells across the exported sheet
+        self.figure = None      # ADR-0225: figures/<usrNNN>-figure.png, when written
 
     @property
     def cells(self):
@@ -370,16 +373,100 @@ class KitBuilder:
                     out.append((node, ox + dx, oy + dy))
         return out, boxes
 
+    def drawable_pixels(self, pose):
+        """`{node: (px, py)}` of the drawable tiles, normalised to the drawn
+        figure's own pixel top-left (ADR-0225 §1; dx*8 on an older sidecar)."""
+        tiles = {n: pose.pixels[n] for n in pose.tiles if self._has_art(n)}
+        if not tiles:
+            return {}
+        x0 = min(px for px, _py in tiles.values())
+        y0 = min(py for _px, py in tiles.values())
+        return {n: (px - x0, py - y0) for n, (px, py) in tiles.items()}
+
+    def figure_rows(self, grid, unit: int = 8):
+        """`[[(pose, ox, oy), ...], ...]` in 1x pixels: the same rows and
+        columns as `placements`, each figure at pixel precision (ADR-0225 §2).
+        A row's box is its largest figure's pixel extent; figures are centred
+        and stand on the row's bottom edge (the baseline), and one empty cell
+        (`SLOT_GAP * unit` px) separates two boxes and two rows — the margin
+        between figures stays, only the gutter inside a figure is gone."""
+        gap = SLOT_GAP * unit
+        extents = {}
+        for cell in grid.cells:
+            px = self.drawable_pixels(cell.pose)
+            if px:
+                extents[id(cell)] = (max(x for x, _y in px.values()) + unit,
+                                     max(y for _x, y in px.values()) + unit)
+        out, top = [], 0
+        for row in grid.rows:
+            sizes = [extents[id(c)] for c in row if id(c) in extents]
+            if not sizes:
+                out.append([])
+                continue
+            box_w, box_h = max(w for w, _h in sizes), max(h for _w, h in sizes)
+            placed = []
+            for cell in row:
+                if id(cell) not in extents:
+                    continue
+                w, h = extents[id(cell)]
+                placed.append((cell.pose, cell.col * (box_w + gap) + (box_w - w) // 2,
+                               top + box_h - h))
+            out.append(placed)
+            top += box_h + gap
+        return out
+
 
 # ---- export ----------------------------------------------------------------
 
-def export_grid(pack, builder, grid, out_dir: Path):
+def export_figure_rows(pack, builder, grid, figures_out: Path, names=None):
+    """ADR-0225 §2: the grid's rows as one composed view,
+    `<figures_out>/<usrNNN>-figure.png` (+ `.orig.png`, `.json`, `.ora`),
+    every phase at pixel precision. The usr sheet stays the cell-grid
+    mep_build input; this is the view an artist reads the figure in, and
+    `mep_figure.py import` returns paint from it to the sprite vocabulary."""
+    rows = builder.figure_rows(grid)
+    stem = mep_figure.figure_stem(grid.name)
+    # A pose on a row is its drawable tiles only, as on the usr sheet.
+    trimmed = [[(_drawable_pose(builder, p), x, y) for p, x, y in row] for row in rows]
+    doc = mep_figure.export_pose_rows(pack, trimmed, figures_out, stem,
+                                      caption=grid_title(grid, names) if names is not None else "")
+    if doc is not None:
+        grid.figure = f"figures/{doc['sheet']}"
+    return doc
+
+
+def _drawable_pose(builder, pose):
+    tiles = {n: xy for n, xy in pose.tiles.items() if builder._has_art(n)}
+    return E.Pose(pose.id, pose.frames, pose.size, tiles, pixels=pose.pixels, z=pose.z)
+
+def row_captions(grid, boxes, names, unit: int = 8):
+    """`[(x, y, text)]` in 1x sheet pixels for the `.ora`'s `guides` layer
+    (ADR-0220 §3): one caption per row at the row's top-left — the sheet title
+    on the first row (a `--names` caption or the ids and counts, ADR-0183 §5),
+    the row's pose ids on every row. Nothing here is invented: an unnamed
+    figure is captioned by its `poses.json` id."""
+    out, top = [], 0
+    for r, row in enumerate(grid.rows):
+        ids = " ".join(str(c.pose.id) for c in row)
+        text = f"{grid_title(grid, names)} | {ids}" if r == 0 and names is not None else ids
+        out.append((E.GUTTER, E.GUTTER + top * (unit + E.GUTTER), text))
+        top += boxes[r][1] + SLOT_GAP
+    return out
+
+
+def export_grid(pack, builder, grid, out_dir: Path, names=None):
     """Write one grid as a composed sprite sheet. Returns its `usrNNN` stem.
 
     The whole figure is what gets painted, so a tile shared by two phases is
     emitted in **both** cells — `mep_build` settles the duplicate itself (one
     crop owns the key, a painted one beats an untouched one), and the
-    alternative would be phases with holes where the shared torso should be."""
+    alternative would be phases with holes where the shared torso should be.
+
+    No `context` is passed (ADR-0220 §3: present iff every cell has a stage
+    position): a sprite pose has no stage position in any recorded artefact —
+    `poses.json` and `adjacency.json` place a figure on the screen's floor
+    bands, never on the stitched map — so a figure sheet's `.ora` carries four
+    layers until a recording writes where a pose was seen on the stage."""
     cells, boxes = builder.placements(grid)
     if not cells:
         return None
@@ -393,7 +480,8 @@ def export_grid(pack, builder, grid, out_dir: Path):
     try:
         pack.export("sprite", nodes, seed=anchors[0] if anchors else None,
                     locked=anchors[1:], to_dir=out_dir, placements=cells,
-                    poses=[p.id for p in grid.poses()], name=name)
+                    poses=[p.id for p in grid.poses()], name=name,
+                    captions=row_captions(grid, boxes, names))
     except Exception:
         (out_dir / f"{name}.json").unlink(missing_ok=True)   # release the claim
         raise
@@ -502,32 +590,81 @@ def sheet_subjects(grid, names):
     return sorted(order, key=lambda s: (-counts[s], order.index(s)))
 
 
+def playback_columns(grid):
+    """The column (1-based, in figures) each phase of the grid's run plays
+    from, in the run's phase order; None for a phase with no column here.
+
+    Issue #400: `_take` lays a figure out once, so a loop whose phases 1 and 4 are
+    one drawing has fewer columns than phases, and a variant takes a column
+    no phase plays from. Read off the cells `_run_grid` placed — a phase's
+    pose may sit in a variant's column when it was placed beside its base —
+    and off `run.poses`, never off the pixels. Empty for a grid with no run."""
+    if grid.run is None or not grid.rows:
+        return []
+    column = {}
+    for cell in grid.rows[0]:
+        column.setdefault(cell.pose.id, cell.col + 1)
+    return [column.get(pid) for pid in grid.run.poses]
+
+
+def playback_clause(grid):
+    """`plays columns 1 2 3 1 4 5 (column 1 plays twice)`, or "" for no run.
+    A `-` is a phase this sheet does not draw (laid out on an earlier sheet,
+    or with no art at all); the notes say so once."""
+    order = playback_columns(grid)
+    if not order:
+        return ""
+    text = "plays columns " + " ".join(str(c) if c else "-" for c in order)
+    times = {2: "twice", 3: "three times"}
+    repeats = [f"column {c} plays {times.get(order.count(c), f'{order.count(c)} times')}"
+               for c in sorted({c for c in order if c and order.count(c) > 1})]
+    return f"{text} ({', '.join(repeats)})" if repeats else text
+
+
+def _run_title(grid, names, who):
+    run = grid.run
+    text, source = E.caption(run.id, run.label, run.label_source, names.run(run.id))
+    if source == E.LABEL_SOURCE_NAMES:
+        return text
+    kind = "loop" if grid.kind == "cycle" else "ordered run"
+    tail = f"a {len(run.poses)}-phase {kind}, seen {run.repeats} time(s)"
+    if who:
+        return f"{who} — {tail}"
+    if source != E.LABEL_SOURCE_ID:
+        return f"{run.id} — {text}"
+    return f"{run.id} — {tail}"
+
+
 def grid_title(grid, names):
     """The file's caption: what is on the sheet, then what the recording
     measured about it.
 
     The name of the run itself wins when `--names` gives one. Failing that the
     **subjects** of the poses on the sheet are the caption — `seq021` tells an
-    artist nothing, "green soldier" tells them what to paint. With nothing
-    named at all the caption is the run/pose id plus the counts, which is the
-    honest fallback and is never dressed up as a name."""
+    artist nothing, "green soldier" tells them what to paint. Failing that too,
+    the recorder's own `label` (ADR-0209 Q1 (b), `E.caption` precedence:
+    names > label > id) stands in for the counts this function used to spell
+    out — it is the same measured facts, stated once by the Core and marked
+    `inferred` in the sidecar — kept beside the id so the join still reads.
+    With nothing at all the caption is the run/pose id plus the counts, which
+    is the honest fallback and is never dressed up as a name."""
     who = ", ".join(names.subject_label(k) for k in sheet_subjects(grid, names))
-    run = grid.run
-    if run is not None:
-        named = names.run(run.id)
-        if named:
-            return named
-        kind = "loop" if grid.kind == "cycle" else "ordered run"
-        tail = f"a {len(run.poses)}-phase {kind}, seen {run.repeats} time(s)"
-        return f"{who or run.id} — {tail}"
+    if grid.run is not None:
+        # Issue #400: every run caption ends in the order its columns play in, so a
+        # row with fewer columns than phases says which column repeats.
+        order = playback_clause(grid)
+        head = _run_title(grid, names, who)
+        return f"{head} — {order}" if order else head
     cells = grid.cells
     if len(cells) == 1:
         pose = cells[0].pose
-        named = names.pose(pose.id)
-        if named:
-            return named
+        text, source = E.caption(pose.id, pose.label, pose.label_source, names.pose(pose.id))
+        if source == E.LABEL_SOURCE_NAMES:
+            return text
         if who:
             return f"{who} — one figure, seen in {pose.frames} frame(s)"
+        if source != E.LABEL_SOURCE_ID:
+            return f"{pose.id} — {text}"
         return f"{pose.id} — seen in {pose.frames} frame(s)"
     frames = sum(c.pose.frames for c in cells)
     if who:
@@ -539,8 +676,8 @@ def grid_title(grid, names):
 # ---- the manifest fragment (artist-kit-contract.md) ------------------------
 
 def _file_record(grid, names):
-    return {
-        "path": f"sheets/{grid.name}.png",
+    rec = {
+        "path": f"sheets/{N.require_asset_name(grid.name + N.SURFACE_EXT, 'artist_kit.py')}",
         "title": grid_title(grid, names),
         "unit": "grid",
         "rows": len(grid.rows),
@@ -554,6 +691,14 @@ def _file_record(grid, names):
         #in one OAM frame, and no tile is filled in from the ROM or guessed.
         "seen": True,
     }
+    if grid.run is not None:
+        #Issue #400: the column each phase plays from, in phase order (null = a
+        #phase this sheet does not draw) — the caption's order, as data.
+        rec["playsColumns"] = playback_columns(grid)
+    if getattr(grid, "figure", None):
+        #ADR-0225 §2: the same rows as one pixel-precise composed view.
+        rec["figure"] = grid.figure
+    return rec
 
 
 def _dropped(builder):
@@ -561,6 +706,15 @@ def _dropped(builder):
     for pid in sorted(builder.excluded_fusions):
         pose = builder.poses.by_id(pid)
         parts = ", ".join(pose.fusion_of) if pose is not None else ""
+        if pose is not None and len(pose.fusion_of) == 1:
+            # ADR-0228: one kept part plus tiles that never stood alone.
+            out.append({"path": pid,
+                        "why": f"the recorder classified it as a figure ({parts}) touched by "
+                               f"another made of tiles never seen on their own — the figure is "
+                               f"laid out by itself and the other's tiles stay on the pack's "
+                               f"sprite sheets, so painting this one would paint a bystander "
+                               f"(ADR-0228)"})
+            continue
         out.append({"path": pid,
                     "why": f"the recorder classified it as two figures that touched "
                            f"({parts or 'a fusion'}) — both halves are laid out on their own, "
@@ -601,8 +755,11 @@ def _notes(pack, builder, grids, names, pack_arg):
         "A figure is laid out once, on the first run that ordered it, so a row can hold fewer "
         "columns than its animation has phases: a phase whose silhouette repeats (the same "
         "drawing twice in one loop) is one column, and a phase already drawn on an earlier "
-        "sheet is not repeated here. files[].ids is always exactly what is on the sheet, in "
-        "reading order, row by row.",
+        "sheet is not repeated here. A cycle's or sequence's title ends in the order its "
+        "columns play in (\"plays columns 1 2 3 1 4 5 (column 1 plays twice)\"), counted "
+        "in figures from the left, and files[].playsColumns carries the same order; a - is a "
+        "phase this sheet does not draw. files[].ids is always exactly what is on the sheet, "
+        "in reading order, row by row.",
         "A column is a phase or a variant of the phase to its left — a variant is the same "
         "figure plus something small the recorder saw attached to it (a muzzle flash, a shot), "
         "and it sits immediately after the figure it varies (ADR-0179).",
@@ -610,8 +767,19 @@ def _notes(pack, builder, grids, names, pack_arg):
         "phases of an animation (a torso that never moved); every phase shows it so the "
         "figure is whole, but the game has only one copy — paint it the same way everywhere, "
         "or the build keeps just one of your versions.",
-        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\" and run "
-        f"python3 scripts/mep_build.py build \"{pack_arg}\".",
+        "figures/usr*-figure.png shows the same rows as one composed view at pixel "
+        "precision (ADR-0225): each figure's tiles sit where the game draws them, with no "
+        "gap inside the figure, so a limb 2-4 px off the 8 px grid reads as attached. Paint "
+        "either surface, not both: python3 scripts/mep_figure.py import <pack> "
+        "figures/usrNNN-figure.png returns a painted view to the sheet that draws each tile "
+        "in the built pack (the usrNNN row, so Reload Repainted Images shows it, #413); where "
+        "two tiles overlap, a pixel goes to the tile in front.",
+        f"Rebuild after painting: copy sheets/usr* into \"{pack_arg}/textures/sheets/\", build "
+        f"once with python3 scripts/mep_build.py build \"{pack_arg}\" (import refuses a copy "
+        "not yet built with these sheets, #435), import each painted figure with python3 "
+        f"scripts/mep_figure.py import \"{pack_arg}\" figures/usrNNN-figure.png, then run "
+        f"python3 scripts/mep_build.py build \"{pack_arg}\" again - a figure left out of the "
+        "import never reaches the pack (#399).",
     ]
     if builder.excluded_fusions or builder.excluded_blank or builder.excluded_hud:
         notes.append(
@@ -741,14 +909,17 @@ def verify(pack_dir: Path, sheets_out: Path, scratch=None):
 
 # ---- CLI -------------------------------------------------------------------
 
-def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg):
+def build_kit(pack_dir: Path, sheets_out: Path, columns, rows, pack_arg, names=None,
+              figures_out: Path = None):
     pack = E.Pack(pack_dir)
     builder = KitBuilder(pack, columns=columns, rows=rows)
     grids = builder.build()
     sheets_out.mkdir(parents=True, exist_ok=True)
     kept = []
     for grid in grids:
-        if export_grid(pack, builder, grid, sheets_out) is not None:
+        if export_grid(pack, builder, grid, sheets_out, names) is not None:
+            if figures_out is not None:
+                export_figure_rows(pack, builder, grid, figures_out, names)
             kept.append(grid)
     return pack, builder, kept
 
@@ -790,7 +961,8 @@ def main(argv=None) -> int:
     try:
         names = Names.load(args.names)
         pack, builder, grids = build_kit(pack_dir, sheets_out, args.columns,
-                                         args.rows, str(pack_dir))
+                                         args.rows, str(pack_dir), names,
+                                         figures_out=out_dir / "figures")
     except (E.ComposeError, KitError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

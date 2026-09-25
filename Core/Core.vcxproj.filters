@@ -245,6 +245,9 @@
     <ClInclude Include="NES\BaseNesPpu.h">
       <Filter>NES</Filter>
     </ClInclude>
+    <ClInclude Include="NES\NesScanlineTraceValidity.h">
+      <Filter>NES</Filter>
+    </ClInclude>
     <ClInclude Include="NES\DefaultNesPpu.h">
       <Filter>NES</Filter>
     </ClInclude>
@@ -814,6 +817,18 @@
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
     <ClInclude Include="NES\HdPacks\HdPackConditions.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdPackErrorDedupe.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\SpriteFetchLog.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\OamFetchLatch.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
     <ClCompile Include="NES\HdPacks\HdPackLoader.cpp">

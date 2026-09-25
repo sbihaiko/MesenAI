@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <unordered_map>
 #include "NES/HdPacks/HdPackLoader.h"
+#include "NES/HdPacks/HdPackErrorDedupe.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/NesConsole.h"
@@ -17,12 +19,24 @@
 #include "Utilities/FastString.h"
 #include "Utilities/magic_enum.hpp"
 
-#define logError(y) MessageManager::Log("[HDPack - Line " + std::to_string(_currentLine) + "] " + (y)); _errorCount++;
+//Issue #302: every error still counts towards _errorCount (so the
+//"Loaded with N errors" total is unchanged), but only the first occurrence
+//of each distinct message reaches the log; the repeats are summarised once
+//at the end of the parse. See HdPackErrorDedupe.
+#define logError(y) LogError(y);
 #define checkConstraint(x, y) if(!(x)) { logError(y); return; }
 #define checkConstraintEx(x, y) if(_data->Version >= 109) { checkConstraint(x, y); } else { if(!(x)) { logError(y); } }
 
 HdPackLoader::HdPackLoader()
 {
+}
+
+void HdPackLoader::LogError(const string& message)
+{
+	_errorCount++;
+	if(_errorLog.ShouldLog(message)) {
+		MessageManager::Log("[HDPack - Line " + std::to_string(_currentLine) + "] " + message);
+	}
 }
 
 bool HdPackLoader::InitializeLoader(VirtualFile& romFile, HdPackData* data)
@@ -71,6 +85,8 @@ bool HdPackLoader::MergeLowerLayer(HdPackData& into, HdPackData& lower, bool inc
 
 	into.Version = std::max(into.Version, lower.Version);
 	into.OptionFlags |= lower.OptionFlags;
+	//ADR-0224: on or off for the whole stacked pack, like the option flags.
+	into.PreservesBehindBgSprites |= lower.PreservesBehindBgSprites;
 	if(into.Palette.empty()) {
 		into.Palette = lower.Palette;
 	}
@@ -216,9 +232,12 @@ bool HdPackLoader::CheckFile(string filename)
 	return CheckFileExact(ResolvePackRelativePath(filename));
 }
 
-bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData)
+bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData, string* outDiskPath)
 {
 	fileData.clear();
+	if(outDiskPath) {
+		outDiskPath->clear();
+	}
 	filename = ResolvePackRelativePath(filename);
 
 	if(_loadFromZip) {
@@ -226,8 +245,12 @@ bool HdPackLoader::LoadFile(string filename, vector<uint8_t>& fileData)
 			return true;
 		}
 	} else {
-		ifstream file(FolderUtilities::CombinePath(_hdPackFolder, filename), ios::in | ios::binary);
+		string diskPath = FolderUtilities::CombinePath(_hdPackFolder, filename);
+		ifstream file(diskPath, ios::in | ios::binary);
 		if(file.good()) {
+			if(outDiskPath) {
+				*outDiskPath = diskPath;
+			}
 			file.seekg(0, ios::end);
 			uint32_t fileSize = (uint32_t)file.tellg();
 			file.seekg(0, ios::beg);
@@ -246,6 +269,8 @@ bool HdPackLoader::LoadPack()
 {
 	string lineContent;
 	_currentLine = 0;
+	//Per load, not per process: a second pack must report its own errors.
+	_errorLog.Reset();
 
 	try {
 		vector<uint8_t> hdDefinition;
@@ -355,6 +380,11 @@ bool HdPackLoader::LoadPack()
 				tokens = StringUtilities::Split(lineContent.substr(9), ',');
 				TrimTokens(tokens);
 				ProcessOptionTag(tokens);
+			} else if(HdBehindBgSpriteRule::IsTagLine(lineContent)) {
+				//ADR-0224: no arguments, no error path - an emulator that does
+				//not know the tag skips it exactly like this dispatch skips any
+				//other unknown line.
+				_data->PreservesBehindBgSprites = true;
 			}
 		}
 
@@ -362,6 +392,17 @@ bool HdPackLoader::LoadPack()
 		InitializeHdPack();
 
 		if(_errorCount > 0) {
+			//One line per distinct problem that repeated, carrying its true
+			//occurrence count - the first occurrence was already logged with
+			//its manifest line number.
+			for(auto& repeated : _errorLog.GetRepeated()) {
+				MessageManager::Log("[HDPack] " + repeated.first + " (" + std::to_string(repeated.second) + " occurrences)");
+			}
+			uint32_t unretained = _errorLog.GetUnretainedCount();
+			if(unretained > 0) {
+				MessageManager::Log("[HDPack] " + std::to_string(unretained) + " further error(s) were not logged: this pack has more than " +
+					std::to_string(HdPackErrorDedupe::MaxDistinctMessages) + " distinct error messages.");
+			}
 			if(_data->Version >= 109) {
 				MessageManager::DisplayMessage("HDPack", "Loaded with " + std::to_string(_errorCount) + " errors");
 			}
@@ -380,12 +421,14 @@ bool HdPackLoader::ProcessImgTag(string src)
 	_data->ImageFileData.push_back(unique_ptr<HdPackBitmapInfo>(new HdPackBitmapInfo()));
 	HdPackBitmapInfo& bitmapInfo = *_data->ImageFileData.back().get();
 
-	if(!LoadFile(src, bitmapInfo.FileData)) {
+	if(!LoadFile(src, bitmapInfo.FileData, &bitmapInfo.SourcePath)) {
 		_data->ImageFileData.pop_back();
 		logError("Error loading HDPack: PNG file " + src + " could not be read.");
 		return false;
 	}
 	bitmapInfo.PngName = src;
+	//F12.3 (ADR-0212 §2): the pair a later reload compares against.
+	bitmapInfo.RecordSourceFingerprint();
 	return true;
 }
 
@@ -776,10 +819,12 @@ void HdPackLoader::ProcessBackgroundTag(vector<string>& tokens, vector<HdPackCon
 		bgFileData = _data->BackgroundFileData.back().get();
 		bgFileData->PngName = tokens[0];
 
-		if(!LoadFile(bgFileData->PngName, bgFileData->FileData)) {
+		if(!LoadFile(bgFileData->PngName, bgFileData->FileData, &bgFileData->SourcePath)) {
 			bgFileData = nullptr;
 			_data->BackgroundFileData.pop_back();
 		} else {
+			//F12.3 (ADR-0212 §2): the pair a later reload compares against.
+			bgFileData->RecordSourceFingerprint();
 			_backgroundsByName[tokens[0]] = bgFileData;
 		}
 	} else {

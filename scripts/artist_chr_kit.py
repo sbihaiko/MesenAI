@@ -5,6 +5,8 @@
                               [--also <other recorded pack dir>]...
                               [--names names.json] [--fill-rules none|observed|all]
                               [--verify] [--quiet]
+    scripts/artist_chr_kit.py <empty or missing dir> --rom <path.nes> --static
+                              [--out DIR] [--scale N] [--names names.json] [--quiet]
 
 A recorded pack is the `auto/` folder the bootstrap builder writes. Its
 `textures/chr/Chr_*.png` pages are already the surface the hand-built fan packs
@@ -15,6 +17,17 @@ put the recorded coverage at 47 % of the fan pack's distinct tiles, so an artist
 painting page by page hits a hole every few cells.
 
 This tool fills the holes from the ROM and refuses to pretend when it cannot.
+
+`--static` (ADR-0219, PRD F12.9) is the degenerate case of exactly that: there is
+no recording at all, so every cell is a hole and every hole is filled from the
+ROM. It runs on a **CHR ROM** game and only there — the bank *is* 4 KB of the
+file, so the shape half of the kit needs no play session — and it produces the
+pattern pages alone: no figure, no scenery, no stage map, because nothing was
+observed. Every cell comes out `fill` / `seen: false` and every emitted `<tile>`
+rule carries `defaultTile = Y`, the palette wildcard ADR-0210 measured. A CHR RAM
+game is refused, with a pointer to the third-party key index (ADR-0210 §3,
+F12.12) that is the only static source of shape for those. The tool never starts
+an emulator, reads a `.mss`, a route set or a movie on any path.
 
 A page is not one palette. `HdPackBuilder::SaveHdPack` spreads each tile's
 palette variants across the pages of its CHR bank by usage, so `Chr_<b>_0` holds
@@ -87,7 +100,12 @@ Honesty rules this tool keeps:
   marked `seen: false` in `Chr_<n>.json`, amber in `Chr_<n>.legend.png`, and
   counted in the manifest fragment;
 * a filled cell's *palette* is a guess — see `--fill-rules` — and by default no
-  `hires.txt` rule is emitted for it at all.
+  `hires.txt` rule is emitted for it at all;
+* a cell holding the bootstrap's own ROM export (a `defaultTile=Y` row, which on
+  a CHR ROM game `AddRomTiles` writes onto the real bank pages) is a ROM fill,
+  `origin: romExport`, `seen: false`, amber — the run never drew that key — but
+  its pixels are copied byte for byte and no rule is emitted, because its `Y`
+  row already draws from it (#449).
 
 Output follows the shared kit contract
 (`runs/golden-20260913-f922/artist-kit-contract.md`): pages under `<out>/chr/`,
@@ -114,26 +132,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 from sheet_repaint import Image, read_png, write_png  # noqa: E402
+import ora_writer  # noqa: E402 — ADR-0220: the layered .ora beside every page
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-# The 2C02 table of Core/NES/NesDefaultVideoFilter.cpp, ARGB. Only ever used for
-# a palette index that no cell of the pack exhibits; everything else is read off
-# the recorded pages, which keeps a custom palette working for free.
-DEFAULT_PALETTE_ARGB = [
-    0xFF666666, 0xFF002A88, 0xFF1412A7, 0xFF3B00A4, 0xFF5C007E, 0xFF6E0040,
-    0xFF6C0600, 0xFF561D00, 0xFF333500, 0xFF0B4800, 0xFF005200, 0xFF004F08,
-    0xFF00404D, 0xFF000000, 0xFF000000, 0xFF000000, 0xFFADADAD, 0xFF155FD9,
-    0xFF4240FF, 0xFF7527FE, 0xFFA01ACC, 0xFFB71E7B, 0xFFB53120, 0xFF994E00,
-    0xFF6B6D00, 0xFF388700, 0xFF0C9300, 0xFF008F32, 0xFF007C8D, 0xFF000000,
-    0xFF000000, 0xFF000000, 0xFFFFFEFF, 0xFF64B0FF, 0xFF9290FF, 0xFFC676FF,
-    0xFFF36AFF, 0xFFFE6ECC, 0xFFFE8170, 0xFFEA9E22, 0xFFBCBE00, 0xFF88D800,
-    0xFF5CE430, 0xFF45E082, 0xFF48CDDE, 0xFF4F4F4F, 0xFF000000, 0xFF000000,
-    0xFFFFFEFF, 0xFFC0DFFF, 0xFFD3D2FF, 0xFFE8C8FF, 0xFFFBC2FF, 0xFFFEC4EA,
-    0xFFFECCC5, 0xFFF7D8A5, 0xFFE4E594, 0xFFCFEF96, 0xFFBDF4AB, 0xFFB3F3CC,
-    0xFFB5EBF2, 0xFFB8B8B8, 0xFF000000, 0xFF000000,
-]
+# The 2C02 table and the palette-fold predicates live in palette_folds.py
+# (F14.9, ADR-0230), shared with the recorder's sheets. Re-exported here:
+# callers and tests read them off this module.
+from palette_folds import (  # noqa: E402,F401
+    DEFAULT_PALETTE_ARGB, HUE_DRIFT_GATE_DEG, _hue, _is_black, _level, _luma, _nes_rgb,
+    compute_folds, fade_related, fold_measure, painted_indices, palette_entries,
+    sheet_fold_anchors)
 
 # Legend washes, RGBA. Painted over the page at 40 % so the art stays readable.
 LEGEND_EVIDENCE = (0x2E, 0xA0, 0x43, 0xFF)
@@ -153,6 +164,30 @@ LEGEND_EMPTY = (0xC4, 0x28, 0x28, 0xFF)
 # that one of those agreeing cells sits next to.
 MIN_BASE_SUPPORT = 3
 LOCALITY_WINDOW = 16
+
+# `<ver>` a static manifest declares: BaseHdNesPack::CurrentVersion, the number
+# the recorder writes (HdNesPack.h). A static pack is read by the same loader as
+# a recorded one, so it declares the same version.
+PACK_VERSION = 109
+
+# The palette a static fill is rendered under. It is a guess and it does not
+# have to be a good one: every static rule carries `defaultTile = Y`, which is
+# the per-rule palette wildcard (ADR-0210), so the shape matches whatever
+# colours the game puts it under. `Bank.fill_palette()` returns this same value
+# when a bank has no recorded cell to vote, which is every bank here.
+STATIC_FILL_PALETTE = "0F001030"
+
+# First line of a static manifest, and of the `hires.txt` a pages-only build
+# writes from it. It is what lets `mep_build.py build` tell "this pack is its
+# own pages" from "this pack has a recording", so it never overwrites a
+# recorded manifest; `scripts/mep_build.py` reads the same constant.
+PAGES_ONLY_MARK = "# mep-pages-only 1"
+
+# The colour the recorder leaves an unpainted cell (`0xFFFF00FF`, ARGB). A
+# static page starts as this and is then written cell by cell; any pixel still
+# wearing it would be a cell the ROM could not supply, which cannot happen on a
+# CHR ROM bank and is why the static kit reports 0 `empty`.
+UNPAINTED_RGBA = (0xFF, 0x00, 0xFF, 0xFF)
 
 
 class ChrKitError(Exception):
@@ -183,19 +218,47 @@ class TileRow:
             return (self.tile_data, self.palette)
         return (f"#{self.tile_index}", self.palette)
 
+    @property
+    def exported(self) -> bool:
+        """True for a row the bootstrap seeded from the ROM, not one the run drew.
+
+        `HdPackBuilder` sets `DefaultTile = true` only in its static exports,
+        `AddRomTiles` (CHR ROM, onto the real bank's pages) and `AddPrgScanTiles`
+        (CHR RAM, onto its synthetic `0x504247xx` pages); every tile the run draws
+        is created by `CaptureOrCapPaletteVariant` with `DefaultTile = false`. So
+        a `Y` row is the ROM export and an `N` row is recorded evidence (#449).
+        One blind spot, in the conservative direction: a tile drawn under exactly
+        the export's neutral palette `0F001030` bumps the export's usage rather
+        than adding a row, and `hires.txt` records no usage, so it reads as an
+        export — never the other way round."""
+        return (self.default_tile or "N").upper() == "Y"
+
 
 class Pack:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, static: "Rom | None" = None, scale: int = 1,
+                 rom_sha1: str = ""):
         self.root = root
         self.textures = root / "textures"
         self.hires = self.textures / "hires.txt"
-        if not self.hires.is_file():
-            raise ChrKitError(f"{root}: no textures/hires.txt — not a recorded pack folder")
-        self.version = 0
+        self.version = PACK_VERSION
         self.scale = 1
         self.rom_sha1 = ""
         self.images: list[str] = []
         self.tiles: list[TileRow] = []
+        self.static = static is not None
+        if self.static:
+            # ADR-0219: the ROM is the whole input and the folder is an output
+            # location, so there is nothing to parse. One page per 4 KB bank of
+            # the file, rank 0, in bank order; no `<tile>` row exists yet
+            # because no cell was ever recorded.
+            self.scale = scale
+            self.rom_sha1 = rom_sha1
+            self.images = [f"chr/{static_page_name(b)}.png"
+                           for b in range(static.chr_tile_count // 256)]
+            return
+        self.version = 0
+        if not self.hires.is_file():
+            raise ChrKitError(f"{root}: no textures/hires.txt — not a recorded pack folder")
         self._parse()
 
     def _parse(self):
@@ -394,6 +457,60 @@ def collect_pages(pack: Pack) -> list[Page]:
     return pages
 
 
+def static_page_name(bank_id: int) -> str:
+    """The page name the recorder would have written for this CHR ROM bank.
+
+    `HdPackBuilder::SaveHdPack` names a CHR ROM page `Chr_<HexUtilities::ToHex(
+    bankId)>_<rank>.png`, and that helper widens by bytes: 2 hex digits up to
+    0xFF, then 4, then 6, then 8. A static kit has only rank 0 — a rank is a
+    palette variant and no palette was ever seen."""
+    for width, top in ((2, 0xFF), (4, 0xFFFF), (6, 0xFFFFFF)):
+        if bank_id <= top:
+            return f"Chr_{bank_id:0{width}X}_0"
+    return f"Chr_{bank_id:08X}_0"
+
+
+def static_pages(pack: Pack) -> list[Page]:
+    """One `Page` per 4 KB CHR ROM bank, with no recorded row on any of them.
+
+    Every field `collect_pages` reads off the recording is decided here instead,
+    and each one is a statement about the ROM rather than about a run: the
+    layout is `identity` because a static page is laid out in bank order (the
+    `largeSprites` shuffle is something the *builder* does to what it saw), the
+    bank id is the bank's own number, and the page carries no palette of its own
+    (ADR-0219 §"Nothing is claimed to be seen")."""
+    pages = []
+    for image_index, rel in enumerate(pack.images):
+        page = Page(Path(rel).stem, None, image_index, pack.scale)
+        page.is_chr_ram = False
+        page.palette = STATIC_FILL_PALETTE
+        page.chr_bank_id = image_index
+        page.layout = "identity"
+        pages.append(page)
+    return pages
+
+
+def static_images(pages: list[Page]) -> dict:
+    """The blank canvas each static page is drawn onto.
+
+    A recorded page arrives as a PNG the recorder wrote; there is none here, so
+    the page starts as the recorder's own unpainted colour and every one of its
+    256 cells is then written by the ROM fill. `orig` is the same canvas rather
+    than `None`, so the twin ADR-0153 §3 requires comes out identical to the
+    sheet — which is exactly what an untouched reference means here."""
+    out = {}
+    for page in pages:
+        size = 16 * page.cell_px
+        # Built as one buffer rather than pixel by pixel: a 32-bank ROM at
+        # scale 4 is 16.7 M pixels, and the per-pixel form spent 9 of the
+        # slice's 10-second budget writing a colour that is about to be
+        # overwritten.
+        row = bytes(UNPAINTED_RGBA) * size
+        out[page.name] = {role: Image(size, size, bytearray(row * size))
+                          for role in ("hd", "orig")}
+    return out
+
+
 class Bank:
     """Every page of one CHR bank, plus what is known about its 256 tiles."""
 
@@ -406,11 +523,16 @@ class Bank:
         self.is_chr_ram = self.primary.is_chr_ram
         self.layout = self.primary.layout
         self.kind = self._kind()
-        # index -> (page, slot) of the recorded art, best rank first
+        # index -> (page, slot) of the art the run drew, best rank first, and
+        # of the bootstrap's ROM export for an index the run never drew (#449).
         self.art: dict[int, tuple] = {}
+        self.exported: dict[int, tuple] = {}
         for page in self.pages:
-            for slot in page.rows:
-                self.art.setdefault(page.index_of_slot(slot), (page, slot))
+            for slot, row in page.rows.items():
+                where = self.exported if row.exported else self.art
+                where.setdefault(page.index_of_slot(slot), (page, slot))
+        for index in self.art:
+            self.exported.pop(index, None)
         # index -> donation dict, from a second recording of the same ROM. Only
         # ever set for an index this pack's own `art` does not hold.
         self.donated: dict[int, dict] = {}
@@ -430,6 +552,11 @@ class Bank:
         if (self.id & PRG_SCAN_BANK_MASK) == PRG_SCAN_BANK_TAG:
             return "prgScan"
         return "chrRam" if self.is_chr_ram else "chrRom"
+
+    def holds_row(self, index: int) -> bool:
+        """The rank-0 page already has a `<tile>` row drawing from this cell, so
+        its pixels are copied through and nothing may be pasted over them."""
+        return self.primary.slot_of_index(index) in self.primary.rows
 
     def fill_palette(self):
         """The palette a ROM fill is rendered under.
@@ -455,6 +582,16 @@ def bank_identity_unknown(pages) -> bool:
     real = [p for p in pages if p.is_chr_ram
             and ((p.chr_bank_id or 0) & PRG_SCAN_BANK_MASK) != PRG_SCAN_BANK_TAG]
     return bool(real) and not any(p.chr_bank_id for p in real)
+
+
+def recorded_before_bank_fix(page) -> bool:
+    """ADR-0232: a CHR RAM page the recorder filed under bank 0 while that id
+    was a constant. Since the fix, 0 is the id of an all-zero bank, which only
+    ever draws an all-zero tile, so a bank-0 page with any set pattern bit
+    comes from an older recording — or from the part of a re-recorded pack
+    that this session never drew again, beside pages with real ids."""
+    return (page.is_chr_ram and page.chr_bank_id == 0
+            and any(r.tile_data and r.tile_data.strip("0") for r in page.rows.values()))
 
 
 def _regroup_without_hashes(pages):
@@ -488,7 +625,7 @@ def collect_banks(pack: Pack, pages: list[Page]) -> list[Bank]:
         # The blank-tile bucket borrows a real bank's ids; keep it on its own.
         if p.chr_bank_id is None or p.name.startswith("Chr_FFFFFFFF"):
             groups["?" + p.name].append(p)
-        elif unknown and p.is_chr_ram and not p.chr_bank_id:
+        elif (unknown and p.is_chr_ram and not p.chr_bank_id) or recorded_before_bank_fix(p):
             homeless.append(p)
         else:
             groups[p.chr_bank_id].append(p)
@@ -750,7 +887,7 @@ def attach_donors(banks: list[Bank], donors: list[Donor]) -> list[str]:
                 continue
             paired.add((donor.label, bank.id))
             for index in sorted(src.art):
-                if index in bank.art or index in bank.donated:
+                if index in bank.art or index in bank.donated or bank.holds_row(index):
                     continue
                 page, slot = src.art[index]
                 bank.donated[index] = {"donor": donor, "page": page, "slot": slot}
@@ -778,7 +915,7 @@ def fill_from_chr_rom(bank: Bank, rom: Rom):
     """CHR ROM: the bank *is* 4 KB of the file, so every index is readable."""
     base = bank.id * 256
     for index in range(256):
-        if index in bank.art or index in bank.donated:
+        if index in bank.art or index in bank.donated or bank.holds_row(index):
             continue
         data = rom.chr_tile(base + index)
         if data is None:
@@ -837,7 +974,7 @@ def fill_from_prg(bank: Bank, rom: Rom, stats):
         return
 
     for j in range(256):
-        if j in bank.art or j in bank.donated:
+        if j in bank.art or j in bank.donated or bank.holds_row(j):
             continue
         best = None
         for b, support in trusted:
@@ -905,247 +1042,6 @@ def legend_image(page: Page, states: dict) -> Image:
                 edge = (xx - x < 2 or yy - y < 2 or x + n - xx <= 2 or y + n - yy <= 2)
                 img.set(xx, yy, rgba if edge else (rgba[0], rgba[1], rgba[2], 0x40))
     return img
-
-
-# --- palette folding (F9.27 follow-up) --------------------------------------
-
-# A recorded pack keys a cell by (pattern, palette), so one drawing comes back
-# once per palette the run saw it wearing. On the TAS Zelda recording that is
-# 4712 cells for 1642 distinct patterns, because a screen fade gives every tile
-# on screen a key per step of the fade.
-#
-# `HdPackLoader` has carried a per-`<tile>` **Brightness** since version 105
-# (`HdPackLoader.cpp:513`, applied by `HdNesPack::AdjustBrightness`), and the
-# builder has never written anything but 255 (`HdPackBuilder.cpp:337/391/464`).
-# So the renderer can already reconstruct a fade step from one painted cell,
-# and this module decides which cells that is true of.
-#
-# THE RULE, read off the NES palette and never off the picture:
-#
-#   NES colour byte c: row = c >> 4, hue = c & 0x0F. The four rows of one hue
-#   column ARE the console's brightness ramp for that colour
-#   ($2C -> $1C -> $0C -> $0F). Ten indices render pure black in the 2C02 table
-#   ($0D-$0F, $1D-$1F, $2E, $2F, $3E, $3F); a black entry carries no hue and is
-#   a wildcard.
-#
-#   Only the palette indices the tile ACTUALLY PAINTS are compared - a pattern
-#   that paints colours 0 and 3 does not care what 1 and 2 hold.
-#
-#   INERT  - the two palettes render the pattern to identical RGB. No judgement
-#            at all; the cells are the same picture.
-#   FADE   - every painted entry keeps its hue and none gets brighter, i.e. the
-#            game moved those colours down their own ramps.
-#   Neither - a painted entry changed hue. A different picture. Collapsing a
-#            green enemy onto a red one would destroy evidence (ADR-0183 3),
-#            so it is never folded, however close the two happen to render.
-#
-# The rule is a precondition, not the decision. `AdjustBrightness` is a single
-# RGB multiplier, and the one thing a multiplier can never do is change hue, so
-# each candidate is also measured: the least-squares multiplier that takes the
-# base to the variant, and the largest hue angle between them. Anything past
-# HUE_DRIFT_GATE_DEG is left as its own cell. Both numbers are written into the
-# cell's sidecar entry, and the per-page distribution into `fold.driftHistogram`,
-# so the gate is retunable from the data a kit already carries rather than from
-# another recording run.
-#
-# Measured on the corpus (2026-09-14), fraction of the rows-over-patterns gap
-# this removes: Contra 77 %, Mega Man 3 58 %, Gauntlet 57 %, Ninja Gaiden 53 %,
-# Zelda TAS 44 %, Castlevania 17 %. Zelda TAS: 4712 cells -> 3372, and the
-# deepest CHR slot goes from 35 variants to 16.
-#
-# What this does NOT do is collapse a pattern to one cell. 1642 is Zelda's
-# *pattern* count, not its picture count: its most-repeated patterns carry ~7
-# hue families (grey, olive $x8, green $xB, cyan $xC, red $x6, blue $x2, brown
-# $x7), each a 3-5 step ramp. 30 keys become 7 cells, not 1.
-
-HUE_DRIFT_GATE_DEG = 25.0
-
-
-def _nes_rgb(c):
-    v = DEFAULT_PALETTE_ARGB[c & 0x3F]
-    return ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
-
-
-def _is_black(c):
-    return _nes_rgb(c) == (0, 0, 0)
-
-
-def _hue(c):
-    return c & 0x0F
-
-
-def _level(c):
-    """0 for black, else the palette row + 1 - the rung of the hue's ramp."""
-    return 0 if _is_black(c) else (c >> 4) + 1
-
-
-def _luma(c):
-    r, g, b = _nes_rgb(c)
-    return 0.299 * r + 0.587 * g + 0.114 * b
-
-
-def palette_entries(palette: str):
-    """`"0F0B1B2B"` -> the four NES colour indices, colour 0 first."""
-    v = int(palette, 16)
-    return [(v >> ((3 - k) * 8)) & 0x3F for k in range(4)]
-
-
-def painted_indices(tile_data: str):
-    """Which of the four palette indices the 8x8 pattern actually paints.
-
-    `tile_data` is the 32 hex characters a CHR RAM `<tile>` row carries. A CHR
-    ROM row carries only an index, and then the caller has to assume all four -
-    which is the conservative direction: more entries have to agree on hue, so
-    fewer cells fold."""
-    d = [int(tile_data[i * 2:i * 2 + 2], 16) for i in range(16)]
-    used = set()
-    for i in range(8):
-        lo, hi = d[i], d[i + 8]
-        for j in range(8):
-            used.add(((lo >> (7 - j)) & 1) | (((hi >> (7 - j)) & 1) << 1))
-    return sorted(used)
-
-
-def fade_related(base, other, used) -> bool:
-    """`other` is `base` further down the same ramps: no painted entry changed
-    hue, none got brighter, and at least one moved."""
-    moved = False
-    for k in used:
-        a, b = base[k], other[k]
-        if _is_black(a) and _is_black(b):
-            continue
-        if _is_black(a) or _is_black(b):
-            moved = True
-            continue
-        if _hue(a) != _hue(b):
-            return False
-        if _level(b) > _level(a):
-            return False
-        if _level(b) < _level(a):
-            moved = True
-    return moved
-
-
-def fold_measure(base, other, used):
-    """(brightness, max hue drift in degrees) for folding `other` onto `base`.
-
-    `brightness` is the least-squares single multiplier, in the 0..1 units the
-    `<tile>` column uses (1 = the loader's 255). The drift is the largest angle
-    between a painted entry's two RGB vectors - the part of the residual a
-    multiplier can never remove. Black entries carry no direction and are
-    skipped."""
-    num = den = 0.0
-    for k in used:
-        a, b = _nes_rgb(base[k]), _nes_rgb(other[k])
-        for i in range(3):
-            num += a[i] * b[i]
-            den += a[i] * a[i]
-    brightness = 0.0 if den == 0 else num / den
-    drift = 0.0
-    for k in used:
-        a, b = _nes_rgb(base[k]), _nes_rgb(other[k])
-        na = math.sqrt(sum(x * x for x in a))
-        nb = math.sqrt(sum(x * x for x in b))
-        if na == 0 or nb == 0:
-            continue
-        cos = sum(x * y for x, y in zip(a, b)) / (na * nb)
-        drift = max(drift, math.degrees(math.acos(max(-1.0, min(1.0, cos)))))
-    return max(0.0, min(4.0, brightness)), drift
-
-
-def compute_folds(pages, gate: float = HUE_DRIFT_GATE_DEG):
-    """Fold every page's palette variants of one pattern onto one painted cell.
-
-    Pack-wide, not per bank: a pack whose CHR bank hashes are all zero has its
-    pages regrouped structurally (`_regroup_without_hashes`), so the variants of
-    one pattern routinely sit in different Bank objects. The key this folds is
-    (pattern, palette), which is global.
-
-    Returns `(folded, bases, stats)`:
-      folded[(page name, slot)] = {"kind", "brightness", "drift", "base*"}
-      bases[(page name, slot)]  = [that cell's folded entries]
-    """
-    groups = collections.defaultdict(list)
-    for page in pages:
-        for slot, row in page.rows.items():
-            ident = row.tile_data or f"#{page.index_of_slot(slot)}"
-            groups[ident].append((page, slot, row))
-
-    folded, bases = {}, collections.defaultdict(list)
-    stats = {"inert": 0, "fade": 0, "kept": 0, "refused": 0,
-             "driftHistogram": collections.Counter()}
-
-    for ident, members in groups.items():
-        data = members[0][2].tile_data
-        used = painted_indices(data) if data else [0, 1, 2, 3]
-        if not used:
-            used = [0]
-        # One member per palette, brightest first; a member of the fullest page
-        # wins a tie, so the cell an artist opens first tends to be the base.
-        by_palette = {}
-        for page, slot, row in members:
-            by_palette.setdefault(row.palette, (page, slot, row))
-        order = sorted(
-            by_palette.values(),
-            key=lambda m: (-sum(_luma(palette_entries(m[2].palette)[k]) for k in used),
-                           -len(m[0].rows), m[0].name, m[1]))
-        if len(order) < 2:
-            stats["kept"] += 1
-            continue
-
-        # INERT first: palettes that render this pattern to identical RGB are
-        # the same picture, and folding them is not a judgement.
-        reps, inert_of = [], collections.defaultdict(list)
-        seen = {}
-        for m in order:
-            sig = tuple(_nes_rgb(palette_entries(m[2].palette)[k]) for k in used)
-            at = seen.get(sig)
-            if at is None:
-                seen[sig] = len(reps)
-                reps.append(m)
-            else:
-                inert_of[at].append(m)
-
-        # FADE: greedy from the brightest representative.
-        taken = [False] * len(reps)
-        for i, base in enumerate(reps):
-            if taken[i]:
-                continue
-            taken[i] = True
-            stats["kept"] += 1
-            bkey = (base[0].name, base[1])
-            base_pal = palette_entries(base[2].palette)
-
-            def _fold(member, kind, brightness, drift):
-                entry = {"kind": kind, "palette": member[2].palette,
-                         "brightness": round(brightness, 4), "drift": round(drift, 1),
-                         "basePage": base[0].name, "baseSlot": base[1],
-                         "basePalette": base[2].palette}
-                folded[(member[0].name, member[1])] = entry
-                bases[bkey].append(entry)
-                stats[kind] += 1
-                stats["driftHistogram"][int(drift) // 5 * 5] += 1
-
-            for m in inert_of[i]:
-                _fold(m, "inert", 1.0, 0.0)
-            for j in range(i + 1, len(reps)):
-                if taken[j]:
-                    continue
-                other = reps[j]
-                other_pal = palette_entries(other[2].palette)
-                if not fade_related(base_pal, other_pal, used):
-                    continue
-                brightness, drift = fold_measure(base_pal, other_pal, used)
-                if drift > gate:
-                    # Same ramps, but too much of the residual is hue for a
-                    # multiplier to carry. Left as its own cell, and counted.
-                    stats["refused"] += 1
-                    continue
-                taken[j] = True
-                _fold(other, "fade", brightness, drift)
-                for m in inert_of[j]:
-                    _fold(m, "inert", brightness, drift)
-    return folded, bases, stats
 
 
 # --- writing ----------------------------------------------------------------
@@ -1219,7 +1115,19 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
             index = page.index_of_slot(slot)
             x, y = page.xy(slot)
             entry = {"slot": slot, "index": index, "x": x, "y": y}
-            if slot in page.rows:
+            if slot in page.rows and page.rows[slot].exported:
+                # The bootstrap's ROM export (#449): the pattern is the ROM's and
+                # the run never drew this key, so it is a ROM fill. Its pixels
+                # stay byte for byte, because its `Y` row draws from this cell.
+                row = page.rows[slot]
+                entry.update(state="fill", seen=False, palette=row.palette,
+                             origin="romExport")
+                if row.tile_data:
+                    entry["tileData"] = row.tile_data
+                else:
+                    entry["tileIndex"] = row.tile_index
+                states[slot] = "fill"
+            elif slot in page.rows:
                 row = page.rows[slot]
                 entry.update(state="evidence", seen=True, palette=row.palette)
                 if row.tile_data:
@@ -1310,9 +1218,8 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
                 states[slot] = "empty"
             cells.append(entry)
 
-        write_png(out_chr / f"{page.name}.png", hd)
-        if orig is not None:
-            write_png(out_chr / f"{page.name}.orig.png", orig)
+        ora_writer.write_chr_surface(  # page PNG + twin + layered .ora, one pass (ADR-0220 §1)
+            out_chr, N.require_asset_name(page.name + N.SURFACE_EXT, __name__), hd, orig, cells, page)
         write_png(out_chr / f"{page.name}.legend.png", legend_image(page, states))
 
         counts = collections.Counter(c["state"] for c in cells)
@@ -1377,6 +1284,81 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
 # --- verify -----------------------------------------------------------------
 
 
+DEFAULT_STATIC_SCALE = 4
+
+
+def static_notes(rom_path: Path, cells: int, filled: int, rules: int) -> list:
+    """What a static kit has to say for itself, in the order it has to say it.
+
+    The first note is the one that matters: no play session happened, so the
+    pages are shape without evidence. Everything a recorded kit says about
+    green/olive/blue cells is omitted rather than reworded — there are none."""
+    return [
+        f"NOTHING ON THESE PAGES WAS SEEN IN PLAY. They were projected over "
+        f"{rom_path.name}'s own CHR with no recording at all (ADR-0219, PRD F12.9): "
+        f"all {cells} cell(s) are `fill` and `seen: false` in the sidecars, and "
+        "there is no figure sheet, no scenery sheet and no stage map, because "
+        "those come from what a run observed and nothing was observed.",
+        f"{filled} of {cells} cell(s) were read out of the file. A CHR ROM bank "
+        "*is* 4 KB of the ROM, so the shape of every tile is exact — what is "
+        "missing is not accuracy, it is organisation.",
+        f"The colours are not. Every one of the {rules} <tile> row(s) in "
+        "chr/fill-rules.hires.txt carries defaultTile=Y, the per-rule palette "
+        "wildcard (ADR-0210): the shape matches whatever palette the game puts it "
+        f"under, and the {STATIC_FILL_PALETTE} the page is *drawn* in is a "
+        "placeholder for reading, never a claim.",
+        "A fill is rendered nearest-neighbour: the recorder smooths its own cells "
+        "and these were never recorded, so they are deliberately crisp.",
+        "This kit is a folder, not a pack, and nothing installs it. To paint: edit "
+        "a page, copy chr/ into a pack folder's textures/ and run "
+        "`python3 scripts/mep_build.py build <pack>` — the build reads "
+        "chr/fill-rules.hires.txt as the manifest and rebuilds textures/hires.txt "
+        "from it.",
+        "Recording the game later never becomes pointless: a run contributes the "
+        "palettes a static page can only wildcard, plus the figures, scenery and "
+        "maps this kit does not have. A recorded cell always wins over a fill.",
+    ]
+
+
+def verify_static(pack: Pack, out_chr: Path, rom: Rom, quiet=False) -> dict:
+    """The static substitute for `verify`'s round-trip, and why it differs.
+
+    ADR-0183 §4 accepts a surface when a rebuilt pack loses and invents no key
+    *against the recording it came from*. A static kit has no recording, so
+    "unchanged" is vacuous and faking it would be worse than useless. What
+    survives of §4 is the half that is checkable here (ADR-0219, F12.9 stop
+    condition 2): the pages-only pack builds with 0 errors and the rebuilt
+    manifest carries exactly one `<tile>` rule per tile of the ROM's CHR, every
+    one of them the `Y` wildcard."""
+    result = {"ran": True, "errors": 0, "rules": 0, "expectedRules": rom.chr_tile_count,
+              "wildcard": 0, "built": False}
+    with tempfile.TemporaryDirectory(prefix="artist-chr-static-verify-") as tmp:
+        target = Path(tmp) / "pack" / "textures" / "chr"
+        target.parent.mkdir(parents=True)
+        shutil.copytree(out_chr, target)
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "mep_build.py"), "build", str(target.parent.parent)],
+            capture_output=True, text=True)
+        result["built"] = proc.returncode == 0
+        result["errors"] = sum(1 for ln in (proc.stdout + proc.stderr).splitlines()
+                               if ln.startswith("error:"))
+        if not result["built"] and not result["errors"]:
+            # A non-zero exit with no `error:` line is still a failure, and
+            # reporting 0 errors beside it would read as a pass.
+            result["errors"] = 1
+        built = target.parent / "hires.txt"
+        if built.is_file():
+            rows = [ln for ln in built.read_text().splitlines() if ln.startswith("<tile>")]
+            result["rules"] = len(rows)
+            result["wildcard"] = sum(1 for ln in rows if ln.rstrip().endswith(",Y"))
+        if not quiet:
+            print(f"  verify: build {'ok' if result['built'] else 'FAILED'}, "
+                  f"{result['errors']} error(s), {result['rules']} <tile> rule(s) "
+                  f"of {result['expectedRules']} expected, "
+                  f"{result['wildcard']} carrying defaultTile=Y")
+    return result
+
+
 def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
     """Drop the completed pages into a copy of the pack, rebuild it, and prove
     nothing was lost.
@@ -1385,8 +1367,8 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
     `textures/sheets/` alone and ignores `textures/chr/` entirely — a naive
     before/after on its output would pass no matter what this tool wrote:
 
-    1. every recorded cell of every emitted page is byte-identical to the
-       recorded page — that is what makes the pack's existing `<tile>` rules
+    1. every recorded cell of every emitted page, and every cell holding the
+       bootstrap's ROM export (#449), is byte-identical to the recorded page — that is what makes the pack's existing `<tile>` rules
        render exactly what they rendered before. A folded cell is checked the
        same way: folding changes what the kit *says* about a cell, never its
        pixels, so a pack rebuilt from an unpainted kit is unchanged;
@@ -1415,7 +1397,8 @@ def verify(pack: Pack, out_chr: Path, quiet=False) -> dict:
             sidecar = json.loads((out_chr / (png.name[:-4] + ".json")).read_text())
             n = sidecar["scale"] * 8
             for cell in sidecar["cells"]:
-                if cell["state"] not in ("evidence", "folded"):
+                if (cell["state"] not in ("evidence", "folded")
+                        and cell.get("origin") != "romExport"):
                     continue
                 result["cells_checked"] += 1
                 x, y = cell["x"], cell["y"]
@@ -1501,13 +1484,48 @@ _PASSTHROUGH_WHY = {
 }
 
 
+def static_input(pack_dir: Path, rom: Rom, rom_path: Path, scale: int, also) -> Pack:
+    """The three refusals of the static path, then the Pack the ROM defines.
+
+    Each refusal is the ADR's, not a convenience: a CHR RAM game has no static
+    source of shape here at all (its recovery pins PRG blocks against *recorded*
+    tiles, and there are none), `--also` presupposes a primary with cells to
+    donate to, and a folder that already holds a recording is a recorded pack —
+    running the static path over it would replace evidence with inference, which
+    is the one thing ADR-0183 §3 forbids."""
+    if not rom.has_chr_rom:
+        raise ChrKitError(
+            f"{rom_path.name}: a CHR RAM game has no CHR in the file, so a static kit "
+            "has nothing to read — its pattern tables are built at run time from PRG "
+            "data, and pinning a PRG block needs recorded tiles. The only static source "
+            "of shape for these games is a third-party key index read as facts: "
+            "`scripts/mep_import.py index` (ADR-0210 §3, PRD F12.12)")
+    if also:
+        raise ChrKitError(
+            "--also is another recording used as evidence for a recorded pack's holes; "
+            "--static has no recording for it to attach to")
+    if (pack_dir / "textures" / "hires.txt").is_file():
+        raise ChrKitError(
+            f"{pack_dir}: this folder holds a recording (textures/hires.txt) — run "
+            "without --static to complete it from the ROM. A static kit is what a kit "
+            "looks like when there is no recording at all")
+    rom_sha1 = hashlib.sha1(rom_path.read_bytes()).hexdigest().lower()
+    pack = Pack(pack_dir, static=rom, scale=scale, rom_sha1=rom_sha1)
+    if not pack.images:
+        raise ChrKitError(f"{rom_path.name}: CHR ROM smaller than one 4 KB bank")
+    return pack
+
+
 def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
-        do_verify, quiet, also=()):
-    pack = Pack(pack_dir)
+        do_verify, quiet, also=(), static=False, scale=DEFAULT_STATIC_SCALE):
     rom = Rom(rom_path)
+    if static:
+        pack = static_input(pack_dir, rom, rom_path, scale, also)
+    else:
+        pack = Pack(pack_dir)
     names = load_names(names_path)
 
-    pages = collect_pages(pack)
+    pages = static_pages(pack) if static else collect_pages(pack)
     if not pages:
         raise ChrKitError(f"{pack_dir}: textures/hires.txt references no chr/ page")
     banks = collect_banks(pack, pages)
@@ -1518,7 +1536,12 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     # with that game's graphics, then reported as an exact ROM fill. The fill
     # is the one place a wrong input produces confident, plausible, wrong art,
     # so the ROM is pinned to the recording rather than merely type-checked.
-    if pack.rom_sha1 and set(pack.rom_sha1) != {"0"}:
+    # On the static path there is no recording to pin against, so this guard has
+    # no anchor and the caller's --rom is the whole of the input (ADR-0219
+    # Consequences). The substitute is that the manifest records the ROM's own
+    # SHA-1 and every cell says `seen: false`: the art is the named ROM's, and
+    # the kit never claims it is any particular game's.
+    if not pack.static and pack.rom_sha1 and set(pack.rom_sha1) != {"0"}:
         actual = hashlib.sha1(rom_path.read_bytes()).hexdigest().lower()
         if actual != pack.rom_sha1:
             raise ChrKitError(
@@ -1526,8 +1549,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                 f"from ({pack.rom_sha1.upper()}) — filling from another game would write its "
                 f"graphics into this one and report them as exact")
 
+    # Static pages are derived from this very ROM, so the pack cannot disagree
+    # with it about CHR kind; the check below is about a recorded pack paired
+    # with the wrong file.
     expect_ram = not rom.has_chr_rom
-    for b in banks:
+    for b in ([] if pack.static else banks):
         if b.kind in ("chrRam", "chrRom") and b.is_chr_ram != expect_ram:
             raise ChrKitError(
                 f"{b.primary.name}: the pack says "
@@ -1541,10 +1567,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     donors = [Donor(p, pack, pack_dir) for p in also_paths]
     donor_notes = attach_donors(banks, donors)
 
-    images = {p.name: {"hd": read_png(p.path),
-                       "orig": (read_png(p.path.parent / (p.name + ".orig.png"))
-                                if (p.path.parent / (p.name + ".orig.png")).is_file() else None)}
-              for p in pages}
+    images = static_images(pages) if pack.static else {
+        p.name: {"hd": read_png(p.path),
+                 "orig": (read_png(p.path.parent / (p.name + ".orig.png"))
+                          if (p.path.parent / (p.name + ".orig.png")).is_file() else None)}
+        for p in pages}
     table = learn_palette(banks, images, rom)
 
     stats = collections.Counter()
@@ -1560,7 +1587,10 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
     # Pack-wide, before any page is written: the variants of one pattern sit in
     # different Bank objects whenever the pack's CHR bank hashes are all zero.
-    fold_map, fold_bases, fold_stats = compute_folds(pages)
+    # A pattern the recorder's sheets carry folds onto that cell's palette
+    # (ADR-0230 Decision item 3), so the two surfaces agree on what a fold is.
+    anchors = {} if pack.static else sheet_fold_anchors(pack.textures / "sheets")
+    fold_map, fold_bases, fold_stats = compute_folds(pages, anchors=anchors)
     folds = (fold_map, fold_bases)
 
     files, rules, dropped, passthrough = [], [], [], []
@@ -1579,7 +1609,23 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
                                 _PASSTHROUGH_WHY[b.kind].format(id=b.id)))
 
     rules_path = out_chr / "fill-rules.hires.txt"
-    if rules:
+    if rules and pack.static:
+        # On the static path these rows are not a suggestion beside a recording:
+        # they are the whole manifest, one per tile in the file, every one of
+        # them `defaultTile = Y`. So the file carries the header and the <img>
+        # lines a build needs, and `mep_build.py build` reads it as the key
+        # source of a pages-only pack (ADR-0219, PRD F12.9 (2)).
+        head = [f"<ver>{PACK_VERSION}", f"<scale>{pack.scale}",
+                f"<supportedRom>{pack.rom_sha1.upper()}"]
+        head += [f"<img>{rel}" for rel in pack.images]
+        rules_path.write_text(
+            PAGES_ONLY_MARK + "\n"
+            f"# The manifest of a static kit: one <tile> row per tile of "
+            f"{rom_path.name}'s own CHR,\n"
+            "# every one of them defaultTile=Y (the palette wildcard) and every one of\n"
+            "# them `seen: false` in the sidecars. Nothing here was observed in play.\n"
+            + "\n".join(head + rules) + "\n", encoding="utf-8")
+    elif rules:
         rules_path.write_text(
             f"// <tile> rows for ROM-filled cells, --fill-rules={fill_rules}.\n"
             "// NOT part of the drop-in: appending these to a pack's textures/hires.txt\n"
@@ -1592,7 +1638,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
     real_cells = 256 * len(real)
     recorded = sum(len(b.art) for b in real)
     donated = sum(len(b.donated) for b in real)
-    filled = sum(len(b.fills) for b in real)
+    # A cell a rule could be emitted for, and on top of it the bootstrap's ROM
+    # export of an index the run never drew (#449): a ROM fill that already has
+    # its `Y` row, so it counts as filled but never as a rule.
+    ruleable = sum(len(b.fills) for b in real)
+    filled = ruleable + sum(1 for b in real for i in b.exported if b.holds_row(i))
     guessed = sum(f["paletteGuessed"] for f in files)
     total = collections.Counter()
     for f in files:
@@ -1604,7 +1654,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
     donated_clause = (f"{donated} donated by {len(donors)} other recording(s), "
                       if donors else "")
-    notes = [
+    notes = static_notes(rom_path, real_cells, filled, len(rules)) if pack.static else [
         f"{len(real)} real CHR bank(s) of 256 tiles each ({real_cells} tiles): "
         f"{recorded} recorded by the run, {donated_clause}{filled} filled from "
         f"{rom_path.name}, {real_cells - recorded - donated - filled} still empty.",
@@ -1615,7 +1665,9 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "Green in Chr_<n>.legend.png is a cell the run recorded on this page; "
         "olive is a cell this bank recorded on a lower-ranked page, moved up "
         "(same pattern, another palette — still evidence); violet is a cell "
-        "folded onto another cell, which is the one to paint; amber is a ROM fill; "
+        "folded onto another cell, which is the one to paint; amber is a ROM fill "
+        "(including the bootstrap's own ROM export, `origin: romExport`, which "
+        "the run never drew); "
         "red is a cell nothing could fill. Every non-green cell is spelled out "
         "in Chr_<n>.json, and a ROM fill is `seen: false` there.",
         "A ROM fill is rendered nearest-neighbour under the bank's most-recorded "
@@ -1625,7 +1677,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         f"recorded. --fill-rules={fill_rules} emitted {len(rules)} <tile> row(s), "
         "into chr/fill-rules.hires.txt and never into the pack. The safe count "
         f"(palette already observed for that pattern) is {len(rules) if fill_rules == 'observed' else '-'}"
-        f"; the permissive count (a rule per fill) would be {filled}. A rule with "
+        f"; the permissive count (a rule per fill) would be {ruleable}. A rule with "
         "a wrong palette never matches and is harmless, but one that does match "
         "would put a nearest-neighbour guess on screen in place of the pack's "
         "filtered art, and a sprite/background misread would punch a transparent "
@@ -1699,6 +1751,11 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "generator": "scripts/artist_chr_kit.py",
         "pack": str(pack_dir),
         "rom": rom_path.name,
+        # Only on the static path, so a recorded run writes the bytes it wrote
+        # before this flag existed. `static` is what ARTIST.md keys its first
+        # line off, and `romSha1` is the whole of what identifies the input when
+        # there is no recording to pin against (ADR-0219).
+        **({"static": True, "romSha1": pack.rom_sha1.upper()} if pack.static else {}),
         "romHasChrRom": rom.has_chr_rom,
         "mapper": rom.mapper,
         "totals": {
@@ -1711,7 +1768,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
             "fill": total["fill"], "empty": total["empty"],
             "folded": total["folded"],
             "paletteGuessed": guessed,
-            "rulesSafe": filled - guessed, "rulesPermissive": filled,
+            "rulesSafe": ruleable - guessed, "rulesPermissive": ruleable,
             "rulesEmitted": len(rules), "fillRules": fill_rules,
         },
         "fold": {
@@ -1737,12 +1794,18 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "verify": {"ran": False},
     }
     if do_verify:
-        fragment["verify"] = verify(pack, out_chr, quiet=quiet)
+        fragment["verify"] = (verify_static(pack, out_chr, rom, quiet=quiet) if pack.static
+                              else verify(pack, out_chr, quiet=quiet))
 
     (out_dir / "kit-part-chr.json").write_text(
         json.dumps(fragment, indent=1) + "\n", encoding="utf-8")
 
-    if not quiet:
+    if not quiet and pack.static:
+        print(f"{rom_path.name} — static, no recording")
+        print(f"  {len(files)} page(s) in {len(banks)} bank(s) -> {out_chr}")
+        print(f"  {real_cells} cell(s), all fill / seen: false; "
+              f"{len(rules)} <tile> rule(s), all defaultTile=Y")
+    elif not quiet:
         pct = 100.0 * recorded / real_cells if real_cells else 0.0
         done = 100.0 * (recorded + donated + filled) / real_cells if real_cells else 0.0
         print(f"{pack_dir}")
@@ -1754,7 +1817,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
               f"{done:.0f}% complete")
         for d in donors:
             print(f"  --also {d.label}: {d.cells} cell(s) donated")
-        print(f"  <tile> rules: safe {filled - guessed}, permissive {filled}, "
+        print(f"  <tile> rules: safe {ruleable - guessed}, permissive {ruleable}, "
               f"emitted {len(rules)} (--fill-rules={fill_rules}); "
               f"palette guessed on {guessed} filled cell(s)")
     return fragment
@@ -1762,7 +1825,9 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("pack", type=Path, help="recorded pack dir (the auto/ folder)")
+    ap.add_argument("pack", type=Path,
+                    help="recorded pack dir (the auto/ folder); with --static, a missing "
+                         "or empty folder used only to place the kit beside")
     ap.add_argument("--rom", type=Path, required=True,
                     help="the .nes file the pack was recorded from")
     ap.add_argument("--out", type=Path, default=None,
@@ -1781,17 +1846,36 @@ def main(argv=None):
                          "pack already has that (pattern, palette) key (adds no key, "
                          "but re-binds one to another image) / always (unsafe: it "
                          "changes what a rebuilt pack renders)")
+    # ADR-0219 / PRD F12.9. Not a mode of the recorded path with the recording
+    # left out: it is the same projection over the one source that is available
+    # before any play session, and it says so on every cell it writes.
+    ap.add_argument("--static", action="store_true",
+                    help="no recording: project every page over the ROM's own CHR "
+                         "(CHR ROM games only). Every cell is a fill, seen: false, and "
+                         "the kit has no figure, scenery or map surface")
+    ap.add_argument("--scale", type=int, default=DEFAULT_STATIC_SCALE,
+                    help=f"--static only: the upscale the pages are drawn at "
+                         f"(default {DEFAULT_STATIC_SCALE}, the recorder's own). A "
+                         "recorded run takes its scale from the recording instead")
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
+    if args.scale < 1 or args.scale > 10:
+        raise SystemExit("error: --scale out of range (1..10)")
 
     pack_dir = args.pack.resolve()
     out_dir = (args.out or pack_dir.parent / "kit").resolve()
     if out_dir == pack_dir or str(out_dir).startswith(str(pack_dir) + os.sep):
         raise SystemExit("error: --out must not be inside the recorded pack")
+    # With no recording there is no key that was ever observed, so "emit a rule
+    # only for an observed (pattern, palette)" would emit nothing at all and the
+    # kit would have no manifest. A static rule is safe for the opposite reason
+    # to a recorded one: it is the Y wildcard, so it cannot re-bind a key the
+    # pack rendered differently — there is no such key.
+    fill_rules = "all" if args.static else args.fill_rules
     try:
-        run(pack_dir, args.rom.resolve(), out_dir, args.names, args.fill_rules,
-            args.verify, args.quiet, args.also)
+        run(pack_dir, args.rom.resolve(), out_dir, args.names, fill_rules,
+            args.verify, args.quiet, args.also, static=args.static, scale=args.scale)
     except ChrKitError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

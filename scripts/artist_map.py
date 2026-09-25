@@ -21,9 +21,10 @@ Per stage it writes, under `<out>/map/`:
   * `<stage>-NNN.json`     an ADR-0153 v1 sheet sidecar whose `cells[]` name,
     for every 8x8 cell of the panorama, its pixel position and the
     `(tileData, palette)` key the pack's `hires.txt` uses for that tile. The
-    panorama is therefore addressable *and* a drop-in `textures/sheets/` sheet:
-    copy the three files into a pack and `scripts/mep_build.py build` slices
-    them back into `<tile>` rules with no extra machinery.
+    panorama is therefore addressable; its canvas also carries the ADR-0220
+    context band below the grid, so it goes back into a pack through
+    `--slice`, never by copying the three files into `textures/sheets/`
+    (mep_build refuses a canvas larger than its sidecar describes, #451).
 
 and one manifest fragment `kit-part-map.json` for the kit assembler.
 
@@ -88,7 +89,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import mep_build  # noqa: E402  — the tree's single PNG decoder
+import ora_writer  # noqa: E402  — ADR-0220: the layered .ora beside every panorama
 import sheet_repaint  # noqa: E402  — Image / read_png / write_png
 
 Image = sheet_repaint.Image
@@ -165,11 +168,12 @@ class GridFrame:
 def parse_grid_dump(path: Path):
     """(frames, shapes, palettes) from a MESEN_SHEET_GRID_DUMP file.
 
-    Four line kinds (HdPackBuilder::WriteGridDump): `F <n>` opens a frame and is
+    Five line kinds (HdPackBuilder::WriteGridDump): `F <n>` opens a frame and is
     repeated once per collapsed duplicate, `K <id> <32 hex tile data> <8 hex
     palette>` interns a shape the first time it is drawn, `P <id> <8 hex
-    palette>` interns a palette word, and `<x> <y> <shape> [<palette id>]`
-    places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
+    palette>` interns a palette word, `M <4096 hex>` carries the frame's
+    internal RAM (F12.6b, read by mep_conditions.py and skipped here), and
+    `<x> <y> <shape> [<palette id>]` places a cell. `x` is `col * 8 + fineX`, so `x & 7` recovers the frame's
     fine scroll and `(x - fineX) // 8` its column.
 
     The fourth cell field and the `P` lines are F9.24's palette plane. A dump
@@ -197,6 +201,12 @@ def parse_grid_dump(path: Path):
             elif head == "P":
                 parts = line.split()
                 palettes[int(parts[1])] = parts[2].upper()
+            elif head == "M":
+                # F12.6b (ADR-0197 §3): the retained RAM window of the frame.
+                # A map is drawn from tiles, not from memory, so this reader
+                # skips it — but it must skip it *by name*, or the line falls
+                # through to the cell parser and the whole dump fails.
+                continue
             elif cur is not None:
                 parts = line.split()
                 x = int(parts[0])
@@ -659,6 +669,19 @@ def build_panorama(region: Region, shapes, palettes, pack: Pack, scale: int):
     return painted, orig, cells, stats
 
 
+def panorama_palettes(cells):
+    """`(swatches, labels)` for the panorama's `palettes` band: first-use
+    order in the panorama's **reading order** (row, then column - the order
+    `build_panorama` emits cells, which is also their `index`), each group
+    labelled with the `index` of the first cell that wears it. Same contract
+    as `compose_engine.Pack.export` and `write_chr_surface`, so what
+    `artist_kit_assemble.py` tells the artist about the band holds for every
+    surface (2026-09-23 follow-up, defect (b))."""
+    return ora_writer.first_use_palettes(
+        (c["index"], [t.get("palette") for t in (c.get("tiles") or []) if t.get("palette")])
+        for c in sorted(cells, key=lambda c: (c["y"], c["x"])))
+
+
 def sidecar(name: str, cells, columns: int, scale: int, mode: str, stats, region: Region,
             pack_scale: int = 1):
     return {
@@ -812,7 +835,9 @@ def cut_painted(map_json: Path, painted_png: Path, out_dir: Path, quiet=False):
         out_cells.append({"index": i, "x": (i % columns) * CELL, "y": (i // columns) * CELL,
                           "tiles": [{"tile": key[0], "palette": key[1]}]})
 
-    name = f"pano-{map_json.stem}"
+    name = N.require_asset_name(
+        "pano-" + N.sanitize_asset_stem(map_json.stem, fallback="map") + N.SURFACE_EXT,
+        "artist_map.py slice")[:-len(N.SURFACE_EXT)]
     sheets = out_dir / "sheets"
     sheets.mkdir(parents=True, exist_ok=True)
     write_png(sheets / f"{name}.png", sheet)
@@ -860,7 +885,8 @@ def verify(pack_dir: Path, map_dir: Path, stems, quiet=False):
          already holds for that cell's `(tileData, palette)` key? That is what
          says the sidecar addresses the strip correctly: a transposed
          coordinate or a wrong stride shows up here and nowhere else;
-      2. does `scripts/mep_build.py build` accept the panorama as a sheet?
+      2. does `scripts/mep_build.py build` accept the panorama once it is
+         sliced back exactly as `--slice` slices the artist's flat PNG?
       3. is the manifest's key set unchanged afterwards — nothing lost, nothing
          invented?
     """
@@ -886,22 +912,19 @@ def verify(pack_dir: Path, map_dir: Path, stems, quiet=False):
         with tempfile.TemporaryDirectory(prefix="artist_map_verify.") as tmp:
             work = Path(tmp) / "pack"
             shutil.copytree(pack_dir, work)
-            sheets = work / "textures" / "sheets"
-            sheets.mkdir(parents=True, exist_ok=True)
+            (work / "textures" / "sheets").mkdir(parents=True, exist_ok=True)
             if with_panorama:
+                # The panorama reaches the pack the way the artist's own flat
+                # export does (ADR-0220 section 5): through `--slice`, which
+                # reads the flat PNG against its twin cell by cell and writes
+                # the drop-in at the pack's <scale>. Copying the panorama in
+                # as a sheet is not that path - its canvas carries the
+                # ADR-0220 context band below the grid, which mep_build
+                # rightly refuses as a size the sidecar does not describe
+                # (#451).
                 for stem in stems:
-                    doc = json.loads((map_dir / f"{stem}.json").read_text(encoding="utf-8"))
-                    orig = read_png(map_dir / f"{stem}.orig.png")
-                    name = f"pano-{stem}"
-                    doc["sheet"] = f"{name}.png"
-                    doc["reference"] = f"{name}.orig.png"
-                    # A pack has one <scale> for every <img> (MEP-v1 2.1), so the
-                    # panorama joins it at the pack's scale whatever the artist
-                    # chose to paint at.
-                    write_png(sheets / f"{name}.png",
-                              orig.upscale(pack.scale) if pack.scale > 1 else orig.clone())
-                    write_png(sheets / f"{name}.orig.png", orig)
-                    (sheets / f"{name}.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+                    cut_painted(map_dir / f"{stem}.json", map_dir / f"{stem}.png",
+                                work / "textures", quiet=True)
             proc = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve().parent / "mep_build.py"), "build",
                  str(work), "--source", str(pack_dir / "textures" / "hires.txt"), "--quiet"],
@@ -971,6 +994,12 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
             "surface. Contra's base stages (2 and 4) are like this by design.")
     map_dir = out_dir / "map"
     map_dir.mkdir(parents=True, exist_ok=True)
+    # `stage` comes from the command line and ends up in a file name the
+    # artist's paint program has to export back onto, so it goes through the
+    # F12.4 contract first (ADR-0213 section 3). The caption keeps the name the
+    # operator typed; only the file name is rewritten, and `renamedStage` below
+    # records it when the two differ.
+    safe_stage = N.sanitize_asset_stem(stage, fallback="stage")
     files = []
     stems = []
     dump_keys = set()
@@ -981,10 +1010,23 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
                 dump_keys.add((shapes[sid][0], palettes.get(pid, shapes[sid][1])))
     for i, region in enumerate(sorted(regions, key=lambda r: -len(r.cells))):
         painted, orig, cells, stats = build_panorama(region, shapes, palettes, pack, scale)
-        name = f"{stage}-{i:03d}"
+        name = N.require_asset_name(
+            f"{safe_stage}-{i:03d}" + N.SURFACE_EXT, "artist_map.py")[:-len(N.SURFACE_EXT)]
         stems.append(name)
-        write_png(map_dir / f"{name}.png", painted)
-        write_png(map_dir / f"{name}.orig.png", orig)
+        # ADR-0220 §1/§3: the panorama, its twin and the layered .ora from one
+        # canvas. Every cell of a panorama has a stage position by construction
+        # (it *is* the stage), so this surface carries the `context` layer: the
+        # 1x panorama itself, in a band below the painted grid, at 50 %.
+        rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
+                  "w": CELL * scale, "h": CELL * scale,
+                  "seen": False if c.get("paletteAttributed") else None} for c in cells]
+        swatches, swatch_labels = panorama_palettes(cells)
+        # `orig` below stays the 1x panorama: the twin on disk grew by the
+        # band, but rows/title/columns describe the stage, not the file.
+        ora_writer.write_surface(
+            map_dir, f"{name}.png", painted, orig, rects, context=orig,
+            captions=[(0, 0, f"{safe_stage} region {i}")],
+            swatches=swatches, swatch_labels=swatch_labels)
         columns = orig.width // CELL
         doc = sidecar(name, cells, columns, scale, orientation_of(region), stats, region,
                       pack.scale)
@@ -1016,7 +1058,11 @@ def generate(stage: str, dump: Path, pack_dir: Path, out_dir: Path, scale: int, 
               f"({100.0 * len(covered) / len(pack.tiles):.1f}%); "
               f"{len(dump_keys - pack.keys)} panorama key(s) the pack does not hold")
     return files, stems, {
-        "stage": stage, "hudTop": top, "hudBottom": bottom,
+        "stage": stage,
+        # Only present when the file name had to be rewritten, so a reader who
+        # never hits the case never has to wonder what it means.
+        **({"renamedStage": safe_stage} if safe_stage != stage else {}),
+        "hudTop": top, "hudBottom": bottom,
         "regions": len(regions),
         "packKeys": len(pack.tiles), "panoramaKeys": len(dump_keys),
         "covered": len(covered), "notInPack": len(dump_keys - pack.keys),

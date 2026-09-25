@@ -43,6 +43,7 @@ ENTRY_POINTS = [
     "fm2_to_bk2",
     "mep_build",
     "mep_compare",
+    "mep_figure",
     "mep_lint",
     "mep_render_audio",
     "sheet_repaint",

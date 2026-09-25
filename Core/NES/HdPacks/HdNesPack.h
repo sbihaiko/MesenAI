@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/HdTileSuppressionLog.h"
 
 class NesConsole;
 class EmuSettings;
@@ -87,6 +88,29 @@ private:
 	static constexpr int kHealthSignalMinMatchRate = 25;
 	static constexpr uint32_t kHealthSignalWindowLimit = 5;
 
+	//Issue #328: a `<background>` at priority 20+ is drawn after the `<tile>`
+	//rule, so it covers every `<tile>` rule on a screen it matches. That is by
+	//design (ADR-0050, ADR-0156) and used to be silent, which left an artist who
+	//painted a tile on a captured screen with a green build, a clean lint, the
+	//key at the right crop in hires.txt - and nothing on any surface saying why
+	//the paint never showed. Counted per frame and reported once per distinct
+	//`<background>` per pack load; see HdTileSuppressionLog.h for why the report
+	//is per background and not per pixel.
+	HdTileSuppressionLog _tileSuppressionLog;
+	uint64_t _suppressedTilePixels = 0;
+	uint32_t _frameSuppressedPixels = 0;
+	HdBackgroundInfo* _frameSuppressingBg = nullptr;
+	HdPackTileInfo* _frameSuppressedTile = nullptr;
+	//The "why" paragraph is the same for every line, and so is "there are more
+	//than the list names", so each is written once.
+	bool _suppressionExplained = false;
+	bool _suppressionCapped = false;
+
+	//Pixels that must have been covered before the first line is worth writing:
+	//one pixel of overlap between a screen PNG and a tile is a coincidence, a
+	//screen's worth is not.
+	static constexpr uint32_t kSuppressionReportPixelFloor = 256;
+
 	unordered_map<HdTileKey, vector<HdPackAdditionalSpriteInfo>> _additionalTilesByKey;
 
 	template<HdPackBlendMode blendMode>
@@ -99,7 +123,9 @@ private:
 	__forceinline HdPackTileInfo* GetCachedMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile);
 	__forceinline HdPackTileInfo* GetMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile, bool* disableCache = nullptr);
 
-	__forceinline void DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth);
+	//Returns the background it drew, or nullptr when this pixel is outside it -
+	//the suppression diagnostic needs to name the layer that did the covering.
+	__forceinline HdBackgroundInfo* DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth);
 
 	template<HdPackBlendMode blendMode>
 	__forceinline void DrawCustomBackground(HdBackgroundInfo& bgInfo, uint32_t* outputBuffer, uint32_t x, uint32_t y, uint32_t screenWidth);
@@ -113,11 +139,16 @@ private:
 	void BuildAdditionalTileCache(int32_t x, int32_t y, HdPpuTileInfo& tile, bool checkFallbackTiles);
 	void InsertAdditionalSprite(int32_t x, int32_t y, HdPpuTileInfo& sprite, HdPackAdditionalSpriteInfo& additionalSprite);
 
+	//The behind-background sprite pass. Records in lowestBgSprite the topmost
+	//opaque one it drew (999 when none). Run once before layer 1 as always, and
+	//again after layer 2 on the pixels ADR-0224's opt-in names.
+	__forceinline void DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite);
 	__forceinline void GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth);
 	__forceinline void ProcessGrayscaleAndEmphasis(HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t hdScreenWidth);
 
 	void CleanupInvalidRules();
 	void InitializeFallbackTiles();
+	void ReportSuppressedTiles();
 
 public:
 	HdNesPack(NesConsole* console, EmuSettings* settings, HdPackData* hdData);

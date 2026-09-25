@@ -29,6 +29,51 @@ folder per golden game. Four kinds:
   stages dir. A chain step may be `Ns`; the helper converts it the way the
   script parser does (`round(N * 60.0988)`).
 
+A game folder **should** also declare which ROM its scripts were authored
+against, or the unattended job cannot use it:
+
+- `stage-set.json` — `{"game": ..., "rom": {"noIntroSha1": [...]}}`, optionally
+  with `mechanisms` (the ADR-0182 list this set exercises) and a `note` saying
+  where the hash came from. `scripts/record_library.sh` matches a ROM to a set
+  **only** through this file. A set without one is skipped and listed as
+  undeclared — matching by folder name was deliberately not implemented, because
+  guessing that `zelda/` means the Zelda in hand is how a pack gets recorded
+  against the wrong ROM (issue #314).
+
+  Only declare a hash you have run the set against. Adding one is:
+
+  ```sh
+  python3 -c "import sys; sys.path.insert(0,'scripts'); \
+    from mep_build import _no_intro_sha1 as h; print(h(__import__('pathlib').Path(sys.argv[1])))" <rom>
+  scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
+  ```
+
+  All six sets are declared since 2026-09-23 (F14.3,
+  `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
+  `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
+  authored on, and each was run once through the library job. `punchout/`
+  (2026-09-24) is pinned to the library dump it was authored and recorded on
+  by hand (below); since #465 the job mints its state at the same frame as
+  that hand mint (below).
+  `scripts/test_library_job.py` fails if a folder here has no manifest, a
+  malformed SHA1, a SHA1 another set also claims, or no recordable route.
+
+  The job produces each route's start state before recording it
+  (`library_job.start_plan`, issues #407/#408): a state a `.chain.txt` yields, or
+  one `navigation.json`'s `rooms[]` enters a room from, comes only from an exact
+  `mint-<stage>.txt` or from replaying the chain out of a state the job itself
+  produced; a `<stage>-probe` copies `<stage>`'s state; any other route takes
+  the longest mint that prefixes it. A route none of these reach is **not
+  recorded** and is listed in `library-report.md` with the reason, because
+  from power-on it records the attract demo under its name. Only a set with no
+  mint, no chain and no room state (`metroid/`) records from power-on. On a
+  checkout that leaves Contra with six routes: `stage1-boss`, `stage2-base` and
+  every `stage3-*`/`stage4-*` start from states that exist only under `runs/`,
+  and `stage3-waterfall.mss`, which every chain here descends from, cannot be
+  re-minted (below). The report also gives each route's retained frames, the
+  stage its start state is in (`navigation.json`'s RAM byte, when the set has
+  one) and the routes whose recordings are byte-identical to it (#409).
+
 A game folder may also hold one **profile**:
 
 - `navigation.json` — the navigation sweep of ADR-0184's 2026-09-14 amendment,
@@ -43,8 +88,15 @@ A game folder may also hold one **profile**:
 
 Mint, then batch:
 
+`<mint-seconds>` is the smallest whole number of seconds whose frame target,
+`round(s * 60.0988)`, covers the mint script: `headless_record` writes
+`save-state=` only at its frame target, not where the script ends, so a longer
+run parks the state on idle frames (#465). `record_library.sh` computes it
+(`library_job.mint_seconds_for_frames`): 15 for Contra's 901-frame
+`mint-stage1.txt`, 6 for Castlevania's 320 frames, 34 for Punch-Out!!'s 1 990.
+
 ```sh
-scripts/headless_record <rom> <seconds> <work>/mint input=scripts/stages/contra/mint-stage1.txt save-state=<work>/stages/stage1-run.mss
+scripts/headless_record <rom> <mint-seconds> <work>/mint input=scripts/stages/contra/mint-stage1.txt save-state=<work>/stages/stage1-run.mss
 cp scripts/stages/contra/stage1-run.txt <work>/stages/
 scripts/record_stages.sh <rom> <work>/stages <work>/by-stage 60
 ```
@@ -100,9 +152,16 @@ the run never held at once. That is the check on a `<stage>.txt`: Contra's
 `stage1-run` says `never: Select, Start, Left, Up+A, Down+A, Down+B`, so its
 sidecar cannot hold the aim-while-jumping or prone-shooting states, and a
 script that wants them has to press them. Two env-gated save-time dumps back
-a measurement: `MESEN_OAM_STREAM_DUMP` (retained frame, repeat, port 1 and 2
-button bytes, then `node,x,y` per sprite) and `MESEN_POSE_TRACK_DUMP` (one
-ADR-0179 track per line as `frame:pose:held`).
+a measurement: `MESEN_OAM_STREAM_DUMP` (self-describing since F12.14 /
+ADR-0222: `K <id> <32 hex tile data> <8 hex palette>` interns a shape and
+`P <id> <8 hex palette>` a palette word on first sight; then one line per
+retained frame — frame, repeat, port 1 and 2 button bytes, then
+`shape,x,y,pal` per sprite, `shape` being the recorder's ShapeId, the same id
+space as the grid dump's `K` lines; before 2026-09-22 the entry was `node,x,y`
+with `node` a vocabulary index, which no reader resolves any more) and
+`MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as `frame:pose:held`).
+Pointing the OAM dump at `oam.txt` beside a `grid.txt` is what lets
+`mep_lint.py --routes` evaluate sprite conditions (`mep_conditions.py`).
 
 ## Probing which cycle answers the pad (F9.23)
 
@@ -313,3 +372,42 @@ where the screen does not scroll) reads Link's walk cleanly — 9 poses, 2 cycle
 period 3, hold [4,4,4], 117 repeats each — but **attributes no driver**, and the
 60 f-hold shape (x20, 100 repeats) does not either. On this game the probe is
 worth running as a clean-cycle measurement; it answered nothing about the pad.
+
+## Punch-Out!!: a route that loses on schedule (2026-09-24)
+
+`punchout/` records the first Minor Circuit fight (Glass Joe) of Mike Tyson's
+Punch-Out!! (MMC2, CHR ROM). `mint-fight1.txt` (1990 f) waits out the boot,
+presses Start ten times 120 f apart — through the title, the password/new-game
+screen and the circuit card — and idles 660 f through the ring introduction,
+so `save-state=` writes `fight1.mss` as the bell rings (the headless run takes
+34 s and stops at frame 2044).
+
+`fight1.txt` (3582 f) repeats a 310-frame block of jabs and body blows to both
+sides (`UA`, `UB`, `A`, `B`), dodges (`L`, `R`) and a duck (`D`), with 14–20 f
+of release between them, cut to fit the 3600-frame budget. It is blind — it
+never reads Glass Joe's tells — so it loses: Little Mac is knocked down around
+60 s from the state and counted out around 70 s. Record at most 70 s from
+`fight1.mss`; past that the run records the "you lost" screen. Two 70 s passes
+of the block repeated 18 times (5580 f; the file's header rebuilds it) gave a
+byte-identical `hires.txt` and `auto/`
+(docs/validation/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
+route stops before the count-out and was not measured.
+
+**Through the library job (#465, 2026-09-25).** `record_library.sh` used to
+run every mint for the batch's `<seconds>` (60 s by default), and
+`headless_record` writes `save-state=` at the run's frame target, not where
+the script ends: the job saved `fight1.mss` at frame 3 607, about 26 s into the
+round, and its 60 s `fight1` run reached the count-out and kept 355 frames.
+The job now runs each mint for the smallest whole number of seconds that
+covers its script - `34` here, the hand-mint duration - so it stops at frame
+2 044 as above, with the same RAM as the hand mint run from the repository
+root, and the 60 s `fight1` run keeps 633 frames
+(`docs/validation/issue-465-mint-at-script-end-2026-09-25.md`). Padding the
+mint so the bell lands on frame 3 607 was tried before the fix and does not
+help: the fight it starts is not the measured one (35 RAM bytes differ at the
+bell; 255 of the measured 1 655 drawn keys are missing from a 70 s recording
+made from it).
+
+Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
+background tiles**, so the kit's figures cover the opponent and Mac shows up
+only on the pattern pages and the BG sheets.

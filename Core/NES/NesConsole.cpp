@@ -19,6 +19,7 @@
 #include "NES/HdPacks/HdPackBuilder.h"
 #include "NES/HdPacks/HdBuilderPpu.h"
 #include "NES/HdPacks/HdVideoFilter.h"
+#include "Shared/Video/VideoDecoder.h"
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "NES/HdPacks/NesAudioFingerprint.h"
 #include "Shared/MessageManager.h"
@@ -26,6 +27,7 @@
 #include "Utilities/ProcessUtilities.h"
 #include <cstdlib>
 #include <filesystem>
+#include <atomic>
 #include "NES/NesDefaultVideoFilter.h"
 #include "NES/NesNtscFilter.h"
 #include "NES/BisqwitNtscFilter.h"
@@ -281,12 +283,76 @@ bool NesConsole::IsHdPackVideoActive()
 	return _hdData && _hdData->HasVideoContent();
 }
 
+//F12.1 (measurement slice): one line per ROM load carrying the time
+//NesConsole::LoadHdPack itself spent and the scale of what it parsed, so the
+//number the phase's "measure before optimizing" principle asks for is
+//reproducible from a plain run instead of inferred from a process wall clock.
+//The bitmap decode is deliberately not in here: it is detached into
+//HdPackData::LoadAsync and logs its own line, so the two halves never hide
+//behind each other.
+static void LogHdPackLoadTime(std::chrono::steady_clock::time_point start, HdPackData* data)
+{
+	double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	string counts = data
+		? ("; tiles=" + std::to_string(data->Tiles.size()) + " keys=" + std::to_string(data->TileByKey.size()) +
+			" images=" + std::to_string(data->ImageFileData.size()) + " backgrounds=" + std::to_string(data->BackgroundFileData.size()))
+		: string("; no-pack");
+	MessageManager::Log("[MEP] LoadHdPack: " + std::to_string((int)(ms + 0.5)) + " ms" + counts);
+}
+
+//F12.3 (ADR-0212): the artist saves a repainted PNG and asks for it back
+//without reopening the ROM. The request can come from the GUI thread, from a
+//headless driver or from interop, so it only raises a flag; the work belongs
+//to the emulation thread (below).
+void NesConsole::RequestHdPackImageReload()
+{
+	_hdPackReloadPending = true;
+}
+
+//Runs on the emulation thread from HdNesPpu::OnBeforeSendFrame, i.e. at a frame
+//boundary before the next frame is handed to the video pipeline.
+//
+//WaitForAsyncFrameDecode is the entire synchronisation (ADR-0212 §3):
+//HdVideoFilter::ApplyFilter reads the very PixelData this is about to
+//overwrite, and it runs on VideoDecoder's decode thread. Draining that thread
+//here is cheaper than locking the per-pixel read path for an event a human
+//triggers by hand. Nothing is reallocated behind a pointer - the images are
+//re-decoded in place, so HdPackTileInfo::Bitmap and the three raw HdPackData*
+//holders stay valid by construction.
+void NesConsole::ProcessPendingHdPackReload()
+{
+	if(!_hdPackReloadPending.exchange(false)) {
+		return;
+	}
+	if(!_hdData) {
+		MessageManager::Log("[MEP] reload: no HD pack is loaded");
+		return;
+	}
+
+	VideoDecoder* decoder = _emu->GetVideoDecoder();
+	if(decoder) {
+		decoder->WaitForAsyncFrameDecode();
+	}
+
+	HdPackReloadResult result = _hdData->ReloadChangedImages();
+	if(result.Scanned > 0 && result.NotWatched == result.Scanned) {
+		//ADR-0212 §5: a zip-backed pack has no file on disk to stat.
+		MessageManager::Log("[MEP] reload: this pack is loaded from a zip - nothing to watch");
+		return;
+	}
+	MessageManager::Log("[MEP] reload: " + std::to_string(result.Reloaded) + " re-decoded, " +
+		std::to_string(result.Refused) + " refused, " + std::to_string(result.Failed) + " failed, of " +
+		std::to_string(result.Scanned) + " image(s), " + std::to_string(result.TilesInvalidated) +
+		" tile rule(s) re-cut, in " + std::to_string((int)(result.Milliseconds + 0.5)) + " ms");
+}
+
 void NesConsole::LoadHdPack(VirtualFile& romFile)
 {
 	_hdData.reset();
 	if(!GetNesConfig().EnableHdPacks) {
 		return;
 	}
+	std::chrono::steady_clock::time_point loadStart = std::chrono::steady_clock::now();
 
 	MepPackManager* mep = _emu->GetEnhancementPackManager();
 	string mepTextures = mep->GetSectionPath(MepSectionType::Textures);
@@ -297,6 +363,12 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 
 	_hdData.reset(new HdPackData());
 	bool loaded = false;
+	//ADR-0049: whether the textures that end up loaded were painted by a person
+	//(the human section of a MEP pack, or a legacy loose HdPacks/ pack, which has
+	//no auto layer at all) rather than produced by the F5 bootstrap's machine
+	//layer. Recorded here, at the only place that knows, and handed to the
+	//renderer through HdPackData::HumanAuthoredTextures.
+	bool humanTextures = false;
 	unique_ptr<HdPackData> looseAudioOnly;
 
 	//1) Loose HdPacks/<rom>/ pack (MEP-v1 §5.1) - unless the ROM's sibling
@@ -318,6 +390,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 			if(loose->HasVideoContent()) {
 				_hdData.reset(loose.release());
 				loaded = true;
+				humanTextures = true;
 				MessageManager::Log("[MEP] textures: loaded loose NES HD pack from HdPacks/" + FolderUtilities::GetFilename(romFile.GetFileName(), false) + "/hires.txt (" + std::to_string(_hdData->Tiles.size()) + " tiles, scale " + std::to_string(_hdData->Scale) + ")");
 				if(anyMepTextures) {
 					MessageManager::Log("[MEP] loose HD pack found for this ROM - it takes precedence over the pack's textures section");
@@ -333,6 +406,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	if(!loaded && anyMepTextures) {
 		if(!mepTextures.empty()) {
 			loaded = HdPackLoader::LoadHdNesPack(FolderUtilities::CombinePath(mepTextures, "hires.txt"), *_hdData.get());
+			humanTextures = loaded;
 			MessageManager::Log(loaded ? "[MEP] textures: loaded NES HD pack from '" + mepTextures + "'" : "[MEP] textures section has no loadable hires.txt in " + mepTextures);
 		}
 		if(!autoTextures.empty()) {
@@ -434,8 +508,14 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 
 	if(!loaded) {
 		_hdData.reset();
+		LogHdPackLoadTime(loadStart, nullptr);
 		return;
 	}
+
+	//Hand the origin of the loaded textures to the renderer (ADR-0049): it only
+	//addresses a diagnostic to the artist when the artist's own layer is what
+	//loaded.
+	_hdData->HumanAuthoredTextures = humanTextures;
 
 	//NEA audio packs (LiQuiDz 1942, etc.) ship a single .ips/.bps next to
 	//hires.txt but omit the <patch> line. If nothing was declared, register
@@ -501,6 +581,7 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	}
 
 	shared_ptr<HdPackData> data = _hdData.lock();
+	LogHdPackLoadTime(loadStart, data.get());
 	if(data) {
 		thread asyncLoadData([data]() {
 			data->LoadAsync();
@@ -606,7 +687,12 @@ void NesConsole::InternalRunFrame()
 					((uint8_t)snesPad->IsPressed(SnesController::Buttons::Right) << 7);
 			}
 		}
-		_hdPackBuilder->OnFrameEnd(buttons);
+		//F12.6b (ADR-0197 §3): the console's own `$0000`-`$07FF`, read at this
+		//same end-of-frame boundary, so a `memoryCheckConstant` replayed off
+		//the recording sees what HdNesPpu::OnBeforeSendFrame would have
+		//sampled. A mapper with a wider internal RAM (FamicomBox) is clipped to
+		//the window the ADR fixes.
+		_hdPackBuilder->OnFrameEnd(buttons, _memoryManager->GetInternalRam(), _mapper->GetInternalRamSize());
 	}
 
 	if(_hdAudioDevice) {

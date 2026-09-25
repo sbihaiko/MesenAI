@@ -118,8 +118,11 @@
 //GbDebugger/SmsDebugger and only run while one exists), so the flag calls
 //InitializeDebugger before the run - see the "cdl=" block in main(). An
 //existing file at <file.cdl> is loaded first, so coverage accumulates across
-//runs as a union, never a maximum. The run fails (non-zero exit) if the CDL
-//came back with zero code bytes, rather than quietly writing an empty map.
+//runs as a union, never a maximum. The run fails (non-zero exit, and "the CDL
+//was not written" in the "result:" line) if the CDL came back with zero code
+//bytes, or if the file is not on disk with the recorded map in it after the
+//write - a path the tool cannot write is a failed run, not a warning, because
+//the caller's whole reason for the flag is the trace (issue #347).
 //One consequence: HeadlessInputEngine refuses to park the run from inside the
 //frame while a debugger is attached (Emulator::Pause() would step the debugger
 //from the emulation thread, which deadlocks on DebugBreakHelper), and logs
@@ -130,7 +133,8 @@
 //guarantee of ADR-0157: read the "capture finished" line for the frame the run
 //actually ended on rather than assuming it.
 //A scratch home folder is created next to the output; the NES game database
-//is copied into it automatically when the tool runs from the repo root.
+//is copied into it from the checkout this binary was built in, found from the
+//binary's own path and never from the cwd (issue #477).
 #include "Core/Shared/SettingTypes.h"
 #include "Core/Shared/Video/FrameCapture.h"
 //ADR-0169: the live sprite layer is published as data - OAM, palette and the
@@ -148,6 +152,9 @@
 //"cdl=" - the CDL exports take the Core's own MemoryType enum; that header is
 //a bare enum with no further dependency, so it is included rather than mirrored.
 #include "Core/Shared/MemoryType.h"
+//"cdl=" - issue #347: the proof that the map reached disk. Host-free, so the
+//same function is exercised branch by branch in scripts/core_unit_tests.cpp.
+#include "Debugger/CdlFileCheck.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -158,6 +165,9 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 struct TimingInfoAbi
 {
@@ -289,6 +299,9 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//panes that cannot agree (LiveRecordFormat.h's HdPackActive comment). The
 	//"hdpack-off" flag below is the switch that turns it off.
 	bool HeadlessIsNesHdPackVideoActive();
+	//F12.3 (ADR-0212) - ask the loaded NES pack to re-decode its repainted
+	//images. Declared in InteropDLL/EmuApiWrapperMep.cpp.
+	bool RequestMepImageReload();
 	//F9.15 - in-memory frame capture (same wrapper file)
 	bool HeadlessCaptureFrame(uint32_t* outWidth, uint32_t* outHeight, uint32_t* outFrameNumber, uint32_t* outPixelCount);
 	uint32_t HeadlessReadCapturedPixels(uint32_t* outPixels, uint32_t maxPixels);
@@ -572,11 +585,40 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 }
 
 
+//Issue #477: the folder this binary lives in. Anything the run reads from the
+//checkout resolves from here, because a path relative to the cwd made the run
+//depend on where the caller stood - record_library.sh, record_stages.sh and
+//replay_chain.sh never cd, and a run from outside the repo root loaded an
+//empty game DB and minted a different state. argv[0] is only the fallback: a
+//bare name found through PATH does not locate the file.
+static std::filesystem::path ExecutableDir(const char* argv0)
+{
+	std::error_code error;
+#ifdef __APPLE__
+	char buffer[4096];
+	uint32_t size = sizeof(buffer);
+	if(_NSGetExecutablePath(buffer, &size) == 0) {
+		std::filesystem::path exe = std::filesystem::canonical(buffer, error);
+		if(!error) {
+			return exe.parent_path();
+		}
+	}
+#else
+	std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", error);
+	if(!error) {
+		return exe.parent_path();
+	}
+#endif
+	std::filesystem::path fallback = std::filesystem::canonical(argv0, error);
+	return error ? std::filesystem::path() : fallback.parent_path();
+}
+
 int main(int argc, char** argv)
 {
 	if(argc < 4) {
 		fprintf(stderr, "usage: %s <rom> <seconds> <output-prefix> [pal] [hdpack] [romtiles]\n"
 			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [mep-off]\n"
+"       [reload-at-frame=<n>] [replace=<destination>=<source>]...\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
 			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
@@ -596,6 +638,18 @@ int main(int argc, char** argv)
 	bool screenshot = false;
 	bool capture = false;
 	bool dumpLog = false;
+	//F12.3 (ADR-0212): "reload-at-frame=<n>" asks for a pack image reload once
+	//the run reaches that emulated frame; "replace=<dst>=<src>" copies one file
+	//over another immediately before the request, so the overwrite and the
+	//reload are ordered by construction instead of by a race with an outside
+	//script. "replace" may be given more than once.
+	//
+	//The trigger counts emulated frames, not wall seconds: a headless run is
+	//far faster than real time (80 emulated seconds finish in about 11 wall
+	//seconds on an M1), so a wall-clock trigger would simply never fire.
+	int64_t reloadAtFrame = -1;
+	bool reloadRequested = false;
+	std::vector<std::pair<std::string, std::string>> replacements; //destination -> source
 	VideoFilterType videoFilter = VideoFilterType::None;
 	EnhancementPackConfig mep = {};
 	mep.BootstrapEnhancementFolder = false; //opt-in headless ("bootstrap" flag) - it writes beside the ROM
@@ -695,6 +749,20 @@ int main(int argc, char** argv)
 			//composed frame against PPU data needs substitution off at the one
 			//gate NesConsole::LoadHdPack checks first.
 			hdPackOff = true;
+		} else if(strncmp(argv[i], "reload-at-frame=", 16) == 0) {
+			reloadAtFrame = atoll(argv[i] + 16);
+			if(reloadAtFrame < 0) {
+				fprintf(stderr, "reload-at-frame must be a non-negative frame number\n");
+				return 1;
+			}
+		} else if(strncmp(argv[i], "replace=", 8) == 0) {
+			std::string spec = argv[i] + 8;
+			size_t eq = spec.find('=');
+			if(eq == std::string::npos || eq == 0 || eq + 1 >= spec.size()) {
+				fprintf(stderr, "replace must be <destination>=<source>\n");
+				return 1;
+			}
+			replacements.emplace_back(spec.substr(0, eq), spec.substr(eq + 1));
 		} else if(strcmp(argv[i], "mep-notextures") == 0) {
 			mep.EnableTextures = false;
 		} else if(strcmp(argv[i], "mep-nosynth") == 0) {
@@ -833,10 +901,28 @@ int main(int argc, char** argv)
 	}
 
 	//NES mapper detection wants the game DB in the home folder; copy it from
-	//the repo checkout when available (silently skipped elsewhere).
-	std::filesystem::path repoDb = "UI/Dependencies/MesenNesDB.txt";
-	if(std::filesystem::exists(repoDb) && !std::filesystem::exists(home / "MesenNesDB.txt")) {
-		std::filesystem::copy_file(repoDb, home / "MesenNesDB.txt");
+	//the checkout next to this binary (scripts/../UI/Dependencies), or from a
+	//copy beside the binary itself. Resolved from the binary, never the cwd
+	//(issue #477); a run with no DB anywhere says so instead of silently
+	//falling back to the iNES header.
+	if(!std::filesystem::exists(home / "MesenNesDB.txt")) {
+		std::filesystem::path exeDir = ExecutableDir(argv[0]);
+		const std::filesystem::path candidates[] = {
+			exeDir / ".." / "UI" / "Dependencies" / "MesenNesDB.txt",
+			exeDir / "MesenNesDB.txt",
+		};
+		bool copied = false;
+		for(const std::filesystem::path& candidate : candidates) {
+			if(!exeDir.empty() && std::filesystem::exists(candidate)) {
+				std::filesystem::copy_file(candidate, home / "MesenNesDB.txt");
+				copied = true;
+				break;
+			}
+		}
+		if(!copied) {
+			fprintf(stderr, "warning: no MesenNesDB.txt found from %s - NES games load without the game database\n",
+				exeDir.string().c_str());
+		}
 	}
 
 	InitDll();
@@ -1256,7 +1342,31 @@ int main(int argc, char** argv)
 		syncTrace.push_back(sample);
 	};
 
+	//F12.3 (ADR-0212): the run's own reload trigger. Copies the replacement
+	//file first, then asks - so the bytes are on disk before the stat that
+	//decides whether anything changed. Fires once.
+	auto serveReload = [&]() {
+		if(reloadAtFrame < 0 || reloadRequested || (int64_t)HeadlessGetFrameCount() < reloadAtFrame) {
+			return;
+		}
+		reloadRequested = true;
+		for(const std::pair<std::string, std::string>& swap : replacements) {
+			std::error_code ec;
+			std::filesystem::copy_file(std::filesystem::u8path(swap.second), std::filesystem::u8path(swap.first),
+				std::filesystem::copy_options::overwrite_existing, ec);
+			if(ec) {
+				fprintf(stderr, "replace failed: %s -> %s (%s)\n", swap.second.c_str(), swap.first.c_str(), ec.message().c_str());
+				return;
+			}
+			printf("replaced %s with %s\n", swap.first.c_str(), swap.second.c_str());
+		}
+		bool asked = RequestMepImageReload();
+		printf("pack image reload requested at frame %u: %s\n", HeadlessGetFrameCount(), asked ? "accepted" : "no NES console loaded");
+		fflush(stdout);
+	};
+
 	auto onTick = [&]() {
+		serveReload();
 		publishLive();
 		sampleSync();
 		if(moviePath.empty()) {
@@ -1510,21 +1620,40 @@ int main(int argc, char** argv)
 			cdlFailed = true;
 		} else {
 			SaveCdlFile(cdlMemType, (char*)cdlPath.c_str());
-			//Round-trip: reload what was just written and require identical
-			//statistics. This catches a truncated write and, on the NES, a CHR
-			//block that did not survive the append/split in NesCodeDataLogger.
-			LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
-			CdlStatisticsAbi reread = GetCdlStatistics(cdlMemType);
-			uint32_t rereadFunctions = CountCdlFunctions(cdlMemType);
-			bool sameStats = reread.CodeBytes == stats.CodeBytes && reread.DataBytes == stats.DataBytes &&
-				reread.TotalBytes == stats.TotalBytes && reread.DrawnChrBytes == stats.DrawnChrBytes &&
-				reread.TotalChrBytes == stats.TotalChrBytes && rereadFunctions == functionCount;
-			if(sameStats) {
-				printf("cdl written: %s (round-trip verified)\n", cdlPath.c_str());
-			} else {
-				PrintCdlStatistics("reloaded", reread, rereadFunctions);
-				fprintf(stderr, "cdl: %s does not read back as what was written\n", cdlPath.c_str());
+			//The DllExport SaveCdlFile returns void, so the ofstream failing
+			//(an unwritable path, a full disk) is not something this tool can
+			//be told. Issue #347: the round-trip below used to be the only
+			//guard, and it cannot see that either - LoadCdlFile leaves the map
+			//untouched when the file will not read, so the statistics were
+			//compared against themselves and an unwritable path printed
+			//"round-trip verified" and exited 0. The bytes on disk are checked
+			//first, and they carry the reason.
+			CdlFileOnDiskCheck onDisk = CheckCdlFileOnDisk(cdlPath, stats.TotalBytes);
+			if(!onDisk.Ok) {
+				fprintf(stderr, "cdl: %s %s\n", cdlPath.c_str(), onDisk.Reason.c_str());
 				cdlFailed = true;
+			} else {
+				//Round-trip: reload what was just written and require identical
+				//statistics. This catches a truncated write and, on the NES, a CHR
+				//block that did not survive the append/split in NesCodeDataLogger.
+				//ResetCdl first so a load that refuses the file (a CRC that does
+				//not match the ROM) cannot leave the run's own map in place and
+				//pass as its own reload; a load that succeeds resets it anyway.
+				ResetCdl(cdlMemType);
+				LoadCdlFile(cdlMemType, (char*)cdlPath.c_str());
+				CdlStatisticsAbi reread = GetCdlStatistics(cdlMemType);
+				uint32_t rereadFunctions = CountCdlFunctions(cdlMemType);
+				bool sameStats = reread.CodeBytes == stats.CodeBytes && reread.DataBytes == stats.DataBytes &&
+					reread.TotalBytes == stats.TotalBytes && reread.DrawnChrBytes == stats.DrawnChrBytes &&
+					reread.TotalChrBytes == stats.TotalChrBytes && rereadFunctions == functionCount;
+				if(sameStats) {
+					printf("cdl written: %s (%llu bytes on disk, round-trip verified)\n",
+						cdlPath.c_str(), (unsigned long long)onDisk.SizeOnDisk);
+				} else {
+					PrintCdlStatistics("reloaded", reread, rereadFunctions);
+					fprintf(stderr, "cdl: %s does not read back as what was written\n", cdlPath.c_str());
+					cdlFailed = true;
+				}
 			}
 		}
 	}
@@ -1536,10 +1665,27 @@ int main(int argc, char** argv)
 	}
 	Stop();
 	Release();
+
+	//The run's own verdict, in the output and not only in the exit code.
 	//A run that did not reach its frame target is a failed capture, not a
 	//short one - the caller (bootstrap_auto_packs.sh) must see it.
 	//A run the sync gate failed is a corrupt recording, not a short one: its
 	//art comes from a playthrough nobody intended (ADR-0185 sec. 4 as amended,
 	//issue #201), so it must never be archived as if it were the movie's.
-	return reachedTarget && !captureFailed && !syncGateFailed && !cdlFailed ? 0 : 1;
+	//
+	//Printed because the exit code is the first thing a caller loses: the
+	//2026-09-19 F12.2 sweep reported "headless_record exits 1 on a successful
+	//render" from a shell line that piped this tool into `tail` and ended in an
+	//`ls` of a folder that did not exist - the 1 was the `ls`, this tool had
+	//already returned 0, and nothing in the output said so. A run that ends
+	//without a "result:" line did not finish; one that ends with "result: ok"
+	//succeeded whatever the surrounding pipeline reports.
+	std::string verdict;
+	if(!reachedTarget) { verdict += verdict.empty() ? "" : ", "; verdict += "the run never reached its frame target"; }
+	if(captureFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the frame capture failed"; }
+	if(syncGateFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the movie sync gate failed"; }
+	if(cdlFailed) { verdict += verdict.empty() ? "" : ", "; verdict += "the CDL was not written"; }
+	printf("result: %s\n", verdict.empty() ? "ok" : ("FAILED - " + verdict).c_str());
+	fflush(stdout);
+	return verdict.empty() ? 0 : 1;
 }

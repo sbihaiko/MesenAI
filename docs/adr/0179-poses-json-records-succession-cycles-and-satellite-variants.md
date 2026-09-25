@@ -2,7 +2,12 @@
 
 - Status: accepted (2026-09-12, by the user, after the spike below) —
   implemented the same day as Phase 9 slice F9.20 in
-  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A §3)
+  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A §3).
+  **§1 amended 2026-09-23 by ADR-0226** (implemented as PRD slice F12.19,
+  merged 2026-09-23 in PR #394): a cluster
+  with no partner in the next retained frame may be continued from the
+  frame after — one missing frame is bridged, so flicker does not end a
+  track.
 - Date: 2026-09-12
 - Related: ADR-0170 (the pose sidecar this amends; its non-goals name
   "ordering poses into an animation" as a separate question — this is that

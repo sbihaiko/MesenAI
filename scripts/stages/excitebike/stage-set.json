@@ -1,0 +1,8 @@
+{
+  "game": "Excitebike",
+  "rom": {
+    "noIntroSha1": ["BA8D9227A0D02B62EE6CB9E691FA5A5134C303A8"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Excitebike (1984) (Nintendo).nes from the user's ROM library, the dump these routes were measured on by F9.22/F9.23 (whole-file SHA1 2E9897846E54A4A9865E87DE7517C6710BDEC255, the ROM copies under runs/golden-20260912/excitebike and runs/golden-20260913-f923/excitebike-a). Verified by the F14.3 library run (docs/validation/f14.3-route-sets-2026-09-23.md)."
+}

@@ -4,6 +4,7 @@
 #include "NES/HdPacks/TileSheetTypes.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetRender.h"
+#include "NES/HdPacks/SheetColourways.h"
 #include "NES/HdPacks/SpriteGrouping.h"
 #include "NES/NesTypes.h"
 #include "Shared/SettingTypes.h"
@@ -102,6 +103,13 @@ private:
 	//ADR-0160 §3 guard: tiles AddTile could not place on a CHR page (the
 	//">256 tiles of one palette" FIXME path). Non-zero disables PruneLegacyChrFiles.
 	uint32_t _droppedTiles = 0;
+	//ADR-0232: whether a re-record loaded a pack recorded before the bank id
+	//followed the CHR state (every tile filed under bank 0), its bank-0 CHR
+	//RAM tiles, and how many of them this session drew again and moved to
+	//their real bank (MesenSheets::RehomesOnRedraw).
+	bool _preFixPack = false;
+	uint32_t _bank0TilesLoaded = 0;
+	uint32_t _preFixTilesRehomed = 0;
 	//Issue #164: how many rarity-ranked candidates a screen carries to save
 	//time. The selection itself looks at kAnchorCandidateCap of them; the rest
 	//are there for the spread constraint to fall back on.
@@ -128,6 +136,49 @@ private:
 	};
 	vector<PendingScreen> _pendingScreens;
 	void FinalizeScreenAnchors();
+
+	//ADR-0223 option A (F12.16): flat runs stay out of the rarity-ranked pool
+	//CaptureScreen builds (ADR-0050 still ranks "rarest non-flat" first), but
+	//every cell they cover is kept as a second, last-resort pool:
+	//MesenSheets::SelectScreenAnchors' last pass reaches for these only when
+	//no non-flat cell can separate the capture from an addition-rival
+	//(ADR-0221 option B's kind test) - the one-letter-later frame ADR-0223
+	//measured, which differs from its capture only on the flat backdrop.
+	//Usage = UINT32_MAX keeps every one of these cells out of the stable/wide
+	//passes (both order by ascending Usage and cap at kAnchorCandidateCap).
+	//Host-bound (touches ScreenRun/_frameRuns), so it stays out of
+	//ScreenStitcher; MesenSheets::FlatRunColumns (host-free) does the
+	//alignment arithmetic this loop is built around. "Flat" is
+	//MesenSheets::IsFlatTileData - the same per-plane predicate
+	//FlatShapePlane uses - not "all 16 bytes identical": a 0x55-striped tile
+	//is a candidate here (correctly, per ADR-0221/ADR-0223's "empty" is a
+	//uniform colour, not a uniform byte pattern), and a solid colour-1/2
+	//tile (all-0xFF or all-0x00 per plane) goes to the probe pool instead of
+	//the rarity ranking, at the margin from CaptureScreen's own predicate
+	//fix (Codex review, PR #379).
+	void AppendFlatAnchorCells(PendingScreen& pending, uint8_t fineX)
+	{
+		for(size_t i = 0; i < _frameRuns.size(); i++) {
+			ScreenRun& run = _frameRuns[i];
+			if(!MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0) {
+				continue;
+			}
+			uint16_t endX = (i + 1 < _frameRuns.size() && _frameRuns[i + 1].Y == run.Y) ? _frameRuns[i + 1].X : 256;
+			for(uint32_t c : MesenSheets::FlatRunColumns(run.X, endX, fineX)) {
+				MesenSheets::AnchorCandidate cell;
+				cell.Row = (uint32_t)run.Y >> 3;
+				cell.Col = c;
+				if(cell.Row >= MesenSheets::kGridRows) {
+					continue;
+				}
+				cell.Usage = UINT32_MAX;
+				pending.Cells.push_back(cell);
+				ScreenRun synth = run;
+				synth.X = (uint16_t)(c * 8 + fineX);
+				pending.Candidates.push_back(synth);
+			}
+		}
+	}
 
 	//F5.4e co-occurrence graph, now the evidence behind the tileNearby
 	//conditions BuildObjectSheets attaches (ADR-0190). During screen capture the
@@ -309,20 +360,42 @@ private:
 	//stem and the node's on-screen placement, so a sheetless cell resolves to
 	//a crop from backgrounds/<stem>.orig.png.
 	vector<string> _screenStems;
+	//F12.6b (ADR-0197 §3, option (b)): the internal RAM of each retained grid
+	//frame, flat, kRetainedRamSize bytes per frame and parallel to _gridFrames
+	//by construction (RecordGridFrame resizes it to match on every push). A
+	//separate plane rather than a GridFrame member: the vocabulary, the
+	//stitcher and the grouping all copy GridFrames around and none of them
+	//reads memory, so 2 KB inside the struct would be paid on every pass.
+	vector<uint8_t> _gridRam;
 	uint32_t _screenResidentCells = 0; //cells the screen surface owns (ADR-0156)
-	unordered_map<HdTileKey, MesenSheets::ShapeId> _shapeIds;
+	unordered_map<HdShapeKey, MesenSheets::ShapeId, HdShapeKey> _shapeIds; //#474: index + drawn data
 	vector<MesenSheets::SheetTileKey> _shapeTiles; //drawable art per shape id
+	//ADR-0209 Q4(k) (F12.8): every shape id some sheet already put on a
+	//canvas, accumulated by WriteSheetFiles as each sheet is written, so the
+	//remainder sheet at the end of BuildSheets knows what is left. Cleared per
+	//BuildSheets run - it describes one save, not the object's lifetime.
+	std::set<MesenSheets::ShapeId> _claimedShapes;
+	//ADR-0230 (F14.9): every non-map sheet of this save, held by WriteSheetFiles
+	//until FlushSheetFiles has seen all of them - a shape's palette variant
+	//joins the highest-ranked sheet that holds the shape, which is only known
+	//once every sheet is built. A map never takes a variant, so it is written
+	//at once and never held (PR #461: a map canvas can reach 256 MB). The
+	//flush writes and frees them one at a time and leaves this empty.
+	std::vector<MesenSheets::PendingSheet> _pendingSheets;
+	void FlushSheetFiles();
+	void WriteSheetOutputs(const string& folder, const string& baseName, const MesenSheets::SheetImage& image, const MesenSheets::SheetJsonDoc& doc, const MesenSheets::TileLookup& lookup, const MesenSheets::ShapeFolds* folds);
 	bool _sheetsBuilt = false;
 	unordered_set<uint32_t> _sheetObjectShapes; //shape hashes inside an inferred object
 	vector<uint32_t> _shapeHashes;              //shape id -> shape hash
 	uint32_t _sheetObjectCount = 0;
-	void RecordGridFrame();
+	void RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize);
 	MesenSheets::ShapeId ShapeIdFor(const HdPpuTileInfo& tile);
 	//ADR-0159 amendment: PaletteColors -> the per-cell palette id the grid
 	//stream carries, so a variant that only recolours an anchor cell is
 	//visible at save time (the shape ids above wildcard the palette).
 	unordered_map<uint32_t, MesenSheets::PaletteId> _paletteIds;
 	MesenSheets::PaletteId PaletteIdFor(uint32_t paletteColors);
+	std::vector<uint32_t> PaletteColorTable() const;
 	void BuildSheets();
 	void EnforceCollapsedSheetFloor(MesenSheets::Vocabulary& vocab, const MesenSheets::TileLookup& lookup);
 	void WriteContextSheets(const string& folder, const MesenSheets::Vocabulary& vocab, const MesenSheets::TileLookup& lookup);
@@ -334,7 +407,9 @@ private:
 	//save time - the hot path keeps no dump code. Line kinds: "F <n>" opens a
 	//frame (repeated once per collapsed duplicate), "K <shape> <32 hex tile
 	//data> <8 hex palette>" interns a shape, "P <id> <8 hex palette>" interns a
-	//palette word, and "<x> <y> <shape> <palette id>" places a cell. The fourth
+	//palette word, "M <4096 hex>" carries the frame's internal RAM (F12.6b,
+	//ADR-0197 §3 - once per retained frame, on its first repeat), and
+	//"<x> <y> <shape> <palette id>" places a cell. The fourth
 	//cell field and the "P" lines are the per-cell palette plane (F9.24): the
 	//shape ids wildcard the palette, so without it a recoloured tile reads as
 	//the colours it was *first* seen with. A reader that predates them parses
@@ -391,10 +466,26 @@ public:
 	//F9.5: one on-screen sprite, post-flip shape, screen origin in pixels.
 	//Gated on screen capture like the background grid, and a no-op otherwise.
 	void RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile);
+	//#458: the same OAM half's art from a second CHR bank - rows the PPU read
+	//after a latch tile switched banks inside the sprite. Registered as a shape
+	//so its key reaches a sheet, but never as an OAM entry, which would place
+	//the sprite twice. Same gates as RecordSprite.
+	void RecordSpriteBank(const HdPpuTileInfo& tile)
+	{
+		if(_captureScreens && _oamFrames.size() < MesenSheets::kMaxSheetFrames) {
+			ShapeIdFor(tile);
+		}
+	}
 	//ADR-0181 §1: `buttons` is the packed button byte of ports 1 and 2 at
 	//frame end (NesController::ToByte order), 0 for a port without a pad;
 	//it rides on the retained OamFrame and never enters frame identity.
-	void OnFrameEnd(const uint8_t buttons[2]);
+	//F12.6b (ADR-0197 §3): `internalRam` is the console's `$0000`-`$07FF`, read
+	//at the same frame boundary HdNesPpu samples a pack's watched addresses at,
+	//so a condition replayed off the recording sees the byte the emulator would
+	//have seen. It is copied per *retained* frame - a frame that collapses into
+	//RepeatCount keeps the RAM of the frame it collapsed into. May be null (a
+	//console without one); the plane then holds zeroes and stays parallel.
+	void OnFrameEnd(const uint8_t buttons[2], const uint8_t* internalRam, uint32_t internalRamSize);
 
 	//Static export (no gameplay needed): every 16-byte tile of CHR ROM becomes
 	//a palette-agnostic defaultTile entry drawn with a neutral gray ramp.

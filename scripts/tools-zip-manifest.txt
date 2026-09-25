@@ -14,9 +14,10 @@
 # Entry points (the tools a reader of the guides actually types):
 #   artist_ai_review artist_bg_kit artist_chr_kit artist_cover artist_kit
 #   artist_kit_assemble artist_map audio_cleanup_suggest cdl_tool fm2_to_bk2
-#   mep_build mep_compare mep_lint mep_render_audio sheet_repaint
+#   mep_build mep_compare mep_figure mep_lint mep_render_audio sheet_repaint
 
 artist_ai_review.py
+asset_names.py
 artist_bg_kit.py
 artist_chr_kit.py
 artist_cover.py
@@ -27,12 +28,22 @@ audio_cleanup_suggest.py
 cdl_tool.py
 compose_engine.py
 fm2_to_bk2.py
+mep_addition.py
 mep_build.py
+mep_capture_scan.py
+mep_carry.py
 mep_compare.py
+mep_conditions.py
 mep_content_id.py
 mep_errata.py
+mep_figure.py
 mep_lint.py
 mep_recipe_common.py
+mep_recorded.py
 mep_render_audio.py
+mep_sentinel.py
+ora_writer.py
 pack_id_rules.py
+palette_folds.py
+sheet_pixel_fixes.py
 sheet_repaint.py

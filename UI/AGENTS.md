@@ -47,6 +47,16 @@ can be exercised by real xunit tests without Avalonia or the native
   `kind: "mediafire"` URL fetches the share page then the
   `downloadN.mediafire.com` href (`CommunityPackMediaFire.ExtractDownloadUrl`);
   the CDN hop is allow-listed via `host_ends_with`.
+- **Tools > Live Recorder offers Record/Stop only** (ADR-0169 §4, amended
+  2026-09-23): the emulator UI never launches `scripts/record_viewer.py`
+  and has no menu entry for it — the viewer is a developer/diagnostic tool
+  run by hand that attaches to the same `LiveRecording` slot. The entries
+  come from the host-free `LiveRecorderMenu.Entries`, which
+  `MainMenuViewModel.GetLiveRecorderMenu` maps one-to-one. Guarded by
+  `UI.Tests/Recording/LiveRecorderMenuTests.cs` (the list is exactly
+  Record then Stop, no viewer value) and
+  `UI.HeadlessTests/LiveRecorderMenuTests.cs` (the realized MenuItem tree;
+  self-skips without a built core).
 - `UI/Logic/*.cs` types return plain, host-free records/DTOs — never
   `ViewModelBase`/`ObservableObject` subtypes. The owning ViewModel maps
   the result into its UI-facing type (e.g. `MepPackListEntry` →
@@ -200,6 +210,19 @@ can be exercised by real xunit tests without Avalonia or the native
   (`CommunityPackHttpStatus.IsFollowableRedirect`); HTTP 304 is a terminal
   catalog-cache status for `CommunityCatalogCacheDecision`, never a
   redirect.
+- **Renderer size (`UI/Logic/RendererViewportFit`, P.7 plus upstream
+  3924215).** `MainWindow` sizes the renderer only from its result; don't
+  round inline there. Invariants, covered by `RendererViewportFitTests` and
+  the headless `RendererLetterboxTests`:
+  - `RealWidth`/`RealHeight` are even (no shader centre seam) and never
+    exceed `floor(panel * dpi)`. The one exception is the integer-scale
+    clamp to 1x on a panel shorter than one screen.
+  - The binding axis rounds **down** to even. Upstream's round-up overflows
+    a 375 px panel.
+  - The aspect contract is `AspectErrorPixels <= 1` physical px, not an
+    exact ratio.
+  - The logical size is snapped back from the physical pixels, so
+    `Width * dpi == RealWidth`.
 
 ## Work Guidance
 

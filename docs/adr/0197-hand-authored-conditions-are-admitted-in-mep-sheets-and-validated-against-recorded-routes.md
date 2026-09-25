@@ -1,9 +1,23 @@
 # ADR-0197: Hand-authored conditions are admitted in MEP sheets and validated against the recorded routes; the toolchain still never emits the refused three
 
 - Status: accepted (2026-09-16) — §3 decided as option (b), the fixed
-  `$0000`–`$07FF` window; user's go-ahead quoted verbatim: "confirmo". Not
-  implemented; the implementing slices are PRD Part A §4, Phase 12, F12.6a
-  (lint) and F12.6b (recorder capture)
+  `$0000`–`$07FF` window; user's go-ahead quoted verbatim: "confirmo". §1 and
+  §2 shipped 2026-09-19 as PRD Part A §4, Phase 12, F12.6a — with one stated
+  deviation: `spriteNearby` reports `not evaluable` rather than a verdict,
+  because `MESEN_OAM_STREAM_DUMP` carries vocabulary indexes and not the tile
+  data a `<condition>` line names, so matching it needs the dump-format change
+  this ADR's Consequences assign to F12.6b. §3 shipped 2026-09-19 as
+  F12.6b: the recorder writes the `$0000`–`$07FF` window as an `M` line per
+  retained frame and `mep_lint --routes` evaluates `memoryCheckConstant` from
+  it. Measured on a 60 s Contra stage-1 route (607 retained frames standing
+  for 3 597 played): +2 488 093 B of grid dump, +6.42 %, and no wall-clock
+  cost outside run-to-run noise —
+  `docs/validation/f12.6b-recorder-retains-internal-ram-2026-09-19.md`.
+  `spriteNearby` is **still** `not evaluable`: this slice widened the memory
+  plane, not the sprite stream. Amended 2026-09-22 (ADR-0222 option A,
+  F12.14): the OAM stream is self-describing and lint evaluates
+  `spriteNearby`, `spriteAtPosition`, `positionCheckX/Y`,
+  `originPositionCheckX/Y` and `memoryCheck` — see "Amended 2026-09-22" below
 - Date: 2026-09-16
 - Related: ADR-0189 §4 (the three refused condition types), ADR-0190
   (`tileNearby` auto-attached), ADR-0183 §3 (evidence vs inference),
@@ -91,6 +105,25 @@ Limits, to be stated by lint rather than hidden:
   on a 60 s Contra route and records the number in `docs/validation/`
   before any doc quotes one. Widening the window later (WRAM first) is an
   amendment to this section, not a new ADR.
+
+#### Amended 2026-09-22 (ADR-0222 option A, shipped as F12.14)
+
+The sprite bullets this section's Limits once implied — `spriteNearby` and
+`spriteAtPosition` "not evaluable: the sprite stream carries vocabulary
+indexes", `positionCheck*` "the sprite's own position is in the sprite
+stream, not the grid", and `memoryCheck` "scoped out" — are retired. The
+retained OAM stream (`MESEN_OAM_STREAM_DUMP`) is self-describing like the grid
+stream: `K`/`P` intern lines, then `<shape>,<x>,<y>,<pal>` per sprite, with
+`OamEntry` carrying the interned palette id as part of entry identity. Lint
+reads it from `oam.txt` beside a route's `grid.txt` and reports a verdict for
+the five sprite-side types; `memoryCheck` reads both operands off the `M`
+line. The limits that remain are stated in `scripts/mep_conditions.py`'s
+docstring and reported per route, never hidden: no `oam.txt`, a pre-F12.14
+dump (no `K` lines), a background key whose grid and OAM streams do not agree
+on played frames (the join is refused rather than guessed), the baked OAM
+flips (ADR-0178) that hide the mirrored offset sign, and the per-pixel
+`positionCheck*` evaluated as "every pixel of the tile". Measured:
+`docs/validation/f12.14-oam-dump-self-describing-2026-09-22.md`.
 
 ## Consequences
 

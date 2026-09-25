@@ -116,6 +116,26 @@ def test_a_fusion_is_never_laid_out():
         check("pose004" in dropped, "the fragment's dropped[] says why", str(dropped))
 
 
+def test_a_one_part_fusion_is_dropped_and_says_so():
+    """ADR-0228: a kept pose plus tiles that never stood alone is a fusion with
+    a single named part; it is kept out of every grid like any fusion, and
+    dropped[] must not claim a second half was laid out."""
+    doc = _doc_with_cycle()
+    doc["poses"].append(_pose("pose005", 3, {0: (0, 0), 1: (0, 1), 3: (1, 0)},
+                              fusionOf=["pose000"]))
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), doc)
+        builder = K.KitBuilder(pack)
+        ids = {c.pose.id for g in builder.build() for c in g.cells}
+        check("pose005" not in ids, "a one-part fusion is in no grid", str(sorted(ids)))
+        whys = {d["path"]: d["why"] for d in K._dropped(builder)}
+        why = whys.get("pose005", "")
+        check("ADR-0228" in why and "pose000" in why and "both halves" not in why,
+              "dropped[] names the one part and cites ADR-0228", why)
+        check("ADR-0177" in whys.get("pose004", ""),
+              "a two-part fusion keeps the ADR-0177 wording", whys.get("pose004", ""))
+
+
 def test_every_figure_shares_the_rows_baseline():
     """The alignment the tool exists for: pad to one box, centre across, and
     put every figure's bottom row on the same line."""
@@ -284,7 +304,7 @@ def test_names_caption_a_file_and_absence_falls_back_to_the_id():
         check("cycle000" in bare and "7 time(s)" in bare,
               "an unnamed grid falls back to its id and what was measured", bare)
         named = K.Names({"cycles": {"cycle000": "the player's run"}})
-        check(K.grid_title(grid, named) == "the player's run",
+        check(K.grid_title(grid, named) == "the player's run — plays columns 1 2 4",
               "a name from --names becomes the title", K.grid_title(grid, named))
 
 
@@ -302,7 +322,8 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
 
         one = K.Names({"subjects": {"green-soldier": "the green-uniformed enemy"},
                        "poses": {pid: {"subject": "green-soldier"} for pid in ids}})
-        check(K.grid_title(grid, one) == "green soldier — a 3-phase loop, seen 7 time(s)",
+        check(K.grid_title(grid, one)
+              == "green soldier — a 3-phase loop, seen 7 time(s) — plays columns 1 2 4",
               "one subject captions the sheet", K.grid_title(grid, one))
 
         # pose002 is alone under "player"; the rest are "green".
@@ -318,7 +339,7 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
         both = K.Names({"cycles": {"cycle000": "the player's run"},
                         "subjects": {"green-soldier": "the green-uniformed enemy"},
                         "poses": {pid: {"subject": "green-soldier"} for pid in ids}})
-        check(K.grid_title(grid, both) == "the player's run",
+        check(K.grid_title(grid, both) == "the player's run — plays columns 1 2 4",
               "a named run outranks its subjects", K.grid_title(grid, both))
 
         # A subject named for no pose on this sheet never reaches the caption.
@@ -327,6 +348,47 @@ def test_a_sheet_is_captioned_by_the_subject_it_holds():
         check(K.grid_title(grid, elsewhere) == bare,
               "a subject belonging to no pose here changes nothing",
               K.grid_title(grid, elsewhere))
+
+
+def test_a_repeated_phase_says_which_column_plays_again():
+    """Issue #400: a loop whose phases 1 and 3 are one drawing is laid out in
+    fewer columns than it has phases, so the caption must state the order the
+    columns play in — otherwise one run reads like two merged animations. A
+    variant's column is played by no phase, and a phase drawn on an earlier
+    sheet has no column here at all."""
+    doc = _doc_with_cycle()
+    doc["poses"].append(_pose("pose005", 80, {3: (0, 0), 0: (0, 1)}))
+    doc["cycles"] = [
+        {"id": "cycle000", "period": 4, "repeats": 5,
+         "poses": ["pose001", "pose002", "pose001", "pose000"], "hold": [8, 8, 8, 8]},
+        {"id": "cycle001", "period": 2, "repeats": 3,
+         "poses": ["pose002", "pose005"], "hold": [8, 8]},
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), doc)
+        builder = K.KitBuilder(pack)
+        first, second = [g for g in builder.build() if g.kind == "cycle"]
+        ids = [c.pose.id for c in first.cells]
+        check(ids == ["pose001", "pose002", "pose000", "pose003"],
+              "the repeated phase is laid out once, the variant beside its base", str(ids))
+        check(K.playback_columns(first) == [1, 2, 1, 3],
+              "each phase maps to the column it plays from", str(K.playback_columns(first)))
+        title = K.grid_title(first, K.Names())
+        check(title.endswith("— plays columns 1 2 1 3 (column 1 plays twice)"),
+              "the caption states the column order and which column repeats", title)
+        named = K.grid_title(first, K.Names({"cycles": {"cycle000": "the run"}}))
+        check(named == "the run — plays columns 1 2 1 3 (column 1 plays twice)",
+              "a human name keeps the order after it", named)
+        check(K.playback_columns(second) == [None, 1] and
+              K.grid_title(second, K.Names()).endswith("— plays columns - 1"),
+              "a phase drawn on an earlier sheet reads as -", K.grid_title(second, K.Names()))
+        first.name = "usr000"
+        rec = K._file_record(first, K.Names())
+        check(rec["playsColumns"] == [1, 2, 1, 3] and rec["title"] == title,
+              "the fragment carries the same order as data, beside the caption", str(rec))
+        notes = " ".join(K._notes(pack, builder, [first, second], K.Names(), "p"))
+        check("plays columns" in notes and "playsColumns" in notes,
+              "the notes tell the artist how to read the order", notes[:200])
 
 
 def test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason():
@@ -343,11 +405,33 @@ def test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason():
                   "a pack with no poses.json is refused, with the fix in the message", str(e))
 
 
+def test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build():
+    """#453: the sprite notes' "Rebuild after painting" bullet still said copy
+    -> import -> build after #435/#444 made `import` refuse a copy never built
+    with the kit sheets (exit 2). It must give the same order as ARTIST.md's
+    "When you are done" recipe: copy, build, import, build."""
+    with tempfile.TemporaryDirectory() as td:
+        pack = _kit_pack(Path(td), _doc_with_cycle())
+        builder = K.KitBuilder(pack)
+        notes = K._notes(pack, builder, builder.build(), K.Names(), "PACK")
+        bullet = next((n for n in notes if n.startswith("Rebuild after painting")), "")
+        check(bullet, "the sprite notes carry a Rebuild after painting bullet", str(notes)[-300:])
+        build = 'python3 scripts/mep_build.py build "PACK"'
+        steps = [bullet.find('copy sheets/usr* into "PACK/textures/sheets/"'), bullet.find(build),
+                 bullet.find('python3 scripts/mep_figure.py import "PACK"'), bullet.rfind(build)]
+        check(-1 not in steps and steps == sorted(steps) and steps[1] < steps[2] < steps[3],
+              "the bullet reads copy, build, import, build", f"{steps} in {bullet!r}")
+        check(bullet.count(build) == 2, "it names the build twice, before and after the import",
+              bullet)
+        check("#435" in bullet, "and says why the first build comes before the import", bullet)
+
+
 def main():
     tests = [
         test_a_cycle_becomes_one_row_in_phase_order,
         test_a_variant_sits_next_to_its_base,
         test_a_fusion_is_never_laid_out,
+        test_a_one_part_fusion_is_dropped_and_says_so,
         test_every_figure_shares_the_rows_baseline,
         test_the_rest_grid_bins_by_box_so_a_row_is_uniform,
         test_the_exported_sheet_is_a_legal_composed_sheet,
@@ -357,7 +441,9 @@ def main():
         test_a_name_is_claimed_by_creating_it_so_two_writers_cannot_collide,
         test_names_caption_a_file_and_absence_falls_back_to_the_id,
         test_a_sheet_is_captioned_by_the_subject_it_holds,
+        test_a_repeated_phase_says_which_column_plays_again,
         test_a_pack_without_a_pose_sidecar_is_refused_with_the_reason,
+        test_the_rebuild_bullet_gives_the_recipe_order_copy_build_import_build,
     ]
     for t in tests:
         t()

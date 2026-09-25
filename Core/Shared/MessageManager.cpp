@@ -32,6 +32,7 @@ std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "HdPackExportDone", u8"HD pack: %1 ROM tiles exported as defaultTile entries" },
 	{ "HdPackExportNoChrRom", u8"HD pack: this game uses CHR RAM - record tiles during gameplay instead" },
 	{ "HdPackExtractAudioStarted", u8"Extract audio: the probe is running in the background - results will appear in the pack folder's auto/audio/ folder." },
+	{ "HdPackTilesHidden", u8"A <background> in this HD pack is drawn over <tile> rules, so painting one of those tiles changes nothing on screen. See the log for the screen and the tiles." },
 	{ "HdPackExtractAudioToolMissing", u8"Extract audio: tool not found - build it with `make spike-sound-driver` and set MESEN_EXTRACT_AUDIO_TOOL, or drop the binary next to the Mesen executable / in the Tools folder of the Mesen data folder" },
 	{ "HdPackExtractAudioStartFailed", u8"Extract audio: failed to launch the tool process" },
 	{ "MEP", u8"MEP" },
@@ -104,6 +105,8 @@ bool MessageManager::_osdEnabled = true;
 bool MessageManager::_outputToStdout = false;
 std::ofstream MessageManager::_logFile;
 bool MessageManager::_logFileTried = false;
+uint64_t MessageManager::_logDropped = 0;
+uint64_t MessageManager::_logFileBytes = 0;
 IMessageManager* MessageManager::_messageManager = nullptr;
 
 void MessageManager::RegisterMessageManager(IMessageManager* messageManager)
@@ -192,8 +195,9 @@ void MessageManager::Log(string message)
 	if(message.empty()) {
 		message = "------------------------------------------------------";
 	}
-	if(_log.size() >= 1000) {
+	if(_log.size() >= MaxLogEntries) {
 		_log.pop_front();
+		_logDropped++;
 	}
 	_log.push_back(message);
 
@@ -207,16 +211,7 @@ void MessageManager::Log(string message)
 	//the first message after the home folder is known; never throws.
 	if(!_logFileTried && !FolderUtilities::GetHomeFolder().empty()) {
 		_logFileTried = true;
-		try {
-			string path = FolderUtilities::CombinePath(FolderUtilities::GetHomeFolder(), "mesen.log");
-			string bak = path + ".1";
-			std::error_code ec;
-			//Windows rejects rename-over-existing; drop the previous .1 first.
-			std::filesystem::remove(bak, ec);
-			std::filesystem::rename(path, bak, ec);
-			_logFile.open(path, std::ios::out | std::ios::trunc);
-		} catch(...) {
-		}
+		RotateLogFile();
 	}
 	if(_logFile.is_open()) {
 		auto now = std::chrono::system_clock::now();
@@ -230,20 +225,81 @@ void MessageManager::Log(string message)
 		localtime_r(&t, &tmv);
 #endif
 		std::strftime(stamp, sizeof(stamp), "%H:%M:%S", &tmv);
-		_logFile << stamp << "." << (ms < 100 ? (ms < 10 ? "00" : "0") : "") << ms << " " << message << std::endl;
+		string entry = string(stamp) + "." + (ms < 100 ? (ms < 10 ? "00" : "0") : "") + std::to_string(ms) + " " + message;
+
+		//ADR-0208 (d): cap the file rather than let it grow without bound. The
+		//budget is spent by rotating into the existing single .1 generation, so
+		//the most recent MaxLogFileBytes always survive and the generation
+		//before them survives too.
+		if(_logFileBytes > 0 && _logFileBytes + entry.size() + 1 > MaxLogFileBytes) {
+			RotateLogFile();
+		}
+		if(_logFile.is_open()) {
+			_logFile << entry << std::endl;
+			_logFileBytes += entry.size() + 1;
+		}
 	}
+}
+
+void MessageManager::RotateLogFile()
+{
+	//Callers hold _logLock, except ReopenLogFile which takes it itself.
+	try {
+		if(FolderUtilities::GetHomeFolder().empty()) {
+			return;
+		}
+		string path = FolderUtilities::CombinePath(FolderUtilities::GetHomeFolder(), "mesen.log");
+		string bak = path + ".1";
+		std::error_code ec;
+		if(_logFile.is_open()) {
+			_logFile.close();
+		}
+		//Windows rejects rename-over-existing; drop the previous .1 first.
+		std::filesystem::remove(bak, ec);
+		std::filesystem::rename(path, bak, ec);
+		_logFile.open(path, std::ios::out | std::ios::trunc);
+		_logFileBytes = 0;
+	} catch(...) {
+	}
+}
+
+void MessageManager::ReopenLogFile()
+{
+	auto lock = _logLock.AcquireSafe();
+	_logFileTried = true;
+	RotateLogFile();
+}
+
+uint64_t MessageManager::GetDroppedLogEntryCount()
+{
+	auto lock = _logLock.AcquireSafe();
+	return _logDropped;
+}
+
+string MessageManager::FormatTruncationNotice(uint64_t dropped)
+{
+	return "[MessageManager] log truncated - " + std::to_string(dropped) +
+		" earlier message(s) evicted from the " + std::to_string(MaxLogEntries) +
+		"-entry ring; mesen.log has the full run";
 }
 
 void MessageManager::ClearLog()
 {
 	auto lock = _logLock.AcquireSafe();
 	_log.clear();
+	_logDropped = 0;
 }
 
 string MessageManager::GetLog()
 {
 	auto lock = _logLock.AcquireSafe();
 	stringstream ss;
+	//ADR-0208 (a): a truncated log must not read like a short one. Both #160
+	//and #302 lost evidence here silently; the loss is now stated, in the same
+	//place a reader is already looking.
+	if(_logDropped > 0) {
+		ss << FormatTruncationNotice(_logDropped) << "\n";
+	}
 	for(string& msg : _log) {
 		ss << msg << "\n";
 	}

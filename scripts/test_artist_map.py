@@ -691,6 +691,138 @@ def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
               f"{art.width}x{art.height}")
 
 
+def test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_labelled():
+    """What `artist_kit_assemble.py` tells the artist about the `palettes`
+    band - first-use order, every group labelled - has to hold for the
+    panorama too, not only for the sheets `compose_engine` exports."""
+    with tempfile.TemporaryDirectory() as td:
+        camera = walk(1, 0, 25)
+        p = Path(td) / "grid.txt"
+        write_dump(p, camera)
+        frames, shapes, palettes = M.parse_grid_dump(p)
+        regions = M.stitch(frames, 0, 0)
+        pack = FakePack(all_keys(camera))
+        _img, _orig, cells, _stats = M.build_panorama(regions[0], shapes, palettes, pack, 1)
+        swatches, labels = M.panorama_palettes(cells)
+        expected_hex, expected_labels = [], []
+        for c in sorted(cells, key=lambda c: (c["y"], c["x"])):
+            for t in c["tiles"]:
+                if t["palette"] not in expected_hex:
+                    expected_hex.append(t["palette"])
+                    expected_labels.append(str(c["index"]))
+        check(labels == expected_labels, "each group is labelled with the first cell (reading order) that wears it",
+              f"{labels[:6]} vs {expected_labels[:6]}")
+        check(swatches == M.ora_writer.nes_swatches(expected_hex),
+              "the swatches follow first use in reading order, not hex order")
+        check(expected_hex != sorted(expected_hex), "the fixture tells the two orders apart")
+        check(len(labels) == len(swatches) > 1, "one label per swatch group", f"{len(labels)} / {len(swatches)}")
+
+        # And `generate` hands exactly that to the writer.
+        seen = {}
+        real_write, real_pack = M.ora_writer.write_surface, M.Pack
+
+        def spy(*a, **kw):
+            seen.update(kw)
+            return real_write(*a, **kw)
+        M.ora_writer.write_surface, M.Pack = spy, lambda _d: pack
+        try:
+            M.generate("s", p, Path(td) / "pack", Path(td) / "kit", 1, None, True)
+        finally:
+            M.ora_writer.write_surface, M.Pack = real_write, real_pack
+        check(seen.get("swatch_labels") == labels and seen.get("swatches") == swatches,
+              "generate passes the labelled first-use band to write_surface",
+              str(seen.get("swatch_labels", "missing"))[:60])
+
+
+def make_recorded_pack(root: Path, keys, scale: int) -> Path:
+    """A minimal recorded pack `mep_build.py build` accepts: one CHR page
+    holding every key's art at `<scale>` beside its 1:1 `.orig.png` twin, one
+    `<tile>` rule per key in `hires.txt` (the key source a rebuild runs
+    against), and one recorder-style sheet under `textures/sheets/`, since a
+    rebuild refuses a pack with no sheet at all."""
+    chr_dir = root / "textures" / "chr"
+    chr_dir.mkdir(parents=True)
+    sheets = root / "textures" / "sheets"
+    sheets.mkdir(parents=True)
+    ordered = sorted(keys)
+    columns = 16
+    rows = (len(ordered) + columns - 1) // columns
+    span = M.CELL * scale
+    page = M.Image(columns * span, rows * span)
+    lines = ["<ver>109", f"<scale>{scale}",
+             "<supportedRom>0000000000000000000000000000000000000000",
+             "<overscan>0,0,0,0", "<img>chr/Chr_0.png"]
+    for i, key in enumerate(ordered):
+        x, y = (i % columns) * span, (i // columns) * span
+        art = M.render_tile(*key)
+        page.paste(art.upscale(scale) if scale > 1 else art, x, y)
+        lines.append(f"<tile>0,{key[0]},{key[1]},{x},{y},1,N")
+    M.write_png(chr_dir / "Chr_0.png", page)
+    M.write_png(chr_dir / "Chr_0.orig.png", page.clone())
+    first = ordered[:columns]
+    base = M.Image(columns * span, span)
+    base_ref = M.Image(columns * M.CELL, M.CELL)
+    for i, key in enumerate(first):
+        art = M.render_tile(*key)
+        base.paste(art.upscale(scale) if scale > 1 else art, i * span, 0)
+        base_ref.paste(art, i * M.CELL, 0)
+    M.write_png(sheets / "base.png", base)
+    M.write_png(sheets / "base.orig.png", base_ref)
+    (sheets / "base.json").write_text(json.dumps({
+        "version": 1, "kind": "misc", "gridUnit": M.CELL, "gridPhase": {"x": 0, "y": 0},
+        "hasGrid": True, "cell": {"w": M.CELL, "h": M.CELL}, "gutter": 0, "columns": columns,
+        "routedCells": 0, "sheet": "base.png", "reference": "base.orig.png",
+        "cells": [{"index": i, "x": i * M.CELL, "y": 0, "tiles": [{"tile": k[0], "palette": k[1]}]}
+                  for i, k in enumerate(first)],
+    }, indent=1) + "\n", encoding="utf-8")
+    (root / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return root
+
+
+def test_verify_round_trips_the_banded_panorama_the_kit_writes():
+    """ADR-0183 section 4 through the real driver (#451): `--verify` on a
+    freshly generated kit rebuilds a copy of the pack with 0 errors and 0 keys
+    lost. The ADR-0220 context band grows the panorama and its twin below the
+    grid, so the verify has to go through the path the artist's own flat PNG
+    takes back into a pack, not hand mep_build a canvas its sidecar does not
+    describe."""
+    with tempfile.TemporaryDirectory() as td:
+        camera = walk(1, 0, 25)
+        dump = Path(td) / "grid.txt"
+        write_dump(dump, camera)
+        # The pack holds exactly the keys the panorama shows (the dump's palette
+        # plane folds ids, so those are not all_keys()), the way a recorded pack
+        # holds what the same run drew.
+        frames, shapes, palettes = M.parse_grid_dump(dump)
+        region = M.stitch(frames, 0, 0, quiet=True)[0]
+        _img, _orig, shown, _stats = M.build_panorama(region, shapes, palettes,
+                                                      FakePack(all_keys(camera)), 1)
+        keys = {(c["tiles"][0]["tile"], c["tiles"][0]["palette"]) for c in shown}
+        pack = make_recorded_pack(Path(td) / "pack", keys, 2)
+        out = Path(td) / "kit"
+        code = M.main(["--out", str(out), "--stage", "s", "--dump", str(dump),
+                       "--pack", str(pack), "--scale", "2", "--verify", "--quiet"])
+        doc = json.loads((out / "map" / "s-000.json").read_text(encoding="utf-8"))
+        twin = M.read_png(out / "map" / "s-000.orig.png")
+        check(twin.height > max(c["y"] for c in doc["cells"]) + M.CELL,
+              "the fixture carries the ADR-0220 context band below the grid",
+              f"twin {twin.width}x{twin.height}")
+        v = json.loads((out / "kit-part-map.json").read_text(encoding="utf-8"))["verify"]
+        check(v.get("ran") is True, "verify ran", json.dumps(v))
+        check(v.get("errors") == 0, "verify rebuilds the pack copy with 0 errors", json.dumps(v))
+        check(v.get("lost") == 0, "and loses no key", json.dumps(v))
+        check(v.get("cellsChecked", 0) > 0 and v.get("cellsChecked") == v.get("cellsByteIdentical"),
+              "every panorama cell is byte-identical to the pack's art", json.dumps(v))
+        check(v.get("addedAreFromSource") is True, "anything added is a key the pack already holds",
+              json.dumps(v))
+        # A verify that dropped the panorama on the floor would pass the three
+        # checks above; the base sheet routes 16 keys, the panorama all of them.
+        check(v.get("keys_before") == 16 and v.get("keys_after") == len(keys),
+              "the panorama really reached the rebuild: every key it shows is routed",
+              f"{v.get('keys_before')} -> {v.get('keys_after')} of {len(keys)}")
+        check(code == 0, "so --verify exits 0", str(code))
+
+
 def main():
     tests = [
         test_dump_parser_recovers_frames_shapes_and_collapsed_repeats,
@@ -711,6 +843,8 @@ def main():
         test_one_key_painted_two_ways_resolves_first_occurrence_and_reports_the_rest,
         test_a_painted_panorama_may_be_any_whole_upscale,
         test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one,
+        test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_labelled,
+        test_verify_round_trips_the_banded_panorama_the_kit_writes,
     ]
     for t in tests:
         t()

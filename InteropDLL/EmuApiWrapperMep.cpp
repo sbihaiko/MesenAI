@@ -2,7 +2,11 @@
 #include "Core/Shared/EnhancementPacks/MepContentId.h"
 #include "Core/Shared/EnhancementPacks/MepPackManager.h"
 #include "Core/Shared/EnhancementPacks/MepRecipeInstaller.h"
+#include "Core/NES/NesConsole.h"
+#include "Core/Shared/Emulator.h"
 #include "Utilities/StringUtilities.h"
+
+extern unique_ptr<Emulator> _emu;
 
 //F6.4b - client-side MEP-recipe-v1 auto-install (ADR-0138 clarifications
 //4/37/38). Sibling file to EmuApiWrapper.cpp (already at its 200-line
@@ -93,5 +97,22 @@ extern "C"
 	DllExport int32_t __stdcall RefreshMepLocalIdentities()
 	{
 		return MepPackManager::RefreshLocalIdentityCache().Recomputed;
+	}
+
+	//F12.3 (ADR-0212): ask the loaded NES pack to re-decode the images an
+	//artist repainted on disk. Returns immediately - the request is served on
+	//the emulation thread at the next frame boundary (ADR-0212 section 3), so
+	//this is safe to call from the UI thread. Returns false when no NES console
+	//is loaded; there is nothing to reload then. The outcome (how many images,
+	//how long, anything refused) goes to the [MEP] log, not through the return
+	//value, because the answer is not known yet when this returns.
+	DllExport bool __stdcall RequestMepImageReload()
+	{
+		auto console = _emu->GetConsole();
+		if(NesConsole* nes = dynamic_cast<NesConsole*>(console.get())) {
+			nes->RequestHdPackImageReload();
+			return true;
+		}
+		return false;
 	}
 }

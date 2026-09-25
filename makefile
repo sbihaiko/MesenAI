@@ -1,7 +1,6 @@
-#Welcome to what must be the most terrible makefile ever (but hey, it works)
-#Both clang & gcc work fine - clang seems to output faster code
-#.NET 10 (and its dev tools) must be installed to compile the UI.
-#The emulation core also requires SDL2.
+#Both clang & gcc work, but clang produces faster code
+#.NET 10 SDK is required to build.
+#SDL2 (.so/.dylib only) is required for audio.
 #Run "make" to build, "make run" to run
 
 UNAME_S := $(shell uname -s)
@@ -31,9 +30,6 @@ else
 	PROFILE_GEN_FLAG := -fprofile-instr-generate=$(CURDIR)/PGOHelper/pgo.profraw
 	PROFILE_USE_FLAG := -fprofile-instr-use=$(CURDIR)/PGOHelper/pgo.profdata
 endif
-
-SDL2LIB := $(shell sdl2-config --libs)
-SDL2INC := $(shell sdl2-config --cflags)
 
 LINKCHECKUNRESOLVED := -Wl,-z,defs
 
@@ -154,7 +150,7 @@ ifeq ($(MESENOS),osx)
 	LINKOPTIONS += -framework Foundation -framework Cocoa -framework GameController -framework CoreHaptics -Wl,-rpath,/opt/local/lib
 endif
 
-CXXFLAGS = -fPIC -Wall --std=c++17 -MMD -MP $(MESENFLAGS) $(SDL2INC) -I $(realpath ./) -I $(realpath ./Core) -I $(realpath ./Utilities) -I $(realpath ./Sdl) -I $(realpath ./Linux) -I $(realpath ./MacOS)
+CXXFLAGS = -fPIC -Wall --std=c++17 -MMD -MP $(MESENFLAGS) -I $(realpath ./) -I $(realpath ./Core) -I $(realpath ./Utilities) -I $(realpath ./Sdl) -I $(realpath ./Linux) -I $(realpath ./MacOS)
 OBJCXXFLAGS = $(CXXFLAGS)
 CFLAGS = -fPIC -Wall -MMD -MP $(MESENFLAGS)
 
@@ -195,14 +191,14 @@ LUASRC := $(shell find Lua -name '*.c')
 LUAOBJ := $(LUASRC:.c=.o)
 
 ifeq ($(MESENOS),linux)
-	LINUXSRC := $(shell find Linux -name '*.cpp')
+	LINUXSRC := $(shell find Linux -name '*.cpp')	
 else
 	LINUXSRC :=
 endif
 LINUXOBJ := $(LINUXSRC:.cpp=.o)
 
 ifeq ($(MESENOS),osx)
-	MACOSSRC := $(shell find MacOS -name '*.mm')
+	MACOSSRC := $(shell find MacOS -name '*.mm')	
 else
 	MACOSSRC :=
 endif
@@ -218,12 +214,6 @@ else
 	LIBEVDEVSRC := $(shell find Linux/libevdev -name '*.c')
 	LIBEVDEVOBJ := $(LIBEVDEVSRC:.c=.o)
 	LIBEVDEVINC := -I../
-endif
-
-ifeq ($(MESENOS),linux)
-	X11LIB := -lX11
-else
-	X11LIB :=
 endif
 
 FSLIB := -lstdc++fs
@@ -298,21 +288,62 @@ doc-checks: check-manifest
 	# Phase 11 C.7: ceilings = line count at the C.7 commit (shrink ok, grow fails).
 	# Amends ADR-0137's guarded-file list. PRD named five files with counts
 	# (said "six"); those five are the contract.
-	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2246
+	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): the
+	# HdPackBuilder.cpp ceiling rose from 2246 to 2265 for F12.8's remainder
+	# sheet. The sheet itself is host-free in SheetRender (no ceiling, unit
+	# tested); what landed here is the part that cannot be: accumulating each
+	# written sheet's shapes in the one funnel they all pass through, and the
+	# call that writes the complement. A ratchet again from 2265.
+	# Amended 2026-09-19 (ADR-0137, eighth amendment; ADR-0197 §3, F12.6b):
+	# 2265 -> 2282 for the recorder's retention of the $0000-$07FF window. The
+	# `M` line's encoder is host-free and inline in TileSheetTypes.h (and unit
+	# tested there); what is here is the OnFrameEnd/RecordGridFrame parameter,
+	# the per-retained-frame copy, and the line WriteGridDump emits. A ratchet
+	# again from 2282.
+	# Amended 2026-09-24 (ADR-0137, twelfth amendment; ADR-0230, F14.9):
+	# 2428 -> 2438 for queueing the sheets and FlushSheetFiles. The plan,
+	# layout and written-slot filter are host-free in SheetColourways.h (unit
+	# tested); the write block moved here from WriteSheetFiles. A ratchet again
+	# from 2438.
+	./scripts/check-file-loc.sh Core/NES/HdPacks/HdPackBuilder.cpp 2438
 	# Amended 2026-09-16 (ADR-0137, third amendment): the artist_chr_kit.py
 	# ceiling rose from the C.7 count of 1762 to 1802 for #275's `--also`
 	# dedup, which added a function and the prose that explains it. The other
 	# three implementation ceilings are untouched, and this one is a ratchet
-	# again from 1802.
-	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 1802
-	./scripts/check-file-loc.sh scripts/mep_build.py 1932
+	# again from 1802. Amended 2026-09-19 (ADR-0137, sixth amendment; ADR-0213,
+	# F12.4): 1802 -> 1803 for the `import asset_names as N` the F12.4 surface-name
+	# guard needs. The guard itself folds into the existing write_png call; an
+	# import cannot. No headroom added -- it is a ratchet again from 1803.
+	# Amended 2026-09-20 (ADR-0137, eleventh amendment; ADR-0219, F12.9):
+	# 1803 -> 2074 for the static projection -- --static, the Pack/Page/Bank
+	# construction the recording normally supplies, the blank canvas and the
+	# manifest a static kit writes. A second input path through this file, and
+	# none of it host-free. A ratchet again from 2074.
+	./scripts/check-file-loc.sh scripts/artist_chr_kit.py 2074
+	# Amended 2026-09-19 (ADR-0137, fifth amendment; ADR-0209 Q4(k)): 1932 ->
+	# 1936 for the "unsorted" entry in _SHEET_RANK and the comment saying why
+	# its rank never decides anything. Amended again the same day (seventh
+	# amendment, ADR-0197 §1, F12.6a): 1936 -> 1945 for the authored-condition
+	# read/merge in _cell_crops and the sheet's own <condition> definitions.
+	# Amended a ninth time 2026-09-19 (#346): 1945 -> 1953 for _EditedProbe's
+	# size-mismatch branch, which now refuses the build instead of falling
+	# back to blind on a half-grown sheet/twin pair.
+	# Amended an eleventh time 2026-09-20 (ADR-0219, F12.9): 1953 -> 2070 for
+	# cmd_build_pages_only -- the build of a pack that is only CHR pages and
+	# the manifest beside them, which slices nothing because the manifest
+	# already names the page and the crop. A ratchet again from 2070.
+	./scripts/check-file-loc.sh scripts/mep_build.py 2070
 	./scripts/check-file-loc.sh scripts/sheet_repaint.py 1591
-	# Amended 2026-09-16 (ADR-0137, second amendment): the test file's ceiling
-	# rose from the C.7 count of 7342 to 7600. C.7 ratcheted the four
-	# implementation files above; a test file grows when a decision does, and
-	# ADR-0195 arrived one day after C.7 with the ratchet already at zero
-	# headroom. The four implementation ceilings are untouched.
-	./scripts/check-file-loc.sh scripts/core_unit_tests.cpp 7600
+	# Amended 2026-09-17 (ADR-0137, fourth amendment; ADR-0207): the ceiling on
+	# scripts/core_unit_tests.cpp is GONE, not raised. C.7 ratcheted it at 7342
+	# on 2026-09-15; ADR-0195 hit it with zero headroom the next day and the
+	# second amendment raised it to 7600; the #302 fix landed at 7565 the day
+	# after that. Twice in three days, both times from work already decided,
+	# and each hit cost an amendment here and in ADR-0137's Status line. The
+	# ratchet exists to stop implementation creeping, and a test file grows
+	# whenever a decision does - so the guarded list is the four implementation
+	# files above, and nothing else. Review, not wc -l, is what catches a
+	# duplicated test case.
 	./scripts/checks/verify_pack_host_allowlist_embed.sh
 	# Phase 11 C.8 / ADR-0187: kind handlers and the validate gate stay in step
 	# with scripts/pack_host_allowlist.json (CI vs client drift).
@@ -378,6 +409,10 @@ doc-checks: check-manifest
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
+	#The session-start index is the only register a session sees by default;
+	#four accepted ADRs were missing from it (0209, 0212, 0213, 0214) because
+	#the Status parser anchored on the first word. That guard is this one.
+	python3 scripts/checks/verify_adr_index.py
 	#Roadmap freshness (PRD slice C.2): a slice that has shipped loses its row
 	#in the PRD's live tables and gains one line in the shipped record, so a
 	#live row whose Decision cell opens with "shipped" is a contract breach.
@@ -399,12 +434,29 @@ doc-checks: check-manifest
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
 	python3 scripts/test_mep_build.py
+	#ADR-0231 (#447): an untouched sheet cell keeps the recorded rule and pixels.
+	python3 scripts/test_mep_build_recorded.py
+	#464: a blank sprite key never claims paint through a crop it shares.
+	python3 scripts/test_mep_build_blank_key.py
+	#ADR-0198 §1/§3 (F12.7, F12.17): legacy pack import, including the IPS-patched
+	#path's refusals and containment. Synthetic packs in a temp dir; no ROM.
+	python3 scripts/test_mep_import.py
+	#F12.2 (ADR-0216): the placer for a copied MEP sheet cell -- which sheet a
+	#loose background key goes on, the free slot, and the two-file grow whose
+	#half-written form silently blinds the build's painted-cell probe (#346).
+	#Synthetic packs in a temp dir; no emulator, no ROM.
+	python3 scripts/test_mep_add_cell.py
 	python3 scripts/test_mep_lint_border.py
+	#ADR-0196 (F12.5): the `<addition>` tag's synthetic target key — the rule
+	#itself, then the lint that gates a pack carrying one.
+	python3 scripts/test_mep_addition.py
+	python3 scripts/test_mep_lint_addition.py
 	python3 scripts/test_mep_errata.py
 	python3 scripts/test_mep_audio_patch_resolution.py
 	#Downloader hop/shape rules and the lint decompression cap (review pass 2026-09-06).
 	python3 scripts/test_fetch_pack.py
 	python3 scripts/test_mep_lint_caps.py
+	python3 scripts/test_mep_lint_usage.py
 	#F9.6 (ADR-0154): the external repaint's own suite -- stdlib-only Python,
 	#no model, no weights, no network (its diffusion backend is exercised only
 	#against a loopback stub and through its unavailable paths).
@@ -419,6 +471,29 @@ doc-checks: check-manifest
 	#header, the union's CRC gate, region coalescing and both strip
 	#directions. Fixtures built in memory; no emulator, no ROM.
 	python3 scripts/test_cdl_tool.py
+	#F12.4 (ADR-0213): the painting-surface name contract -- what Photoshop's
+	#Generate Image Assets grammar, a Windows file system and the kit's own
+	#manifest all have to accept. Pure string rules; no kit, no pack, no ROM.
+	python3 scripts/test_asset_names.py
+	#ADR-0209 Q2 (e) / Q3 (i): a sprNNN/objNNN figure exported as one PNG
+	#through the pack's own offsets, and the painted file brought back onto
+	#exactly the sheet cells it came from -- unpainted round-trip writes zero
+	#cells, one painted cell changes one sheet cell, build keeps the key set.
+	#Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_mep_figure.py
+	#ADR-0209 Q1 (b): the Core-inferred sidecar `label` on the reader side --
+	#names.json > label > id in every caption, Pose/PoseRun/Sheet carry the
+	#label and its source, a labelled pack builds to the same key set.
+	#Synthetic pack in a temp dir; no emulator, no ROM.
+	python3 scripts/test_sidecar_labels.py
+	#F12.6a (ADR-0197): hand-authored conditions -- the syntax a sheet may
+	#carry, and the evaluation of one against a recorded route, written from
+	#HdPackConditions.h. Synthetic grid streams; no emulator, no ROM.
+	python3 scripts/test_mep_conditions.py
+	#F12.10: the unattended recording job's resolver and report -- which
+	#driver a ROM gets, which minted state a stage starts from, and a ROM
+	#that failed reading as a row. Synthetic iNES files in a temp dir.
+	python3 scripts/test_library_job.py
 	#F9.24 (ADR-0183): the artist kit's assembler -- the page an artist reads
 	#first. Synthetic manifest fragments in a temp dir; no pack, no ROM.
 	python3 scripts/test_artist_kit_assemble.py
@@ -559,7 +634,7 @@ spike-sound-driver: core
 	$(call fixup_install_name,scripts/spike_sound_driver)
 
 pgohelper: InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
-	mkdir -p PGOHelper/$(OBJFOLDER) && cd PGOHelper/$(OBJFOLDER) && $(CXX) $(CXXFLAGS) $(LINKCHECKUNRESOLVED) -o pgohelper ../PGOHelper.cpp ../../bin/pgohelperlib.so -pthread $(FSLIB) $(SDL2LIB) $(LIBEVDEVLIB) $(X11LIB)
+	mkdir -p PGOHelper/$(OBJFOLDER) && cd PGOHelper/$(OBJFOLDER) && $(CXX) $(CXXFLAGS) $(LINKCHECKUNRESOLVED) -o pgohelper ../PGOHelper.cpp ../../bin/pgohelperlib.so -pthread $(FSLIB) $(LIBEVDEVLIB)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -580,7 +655,7 @@ ALLOBJ = $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) $(SDLOBJ) $(LIBEVDEVOBJ)
 InteropDLL/$(OBJFOLDER)/$(SHAREDLIB): $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) $(SDLOBJ) $(LIBEVDEVOBJ) $(LINUXOBJ) $(DLLOBJ) $(MACOSOBJ)
 	mkdir -p bin
 	mkdir -p InteropDLL/$(OBJFOLDER)
-	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) -shared -o $(SHAREDLIB) $(DLLOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(LINUXOBJ) $(MACOSOBJ) $(LIBEVDEVOBJ) $(UTILOBJ) $(SDLOBJ) $(COREOBJ) $(SDL2INC) -pthread $(FSLIB) $(SDL2LIB) $(LIBEVDEVLIB) $(X11LIB)
+	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) -shared -o $(SHAREDLIB) $(DLLOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(LINUXOBJ) $(MACOSOBJ) $(LIBEVDEVOBJ) $(UTILOBJ) $(SDLOBJ) $(COREOBJ) -pthread $(FSLIB) $(LIBEVDEVLIB)
 	cp $(SHAREDLIB) bin/pgohelperlib.so
 	mv $(SHAREDLIB) InteropDLL/$(OBJFOLDER)
 
@@ -611,3 +686,4 @@ clean:
 	rm -r -f $(MACOSOBJ)
 	rm -r -f $(DLLOBJ)
 	rm -r -f $(CUTOBJ) $(CUTOBJ:.o=.d) scripts/core_unit_tests
+	rm -r -f $(OUTFOLDER)

@@ -159,7 +159,8 @@ namespace Mesen.Debugger.ViewModels
 				GetViewInMemoryViewerAction(),
 				GetViewInTileViewerAction(),
 				GetCopyHdPackFormatActionSeparator(),
-				GetCopyHdPackFormatAction()
+				GetCopyHdPackFormatAction(),
+				GetCopyMepSheetCellAction()
 			}));
 
 			AddDisposables(DebugShortcutManager.CreateContextMenu(_spriteGrid, new List<object> {
@@ -169,7 +170,8 @@ namespace Mesen.Debugger.ViewModels
 				GetViewInMemoryViewerAction(),
 				GetViewInTileViewerAction(),
 				GetCopyHdPackFormatActionSeparator(),
-				GetCopyHdPackFormatAction()
+				GetCopyHdPackFormatAction(),
+				GetCopyMepSheetCellAction()
 			}));
 
 			AddDisposables(DebugShortcutManager.CreateContextMenu(listView, new List<object> {
@@ -179,7 +181,8 @@ namespace Mesen.Debugger.ViewModels
 				GetViewInMemoryViewerAction(),
 				GetViewInTileViewerAction(),
 				GetCopyHdPackFormatActionSeparator(),
-				GetCopyHdPackFormatAction()
+				GetCopyHdPackFormatAction(),
+				GetCopyMepSheetCellAction()
 			}));
 
 			AddDisposable(this.ObserveProp([nameof(ViewerMousePos), nameof(PreviewPanelSprite)], UpdateMouseOverRect));
@@ -293,7 +296,27 @@ namespace Mesen.Debugger.ViewModels
 				OnClick = () => {
 					SpritePreviewModel? sprite = GetSelectedSprite();
 					if(sprite != null && sprite.TileAddress >= 0 && _data.Palette != null) {
-						HdPackCopyHelper.CopyToHdPackFormat(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, sprite.Height > 8);
+						//ADR-0215 OPEN 3: a sprite has a Y, so it can name the scanlines it was
+						//fetched on - the same rule the Tilemap Viewer applies, under one name.
+						HdPackCopyHelper.Announce(HdPackCopyHelper.CopyToHdPackFormat(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, HdPackCopyContext.ForSprite(sprite.Y, sprite.Height), sprite.Height > 8));
+					}
+				}
+			};
+		}
+
+		private ContextMenuAction GetCopyMepSheetCellAction()
+		{
+			return new ContextMenuAction() {
+				ActionType = ActionType.CopyToMepSheetCell,
+				IsVisible = () => CpuType == CpuType.Nes,
+				IsEnabled = () => {
+					SpritePreviewModel? sprite = GetSelectedSprite();
+					return sprite != null && HdPackCopyHelper.IsActionAllowed(CpuType.GetVramMemoryType(sprite.UseExtendedVram));
+				},
+				OnClick = () => {
+					SpritePreviewModel? sprite = GetSelectedSprite();
+					if(sprite != null && sprite.TileAddress >= 0 && _data.Palette != null) {
+						HdPackCopyHelper.Announce(HdPackCopyHelper.CopyAsMepSheetCell(sprite.TileAddress, CpuType.GetVramMemoryType(sprite.UseExtendedVram), _data.Palette.Value.GetRawPalette(), sprite.Palette, true, HdPackCopyContext.ForSprite(sprite.Y, sprite.Height), sprite.Height > 8));
 					}
 				}
 			};

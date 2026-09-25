@@ -271,6 +271,12 @@ so every one of its cells counts as painted and it relies on its static rank
 alone. Every override is logged, tagged `(painted)`, `(untouched)` or
 `(precedence)`.
 
+*Amended 2026-09-24 by ADR-0231 (#447):* an untouched cell that wins a key no
+longer emits its nearest-neighbour crop when the recording has that key. The
+recording's own rule is re-emitted, pointing at the recorded pattern page.
+Only a painted cell points at its crop. The painted/untouched test itself is
+unchanged.
+
 A static rank alone cannot work here: `map > metatiles` breaks PRD Phase 9
 validation test 3 ("make every bush purple" from `metatiles.png`), and
 `metatiles > map` breaks test 4 (the seam test, painted on the map). Only "who
@@ -437,3 +443,23 @@ The hot path keeps no dump code.
   as a hot-path cost while recording and kept: replacing it with the
   vocabulary's East/South relations was not provably output-identical. Open
   design point.
+
+## Amendments (2026-09-25, issue #464)
+
+- §4 precedence: a **blank sprite key** never claims its tile key by paint.
+  Blank means all 32 hex digits of pattern data are zero under a sprite
+  palette key (first byte `FF`), so the NES draws nothing. The rule holds
+  even when the key's cell differs from its twin. The artist kit's composed
+  sheets can place a blank tile in the same rect as another tile
+  (Castlevania `usr017`: the blank tile and a spark share position (1, 10)).
+  Painting the spark is correct, but it made the blank key's cell read as
+  painted. Its 22 rules then left the untouched `hud.png` crop for the
+  painted one, and a tile the NES never draws showed 480 magenta pixels.
+  The blank key now follows the untouched rule. Among its untouched crops,
+  one whose cell nobody painted wins before the kind rank. A background tile
+  with the same data is excluded, because its colour 0 is the backdrop,
+  which the NES does draw. This matches `mep_figure.py import`, which
+  already never writes paint onto a blank tile (#452). Implemented in
+  `scripts/mep_build.py`. Covered by `scripts/test_mep_build_blank_key.py`
+  and logged in
+  `docs/validation/issue-464-blank-sprite-key-shared-crop-2026-09-25.md`.

@@ -65,6 +65,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 import compose_engine as E  # noqa: E402
 
 PART = "background"
@@ -443,10 +444,17 @@ def _claim_name(pack: E.Pack, out_dir: Path) -> str:
 
 
 def _export(pack: E.Pack, out_dir: Path, placements):
+    """One composed object sheet. The `.ora` beside it (ADR-0220) captions the
+    sheet with its first node id — the same id the manifest's `ids[]` opens
+    with, never a name this tool invents (ADR-0183 §5). No `context` is
+    passed: a stage position for a background node would come from a
+    recorder `map-NNN.json`'s `placements[]`, and the packs this tool reads
+    ship none, so a scenery sheet's `.ora` has four layers today."""
     nodes = [n for n, _x, _y in placements]
     return pack.export("object", nodes, seed=nodes[0], locked=nodes,
                        to_dir=out_dir, placements=placements,
-                       name=_claim_name(pack, out_dir))
+                       name=_claim_name(pack, out_dir),
+                       captions=[(E.GUTTER, E.GUTTER, f"bg{nodes[0]:03d}")])
 
 
 def _geometry(placements):
@@ -501,7 +509,7 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
         rows, columns = _geometry(placements)
         ids = [Path(sheet.name).stem]
         files.append({
-            "path": f"sheets/{name}.png",
+            "path": f"sheets/{N.require_asset_name(name + N.SURFACE_EXT, 'artist_bg_kit.py')}",
             "title": _title(names, ids, f"{ids[0]} ({len(placements)} cells)"),
             "unit": "object",
             "rows": rows,
@@ -536,7 +544,7 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
         rows, columns = _geometry(element["nodes"])
         ids = [f"bg{n:03d}" for n, _x, _y in element["nodes"]]
         files.append({
-            "path": f"sheets/{name}.png",
+            "path": f"sheets/{N.require_asset_name(name + N.SURFACE_EXT, 'artist_bg_kit.py')}",
             "title": _title(names, ids,
                             f"{ids[0]} + {len(ids) - 1} cells that always follow it"),
             "unit": "element",

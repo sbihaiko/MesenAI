@@ -5,6 +5,9 @@
 //Everything here is pure: buffers in, buffers out - no I/O, no PNG encoding.
 #include "NES/HdPacks/TileSheetTypes.h"
 #include <functional>
+#include <map>
+#include <string>
+#include <set>
 
 namespace MesenSheets
 {
@@ -15,6 +18,16 @@ namespace MesenSheets
 
 	//NES master palette: 512 entries of 0x00RRGGBB (HdPackBuilder::_palette).
 	using NesPalette = const uint32_t*;
+
+	//ADR-0230 Decision item 2 (F14.9): another palette the recording drew a
+	//shape in that the shape's cell reproduces exactly at one Brightness
+	//(SheetColourways.h). Brightness is the column text mep_build.py writes.
+	struct PaletteFold
+	{
+		uint32_t Palette = 0;
+		std::string Brightness;
+	};
+	using ShapeFolds = std::map<ShapeId, std::vector<PaletteFold>>;
 
 	//---- pixels ------------------------------------------------------------
 
@@ -110,10 +123,36 @@ namespace MesenSheets
 		std::vector<uint32_t> Poses;
 	};
 
+	//---- remainder sheet (ADR-0209 Q4(k), F12.8) ---------------------------
+
+	//Builds the `unsorted` sheet: one cell for every shape id in
+	//[0, shapeCount) that no other sheet claimed, at grid unit 8, in shape-id
+	//order (first-sight order, which is the only order this set has - the
+	//remainder is by definition what no grouping pass found structure in).
+	//
+	//Coverage is the whole point (ADR-0209 Q4(k)): with this sheet on disk the
+	//artist can never meet a recorded tile that has no surface to paint, which
+	//is what made the F12.2 panel script read as complicated - it walked the
+	//uncovered case. Sheets carried 319 of Zelda's 2 203 keys before this.
+	//
+	//Deliberately *not* alias-collapsed. CollapseAliases exists to stop an
+	//artist paying twice for one subject on a sheet built around subjects; this
+	//sheet is the leftovers, its cells are unrelated by construction, and
+	//collapsing them would hide a key behind a look-alike with no group to
+	//explain the substitution. Coverage beats tidiness here.
+	//
+	//Returns false - and touches neither out parameter - when nothing is left
+	//over, so a pack whose sheets already cover everything ships no empty
+	//`unsorted.png`. `outDoc`'s Kind, CellWidth/Height, Columns and Cells are
+	//filled; the caller owns SheetFile/ReferenceFile (WriteSheetFiles does).
+	bool BuildUnsortedSheet(size_t shapeCount, const std::set<ShapeId>& claimed, const TileLookup& lookup, NesPalette palette, SheetImage& outImage, SheetJsonDoc& outDoc);
+
 	//Serialises `doc` to the ADR-0153 §4 schema. `lookup` resolves each cell's
 	//shapes into the exact hires.txt keys, so a crop maps back to tile entries
 	//with no guessing. Deterministic: same input, same bytes.
-	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup);
+	//`folds` (ADR-0230, F14.9) adds a `folds` list to every tile entry of a
+	//shape it names; null or empty writes the schema as it was.
+	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup, const ShapeFolds* folds = nullptr);
 
 	//ADR-0164 §1 (F9.17): serialises the sheets/adjacency.json sidecar - the
 	//adjacency statistics the sheet inference measured, kept so an external

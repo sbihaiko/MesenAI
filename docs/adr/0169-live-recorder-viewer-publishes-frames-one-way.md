@@ -4,7 +4,10 @@
   the sprite-layer record in `scripts/headless_record.cpp`, the viewer
   `scripts/record_viewer.py`, and the interactive producer
   `Core/Shared/LiveFrameRecorder` + the Tools-menu toggle (section 4) are all
-  on `main`.
+  on `main`. Section 4 amended 2026-09-23 (the viewer leaves the emulator's
+  menu; Record/Stop stays), accepted and implemented in the same change on
+  the user's decision and go-ahead, quoted verbatim: "manter o script como ferramenta de desenvolvimento e diagnóstico, e tirar o "Open Viewer" do menu que o jogador ou artista vê. O Record/Stop continua, porque alimenta o kit. Seria uma emenda à ADR-0169 §4, que foi quem colocou o viewer no menu, e não um bug. Não medi uso real, então é uma leitura do fluxo atual, não um dado."
+  Covered by `UI.HeadlessTests/LiveRecorderMenuTests.cs`.
 - Date: 2026-09-08
 - Updated: 2026-09-08 — the sprite-layer read channel switched from the
   debugger-based `GetMemoryState` to direct console exports under
@@ -18,6 +21,15 @@
   (`LiveFrameRecorder`, Decision section 4) and supersedes the viewer-launch
   panel of section 3: the viewer no longer starts processes, fields, or knows a
   ROM; it auto-attaches by convention to the emulator's live slot.
+- Amended 2026-09-22 (ADR-0222 option A, F12.14) — the save-time
+  `MESEN_OAM_STREAM_DUMP` gained a palette id per entry; the live wire format
+  (`Utilities/LiveRecordFormat.h`, `sprites.json`) is **not** changed and
+  needs no byte: it carries the raw 64 OAM entries as `[y, tile, attr, x]`
+  plus the 32 bytes of palette RAM, so the sprite palette is already on the
+  wire as the attribute's two palette bits resolved through palette RAM. The
+  dump and the wire describe the same sprite in two encodings on purpose —
+  the dump interns `(tileData, palette)` for a reader with no CHR or palette
+  RAM, the wire ships the console's own bytes for a viewer that has both.
 - Updated: 2026-09-08 ("capture every layer") — both producers now also read
   the background layer under the same `Lock()` hold as the sprite layer:
   `nametables.bin` (the mapper-resolved `$2000-$2FFF` bytes) and
@@ -193,6 +205,8 @@
   shown as a message, and explicitly does not touch the recording: the
   protocol stays one-way (section 1), so a viewer that never starts costs the
   run nothing. `Open Viewer` exists for the case where the human closed it.
+  **(a)'s Open Viewer child and all of (b) are withdrawn by the 2026-09-23
+  amendment below; (c) stands.**
   (c) **The record carries its ROM, and the slot re-targets when the ROM
   changes.** A single convention slot (section 4) is reused by every session,
   so nothing in it told one game from the next; `status.json` gained a
@@ -212,6 +226,32 @@
   retitles itself on a `"rom"` change. Alternative rejected: a per-ROM
   subdirectory, which would give the viewer a field to fill again and undo the
   zero-field attach.
+- Amended: 2026-09-23 ("the viewer leaves the player's menu") — section 4's
+  Tools-menu surface shrinks to Record / Stop. What changes: (a) the "Live
+  Recorder" submenu (caption no longer "(viewer)") has exactly two children,
+  Record and Stop, with no Open Viewer entry and no separator; (b) Record, and
+  the `--recordlive` command-line switch that takes the same path, start the
+  recorder and open nothing — the emulator no longer spawns
+  `scripts/record_viewer.py`, so `UI/Logic/RecordViewerLocator.cs`, its unit
+  tests, the `MESENCE_RECORD_VIEWER` override and the "Open Viewer" string are
+  deleted. What does not change: the interactive recorder still publishes
+  into `<HomeFolder>/LiveRecording` (`ConfigManager.LiveRecordingFolder`) and
+  still re-targets the slot per ROM, because that slot feeds the artist kit;
+  the wire format; `scripts/record_viewer.py`, which stays as a developer and
+  diagnostic tool run by hand (`python3 scripts/record_viewer.py`) and still
+  auto-attaches to the convention slot with zero fields (section 4's last
+  bullet); and `scripts/render_record_viewer.py`, which agents use to render
+  the viewer to a PNG without a display. Rationale — a reading of the current
+  artist flow, **not measured usage** (nobody counted how often the viewer is
+  opened): the flow a player or artist follows today is record → the kit's
+  `.ora` surfaces → paint in GIMP/Krita → `mep_build.py build` → reload the
+  repainted images (F12.3), and a tile's key is picked with F12.2's "Copy as
+  MEP sheet cell" from the emulator's own debugger viewers. The live viewer
+  is not a step in that flow; it answers a developer's questions (did the run
+  reach gameplay, does the reconstruction agree with the composed frame), so
+  its entry point moves to where developers are — a terminal. Consequence: a
+  player who wants to watch a live session must now run the script by hand;
+  that is the intended trade.
 - Related: ADR-0050 (bootstrap screen backgrounds), ADR-0157 (headless input in
   emulated frames), ADR-0164 (adjacency sidecar), ADR-0165 (the composition
   editor is an external stdlib Python tool), ADR-0167 (HUD-only capture seam),
@@ -399,6 +439,14 @@ Decisions that follow:
   fields. The path box stays only as the manual override of section 3's last
   bullet — to watch a terminal-launched `<prefix>-live/` of `headless_record`.
   It never launches a process now, so section 3's subprocess machinery is gone.
+
+> Amended 2026-09-23: the Tools-menu toggle is the Record / Stop pair only.
+> The emulator does not open the viewer — not from the menu, not on Record,
+> not from `--recordlive` — and offers no Open Viewer entry;
+> `scripts/record_viewer.py` is a developer/diagnostic tool run by hand, which
+> attaches to this slot by the convention above. The recorder and the slot
+> are unchanged, because they feed the artist kit. Rationale and scope: the
+> "Amended: 2026-09-23" line in the header.
 
 ## Consequences
 

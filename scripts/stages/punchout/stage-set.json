@@ -1,0 +1,8 @@
+{
+  "game": "Mike Tyson's Punch-Out!!",
+  "rom": {
+    "noIntroSha1": ["B6F6BD9D78CDD264A117D4B647AEE3309993E9A9"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Mike Tyson's Punch-Out!! (1987) (Nintendo).nes from the user's ROM library (whole-file SHA1 0F0C2C2E294FF8CE255A618964728C935FD8963B, MMC2, CHR ROM), the dump mint-fight1.txt and fight1.txt were authored and recorded on by the 2026-09-24 deep measurement (docs/validation/punchout-deep-measurement-2026-09-24.md)."
+}

@@ -14,18 +14,16 @@ using Mesen.Utilities;
 using Mesen.Windows;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
 {
-	public partial class MainMenuViewModel : ViewModelBase
+	public partial class MainMenuViewModel : DisposableViewModel
 	{
 		public MainWindowViewModel MainWindow { get; set; }
 
@@ -47,6 +45,7 @@ namespace Mesen.ViewModels
 
 		private ConfigWindow? _cfgWindow = null;
 		private MainMenuAction _selectControllerAction = new();
+		private FileSystemWatcher? _fileWatcher;
 
 		[Obsolete("For designer only")]
 		public MainMenuViewModel() : this(new MainWindowViewModel()) { }
@@ -54,6 +53,12 @@ namespace Mesen.ViewModels
 		public MainMenuViewModel(MainWindowViewModel windowModel)
 		{
 			MainWindow = windowModel;
+		}
+
+		protected override void DisposeView()
+		{
+			base.DisposeView();
+			_fileWatcher?.Dispose();
 		}
 
 		private void OpenConfig(MainWindow wnd, ConfigWindowTab tab)
@@ -307,6 +312,54 @@ namespace Mesen.ViewModels
 			};
 		}
 
+		private MainMenuAction GetShaderMenu(MainWindow wnd)
+		{
+			return ShaderMenuHelper.GetShaderMenu(
+				wnd,
+				() => {
+					ConsoleOverrideConfig? overrides = ConsoleOverrideConfig.GetActiveOverride();
+					if(overrides?.OverrideShader == true) {
+						return overrides.ShaderFile;
+					}
+					return ConfigManager.Config.Video.ShaderFile;
+				}, v => {
+					ConsoleOverrideConfig? overrides = ConsoleOverrideConfig.GetActiveOverride();
+					if(overrides?.OverrideShader == true) {
+						overrides.ShaderFile = v;
+					} else {
+						ConfigManager.Config.Video.ShaderFile = v;
+					}
+				},
+				true
+			);
+		}
+
+		private MainMenuAction? InitShaderMenu(MainWindow wnd)
+		{
+			MainMenuAction shaderMenu = GetShaderMenu(wnd);
+
+			Action refreshFilterList = ((Action)(() => {
+				Dispatcher.UIThread.Post(() => {
+					if(shaderMenu.SubActions != null) {
+						foreach(object action in shaderMenu.SubActions) {
+							(action as BaseMenuAction)?.Dispose();
+						}
+					}
+					shaderMenu.SubActions = GetShaderMenu(wnd).SubActions;
+				});
+			})).Debounce();
+
+			//Auto-refresh menu when files are added/deleted in the "Shaders" folder
+			_fileWatcher = new(ConfigManager.ShaderFolder, "*.slangp");
+			_fileWatcher.IncludeSubdirectories = true;
+			_fileWatcher.Renamed += (s, e) => refreshFilterList();
+			_fileWatcher.Created += (s, e) => refreshFilterList();
+			_fileWatcher.Deleted += (s, e) => refreshFilterList();
+			_fileWatcher.Changed += (s, e) => refreshFilterList();
+			_fileWatcher.EnableRaisingEvents = true;
+			return shaderMenu;
+		}
+
 		private void InitOptionsMenu(MainWindow wnd)
 		{
 			OptionsMenuItems = new List<object>() {
@@ -398,7 +451,7 @@ namespace Mesen.ViewModels
 								ConfigManager.Config.Video.ApplyConfig();
 							}
 						}
-					}
+					},
 				},
 
 				new MainMenuAction() {
@@ -493,6 +546,11 @@ namespace Mesen.ViewModels
 					OnClick = () => OpenConfig(wnd, ConfigWindowTab.Preferences)
 				}
 			};
+
+			MainMenuAction? shaderMenu = InitShaderMenu(wnd);
+			if(shaderMenu != null) {
+				OptionsMenuItems.Insert(3, shaderMenu);
+			}
 		}
 
 		private MainMenuAction GetAspectRatioMenuItem(VideoAspectRatio aspectRatio)
@@ -523,12 +581,7 @@ namespace Mesen.ViewModels
 		{
 			return new MainMenuAction() {
 				ActionType = ActionType.Custom,
-				DynamicText = () => {
-					if(region == ConsoleRegion.Pal && MainWindow.RomInfo.Format == RomFormat.GameGear) {
-						return "PAL (60 FPS)"; //GG is 60fps even when region is PAL
-					}
-					return ResourceHelper.GetEnumText(region);
-				},
+				DynamicText = () => ResourceHelper.GetEnumText(region),
 				IsVisible = () => {
 					if(MainWindow.RomInfo.ConsoleType == ConsoleType.Gameboy) {
 						return false;
@@ -537,7 +590,7 @@ namespace Mesen.ViewModels
 					return region switch {
 						ConsoleRegion.Ntsc => true,
 						ConsoleRegion.NtscJapan => MainWindow.RomInfo.Format == RomFormat.GameGear,
-						ConsoleRegion.Pal => true,
+						ConsoleRegion.Pal => MainWindow.RomInfo.Format != RomFormat.GameGear,
 						ConsoleRegion.Dendy => MainWindow.RomInfo.ConsoleType == ConsoleType.Nes,
 						ConsoleRegion.Auto or _ => true
 					};
@@ -731,6 +784,15 @@ namespace Mesen.ViewModels
 								ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new HdPackBuilderWindow());
 							}
 						},
+						//F12.3 (ADR-0212): the artist saves in their own paint
+						//program and asks for the pixels back here - no ROM
+						//reopen, no state lost. Only images whose file changed
+						//are re-decoded, at the next frame boundary.
+						new MainMenuAction() {
+							ActionType = ActionType.ReloadPackImages,
+							IsEnabled = () => EmuApi.IsRunning(),
+							OnClick = () => EmuApi.RequestMepImageReload()
+						},
 						new ContextMenuSeparator(),
 						new MainMenuAction() {
 							ActionType = ActionType.EnhancementPacks,
@@ -848,34 +910,37 @@ namespace Mesen.ViewModels
 		{
 			//Shaped like the Sound/Video/Music recorders above it (Record/Stop),
 			//with no dialog and no user-typed fields: the recorder publishes to
-			//the LiveRecordingFolder convention slot (ADR-0169) and Record opens
-			//the viewer (scripts/record_viewer.py) on that slot, so what starts
-			//recording is also what shows the game running. The ROM, the
-			//interval and the path are never typed - LiveRecordingSession keeps
-			//the recorder pointed at whatever ROM is open (its OnGameLoaded /
-			//OnEmulationStopped are wired in MainWindow's notification handler).
+			//the LiveRecordingFolder convention slot (ADR-0169), which feeds the
+			//artist kit. The ROM, the interval and the path are never typed -
+			//LiveRecordingSession keeps the recorder pointed at whatever ROM is
+			//open (its OnGameLoaded / OnEmulationStopped are wired in MainWindow's
+			//notification handler).
+			//
+			//No viewer entry, and Record opens nothing (ADR-0169 section 4,
+			//amended 2026-09-23): scripts/record_viewer.py is a developer and
+			//diagnostic tool run by hand, and it auto-attaches to the same slot.
+			//The entries and their order come from the host-free
+			//LiveRecorderMenu.Entries (asserted in UI.Tests).
 			return new MainMenuAction() {
 				ActionType = ActionType.LiveRecorder,
-				SubActions = new List<object> {
-					new MainMenuAction() {
-						ActionType = ActionType.Record,
-						IsEnabled = () => IsGameRunning && !LiveRecordingSession.IsRecording,
-						OnClick = () => LiveRecordingSession.Start()
-					},
-					new MainMenuAction() {
-						ActionType = ActionType.Stop,
-						IsEnabled = () => IsGameRunning && LiveRecordingSession.IsRecording,
-						OnClick = () => LiveRecordingSession.Stop()
-					},
-					new ContextMenuSeparator(),
-					new MainMenuAction() {
-						//Always available: the viewer is read-only, and reopening
-						//it after it was closed must not need a second recording.
-						ActionType = ActionType.OpenLiveViewer,
-						IsEnabled = () => !LiveRecordingSession.IsViewerRunning,
-						OnClick = () => LiveRecordingSession.OpenViewer()
-					}
-				}
+				SubActions = LiveRecorderMenu.Entries.Select(GetLiveRecorderEntry).ToList<object>()
+			};
+		}
+
+		private MainMenuAction GetLiveRecorderEntry(LiveRecorderMenu.Entry entry)
+		{
+			return entry switch {
+				LiveRecorderMenu.Entry.Record => new MainMenuAction() {
+					ActionType = ActionType.Record,
+					IsEnabled = () => IsGameRunning && !LiveRecordingSession.IsRecording,
+					OnClick = () => LiveRecordingSession.Start()
+				},
+				LiveRecorderMenu.Entry.Stop => new MainMenuAction() {
+					ActionType = ActionType.Stop,
+					IsEnabled = () => IsGameRunning && LiveRecordingSession.IsRecording,
+					OnClick = () => LiveRecordingSession.Stop()
+				},
+				_ => throw new ArgumentOutOfRangeException(nameof(entry), entry, null)
 			};
 		}
 

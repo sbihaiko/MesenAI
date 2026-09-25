@@ -64,6 +64,11 @@ private:
 
 	bool _nextFrameOverclockDisabled = false;
 
+	//F12.3 (ADR-0212 §3): a reload is requested from any thread and served on
+	//the emulation thread at the next frame boundary, once the video decode
+	//thread has been drained.
+	std::atomic<bool> _hdPackReloadPending { false };
+
 	void UpdateRegion(bool forceUpdate = false);
 	void LoadHdPack(VirtualFile& romFile);
 
@@ -77,6 +82,13 @@ private:
 	void ExtractAudioHdPack(HdPackBuilderOptions options);
 
 public:
+	//F12.3 (ADR-0212): ask for the pack's repainted images to be re-decoded.
+	//Callable from any thread; the work happens on the emulation thread at the
+	//next frame boundary (ADR-0212 §3), which is where ProcessPendingHdPackReload
+	//runs - HdNesPpu::OnBeforeSendFrame calls it.
+	void RequestHdPackImageReload();
+	void ProcessPendingHdPackReload();
+
 	NesConsole(Emulator* emulator);
 	~NesConsole();
 
@@ -100,6 +112,13 @@ public:
 	BaseMapper* GetMapper() { return _mapper.get(); }
 	NesSoundMixer* GetSoundMixer() { return _mixer.get(); }
 	HdAudioDevice* GetHdAudioDevice() { return _hdAudioDevice.get(); }
+
+	//ADR-0215 / issue #342: the loaded pack's own data, so the debugger's copy
+	//actions can ask which palettes the pack keys a tile under instead of
+	//handing out whatever is live in palette RAM at the instant of the copy.
+	//Null when no pack is loaded. Read under the emulation lock - the pack
+	//loads on the detached thread NesConsole::LoadHdPack starts.
+	HdPackData* GetHdData() { return _hdData.get(); }
 
 	//True when a loaded pack actually replaces pixels - the same condition
 	//InitializeRam uses to swap in HdNesPpu/HdVideoFilter, so an audio-only

@@ -16,7 +16,6 @@
 #include "Core/NES/NesConsole.h"
 #include "Core/NES/HdPacks/HdPackBuilder.h"
 #include "Core/Netplay/GameClient.h"
-#include "Core/Netplay/GameServer.h"
 #include "Utilities/ArchiveReader.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/StringUtilities.h"
@@ -32,7 +31,7 @@
 	#include "MacOS/MacOSKeyManager.h"
 	#include "MacOS/MacOSMouseManager.h"
 #else
-	#include "Sdl/SdlRenderer.h"
+	#include "Linux/LinuxOglRenderer.h"
 	#include "Sdl/SdlSoundManager.h"
 	#include "Linux/LinuxKeyManager.h"
 	#include "Linux/LinuxMouseManager.h"
@@ -40,8 +39,6 @@
 
 #include "Shared/Video/SoftwareRenderer.h"
 
-unique_ptr<IRenderingDevice> _renderer;
-unique_ptr<IAudioDevice> _soundManager;
 unique_ptr<IKeyManager> _keyManager;
 unique_ptr<IMouseManager> _mouseManager;
 unique_ptr<Emulator> _emu(new Emulator());
@@ -76,6 +73,30 @@ struct InteropHdPackCoverageReport
 	uint32_t IsChrRam = 0;
 };
 
+IRenderingDevice* InitRenderer()
+{
+	if(_softwareRenderer) {
+		return new SoftwareRenderer(_emu.get());
+	} else {
+#ifdef _WIN32
+		return new Renderer(_emu.get(), (HWND)_viewerHandle);
+#elif __APPLE__
+		return new SoftwareRenderer(_emu.get());
+#else
+		return new LinuxOglRenderer(_emu.get(), _viewerHandle);
+#endif
+	}
+}
+
+IAudioDevice* InitSoundManager()
+{
+#ifdef _WIN32
+	return SoundManager::Create(_emu.get(), (HWND)_windowHandle);
+#else
+	return SdlSoundManager::Create(_emu.get());
+#endif
+}
+
 extern "C"
 {
 	DllExport bool __stdcall TestDll()
@@ -108,27 +129,9 @@ extern "C"
 			_viewerHandle = viewerHandle;
 			_softwareRenderer = softwareRenderer;
 
-			if(!noVideo) {
-				if(softwareRenderer) {
-					_renderer.reset(new SoftwareRenderer(_emu.get()));
-				} else {
-#ifdef _WIN32
-					_renderer.reset(new Renderer(_emu.get(), (HWND)_viewerHandle));
-#elif __APPLE__
-					_renderer.reset(new SoftwareRenderer(_emu.get()));
-#else
-					_renderer.reset(new SdlRenderer(_emu.get(), _viewerHandle));
-#endif
-				}
-			}
-
-			if(!noAudio) {
-#ifdef _WIN32
-				_soundManager.reset(new SoundManager(_emu.get(), (HWND)_windowHandle));
-#else
-				_soundManager.reset(new SdlSoundManager(_emu.get()));
-#endif
-			}
+			//Upstream 3924215 passed these crossed (noVideo gated audio, noAudio gated
+			//video); each flag gates its own device here.
+			_emu->SetAudioVideoInitCallback(noAudio ? nullptr : InitSoundManager, noVideo ? nullptr : InitRenderer);
 
 			if(!noInput) {
 #ifdef _WIN32
@@ -149,8 +152,9 @@ extern "C"
 
 	DllExport void __stdcall SetFullscreenMode(FullscreenSettings settings)
 	{
-		if(_renderer) {
-			_renderer->SetFullscreenMode(settings);
+		shared_ptr<IRenderingDevice> renderer = _emu->GetRenderer();
+		if(renderer) {
+			renderer->SetFullscreenMode(settings);
 		}
 	}
 
@@ -277,8 +281,6 @@ extern "C"
 			_emu->Release();
 		}
 
-		_renderer.reset();
-		_soundManager.reset();
 		_keyManager.reset();
 		_emu.reset();
 	}
@@ -312,6 +314,15 @@ extern "C"
 	DllExport void __stdcall GetMepRomSha1(char* outBuffer, uint32_t maxLength)
 	{
 		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRomSha1(), outBuffer, maxLength);
+	}
+
+	//ADR-0211: the whole-file SHA-1 (header included), the form an HD pack's
+	//<supportedRom> line carries. Deliberately a second export rather than a
+	//flag on GetMepRomSha1 - the two hashes must never be mistaken for one
+	//another at the call site.
+	DllExport void __stdcall GetMepRomFileSha1(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRomFileSha1(), outBuffer, maxLength);
 	}
 
 	DllExport void __stdcall GetMepSiblingFolder(char* outBuffer, uint32_t maxLength)

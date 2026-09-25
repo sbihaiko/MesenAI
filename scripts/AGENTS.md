@@ -36,6 +36,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `spike_sound_driver`) are build output, not source - never `git add` them.
   `.gitignore` at the repo root lists all four by name, so none of them show
   as untracked after building.
+- `record_viewer.py` is a developer/diagnostic tool, **launched by hand
+  only** (ADR-0169 §4, amended 2026-09-23): the emulator UI never starts it
+  and Tools > Live Recorder offers only Record/Stop. With no argument it
+  attaches to the emulator's `<HomeFolder>/LiveRecording` slot, so nothing
+  needs typing. Do not add a UI launcher or a path-discovery hook for it;
+  the menu side is guarded by `UI.Tests/Recording/LiveRecorderMenuTests.cs`
+  and `UI.HeadlessTests/LiveRecorderMenuTests.cs`.
 
 ## Work Guidance
 
@@ -66,6 +73,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `roles_probe.cpp` / `headless_record.cpp` / `spike_sound_driver.cpp` run
   the emulator headless against a real ROM; they link `InteropDLL`'s shared
   lib and need `make core` first.
+- `headless_record` copies the NES game DB into its per-run `mesen-home`
+  from the binary's own location (`scripts/../UI/Dependencies/MesenNesDB.txt`,
+  else `MesenNesDB.txt` beside the binary), **never from the cwd** (issue
+  #477): the recording scripts do not `cd`, and a cwd-relative lookup loaded
+  an empty DB outside the repo root, dropped the board/input overrides and
+  minted a different state. With no DB found it warns on stderr. Nothing in
+  the tool may read a checkout file through a cwd-relative path;
+  `test_headless_record_cwd.py` runs the built binary from a temp cwd and
+  the repo root and asserts both load the same non-empty DB (it skips when
+  the binary is not built).
 - **Navigation sweep (ADR-0184, amended 2026-09-14)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
@@ -449,14 +466,161 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `mirror`, build also un-bakes those pixels into the sheet PNG so the
   source key stores the art the run time will mirror, then rewrites the
   sidecar to a plain unflipped entry so a second build is idempotent
-  (#255). Every `[condition]` rule from the key source keeps its
+  (#255). The same un-bake runs on an index-keyed (CHR ROM, ADR-0172) pack:
+  the key is the index, but the run time still mirrors the art (#457). Each
+  physical crop is un-baked once, however many entries (an alias, a fold)
+  share it - twice would re-bake it while the sidecar lost the mirror.
+  **Colour 0 on background crops (#456, `sheet_pixel_fixes.py`).** Input:
+  the key source (`textures/hires.txt`) and the crops its `<img>`/`<tile>`
+  lines point at, at its `<scale>`. A background key is see-through when
+  one of those crops has an alpha-0 pixel at a colour-0 position of the
+  key's tile - the recorder's `TransparencyRequired` signature. On a CHR
+  ROM game the tile comes from the sheet crop, since an index key has no
+  pixels. A translucent brush pixel (alpha 1..254), or alpha 0 over ink,
+  is paint and never marks a key. Side effect: in every background crop of
+  a see-through key, and of any key sharing one of those crops (closed to
+  a fixed point), `build` sets each colour-0 pixel that still equals the
+  twin's backdrop (no twin: palette entry 0 of the default NES
+  palette) to alpha 0. It rewrites both the authored sheet PNG and
+  its `*.orig.png` twin in lockstep (#329). An RGB sheet and twin are
+  written back as RGBA. Exclusions: sprite sheets (`sprite`, `sprites`),
+  `FF`-prefixed palettes, and a colour-0 pixel the artist repainted (it no
+  longer equals the twin). A twin pixel already at alpha 0 is skipped, so
+  a second build over its own output is byte-identical. Verification:
+  `test_mep_build.py` (`backdrop_*`, `index_keyed_*` tests). Every `[condition]` rule from the key source keeps its
   unconditional fallback twin in the rebuilt `hires.txt` (synthesised when
   the source omitted it) so a condition miss still shows the painted art
   (#256 / ADR-0189 §3). A painted sprite sheet whose cells lose to another
   sheet fails the build with an ownership error instead of a silent
   all-green success (#253); map-vs-metatiles both-painted stays a logged
   precedence choice. `scripts/test_mep_build.py` is the acceptance test
-  wired into `make doc-checks`, and asserts these halves.
+  wired into `make doc-checks`, and asserts these halves. A **blank sprite
+  key** (32 zero hex digits under an `FF......` sprite palette,
+  `mep_addition.is_blank_sprite`: the NES draws nothing) never claims its
+  key by paint, even when its cell differs from the twin. A composed kit
+  sheet can place it in the same rect as another tile (Castlevania
+  `usr017`), so that paint belongs to the other key. It falls back to the
+  untouched rule, and among its untouched crops one whose cell nobody
+  painted wins before the kind rank; it is never counted as muted paint
+  (#464, ADR-0153 §4 amendment 2026-09-25). A background tile with the same
+  data is not blank (its colour 0 is the drawn backdrop) and keeps the
+  ordinary rule. Covered by `scripts/test_mep_build_blank_key.py`, also
+  wired into `make doc-checks`.
+  **An untouched
+  cell keeps the recorded rule** (ADR-0231, #447, `mep_recorded.py`). A
+  cell equal to its `*.orig.png` twin whose key the recording has does not
+  point at its crop. Its crop is nearest-neighbour, while the recorded
+  `chr/` page went through the scale filter. Instead the build re-emits the
+  recording's line byte for byte, with only the `<img>` index remapped.
+  Those lines go under the `# mep_build: rules kept as recorded for
+  untouched cells` comment, in the recording's order. Only a painted cell
+  points at its crop. The recording is read from
+  `textures/hires.recorded.txt`, else `auto/textures/hires.txt`, else the
+  key source itself when no build wrote it, else a recorded
+  `textures/hires.txt` under a `--source` build. In those two cases the
+  first build copies it to `hires.recorded.txt` before overwriting it,
+  even when none of its rules is usable yet (a page missing). A recorded
+  page is looked up under `textures/`, else beside the manifest the
+  recording came from; one found only there (`auto/textures/chr/…` in a
+  `mep_import` project) is copied up into `textures/` when a kept rule
+  names it, since the loader resolves an `<img>` in the layer that names it
+  (PR #472 review). A rule whose page is missing in both, whose crop is out of bounds or whose `<scale>`
+  differs falls back to the crop, as does a key the recording never had,
+  and the build prints the count and the reason. `check-coverage` counts
+  the `<img>` lines under that comment as build output. The key set is
+  unchanged. So the first paint of a cell (or reverting it) re-points a
+  key and needs a ROM reopen, and later repaints reload in place.
+  `scripts/test_mep_build_recorded.py` asserts this. The audio-manifest
+  helpers live in `mep_carry.py` (`build_audio_manifest`), moved there to
+  keep `mep_build.py` under its line ceiling. "Untouched" is read from
+  the entry's claim flag, so a blank sprite key in a painted cell keeps
+  its recorded rule too (#464).
+  **Sidecar palette fields (ADR-0230, F14.9; producer contract in
+  `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
+  "brightness"}]`. For each fold, `build` emits one extra exact
+  `defaultTile=N` rule: the same crop, the key source's other fields, the
+  fold's palette, and that Brightness as the last field. This happens
+  whether or not the cell was painted. A fold is exact by construction: the
+  recorder lists it only when that one Brightness rebuilds the recorded
+  pixels. So a consumer must never recompute or widen it, and never turn a
+  residual fade into a fold. A cell carrying `variantOf` is an ordinary
+  cell for `build`: its own tiles, its own palette, one rule per key. It
+  has no `metatile`, so no map placement resolves to it. `mep_lint`
+  (`lint_sheet_folds`) reports a malformed `folds` list as an error
+  (`palette_folds.entry_folds`: 8-hex palette, numeric brightness in
+  [0, 4], not the entry's own palette, no repeats). It reports a
+  `variantOf` that names no cell index of the same sheet as a warning.
+  `palette_folds.py` (stdlib only, shipped in
+  `scripts/tools-zip-manifest.txt` because `mep_build`/`mep_lint` import
+  it) is the single Python definition of a fold. `artist_chr_kit.py`
+  imports it too, and anchors its pattern-page folds on the sheet cells'
+  palettes (`sheet_fold_anchors`, ADR-0230 item 3).
+  `docs/specs/golden/sheets/palette-relation-cases.txt` holds the shared
+  vectors. `test_palette_folds.py` checks them against
+  `palette_relation`, and `core_unit_tests` checks them against the C++
+  port. Change both sides together. Round-trip invariants
+  (`test_mep_build.py` `sheet_fold_tests`, `test_mep_lint_folds.py`): a
+  sidecar with no `folds` and no `variantOf` builds exactly as before, and
+  a second `build` is byte-identical.
+  `mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) turns a legacy plain HD
+  pack (`hires.txt` + PNGs) into a MEP project `mep_build.py build`
+  regenerates with the identical rule set and pixels: `import <pack> --out
+  <project> [--force] [--rom <stock dump>]`, `verify <pack> <project>
+  [--strict]` (ADR-0198 §1's acceptance test, run after `build`), and
+  `index` (ADR-0210 §3). In `index`, filter 2 is per key since 2026-09-24:
+  a 32-hex key of a `<patch>` pack is admitted only when its 16 bytes are
+  verbatim in the stock `--rom`'s No-Intro range (`mep_patch.no_intro_body`),
+  the rest refused and counted (`patch_guard`, `dropped.not_in_stock_rom`,
+  the sheet's `origin.patchGuard`); an index-keyed `<patch>` pack is still
+  refused whole. **Patched-ROM import** (ADR-0198 §3, option (a);
+  the byte half lives in `mep_patch.py`, stdlib only, mirroring
+  `IpsPatcher::PatchBuffer` and `HdPackLoader::ProcessPatchTag`): a pack
+  with `<patch>` lines keys its `<tile>`s against the ROM *after* the
+  patch, so it is imported against that ROM. Inputs: `--rom <stock dump>`
+  and a pack whose `<patch>` line names that dump's whole-file or No-Intro
+  sha1 (the loader's own two lookups, in that order; a repeated sha1 keeps
+  the **last** line, as the loader does). Outputs: the key source's and the
+  built manifest's `<supportedRom>` is the **patched** ROM's whole-file sha1
+  (`HdPackBuilder`'s form; inserted after `<scale>` when the pack declared
+  none). Four refusals happen before anything is written: a `<patch>` line
+  that is indented or sits behind a `[condition]`, because the loader
+  dispatches the tag only at column 0; a patch name that clashes with a
+  generated path, as a file or as a folder prefix; a patch destination
+  reached through an existing symlink below its layer (an `--out` reused
+  with `--force`); and any carried IPS —
+  not only the one `--rom` selects — that is not a valid IPS. `verify` also
+  compares the `<patch>` lines as an ordered sequence, since for a repeated
+  sha1 the loader keeps the last line. Every IPS — found the way
+  `HdPackLoader::ResolvePackRelativePath` finds it (exact path, then a
+  case-folded match; an ambiguous fold is refused) and written under the
+  normalized manifest name — is copied beside **both** manifests
+  (`auto/textures/` and `textures/`), every `<patch>` line is re-emitted
+  with its file token as the normalized `/`-separated path the IPS was copied
+  to and its sha1 uppercased (the loader's key form; a lowercase digest
+  changes spelling, not value). The `/` form is the canonical spelling every
+  repo tool can resolve, the way `mep_build` normalizes `<background>`; it is
+  not a runtime need — `HdPackLoader::LoadPack` rewrites `\` to `/` on every
+  manifest line before parsing (commit 9615330b), so a Windows `sub\fix.ips`
+  loads on every host. The import also writes an `IMPORT.md` section with both hash pairs,
+  record count, CHR growth and the namespace limit. Refusals, each naming
+  the manifest line and the rule (nothing written): no `--rom`; a dump none
+  of the `<patch>` lines names (ADR-0145 (3): IPS does not relax); a
+  `<patch>` name that is absolute, has a `..` component, or resolves outside
+  the pack or the project (ADR-0006); a comma in the file name (the loader
+  splits on every comma); fewer or more than two tokens or a non-40-hex
+  sha1; a missing, non-IPS or truncated patch file; a declared
+  `<supportedRom>` that is none of the stock, patched or `<patch>` hashes
+  (ADR-0211). `--rom` on a pack without `<patch>` is a stderr note, not an
+  error. **Namespace limit**, printed on every such import and written to
+  `IMPORT.md`: the project lives in the patched ROM's key namespace, so a
+  recording made on the stock ROM (16-byte pattern keys, stock hash) does
+  not land in it — its author can paint and lint there, not record
+  (ADR-0198 §3). `mep_build.py pack . --rom <stock dump>` still writes
+  `targets[]` from the **stock** dump (the MEP matcher runs before the
+  patch). Verification: `python3 scripts/test_mep_import.py` (synthetic
+  pack, synthetic iNES + IPS; PASS/FAIL per check, exit 0 only if all
+  pass); the measured round-trips are in
+  `docs/validation/adr0198-s3-patched-rom-import-2026-09-22.md`.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a
@@ -668,8 +832,19 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   row *is* the loop, its columns the phases in order), one per `sequences[]`
   entry the cycles did not already cover, then the remainder wrapped at
   `--columns`. A variant (ADR-0179 §4) is the column after the figure it
-  varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why. A
-  figure is laid out once, so a row can be shorter than its animation. A sheet
+  varies; a fusion (ADR-0177) is never laid out, and `dropped[]` says why -
+  "two figures that touched" naming both parts, or, for a one-part
+  `fusionOf` (ADR-0228), a figure touched by tiles never seen on their own:
+  the figure is laid out by itself and the stray tiles stay on the pack's
+  sprite sheets, so painting the fusion would paint a bystander. A
+  figure is laid out once, so a row can be shorter than its animation, and so
+  a run's file carries `files[].playsColumns` (#400): the 1-based column, in
+  figures from the left, each phase of `run.poses` plays from, in phase order
+  - read off the placed cells, never off pixels - with `null` for a phase this
+  sheet does not draw (laid out on an earlier sheet, or no art). The caption
+  ends in the same order (`plays columns 1 2 3 1 4 5 (column 1 plays twice)`,
+  `-` for a `null`). There is no mirror mark: `poses.json` records no mirror
+  relation, so neither says a column is another one flipped. A sheet
   is captioned by the run's own `--names` entry, failing that by the
   **subjects** its poses are filed under in that file (most cells first, the
   key humanised - the `subjects` prose goes to `notes[]` once), and failing
@@ -754,8 +929,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   that voted fixed, and a tied row is an abstention rather than a "moving"
   vote. Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
   being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
-  position and `(tileData, palette)` key - so the panorama is addressable *and*
-  a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
+  position and `(tileData, palette)` key, so the panorama is addressable. It is
+  **not** a `textures/sheets/` drop-in: the ADR-0220 §3 context band makes the
+  PNG and its `.orig.png` twin taller than the grid `cells[]` describe, and
+  `mep_build` refuses that size (#451). The only way back is `--slice`
+  (ADR-0220 §5), and `--verify` goes through `--slice` too, so the ADR-0183 §4
+  round trip exercises the artist's path.
   `--slice` cuts a painted strip back into that sheet: one key sits at many
   positions and a pack holds one art per key, so **first occurrence in (y, x)
   order wins** and every disagreeing position is printed, split into "both
@@ -789,15 +968,24 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   The recorder's own synthetic pages are recognised and copied through
   untouched: the PRG scan it already writes (`AddPrgScanTiles`, bank ids
   `0x504247xx`) and the blank-tile bucket (`Chr_FFFFFFFF_*`). Packs recorded
-  before the builder filled in the CHR bank hash carry 0 on every page; their
-  banks are recovered as the largest sets of pages that never disagree about a
-  tile index. Palette RGBA is read off the pack's own reference pages rather
+  before ADR-0232 (the recorder's bank hash never followed the CHR state)
+  carry 0 on every page; their banks are recovered as the largest sets of
+  pages that never disagree about a tile index, and are never paired with an
+  `--also` donor. A re-record over such a pack keeps bank 0 on the tiles it
+  did not draw again, beside pages with real ids; only those bank-0 pages
+  with a non-blank tile (`recorded_before_bank_fix`) are regrouped, and a
+  bank-0 page of blank tiles is the real power-on bank. Palette RGBA is read off the pack's own reference pages rather
   than assumed, so a custom palette completes correctly; a fill is rendered
   nearest-neighbour (the recorder smooths its own cells) under the bank's
   most-recorded palette, which is a guess and says so. Writes
   `<out>/chr/Chr_<n>.png` + `.orig.png` + `.legend.png` (green recorded, olive
   moved up, amber ROM fill, red hole) + `.json` (every cell's state, `seen`,
-  origin and PRG offset), plus the `kit-part-chr.json` fragment. `hires.txt` is
+  origin and PRG offset), plus the `kit-part-chr.json` fragment. A cell whose
+  row is `defaultTile=Y` is the bootstrap's own ROM export (`AddRomTiles` on
+  the real CHR ROM pages, `AddPrgScanTiles` on the synthetic ones; every tile
+  the run draws is written `N`), so it is `fill` / `origin: romExport` /
+  `seen: false`, amber, counted as ROM fill and never folded, with its pixels
+  copied byte for byte and no rule emitted (#449). `hires.txt` is
   never touched: `--fill-rules` writes its rows to `chr/fill-rules.hires.txt`
   and defaults to `none`, because a rule for a filled cell either never matches
   (harmless) or re-binds a key the pack already owns. `--also <other recorded
@@ -834,6 +1022,101 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   stage2-base 247 recorded + 102 filled of 512 (packed CHR RAM), Zelda 1 508 +
   453 of 1536 (linear CHR RAM). Stdlib only; `test_artist_chr_kit.py` covers it
   on a synthetic iNES image and pack.
+- `ora_writer.py` (F12.11, ADR-0220) - the one module every kit surface
+  writer goes through for its layered file: `compose_engine.Pack.export`
+  (sheets), `artist_map.py` (panoramas), `mep_figure.py` (figures) and
+  `write_chr_surface` (pattern pages) all call `write_surface` from the same
+  canvas they write the flat PNG and its `.orig.png` twin from, so the three
+  files cannot disagree. Beside `<name>.png` it writes `<name>.ora`
+  (OpenRaster: `mimetype` stored first, `stack.xml`, `data/*.png`,
+  `mergedimage.png`, `Thumbnails/thumbnail.png`), layers bottom-to-top
+  `orig` (the twin, visible, `edit-locked`), `context` (only where every cell
+  has a stage position, i.e. the `artist_map` panorama: the 1x stage at
+  opacity 0.5, ADR-0220 §3 as amended), `paint` (fully transparent, visible -
+  the topmost visible layer), `guides` (cell outlines, captions, a hatch over
+  every `seen: false` cell; hidden, `edit-locked`) and `palettes` (hidden,
+  `edit-locked`). Everything the module draws is one sentinel colour,
+  `#FF00FD` (`mep_sentinel.SENTINEL_RGBA`, no NES palette reaches it), and
+  `write_surface` refuses a canvas or twin that already carries it, so a
+  cell exported with `guides`/`palettes` still visible is caught by
+  `mep_lint.py` naming the cell. **Write-only** for the toolchain (ADR-0220
+  §1): nothing - rebuild, reload, lint - reads the `.ora` back; the flat PNG
+  over the F12.4 name stays the only return path, and no ADR permits adding
+  a reader. Captions go through `fit_text`: greedy word wrap inside the
+  canvas width, at most
+  `CAPTION_MAX_LINES = 2` lines, the last one cut with `...` - a caption
+  never runs past the canvas edge. The `palettes` band follows one
+  contract on every surface: `first_use_palettes(labelled_cells)` lists each
+  palette once, where it is **first used in the surface's reading order**
+  (row, then column: `compose_engine` sorts cells by `(y, x)`,
+  `artist_map.panorama_palettes` by `(y, x)` which is also the cell index,
+  `mep_figure.figure_palettes` by `(dy, dx)` as `export_figure` places them),
+  and labels the group with that first cell's `index` - `swatch_labels` is
+  always passed; a hex-sorted `nes_swatches(sorted({...}))` is the pattern
+  that was retired 2026-09-23, since it put the leftmost group under a cell
+  that never wore it. The artist page `artist_kit_assemble.py` writes states
+  the rule **select `paint` before the first stroke**, and the reason is
+  measured, not stylistic: GIMP 2.10 and Krita 5.3.4 both open an OpenRaster
+  file with the bottom layer, `orig`, active whatever the stack order; Krita
+  honours `edit-locked` and refuses the stroke, GIMP does not, and a stroke
+  on `orig` is lost on the next kit run (ADR-0220 §3). Verified by
+  `test_ora_writer.py` (layer order, flags, sentinel guard, `fit_text`,
+  first-use band and its labels), `test_compose_engine.py`,
+  `test_artist_map.py` and `test_mep_figure.py` (each caller's band order
+  and labels), `test_artist_chr_kit.py` and `test_artist_kit_assemble.py`
+  (the artist-page wording); all run by `make python-tests`.
+- `mep_figure.py import` (ADR-0209 Q3, #413) writes a painted cell where
+  the pack's built `hires.txt` already draws its key from. It is not always
+  the sheet the figure sidecar names. `manifest_owners` builds a throwaway copy
+  of the pack as it is (only once a cell is painted) and maps each
+  `(tileData, palette)` to the `sheets/` crops its rules use. `plan_targets`
+  then does one of two things. If the source cell owns every key it emits, it
+  writes the source cell. Otherwise it copies each 8x8 sub-tile to the owner
+  crop and leaves the source alone. In a kit project the owner is the
+  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1).
+  Writing both is not an option: painted beats untouched (ADR-0153 §4)
+  re-points the key, and a painted sprite crop that loses its key is a build
+  error (#253). An owner whose `*.orig.png` art differs from the source's is
+  never painted over. In that case, or when a key has no owner, the source is
+  written and the report's `moves` says the next build re-points a rule, so
+  the reload (ADR-0212) cannot show it. `export_figure` overlays paint routed
+  to an owner, so a re-export shows it. `verify` reports `manifest_unchanged`
+  (byte-identical rebuilt `hires.txt`) beside the key-set check; it is
+  informational and does not fail the run. The throwaway build is also a
+  precondition (#435): `probe_build` diffs `textures/sheets/*.png|*.json`
+  across it, and a painted import is refused (`FigureError`, CLI exit 2,
+  nothing written) when that build rewrites any sheet file - the pack was
+  never built with these sheets, so its flip-baked crops (ADR-0178) are not
+  the twins the next build slices - or when the pack does not build at all.
+  Keep the guard: planning without it re-points rules the reload cannot
+  show. A cell whose `*.orig.png` art is fully transparent (a blank sprite
+  tile, which the NES never draws) is never written, whatever paint covers
+  its rect. It is listed in the report's `blank` array and printed by the
+  CLI (#452). Without this check, Castlevania's blank tile took body paint
+  and the build failed #253's guard. A figure shows each cell the way the
+  game draws it, so its sidecar records, per cell, the OAM flip its crop
+  still carried at export (`mirror`, one `H`/`V`/`HV`/`""` per 8x8 sub-tile,
+  written only when one is set, from the sheet's ADR-0178 `mirror`).
+  Import un-bakes the paint by every recorded flip the crop has since lost
+  (`pending_flips`: the first build un-bakes the crop and drops the sheet's
+  `mirror`, #255) and reads each cell's art in the figure's orientation
+  when it decides pixel ownership (ADR-0225 §3). The report's `unmirrored`
+  counts those cells (#463). A crop that still carries its `mirror` is not
+  flipped: it already matches the figure. Without this, the kit's figures,
+  cut from the recording before the #435 first build, were the mirror of
+  120 of Simon's 140 non-blank cells, and paint landed mirrored in game. A
+  figure exported before #463 has no `mirror`; re-export it. An overlapped
+  cell that is routed takes the pixels it does not own from the owner crop
+  it is pasted onto, not from its source crop (#478). A key repeats across
+  the poses of one figure, and the source crop's recorded art would erase
+  paint an earlier instance had already routed there. Covered by
+  `test_mep_figure.py`; measured on Contra in
+  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
+  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  Castlevania in
+  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
+  and `docs/validation/issue-463-figure-mirror-2026-09-25.md` and
+  `docs/validation/issue-478-routed-cell-owner-merge-2026-09-25.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
@@ -1059,6 +1342,18 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   starts with the word `shipped` fails the row. A shipped slice loses its row
   and gains one line in the Part's shipped record (`docs/roadmap/AGENTS.md`).
   Its own fixtures live in `python3 scripts/test_verify_prd_live_rows.py`.
+- `python3 scripts/test_mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) -
+  `mep_import.py` + `mep_patch.py` on a synthetic legacy pack and a
+  synthetic iNES + IPS: data- and index-keyed round-trips through `build` +
+  `verify`, the patched-ROM import (hash selection in the loader's order,
+  `apply_ips` against `IpsPatcher`'s rules, `<supportedRom>` rewrite, IPS
+  beside both manifests, `<patch>` token normalized to the copied path,
+  `verify` resolving the token the loader's way — `\`→`/`, exact, then
+  case-folded — and failing when either IPS copy is missing or its bytes
+  differ from the source pack's), every
+  refusal named above, and the index read (its `<patch>` verbatim guard
+  included); PASS/FAIL per check, exit 0 only
+  if all pass. No ROM, no PNG codec beyond the stdlib.
 - `python3 scripts/test_mei_rules.py` (F6.3b) - `mei_rules.py` leaf: constant
   shapes, `required_mei_pack_fields`/`mei_entry_conforms` per kind,
   `resolve_kind`'s mep-meta-first / Status-fallback / None-when-unmapped

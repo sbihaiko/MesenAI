@@ -21,6 +21,7 @@ namespace Mesen.HeadlessTests;
 //
 //These need a MainWindow, whose constructor calls EmuApi.InitDll() before the
 //XAML is loaded, so they run only where the native core is built (NativeCore).
+[Collection(NativeCoreCollection.Name)]
 public class PlayerHomeCardsTests
 {
 	private static (MainWindow Window, MainWindowViewModel Model) ShowPlayerHome(bool welcomeDismissed, params string[] recentGames)

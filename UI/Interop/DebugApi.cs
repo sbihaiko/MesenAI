@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Mesen.Config;
 using Mesen.Debugger;
+using Mesen.Logic;
 using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
@@ -214,6 +215,39 @@ namespace Mesen.Interop
 
 		[DllImport(DllPath)] public static extern AddressInfo GetAbsoluteAddress(AddressInfo relAddress);
 		[DllImport(DllPath)] public static extern AddressInfo GetRelativeAddress(AddressInfo absAddress, CpuType cpuType);
+
+		//ADR-0215: GetAbsoluteAddress answers with the CHR mapping the paused
+		//emulator happens to hold. These are the two per-scanline traces ADR-0169
+		//keeps of the mapping that actually drew the frame. The decision they feed
+		//lives host-free in UI/Logic/NesDrawnTileResolver.cs.
+		//Issue #419: the traces are not part of a save state, so the export also
+		//says whether they describe a frame drawn since the last load or reset.
+		[DllImport(DllPath, EntryPoint = "GetNesScanlineTrace")]
+		private static extern Int32 GetNesScanlineTraceWrapper([In, Out] UInt32[] outScroll, [In, Out] UInt32[] outChrBank);
+
+		public static NesScanlineTraceStatus GetNesScanlineTrace(out UInt32[] scrollTrace, out UInt32[] chrBankTrace)
+		{
+			scrollTrace = new UInt32[NesDrawnTileResolver.VisibleScanlines];
+			chrBankTrace = new UInt32[NesDrawnTileResolver.VisibleScanlines * NesDrawnTileResolver.PpuPageCount];
+			return (NesScanlineTraceStatus)DebugApi.GetNesScanlineTraceWrapper(scrollTrace, chrBankTrace);
+		}
+
+		//ADR-0215 / issue #342: -1 when there is no pack to check against, else the
+		//number of distinct palettes the loaded pack keys this tile under (0 = the
+		//pack holds no rule for it). See the export's own comment for the
+		//0xFFFFFFFF defaultTile wildcard.
+		[DllImport(DllPath, EntryPoint = "GetNesHdPackTilePalettes")]
+		private static extern Int32 GetNesHdPackTilePalettesWrapper(Int32 tileIndex, [In] byte[] tileData, [MarshalAs(UnmanagedType.I1)] bool isChrRam, [In, Out] UInt32[] outPalettes, Int32 maxCount);
+
+		public static UInt32[]? GetNesHdPackTilePalettes(Int32 tileIndex, byte[] tileData, bool isChrRam)
+		{
+			UInt32[] palettes = new UInt32[64];
+			Int32 count = DebugApi.GetNesHdPackTilePalettesWrapper(tileIndex, tileData, isChrRam, palettes, palettes.Length);
+			if(count < 0) {
+				return null;
+			}
+			return palettes[0..count];
+		}
 
 		[DllImport(DllPath)] public static extern void SetLabel(uint address, MemoryType memType, [MarshalAs(UnmanagedType.LPUTF8Str)] string label, [MarshalAs(UnmanagedType.LPUTF8Str)] string comment);
 		[DllImport(DllPath)] public static extern void ClearLabels();

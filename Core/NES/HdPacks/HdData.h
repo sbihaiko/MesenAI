@@ -6,6 +6,12 @@
 #include "Utilities/HexUtilities.h"
 #include "Utilities/SimpleLock.h"
 #include "Utilities/Timer.h"
+//F12.1: HdPackData::LoadAsync reports its own cost (see the log line below).
+#include <chrono>
+//F12.3 (ADR-0212): a reload re-stats the file each image was decoded from.
+#include <filesystem>
+#include <fstream>
+#include <set>
 
 class BaseHdNesPack;
 
@@ -99,6 +105,26 @@ struct HdPpuTileInfo : public HdTileKey
 	uint8_t SpriteColor = 0;
 	uint8_t PpuBackgroundColor = 0;
 	uint8_t PaletteOffset = 0;
+};
+
+//#474: the recorder's shape identity (HdPackBuilder::ShapeIdFor), and the
+//hasher for its map. HdTileKey is the run time's key: on a CHR ROM game it
+//compares the index only, because the run time mirrors the replacement art
+//itself. A shape is a drawing, though - HdBuilderPpu bakes the OAM flips into
+//TileData so a figure's mirrored halves are distinct shapes (ADR-0178) - so one
+//index drawn both ways must be two shapes, or every OAM entry of the second
+//orientation names the first one's art. The drawn data joins the index here,
+//which makes CHR ROM behave as CHR RAM (keyed by that data) always has. The
+//hash stays HdTileKey's: the two orientations of an index share a bucket.
+struct HdShapeKey : public HdTileKey
+{
+	HdShapeKey() = default;
+	explicit HdShapeKey(const HdTileKey& key) : HdTileKey(key) {}
+
+	bool operator==(const HdShapeKey& other) const
+	{
+		return HdTileKey::operator==(other) && (IsChrRamTile || memcmp(TileData, other.TileData, sizeof(TileData)) == 0);
+	}
 };
 
 struct HdPpuPixelInfo
@@ -209,6 +235,31 @@ protected:
 	virtual bool InternalCheckCondition(int x, int y, HdPpuTileInfo* tile) = 0;
 };
 
+//F12.3 (ADR-0212 §1/§2/§4): what one reload attempt did to one image. The
+//caller logs from this; nothing here decides policy.
+enum class HdPackImageReload
+{
+	NotWatched,     //zip-backed pack, or the image never got a source path
+	Unchanged,      //the (size, mtime) pair on disk still matches
+	Needed,         //ClassifyReload only: the file moved and a decode is due
+	Reloaded,       //re-decoded in place, same dimensions
+	RefusedResize,  //the repaint changed the canvas; old pixels kept (ADR-0212 §4)
+	ReadFailed      //the file went away, or the PNG no longer decodes
+};
+
+//F12.3 (ADR-0212): what one reload sweep did, for the single log line the
+//console writes and for the interop caller that wants to know.
+struct HdPackReloadResult
+{
+	uint32_t Scanned = 0;
+	uint32_t Reloaded = 0;
+	uint32_t Refused = 0;
+	uint32_t Failed = 0;
+	uint32_t NotWatched = 0;
+	uint32_t TilesInvalidated = 0;
+	double Milliseconds = 0;
+};
+
 struct HdPackBitmapInfo
 {
 private:
@@ -221,6 +272,79 @@ public:
 	vector<uint32_t> PixelData;
 	uint32_t Width;
 	uint32_t Height;
+
+	//F12.3 (ADR-0212 §2): the absolute file this image was decoded from, plus
+	//the (size, mtime) pair it had then. SourcePath is empty for a zip-backed
+	//pack - there is nothing to stat, so it is never reloaded (ADR-0212 §5).
+	string SourcePath;
+	uint64_t SourceSize = 0;
+	int64_t SourceTime = 0;
+
+	//Free of PNG decoding on purpose: the change rule is the part worth unit
+	//testing, and Utilities/PNGHelper.cpp is not in the core-unit-tests link
+	//set. Returns false when the path cannot be stat'ed at all.
+	static bool StatSource(const string& path, uint64_t& size, int64_t& time)
+	{
+		if(path.empty()) {
+			return false;
+		}
+		std::error_code ec;
+		std::filesystem::path fsPath = std::filesystem::u8path(path);
+		uintmax_t fileSize = std::filesystem::file_size(fsPath, ec);
+		if(ec) {
+			return false;
+		}
+		std::filesystem::file_time_type writeTime = std::filesystem::last_write_time(fsPath, ec);
+		if(ec) {
+			return false;
+		}
+		size = (uint64_t)fileSize;
+		time = (int64_t)writeTime.time_since_epoch().count();
+		return true;
+	}
+
+	void RecordSourceFingerprint()
+	{
+		if(!StatSource(SourcePath, SourceSize, SourceTime)) {
+			SourceSize = 0;
+			SourceTime = 0;
+		}
+	}
+
+	//True when the file on disk differs from what was recorded. A path that
+	//cannot be stat'ed reads as unchanged: a reload must not throw away good
+	//pixels because the file is momentarily unreadable (a paint program
+	//writing through a temporary file is the normal case).
+	bool SourceChanged() const
+	{
+		uint64_t size = 0;
+		int64_t time = 0;
+		if(!StatSource(SourcePath, size, time)) {
+			return false;
+		}
+		return size != SourceSize || time != SourceTime;
+	}
+
+	//ADR-0212 section 1/section 4: the two rules a reload obeys, split out so
+	//they can be unit tested. Utilities/PNGHelper.cpp is not in the
+	//core-unit-tests link set (and spng.c is a C file the set has no rule for),
+	//so anything that touches the decoder cannot be reached from a test - the
+	//decision has to live where the decoder does not.
+	HdPackImageReload ClassifyReload() const
+	{
+		if(SourcePath.empty()) {
+			return HdPackImageReload::NotWatched;
+		}
+		return SourceChanged() ? HdPackImageReload::Needed : HdPackImageReload::Unchanged;
+	}
+
+	//A repaint may only replace the pixels in place when it kept the canvas:
+	//HdPackTileInfo caches x/y/w/h from the manifest and indexes PixelData with
+	//them, so a smaller image would be read out of bounds.
+	static bool DimensionsAllowInPlaceSwap(uint32_t oldWidth, uint32_t oldHeight, uint32_t newWidth, uint32_t newHeight)
+	{
+		return oldWidth == newWidth && oldHeight == newHeight;
+	}
 
 	void Init()
 	{
@@ -242,6 +366,66 @@ public:
 		}
 		FileData = {};
 		_initDone = true;
+	}
+
+	//F12.3 (ADR-0212 §1): re-decode this image from its own file, into this
+	//same object. Nothing that points here is invalidated - not
+	//HdPackTileInfo::Bitmap, not the three raw HdPackData* holders - which is
+	//exactly why the reload is shaped as an in-place decode rather than a swap.
+	//Runs on the emulation thread with VideoDecoder's decode thread drained
+	//(ADR-0212 §3); the lock here only keeps it off LoadAsync's toes.
+	HdPackImageReload ReloadFromDisk(uint32_t* outNewWidth = nullptr, uint32_t* outNewHeight = nullptr)
+	{
+		HdPackImageReload need = ClassifyReload();
+		if(need != HdPackImageReload::Needed) {
+			return need;
+		}
+
+		vector<uint8_t> bytes;
+		{
+			std::ifstream file(SourcePath, std::ios::in | std::ios::binary);
+			if(!file.good()) {
+				//Left un-fingerprinted on purpose: an explicit reload should
+				//retry a file it could not read, not swallow it once.
+				return HdPackImageReload::ReadFailed;
+			}
+			file.seekg(0, std::ios::end);
+			std::streamoff size = file.tellg();
+			file.seekg(0, std::ios::beg);
+			bytes.resize((size_t)(size > 0 ? size : 0));
+			if(!bytes.empty()) {
+				file.read((char*)bytes.data(), (std::streamsize)bytes.size());
+			}
+		}
+
+		auto lock = _lock.AcquireSafe();
+		if(!_initDone) {
+			//LoadAsync has not reached this image yet: hand it the new bytes
+			//and let the decode it is already going to do read the new file.
+			FileData = std::move(bytes);
+			RecordSourceFingerprint();
+			return HdPackImageReload::Reloaded;
+		}
+
+		vector<uint32_t> pixels;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		if(!PNGHelper::ReadPNG(bytes, pixels, width, height)) {
+			return HdPackImageReload::ReadFailed;
+		}
+		if(outNewWidth) { *outNewWidth = width; }
+		if(outNewHeight) { *outNewHeight = height; }
+		if(!DimensionsAllowInPlaceSwap(Width, Height, width, height)) {
+			//ADR-0212 §4: HdPackTileInfo caches x/y/w/h from the manifest, so a
+			//resized canvas would be read out of bounds. Keep the old pixels.
+			RecordSourceFingerprint();
+			return HdPackImageReload::RefusedResize;
+		}
+
+		PixelData = std::move(pixels);
+		PremultiplyAlpha();
+		RecordSourceFingerprint();
+		return HdPackImageReload::Reloaded;
 	}
 
 	void PremultiplyAlpha()
@@ -332,6 +516,16 @@ public:
 				IsFullyTransparent = false;
 			}
 		}
+	}
+
+	//F12.3 (ADR-0212): Init() copies the crop out of Bitmap->PixelData into
+	//HdTileData, so re-decoding the bitmap alone is invisible - this second
+	//cache layer has to be dropped too, or a repaint renders the old pixels.
+	//Called on the emulation thread with the decode thread drained, which is
+	//the same thread discipline the Init() below relies on.
+	void InvalidateCachedPixels()
+	{
+		_needInit = true;
 	}
 
 	__forceinline bool NeedInit()
@@ -495,6 +689,21 @@ public:
 	uint32_t Version = 0;
 	uint32_t OptionFlags = 0;
 
+	//ADR-0224: the pack carried <bgPreservesBehindBgSprites>, so a layer-2
+	//<background> must not hide a behind-background sprite over a colour-0
+	//background pixel. Deliberately not an HdPackOptions bit: the <options>
+	//line is a contract other emulators enforce (see HdBehindBgSpriteRule.h).
+	bool PreservesBehindBgSprites = false;
+
+	//ADR-0049's human-vs-auto line, carried along with the data so the renderer
+	//can tell a pack somebody painted from the bootstrap's machine layer. Set by
+	//NesConsole::LoadHdPack from the existing MepSection::HasHuman signal (and for
+	//a legacy loose HdPacks/ pack, which has no auto layer at all) - never
+	//re-derived here. A recorded-only pack keeps this false: its <background>
+	//lines are the bootstrap's, so a diagnostic addressed to an artist would be
+	//addressed to nobody (ADR-0146).
+	bool HumanAuthoredTextures = false;
+
 	HdPackData() {}
 	~HdPackData() {}
 
@@ -518,23 +727,99 @@ public:
 
 	void LoadAsync()
 	{
+		//F12.1: this runs on the detached thread NesConsole::LoadHdPack starts,
+		//so the ROM load returns before the pack's images are ready. A number
+		//that only covered the parse would understate what the user waits for,
+		//so the decode reports its own cost here.
+		std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 		for(auto& bitmap : BackgroundFileData) {
 			bitmap->Init();
 			if(_cancelLoad) {
+				LogLoadAsyncTime(start, true);
 				return;
 			}
 		}
 		for(auto& bitmap : ImageFileData) {
 			bitmap->Init();
 			if(_cancelLoad) {
+				LogLoadAsyncTime(start, true);
 				return;
 			}
 		}
+		LogLoadAsyncTime(start, false);
+	}
+
+	void LogLoadAsyncTime(std::chrono::steady_clock::time_point start, bool cancelled)
+	{
+		double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		MessageManager::Log("[MEP] LoadAsync (bitmap decode): " + std::to_string((int)(ms + 0.5)) + " ms, " +
+			std::to_string(BackgroundFileData.size() + ImageFileData.size()) + " image(s)" + (cancelled ? " (cancelled)" : ""));
 	}
 
 	void CancelLoad()
 	{
 		_cancelLoad = true;
+	}
+
+	//F12.3 (ADR-0212): re-decode every image whose file changed on disk, in
+	//place. An unchanged pack costs one stat per image and decodes nothing -
+	//that is the whole point of per-image invalidation (F12.1 finding 1: the
+	//pack's load is the 13-16 s decode, not the 0.4 s parse).
+	HdPackReloadResult ReloadChangedImages()
+	{
+		std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+		HdPackReloadResult result;
+		std::set<const HdPackBitmapInfo*> reloaded;
+		auto sweep = [&](vector<unique_ptr<HdPackBitmapInfo>>& images) {
+			for(auto& bitmap : images) {
+				result.Scanned++;
+				uint32_t newWidth = 0;
+				uint32_t newHeight = 0;
+				switch(bitmap->ReloadFromDisk(&newWidth, &newHeight)) {
+					case HdPackImageReload::Reloaded:
+						result.Reloaded++;
+						reloaded.insert(bitmap.get());
+						MessageManager::Log("[MEP] reload: " + bitmap->PngName + " re-decoded");
+						break;
+					case HdPackImageReload::RefusedResize:
+						result.Refused++;
+						MessageManager::Log("[MEP] reload: " + bitmap->PngName + " changed size (" +
+							std::to_string(bitmap->Width) + "x" + std::to_string(bitmap->Height) + " -> " +
+							std::to_string(newWidth) + "x" + std::to_string(newHeight) +
+							") - reopen the ROM to pick it up");
+						break;
+					case HdPackImageReload::ReadFailed:
+						result.Failed++;
+						MessageManager::Log("[MEP] reload: " + bitmap->PngName + " could not be read");
+						break;
+					case HdPackImageReload::NotWatched:
+						result.NotWatched++;
+						break;
+					case HdPackImageReload::Unchanged:
+					case HdPackImageReload::Needed:
+						break;
+				}
+			}
+		};
+		sweep(BackgroundFileData);
+		sweep(ImageFileData);
+
+		//A <background> reads Data->PixelData straight through and needs
+		//nothing more. A <tile> does not: HdPackTileInfo::Init() memcpy'd its
+		//crop out of the bitmap once and has served it from HdTileData ever
+		//since, so every tile cut from a re-decoded image has to be told to cut
+		//it again. Linear over Tiles, which is fine for an explicit, rare
+		//action - the Metroid pack's 150 199 rules are one pass.
+		if(!reloaded.empty()) {
+			for(auto& tile : Tiles) {
+				if(tile->Bitmap && reloaded.count(tile->Bitmap)) {
+					tile->InvalidateCachedPixels();
+					result.TilesInvalidated++;
+				}
+			}
+		}
+		result.Milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		return result;
 	}
 };
 

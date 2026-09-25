@@ -77,6 +77,10 @@ template<class T> void NesPpu<T>::Reset(bool softReset)
 {
 	_masterClock = 0;
 
+	//Issue #419: the per-scanline trace describes a frame drawn before the
+	//reset until the next whole frame is drawn.
+	_scanlineTraceValidity.Invalidate();
+
 	//Reset OAM decay timestamps regardless of the reset PPU option
 	memset(_oamDecayCycles, 0, sizeof(_oamDecayCycles));
 	_enableOamDecay = _console->GetNesConfig().EnableOamDecay;
@@ -1048,6 +1052,12 @@ template<class T> void NesPpu<T>::ProcessScanlineImpl()
 				if(_mapper) {
 					_mapper->GetChrPageOffsets(_scanlineChrBankOffsets[governedScanline]);
 				}
+
+				//Issue #419: row 0 is the first entry a frame writes, so a frame
+				//traced from here to scanline 240 is traced whole.
+				if(governedScanline == 0) {
+					_scanlineTraceValidity.OnRowZeroCaptured();
+				}
 			}
 		}
 	} else if(_cycle >= 321 && _cycle <= 336) {
@@ -1523,6 +1533,9 @@ template<class T> void NesPpu<T>::ProcessScanlineFirstCycle()
 		//According to Visual NES, this occurs on scanline 240, cycle 1, but is done here on cycle 0 for performance reasons
 		SetBusAddress(_videoRamAddr & 0x3FFF);
 		_emu->AddDebugEvent<CpuType::Nes>(DebugEventType::BgColorChange);
+		//Issue #419: the frame about to be sent is the one the trace describes,
+		//if it was traced from row 0 since the last load or reset.
+		_scanlineTraceValidity.OnVisibleFrameEnd();
 		SendFrame();
 		_frameCount++;
 	}
@@ -1772,6 +1785,11 @@ template<class T> void NesPpu<T>::Serialize(Serializer& s)
 	}
 
 	if(!s.IsSaving()) {
+		//Issue #419: the per-scanline trace is not part of a save state, so
+		//after a load it describes the frame drawn before it - stale until
+		//the next whole frame is drawn.
+		_scanlineTraceValidity.Invalidate();
+
 		UpdateTimings(_region);
 		UpdateMinimumDrawCycles();
 		UpdateGrayscaleAndIntensifyBits();

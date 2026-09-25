@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include "NES/HdPacks/HdNesPack.h"
+#include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackLoader.h"
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
@@ -372,13 +373,16 @@ void HdNesPack<scale>::ProcessAdditionalSprites()
 	}
 
 	bool checkFallbackTiles = _console->GetMapper()->HasChrRom() && _fallbackTiles.size() > 0;
-	HdPpuPixelInfo& lineFirstPixel = _hdScreenInfo->ScreenTiles[0];
-	uint32_t yScroll = (((lineFirstPixel.TmpVideoRamAddr & 0x3E0) >> 2) | ((lineFirstPixel.TmpVideoRamAddr & 0x7000) >> 12)) + ((lineFirstPixel.TmpVideoRamAddr & 0x800) ? 240 : 0);
-	uint16_t tmpVramAddr = lineFirstPixel.TmpVideoRamAddr;
+	HdPpuPixelInfo& screenFirstPixel = _hdScreenInfo->ScreenTiles[0];
+	uint32_t yScroll = (((screenFirstPixel.TmpVideoRamAddr & 0x3E0) >> 2) | ((screenFirstPixel.TmpVideoRamAddr & 0x7000) >> 12)) + ((screenFirstPixel.TmpVideoRamAddr & 0x800) ? 240 : 0);
+	uint16_t tmpVramAddr = screenFirstPixel.TmpVideoRamAddr;
 	bool processBgNextRow = true;
 
 	for(int32_t y = 0; y < NesConstants::ScreenHeight; y++) {
-		lineFirstPixel = _hdScreenInfo->ScreenTiles[y << 8];
+		//A reference cannot be re-seated: `lineFirstPixel = ScreenTiles[y << 8]`
+		//copy-assigned this scanline's pixel info *into* ScreenTiles[0], so the
+		//rendered frame's first pixel was overwritten on every scanline (#326).
+		const HdPpuPixelInfo& lineFirstPixel = _hdScreenInfo->ScreenTiles[y << 8];
 
 		//Only process the first scanline for each row of tiles (if no additions are found)
 		if(((yScroll + y) & 0x07) == 0 || tmpVramAddr != lineFirstPixel.TmpVideoRamAddr) {
@@ -531,7 +535,7 @@ HdPackTileInfo* HdNesPack<scale>::GetMatchingTile(uint32_t x, uint32_t y, HdPpuT
 }
 
 template<uint32_t scale>
-void HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth)
+HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth)
 {
 	HdBgConfig bgConfig = _bgConfig[(int)priority];
 	if((int32_t)x >= bgConfig.BgMinX && (int32_t)x <= bgConfig.BgMaxX) {
@@ -540,6 +544,27 @@ void HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_
 			case HdPackBlendMode::Alpha: DrawCustomBackground<HdPackBlendMode::Alpha>(bgInfo, outputBuffer, x + bgConfig.BgScrollX, y + bgConfig.BgScrollY, screenWidth); break;
 			case HdPackBlendMode::Add: DrawCustomBackground<HdPackBlendMode::Add>(bgInfo, outputBuffer, x + bgConfig.BgScrollX, y + bgConfig.BgScrollY, screenWidth); break;
 			case HdPackBlendMode::Subtract: DrawCustomBackground<HdPackBlendMode::Subtract>(bgInfo, outputBuffer, x + bgConfig.BgScrollX, y + bgConfig.BgScrollY, screenWidth); break;
+		}
+		return &bgInfo;
+	}
+	return nullptr;
+}
+
+template<uint32_t scale>
+void HdNesPack<scale>::DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite)
+{
+	for(int k = pixelInfo.SpriteCount - 1; k >= 0; k--) {
+		if(pixelInfo.Sprite[k].BackgroundPriority) {
+			if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
+				lowestBgSprite = k;
+			}
+
+			HdPackTileInfo* hdPackSpriteInfo = GetMatchingTile(x, y, &pixelInfo.Sprite[k]);
+			if(hdPackSpriteInfo) {
+				DrawTile(pixelInfo.Sprite[k], *hdPackSpriteInfo, outputBuffer, screenWidth);
+			} else if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
+				DrawColor(_palette[pixelInfo.Sprite[k].SpriteColor], outputBuffer, screenWidth);
+			}
 		}
 	}
 }
@@ -569,25 +594,22 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 	}
 
 	if(hasSprite) {
-		for(int k = pixelInfo.SpriteCount - 1; k >= 0; k--) {
-			if(pixelInfo.Sprite[k].BackgroundPriority) {
-				if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
-					lowestBgSprite = k;
-				}
-
-				hdPackSpriteInfo = GetMatchingTile(x, y, &pixelInfo.Sprite[k]);
-				if(hdPackSpriteInfo) {
-					DrawTile(pixelInfo.Sprite[k], *hdPackSpriteInfo, outputBuffer, screenWidth);
-				} else if(pixelInfo.Sprite[k].SpriteColorIndex != 0) {
-					DrawColor(_palette[pixelInfo.Sprite[k].SpriteColor], outputBuffer, screenWidth);
-				}
-			}
-		}
+		DrawBehindBgSprites(x, y, pixelInfo, outputBuffer, screenWidth, lowestBgSprite);
 	}
 
 	for(int i = 0; i < _activeBgCount[1]; i++) {
 		DrawBackgroundLayer(HdNesPack::BehindBgPriority + i, x, y, outputBuffer, screenWidth);
 	}
+
+	//Issue #328. The only two layers that can hide a `<tile>` rule are behind
+	//here - layer 2 (priority 20-29) and layer 3 (30-39) are drawn after the
+	//tile below, which is exactly what a recorded `<background>` relies on
+	//(ADR-0050: "the screen replaces the tiles"). Watch for it rather than
+	//guess at it: what counts is a pixel the tile rule really painted and a
+	//background layer really replaced, so a transparent pixel of a screen PNG
+	//and a `<tile>` rule that drew nothing are both excluded by construction.
+	bool trackTileSuppression = hdPackTileInfo != nullptr && (_activeBgCount[2] > 0 || _activeBgCount[3] > 0);
+	uint32_t pixelBeforeTile = trackTileSuppression ? *outputBuffer : 0;
 
 	if(hdPackTileInfo) {
 		DrawTile(pixelInfo.Tile, *hdPackTileInfo, outputBuffer, screenWidth);
@@ -598,8 +620,30 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 		}
 	}
 
+	uint32_t pixelAfterTile = trackTileSuppression ? *outputBuffer : 0;
+	HdBackgroundInfo* coveringBackground = nullptr;
+	bool layer2Painted = false;
+
 	for(int i = 0; i < _activeBgCount[2]; i++) {
-		DrawBackgroundLayer(HdNesPack::BehindFgSpritesPriority + i, x, y, outputBuffer, screenWidth);
+		uint32_t before = *outputBuffer;
+		HdBackgroundInfo* bgInfo = DrawBackgroundLayer(HdNesPack::BehindFgSpritesPriority + i, x, y, outputBuffer, screenWidth);
+		if(bgInfo && *outputBuffer != before) {
+			//The comparison is scoped to this one draw, so a sprite drawn
+			//between the layers can never be blamed on a background.
+			coveringBackground = bgInfo;
+			layer2Painted = true;
+		}
+	}
+
+	//ADR-0224: a pack that opted in keeps a behind-background sprite visible
+	//where the ROM's background pixel is colour 0 - on hardware the sprite
+	//shows there, and a recorded screen (ADR-0050) carries no sprite of either
+	//priority, so the layer-2 draw above just painted canvas over it. The pass
+	//is re-applied rather than the layer skipped, so layers 0/1 and the tile
+	//stay as they were and the #328 counters above are untouched.
+	if(HdBehindBgSpriteRule::KeepsBehindBgSprite(_hdData->PreservesBehindBgSprites, lowestBgSprite, pixelInfo.Tile.BgColorIndex, layer2Painted)) {
+		int ignored = 999;
+		DrawBehindBgSprites(x, y, pixelInfo, outputBuffer, screenWidth, ignored);
 	}
 
 	if(hasSprite) {
@@ -616,7 +660,19 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 	}
 
 	for(int i = 0; i < _activeBgCount[3]; i++) {
-		DrawBackgroundLayer(HdNesPack::ForegroundPriority + i, x, y, outputBuffer, screenWidth);
+		uint32_t before = *outputBuffer;
+		HdBackgroundInfo* bgInfo = DrawBackgroundLayer(HdNesPack::ForegroundPriority + i, x, y, outputBuffer, screenWidth);
+		if(bgInfo && *outputBuffer != before) {
+			coveringBackground = bgInfo;
+		}
+	}
+
+	if(trackTileSuppression && coveringBackground != nullptr && pixelAfterTile != pixelBeforeTile) {
+		_frameSuppressedPixels++;
+		//Last one wins: the topmost layer is the pixels that reach the display,
+		//and that is the one an artist has to edit or re-prioritise.
+		_frameSuppressingBg = coveringBackground;
+		_frameSuppressedTile = hdPackTileInfo;
 	}
 }
 
@@ -638,6 +694,29 @@ void HdNesPack<scale>::Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffe
 		}
 
 		ProcessGrayscaleAndEmphasis(hdScreenInfo->ScreenTiles[i * 256], outputBuffer + lineStartIndex, screenWidth);
+	}
+
+	//Issue #328: what GetPixels counted this frame, reported the first time each
+	//`<background>` is seen doing it. The floor keeps a single pixel of overlap
+	//between a screen PNG and a tile from being reported as if it were a screen.
+	if(_frameSuppressedPixels > 0) {
+		_suppressedTilePixels += _frameSuppressedPixels;
+		if(_frameSuppressingBg != nullptr && _frameSuppressedTile != nullptr &&
+			_suppressedTilePixels >= kSuppressionReportPixelFloor) {
+			ReportSuppressedTiles();
+			//Once, when the ledger starts dropping signatures: a reader who has
+			//seen only the lines above must not conclude the list is complete.
+			if(!_suppressionCapped && _tileSuppressionLog.GetUnretainedCount() > 0) {
+				_suppressionCapped = true;
+				MessageManager::Log(
+					"[HDPack] more <background>(s) than the " +
+					std::to_string(HdTileSuppressionLog::MaxDistinctMessages) +
+					" named above also cover <tile> rules - the list stops there, once per pack load.");
+			}
+		}
+		_frameSuppressedPixels = 0;
+		_frameSuppressingBg = nullptr;
+		_frameSuppressedTile = nullptr;
 	}
 
 	//Diagnostic: log the background tile match ratio once per second (~60
@@ -726,6 +805,76 @@ void HdNesPack<scale>::ProcessGrayscaleAndEmphasis(HdPpuPixelInfo& pixelInfo, ui
 					std::min<uint16_t>((uint16_t)((rgbValue & 0xFF) * blue), 255);
 			}
 			out += hdScreenWidth;
+		}
+	}
+}
+
+//Issue #328. How a `<tile>` rule is named back to the artist. `sheets/misc.png
+//at 208,276` is the crop they painted in their paint program (ADR-0213 §4), and
+//the key is character-for-character the JSON `Copy as MEP sheet cell` puts on
+//the clipboard (UI/Logic/MepSheetCell.cs) - so the line can be matched against
+//what they pasted, without opening hires.txt and counting commas.
+static string DescribeTileRule(const HdPackTileInfo& tile)
+{
+	string image = tile.Bitmap ? tile.Bitmap->PngName : string("(unknown image)");
+	string key;
+	if(tile.IsChrRamTile) {
+		for(int i = 0; i < 16; i++) {
+			key += HexUtilities::ToHex(tile.TileData[i]);
+		}
+		key = "\"tile\": \"" + key + "\", \"palette\": \"" + HexUtilities::ToHex(tile.PaletteColors, true) + "\"";
+	} else {
+		key = "tile index " + HexUtilities::ToHex(tile.TileIndex) + ", \"palette\": \"" + HexUtilities::ToHex(tile.PaletteColors, true) + "\"";
+	}
+
+	return image + " at " + std::to_string(tile.X) + "," + std::to_string(tile.Y) + " {" + key + "}";
+}
+
+template<uint32_t scale>
+void HdNesPack<scale>::ReportSuppressedTiles()
+{
+	//`HdBackgroundInfo::ToString` is the manifest line itself, so the reader gets
+	//something they can search for in textures/hires.txt rather than a
+	//paraphrase of it.
+	string signature = _frameSuppressingBg->ToString();
+	if(!_tileSuppressionLog.ShouldLog(signature)) {
+		return;
+	}
+
+	//`_suppressedTilePixels` only decides whether the line is worth writing (see
+	//the floor in HdNesPack.h); by the time it is read here it is a running
+	//total in the tens of millions for a recorded pack, which is a number no
+	//reader can act on. The two facts that are actionable are named instead: the
+	//exact manifest line of the background, and the crop of a rule it covered.
+	MessageManager::Log(
+		"[HDPack] a <background> is drawn over <tile> rules: " + signature +
+		" replaced the pixels of " + DescribeTileRule(*_frameSuppressedTile) +
+		" after that rule drew them.");
+	if(!_suppressionExplained) {
+		_suppressionExplained = true;
+		MessageManager::Log(
+			"[HDPack] this is precedence, not a broken pack: a <background> at priority 20 or higher is drawn "
+			"after the <tile> layer (ADR-0050, ADR-0156), so on a screen it matches the background PNG is what "
+			"reaches the display and every <tile> rule under it is invisible. Paint that PNG "
+			"(textures/backgrounds/<screen>.png), or give the <background> a priority below 20 in "
+			"textures/hires.txt to let the <tile> rules draw over it.");
+		//ADR-0167: the one surface an artist who never opens the log window still
+		//sees. Headless runs gate the OSD off (HeadlessSetOsdEnabled), which turns
+		//this into one more log line instead of a toast - so the same diagnostic is
+		//asserted from a script either way.
+		//
+		//Unlike the two log lines above, the toast is only worth showing when the
+		//pack has a human-authored textures layer (ADR-0049). ADR-0050's bootstrap
+		//writes one priority-20 <background> per captured screen, so a recorded pack
+		//suppresses tiles by construction; announcing that to a player is the nag
+		//ADR-0146 forbids - nobody painted anything and there is nothing to do.
+		//`HumanAuthoredTextures` is set by NesConsole::LoadHdPack from the existing
+		//MepSection::HasHuman signal, and stays false for a pack that loaded from
+		//auto/ alone. The log half above is deliberately unconditional: a developer
+		//diagnosing a recorded pack still gets the same lines; only the popup is
+		//withheld.
+		if(_hdData->HumanAuthoredTextures) {
+			MessageManager::DisplayMessage("HdPack", "HdPackTilesHidden");
 		}
 	}
 }

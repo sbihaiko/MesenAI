@@ -90,7 +90,10 @@
     <ClInclude Include="NES\HdPacks\HdPackBuilder.h" />
     <ClInclude Include="NES\HdPacks\MetatileVocabulary.h" />
     <ClInclude Include="NES\HdPacks\ScreenStitcher.h" />
+    <ClInclude Include="NES\HdPacks\SheetColourways.h" />
+    <ClInclude Include="NES\HdPacks\ChrPageSlots.h" />
     <ClInclude Include="NES\HdPacks\SheetGrouping.h" />
+    <ClInclude Include="NES\HdPacks\SheetLabels.h" />
     <ClInclude Include="NES\HdPacks\SheetRender.h" />
     <ClInclude Include="NES\HdPacks\SpriteGrouping.h" />
     <ClInclude Include="NES\HdPacks\TileSheetTypes.h" />
@@ -423,6 +426,7 @@
     <ClInclude Include="Gameboy\GbsHeader.h" />
     <ClInclude Include="Gameboy\Input\GbController.h" />
     <ClInclude Include="NES\BaseNesPpu.h" />
+    <ClInclude Include="NES\NesScanlineTraceValidity.h" />
     <ClInclude Include="NES\BisqwitNtscFilter.h" />
     <ClInclude Include="NES\Debugger\DummyNesCpu.h" />
     <ClInclude Include="NES\Debugger\NesPpuTools.h" />
@@ -436,6 +440,10 @@
     <ClInclude Include="NES\HdPacks\HdNesPack.h" />
     <ClInclude Include="NES\HdPacks\HdNesPpu.h" />
     <ClInclude Include="NES\HdPacks\HdPackConditions.h" />
+    <ClInclude Include="NES\HdPacks\HdPackErrorDedupe.h" />
+    <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h" />
+    <ClInclude Include="NES\HdPacks\OamFetchLatch.h" />
+    <ClInclude Include="NES\HdPacks\SpriteFetchLog.h" />
     <ClInclude Include="NES\HdPacks\HdPackLoader.h" />
     <ClInclude Include="NES\HdPacks\HdVideoFilter.h" />
     <ClInclude Include="NES\HdPacks\IOggSource.h" />
@@ -603,6 +611,7 @@
     <ClInclude Include="Debugger\Breakpoint.h" />
     <ClInclude Include="Debugger\BreakpointManager.h" />
     <ClInclude Include="Debugger\CallstackManager.h" />
+    <ClInclude Include="Debugger\CdlFileCheck.h" />
     <ClInclude Include="Debugger\CodeDataLogger.h" />
     <ClInclude Include="Shared\EmulatorLock.h" />
     <ClInclude Include="Shared\ControlDeviceState.h" />

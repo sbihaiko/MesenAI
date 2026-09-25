@@ -23,6 +23,13 @@ Usage: python3 scripts/mep_lint.py <folder-or-zip> [rom_name] [--quiet]
        python3 scripts/mep_lint.py --content-id <folder-or-zip> [rom_name]
        python3 scripts/mep_lint.py --list-games <folder-or-zip> [rom_name]
        python3 scripts/mep_lint.py [--content-id] --root <prefix> <folder-or-zip> [rom_name]
+       python3 scripts/mep_lint.py <folder-or-zip> --routes <recording>... (ADR-0197 §2)
+
+  --routes evaluates every hand-authored condition the pack's sheets carry
+  against the retained frames of one or more recordings (a grid stream written
+  by MESEN_SHEET_GRID_DUMP), and reports where it held, where it failed and
+  where it fired on a key the author did not condition. It is a report, not a
+  gate: the exit code says whether the report could be produced.
   rom_name (optional): target ROM name declared by the submitter (e.g.
   "Contra (U) [!]"). When present, enables the ROM-name fallback (ADR-0120
   §3's named follow-up) in addition to the structural fallback — see
@@ -56,8 +63,12 @@ import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 
+import mep_addition  # ADR-0196 <addition> tags and their synthetic target keys
+import palette_folds  # ADR-0230 item 2: sidecar `folds` validation
+import mep_conditions  # ADR-0197 authored conditions and their evaluation over routes
 import mep_content_id  # ADR-0139 tree content_id of the discovered pack root
 import mep_errata  # ADR-0152 reviewed known-missing declarations, shared with the smoke gate
+import mep_sentinel  # ADR-0220 §4: the guide sentinel and the per-cell scan that catches a wrong export
 import pack_id_rules  # ADR-0140 source (1): SLUG shape of the MEP root `id`
 
 SECTION_PATHS = {"textures": "textures", "audio": "audio", "synth": "synth/preset.cfg", "border": "border"}
@@ -106,7 +117,9 @@ FALLBACK_SUFFIXES = (
     + sorted(FALLBACK_PROBE_BASENAMES)
 )
 KNOWN_SYSTEMS = {"nes", "gb", "gbc", "sms", "gg", "sg1000", "coleco", "snes"}
-NES_TAGS = {"ver", "scale", "system", "supportedRom", "img", "tile", "background", "condition", "bgm", "sfx", "patch", "overscan", "options", "addition", "fallback"}
+# bgPreservesBehindBgSprites: ADR-0224's argument-less opt-in (MesenAI
+# extension, skipped by other emulators); accepted, never required.
+NES_TAGS = {"ver", "scale", "system", "supportedRom", "img", "tile", "background", "condition", "bgm", "sfx", "patch", "overscan", "options", "addition", "fallback", "bgPreservesBehindBgSprites"}
 GBSMS_TAGS = {"ver", "scale", "system", "img", "tile", "supportedRom"}
 COND_TYPES = {"tileAtPosition", "tileNearby", "spriteAtPosition", "spriteNearby", "memoryCheck", "ppuMemoryCheck", "memoryCheckConstant", "ppuMemoryCheckConstant", "frameRange", "positionCheckX", "positionCheckY", "originPositionCheckX", "originPositionCheckY"}
 GLOBAL_CONDS = {"hmirror", "vmirror", "bgpriority", "sppalette0", "sppalette1", "sppalette2", "sppalette3"}
@@ -936,6 +949,8 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
     conds = {}
     cond_kinds = {}
     tile_keys = {}
+    keyed = set()       # (tileData, palette) a <tile> rule keys, prefix-free
+    additions = []      # (line, where, conditions, params) — checked after the pass
     dups = []
     missing = {}
     badcase = {}
@@ -979,6 +994,13 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
             # present it must agree with the format branch (ADR-0136 §5).
             if params.strip().lower() != "nes":
                 rep.error(where, f"<system> invalid for a NES hires.txt: {params} (expected nes)")
+        elif tag == "bgPreservesBehindBgSprites":
+            # ADR-0224 (F12.15): opt-in, on/off for the whole pack, takes no
+            # arguments. Its absence is never reported (the default is today's
+            # draw order); a stray argument is a warning, not an error, since
+            # HdPackLoader ignores it.
+            if params.strip():
+                rep.warning(where, f"<bgPreservesBehindBgSprites> takes no arguments (ignored: {params.strip()[:40]})")
         elif tag == "supportedRom":
             for h in tokens:
                 if not HEX40.match(h.strip()):
@@ -1016,11 +1038,24 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
                 rep.error(where, f"<tile> references nonexistent <img> #{idx}")
             elif imgs[idx] and scale and (x + 8 * scale > imgs[idx][0] or y + 8 * scale > imgs[idx][1]):
                 rep.warning(where, f"<tile> at ({x},{y}) is outside image #{idx} ({imgs[idx][0]}x{imgs[idx][1]}) — renders as fully transparent, load continues (HdPackTileInfo::Init bounds check)")
-            key = (tokens[1], tokens[2].upper(), tuple(sorted(used)))
+            # #382: compare the key as the loader parses it, not as the author
+            # spelt it — `000` and `00` are one CHR index at <ver>103+, and a
+            # short token is decimal below that (HdPackLoader::ReadTileData).
+            data, pal = mep_addition.canonical_key((tokens[1], tokens[2]), version)
+            key = (data, pal, tuple(sorted(used)))
+            # ADR-0196 §4 needs the key set without its condition prefixes: an
+            # <addition> cites a key, never a conditioned entry of it.
+            keyed.add((data, pal))
+            # #386: a defaultTile=Y rule is also filed under the default key,
+            # so it draws its index under every palette (InitializeHdPack).
+            if len(tokens) > 6 and tokens[6].upper() in HDPACK_BOOL_TRUE:
+                keyed.add(mep_addition.default_key((data, pal)))
             if key in tile_keys:
                 dups.append((n, tile_keys[key]))
             else:
                 tile_keys[key] = n
+        elif tag == "addition":
+            additions.append((n, where, used, params))
         elif tag == "background":
             if len(tokens) < 2:
                 rep.error(where, "<background> needs file and brightness")
@@ -1149,7 +1184,100 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
     if dups:
         sample = ", ".join(f"{n}(={first})" for n, first in dups[:5])
         rep.warning(rel, f"{len(dups)} duplicate <tile>(s) (same key/palette/conditions); only the first of each is used — e.g. lines {sample}")
-    rep.info(rel, f"NES hires.txt: ver {version}, scale {scale}, {len(imgs)} images, {len(tile_keys)} tiles, {len(conds)} conditions")
+    if additions:
+        lint_additions(src, rel, folder, version, additions, keyed, rep)
+    rep.info(rel, f"NES hires.txt: ver {version}, scale {scale}, {len(imgs)} images, {len(tile_keys)} tiles, {len(conds)} conditions"
+                  + (f", {len(additions)} additions" if additions else ""))
+
+
+def synthetic_sidecar_keys(src: Source, folder: str, version: int):
+    """The `(tileData, palette)` and CHR indices every sheet sidecar of this
+    pack marks `synthetic` (ADR-0196 §1). Returns `(keys, indices, sidecars)`;
+    `sidecars` is how many were read, so a caller can tell "marked nowhere"
+    from "this pack ships no sidecars at all". Keys come back in
+    `mep_addition.canonical_key` form so they compare with the manifest's."""
+    keys, indices, seen = set(), set(), 0
+    prefix = f"{folder}sheets/"
+    for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
+        try:
+            doc = json.loads(src.text(name))
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        seen += 1
+        for cell in doc.get("cells") or []:
+            if not isinstance(cell, dict) or not cell.get("synthetic"):
+                continue
+            for entry in cell.get("tiles") or []:
+                if not isinstance(entry, dict):
+                    continue
+                keys.add(mep_addition.canonical_key(
+                    (entry.get("tile") or "", entry.get("palette") or ""), version))
+                if isinstance(entry.get("index"), int):
+                    indices.add(mep_addition.index_token(entry["index"]))
+    return keys, indices, seen
+
+
+def lint_additions(src: Source, rel: str, folder: str, version: int, additions: list,
+                   keyed: set, rep: Report):
+    """ADR-0196 §4 on the `<addition>` lines of one NES hires.txt.
+
+    Three refusals, in the ADR's own words: an anchor no `<tile>` rule keys, a
+    target not marked synthetic in the sidecar, and a synthetic key that fails
+    §3's check for the console's key kind. The §3 check here is the pack-local
+    form — a linter has no ROM, so a CHR ROM target is required to be past
+    every index the pack's own manifest names, while `mep_build --rom` makes
+    the header assertion the ADR states."""
+    marked, marked_idx, sidecars = synthetic_sidecar_keys(src, folder, version)
+    index_keyed = any(mep_addition.is_index_key(d) for d, _p in keyed)
+    max_real = -1
+    if index_keyed:
+        for data, _pal in keyed:
+            # A default key (#386) always has its exact twin in `keyed`, which
+            # is what the synthetic marking names.
+            if _pal == mep_addition.DEFAULT_KEY_PALETTE:
+                continue
+            if (data, _pal) in marked or data in marked_idx:
+                continue
+            try:
+                max_real = max(max_real, int(data, 16))
+            except ValueError:
+                pass
+    for _n, where, used, params in additions:
+        if version < mep_addition.MIN_VERSION:
+            rep.error(where, f"<addition> requires <ver>{mep_addition.MIN_VERSION}+, this pack declares {version} — HdPackLoader::ProcessAdditionTag refuses the file")
+            continue
+        if used:
+            rep.warning(where, "<addition> carries a condition prefix — HdPackLoader::ProcessAdditionTag ignores it, the tag always applies")
+        try:
+            anchor, (dx, dy), target, ignore = mep_addition.parse_addition(params)
+        except mep_addition.AdditionError as e:
+            rep.error(where, f"<addition> {e}")
+            continue
+        # #382: `keyed` holds canonical keys; the author's own spelling stays
+        # in `anchor`/`target` for the messages below.
+        anchor_key = mep_addition.canonical_key(anchor, version)
+        target_key = mep_addition.canonical_key(target, version)
+        if ignore is not None and version < mep_addition.IGNORE_PALETTE_VERSION:
+            rep.error(where, f"<addition> ignorePalette requires <ver>{mep_addition.IGNORE_PALETTE_VERSION}+, this pack declares {version}")
+        if ignore:
+            rep.error(where, "<addition> sets ignorePalette on its target — ADR-0196 §3 keeps the palette half of a synthetic key load-bearing, and dropping it is what lets the key collide")
+        if abs(dx) > 255 or abs(dy) > 239:
+            rep.warning(where, f"<addition> offset ({dx},{dy}) is larger than the screen — HdNesPack::InsertAdditionalSprite drops every placement off-screen")
+        # #386: "keyed" is what the runtime draws — the exact key, or a
+        # defaultTile=Y rule on the same tileData under any palette.
+        if not mep_addition.is_keyed(anchor_key, keyed):
+            rep.error(where, f"<addition> anchor {anchor[0]}/{anchor[1]} is keyed by no <tile> rule in this manifest — the tag can never fire (ADR-0196 §4)")
+        if not mep_addition.is_keyed(target_key, keyed):
+            rep.error(where, f"<addition> target {target[0]}/{target[1]} is keyed by no <tile> rule — the overflow has no art to draw (ADR-0196 §4)")
+        if sidecars and target_key not in marked and target_key[0] not in marked_idx:
+            rep.error(where, f"<addition> target {target[0]}/{target[1]} is not marked synthetic in any sheet sidecar (ADR-0196 §4) — a key no recording observed has to say so, or it inflates coverage")
+        elif not sidecars:
+            rep.warning(where, "this pack ships no sheet sidecars, so ADR-0196 §4's \"marked synthetic in the sidecar\" cannot be checked here")
+        why = mep_addition.target_verdict(target_key, index_keyed, max_real)
+        if why:
+            rep.error(where, f"<addition> {why}")
 
 
 def lint_gbsms_hires(src: Source, rel: str, rep: Report):
@@ -1220,6 +1348,122 @@ def lint_gbsms_hires(src: Source, rel: str, rep: Report):
     if system is None:
         rep.error(rel, "<system> missing")
     rep.info(rel, f"GB/SMS hires.txt: system {system}, scale {scale}, {len(imgs)} images, {tiles} tiles")
+
+
+def lint_sheet_sentinels(src: Source, hires_rel: str, rep: Report):
+    """ADR-0220 §4: a cell that still carries the guide sentinel (`#FF00FD`,
+    alpha 255) was exported with the `.ora`'s `guides` or `palettes` layer
+    left visible. Every sheet PNG this lint can pair with a sidecar — the
+    `sheets/*.json` beside `hires.txt` and the `chr/*.json` page sidecars a
+    kit writes — is scanned cell rectangle by cell rectangle, and a hit is an
+    **error naming the sheet and the cell** (`index` and `(x, y)`), so the
+    message is one a person can act on. Exact equality, no tolerance. The scan
+    reads the flat PNG and the sidecar, never a `.ora` (§5)."""
+    folder = hires_rel[:-len("hires.txt")]
+    scale = 1
+    for line in src.text(hires_rel).splitlines():
+        s = line.strip()
+        if s.startswith("<scale>"):
+            try:
+                scale = max(1, int(s[7:].strip()))
+            except ValueError:
+                pass
+            break
+    for sub in ("sheets/", "chr/"):
+        prefix = folder + sub
+        for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
+            try:
+                doc = json.loads(src.text(name))
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(doc, dict) or not doc.get("cells") or not doc.get("sheet"):
+                continue
+            png_rel = prefix + str(doc["sheet"])
+            if not src.exists(png_rel):
+                continue
+            try:
+                bitmap = mep_sentinel.decode_png(src.read(png_rel))
+            except MemberTooLargeError:
+                raise
+            except Exception:  # noqa: BLE001 — an unreadable PNG is reported by the image pass
+                bitmap = None
+            if bitmap is None:
+                continue
+            for index, x, y in mep_sentinel.scan_sidecar(doc, bitmap, scale):
+                rep.error(png_rel, f"cell index {index} at ({x}, {y}) contains the guide sentinel "
+                                   f"{mep_sentinel.SENTINEL_HEX} — the .ora's guides or palettes "
+                                   "layer was left visible on export (ADR-0220 §4); hide both "
+                                   f"layers and export the flat PNG again over {doc['sheet']}")
+
+
+def _to_cells(pixels: int) -> int:
+    """`SpriteGrouping::ToCells`: round a pixel offset to the nearest 8 px
+    cell, halves away from zero (C++ integer division truncates)."""
+    return int((pixels + (4 if pixels >= 0 else -4)) / 8)
+
+
+def lint_pose_offsets(src: Source, hires_rel: str, rep: Report):
+    """ADR-0225 Consequences: a `poses.json` tile carrying `px`/`py` must
+    round to its own `dx`/`dy` (`dx == ToCells(px)`). A warning, not an error
+    — the two are written from one frame, so a mismatch is a hand edit or a
+    broken writer, and a tile without `px` (every pre-ADR pack) is fine."""
+    rel = hires_rel[:-len("hires.txt")] + "sheets/poses.json"
+    if not src.exists(rel):
+        return
+    try:
+        doc = json.loads(src.text(rel))
+    except (ValueError, UnicodeDecodeError):
+        return
+    bad = []
+    for pose in (doc.get("poses") or []) if isinstance(doc, dict) else []:
+        if not isinstance(pose, dict):
+            continue
+        for tile in pose.get("tiles") or []:
+            if not isinstance(tile, dict):
+                continue
+            for cell_key, px_key in (("dx", "px"), ("dy", "py")):
+                cell, px = tile.get(cell_key), tile.get(px_key)
+                if isinstance(cell, int) and isinstance(px, int) and cell != _to_cells(px):
+                    bad.append(f"{pose.get('id')} node {tile.get('node')}: "
+                               f"{cell_key} {cell} != ToCells({px_key} {px})")
+    if bad:
+        rep.warning(rel, f"{len(bad)} pose tile offset(s) whose pixel and cell forms disagree "
+                         f"(ADR-0225 §1: dx == ToCells(px)), e.g. {bad[0]}")
+
+
+def lint_sheet_folds(src: Source, hires_rel: str, rep: Report):
+    """ADR-0230 Decision item 2 (F14.9): a `sheets/*.json` tile entry may list
+    `folds` - other palettes the recording drew the shape in that the cell
+    reproduces exactly at one Brightness; mep_build.py emits one defaultTile=N
+    rule per item. A malformed item is an **error**, because build would skip
+    it and the key it names would silently fall back to the ROM. An entry
+    without the field - every sidecar before F14.9 - is fine. A variant cell's
+    `variantOf` must name a cell index of the same sheet (warning)."""
+    prefix = hires_rel[:-len("hires.txt")] + "sheets/"
+    for name in sorted(n for n in src.names if n.startswith(prefix) and n.endswith(".json")):
+        try:
+            doc = json.loads(src.text(name))
+        except (ValueError, UnicodeDecodeError):
+            continue
+        cells = doc.get("cells") if isinstance(doc, dict) else None
+        cells = [c for c in cells if isinstance(c, dict)] if isinstance(cells, list) else []
+        # A cell index is an int; anything else (e.g. an unhashable `[]`) is
+        # reported, never hashed - it would crash the set below (#461 review).
+        def is_index(v):
+            return isinstance(v, int) and not isinstance(v, bool)
+        indexes = {c.get("index") for c in cells if is_index(c.get("index"))}
+        for cell in cells:
+            if "index" in cell and not is_index(cell["index"]):
+                rep.warning(name, f"cell index {cell['index']!r} is not an integer (ADR-0230)")
+            if "variantOf" in cell and not is_index(cell["variantOf"]):
+                rep.warning(name, f"cell index {cell.get('index')!r}: variantOf {cell['variantOf']!r} "
+                                  "is not a cell index (ADR-0230)")
+            elif "variantOf" in cell and cell["variantOf"] not in indexes:
+                rep.warning(name, f"cell index {cell.get('index')}: variantOf {cell['variantOf']!r} "
+                                  "names no cell of this sheet (ADR-0230)")
+            for i, entry in enumerate(cell.get("tiles") or []):
+                for problem in palette_folds.entry_folds(entry)[1]:
+                    rep.error(name, f"cell index {cell.get('index')} tile {i}: {problem} (ADR-0230 item 2)")
 
 
 def lint_hires(src: Source, rel: str, rep: Report):
@@ -1321,7 +1565,160 @@ def scan_bundled_patches(src: Source, rep: Report):
             rep.info("pack", f"bundled patch: {name} (present, NOT wired — no <patch> line / patches[] entry, never applied; ADR-0148)")
 
 
+def collect_authored_conditions(src):
+    """Every authored condition in the target's sheet sidecars, with the keys
+    it is attached to.
+
+    ADR-0197 §1 puts a hand-written condition in the sheet, not in
+    `hires.txt`: the manifest is generated and an edit there is thrown away on
+    the next build, so the sheet is the only place an authored decision can
+    survive. Returns `[(sidecar name, condition, keys)]` plus the sidecars that
+    could not be read, each with its reason.
+    """
+    found, broken = [], []
+    for rel in sorted(n for n in src.names
+                      if n.endswith(".json") and "/sheets/" in "/" + n):
+        try:
+            doc = json.loads(src.text(rel))
+        except Exception as exc:  # noqa: BLE001
+            continue  # not a sidecar; the normal lint pass reports bad JSON
+        if not isinstance(doc, dict) or not doc.get("conditions"):
+            continue
+        try:
+            conds = mep_conditions.load_sheet_conditions(doc, rel)
+        except mep_conditions.ConditionError as exc:
+            broken.append((rel, str(exc)))
+            continue
+        keys = {}
+        for cell in doc.get("cells") or []:
+            if not isinstance(cell, dict):
+                continue
+            name = cell.get("condition")
+            if not name:
+                continue
+            for entry in cell.get("tiles") or []:
+                if not isinstance(entry, dict):
+                    continue
+                data = str(entry.get("tile") or "").strip().upper()
+                pal = str(entry.get("palette") or "").strip().upper()
+                if data and pal:
+                    keys.setdefault(name, set()).add((data, pal))
+        for name, cond in sorted(conds.items()):
+            found.append((rel, cond, keys.get(name, set())))
+            if name not in keys:
+                broken.append((rel, f"condition {name!r} is defined but no cell "
+                                    "names it; it would gate nothing"))
+    return found, broken
+
+
+def report_routes(src, route_paths, target):
+    """ADR-0197 §2: evaluate every authored condition on every retained frame
+    of every recording, and say where it held, where it failed and where it
+    fired on a key the author did not condition.
+
+    A report, not a gate. An authored condition is the author's decision; this
+    says whether the recorded evidence agrees, and its exit code reflects only
+    whether the report could be produced.
+
+    Read route-major and printed condition-major: a route is far too large to
+    keep (see `mep_conditions.iter_routes`), a verdict is a handful of
+    integers, so each recording is loaded once, asked about every condition,
+    and dropped.
+    """
+    found, broken = collect_authored_conditions(src)
+    for rel, why in broken:
+        print(f"warning  {rel}  {why}")
+
+    summaries, verdicts = [], {}
+    def skip(path, why):
+        print(f"skipped  {path}  {why}")
+    for route in mep_conditions.iter_routes(route_paths, on_skip=skip):
+        # F12.14 (ADR-0222): the OAM stream beside the grid, when there is one.
+        if route.oam is not None:
+            oam = (f"OAM {route.oam.retained} retained, {route.oam.played} played"
+                   + ("" if route.oam.has_tiles else ", no tile data (pre-F12.14)")
+                   + ("" if route.oam_aligned else ", not aligned with the grid"))
+        elif route.oam_skipped:
+            oam = f"OAM skipped: {route.oam_skipped}"
+        else:
+            oam = "no OAM stream"
+        summaries.append((route.name, route.retained, route.played, len(route.shapes), oam))
+        for rel, cond, keys in found:
+            if cond.evaluable:
+                verdicts.setdefault(cond.name, []).append(
+                    (route.name, mep_conditions.evaluate(cond, keys, route)))
+    if not summaries:
+        print("error: no recorded route could be read. A route is a grid stream "
+              "written by MESEN_SHEET_GRID_DUMP on a run that reached gameplay "
+              "(docs/remastering-a-game.md).", file=sys.stderr)
+        return 2
+
+    print(f"\nroutes: {len(summaries)} recording(s), "
+          f"{sum(s[1] for s in summaries)} retained frame(s) "
+          f"standing for {sum(s[2] for s in summaries)} played")
+    for name, retained, played, shapes, oam in summaries:
+        print(f"  {name}: {retained} retained, {played} played, {shapes} shape(s); {oam}")
+    if not found:
+        print(f"\nno authored condition found in {target} — nothing to validate. "
+              "A sheet carries one in its `conditions` block, marked "
+              "`authored: true` (ADR-0197 §1).")
+        return 0
+
+    print(f"\n{len(found)} authored condition(s):")
+    for rel, cond, keys in found:
+        print(f"\n  {cond.name}  ({cond.type}, {rel}, {len(keys)} key(s))")
+        print(f"    {cond.line}")
+        if not cond.evaluable:
+            print(f"    not evaluable: {cond.not_evaluable_reason}")
+            print("    not evaluable is never a pass.")
+            continue
+        for route_name, v in verdicts.get(cond.name, []):
+            if not v.evaluable:
+                # ADR-0197 §3: a route-dependent refusal — the condition is a
+                # type this build evaluates, but *this* recording cannot
+                # answer it (a dump made before F12.6b carries no memory).
+                print(f"    {route_name}: not evaluable — {v.reason}")
+                print("      not evaluable is never a pass.")
+                continue
+            print(f"    {route_name}: {v.state} — held {v.held}, "
+                  f"failed {v.failed}, of {v.instances} instance(s)")
+            if v.first_failure is not None:
+                frame, row, col = v.first_failure
+                where = f" at cell ({col},{row})" if col is not None else ""
+                print(f"      first failure: frame {frame}{where}")
+            if v.first_failure_sprite is not None:
+                # F12.14: a sprite instance is placed by its screen origin in
+                # the OAM stream, not by a grid cell.
+                frame, x, y = v.first_failure_sprite
+                print(f"      first failing sprite: OAM frame {frame} at ({x},{y})")
+            if cond.type in mep_conditions.SPRITE_TYPES:
+                print("      unintended hits: n/a — not counted for sprite and "
+                      "position conditions (ADR-0222)")
+            elif cond.type == "tileNearby":
+                if v.unintended:
+                    frame, row, col = v.first_unintended
+                    print(f"      unintended hits: {v.unintended}, first at "
+                          f"frame {frame} cell ({col},{row}) — the pattern also "
+                          "occurs around a key this condition is not attached to")
+                else:
+                    print("      unintended hits: 0")
+            else:
+                print("      unintended hits: n/a — the predicate does not "
+                      "depend on the cell being drawn")
+            if cond.type == "frameRange":
+                if v.phase:
+                    print("      phase offsets that would hold throughout: "
+                          + ", ".join(str(k) for k in v.phase))
+                else:
+                    print("      no phase offset makes it hold on every "
+                          "retained frame of this route")
+    return 0
+
+
 def main(argv):
+    if "--help" in argv[1:] or "-h" in argv[1:]:
+        print(__doc__)
+        return 0
     if len(argv) < 2:
         print(__doc__)
         return 2
@@ -1330,10 +1727,20 @@ def main(argv):
     list_games = "--list-games" in argv
     root_prefix = None
     errata_path = None
+    route_paths = []
     positional = []
     i = 1
     while i < len(argv):
         arg = argv[i]
+        if arg == "--routes":
+            # Takes every following non-flag argument, so the pack has to come
+            # first: `mep_lint.py <pack> --routes <dir-or-file>...`.
+            j = i + 1
+            while j < len(argv) and not argv[j].startswith("--"):
+                route_paths.append(argv[j])
+                j += 1
+            i = j
+            continue
         if arg == "--root" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
             root_prefix = argv[i + 1].rstrip("/")
             i += 2
@@ -1345,12 +1752,22 @@ def main(argv):
         if not arg.startswith("--"):
             positional.append(arg)
         i += 1
+    if not positional:
+        # Flags alone (e.g. `--quiet`) name no pack: usage, not a traceback.
+        print(__doc__)
+        return 2
     target = Path(positional[0])
     rom_name = positional[1] if len(positional) > 1 else None
     if not target.exists():
         print(f"error: {target} does not exist")
         return 2
     src = Source(target)
+
+    #ADR-0197 §2: a report over the recorded routes, not a gate. It answers a
+    #different question from the rest of lint (does the evidence agree with
+    #what the author wrote?), so it runs on its own and returns.
+    if route_paths:
+        return report_routes(src, route_paths, target)
 
     #ADR-0152: an explicit --errata wins; otherwise, when the target is the
     #downloaded artifact itself, look one up by its sha256. A directory has no
@@ -1486,6 +1903,9 @@ def main(argv):
                 if hires not in seen and src.exists(hires):
                     seen.add(hires)
                     lint_hires(src, hires, rep)
+                    lint_sheet_sentinels(src, hires, rep)
+                    lint_pose_offsets(src, hires, rep)
+                    lint_sheet_folds(src, hires, rep)
 
         scan_bundled_patches(src, rep)
 

@@ -47,6 +47,13 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   Also documents the split-distribution/MEP Recipe flow (ADR-0138 §12):
   the `external_assets`/`external_assets_license` form fields and the
   `assets:external` label, citing `docs/specs/MEP-recipe-v1.md`.
+- F12.2 cold-read protocol (ADR-0214, amended 2026-09-19: the evaluator is a
+  fresh **Opus** session): `docs/validation/f12.2-sweep-evaluator-briefing.md`
+  is the only evaluator-facing document for the 28-ROM sweep;
+  `docs/validation/f12.2-fable-evaluator-briefing.md` is the Fable-era
+  two-game version. The dispatcher script next to them
+  (`f12.2-copy-sheet-cell-panel-script.md`) is the answer key and must not
+  be pasted into an evaluator session.
 
 ## Verification
 
@@ -73,4 +80,4 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 - adr/ — the decision register (`NNNN-<kebab-title>.md`); accepted ADRs are binding
 - specs/ — ESP, MEP, MEI, MEP-recipe, hires-gbsms drafts and `golden/`
 - roadmap/ — consolidated PRD (Part A: pack/core; Part B: player shell) (product consoles: NES, GB, SMS-family, GBA)
-- validation/ — manual acceptance/validation run scripts (e.g. F6.5 checklist, validation-automation plan)
+- validation/ — acceptance/validation scripts and logs (F6.5, F12.2 dispatcher vs Fable briefing, mechanical-replay logs)

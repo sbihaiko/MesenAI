@@ -3,6 +3,7 @@
 #include "NES/INesMemoryHandler.h"
 #include "Utilities/ISerializable.h"
 #include "NES/NesTypes.h"
+#include "NES/NesScanlineTraceValidity.h"
 
 enum class ConsoleRegion;
 
@@ -163,6 +164,11 @@ protected:
 	//CHR/nametable data already published every tick.
 	uint32_t _scanlineChrBankOffsets[240][0x20] = {};
 
+	//Issue #419: neither trace above is part of a save state, so this records
+	//whether they describe a whole frame drawn since the last load or reset -
+	//see NesScanlineTraceValidity.
+	NesScanlineTraceValidity _scanlineTraceValidity;
+
 	bool IsRenderingEnabled();
 	void UpdateGrayscaleAndIntensifyBits();
 	void UpdateColorBitMasks();
@@ -197,6 +203,14 @@ public:
 	void GetScanlineChrBankTrace(uint32_t* outValues)
 	{
 		memcpy(outValues, _scanlineChrBankOffsets, sizeof(_scanlineChrBankOffsets));
+	}
+
+	//Issue #419: false until a whole frame has been drawn since the last state
+	//load or reset - until then both traces above still describe the frame
+	//drawn before it, never the one on screen.
+	bool ScanlineTraceDescribesDrawnFrame() const
+	{
+		return _scanlineTraceValidity.DescribesDrawnFrame();
 	}
 
 	uint16_t GetCurrentBgColor();

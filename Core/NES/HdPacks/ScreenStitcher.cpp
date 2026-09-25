@@ -798,6 +798,35 @@ namespace MesenSheets
 			return true;
 		}
 
+		//ADR-0221 (option B): the *kind* of difference, checked after the ratio.
+		//#339's frame agreed with screen003 on 919 of 960 cells and still
+		//erased the game's text, because the 41 cells it changed were cells the
+		//capture held as a flat white block - content the capture lacks, so the
+		//capture's PNG paints nothing where the game now draws. A change from
+		//content to content (a score digit, a blink phase) is harmless: the
+		//capture has *something* there. A change from empty to content is an
+		//addition, and one addition is enough. The reverse (the frame blanks a
+		//cell the capture fills) is left alone - drawing art over a blank cell
+		//is what owning a variant means, not what #339 complains about.
+		bool IsEmptyShape(ShapeId shape, const std::vector<bool>& emptyShapes)
+		{
+			return shape == kEmptyCell || (shape < emptyShapes.size() && emptyShapes[shape]);
+		}
+
+		bool AddsContent(const GridFrame& screen, const GridFrame& other, const std::vector<bool>& emptyShapes)
+		{
+			for(uint32_t r = 0; r < kGridRows; r++) {
+				for(uint32_t c = 0; c < kGridCols; c++) {
+					ShapeId have = screen.Cells[r][c];
+					ShapeId got = other.Cells[r][c];
+					if(have != got && IsEmptyShape(have, emptyShapes) && !IsEmptyShape(got, emptyShapes)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
 		//How the palette plane is read (ADR-0159 amendment). An unknown id - no
 		//cell drawn there, a caller that carries no palette evidence at all,
 		//or a recording past the id space - is evidence of nothing, so it reads
@@ -883,16 +912,42 @@ namespace MesenSheets
 		}
 	}
 
-	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates)
+	std::vector<uint32_t> FlatRunColumns(uint32_t startX, uint32_t endX, uint8_t fineX)
+	{
+		std::vector<uint32_t> cols;
+		for(uint32_t c = 0; c < kGridCols; c++) {
+			uint32_t x = c * 8 + (uint32_t)fineX;
+			if(x >= startX && x + 8 <= endX && x + 8 <= 256) {
+				cols.push_back(c);
+			}
+		}
+		return cols;
+	}
+
+	std::vector<bool> FlatShapePlane(const std::vector<SheetTileKey>& shapes)
+	{
+		std::vector<bool> flat(shapes.size(), false);
+		for(size_t i = 0; i < shapes.size(); i++) {
+			flat[i] = IsFlatTileData(shapes[i].TileData);
+		}
+		return flat;
+	}
+
+	AnchorChoice SelectScreenAnchors(const std::vector<GridFrame>& frames, size_t capturedIndex, const std::vector<AnchorCandidate>& candidates, const std::vector<size_t>& forcedRivalFrames, const std::vector<bool>& emptyShapes)
 	{
 		AnchorChoice empty;
 		if(candidates.empty()) {
 			return empty;
 		}
 
+		//ADR-0223 option A (F12.16): Usage == UINT32_MAX marks a flat cell
+		//(HdPackBuilder::AppendFlatAnchorCells) - explicitly kept out of the
+		//stable/wide passes' pool, not merely sorted last, so a small
+		//candidate list under kAnchorCandidateCap cannot let one through by
+		//accident. It only reaches the last pass below.
 		std::vector<size_t> order;
 		for(size_t i = 0; i < candidates.size(); i++) {
-			if(candidates[i].Row < kGridRows && candidates[i].Col < kGridCols) {
+			if(candidates[i].Row < kGridRows && candidates[i].Col < kGridCols && candidates[i].Usage != UINT32_MAX) {
 				order.push_back(i);
 			}
 		}
@@ -906,6 +961,7 @@ namespace MesenSheets
 		const GridFrame* screen = capturedIndex < frames.size() ? &frames[capturedIndex] : nullptr;
 		std::vector<const GridFrame*> variants;
 		std::vector<const GridFrame*> rivals;
+		uint32_t additionRivals = 0;
 		if(screen) {
 			for(size_t i = 0; i < frames.size(); i++) {
 				//A frame recorded under another fine scroll is not comparable
@@ -914,58 +970,151 @@ namespace MesenSheets
 				if(i == capturedIndex || frames[i].FineX != screen->FineX) {
 					continue;
 				}
-				if(IsScreenVariant(*screen, frames[i])) {
-					variants.push_back(&frames[i]);
+				//ADR-0217 Option C / ADR-0218 Option A: a forced rival skips
+				//IsScreenVariant entirely, never landing in `variants`.
+				bool forcedRival = std::find(forcedRivalFrames.begin(), forcedRivalFrames.end(), i) != forcedRivalFrames.end();
+				if(!forcedRival && IsScreenVariant(*screen, frames[i])) {
+					//ADR-0221 option B: the kind test, after the ratio test.
+					if(AddsContent(*screen, frames[i], emptyShapes)) {
+						additionRivals++;
+						rivals.push_back(&frames[i]);
+					} else {
+						variants.push_back(&frames[i]);
+					}
 				} else {
 					rivals.push_back(&frames[i]);
 				}
 			}
 		}
 
-		std::vector<size_t> stable;
-		for(size_t index : order) {
-			const AnchorCandidate& candidate = candidates[index];
+		//ADR-0159 §1's stability filter: a candidate survives when the
+		//*condition* holds on every variant, not just the drawing - a variant
+		//that keeps the tile and swaps its palette reads as unchanged in Cells
+		//and still fails tileAtPosition, which is the gap the ADR-0159
+		//amendment closes. Shared with ADR-0223 option A's last pass below,
+		//which applies the identical test to the flat pool.
+		auto stableSubset = [&](const std::vector<size_t>& pool) {
+			std::vector<size_t> result;
 			if(!screen) {
-				stable.push_back(index);
-				continue;
+				return pool;
 			}
-			ShapeId wanted = screen->Cells[candidate.Row][candidate.Col];
-			if(wanted == kEmptyCell) {
-				continue;
-			}
-			//Stable means the *condition* holds on every variant, not just the
-			//drawing: a variant that keeps the tile and swaps its palette reads
-			//as unchanged in Cells and still fails tileAtPosition, which is the
-			//gap the ADR-0159 amendment closes.
-			bool survives = true;
-			for(const GridFrame* variant : variants) {
-				if(variant->Cells[candidate.Row][candidate.Col] != wanted ||
-					!PaletteMayMatch(*screen, *variant, candidate.Row, candidate.Col)) {
-					survives = false;
-					break;
+			for(size_t index : pool) {
+				const AnchorCandidate& candidate = candidates[index];
+				ShapeId wanted = screen->Cells[candidate.Row][candidate.Col];
+				if(wanted == kEmptyCell) {
+					continue;
+				}
+				bool survives = true;
+				for(const GridFrame* variant : variants) {
+					if(variant->Cells[candidate.Row][candidate.Col] != wanted ||
+						!PaletteMayMatch(*screen, *variant, candidate.Row, candidate.Col)) {
+						survives = false;
+						break;
+					}
+				}
+				if(survives) {
+					result.push_back(index);
 				}
 			}
-			if(survives) {
-				stable.push_back(index);
-			}
-		}
+			return result;
+		};
+
+		std::vector<size_t> stable = stableSubset(order);
 
 		AnchorChoice choice = GreedyAnchors(screen, rivals, candidates, stable);
+		choice.AdditionRivals = additionRivals;
+		AnchorChoice best;
 		if(choice.Picked.size() == kAnchorCount && choice.Rivals == 0) {
-			return choice;
+			best = choice;
+		} else {
+			//The stable region cannot tell this screen from another one (or
+			//cannot fill three conditions at all). A wrong screen drawn whole
+			//is worse than a screen that misses a variant, so widen the pool
+			//rather than ship an ambiguous condition set.
+			AnchorChoice wide = GreedyAnchors(screen, rivals, candidates, order);
+			wide.AdditionRivals = additionRivals;
+			if(wide.Picked.size() > choice.Picked.size() || wide.Rivals < choice.Rivals) {
+				for(size_t index : wide.Picked) {
+					wide.UsedVolatileCell |= std::find(stable.begin(), stable.end(), index) == stable.end();
+				}
+				best = wide;
+			} else {
+				best = choice;
+			}
 		}
 
-		//The stable region cannot tell this screen from another one (or cannot
-		//fill three conditions at all). A wrong screen drawn whole is worse
-		//than a screen that misses a variant, so widen the pool rather than
-		//ship an ambiguous condition set.
-		AnchorChoice wide = GreedyAnchors(screen, rivals, candidates, order);
-		if(wide.Picked.size() > choice.Picked.size() || wide.Rivals < choice.Rivals) {
-			for(size_t index : wide.Picked) {
-				wide.UsedVolatileCell |= std::find(stable.begin(), stable.end(), index) == stable.end();
+		//ADR-0223 option A (F12.16): only when rivals still survive the two
+		//passes above does a last pass run, over the stable pool plus the
+		//flat cells no variant changes (candidates.Usage == UINT32_MAX, see
+		//HdPackBuilder::AppendFlatAnchorCells) - a flat cell can separate a
+		//capture from an addition-rival that differs from it only on that
+		//cell, which is the one case the stable/wide passes above can never
+		//reach (ADR-0050 excludes flat tiles from `ranked`/`order` entirely).
+		//Kept only if it separates strictly more rivals than the previous
+		//best; otherwise the ordinary result stands untouched.
+		if(best.Rivals > 0) {
+			std::vector<size_t> flatPool;
+			for(size_t i = 0; i < candidates.size(); i++) {
+				if(candidates[i].Usage == UINT32_MAX && candidates[i].Row < kGridRows && candidates[i].Col < kGridCols) {
+					flatPool.push_back(i);
+				}
 			}
-			return wide;
+			std::vector<size_t> flatStable = stableSubset(flatPool);
+			if(!flatStable.empty()) {
+				std::vector<size_t> lastPool = stable;
+				lastPool.insert(lastPool.end(), flatStable.begin(), flatStable.end());
+				AnchorChoice probed = GreedyAnchors(screen, rivals, candidates, lastPool);
+				probed.AdditionRivals = additionRivals;
+				if(probed.Rivals < best.Rivals) {
+					probed.UsedEmptinessProbe = true;
+					for(size_t index : probed.Picked) {
+						probed.UsedVolatileCell |= std::find(stable.begin(), stable.end(), index) == stable.end() &&
+							std::find(flatStable.begin(), flatStable.end(), index) == flatStable.end();
+					}
+					best = probed;
+				}
+			}
 		}
-		return choice;
+		return best;
+	}
+
+	std::vector<AnchorKey> AnchorKeysOf(const GridFrame& frame, const AnchorChoice& choice, const std::vector<AnchorCandidate>& candidates)
+	{
+		std::vector<AnchorKey> keys;
+		for(size_t index : choice.Picked) {
+			const AnchorCandidate& candidate = candidates[index];
+			AnchorKey key;
+			key.Row = candidate.Row;
+			key.Col = candidate.Col;
+			key.FineX = frame.FineX;
+			key.Tile = frame.Cells[candidate.Row][candidate.Col];
+			key.Palette = frame.Palettes[candidate.Row][candidate.Col];
+			keys.push_back(key);
+		}
+		return keys;
+	}
+
+	bool SameAnchorKeys(std::vector<AnchorKey> a, std::vector<AnchorKey> b)
+	{
+		if(a.empty() || a.size() != b.size()) {
+			return false;
+		}
+		auto byPosition = [](const AnchorKey& x, const AnchorKey& y) {
+			if(x.Row != y.Row) { return x.Row < y.Row; }
+			if(x.Col != y.Col) { return x.Col < y.Col; }
+			if(x.FineX != y.FineX) { return x.FineX < y.FineX; }
+			return x.Tile < y.Tile;
+		};
+		std::sort(a.begin(), a.end(), byPosition);
+		std::sort(b.begin(), b.end(), byPosition);
+		for(size_t i = 0; i < a.size(); i++) {
+			if(a[i].Row != b[i].Row || a[i].Col != b[i].Col || a[i].FineX != b[i].FineX || a[i].Tile != b[i].Tile) {
+				return false;
+			}
+			if(a[i].Palette != b[i].Palette && a[i].Palette != kUnknownPalette && b[i].Palette != kUnknownPalette) {
+				return false;
+			}
+		}
+		return true;
 	}
 }

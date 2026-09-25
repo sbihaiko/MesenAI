@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "Utilities/ZipReader.h"
 #include "Utilities/VirtualFile.h"
 
@@ -27,6 +28,8 @@ private:
 	bool _loadFromZip = false;
 	int _currentLine = 0;
 	int _errorCount = 0;
+	//Issue #302: first-occurrence-only logging for repeated loader errors.
+	HdPackErrorDedupe _errorLog;
 	ZipReader _reader;
 	string _hdPackDefinitionFile;
 	string _hdPackFolder;
@@ -41,8 +44,14 @@ private:
 
 	HdPackLoader();
 
+	//Counts every occurrence, logs only the first of each distinct message.
+	void LogError(const string& message);
+
 	bool InitializeLoader(VirtualFile& romPath, HdPackData* data);
-	bool LoadFile(string filename, vector<uint8_t>& fileData);
+	//F12.3 (ADR-0212 §2): `outDiskPath`, when given, receives the absolute file
+	//the bytes came from - empty for a zip-backed pack, which has no file to
+	//stat and is therefore never reloaded (ADR-0212 §5).
+	bool LoadFile(string filename, vector<uint8_t>& fileData, string* outDiskPath = nullptr);
 	bool CheckFile(string filename);
 	bool CheckFileExact(const string& filename);
 	void TrimTokens(vector<string>& tokens);

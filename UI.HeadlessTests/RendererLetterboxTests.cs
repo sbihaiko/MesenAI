@@ -24,6 +24,7 @@ namespace Mesen.HeadlessTests;
 //A capture of the emulator frame (Core/Shared/Video/FrameCapture.h) cannot
 //answer this: the video filter's output buffer is the picture at its own base
 //size, and the letterbox only exists in the host window's layout.
+[Collection(NativeCoreCollection.Name)]
 public class RendererLetterboxTests
 {
 	//Deliberately not 4:3 and not 16:9, so whatever aspect ratio the core
@@ -65,12 +66,36 @@ public class RendererLetterboxTests
 		(MainWindow window, MainWindowViewModel model, Panel panel) = ShowWindow();
 		Assert.True(panel.Bounds.Width > 0 && panel.Bounds.Height > 0, "RendererPanel was never laid out");
 
+		//One physical pixel of tolerance (OnePixel): the even-size snap is
+		//deterministic, but a pixel is the resolution the contract is stated
+		//in, and anything wider than that is a real divergence.
 		RendererViewport expected = Expected(window, panel);
-		Assert.Equal(expected.Width, window.Renderer.Width, 3);
-		Assert.Equal(expected.Height, window.Renderer.Height, 3);
-		Assert.Equal(expected.RealWidth, (uint)model.RendererSize.Width);
-		Assert.Equal(expected.RealHeight, (uint)model.RendererSize.Height);
+		double onePixel = OnePixel(window);
+		Assert.InRange(window.Renderer.Width, expected.Width - onePixel, expected.Width + onePixel);
+		Assert.InRange(window.Renderer.Height, expected.Height - onePixel, expected.Height + onePixel);
+		Assert.InRange(model.RendererSize.Width, expected.RealWidth - 1.0, expected.RealWidth + 1.0);
+		Assert.InRange(model.RendererSize.Height, expected.RealHeight - 1.0, expected.RealHeight + 1.0);
 	}
+
+	//Upstream 3924215's shader-seam rule, as it reaches the core: the size
+	//handed to EmuApi.SetRendererSize is even on both axes, and the renderer
+	//control sits on whole physical pixels at the window's render scaling.
+	[AvaloniaFact]
+	public void The_core_gets_an_even_size_on_whole_physical_pixels()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		(MainWindow window, MainWindowViewModel model, _) = ShowWindow();
+		double dpi = LayoutHelper.GetLayoutScale(window);
+		uint realWidth = (uint)model.RendererSize.Width;
+		uint realHeight = (uint)model.RendererSize.Height;
+		Assert.True(realWidth > 0 && realHeight > 0, $"the core was never given a size ({realWidth}x{realHeight})");
+		Assert.True(realWidth % 2 == 0 && realHeight % 2 == 0, $"odd renderer size {realWidth}x{realHeight}");
+		Assert.Equal(realWidth, window.Renderer.Width * dpi, 3);
+		Assert.Equal(realHeight, window.Renderer.Height * dpi, 3);
+	}
+
+	private static double OnePixel(MainWindow window) => 1.0 / LayoutHelper.GetLayoutScale(window);
 
 	//The check a human used to make by looking at the window: the picture is
 	//contained in the panel and keeps the core's aspect ratio, rather than being
@@ -81,7 +106,7 @@ public class RendererLetterboxTests
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
-		(MainWindow window, _, Panel panel) = ShowWindow();
+		(MainWindow window, MainWindowViewModel model, Panel panel) = ShowWindow();
 		double aspectRatio = EmuApi.GetAspectRatio();
 		Assert.True(aspectRatio > 0, $"the core reported an unusable aspect ratio ({aspectRatio})");
 
@@ -89,11 +114,15 @@ public class RendererLetterboxTests
 		double height = window.Renderer.Height;
 		Assert.True(width > 0 && height > 0, $"the renderer was never sized ({width}x{height})");
 
-		//No crop on either axis...
-		Assert.True(width <= panel.Bounds.Width + 0.5, $"renderer width {width} overflows the panel ({panel.Bounds.Width})");
-		Assert.True(height <= panel.Bounds.Height + 0.5, $"renderer height {height} overflows the panel ({panel.Bounds.Height})");
-		//...the ratio is the core's, not the window's...
-		Assert.Equal(aspectRatio, width / height, 3);
+		//No crop on either axis (the snap rounds down, so the only slack is
+		//upstream's 1e-5 nudge; one physical pixel is the tolerance)...
+		double onePixel = OnePixel(window);
+		Assert.True(width <= panel.Bounds.Width + onePixel, $"renderer width {width} overflows the panel ({panel.Bounds.Width})");
+		Assert.True(height <= panel.Bounds.Height + onePixel, $"renderer height {height} overflows the panel ({panel.Bounds.Height})");
+		//...the ratio is the core's, not the window's, to within the one
+		//physical pixel the even-size snap may cost the derived axis...
+		double aspectError = RendererViewportFit.AspectErrorPixels((uint)model.RendererSize.Width, (uint)model.RendererSize.Height, aspectRatio);
+		Assert.True(aspectError <= 1.0 + 1e-9, $"{model.RendererSize.Width}x{model.RendererSize.Height} is {aspectError} px off the core's ratio {aspectRatio}");
 		//...and, since the window is deliberately not that shape, a band is
 		//genuinely left over. Without this the two asserts above would also
 		//hold for a renderer that simply filled the panel.
@@ -118,8 +147,10 @@ public class RendererLetterboxTests
 		window.GetControl<Panel>("RendererPanel").InvalidateArrange();
 		Dispatcher.UIThread.RunJobs();
 
-		Assert.Equal(before, window.Renderer.Height, 3);
-		Assert.Equal(Expected(window, panel).Height, window.Renderer.Height, 3);
+		double onePixel = OnePixel(window);
+		Assert.InRange(window.Renderer.Height, before - onePixel, before + onePixel);
+		double expected = Expected(window, panel).Height;
+		Assert.InRange(window.Renderer.Height, expected - onePixel, expected + onePixel);
 
 		ConfigManager.Config.Video.FullscreenForceIntegerScale = false;
 	}

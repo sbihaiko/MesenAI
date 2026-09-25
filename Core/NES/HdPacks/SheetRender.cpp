@@ -1,5 +1,6 @@
 //ADR-0153 §3/§4 (Phase 9) - see SheetRender.h. Stateful partner: HdPackBuilder.
 #include "NES/HdPacks/SheetRender.h"
+#include "NES/HdPacks/SheetLabels.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -294,7 +295,7 @@ namespace MesenSheets
 		return out;
 	}
 
-	static void AppendTiles(std::stringstream& json, const MetatileKey& key, uint32_t unit, const TileLookup& lookup)
+	static void AppendTiles(std::stringstream& json, const MetatileKey& key, uint32_t unit, const TileLookup& lookup, const ShapeFolds* folds = nullptr)
 	{
 		uint32_t tiles = unit >= 16 ? 4 : 1;
 		json << "[";
@@ -332,6 +333,17 @@ namespace MesenSheets
 				json << ", \"source\": \"" << source << "\", \"mirror\": \""
 				     << ((tile->Mirrors & 1) ? "H" : "") << ((tile->Mirrors & 2) ? "V" : "") << "\"";
 			}
+			//ADR-0230 item 2: the palettes this cell reproduces exactly at one
+			//Brightness each; mep_build.py emits one defaultTile=N rule per fold.
+			auto shapeFolds = folds ? folds->find(key.Tiles[i]) : ShapeFolds::const_iterator();
+			if(folds && shapeFolds != folds->end() && !shapeFolds->second.empty()) {
+				json << ", \"folds\": [";
+				for(size_t f = 0; f < shapeFolds->second.size(); f++) {
+					json << (f ? ", " : "") << "{ \"palette\": \"" << ToHex(shapeFolds->second[f].Palette, 8)
+					     << "\", \"brightness\": " << shapeFolds->second[f].Brightness << " }";
+				}
+				json << "]";
+			}
 			json << " }";
 		}
 		json << "]";
@@ -346,7 +358,57 @@ namespace MesenSheets
 		return out.str();
 	}
 
-	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup)
+	//ADR-0209 Q4(k) (F12.8): the remainder sheet. See SheetRender.h for why it
+	//is not alias-collapsed and why an empty remainder writes no file.
+	bool BuildUnsortedSheet(size_t shapeCount, const std::set<ShapeId>& claimed, const TileLookup& lookup, NesPalette palette, SheetImage& outImage, SheetJsonDoc& outDoc)
+	{
+		//A synthetic vocabulary at grid unit 8 with one shape per entry - the
+		//same shape SpriteGrouping builds for the OAM side. Building one here
+		//rather than teaching BuildContactSheet a second input keeps the
+		//contact-sheet geometry (gutters, cell origins, ordering) in exactly
+		//one place, so the remainder sheet cannot drift from the sheets the
+		//artist already knows how to read.
+		Vocabulary vocab;
+		vocab.Grid.Unit = 8;
+		std::vector<uint32_t> indexes;
+		for(size_t id = 0; id < shapeCount && id < kEmptyCell; id++) {
+			ShapeId shape = (ShapeId)id;
+			if(claimed.count(shape)) {
+				continue;
+			}
+			//A shape with no drawable art renders as a transparent cell - a
+			//hole the artist cannot act on, and a key mep_build.py would then
+			//resolve to empty pixels. Skip it: the remainder is what can be
+			//painted, not everything that was ever numbered.
+			if(lookup(shape) == nullptr) {
+				continue;
+			}
+			MetatileEntry entry;
+			entry.Key.Tiles[0] = shape;
+			entry.Count = 1;
+			entry.Context = SheetContext::Misc;
+			vocab.Index[entry.Key] = (uint32_t)vocab.Entries.size();
+			indexes.push_back((uint32_t)vocab.Entries.size());
+			vocab.Entries.push_back(entry);
+		}
+		if(indexes.empty()) {
+			return false;
+		}
+
+		uint32_t columns = PreferredColumns(indexes.size());
+		outDoc = SheetJsonDoc();
+		outImage = BuildContactSheet(vocab, indexes, lookup, palette, columns, outDoc.Cells);
+		if(outImage.Width == 0 || outImage.Height == 0) {
+			return false;
+		}
+		outDoc.Kind = "unsorted";
+		outDoc.Grid = vocab.Grid;
+		outDoc.CellWidth = outDoc.CellHeight = 8;
+		outDoc.Columns = columns;
+		return true;
+	}
+
+	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup, const ShapeFolds* folds)
 	{
 		std::stringstream json;
 		json << "{\n";
@@ -365,6 +427,16 @@ namespace MesenSheets
 		json << "  \"routedCells\": " << doc.RoutedCells << ",\n";
 		json << "  \"sheet\": \"" << doc.SheetFile << "\",\n";
 		json << "  \"reference\": \"" << doc.ReferenceFile << "\",\n";
+
+		//ADR-0209 Q1 (b): a sprite/object group sheet is a figure, and it gets
+		//a default name inferred from the grouping (SheetLabels.h), marked
+		//"inferred" so a human's names.json entry wins over it in every reader
+		//(ADR-0183 §5). A vocabulary sheet gets none - it is not a figure.
+		std::string sheetLabel = InferSheetLabel(doc.Kind, doc.Columns, doc.Cells, doc.EmptySlots.size(), doc.Poses.size());
+		if(!sheetLabel.empty()) {
+			json << "  \"label\": \"" << sheetLabel << "\",\n";
+			json << "  \"labelSource\": \"" << kLabelSourceInferred << "\",\n";
+		}
 
 		if(doc.IsMap) {
 			json << "  \"mode\": \"" << (doc.Mode == StitchMode::Continuous ? "continuous" : "screen") << "\",\n";
@@ -426,6 +498,9 @@ namespace MesenSheets
 			if(cell.Metatile >= 0) {
 				json << ", \"metatile\": " << cell.Metatile;
 			}
+			if(cell.VariantOf >= 0) {
+				json << ", \"variantOf\": " << cell.VariantOf;
+			}
 			if(!cell.Aliases.empty()) {
 				//Every other vocabulary entry that renders to this cell, with
 				//its own tile keys, so the round-trip can paint them all from
@@ -434,13 +509,22 @@ namespace MesenSheets
 				json << ", \"aliases\": [";
 				for(size_t a = 0; a < cell.Aliases.size(); a++) {
 					json << (a ? ", " : "") << "{ \"metatile\": " << cell.Aliases[a] << ", \"tiles\": ";
-					AppendTiles(json, a < cell.AliasKeys.size() ? cell.AliasKeys[a] : MetatileKey(), doc.Grid.Unit, lookup);
+					AppendTiles(json, a < cell.AliasKeys.size() ? cell.AliasKeys[a] : MetatileKey(), doc.Grid.Unit, lookup, folds);
 					json << " }";
 				}
 				json << "]";
 			}
-			json << ", \"label\": \"\", \"tiles\": ";
-			AppendTiles(json, cell.Key, doc.Grid.Unit, lookup);
+			//ADR-0209 Q1 (b): the cell's default name, from its own context,
+			//vocabulary index and count (SheetLabels.h). A cell with no grouping
+			//data keeps the empty label every pack ever recorded carried.
+			std::string cellLabel = InferCellLabel(cell, doc.Kind);
+			if(cellLabel.empty()) {
+				json << ", \"label\": \"\"";
+			} else {
+				json << LabelFields(cellLabel);
+			}
+			json << ", \"tiles\": ";
+			AppendTiles(json, cell.Key, doc.Grid.Unit, lookup, folds);
 			json << " }";
 		}
 		json << (doc.Cells.empty() ? "]\n" : "\n  ]\n");
@@ -594,7 +678,7 @@ namespace MesenSheets
 	//One top-level array of ADR-0179 §3 runs. Ids are positions in the array,
 	//as pose ids are; `period` is written for cycles only, where it means
 	//something (a sequence's length is its poses count).
-	static void WritePoseRuns(std::stringstream& json, const char* key, const char* idPrefix, const std::vector<PoseRun>& runs, bool withPeriod)
+	static void WritePoseRuns(std::stringstream& json, const char* key, const char* idPrefix, const std::vector<PoseRun>& runs, bool withPeriod, const std::vector<PoseEntry>& poses)
 	{
 		if(runs.empty()) {
 			return;
@@ -625,6 +709,9 @@ namespace MesenSheets
 			if(run.Driver == 1 || run.Driver == 2) {
 				json << ", \"driver\": \"port" << (int)run.Driver << "\"";
 			}
+			//ADR-0209 Q1 (b): the run's default name (SheetLabels.h) - a
+			//rendering of this entry plus the extents of the poses it names.
+			json << LabelFields(InferRunLabel(run, poses, withPeriod));
 			json << " }";
 		}
 		json << "\n  ]";
@@ -722,11 +809,23 @@ namespace MesenSheets
 				snprintf(base, sizeof(base), "pose%03u", (uint32_t)pose.VariantOf);
 				json << ", \"variantOf\": \"" << base << "\"";
 			}
+			//ADR-0209 Q1 (b): the pose's default name, formatted from the
+			//fields written above and nothing else (SheetLabels.h) - the one
+			//field here that is a rendering of the others rather than a datum,
+			//and marked "inferred" for exactly that reason.
+			json << LabelFields(InferPoseLabel(pose));
 			json << ", \"tiles\": [";
 			for(size_t t = 0; t < pose.Tiles.size(); t++) {
 				const PoseTile& tile = pose.Tiles[t];
 				json << (t ? ", " : "");
-				json << "{ \"node\": " << tile.Node << ", \"dx\": " << tile.Dx << ", \"dy\": " << tile.Dy << " }";
+				json << "{ \"node\": " << tile.Node << ", \"dx\": " << tile.Dx << ", \"dy\": " << tile.Dy;
+				//ADR-0225 §1: native-pixel offsets beside the cells; `z` only
+				//when the layout overlaps.
+				json << ", \"px\": " << tile.Px << ", \"py\": " << tile.Py;
+				if(pose.Overlaps) {
+					json << ", \"z\": " << tile.Z;
+				}
+				json << " }";
 			}
 			json << "] }";
 		}
@@ -735,8 +834,8 @@ namespace MesenSheets
 		//absent, not empty, when the stream showed no repetition - a reader
 		//distinguishes "nothing found" from "written by an older recorder"
 		//by the version, not by these keys.
-		WritePoseRuns(json, "cycles", "cycle", stats.Cycles, true);
-		WritePoseRuns(json, "sequences", "seq", stats.Sequences, false);
+		WritePoseRuns(json, "cycles", "cycle", stats.Cycles, true, stats.Poses);
+		WritePoseRuns(json, "sequences", "seq", stats.Sequences, false, stats.Poses);
 		json << "\n}\n";
 		return json.str();
 	}

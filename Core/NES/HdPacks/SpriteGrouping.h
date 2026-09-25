@@ -63,7 +63,8 @@ namespace MesenSheets
 	//kept set is capped at kMaxPoses.
 	//ADR-0179 (F9.20) adds what the stream says about succession, without
 	//touching how a pose is found or ranked: kept clusters are linked frame
-	//to frame (nearest within kPoseTrackMaxMove) into tracks, each entry
+	//to frame (nearest within kPoseTrackMaxMove; ADR-0226 bridges one missing
+	//retained frame) into tracks, each entry
 	//gains Hold/Next, a kept pose that is another plus a sub-threshold
 	//remainder is a VariantOf it, and the tracks are scanned for cycles
 	//(period repeated >= kPoseCycleMinRepeats times, found on the sequence
@@ -91,6 +92,21 @@ namespace MesenSheets
 	//transitively - a chain A-B-C yields "B at dB from A" and "C at dC from B",
 	//never a synthesized A-to-C offset nobody observed.
 	std::vector<SpriteNearbyPlan> PlanSpriteNearby(const SheetGroup& group);
+
+	//Issue #415: the palette word a `spriteNearby` condition names for each
+	//shape, indexed by ShapeId (size shapeCount), as the shape was seen in the
+	//retained OAM stream - never the palette of the shape's first-seen art.
+	//A shape id wildcards the palette, so a tile the PPU drew as background
+	//before it ever reached OAM (Zelda's blank tile, first drawn with the
+	//background palette 09010001) had its anchor written with a background
+	//palette, which contradicts ADR-0189 §5: the condition must state what the
+	//recorder observed in OAM. The pick is the sprite palette seen on the most
+	//frames (RepeatCount-weighted), ties going to the one seen first. 0 means
+	//"no sprite palette observed" and the caller emits no condition: a sprite
+	//palette word always has 0xFF in its top byte (HdBuilderPpu), and a palette
+	//RAM byte is 6-bit, so 0 can never be one. paletteColors maps a PaletteId
+	//to its word (HdPackBuilder::PaletteColorTable).
+	std::vector<uint32_t> SpriteNearbyPalettes(const std::vector<OamFrame>& frames, size_t shapeCount, const std::vector<uint32_t>& paletteColors);
 
 	//ADR-0174 (issue #174): the join from a sprNNN group sheet to the whole
 	//figures its cells are part of. ADR-0153 §2's criterion cuts a character

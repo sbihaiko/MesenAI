@@ -22,6 +22,7 @@ namespace Mesen.HeadlessTests;
 //The pad itself is injected into GamepadTesterViewModel.Gamepads: the real
 //source is InputApi.GetConnectedGamepadCount(), which needs both the native
 //core and a physical pad, so an end-to-end "plug a pad in" check stays manual.
+[Collection(NativeCoreCollection.Name)]
 public class GamepadTestTabTests
 {
 	private static (Window Window, GamepadTestItem Pad) ShowTestTabWithOnePad()

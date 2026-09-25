@@ -9,6 +9,7 @@
 #include <cstring>
 #include <array>
 #include <map>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,13 @@ namespace MesenSheets
 	//whose top-left is nearest, within this Manhattan distance in pixels. A
 	//running actor moves a few px per frame; a teleport ends the track.
 	constexpr int32_t kPoseTrackMaxMove = 16;
+	//ADR-0226: a kept cluster with no partner in frame i+1 stays a pending
+	//track end for this many retained frames, so a figure drawn on every
+	//other frame (flicker, OAM sharing) is one track, not one per sighting.
+	//The skipped frame must carry RepeatCount <= kPoseTrackGapMaxRepeats: a
+	//figure gone across a long static frame has really left.
+	constexpr uint32_t kPoseTrackMaxGap = 1;
+	constexpr uint32_t kPoseTrackGapMaxRepeats = 2;
 	//A cycle is a period that repeats at least this many consecutive times
 	//on one track; the period is searched up to kPoseCycleMaxPeriod poses.
 	constexpr uint32_t kPoseCycleMinRepeats = 2;
@@ -121,6 +129,15 @@ namespace MesenSheets
 	//amendment added the palette plane (1920 B of shape ids + 960 B of palette
 	//ids), i.e. ~11.5 MB with the stream full.
 	constexpr uint32_t kMaxSheetFrames = 4096;
+	//F12.6b (ADR-0197 §3, option (b)): the internal RAM window the recorder
+	//keeps beside every retained grid frame, so a `memoryCheckConstant` an
+	//artist writes after the fact can still be checked against the run. It is
+	//the same range ADR-0184 bounds for RAM cheats (AAAA < 0x0800). Fixed, and
+	//independent of any loaded pack's WatchedMemoryAddresses - option (a),
+	//retaining only what a pack already watches, was rejected because a new
+	//address would need the pack loaded and the run re-recorded first.
+	//2 KB x kMaxSheetFrames = 8 MB with the stream full.
+	constexpr uint32_t kRetainedRamSize = 0x800;
 	//1-cell gutter, transparent, between every sheet cell.
 	constexpr uint32_t kSheetGutter = 1;
 	//Largest stitched-map canvas rendered at 1x, in pixels (ADR-0153 §6: a map
@@ -351,6 +368,32 @@ namespace MesenSheets
 	using ShapeId = uint16_t;
 	constexpr ShapeId kEmptyCell = 0xFFFF;
 
+	//ADR-0221 (option B, F12.13): what "empty" means for the variant kind test.
+	//The recorder hands *every* drawn tile a shape id (ShapeIdFor), so a cell
+	//the game fills with a single flat colour is not kEmptyCell in the grid -
+	//it is a shape whose 16 CHR bytes resolve every pixel to one colour index
+	//(each plane's eight row bytes all 0x00 or all 0xFF). That is the same
+	//"single flat colour per 8x8 cell" scripts/measure_capture_overdraw.py
+	//scores, chosen so the rule and its acceptance tool agree on the word. A
+	//kEmptyCell (nothing drawn there) is empty too. Palette-agnostic on
+	//purpose: two colour indexes that happen to map to one NES colour under
+	//some palette would read as "detail" here and "flat" in the tool, which
+	//errs toward the rival side - the safe one for #339.
+	inline bool IsFlatTileData(const uint8_t* tileData)
+	{
+		uint8_t plane0 = tileData[0];
+		uint8_t plane1 = tileData[8];
+		if((plane0 != 0x00 && plane0 != 0xFF) || (plane1 != 0x00 && plane1 != 0xFF)) {
+			return false;
+		}
+		for(int row = 1; row < 8; row++) {
+			if(tileData[row] != plane0 || tileData[8 + row] != plane1) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	//Which 4-colour NES palette a cell was drawn with, interned by the recorder
 	//in first-sight order (ADR-0159 amendment, 2026-09-05). A whole
 	//PaletteColors word per cell would triple the retained stream; an id only
@@ -421,6 +464,98 @@ namespace MesenSheets
 		}
 	};
 
+	//HdPackBuilder::RecordGridFrame's layout of one frame's background runs
+	//onto `frame` (a run is HdPackBuilder::ScreenRun: X, Y and the HdPpuTileInfo
+	//Tile drawn from X to the next run's X on scanline Y). Ported from the
+	//spike's frame_grid (scripts/spike_tile_sheets.py): run starts sit on tile
+	//boundaries, so the most common (x % 8) among non-zero run starts is the
+	//frame's fine x scroll, and cells are laid out relative to it - two frames
+	//of the same screen at different sub-tile offsets then compare equal. A
+	//cell is filled from the scanline at its origin (y % 8 == 0).
+	//`shapeFor(tile)` interns a tile's shape (kEmptyCell when it cannot) and
+	//`paletteFor(paletteColors)` its palette, in the order they are met. Host-free and inline
+	//because HdPackBuilder.cpp is not in the unit-test link set.
+	template<typename Run, typename ShapeFor, typename PaletteFor>
+	void LayOutGridRuns(const std::vector<Run>& runs, GridFrame& frame, ShapeFor&& shapeFor, PaletteFor&& paletteFor)
+	{
+		uint32_t fineCounts[8] = {};
+		for(const Run& run : runs) {
+			if(run.X != 0) {
+				fineCounts[run.X & 7]++;
+			}
+		}
+		uint8_t fine = 0;
+		for(uint8_t i = 1; i < 8; i++) {
+			if(fineCounts[i] > fineCounts[fine]) {
+				fine = i;
+			}
+		}
+		frame.FineX = fine;
+		for(size_t i = 0; i < runs.size(); i++) {
+			const Run& run = runs[i];
+			if((run.Y & 7) != 0) {
+				continue;
+			}
+			uint32_t row = (uint32_t)run.Y >> 3;
+			if(row >= kGridRows) {
+				continue;
+			}
+			//The run ends where the next run on the same scanline starts
+			uint32_t xEnd = (i + 1 < runs.size() && runs[i + 1].Y == run.Y) ? runs[i + 1].X : 256;
+			int32_t offset = ((int32_t)run.X - (int32_t)fine) % 8;
+			if(offset < 0) {
+				offset += 8;
+			}
+			uint32_t cx = offset == 0 ? run.X : run.X + (8 - offset);
+			ShapeId shape = shapeFor(run.Tile);
+			if(shape == kEmptyCell) {
+				continue;
+			}
+			PaletteId palette = paletteFor(run.Tile.PaletteColors);
+			for(; cx + 8 <= 256 && cx < xEnd; cx += 8) {
+				int32_t col = ((int32_t)cx - (int32_t)fine) / 8;
+				if(col >= 0 && col < (int32_t)kGridCols) {
+					frame.Cells[row][col] = shape;
+					frame.Palettes[row][col] = palette;
+				}
+			}
+		}
+		//#471: every other scanline's tiles are interned too, after the origin
+		//scanlines so their shapes keep the ids they had. DrawPixel writes a
+		//<tile> rule for every scanline; a tile drawn only off a cell's origin
+		//(Punch-Out!!'s 00FD, a one-line raster effect on y % 8 == 7) had rules
+		//and no sheet cell. It takes no grid cell here (the cell belongs to
+		//its origin's tile); the unsorted sheet gives its shape one.
+		for(const Run& run : runs) {
+			if((run.Y & 7) != 0) {
+				shapeFor(run.Tile);
+			}
+		}
+	}
+
+	//F12.6b (ADR-0197 §3): the body of a grid dump's `M` line - the retained
+	//RAM window as upper-case hex with no separators, `kRetainedRamSize * 2`
+	//characters, always the full width so a reader can index a byte by
+	//multiplying its address by two. A short or absent buffer pads with zeroes
+	//rather than shortening the line, because a ragged line would read as a
+	//different address space.
+	//
+	//It lives here, host-free and inline, on purpose: `HdPackBuilder.cpp` is
+	//not in the unit-test link set, so the encoding the emulator writes would
+	//otherwise be untestable and could drift from the one `mep_conditions.py`
+	//reads.
+	inline std::string RamDumpLine(const uint8_t* ram, size_t size)
+	{
+		static const char* digits = "0123456789ABCDEF";
+		std::string out((size_t)kRetainedRamSize * 2, '0');
+		size_t n = ram == nullptr ? 0 : (size < kRetainedRamSize ? size : kRetainedRamSize);
+		for(size_t i = 0; i < n; i++) {
+			out[i * 2] = digits[ram[i] >> 4];
+			out[i * 2 + 1] = digits[ram[i] & 0x0F];
+		}
+		return out;
+	}
+
 	//---- OAM (F9.5) --------------------------------------------------------
 
 	//One sprite as the recorder saw it: the 8x8 shape id - taken *after* the OAM
@@ -428,13 +563,22 @@ namespace MesenSheets
 	//can sit beside its twin on a sheet - plus its screen origin in pixels. An
 	//8x16 sprite is recorded as its two 8x8 halves, which keeps the whole slice
 	//on one unit and lets the grouping recover the tall figure by itself.
+	//
+	//ADR-0222 (F12.14): Palette is the interned id of the sprite's palette word
+	//(the OAM attribute's two palette bits resolved through palette RAM), from
+	//the same first-sight table the grid stream's "P" lines spell
+	//(HdPackBuilder::PaletteIdFor). The shape id wildcards the palette on
+	//purpose, so without it the OAM stream could settle the shape half of a
+	//spriteNearby condition and never its colour half. It is part of entry
+	//identity: two frames that differ only in sprite colour are two frames.
 	struct OamEntry
 	{
 		ShapeId Shape = kEmptyCell;
 		uint8_t X = 0;
 		uint8_t Y = 0;
+		PaletteId Palette = kUnknownPalette;
 
-		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y; }
+		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y && Palette == o.Palette; }
 	};
 
 	//One frame's OAM, in OAM order. Consecutive identical frames collapse into
@@ -453,8 +597,58 @@ namespace MesenSheets
 		//attention, not a duty cycle). 0 for a port with no controller.
 		uint8_t Buttons[2] = {};
 
+		//Entry identity includes the palette id (ADR-0222), so a frame that only
+		//recolours a sprite is retained as its own frame, as the grid stream
+		//already does for a recoloured cell (ADR-0159 amendment, 2026-09-05).
 		bool SameEntries(const OamFrame& o) const { return Entries == o.Entries; }
 	};
+
+	//ADR-0222 option A (F12.14): the MESEN_OAM_STREAM_DUMP writer, host-free so
+	//scripts/core_unit_tests.cpp can pin the format `mep_conditions.py` reads.
+	//Self-describing like WriteGridDump: "K <id> <32 hex tile data> <8 hex
+	//palette>" interns a shape on first sight, "P <id> <8 hex palette>" interns
+	//a palette word on first sight, and each frame is one line,
+	//"<frame> <repeat> <port1> <port2>" (ADR-0181: the two button bytes) followed
+	//by "<shape>,<x>,<y>,<pal>" per sprite, where <shape> is the ShapeId - the
+	//same id space the grid stream's "K" lines use, since ShapeIdFor interns
+	//sprites and background cells into one table. The "K" tile data is the
+	//shape's drawable art (TileData, with the OAM flips baked in - ADR-0178),
+	//exactly what the grid dump writes for the same id. A palette id with no
+	//entry in `paletteColors` (kUnknownPalette: the id space ran out) gets no
+	//"P" line and a reader falls back to the shape's own first-seen palette.
+	inline void WriteOamStreamDump(std::ostream& out, const std::vector<OamFrame>& frames, const std::vector<SheetTileKey>& shapeTiles, const std::vector<uint32_t>& paletteColors)
+	{
+		static const char* digits = "0123456789ABCDEF";
+		auto hex8 = [&](uint8_t v) { out << digits[v >> 4] << digits[v & 0x0F]; };
+		auto hex32 = [&](uint32_t v) { hex8((uint8_t)(v >> 24)); hex8((uint8_t)(v >> 16)); hex8((uint8_t)(v >> 8)); hex8((uint8_t)v); };
+		std::vector<bool> shapeEmitted(shapeTiles.size(), false);
+		std::vector<bool> paletteEmitted(paletteColors.size(), false);
+		for(const OamFrame& frame : frames) {
+			for(const OamEntry& entry : frame.Entries) {
+				if(entry.Shape < shapeTiles.size() && !shapeEmitted[entry.Shape]) {
+					shapeEmitted[entry.Shape] = true;
+					out << "K " << entry.Shape << ' ';
+					for(int b = 0; b < 16; b++) {
+						hex8(shapeTiles[entry.Shape].TileData[b]);
+					}
+					out << ' ';
+					hex32(shapeTiles[entry.Shape].PaletteColors);
+					out << '\n';
+				}
+				if(entry.Palette < paletteColors.size() && !paletteEmitted[entry.Palette]) {
+					paletteEmitted[entry.Palette] = true;
+					out << "P " << (uint32_t)entry.Palette << ' ';
+					hex32(paletteColors[entry.Palette]);
+					out << '\n';
+				}
+			}
+			out << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
+			for(const OamEntry& entry : frame.Entries) {
+				out << ' ' << entry.Shape << ',' << (int)entry.X << ',' << (int)entry.Y << ',' << (uint32_t)entry.Palette;
+			}
+			out << '\n';
+		}
+	}
 
 	//---- F9.17 (ADR-0164): adjacency.json statistics ----------------------
 
@@ -539,6 +733,13 @@ namespace MesenSheets
 		uint32_t Node = 0;
 		int32_t Dx = 0;
 		int32_t Dy = 0;
+		//ADR-0225 §1: the tile's top-left in native pixels from the pose origin
+		//(Dx == ToCells(Px)), and its front-to-back OAM rank (0 = frontmost) -
+		//written as `z` only when the pose's tiles overlap. Deliberately NOT
+		//part of ==/<: identity stays on the rounded (Node, Dx, Dy) set.
+		int32_t Px = 0;
+		int32_t Py = 0;
+		int32_t Z = 0;
 
 		bool operator==(const PoseTile& o) const { return Node == o.Node && Dx == o.Dx && Dy == o.Dy; }
 		bool operator<(const PoseTile& o) const
@@ -565,6 +766,9 @@ namespace MesenSheets
 	struct PoseEntry
 	{
 		std::vector<PoseTile> Tiles;
+		//ADR-0225 §1: some pair of Tiles overlaps at pixel precision, so the
+		//sidecar writes each tile's Z.
+		bool Overlaps = false;
 		//Retained frames this silhouette was seen in, RepeatCount included -
 		//unlike the pair statistics, which ignore RepeatCount on purpose. A
 		//pose is a still, so a paused screen showing one really is evidence
@@ -579,6 +783,8 @@ namespace MesenSheets
 		//so were clustered as one. Empty means *not classified as a fusion*,
 		//never *proved not to be one*. Both parts are kept poses themselves,
 		//and they may be the same pose twice (two copies side by side).
+		//ADR-0228: a single position when the entry is a kept pose plus a
+		//remainder of kPoseMinTiles or more tiles that never stood alone.
 		std::vector<uint32_t> FusionOf;
 		//ADR-0179 §2: retained-frame transitions on which this pose was linked
 		//to itself (the figure held still or moved without changing shape).
@@ -876,6 +1082,11 @@ namespace MesenSheets
 		//would need the vocabulary the artist never receives.
 		std::vector<uint32_t> Aliases;
 		std::vector<MetatileKey> AliasKeys;
+		//ADR-0230 (F14.9): the Index of the cell this one is a palette variant
+		//of - the same shapes drawn in another palette the recording saw - or
+		//-1 for an ordinary cell. A variant carries no vocabulary index
+		//(Metatile stays -1) so a map placement never resolves to it.
+		int32_t VariantOf = -1;
 	};
 
 	//0xAARRGGBB, alpha 0 outside a cell (gutters and padding stay transparent).

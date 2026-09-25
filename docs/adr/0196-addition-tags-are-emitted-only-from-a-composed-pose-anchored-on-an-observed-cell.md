@@ -2,8 +2,9 @@
 
 - Status: accepted (2026-09-16) — §3 decided as option (a) with a reserved
   palette added to the reserved pattern; user's go-ahead quoted verbatim:
-  "confirmo". Not implemented; the implementing slice is PRD Part A §4,
-  Phase 12, F12.5
+  "confirmo". Implemented as PRD Part A slice F12.5 (2026-09-19; Part A
+  §3); its hand-added overflow cell is still owed and is carried by Phase 14's
+  F14.8
 - Date: 2026-09-16
 - Related: ADR-0165 (composition editor, external stdlib tool), ADR-0171
   (the sprite layer's unit is the pose), ADR-0179 (`poses.json` succession),
@@ -107,6 +108,18 @@ offset (ADR-0183 §4). `mep_lint.py` errors when an `<addition>` cites an
 anchor that no `<tile>` rule keys, when a target key is not marked synthetic
 in the sidecar, or when a synthetic key fails the §3 check for the console's
 key kind.
+
+*Refined 2026-09-23 (#382/#386; user's decision, verbatim: "Manter como está").*
+"Keyed" is read the way `HdNesPack::GetMatchingTile` finds art: an anchor or
+target counts as keyed when a `<tile>` rule matches its CHR index by value
+(decimal below `<ver>103`, hex from 103) under its exact palette, or when a
+`defaultTile=Y` rule keys that index under any palette (the loader's
+palette-wildcard key). **A rule's `[condition]` prefix is not weighed:** a
+target whose only art sits behind a condition still counts as keyed, since
+lint does not evaluate conditions and cannot tell whether the rule's
+condition matches the context the `<addition>` fires in — art conditioned
+on purpose (a title screen) would otherwise be a false error. Measured on
+Metroid (USA), #148: one such target (`006/FF001431`, title-screen rules).
 
 ## Consequences
 
