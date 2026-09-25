@@ -63,6 +63,7 @@
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
+#include "NES/HdPacks/OamFetchLatch.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
@@ -9597,6 +9598,275 @@ void TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten()
 	Check(got == expected, "PR #461: sheet-at-a-time output is identical to laying every sheet out at once");
 }
 
+//Issue #450: the recorder's OAM snapshot must name the (tile, palette) the
+//PPU fetched, not whatever PPUCTRL/OAM/palette hold when the frame ends. The
+//model drives OamFetchLatch the way HdBuilderPpu does - one call per visible
+//scanline at the start of its sprite fetch (cycle 257), with that moment's
+//state - and reads back what the frame would hand to RecordSprite.
+namespace OamFetchLatchModel
+{
+	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; uint32_t Palette; };
+
+	//The sprite palettes a line uses unless a test says otherwise, one per
+	//attribute palette index, in HdPpuTileInfo::PaletteColors form.
+	constexpr uint32_t kSteadyPalettes[4] = { 0xFF162730, 0xFF021222, 0xFF0A1A2A, 0xFF071727 };
+
+	//One visible line of the PPU timeline. The first group is the state at
+	//cycle 257, where the PPU starts fetching the sprites of the next row;
+	//the second is how row `line` itself was drawn (cycles 1-256).
+	struct LineState
+	{
+		bool RenderingAt257 = true;
+		bool SpritesAt257 = true;
+		bool LargeSprites = false;
+		uint16_t SpritePatternAddr = 0;
+		uint32_t PalettesAt257[4] = { kSteadyPalettes[0], kSteadyPalettes[1], kSteadyPalettes[2], kSteadyPalettes[3] };
+		bool SpritesShownOnRow = true;
+		uint32_t PalettesOnRow[4] = { kSteadyPalettes[0], kSteadyPalettes[1], kSteadyPalettes[2], kSteadyPalettes[3] };
+	};
+
+	//Every OAM slot parked off-screen (Y = 0xEF), as a game does.
+	void ClearOam(uint8_t* oam)
+	{
+		memset(oam, 0, 256);
+		for(int i = 0; i < 64; i++) {
+			oam[i * 4] = 0xEF;
+		}
+	}
+
+	void SetSprite(uint8_t* oam, int index, uint8_t y, uint8_t tile, uint8_t attributes, uint8_t x)
+	{
+		oam[index * 4] = y;
+		oam[index * 4 + 1] = tile;
+		oam[index * 4 + 2] = attributes;
+		oam[index * 4 + 3] = x;
+	}
+
+	//stateForLine(line) gives the PPU state at cycle 257 of each visible line.
+	template<typename StateFor>
+	std::vector<Entry> RunFrame(OamFetchLatch& latch, const uint8_t* oam, StateFor&& stateForLine)
+	{
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			LineState s = stateForLine(line);
+			//HdBuilderPpu's wiring: rendering on at cycle 257 fetches, and the
+			//row just drawn says whether it showed sprites and in which palettes.
+			latch.OnSpriteFetch(line, s.SpritesShownOnRow, s.PalettesOnRow, s.RenderingAt257, oam, s.LargeSprites, s.SpritePatternAddr,
+				[&](const OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+					tile.TileIndex = h.TileAddr;
+					tile.PaletteColors = s.PalettesAt257[(h.PaletteOffset >> 2) & 0x03];
+					return true;
+				});
+		}
+		std::vector<Entry> out;
+		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) {
+			out.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors });
+		});
+		return out;
+	}
+
+	std::string Describe(const std::vector<Entry>& entries)
+	{
+		std::string s;
+		char buf[48];
+		for(const Entry& e : entries) {
+			snprintf(buf, sizeof(buf), "(%u,%u,%04X,%08X) ", e.X, e.Y, e.TileAddr, e.Palette);
+			s += buf;
+		}
+		return s.empty() ? "(none)" : s;
+	}
+}
+
+void TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched()
+{
+	//Castlevania's cut from the gate screen to stage 1 (frame 658): the game
+	//writes PPUCTRL=$00 and PPUMASK=$00 at line 0, cycles 240-252. Sprites
+	//were on for the first pixels of line 0, but no sprite row is drawn on
+	//line 0 and every later fetch happens with rendering off - the frame
+	//drew no sprite at all, whatever OAM and PPUCTRL say at frame end.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 37, 0x21, 0x00, 64);
+	SetSprite(oam, 1, 22, 0x44, 0x02, 128);
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		s.RenderingAt257 = false;
+		s.SpritesAt257 = false;
+		s.SpritesShownOnRow = line == 0;
+		s.LargeSprites = false;
+		return s;
+	});
+	Check(got.empty(), "Issue #450: a frame whose rendering stopped before any sprite fetch records no sprite",
+		"got " + Describe(got));
+}
+
+void TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch()
+{
+	//The same cut, seen one step later: 8x16 sprites draw the top of the
+	//frame, then the game turns rendering off and switches PPUCTRL to 8x8 for
+	//the next screen. The sprite drawn above the switch keeps its 8x16 halves;
+	//the one below it was never drawn and must not appear as an 8x8 half.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x00, 40);  //rows 21-36, drawn
+	SetSprite(oam, 1, 150, 0x22, 0x01, 90); //rows 151-166, after the switch
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		s.RenderingAt257 = line < 100;
+		s.SpritesAt257 = line < 100;
+		s.SpritesShownOnRow = line <= 100;
+		s.LargeSprites = line < 100;
+		s.SpritePatternAddr = line < 100 ? 0x0000 : 0x1000;
+		return s;
+	});
+	bool ok = got.size() == 2
+		&& got[0].X == 40 && got[0].Y == 21 && got[0].TileAddr == 0x1100
+		&& got[1].X == 40 && got[1].Y == 29 && got[1].TileAddr == 0x1110;
+	Check(ok, "Issue #450: an 8x16 sprite drawn before a mid-frame PPUCTRL switch keeps both halves, and an undrawn one is absent",
+		"got " + Describe(got));
+}
+
+void TestOamLatchKeepsASpriteWhoseLowerRowsDrawAfterSpritesTurnOn()
+{
+	//Sprites enabled (background on throughout) from line 104's hblank on, so
+	//from row 105: a sprite whose rows straddle that line
+	//is partly drawn and is recorded (with the half the drawn rows belong
+	//to); a sprite wholly above it is not.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 10, 0x30, 0x00, 8);   //rows 11-26, never drawn
+	SetSprite(oam, 1, 100, 0x30, 0x00, 16); //rows 101-116, drawn from row 105
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		s.SpritesAt257 = line >= 104;
+		s.SpritesShownOnRow = line >= 105;
+		s.LargeSprites = true;
+		return s;
+	});
+	bool ok = got.size() == 2
+		&& got[0].X == 16 && got[0].Y == 101 && got[0].TileAddr == 0x0300
+		&& got[1].X == 16 && got[1].Y == 109 && got[1].TileAddr == 0x0310;
+	Check(ok, "Issue #450: a partly drawn sprite is recorded and a sprite above the enable line is not",
+		"got " + Describe(got));
+}
+
+void TestOamLatchMatchesTheFrameEndDecodeWhenNothingChangesMidFrame()
+{
+	//Every frame that does not touch the PPU mid-frame must record exactly
+	//what the frame-end decode recorded: OAM order, halves top first, a
+	//vertical flip swapping the 8x16 parts, parked sprites skipped, and a
+	//bottom half that would start at row 240 dropped.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 50, 0x13, 0x80, 30);  //vflip: bottom part first on screen
+	SetSprite(oam, 3, 0x00, 0x20, 0x00, 7); //rows 1-16
+	SetSprite(oam, 5, 0xE7, 0x08, 0x40, 9); //top half rows 232-239, bottom off-screen
+	SetSprite(oam, 9, 0xF0, 0x02, 0x00, 1); //parked
+	OamFetchLatch latch;
+	std::vector<Entry> large = RunFrame(latch, oam, [](int) {
+		LineState s;
+		s.LargeSprites = true;
+		return s;
+	});
+	bool largeOk = large.size() == 5
+		&& large[0].Y == 51 && large[0].TileAddr == 0x1130
+		&& large[1].Y == 59 && large[1].TileAddr == 0x1120
+		&& large[2].X == 7 && large[2].Y == 1 && large[2].TileAddr == 0x0200
+		&& large[3].X == 7 && large[3].Y == 9 && large[3].TileAddr == 0x0210
+		&& large[4].X == 9 && large[4].Y == 232 && large[4].TileAddr == 0x0080;
+	Check(largeOk, "Issue #450: a steady 8x16 frame records the frame-end decode unchanged", "got " + Describe(large));
+
+	std::vector<Entry> small = RunFrame(latch, oam, [](int) {
+		LineState s;
+		s.SpritePatternAddr = 0x1000;
+		return s;
+	});
+	bool smallOk = small.size() == 3
+		&& small[0].Y == 51 && small[0].TileAddr == 0x1130
+		&& small[1].Y == 1 && small[1].TileAddr == 0x1200
+		&& small[2].Y == 232 && small[2].TileAddr == 0x1080;
+	Check(smallOk, "Issue #450: a steady 8x8 frame records the frame-end decode unchanged", "got " + Describe(small));
+}
+
+//PR #468 review: whether a fetched half was drawn is decided by the row it is
+//drawn on, not by PPUMASK at cycle 257. With the background on, rendering
+//stays on and the PPU fetches sprites whatever PPUMASK's sprite bit says; the
+//bit only decides, pixel by pixel, whether the next row shows them - which is
+//also what DrawPixel's <tile> rule follows.
+void TestOamLatchKeepsAHalfWhoseRowShowsSpritesThoughTheBitWasOffAtItsFetch()
+{
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 50, 0x42, 0x00, 24); //rows 51-58, fetched on lines 50-57
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		//The game clears the sprite bit in each hblank and sets it again
+		//before the row's first pixel: every fetch sees it off, every row
+		//shows the sprite.
+		s.SpritesAt257 = !(line >= 45 && line <= 60);
+		return s;
+	});
+	bool ok = got.size() == 1 && got[0].X == 24 && got[0].Y == 51 && got[0].TileAddr == 0x0420;
+	Check(ok, "PR #468: a half drawn on rows that show sprites is recorded though PPUMASK hid sprites at each of its fetches",
+		"got " + Describe(got));
+}
+
+void TestOamLatchDropsAHalfFetchedWithSpritesOnButHiddenOnEveryRow()
+{
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 150, 0x42, 0x00, 24); //rows 151-158
+	SetSprite(oam, 1, 30, 0x43, 0x00, 32);  //rows 31-38, drawn
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int line) {
+		LineState s;
+		//The sprite bit is on at every cycle 257 but cleared before the
+		//row's pixels on rows 145-165: those rows draw no sprite at all.
+		s.SpritesShownOnRow = !(line >= 145 && line <= 165);
+		return s;
+	});
+	bool ok = got.size() == 1 && got[0].X == 32 && got[0].Y == 31 && got[0].TileAddr == 0x0430;
+	Check(ok, "PR #468: a half fetched with sprites on but drawn on no row that shows sprites is not recorded",
+		"got " + Describe(got));
+}
+
+//PR #468 review: the PPU reads palette RAM as it draws a pixel, not when it
+//fetches the sprite, and DrawPixel keys the <tile> rule the same way. A
+//palette rewritten after a half's first fetch and before its rows are drawn
+//must reach the half.
+void TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn()
+{
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 99, 0x42, 0x02, 24); //rows 100-107, first fetched on line 99
+	const uint32_t rewritten = 0xFF30201A;
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [&](int line) {
+		LineState s;
+		//Palette 2 is rewritten in line 99's hblank, after cycle 257, and
+		//keeps its new value for the rest of the frame.
+		if(line >= 100) {
+			s.PalettesAt257[2] = rewritten;
+			s.PalettesOnRow[2] = rewritten;
+		}
+		return s;
+	});
+	bool ok = got.size() == 1 && got[0].Y == 100 && got[0].Palette == rewritten;
+	Check(ok, "PR #468: a half carries the palette its rows were drawn in (FF30201A), not the one at its fetch",
+		"got " + Describe(got));
+}
+
 void TestALaterTileNeverEvictsAnEarlierOneFromItsChrPageSlot()
 {
 	//Issue #460: on CHR RAM the bank is keyed by a hash that can outlive the
@@ -10008,6 +10278,14 @@ int main()
 	TestAFullChrPageRefusesATileInsteadOfEvictingOne();
 	TestADisplacedTileStaysInsideTheUsableSlotsOfItsPage();
 	TestAPageWithItsUsableSlotsFullRefusesATile();
+
+	TestOamLatchRecordsNothingWhenRenderingStopsBeforeAnySpriteIsFetched();
+	TestOamLatchDecodesASpriteWithThePpuctrlOfItsFetch();
+	TestOamLatchKeepsASpriteWhoseLowerRowsDrawAfterSpritesTurnOn();
+	TestOamLatchMatchesTheFrameEndDecodeWhenNothingChangesMidFrame();
+	TestOamLatchKeepsAHalfWhoseRowShowsSpritesThoughTheBitWasOffAtItsFetch();
+	TestOamLatchDropsAHalfFetchedWithSpritesOnButHiddenOnEveryRow();
+	TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
