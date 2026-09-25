@@ -41,7 +41,10 @@ A later `export` shows paint routed that way. A pack never built with the
 sheets it holds (a kit copied into a recording, a fresh recording whose
 flip-baked crops the first build un-bakes, ADR-0178) is refused before
 anything is written, naming the build to run first (#435): its plan would be
-made against twins that build is about to rewrite.
+made against twins that build is about to rewrite. The figure keeps
+showing a flip-baked crop the way the game draws it: its sidecar records the
+flip per cell (`mirror`), and import un-bakes the paint wherever the build
+has since un-baked the crop, so the art lands un-mirrored in game (#463).
 
 Where the layout comes from is stated in the sidecar (`source`): `poses` when
 `sheets/poses.json` records the silhouette (ADR-0170 §4), `walk` when the pack
@@ -166,6 +169,85 @@ def figure_stem(figure_id: str) -> str:
     return f"{figure_id}{FIGURE_SUFFIX}"
 
 
+# ---- orientation: the flip the recorder baked into a crop (#463) -------------
+#
+# The recorder bakes a sprite's OAM flip into the crop it records (ADR-0178),
+# and the kit cuts its figures from those crops, so a figure shows every cell
+# the way the game draws it. The first `mep_build.py build` un-bakes the crops
+# in place and drops the sidecar's `mirror` (#255), and the #435 recipe runs
+# that build before the import. So the figure records, per cell, the flip its
+# crop still carried at export; import then un-bakes the paint the same way
+# wherever the crop has since lost that flip, and reads the crop's art back
+# in the figure's orientation when it decides pixel ownership (ADR-0225 §3).
+
+_MIRRORS = ("H", "V", "HV")
+
+
+def _subtiles(unit: int) -> int:
+    return 4 if unit >= 16 else 1
+
+
+def baked_mirrors(cell: dict, unit: int) -> list:
+    """Per 8x8 sub-tile of `cell` (row-major, the order `tiles[]` lists them),
+    the OAM flip still baked into its crop: the tile entry's `mirror` (ADR-0178
+    §4), which the build drops once it has un-baked the pixels. "" when none."""
+    tiles = cell.get("tiles") if isinstance(cell.get("tiles"), list) else []
+    out = []
+    for i in range(_subtiles(unit)):
+        t = tiles[i] if i < len(tiles) and isinstance(tiles[i], dict) else {}
+        m = str(t.get("mirror") or "").strip().upper()
+        out.append(m if m in _MIRRORS else "")
+    return out
+
+
+def pending_flips(entry: dict, cell: dict, unit: int) -> list:
+    """Per sub-tile, the flip between the figure (`entry`, which recorded the
+    flip its crop carried at export) and the crop as it is now: the recorded
+    flip where the build has since un-baked it, else "". Applying it maps
+    figure pixels onto the crop, and back — each flip is an involution."""
+    rec = entry.get("mirror")
+    rec = [rec] if isinstance(rec, str) else rec if isinstance(rec, list) else []
+    now = baked_mirrors(cell, unit)
+    out = []
+    for i, still in enumerate(now):
+        m = str(rec[i]).upper() if i < len(rec) else ""
+        out.append(m if m in _MIRRORS and not still else "")
+    return out
+
+
+def _flip_index(flips: list, tile: int, x: int, y: int):
+    """The source pixel of `(x, y)` in a cell of `tile`-pixel sub-tiles."""
+    m = flips[(y // tile) * 2 + x // tile] if len(flips) > 1 else flips[0]
+    ox, oy = x - x % tile, y - y % tile
+    lx, ly = x % tile, y % tile
+    return (ox + (tile - 1 - lx if "H" in m else lx), oy + (tile - 1 - ly if "V" in m else ly))
+
+
+def mirror_image(img, flips: list, tile: int):
+    """`img` (one cell) with each `tile`-pixel sub-tile flipped by `flips`."""
+    if not any(flips):
+        return img
+    out = sheet_repaint.Image(img.width, img.height)
+    for y in range(img.height):
+        for x in range(img.width):
+            sx, sy = _flip_index(flips, tile, x, y)
+            o, d = img.offset(sx, sy), out.offset(x, y)
+            out.px[d:d + 4] = img.px[o:o + 4]
+    return out
+
+
+def _mirror_mask(owned: list, flips: list, unit: int) -> list:
+    """`_owned_pixels`' row-major `unit`x`unit` mask, flipped like the cell."""
+    if not any(flips):
+        return owned
+    out = []
+    for y in range(unit):
+        for x in range(unit):
+            sx, sy = _flip_index(flips, 8, x, y)
+            out.append(owned[sy * unit + sx])
+    return out
+
+
 # ---- caption (ADR-0209 Q1 (b), ADR-0183 §5) ----------------------------------
 
 def load_names(path):
@@ -262,6 +344,9 @@ def figure_cells(pack: E.Pack, figure: Figure, origin=(0, 0), pose_id=None):
         }
         if isinstance(cell.get("index"), int):
             entry["index"] = cell["index"]
+        mirrors = baked_mirrors(cell, sheet.unit)
+        if any(mirrors):
+            entry["mirror"] = mirrors  # #463: the figure shows this crop flipped
         if node in figure.z:
             entry["z"] = figure.z[node]
         if pose_id is not None:
@@ -486,7 +571,9 @@ def _owned_pixels(pack: E.Pack, entries, i, others, unit):
             e = entries[j]
             sheet = _group_sheet(pack, Path(str(e["sheet"])).stem)
             cell = _find_cell(sheet, e) if sheet is not None else None
-            arts[j] = sheet.cell_image(cell) if cell is not None else None
+            # #463: in the figure's orientation, not the un-baked crop's.
+            arts[j] = (mirror_image(sheet.cell_image(cell), pending_flips(e, cell, unit), 8)
+                       if cell is not None else None)
         return arts[j]
 
     me = entries[i]
@@ -819,7 +906,8 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
 
     report = {"figure": doc.get("figure"), "scale": scale, "cells": 0, "painted": 0,
               "written": 0, "alreadyApplied": 0, "sheets": [], "overlapped": 0,
-              "rerouted": 0, "sourceLeft": 0, "moves": 0, "overwrote": 0, "blank": []}
+              "rerouted": 0, "sourceLeft": 0, "moves": 0, "overwrote": 0, "blank": [],
+              "unmirrored": 0}
     entries = [e for e in (doc.get("cells") or []) if isinstance(e, dict)]
     for e in entries:
         e["x"], e["y"] = int(e["x"]), int(e["y"])
@@ -878,6 +966,14 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
         report["painted"] += 1
         if sheet.unit != unit:
             raise FigureError(f"{sheet.name}: unit {sheet.unit} does not match the figure's {unit}")
+        flips = pending_flips(entry, cell, unit)
+        if any(flips):
+            # #463: the build un-baked this crop's flip after the figure was
+            # cut; un-bake the paint the same way so the run time, which
+            # mirrors the art itself, draws it as the artist painted it.
+            fig_cell = mirror_image(fig_cell, flips, 8 * scale)
+            owned = _mirror_mask(owned, flips, unit) if owned is not None else None
+            report["unmirrored"] += 1
         img = canvas(sheet)[1]
         sx, sy = int(cell["x"]) * scale, int(cell["y"]) * scale
         if sx + unit * scale > img.width or sy + unit * scale > img.height:
@@ -1031,6 +1127,9 @@ def cmd_import(args) -> int:
               f"key from; {report['sourceLeft']} of their source cell(s) left as they were, so no rule moves")
     for name in report["sheets"]:
         print(f"  wrote {pack.sheets_dir / name}")
+    if report["unmirrored"]:
+        print(f"  {report['unmirrored']} painted cell(s) un-mirrored on the way in: the build un-baked the "
+              "flip the game draws them with (ADR-0178), and the game mirrors the art back (#463)")
     if report["blank"]:
         print(f"  {len(report['blank'])} fully transparent tile(s) skipped: the NES draws nothing there, "
               "so paint over them is a neighbour's and stays off the sheet (#452)")

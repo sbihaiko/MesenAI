@@ -520,6 +520,147 @@ def test_an_import_before_the_first_build_is_refused_and_the_recipe_holds_the_ma
               "and the paint is on the crop the manifest draws")
 
 
+def _bake_recorded_mirror(pack_dir: Path, node: int, true_art, stems=("sprites", "spr000")):
+    """What the recorder writes for a sprite the game always draws H-flipped
+    (ADR-0178), on every sheet that shows it: the sidecar keys the flipped
+    data with `source` + `mirror: H`, and the pixels (sheet and twin) are the
+    H mirror of `true_art`, the unflipped tile. The kit's figures are cut from
+    these crops, so they show the baked view; the first build un-bakes them
+    back to `true_art` (#255) and drops the two fields."""
+    sheets = pack_dir / "textures" / "sheets"
+    tile, pal = _key(node)
+    flipped = bytes(int(f"{x:08b}"[::-1], 2) for x in bytes.fromhex(tile)).hex().upper()
+    baked = sheet_repaint.Image(true_art.width, true_art.height)
+    for y in range(true_art.height):
+        for x in range(true_art.width):
+            baked.set(true_art.width - 1 - x, y, true_art.get(x, y))
+    for stem in stems:
+        doc = json.loads((sheets / f"{stem}.json").read_text(encoding="utf-8"))
+        cell = next(c for c in doc["cells"] if c.get("metatile") == node)
+        cell["tiles"] = [{"tile": flipped, "source": tile, "mirror": "H", "palette": pal}]
+        (sheets / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+        for name, n in ((f"{stem}.orig.png", 1), (f"{stem}.png", SCALE)):
+            img = sheet_repaint.read_png(sheets / name)
+            img.paste(baked if n == 1 else baked.upscale(n), int(cell["x"]) * n, int(cell["y"]) * n)
+            sheet_repaint.write_png(sheets / name, img)
+
+
+def _drawn_crop(pack_dir: Path, node: int):
+    """The `8*SCALE` square crop the built `hires.txt` draws `node`'s key from."""
+    tile, pal = _key(node)
+    hires = (pack_dir / "textures" / "hires.txt").read_text(encoding="utf-8").splitlines()
+    images = [ln.strip()[5:].strip() for ln in hires if ln.startswith("<img>")]
+    rule = next(ln for ln in hires if ln.startswith("<tile>") and f",{tile},{pal}," in ln)
+    f = rule[6:].split(",")
+    img = sheet_repaint.read_png(pack_dir / "textures" / images[int(f[0])])
+    return img.crop(int(f[3]), int(f[4]), 8 * SCALE, 8 * SCALE)
+
+
+def test_paint_on_a_mirrored_cell_lands_unmirrored_after_the_first_build():
+    """#463: the kit exports its figures from the recording, where the
+    recorder baked each sprite's OAM flip into the crop (ADR-0178). The
+    #435 recipe builds once before the import, and that build un-bakes the
+    crops (#255), so the figure became the mirror of the cells it imports
+    into and import pasted the paint as it stood: painted art landed
+    mirrored in game. The figure records each cell's flip and import
+    un-bakes the paint the same way the build un-baked the crop."""
+    magenta, green = (255, 0, 255, 255), (0, 255, 0, 255)
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        true_art = _two_halves(8, (10, 20, 30, 255), (200, 100, 50, 255))
+        _bake_recorded_mirror(pack_dir, 1, true_art)
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)  # the kit: before any build
+        cells = {c["node"]: c for c in doc["cells"]}
+        check(cells[1].get("mirror") == ["H"] and "mirror" not in cells[0],
+              "the export records the flip of the mirrored cell only",
+              json.dumps({n: c.get("mirror") for n, c in cells.items()}))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recipe's first build")
+
+        # Paint an asymmetric picture on a mirrored cell and on a plain one:
+        # magenta on the left half, green on the right, as the figure shows them.
+        fig = sheet_repaint.read_png(out / "pose000-figure.png")
+        for node in (0, 1):
+            fig.paste(_two_halves(8 * SCALE, magenta, green), cells[node]["x"] * SCALE, cells[node]["y"] * SCALE)
+        sheet_repaint.write_png(out / "pose000-figure.png", fig)
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["written"] == 2, "both painted cells are written", json.dumps(rep))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+
+        half = 4 * SCALE
+        mirrored = _drawn_crop(pack_dir, 1)
+        check(mirrored.get(0, 0) == green and mirrored.get(half, 0) == magenta,
+              "the mirrored cell's crop stores the paint un-baked, so the run time's H flip draws "
+              "magenta|green as painted", f"left {mirrored.get(0, 0)} right {mirrored.get(half, 0)}")
+        plain = _drawn_crop(pack_dir, 0)
+        check(plain.get(0, 0) == magenta and plain.get(half, 0) == green,
+              "a cell that was never flipped takes the paint as it is",
+              f"left {plain.get(0, 0)} right {plain.get(half, 0)}")
+
+
+def test_pixel_ownership_reads_a_mirrored_cell_in_the_figure_orientation():
+    """#463 (the #452 mechanism): ADR-0225 §3 gives a shared pixel to the
+    frontmost cell whose recorded art is opaque there. It read that art from
+    the pack after the first build, un-baked, so a mirrored front cell won
+    the pixels where the figure shows it transparent and its paint landed
+    over the transparent half of the tile."""
+    magenta = (255, 0, 255, 255)
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=False)
+        sheets = pack_dir / "textures" / "sheets"
+        # Node 1 in front, node 0 behind and 4 px to its right. Node 1's tile
+        # is opaque on its right half only (true art), so the game, drawing
+        # it H-flipped, shows it opaque on the left and see-through where it
+        # overlaps node 0: those 4 columns are node 0's.
+        true_art = _two_halves(8, (0, 0, 0, 0), (200, 100, 50, 255))
+        _bake_recorded_mirror(pack_dir, 1, true_art)
+        T._write_poses(sheets, {"version": 1, "unit": 8, "frames": 10, "poses": [
+            {"id": "pose000", "frames": 10, "size": [2, 1], "tiles": [
+                {"node": 1, "dx": 0, "dy": 0, "px": 0, "py": 0, "z": 0},
+                {"node": 0, "dx": 1, "dy": 0, "px": 4, "py": 0, "z": 1}]}]})
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recipe's first build")
+        fig = sheet_repaint.read_png(out / "pose000-figure.png")
+        for py in range(fig.height):
+            for px in range(fig.width):
+                if fig.get(px, py)[3]:
+                    fig.set(px, py, magenta)
+        sheet_repaint.write_png(out / "pose000-figure.png", fig)
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["written"] >= 1, "the painted figure is written", json.dumps(rep))
+        mirrored = _drawn_crop(pack_dir, 1)
+        left, right = mirrored.get(0, 0), mirrored.get(4 * SCALE, 0)
+        check(left == (0, 0, 0, 0) and right == magenta,
+              "node 1 takes paint only where its tile is opaque; its transparent half stays a hole",
+              f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
+
+
+def test_the_pending_flip_is_the_recorded_one_the_crop_has_since_lost():
+    """#463: import flips a cell only by a flip the figure recorded AND the
+    crop no longer carries - a crop still baked (never built, or a build that
+    does not un-bake it) already matches the figure. Per 8x8 sub-tile, and
+    each flip undoes itself."""
+    baked = {"tiles": [{"tile": "1" * 32, "source": "2" * 32, "mirror": "H", "palette": "0F0F0F0F"}]}
+    built = {"tiles": [{"tile": "2" * 32, "palette": "0F0F0F0F"}]}
+    check(F.pending_flips({"mirror": ["H"]}, built, 8) == ["H"], "recorded, since un-baked: flip")
+    check(F.pending_flips({"mirror": ["H"]}, baked, 8) == [""], "recorded, still baked: no flip")
+    check(F.pending_flips({}, built, 8) == [""], "nothing recorded: no flip")
+    quad = {"tiles": [{"tile": "1" * 32, "palette": "0F0F0F0F"}] * 4}
+    check(F.pending_flips({"mirror": ["", "V", "", "HV"]}, quad, 16) == ["", "V", "", "HV"],
+          "a unit-16 cell flips each sub-tile by its own record")
+    img = sheet_repaint.Image(16, 16)
+    for y in range(16):
+        for x in range(16):
+            img.set(x, y, (x, y, 7, 255))
+    flips = ["H", "V", "", "HV"]
+    once = F.mirror_image(img, flips, 8)
+    check(once.get(0, 0) == (7, 0, 7, 255) and once.get(8, 0) == (8, 7, 7, 255)
+          and once.get(0, 8) == (0, 8, 7, 255) and once.get(8, 8) == (15, 15, 7, 255),
+          "each sub-tile is flipped in place, on its own axis", str([once.get(0, 0), once.get(8, 0)]))
+    check(F.mirror_image(once, flips, 8).px == img.px, "and flipping twice restores the cell")
+
+
 def test_an_import_into_a_pack_that_does_not_build_is_refused():
     """#443 review: when the throwaway build fails, the probe can say neither
     which crop owns a key nor whether the next build rewrites the sheets, so

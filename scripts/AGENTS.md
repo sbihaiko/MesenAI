@@ -1050,12 +1050,25 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   tile, which the NES never draws) is never written, whatever paint covers
   its rect. It is listed in the report's `blank` array and printed by the
   CLI (#452). Without this check, Castlevania's blank tile took body paint
-  and the build failed #253's guard. Covered by `test_mep_figure.py`;
-  measured on Contra in
+  and the build failed #253's guard. A figure shows each cell the way the
+  game draws it, so its sidecar records, per cell, the OAM flip its crop
+  still carried at export (`mirror`, one `H`/`V`/`HV`/`""` per 8x8 sub-tile,
+  written only when one is set, from the sheet's ADR-0178 `mirror`).
+  Import un-bakes the paint by every recorded flip the crop has since lost
+  (`pending_flips`: the first build un-bakes the crop and drops the sheet's
+  `mirror`, #255) and reads each cell's art in the figure's orientation
+  when it decides pixel ownership (ADR-0225 §3). The report's `unmirrored`
+  counts those cells (#463). A crop that still carries its `mirror` is not
+  flipped: it already matches the figure. Without this, the kit's figures,
+  cut from the recording before the #435 first build, were the mirror of
+  120 of Simon's 140 non-blank cells, and paint landed mirrored in game. A
+  figure exported before #463 has no `mirror`; re-export it. Covered by
+  `test_mep_figure.py`; measured on Contra in
   `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
   `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
   Castlevania in
-  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`.
+  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
+  and `docs/validation/issue-463-figure-mirror-2026-09-25.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
