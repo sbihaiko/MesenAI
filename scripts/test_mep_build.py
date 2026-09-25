@@ -1791,8 +1791,10 @@ def backdrop_transparency_tests(root: Path):
     imgs, tiles = parse_hires(tex / "hires.txt")
 
     def crop_of(shape):
+        # An untouched key (A, B) keeps the recorded rule on old.png (ADR-0231),
+        # so resolve each <img> against textures/, not sheets/.
         e = tiles.get((tile_hex(shape), PAL_HEX))
-        return None if e is None else crop(png_read(sheets / Path(imgs[e[0]]).name), e[1], e[2], 8)
+        return None if e is None else crop(png_read(tex / imgs[e[0]]), e[1], e[2], 8)
 
     def opaque(px):
         return sum(1 for row in (px or []) for p in row if p >> 24 == 0xFF)

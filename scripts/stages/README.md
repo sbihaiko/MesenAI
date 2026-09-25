@@ -53,9 +53,8 @@ against, or the unattended job cannot use it:
   `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
   authored on, and each was run once through the library job. `punchout/`
   (2026-09-24) is pinned to the library dump it was authored and recorded on
-  by hand (below); run through the library job once (2026-09-24), it does not
-  reproduce that recording, because the job mints its state at the wrong
-  frame (below).
+  by hand (below); since #465 the job mints its state at the same frame as
+  that hand mint (below).
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
@@ -89,8 +88,15 @@ A game folder may also hold one **profile**:
 
 Mint, then batch:
 
+`<mint-seconds>` is the smallest whole number of seconds whose frame target,
+`round(s * 60.0988)`, covers the mint script: `headless_record` writes
+`save-state=` only at its frame target, not where the script ends, so a longer
+run parks the state on idle frames (#465). `record_library.sh` computes it
+(`library_job.mint_seconds_for_frames`): 15 for Contra's 901-frame
+`mint-stage1.txt`, 6 for Castlevania's 320 frames, 34 for Punch-Out!!'s 1 990.
+
 ```sh
-scripts/headless_record <rom> <seconds> <work>/mint input=scripts/stages/contra/mint-stage1.txt save-state=<work>/stages/stage1-run.mss
+scripts/headless_record <rom> <mint-seconds> <work>/mint input=scripts/stages/contra/mint-stage1.txt save-state=<work>/stages/stage1-run.mss
 cp scripts/stages/contra/stage1-run.txt <work>/stages/
 scripts/record_stages.sh <rom> <work>/stages <work>/by-stage 60
 ```
@@ -387,16 +393,20 @@ byte-identical `hires.txt` and `auto/`
 (docs/validation/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
 route stops before the count-out and was not measured.
 
-**Not yet through the library job.** `record_library.sh` runs every mint for
-the batch's `<seconds>` (60 s by default), and `headless_record` writes
-`save-state=` at the run's frame target, not where the script ends. So the job
-saves `fight1.mss` at frame 3 607, about 26 s into the round (clock 1:15), and
-its 60 s `fight1` run reaches the count-out and keeps 355 frames, most of them
-the loss (measured 2026-09-24). Mint by hand with `34` as above until the job
-can end a mint where its script ends (#465). Padding the mint so the bell lands on
-frame 3 607 was tried and does not help: the fight it starts is not the
-measured one (35 RAM bytes differ at the bell; 255 of the measured 1 655 drawn
-keys are missing from a 70 s recording made from it).
+**Through the library job (#465, 2026-09-25).** `record_library.sh` used to
+run every mint for the batch's `<seconds>` (60 s by default), and
+`headless_record` writes `save-state=` at the run's frame target, not where
+the script ends: the job saved `fight1.mss` at frame 3 607, about 26 s into the
+round, and its 60 s `fight1` run reached the count-out and kept 355 frames.
+The job now runs each mint for the smallest whole number of seconds that
+covers its script - `34` here, the hand-mint duration - so it stops at frame
+2 044 as above, with the same RAM as the hand mint run from the repository
+root, and the 60 s `fight1` run keeps 633 frames
+(`docs/validation/issue-465-mint-at-script-end-2026-09-25.md`). Padding the
+mint so the bell lands on frame 3 607 was tried before the fix and does not
+help: the fight it starts is not the measured one (35 RAM bytes differ at the
+bell; 255 of the measured 1 655 drawn keys are missing from a 70 s recording
+made from it).
 
 Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
 background tiles**, so the kit's figures cover the opponent and Mac shows up

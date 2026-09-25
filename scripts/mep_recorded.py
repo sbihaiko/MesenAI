@@ -93,11 +93,14 @@ class Recorded:
 
     def take(self, live: list) -> list:
         """Remove from `live` ((pos, entry) pairs of one sheet slot) every
-        untouched entry the recording has a rule for; keep the rest."""
+        untouched entry the recording has a rule for; keep the rest. "Untouched"
+        is the entry's claim flag, not the raw twin test: a blank sprite key
+        in a painted cell never claims paint, so it keeps its recorded rule
+        (#464)."""
         kept = []
         for pos, entry in live:
-            key, edited = entry[0], entry[3]
-            if edited:
+            key, claim = entry[0], entry[3]
+            if claim:
                 kept.append((pos, entry))
             elif key in self.rules:
                 self.used.append(self.rules[key])

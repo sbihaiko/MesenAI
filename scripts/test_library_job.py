@@ -477,6 +477,70 @@ def test_per_route_evidence_shows_a_mis_started_route():
               "and lists every route it did not record, with the reason", text)
 
 
+_FAKE_RECORDER = """#!/usr/bin/env bash
+# Stands in for headless_record: logs its argv and writes save-state= the way
+# the real one does when the run reaches its target.
+printf '%s\\n' "$*" >> "$FAKE_RECORD_LOG"
+for a in "$@"; do
+  case "$a" in save-state=*) printf 'mss' > "${a#save-state=}" ;; esac
+done
+"""
+
+
+def _run_job_with_fake_recorder(td, mints):
+    """Run the real record_library.sh over one synthetic ROM whose route set
+    holds `mints` ({script name: text}), with a fake headless_record. Returns
+    the argv line of every recorder call."""
+    import os
+    import subprocess
+    real = Path(__file__).resolve().parent
+    bin_dir = Path(td) / "scripts"
+    bin_dir.mkdir()
+    for p in real.iterdir():
+        if p.name not in ("stages", "headless_record"):
+            (bin_dir / p.name).symlink_to(p)
+    rec = bin_dir / "headless_record"
+    rec.write_text(_FAKE_RECORDER, encoding="utf-8")
+    rec.chmod(0o755)
+    roms = Path(td) / "roms"
+    roms.mkdir()
+    rom = ines(roms / "Game.nes")
+    d = stage_set(bin_dir / "stages", "game", [L.no_intro_sha1(rom).upper()],
+                  ["stage1-run.txt"])
+    for name, text in mints.items():
+        (d / name).write_text(text, encoding="utf-8")
+    log = Path(td) / "argv.log"
+    env = dict(os.environ, MESEN_NO_CAFFEINATE="1", FAKE_RECORD_LOG=str(log))
+    subprocess.run(["bash", str(bin_dir / "record_library.sh"), str(roms),
+                    str(Path(td) / "out"), "60"], env=env, capture_output=True,
+                   timeout=300, check=False)
+    return log.read_text(encoding="utf-8").splitlines() if log.is_file() else []
+
+
+def test_a_mint_ends_where_its_script_ends_not_at_the_batch_target():
+    # #465: every mint ran for the batch's <seconds> (60 s = frame 3607), and
+    # headless_record saves only at its frame target, so every minted state
+    # carried 1,000-3,400 idle frames. The run must last the script: the
+    # smallest whole number of seconds whose frame target (round(s * 60.0988))
+    # covers it - the duration the hand-mint procedures use (Castlevania 320 f
+    # -> 6 s, Punch-Out!! 1990 f -> 34 s), so the job's state is theirs.
+    with tempfile.TemporaryDirectory() as td:
+        calls = _run_job_with_fake_recorder(td, {
+            "mint-stage1.txt": "# Castlevania-shaped\n120f -\n20f T\n180f -\n"})
+        mint = [c for c in calls if "input=" in c and "mint-stage1.txt" in c]
+        check(len(mint) == 1 and mint[0].split()[1] == "6",
+              "a 320-frame mint runs for 6 s, not the batch's 60 s", str(calls))
+    for frames, secs in ((1990, 34), (901, 15), (200, 4), (601, 10), (1, 1)):
+        check(L.mint_seconds_for_frames(frames) == secs,
+              f"{frames} frames -> {secs} s", str(L.mint_seconds_for_frames(frames)))
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "mint-x.txt"
+        p.write_text("# c\n2s A\n10f -|R\n\n", encoding="utf-8")
+        check(L.script_frames(p) == 130,
+              "a script's length counts Nf and Ns (round(N * 60.0988)) and "
+              "skips comments, blanks and the port-2 half", str(L.script_frames(p)))
+
+
 def test_chain_and_mint_files_are_never_recorded_as_stages():
     with tempfile.TemporaryDirectory() as td:
         d = stage_set(Path(td), "game", ["A" * 40], [
@@ -660,6 +724,7 @@ def main():
         test_prune_drops_every_route_without_its_state_and_keeps_power_on,
         test_the_real_contra_set_starts_only_what_a_checkout_can_produce,
         test_per_route_evidence_shows_a_mis_started_route,
+        test_a_mint_ends_where_its_script_ends_not_at_the_batch_target,
         test_chain_and_mint_files_are_never_recorded_as_stages,
         test_a_kit_that_was_never_produced_reads_as_absent_not_as_zero,
         test_seen_percent_is_weighted_by_cells_not_by_surfaces,

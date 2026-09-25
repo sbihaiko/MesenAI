@@ -142,6 +142,50 @@ def entry_scripts(stage_dir):
     return sorted(Path(stage_dir).glob("mint-*.txt"))
 
 
+# headless_record resolves `Ns` steps and its <seconds> argument at this rate
+# (ADR-0157 section 1; a mint runs without the `pal` flag).
+NTSC_FPS = 60.0988
+
+
+def script_frames(path):
+    """A headless_record input script's length in frames.
+
+    Same arithmetic as HeadlessInputScript::Parse and `replay_chain.sh`: `Nf`
+    is N frames, `Ns` is round(N * fps); `#` comments and blank lines are
+    skipped, and only the first token (the duration) of a line counts, so a
+    `<port1>|<port2>` line is one step. Raises ValueError on a bare number.
+    """
+    total = 0
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        tok = line.split()[0] if line.split() else ""
+        if not tok or tok.startswith("#"):
+            continue
+        unit, n = tok[-1], tok[:-1]
+        if unit == "f":
+            total += int(n)
+        elif unit == "s":
+            total += int(float(n) * NTSC_FPS + 0.5)
+        else:
+            raise ValueError(f"{path}: bad duration {tok!r} - write <count>f or <count>s")
+    return total
+
+
+def mint_seconds_for_frames(frames):
+    """The whole seconds a mint of `frames` frames runs for (#465).
+
+    headless_record writes `save-state=` only when the run reaches its frame
+    target, round(seconds * fps), so a mint run for the batch's <seconds>
+    saved every state at frame 3607. This is the smallest whole number of
+    seconds whose target covers the script - the duration the hand-mint
+    procedures in scripts/stages/ use (Castlevania 320 f -> 6 s, Punch-Out!!
+    1990 f -> 34 s), so the job's state is the one the routes were authored on.
+    """
+    s = max(1, int(frames / NTSC_FPS))
+    while int(s * NTSC_FPS + 0.5) < frames:  # std::round, for s > 0
+        s += 1
+    return s
+
+
 CHAIN_SUFFIX = ".chain.txt"
 PROBE_SUFFIX = "-probe"
 NAVIGATION = "navigation.json"
@@ -203,7 +247,8 @@ def start_plan(stage_dir):
       power-on it records the attract demo and reads like a recording (#407).
 
     Returns `{"steps": [...], "routes": {route: {...}}}`. A step is
-    `{"op": "mint", "script", "state"}`, `{"op": "chain", "script", "from",
+    `{"op": "mint", "script", "state", "seconds"}` (the run's duration, from
+    `mint_seconds_for_frames`; "" when the script cannot be read), `{"op": "chain", "script", "from",
     "state"}` or `{"op": "copy", "from", "state"}`, in an order where every
     `from` precedes its use. A route entry holds `start` (`mint <file>`, `chain
     <file>`, `copy of <state>`, `power-on`, or `None` when skipped) and
@@ -278,7 +323,12 @@ def start_plan(stage_dir):
             steps.append({"op": "copy", "from": minted[prod[1]], "state": name})
         elif prod[0] == "mint":
             minted[prod[1]] = name
-            steps.append({"op": "mint", "script": str(prod[1]), "state": name})
+            try:
+                secs = mint_seconds_for_frames(script_frames(prod[1]))
+            except (OSError, ValueError):
+                secs = ""  # the shell refuses the mint rather than guess (#465)
+            steps.append({"op": "mint", "script": str(prod[1]), "state": name,
+                          "seconds": secs})
         elif prod[0] == "chain":
             emit(prod[2])
             steps.append({"op": "chain", "script": str(prod[1]), "from": prod[2], "state": name})
@@ -830,7 +880,7 @@ def main(argv=None):
             Path(args.json).write_text(json.dumps({"routes": sp["routes"]}, indent=2),
                                        encoding="utf-8")
             for st in sp["steps"]:
-                for k in ("op", "script", "from", "state"):
+                for k in ("op", "script", "from", "state", "seconds"):
                     sys.stdout.write(str(st.get(k, "")) + "\0")
             return 0
         if args.cmd == "prune":
