@@ -901,7 +901,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   most-recorded palette, which is a guess and says so. Writes
   `<out>/chr/Chr_<n>.png` + `.orig.png` + `.legend.png` (green recorded, olive
   moved up, amber ROM fill, red hole) + `.json` (every cell's state, `seen`,
-  origin and PRG offset), plus the `kit-part-chr.json` fragment. `hires.txt` is
+  origin and PRG offset), plus the `kit-part-chr.json` fragment. A cell whose
+  row is `defaultTile=Y` is the bootstrap's own ROM export (`AddRomTiles` on
+  the real CHR ROM pages, `AddPrgScanTiles` on the synthetic ones; every tile
+  the run draws is written `N`), so it is `fill` / `origin: romExport` /
+  `seen: false`, amber, counted as ROM fill and never folded, with its pixels
+  copied byte for byte and no rule emitted (#449). `hires.txt` is
   never touched: `--fill-rules` writes its rows to `chr/fill-rules.hires.txt`
   and defaults to `none`, because a rule for a filled cell either never matches
   (harmless) or re-binds a key the pack already owns. `--also <other recorded

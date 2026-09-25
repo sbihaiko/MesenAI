@@ -17,6 +17,7 @@ under `runs/` is touched.
 Run:  python3 scripts/test_artist_chr_kit.py
 """
 
+import collections
 import hashlib
 import json
 import sys
@@ -138,11 +139,15 @@ def write_pack(root: Path, scale: int, images, rows, rom_sha1="0" * 40):
     (root / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def chr_rom_rows(image_index, cells):
+def chr_rom_rows(image_index, cells, default_tile="N"):
+    """A recorded CHR ROM row. `N` is what the recorder writes for a tile the
+    run drew (`HdPackBuilder::CaptureOrCapPaletteVariant` sets
+    `DefaultTile = false`); `Y` is only ever the bootstrap's own ROM export
+    (`AddRomTiles`), which `bootstrap_export_fixture` builds (#449)."""
     out = []
     for slot, (_, palette, index) in sorted(cells.items()):
         x, y = (slot % 16) * CELL, (slot // 16) * CELL
-        out.append(f"<tile>{image_index},{index:02X},{palette},{x},{y},1,Y")
+        out.append(f"<tile>{image_index},{index:02X},{palette},{x},{y},1,{default_tile}")
     return out
 
 
@@ -167,6 +172,29 @@ def chr_rom_fixture(td: Path):
     rank0 = {i: (tile_bytes(i), PAL_A, i) for i in range(100)}
     rank1 = {i: (tile_bytes(i), PAL_B, i) for i in range(200, 210)}
     write_pack(pack, SCALE, [("Chr_00_0", rank0), ("Chr_00_1", rank1)], chr_rom_rows)
+    return pack, rom
+
+
+EXPORTED = range(240)       # indices the bootstrap exported from the ROM
+DRAWN = range(100)          # indices the run drew
+
+
+def bootstrap_export_fixture(td: Path):
+    """A CHR ROM recording the way the bootstrap writes one (issue #449).
+
+    `AddRomTiles` seeds one `defaultTile=Y` row per CHR tile under the neutral
+    ramp `0F001030`, before the run draws anything, and those rows land on the
+    real bank's pages. Here they fill the rank-0 page for indices 0..239 (the
+    builder skips a few, as it did 14 times on Excitebike), and the run drew
+    indices 0..99 under PAL_A, which the recorder wrote as `N` rows on rank 1."""
+    chr_rom = b"".join(tile_bytes(i) for i in range(512))
+    rom = td / "game.nes"
+    rom.write_bytes(ines(lcg(16384, 7), chr_rom))
+    pack = td / "pack"
+    export = {i: (tile_bytes(i), K.STATIC_FILL_PALETTE, i) for i in EXPORTED}
+    drawn = {i: (tile_bytes(i), PAL_A, i) for i in DRAWN}
+    write_pack(pack, SCALE, [("Chr_00_0", export), ("Chr_00_1", drawn)],
+               lambda i, cells: chr_rom_rows(i, cells, "Y" if i == 0 else "N"))
     return pack, rom
 
 
@@ -458,6 +486,59 @@ def test_a_cell_from_a_lower_rank_page_is_moved_up_and_still_evidence():
         check(page.crop(c["x"], c["y"], CELL, CELL).px
               == src.crop(c["x"], c["y"], CELL, CELL).px,
               "the moved-up pixels are copied, not re-rendered")
+
+
+def test_the_bootstraps_rom_export_is_a_rom_fill_not_evidence():
+    # Issue #449: on Excitebike the kit marked 175 cells of indices the run
+    # never drew `evidence, seen: true` (green) and logged "recorded 498 (97%)"
+    # where the run drew 337 of 512 indices.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = bootstrap_export_fixture(td)
+        frag = K.run(pack, rom, td / "kit", None, "none", False, True)
+        doc = sidecar(td / "kit", "Chr_00_0")
+        cells = {c["index"]: c for c in doc["cells"]}
+        exported = [cells[i] for i in EXPORTED]
+        check(all(c["state"] == "fill" and c["seen"] is False for c in exported),
+              "a cell holding only the bootstrap's ROM export is a fill, seen: false",
+              str(collections.Counter((c["state"], c["seen"]) for c in exported)))
+        check(all(c.get("origin") == "romExport" for c in exported),
+              "and it says the bootstrap exported it from the ROM",
+              str({c.get("origin") for c in exported}))
+        check(not any(c["seen"] for c in doc["cells"] if c["index"] not in DRAWN),
+              "no cell of an index the run never drew is seen: true")
+        t = frag["totals"]
+        check((t["recorded"], t["filled"], t["unrecoverable"]) == (100, 156, 0),
+              "recorded counts only the indices the run drew; the export is ROM fill",
+              f"recorded={t['recorded']} filled={t['filled']} "
+              f"unrecoverable={t['unrecoverable']}")
+        legend = read_png(td / "kit" / "chr" / "Chr_00_0.legend.png")
+        check(legend.get(0, 0) == K.LEGEND_FILL,
+              "the legend paints an exported cell amber, not green", str(legend.get(0, 0)))
+        rank1 = sidecar(td / "kit", "Chr_00_1")
+        check(rank1["counts"]["evidence"] == len(DRAWN),
+              "the cells the run drew stay evidence", str(rank1["counts"]))
+
+
+def test_an_exported_cell_keeps_its_pixels_and_gets_no_extra_rule():
+    # The export's `Y` row is already in hires.txt and draws from this cell, so
+    # the cell is copied byte for byte (and verify checks it), and no fill rule
+    # is emitted for it: only the 16 indices nobody wrote a row for get one.
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        pack, rom = bootstrap_export_fixture(td)
+        frag = K.run(pack, rom, td / "kit-all", None, "all", False, True)
+        check(frag["totals"]["rulesEmitted"] == 256 - len(EXPORTED),
+              "a fill rule is emitted only for a cell with no recorded row",
+              str(frag["totals"]["rulesEmitted"]))
+        K.run(pack, rom, td / "kit", None, "none", False, True)
+        result = K.verify(K.Pack(pack), td / "kit" / "chr", quiet=True)
+        check(result["cells_differing"] == 0
+              and result["cells_checked"] == len(EXPORTED) + len(DRAWN),
+              "every cell with a recorded row, exported or drawn, is byte-identical",
+              str(result))
+        check(result["lost"] == 0 and result["rebuildIdentical"],
+              "and the pack round-trips unchanged", str(result))
 
 
 def test_recorded_cells_come_out_byte_identical():
@@ -1106,6 +1187,8 @@ def main():
         test_chr_rom_bank_is_completed_to_every_one_of_its_256_tiles,
         test_a_filled_cell_carries_the_rom_bytes_and_is_marked_unseen,
         test_a_cell_from_a_lower_rank_page_is_moved_up_and_still_evidence,
+        test_the_bootstraps_rom_export_is_a_rom_fill_not_evidence,
+        test_an_exported_cell_keeps_its_pixels_and_gets_no_extra_rule,
         test_recorded_cells_come_out_byte_identical,
         test_the_fill_palette_is_read_off_the_pack_not_assumed,
         test_chr_ram_fills_only_what_a_prg_block_explains,

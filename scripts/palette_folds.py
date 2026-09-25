@@ -299,6 +299,10 @@ def compute_folds(pages, gate: float = HUE_DRIFT_GATE_DEG, anchors=None):
     groups = collections.defaultdict(list)
     for page in pages:
         for slot, row in page.rows.items():
+            # The bootstrap's ROM export (a `defaultTile=Y` row, #449) is not a
+            # picture the run drew, so it neither folds nor is folded onto.
+            if getattr(row, "exported", False):
+                continue
             ident = row.tile_data or f"#{page.index_of_slot(slot)}"
             groups[ident].append((page, slot, row))
 
