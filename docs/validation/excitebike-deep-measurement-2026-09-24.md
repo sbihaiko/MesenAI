@@ -1,5 +1,7 @@
 # Excitebike deep measurement (2026-09-24)
 
+> Re-measured on `main` `ceab80a9` (2026-09-25): see [deep-remeasure-ceab80a9-2026-09-25.md](deep-remeasure-ceab80a9-2026-09-25.md).
+
 This log adds Excitebike (1984) (Nintendo) to the per-game deep measurements
 that Contra, Castlevania and Zelda already have. It uses the same protocol:
 a recording of real play with a determinism check, the F14.4 palette-gap

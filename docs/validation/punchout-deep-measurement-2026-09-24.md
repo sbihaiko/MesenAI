@@ -1,5 +1,7 @@
 # Punch-Out!! deep measurement (2026-09-24)
 
+> Re-measured on `main` `ceab80a9` (2026-09-25): see [deep-remeasure-ceab80a9-2026-09-25.md](deep-remeasure-ceab80a9-2026-09-25.md).
+
 This puts Mike Tyson's Punch-Out!! through the same deep measurements already
 run on Contra, Castlevania and Zelda:
 
@@ -166,7 +168,7 @@ The fold statistics were inert 54, fade 279, kept 1262 and refused 52.
 
 On the measure scale:
 
-- the grid dump is 58.3 MB (592 K lines);
+- the grid dump is 58.3 MB (4 046 508 lines; corrected 2026-09-25, was "592 K lines");
 - the registry lower bound is 1010;
 - `sheets/` holds 140 files, 2 283 050 B in all, and 46 sheets have a PNG;
 - `hires.txt` is 364 212 B;
