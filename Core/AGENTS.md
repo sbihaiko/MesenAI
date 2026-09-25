@@ -12,7 +12,8 @@ needs no local rules beyond the root DOX.
 
 - `Core/NES/HdPacks/` — the bootstrap HD-pack builder and the sheet /
   pose recorder (`HdPackBuilder`, `SpriteGrouping`, `SheetRender`,
-  `SheetColourways.h`, `TileSheetTypes.h`). Decisions live in `docs/adr/`
+  `SheetColourways.h`, `ChrPageSlots.h`, `TileSheetTypes.h`). Decisions
+  live in `docs/adr/`
   (ADR-0153, 0164, 0170, 0171, 0173, 0174, 0177, 0179, 0181, 0189, 0190,
   0228, 0230); this file only
   states the contracts a consumer relies on.
@@ -99,8 +100,9 @@ needs no local rules beyond the root DOX.
 - **Every palette a shape was drawn in reaches a sheet sidecar (ADR-0230).**
   A shape is interned palette-wildcarded, so its cell shows the first palette
   seen. Each other palette `hires.txt` carries for the same key
-  (`WrittenPalettesByShape`: a variant evicted from its CHR page slot is
-  not drawn) becomes exactly one of two things:
+  (`WrittenPalettesByShape`: only a variant that holds a CHR page slot is
+  drawn; since #460 the only one left off is one a full page refused)
+  becomes exactly one of two things:
   - **`tiles[].folds: [{"palette", "brightness"}]`** on the cell's tile
     entry, only when the fold is **exact**. The cell's own crop, scaled by
     one loader Brightness, must rebuild every painted pixel on the render
@@ -128,6 +130,25 @@ needs no local rules beyond the root DOX.
     against `docs/specs/golden/sheets/palette-relation-cases.txt`, by
     `core_unit_tests` and by `scripts/test_palette_folds.py`. Change the
     definition in both, and regenerate the vectors only on purpose.
+- **A CHR page slot is never overwritten (#460).** `HdPackBuilder::AddTile`
+  files each tile through `MesenSheets::PlaceTileOnChrPage`
+  (`ChrPageSlots.h`) on its bank's 256-slot page for its palette; `SaveHdPack`
+  writes one `<tile>` line per filled slot, cell by cell into
+  `chr/Chr_*.png`. A tile takes the slot of its CHR index while that slot is
+  free. When a different tile already holds it (on CHR RAM the bank hash
+  `HdBuilderPpu` keys by is not refreshed when the game rewrites CHR RAM,
+  #467), the earlier tile keeps the slot and its `<tile>` line, and the
+  newcomer moves to the free slot of the same page whose column (that slot
+  index across the bank's pages) holds the fewest tiles, lowest index first,
+  so the bank's PNG count does not grow while any column has room. A loaded
+  CHR RAM tile (index -1) takes the first free slot. A full page refuses the
+  tile: it gets no `<tile>` line and is counted in `_droppedTiles`, which
+  makes `SaveHdPack` keep the old fragments (ADR-0160 §3 guard). Consumers
+  must therefore not read a tile's CHR index from its cell position in
+  `chr/Chr_*.png` for a relocated tile; `hires.txt` is the authority. Pinned
+  by `TestALaterTileNeverEvictsAnEarlierOneFromItsChrPageSlot`,
+  `TestADisplacedTileGoesToTheLeastFilledColumnOfItsBank` and
+  `TestAFullChrPageRefusesATileInsteadOfEvictingOne`.
 - **Save-time debug dumps**, env-gated, never pack files:
   `MESEN_SHEET_GRID_DUMP` (per retained frame: `F` opens it, `K`/`P` intern a
   shape and a palette word, `M` carries the frame's internal RAM, then
@@ -151,8 +172,8 @@ needs no local rules beyond the root DOX.
   written from `BuildObjectSheets` *ahead of* its early-outs, because a
   recording with a populated table and no inferred objects is exactly the one
   worth studying.
-- Host-free rule (ADR-0127): `SpriteGrouping`, `SheetRender` and
-  `SheetColourways.h` take data and return data; file, env and log access
+- Host-free rule (ADR-0127): `SpriteGrouping`, `SheetRender`,
+  `SheetColourways.h` and `ChrPageSlots.h` take data and return data; file, env and log access
   stay in `HdPackBuilder`, so
   `scripts/core_unit_tests.cpp` can cover the rules without an emulator.
 - **Movie row ↔ device list need not match in width.**
