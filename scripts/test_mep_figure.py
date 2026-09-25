@@ -636,6 +636,58 @@ def test_pixel_ownership_reads_a_mirrored_cell_in_the_figure_orientation():
               f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
 
 
+def test_a_routed_overlapped_cell_keeps_the_paint_an_earlier_instance_routed():
+    """#478: node 1 appears twice in one figure (as a key repeats across the
+    poses of a kit figure) - alone, then behind node 0, which covers its
+    right half. Both instances route to `spr000` (#413). The second one owns
+    only its left half (ADR-0225 §3), so its right half must come from the
+    crop it is pasted onto - where the first instance already put paint -
+    not from the untouched source crop in `sprites.png`, which erased it,
+    and never from node 0's paint over it."""
+    magenta = (255, 0, 255, 255)
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=False)
+        sheets = pack_dir / "textures" / "sheets"
+        T._write_poses(sheets, {"version": 1, "unit": 8, "frames": 10, "poses": [
+            {"id": "pose000", "frames": 10, "size": [4, 1], "tiles": [
+                {"node": 1, "dx": 0, "dy": 0, "px": 0, "py": 0, "z": 0},
+                {"node": 0, "dx": 2, "dy": 0, "px": 20, "py": 0, "z": 0}]}]})
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the pack builds before the import")
+        manifest_before = (pack_dir / "textures" / "hires.txt").read_bytes()
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        # A second instance of node 1 at x=16, behind node 0 (x=20): the twin
+        # shows node 1's art there with node 0's drawn over its right half.
+        first = next(c for c in doc["cells"] if c["node"] == 1)
+        front = next(c for c in doc["cells"] if c["node"] == 0)
+        doc["cells"].append(dict(first, x=16, z=1))
+        (out / "pose000-figure.json").write_text(json.dumps(doc), encoding="utf-8")
+        twin = sheet_repaint.read_png(out / "pose000-figure.orig.png")
+        one, zero = twin.crop(first["x"], 0, 8, 8), twin.crop(front["x"], 0, 8, 8)
+        twin.paste(one, 16, 0)
+        twin.paste(zero, 20, 0)
+        sheet_repaint.write_png(out / "pose000-figure.orig.png", twin)
+        fig = twin.upscale(SCALE)
+        for py in range(fig.height):
+            for px in range(fig.width):
+                if fig.get(px, py)[3]:
+                    fig.set(px, py, magenta)
+        # Node 0 is painted green: what it covers is its own, never node 1's.
+        fig.paste(T._solid(8 * SCALE, (0, 255, 0, 255)), 20 * SCALE, 0)
+        sheet_repaint.write_png(out / "pose000-figure.png", fig)
+        rep = F.import_figure(E.Pack(pack_dir), out / "pose000-figure.png")
+        check(rep["overlapped"] == 2 and rep["rerouted"] >= 1 and rep["sheets"] == ["spr000.png"],
+              "the overlapped instance is routed to spr000", json.dumps(rep))
+        crop = _drawn_crop(pack_dir, 1)
+        lost = [(x, y) for y in range(crop.height) for x in range(crop.width) if crop.get(x, y) != magenta]
+        check(not lost, "node 1's drawn crop keeps every painted pixel, the right half included",
+              f"{len(lost)} of {crop.width * crop.height} pixels lost, e.g. {lost[:3]} = "
+              f"{crop.get(*lost[0]) if lost else None}")
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0
+              and (pack_dir / "textures" / "hires.txt").read_bytes() == manifest_before,
+              "the rebuild moves no rule")
+
+
 def test_the_pending_flip_is_the_recorded_one_the_crop_has_since_lost():
     """#463: import flips a cell only by a flip the figure recorded AND the
     crop no longer carries - a crop still baked (never built, or a build that
