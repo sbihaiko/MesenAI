@@ -89,6 +89,9 @@ Bugs:
   not to paint) and build2/build3 on the painted arm warn "size not a whole
   number of cells". The wheel cycle's 772 → 768 repeats and a new 10-phase
   `cycle007` are likely the same cause, not proven.
+  *Correction:* attributing the `sprites.png` landing to #493 is
+  incomplete; it recurs without #493 in SMB3 and Ninja Gaiden, filed as
+  #498 (see [smb3-ninjagaiden-deep-measurement-2026-09-25.md](smb3-ninjagaiden-deep-measurement-2026-09-25.md)).
 
 ## Castlevania
 
