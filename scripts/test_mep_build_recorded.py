@@ -613,6 +613,83 @@ def cell_rule_report_test(root: Path):
         fail(f"#511: a wholesale repaint printed {len(rows)} row(s) and {more} more, expected 20 + 8")
 
 
+def index_keyed_report_test(root: Path):
+    """Issue #524: on a CHR ROM pack the manifest is keyed by the tile's CHR
+    index (ADR-0172), while `Copy as MEP sheet cell` puts the 32-hex pattern on
+    the clipboard. A row that named only the index left the artist unable to
+    match the row to the pasted key without opening `hires.txt` — which is a
+    criterion-4 fail — so an index-keyed row names both. A pattern-keyed pack's
+    row is unchanged: there the key *is* the 32 hex."""
+    folder, _rules = make_recorded_pack(root, "report-chr-rom", shapes=range(8), chr_rom=True)
+    # Metatile cell 0 (shapes 0..3) sits at (1,1) at 1x, painted at scale 2.
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    bad = []
+    for shape in range(4):
+        index, data = f"{T.CHR_INDEX_BASE + shape:02X}", T.tile_hex(shape)
+        row = next((r for r in rows if f"tile {index} " in r), None)
+        if row is None:
+            bad.append(f"shape {shape}: no row for index {index}")
+        elif f"pattern {data} " not in row:
+            bad.append(f"shape {shape}: {row}")
+    if bad:
+        fail(f"#524: an index-keyed row does not name the pasted pattern key: {bad[:2]}")
+    else:
+        ok("#524: an index-keyed row names the pattern the clipboard carries, beside the CHR index")
+
+    # The control: a pattern-keyed pack is unchanged, i.e. named by that pattern
+    # alone — no second spelling of the same key.
+    plain, _ = make_recorded_pack(root, "report-pattern")
+    T.paint(plain, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(plain))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    row = next((r for r in rows if f"tile {T.tile_hex(0)} " in r), None)
+    if row is None:
+        fail(f"#524: a pattern-keyed row stopped naming its key:\n{out[-800:]}")
+    elif "pattern " in row:
+        fail(f"#524: a pattern-keyed row gained a pattern field it does not need: {row}")
+    else:
+        ok("#524: a pattern-keyed row is unchanged — its key was always the pasted pattern")
+
+
+def mirrored_index_keyed_report_test(root: Path):
+    """#524/ADR-0178: the row's pattern field is the key the artist's clipboard
+    carries, and on a cell the recorder stored with its OAM flip baked in that is
+    the un-baked `source` — the key the run time looks up and the emission loop
+    uses (`src or data`) — not the baked `tile` sitting beside it in the sidecar.
+    Printing the baked data would name a key nothing ever looks up, in exactly
+    the pack shape the ADR exists for."""
+    folder, _rules = make_recorded_pack(root, "report-mirrored", shapes=range(8), chr_rom=True,
+                                        flip_baked=True, sidecar_source=True, sprite_sheet=True)
+    # Metatile cell 0 (shapes 0..3) sits at (1,1) at 1x, painted at scale 2.
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    bad = []
+    for shape in range(4):
+        index, src = f"{T.CHR_INDEX_BASE + shape:02X}", T.tile_hex(shape)
+        baked = T.flip_hex(src)
+        row = next((r for r in rows if f"tile {index} " in r), None)
+        if row is None:
+            bad.append(f"shape {shape}: no row for index {index}")
+        elif f"pattern {src} " not in row:
+            bad.append(f"shape {shape}: {row}")
+        elif baked in row:
+            bad.append(f"shape {shape}: the baked key is in the row: {row}")
+    if bad:
+        fail(f"#524/ADR-0178: a mirrored cell's row does not name the un-baked key the clipboard "
+             f"carries: {bad[:2]}")
+    else:
+        ok("#524/ADR-0178: a mirrored cell's pattern is the un-baked source, not the baked tile")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -629,6 +706,8 @@ def main() -> int:
         external_source_test(root)
         fold_follows_recorded_test(root)
         cell_rule_report_test(root)
+        index_keyed_report_test(root)
+        mirrored_index_keyed_report_test(root)
     return 1 if FAILED else 0
 
 

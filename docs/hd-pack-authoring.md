@@ -293,7 +293,10 @@ layer without recording audio manually:
    `mep_add_cell.py` placed, naming the `<tile>` rule that cell produced:
    **that row is how a repaint is confirmed**, not a look inside
    `textures/hires.txt` (#511, and *The report* in
-   [remastering-a-game.md](remastering-a-game.md)).
+   [remastering-a-game.md](remastering-a-game.md)). The row names the key the
+   manifest is keyed by, so on a CHR ROM pack it carries the CHR index *and* —
+   beside it — the 32-hex pattern *Copy as MEP sheet cell* put on the
+   clipboard, which is the string the author matches the row against (#524).
 
 This is the seed-MIDI→OGG path: the seed MIDIs come from the game itself,
 are rendered once, and a human curates the result — no manual recording or

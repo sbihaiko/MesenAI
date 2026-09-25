@@ -856,6 +856,9 @@ def report_cells(out_lines, sliced, slots, winner, index_keyed: bool) -> None:
         # The key the emission loop keyed by: ADR-0172's CHR index, else the
         # ADR-0178 un-baked source, else the sidecar's own tile.
         tile = _index_token(idx) if index_keyed and idx is not None else (src or data)
+        # #524: an index-keyed row names the key by CHR index (ADR-0172) while the
+        # clipboard carries the 32-hex pattern — `src or data`, as `tile` picks it.
+        pat = f" pattern {src or data}" if index_keyed and idx is not None else ""
         at = winner.get((c["condition"], tile, pal)) or winner.get(("", tile, pal))
         # The winning entry is this cell's only if it sits in the cell's own slot
         # and its crop is one the cell produced: two sheets can share an x,y.
@@ -863,7 +866,7 @@ def report_cells(out_lines, sliced, slots, winner, index_keyed: bool) -> None:
             int(v) for v in slots[at[0]]["entries"][at[1]][2][3:5]) in c["crops"]
         line = (by_cond.get((c["condition"], tile, pal)) or by_cond.get(("", tile, pal))) if mine else ""
         print(f"report: sheets/{sd.json_path.name} cell {c['index']} "
-              f"{'painted' if c['painted'] else 'added'} — tile {tile} palette {pal} "
+              f"{'painted' if c['painted'] else 'added'} — tile {tile}{pat} palette {pal} "
               f"at crop {c['crop'][0]},{c['crop'][1]}: "
               + (line or "no <tile> — this key produced no rule for this cell (another crop may "
                          "already own it, #343)"))
