@@ -257,6 +257,63 @@ FAIL  PR #468: no bank comes from a hidden row or from the row-240 fetch: named 
   260 entries, 0 leftover. Pack, OAM dump and grid dump are byte-identical
   across all three.
 
+## PR #476 review: a fetch names only the entry that made it
+
+Codex 4100411167 still applied after the rebase. `SpriteFetchLog::Draws`
+matched a fetch to a half by x, tile base and an eight-scanline window, so
+two OAM entries with the same x and tile on overlapping rows took each
+other's fetches. In the reported case, sprite 0 (`$80` at x 48) covers rows
+100-107 and sprite 2 (same tile, same x) covers rows 101-108. Latch sprite 1
+sits between them in OAM order and trips the latch on line 100, before sprite
+2's top row is fetched. `Resolve` found sprite 0's row 1 (bank `$05`) first
+in sprite 2's window, and `FetchedAddresses` merged the two entries' banks.
+
+The fix is identity, not position. Each logged fetch now carries:
+
+- the screen line its half's top row is drawn on. `Record` derives this from
+  the fetch's own row within the half, taking vertical flip into account, and
+  `HdBuilderPpu::StoreSpriteInformation` passes the flip in.
+- an ordinal: how many fetches of the same x, tile and top line came earlier
+  on the same scanline.
+
+The PPU fetches a line's sprites in OAM order, so the ordinal is the half's
+rank among the OAM entries whose half has that same x, tile and top line.
+`OamFetchLatch::OnSpriteFetch` computes that rank from OAM when it decodes
+the half. A half matches a fetch only when x, tile, top line and ordinal all
+agree. The change is in `SpriteFetchLog.h`, `OamFetchLatch.h` (#468's latch,
+changed here on #476) and one argument in `HdBuilderPpu.h`. The PPU core is
+untouched. The secondary-OAM slot does not record which OAM index filled it,
+so the ordinal recovers that index without adding state to `NesPpu`.
+
+**Red** (new case `TestTheRowLogNamesEachOverlappingEntryByItsOwnFetches`,
+against `448f35c5`), verbatim:
+
+```
+FAIL  PR #476: two entries with the same x and tile on overlapping rows are each named by their own fetches (0580, then 1E80 + 0580): named 0580 05FD 0580 extra 1E80 1E80 
+FAIL  PR #476: two identical entries on the same rows are told apart by fetch order (0580, then 1E80 + 0580): named 0580 05FD 0580 extra 1E80 1E80 
+1132/1134 cases passed
+```
+
+**Green:** 1135/1135. That includes a third check: a vertically flipped half
+is found by its top line.
+
+**Mutations:**
+
+| Mutation | Result |
+|---|---|
+| `Draws` matches the old eight-scanline window instead of the top line | 1 fails (1134/1135): overlapping entries, `named 0580 05FD 0580 extra 1E80 1E80` |
+| `Draws` ignores the ordinal | 1 fails (1134/1135): identical entries, `named 0580 05FD 0580 extra 1E80 1E80` |
+| `Record` ignores vertical flip | 1 fails (1134/1135): the flipped-half check |
+
+**E2E** (same commands and private relinked copies as above). The
+`MesenCore.dylib` sha256 was `748b125d…1403` at `448f35c5` and is
+`97a622cd…529d` with this change. In both runs, the pack, OAM
+dump and grid dump are byte-identical to `448f35c5`.
+
+- Castlevania stage 1, 80 s from `stage1.mss`: `sheet_keys_audit.py` finds
+  590 entries, 0 leftover.
+- Excitebike, 40 s: 260 entries, 0 leftover.
+
 ## What is left, and why it is not this bug
 
 The 7 remaining keys are all blank latch tiles: the bitmaps of `$FD`, `$FE`

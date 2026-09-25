@@ -40,7 +40,11 @@
 //each half by the bank of its topmost fetched row that showed sprites (a row
 //PPUMASK hid made no <tile> rule, PR #468 review), handing every other bank
 //its rows came from to `emitBank`. A half no row of which was fetched (the
-//8-per-line limit) keeps the bank of its cycle-257 decode. Host-free (ADR-0127): HdBuilderPpu
+//8-per-line limit) keeps the bank of its cycle-257 decode. A half finds its
+//rows in the log by identity (PR #476 review): its x, tile, top line and its
+//rank among the OAM entries with a half of those same three (see
+//SpriteFetchLog), so an entry never takes the fetches of another one on
+//overlapping rows. Host-free (ADR-0127): HdBuilderPpu
 //supplies the per-half CHR/palette reads through `resolve`, and
 //scripts/core_unit_tests.cpp drives the latch with synthetic frames.
 class OamFetchLatch
@@ -73,10 +77,11 @@ public:
 	}
 
 	//#458: one sprite row as the PPU fetched it (StoreSpriteInformation), on
-	//`scanline`, with the absolute CHR address that fetch read.
-	void OnRowFetch(int32_t scanline, uint8_t spriteX, uint16_t patternAddr, int32_t absoluteAddr)
+	//`scanline`, with the sprite's vertical flip and the absolute CHR address
+	//that fetch read.
+	void OnRowFetch(int32_t scanline, uint8_t spriteX, uint16_t patternAddr, bool verticalMirror, int32_t absoluteAddr)
 	{
-		_rows.Record(scanline, spriteX, patternAddr, absoluteAddr);
+		_rows.Record(scanline, spriteX, patternAddr, verticalMirror, absoluteAddr);
 	}
 
 	//Called at cycle 257 of every visible scanline `line` (0-239).
@@ -117,6 +122,10 @@ public:
 		}
 		uint32_t row = (uint32_t)line + 1;
 		uint32_t height = largeSprites ? 16 : 8;
+		//The halves on this row so far, in OAM order: the PPU fetches them in
+		//this order, which is what tells twins (same x, tile, top) apart.
+		Half onRow[64];
+		uint32_t onRowCount = 0;
 		for(uint32_t i = 0; i < 64; i++) {
 			const uint8_t* entry = oam + i * 4;
 			//239 and up is how a game parks a sprite off-screen
@@ -129,16 +138,24 @@ public:
 			}
 			uint32_t half = (row - top) >> 3;
 			uint32_t slot = i * 2 + half;
+			Half h = Decode(entry, (uint8_t)i, (uint8_t)half, largeSprites, spritePatternAddr);
+			uint8_t ordinal = 0;
+			for(uint32_t j = 0; j < onRowCount; j++) {
+				if(onRow[j].X == h.X && onRow[j].Y == h.Y && (onRow[j].TileAddr & 0xFFF0) == (h.TileAddr & 0xFFF0)) {
+					ordinal++;
+				}
+			}
+			onRow[onRowCount++] = h;
 			if(_latched[slot]) {
 				continue;
 			}
-			Half h = Decode(entry, (uint8_t)i, (uint8_t)half, largeSprites, spritePatternAddr);
 			if(resolve(h, _tiles[slot])) {
 				_x[slot] = h.X;
 				_y[slot] = h.Y;
 				_paletteIndex[slot] = (uint8_t)((h.PaletteOffset >> 2) & 0x03);
 				_tileAddr[slot] = h.TileAddr;
 				_abs[slot] = h.AbsoluteAddr;
+				_ordinal[slot] = ordinal;
 				_pending.set(slot);
 			}
 		}
@@ -157,7 +174,7 @@ public:
 				continue;
 			}
 			HdPpuTileInfo& tile = _tiles[slot];
-			_rows.FetchedAddresses(_x[slot], _y[slot], _tileAddr[slot], _banks);
+			_rows.FetchedAddresses(_x[slot], _y[slot], _tileAddr[slot], _ordinal[slot], _banks);
 			if(!_banks.empty() && _banks[0] != _abs[slot]) {
 				rebank(_banks[0], tile);
 			}
@@ -211,6 +228,8 @@ private:
 	uint8_t _paletteIndex[SlotCount] = {};
 	uint16_t _tileAddr[SlotCount] = {};
 	int32_t _abs[SlotCount] = {};
+	//The half's rank among its twins on the row log (PR #476 review).
+	uint8_t _ordinal[SlotCount] = {};
 	std::bitset<SlotCount> _latched;
 	//Decoded at the last fetch, recorded once their row is drawn.
 	std::bitset<SlotCount> _pending;

@@ -76,7 +76,7 @@ public:
 		info.AbsoluteTileAddr = _mapper->GetPpuAbsoluteAddress(info.TileAddr).Address;
 		//#458: the bank this row really came from, for OamFetchLatch to name
 		//the half by (the <tile> rule is keyed by the same address).
-		_oamLatch.OnRowFetch(_scanline, sprite.SpriteX, tileAddr, info.AbsoluteTileAddr);
+		_oamLatch.OnRowFetch(_scanline, sprite.SpriteX, tileAddr, verticalMirror, info.AbsoluteTileAddr);
 		info.HorizontalMirror = horizontalMirror;
 		info.VerticalMirror = verticalMirror;
 		info.OffsetY = lineOffset;
