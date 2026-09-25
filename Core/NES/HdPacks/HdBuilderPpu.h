@@ -165,7 +165,11 @@ public:
 					sprite.IsChrRamTile = isChrRam;
 					mapper->CopyChrTile(spriteInfoEx.AbsoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
 
-					_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, spriteInfoEx.AbsoluteTileAddr, sprite, mapper, false, _bankHashes[spriteInfoEx.TileAddr / _chrRamBankSize], false);
+					//#470: a fully transparent sprite tile makes no rule, just as
+					//OamFetchLatch gives it no sheet key.
+					if(!OamFetchLatch::IsFullyTransparent(sprite)) {
+						_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, spriteInfoEx.AbsoluteTileAddr, sprite, mapper, false, _bankHashes[spriteInfoEx.TileAddr / _chrRamBankSize], false);
+					}
 				}
 			}
 

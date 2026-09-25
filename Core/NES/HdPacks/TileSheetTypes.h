@@ -464,6 +464,75 @@ namespace MesenSheets
 		}
 	};
 
+	//HdPackBuilder::RecordGridFrame's layout of one frame's background runs
+	//onto `frame` (a run is HdPackBuilder::ScreenRun: X, Y and the HdPpuTileInfo
+	//Tile drawn from X to the next run's X on scanline Y). Ported from the
+	//spike's frame_grid (scripts/spike_tile_sheets.py): run starts sit on tile
+	//boundaries, so the most common (x % 8) among non-zero run starts is the
+	//frame's fine x scroll, and cells are laid out relative to it - two frames
+	//of the same screen at different sub-tile offsets then compare equal. A
+	//cell is filled from the scanline at its origin (y % 8 == 0).
+	//`shapeFor(tile)` interns a tile's shape (kEmptyCell when it cannot) and
+	//`paletteFor(paletteColors)` its palette, in the order they are met. Host-free and inline
+	//because HdPackBuilder.cpp is not in the unit-test link set.
+	template<typename Run, typename ShapeFor, typename PaletteFor>
+	void LayOutGridRuns(const std::vector<Run>& runs, GridFrame& frame, ShapeFor&& shapeFor, PaletteFor&& paletteFor)
+	{
+		uint32_t fineCounts[8] = {};
+		for(const Run& run : runs) {
+			if(run.X != 0) {
+				fineCounts[run.X & 7]++;
+			}
+		}
+		uint8_t fine = 0;
+		for(uint8_t i = 1; i < 8; i++) {
+			if(fineCounts[i] > fineCounts[fine]) {
+				fine = i;
+			}
+		}
+		frame.FineX = fine;
+		for(size_t i = 0; i < runs.size(); i++) {
+			const Run& run = runs[i];
+			if((run.Y & 7) != 0) {
+				continue;
+			}
+			uint32_t row = (uint32_t)run.Y >> 3;
+			if(row >= kGridRows) {
+				continue;
+			}
+			//The run ends where the next run on the same scanline starts
+			uint32_t xEnd = (i + 1 < runs.size() && runs[i + 1].Y == run.Y) ? runs[i + 1].X : 256;
+			int32_t offset = ((int32_t)run.X - (int32_t)fine) % 8;
+			if(offset < 0) {
+				offset += 8;
+			}
+			uint32_t cx = offset == 0 ? run.X : run.X + (8 - offset);
+			ShapeId shape = shapeFor(run.Tile);
+			if(shape == kEmptyCell) {
+				continue;
+			}
+			PaletteId palette = paletteFor(run.Tile.PaletteColors);
+			for(; cx + 8 <= 256 && cx < xEnd; cx += 8) {
+				int32_t col = ((int32_t)cx - (int32_t)fine) / 8;
+				if(col >= 0 && col < (int32_t)kGridCols) {
+					frame.Cells[row][col] = shape;
+					frame.Palettes[row][col] = palette;
+				}
+			}
+		}
+		//#471: every other scanline's tiles are interned too, after the origin
+		//scanlines so their shapes keep the ids they had. DrawPixel writes a
+		//<tile> rule for every scanline; a tile drawn only off a cell's origin
+		//(Punch-Out!!'s 00FD, a one-line raster effect on y % 8 == 7) had rules
+		//and no sheet cell. It takes no grid cell here (the cell belongs to
+		//its origin's tile); the unsorted sheet gives its shape one.
+		for(const Run& run : runs) {
+			if((run.Y & 7) != 0) {
+				shapeFor(run.Tile);
+			}
+		}
+	}
+
 	//F12.6b (ADR-0197 §3): the body of a grid dump's `M` line - the retained
 	//RAM window as upper-case hex with no separators, `kRetainedRamSize * 2`
 	//characters, always the full width so a reader can index a byte by
