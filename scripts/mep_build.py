@@ -118,6 +118,7 @@ import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as th
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
 import mep_recorded  # ADR-0231 (#447): an untouched cell keeps the recorded rule
+import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
 from mep_recipe_common import sha256_file
 
 # NES hires.txt version emitted for the texture and audio manifests (ver >=
@@ -774,12 +775,16 @@ def _cell_crops(tiles, ox: int, oy: int, per_cell: int, scale: int, where: str, 
         src = src if _HEX_TILE_RE.match(src) else None
         mirror = str(entry.get("mirror") or "").strip().upper()
         mirror = mirror if mirror in ("H", "V", "HV") else None
-        out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
-                    data, pal, edited, idx, src, mirror, condition))
+        # ADR-0230: one more crop per exact fold - the same pixels, keyed by the
+        # fold's palette, carrying the Brightness that rebuilds it (last field).
+        for fpal, bright in [(pal, None)] + palette_folds.entry_folds(entry)[0]:
+            out.append(((ox + (i % 2) * 8) * scale, (oy + (i // 2) * 8) * scale,
+                        data, fpal, edited, idx, src, mirror, condition, bright))
 
 
 def _slice_sheet(sd: SheetDoc, scale: int, sheets_dir: Path) -> list:
-    """(x, y, tileData, palette, edited, index, source, mirror) for every 8x8
+    """(x, y, tileData, palette, edited, index, source, mirror, condition, fold
+    brightness or None) for every 8x8
     crop the sheet resolves, in sheet pixels at `scale`. `edited` says the
     crop's cell differs from the `*.orig.png` twin, i.e. the artist actually
     painted it. Crops that fall outside the PNG are dropped with a warning
@@ -1209,7 +1214,7 @@ def cmd_build(args) -> int:
         seen = {}
         repeats = 0
         pending_unflips = []
-        for x, y, data, pal, edited, index, unflipped, mirror, authored in crops:
+        for x, y, data, pal, edited, index, unflipped, mirror, authored, fold in crops:
             bitmap = data
             if index_keyed:
                 if index is None:
@@ -1224,7 +1229,7 @@ def cmd_build(args) -> int:
                 # un-baked too (#255): storing the flipped bitmap under the
                 # source key makes the mirrored phase render garbled.
                 data = unflipped
-                if mirror:
+                if mirror and fold is None:  # a fold shares its cell's pixels: un-bake once
                     pending_unflips.append((x, y, mirror))
             elif (sd.kind in _FLIPPABLE_SHEET_KINDS
                   and (data, pal) not in keysrc_attrs
@@ -1240,6 +1245,7 @@ def cmd_build(args) -> int:
                 continue
             bitmaps.setdefault((data, pal), bitmap)
             variants = mep_conditions.variants_for(authored, keysrc_attrs.get((data, pal)))
+            variants = variants if fold is None else [(c, [fold] + list(r[1:])) for c, r in variants]
             for cond, rest in variants:
                 key = (cond, data, pal)
                 row = (key, cond, ["0", data, pal, str(x), str(y)] + list(rest), edited)

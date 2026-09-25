@@ -430,11 +430,18 @@ organised sheets and `unsorted` give a cell to every shape the recording
 drew. Most of a recorded pack's `<tile>` keys are something else: tiles the
 game never drew during the recording, which the bootstrap exports from the
 ROM with `defaultTile=Y` (on a 60 s Castlevania run, 2 141 of 2 673 shapes).
-Those are on the `chr/` pattern pages only. A shape the game drew in several
-palettes also has **one** sheet cell, in the first palette it was seen in.
-Its other palettes are on the pattern pages too (on an 85 s Zelda run, 312 of
-574 drawn keys). Paint them there if they need their own art. ADR-0230,
-`proposed`, tracks giving those palettes a place on the sheets.
+Those are on the `chr/` pattern pages only. Every palette the game drew a
+shape in reaches the sheets too (ADR-0230, F14.9). The shape's cell carries
+the first palette it was seen in. Another palette that is the same picture at
+one Brightness (the cell's pixels times one multiplier give exactly what the
+recording drew, e.g. a palette that differs only in a colour the tile never
+paints, or a fade to black) is listed on the cell's sidecar entry as a
+`folds` item and rides on the cell's paint. Any other palette, whether a
+colourway (a red and a blue enemy) or a fade step no single Brightness
+reproduces, gets its own **variant cell**, rendered in that palette directly
+beneath its base cell. On a 60 s Castlevania run that is 67 variant cells and
+29 folds; on an 85 s Zelda run, 127 variant cells and 142 folds, so the sheets
+carry 100 % of the drawn keys on both.
 
 ### The panorama is a CHR RAM surface
 
@@ -672,6 +679,24 @@ key goes on*). Two optional fields appear only where they mean something:
 - `"source"` and `"mirror"` — written by the recorder for a shape it recorded
   with an OAM flip baked in (ADR-0178), so the rebuild can emit the unflipped
   key the run time looks up. Never author these by hand.
+- `"folds": [{"palette": "<8 hex>", "brightness": <number>}]` — other
+  palettes the recording drew this shape in that the cell reproduces exactly
+  at one Brightness (ADR-0230 item 2). `build` emits one `defaultTile=N`
+  `<tile>` rule per item, on this cell's crop at that Brightness, painted or
+  not, so painting the cell repaints its folds too. `brightness` is in
+  [0, 4]; above 1 means the fold is brighter than the cell. `mep_lint.py`
+  rejects a malformed item (a bad palette, a Brightness out of range, the
+  entry's own palette, a palette listed twice), because `build` would skip
+  it. To give a fold its own art, delete its item and add a cell for its
+  palette. A sidecar without the field (every pack recorded before F14.9) is
+  valid and carries no fold rules.
+
+A **variant cell** carries `"variantOf": <index>`, the `index` of the cell
+whose shapes it repeats in another palette the recording drew (ADR-0230
+item 1). It sits directly beneath that cell, in the same column, in rows the
+recorder inserted, so a cycle grid's columns keep their phase order. It has
+no `metatile`, so a map placement never resolves to it. Paint it like any
+cell. It is its own exact key, so it can differ from its base.
 
 **A cell may hold a single 8×8 tile.** The 16×16 cell grid is a layout
 convention, not a constraint: `count: 1` with one entry in `tiles[]` builds,

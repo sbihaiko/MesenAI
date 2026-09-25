@@ -30,6 +30,9 @@ holds crops that differ from the sheet's on purpose (the xBRZ stand-in):
   * a `mep_import` project, whose recorded pages live only under
     `auto/textures/`, gets them copied up into `textures/`, so every emitted
     `<img>` resolves in the layer that names it and the pack lints;
+  * an ADR-0230 fold of an untouched cell keeps its recorded rule too, and
+    follows the painted crop at the fold's Brightness once the cell is painted
+    (ADR-0231 §6);
   * `check-coverage` still treats an unpainted build as a sheet-derived
     baseline.
 
@@ -37,6 +40,7 @@ Framework-free, like test_mep_build.py, whose fixtures it reuses.
 Usage: python3 scripts/test_mep_build_recorded.py
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -467,6 +471,44 @@ def external_source_test(root: Path):
         ok("#447: a --source build keeps a recorded textures/hires.txt, and later builds re-emit its rules")
 
 
+def fold_follows_recorded_test(root: Path):
+    """ADR-0231 §6 with ADR-0230 item 2: a fold rule derived from an untouched
+    cell keeps the recording's own line for that key; once the cell is painted,
+    the fold points at the cell's crop at the sidecar's Brightness."""
+    fold_pal, slot = "0F062A30", 9
+    folder, _rules = make_recorded_pack(root, "fold")
+    textures = folder / "textures"
+    x, y = page_xy(slot)
+    recorded_fold = f"0,{T.tile_hex(0)},{fold_pal},{x},{y},1,N,{700000 + slot},0"
+    with (textures / "hires.txt").open("a", encoding="utf-8") as fh:
+        fh.write(f"<tile>{recorded_fold}\n")
+    write_page(textures, range(slot + 1))
+    for path in sorted((textures / "sheets").glob("*.json")):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        for cell in doc.get("cells") or []:
+            for entry in cell.get("tiles") or []:
+                if entry and entry.get("tile") == T.tile_hex(0):
+                    entry["folds"] = [{"palette": fold_pal, "brightness": 0.75}]
+        path.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+    if run("build", str(folder)) is None:
+        return
+    _imgs, got = by_key(textures / "hires.txt")
+    fold = got.get(("", T.tile_hex(0), fold_pal))
+    if fold is None or fold[0] != PAGE or fold[1][1:] != recorded_fold.split(",")[1:]:
+        fail(f"ADR-0231 §6: an untouched cell's fold does not keep the recorded rule: {fold}")
+    else:
+        ok("ADR-0231 §6: an untouched cell's ADR-0230 fold keeps the recorded rule")
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    if run("build", str(folder)) is None:
+        return
+    _imgs, got = by_key(textures / "hires.txt")
+    fold = got.get(("", T.tile_hex(0), fold_pal))
+    if fold is None or fold[0] != "sheets/metatiles.png" or fold[1][5:7] != ["0.75", "N"]:
+        fail(f"ADR-0231 §6: a painted cell's fold does not point at its crop at the fold's Brightness: {fold}")
+    else:
+        ok("ADR-0231 §6: a painted cell's fold points at its crop at the fold's Brightness")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -481,6 +523,7 @@ def main() -> int:
         coverage_baseline_test(root)
         restored_page_test(root)
         external_source_test(root)
+        fold_follows_recorded_test(root)
     return 1 if FAILED else 0
 
 

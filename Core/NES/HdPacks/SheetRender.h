@@ -5,6 +5,8 @@
 //Everything here is pure: buffers in, buffers out - no I/O, no PNG encoding.
 #include "NES/HdPacks/TileSheetTypes.h"
 #include <functional>
+#include <map>
+#include <string>
 #include <set>
 
 namespace MesenSheets
@@ -16,6 +18,16 @@ namespace MesenSheets
 
 	//NES master palette: 512 entries of 0x00RRGGBB (HdPackBuilder::_palette).
 	using NesPalette = const uint32_t*;
+
+	//ADR-0230 Decision item 2 (F14.9): another palette the recording drew a
+	//shape in that the shape's cell reproduces exactly at one Brightness
+	//(SheetColourways.h). Brightness is the column text mep_build.py writes.
+	struct PaletteFold
+	{
+		uint32_t Palette = 0;
+		std::string Brightness;
+	};
+	using ShapeFolds = std::map<ShapeId, std::vector<PaletteFold>>;
 
 	//---- pixels ------------------------------------------------------------
 
@@ -138,7 +150,9 @@ namespace MesenSheets
 	//Serialises `doc` to the ADR-0153 §4 schema. `lookup` resolves each cell's
 	//shapes into the exact hires.txt keys, so a crop maps back to tile entries
 	//with no guessing. Deterministic: same input, same bytes.
-	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup);
+	//`folds` (ADR-0230, F14.9) adds a `folds` list to every tile entry of a
+	//shape it names; null or empty writes the schema as it was.
+	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup, const ShapeFolds* folds = nullptr);
 
 	//ADR-0164 §1 (F9.17): serialises the sheets/adjacency.json sidecar - the
 	//adjacency statistics the sheet inference measured, kept so an external

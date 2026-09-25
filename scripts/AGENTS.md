@@ -490,6 +490,33 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `scripts/test_mep_build_recorded.py` asserts this. The audio-manifest
   helpers live in `mep_carry.py` (`build_audio_manifest`), moved there to
   keep `mep_build.py` under its line ceiling.
+  **Sidecar palette fields (ADR-0230, F14.9; producer contract in
+  `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
+  "brightness"}]`. For each fold, `build` emits one extra exact
+  `defaultTile=N` rule: the same crop, the key source's other fields, the
+  fold's palette, and that Brightness as the last field. This happens
+  whether or not the cell was painted. A fold is exact by construction: the
+  recorder lists it only when that one Brightness rebuilds the recorded
+  pixels. So a consumer must never recompute or widen it, and never turn a
+  residual fade into a fold. A cell carrying `variantOf` is an ordinary
+  cell for `build`: its own tiles, its own palette, one rule per key. It
+  has no `metatile`, so no map placement resolves to it. `mep_lint`
+  (`lint_sheet_folds`) reports a malformed `folds` list as an error
+  (`palette_folds.entry_folds`: 8-hex palette, numeric brightness in
+  [0, 4], not the entry's own palette, no repeats). It reports a
+  `variantOf` that names no cell index of the same sheet as a warning.
+  `palette_folds.py` (stdlib only, shipped in
+  `scripts/tools-zip-manifest.txt` because `mep_build`/`mep_lint` import
+  it) is the single Python definition of a fold. `artist_chr_kit.py`
+  imports it too, and anchors its pattern-page folds on the sheet cells'
+  palettes (`sheet_fold_anchors`, ADR-0230 item 3).
+  `docs/specs/golden/sheets/palette-relation-cases.txt` holds the shared
+  vectors. `test_palette_folds.py` checks them against
+  `palette_relation`, and `core_unit_tests` checks them against the C++
+  port. Change both sides together. Round-trip invariants
+  (`test_mep_build.py` `sheet_fold_tests`, `test_mep_lint_folds.py`): a
+  sidecar with no `folds` and no `variantOf` builds exactly as before, and
+  a second `build` is byte-identical.
   `mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) turns a legacy plain HD
   pack (`hires.txt` + PNGs) into a MEP project `mep_build.py build`
   regenerates with the identical rule set and pixels: `import <pack> --out
@@ -857,8 +884,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   that voted fixed, and a tied row is an abstention rather than a "moving"
   vote. Writes `<out>/map/<stage>-NNN.png` + `.orig.png` + `.json`, the JSON
   being an ADR-0153 v1 sidecar whose `cells[]` name every 8x8 cell's pixel
-  position and `(tileData, palette)` key - so the panorama is addressable *and*
-  a drop-in `textures/sheets/` sheet `mep_build.py build` already slices.
+  position and `(tileData, palette)` key, so the panorama is addressable. It is
+  **not** a `textures/sheets/` drop-in: the ADR-0220 §3 context band makes the
+  PNG and its `.orig.png` twin taller than the grid `cells[]` describe, and
+  `mep_build` refuses that size (#451). The only way back is `--slice`
+  (ADR-0220 §5), and `--verify` goes through `--slice` too, so the ADR-0183 §4
+  round trip exercises the artist's path.
   `--slice` cuts a painted strip back into that sheet: one key sits at many
   positions and a pack holds one art per key, so **first occurrence in (y, x)
   order wins** and every disagreeing position is printed, split into "both
@@ -1004,9 +1035,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   never built with these sheets, so its flip-baked crops (ADR-0178) are not
   the twins the next build slices - or when the pack does not build at all.
   Keep the guard: planning without it re-points rules the reload cannot
-  show. Covered by `test_mep_figure.py`; measured on Contra in
+  show. A cell whose `*.orig.png` art is fully transparent (a blank sprite
+  tile, which the NES never draws) is never written, whatever paint covers
+  its rect. It is listed in the report's `blank` array and printed by the
+  CLI (#452). Without this check, Castlevania's blank tile took body paint
+  and the build failed #253's guard. Covered by `test_mep_figure.py`;
+  measured on Contra in
   `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
-  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`.
+  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  Castlevania in
+  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the

@@ -158,8 +158,11 @@ is never baked from the flipped crop.
 A fold or palette-variant rule that ADR-0230 derives from an untouched cell
 follows the same rule: when the recording has that key, the recorded line
 wins. This works through `mep_recorded.Recorded.take`, which sees every entry
-the emission loop keeps. Wiring F14.9's new rule kinds through it is F14.9's
-job, and this change does not touch that code.
+the emission loop keeps. F14.9 emits each fold as its own entry of the
+cell, carrying the cell's painted flag, and a variant cell is an ordinary
+cell, so both reach `take` with no extra wiring.
+`fold_follows_recorded_test` in `scripts/test_mep_build_recorded.py` pins
+it for a fold.
 
 ### 7. `check-coverage`
 

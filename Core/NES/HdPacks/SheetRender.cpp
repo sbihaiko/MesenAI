@@ -295,7 +295,7 @@ namespace MesenSheets
 		return out;
 	}
 
-	static void AppendTiles(std::stringstream& json, const MetatileKey& key, uint32_t unit, const TileLookup& lookup)
+	static void AppendTiles(std::stringstream& json, const MetatileKey& key, uint32_t unit, const TileLookup& lookup, const ShapeFolds* folds = nullptr)
 	{
 		uint32_t tiles = unit >= 16 ? 4 : 1;
 		json << "[";
@@ -332,6 +332,17 @@ namespace MesenSheets
 				}
 				json << ", \"source\": \"" << source << "\", \"mirror\": \""
 				     << ((tile->Mirrors & 1) ? "H" : "") << ((tile->Mirrors & 2) ? "V" : "") << "\"";
+			}
+			//ADR-0230 item 2: the palettes this cell reproduces exactly at one
+			//Brightness each; mep_build.py emits one defaultTile=N rule per fold.
+			auto shapeFolds = folds ? folds->find(key.Tiles[i]) : ShapeFolds::const_iterator();
+			if(folds && shapeFolds != folds->end() && !shapeFolds->second.empty()) {
+				json << ", \"folds\": [";
+				for(size_t f = 0; f < shapeFolds->second.size(); f++) {
+					json << (f ? ", " : "") << "{ \"palette\": \"" << ToHex(shapeFolds->second[f].Palette, 8)
+					     << "\", \"brightness\": " << shapeFolds->second[f].Brightness << " }";
+				}
+				json << "]";
 			}
 			json << " }";
 		}
@@ -397,7 +408,7 @@ namespace MesenSheets
 		return true;
 	}
 
-	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup)
+	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup, const ShapeFolds* folds)
 	{
 		std::stringstream json;
 		json << "{\n";
@@ -487,6 +498,9 @@ namespace MesenSheets
 			if(cell.Metatile >= 0) {
 				json << ", \"metatile\": " << cell.Metatile;
 			}
+			if(cell.VariantOf >= 0) {
+				json << ", \"variantOf\": " << cell.VariantOf;
+			}
 			if(!cell.Aliases.empty()) {
 				//Every other vocabulary entry that renders to this cell, with
 				//its own tile keys, so the round-trip can paint them all from
@@ -495,7 +509,7 @@ namespace MesenSheets
 				json << ", \"aliases\": [";
 				for(size_t a = 0; a < cell.Aliases.size(); a++) {
 					json << (a ? ", " : "") << "{ \"metatile\": " << cell.Aliases[a] << ", \"tiles\": ";
-					AppendTiles(json, a < cell.AliasKeys.size() ? cell.AliasKeys[a] : MetatileKey(), doc.Grid.Unit, lookup);
+					AppendTiles(json, a < cell.AliasKeys.size() ? cell.AliasKeys[a] : MetatileKey(), doc.Grid.Unit, lookup, folds);
 					json << " }";
 				}
 				json << "]";
@@ -510,7 +524,7 @@ namespace MesenSheets
 				json << LabelFields(cellLabel);
 			}
 			json << ", \"tiles\": ";
-			AppendTiles(json, cell.Key, doc.Grid.Unit, lookup);
+			AppendTiles(json, cell.Key, doc.Grid.Unit, lookup, folds);
 			json << " }";
 		}
 		json << (doc.Cells.empty() ? "]\n" : "\n  ]\n");

@@ -51,7 +51,11 @@ against, or the unattended job cannot use it:
   All six sets are declared since 2026-09-23 (F14.3,
   `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
   `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
-  authored on, and each was run once through the library job.
+  authored on, and each was run once through the library job. `punchout/`
+  (2026-09-24) is pinned to the library dump it was authored and recorded on
+  by hand (below); run through the library job once (2026-09-24), it does not
+  reproduce that recording, because the job mints its state at the wrong
+  frame (below).
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
@@ -362,3 +366,38 @@ where the screen does not scroll) reads Link's walk cleanly — 9 poses, 2 cycle
 period 3, hold [4,4,4], 117 repeats each — but **attributes no driver**, and the
 60 f-hold shape (x20, 100 repeats) does not either. On this game the probe is
 worth running as a clean-cycle measurement; it answered nothing about the pad.
+
+## Punch-Out!!: a route that loses on schedule (2026-09-24)
+
+`punchout/` records the first Minor Circuit fight (Glass Joe) of Mike Tyson's
+Punch-Out!! (MMC2, CHR ROM). `mint-fight1.txt` (1990 f) waits out the boot,
+presses Start ten times 120 f apart — through the title, the password/new-game
+screen and the circuit card — and idles 660 f through the ring introduction,
+so `save-state=` writes `fight1.mss` as the bell rings (the headless run takes
+34 s and stops at frame 2044).
+
+`fight1.txt` (3582 f) repeats a 310-frame block of jabs and body blows to both
+sides (`UA`, `UB`, `A`, `B`), dodges (`L`, `R`) and a duck (`D`), with 14–20 f
+of release between them, cut to fit the 3600-frame budget. It is blind — it
+never reads Glass Joe's tells — so it loses: Little Mac is knocked down around
+60 s from the state and counted out around 70 s. Record at most 70 s from
+`fight1.mss`; past that the run records the "you lost" screen. Two 70 s passes
+of the block repeated 18 times (5580 f; the file's header rebuilds it) gave a
+byte-identical `hires.txt` and `auto/`
+(docs/validation/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
+route stops before the count-out and was not measured.
+
+**Not yet through the library job.** `record_library.sh` runs every mint for
+the batch's `<seconds>` (60 s by default), and `headless_record` writes
+`save-state=` at the run's frame target, not where the script ends. So the job
+saves `fight1.mss` at frame 3 607, about 26 s into the round (clock 1:15), and
+its 60 s `fight1` run reaches the count-out and keeps 355 frames, most of them
+the loss (measured 2026-09-24). Mint by hand with `34` as above until the job
+can end a mint where its script ends (#465). Padding the mint so the bell lands on
+frame 3 607 was tried and does not help: the fight it starts is not the
+measured one (35 RAM bytes differ at the bell; 255 of the measured 1 655 drawn
+keys are missing from a 70 s recording made from it).
+
+Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
+background tiles**, so the kit's figures cover the opponent and Mac shows up
+only on the pattern pages and the BG sheets.

@@ -25,7 +25,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4 and accepted 2026-09-24, implementing slice F14.9; ADR-0229 superseded 2026-09-24), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -662,6 +662,34 @@ or Part B §8. Dates below describe delivery, not a new validation run.
     `$1A` stalls on loads, so the lock lasts only until the next load.
   - No issue filed.
   [Log](../validation/f14.5-counter-locked-cycles-2026-09-24.md).
+
+- **F14.9** (2026-09-24) — ADR-0230 implemented. Every palette a shape was
+  drawn in now reaches a sheet. Go-ahead verbatim *"aceito sua sugestão.
+  pode aplicar e rodar em paralelo"*.
+  - The recorder queues its sheets and plans them in the host-free
+    `Core/NES/HdPacks/SheetColourways.h`. A drawn palette whose single
+    Brightness rebuilds the recorded pixels exactly becomes a `folds` entry
+    on the cell's sidecar tile entry.
+  - Every other drawn palette becomes a variant cell (`variantOf`) beneath
+    its base cell. That covers colourways and least-squares folds that
+    leave a residual (the #448 refinement).
+  - `mep_build` emits one exact rule per fold, and `mep_lint` checks the
+    list.
+  - `compute_folds` (now `scripts/palette_folds.py`) measures drift against
+    the cell.
+  - Castlevania 60 s and Zelda 85 s runs:
+    - drawn-key coverage is **100 %** (628/628, 574/574), with 0 unobserved
+      keys;
+    - variant cells: Castlevania +67 (61 colourway + 6 residual fold), Zelda
+      +127 (45 colourway + 82 residual fold);
+    - exact folds: 29 and 142;
+    - 0 build errors and byte-identical second builds;
+    - every emitted rule renders the recorded pixels. The only exceptions
+      are colour-0 pixels, a pre-existing sheet convention.
+  - The Contra kit, regenerated, builds clean, with 259 keys (was 172).
+  - `HdPackBuilder.cpp`'s ceiling is amended 2428 → 2438 (ADR-0137, twelfth
+    amendment).
+  [Log](../validation/f14.9-adr0230-implementation-2026-09-24.md).
 
 - **F14.4** (2026-09-24) — ADR-0230's palette gap measured. F14.4 itself
   decided and shipped nothing; the user accepted ADR-0230's hybrid on the
@@ -1348,7 +1376,9 @@ pack. (c) (simulated) and (d) (prototyped) both reach 100 % of drawn keys.
 ADR-0230 was accepted the same day as a hybrid, user's decision verbatim
 *"aceito sua sugestão. pode aplicar e rodar em paralelo"*: colourways get
 their own cell, folds ride on the cell with a Brightness, and the fold test
-measures against the cell. F14.9 implements it. F14.8 is not started.
+measures against the cell. **F14.9 is delivered** (2026-09-24, §3; its row
+is removed): 100 % of drawn keys reach a sheet on both games, through exact
+folds and variant cells. F14.8 is not started.
 Two questions the review raised are already decided on open PR #397 and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
 an `<addition>` anchor is keyed (*"Manter como está"*, recorded as an
@@ -1372,7 +1402,8 @@ already reach every shape the recording drew. Most of the rest are tiles the
 recording never drew (the bootstrap's `defaultTile=Y` export), which stay on
 the CHR pattern pages (ADR-0229 closed as (iii)). What is still open is that
 a sheet cell carries one palette: 84.7 % (Castlevania) and 45.6 % (Zelda) of
-the *drawn* keys reach a sheet (ADR-0230).
+the *drawn* keys reach a sheet (ADR-0230). F14.9 closed that: 100 % on both
+since 2026-09-24.
 
 **Prerequisite for the whole phase.** Issues #399, #400 and #401 — the three
 kit defects the 2026-09-23 Contra kit cold read found (painted figures never
@@ -1384,7 +1415,6 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F14.9 | **A sheet cell reaches every palette its shape was drawn in (ADR-0230).** Colourway variant cells emitted by the recorder from the host-free `MesenSheets::` headers; a `folds` list with a Brightness on the sidecar tile entry, emitted by `mep_build` as exact rules; `compute_folds` measures drift against the cell. | ADR-0230 "Decision", accepted 2026-09-24. Stop when the Castlevania 60 s and Zelda 85 s runs reach 100 % of drawn keys with 0 unobserved keys, cells grow by at most about +61 / +76, and the ADR-0183 §4 round trip holds, with unit tests. |
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
 
 ### 5. Order of execution
@@ -1422,7 +1452,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    F14.2 (delivered 2026-09-24, §3) → F14.4/F14.5 (measure before deciding: ADR-0229's figures were
    measured 2026-09-23 and it closed as (iii) on 2026-09-24, so F14.4
    measured for ADR-0230; both delivered 2026-09-24, §3; ADR-0230 accepted
-   2026-09-24) → F14.9 →
+   2026-09-24) → F14.9 (delivered 2026-09-24, §3) →
    Phase 13 R.1/R.2. F14.8 runs whenever a person is available.
 
 One implementation slice per task; architecture changes still require their
@@ -1485,7 +1515,7 @@ files and in §3.
 | 0198 | accepted (2026-09-16), §1 shipped as F12.7 (2026-09-17, completed 2026-09-19); §3 shipped as F12.17 (2026-09-23) | a legacy plain `hires.txt` pack is imported into a MEP project by an external stdlib tool in the stock-ROM namespace — round-trip proven with 0 differing keys on Ninja Gaiden, Contra80s and Super Mario Bros.; a pack keyed against an IPS-patched ROM imports against the patched ROM as a second namespace that the recording loop does not reach (§3, F12.17) |
 | 0209 | Q4 accepted and shipped as F12.8 (2026-09-19); Q1–Q3 accepted 2026-09-20 — (b), (e), (i); **Q2/Q3 shipped 2026-09-22** as `scripts/mep_figure.py export`/`import` ([log](../validation/adr0209-q2-q3-figure-export-2026-09-22.md): Contra `spr000`, 10 cells, keys 116 → 116, 0 lost / 0 added; the in-game F12.3 reload verified 2026-09-23 by F14.1 for a `sprNNN` figure whose sheet owns its key); **Q1 shipped 2026-09-22** as option (b) ([log](../validation/adr0209-q1-inferred-label-2026-09-22.md): `Core/NES/HdPacks/SheetLabels.h`, Contra 49/49 sidecars labelled, `mep_build` round-trip byte-identical), go-ahead verbatim *"vai com o Q1 da ADR-0209 em paralelo também"* | MesenAI owns **selection** and **return**, painting is delegated to the artist's own program; the `unsorted` remainder sheet gives every recorded shape a cell. Q1–Q3 answered the label author (the Core infers it at record time, the artist renames), the export unit (the `sprNNN` figure reassembled through its `evidence[]` offsets, not the cell) and the return path (F12.4's template, with this ADR adding only the launch and the reload trigger). Slices F12.9–F12.12 are bounded by its three constraints |
 | 0229 | **superseded 2026-09-24** by ADR-0230, closed as option (iii); user's pick verbatim *"Reenquadrar (Recommended)"*. Option (i), measured on a prototype 2026-09-23 ([log](../validation/f14.4-adr0229-option-i-measurement-2026-09-23.md)), gained nothing: 19.9 → 19.9 % of shapes (Castlevania), 16.0 → 16.0 % (Zelda) | the sheets already reach every drawn shape; the rest of the pack is the bootstrap's `defaultTile=Y` export of tiles the recording never drew, reachable on the CHR pattern pages (ADR-0194) and documented in `docs/remastering-a-game.md`. Answered the question ADR-0209 "What (k) actually closed" left open; placed beside 0209 for that reason
-| 0230 | **accepted 2026-09-24** (hybrid: colourway cells, folds with Brightness on the cell, fold test against the cell; user's pick verbatim *"aceito sua sugestão. pode aplicar e rodar em paralelo"*; slice F14.9); measured by F14.4 2026-09-24 ([log](../validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md)): colourways 61/96 (Castlevania) and 45–128/312 (Zelda); (b) serves 0 missing keys under `auto/`; (c) (simulated) and (d) reach 100 % of drawn keys | a sheet cell reaches every palette its shape was drawn in: (a) leave it, the other palettes stay on the pattern pages; (b) emit the painted cell as `defaultTile=Y`; (c) one cell per drawn palette; (d) a palette list on the cell's sidecar entry. Decided by the fold/colourway split of the missing drawn keys (84.7 % / 45.6 % reached today), sheet size and the round trip. Placed beside 0229, which it supersedes
+| 0230 | **accepted 2026-09-24** (hybrid: colourway cells, folds with Brightness on the cell, fold test against the cell; user's pick verbatim *"aceito sua sugestão. pode aplicar e rodar em paralelo"*); **implemented by F14.9** 2026-09-24 ([log](../validation/f14.9-adr0230-implementation-2026-09-24.md): 100 % of drawn keys, +67 / +127 variant cells incl. 6 / 82 residual folds); measured by F14.4 2026-09-24 ([log](../validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md)): colourways 61/96 (Castlevania) and 45–128/312 (Zelda); (b) serves 0 missing keys under `auto/`; (c) (simulated) and (d) reach 100 % of drawn keys | a sheet cell reaches every palette its shape was drawn in: (a) leave it, the other palettes stay on the pattern pages; (b) emit the painted cell as `defaultTile=Y`; (c) one cell per drawn palette; (d) a palette list on the cell's sidecar entry. Decided by the fold/colourway split of the missing drawn keys (84.7 % / 45.6 % reached today), sheet size and the round trip. Placed beside 0229, which it supersedes
 | 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged. **Amended 2026-09-24** and implemented the same turn, go-ahead verbatim *"em paralelo, rode a emenda da ADR-0210"*: filter 2 is per key — a 32-hex key of a `<patch>` pack is admitted only when its 16 bytes are verbatim in the stock dump, index-keyed `<patch>` packs stay refused; measured +550 shapes (Castlevania 249, Mega Man 257, Zelda 44), 0 admitted absent from stock ([log](../validation/adr0210-patch-verbatim-guard-2026-09-24.md)) | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
 | 0214 | accepted (2026-09-19), amended the same day (Opus replaces Fable); protocol in use — the two-game Fable panel and the 28-ROM Opus sweep both ran 2026-09-19 | a fresh Opus session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
 | 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, and the sweep extended the same day to the whole bounded library — **30 packs, 193 captures, 0 co-gated**, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Punch-Out!! (issue #339's game) keeps all ten captures and skips none — Option C separates rather than discards ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344

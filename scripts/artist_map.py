@@ -21,9 +21,10 @@ Per stage it writes, under `<out>/map/`:
   * `<stage>-NNN.json`     an ADR-0153 v1 sheet sidecar whose `cells[]` name,
     for every 8x8 cell of the panorama, its pixel position and the
     `(tileData, palette)` key the pack's `hires.txt` uses for that tile. The
-    panorama is therefore addressable *and* a drop-in `textures/sheets/` sheet:
-    copy the three files into a pack and `scripts/mep_build.py build` slices
-    them back into `<tile>` rules with no extra machinery.
+    panorama is therefore addressable; its canvas also carries the ADR-0220
+    context band below the grid, so it goes back into a pack through
+    `--slice`, never by copying the three files into `textures/sheets/`
+    (mep_build refuses a canvas larger than its sidecar describes, #451).
 
 and one manifest fragment `kit-part-map.json` for the kit assembler.
 
@@ -884,7 +885,8 @@ def verify(pack_dir: Path, map_dir: Path, stems, quiet=False):
          already holds for that cell's `(tileData, palette)` key? That is what
          says the sidecar addresses the strip correctly: a transposed
          coordinate or a wrong stride shows up here and nowhere else;
-      2. does `scripts/mep_build.py build` accept the panorama as a sheet?
+      2. does `scripts/mep_build.py build` accept the panorama once it is
+         sliced back exactly as `--slice` slices the artist's flat PNG?
       3. is the manifest's key set unchanged afterwards — nothing lost, nothing
          invented?
     """
@@ -910,22 +912,19 @@ def verify(pack_dir: Path, map_dir: Path, stems, quiet=False):
         with tempfile.TemporaryDirectory(prefix="artist_map_verify.") as tmp:
             work = Path(tmp) / "pack"
             shutil.copytree(pack_dir, work)
-            sheets = work / "textures" / "sheets"
-            sheets.mkdir(parents=True, exist_ok=True)
+            (work / "textures" / "sheets").mkdir(parents=True, exist_ok=True)
             if with_panorama:
+                # The panorama reaches the pack the way the artist's own flat
+                # export does (ADR-0220 section 5): through `--slice`, which
+                # reads the flat PNG against its twin cell by cell and writes
+                # the drop-in at the pack's <scale>. Copying the panorama in
+                # as a sheet is not that path - its canvas carries the
+                # ADR-0220 context band below the grid, which mep_build
+                # rightly refuses as a size the sidecar does not describe
+                # (#451).
                 for stem in stems:
-                    doc = json.loads((map_dir / f"{stem}.json").read_text(encoding="utf-8"))
-                    orig = read_png(map_dir / f"{stem}.orig.png")
-                    name = f"pano-{stem}"
-                    doc["sheet"] = f"{name}.png"
-                    doc["reference"] = f"{name}.orig.png"
-                    # A pack has one <scale> for every <img> (MEP-v1 2.1), so the
-                    # panorama joins it at the pack's scale whatever the artist
-                    # chose to paint at.
-                    write_png(sheets / f"{name}.png",
-                              orig.upscale(pack.scale) if pack.scale > 1 else orig.clone())
-                    write_png(sheets / f"{name}.orig.png", orig)
-                    (sheets / f"{name}.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+                    cut_painted(map_dir / f"{stem}.json", map_dir / f"{stem}.png",
+                                work / "textures", quiet=True)
             proc = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve().parent / "mep_build.py"), "build",
                  str(work), "--source", str(pack_dir / "textures" / "hires.txt"), "--quiet"],
