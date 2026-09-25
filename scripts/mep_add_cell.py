@@ -33,11 +33,19 @@ sprite sheet is the one destination the rule forbids. So `sprite`, `sprites`,
 `unsorted` on all 27 packs that ship one, then to the 16x16 free-form sheet
 `misc` (21), then to `metatiles` (30).
 
-**Growing (ADR-0216 OPEN 3(a)).** `cells[]` is dense and row-major, so the
-free slots are the tail of the last partial row: on `unsorted`, 5 of the 27
-packs have none at all and 7 more have exactly one, so "the sheet is full" is
-the common case, not the corner. Appending a row changes the logical size the
-sidecar describes, and `mep_build` derives the pack's `<scale>` by requiring
+**Growing (ADR-0216 OPEN 3(a)).** The free slots are the ones no cell's `x,y`
+claims, and the placer takes the first of them in row-major order. On a dense
+`cells[]` that is the slot after the last cell — the tail of the last partial
+row, the arithmetic the ADR states — and on a sparse one it is the first hole.
+Sparse is the case that was wrong (#503): the 2026-09-19 measurement behind
+"`cells[]` is dense and row-major" does not survive the 16-game F14.2 retest of
+2026-09-25, where Mario Bros.'s `unsorted` holds 30 cells at indices 0..29 while
+rows 1 and 2 carry only columns 0..2, so the dense slot `x1,y55` was cell 20's
+own (the counts are the sidecar as the repro copies it, before the paste). A hole in a row the sidecar describes is a free slot like any other and
+needs no growth at all; only when every described slot is claimed does the
+sheet gain a row, and then the logical size and both images move together by
+exactly one row pitch. Appending that row changes the logical size the sidecar
+describes, and `mep_build` derives the pack's `<scale>` by requiring
 `<sheet>.png` to be an exact integer multiple of it while `_EditedProbe`
 requires `<sheet>.orig.png` to be exactly 1/N of the PNG. Growing one file and
 not the other is the one failure mode in this area that is both silent and
@@ -234,14 +242,43 @@ def choose_sheet(docs, wanted: str = ""):
 
 
 def grid(sd):
-    """(pitch, columns, rows already used). `cells[]` is dense and row-major
-    on all 78 free-form sheets of the 30 sweep packs — index == position and
-    `x,y` == `gutter + col*pitch, gutter + row*pitch` on every one — so the
-    next slot is simply the one after the last cell."""
+    """(pitch, columns, rows the sidecar describes). The rows are counted from
+    the cells' own `y`, never from `len(cells)`: a recorded `cells[]` is **not**
+    dense (#503) — Mario Bros.'s `unsorted` holds 30 cells at indices 0..29
+    while rows 1 and 2 carry only columns 0..2, the state the repro pastes
+    into — and `y` is what
+    `mep_build._logical_size` reads the sheet's height from, so every row up to
+    the lowest cell is a row of the PNG. Row 0 exists even on a sheet with no
+    cell at all, which is what `_logical_size` does too (it starts `bottom` at
+    0)."""
     pitch = sd.unit + sd.gutter
-    used = len(sd.cells)
-    rows = (used + sd.columns - 1) // sd.columns
+    rows = 1
+    for c in sd.cells:
+        try:
+            rows = max(rows, (int(c.get("y", 0)) - sd.gutter) // pitch + 1)
+        except (TypeError, ValueError):
+            continue
     return pitch, sd.columns, rows
+
+
+def free_slot(sd, pitch: int, rows: int):
+    """The first slot of the described grid no cell claims, row-major, or None
+    when every one of them is claimed. On a dense `cells[]` that first slot is
+    the one after the last cell — the tail of the last partial row, which is
+    the arithmetic ADR-0216 OPEN 3 states — and on a sparse one it is the first
+    hole, never a slot that already repaints a cell an artist painted (#503)."""
+    taken = set()
+    for c in sd.cells:
+        try:
+            taken.add((int(c.get("x", 0)), int(c.get("y", 0))))
+        except (TypeError, ValueError):
+            continue
+    for row in range(rows):
+        for col in range(sd.columns):
+            x, y = sd.gutter + col * pitch, sd.gutter + row * pitch
+            if (x, y) not in taken:
+                return col, row, x, y
+    return None
 
 
 def slot_of(sd, index: int):
@@ -347,10 +384,18 @@ def place(sheets_dir: Path, docs, sd, payload, scale: int, label: str, dry_run: 
     """One cell into one sheet. Returns the report lines."""
     if sd.doc.get("kind") == "map" or sd.doc.get("placements"):
         raise AddCellError(f"{sd.json_path.name} is a map sheet; it places metatiles, not cells")
-    pitch, columns, rows_used = grid(sd)
+    pitch, columns, rows_described = grid(sd)
+    free = free_slot(sd, pitch, rows_described)
     index = len(sd.cells)
-    col, row, x, y = slot_of(sd, index)
-    must_grow = row >= rows_used
+    if free is None:
+        # Every slot the sidecar describes is claimed, so the sheet gains a row
+        # (ADR-0216 OPEN 3(a)): column 0 of row `rows_described`, the first row
+        # the PNG does not already have.
+        col, row, x, y = slot_of(sd, rows_described * columns)
+        must_grow = True
+    else:
+        col, row, x, y = free
+        must_grow = False
 
     out = [f"sheet: {sd.json_path.name} (kind {sd.kind}, {columns} columns, {sd.unit}px cells, "
            f"gutter {sd.gutter}, scale {scale})",
@@ -372,7 +417,7 @@ def place(sheets_dir: Path, docs, sd, payload, scale: int, label: str, dry_run: 
         if ref_path is None or not ref_path.is_file():
             raise AddCellError(
                 f"{sd.json_path.name} is full ({len(sd.cells)} cells, {columns} columns, "
-                f"{rows_used} rows) and has no readable '{ref or '<none>'}' twin to grow with it. "
+                f"{rows_described} rows) and has no readable '{ref or '<none>'}' twin to grow with it. "
                 "Growing only the sheet blinds the build's painted-cell probe for the whole "
                 "sheet (#346), so nothing is written.")
         sheet_bmp = mep_build._png_pixels(sd.png_path)

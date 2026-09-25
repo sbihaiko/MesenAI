@@ -872,7 +872,10 @@ Zelda II's worked example: `columns: 18`, `cell: 16×16`, `gutter: 1`,
 `metatiles.orig.png` 307×290, 298 cells. The pitch is 17, so the grid is 18×17 =
 306 slots and 8 are free; index 298 lands at `x = 1 + 17×10 = 171`,
 `y = 1 + 17×16 = 273`, painted at `(684, 1092)` on the scale-4 PNG, and no
-resize is needed. Donkey Kong is the same shape: `columns: 13`, a 222×222
+resize is needed. (That arithmetic reads a cell's `index` as its position, which
+holds on a sheet whose `cells[]` is in row-major order — Zelda II's is. Where it
+is not, ask which `x,y` no cell claims instead; see the trap below.) Donkey Kong
+is the same shape: `columns: 13`, a 222×222
 reference, 169 slots, 161 used, 8 free.
 
 Two traps around it, both measured:
@@ -886,9 +889,16 @@ Two traps around it, both measured:
   earlier, and it reads the paint state through the build's own probe, so the
   two never disagree.
 - **Find a free slot, do not guess one.** A cell you overwrite silently
-  repaints whatever tile already lived there. The grid is `columns` wide and
-  `cells[]` is in row-major order, so the free slots are the ones no `index`
-  claims.
+  repaints whatever tile already lived there. The free slots are the ones no
+  cell's `x,y` claims, and `mep_add_cell.py` takes the first of them in
+  row-major order. Do not count `cells[]` to find it: a recorded sidecar's
+  cells are **not** in row-major order and skip slots — Mario Bros.'s
+  `unsorted` holds 30 cells at `index` 0..29 with rows 1 and 2 carrying only
+  columns 0–2 of 5, so the slot after the last cell (`x1,y55`) is cell 20's
+  own, and
+  pasting there grew the PNG by a row the lowest cell did not describe and made
+  `build` exit 2 (#503). A slot the grid leaves empty **above** the lowest cell
+  is free and needs no resize at all.
 
 - **A painted cell that reaches nothing now says so.** `build` names the sheet
   and the key in two cases: a painted key another crop already owns
