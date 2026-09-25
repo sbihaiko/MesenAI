@@ -210,6 +210,19 @@ can be exercised by real xunit tests without Avalonia or the native
   (`CommunityPackHttpStatus.IsFollowableRedirect`); HTTP 304 is a terminal
   catalog-cache status for `CommunityCatalogCacheDecision`, never a
   redirect.
+- **Renderer size (`UI/Logic/RendererViewportFit`, P.7 plus upstream
+  3924215).** `MainWindow` sizes the renderer only from its result; don't
+  round inline there. Invariants, covered by `RendererViewportFitTests` and
+  the headless `RendererLetterboxTests`:
+  - `RealWidth`/`RealHeight` are even (no shader centre seam) and never
+    exceed `floor(panel * dpi)`. The one exception is the integer-scale
+    clamp to 1x on a panel shorter than one screen.
+  - The binding axis rounds **down** to even. Upstream's round-up overflows
+    a 375 px panel.
+  - The aspect contract is `AspectErrorPixels <= 1` physical px, not an
+    exact ratio.
+  - The logical size is snapped back from the physical pixels, so
+    `Width * dpi == RealWidth`.
 
 ## Work Guidance
 

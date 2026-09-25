@@ -744,11 +744,10 @@ namespace Mesen.Windows
 			EmuApi.SetRendererSize(realWidth, realHeight);
 			_model.RendererSize = new Size(realWidth, realHeight);
 
-			//Upstream 3924215 also snapped width/height to whole device pixels
-			//here and rounded realWidth/realHeight up to even numbers (a shader
-			//line artifact). Both break the P.7 contract that the renderer is
-			//sized exactly by RendererViewportFit (RendererLetterboxTests), so
-			//they are held back pending a decision - see
+			//Upstream 3924215 rounds realWidth/realHeight up to even numbers (a
+			//shader seam) and snaps width/height to whole device pixels here.
+			//Both rules live in RendererViewportFit instead, rounding down so
+			//the picture never overflows the panel (P.7) - see
 			//docs/validation/upstream-sync-3924215-2026-09-24.md.
 
 			if(WindowState == WindowState.FullScreen && !ConfigManager.Config.Video.UseExclusiveFullscreen && ConfigManager.Config.Video.EnableVariableRefreshRate) {

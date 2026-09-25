@@ -379,6 +379,13 @@ size straight to the renderer fails 2 of the 3 headless cases. Green:
 `make unit-tests` 423/423, `make headless-ui-tests` 15/15 (0 skipped, with
 the native core built).
 
+Amended 2026-09-24: `RendererViewportFit` also applies upstream 3924215's
+shader-seam rules, adapted to round down so the picture still fits the
+panel. The physical size is even and the logical size lands on whole
+physical pixels, so "exactly the core's ratio" is now "within 1 physical
+pixel". The rule and its tests are in
+`docs/validation/upstream-sync-3924215-2026-09-24.md` ("Follow-up: ported").
+
 ### What remains genuinely manual after wave 3
 
 - **F6.5 / the installer** — the OS file-picker step and a human
