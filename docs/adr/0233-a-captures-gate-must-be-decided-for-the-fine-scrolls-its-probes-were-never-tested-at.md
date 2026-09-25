@@ -1,6 +1,10 @@
 # ADR-0233: Decide how a capture is gated when its probes were never tested against the frames it draws on (other fine scrolls, surviving rivals)
 
-- Status: accepted (2026-09-25) — option A alone; B and C are re-opened only
+- Status: superseded (2026-09-25) by ADR-0235 — its premise that the frames
+  the gate wrongly fires on were never retained was falsified by the retention
+  measurement (frame 2946 is retained entry 597; the recorder misreads the
+  fixed status bar's row at the playfield's fine scroll). History: accepted
+  (2026-09-25) — option A alone; B and C are re-opened only
   on A's measured numbers. Owner's pick, verbatim: *"A sozinha, mede, depois
   decide B (Recommended)"*; build go-ahead, verbatim: *"pode implementar a
   opção A com o DeepSeek"*. **Option A was implemented and measured, and is
@@ -16,6 +20,7 @@
   (Recommended)"* — next, measure whether retaining more frames closes #499,
   with option D as the fallback. The env-gated measurement switches are not
   part of any change (see "Reproducing").
+- Superseded by: ADR-0235
 - Date: 2026-09-25
 - Related: issue #499 (Ninja Gaiden HUD frozen by a captured
   `<background>`), issue #339 (Punch-Out!! card, the same lineage, a different cause),
