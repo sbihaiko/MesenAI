@@ -1,10 +1,10 @@
 # ADR-0233: Decide how a capture is gated when its probes were never tested against the frames it draws on (other fine scrolls, surviving rivals)
 
-- Status: proposed. Nothing here is implemented. The owner asked to
-  *"measure first, ADR proposed"*, so the measurements below were taken
-  before any option was picked. The Decision stays open until a human picks
-  one. The env-gated measurement switches used to take these numbers were
-  reverted and are not part of this change (see "Reproducing").
+- Status: accepted (2026-09-25) — option A alone; B and C are re-opened only
+  on A's measured numbers. Owner's pick, verbatim: *"A sozinha, mede, depois
+  decide B (Recommended)"*. Not implemented yet; pending slice (see
+  "Decision"). The env-gated measurement switches used to take the numbers
+  below were reverted and are not part of this change (see "Reproducing").
 - Date: 2026-09-25
 - Related: issue #499 (Ninja Gaiden HUD frozen by a captured
   `<background>`), issue #339 (Punch-Out!! card, the same class),
@@ -16,7 +16,8 @@
   `GreedyAnchors`), `Core/NES/HdPacks/HdPackBuilder.cpp`
   (`FinalizeScreenAnchors`), `Core/NES/HdPacks/HdNesPack.cpp`
   (`GetLayerIndex`), `scripts/measure_capture_draw_rate.py`
-- Supersedes / amends: nothing yet. Option A would amend ADR-0159 §3. Option
+- Supersedes / amends: ADR-0159 §3 (the rival universe no longer stops at
+  the capture's `FineX`). For the record, the options not picked: option A amends ADR-0159 §3. Option
   B would amend ADR-0159 §1 ("rather than ship an ambiguous set" becomes a
   refusal). Option C would re-open ADR-0221 option C. Option D would amend
   ADR-0156. The amendment is written once an option is picked.
@@ -143,7 +144,26 @@ frames, at most 8× today's comparisons.
 
 ## Decision
 
-**Open.** The question for the owner is *what a gate has to prove about the
+**Picked 2026-09-25: option A alone.**
+
+1. **A.** Every retained frame at another fine scroll is a rival of every
+   capture, evaluated at the cell covering the probe's absolute pixel (see A
+   below). B is not combined now; it is re-opened only if A's measurement
+   leaves `screen001` or other gates ambiguous. C and D stay unpicked.
+2. **Variants stay same-`FineX`.** "A capture owns its variants" (ADR-0159 §1,
+   ADR-0217 answer (1)) is unchanged; only rivals widen.
+3. **Stop condition.** The slice ships with unit tests covering the remap and
+   the widened universe, and publishes, before and after:
+   - Ninja Gaiden's 31 s frame shows TIMER 120 / SCORE 000100;
+   - the stale-frame count (render trace, > 2 000 px) for Ninja Gaiden,
+     Castlevania, the Punch-Out!! card route and the 30-ROM library;
+   - the draw rate from the render trace, not only from
+     `measure_capture_draw_rate.py`.
+   If A drops the library's render-trace draw rate by more than 25 %, the
+   slice stops and returns to the owner. Vertical fine scroll stays out of
+   scope (`GridFrame` has no `FineY`).
+
+The options as weighed before the pick follow. The question for the owner is *what a gate has to prove about the
 frames it will run on*. Today a gate proves it separates the capture from the
 retained frames at the capture's own fine scroll, and nothing about the rest.
 
