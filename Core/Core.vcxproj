@@ -91,6 +91,7 @@
     <ClInclude Include="NES\HdPacks\MetatileVocabulary.h" />
     <ClInclude Include="NES\HdPacks\ScreenStitcher.h" />
     <ClInclude Include="NES\HdPacks\SheetColourways.h" />
+    <ClInclude Include="NES\HdPacks\ChrPageSlots.h" />
     <ClInclude Include="NES\HdPacks\SheetGrouping.h" />
     <ClInclude Include="NES\HdPacks\SheetLabels.h" />
     <ClInclude Include="NES\HdPacks\SheetRender.h" />
