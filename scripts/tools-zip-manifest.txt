@@ -7,14 +7,16 @@
 # suites, the community-pack CI helpers and maintainer scripts that need `gh`,
 # and none of those belong in a pack author's download.
 #
-# scripts/check_tools_zip_closure.py recomputes the closure from the entry
-# points below and fails when this file and the closure disagree — so a tool
-# that grows a new import cannot ship a zip that dies on ModuleNotFoundError.
+# scripts/check_tools_zip_closure.py recomputes the closure and fails when this
+# file and the closure disagree — so a tool that grows a new import cannot ship
+# a zip that dies on ModuleNotFoundError.
 #
-# Entry points (the tools a reader of the guides actually types):
-#   artist_ai_review artist_bg_kit artist_chr_kit artist_cover artist_kit
-#   artist_kit_assemble artist_map audio_cleanup_suggest cdl_tool fm2_to_bk2
-#   mep_build mep_compare mep_figure mep_lint mep_render_audio sheet_repaint
+# There is no entry-point list here to keep in sync: the guard reads the entry
+# points out of the two guides (every `scripts/<name>.py` a guide tells the
+# reader to run), so a guide line for a tool this file does not reach fails the
+# build instead of shipping a "No such file" to the reader (#538). The one tool
+# the guides do not name, and that no walk reaches, is listed as an extra entry
+# point in the guard itself.
 
 artist_ai_review.py
 asset_names.py
@@ -28,6 +30,8 @@ audio_cleanup_suggest.py
 cdl_tool.py
 compose_engine.py
 fm2_to_bk2.py
+library_job.py
+mep_add_cell.py
 mep_addition.py
 mep_build.py
 mep_capture_scan.py
@@ -43,6 +47,7 @@ mep_recipe_common.py
 mep_recorded.py
 mep_render_audio.py
 mep_sentinel.py
+mss_ram.py
 ora_writer.py
 pack_id_rules.py
 palette_folds.py
