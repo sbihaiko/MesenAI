@@ -2,6 +2,7 @@
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/HeadlessInputProvider.h"
 #include "Core/Shared/MessageManager.h"
+#include "Core/Shared/SaveStateManager.h"
 #include "Core/Shared/Video/VideoDecoder.h"
 #include "Core/Shared/Video/VideoRenderer.h"
 #include "Core/Shared/Video/FrameCapture.h"
@@ -325,5 +326,67 @@ extern "C"
 
 		_emu->Unlock();
 		return ready;
+	}
+
+	//F14.12 (ADR-0238 sec. 1): a step-mode session holds candidate states in
+	//memory. SaveStateFile/LoadStateFile above are the same serialization with a
+	//file around it, and a search that restores one state per candidate would
+	//pay that open/write/read/short-lived-file per try. The bytes here are the
+	//same bytes a .mss holds - SaveStateManager::SaveState(ostream&) is what
+	//SaveStateFile wraps - so a buffer from this export can be written to a .mss
+	//and read by scripts/mss_ram.py, and vice versa.
+	//
+	//No EventType::StateSaved/StateLoaded is raised, unlike the file exports.
+	//Those events feed the HistoryViewer and the OSD; a search that saves
+	//thousands of throwaway states would queue a toast per state and grow the
+	//message queue for no reader. Callers that want the notification use
+	//SaveStateFile.
+	//
+	//Both calls take the emulator lock, which is what makes them the same
+	//operation SaveStateFile performs - mesen's SaveState(filepath) wraps the
+	//serialization in AcquireLock for exactly this reason. "The session only
+	//calls these while parked" is not enough: the emulation thread sets
+	//_paused from inside the frame and finishes that frame afterwards
+	//(ProcessSystemActions, WaitForLock, then WaitForPauseEnd), so a caller
+	//that saw IsPaused() can still be reading and writing console state the
+	//emulation thread is still using. Measured, not assumed: without the lock
+	//3 of 9 identical 688-frame runs came back with RAM that differed from the
+	//one-shot run's by 476-563 bytes
+	//(docs/validation/f1412-step-mode-emulator-2026-09-26.md sec. 7).
+	//
+	//out = nullptr asks for the size alone. Returns the size the state would
+	//take, or 0 when no game is running.
+	DllExport uint32_t __stdcall HeadlessSaveState(uint8_t* out, uint32_t maxLength)
+	{
+		SaveStateManager* manager = _emu->GetSaveStateManager();
+		if(!manager || !_emu->IsRunning()) {
+			return 0;
+		}
+		_emu->Lock();
+		std::ostringstream stream(std::ios::binary);
+		manager->SaveState(stream);
+		_emu->Unlock();
+		string data = stream.str();
+		if(out && maxLength > 0) {
+			memcpy(out, data.data(), std::min((size_t)maxLength, data.size()));
+		}
+		return (uint32_t)data.size();
+	}
+
+	//The inverse: a buffer from HeadlessSaveState (or the bytes of a .mss
+	//file). Returns false when the buffer is not a state this core accepts -
+	//SaveStateManager::LoadState reads a console type and a format version out
+	//of the header and refuses a mismatch.
+	DllExport bool __stdcall HeadlessLoadState(const uint8_t* data, uint32_t length)
+	{
+		SaveStateManager* manager = _emu->GetSaveStateManager();
+		if(!manager || !_emu->IsRunning() || !data || length == 0) {
+			return false;
+		}
+		std::istringstream stream(string((const char*)data, length), std::ios::binary);
+		_emu->Lock();
+		bool loaded = manager->LoadState(stream);
+		_emu->Unlock();
+		return loaded;
 	}
 }

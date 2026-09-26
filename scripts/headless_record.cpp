@@ -161,6 +161,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <map>
 #include <filesystem>
 #include <thread>
 #include <chrono>
@@ -337,6 +338,12 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//InteropDLL/EmuApiWrapperHeadless.cpp - the NES internal RAM, for the
 	//declared invariant of a "sync-watch=".
 	bool HeadlessReadNesRam(uint16_t start, uint32_t length, uint8_t* out);
+	//F14.12 (ADR-0238 sec. 1) - the same state bytes SaveStateFile writes, in
+	//memory, so "session" mode can hold candidate states without a file round
+	//trip per candidate. out=nullptr asks for the size alone; both are only
+	//meaningful while the emulator is parked.
+	uint32_t HeadlessSaveState(uint8_t* out, uint32_t maxLength);
+	bool HeadlessLoadState(const uint8_t* data, uint32_t length);
 	//InteropDLL/EmuApiWrapper.cpp - the run's end in movie mode, see the
 	//pauseOnBudget comment in the recording wait below.
 	void Pause();
@@ -585,6 +592,272 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 }
 
 
+//F14.12 (ADR-0238 sec. 1): step mode.
+//
+//A search over short windows played from save states pays a process start, a
+//ROM load and a state file round trip per candidate, and none of it is
+//emulation. Measured on the Ninja Gaiden search this was written for
+//(docs/validation/f1412-step-mode-emulator-2026-09-26.md): about 1 s of the
+//1.05 s a candidate cost was that overhead. This mode keeps the emulator, the
+//ROM and the candidate states in one process and answers requests on
+//stdin/stdout, so what a candidate costs is the frames it plays.
+//
+//Why this transport and not ctypes over the DLL. ADR-0238 sec. 1 asks for the
+//choice to be made by measurement, and measurement does not separate them:
+//either transport spends microseconds per request against tens of milliseconds
+//of emulation. What separates them is what has to be got right to be
+//comparable at all. This mode reuses main()'s own init - the scratch home, the
+//MesenNesDB.txt copy beside it, SetNesConfig's controller type and AllZeros
+//power-on RAM, EmulationSpeed 0, the pack flags - so a session run and a
+//one-shot run of the same script from the same state are the same run by
+//construction and not by a second driver reproducing the ABI field by field.
+//The measurement in the log is what confirms it either way.
+//
+//Protocol: one request per line, one reply line per request, "ok ..." or
+//"err ...". Numbers are decimal unless they carry their own 0x. The one
+//request with a body is "input": its header names a byte count and the script
+//text follows verbatim, so no line structure has to be escaped.
+//
+//  input <nbytes>            then <nbytes> bytes of script text. Script frame 0
+//                            is the frame the emulator is on now, so the same
+//                            script text means the same thing from any state.
+//                            reply: ok <script frames>
+//  run <frames>              run that many emulated frames. reply: ok <frame>
+//  ram <spec>                hex bytes of NES internal RAM. <spec> is
+//                            comma-separated, each item 0xNNNN (one byte) or
+//                            0xNNNN-0xMMMM (inclusive). reply: ok <hex> <hex>..
+//  save                      keep the current state in this process.
+//                            reply: ok <id>
+//  restore <id>              reply: ok
+//  drop <id>                 reply: ok
+//  savefile <id> <path>      write a kept state out as a .mss. reply: ok
+//  loadfile <path>           read a .mss, keep it and start from it.
+//                            reply: ok <id>
+//  frame                     reply: ok <frame>
+//  quit                      reply: ok, then exit 0
+//
+//stdout carries reply lines only: the OSD is gated off and no run logs to it,
+//as in a normal headless run. A malformed request is answered with "err" and
+//the session continues - one bad command among thousands should not throw away
+//a loaded ROM and every state held for it.
+static int RunStepSession(const std::string& rom, double fps)
+{
+	std::map<uint32_t, std::vector<uint8_t>> states;
+	uint32_t nextStateId = 1;
+
+	auto send = [](const std::string& line) {
+		fputs(line.c_str(), stdout);
+		fputc('\n', stdout);
+		fflush(stdout);
+	};
+	auto err = [&](const std::string& text) { send("err " + text); };
+
+	//The init above prints what a one-shot run prints (the ROM load line, the
+	//emulated fps line). A caller speaking this protocol has to know where that
+	//chatter stops, so the first thing the loop says is this.
+	send("ready");
+
+	//Parses "<address spec>" and answers one hex token per item. Refuses
+	//anything outside $0000-$07FF for the reason HeadlessReadNesRam does
+	//(ADR-0184): above it is a mirror, a register or the cartridge.
+	auto readRam = [&](const std::string& spec) {
+		std::string out;
+		size_t pos = 0;
+		while(pos <= spec.size()) {
+			size_t comma = spec.find(',', pos);
+			std::string item = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+			if(item.empty()) {
+				return std::string();
+			}
+			size_t dash = item.find('-', 1);
+			unsigned long start = strtoul(item.c_str(), nullptr, 0);
+			unsigned long end = dash == std::string::npos ? start : strtoul(item.c_str() + dash + 1, nullptr, 0);
+			if(start > end || end >= 0x800) {
+				return std::string();
+			}
+			uint8_t bytes[0x800] = {};
+			if(!HeadlessReadNesRam((uint16_t)start, (uint32_t)(end - start + 1), bytes)) {
+				return std::string();
+			}
+			if(!out.empty()) {
+				out += " ";
+			}
+			char hex[4];
+			for(unsigned long a = start; a <= end; a++) {
+				snprintf(hex, sizeof(hex), "%02x", bytes[a - start]);
+				out += hex;
+			}
+			if(comma == std::string::npos) {
+				break;
+			}
+			pos = comma + 1;
+		}
+		return out;
+	};
+
+	//Runs to 'targetFrame' by arming the provider's in-frame pause and letting
+	//it stop the emulator from inside the frame it was told to stop on - the
+	//same stop a one-shot run has (ADR-0157 sec. 4), so a session run covers
+	//exactly the frames it asked for. False when the emulator is no longer
+	//running or stops advancing, which is fatal for the session: there is no
+	//frame left to answer about.
+	auto runToFrame = [&](uint32_t targetFrame, std::string& failure) {
+		HeadlessSetPauseFrame(targetFrame);
+		Resume();
+		uint32_t lastFrame = HeadlessGetFrameCount();
+		auto lastProgress = std::chrono::steady_clock::now();
+		while(!IsPaused()) {
+			if(!IsRunning()) {
+				failure = "emulation stopped at frame " + std::to_string(HeadlessGetFrameCount());
+				return false;
+			}
+			uint32_t frame = HeadlessGetFrameCount();
+			if(frame != lastFrame) {
+				lastFrame = frame;
+				lastProgress = std::chrono::steady_clock::now();
+			} else if(std::chrono::duration<double>(std::chrono::steady_clock::now() - lastProgress).count() > 90.0) {
+				//Same rule and same limit as a one-shot run's watchdog.
+				failure = "STALLED at frame " + std::to_string(frame);
+				return false;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		return true;
+	};
+
+	char line[4096];
+	while(fgets(line, sizeof(line), stdin)) {
+		std::string request(line);
+		while(!request.empty() && (request.back() == '\n' || request.back() == '\r')) {
+			request.pop_back();
+		}
+		size_t space = request.find(' ');
+		std::string verb = request.substr(0, space);
+		std::string argument = space == std::string::npos ? std::string() : request.substr(space + 1);
+
+		if(verb == "input") {
+			uint32_t length = (uint32_t)strtoul(argument.c_str(), nullptr, 10);
+			std::vector<char> script(length + 1, 0);
+			if(length == 0 || fread(script.data(), 1, length, stdin) != length) {
+				err("input: could not read the script body");
+				break; //the stream is desynced; nothing after it can be trusted
+			}
+			char scriptError[1024] = {};
+			if(!HeadlessLoadInputScript(script.data(), fps, scriptError, (uint32_t)sizeof(scriptError))) {
+				err(std::string("input: ") + scriptError);
+				continue;
+			}
+			//Script frame 0 is where the emulator stands now, so the same text
+			//plays the same frames whether it follows a state load or a run.
+			HeadlessSetScriptStartFrame(HeadlessGetFrameCount());
+			send("ok " + std::to_string(HeadlessGetScriptFrameCount()));
+		} else if(verb == "run") {
+			uint32_t frames = (uint32_t)strtoul(argument.c_str(), nullptr, 10);
+			std::string failure;
+			if(frames == 0 || !runToFrame(HeadlessGetFrameCount() + frames, failure)) {
+				err("run: " + (failure.empty() ? std::string("frame count must be positive") : failure));
+				if(!failure.empty()) {
+					//The emulator is gone or hung: Stop() joins the thread it
+					//would have to interrupt, so the reply is the last thing
+					//this process can say. std::_Exit runs no destructor - the
+					//same reason a one-shot run returns 1 from main.
+					fflush(stdout);
+					std::_Exit(1);
+				}
+				continue;
+			}
+			send("ok " + std::to_string(HeadlessGetFrameCount()));
+		} else if(verb == "ram") {
+			std::string out = readRam(argument);
+			if(out.empty()) {
+				err("ram: bad address spec (" + argument + ")");
+			} else {
+				send("ok " + out);
+			}
+		} else if(verb == "save") {
+			uint32_t size = HeadlessSaveState(nullptr, 0);
+			if(size == 0) {
+				err("save: no game running");
+				continue;
+			}
+			std::vector<uint8_t> data(size);
+			uint32_t written = HeadlessSaveState(data.data(), size);
+			if(written == 0) {
+				err("save: the core refused to serialize");
+				continue;
+			}
+			data.resize(written);
+			states[nextStateId] = std::move(data);
+			send("ok " + std::to_string(nextStateId++));
+		} else if(verb == "restore") {
+			uint32_t id = (uint32_t)strtoul(argument.c_str(), nullptr, 10);
+			auto it = states.find(id);
+			if(it == states.end()) {
+				err("restore: no state " + argument);
+			} else if(!HeadlessLoadState(it->second.data(), (uint32_t)it->second.size())) {
+				err("restore: the core refused state " + argument);
+			} else {
+				HeadlessSetScriptStartFrame(HeadlessGetFrameCount());
+				send("ok");
+			}
+		} else if(verb == "drop") {
+			states.erase((uint32_t)strtoul(argument.c_str(), nullptr, 10));
+			send("ok");
+		} else if(verb == "savefile") {
+			size_t pathAt = argument.find(' ');
+			uint32_t id = (uint32_t)strtoul(argument.substr(0, pathAt).c_str(), nullptr, 10);
+			std::string path = pathAt == std::string::npos ? std::string() : argument.substr(pathAt + 1);
+			auto it = states.find(id);
+			if(it == states.end() || path.empty()) {
+				err("savefile: needs a known state id and a path");
+				continue;
+			}
+			FILE* file = fopen(path.c_str(), "wb");
+			bool wrote = file && fwrite(it->second.data(), 1, it->second.size(), file) == it->second.size();
+			if(file) {
+				fclose(file);
+			}
+			if(!wrote) {
+				err("savefile: cannot write " + path);
+			} else {
+				send("ok");
+			}
+		} else if(verb == "loadfile") {
+			FILE* file = fopen(argument.c_str(), "rb");
+			if(!file) {
+				err("loadfile: cannot read " + argument);
+				continue;
+			}
+			std::vector<uint8_t> data;
+			uint8_t chunk[65536];
+			size_t read = 0;
+			while((read = fread(chunk, 1, sizeof(chunk), file)) > 0) {
+				data.insert(data.end(), chunk, chunk + read);
+			}
+			fclose(file);
+			if(data.empty() || !HeadlessLoadState(data.data(), (uint32_t)data.size())) {
+				err("loadfile: the core refused " + argument);
+				continue;
+			}
+			states[nextStateId] = std::move(data);
+			HeadlessSetScriptStartFrame(HeadlessGetFrameCount());
+			send("ok " + std::to_string(nextStateId++));
+		} else if(verb == "frame") {
+			send("ok " + std::to_string(HeadlessGetFrameCount()));
+		} else if(verb == "quit") {
+			send("ok");
+			break;
+		} else {
+			err("unknown request: " + verb);
+		}
+	}
+
+	Stop();
+	Release();
+	return 0;
+}
+
+
 //Issue #477: the folder this binary lives in. Anything the run reads from the
 //checkout resolves from here, because a path relative to the cwd made the run
 //depend on where the caller stood - record_library.sh, record_stages.sh and
@@ -625,13 +898,16 @@ int main(int argc, char** argv)
 			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
-			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n", argv[0]);
+			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n"
+			"       [session] (F14.12: serve run/ram/state requests on stdin until quit,\n"
+			"                  instead of running <seconds> once - see RunStepSession)\n", argv[0]);
 		return 1;
 	}
 	std::string rom = argv[1];
 	double seconds = atof(argv[2]);
 	std::string prefix = argv[3];
 	bool pal = false;
+	bool sessionMode = false; //F14.12 - see RunStepSession
 	bool hdPack = false;
 	bool hdPackOff = false;
 	bool romTiles = false;
@@ -703,7 +979,9 @@ int main(int argc, char** argv)
 	//parsed and applied after the ROM (and any state) is loaded.
 	std::vector<CheatCodeAbi> cheats;
 	for(int i = 4; i < argc; i++) {
-		if(strcmp(argv[i], "pal") == 0) {
+		if(strcmp(argv[i], "session") == 0) {
+			sessionMode = true;
+		} else if(strcmp(argv[i], "pal") == 0) {
 			pal = true;
 		} else if(strcmp(argv[i], "hdpack") == 0) {
 			hdPack = true;
@@ -1127,6 +1405,15 @@ int main(int argc, char** argv)
 		//state's frame, or the whole script lands before the run begins.
 		HeadlessSetScriptStartFrame(stateFrame);
 		printf("state loaded: %s (at frame %u; the run ends at frame %u)\n", stateFile.c_str(), stateFrame, totalFrames);
+	}
+
+	//F14.12 (ADR-0238 sec. 1): hand the process over to the request loop. A
+	//session wants the init above - the scratch home, the game DB, the configs,
+	//the load, the state - and none of what follows: no recorder to start, no
+	//movie, no CDL, no <seconds> to run. Its own "input=", if any, is only the
+	//first script; requests replace it.
+	if(sessionMode) {
+		return RunStepSession(rom, frameRate);
 	}
 
 	if(!moviePath.empty()) {
