@@ -129,7 +129,7 @@ machine ([method](docs/hd-pack-toolchain-comparison.md)):
 
 | The old way | With MesenAI | Measured |
 |---|---|---|
-| Play the whole game with the recorder on | **Write the route down.** Frame-counted input scripts, save states, published TAS movies and RAM-only cheats drive a headless recorder | ~3× real time, deterministic in emulated frames |
+| Play the whole game with the recorder on | **Write the route down.** Frame-counted input scripts, save states, published TAS movies and RAM-only cheats drive a headless recorder — and a route you do not have yet can be **searched**, with Jev asked only where the search cannot pass | ~3× real time, deterministic in emulated frames; a searched candidate 2.6× cheaper |
 | Hope you saw everything | **Measure coverage, then steer.** Per recording, per image, which tiles only *that* state shows | Contra: 53.8 % → 58.9 % → 64.6 % across three recordings |
 | Untangle thousands of 8×8 fragments | **A kit of four surfaces.** Figures with animation cycles, named scenery, stage panoramas, completed pattern pages — every cell labeled | Contra stage-3 boss: 517 poses over 195 distinct tiles, a 50× reuse the kit makes visible |
 | Hand-write the rule file (or a 34-sheet spreadsheet) | **Build it from the sheets.** Ambiguous reused tiles get their conditions from observed neighbours, automatically | 0 tile keys lost, 0 invented, on every generator's round trip |
@@ -167,8 +167,9 @@ emulator plus `mesenai-tools-<version>.zip`, the command-line tools the
 remastering guide uses as of that tag. **v0.1.0 (2026-09-15) is macOS Apple
 Silicon only**, cut locally from a tagged commit, and its tools zip predates
 what the guide has gained since — `mep_figure.py`, `mep_add_cell.py`,
-`record_library.sh`, and the `stage-set.json` route sets that now cover ten
-games. Those come from a checkout instead. No installer: unzip and run. macOS
+`record_library.sh`, the `stage-set.json` route sets that now cover ten
+games, and the route search (`route_search.py`, `jev_harness.py`) with the
+recorder's step-mode session it runs on. Those come from a checkout instead. No installer: unzip and run. macOS
 needs SDL2 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
 **System Settings → Privacy & Security → Open Anyway**.
 
@@ -206,7 +207,12 @@ build of `prod` that passed, unzip and run:
    builder: a frame-counted input script, a **save state** to start mid-level,
    a published **TAS movie** (`.bk2`), or a **RAM-only cheat** to reach a
    later stage. No window, no human at the pad, about 3× real time. Route sets
-   for ten games ship in `scripts/stages/`.
+   for ten games ship in `scripts/stages/`. No route yet? `scripts/route_search.py`
+   searches one, locally and for free. Where the search stalls,
+   `scripts/jev_harness.py` can optionally ask **Jev** (TypeSafe, through your own
+   OpenRouter key) to pick one macro from a fixed set; it sees RAM-derived numbers
+   only, never ROM bytes or pixels. Either way the output is a plain input script,
+   and replaying it never calls a model ([finding a route](docs/remastering-a-game.md#finding-a-route--search-it-with-jev-at-the-stalls)).
 2. **Measure** what the recording put on screen — per image, per state — and
    write a better route if a figure is missing.
 3. **Unpack** the recording into a **kit**: sprite figures and their cycles,
@@ -295,6 +301,10 @@ A project that measures its own claims should say what is and isn't shipped.
   recorded routes, the in-place reload of repainted images, a recorded capture
   that draws only the cells its own record carries (ADR-0236), importing a
   legacy `hires.txt` pack, 15 validated community packs auto-installing.
+- Route search on a persistent step-mode session, and the optional Jev stall
+  helper (ADR-0238). Measured on one real stall, Ninja Gaiden's Act 1-1 wall:
+  two Jev decisions, US$ 0.0001, and the script replays without the model to the
+  same positions.
 - A CI gate on every pull request to `main` and every push to `main`: the
   structural suite, the Python tool suites, a headless boot of the real core,
   1316 dependency-free C++ unit tests and the C# xUnit suites.
@@ -316,6 +326,9 @@ A project that measures its own claims should say what is and isn't shipped.
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
   workflow end to end. Every acceptance so far is measured, but by proxy.
+- The Jev helper is proven on one stall only. A boss (Mega Man 3's Snake Man)
+  is the next measurement; RAM cheats do not reach a search session yet; and
+  the web-research step has run only against a mock.
 - Only macOS Apple Silicon is a tagged release. The Windows and Linux binaries,
   and macOS's own CI build, come from the on-demand channel in
   [Download](#download) — never from a tag.
@@ -359,7 +372,11 @@ drop them in `HdPacks/` as always, or wrap them in a MEP pack.
 
 **Do I need to play the whole game to remaster it?** No. Write the route, or
 start from a save state, or let a published TAS play. Measure what you covered.
-Record again where the number says so.
+Record again where the number says so. A route you cannot write can be searched
+instead, and a spot the search cannot pass can be handed to a model as a choice
+between fixed macros — the output is still a plain input script, and replaying it
+never calls the model. The model step is optional and needs your own OpenRouter
+key; the search alone needs nothing ([finding a route](docs/remastering-a-game.md#finding-a-route--search-it-with-jev-at-the-stalls)).
 
 **Will you host packs?** No. Packs stay with their authors; MesenAI validates
 and [catalogs](docs/community-packs.md) them, and the emulator reads that one

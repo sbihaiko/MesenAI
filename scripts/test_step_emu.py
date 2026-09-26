@@ -61,6 +61,12 @@ stdin = sys.stdin.buffer
 frame = 100   # a state the caller started from is never frame 0
 states = {}
 nextId = 1
+#The real tool's counting: `run n` targets `runFrame + n`, and a state read by
+#`loadfile` carries the console's own counter - the frame *about to* run - so a
+#run from one covers n+1 frames. A state a `save` took carries the frame a run
+#ended on, so a run from it covers n. `step_emu` has to ask accordingly.
+loaded = set()
+afterRun = False
 
 
 def send(line):
@@ -95,7 +101,8 @@ while True:
                      for part in body.splitlines() if part.strip())
         send("ok %d" % frames)
     elif verb == "run":
-        frame += int(argument)
+        frame += int(argument) + (0 if afterRun else 1)
+        afterRun = True
         send("ok %d" % frame)
     elif verb == "ram":
         tokens = []
@@ -108,6 +115,8 @@ while True:
         send("ok " + " ".join(tokens))
     elif verb == "save":
         states[nextId] = frame
+        if not afterRun:
+            loaded.add(nextId)
         send("ok %d" % nextId)
         nextId += 1
     elif verb == "restore":
@@ -116,6 +125,7 @@ while True:
             err("restore: no state %s" % argument)
         else:
             frame = states[handle]
+            afterRun = handle not in loaded
             send("ok")
     elif verb == "drop":
         states.pop(int(argument), None)
@@ -132,6 +142,8 @@ while True:
     elif verb == "loadfile":
         frame = 500
         states[nextId] = frame
+        loaded.add(nextId)
+        afterRun = False
         send("ok %d" % nextId)
         nextId += 1
     elif verb == "quit":
@@ -206,8 +218,15 @@ def main():
             check(emu.frame() == 100, "the session starts on the state's frame")
             check(emu.load_script("29f RB\n1f -\n") == 30,
                   "a loaded script is measured in frames it declares")
-            check(emu.run(30) == 130, "a run ends on the frame it asked for")
-            check(emu.play(29, "RA") == 159, "play is a one-macro load and run")
+            #The stand-in counts frames the way the tool does: a `run n` from a
+            #state `loadfile` read covers n+1 frames (the state's own counter
+            #names the frame about to run) and n from a state a run ended on.
+            #That is the difference play_window and run_exact exist to take out.
+            check(emu.run(30) == 131,
+                  "a run from a loaded state covers one frame more than it asks")
+            check(emu.play(29, "RA") == 160,
+                  "play is a one-macro load and run, and a run after a run "
+                  "covers what it asks")
 
             check(emu.read_ram(0x76) == [0x87], "a single address is one int")
             check(emu.read_ram((0x51, 0x52)) == [buffer_of(0x51, 0x52)],
@@ -216,12 +235,35 @@ def main():
                   == [0x97, buffer_of(0x400, 0x401, 0x402)],
                   "a mixed request is answered per item, in order")
 
+            #Issue #543's client half: a read, a save and a frame request each
+            #send the one request they name and nothing else, so the client
+            #never moves the console on its own account. Whether the session
+            #honours that is the ROM-backed check's business
+            #(scripts/test_step_emu_rom.py) - this is the boundary where a
+            #future refactor would slip a synchronizing run in.
+            inert = emu.frame()
+            emu.read_ram(0x86)
+            emu.read_ram((0x400, 0x497))
+            check(emu.frame() == inert,
+                  "reading RAM leaves the client on the frame it was on",
+                  f"{inert} -> {emu.frame()}")
+            kept = emu.save()
+            check(emu.frame() == inert, "so does saving",
+                  f"{inert} -> {emu.frame()}")
+            emu.run(7)
+            emu.restore(kept)
+            check(emu.frame() == inert,
+                  "restoring returns to the frame its state was saved on",
+                  f"saved on {inert}, restored to {emu.frame()}")
+            emu.drop(kept)
+
             parent = emu.save()
+            was = emu.frame()
             emu.play(10, "R")
             child = emu.save()
             check(child != parent, "each save is its own handle")
             emu.restore(parent)
-            check(emu.frame() == 159, "restore returns the emulator to the state")
+            check(emu.frame() == was, "restore returns the emulator to the state")
             emu.drop(child)
             raises(lambda: emu.restore(child), "a dropped handle is refused",
                    "no state")
@@ -233,7 +275,37 @@ def main():
             emu.save_file(parent, out)
             check(out.read_text() == f"stub {parent}",
                   "save_file writes the state the handle names")
-            check(emu.load_file(out) > 0, "load_file starts from a .mss")
+            loaded = emu.load_file(out)
+            check(loaded > 0, "load_file starts from a .mss")
+
+            #play_window and run_exact: the window's own frames plus the
+            #boundary frame, whichever kind of state the session stands on.
+            #Measured against the same stand-in, so the ask is checked as well
+            #as the span it produces.
+            emu.restore(parent)
+            after_load = emu.frame()
+            check(emu.play_window(["29f R"], 29) == after_load + 30,
+                  "a window from a loaded state covers its own frames plus the "
+                  "boundary",
+                  f"{after_load} -> {emu.frame()}")
+            after_window = emu.frame()
+            check(emu.play_window(["29f R"], 29) == after_window + 30,
+                  "and the same window after a run covers the same span",
+                  f"{after_window} -> {emu.frame()}")
+            emu.restore(parent)
+            exact = emu.frame()
+            check(emu.run_exact(30) == exact + 30,
+                  "run_exact covers exactly the frames it is given, from a load",
+                  f"{exact} -> {emu.frame()}")
+            check(emu.run_exact(30) == exact + 60,
+                  "and from a state a run ended on", f"{exact} -> {emu.frame()}")
+            #One frame from a just-loaded state is the span a single `run`
+            #cannot name, and asking for it is refused rather than answered with
+            #two frames. `loaded` is the handle load_file handed back, a `.mss`
+            #the caller started from - the state a chain starts on.
+            emu.restore(loaded)
+            raises(lambda: emu.run_exact(1), "one frame from a load is refused",
+                   "just-loaded")
 
             emu.play(5, "R")
             raises(lambda: emu._request("explode"),

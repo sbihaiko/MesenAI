@@ -1,0 +1,101 @@
+{
+  "_comment": [
+    "Mega Man 3's RAM-only cheats, re-verified on this checkout's dump (ADR-0184",
+    "s5, ADR-0238 s4: every code is re-verified on the dump the route is pinned",
+    "to, because the vendored database's SHA-1s differ from ours).",
+    "",
+    "This file is data. Read by nothing yet - the coverage pass of a search or a",
+    "Jev run is what will read it - but it is the record ADR-0238 s4 asks for:",
+    "the code, what it does on this dump, and what the game draws while it holds.",
+    "",
+    "All three hold. An earlier revision of this file said two of them did not,",
+    "and that was a measurement error, not a finding: on the NES a RAM cheat is",
+    "*read-substitution* - Core/NES/NesMemoryManager.h:74 calls",
+    "CheatManager::ApplyCheat (Core/Shared/CheatManager.cpp:467) on every CPU",
+    "read, so the value the CPU sees changes and the byte in RAM keeps whatever",
+    "the game wrote. Reading RAM back - out of the run's own save state, or",
+    "through the tool's `ram` verb, which reads GetInternalRam() and skips the",
+    "cheat manager entirely - cannot see a code that is working, and reporting",
+    "'the byte did not change' as 'the code does not hold' was reading the",
+    "instrument instead of the game. Measured by effect below.",
+    "",
+    "Consequence for ADR-0184 s3's ranking: it is NOT inverted on this dump. The",
+    "life/lives counters come first and the invulnerability timer last, exactly",
+    "as the ADR puts them, and all three are usable."
+  ],
+  "game": "Mega Man 3",
+  "console": "nes",
+  "rom": {
+    "noIntroSha1": ["6780B3FCC547C013EE45AFAC6BB30C6FC6D8B46E"],
+    "note": "roms/Mega Man 3 (USA).nes in the working checkout. The vendored UI/Dependencies/Internal/CheatDb.Nes.json entry for this game carries a different SHA-1, which is why every code below is re-measured here rather than trusted."
+  },
+  "form": "cheat=AAAA:VV[:CC] on scripts/headless_record - a RAM address below $0800. A Game Genie letter code is a PRG patch and is refused by the tool, and would corrupt recorded art besides (ADR-0184 s1).",
+  "ramMap": "scripts/stages/mm3/ram-map.json",
+  "reader": "runs/mm3-boss/cheat_effect.py - one headless_record run per arm, state=runs/mm3-boss/mintboss.mss (the boss arena), holding Right for the window, with the bytes read out of the run's own save state",
+  "how_a_code_is_measured": [
+    "A read-substituted byte cannot be read back, so the measurement is the byte",
+    "the *game* writes after it reads: the game reads the code's value and then",
+    "writes what it computed, which lands in RAM and is readable.",
+    "",
+    "Every arm below holds Right from the same state for the same window. The",
+    "columns are $00A2 (health), $00AE (lives) and $0039 (invulnerability",
+    "timer) at the end of the window:",
+    "",
+    "  arm            600f            1800f           3600f",
+    "  plain          hp 94 lives 2    hp 82 lives 2   hp 8A lives 1  timer 33",
+    "  cheat=00A2:9C  hp 9A lives 2    hp 9A lives 2   hp 9A lives 2  timer 33",
+    "  cheat=00AE:03  hp 94 lives 2    hp 82 lives 2   hp 8A lives 2  timer 33",
+    "  cheat=0039:39  hp 9C lives 2    hp 9C lives 2   hp 9C lives 2  timer 38",
+    "",
+    "The un-cheated arm loses health, dies once in the 3600-frame window and",
+    "comes back at 0x8A with one life left. Each code changes exactly what it",
+    "names and nothing else."
+  ],
+  "cheats": [
+    {
+      "address": "00A2",
+      "label": "health",
+      "code": "00A2:9C",
+      "source": "UI/Dependencies/Internal/CheatDb.Nes.json, Mega Man 3 entry (address 00A2, health). Re-verified on this dump.",
+      "what_it_does": "Every read of the health byte returns 0x9C (full). The game then writes `read - damage` = 0x9A, so the stored byte floors one hit below full and never goes lower: damage lands and shows, but can never accumulate into a death.",
+      "verified": "yes",
+      "evidence": "The hp row above. 0x9A at 600, 1800 and 3600 frames, against the un-cheated arm's 0x94, 0x82 and 0x8A-with-a-death. The floor at exactly one hit's worth (2) below full is the substitution seen through the game: it reads 0x9C every time, so what it computes never depends on the last hit. The death the un-cheated arm takes in the 3600-frame window does not happen here - the arm ends with both lives.",
+      "address_confirmed_by": "ram-map.json's player_hp: 0x9C at rest, 0x9A/0x98/0x96 after successive hits.",
+      "what_the_game_draws": "Read as data, not as a picture: the OAM out of the run's own save state. 34, 32 and 27 sprite entries at 600, 1800 and 3600 frames - the same counts as the un-cheated arm at the same frames, so nothing about the drawing changes and the game is not told anything: the code removes the accumulation of damage, not the damage.",
+      "usable_for": "a coverage pass whose stall is a death by attrition, and nothing else - ADR-0238 s4: a cheat does not remove a position stall, so a search-versus-Jev comparison is valid only under the same cheat set.",
+      "status": "holds. A compare form (`00A2:9C:9A`) is inert here by construction: the code substitutes only when the value read equals 0x9A, and 0x9A is what the game read *before* the substitution - so it never fires. The earlier revision's compare-form runs are consistent with this and were read the wrong way round."
+    },
+    {
+      "address": "00AE",
+      "label": "lives",
+      "code": "00AE:03",
+      "source": "UI/Dependencies/Internal/CheatDb.Nes.json, Mega Man 3 entry (address 00AE, lives). Re-verified on this dump.",
+      "what_it_does": "Every read of the lives counter returns 3, so the game's `read - 1` on a death always writes 2: the counter never reaches 0 and the player never runs out of lives.",
+      "verified": "yes",
+      "evidence": "The lives row above. The health trace is byte-identical to the un-cheated arm's (0x94, 0x82, 0x8A) - the death still happens and the game's own logic is untouched - while the counter stays at 2 in a window where the un-cheated arm ends at 1. That the rest of the trace does not move at all is the substitution being invisible to everything except the one read the code names.",
+      "address_confirmed_by": "the counter reads 2 on this dump's minted states and 1 after the un-cheated arm's death.",
+      "what_the_game_draws": "Nothing to report: the counter byte is the game's own, and the stage HUD does not show lives (Mega Man 3 shows them on the pause/stage-select screen), so there is no drawn difference to read.",
+      "usable_for": "a coverage pass whose stall is a game over - the code that keeps a search alive longest, which is why ADR-0184 s3 ranks it first.",
+      "status": "holds."
+    },
+    {
+      "address": "0039",
+      "label": "invincibility timer",
+      "code": "0039:39",
+      "source": "UI/Dependencies/Internal/CheatDb.Nes.json, Mega Man 3 entry (address 0039, invincibility timer). Re-verified on this dump.",
+      "what_it_does": "Every read of the post-hit invulnerability timer returns 0x39, so the game's per-frame decrement never reaches 0 and no hit is ever allowed to land.",
+      "verified": "yes",
+      "evidence": "The timer row above: 0x38 at every window - 0x39 minus the one decrement the game performs on the value it read, i.e. the value is being substituted and nothing else writes this byte. The health byte stays at full 0x9C through 3600 frames of walking into the same enemies that take the un-cheated arm down to 0x82, and camera-x never leaves 30968 while the other arms advance: no hit lands, so no knockback happens.",
+      "address_confirmed_by": "the un-cheated arm's own decay: 0x00 at rest, 0x0D ~600 frames after a hit, 0x33 later in the window - the game writes this byte every frame while it is non-zero, which is why the code's value shows as 0x38 and not 0x39.",
+      "what_the_game_draws": "36 OAM entries against the un-cheated arm's 27 at the same frame 150 frames in (36/27/25 against 34/32/27 at 600/1800/3600 - the counts differ because no knockback happens and the arms are in different places, not because of a blink), and the health bar's tiles unchanged from full - the game draws a live, undamaged player. A blink was looked for and NOT found: over frames 1-8 after the state load with the cheat held, the number of OAM entries the console draws is 16 with the cheat and 16 without, so this dump's invincibility does not hide the player's sprites on this screen (the extra 9 entries at 150 frames are the stage's own objects, not a blink pattern).",
+      "coverage_pass_measurement": "The 188-frame route (scripts/stages/mm3/boss-run-slide.txt) replayed with this code reaches LESS far, not more: x = $0027 = 38, camera = $0025 = 166, health full at 0x9C, against x = 59 and camera = 187 without it. The reason is that the cheat removes the hitstun and knockback the route's own timing was found with, so the same inputs land elsewhere - which is ADR-0238 s4's warning measured rather than argued: a search-versus-Jev comparison is valid only under the same cheat set, and here the cheat set is part of what the route is.",
+      "usable_for": "a coverage pass that has to cross a stretch of enemies it cannot fight, and nothing else.",
+      "status": "holds."
+    }
+  ],
+  "open": {
+    "the_stage_id_the_tips_are_gated_on": {
+      "method": "mm3's jev-tips.json gates all six tips on a run-level `stage`, because ram-map.json's `stage_id` is unconfirmed (an `open` entry there). Settling it - the byte or pointer the stage id comes from - would let the tips be gated on RAM like Ninja Gaiden's, and drop the run key."
+    }
+  }
+}

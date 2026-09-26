@@ -1,6 +1,6 @@
 # ADR-0238: Jev, via OpenRouter, is a stuck-point input generator behind a persistent step-mode emulator; a route stays a plain input script
 
-- Status: accepted (2026-09-26). The user chose the vendor path verbatim — *"vamos usar o jev pelo ope router"* — and then the recommended order, verbatim: *"pode escrever"*. **Not implemented**: pending slices F14.12–F14.15 in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A §4, Phase 14). No go-ahead to implement yet.
+- Status: accepted (2026-09-26). The user chose the vendor path verbatim — *"vamos usar o jev pelo ope router"* — and then the recommended order, verbatim: *"pode escrever"*. **Implemented, F14.12–F14.14**: the step-mode session of §1 and its client (`scripts/step_emu.py`, `scripts/headless_record.cpp`, `docs/validation/f1412-step-mode-emulator-2026-09-26.md`), the ported search of §2 (`scripts/route_search.py`, `docs/validation/f1413-ninjagaiden-search-2026-09-26.md`) and the stall helper of §3 (`scripts/jev_harness.py`, `scripts/jev_client.py`, `docs/validation/f1414-jev-stall-helper-2026-09-26.md`). §4's artifact rule is what those three produce — a plain `<n>f <buttons>` script plus `cheat=` codes, never a patch. **F14.15 (§5, measurement and adoption) is not implemented.** Go-ahead to implement, verbatim: *"implemente usando o deepseek"* (2026-09-26).
 - Date: 2026-09-26
 - Related: ADR-0185 (a published movie is input, never evidence), ADR-0188 (an AI's judgement is a proposal that never becomes evidence), F14.3 route sets (`scripts/stages/*`), ADR-0203/0204 (CI and download channel, which this does not touch)
 - Supersedes / amends: nothing
@@ -92,6 +92,48 @@ In this order, each step gated on the one before:
      `JUMP_RIGHT`, `JUMP`, `ATTACK`, `LEFT_15`, `WAIT_15`; durations are fixed
      in code, never by the model). The state is RAM-derived JSON. The chosen
      macro is appended and the search resumes from the resulting state.
+   - **Rewind on failure (amended 2026-09-26, user's suggestion):** the
+     harness keeps a ring of in-memory checkpoints (one per emulated
+     second). When a chosen macro makes no progress, it restores an earlier
+     checkpoint on a doubling ladder — 1, 2, 4, 8, 16 s back — and asks
+     again, never rewinding past the start of the current screen or the last
+     real progress. The rungs match the three failure causes: a mistimed
+     press (1–2 s), a bad approach speed/height/HP (4–8 s), an earlier wrong
+     choice (16 s). Up to three questions per rung. Jev keeps
+     no memory between calls, so the state carries a `tried` list of what
+     already failed from that checkpoint (macro, progress, death), and a
+     macro that failed there is removed from that question's options. Each
+     stall has a fixed attempt cap; past it the harness records the stall
+     point and stops. Only the winning path reaches the script.
+   - **Situation tips (amended 2026-09-26, user's suggestion):** each game
+     may carry `scripts/stages/<game>/jev-tips.json` — per-situation tips
+     for bosses and hard spots, each gated by a RAM trigger (stage, x range,
+     boss fight on), written in our own words with sources cited. A question
+     carries only the tips whose trigger holds, folded into the option
+     descriptions; the decision log records the tips file hash. Macros a tip
+     calls for are added to the fixed set, and the search tries them too.
+     Measured on four synthetic states (2026-09-26, 40 calls, US$ 0.00098):
+     15/20 right without tips, 20/20 with them.
+   - **Web research when the ladder is exhausted (amended 2026-09-26, user's
+     suggestion):** the harness writes a stall report (game, stage,
+     position, what was tried and how it failed) and one `claude -p` worker
+     with web search proposes new tips and, if needed, a new fixed macro.
+     The search query carries the game and a description of the spot only —
+     never ROM bytes or pixels. One research pass per stall; the retry runs
+     from the checkpoint with the new tips kept under `runs/`. A tip reaches
+     the versioned `jev-tips.json` only after it passed the stall.
+   - **Loop guard (amended 2026-09-26, user's suggestion):** three
+     detectors, each logged per decision: a state fingerprint (position
+     rounded to 8 px, camera, room, HP) seen 3 times in one stall; a
+     progress watermark (furthest position reached) that has not risen for
+     60 emulated seconds; a period-2-to-4 cycle repeated 3 times in the last
+     12 choices. A detected loop bans the cycle's macros at that checkpoint
+     and climbs one rewind rung; a second loop goes to web research; a third
+     ends the stall as `loop`. Hard caps on decisions per stall, emulated
+     time and budget always hold. Each log line carries watermark, novelty
+     (share of the last 20 decisions that reached an unseen fingerprint),
+     loop count and spend; the run summary counts loops, and F14.15 reports
+     them.
    - **Model and endpoint:** `typesafe/jev-1.13`, pinned, at
      `https://openrouter.ai/api/alpha/decisions`.
    - **Per-decision log:** each decision logs the served snapshot id, request
@@ -109,6 +151,18 @@ In this order, each step gated on the one before:
    Replay never calls Jev: same ROM, same start state and same inputs give the
    same frames. As with a TAS (ADR-0185), Jev's output is input, never
    evidence.
+   - **Cheats (amended 2026-09-26, user's request):** a search or Jev run
+     may carry RAM-only cheats under ADR-0184 — life/lives counters first,
+     an invulnerability timer only after checking what the game draws, a
+     boss-HP code only when its frozen value is one the game produces (0).
+     No weapon-power code: none is a RAM code the game produces. Each code
+     comes from `UI/Dependencies/Internal/CheatDb.Nes.json` or a published
+     RAM map and is re-verified on the dump the route is pinned to (the
+     database's SHA-1s differ from ours). A cheated script is a coverage-pass
+     artifact: it ships beside its cheat list, replays only with it, and
+     feeds only ADR-0184 §2's coverage surfaces. A cheat does not remove a
+     position stall, so a search-versus-Jev comparison is valid only under
+     the same cheat set.
 5. **Measurement and adoption (F14.15).**
    - **Where:** two real stall points — Ninja Gaiden x 987 (if F14.13 left it
      standing) and one Mega Man 3 boss.

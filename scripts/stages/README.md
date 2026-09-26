@@ -417,3 +417,56 @@ made from it).
 Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
 background tiles**, so the kit's figures cover the opponent and Mac shows up
 only on the pattern pages and the BG sheets.
+
+## Situation tips (F14.14, ADR-0238 §3)
+
+A game may carry a `jev-tips.json` beside its routes: per-situation advice for
+the spots a search stalls on, each entry gated by RAM so a Jev question only
+carries the tips that hold where the run is stuck. `scripts/jev_harness.py`
+reads one thing from the file: a `tips` array of `{id, tip, macro, when,
+sources}`, where `when` is a list of `{field, min?, max?}` (or `value`, the
+file's name for pinning one — a number or a string, read as `equals`). The other
+top-level keys are notes for a human, with one exception: the names under
+`runKeys` are *declared*, so a `when` may gate on one of them as well as on a RAM
+field. A `when` naming a field the game's `ram-map.json` does not define and the
+file does not declare is refused at load (exit 2), not skipped, so an unresolved
+address never becomes a guessed tip; a `_`-prefixed key (`_comment`) is a
+comment and declares nothing. `sources` are the pages the advice came from and
+the text is our own wording, never a copy. A tip is advice and never evidence
+(ADR-0188): the file records where a tip came from and `runs/` records whether it
+worked, which is why a tip that has not been through the stall it was written for
+carries no `confirmed` line. `mm3/jev-tips.json` and `ninjagaiden/jev-tips.json`
+are the two worked examples; Ninja Gaiden gates on its RAM stage byte `$006D`,
+and `mm3/` gates on the run-level `stage` because its own `stage_id` is still
+open — which means an mm3 tip holds only once a run carries that key, and both
+files say so.
+
+## The data a Jev run reads (F14.14, ADR-0238 §3)
+
+A game `scripts/jev_harness.py` drives carries the tips file above and one more
+beside its routes:
+
+- `ram-map.json` — the named fields a **state** is read out of. A field is an
+  `address`, an `[lo, hi]` word (`signed_high` for a signed high byte, as Ninja
+  Gaiden's camera `$0052` is), a `range` with a `reduce`, or an `expr`: names,
+  numbers and arithmetic over the fields declared before it, which is how Ryu's
+  absolute x is the camera plus a screen-relative byte. An address is hex with or
+  without the `0x` (`0027` and `0x27` are the same byte), and a spec whose
+  `address` is `null` is how a map records a number that is **not** RAM at all —
+  Mega Man 3's `state_frame` is the save state's `ppu.frameCount` — so it is
+  skipped, named in the loader's own report, and never asked of the emulator.
+  Two of its top-level keys name the fields the run judges on — `progress` (the
+  number the search maximises and a stall is measured against) and `screen`, with
+  `screen_width`, so "the start of the current screen" is a boundary the rewind
+  ladder can hold. `--ram-map`, `--progress-field` and `--screen-field` override
+  the file and its defaults.
+- `jev-tips.json` — optional, and the schema above.
+
+One more file the format allows and **nothing reads yet**: `cheats.json`, the
+RAM-only cheats a coverage pass may use (ADR-0184), each with the measurement
+that re-verified it on this checkout's dump. Today a cheat reaches a run on the
+command line (`--cheat AAAA:VV[:CC]`) and the coverage sidecar is written beside
+the script it produced. What that measurement has to be is worth saying: on the
+NES a RAM cheat substitutes the value the CPU *reads* and leaves the byte in
+memory alone, so the evidence in the file is what the game did after reading the
+code's value — never `this byte did not change`.

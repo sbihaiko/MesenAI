@@ -443,6 +443,22 @@ doc-checks: check-manifest
 	#ADR-0199: the classify step's API call — body shape (no `tools`), the
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
+	#ADR-0238 §3 (F14.14): the Jev client — the Choice wire shape, the option
+	#looked up by name, the US$ cap, the per-decision JSONL that holds neither
+	#the state nor the key, and the key kept off argv and out of exceptions.
+	#An injected transport throughout; no network.
+	python3 scripts/test_jev_client.py
+	#ADR-0238 §1 (F14.12): the step-mode session the searches drive — the
+	#request grammar, and the framing against a stand-in for the tool, so the
+	#init chatter skip and the request/reply pairing are exercised without a
+	#ROM. The ROM-backed determinism check is scripts/test_step_emu_rom.py,
+	#which is not listed here because it needs the ROM and the emulator.
+	python3 scripts/test_step_emu.py
+	#ADR-0238 §2 (F14.13): the Ninja Gaiden search's windows — the Left+A jump
+	#and the wall techniques as fixed durations, the frame count every window
+	#has to fill — and the beam rule that keeps a window which does not improve
+	#on abs x alive across the hops a wall climb takes. No ROM, no session.
+	python3 scripts/test_route_search.py
 	python3 scripts/test_mep_build.py
 	#ADR-0231 (#447): an untouched sheet cell keeps the recorded rule and pixels.
 	python3 scripts/test_mep_build_recorded.py

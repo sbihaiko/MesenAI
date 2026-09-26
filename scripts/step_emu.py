@@ -106,6 +106,19 @@ def macro_line(frames, buttons):
     return f"{frames}f {button_spec(buttons)}"
 
 
+#The boundary frame a window ends on, and the frame count it costs. A one-shot
+#run appends one idle frame past its script, and a save-state boundary is
+#input-neutral only with that frame written in (scripts/stages/README.md), so
+#every flat script a search or a harness writes carries it between windows -
+#and now so does the chain that wrote it. It used to be played by accident:
+#before issue #543 a session `ram` read advanced the emulated frame by one, so
+#a driver that read RAM after every window played the boundary frame without
+#asking for it. With the read inert the chain is one frame per window short of
+#its own artifact unless it plays the frame - so it plays it, explicitly, here.
+IDLE_FRAMES = 1
+IDLE_LINE = macro_line(IDLE_FRAMES, "-")
+
+
 def parse_ram_reply(reply, items):
     """Turns a `ok <hex> <hex> ...` reply into one entry per requested item: an
     int for a single address, a `bytes` for a range."""
@@ -167,6 +180,23 @@ class StepEmu:
             args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=self._error_file, bufsize=0)
         self._buffer = b""
+        #Whether a `run n` from here covers exactly n frames or n+1 of them.
+        #
+        #The session's `run` targets `runFrame + n`, and `runFrame` is the frame
+        #whose input was last applied: after a run it is the frame the run ended
+        #on, so the next run covers n. A state `save` took carries that same
+        #pair, so a `restore` of it lands the session where a `run` left it.
+        #`loadfile` is the odd one: a .mss carries the console's own counter,
+        #which names the frame *about to* run, and the session takes it as
+        #`runFrame` - so the first `run n` after a load covers n+1 frames, the
+        #state's own frame among them. That is the same arithmetic a one-shot
+        #run does with `state=` (`totalFrames += stateFrame`), and it is why a
+        #flat replay of a script through a session matches a one-shot run of it.
+        #
+        #`play_window` is the one caller that has to know: it asks for one frame
+        #less on a just-loaded state so that both cases cover the same window.
+        self._standing_after_run = False
+        self._load_like = set()
         try:
             self._await_ready()
         except Exception:
@@ -246,10 +276,15 @@ class StepEmu:
         return self.load_script(Path(path).read_text())
 
     def run(self, frames):
-        """Runs `frames` emulated frames of the loaded script. Returns the
-        emulated frame the emulator parked on."""
+        """Runs `frames` emulated frames of the loaded script, and returns the
+        frame the run ended on - the same number `frame()` reports, which the
+        next run counts from. Nothing else in this module moves that frame: a
+        `read_ram` or a `save` between two runs plays no frame, so a window
+        replay that reads RAM after every window is the same play as one that
+        does not (issue #543)."""
         if not isinstance(frames, int) or isinstance(frames, bool) or frames <= 0:
             raise ValueError(f"run needs a positive frame count, got {frames!r}")
+        self._standing_after_run = True
         return int(self._request(f"run {frames}"))
 
     def play(self, frames, buttons):
@@ -257,6 +292,56 @@ class StepEmu:
         Returns the emulated frame the emulator parked on."""
         self.load_script(macro_line(frames, buttons) + "\n")
         return self.run(frames)
+
+    def play_window(self, lines, frames):
+        """Plays one *window* of a chain and returns the frame it parked on.
+
+        A window is the input it carries (`lines`, one `macro_line` per part,
+        `frames` frames of it) and the boundary frame that ends it, which is the
+        frame a one-shot run appends past its script and a save-state boundary
+        is input-neutral only with (`scripts/stages/README.md`). The boundary is
+        written into the session's script, so a run of `k` windows is the same
+        play as the flat script of those windows - `route_search.py` and
+        `jev_harness.py` both play their candidates and their macros this way,
+        and `scripts/verify_chain.py` measures the equality on a real route.
+
+        Which frame count to ask for is the subtle part and the reason this is a
+        method rather than two lines at each caller: from a state a run ended on
+        the session covers exactly the frames asked for, and from a state it was
+        just handed by `loadfile` it covers one more (that state's own frame),
+        so the ask is one frame less there. Either way the window covers
+        `frames + IDLE_FRAMES` frames with the input on the first `frames` of
+        them. Before issue #543 this frame came for free: the `ram` read a
+        driver made between windows advanced the emulated frame by one, so the
+        chain played the boundary without asking and the flat script had to
+        write it. The read is inert now, so the chain asks.
+        """
+        self.load_script("\n".join([*lines, IDLE_LINE]) + "\n")
+        return self.run_exact(frames + IDLE_FRAMES)
+
+    def run_exact(self, frames):
+        """Runs exactly `frames` frames, whatever state the session stands on.
+
+        `run` counts from `runFrame` - the frame whose input was last applied -
+        which is the frame a run ended on but the frame a load is *about to*
+        run, so the same `run n` covers n frames after a run and n+1 after a
+        load. This is that count with the difference taken out: the ask is one
+        frame less on a just-loaded state, and the two cases then cover the same
+        span of emulated time. `play_window` is built on it, and so is a caller
+        that has to stop mid-window (a checkpoint between two boundary frames).
+        """
+        if frames < 0:
+            raise ValueError(f"run_exact needs a frame count, got {frames!r}")
+        ask = frames if self._standing_after_run else frames - IDLE_FRAMES
+        if frames and ask < 1:
+            #One frame from a just-loaded state is the one span a single `run`
+            #cannot name: run(1) covers two frames there. A caller that wants it
+            #is asking for a boundary the session does not have, so say so
+            #rather than play two frames and call it one.
+            raise ValueError(
+                "one frame from a just-loaded state is not a run this session "
+                "can make; restore a state a run ended on first")
+        return self.frame() if ask < 1 else self.run(ask)
 
     def read_ram(self, *items):
         """Reads NES internal RAM. Each item is an address (an int) or an
@@ -268,20 +353,33 @@ class StepEmu:
         return parse_ram_reply(reply, items)
 
     def frame(self):
-        """The emulator's own frame counter."""
+        """The frame the session is on: the one the last `run` ended on, before
+        any run the frame of the state the session started from. It does not
+        move on its own, and no request but `run` moves it."""
         return int(self._request("frame"))
 
     def save(self):
         """Keeps the current state in the session. Returns its handle."""
-        return int(self._request("save"))
+        handle = int(self._request("save"))
+        #A state taken before any run is a *load-like* one - the console's
+        #counter names a frame the state already holds, exactly as a .mss read
+        #by `load_file` does - so restoring it puts play_window back on the
+        #one-frame-less ask. Taken after a run, it is an ordinary state.
+        if not self._standing_after_run:
+            self._load_like.add(handle)
+        return handle
 
     def restore(self, handle):
         """Returns the emulator to a kept state."""
         self._request(f"restore {int(handle)}")
+        #A state `save` took came from a run and lands the session after one; a
+        #state `loadfile` read is the state's own frame. See play_window.
+        self._standing_after_run = int(handle) not in self._load_like
 
     def drop(self, handle):
         """Forgets a kept state. Safe on an unknown handle."""
         self._request(f"drop {int(handle)}")
+        self._load_like.discard(int(handle))
 
     def save_file(self, handle, path):
         """Writes a kept state out as a .mss - the same bytes
@@ -291,7 +389,10 @@ class StepEmu:
 
     def load_file(self, path):
         """Reads a .mss, keeps it and starts from it. Returns its handle."""
-        return int(self._request(f"loadfile {Path(path)}"))
+        handle = int(self._request(f"loadfile {Path(path)}"))
+        self._load_like.add(handle)
+        self._standing_after_run = False
+        return handle
 
     def close(self):
         """Asks the session to quit and reaps it. Idempotent."""

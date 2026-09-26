@@ -1,0 +1,95 @@
+{
+  "game": "Mega Man 3",
+  "console": "nes",
+  "rom": {
+    "noIntroSha1": ["6780B3FCC547C013EE45AFAC6BB30C6FC6D8B46E"]
+  },
+  "note": "F14.15 groundwork (ADR-0238 sec. 5): what a Mega Man 3 boss stall needs from the game's own state. Every entry under `verified` was reproduced on this checkout's dump, from the state `mint-boss.txt` writes, with plain inputs - no public RAM map was trusted for anything below, and the two addresses the vendored cheat database names for this game ($00A2 health and $00AE lives) got in only because an experiment reproduced them here. `rejected` records what an experiment ruled out, so a search does not adopt it. `open` is what is still missing; the method column is the experiment that would settle it.",
+  "readers": {
+    "ram": "scripts/mss_ram.py <file.mss>",
+    "console": "runs/mm3-boss/nt.py <file.mss> - prints ppu.frameCount, the MMC3 bank registers, the fine scroll and both nametables as tile-index text",
+    "session": "scripts/step_emu.py (F14.12) - one long-lived headless session; runs/mm3-boss/mm3state.py adds the OAM and the fine scroll to what a step can read",
+    "evidence": "runs/mm3-boss/evidence.py <abs_x|screen_y|hp|sprite_buffer|stage_id> prints every number this file is cited by"
+  },
+  "verified": {
+    "state_frame": {
+      "address": null,
+      "source": "save-state key `ppu.frameCount`",
+      "evidence": "mint-boss.txt at 25 s reads 1502 at the state's own frame target (headless_record printed `capture finished: 1503 frames (target 1502)`), so the counter is the console's own frame count and not the run's."
+    },
+    "abs_x": {
+      "address": "0027",
+      "label": "the player's absolute level x, one byte",
+      "unit": "pixels",
+      "wraps": "bit 8 is the level's page, not stored here: at the route's own hop 4 the byte went 248 -> 7 while the camera advanced 120 -> 135, so the page has to come from camera_scroll_x",
+      "evidence": "runs/mm3-boss/evidence.py abs_x. Holding Right from mint-boss with the player pinned at his screen column: $0027 = 135/148/161/200/222/248 at 10/20/30/60/120/240 frames while the camera's fine scroll went 6/19/32/71/95/120 - $0027 minus the scroll stays 127-129 (the constant screen column) across a 114-pixel camera move. Holding Left, with the camera pinned at 0, $0027 = 120/94/55 at 10/30/60 frames while the player's drawn column went 101/83/44, moving 1:1 and in the same direction. That pair is what separates it from a counter: it tracks the camera when the player is still on screen and it tracks the player when the camera is still."
+    },
+    "camera_scroll_x": {
+      "address": "0025",
+      "label": "the level's scroll position (the camera)",
+      "unit": "pixels, one byte",
+      "evidence": "runs/mm3-boss/evidence.py abs_x, second column. $0025 reads one more than the save state's own fine scroll ((ppu.tmpVideoRamAddr & 0x1F) << 3 | ppu.xScroll) at every window of the Right ladder: $0025 = 7/20/33/72/94/120 against fine scroll 6/19/32/71/95/120 at 10/20/30/60/120/240 frames. Same one-frame lead as screen_y below, from the same cause."
+    },
+    "screen_y": {
+      "address": "0012",
+      "label": "the player's y on screen (his drawn block's top row is $0012 - 12)",
+      "unit": "pixels",
+      "evidence": "runs/mm3-boss/evidence.py screen_y. Through one whole jump (A held from mint-boss, 2..58 frames in steps of 4) $0012 minus the OAM top row of the player's own two columns is 12 at eleven of the twelve samples; the single 17 is the frame of fastest motion, where the OAM being displayed is the previous frame's. The live OAM comes out of the run's own save state (`ppu.spriteRam`), so the comparison is measured, not assumed."
+    },
+    "player_hp": {
+      "address": "00A2",
+      "label": "the player's health",
+      "full": "9C",
+      "step": "2 per hit in the windows measured",
+      "evidence": "runs/mm3-boss/evidence.py hp. Idle for 60 frames: 0x9C and no change. Walking right into the stage's first enemies: 0x9A at 90 frames (and $0039 leaves 0 in the same step), 0x98 at 270, 0x96 at 500 - it only ever falls, and only when $0039 says a hit landed. The value is the game's own: 0x9C = 0x80 | 0x1C and 0x1C is the 28 units the game's health bar is drawn in, which is also the value the vendored cheat database's 00A2:9C code names for this game."
+    },
+    "invincibility_timer": {
+      "address": "0039",
+      "label": "the player's post-hit invulnerability timer",
+      "unit": "frames, counts down one per frame",
+      "evidence": "runs/mm3-boss/evidence.py hp. 0 in every idle window; at the frame the first hit lands it reads 0x3C (60), then 0x2E at 135 frames, 0x21 at 150, 0x03 at 180 and 0 at 240 - a countdown, and the only address in the whole 2 KB that turns non-zero exactly when $00A2 drops. Confirmed a second time at 300 frames (0x38 on a fresh hit, 0 by 400)."
+    },
+    "lives": {
+      "address": "00AE",
+      "label": "the player's remaining lives",
+      "evidence": "runs/mm3-boss/evidence.py hp, fourth column: 0x02 at the stage start and 0x02 in every arm up to 500 frames of play, i.e. constant while the player is alive and never touched by input. The value is the game's own (3 lives shown, 2 remaining once one is in play) and it matches the address the vendored cheat database names for this game (00AE lives).",
+      "not_yet_verified": "the decrement-on-death half. No arm in these experiments died, so the link 'loses a life -> this byte falls' was not reproduced on this dump. A run that stands in the stage until an enemy kills the player twice would close it."
+    }
+  },
+  "rejected": {
+    "004F, 0092, 0095": {
+      "claim": "looks like the player's x (it advances ~1 px per frame while R is held)",
+      "ruled_out": "It advances with NO input at all: four 60-frame idle hops moved each of them by exactly +0x3D (61) per 60 frames (0xFF -> 0x3C -> 0x79 -> 0xB6 -> 0xF3). They are counters, not position - a search that steers by them will walk off a cliff.",
+      "evidence": "runs/mm3-boss/probe.py seq --state walk/rt029.mss --lines '-' --frames 60 --hops 4 --tag idle"
+    },
+    "0200-02FF": {
+      "claim": "the game's sprite/OAM buffer, so a RAM-only enemy table with x/y/tile/attr per slot",
+      "ruled_out": "It is not the live OAM. Over three arms (30 frames idle, 30 frames Right, 60 frames Right) $0200-$02FF holds the same 16 non-filler entries, byte for byte, while the OAM the console is actually displaying (`ppu.spriteRam` in the same run's save state) differs in every one of them - the block is a stale copy from an earlier screen, not the frame's sprite list. Measured by runs/mm3-boss/evidence.py sprite_buffer (its first form compared the live OAM against a re-read of itself and printed a misleading False; the second form, kept, compares the two byte ranges).",
+      "evidence": "runs/mm3-boss/evidence.py sprite_buffer, run on this dump over the three arms above; the live OAM is read out of each run's own save state (`ppu.spriteRam`) and compared entry by entry with $0200-$02FF from the same state, and not one of the 16 non-filler entries matches.",
+      "consequence": "F14.15's RAM-derived enemy state is NOT available at $0200-$02FF on this dump. The live sprite layer is still readable, but as the save state's `ppu.spriteRam` (64 x [y, tile, attr, x]), not as NES internal RAM - see `open.enemy_table`."
+    },
+    "0065, 0076": {
+      "claim": "the Ninja Gaiden addresses for hit points ($0065) and lives ($0076), carried over as a starting guess",
+      "ruled_out": "Both are constant through every window measured: $0065 reads 0x3C and $0076 reads 0x00 at 60/90/120/150/180/240/270/300/400/500 frames of play, including the windows where the player loses health. Mega Man 3 keeps neither number there.",
+      "evidence": "runs/mm3-boss/evidence.py hp, fifth and sixth columns"
+    }
+  },
+  "open": {
+    "stage_id": {
+      "method": "Mint two stages from the same select screen with the SAME number of in-stage frames (the first attempt ran 440 frames for Snake Man and 460 for the next stage, so 47 bytes differed and the three that differ by exactly the 20-frame offset - $004F, $0092, $0095 - had to be discarded by hand, which is not a check). With equal frames the byte that still differs, is in 0-7 and is constant inside one stage is the stage id. The candidates the unequal run left are $05A0 (0x03 vs 0x05) and $05E0 (0x04 vs 0x06).",
+      "status": "not confirmed - the equal-frame run was not made, so no address is claimed here"
+    },
+    "boss_hp": {
+      "method": "Reach a boss room, then diff a state at the door against one mid-fight. The bar is the game's own: shoot the boss once and the byte drops by one unit of the bar. The route below does not reach a boss room - it stalls at camera scroll 187, two screens into the stage - so this could not be attempted on Snake Man."
+    },
+    "boss_fight_on": {
+      "method": "The flag that turns 1 when the boss door closes behind the player and the health bar appears - confirmed against the nametable, which shows the bar's tiles, and against the camera coming to rest. Blocked by the same missing route as boss_hp."
+    },
+    "enemy_table": {
+      "method": "Find the game's object list in RAM (a run of slots holding x, y and a type byte each) by locating the RAM byte that equals a known enemy's OAM x at the same frame, over several frames of that enemy's motion. $0200-$02FF is ruled out (see `rejected`), so this is a search, not a lookup. Until it lands, F14.15's RAM-derived state has the player and the camera only, and an enemy-aware trigger in jev-tips.json cannot be written."
+    },
+    "level_x_high_byte": {
+      "method": "$0027 is one byte of a longer level. The page was not observed directly: the camera's page bits live in the PPU's nametable address, and the only crossing seen (248 -> 7 at camera 120 -> 135) went the other way. Steering should use camera_scroll_x for the coarse part and $0027 for the fine part, which is what runs/mm3-boss/route_search_mm3.py does; a run that crosses three screens while reading $0025 at the same time would close it."
+    }
+  }
+}
