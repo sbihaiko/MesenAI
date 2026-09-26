@@ -130,11 +130,22 @@ index, so every pack of one ROM shares them.
   *(Corrected 2026-09-26, the same day: the first text gated on `unique` and
   counted tile data, which is structurally 0 on a CHR ROM game.)*
 
-When the profile names one, a RAM check read off the session's final state
-is also reported. Reading the selector's own address proves nothing: a
-pinned cheat substitutes the byte on the CPU read path, and the save state
-holds the unpinned byte. So the check reads a different variable the stage
-sets.
+When the profile names one, a RAM check read off the session's final state is
+also reported. A check on **any address the session pins** — the selector
+(`navigation.address`, `kind: "ram"`) and every `values[].cheats` /
+`defaults.cheats` address in effect — carries a `caveat` naming the byte the
+pin substitutes (`pinnedValue`), and no check is refused for naming one. The
+pin acts on the CPU **read bus** and never writes memory, so the state holds
+either the game's own value or a byte the game stored after reading the pinned
+bus, and one state cannot separate the two; neither reading is "proves
+nothing". Contra's `$0030` reads 00 because the game reads it and never stores
+it back; Punch-Out's fight loader stores back the bank byte it read, so a
+pinned `$0002` reads 03 while the pinned `$0001` reads the game's own 00 in the
+same state. Reading a byte the stage sets and the profile does not pin is still
+the robust choice, but it is a preference, not a rule. *(Amended 2026-09-26,
+the same day: the first text said a check on the selector's own address "proves
+nothing" and a `kind: "input"` profile, which has no `navigation.address`,
+could never carry the caveat at all — #546.)*
 
 ### 5. The metric is ADR-0194 §4's union, against two denominators
 
@@ -142,19 +153,35 @@ sets.
 binary. **After** is the union of that pack and every sweep session. Each
 is reported as:
 
-1. **Drawn keys and distinct tile data** of the union.
+1. **Drawn keys and distinct tile data** of the union, over the rules a run
+   wrote (the builder's `defaultTile` placeholders excluded — they are a shared
+   constant of every pack of a ROM).
 2. **ROM CHR coverage,** for a CHR ROM game: the distinct non-blank 16-byte
    patterns the union's recorded (non-placeholder) `<tile>` rules name, over the distinct non-blank
    patterns in the ROM's CHR. It needs no third-party pack, so it exists for
    every game. A CHR RAM game has no fixed denominator and reports the
    reference line only.
 3. **Reference coverage,** when a reference pack for the same ROM is on disk:
-   `artist_cover`'s unit, the fraction of its distinct tile data the union
-   holds. A pack keyed for a patched ROM is refused (#225), not printed as 0 %.
+   the fraction of its distinct tiles the union holds, asked at the identity
+   both files share — the 16-byte CHR pattern each `<tile>` rule names, over
+   the rules a run wrote. It is **not** the tile field compared as a string: a
+   community pack is `<ver>100` and writes a decimal, unpadded CHR index while
+   a bootstrapped pack is `<ver>109` and writes hex, padded, so the two key
+   sets intersect only by accident and every pack of that game reads one
+   constant (#545, measured on Ninja Gaiden: 1003/7382 = 13.6 % for the
+   baseline, for each of the 21 sessions and for the union). At the pattern the
+   same packs read 535/6208 = 8.6 % before against 2705/6208 = 43.6 % after.
+   An index is read through the ROM's own CHR, so `--reference` needs `--rom`,
+   and a pack that names tiles by index without one is refused rather than
+   scored at 0 %. When the two files declare different `<ver>` bases the report
+   notes it beside the figure — provenance, not a gate, because the comparison
+   no longer depends on the dialect. A pack keyed for a patched ROM is refused
+   (#225), not printed as 0 %.
 
 `record_navigation_sweep.py` prints items 1–2 with `--rom-chr` and folds a
 baseline pack into the union with `--baseline <pack dir>`. `--reference` is
-unchanged.
+scored at the CHR-pattern identity of item 3, and `--rom-chr` prints items
+1–2.
 
 ### 6. Scope and budget
 

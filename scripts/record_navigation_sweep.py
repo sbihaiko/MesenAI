@@ -46,7 +46,12 @@ What it does, in order:
    totals are ADR-0194 s4's union - drawn keys *and* distinct tile data - with
    `--baseline` folding the game's existing pack in as *before*, and `--rom-chr`
    adding the denominator that needs no third-party pack: the ROM's own
-   non-blank CHR patterns the union names.
+   non-blank CHR patterns the union names. `--reference` scores a third-party
+   pack for the same ROM at the identity both files share, the 16-byte CHR
+   pattern each rule names, and never at the `<tile>` field as a string: a
+   community pack writes a decimal CHR index (`<ver>100`) where a bootstrapped
+   one writes hex (`<ver>109`), so the strings intersect by accident and the
+   figure is constant (#545). The two files' dialects are noted beside it.
 
 Union. Each session keeps its own pack, the shape `record_stages.sh` already
 produces, and the surfaces union them downstream: the CHR kit's repeatable
@@ -99,11 +104,12 @@ from pathlib import Path
 # and countable lives in nav_sweep_metrics.py, and it is re-exported here so a
 # caller (and this repo's test) has one entry point.
 from nav_sweep_metrics import (  # noqa: F401 - re-exported for callers
-    CHR_RAM_NOTE, find_pack_hires, pack_hires, pack_rule_keys,
-    pack_seen_rule_keys, pack_seen_tile_data, pack_tile_data,
+    CHR_RAM_NOTE, find_pack_hires, pack_hires, pack_named_patterns,
+    pack_rule_keys, pack_seen_rule_keys, pack_seen_tile_data, pack_tile_data,
+    pack_version,
     ram_check, ram_check_spec,
     rom_chr_coverage, rom_chr_seen_coverage, score_sessions, summary_document,
-    tile_data_keys, totals_document,
+    tile_data_keys, totals_document, version_note,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -170,6 +176,41 @@ def pins_note(pins: list) -> str:
         f" Extra RAM pin {p['code']}"
         f"{' (' + p['label'] + ')' if p['label'] else ''} pinned for the whole "
         f"run as well: {p['source']}" for p in pins)
+
+
+def pinned_addresses(codes) -> dict:
+    """Every address a session pins, as `{address: pinned byte}` (ADR-0239 §4).
+
+    A session pins more than its selector: `defaults.cheats` and
+    `values[].cheats` are pinned for the whole run too, and on a `kind:
+    "input"` profile they are the only pins there are. The caveat fires on the
+    address, not on the role, so the map is built from the cheat codes the
+    session really carries - `session["cheats"]`, which already holds the
+    selector for a `kind: "ram"` session and holds nothing extra for a room,
+    because a room applies no selector cheat. The `CC` compare byte of an
+    `AAAA:VV:CC` code is the condition, not the substituted byte, so `VV` is
+    what a reader is shown.
+    """
+    out = {}
+    for code in codes or []:
+        m = CHEAT_RE.match(str(code).strip().upper())
+        if m:
+            out[m.group(1).upper()] = m.group(2).upper()
+    return out
+
+
+def checked_ram(session: dict) -> dict:
+    """A session's declared RAM check, read with every address it pins.
+
+    ADR-0239 §4's check is read off the session's final state; the caveat that
+    says what a pin can and cannot prove fires on any of the session's pins.
+    This is the one call site the map reaches, so a scalar here is the bug
+    #546 filed - `nav_sweep_metrics.ram_check` refuses one loudly instead of
+    reading it as a string. `session["ramCheck"]` must be set: a profile that
+    declares no check runs through `run_session`'s guard.
+    """
+    return ram_check(session["ramCheck"], session["stateOut"],
+                     pinned_addresses=session["pinnedAddresses"])
 
 
 # --- input scripts -----------------------------------------------------------
@@ -334,7 +375,7 @@ def build_plan(profile: dict, prof_dir: Path, rom: Path, out: Path,
             "input": None,
             "seconds": seconds,
             "ramCheck": check,
-            "selectorAddress": addr or None,
+            "pinnedAddresses": pinned_addresses(cheats),
             "pins": pins,
             "note": note + pins_note(pins),
         })
@@ -368,7 +409,7 @@ def build_plan(profile: dict, prof_dir: Path, rom: Path, out: Path,
             "input": prof_dir / room["input"],
             "seconds": seconds,
             "ramCheck": None,
-            "selectorAddress": addr or None,
+            "pinnedAddresses": pinned_addresses([p["code"] for p in pins]),
             "pins": pins,
             "note": (
                 f"{head} {why}, so this room is entered from the "
@@ -511,8 +552,7 @@ def run_session(session: dict, rom: Path, dry: bool) -> dict:
         result["hires"] = None
         result["pack"] = None
     if session["ramCheck"]:
-        result["ramCheck"] = ram_check(session["ramCheck"], session["stateOut"],
-                                       pinned=session["selectorAddress"])
+        result["ramCheck"] = checked_ram(session)
     return result
 
 
@@ -579,6 +619,15 @@ def main() -> int:
         ap.error("--rom is required unless --rescore reads an existing sweep")
     if args.rom_chr and not args.rom:
         ap.error("--rom-chr needs --rom: the denominator is the ROM's own CHR")
+    # ADR-0184 s1's "refuse, do not warn", in the shape #545 asks for: the
+    # reference comparison is scored at the CHR-pattern identity, and a rule
+    # that names a tile by index resolves to a pattern only through the ROM's
+    # own CHR. Without one it would score 0 of 0, which is the figure §5.3
+    # forbids printing.
+    if args.reference and not args.rom:
+        ap.error("--reference needs --rom: the comparison is scored at the "
+                 "CHR-pattern identity, and an index becomes a pattern only "
+                 "through the ROM's own CHR (ADR-0239 s5.2/s5.3)")
     prof_dir = args.profile.resolve().parent if args.profile else Path.cwd()
     seconds = args.seconds if args.seconds is not None else \
         profile.get("defaults", {}).get("seconds", 300)
@@ -688,8 +737,12 @@ def main() -> int:
     if not args.dry_run:
         scored = score_sessions(results, baseline_hires)
         after_hires = list(baseline_hires) + scored["unionHires"]
+        # The ROM resolves an index to a pattern for §5.3's reference row as
+        # well as for §5.2's denominator, so it is handed over whenever either
+        # is asked for; `--rom-chr` still decides whether the row is printed.
         totals = totals_document(baseline_hires, after_hires,
-                                 args.rom.resolve() if args.rom_chr else None,
+                                 args.rom.resolve()
+                                 if (args.rom_chr or reference) else None,
                                  reference)
         print("\n== sessions (ADR-0239 s4: a session must prove it went somewhere)")
         print(f"   {'name':<16}{'status':<14}{'tiles':>6}{'keys':>7}"
@@ -734,8 +787,12 @@ def main() -> int:
         before, after = totals["before"], totals["after"]
         print(f"\n== coverage ({ADR_0239} s5): drawn keys and distinct tile data")
         for label, row in (("before", before), ("after", after)):
-            print(f"   {label:<8}{row['keys']:>6} keys {row['tileData']:>6} tile data"
-                  f"   romChr {_rom_chr_line(row['romChr'], row['romChrSeen'])}")
+            # The row is computed whenever the ROM is known (a --reference
+            # needs it too) and printed when it was asked for.
+            print(f"   {label:<8}{row['keys']:>6} keys {row['tileData']:>6} tile "
+                  "data"
+                  + (f"   romChr {_rom_chr_line(row['romChr'], row['romChrSeen'])}"
+                     if args.rom_chr else ""))
         print(f"   gained  {after['keys'] - before['keys']:>+6} keys "
               f"{after['tileData'] - before['tileData']:>+6} tile data "
               + (f"over {len(baseline_hires)} baseline pack(s)" if baseline_hires
@@ -756,8 +813,16 @@ def main() -> int:
     coverage = None
     if reference and not args.dry_run:
         ref = reference
-        ref_keys = tile_data_keys(ref)
-        union_keys = set()
+        # #545: the identity is the CHR pattern each rule names, never the
+        # `<tile>` field as a string. A community pack is `<ver>100` and writes
+        # a decimal CHR index, a bootstrapped one `<ver>109` and writes hex, so
+        # a string comparison compares two spellings of the same tile: on Ninja
+        # Gaiden it read 1003/7382 = 13.6 % for the baseline, for each session
+        # and for the union. At the pattern the same packs read 535/6208 =
+        # 8.6 % before against 2705/6208 = 43.6 % after.
+        rom = args.rom.resolve() if args.rom else None
+        ref_pat = pack_named_patterns([ref], rom)
+        union_pat = set()
         per_session = []
         for r in results:
             if not r.get("hires"):
@@ -765,45 +830,58 @@ def main() -> int:
             # Drawn rows: a pattern the record never painted is not a pattern
             # the recording holds, and the placeholder scan paints thousands of
             # bytes nobody drew (nav_sweep_metrics.totals_document).
-            keys = pack_seen_tile_data([Path(r["hires"])])
-            union_keys |= keys
-            hit = len(keys & ref_keys)
+            pats = pack_named_patterns([Path(r["hires"])], rom)
+            union_pat |= pats
+            hit = len(pats & ref_pat)
             per_session.append({
-                "name": r["name"], "tiles": len(keys), "ofReference": hit,
-                "pct": round(100.0 * hit / len(ref_keys), 1) if ref_keys else 0.0,
+                "name": r["name"], "patterns": len(pats), "ofReference": hit,
+                "pct": round(100.0 * hit / len(ref_pat), 1) if ref_pat else 0.0,
             })
-        base_keys = pack_seen_tile_data(baseline_hires)
-        sweep_hit = len(union_keys & ref_keys)
+        base_pat = pack_named_patterns(baseline_hires, rom)
+        sweep_hit = len(union_pat & ref_pat)
         coverage = {
             "reference": str(ref),
-            "referenceTiles": len(ref_keys),
+            "unit": "chr-pattern",
+            "referencePatterns": len(ref_pat),
             "perSession": per_session,
-            "sweepUnionTiles": len(union_keys),
+            "sweepUnionPatterns": len(union_pat),
             "sweepOfReference": sweep_hit,
-            "sweepPct": round(100.0 * sweep_hit / len(ref_keys), 1) if ref_keys else 0.0,
+            "sweepPct": round(100.0 * sweep_hit / len(ref_pat), 1) if ref_pat else 0.0,
+            "versions": {
+                "reference": pack_version(ref),
+                "compared": sorted({pack_version(Path(r["hires"]))
+                                    for r in results if r.get("hires")}
+                                   | {pack_version(h) for h in baseline_hires}),
+            },
+            "note": version_note(ref, baseline_hires
+                                 + [Path(r["hires"]) for r in results
+                                    if r.get("hires")]),
         }
-        if base_keys:
-            both = len((union_keys | base_keys) & ref_keys)
-            coverage["baselineOfReference"] = len(base_keys & ref_keys)
-            coverage["baselinePct"] = round(100.0 * len(base_keys & ref_keys) / len(ref_keys), 1)
+        if base_pat:
+            both = len((union_pat | base_pat) & ref_pat)
+            coverage["baselineOfReference"] = len(base_pat & ref_pat)
+            coverage["baselinePct"] = round(100.0 * len(base_pat & ref_pat) / len(ref_pat), 1)
             coverage["unionWithBaselineOfReference"] = both
-            coverage["unionWithBaselinePct"] = round(100.0 * both / len(ref_keys), 1)
-            coverage["gainedOverBaseline"] = both - len(base_keys & ref_keys)
+            coverage["unionWithBaselinePct"] = round(100.0 * both / len(ref_pat), 1)
+            coverage["gainedOverBaseline"] = both - len(base_pat & ref_pat)
 
-        print(f"\n== coverage against {ref} ({len(ref_keys)} distinct tile-data strings)")
+        print(f"\n== coverage against {ref} ({len(ref_pat)} distinct CHR patterns, "
+              "the identity both sides share - #545)")
+        if coverage["note"]:
+            print(f"   ! {coverage['note']}")
         for p in per_session:
-            print(f"   {p['name']:<14} {p['tiles']:>5} tiles  "
+            print(f"   {p['name']:<14} {p['patterns']:>5} patterns  "
                   f"{p['ofReference']:>5} of reference  {p['pct']:>5.1f}%")
-        print(f"   {'SWEEP UNION':<14} {len(union_keys):>5} tiles  "
+        print(f"   {'SWEEP UNION':<14} {len(union_pat):>5} patterns  "
               f"{sweep_hit:>5} of reference  {coverage['sweepPct']:>5.1f}%")
-        if base_keys:
-            print(f"   {'baseline':<14} {len(base_keys):>5} tiles  "
+        if base_pat:
+            print(f"   {'baseline':<14} {len(base_pat):>5} patterns  "
                   f"{coverage['baselineOfReference']:>5} of reference  "
                   f"{coverage['baselinePct']:>5.1f}%")
             print(f"   {'UNION + base':<14} {'':>5}        "
                   f"{coverage['unionWithBaselineOfReference']:>5} of reference  "
                   f"{coverage['unionWithBaselinePct']:>5.1f}%  "
-                  f"(+{coverage['gainedOverBaseline']} tiles the baseline never held)")
+                  f"(+{coverage['gainedOverBaseline']} patterns the baseline never held)")
 
     # --- notes[] (ADR-0183 s3, ADR-0184: the code travels with the art) ------
     # A rescore wrote no art and ran no session, so there is nothing to hand a
@@ -821,6 +899,14 @@ def main() -> int:
             dest.write_text(json.dumps(doc, indent=2) + "\n")
             print(f"wrote {dest}")
         return 0
+
+    # The two lists the note names, read off the plan this run just made: the
+    # selector cheats a RAM sweep pinned and the places an input selector
+    # reached. Both were used but never assigned on the F14.16 branch, which
+    # aborted a real sweep here - the last thing before `sweep.json` - after
+    # every capture had been paid for.
+    swept = [s["cheat"] for s in sessions if s["cheat"]]
+    picked = [s["title"] or s["name"] for s in sessions if s["kind"] == "navigation"]
 
     if kind == "ram":
         notes = [

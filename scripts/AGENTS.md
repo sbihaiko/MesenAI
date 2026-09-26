@@ -90,8 +90,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   [--summary <path>] [--rescore]` turns the amendment's eleven hand-typed
   sessions into one command. `--rescore` is the other input path: it scores the
   packs a previous sweep left under `--out` (`--profile` and `--rom` then
-  optional; `--rom` is still needed for `--rom-chr`), which is how a metric
-  change is re-read without spending the capture budget again.
+  optional; `--rom` is still needed for `--rom-chr` and for `--reference`),
+  which is how a metric change is re-read without spending the capture budget
+  again.
   The profile is **data**: a second game is a second
   `navigation.json`, never a code change. It declares the navigation address
   (`kind: "ram"`, the default) or `kind: "input"`, where the game's own menu,
@@ -151,18 +152,38 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `{game, rom, seconds,
   sessions:[{name,status,tiles,new,unique,ramCheck,keys,seen,newTiles}],
   totals:{before,after,[reference]}}`.
-  `--reference` is unchanged: `artist_cover.py`'s own metric — distinct
-  `tileData` against the reference pack — per session and for the union.
+  `--reference` is scored at the **CHR-pattern identity**, never at the tile
+  field as a string (#545): a community pack is `<ver>100` and writes a
+  decimal, unpadded CHR index (`<tile>0,1,FF072235,...`) while a bootstrapped
+  pack is `<ver>109` and writes hex (`<tile>0,1000,0F25300F,...`), so their key
+  sets (`'1','10','100'` against `'00','01','0100'`) intersect by accident and
+  every pack of a game reads the same figure — measured on Ninja Gaiden,
+  1003/7382 = 13.6 % for the baseline, for each of the 21 sessions and for the
+  union. `nav_sweep_metrics.pack_named_patterns` resolves both readings through
+  the ROM (`_named_pattern`, the identity `--rom-chr` already uses), over the
+  rules a run wrote, so **`--reference` needs `--rom`**: a pack naming tiles by
+  index with no ROM to resolve them through is refused, not scored at 0 %. The
+  same packs read 535/6208 = 8.6 % before against 2705/6208 = 43.6 % after
+  (union + baseline; the sweep's own union is 2585/6208 = 41.6 %). The two
+  files' `<ver>` bases are **noted** beside the figure when they differ — a
+  reader's provenance, never a gate, and §5.3's own refusal (a pack keyed for a
+  patched ROM, #225) is `artist_cover.py`'s and is untouched.
   Measured 2026-09-14 on Contra, 11 sessions × 300 s, `--jobs 4`, ~7 min of
-  wall clock: sweep union **56.6%** (1928/3404) against the amendment's 58.9%,
+  wall clock (by `artist_cover.py`'s own run, unchanged): sweep union
+  **56.6%** (1928/3404) against the amendment's 58.9%,
   the 72 archived recordings **53.8%** (1831 — the amendment's number exactly),
   union **63.7%** against its 64.6%, +339 tiles the archive never held.
   Measured 2026-09-26 (`runs/f1416/code/`), 30-40 s sessions: Contra
   `0030:01` ends with `$0086=01` (wall cores, stage 2) against `00` on stage 1;
-  a pinned address read off the final state is the *game's* value, never the
-  pinned one, because the cheat substitutes the byte on the CPU read bus (with
-  `cheat=0030:05` the run plays stage 6 and `$0030` still reads 00) — such a
-  check is reported with a caveat, not refused. Punch-Out (CHR ROM, `kind:
+  a pinned address read off the final state holds either the game's own value
+  or a byte the game stored after reading the pinned bus, because the cheat
+  substitutes the byte on the CPU read bus and never writes memory (with
+  `cheat=0030:05` the run plays stage 6 and `$0030` still reads 00, where
+  Punch-Out's fight loader stores back the `$0002` it read, so a pinned `$0002`
+  reads the pin). Every check on an address the session pins is reported with a
+  caveat naming the byte it is pinned at, never refused — the pins are the
+  selector *and* every `values[].cheats` / `defaults.cheats` address in effect
+  (#546). Punch-Out (CHR ROM, `kind:
   "input"`) 9815 → 11733 keys and 976 → 1356 CHR patterns with the tile-data
   column flat at 8192. Excitebike, the 13-session rehearsal the rehearsal
   worker ran (`runs/f1416/excitebike/rehearsal`, re-scored by
@@ -183,8 +204,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `artist_chr_kit.py --also` and the coverage set union.
   `test_record_navigation_sweep.py` pins the §1 refusals, the script
   arithmetic, the Contra plan field for field, the §2 schema (kind, per-value
-  scripts, pins, the RAM check), the §4 verdict, the §5 units and `--rescore`
-  (135 checks);
+  scripts, pins, the RAM check), the §4 verdict and its pinned-address caveat
+  (#546), the §5 units, the §5.3 reference identity across `<ver>` bases
+  (#545) and `--rescore` (176 checks);
   the host-free metric lives in `nav_sweep_metrics.py`.
 - **Per-stage recording (F9.22)** — `stages/<game>/` holds
   `mint-<stage>.txt` (power-on to a stage; run with `save-state=<f.mss>`)

@@ -404,13 +404,100 @@ def _ram_check_reads():
               "a state that is not there fails the check and says so", str(got))
         # Measured 2026-09-26: `cheat=0030:05` plays Contra's stage 6 while the
         # final state's $0030 reads 00 - the pin is applied on the CPU read
-        # bus. A check on the pinned address itself therefore says nothing
-        # about the warp, and must carry that in its own result.
-        got = sweep.ram_check(spec, state, pinned="006D")
-        check("caveat" in got and "read bus" in got["caveat"],
-              "a check on the pinned address carries the read-bus caveat", str(got))
-        got = sweep.ram_check(spec, state, pinned="0030")
-        check("caveat" not in got, "a check on another address carries none")
+        # bus. A check on a pinned address therefore carries that in its own
+        # result, with the byte the pin substitutes (#546).
+        got = sweep.ram_check(spec, state, pinned_addresses={"006D": "03"})
+        check("caveat" in got and "read bus" in got["caveat"]
+              and got["pinnedValue"] == "03",
+              "a check on a pinned address carries the read-bus caveat", str(got))
+        got = sweep.ram_check(spec, state, pinned_addresses={"0030": "05"})
+        check("caveat" not in got and "pinnedValue" not in got,
+              "a check on another address carries none", str(got))
+        got = sweep.ram_check(spec, state,
+                              pinned_addresses={"0030": "05", "006D": "03"})
+        check(got["pinnedValue"] == "03",
+              "and the byte reported is the one pinned on the checked address",
+              str(got))
+
+
+def _the_caveat_covers_every_address_the_session_pins():
+    """#546: the caveat is per address a session *pins*, not per selector.
+
+    Measured 2026-09-26 on Punch-Out: `kind: "input"` declares no
+    `navigation.address`, so the `pinned` scalar the recorder passed was always
+    None and nine rung-2 sessions - which pin `$0002`/`$0003` through
+    `values[].cheats` and check one of them - printed a bare `$0002=03 ok`.
+    That same run also shows why the wording matters: the fight loader stores
+    back the bank byte it read, so `$0002` reading the pin is the game's own
+    write while the pinned `$0001` reads the game's 00, which is what proves
+    the harness never wrote memory. Neither reading is "proves nothing".
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        prof = _scripts(tmp)
+        pins = [{"code": "0001:0B", "label": "fight id",
+                 "source": "DataCrystal $0001 RAM map"},
+                {"code": "0002:03", "label": "fight data bank",
+                 "source": "DataCrystal $0002 RAM map"}]
+        profile = _profile(
+            {"kind": "input", "label": "pass key", "source": "manual p.6",
+             "values": [{"name": "sandman", "title": "World - Mr. Sandman",
+                         "entry": "entry.txt", "body": "body.txt", "cheats": pins,
+                         "ramCheck": {"address": "0002", "expect": "03"}},
+                        {"name": "tyson", "title": "World - Mike Tyson",
+                         "entry": "entry.txt", "body": "body.txt", "cheats": pins,
+                         "ramCheck": {"address": "000B", "expect": "05"}}]},
+            {"seconds": 120, "entry": "entry.txt", "body": "body.txt"})
+        plan = _plan(profile, prof, tmp)
+        check(plan[0]["pinnedAddresses"] == {"0001": "0B", "0002": "03"},
+              "an input profile pins every cheats address, selector or not",
+              str(plan[0].get("pinnedAddresses")))
+        ram = bytearray(2048)
+        ram[0x02] = 3
+        ram[0x0B] = 5
+        for s in plan:
+            s["stateOut"].parent.mkdir(parents=True, exist_ok=True)
+            _mss(s["stateOut"], ram)
+        got = sweep.checked_ram(plan[0])
+        check(got["ok"] is True and "caveat" in got,
+              "a check on a values[].cheats address carries the caveat (#546)",
+              str(got))
+        check(got.get("pinnedValue") == "03",
+              "and reports the byte the pin substitutes beside the one observed",
+              str(got))
+        check("read bus" in got["caveat"] and "03" in got["caveat"],
+              "the caveat says where a pin acts and names the pinned byte",
+              got.get("caveat", ""))
+        check("says nothing" not in got["caveat"],
+              "and does not claim the check proves nothing where the game may "
+              "have stored the byte back", got.get("caveat", ""))
+        got = sweep.checked_ram(plan[1])
+        check("caveat" not in got and "pinnedValue" not in got,
+              "a check on an address the session does not pin carries none",
+              str(got))
+        # A `kind: "ram"` session pins its selector as a cheat, so the same map
+        # covers it and no second rule is needed; a room applies no selector
+        # cheat, so it pins nothing at all.
+        cplan = _plan(json.loads(PROFILE.read_text()), PROFILE.parent, tmp)
+        check(cplan[0]["pinnedAddresses"] == {"0030": "00"},
+              "a ram selector arrives through its own cheat",
+              str(cplan[0].get("pinnedAddresses")))
+        check(cplan[8]["pinnedAddresses"] == {},
+              "and a room pins nothing - it applies no selector cheat",
+              str(cplan[8].get("pinnedAddresses")))
+        # The shape #546 came from. A bare address is iterable, so
+        # `address in pinned_addresses` would silently become a substring test.
+        raises(lambda: sweep.ram_check({"address": "0002", "expect": "03"},
+                                       plan[0]["stateOut"],
+                                       pinned_addresses="0002"),
+               "a scalar pinned_addresses is refused, not read as a string",
+               "pinned_addresses")
+        try:
+            sweep.ram_check({"address": "0002", "expect": "03"}, plan[0]["stateOut"],
+                            pinned="0002")
+            FAILED.append("the scalar keyword `pinned` is gone")
+        except TypeError:
+            check(True, "the scalar keyword `pinned` is gone, loudly")
 
 
 # --- ADR-0239 s4: a session must prove it went somewhere ---------------------
@@ -836,16 +923,19 @@ def _the_union_row_is_the_rules_a_run_wrote():
         ph = "".join(f"<tile>0,{i:032X},0F001030,0,0,1,Y\n" for i in range(40))
         base = tmp / "base" / "hires.txt"
         base.parent.mkdir(parents=True)
-        base.write_text("<ver>109\n" + ph + "<tile>0,AAAA,0F001030,0,0,1,N\n")
+        base.write_text("<ver>109\n" + ph + "<tile>0,01,0F001030,0,0,1,N\n")
         sess = tmp / "s" / "hires.txt"
         sess.parent.mkdir(parents=True)
         sess.write_text("<ver>109\n" + ph
-                        + "<tile>0,BBBB,0F001030,0,0,1,N\n"
-                        + "<tile>0,CCCC,0F001030,0,0,1,N\n"
-                        + "<tile>0,DDDD,0F001030,0,0,1,N\n")
-        ref = _hires(tmp / "ref" / "hires.txt", 109, ["CCCC"])
+                        + "<tile>0,02,0F001030,0,0,1,N\n"
+                        + "<tile>0,03,0F001030,0,0,1,N\n"
+                        + "<tile>0,04,0F001030,0,0,1,N\n")
+        ref = _hires(tmp / "ref" / "hires.txt", 109, ["03"])
+        # §5.3 is scored at the CHR pattern (#545), so the reference row needs
+        # the ROM's own CHR: a written rule names index 3, and index 3 is P3.
+        rom = _rom(tmp / "g.nes", {1: P1, 2: P2, 3: P3, 4: P4})
 
-        t = sweep.totals_document([base], [base, sess], None, ref)
+        t = sweep.totals_document([base], [base, sess], rom, ref)
         check(t["before"]["tileData"] == 1 and t["after"]["tileData"] == 4,
               "the union's distinct tile data counts the rules the run wrote",
               str(t["before"]) + " " + str(t["after"]))
@@ -858,11 +948,190 @@ def _the_union_row_is_the_rules_a_run_wrote():
         check(t["after"]["keysAll"] == 44, "with the every-rule count beside it",
               str(t["after"]))
         check(t["reference"]["after"]["tiles"] == 1,
-              "and the reference hit is measured over the drawn rows: only CCCC "
-              "is both drawn and painted, the 40 placeholders are neither",
+              "and the reference hit is measured over the drawn rows: only the "
+              "rule naming index 3 is both drawn and painted, the 40 "
+              "placeholders are neither",
               str(t["reference"]))
         check(t["reference"]["afterAll"]["tiles"] == 1,
               "the every-rule hit rides along", str(t["reference"]))
+
+
+# --- #545: the reference is scored at the pattern, not at the string ---------
+P3 = bytes([0xAA] * 16)
+P4 = bytes([0x55] * 16)
+
+
+def _the_two_dialects_meet_at_the_pattern_they_name():
+    """#545: two packs of one ROM write the `<tile>` field in different bases.
+
+    A community pack is `<ver>100` - a decimal, unpadded CHR index ('<tile>0,1,
+    FF072235,...') - and a bootstrapped pack is `<ver>109` - hex, padded
+    ('<tile>0,1000,0F25300F,...') - so keying the comparison on the string it
+    read ({'1','10','100',...} against {'00','01','0100',...}) intersects by
+    accident and the figure is a constant. Measured on Ninja Gaiden:
+    1003/7382 = 13.6 % for the baseline, for each of the 21 sessions and for
+    the union - not 0 %, so §5.3's "not printed as 0 %" guard does not see it.
+    Each rule names a 16-byte CHR pattern either way, which is the identity
+    `_named_pattern` reads and the one §5.3 is asking for: on the same packs
+    the pattern reads 535/6208 (8.6 %) -> 2705/6208 (43.6 %).
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        # Index 1 holds P1, index 10 P2, index 16 P3: the token "10" is a
+        # different index in each dialect, which is what the fix is about.
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2, 16: P3})
+        ref = _hires(tmp / "ref" / "hires.txt", 100, ["1", "10"])
+        base = _hires(tmp / "base" / "hires.txt", 109, ["01", "0A"])
+
+        t = sweep.totals_document([base], [base], rom, ref)
+        check(t["reference"]["tileData"] == 2,
+              "the denominator is the reference pack's own distinct patterns",
+              str(t["reference"]))
+        check(t["reference"]["before"]["tiles"] == 2
+              and t["reference"]["before"]["pct"] == 100.0,
+              "and a pack writing the same two tiles in the other dialect holds "
+              "both of them - the raw strings {'1','10'} and {'01','0A'} share "
+              "nothing", str(t["reference"]))
+
+        # The same reference figure for either dialect: what is compared is the
+        # pattern, so which spelling the pack uses cannot move the number.
+        hex_ref = _hires(tmp / "hexref" / "hires.txt", 109, ["01", "0A"])
+        figures = ("tileData", "tileDataAll", "before", "after",
+                   "beforeAll", "afterAll")
+        check([sweep.totals_document([base], [base], rom, hex_ref)["reference"][k]
+               for k in figures]
+              == [sweep.totals_document([base], [base], rom, ref)["reference"][k]
+                  for k in figures],
+              "a reference pack written at the other <ver> gives the same figures")
+
+        # The other direction, and the one a string comparison gets *wrong*: a
+        # token that matches is not a tile that matches.
+        ref10 = _hires(tmp / "ref10" / "hires.txt", 100, ["10"])
+        hex10 = _hires(tmp / "hex10" / "hires.txt", 109, ["10"])
+        t = sweep.totals_document([hex10], [hex10], rom, ref10)
+        check(t["reference"]["before"]["tiles"] == 0,
+              '"10" is index 10 in one dialect and index 16 in the other, so a '
+              "rule that names another tile is not a hit", str(t["reference"]))
+        check(t["reference"]["tileData"] == 1,
+              "and the denominator is one pattern, not zero: the reference "
+              "names index 10 whatever the compared pack does", str(t["reference"]))
+
+        # §5.2 is untouched: it already reads the pattern, so the same two
+        # packs give the same CHR coverage in either dialect.
+        check(sweep.rom_chr_seen_coverage([base], rom)
+              == sweep.rom_chr_seen_coverage([_hires(tmp / "dec" / "hires.txt",
+                                                     102, ["1", "10"])], rom),
+              "the ROM CHR row reads the same for both dialects, as it did")
+
+
+def _an_index_needs_the_rom_and_a_pattern_does_not():
+    """`pack_named_patterns`: what an identity needs to be resolved.
+
+    An index becomes a pattern only through the ROM's own CHR (ADR-0239 §5.2),
+    so asking for the identity of an index-form pack with no ROM is refused
+    rather than scored as an empty set - an empty set reads as 0 % coverage,
+    the figure §5.3 forbids. A rule that carries its 16 bytes names its pattern
+    by value (`HdPackLoader::ReadTileData`: 32+ hex digits is a CHR RAM
+    pattern), so a CHR RAM pack needs no ROM at all.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2})
+        by_index = _hires(tmp / "i" / "hires.txt", 109, ["01", "0A"])
+        by_value = _hires(tmp / "v" / "hires.txt", 109, [P1.hex().upper()])
+        check(sweep.pack_named_patterns([by_index], rom) == {P1, P2},
+              "an index-form pack resolves through the ROM's CHR",
+              str(sweep.pack_named_patterns([by_index], rom)))
+        check(sweep.pack_named_patterns([by_value], None) == {P1},
+              "a 32-hex rule names its pattern by value, with no ROM")
+        raises(lambda: sweep.pack_named_patterns([by_index], None),
+               "an index-form pack with no ROM is refused, not scored empty",
+               "needs the ROM")
+        # The placeholders are the unit §5.1 drops, here too.
+        with_ph = _hires(tmp / "p" / "hires.txt", 109, ["01", "0A"], flag="Y")
+        check(sweep.pack_named_patterns([with_ph], rom) == set(),
+              "a defaultTile placeholder names no pattern for §5.1's row")
+        check(sweep.pack_named_patterns([with_ph], rom, seen_only=False) == {P1, P2},
+              "and names it for the every-rule row")
+
+
+def _a_different_ver_base_is_provenance_not_a_gate():
+    """§5.3, amended: two dialects are noted, never refused.
+
+    The comparison no longer cares which base the field is written in, so what
+    a reader needs is that the two files are not the same dialect - a note. The
+    refusal is §5.3's own (#225: a pack keyed for a patched ROM) and it is
+    untouched.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2})
+        ref = _hires(tmp / "ref" / "hires.txt", 100, ["1", "10"])
+        base = _hires(tmp / "base" / "hires.txt", 109, ["01"])
+
+        note = sweep.version_note(ref, [base])
+        check("100" in note and "109" in note,
+              "the note names both bases", note)
+        check(sweep.version_note(base, [base]) == "",
+              "the same dialect carries no note")
+        check(sweep.version_note(base, []) == "",
+              "and nothing to compare against carries none either")
+        t = sweep.totals_document([base], [base], rom, ref)
+        check(t["reference"]["note"] == note
+              and t["reference"]["versions"] == {"reference": 100, "compared": [109]},
+              "the totals carry the same note beside the figure",
+              str(t["reference"].get("versions")))
+
+
+def _the_rescore_scores_the_reference_at_the_pattern():
+    """`--reference` end to end: per-session, union and union+baseline lines.
+
+    The packs are #545's shape - a `<ver>100` reference against `<ver>109`
+    sessions - so the string comparison this replaces reads 0.0 % on every
+    line. Only the runs on disk are read: no ROM is emulated and no session is
+    re-recorded.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2, 16: P3})
+        ref = _hires(tmp / "ref" / "hires.txt", 100, ["1", "10"])
+        base = _hires(tmp / "base" / "hires.txt", 109, ["01"])
+        _hires(tmp / "sweep" / "s1" / "Fake" / "auto" / "textures" / "hires.txt",
+               109, ["0A"])
+        _hires(tmp / "sweep" / "s2" / "Fake" / "auto" / "textures" / "hires.txt",
+               109, ["10"])
+
+        rc, out = _main_rc("--rescore", "--out", str(tmp / "sweep"),
+                           "--baseline", str(base), "--rom", str(rom),
+                           "--reference", str(ref),
+                           "--summary", str(tmp / "s.json"))
+        check(rc == 0, "rescore with a reference exits 0", str(rc))
+        check("2 distinct CHR patterns" in out,
+              "the reference line says what its denominator is",
+              [ln for ln in out.splitlines() if "coverage against" in ln])
+        check(any("SWEEP UNION" in ln and "1 of reference" in ln and "50.0%" in ln
+                  for ln in out.splitlines()),
+              "the union line is the pattern hit: s2's '10' is index 16, not "
+              "the reference's index 10, so only s1's P2 is held",
+              [ln for ln in out.splitlines() if "SWEEP UNION" in ln])
+        check(any("UNION + base" in ln and "2 of reference" in ln and "100.0%" in ln
+                  for ln in out.splitlines()),
+              "and with the baseline's P1 the reference is fully held",
+              [ln for ln in out.splitlines() if "UNION + base" in ln])
+        check(any("<ver>100" in ln and "<ver>109" in ln for ln in out.splitlines()),
+              "the two dialects are noted, not refused",
+              [ln for ln in out.splitlines() if "<ver>" in ln])
+        doc = json.loads((tmp / "s.json").read_text())
+        check(doc["totals"]["reference"]["before"] == {"tiles": 1, "pct": 50.0}
+              and doc["totals"]["reference"]["after"] == {"tiles": 2, "pct": 100.0},
+              "and the totals carry the same figure", str(doc["totals"]["reference"]))
+
+        # The identity is the pattern, so a reference with no ROM to resolve an
+        # index through is refused before anything is printed as 0 %.
+        rc, _ = _main_rc("--rescore", "--out", str(tmp / "sweep"),
+                         "--baseline", str(base), "--reference", str(ref))
+        check(rc == 2, "--reference without --rom is refused, not scored at 0 %",
+              str(rc))
 
 
 def _summary_document():
@@ -905,15 +1174,70 @@ def _summary_document():
               "the document names the game, the ROM and the budget")
 
 
+# --- the notes a run hands a kit generator, for both selector kinds ---------
+# A snapshot of the F14.16 branch shipped `main()` with `swept` (the RAM
+# branch) and `picked` (the input branch) used but never assigned, so a real
+# sweep aborted with `NameError` *after* paying for every capture, at the
+# notes[] block - the last thing a run writes before `sweep.json`. `--rescore`
+# and `--dry-run` are the only cheap ways to reach it, and `--dry-run` reaches
+# it without spawning the emulator.
+def _the_run_notes_are_built_for_both_selector_kinds():
+    """ADR-0183 §3: the notes[] a kit generator reads, for rung 1 and rung 2."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = tmp / "Fake.nes"
+        rom.write_bytes(b"NES\x1a" + bytes(12))
+        for kind in ("ram", "input"):
+            prof = tmp / kind
+            prof.mkdir()
+            (prof / "mint.txt").write_text("10f S\n")
+            (prof / "body.txt").write_text("20f R\n")
+            value = {"name": "one", "title": "One",
+                     "entry": "mint.txt", "body": "body.txt"}
+            if kind == "ram":
+                value["value"] = "01"
+            nav = {"kind": kind, "label": "selector",
+                   "source": "a published map", "values": [value]}
+            if kind == "ram":
+                nav["address"] = "006D"
+            doc = {"game": "Fake", "navigation": nav,
+                   "defaults": {"seconds": 1}}
+            (prof / "navigation.json").write_text(json.dumps(doc))
+            rc, out = _main_rc("--profile", str(prof / "navigation.json"),
+                               "--rom", str(rom), "--out", str(tmp / ("out-" + kind)),
+                               "--dry-run")
+            check(rc == 0, f"a dry run of a kind:{kind} profile exits 0", str(rc))
+            check("== notes[]" in out,
+                  f"and a kind:{kind} run reaches the notes[] block, which is "
+                  "where a real sweep aborted after spending its captures",
+                  out[-500:])
+            check("[Fake] navigation sweep" in out or "Fake navigation sweep" in out,
+                  f"the kind:{kind} note names the game", out[-500:])
+            if kind == "ram":
+                check("values swept 006D:01" in out,
+                      "the RAM note lists the selector cheats the sweep pinned",
+                      out[-500:])
+            else:
+                check("places swept One" in out,
+                      "and the input note lists the places the entry scripts "
+                      "selected, by title", out[-500:])
+
+
 for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _per_value_scripts, _extra_pins, _ram_check_plan,
             _missing_scripts_are_named, _ram_check_reads,
+            _the_caveat_covers_every_address_the_session_pins,
             _the_gate_is_the_baseline_and_unique_only_reads,
             _placeholders_are_not_keys_a_session_can_claim,
             _the_unit_that_can_move_is_the_drawn_key,
             _union_units, _rom_chr, _pack_hires_resolution,
             _rescore_reads_the_packs_a_sweep_left, _rescore_cli,
-            _the_union_row_is_the_rules_a_run_wrote, _summary_document):
+            _the_union_row_is_the_rules_a_run_wrote,
+            _the_two_dialects_meet_at_the_pattern_they_name,
+            _an_index_needs_the_rom_and_a_pattern_does_not,
+            _a_different_ver_base_is_provenance_not_a_gate,
+            _the_rescore_scores_the_reference_at_the_pattern,
+            _summary_document, _the_run_notes_are_built_for_both_selector_kinds):
     case(_fn, _fn.__name__.lstrip("_"))
 
 print(f"{len(PASSED)}/{len(PASSED) + len(FAILED)} passed")

@@ -17,6 +17,12 @@ The two units are ADR-0194 §4's, and they are not the same unit:
   tile under a stage's other palette is another key, so keys overcount figures
   an artist repaints per stage and tile data undercounts them.
 
+§5.3 compares two *packs*, and its unit is neither of those: it is the 16-byte
+CHR pattern a `<tile>` rule names (`pack_named_patterns`). Two packs of one ROM
+need not spell a tile the same way - a community pack writes a decimal CHR
+index, a bootstrapped one hex - so the field as a string is not an identity
+they share, and asking at it reads a constant (#545).
+
 §5's second denominator needs no third-party pack, which is why it exists: a
 CHR ROM game's own CHR is the set of patterns the game can draw, so the
 fraction of them the union names is a floor that holds for every game. A CHR
@@ -244,8 +250,16 @@ def chr_patterns(chr_bytes: bytes) -> dict:
     return out
 
 
-def _named_pattern(chr_bytes: bytes, patterns: dict, data: str, version: int):
-    """The pattern one `<tile>` rule names, or None when it names no tile."""
+def _named_pattern(chr_bytes: bytes, patterns, data: str, version: int):
+    """The pattern one `<tile>` rule names, or None when it names no tile.
+
+    `patterns` is the set an identity has to be *in* to count -
+    `chr_patterns(chr_bytes)`, §5.2's denominator - or None when the caller
+    wants the pattern the rule names whether or not this ROM's CHR holds it.
+    §5.3's reference comparison is the second caller: it asks what a rule
+    names, and a rule that carries its 16 bytes says so without a ROM at all
+    (`pack_named_patterns`).
+    """
     if len(data) >= 32:
         # A CHR RAM pattern: the rule carries the 16 bytes, so it names a
         # pattern by value. The loader reads the first 16 byte pairs.
@@ -253,7 +267,7 @@ def _named_pattern(chr_bytes: bytes, patterns: dict, data: str, version: int):
             pat = bytes.fromhex(data[:32])
         except ValueError:
             return None
-        return pat if pat in patterns else None
+        return pat if patterns is None or pat in patterns else None
     sys.path.insert(0, str(SCRIPT_DIR))
     import mep_addition  # noqa: E402 - the repo's index reader, with the ADR-0210 rule
     try:
@@ -264,7 +278,7 @@ def _named_pattern(chr_bytes: bytes, patterns: dict, data: str, version: int):
     if off + 16 > len(chr_bytes):
         return None
     pat = bytes(chr_bytes[off:off + 16])
-    return pat if pat in patterns else None
+    return pat if patterns is None or pat in patterns else None
 
 
 def _chr_coverage(hires_paths, rom_path, seen_only: bool) -> dict:
@@ -316,6 +330,81 @@ def rom_chr_seen_coverage(hires_paths, rom_path) -> dict:
     return _chr_coverage(hires_paths, rom_path, seen_only=True)
 
 
+# --- the identity two packs of one ROM share (ADR-0239 §5.3) ------------------
+def pack_named_patterns(hires_paths, rom_path=None, seen_only=True) -> set:
+    """The 16-byte CHR patterns a pack's written `<tile>` rules name.
+
+    §5.3 compares two packs of one ROM, and the one thing those two files are
+    guaranteed **not** to share is how they spell a tile. A community pack is
+    `<ver>100` and writes a decimal, unpadded CHR index (`<tile>0,1,FF072235,
+    8,0,1,N`); a bootstrapped pack is `<ver>109` and writes a hex, padded one
+    (`<tile>0,1000,0F25300F,0,0,1,N`). Keying the comparison on the field as a
+    string therefore compares two spellings - `{'1','10','100',...}` against
+    `{'00','01','0100',...}` - which intersect by accident and read the same
+    figure for every pack of the game (#545, measured on Ninja Gaiden: the
+    baseline, all 21 sessions and the union each read 1003/7382).
+
+    Each rule names a pattern either way, and that is the identity to ask at:
+    at it, the same packs read 535/6208 (8.6%) before against 2705/6208
+    (43.6%) after. `_named_pattern` resolves both readings - the 32-hex field
+    that carries the bytes, and the index through the ROM's own CHR - so this
+    is `rom_chr_seen_coverage`'s numerator without its denominator.
+
+    `seen_only` drops the builder's `defaultTile` placeholders, §5.1's unit; a
+    pack that names tiles by index and no ROM to resolve them through is
+    refused, because an unresolvable index is not a measurement of zero
+    coverage and §5.3 forbids printing one.
+    """
+    paths = [Path(h) for h in hires_paths]
+    chr_bytes = rom_chr_bytes(rom_path) if rom_path else b""
+    # None, not {}: "this ROM holds no CHR to be a member of" is a CHR RAM
+    # game (or no ROM at all), where a pattern is named by value and there is
+    # nothing to check it against.
+    patterns = chr_patterns(chr_bytes) if chr_bytes else None
+    out, unresolved = set(), 0
+    for h in paths:
+        version = pack_version(h)
+        data_set = (pack_seen_tile_data([h]) if seen_only else tile_data_keys(h))
+        for data in data_set:
+            if len(data) < 32 and not chr_bytes:
+                unresolved += 1
+                continue
+            pat = _named_pattern(chr_bytes, patterns, data, version)
+            if pat is not None:
+                out.add(pat)
+    if unresolved:
+        raise ValueError(
+            f"{unresolved} rule(s) over {len(paths)} pack(s) name a tile by CHR "
+            "index, and the CHR-pattern identity needs the ROM to read an index "
+            "through (ADR-0239 s5.2) - without it the comparison would be "
+            "scored at nothing, which §5.3 forbids printing as 0%. Pass the ROM.")
+    return out
+
+
+def version_note(reference, compared) -> str:
+    """The `<ver>` bases of the two files, when they differ (ADR-0239 §5.3).
+
+    A note, never a gate: `pack_named_patterns` resolves either dialect, so a
+    mismatch does not spoil the figure. What it does mean is that the reader is
+    looking at two files that do not agree on how a tile is written, which is
+    worth saying beside the number - §5.3's own refusal is a pack keyed for a
+    patched ROM (#225) and it is a different check.
+    """
+    ref_v = pack_version(reference)
+    others = sorted({pack_version(h) for h in compared
+                     if Path(h).exists() and Path(h).is_file()})
+    if not others or others == [ref_v]:
+        return ""
+    return (f"the reference pack declares <ver>{ref_v} and the compared packs "
+            f"declare <ver>{', '.join(str(v) for v in others)}: a `<tile>` field "
+            "shorter than 32 hex digits is a decimal CHR index below <ver>103 "
+            "and a hex one at 103+ (HdPackLoader::ReadTileData), so the two "
+            "files are not written in the same dialect. A field of 32 digits is "
+            "the pattern itself and reads the same at any <ver>. Both sides are "
+            "scored at the identity they share - the 16-byte CHR pattern each "
+            "rule names - so the figures stand.")
+
+
 # --- a session must prove it went somewhere (ADR-0239 §4) --------------------
 def ram_check_spec(raw: dict, where: str) -> dict:
     """Normalise a `values[].ramCheck`, refusing a bad one before anything runs.
@@ -344,7 +433,7 @@ def ram_check_spec(raw: dict, where: str) -> dict:
     return {"address": address, "expect": expect}
 
 
-def ram_check(spec: dict, state_path, read_ram=None, pinned=None) -> dict:
+def ram_check(spec: dict, state_path, read_ram=None, pinned_addresses=None) -> dict:
     """Read one byte off the session's final state and compare it.
 
     ADR-0239 §4: "when the profile names one, a RAM check read off the
@@ -353,17 +442,21 @@ def ram_check(spec: dict, state_path, read_ram=None, pinned=None) -> dict:
     F9.22 chains are steered by, so a state this cannot read is a state no
     other tool here can read either.
 
-    `pinned` is the address a navigation cheat is pinned on, and naming the
-    same address in a check is the one shape that cannot mean what it looks
-    like. Measured 2026-09-26 on Contra: with `cheat=0030:05` the run plays
-    stage 6 - the screenshot is the Energy Zone - and the final state's
-    `$0030` reads **00**, because the cheat substitutes the byte on the CPU
-    read bus (`CheatManager::ApplyCheat`) and "leaves the byte in memory
-    alone" (`scripts/stages/README.md`). So the check reads the game's own
-    value and *always* reports the stage the game would have loaded by itself.
-    It is not refused - pinning the selector's own start value and asserting
-    the byte did not move is ADR-0184's inertness control - but it carries a
-    `caveat` that the report prints beside the verdict.
+    `pinned_addresses` is **every** address the session pins, as
+    `{address: byte}` - the selector and each `values[].cheats` /
+    `defaults.cheats` pin, which is what the run really applies. A check on any
+    of them carries a `caveat` and the byte it is pinned at: the cheat
+    substitutes on the CPU read bus (`CheatManager::ApplyCheat`) and never
+    writes memory, so the byte in the state is the game's own value *or* a
+    value the game stored after reading the pinned bus, and this one state
+    cannot tell those two apart. Measured 2026-09-26: with `cheat=0030:05`
+    Contra plays stage 6 while its `$0030` reads 00, and Punch-Out's fight
+    loader stores the `$0002` it read back (so a pinned `$0002` reads the pin,
+    while the pinned `$0001` reads the game's own 00 in the same state) - a
+    pinned address can be a good verdict byte (#546). Naming a pinned address
+    is therefore reported with its caveat, never refused: pinning the
+    selector's own start value and asserting the byte did not move is
+    ADR-0184's inertness control.
     """
     address = str(spec.get("address", "")).strip().upper()
     raw = spec.get("expect")
@@ -373,6 +466,7 @@ def ram_check(spec: dict, state_path, read_ram=None, pinned=None) -> dict:
     if not RAM_ADDRESS_RE.match(address):
         out["why"] = f'"{address}" is not a hex RAM address'
         return out
+    pins = _pinned_map(pinned_addresses)
     if read_ram is None:
         sys.path.insert(0, str(SCRIPT_DIR))
         import mss_ram  # noqa: E402 - the parser the chains already trust
@@ -394,13 +488,42 @@ def ram_check(spec: dict, state_path, read_ram=None, pinned=None) -> dict:
     out["ok"] = out["actual"] in expect
     if not out["ok"]:
         out["why"] = f"${address} reads {out['actual']}, not {'/'.join(expect)}"
-    if pinned and address == str(pinned).upper():
+    if index in pins:
+        out["pinnedValue"] = pins[index]
         out["caveat"] = (
-            f"${address} is the address the selector is pinned on, so what is "
-            "here is the game's own value: a RAM cheat substitutes the byte on "
-            "the CPU read bus and leaves the byte in memory alone. This check "
-            "says nothing about which place the pin reached."
+            f"${address} is pinned at {pins[index]} for this session, and a RAM "
+            "pin substitutes the byte on the CPU read bus and never writes "
+            f"memory: an actual other than {pins[index]} is the game's own byte, "
+            f"and one equal to it is either the pin itself or a byte the game "
+            "stored after reading it - this state alone cannot separate the two."
         )
+    return out
+
+
+def _pinned_map(pinned_addresses) -> dict:
+    """The addresses a session pins, as `{int address: pinned byte}`.
+
+    The scalar this replaced (#546) was one address - the selector - so a
+    profile that pins through `values[].cheats` and checks one of those never
+    matched it. A bare string is refused loudly rather than read: it is
+    iterable, so `index in pinned_addresses` would silently become a substring
+    test, which is exactly the failure that hides.
+    """
+    if pinned_addresses is None:
+        return {}
+    if isinstance(pinned_addresses, (str, bytes)) or not hasattr(
+            pinned_addresses, "items"):
+        raise ValueError(
+            "pinned_addresses is the {address: byte} map of every address the "
+            f"session pins, not {pinned_addresses!r}: a bare address is the "
+            "single-address shape the caveat used to be read from (issue #546).")
+    out = {}
+    for pin_address, pin_value in pinned_addresses.items():
+        text = str(pin_address).strip().upper()
+        if not RAM_ADDRESS_RE.match(text):
+            raise ValueError(
+                f'pinned_addresses: "{pin_address}" is not a hex RAM address')
+        out[int(text, 16)] = str(pin_value).strip().upper()
     return out
 
 
@@ -538,17 +661,34 @@ def totals_document(before_hires, after_hires, rom_path=None, reference=None) ->
             "romChrSeen": rom_chr_seen_coverage(paths, rom_path) if rom_path else None,
         }
     if reference is not None:
-        ref = tile_data_keys(reference)
+        # §5.3 is asked at the CHR pattern (#545): the two packs compared here
+        # write their `<tile>` field in different bases - a community pack is
+        # `<ver>100` decimal, a bootstrapped one `<ver>109` hex - so the field
+        # as a string is not an identity they share. `tileData` keeps its name
+        # because the F14.16 table reads it, and `unit` says what it holds.
+        ref_written = pack_named_patterns([reference], rom_path)
+        ref_all = pack_named_patterns([reference], rom_path, seen_only=False)
+        compared = [h for h in list(before_hires) + list(after_hires)
+                    if Path(h).is_file()]
         out["reference"] = {
             "pack": str(reference),
-            "tileData": len(ref),
+            "unit": "chr-pattern",
+            "tileData": len(ref_written),
+            "tileDataAll": len(ref_all),
             # The drawn rows are the ones that answer §5.3: a pattern the run
             # never drew is not "held" by the union however many placeholders
             # name its bytes.
-            "before": _hit(pack_seen_tile_data(before_hires), ref),
-            "after": _hit(pack_seen_tile_data(after_hires), ref),
-            "beforeAll": _hit(pack_tile_data(before_hires), ref),
-            "afterAll": _hit(pack_tile_data(after_hires), ref),
+            "before": _hit(pack_named_patterns(before_hires, rom_path), ref_written),
+            "after": _hit(pack_named_patterns(after_hires, rom_path), ref_written),
+            "beforeAll": _hit(pack_named_patterns(before_hires, rom_path,
+                                                  seen_only=False), ref_all),
+            "afterAll": _hit(pack_named_patterns(after_hires, rom_path,
+                                                 seen_only=False), ref_all),
+            "versions": {
+                "reference": pack_version(reference),
+                "compared": sorted({pack_version(h) for h in compared}),
+            },
+            "note": version_note(reference, compared),
         }
     return out
 
