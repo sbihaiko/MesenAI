@@ -1,0 +1,16 @@
+# mint from power-on to the start of a race on the working design, PLAY MODE B.
+#
+# ADR-0239 s1 rung 1 (the game's own selector, by input): PLAY MODE B is the
+# second entry of the design submenu, one Down past PLAY MODE A, which is
+# where the cursor opens. Mode B races the same design against CPU riders,
+# the way SELECTION B does on the five tracks.
+60f -
+20f D
+40f -
+20f D
+40f -
+20f T
+40f -
+20f D
+40f -
+20f T
