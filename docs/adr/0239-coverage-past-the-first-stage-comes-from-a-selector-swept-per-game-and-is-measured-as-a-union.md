@@ -175,8 +175,13 @@ is reported as:
    and a pack that names tiles by index without one is refused rather than
    scored at 0 %. When the two files declare different `<ver>` bases the report
    notes it beside the figure — provenance, not a gate, because the comparison
-   no longer depends on the dialect. A pack keyed for a patched ROM is refused
-   (#225), not printed as 0 %.
+   no longer depends on the dialect. A pack keyed for a patched ROM is never
+   printed as plain coverage, and neither consumer refuses it wholesale: the
+   one comparison that is impossible by construction — a tile namespace the
+   recording cannot contain — is refused instead of printed as 0 % (#225), and
+   everything else is caveated, the patch named with its target sha1 above the
+   figures and again on the summary line, because whether it moves the tiles is
+   undecidable from the pack alone (#231, #554).
 
 `record_navigation_sweep.py` prints items 1–2 with `--rom-chr` and folds a
 baseline pack into the union with `--baseline <pack dir>`. `--reference` is

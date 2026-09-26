@@ -1359,6 +1359,103 @@ def _the_rescore_scores_the_reference_at_the_pattern():
               str(rc))
 
 
+# --- #554: the reference's <patch> is a caveat, never a silent score ---------
+PATCH_SHA1 = "2F88381557339A14C20428455F6991C1EB902C99"
+
+
+def _ips(path: Path, writes: dict) -> Path:
+    """A minimal IPS file: one literal record per offset, then EOF."""
+    blob = b"PATCH"
+    for off, byte in sorted(writes.items()):
+        blob += off.to_bytes(3, "big") + (1).to_bytes(2, "big") + bytes([byte])
+    path.write_bytes(blob + b"EOF")
+    return path
+
+
+def _first_line_diff(got, want):
+    """The first line the two reports do not share, for a failure's detail."""
+    for i, (a, b) in enumerate(zip(got, want)):
+        if a != b:
+            return f"line {i}: {a!r} != {b!r}"
+    return f"{len(got)} lines != {len(want)}"
+
+
+def _the_reference_patch_is_a_caveat_not_a_silent_score():
+    """#554: §5.3 scored a patched-ROM reference pack as plain coverage.
+
+    `--reference` never read the pack's `<patch>` lines, so a pack built for a
+    patched ROM printed `SWEEP UNION ... 33.4%` with nothing about the patch -
+    in the document the artist reads to decide what to paint next. The sibling
+    `artist_cover.py` already answers this (#225 refuses the namespace mismatch
+    that is empty by construction, #231 caveats everything else, because
+    whether a patch moves the tiles is undecidable from the pack alone), and
+    the sweep now asks it rather than reading `<patch>` a second time. The
+    case builds the whole thing - a pack manifest, its IPS beside it and a
+    synthetic iNES header - so no ROM is downloaded and no session is recorded.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2})
+        out = tmp / "sweep"
+        _hires(out / "s1" / "Fake" / "auto" / "textures" / "hires.txt", 109, ["01"])
+        manifest = _hires(tmp / "ref" / "hires.txt", 100, ["1"])
+        _ips(tmp / "ref" / "Super.ips", {5: 0x10})  # CHR ROM size, i.e. a mapper patch
+        clean = manifest.read_text()
+        head = ["--rescore", "--out", str(out), "--rom", str(rom),
+                "--reference", str(manifest)]
+
+        manifest.write_text(clean.replace(
+            "<ver>100\n", f"<ver>100\n<patch>Super.ips,{PATCH_SHA1}\n"))
+        rc, with_patch = _main_rc(*head)
+        check(rc == 0, "a reference declaring a <patch> still scores", str(rc))
+        lines = with_patch.splitlines()
+        at = next((i for i, ln in enumerate(lines) if "declares a <patch>" in ln),
+                  None)
+        check(at is not None,
+              "the §5.3 report names the <patch>, instead of printing the figure "
+              "as if the two sides were the same build",
+              [ln for ln in lines if "coverage against" in ln]
+              or lines[-3:])
+        caveat = []
+        if at is not None:  # the block: the headline, then its indented lines
+            caveat = [lines[at]]
+            for ln in lines[at + 1:]:
+                if not ln.startswith("     "):
+                    break
+                caveat.append(ln)
+        check(any("Super.ips" in ln and PATCH_SHA1.lower() in ln for ln in caveat),
+              "and quotes the patch and its target sha1", caveat)
+        check(any("offset 5 = 0x10" in ln for ln in caveat),
+              "and the iNES header bytes it writes - artist_cover's own reading "
+              "of a <patch>, not a second one", caveat)
+        union_at = next((i for i, ln in enumerate(lines) if "SWEEP UNION" in ln),
+                        None)
+        union = lines[union_at] if union_at is not None else ""
+        check("SWEEP UNION" in union and "[caveat:" in union
+              and "Super.ips" in union,
+              "and the summary line does not read as plain coverage", union)
+        check(union_at is not None and at is not None and union_at > at,
+              "the caveat is above the figure it qualifies", union)
+        row = next((i for i, ln in enumerate(lines)
+                    if ln.startswith("   s1 ") and "patterns" in ln), None)
+        check(at is not None and row is not None and at < row,
+              "and above the per-session table it also qualifies",
+              lines[row] if row is not None else lines[-3:])
+
+        # The non-regression: with the <patch> line gone the report is exactly
+        # this output minus the caveat, which is what "byte-identical to today's"
+        # means when the two runs share their fixture paths.
+        manifest.write_text(clean)
+        rc, no_patch = _main_rc(*head)
+        block = set(caveat)
+        stripped = [ln.split("  [caveat:")[0] if "SWEEP UNION" in ln else ln
+                    for ln in lines if ln not in block]
+        check(rc == 0 and stripped == no_patch.splitlines(),
+              "a pack declaring no <patch> prints exactly this report minus the "
+              "caveat: byte-identical to today's output",
+              _first_line_diff(stripped, no_patch.splitlines()))
+
+
 def _summary_document():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1553,6 +1650,7 @@ for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _an_index_needs_the_rom_and_a_pattern_does_not,
             _a_different_ver_base_is_provenance_not_a_gate,
             _the_rescore_scores_the_reference_at_the_pattern,
+            _the_reference_patch_is_a_caveat_not_a_silent_score,
             _summary_document, _the_run_notes_are_built_for_both_selector_kinds,
             _a_dry_run_writes_nothing):
     case(_fn, _fn.__name__.lstrip("_"))
