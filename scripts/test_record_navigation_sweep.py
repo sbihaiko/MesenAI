@@ -842,16 +842,19 @@ def _rescore_reads_the_packs_a_sweep_left():
               "and the rescued packs score exactly as the run's own did", str(scored))
 
 
-def _main_rc(*argv):
+def _main_rc(*argv, buf=None):
     """`main()`'s `(exit code, stdout)` for one command line, SystemExit included.
 
     argparse answers a missing required argument with SystemExit, which is not
     an `Exception` - raised inside a case it would abort the run and hide every
     case after it instead of failing one. stdout is captured because `main()`
     prints whole report tables and a test that leaks them buries its own
-    failures.
+    failures. `buf` is a caller's own buffer, for a caller that has to read what
+    was printed before an exception escaped `main()` - #551's traceback is
+    raised past a report that had already started printing.
     """
-    before, buf = sys.argv, io.StringIO()
+    before = sys.argv
+    buf = io.StringIO() if buf is None else buf
     sys.argv = ["record_navigation_sweep.py", *argv]
     try:
         with contextlib.redirect_stdout(buf):
@@ -860,6 +863,23 @@ def _main_rc(*argv):
         return exc.code, buf.getvalue()
     finally:
         sys.argv = before
+
+
+def _main_refusal(*argv):
+    """`main()`'s `(exit code, stdout, stderr)` for a command line it must refuse.
+
+    stderr is captured because a refusal is printed there and `_main_rc` keeps
+    stdout only; the traceback #551 is about - raised past the report the tool
+    had already started printing - is folded into the exit code instead of being
+    left to abort the case that is checking for the refusal.
+    """
+    err, buf = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stderr(err):
+        try:
+            rc, out = _main_rc(*argv, buf=buf)
+        except Exception as exc:  # noqa: BLE001 - the failure names its own cause
+            rc, out = f"{type(exc).__name__}: {exc}", buf.getvalue()
+    return rc, out, err.getvalue()
 
 
 def _rescore_cli():
@@ -1080,6 +1100,85 @@ def _the_placeholder_note_names_the_rom_in_hand():
               note)
         check(note in para, "and that is the note the ROM-less report prints",
               para)
+
+
+# --- #551: a --rom the reader cannot use is refused before the report --------
+def _a_rom_that_is_not_a_readable_ines_image_is_refused_up_front():
+    """#551: `--rom` was only checked with `Path.exists()`.
+
+    An independent verifier found it on 2026-09-26: a directory satisfies
+    `exists()`, and so does a text file, so a bad `--rom` printed the §4 table
+    and then died in a traceback (`IsADirectoryError`, `ChrKitError`) - and one
+    shape died *silently wrong*, which is the worse half. `Rom` slices the CHR
+    at `header + PRG`, so an iNES file whose header declares a bank the file is
+    too short to hold comes back `b""`, the value the CHR RAM branch of §5.2 and
+    of `placeholder_note` reads. A truncated dump is not a CHR RAM cartridge and
+    the two must not read the same. ADR-0184 §1's "refuse, do not warn" is what
+    the three refusals below are, with the exit code every other refusal here
+    uses.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        # --rescore, so the command line reaches the §4 table and the §5
+        # placeholder note with no recorder binary and no session run - the
+        # shape the report was found in.
+        _hires(tmp / "sweep" / "s1" / "Fake" / "auto" / "textures" / "hires.txt",
+               109, ["01"])
+        head = ["--rescore", "--out", str(tmp / "sweep")]
+        s4 = "== sessions (ADR-0239 s4"
+
+        # A directory: what `Path.exists()` is satisfied by.
+        directory = tmp / "a-folder"
+        directory.mkdir()
+        rc, printed, err = _main_refusal(*head, "--rom", str(directory))
+        check(rc == 2, "a directory as --rom is refused, not read", str(rc))
+        check(str(directory) in err, "and the refusal names the path", err.strip())
+        check(s4 not in printed,
+              "and no §4 table is printed: the report never starts", printed[:120])
+
+        # A regular file that is not an image at all.
+        junk = tmp / "not-ines.nes"
+        junk.write_bytes(b"not a cartridge, whatever the name says\n")
+        rc, printed, err = _main_refusal(*head, "--rom", str(junk))
+        check(rc == 2, "a regular file that is not iNES is refused", str(rc))
+        check(str(junk) in err and "not an iNES file" in err,
+              "and the message names the file and why", err.strip())
+        check(s4 not in printed, "and no §4 table is printed for it either",
+              printed[:120])
+
+        # The header's sizes are a promise about the file: 1 CHR bank declared,
+        # none carried. This is the claim that was silently wrong, so it is
+        # pinned at the reader too, where a wrong answer is a number in a report.
+        whole = _rom(tmp / "whole.nes", {1: P1})
+        short = tmp / "short.nes"
+        short.write_bytes(whole.read_bytes()[:16 + 16384])
+        check(sweep.rom_chr_bytes(_rom(tmp / "ram.nes", chr_ram=True)) == b"",
+              "a cartridge whose header declares no CHR bank still reads empty")
+        raises(lambda: sweep.rom_chr_bytes(short),
+               "and one whose declared bank is absent does not read the same way",
+               "truncated")
+        rc, printed, err = _main_refusal(*head, "--rom", str(short))
+        check(rc == 2, "so --rom refuses a truncated dump too", str(rc))
+        check("truncated" in err and "CHR RAM" not in err,
+              "naming the dump as short instead of calling the cartridge a "
+              "CHR RAM one", err.strip())
+        check(s4 not in printed, "and no §4 table is printed for it",
+              printed[:120])
+
+        # The non-regression, and the one the refusal must not catch: a
+        # cartridge whose header declares no CHR bank is a real cartridge, and
+        # one that declares CHR still reports the denominator it is read for.
+        ram = _rom(tmp / "ram.nes", chr_ram=True)
+        rc, printed, err = _main_refusal("--profile", str(PROFILE), "--rom",
+                                         str(ram), "--out", str(tmp / "out"),
+                                         "--dry-run")
+        check(rc == 0 and "navigation sweep: 11 sessions" in printed,
+              "a valid CHR RAM ROM still plans a sweep and exits 0",
+              f"rc={rc} {err.strip()}")
+        rc, printed, err = _main_refusal(*head, "--rom", str(whole), "--rom-chr")
+        check(rc == 0 and "romChr 1/1 (100.0%) written" in printed,
+              "and a valid CHR ROM still runs and still reports its pattern "
+              "denominator", f"rc={rc} {err.strip()}")
 
 
 # --- #545: the reference is scored at the pattern, not at the string ---------
@@ -1449,6 +1548,7 @@ for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _a_rescore_dry_run_writes_nothing,
             _the_union_row_is_the_rules_a_run_wrote,
             _the_placeholder_note_names_the_rom_in_hand,
+            _a_rom_that_is_not_a_readable_ines_image_is_refused_up_front,
             _the_two_dialects_meet_at_the_pattern_they_name,
             _an_index_needs_the_rom_and_a_pattern_does_not,
             _a_different_ver_base_is_provenance_not_a_gate,

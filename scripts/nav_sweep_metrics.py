@@ -227,10 +227,25 @@ def rom_chr_bytes(rom_path) -> bytes:
     The header rule is `artist_chr_kit.Rom`'s and is imported rather than
     repeated: iNES byte 5 is the CHR size in 8 KB units, PRG starts at byte 16
     (after a 512-byte trainer when byte 6 bit 2 is set) and CHR follows it.
+
+    A `--rom` the reader cannot use is refused here, as a `ValueError` naming
+    the path, instead of surfacing as a traceback once the report has started
+    printing (#551) - ADR-0184 §1's "refuse, do not warn", in the shape this
+    module already uses for a `--reference` whose indices it cannot resolve. So
+    `b""` means exactly one thing, the header declares no CHR bank and this is a
+    CHR RAM cartridge, and never "the bank it declares is not in the file".
     """
     sys.path.insert(0, str(SCRIPT_DIR))
     import artist_chr_kit  # noqa: E402 - one iNES reader in this repo
-    return artist_chr_kit.Rom(Path(rom_path)).chr
+    path = Path(rom_path)
+    if not path.exists():
+        raise ValueError(f"{path}: not found")
+    if not path.is_file():
+        raise ValueError(f"{path}: not a regular file")
+    try:
+        return artist_chr_kit.Rom(path).chr
+    except (OSError, artist_chr_kit.ChrKitError) as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def chr_patterns(chr_bytes: bytes) -> dict:
