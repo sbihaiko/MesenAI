@@ -58,7 +58,8 @@ your stored per-ROM choice follows it.
 Record the game once — scripted, from a save state, or driven by a published
 TAS. Get back **sprite figures with their animation cycles, the stage stitched
 into one panorama, and completed pattern pages**, each cell labeled. Paint the
-PNGs. Build. See it in the game.
+PNGs, or export a figure as one PNG, paint that whole, and import it back.
+Build. See it in the game.
 
 **→ [Remastering guide](docs/remastering-a-game.md)**
 
@@ -155,15 +156,20 @@ Names come from the data or from a human — never from a guess.
 5. Want the soundtrack as MIDI or VGM? **Tools → Record Music (MIDI/VGM)**.
 
 Want to redraw a game? Start at **[docs/remastering-a-game.md](docs/remastering-a-game.md)** —
-every command, in order, and the release ships every tool it uses.
+every command, in order. The tools are Python scripts under `scripts/` plus the
+compiled `headless_record`; a release bundles the set its tag had, not the tools
+added since (see [Download](#download)).
 
 ## Download
 
 **[Releases](https://github.com/sbihaiko/MesenAI/releases/latest)** carry the
 emulator plus `mesenai-tools-<version>.zip`, the command-line tools the
-remastering guide uses. **v0.1.0 is macOS Apple Silicon only**, cut locally
-from a tagged commit. No installer: unzip and run. macOS needs SDL2
-(`brew install sdl2`); the app is ad-hoc signed, so open it once, then
+remastering guide uses as of that tag. **v0.1.0 (2026-09-15) is macOS Apple
+Silicon only**, cut locally from a tagged commit, and its tools zip predates
+what the guide has gained since — `mep_figure.py`, `mep_add_cell.py`,
+`record_library.sh`, and the `stage-set.json` route sets that now cover ten
+games. Those come from a checkout instead. No installer: unzip and run. macOS
+needs SDL2 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
 **System Settings → Privacy & Security → Open Anyway**.
 
 Platforms without a tagged release use the on-demand CI channel — the newest
@@ -199,13 +205,15 @@ build of `prod` that passed, unzip and run:
 1. **Record** the game doing everything it can do. Four drivers feed one
    builder: a frame-counted input script, a **save state** to start mid-level,
    a published **TAS movie** (`.bk2`), or a **RAM-only cheat** to reach a
-   later stage. No window, no human at the pad, about 3× real time.
+   later stage. No window, no human at the pad, about 3× real time. Route sets
+   for ten games ship in `scripts/stages/`.
 2. **Measure** what the recording put on screen — per image, per state — and
    write a better route if a figure is missing.
 3. **Unpack** the recording into a **kit**: sprite figures and their cycles,
-   named scenery, the stage as one scrolling panorama, and pattern pages
-   completed from the cartridge — each with a sidecar saying what every cell
-   is and whether it was *seen* or *inferred*.
+   named scenery, the stage as one scrolling panorama (CHR RAM games), and
+   pattern pages completed from the cartridge — each with a sidecar saying what
+   every cell is and whether it was *seen* or *inferred*. The pattern pages need
+   no recording at all: `artist_chr_kit.py --static` fills them from the ROM.
 4. **Paint** the PNGs in your own editor. Cells are the deliverable.
 5. **Build and lint.** `mep_build.py` regenerates `hires.txt` from the sheets;
    `mep_lint.py` checks the pack against MEP v1. Every generator round-trips
@@ -221,14 +229,14 @@ promotes, never as evidence ([docs/ai-kit-review.md](docs/ai-kit-review.md)).
 | | Stock Mesen / MesenCE | **MesenAI** |
 |---|---|---|
 | **Audio** | Faithful chip emulation | Faithful **+ real-time modern re-voicing**, on by default, 5 styles, SoundFont, text-file presets |
-| **HD textures** | NES only | **NES, Game Boy/GBC, SMS/Game Gear/SG-1000** |
+| **HD textures** | NES only | **NES, Game Boy/GBC, SMS/Game Gear** |
 | **Recording a game** | Press Start, play to the end, press Stop | Same window, **plus a headless recorder driven by scripts, states, TAS movies or RAM cheats** |
 | **Knowing what you missed** | Play more and look | **Coverage per recording, per image, per state** |
 | **Vocabulary** | Tiles in cartridge order | **Metatiles, sprite figures, poses, animation cycles**, inferred and marked |
 | **The rule file** | By hand, or your own spreadsheet | **Generated from the sheets**; conditions for reused tiles attached from observed neighbours |
 | **Validation** | None | **Linter, versioned spec, content id, sha256 errata, pack CI** |
 | **Finding packs** | Forum threads | **Validated catalog**, hash-tracked, labeled by content, ranked by 👍 |
-| **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets in one hash-keyed pack, folder or `.zip`, per-layer toggles |
+| **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets + a border frame in one hash-keyed pack, folder or `.zip`, per-layer toggles |
 | **Music export** | — | **MIDI / VGM** while you play |
 | **Player mode** | — | Couch shell on a fresh install: overlay, recent games, pack picker |
 | **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist |
@@ -278,22 +286,32 @@ A project that measures its own claims should say what is and isn't shipped.
   checkbox exists and does nothing yet.
 - HD textures on NES, GB/GBC, SMS/GG. The `audio` layer of a MEP pack applies
   on NES only until the GB/SMS `hires.txt` extension freezes.
+- The MEP `border` layer: a frame or bezel composited around the game viewport,
+  toggled with the other enhancement layers (ADR-0149).
 - The headless recorder, all four drivers, coverage measurement, the four-surface
-  kit, `mep_build`/`mep_lint`, the composition editor, auto-attached
+  kit — every palette a shape was drawn in reaches its cell (ADR-0230) —
+  `mep_build`/`mep_lint`, the composition editor, auto-attached
   `spriteNearby`/`tileNearby` and hand-written conditions checked against
-  recorded routes, the in-place reload of repainted images, importing a legacy
-  `hires.txt` pack, 15 validated community packs auto-installing.
-- A CI gate on every push: the structural suite, the Python tool suites and a
-  headless boot of the real core. 1193 dependency-free C++ unit tests and a C#
-  xUnit suite run locally.
+  recorded routes, the in-place reload of repainted images, a recorded capture
+  that draws only the cells its own record carries (ADR-0236), importing a
+  legacy `hires.txt` pack, 15 validated community packs auto-installing.
+- A CI gate on every pull request to `main` and every push to `main`: the
+  structural suite, the Python tool suites, a headless boot of the real core,
+  1316 dependency-free C++ unit tests and the C# xUnit suites.
 
 **Not yet, and named as such**
+- Shaders are **Windows and Linux only**: RetroArch `.slangp` presets through
+  librashader, ported from upstream in the sync of 2026-09-24. macOS still
+  renders in software, and the native Metal renderer that closes the gap is
+  accepted ([ADR-0237](docs/adr/0237-macos-gets-shader-support-through-a-native-metal-renderer.md))
+  and not built — roadmap slice P.8.
 - Two limits stand by design, not as gaps: a changed `hires.txt` still needs the
-  ROM reopened — the in-place reload covers repainted images — and the layered
-  `.ora` is write-only, so the flat PNG stays the return path. Otherwise
-  **Phase 12** is delivered, with only human rows left; the live phase is
-  **14**, proof at scale, of the
-  [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
+  ROM reopened — the in-place reload covers a cell already painted, and a cell's
+  first paint re-points its rule, so it wants one reopen of its own (ADR-0231) —
+  and the layered `.ora` is write-only, so the flat PNG stays the return path.
+  Otherwise **Phase 12** is delivered, with only human rows left, and the live
+  phases are **14** (proof at scale) and **13** (shared replays, ADR-0205), of
+  the [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
   [side-by-side with upstream](docs/hd-pack-toolchain-comparison.md) that says
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
@@ -344,8 +362,8 @@ start from a save state, or let a published TAS play. Measure what you covered.
 Record again where the number says so.
 
 **Will you host packs?** No. Packs stay with their authors; MesenAI validates
-and [catalogs](docs/community-packs.md) them, and the emulator can consume any
-[MEI](docs/specs/MEI-v1.md) index.
+and [catalogs](docs/community-packs.md) them, and the emulator reads that one
+[MEI](docs/specs/MEI-v1.md) index — extra index URLs are a deferred non-goal.
 
 **Where's SNES?** Not here, deliberately. [bsnes](https://github.com/bsnes-emu/bsnes),
 [snes9x](https://github.com/snes9x/snes9x) and [ZSNES](https://www.zsnes.com/)

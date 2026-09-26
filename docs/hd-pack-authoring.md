@@ -14,7 +14,9 @@ just translates the sections relevant to someone preparing a submission.
 When the submission issue is opened, a workflow downloads the pack from the
 provided link, runs `scripts/mep_lint.py` on it, and classifies the declared
 content in `pack.json` (the `sections` field, see MEP-v1.md §3) or, for a
-plain HD Mesen pack, its `hires.txt`. The verdict is **binary** — `accepted`
+plain HD Mesen pack, its `hires.txt` — read from a bounded pack brief, not by
+opening the manifests themselves, so an oversized `hires.txt` cannot stall the
+step (ADR-0199). The verdict is **binary** — `accepted`
 or `invalid` (ADR-0138 Clarification §2) — and is reflected on the
 "MesenCE Community Packs" board through the Status field, whose option names
 are literals: "Novo envio" → "Em validação" → "Aceito parcial (HD Mesen)" /
@@ -24,9 +26,16 @@ not an automated target; there is no separate full-MEP verdict.)
 ### Accepted — Status "Aceito parcial (HD Mesen)"
 
 The pack lints clean and at least one declared section actually resolves
-inside the archive. Every `accepted` submission receives the `pack:valid`
-label; **what** the pack contains is conveyed by additive content-index
-labels, never by the verdict itself:
+inside the archive — that is the listability bar (ADR-0148 rule 1): a section
+that delivers nothing once installed (`<bgm>`/`<sfx>` targets the archive does
+not ship, and no wired ROM patch) is `invalid`, not merely de-listed. The one
+exception is the install-time audio flow: an `audio` section whose tracks are
+generated at install time counts when the pack bundles a ROM patch that is
+both present and **wired** (a `<patch>` line in `hires.txt`, or a `patches[]`
+entry in `pack.json`), because the extract-audio flow rebuilds those tracks
+from the patched ROM (ADR-0144, as amended by ADR-0148). Every `accepted`
+submission receives the `pack:valid` label; **what** the pack contains is
+conveyed by additive content-index labels, never by the verdict itself:
 
 - `assets:textures` — a **`textures`** section (MEP-v1.md §5.1): a directory
   pointing to an HD Pack in HDNes `hires.txt` format (or a plain HD Mesen
@@ -36,7 +45,11 @@ labels, never by the verdict itself:
   section (MEP-v1.md §5.3, an **ESP v1** file applied above the built-in
   defaults and below the user's local ESP) is validated by the lint but has
   no label of its own.
-- `patch:ips` / `patch:bps` — the pack ships a ROM patch (`patches[]`).
+- `patch:ips` / `patch:bps` — the archive bundles an `.ips` / `.bps` ROM
+  patch. The label is a content index: it does not mean the patch is applied.
+  Only a patch that a `<patch>` line or a `patches[]` entry *wires* is ever
+  applied, and that wiring is what redeems an `audio` section whose OGG files
+  are absent (ADR-0144/ADR-0148).
 - `console:nes` / `console:gb` / `console:gbc` / `console:sms` — the console
   declared in the form.
 - `assets:external` — a split-distribution pack assembled through an
@@ -45,16 +58,24 @@ labels, never by the verdict itself:
   multi-game archive (`scripts/validate_pack_local.sh`).
 - `pack:needs-review` — the identity check found the same `pack_id` claimed
   from a different origin (ADR-0140/0141); a human decides.
+- `pack:known-missing` — the artifact's SHA-256 matches a **reviewed errata**
+  under `docs/community-packs/errata/`: manifest targets the pack declares but
+  does not ship, verified by the project against the shipped assets
+  (ADR-0152). The pipeline applies it from the hash it computed itself —
+  never the classify step, whose input is submitter-controlled — and
+  republishing changes the hash, which drops the label.
 
 ### Invalid — Status "Inválido" (`pack:invalid`)
 
 The submission is rejected when:
 
 - the link is not on the allow-list of accepted hosts (GitHub
-  releases/archives, gist/raw, Google Drive, MediaFire `/file/` links), or
-  the download exceeds the size limit;
-- `scripts/mep_lint.py` fails (invalid `pack.json` structure, sections, or
-  paths);
+  releases/archives, gist/raw, Google Drive, MediaFire `/file/` links,
+  Dropbox share links, MEGA `/file/` links), or the download exceeds the
+  300 MB cap;
+- `scripts/mep_lint.py` fails (invalid `pack.json` structure, sections or
+  paths, or a `<background>` target the archive does not ship — an error
+  since ADR-0151, not a warning);
 - the pack violates the spec's security section (MEP-v1.md §6): zip entries
   that escape the pack directory (zip-slip), or any indication that the pack
   attempts to package executable bytes instead of declarative data;
@@ -83,9 +104,12 @@ asymmetry documented in MEP-v1.md §2.1:
   (`MepZipValidator.cs`)** instead use a **structural** (name-agnostic)
   criterion: they accept the subfolder whose contents match the fixed
   layout (`textures/hires.txt`, `audio/hires.txt`,
-  `audio/fingerprints.json` and/or `synth/preset.cfg`), without looking at
-  the name. A pack can pass structural triage and still fail to load in the
-  host if the subfolder is not named like the ROM.
+  `audio/fingerprints.json` and/or `synth/preset.cfg`, in the human layer or
+  under `auto/`), or hold a bare `hires.txt`, `preset.cfg` or
+  `fingerprints.json` at their own root — the pre-MEP HD Mesen layout
+  (ADR-0121) — without looking at the name. A pack can pass structural triage
+  and still fail to load in the host if the subfolder is not named like the
+  ROM.
 
 In both cases, the fallback only runs after the normal conventions fail,
 and if the zip has **more than one** candidate subfolder, the submission is
@@ -233,10 +257,10 @@ and prints the decoded frame size (`border frame PNG 1920x1080`); it also
 checks every `border.json` field.
 
 **Toggling it in the emulator.** The border is gated by its own switch,
-"Border" in the Player shell's Enhancements quick-toggle panel (next to
-Textures/Audio) and the "Enable pack border" checkbox in *Enhancement
-Packs* (Advanced mode). It defaults to on; turning it off costs nothing and
-restores the plain game frame.
+"Border", in the Player shell's Enhancements quick-toggle panel (next to
+Textures/Audio). It defaults to on; turning it off costs nothing and restores
+the plain game frame. The *Enhancement Packs* window carries no border
+checkbox — the quick-toggle panel is the only switch.
 
 ## Seeding audio for your pack (record → MIDI → OGG)
 
@@ -310,16 +334,29 @@ transcription required.
 - **Valid `pack.json`.** Check it against the example in MEP-v1.md §3: the
   `mep`, `name`, `version`, `targets` (with the ROM's No-Intro `sha1`), and
   `sections` fields are required.
+- **MesenAI-only tag lines do not sink a pack.** A recording carries
+  `<bgPreservesBehindBgSprites>` (ADR-0224 — written on every pack it makes)
+  and one `<bgCellRecord>` per captured screen (ADR-0236). The lint accepts
+  both and requires neither, and Mesen/MesenCE skip a tag they do not know, so
+  the pack still loads there — only without the effect.
 - **Run the lint locally before submitting**, if possible:
   `python3 scripts/mep_lint.py <pack-folder-or-zip>`.
 - **Direct download link**, hosted on one of the accepted hosts: a GitHub
-  release, `raw.githubusercontent.com`, or a gist. Links to HTML pages (not
-  to the file itself) are not accepted automatically.
+  release or archive, `raw.githubusercontent.com`, a gist, a Google Drive
+  file, a MediaFire `/file/` link, a Dropbox share link, or a MEGA `/file/`
+  link. Links to HTML pages (not to the file itself) are not accepted
+  automatically.
 
 ## After submitting
 
 An automatic comment on the issue records the verdict, the spec section it
 is based on, and moves the item on the board. If you update the pack at the
 same link after a verdict, comment `/revalidate` on the issue to trigger a
-new check — the content hash is always recomputed, so an actual change to
-the pack is detected even without this command (periodic drift check).
+new check — every run recomputes the content hash, so a changed pack is
+detected. The daily drift check that would do this unattended is currently
+disabled on the repository (the *Community pack catalog* still regenerates
+from the board), so a pack replaced in place is re-checked when
+`/revalidate` runs, or when a maintainer runs the check by hand — a
+disabled workflow refuses a dispatch, so re-enable it first:
+`gh workflow enable community-pack-drift-check.yml` then
+`gh workflow run community-pack-drift-check.yml`.

@@ -50,10 +50,20 @@ make core
 make capture-tool        # writes scripts/headless_record
 ```
 
-**Using a binary release?** The release already includes `headless_record` and
-`MesenCore.dylib`; do not run `make`. Run the prebuilt executable from the
-unpacked release directory, keeping the dylib beside it, and run the bundled
-Python tools from that same release.
+**Using a binary release?** The tagged release — macOS Apple Silicon only —
+carries `headless_record` inside `MesenAI-<version>-macos-arm64.zip` and the
+Python tools in `mesenai-tools-<version>.zip`; do not run `make`. Run the
+prebuilt executable from the unpacked release directory with `MesenCore.dylib`
+beside it, and run from the tools zip what it carries. **The tools zip is a
+snapshot of its tag, not of this guide**, and the only tag published so far —
+`mesence-v0.1.0` (2026-09-15) — predates three tools this guide names:
+`scripts/mep_figure.py` and `scripts/mep_add_cell.py` do not exist in that tag
+at all, and `scripts/record_library.sh` is in no published tools zip (#538 adds the
+missing two to the zip, so a tag cut after it carries all three). Its route sets are a snapshot too — six games then, the ten of `scripts/stages/` now. Take the
+missing tools and routes from a checkout of `main`. The CI channel covers Linux
+x64, Linux arm64, macOS Apple Silicon and Windows x64 (ADR-0203, ADR-0204), but
+its zips carry **the emulator alone** and no tools zip at all, so on those
+platforms build the tools from source as above.
 
 ### The three positional arguments
 
@@ -80,14 +90,17 @@ Buttons are `U D L R A B S T`, `-` means nothing held, and a second player is
 `<count>f <port1>|<port2>`. A bare count with no buttons is a parse error. The
 full contract, including the *probe* scripts that let the recorder read a
 sprite's animation cycle, is [`scripts/stages/README.md`](../scripts/stages/README.md),
-and `scripts/stages/` ships working sets for Contra, Zelda, Mega Man 3 and
-Excitebike.
+and `scripts/stages/` ships working sets for ten games: Castlevania, Contra,
+Excitebike, Metroid, Mega Man 3, Mike Tyson's Punch-Out!!, Ninja Gaiden, Super
+Mario Bros. 3, Zelda and Zelda II.
 
 ```sh
 # `scripts/stages/` ships the routes (`.txt`) and never the states (`.mss`):
 # a state carries the game's graphics, so it is not versioned. Mint one into
-# your own working directory first (Driver D below), then replay it.
-scripts/headless_record roms/Contra.nes 60 out/mint bootstrap hdpack-off \
+# your own working directory first (Driver D below), then replay it. Mint
+# WITHOUT `bootstrap`: that flag writes a pack beside the ROM, and the next run
+# over the same ROM would then decline to record over it.
+scripts/headless_record roms/Contra.nes 60 out/mint hdpack-off \
   input=scripts/stages/contra/mint-stage1.txt save-state=out/stages/stage1-run.mss
 scripts/headless_record roms/Contra.nes 60 out/rec bootstrap hdpack-off \
   input=scripts/stages/contra/stage1-run.txt state=out/stages/stage1-run.mss
@@ -103,7 +116,8 @@ cp -R scripts/stages/contra out/stages
 scripts/record_stages.sh roms/Contra.nes out/stages out/by-stage 60
 ```
 
-That writes one recorded pack per stage under `out/by-stage/<stage>/<rom name>/auto/`.
+That writes one recorded pack per stage under `out/by-stage/<stage>/<rom stem>/auto/`
+(the pack builder names the folder after the ROM file without its extension).
 Nothing is merged — you judge them as a union, and a stage that came out thin is
 the stage you record again. A `<stage>.txt` whose `<stage>.mss` is not there
 yet is **replayed from power-on instead**, which is not the same recording:
@@ -195,8 +209,12 @@ ROM with the driver, retained frames, `seen` %, surface counts and the kit's
 `--verify` result. It never waits for you, and a ROM it cannot record is a row
 saying why, not a stop.
 
-A ROM that matches nothing gets driver `static` and no kit — there is nothing to
-record. A route set is matched only through its `stage-set.json`
+A ROM that matches nothing gets driver `static`. There is nothing to record,
+but on a **CHR ROM** game the job still writes a kit: `artist_chr_kit.py
+--static` projects the pattern pages over the ROM alone, every cell `fill` and
+`seen: false`, with no emulator started (F12.9, ADR-0219). A CHR RAM game has
+nothing to fall back on — the generator refuses it, and the report says so in
+the ROM's row. A route set is matched only through its `stage-set.json`
 (`scripts/stages/README.md`), never by folder name.
 
 ### Check the route before you trust the recording
@@ -229,7 +247,7 @@ after is a flag, and the order of the flags does not matter.
 | `bootstrap` | Runs the pack builder as the game plays, so a pack is written beside the ROM. **This is what makes a recording**, and it costs about 3x the emulation time. Without it the run is only audio export or a screenshot. |
 | `hdpack-off` | Disables HD pack / MEP texture substitution for the run, so you record the game's own art. Omit it on a run whose purpose is to *look at* a pack you installed — that is the difference between recording and reviewing. |
 | `hdpack` | The opposite switch: record a pack skeleton to `<prefix>-hdpack/` from the first `<seconds>` with no input fed. Used by the tooling's own tests; you do not need it to remaster a game. |
-| `screenshot` | Saves the final frame to `<output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png`. The route check above and the pack review later both depend on it. |
+| `screenshot` | Saves the final frame to `<dir of output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png` — beside the prefix, not under it, because the harness builds its `mesen-home` from the prefix's parent directory. The route check above and the pack review later both depend on it. |
 | `input=<file>` | Plays an input script (`.txt`, `<frames>f <buttons>` per line) instead of idling. This is the route. |
 | `state=<file>` / `save-state=<file>` | `state=` starts the run from a saved state; `save-state=` writes one at the end. Minting a stage state and then recording from it is two runs, as above. |
 
@@ -292,8 +310,16 @@ folder leaves the pack you already had. It says so, on its own line, since
 issue #229 was fixed on 2026-09-14:
 
 ```
-[MEP] bootstrap: no tiles were recorded - '<rom>' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.
+[MEP] bootstrap: nothing was recorded - '<rom>' already dresses this ROM, so the bootstrap kept it as it was. The pack is unchanged and this run still exits 0.
 ```
+
+That is the usual line: the run that filled an empty folder writes every section
+the console has there (textures and audio, on NES), so the next one has nothing
+left to add. A pack that already has its textures but not its audio gets the
+narrower variant instead —
+`no tiles were recorded - '<rom>' already dresses this ROM. Only the audio
+section was written by this run; the textures are unchanged.` — which means the
+run added the audio half alone.
 
 Read that line as *the pack on disk is the old one*. Clear `auto/`, but **move
 a `mep/` layer aside rather than deleting the whole folder**, because since
@@ -337,10 +363,10 @@ community Metroid pack is the worked example: it declares the stock
 with **CHR RAM**, so a recording keys every tile by its 32-hex-character pattern
 (`<tile>0,3E7FFF7007FFFC1E00061F000007D01E,...`), while the patched ROM has CHR
 ROM and the artist keys by index (`<tile>0,00,...`). The two namespaces cannot
-intersect, and today the tool reports that as a flat `0/1465` with no warning —
-see issue #225. Check the reference for `<patch>` lines and compare a couple of
-`<tile>` rows from each file before you believe a coverage number, in either
-direction.
+intersect, so the tool refuses the comparison instead of printing a confident
+`0/1465` — see *When it refuses instead of measuring* below. A `<patch>` whose
+keys do share the recording's shape is a different case: it is not refused, and
+the tables carry a caveat naming it.
 
 Measured on Contra against the Contra80s reference: blind route recording
 reached **53.8%**, adding eleven per-stage and per-boss sessions took it to
@@ -374,13 +400,21 @@ PRG/CHR body rather than the board type keys its tiles by index on both sides,
 so every key is the right shape and the intersection is a real one, just between
 two different builds.
 
-Nothing in the output says so today. Measured on the Zelda II "Revamp" pack,
-whose `hires.txt` line 4 is a `<patch>`: the table looks plausible and is not —
-`Characters/hero_Normal.png` classified as *background*, `blank.png` with 30
-cells seen. **Open the reference's `hires.txt` and look for a `<patch>` line
-before steering by the percentages.** It is not automatically fatal (a patch
-that only touches audio leaves the tiles alone), but it is never visible, and it
-is tracked as issue #231.
+It cannot refuse this one — whether that patch invalidates the keys is not
+decidable from the pack alone, and refusing would delete the only measurement
+half the installed reference packs can give — so it says so instead. A
+`warning:` block goes above the tables, on **stderr**, naming each `<patch>`,
+its target SHA1 and the iNES header bytes the patch rewrites (byte 5, the one
+that decides the tile namespace, called out first). The summary line on stdout
+repeats it:
+`[caveat: … built for a patched ROM, so this compares two builds — not coverage]`.
+
+Measured on the Zelda II "Revamp" pack, whose `hires.txt` line 4 is a
+`<patch>`: the table looks plausible and is not —
+`Characters/hero_Normal.png` classified as *background*, `blank.png` with
+30 cells seen. **Read the caveat before steering by the percentages.** It is not
+automatically fatal (a patch that only touches audio leaves the tiles alone),
+but a figure under it is never a coverage number (#231).
 
 ---
 
@@ -413,11 +447,23 @@ The last line writes **`<kit>/ARTIST.md` — the page you open first** — plus
 | `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually travelled, so a short recording gives a short strip. **CHR RAM games only** — see below |
 | `artist_chr_kit.py` | `<kit>/chr/Chr_*.png` | complete pattern pages — every tile of a CHR bank, in ROM order |
 
-A measured 60-second stage-1 recording yields, for scale: 4 parts, 43 files,
-6922 cells; 18 CHR pages over 9 banks from a 2-bank ROM (`--fill-rules none`:
-246 recorded, 109 filled from ROM, 157 unrecoverable — 69% complete); and a
-592x240 panorama covering 5.6% of the pack's tile keys. Painting a *whole* stage
-means recording the whole stage.
+`artist_chr_kit.py` also runs with **no recording at all**: `--static` takes a
+missing or empty pack folder and derives every page from `--rom`, so a CHR ROM
+game you have not played yet still hands you completed pattern pages — one page
+per 4 KB CHR bank, every cell `fill` / `seen: false`, an `ARTIST.md` whose first
+line says nothing on them was seen in play, and no figure, scenery or map
+surface, because nothing was observed (F12.9, ADR-0219). A CHR RAM game is
+refused. You give it the `<scale>` with `--scale`, there being no recording to
+read one from.
+
+A 60-second stage-1 recording yields up to one part per generator —
+`kit-part-sprites.json`, `kit-part-background.json`, `kit-part-chr.json`,
+`kit-part-map.json` — a `chr/` page per 4 KB bank of the ROM, and a panorama
+whose length is exactly how far the camera travelled and nothing more. Painting
+a *whole* stage means recording the whole stage. The counts for a particular
+kit are in its own `kit.json` and the parts beside it, and they move whenever a
+kit feature changes what a cell is — the variant and fold cells of F14.9 are
+the latest — so read yours rather than a number from an older guide.
 
 Each writes a `.legend.png` / sidecar next to the PNG naming what it holds.
 `--verify` is the round trip: it rebuilds a throwaway pack with your kit dropped
@@ -474,7 +520,12 @@ the recording never reached. Precedence, per cell of a bank's rank-0 page:
 2. **borrowed** — this bank's tile from a lower-ranked page;
 3. **donated** — a tile **another recording of the same ROM** drew, via
    `--also <other pack>`, repeatable. A donor is refused unless its
-   `<supportedRom>` SHA1 matches yours;
+   `<supportedRom>` SHA1 matches yours **and** the two packs agree on which CHR
+   bank a cell belongs to: on a CHR RAM game a bank is named by a hash of the
+   CHR state it was drawn from (ADR-0232), so a pack recorded before 2026-09-25
+   — every drawn tile of which sits under the all-zero bank's id, leaving its
+   banks recovered from page layout alone and marked unknown — donates nothing.
+   Re-record it;
 4. **fill** — read statically from the ROM, marked `seen: false` in the legend;
 5. **empty**.
 
@@ -487,8 +538,13 @@ Two more things the CHR kit does that matter for how much work you have:
   this took 4712 cells to 3439. Folding is **colour-only**: a palette that
   changes the hue of anything you painted is never folded, and no pixel is ever
   altered by it.
-- `--fill-rules observed|all` controls whether the ROM fill is limited to tiles
-  the recording's rules actually reach, or every cell of the bank.
+- `--fill-rules none|observed|all` decides which **filled** cells also get a
+  `<tile>` row, in `chr/fill-rules.hires.txt` and never in the pack: `none` (the
+  default) emits none, so a filled cell is pixels with no rule behind it;
+  `observed` emits one only for a `(pattern, palette)` key the pack already
+  holds, re-binding that key to the filled image and adding no key; `all` emits
+  one for every cell of the bank, which is unsafe because it changes what a
+  rebuilt pack renders.
 
 ### A second recording is evidence
 
@@ -582,6 +638,12 @@ paint. A cell painted for the first time still re-points its tile from the
 recorded page to the sheet (ADR-0231, see above). The import prints a note
 when that happens: "N painted cell(s) will re-point a key in hires.txt at the
 next build — reopen the ROM to see them".
+The figure sidecar also records, per cell, the OAM flip the figure shows its
+crop in, so `import` un-mirrors the paint wherever the build has since
+un-baked that crop, and the art lands the way the game draws it — the import
+counts those cells as `unmirrored` (ADR-0209, amended 2026-09-25, #463). A
+figure exported before that amendment carries no such field and imports exactly
+as it always did — re-export it to gain the field.
 A later `export` shows paint that was placed this way. `import` refuses a pack
 that was never built with the sheets it holds (a kit just copied into a
 recording, or a fresh recording) and writes nothing: that first build
@@ -939,15 +1001,34 @@ including frames it was never frozen for, whose own art it then erases. Mike
 Tyson's Punch-Out!! is the measured case: the pre-fight card renders with the
 game's own `STARRING` / `LITTLE MAC` text missing, and no capture in the pack
 matches that frame exactly (the closest, `screen003.png`, is 16 047 pixels
-away). ADR-0050 and ADR-0156 make a *present* capture's precedence deliberate
-and that has not changed; what changed is that the build now says the gate is
-approximate, and that you have a way out.
+away; that pack carries none of the per-cell records below). ADR-0050 and
+ADR-0156 make a *present* capture's precedence deliberate and that has not
+changed; what changed is that the build now says the gate is approximate, and
+that you have a way out.
+
+**Since F14.11, the gate decides less.** Every capture the recorder writes now
+carries a `<bgCellRecord>` line too — on the very next line, with nothing
+between it and its `<background>` line: the key the run time read at the origin
+pixel of each of the 960 screen cells, on the frame the capture was taken from
+(ADR-0236, #499). A `<background>` that carries the record draws a cell only
+where the live key at that cell's origin equals the recorded one; a cell that
+does not match falls back to the pack's own `<tile>` rules and then to the ROM,
+exactly as if the capture covered only the matching cells. So the gate still
+decides *whether* the capture draws on a frame, and the record decides *which of
+its cells* land — on the 30-ROM library that cut frames a capture drew more than
+2 000 pixels off the live plane from 2 995 to 618, keeping all 219 captures. A
+pack with no record — every pack recorded before F14.11, and every hand-made
+one, the Contra80s pack's 3 007 `<background>` lines included — renders exactly
+as it always did, and `mep_build` carries the record along with the PNG, so a
+rebuild does not lose it.
 
 **Retiring a capture.** Delete `textures/backgrounds/screenNNN.png` (and the
 `auto/textures/` copy, if the pack still carries the recorder layer) and
-rebuild. `build` drops the `<background>` line with it and reports
-`info: retired N captured screen(s) ... (#344)`; those frames are drawn from
-the sheets again. Deleting the PNG used to fail the build with one
+rebuild. `build` drops the `<background>` line with it — and the
+`<bgCellRecord>` bound to it — and reports
+`warning: retired N captured screen(s) ...`; it is a warning and not an `info:`
+line on purpose, because it drops manifest lines (#344, #381). Those frames are
+drawn from the sheets again. Deleting the PNG used to fail the build with one
 `error: <background> ... does not exist` per file even though the engine
 itself drops a dangling entry harmlessly at load, which left keeping the
 capture — and living with a no-op repaint — as the only option.
@@ -1170,14 +1251,18 @@ available underneath it.
 Put the community pack back when you are done comparing — `mv
 "$MEP.community" "$MEP"` — or keep your own and leave it moved aside. The
 automatic install itself is the `Automatically install matching community
-packs` switch in Preferences, if you would rather it stopped happening while
-you work.
+packs` checkbox in the **Enhancement Packs** window — Tools → HD Packs (NES) →
+Enhancement Packs (MEP)… — if you would rather it stopped happening while you
+work.
 
 If `build` reports dropped duplicate keys, do this screenshot check before you
 call the edit done. A sheet may share `(tile, palette)` keys with other sheets;
-a lint-clean build can still leave part of a figure supplied by `auto/`. Track
-key ownership manually for now; issue #253 covers an artist-facing ownership
-report.
+a lint-clean build can still leave part of a figure supplied by `auto/`. The
+build reports ownership itself, so there is nothing to track by hand: it prints
+`info: <sheet> overrides tile <key> from <other sheet> (painted)` as it merges
+the sheets, and your own cell's `report:` row reads `no <tile> — this key
+produced no rule for this cell` when it lost (#343, #511) — both are in *The
+report* and *Which sheet a copied key goes on* above.
 
 `mep_build.py check-coverage` answers a different question — "did this repaint
 lose a tile the previous build carried?" — and its `--baseline` has to be a
@@ -1250,8 +1335,8 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A movie-driven run fails with a `sync-watch` finding | The movie desynced from your ROM revision. That is the gate working; get a movie for your revision. |
 | A recording has almost no sprites | Frames after the retained-stream cap are dropped. Use several shorter runs (`record_stages.sh`) instead of one long one. |
 | A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
-| `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
-| A second `bootstrap` run changes nothing in the pack | Something already dresses the ROM — `<rom stem>/auto/`, or a `mep/` layer beside it — so the bootstrap declines and keeps it — it logs `no tiles were recorded - '<rom>' already dresses this ROM`. Clear `auto/` and the sibling `.bootstrap` stamp, moving any `mep/` aside first (step 1), or record through `record_stages.sh`. |
+| `artist_cover.py` prints a `warning:` about a `<patch>` above the tables | The reference pack is built for a patched ROM, so every figure compares two builds. Not automatically fatal, but read the bytes the patch rewrites and the `<tile>` rows of both files before steering by the percentages — see step 2. |
+| A second `bootstrap` run changes nothing in the pack | Something already dresses the ROM — `<rom stem>/auto/`, or a `mep/` layer beside it — so the bootstrap declines and keeps it — it logs `nothing was recorded - '<rom>' already dresses this ROM, so the bootstrap kept it as it was`. Clear `auto/` and the sibling `.bootstrap` stamp, moving any `mep/` aside first (step 1), or record through `record_stages.sh`. |
 | `artist_map.py` refuses: "keys its tiles by CHR index" | A CHR ROM game; there is no panorama for it yet. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
 | `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
@@ -1269,3 +1354,4 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 - [`enhancement-ecosystem.md`](enhancement-ecosystem.md) — what MEP is, for newcomers.
 - [`../scripts/stages/README.md`](../scripts/stages/README.md) — route script format and how stages are reached headlessly.
 - `docs/adr/0182`–`0189` — the decisions behind per-stage coverage, the kit's four surfaces, the RAM-cheat rule, the TAS driver, the CDL map, the AI reviewer and the emitted conditions.
+- `docs/adr/0209`–`0236` — the decisions behind what this guide describes since then: naming a figure and returning its paint (0209), the static kit (0219), the layered `.ora` (0220), the behind-background flag (0224), the sheet reaching every palette a shape was drawn in (0230), the untouched cell keeping its recorded rule (0231), the CHR RAM bank's identity (0232) and the per-cell capture record (0236).
