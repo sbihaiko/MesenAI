@@ -85,7 +85,10 @@ the session's final state must read there - which is what tells a warp that
 worked from one that left the game where it was.
 
 `--dry-run` prints the plan, the generated input scripts' lengths and every
-command line, and runs nothing.
+command line, and runs nothing. On `--rescore` there is no plan and nothing to
+run - the packs are already on disk - so it prints that path's report and writes
+neither `--summary` nor `<out>/rescore.json`, which is what shows a rescore
+without overwriting the record a sweep left under either name (#548).
 """
 
 import argparse
@@ -673,6 +676,12 @@ def main() -> int:
     # is no wall clock to report) and printed no command at all - the one thing
     # it exists to show.
     jobs = 1 if (args.dry_run or args.rescore) else max(1, args.jobs)
+    # A rescore's sessions are the packs already on disk, so a dry run of it
+    # still has something to score: the report *is* what "show me the rescore
+    # without overwriting my summary" asks for, and suppressing it left the dry
+    # run printing its header and nothing else. The sweep's dry run has nothing
+    # to score - no session ran - and stays suppressed.
+    report = not args.dry_run or args.rescore
 
     if not args.dry_run and not args.rescore and not RECORDER.exists():
         print(f"missing {RECORDER} - run: make capture-tool", file=sys.stderr)
@@ -770,7 +779,7 @@ def main() -> int:
     scored = {"counted": [], "didNotWarp": [], "unionHires": []}
     totals = None
     after_hires = list(baseline_hires)
-    if not args.dry_run:
+    if report:
         scored = score_sessions(results, baseline_hires)
         after_hires = list(baseline_hires) + scored["unionHires"]
         # The ROM resolves an index to a pattern for §5.3's reference row as
@@ -847,7 +856,7 @@ def main() -> int:
 
     # --- coverage against a reference pack (ADR-0184's own metric) -----------
     coverage = None
-    if reference and not args.dry_run:
+    if reference and report:
         ref = reference
         # #545: the identity is the CHR pattern each rule names, never the
         # `<tile>` field as a string. A community pack is `<ver>100` and writes
@@ -924,16 +933,22 @@ def main() -> int:
     # kit generator: the packs it read are the sweep's, and their notes are in
     # that sweep's own sweep.json.
     if args.rescore:
-        doc = summary_document(profile.get("game", args.out.name),
-                               str(args.rom or ""), seconds, results, totals)
-        if args.summary:
-            args.summary.parent.mkdir(parents=True, exist_ok=True)
-            args.summary.write_text(json.dumps(doc, indent=2) + "\n")
-            print(f"wrote {args.summary}")
-        elif args.out.is_dir():
-            dest = args.out / "rescore.json"
-            dest.write_text(json.dumps(doc, indent=2) + "\n")
-            print(f"wrote {dest}")
+        # #548's promise, on this path: the writes are the whole of what a dry
+        # run must not do here, and both of them land on a record somebody
+        # already has - `--summary` (a rescore nulls its per-session `ramCheck`
+        # column, because it reads no state and cannot re-derive the check) and
+        # `<out>/rescore.json`. The report above is printed either way.
+        if not args.dry_run:
+            doc = summary_document(profile.get("game", args.out.name),
+                                   str(args.rom or ""), seconds, results, totals)
+            if args.summary:
+                args.summary.parent.mkdir(parents=True, exist_ok=True)
+                args.summary.write_text(json.dumps(doc, indent=2) + "\n")
+                print(f"wrote {args.summary}")
+            elif args.out.is_dir():
+                dest = args.out / "rescore.json"
+                dest.write_text(json.dumps(doc, indent=2) + "\n")
+                print(f"wrote {dest}")
         return 0
 
     # The two lists the note names, read off the plan this run just made: the

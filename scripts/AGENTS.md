@@ -207,7 +207,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   scripts, pins, the RAM check), the §4 verdict and its pinned-address caveat
   (#546), the §5 units, the §5.3 reference identity across `<ver>` bases
   (#545), the §5 placeholder note's dependence on the ROM in hand (#549),
-  `--rescore`, and `--dry-run`'s promise to write nothing (#548, 190 checks);
+  `--rescore`, and `--dry-run`'s promise to write nothing on **both** input
+  paths — the sweep's plan and the rescore's report are printed, neither
+  `--summary` nor `<out>/rescore.json` is written (#548, 199 checks);
   the host-free metric lives in `nav_sweep_metrics.py`.
 - **Per-stage recording (F9.22)** — `stages/<game>/` holds
   `mint-<stage>.txt` (power-on to a stage; run with `save-state=<f.mss>`)

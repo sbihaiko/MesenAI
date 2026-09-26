@@ -905,6 +905,80 @@ def _rescore_cli():
         check(rc == 2, "a --out holding no session pack is refused", str(rc))
 
 
+def _a_rescore_dry_run_writes_nothing():
+    """#548's gap: the promise held on the sweep path only.
+
+    The fix that made a dry run write nothing guards `sweep.json` and
+    `--summary` at the end of `main()`, and `--rescore` returns from its own
+    block *before* it - so `--dry-run` wrote anyway, in both shapes. Over a
+    `summary.json` a sweep had just written, a rescore nulls every per-session
+    `ramCheck` column (it reads no state, so it cannot re-derive the check), so
+    the sweep's record of what it recorded is gone; `--out` need not even be
+    named for the other shape, which is `<out>/rescore.json`. Measured
+    2026-09-26 by the F14.16/F14.17 wave: `--rescore --dry-run --summary
+    /tmp/x/sum.json` exits 0, prints `wrote /tmp/x/sum.json` and leaves a
+    305-byte file. "Show me the rescore without overwriting my summary" is what
+    a user means by `--dry-run` here, so the report is printed and nothing is
+    written.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        out = tmp / "sweep"
+        _hires(out / "s1" / "Fake" / "auto" / "textures" / "hires.txt",
+               109, ["0A"])
+        base = _hires(tmp / "base" / "hires.txt", 109, ["01"])
+        rom = _rom(tmp / "g.nes", {1: P1, 10: P2})
+        ref = _hires(tmp / "ref" / "hires.txt", 100, ["1", "10"])
+        head = ["--rescore", "--out", str(out), "--baseline", str(base)]
+
+        # 1. The --summary is left where it is, and the report the rescore
+        #    exists to show is still printed - all three of its sections.
+        summary = tmp / "sum.json"
+        rc, printed = _main_rc(*head, "--rom", str(rom), "--reference", str(ref),
+                               "--summary", str(summary), "--dry-run")
+        check(rc == 0, "a rescore dry run exits 0", str(rc))
+        check(not summary.exists(),
+              "and writes no --summary, the file a sweep's record is lost to",
+              f"exists={summary.exists()}")
+        lines = printed.splitlines()
+        check(any(ln.startswith("   s1 ") for ln in lines)
+              and any("== sessions (ADR-0239 s4" in ln for ln in lines)
+              and any("== coverage (ADR-0239 s5)" in ln for ln in lines),
+              "the section 4 table and the section 5 totals are still printed - "
+              "a dry run that shows nothing is not 'show me the rescore'",
+              lines[:4])
+        check(any("== coverage against" in ln for ln in lines),
+              "and so is the --reference section",
+              [ln for ln in lines if "coverage" in ln])
+
+        # 2. No --summary: the other shape's file is not created either, and
+        #    nothing else under --out moves.
+        before = _tree(out)
+        rc, _ = _main_rc(*head, "--dry-run")
+        check(rc == 0, "a rescore dry run with no --summary exits 0", str(rc))
+        check(not (out / "rescore.json").exists(),
+              "and creates no <out>/rescore.json")
+        after = _tree(out)
+        check(after == before,
+              "leaving every entry under --out byte-identical",
+              _tree_diff(before, after))
+
+        # 3. The non-regression: a plain rescore still writes both shapes. The
+        #    --summary shape is read back above; the `rescore.json` one had no
+        #    case of its own.
+        rc, _ = _main_rc(*head, "--summary", str(summary))
+        check(rc == 0 and summary.exists()
+              and json.loads(summary.read_text())["sessions"][0]["new"] == 1,
+              "a plain rescore still writes the --summary it is given",
+              f"rc={rc} exists={summary.exists()}")
+        rc, _ = _main_rc(*head)
+        wrote = out / "rescore.json"
+        doc = json.loads(wrote.read_text()) if wrote.exists() else {}
+        check(rc == 0 and [s["name"] for s in doc.get("sessions", [])] == ["s1"],
+              "and still writes <out>/rescore.json when no --summary names a path",
+              f"rc={rc} doc={doc}")
+
+
 def _the_union_row_is_the_rules_a_run_wrote():
     """ADR-0239 §5.1's row is what the run *drew*, not every rule the pack holds.
 
@@ -1372,6 +1446,7 @@ for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _the_unit_that_can_move_is_the_drawn_key,
             _union_units, _rom_chr, _pack_hires_resolution,
             _rescore_reads_the_packs_a_sweep_left, _rescore_cli,
+            _a_rescore_dry_run_writes_nothing,
             _the_union_row_is_the_rules_a_run_wrote,
             _the_placeholder_note_names_the_rom_in_hand,
             _the_two_dialects_meet_at_the_pattern_they_name,
