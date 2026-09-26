@@ -1,0 +1,224 @@
+{
+  "_comment": [
+    "Navigation sweep profile for Mike Tyson's Punch-Out!! (ADR-0239: coverage",
+    "past the first stage comes from a selector swept per game).",
+    "",
+    "kind is \"input\": the selector is the game's own PASS KEY screen, so no RAM",
+    "cheat is involved at all - ADR-0239 section 1's first rung, which is also",
+    "ADR-0184 section 3's rank 1 (\"game code the developers shipped\"): the game",
+    "writes its own fight variables through its own routine. Every pass key below",
+    "is a PUBLISHED value (the per-value _source lines); none is invented.",
+    "",
+    "Why not a RAM selector: the game's fight id $0001 and its two companions",
+    "$0002 (fight data bank) and $0003 (offset within the bank) are published",
+    "(DataCrystal, Punch-Out:RAM map) and a pinned triple does load the pinned",
+    "fight, but the pass keys reach every opponent the rest of this file names,",
+    "so the ladder stops at rung 1.",
+    "",
+    "Read by scripts/record_navigation_sweep.py.",
+    "",
+    "Every value carries a ramCheck, and ADR-0239 section 4 asks for one on a",
+    "byte the stage sets rather than on the selector's own address. The two",
+    "rungs need different bytes for that reason.",
+    "",
+    "Rung 1 checks $000B. $0001 (the fight id) looks like the obvious byte and is",
+    "a trap: it holds the LIVE fight, so it moves on once the fight ends. Measured",
+    "on the 120 s sessions of the first run of this sweep",
+    "(runs/f1416/punchout/sweep-first-run.log): 0C Super Macho Man read 0A (the",
+    "rank-down opponent the game loads after a loss, the World Circuit's Don",
+    "Flamenco), 0D Tyson read 0E and 14 King Hippo (Another World) read 1D, while",
+    "03 Don Flamenco and 07 Piston Honda happened to still be in their fight. It",
+    "read the pass key correctly in the 26-56 s states of runs/f1416/punchout/",
+    "verify/, so the byte is right and the instant was wrong. $000B is the byte",
+    "the pass-key routine sets from the key it accepted (DataCrystal lists it as",
+    "which password/circuit); it reads 01/02/03/04/05, one distinct stable value",
+    "per key, and 00 for all nine rung-2 sessions, which never enter the PASS KEY",
+    "screen. The expectations are measured, so the check reads \"this session took",
+    "its own path and stayed on it\" - the warp itself is what `new` counts and",
+    "what the screenshots in runs/f1416/punchout/probe/ show.",
+    "",
+    "Rung 2 pins $0001/$0002/$0003, and a pin substitutes on the CPU read path,",
+    "so the pinned $0001 reads the game's own 00 in the final state - measured,",
+    "not assumed (<name>/end.mss in runs/f1416/punchout/pair/, seven runs, the",
+    "pin 0001:0B of the Sandman run reading 00). $0002 and $0003 are different:",
+    "the game's fight loader stores back the bank and offset it read, so $0002",
+    "reads the pinned value (02/05/01/02/03/04/03/03) and $0003 reads 20 for",
+    "Don Flamenco (World). That read-back is the check: $0001 reading the game's",
+    "own 00 in the same state is what proves the harness did not write memory, so",
+    "$0002 = 03 was stored by the game. This check does NOT print the caveat",
+    "ADR-0239 section 4 describes, because that caveat fires only when the check",
+    "names navigation.address (record_navigation_sweep.py:486) and a \"input\"",
+    "profile has none - filed as issue #546 with this measurement. Read the two",
+    "rung-2 rows with that in mind: the check says the game consumed the pin, and",
+    "`new` is what says the fight on screen changed."
+  ],
+
+  "game": "Mike Tyson's Punch-Out!!",
+  "rom": "Mike Tyson's Punch-Out!! (1987) (Nintendo).nes",
+  "romSha1": "0F0C2C2E294FF8CE255A618964728C935FD8963B",
+
+  "navigation": {
+    "kind": "input",
+    "label": "pass key (the title screen's CONTINUE option)",
+    "source": "The game's own PASS KEY screen. Entered from the title menu: Down selects CONTINUE, then the ten digits. The official manual page 6: \"Use the top and bottom of the control pad to select either NEW or CONTINUE. If CONTINUE is selected, use the left and right sides of the control pad to select the pass key, then press the A or B button to input the pass key. If the pass key is correct, the game will begin from the boxing circuit corresponding to the pass key.\" The same routine is in nmikstas/mike-tysons-punch-out-disassembly (PRG_BankDEF.asm LA370-LA406: $D2 masked #$03 = Left/Right increment/decrement the digit at the cursor, A1History/B1History advance it and the tenth input validates), which is also where 135 792 4680 and 106 113 0120 are compared against the A+B+Select buffer. Typing is 47-65 keypresses per key and each script is generated: scripts/stages/punchout/pass-key.py.",
+    "values": [
+      {
+        "name": "donflamenco",
+        "title": "Major Circuit - Don Flamenco",
+        "entry": "mint-pass-donflamenco.txt",
+        "_passKey": "005 737 5423",
+        "_source": "The pass key the game itself shows after the Minor Circuit is won; published by StrategyWiki (Mike Tyson's Punch-Out!!/Miscellaneous and Cheats), GamingTarget and the babcockd password guide.",
+        "ramCheck": { "address": "000B", "expect": "01" }
+      },
+      {
+        "name": "pistonhonda2",
+        "title": "World Circuit - Piston Honda (rematch)",
+        "entry": "mint-pass-pistonhonda2.txt",
+        "_passKey": "777 807 3454",
+        "_source": "The pass key the game itself shows after the Major Circuit is won; published by StrategyWiki, GamingTarget and the babcockd password guide.",
+        "ramCheck": { "address": "000B", "expect": "02" }
+      },
+      {
+        "name": "machoman",
+        "title": "World Circuit - Super Macho Man",
+        "entry": "mint-pass-machoman.txt",
+        "_passKey": "267 853 7538",
+        "_source": "Published by the babcockd password guide, TheNesPage and GamingTarget as the World Circuit title bout.",
+        "ramCheck": { "address": "000B", "expect": "03" }
+      },
+      {
+        "name": "kinghippo-awc",
+        "title": "Another World Circuit - King Hippo",
+        "entry": "mint-pass-kinghippo-awc.txt",
+        "_passKey": "135 792 4680, with A+B+Select as the tenth input",
+        "_source": "Hard-coded in the ROM: the disassembly's PswrdDatTbl (PRG_Bank007.asm L8DC0) holds 01 03 05 07 09 02 04 06 08 00 = 135 792 4680 and the routine at L8DDE compares it against the A+B+Select buffer ($0110-$0119) instead of the normal one. Published by StrategyWiki, GamingTarget and the babcockd guide, which all describe the A+B+Select press.",
+        "ramCheck": { "address": "000B", "expect": "04" }
+      },
+      {
+        "name": "tyson",
+        "title": "The Dream Fight - Mike Tyson",
+        "entry": "mint-pass-tyson.txt",
+        "_passKey": "007 373 5963",
+        "_source": "Hard-coded in the ROM: the disassembly's PswrdDatTbl (PRG_Bank007.asm L8DD4) holds 00 00 07 03 07 03 05 09 06 03 = 007 373 5963. Published by StrategyWiki, GamingTarget and the babcockd guide.",
+        "ramCheck": { "address": "000B", "expect": "05" }
+      },
+
+      {
+        "name": "vonkaiser",
+        "title": "Minor Circuit - Von Kaiser",
+        "cheats": [
+          { "code": "0001:01", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map (values 00 Glass Joe .. 0D Tyson); 01 = Von Kaiser." },
+          { "code": "0002:02", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 02 = Von Kaiser/Great Tiger." },
+          { "code": "0003:00", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 00 = Glass Joe, Von Kaiser, King Hippo, Bald Bull (Demo)." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "02" }
+      },
+      {
+        "name": "pistonhonda1",
+        "title": "Minor Circuit - Piston Honda",
+        "cheats": [
+          { "code": "0001:02", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 02 = Piston Honda (Minor Circuit)." },
+          { "code": "0002:05", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 05 = Piston Honda/Mike Tyson." },
+          { "code": "0003:30", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 30 = Piston Honda (Minor), Bald Bull (Major), Super Macho Man." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "05" }
+      },
+      {
+        "name": "kinghippo",
+        "title": "Major Circuit - King Hippo",
+        "cheats": [
+          { "code": "0001:04", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 04 = King Hippo (Major Circuit)." },
+          { "code": "0002:01", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 01 = King Hippo." },
+          { "code": "0003:00", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 00 = Glass Joe, Von Kaiser, King Hippo, Bald Bull (Demo)." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "01" }
+      },
+      {
+        "name": "greattiger",
+        "title": "Major Circuit - Great Tiger",
+        "cheats": [
+          { "code": "0001:05", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 05 = Great Tiger." },
+          { "code": "0002:02", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 02 = Von Kaiser/Great Tiger." },
+          { "code": "0003:10", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 10 = Don Flamenco (Major), Great Tiger, Soda Popinski, Mr. Sandman." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "02" }
+      },
+      {
+        "name": "baldbull1",
+        "title": "Major Circuit - Bald Bull",
+        "cheats": [
+          { "code": "0001:06", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 06 = Bald Bull (Major Circuit)." },
+          { "code": "0002:03", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 03 = Bald Bull/Mr. Sandman." },
+          { "code": "0003:30", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 30 = Piston Honda (Minor), Bald Bull (Major), Super Macho Man." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "03" }
+      },
+      {
+        "name": "sodapopinski",
+        "title": "World Circuit - Soda Popinski",
+        "cheats": [
+          { "code": "0001:08", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 08 = Soda Popinski." },
+          { "code": "0002:04", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 04 = Soda Popinski/Super Macho Man." },
+          { "code": "0003:10", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 10 = Don Flamenco (Major), Great Tiger, Soda Popinski, Mr. Sandman." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "04" }
+      },
+      {
+        "name": "baldbull2",
+        "title": "World Circuit - Bald Bull",
+        "cheats": [
+          { "code": "0001:09", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 09 = Bald Bull (World Circuit)." },
+          { "code": "0002:03", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 03 = Bald Bull/Mr. Sandman." },
+          { "code": "0003:20", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 20 = Piston Honda (World), Bald Bull (World), Don Flamenco (World)." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "03" }
+      },
+      {
+        "name": "donflamenco2",
+        "title": "World Circuit - Don Flamenco",
+        "cheats": [
+          { "code": "0001:0A", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 0A = Don Flamenco (World Circuit)." },
+          { "code": "0002:00", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 00 = Glass Joe/Don Flamenco." },
+          { "code": "0003:20", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 20 = Piston Honda (World), Bald Bull (World), Don Flamenco (World)." }
+        ],
+        "ramCheck": { "address": "0003", "expect": "20" }
+      },
+      {
+        "name": "sandman",
+        "title": "World Circuit - Mr. Sandman",
+        "cheats": [
+          { "code": "0001:0B", "label": "current opponent", "source": "$0001 is DataCrystal's \"Current Match / Opponent ID\", Punch-Out:RAM map; 0B = Mr. Sandman." },
+          { "code": "0002:03", "label": "opponent body (fight data bank)", "source": "DataCrystal, $0002 \"Current Opponent Body\": 03 = Bald Bull/Mr. Sandman." },
+          { "code": "0003:10", "label": "opponent part 2 (offset in the bank)", "source": "DataCrystal, $0003 \"Current Opponent Part 2\": 10 = Don Flamenco (Major), Great Tiger, Soda Popinski, Mr. Sandman." }
+        ],
+        "ramCheck": { "address": "0002", "expect": "03" }
+      }
+    ]
+  },
+
+  "_defaultsComment": [
+    "entry is the route the non-pass-key sessions would take - the 2026-09-24",
+    "route, which presses Start through the title to the Minor Circuit and idles",
+    "to the bell (scripts/stages/README.md). No value here uses it: every value",
+    "above names its own entry script, because a pass key is what selects the",
+    "fight. It is kept so the file stays a valid profile for a value added",
+    "later, and because the game's first fight - Glass Joe, the Minor Circuit -",
+    "is reached by pressing Start at the title menu, which is the same script.",
+    "",
+    "seconds is ADR-0239 section 6's budget. The body is the game's only stage-1",
+    "route: a blind combination loop that never reads the opponent's tells, so",
+    "it loses. From the bell it lasts about 70 s (Little Mac is counted out),",
+    "and the recording after that holds the count-out, the GAME OVER screen and",
+    "the pass key the game shows - the same material for every opponent, which",
+    "the sweep's new-tile count does not credit twice.",
+    "",
+    "No lives pin rides with a pass key: the entry is input, not a cheat, so",
+    "ADR-0239 section 3 does not apply and the game's own GAME OVER stays on",
+    "the record (ADR-0184 section 4)."
+  ],
+  "defaults": {
+    "seconds": 120,
+    "entry": "mint-fight1.txt",
+    "body": "fight1.txt"
+  }
+}

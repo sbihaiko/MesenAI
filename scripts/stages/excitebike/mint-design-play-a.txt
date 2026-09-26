@@ -1,0 +1,15 @@
+# mint from power-on to the start of a race on the working design, PLAY MODE A.
+#
+# ADR-0239 s1 rung 1 (the game's own selector, by input). The design submenu's
+# cursor opens on PLAY MODE A, so one Start after the submenu is up begins it.
+# The working design is the one the game ships with: mint-design.txt is what
+# puts pieces on it, and a sweep session never shares its battery, so this
+# entry always races the same empty canvas.
+60f -
+20f D
+40f -
+20f D
+40f -
+20f T
+40f -
+20f T

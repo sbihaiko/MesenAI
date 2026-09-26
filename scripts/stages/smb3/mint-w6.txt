@@ -1,0 +1,42 @@
+# Super Mario Bros. 3 - power-on to the first level of World 6, with
+# $0727 pinned at 0x05 for the whole run (ADR-0239 s1 rung 2, a
+# published RAM selector). Pinning the world makes the game load THIS
+# world's map instead of World 1's, so the run reaches a place the
+# stage-1 route never reaches: it never leaves World 1-1.
+#
+# $0727 is DataCrystal's "World number - 1", 00-07 = Worlds 1-8
+# (datacrystal.tcrf.net/wiki/Super_Mario_Bros._3/RAM_map). The pin is a
+# read-substitution, so the byte in RAM still reads 00 afterwards: what
+# proves the warp is the game's own derived state, not the pinned byte.
+# $0348 (the HUD's world digit) reads F1-F8, and $070A (the object set)
+# is non-zero once the level loads.
+#
+# The walk is the game's own selector by input (ADR-0239 s1 rung 1):
+# Mario starts on the map's START panel and the panel marked with the
+# level number for World 6-1 sits up, then right of it. The direction holds
+# are the sampled ones (runs/f1416/smb3/probe/explore_map.py) and carry
+# no settle frames: a 40 f pause between two holds moves the panel the A
+# press lands on, measured on this dump (World 5 and World 6 miss the
+# level with the pause and enter it without).
+# Measured on this dump: the entry lands in World 6-1 ($070A =
+# $0C, timer 300 - the level's own object set), and the state a
+# 120 s session ends on still reads $0348 = F6.
+#
+# By hand: scripts/headless_record <rom> 15 <work>/mint \
+#   input=mint-w6.txt save-state=<work>/w6.mss cheat=0727:05
+# 15 s covers this 876-frame script; the save-state lands on its frame
+# target (901), the first frame of World 6-1.
+
+300f -
+10f T
+120f -
+10f T
+300f -
+
+# the map of World 6, where Mario stands on the START panel
+20f U
+36f R
+
+# enter World 6-1: the map fades out and the level fades in
+20f A
+60f -

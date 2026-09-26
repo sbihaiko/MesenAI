@@ -83,29 +83,97 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_headless_record_cwd.py` runs the built binary from a temp cwd and
   the repo root and asserts both load the same non-empty DB (it skips when
   the binary is not built).
-- **Navigation sweep (ADR-0184, amended 2026-09-14)** —
+- **Navigation sweep (ADR-0184, amended 2026-09-14; ADR-0239 §2/§4/§5)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
-  [--reference <ref hires.txt>] [--baseline <pack hires.txt>]...` turns the
-  amendment's eleven hand-typed sessions into one command. The profile is
-  **data**: a second game is a second `navigation.json`, never a code change.
-  It declares the navigation address, its admissible values with a citation
-  (`$0030` = Contra's current level, DataCrystal's published map — ADR-0184 §5
-  forbids inventing one), the entry + body input scripts, and the `rooms[]` a
-  selector cannot reach. A selector picks a *level*, not a room inside it, so
-  Contra's three boss rooms are separate no-cheat sessions entered from their
-  F9.22 `.mss` states. Cheats are validated against §1 at plan time, before any
-  process starts. Each session gets its own directory, ROM hard link,
-  `mesen-home` and pack, which is what makes `--jobs` safe; the body script is
-  repeated to cover the whole run, because ADR-0184 measured effective input
-  time, not the cheat, as the lever. Every session emits a `notes[]` line
-  quoting its cheat verbatim with its address and source (ADR-0183 §3), and
-  `--reference` prints `artist_cover.py`'s own metric — distinct `tileData`
-  against the reference pack — per session and for the union.
+  [--reference <ref hires.txt>] [--baseline <pack dir>]... [--rom-chr]
+  [--summary <path>] [--rescore]` turns the amendment's eleven hand-typed
+  sessions into one command. `--rescore` is the other input path: it scores the
+  packs a previous sweep left under `--out` (`--profile` and `--rom` then
+  optional; `--rom` is still needed for `--rom-chr`), which is how a metric
+  change is re-read without spending the capture budget again.
+  The profile is **data**: a second game is a second
+  `navigation.json`, never a code change. It declares the navigation address
+  (`kind: "ram"`, the default) or `kind: "input"`, where the game's own menu,
+  password or track choice selects and the value's own `entry` script types it
+  (ADR-0239 §1 rung 1) — either with a citation (`$0030` = Contra's current
+  level, DataCrystal's published map — ADR-0184 §5 forbids inventing one),
+  `values[].entry`/`body` overriding the defaults, `defaults.cheats`/
+  `values[].cheats` as extra RAM-only pins (a lives pin, ADR-0239 §3) each with
+  its `source`, a `values[].ramCheck` ({`address`, `expect`}) read off the
+  session's final state, and the `rooms[]` a selector cannot reach. A selector
+  picks a *level*, not a room inside it, so Contra's three boss rooms are
+  separate no-cheat sessions entered from their F9.22 `.mss` states. Cheats are
+  validated against §1, and the scripts the plan needs are checked, at plan
+  time — before any process starts. Each session gets its own directory, ROM
+  hard link, `mesen-home` and pack, which is what makes `--jobs` safe; the body
+  script is repeated to cover the whole run, because ADR-0184 measured
+  effective input time, not the cheat, as the lever. Every session emits a
+  `notes[]` line quoting its cheat verbatim with its address and source
+  (ADR-0183 §3).
+  **A session must prove it went somewhere (§4, amended 2026-09-26):** two counts
+  per session, both in **drawn keys** — `(tileData, palette)`, the identity
+  ADR-0194 §2 gives a pattern page — and both excluding the builder's
+  `defaultTile` placeholders, which every pack of one ROM shares.
+  `new` is the keys the **baseline** packs do not hold and it is the gate:
+  `new == 0` means the run recorded what the game's current route already has,
+  so the session is `did-not-warp` and counts in no total. `unique` is the keys
+  no *other session* and no baseline holds; it is **reported, never a gate**,
+  because two tracks that share a tileset are both legitimate warps with
+  `unique == 0`. *Not* the tile-data string §4's wording names: measured
+  2026-09-26, over every `<tile>` rule it is frozen per ROM (the builder writes
+  a `defaultTile` placeholder per CHR index — a Punch-Out baseline and a fresh
+  session hold the same 8192 strings), so `newTiles` is 0 for **all 13** of
+  Excitebike's rehearsal sessions while their union gains 1422 keys; the tile
+  data a run *wrote* is finer but still one cell coarser — it cannot see the
+  same art repainted under another palette (1/13 `unique` against 3/13 over
+  drawn keys: `track-a2` 114, `design` 23, `track-a1` 1). The tile-data counts
+  ride along in `--summary` — `tiles` (every rule), `seen` (written rules) and
+  `newTiles` (every rule, against the baseline) — so nothing is hidden. The
+  union is §5's "every sweep session", `did-not-warp` ones included: on this
+  rule their keys are already in the baseline, so they cannot inflate it, and
+  filtering them out is not something the ADR asks for. **The metric is a union against two denominators (§5):**
+  `--baseline <pack dir>` folds the game's existing pack in as *before* (the
+  `auto/` folder, a folder holding `textures/hires.txt`, a whole recording dir
+  or the file — a `--baseline` that resolves to nothing is refused), and each
+  side reports drawn keys (`tileData`+palette) and distinct tile data, **over the
+  rules a run wrote** — the `defaultTile` placeholders are the builder's CHR or
+  PRG-scan enumeration, identical in every pack of a ROM (measured on
+  Castlevania: 2581 distinct PRG-scan placeholders, so an every-rule column hid
+  the warps and its 1752 → 1761 reference hit was mostly the scan). The
+  every-rule counts ride beside them as `keysAll`/`tileDataAll`, and
+  `reference` carries the same `before`/`after` plus `beforeAll`/`afterAll`.
+  `--rom-chr` adds the ROM's own non-blank CHR patterns as the denominator that
+  needs no third-party pack, printed over the rules a run wrote, with `[every
+  rule: N%]` beside it — that second figure is 100% for any bootstrapped pack,
+  because the CHR enumeration names every index, so never quote it as coverage;
+  a CHR RAM game prints `n/a (CHR RAM)`. `--summary <path>` writes
+  `{game, rom, seconds,
+  sessions:[{name,status,tiles,new,unique,ramCheck,keys,seen,newTiles}],
+  totals:{before,after,[reference]}}`.
+  `--reference` is unchanged: `artist_cover.py`'s own metric — distinct
+  `tileData` against the reference pack — per session and for the union.
   Measured 2026-09-14 on Contra, 11 sessions × 300 s, `--jobs 4`, ~7 min of
   wall clock: sweep union **56.6%** (1928/3404) against the amendment's 58.9%,
   the 72 archived recordings **53.8%** (1831 — the amendment's number exactly),
   union **63.7%** against its 64.6%, +339 tiles the archive never held.
+  Measured 2026-09-26 (`runs/f1416/code/`), 30-40 s sessions: Contra
+  `0030:01` ends with `$0086=01` (wall cores, stage 2) against `00` on stage 1;
+  a pinned address read off the final state is the *game's* value, never the
+  pinned one, because the cheat substitutes the byte on the CPU read bus (with
+  `cheat=0030:05` the run plays stage 6 and `$0030` still reads 00) — such a
+  check is reported with a caveat, not refused. Punch-Out (CHR ROM, `kind:
+  "input"`) 9815 → 11733 keys and 976 → 1356 CHR patterns with the tile-data
+  column flat at 8192. Excitebike, the 13-session rehearsal the rehearsal
+  worker ran (`runs/f1416/excitebike/rehearsal`, re-scored by
+  `runs/f1416/code/rescore_excitebike.py`): 353 → **1775 keys** (865 → 2287 over
+  every rule), 335 → **481 tile data**, 309/456
+  (67.8 %) → **437/456 (95.8 %)** of the ROM's written CHR patterns, and
+  `newTiles` 0 for all 13 sessions (the tile-data reading cannot move on a CHR
+  ROM game). Under §4 as amended every one of the 13 holds keys the baseline
+  does not (`new` 68–628) while only 3 are `unique` — which is the distinction
+  the amendment draws: `new` asks whether the run left the baseline, `unique`
+  only says nobody else got there.
   No shared-folder union is offered: `HdPackBuilder` does accumulate from its
   save folder (`HdPackBuilder.cpp:46-49`), but
   `MepPackManager::StartBootstrapIfNeeded` (`MepPackManager.cpp:200-210`)
@@ -114,7 +182,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   16.7 s, tile count unmoved). Union across sessions is
   `artist_chr_kit.py --also` and the coverage set union.
   `test_record_navigation_sweep.py` pins the §1 refusals, the script
-  arithmetic, the plan and the `notes[]` obligation (28 checks).
+  arithmetic, the Contra plan field for field, the §2 schema (kind, per-value
+  scripts, pins, the RAM check), the §4 verdict, the §5 units and `--rescore`
+  (135 checks);
+  the host-free metric lives in `nav_sweep_metrics.py`.
 - **Per-stage recording (F9.22)** — `stages/<game>/` holds
   `mint-<stage>.txt` (power-on to a stage; run with `save-state=<f.mss>`)
   and `<stage>.txt` (a run *from* that state, <= 3600 frames so it fits the
