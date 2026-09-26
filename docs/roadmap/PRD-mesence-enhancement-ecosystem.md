@@ -752,6 +752,39 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   closed the review's open problem 6.
   [Log](../validation/f1414-jev-stall-helper-2026-09-26.md).
 
+- **F14.15** (2026-09-26) — measured twice, and the verdict is **do not adopt
+  Jev beyond the spike** (ADR-0238 §5; same go-ahead) — but now one clause
+  short, not two. Two live stalls: Ninja Gaiden's section 1-2 death window (the
+  committed route's own end) and Mega Man 3's Snake Man stall, which
+  measurement moved — the briefed camera-187 point is passed by the search
+  alone, and the real wall is on page 3 at camera 184 once the level's wrapping
+  scroll byte is chained page by page. `--no-jev` is new (the search-alone arm,
+  key-free, unit-tested): the search fails both stalls deterministically,
+  4.09–4.26× real time. **The first pass is void**: its 0-of-8 result, every run
+  ending on the loop guard at one repeated fingerprint, came from four harness
+  defects, each fixed with a test that failed first (the rewind ladder's floor
+  collapsed every rung onto one checkpoint; the loop guard fingerprinted
+  rejected attempts; Mega Man 3's `abs_x` was a one-byte field that wrapped, so
+  no tip's band reached the stall; the research worker pinned an unrecognized
+  model id and parsed the wrong JSON envelope, so it never answered). **Second
+  pass: Jev passed the Mega Man 3 stall in 5 of 5 arms, tips on and off, at
+  3.57–3.62× real time** with bit-identical repeats, while the search alone
+  stops there; the page counter is `$002D` (`camera_x = page·256 + scroll`,
+  `abs_x = camera_x + (player − scroll) mod 256`, stall at 824) and every
+  Mega Man 3 tip now fires in a band of its own. The Ninja Gaiden half is still
+  0 of 4 — that stall has no legal candidate for the base search, so its rewind
+  ring holds one checkpoint and eight questions come from one state — and the
+  §5 control holds (search `no-jev`, Jev `goal` in 2 decisions at 4.03×). The
+  gate's second clause still fails: the passing route bought the recorded kit
+  **0 keys** the committed routes do not already record (9 MM3 packs + the
+  Ninja Gaiden baseline, `runs/f1415/cells.py` and `scripts/artist_cover.py`;
+  union 8 777 keys, all 394 unique ones in the two committed packs), because
+  the game is CHR ROM and its bootstrap exports every bank index. The research
+  path is live for the first time (one pass US$ 0.27, 58.7 s smoke test); the
+  coverage pass with `00A2:9C` held its cheat and reached the same abs_x 906 in
+  the same 208 frames.
+  [Log](../validation/f1415-jev-adoption-2026-09-26.md).
+
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
   paralelo"*, PR #395). The recorder writes per-tile `px`/`py` (and `z` on
@@ -1464,7 +1497,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | F14.12 | **Persistent step-mode emulator (ADR-0238 §1).** A long-lived headless session that loads a ROM and state once and serves run-N-frames-with-input, read-RAM and in-memory save/restore without a relaunch; transport (InteropDLL via ctypes, or a `headless_record` stdin/stdout mode) picked by measurement. Stop conditions: (1) the Ninja Gaiden search is ported to it; (2) its per-candidate cost is measured before and after, and the log is versioned. | ADR-0238; **delivered 2026-09-26** (`docs/validation/f1412-step-mode-emulator-2026-09-26.md`: transport is a `session` mode of `headless_record`, per candidate 0.232 s -> 0.091 s, the ported search matches the scratch search's own log 15/15 hops, and its RAM at frames 688/1800/3600 is byte-identical to a one-shot run's) |
 | F14.13 | **Fix the Ninja Gaiden search before Jev (ADR-0238 §2).** Add the Left+A jump macro Ryu's x 987 pin needs and re-run the search on F14.12. Stop condition: the search passes x 987, or the log shows it cannot with the macro available. | ADR-0238 |
 | F14.14 | **Jev as the stall helper (ADR-0238 §3–§4).** On no progress for a set number of emulated seconds, one Jev Choice (`typesafe/jev-1.13` via OpenRouter) over about seven fixed-duration macros, with RAM-derived JSON state; the output is a plain `scripts/stages/<game>/*.txt` script and replay never calls Jev. Key from `OPENROUTER_API_KEY` or the gitignored `.env`, never printed or logged; per-decision log of snapshot id, request id, choice and probabilities in `runs/`; US$ 1 hard cap. Stop condition: the harness refuses to run without the key and stops at the cap (both tested). ADR-0238; **delivered 2026-09-26** (`docs/validation/f1414-jev-stall-helper-2026-09-26.md`: from the minted Act 1-1 state the harness passed the x 987 pin to abs x 991 in 2 Jev decisions for US$ 0.000094 — wall 45.75 s for 159.49 emulated s, 3.49× real time — and the 1 232-frame script it wrote replayed with no AI matched abs x 545/987/991 and `lives`/`hp` at three frames. The search plays a chain of `play` calls and the artifact is one flat script: without `route_search`'s `1f -` boundary frame the flat replay reads 978, so the boundary is written, the completed script is replayed flat, and *that* replay decides the goal. 123 unit checks, 12/12 mutations caught. Open: the session transport drops `cheat=` (it returns before `SetCheats`), so a cheated run is refused — ADR-0184 §1 — and `test_step_emu_rom.py` still pins the pre-F14.13 route) |
-| F14.15 | **Measure and decide (ADR-0238 §5).** Ninja Gaiden x 987 (if F14.13 left it standing) and one Mega Man 3 boss. Adopt beyond the spike only if Jev passes at least one stall the search could not **and** the kit gains cells the current route does not record; the hybrid run reaches ≥ 3× real time; Grok 4.6 replays the committed script with no AI and matches RAM checkpoints. | ADR-0238 |
+| F14.15 | **Measure and decide (ADR-0238 §5).** Ninja Gaiden x 987 (if F14.13 left it standing) and one Mega Man 3 boss. Adopt beyond the spike only if Jev passes at least one stall the search could not **and** the kit gains cells the current route does not record; the hybrid run reaches ≥ 3× real time; Grok 4.6 replays the committed script with no AI and matches RAM checkpoints. | ADR-0238; **delivered 2026-09-26** (`docs/validation/f1415-jev-adoption-2026-09-26.md`): Ninja Gaiden's x 987 is passed by F14.13's fix and is not a Jev case, and the Mega Man 3 stall was moved by measurement to page 3 / camera 184 (the briefed camera-187 point is not a stall). The search alone fails both (4.09–4.26× real time, new `--no-jev` arm). **First pass void** — its 0-of-8 came from four harness defects (rewind-ladder floor, loop-guard fingerprint, a one-byte wrapping `abs_x`, a research worker that could never answer), each fixed with a test that failed first. **Second pass: Jev passed the Mega Man 3 stall in 5 of 5 arms, tips on and off, 3.57–3.62× real time**, and 0 of 4 on Ninja Gaiden's; the control still holds (`goal`, 2 decisions, 4.03×). The gate's second clause still fails: that route bought the kit **0 keys** the committed routes do not already record. Verdict: **do not adopt beyond the spike** — one clause short |
 
 ### 5. Order of execution
 
@@ -1502,9 +1535,11 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    measured 2026-09-23 and it closed as (iii) on 2026-09-24, so F14.4
    measured for ADR-0230; both delivered 2026-09-24, §3; ADR-0230 accepted
    2026-09-24) → F14.9 (delivered 2026-09-24, §3) →
-   Phase 13 R.1/R.2, and F14.12–F14.14 (delivered 2026-09-26, §3)
-   precede F14.15, which is the measurement the ADR's adoption gate is read
-   from. F14.8 runs whenever a person is available.
+   Phase 13 R.1/R.2, and F14.12–F14.15 (delivered 2026-09-26, §3) close
+   ADR-0238: F14.15 is the measurement its adoption gate is read from, and it
+   returned **do not adopt Jev beyond the spike** — one clause short, since the
+   second pass passed the stall the search could not and the kit still gained
+   nothing. F14.8 runs whenever a person is available.
 
 One implementation slice per task; architecture changes still require their
 ADR. This documentation update records work and acceptance, not completed runs.
@@ -1569,7 +1604,7 @@ files and in §3.
 | 0230 | **accepted 2026-09-24** (hybrid: colourway cells, folds with Brightness on the cell, fold test against the cell; user's pick verbatim *"aceito sua sugestão. pode aplicar e rodar em paralelo"*); **implemented by F14.9** 2026-09-24 ([log](../validation/f14.9-adr0230-implementation-2026-09-24.md): 100 % of drawn keys, +67 / +127 variant cells incl. 6 / 82 residual folds); measured by F14.4 2026-09-24 ([log](../validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md)): colourways 61/96 (Castlevania) and 45–128/312 (Zelda); (b) serves 0 missing keys under `auto/`; (c) (simulated) and (d) reach 100 % of drawn keys | a sheet cell reaches every palette its shape was drawn in: (a) leave it, the other palettes stay on the pattern pages; (b) emit the painted cell as `defaultTile=Y`; (c) one cell per drawn palette; (d) a palette list on the cell's sidecar entry. Decided by the fold/colourway split of the missing drawn keys (84.7 % / 45.6 % reached today), sheet size and the round trip. Placed beside 0229, which it supersedes
 | 0233/0235/0236 | **0236 accepted and implemented 2026-09-25 (slice F14.11)**; it supersedes 0235 (option 2, implemented as F14.10, measured and not merged), which superseded 0233 (option A measured, not shipped; its premise that the wrongly-gated frames were never retained was falsified). Option 2 cost 219 → 87 library captures. Picks verbatim *"Não mergear A; medir retenção (Recommended)"*, *"Opção 2: corrigir o gravador (Recommended)"*, then *"Opção 3: guarda no render (Recommended)"* and *"Manter opção 3 (Recommended)"* | a recorded capture carries a positional per-cell key record; at run time it draws a cell only where the live key matches the record; a `<background>` without the record draws as before |
 | 0237 | **accepted 2026-09-26, pending slice P.8**; user's pick verbatim *"escreva o ADR utilizando o natinvo no Metal"*, no go-ahead to implement yet | macOS gets shader support through a native Metal renderer running the librashader Metal filter chain; the software-path readback and waiting for upstream were rejected; shaders never touch recording or measurement |
-| 0238 | **accepted 2026-09-26, implemented — F14.12–F14.14 delivered (§3), F14.15 pending**; user's picks verbatim *"vamos usar o jev pelo ope router"* and *"pode escrever"*, go-ahead to implement verbatim *"implemente usando o deepseek"* | Jev via OpenRouter is a stall-point input generator behind a persistent step-mode emulator, never the default player (measured: Jev every 15 frames is 0.6× real time, ≈ 0.38 s per warm call); the search is fixed first; a route stays a plain input script replayed without AI |
+| 0238 | **accepted 2026-09-26, implemented — F14.12–F14.15 delivered (§3)**; F14.15's first pass is void (four harness defects, fixed with tests that failed first) and its second pass measured two live stalls: **Jev passed the Mega Man 3 stall in 5 of 5 arms at 3.57–3.62×** and the Ninja Gaiden stall in 0 of 4, while the kit gained 0 keys — §5's first clause met for the first time, the second not, so the verdict is *do not adopt beyond the spike*; §1–§4 stand ([log](../validation/f1415-jev-adoption-2026-09-26.md)). User's picks verbatim *"vamos usar o jev pelo ope router"* and *"pode escrever"*, go-ahead to implement verbatim *"implemente usando o deepseek"* | Jev via OpenRouter is a stall-point input generator behind a persistent step-mode emulator, never the default player (measured: Jev every 15 frames is 0.6× real time, ≈ 0.38 s per warm call); the search is fixed first; a route stays a plain input script replayed without AI |
 | 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged. **Amended 2026-09-24** and implemented the same turn, go-ahead verbatim *"em paralelo, rode a emenda da ADR-0210"*: filter 2 is per key — a 32-hex key of a `<patch>` pack is admitted only when its 16 bytes are verbatim in the stock dump, index-keyed `<patch>` packs stay refused; measured +550 shapes (Castlevania 249, Mega Man 257, Zelda 44), 0 admitted absent from stock ([log](../validation/adr0210-patch-verbatim-guard-2026-09-24.md)) | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
 | 0214 | accepted (2026-09-19), amended the same day (Opus replaces Fable); protocol in use — the two-game Fable panel and the 28-ROM Opus sweep both ran 2026-09-19 | a fresh Opus session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
 | 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, and the sweep extended the same day to the whole bounded library — **30 packs, 193 captures, 0 co-gated**, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Punch-Out!! (issue #339's game) keeps all ten captures and skips none — Option C separates rather than discards ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344

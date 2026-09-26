@@ -8,6 +8,15 @@ found a move, the harness writes a stall report and calls this: a single
 situation tips and, if the fixed macro table truly has no move for the spot, one
 more named macro.
 
+What F14.15's first pass cost, and why the two lines above changed: nine live
+workers were spawned and not one came back usable, and neither cause was the
+network. `--output-format json` on this CLI writes a JSON **array of stream
+events**, not the `{"result": ...}` envelope this module parsed, so a worker that
+answered perfectly read as "no JSON object"; and the pinned DeepSeek id is not a
+model this CLI knows, so on this module's real prompt it returned nothing at all.
+`answer_text` reads every shape the CLI produces, and the default is `sonnet`.
+Measured 2026-09-26, `runs/diag/`.
+
 Three things this module is careful about:
 
 * **The query carries the game and a description of the spot, nothing else.**
@@ -39,7 +48,14 @@ import sys
 from pathlib import Path
 
 CLAUDE = "claude"
-MODEL = "claude-deepseek-v4-flash[1m]"
+#Sonnet, and not the id this module pinned first, because that id is not a model
+#this CLI knows: `claude -p --model 'claude-deepseek-v4-flash[1m]'` answers with
+#`[claude-code:unrecognized_model]` on stderr, and on this module's own prompt it
+#returned *nothing at all* - empty stdout, no error - while `sonnet` returned a
+#usable proposal object. Measured 2026-09-26 in `runs/diag/` (H/H2 against I);
+#the trivial-question probes answer on either model, which is how the id looked
+#fine for two slices.
+MODEL = "sonnet"
 ALLOWED_TOOLS = "WebSearch,WebFetch"
 DEFAULT_TIMEOUT = 900.0
 PROPOSAL_KEYS = ("tips", "macros")
@@ -140,33 +156,97 @@ def claude_argv(model=MODEL) -> list:
             "--output-format", "json"]
 
 
+def answer_text(stdout: str) -> tuple:
+    """`(the worker's answer text, the error it reported)` - one of them empty.
+
+    `--output-format json` on this CLI does **not** write the single
+    `{"result": ...}` envelope this module used to parse. It writes a JSON
+    *array of stream events*, and the answer is the `result` string of the last
+    event whose `type` is `result`; an `is_error` event is the worker saying it
+    failed. Both shapes are read, and so is a bare answer with no envelope at
+    all, because they are one `json.loads` apart and reading the wrong one made
+    a worker that answered perfectly look empty - which is what every live pass
+    in F14.15's first pass looked like.
+    """
+    text = stdout or ""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict) and isinstance(parsed.get("result"), str):
+        if parsed.get("is_error"):
+            return "", parsed["result"][:400] or "the worker reported an error"
+        return parsed["result"], ""
+    if isinstance(parsed, list):
+        for event in reversed(parsed):
+            if (isinstance(event, dict) and event.get("type") == "result"
+                    and isinstance(event.get("result"), str)):
+                if event.get("is_error"):
+                    return "", event["result"][:400] or "the worker reported an error"
+                return event["result"], ""
+    return text, ""
+
+
+def worker_cost(stdout: str) -> float:
+    """What the CLI's own `result` event says the pass cost, or 0.0.
+
+    A research pass is not free - the smoke's own pass was US$ 0.02 - and the
+    harness's budget counts the Jev client, not this worker, so the number has
+    to come back with the proposals or a run's total spend is unknowable.
+    """
+    try:
+        parsed = json.loads(stdout or "")
+    except json.JSONDecodeError:
+        return 0.0
+    events = parsed if isinstance(parsed, list) else [parsed]
+    for event in reversed(events):
+        if (isinstance(event, dict) and event.get("type") == "result"
+                and isinstance(event.get("total_cost_usd"), int | float)):
+            return float(event["total_cost_usd"])
+        if (isinstance(event, dict) and isinstance(event.get("total_cost_usd"), int | float)
+                and "result" in event):
+            return float(event["total_cost_usd"])
+    return 0.0
+
+
 def research(report, *, out_dir=None, runner=subprocess.run, model=MODEL,
              timeout=DEFAULT_TIMEOUT, dry_run=False) -> dict:
     """One research pass. Returns `{"tips": [...], "macros": [...], "query": ...}`.
 
     The worker sees the report as data on stdin and the query inside the prompt;
-    its stdout is a JSON envelope whose `result` holds the answer text.
+    its stdout is the CLI's event stream, whose `result` event holds the answer
+    text (`answer_text`). Every failure - the cap, a missing CLI, a non-zero exit,
+    an error event, an answer with no JSON object in it - comes back as an error
+    dict and never as an exception: the harness calls this from inside a run, so
+    a raise here does not lose a research pass, it loses the run.
     """
     query = build_query(report)
     prompt = f"{query}\n\n{build_prompt(report)}"
     argv = claude_argv(model)
     if dry_run:
         return {"dry_run": True, "argv": argv, "query": query, "prompt": prompt}
-    done = runner(argv, input=prompt, capture_output=True, text=True, timeout=timeout)
+    try:
+        done = runner(argv, input=prompt, capture_output=True, text=True,
+                      timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"error": f"the worker did not answer within {timeout:.0f}s",
+                "query": query}
+    except OSError as error:
+        return {"error": f"could not run {CLAUDE}: {error}", "query": query}
     if done.returncode != 0:
         return {"error": f"the worker exited {done.returncode}",
                 "stderr": (done.stderr or "")[-400:], "query": query}
-    text = done.stdout or ""
-    try:
-        envelope = json.loads(text)
-    except json.JSONDecodeError:
-        envelope = {"result": text}
-    result = envelope.get("result") if isinstance(envelope, dict) else None
-    proposals = extract_json(result if isinstance(result, str) else text)
+    cost = worker_cost(done.stdout)
+    text, worker_error = answer_text(done.stdout)
+    if worker_error:
+        return {"error": f"the worker reported: {worker_error}", "query": query,
+                "raw": (done.stdout or "")[:400], "cost_usd": cost}
+    proposals = extract_json(text)
     if proposals is None:
         return {"error": "the worker answered no JSON object", "query": query,
-                "raw": (result or text)[:400]}
+                "raw": (text or done.stdout or "")[:400], "cost_usd": cost}
     proposals["query"] = proposals.get("query") or query
+    proposals["cost_usd"] = cost
     if out_dir is not None:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)

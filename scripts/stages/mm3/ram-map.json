@@ -2,9 +2,11 @@
   "game": "Mega Man 3",
   "console": "nes",
   "rom": {
-    "noIntroSha1": ["6780B3FCC547C013EE45AFAC6BB30C6FC6D8B46E"]
+    "noIntroSha1": [
+      "6780B3FCC547C013EE45AFAC6BB30C6FC6D8B46E"
+    ]
   },
-  "note": "F14.15 groundwork (ADR-0238 sec. 5): what a Mega Man 3 boss stall needs from the game's own state. Every entry under `verified` was reproduced on this checkout's dump, from the state `mint-boss.txt` writes, with plain inputs - no public RAM map was trusted for anything below, and the two addresses the vendored cheat database names for this game ($00A2 health and $00AE lives) got in only because an experiment reproduced them here. `rejected` records what an experiment ruled out, so a search does not adopt it. `open` is what is still missing; the method column is the experiment that would settle it.",
+  "note": "F14.15 groundwork (ADR-0238 sec. 5), second pass: what a Mega Man 3 boss stall needs from the game's own state. Every entry under `verified` was reproduced on this checkout's dump with plain inputs - no public RAM map was trusted for anything below, and the two addresses the vendored cheat database names for this game ($00A2 health and $00AE lives) got in only because an experiment reproduced them here. `rejected` records what an experiment ruled out, so a search does not adopt it. `open` is what is still missing; the method column is the experiment that would settle it. The level's page ($002D) closed `level_x_high_byte`, which is why `progress` is this file's own `abs_x` now and a run no longer has to pass `--progress-field camera_scroll_x` and chain the level page by hand.",
   "readers": {
     "ram": "scripts/mss_ram.py <file.mss>",
     "console": "runs/mm3-boss/nt.py <file.mss> - prints ppu.frameCount, the MMC3 bank registers, the fine scroll and both nametables as tile-index text",
@@ -16,19 +18,6 @@
       "address": null,
       "source": "save-state key `ppu.frameCount`",
       "evidence": "mint-boss.txt at 25 s reads 1502 at the state's own frame target (headless_record printed `capture finished: 1503 frames (target 1502)`), so the counter is the console's own frame count and not the run's."
-    },
-    "abs_x": {
-      "address": "0027",
-      "label": "the player's absolute level x, one byte",
-      "unit": "pixels",
-      "wraps": "bit 8 is the level's page, not stored here: at the route's own hop 4 the byte went 248 -> 7 while the camera advanced 120 -> 135, so the page has to come from camera_scroll_x",
-      "evidence": "runs/mm3-boss/evidence.py abs_x. Holding Right from mint-boss with the player pinned at his screen column: $0027 = 135/148/161/200/222/248 at 10/20/30/60/120/240 frames while the camera's fine scroll went 6/19/32/71/95/120 - $0027 minus the scroll stays 127-129 (the constant screen column) across a 114-pixel camera move. Holding Left, with the camera pinned at 0, $0027 = 120/94/55 at 10/30/60 frames while the player's drawn column went 101/83/44, moving 1:1 and in the same direction. That pair is what separates it from a counter: it tracks the camera when the player is still on screen and it tracks the player when the camera is still."
-    },
-    "camera_scroll_x": {
-      "address": "0025",
-      "label": "the level's scroll position (the camera)",
-      "unit": "pixels, one byte",
-      "evidence": "runs/mm3-boss/evidence.py abs_x, second column. $0025 reads one more than the save state's own fine scroll ((ppu.tmpVideoRamAddr & 0x1F) << 3 | ppu.xScroll) at every window of the Right ladder: $0025 = 7/20/33/72/94/120 against fine scroll 6/19/32/71/95/120 at 10/20/30/60/120/240 frames. Same one-frame lead as screen_y below, from the same cause."
     },
     "screen_y": {
       "address": "0012",
@@ -54,6 +43,44 @@
       "label": "the player's remaining lives",
       "evidence": "runs/mm3-boss/evidence.py hp, fourth column: 0x02 at the stage start and 0x02 in every arm up to 500 frames of play, i.e. constant while the player is alive and never touched by input. The value is the game's own (3 lives shown, 2 remaining once one is in play) and it matches the address the vendored cheat database names for this game (00AE lives).",
       "not_yet_verified": "the decrement-on-death half. No arm in these experiments died, so the link 'loses a life -> this byte falls' was not reproduced on this dump. A run that stands in the stage until an enemy kills the player twice would close it."
+    },
+    "level_page": {
+      "address": "002D",
+      "label": "the level's page: how many 256-pixel pages of the level the camera has crossed",
+      "unit": "pages, one byte, 0 at the stage's own start",
+      "evidence": "runs/f1415-fix/mm3/wrap_table.py, 7 runs and 2164 one-frame rows over one long-lived step_emu session, the whole 2 KB read every row. $002D moves at a wrap and only at a wrap: 00->01 when the camera goes 255->1 while the player walks right, 01->02 at 255->0 the next page out, and 01->00 / 02->01 on the same two boundaries walking back left - the four crossings of the route, each in both directions. In the same rows the camera's low byte ($0025) and the player's x ($0027) move 12-17 times per run, and $0029 - which also looks like a page, 01->02 then 02->03 - reads 02 on the state that enters page 3 from the p3-left arm where p2-rl's page 3 reads 03, so it tracks something the two entries disagree on. $00F9 never once disagrees with $002D over all 2164 rows (equal deltas from their own first row), so this route cannot say which of the two the game keeps as the level page; it can only say they are two copies of the same number, and $002D is the one named here.",
+      "wraps": "no - it is the counter the others wrap against"
+    },
+    "camera_scroll_x": {
+      "address": "0025",
+      "label": "the level's scroll position (the camera)",
+      "unit": "pixels, one byte",
+      "evidence": "runs/mm3-boss/evidence.py abs_x, second column. $0025 reads one more than the save state's own fine scroll ((ppu.tmpVideoRamAddr & 0x1F) << 3 | ppu.xScroll) at every window of the Right ladder: $0025 = 7/20/33/72/94/120 against fine scroll 6/19/32/71/95/120 at 10/20/30/60/120/240 frames. Same one-frame lead as screen_y below, from the same cause."
+    },
+    "player_x_low": {
+      "address": "0027",
+      "label": "the player's absolute x within the page, one byte - player_x_low, not abs_x",
+      "unit": "pixels, 0..255",
+      "wraps": "yes, and this byte alone is NOT a progress metric: it is the camera's low byte plus the player's screen column, so it wraps 128 pixels of camera travel before the level's own page does. Two pages of a route can share it - that is exactly how the F14.15 first pass's page-3 stall sits at $0027 56 with the page-1 route end at $0027 59 - so a search that steers by it walks backwards across the wrap. `abs_x` below is the monotone form and is the field to steer by.",
+      "evidence": "the entry this one renamed; unchanged. runs/mm3-boss/evidence.py abs_x. Holding Right from mint-boss with the player pinned at his screen column: $0027 = 135/148/161/200/222/248 at 10/20/30/60/120/240 frames while the camera's fine scroll went 6/19/32/71/95/120 - $0027 minus the scroll stays 127-129 (the constant screen column) across a 114-pixel camera move. Holding Left, with the camera pinned at 0, $0027 = 120/94/55 at 10/30/60 frames while the player's drawn column went 101/83/44, moving 1:1 and in the same direction."
+    },
+    "player_screen_x": {
+      "expr": "(player_x_low - camera_scroll_x) % 256",
+      "label": "the player's column on the screen, 128-129 while the camera follows him",
+      "note": "The modulo is the whole point: both bytes wrap, so the difference is only the screen column when it is taken mod 256. Measured 127-129 across a 114-pixel camera move (see player_x_low).",
+      "evidence": "runs/f1415-fix/mm3/wrap-evidence.txt sections 2 and 5: over the four states of the F14.15 route the difference (player_x_low - camera_scroll_x) is 128 at every one of them, and the frame-by-frame rows at the page-1/page-2 wrap read $0027 127 with $0025 255 (a difference of -128, i.e. 128 mod 256) and then $0027 129 with $0025 001 (128 again) - the column does not move while both bytes wrap, which is what makes the modulo the right form and not a fudge."
+    },
+    "camera_x": {
+      "expr": "level_page * 256 + camera_scroll_x",
+      "label": "the camera's position in the level: monotone over the whole stage",
+      "note": "187 / 280 / 529 / 696 at the four states of the F14.15 route (page 1 route end, page 2 start, page 3 start, the page-3 stall), strictly increasing.",
+      "evidence": "runs/f1415-fix/mm3/wrap-evidence.txt sections 1 and 5: 187 / 280 / 529 / 696 at the four states of the route, where the wrapping camera byte alone reads 187 / 24 / 17 / 184; and the continuous run in section 3 walks 187 -> 257 -> 512 -> 523 across the three page boundaries with no step backwards."
+    },
+    "abs_x": {
+      "expr": "camera_x + player_screen_x",
+      "label": "the player's absolute x in the level: monotone, and the progress metric a search steers by",
+      "note": "315 / 408 / 657 / 824 at the same four states, strictly increasing, where the wrapping byte read 59 / 152 / 145 / 56. Mega Man 3's stage is four 256-pixel pages, which is what the tips file's 140-1023 bands were written against.",
+      "evidence": "runs/f1415-fix/mm3/wrap-evidence.txt section 5 - runs/f1415-fix/mm3/wrap_table.py over the four minted states, and the frame-by-frame wrap rows in section 2: at the page-1/page-2 boundary the wrapping byte goes 127 -> 129 while this number goes 383 -> 385."
     }
   },
   "rejected": {
@@ -87,9 +114,9 @@
     },
     "enemy_table": {
       "method": "Find the game's object list in RAM (a run of slots holding x, y and a type byte each) by locating the RAM byte that equals a known enemy's OAM x at the same frame, over several frames of that enemy's motion. $0200-$02FF is ruled out (see `rejected`), so this is a search, not a lookup. Until it lands, F14.15's RAM-derived state has the player and the camera only, and an enemy-aware trigger in jev-tips.json cannot be written."
-    },
-    "level_x_high_byte": {
-      "method": "$0027 is one byte of a longer level. The page was not observed directly: the camera's page bits live in the PPU's nametable address, and the only crossing seen (248 -> 7 at camera 120 -> 135) went the other way. Steering should use camera_scroll_x for the coarse part and $0027 for the fine part, which is what runs/mm3-boss/route_search_mm3.py does; a run that crosses three screens while reading $0025 at the same time would close it."
     }
-  }
+  },
+  "progress": "abs_x",
+  "screen": "camera_x",
+  "screen_width": 256
 }

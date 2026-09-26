@@ -1,6 +1,6 @@
 # ADR-0238: Jev, via OpenRouter, is a stuck-point input generator behind a persistent step-mode emulator; a route stays a plain input script
 
-- Status: accepted (2026-09-26). The user chose the vendor path verbatim — *"vamos usar o jev pelo ope router"* — and then the recommended order, verbatim: *"pode escrever"*. **Implemented, F14.12–F14.14**: the step-mode session of §1 and its client (`scripts/step_emu.py`, `scripts/headless_record.cpp`, `docs/validation/f1412-step-mode-emulator-2026-09-26.md`), the ported search of §2 (`scripts/route_search.py`, `docs/validation/f1413-ninjagaiden-search-2026-09-26.md`) and the stall helper of §3 (`scripts/jev_harness.py`, `scripts/jev_client.py`, `docs/validation/f1414-jev-stall-helper-2026-09-26.md`). §4's artifact rule is what those three produce — a plain `<n>f <buttons>` script plus `cheat=` codes, never a patch. **F14.15 (§5, measurement and adoption) is not implemented.** Go-ahead to implement, verbatim: *"implemente usando o deepseek"* (2026-09-26).
+- Status: accepted (2026-09-26). The user chose the vendor path verbatim — *"vamos usar o jev pelo ope router"* — and then the recommended order, verbatim: *"pode escrever"*. **Implemented, F14.12–F14.14**: the step-mode session of §1 and its client (`scripts/step_emu.py`, `scripts/headless_record.cpp`, `docs/validation/f1412-step-mode-emulator-2026-09-26.md`), the ported search of §2 (`scripts/route_search.py`, `docs/validation/f1413-ninjagaiden-search-2026-09-26.md`) and the stall helper of §3 (`scripts/jev_harness.py`, `scripts/jev_client.py`, `docs/validation/f1414-jev-stall-helper-2026-09-26.md`). §4's artifact rule is what those three produce — a plain `<n>f <buttons>` script plus `cheat=` codes, never a patch. Go-ahead to implement, verbatim: *"implemente usando o deepseek"* (2026-09-26). **F14.15 (§5, measurement and adoption) implemented 2026-09-26** ([log](../validation/f1415-jev-adoption-2026-09-26.md)): two live stalls measured — Ninja Gaiden's section 1-2 death window, and Mega Man 3's Snake Man stall, which the page-chained search put on page 3 at camera 184 because the point the slice briefing named (camera 187) is not a stall at all (log §1, §3). The **first pass is void** — its 0-of-8 result came from four harness defects, each fixed with a test that failed first (rewind-ladder floor, loop-guard fingerprint, Mega Man 3's one-byte progress field, a research worker that could never answer; log §0). **Second pass: §5's first half is met for the first time** — Jev passed the Mega Man 3 stall in **5 of 5 arms**, tips on and tips off, at **3.57–3.62×** real time with deterministic repeats, while the search alone stops there (`no-jev`); the Ninja Gaiden control still passes on the first rung at 4.03×. **§5's second half still fails**: the route that passes gains the recorded kit **0 keys** the committed routes do not already have, because Mega Man 3 is CHR ROM and the bootstrap exports every bank index, so the new corridor paints no new tile-palette pair (`runs/f1415/cells.py`; union of nine packs 8 777 keys, `mm3-bossrun` alone 381 of the 394 that are unique) — and Jev passed **0 of 4** arms on the Ninja Gaiden stall, whose state has no legal candidate for the base search and therefore a one-checkpoint rewind ring. Verdict: **do not adopt beyond the spike** — one clause short, and the missing one is about the product, not the model. §1–§4 stand, and the step-mode session's own gain (0.232 → 0.091 s per candidate) is untouched.
 - Date: 2026-09-26
 - Related: ADR-0185 (a published movie is input, never evidence), ADR-0188 (an AI's judgement is a proposal that never becomes evidence), F14.3 route sets (`scripts/stages/*`), ADR-0203/0204 (CI and download channel, which this does not touch)
 - Supersedes / amends: nothing
@@ -96,8 +96,11 @@ In this order, each step gated on the one before:
      harness keeps a ring of in-memory checkpoints (one per emulated
      second). When a chosen macro makes no progress, it restores an earlier
      checkpoint on a doubling ladder — 1, 2, 4, 8, 16 s back — and asks
-     again, never rewinding past the start of the current screen or the last
-     real progress. The rungs match the three failure causes: a mistimed
+     again, never rewinding past the start of the current screen (amended
+     again 2026-09-26: "or the last real progress" was dropped — the watermark
+     rises every window, so that floor sat a fraction of a second behind the
+     head and collapsed every rung onto one checkpoint, measured in F14.15's
+     first pass). The rungs match the three failure causes: a mistimed
      press (1–2 s), a bad approach speed/height/HP (4–8 s), an earlier wrong
      choice (16 s). Up to three questions per rung. Jev keeps
      no memory between calls, so the state carries a `tried` list of what
@@ -124,7 +127,11 @@ In this order, each step gated on the one before:
      the versioned `jev-tips.json` only after it passed the stall.
    - **Loop guard (amended 2026-09-26, user's suggestion):** three
      detectors, each logged per decision: a state fingerprint (position
-     rounded to 8 px, camera, room, HP) seen 3 times in one stall; a
+     rounded to 8 px, camera, room, HP) of the committed head seen 3 times in
+     one stall (a rejected attempt that ends where another did is what
+     `tried_here` records, not a loop; and consecutive samples of one 8-px
+     cell are one visit, because "the run stands still" is the watermark
+     detector's finding, not this one's); a
      progress watermark (furthest position reached) that has not risen for
      60 emulated seconds; a period-2-to-4 cycle repeated 3 times in the last
      12 choices. A detected loop bans the cycle's macros at that checkpoint

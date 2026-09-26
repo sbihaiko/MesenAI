@@ -156,10 +156,18 @@ def check_tips():
                   f"tip {ident} `when` field {field!r} is a RAM or run key",
                   f"known: {sorted(known)}")
             if field in verified:
-                address = ram_map["verified"][field].get("address")
-                check(address is not None,
-                      f"tip {ident} gates on {field!r}, which has an address",
-                      "an entry with no address cannot be read at question time")
+                entry = ram_map["verified"][field]
+                #A field a trigger may gate on is one the map can *read*: an
+                #address, or an `expr` over fields it reads (Mega Man 3's abs_x
+                #is the page, the camera and the player's column - a gate on the
+                #wrapping byte would drift across a wrap, which is the bug the
+                #monotone field exists to prevent). Only an entry that is
+                #neither - a number the map records as not being RAM - is
+                #unreadable at question time.
+                check(entry.get("address") is not None or entry.get("expr"),
+                      f"tip {ident} gates on {field!r}, which the map can read",
+                      f"an entry with neither an address nor an expr is not read "
+                      f"at question time: {json.dumps(entry)[:120]}")
             bounded = [k for k in clause if k in ("min", "max")]
             check(bool(bounded) or "value" in clause,
                   f"tip {ident} clause on {field!r} bounds or pins the value",
@@ -213,6 +221,99 @@ def check_harness_reads_the_files():
             check(not tip.conditions or not tip.holds({}),
                   f"{game}: tip {tip.id} does not hold on a state with no fields",
                   str(tip.conditions))
+
+
+def check_the_progress_field_is_monotone():
+    """`progress` is the monotone level x, and the wrapping bytes are not it.
+
+    The two bytes the map used to steer by are each ONE byte wide and each wraps
+    at 256 - `$0025` the camera's scroll and `$0027` the player's x within the
+    page - so a search scored on either walks *backwards* across a wrap and
+    reports the page's end as reached. The first F14.15 pass had to chain the
+    level page by page by hand because of it (`runs/f1415/hunt_mm3.py`).
+
+    What closed it is `$002D`, the level's page (measured 2026-09-26, 7 runs and
+    2164 one-frame rows over one session: it moves at a wrap and only at a wrap).
+    This check is the arithmetic over the four states of that route, taken from
+    their raw bytes: the derived numbers have to be strictly increasing where the
+    raw ones are not, and the stall has to read what the measurement says.
+    """
+    sys.path.insert(0, str(HERE))
+    import jev_harness  # noqa: PLC0415 - the reader under test
+
+    ram = jev_harness.RamMap.load(HERE / "stages" / "mm3" / "ram-map.json")
+    check(ram.progress == "abs_x" and ram.screen == "camera_x",
+          "the map's own progress is the derived abs_x and its screen the derived "
+          "camera_x, so a run needs no --progress-field for this game",
+          f"{ram.progress} / {ram.screen}")
+    for name in ("level_page", "camera_scroll_x", "player_x_low",
+                 "player_screen_x", "camera_x", "abs_x"):
+        check(name in ram.fields, f"the map carries {name}", str(sorted(ram.fields)))
+
+    document = load(HERE / "stages" / "mm3" / "ram-map.json")
+    check("level_x_high_byte" not in document.get("open", {}),
+          "the open problem `level_x_high_byte` is closed, not still open",
+          str(list(document.get("open", {}))))
+    check("002D" in document["verified"]["level_page"]["address"].upper()
+          or "0X2D" in document["verified"]["level_page"]["address"].upper(),
+          "and it is closed by a measured address, with its evidence beside it",
+          str(document["verified"]["level_page"].get("address")))
+
+    #The four states of F14.15's Mega Man 3 route, as raw bytes: (page, scroll,
+    #player x within the page). 187/280/529/696 is the level, 315/408/657/824 the
+    #player - and the raw player byte reads 59/152/145/56, which is not a route.
+    class Raw:
+        def __init__(self, page, scroll, player):
+            self.ram = bytearray(0x800)
+            self.ram[0x2D] = page
+            self.ram[0x25] = scroll
+            self.ram[0x27] = player
+            for address in (0x12, 0xA2, 0xAE, 0x39):
+                self.ram[address] = 0
+
+        def read_ram(self, *items):
+            return [bytes(self.ram[item[0]:item[1] + 1]) if isinstance(item, tuple)
+                    else self.ram[item] for item in items]
+
+    rows = [(0, 187, 59, "page 1, the committed route's end"),
+            (1, 24, 152, "page 2 start"),
+            (2, 17, 145, "page 3 start"),
+            (2, 184, 56, "the page-3 stall F14.15 measures")]
+    states = [(what, ram.read(Raw(page, scroll, player)))
+              for page, scroll, player, what in rows]
+    raw = [state["player_x_low"] for _what, state in states]
+    level = [state["camera_x"] for _what, state in states]
+    absolute = [state["abs_x"] for _what, state in states]
+    check(raw == [59, 152, 145, 56],
+          "the wrapping byte is not a route: it falls where the level rises", str(raw))
+    check(level == [187, 280, 529, 696] and absolute == [315, 408, 657, 824],
+          "the derived level and player x are the measured monotone numbers, in "
+          "order", f"{level} / {absolute}")
+    check(all(later > earlier for earlier, later in zip(level, level[1:]))
+          and all(later > earlier for earlier, later in zip(absolute, absolute[1:])),
+          "both are strictly increasing over the route", f"{level} / {absolute}")
+    check(states[-1][1]["abs_x"] == 824,
+          "and the stall F14.15 measures stands at abs_x 824, page 2 / camera 696",
+          str(states[-1][1]["abs_x"]))
+    check(int(states[-1][1]["camera_x"] // ram.screen_width) == 2,
+          "the screen index a run rewinds against is the level's page",
+          str(int(states[-1][1]["camera_x"] // ram.screen_width)))
+
+    #The tips' bands were written for this scale (140..1023, four pages of 256).
+    #The stall is the anchor that matters: a tip has to be able to fire there.
+    tips = jev_harness.load_tips(HERE / "stages" / "mm3" / "jev-tips.json",
+                                 fields=ram.fields)
+    at_stall = dict(states[-1][1], stage="snake-man")
+    check([tip.id for tip in tips.matching(at_stall)] == ["cloud-platforms"],
+          "and a tip's band reaches the stall at last - the first pass had none "
+          "that could, because every band starts above the wrapping byte's range",
+          str([tip.id for tip in tips.matching(at_stall)]))
+    fired = {what: [tip.id for tip in tips.matching(dict(state, stage="snake-man"))]
+             for what, state in states}
+    check(all(len(ids) <= 1 for ids in fired.values()) and
+          len({ids[0] for ids in fired.values() if ids}) == 4,
+          "each of the route's four states falls in a band of its own, in order",
+          json.dumps(fired))
 
 
 def check_the_stage_reaches_the_state():
@@ -296,6 +397,7 @@ def main():
     check_cheats()
     check_tips()
     check_harness_reads_the_files()
+    check_the_progress_field_is_monotone()
     check_the_stage_reaches_the_state()
     check_routes()
     print(f"\n{len(_FAILURES)} failure(s)")

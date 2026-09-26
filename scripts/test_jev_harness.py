@@ -185,17 +185,26 @@ class FakeJev:
 
     COST = 2.2974e-05
 
-    def __init__(self, choices, *, spent_usd=0.0):
+    def __init__(self, choices, *, spent_usd=0.0, picker=None):
         self.choices = list(choices) or ["WAIT_15"]
         self.calls = 0
         self.spent_usd = spent_usd
         self.seen = []
         self.forced = 0
+        #A picker is a vendor that answers from the offered set instead of from
+        #a script: `picker(call_index, offered_names)` -> a name. It is how a
+        #test drives a *choice log* - the input the cycle detector reads - rather
+        #than a run, since the macros a script names get withdrawn from the
+        #options of the checkpoint they failed at and the log stops repeating.
+        self.picker = picker
 
     def ask(self, question, *, state, instructions, criteria):
         self.seen.append({"question": question, "state": state,
                           "instructions": instructions, "criteria": dict(criteria)})
-        wanted = self.choices[min(self.calls, len(self.choices) - 1)]
+        if self.picker is not None:
+            wanted = self.picker(self.calls, list(criteria))
+        else:
+            wanted = self.choices[min(self.calls, len(self.choices) - 1)]
         if wanted not in criteria:
             self.forced += 1
             wanted = next(iter(criteria))
@@ -398,28 +407,109 @@ def test_failed_macro_withdrawn_and_ladder_monotone(tmp):
     check(len(set(rewinds)) >= 2, "the ladder climbs past the first rung", str(rewinds))
 
 
-def test_checkpoint_floor_is_screen_start_or_last_progress(tmp):
+def test_the_ladders_only_floor_is_the_start_of_the_current_screen(tmp):
+    """ADR-0238 section 3, amended 2026-09-26: the floor is the start of the
+    current screen, and nothing else.
+
+    It used to be "or the last real progress" as well, and that clause made the
+    ladder a formality: `_commit` marks the newest checkpoint every time the
+    watermark rises, and the watermark rises on every window of a search that is
+    still moving - so the floor sat a fraction of a second behind the head and
+    rungs 1, 2, 4, 8 and 16 all clamped onto the same checkpoint. That is what
+    F14.15's first pass measured, and why every run in it burned its whole
+    decision budget asking from one spot.
+    """
     emu = FakeEmu()
     run = make_harness(emu, FakeJev(["WAIT_15"]), tmp)
     ram = run.ram_map
+    #One checkpoint per emulated second; the current screen began at t = 20.
     run.ring = [jev_harness.Checkpoint(t=float(t), frame=int(t * FPS), handle=t,
-                                       state={"abs_x": 100 + t, "camera_x": 0},
-                                       progress=100.0 + t, lines=1, screen=0)
-                for t in range(1, 21)]
-    check(run._checkpoint_at(13.0).t == 13.0,
-          "with no marks the ladder reaches any checkpoint")
-    run._last_progress_ckpt = run.ring[17]          # progress at t = 18
-    check(run._checkpoint_at(13.0).t == 18.0,
-          "the last real progress is a floor: a deeper rung clamps to it")
-    check(run._checkpoint_at(19.5).t == 19.0,
-          "a rung behind the head resolves to the newest checkpoint before it")
-    check(run._checkpoint_at(0.0).t == 18.0,
-          "no rung ever lands before the floor")
-    run._screen_ckpt = run.ring[19]                 # the screen changed at t = 20
-    check(run._checkpoint_at(19.5).t == 20.0 and run._checkpoint_at(24.0).t == 20.0,
-          "the start of the current screen is the later floor of the two",
-          str(run._checkpoint_at(19.5).t))
+                                       state={"abs_x": 100.0 + t, "camera_x": 0,
+                                              "room": 0, "hp": 16},
+                                       progress=100.0 + t, lines=1,
+                                       screen=0 if t < 20 else 1)
+                for t in range(1, 41)]
+    run._screen = 1
+    #The head, and the mark a risen watermark leaves behind: the newest
+    #checkpoint, which for a search still moving is the head itself.
+    run._commit(jev_harness.Head(frame=40 * FPS, handle=99, lines=(),
+                                 state={"abs_x": 140.0, "camera_x": 0, "room": 0,
+                                        "hp": 16}, screen=1))
+    rungs = [run._checkpoint_at(40.0 - rung) for rung in jev_harness.LADDER]
+    check(all(checkpoint is not None for checkpoint in rungs),
+          "every rung of the ladder found a checkpoint", str(rungs))
+    check([c.t for c in rungs] == [39.0, 38.0, 36.0, 32.0, 24.0],
+          "1, 2, 4, 8 and 16 s back are five different checkpoints, each the one "
+          "that many seconds behind the head", str([c.t for c in rungs]))
+    check(run._checkpoint_at(22.5).t == 22.0,
+          "inside the screen a rung is the newest checkpoint before it",
+          str(run._checkpoint_at(22.5).t))
+    check(run._checkpoint_at(19.5).t == 20.0,
+          "a rung behind the screen's start clamps to the screen's start, not to "
+          "the last progress", str(run._checkpoint_at(19.5).t))
+    check(run._checkpoint_at(0.0).t == 20.0,
+          "no rung ever lands before the floor", str(run._checkpoint_at(0.0).t))
+    check(all(c.t >= 20.0 for c in rungs + [run._checkpoint_at(0.0)]),
+          "and none of them lands on the previous screen",
+          str([c.t for c in rungs]))
     check(ram.progress == "abs_x", "the floor test ran on the game's own progress field")
+
+
+def test_macros_that_fail_from_one_checkpoint_are_tried_here_not_a_loop(tmp):
+    """ADR-0238 section 3, amended 2026-09-26: the loop guard's fingerprint is
+    the *committed* head's, never a rejected attempt's result.
+
+    It used to be the result state of every attempt, rejected ones included -
+    and three macros that all fail from the same spot end near that spot, so
+    three ordinary failures read as one loop. F14.15's first pass is where that
+    was measured: every Jev run in it ended `loop` after five or six decisions
+    with the ladder barely walked. A rejected attempt is what `tried_here`
+    records; a loop is the committed path coming back to where it has been.
+    """
+    emu = FakeEmu()
+    client = FakeJev(["WAIT_15", "JUMP_RIGHT_15", "RIGHT_15"])
+    summary = make_harness(emu, client, tmp, max_decisions_per_stall=9,
+                           max_questions_per_rung=3).run()
+    loops = [event for event in events(tmp) if event.get("event") == "loop"]
+    check(not loops, "three macros that fail from one checkpoint are not a loop",
+          json.dumps(loops)[:300])
+    check(summary.reason != "loop", "and the stall does not end as one",
+          summary.reason)
+    check(len(client.seen) == 9,
+          "the run spends its whole decision budget instead of stopping at the "
+          "third question", str(len(client.seen)))
+    first = client.seen[0]["state"]["checkpoint_at_s"] if client.seen else None
+    same = [entry["state"]["checkpoint_at_s"] for entry in client.seen[:3]]
+    check(first is not None and len(set(same)) == 1,
+          "the first three questions are the same checkpoint's", str(same))
+    tried = client.seen[1]["state"]["tried_here"] if len(client.seen) > 1 else []
+    check([entry["macro"] for entry in tried] == ["WAIT_15"],
+          "a macro that failed here is withdrawn from the next question there, "
+          "and `tried_here` is where it is written down", json.dumps(tried))
+    withdrawn = all("WAIT_15" not in entry["criteria"] for entry in client.seen[1:3])
+    check(withdrawn, "so it is not offered again at that checkpoint",
+          str([sorted(entry["criteria"]) for entry in client.seen[:3]]))
+
+
+def test_a_pinned_spot_is_not_a_loop_but_a_return_to_one_is(tmp):
+    """The same rule at the detector: samples of one committed head are one
+    visit, and the path coming back to a cell it had left is what counts."""
+    emu = FakeEmu()
+    run = make_harness(emu, FakeJev(["WAIT_15"]), tmp)
+    pinned = jev_harness.StallState(start_t=0.0, watermark=987.0)
+    state = {"abs_x": 987, "camera_x": 859, "hp": 16}
+    flags, _cycle = run._loop_flags(pinned, state)
+    run._loop_flags(pinned, dict(state, abs_x=990))
+    flags, _cycle = run._loop_flags(pinned, dict(state, abs_x=989))
+    check(not any("fingerprint" in flag for flag in flags),
+          "three samples of one 8-px cell are one visit, not a loop - a spot "
+          "held is the watermark detector's finding", str(flags))
+    for _ in range(2):
+        run._loop_flags(pinned, {"abs_x": 1100, "camera_x": 972, "hp": 16})
+        flags, _cycle = run._loop_flags(pinned, state)
+    check(any("fingerprint" in flag for flag in flags),
+          "the committed path leaving that cell and coming back twice is a loop",
+          str(flags))
 
 
 def test_question_excludes_banned_and_carries_tips(tmp):
@@ -488,25 +578,58 @@ def test_loop_detectors(tmp):
 
 
 def test_loop_guard_escalation(tmp):
+    """Three loops: the first bans the cycle's macros and climbs a rung, the
+    second goes to research, the third ends the stall as `loop`.
+
+    The cycle detector is the one that can fire here, and it is driven the way a
+    real run drives it: the vendor answers with the same pair of macros at every
+    fresh checkpoint (a model with no memory of the last call, on a state that
+    barely changes), and one question per rung leaves each rung a checkpoint of
+    its own. The ladder is the module's own, lengthened to eight rungs, because
+    the detector wants a period-2 cycle repeated three times in the last twelve
+    choices - six decisions - and the shipped five-rung ladder runs out of
+    distinct checkpoints first. Eight rungs also need eight emulated seconds of
+    path behind the head, or the screen's own start clamps the deep ones onto one
+    checkpoint and the macro a question withdraws there breaks the alternation.
+    Which macro a rung does not reach is a property of this fake, not of the
+    guard; the guard's own arithmetic is
+    `test_loop_detectors`, and the amendment of 2026-09-26 - the fingerprint is
+    the committed head's, and a spot held is one visit - is
+    `test_a_pinned_spot_is_not_a_loop_but_a_return_to_one_is`.
+    """
     emu = FakeEmu()
-    client = FakeJev(["JUMP_RIGHT_15", "RIGHT_15"] * 30)
+    #The pin's one escape would walk out of the stall, which is not the subject.
+    client = FakeJev([], picker=lambda call, names: [
+        name for name in names if name != "JUMP_LEFT_15"][
+            0 if call % 2 == 0 else -1])
     researched = []
 
     def research(report):
         researched.append(report)
         return {"tips": [], "macros": []}
 
-    summary = make_harness(emu, client, tmp, max_decisions_per_stall=60,
-                           max_questions_per_rung=3, research=research).run()
+    shipped = jev_harness.LADDER
+    jev_harness.LADDER = (1, 2, 3, 4, 5, 6, 7, 8)
+    try:
+        summary = make_harness(emu, client, tmp, max_decisions_per_stall=60,
+                               max_questions_per_rung=1, stall_seconds=8.0,
+                               research=research).run()
+    finally:
+        jev_harness.LADDER = shipped
     loops = [event for event in events(tmp) if event.get("event") == "loop"]
-    check(loops, "the cycle detector fires", str(events(tmp))[:200])
-    check(len(researched) == 1, "the ladder's end and the second loop share one "
-                                "research pass", str(len(researched)))
-    check(loops and all(event.get("flags") for event in loops),
+    check(len(loops) >= 3, "the cycle detector fires three times",
+          str([event.get("flags") for event in loops]))
+    check(loops and all("period-2 cycle" in flag for event in loops
+                        for flag in event.get("flags", [])),
           "every loop is logged, with the detector that fired",
           json.dumps(loops[:1])[:200])
+    check(len(researched) == 1, "the ladder's end and the second loop share one "
+                                "research pass", str(len(researched)))
     check(summary.reason == "loop" and summary.loops >= 3,
           "the third loop ends the stall as `loop`", f"{summary.reason} {summary.loops}")
+    check(all(entry["state"]["rewound_seconds"] <= 16 for entry in client.seen),
+          "and no question ever rewinds past the ADR's 16 s",
+          str([entry["state"]["rewound_seconds"] for entry in client.seen]))
 
 
 def test_flat_watermark_detector(tmp):
@@ -523,14 +646,9 @@ def test_flat_watermark_detector(tmp):
     check(not any("watermark" in flag for flag in flags),
           "59 emulated seconds is not 60", str(flags))
 
-    repeated = jev_harness.StallState(start_t=0.0, watermark=987.0)
+    #The fingerprint detector is `test_a_pinned_spot_is_not_a_loop_but_a_return_
+    #to_one_is` below: it counts the committed head's visits, not samples.
     state = {"abs_x": 987, "camera_x": 859, "hp": 16}
-    flags, _cycle = run._loop_flags(repeated, state)
-    run._loop_flags(repeated, dict(state, abs_x=990))
-    flags, _cycle = run._loop_flags(repeated, dict(state, abs_x=989))
-    check(any("fingerprint" in flag for flag in flags),
-          "the same fingerprint three times in one stall is a loop", str(flags))
-
     alternating = jev_harness.StallState(start_t=0.0, watermark=987.0)
     for name in ["JUMP_RIGHT_15", "RIGHT_15"] * 3:
         flags, cycle = run._loop_flags(alternating, state, choice=name)
@@ -551,6 +669,64 @@ def test_decisions_cap_stops_a_stall(tmp):
                            max_questions_per_rung=1).run()
     check(client.calls == 2, "the per-stall decision cap holds", f"calls={client.calls}")
     check(summary.reason == "decisions-cap", "the stall ends on the cap", summary.reason)
+
+
+def test_no_jev_stops_the_run_at_the_first_stall(tmp):
+    """ADR-0238 section 5, arm 1: the search alone, with no model in it.
+
+    `--no-jev` is the arm the adoption criterion is read against - the same
+    macro library, the same caps and the same session, and only the question
+    missing - so the run has to stop where the search runs out of candidates
+    and say so instead of asking anyone.
+    """
+    emu = FakeEmu()
+    researched = []
+
+    def never(report):
+        researched.append(report)
+        return {}
+
+    run = make_harness(emu, None, tmp, research=never)
+    summary = run.run()
+    check(summary.reason == "no-jev",
+          "a harness with no client ends the run at its first stall as `no-jev`",
+          summary.reason)
+    check(summary.decisions == 0 and summary.spend_usd == 0.0,
+          "the search-alone arm asks nothing and spends nothing",
+          f"decisions={summary.decisions} spend={summary.spend_usd}")
+    check(summary.stalls == 1,
+          "the stall the search could not pass is still counted", str(summary.stalls))
+    check(not researched,
+          "the ladder is spent and no web-research pass runs without a client",
+          f"{len(researched)} report(s)")
+    check(summary.script and summary.frames > 0,
+          "the path it did play is still measured and written",
+          f"lines={len(summary.script)} frames={summary.frames}")
+    check(any(entry.get("event") == "stall" and entry.get("reason") == "no-jev"
+              for entry in events(tmp)),
+          "the stall's own log line names `no-jev`")
+    #The flag is what makes the key irrelevant, so the factory is tested where
+    #that decision lives rather than through a run that needs a ROM: `JevClient`
+    #is stubbed, which also keeps this check independent of whether a key is
+    #present on the machine (the environment, or the gitignored `.env`).
+    built = []
+
+    class StubClient:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+    real = jev_harness.jev_client.JevClient
+    jev_harness.jev_client.JevClient = StubClient
+    try:
+        check(jev_harness.make_client(no_jev=True, budget=0.0, log_path=None) is None,
+              "make_client(no_jev=True) builds nothing, so no key is required")
+        check(isinstance(jev_harness.make_client(no_jev=False, budget=0.0,
+                                                 log_path=None), StubClient)
+              and len(built) == 1,
+              "without --no-jev the arm that asks still builds the client",
+              f"{len(built)} construction(s)")
+    finally:
+        jev_harness.jev_client.JevClient = real
 
 
 def test_budget_cap_stops_the_run(tmp):
@@ -603,6 +779,36 @@ def test_ladder_exhausted_runs_one_research_pass_then_retries(tmp):
                and any("research says" in text for text in entry["criteria"].values())]
     check(retries, "after research the ladder is walked again with the proposals",
           f"questions={len(client.seen)}")
+
+
+def test_a_research_pass_costs_money_and_the_run_counts_it(tmp):
+    """A worker is not free: the live smoke's own pass was US$ 0.02, and the
+    budget clause is per run, so a run that reaches research has to see it."""
+    emu = FakeEmu()
+    client = FakeJev(["WAIT_15"])
+
+    def research(_report):
+        return {"tips": [], "macros": [], "cost_usd": 0.02}
+
+    summary = make_harness(emu, client, tmp, max_decisions_per_stall=60,
+                           max_questions_per_rung=1, research=research).run()
+    check(abs(summary.research_spend_usd - 0.02) < 1e-9,
+          "the pass's own cost reaches the summary",
+          str(summary.research_spend_usd))
+    check(abs(summary.spend_usd - (client.spent_usd + 0.02)) < 1e-9,
+          "and the run's spend is both halves: the client's calls and the worker's",
+          f"{summary.spend_usd} vs client {client.spent_usd}")
+    check(summary.as_json()["research_spend_usd"] == 0.02,
+          "the summary JSON carries it too", json.dumps(summary.as_json())[:160])
+
+    empty = make_harness(FakeEmu(), FakeJev(["WAIT_15"]), Path(tmp) / "b",
+                         max_decisions_per_stall=60, max_questions_per_rung=1,
+                         research=_no_research)
+    Path(tmp, "b").mkdir(exist_ok=True)
+    summary = empty.run()
+    check(summary.research_spend_usd == 0.0 and summary.spend_usd == empty.client.spent_usd,
+          "a pass that reports no cost adds nothing",
+          f"{summary.research_spend_usd} {summary.spend_usd}")
 
 
 def test_research_merge_keeps_the_harness_duration(tmp):
@@ -951,21 +1157,29 @@ def test_ram_map_shapes(tmp):
 def test_ram_map_reads_the_stage_sets_own_spelling(tmp):
     """Mega Man 3's map writes its addresses the way the stage set's notes do
     (`0027`), records a field that is not RAM at all (`ppu.frameCount` in the
-    save state), and names no `progress` key. All three have to load."""
+    save state), and names its own `progress` and `screen` (F14.15: the progress
+    is the monotone level x, so the byte the map used to call `abs_x` is
+    `player_x_low` and the real one is an expression over it). All of it has to
+    load."""
     ram = jev_harness.RamMap.load(HERE / "stages" / "mm3" / "ram-map.json")
     check(ram.progress == "abs_x",
           "the map's own progress field is found by name", str(ram.progress))
-    check(ram.fields["abs_x"].address == 0x27 and ram.fields["screen_y"].address == 0x12,
+    check(ram.fields["player_x_low"].address == 0x27 and
+          ram.fields["screen_y"].address == 0x12,
           "a four-digit address with no `0x` is read as hex",
-          str({name: ram.fields[name].address for name in ("abs_x", "screen_y")}))
+          str({name: ram.fields[name].address
+               for name in ("player_x_low", "screen_y")}))
     check(ram.fields["player_hp"].address == 0xA2,
           "and one with letters in it", str(ram.fields["player_hp"].address))
     check(ram.not_ram == ["state_frame"] and "state_frame" not in ram.fields,
           "a field the map records as not RAM is skipped and named, not refused",
           str(ram.not_ram))
-    check(ram.screen is None and ram.screen_width == 256,
-          "the map names no screen field yet, and that is not an error",
-          str(ram.screen))
+    check(ram.screen == "camera_x" and ram.screen_width == 256,
+          "the map names the field a screen is cut on, and its width",
+          f"{ram.screen} / {ram.screen_width}")
+    check(ram.fields["abs_x"].address is None and ram.fields["abs_x"].expr,
+          "the progress field is the monotone expression, not the wrapping byte",
+          str(ram.fields["abs_x"]))
 
     spelled = Path(tmp) / "spelled.json"
     spelled.write_text(json.dumps({"fields": {
@@ -1161,15 +1375,19 @@ def main():
         test_a_tips_move_is_matched_by_the_questions_own_name,
         test_tips_are_gated_by_their_trigger,
         test_failed_macro_withdrawn_and_ladder_monotone,
-        test_checkpoint_floor_is_screen_start_or_last_progress,
+        test_the_ladders_only_floor_is_the_start_of_the_current_screen,
+        test_macros_that_fail_from_one_checkpoint_are_tried_here_not_a_loop,
+        test_a_pinned_spot_is_not_a_loop_but_a_return_to_one_is,
         test_question_excludes_banned_and_carries_tips,
         test_loop_detectors,
         test_loop_guard_escalation,
         test_flat_watermark_detector,
         test_decisions_cap_stops_a_stall,
+        test_no_jev_stops_the_run_at_the_first_stall,
         test_budget_cap_stops_the_run,
         test_emulated_seconds_cap,
         test_ladder_exhausted_runs_one_research_pass_then_retries,
+        test_a_research_pass_costs_money_and_the_run_counts_it,
         test_research_merge_keeps_the_harness_duration,
         test_promote_tips_is_a_separate_step,
         test_cheat_validation,

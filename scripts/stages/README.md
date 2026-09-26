@@ -455,12 +455,24 @@ beside its routes:
   `address` is `null` is how a map records a number that is **not** RAM at all —
   Mega Man 3's `state_frame` is the save state's `ppu.frameCount` — so it is
   skipped, named in the loader's own report, and never asked of the emulator.
+  `%` is allowed, and Mega Man 3 is why: its `$0025` and `$0027` are one byte
+  each, so the level's position is `level_page($002D) * 256 + camera_scroll_x`
+  plus `(player_x_low - camera_scroll_x) % 256` — three fields, two of them
+  `expr`, and the modulo is what keeps a column a column while both bytes wrap
+  (F14.15, `docs/validation/f1415-jev-adoption-2026-09-26.md` §3).
   Two of its top-level keys name the fields the run judges on — `progress` (the
   number the search maximises and a stall is measured against) and `screen`, with
   `screen_width`, so "the start of the current screen" is a boundary the rewind
   ladder can hold. `--ram-map`, `--progress-field` and `--screen-field` override
   the file and its defaults.
 - `jev-tips.json` — optional, and the schema above.
+
+`--no-jev` (F14.15, ADR-0238 §5) is the **search-alone arm**: no client is
+built, no `OPENROUTER_API_KEY` is required, and the run ends at its first stall
+as `no-jev` instead of asking anyone. It is the same macro library, the same
+session and the same caps as a Jev run, so `--no-jev` against a Jev run is the
+A/B the ADR's adoption criterion is read from — and the base search alone runs
+at ≳ 3.9× real time where a run that reaches the web-research pass does not.
 
 One more file the format allows and **nothing reads yet**: `cheats.json`, the
 RAM-only cheats a coverage pass may use (ADR-0184), each with the measurement

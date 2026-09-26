@@ -65,7 +65,16 @@ whose stall the ADR was written about.
   `scripts/jev_stall_research.py` — one `claude -p --model
   'claude-deepseek-v4-flash[1m]' --allowedTools WebSearch,WebFetch
   --output-format json` worker, report on stdin as data, query carrying the game
-  and the spot only. Its proposals land under `runs/`, are re-stamped with the
+  and the spot only.
+  **Erratum (2026-09-26, F14.15's second pass, [log](f1415-jev-adoption-2026-09-26.md) §6).**
+  That model id is what this log ran; it is not what the module uses now, and the
+  reading above was of a worker that never answered. Measured: this CLI does not
+  know the pinned DeepSeek id (`[claude-code:unrecognized_model]` on stderr, no
+  output on this module's own prompt at a 150 s and a 240 s cap), `--output-format
+  json` writes an array of stream events rather than the `{"result": …}` envelope
+  this log assumed it parsed, and `--allowedTools` does not restrict the worker.
+  The module is `MODEL = "sonnet"` and reads the event array.
+  Its proposals land under `runs/`, are re-stamped with the
   harness's own macro durations (a proposal never picks how long a press lasts),
   and reach the versioned tips file only through `--promote-tips`, after the
   stall they were written for passed.

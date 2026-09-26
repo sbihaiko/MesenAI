@@ -20,16 +20,15 @@ The shape of a run:
   tips whose RAM trigger holds (`scripts/stages/<game>/jev-tips.json`), and the
   macros that already failed from that checkpoint withdrawn from the options.
 * A **rewind ladder** of 1, 2, 4, 8 and 16 emulated seconds back, never past the
-  start of the current screen or the last real progress, up to three questions
-  per rung. When the ladder is exhausted the stall is written out as a report
+  start of the current screen, up to three questions per rung. When the ladder is exhausted the stall is written out as a report
   and **one research pass** (`scripts/jev_stall_research.py`, a `claude -p`
   worker with web search) proposes tips and a macro; the retry starts from the
   checkpoint with the proposals kept under `runs/`.
-* A **loop guard** watches three things per decision - a state fingerprint seen
-  three times in one stall, a watermark that has not risen for 60 emulated
-  seconds, a period-2..4 cycle repeated three times in the last 12 choices. The
-  first loop bans the cycle's macros and climbs a rung, the second goes to
-  research, the third ends the stall as `loop`.
+* A **loop guard** watches three things per decision - the **committed head's**
+  state fingerprint seen three times in one stall, a watermark that has not risen
+  for 60 emulated seconds, a period-2..4 cycle repeated three times in the last
+  12 choices. The first loop bans the cycle's macros and climbs a rung, the
+  second goes to research, the third ends the stall as `loop`.
 * What survives is a plain `<n>f <buttons>` script, the same format
   `scripts/stages/<game>/*.txt` already uses, with one `1f -` after each macro
   (`render_script`, the same input-neutral boundary `scripts/route_search.py`
@@ -912,6 +911,7 @@ class Summary:
     loops: int
     stalls: int
     spend_usd: float
+    research_spend_usd: float
     wall_s: float
     emulated_s: float
     goal_reached: bool
@@ -937,6 +937,7 @@ class Summary:
             "loops": self.loops,
             "stalls": self.stalls,
             "spend_usd": round(self.spend_usd, 6),
+            "research_spend_usd": round(self.research_spend_usd, 6),
             "goal_reached": self.goal_reached,
             #The search plays a *chain* of play calls; the artifact is one flat
             #script, and only the flat replay of it is measured (measure_script).
@@ -989,15 +990,18 @@ class Harness:
         #Macros a research pass proposed: they joined the fixed set, so a later
         #question offers them without a tip having to name them.
         self.researched_macros = []
+        #What the web-research workers cost, kept apart from the Jev client's own
+        #accounting: a pass is US$ 0.02 or so (measured 2026-09-26) and the
+        #budget clause is per run, so a run whose ladder keeps reaching research
+        #has to see it.
+        self.research_spend_usd = 0.0
         self.stalls = 0
         self.loop_count = 0
         self.head = None
         self._lines = []
         self._watermark = 0.0
         self._last_progress_t = 0.0
-        self._last_progress_ckpt = None
         self._screen = None
-        self._screen_ckpt = None
         #Two clocks, and they measure different things. `_played_frames` is what
         #the emulator actually emulated - every candidate of every base step -
         #and it is the honest cost, so the emulated-seconds cap and the speed
@@ -1005,9 +1009,8 @@ class Harness:
         #that bought no progress, which is what "stuck for N emulated seconds"
         #means to anyone reading the script, and what the rewind ladder is
         #measured in. They are kept apart because the probes of one base step
-        #are seven eighths of the work and none of the run, and a stall clock
-        #fed by the probes would open a ladder whose every rung is behind the
-        #last real progress and would therefore never rewind at all.
+        #are seven eighths of the work and none of the run, and a stall clock fed
+        #by the probes would open a ladder the run had never earned.
         self._played_frames = 0
         self._stuck_frames = 0
         self._active_stall = None
@@ -1116,7 +1119,6 @@ class Harness:
         if int(progress) > int(self._watermark):
             self._watermark = progress
             self._last_progress_t = head.t
-            self._last_progress_ckpt = self.ring[-1] if self.ring else None
             self._stuck_frames = 0
         else:
             #A frame of the run that bought nothing. The base search commits its
@@ -1124,9 +1126,7 @@ class Harness:
             #would look like played back - and those are the frames the stall
             #clock counts.
             self._stuck_frames += head.frame - (previous.frame if previous else 0)
-        if head.screen != self._screen:
-            self._screen = head.screen
-            self._screen_ckpt = self.ring[-1] if self.ring else None
+        self._screen = head.screen
         self.head = head
         self._keep_checkpoint(head)
         if previous is not None and previous.handle != head.handle:
@@ -1138,11 +1138,7 @@ class Harness:
         while self.ring and self.ring[-1].t > checkpoint.t + 1e-6:
             self._maybe_drop(self.ring.pop().handle)
         self._watermark = max([c.progress for c in self.ring] + [checkpoint.progress])
-        self._last_progress_ckpt = max(self.ring,
-                                       key=lambda c: c.progress) if self.ring else None
         self._screen = checkpoint.screen
-        self._screen_ckpt = next((c for c in reversed(self.ring)
-                                  if c.screen != checkpoint.screen), None)
 
     # ---- the base search -------------------------------------------------
 
@@ -1205,10 +1201,25 @@ class Harness:
         return sum(self.recent_novel) / len(self.recent_novel)
 
     def _loop_flags(self, stall: StallState, state, *, choice=None):
-        """The three detectors, evaluated once per decision."""
+        """The three detectors, evaluated once per decision.
+
+        `state` is the **committed head** - where the run's path stands once the
+        decision has been resolved - and never a rejected attempt's result state
+        (ADR-0238 section 3, amended 2026-09-26). A rejected attempt leaves the
+        path exactly where it was, so its result is what `tried_here` records and
+        nothing here; three macros that fail from one checkpoint are three
+        failures, not a loop.
+
+        Samples of one 8-px cell in a row are **one visit**: a run that stands at
+        one spot for three seconds has stood on one cell, and "the search is
+        pinned" is the watermark detector's finding. What this detector counts is
+        the committed path coming *back* to a cell it had left, which is why the
+        fingerprint list is the path's own itinerary and not a list of questions.
+        """
         flags = []
         fp = fingerprint(state, self.ram_map)
-        stall.fingerprints.append(fp)
+        if not stall.fingerprints or stall.fingerprints[-1] != fp:
+            stall.fingerprints.append(fp)
         seen = stall.fingerprints.count(fp)
         if seen >= 3:
             flags.append(f"fingerprint {fp} seen {seen}x")
@@ -1224,22 +1235,49 @@ class Harness:
 
     # ---- the stall helper ------------------------------------------------
 
+    @property
+    def _spent_usd(self) -> float:
+        """Everything this run has spent: the Jev client's calls and the workers'."""
+        return getattr(self.client, "spent_usd", 0.0) + self.research_spend_usd
+
+    def _screen_floor_t(self) -> float:
+        """When the current screen began, as far back as the ring remembers.
+
+        The ring is one checkpoint per emulated second over the last
+        `--ring-seconds`, so the answer is the oldest checkpoint of the trailing
+        run of same-screen entries. A screen the ring no longer reaches back to
+        answers 0 - there is nothing older to protect.
+        """
+        floor = None
+        for checkpoint in self.ring:
+            if checkpoint.screen == self._screen:
+                if floor is None:
+                    floor = checkpoint.t
+            else:
+                floor = None
+        return floor if floor is not None else 0.0
+
     def _checkpoint_at(self, target_t: float) -> Checkpoint | None:
         """The newest checkpoint at or before `target_t`, never past the floor.
 
-        The floor is the start of the current screen or the last real progress,
-        whichever is later. A rung that would land before it is *clamped* to it
-        rather than dropped, and that is a reading of ADR-0238 section 3 that the
-        measurements forced: a stall is entered after `--stall-seconds` of
-        emulated play, so the last real progress is only a fraction of a second
-        of path behind the head, and a ladder that refused every rung inside that
-        margin would never ask a question at all. Clamping keeps both clauses
-        true - the run never rewinds past either mark, and a rung is always a
-        checkpoint - at the price of the deeper rungs landing on the same one.
+        **The floor is the start of the current screen, and nothing else**
+        (ADR-0238 section 3, amended 2026-09-26). It used to be "or the last real
+        progress", and that second clause made the ladder a formality: `_commit`
+        marks the newest checkpoint whenever the watermark rises, and the
+        watermark rises on every window of a search that is still moving - so the
+        floor sat a fraction of a second behind the head and rungs 1, 2, 4, 8 and
+        16 all clamped onto the same checkpoint. Measured in F14.15's first pass,
+        where every Jev run spent its whole decision budget asking from one spot.
+
+        A rung that would land before the floor is still *clamped* to it rather
+        than dropped: a stall opens only after `--stall-seconds` of play with no
+        progress, so a ladder that refused every rung would ask nothing at all,
+        and a question from the screen's first second is a question a player
+        could have asked. The rungs differ by how far back they reach; when the
+        screen is younger than the rung, several of them land on its start, which
+        is the honest answer.
         """
-        floor = max([c.t for c in (self._screen_ckpt, self._last_progress_ckpt)
-                     if c is not None] or [0.0])
-        target_t = max(target_t, floor)
+        target_t = max(target_t, self._screen_floor_t())
         candidates = [c for c in self.ring if c.t <= target_t + 1e-6]
         return candidates[-1] if candidates else None
 
@@ -1338,7 +1376,7 @@ class Harness:
             "loops": stall.loops,
             "decisions": stall.decisions,
             "decisions_cap": self.max_decisions_per_stall,
-            "spend_usd": round(getattr(self.client, "spent_usd", 0.0), 6),
+            "spend_usd": round(self._spent_usd, 6),
             "rung_s": rung,
             "question": stall.questions + 1,
             "checkpoint_t": round(checkpoint.t, 1),
@@ -1366,6 +1404,13 @@ class Harness:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
+
+    def _ask_research(self, stall: StallState, checkpoint: Checkpoint) -> dict:
+        """One web pass for this stall, its proposals merged and its cost counted."""
+        result = self.research(self._report(stall, checkpoint)) or {}
+        self.research_spend_usd += float(result.get("cost_usd") or 0.0)
+        self._merge_research(result)
+        return result
 
     def _research_subprocess(self, report) -> dict:
         """One `claude -p` web-search worker, through the helper module."""
@@ -1459,10 +1504,17 @@ class Harness:
         return outcome, why
 
     def _run_stall(self, head: Head, stall: StallState):
+        if self.client is None:
+            #`--no-jev`: the search-alone arm of ADR-0238 section 5. The base
+            #search has just run out of candidates - that is what a stall is -
+            #and there is no model to ask, so the run ends here and names it.
+            #Nothing else in this method is reachable without a client, so the
+            #ladder, the research pass and the loop guard are all skipped.
+            return None, "no-jev"
         while True:
             if stall.decisions >= self.max_decisions_per_stall:
                 return None, "decisions-cap"
-            if getattr(self.client, "spent_usd", 0.0) >= self.budget_usd:
+            if self._spent_usd >= self.budget_usd:
                 return None, "budget"
             if stall.rung >= len(LADDER):
                 if stall.research is not None:
@@ -1473,8 +1525,7 @@ class Harness:
                     self.ring[0] if self.ring else None)
                 if checkpoint is None:
                     return None, "exhausted"
-                stall.research = self.research(self._report(stall, checkpoint)) or {}
-                self._merge_research(stall.research)
+                stall.research = self._ask_research(stall, checkpoint)
                 stall.rung = 0
                 stall.questions = 0
                 continue
@@ -1495,7 +1546,16 @@ class Harness:
                 raise HarnessError(
                     f"Jev chose {decision.choice!r}, which this table does not carry")
             played, reached, died = self._attempt(checkpoint, macro, stall)
-            flags, cycle = self._loop_flags(stall, played.state, choice=macro.name)
+            kept = int(self._progress_of(played.state)) > int(stall.watermark)
+            if not kept:
+                #A rejected attempt moves nothing: the run goes back to the
+                #checkpoint, and what it learned there is an entry in
+                #`tried_here`. Resolving it *before* the loop guard is what makes
+                #`self.head` the committed head the guard samples - the state the
+                #path stands on, never the attempt's own result.
+                stall.tried_at(checkpoint.t).append((macro.name, reached, died))
+                self._rewind_to(checkpoint)
+            flags, cycle = self._loop_flags(stall, self.head.state, choice=macro.name)
             if flags:
                 stall.loops += 1
                 stall.reasons.extend(flags)
@@ -1507,19 +1567,17 @@ class Harness:
                     self._maybe_drop(played.handle)
                     return None, "loop"
                 if stall.loops == 2 and stall.research is None:
-                    stall.research = self.research(self._report(stall, checkpoint)) or {}
-                    self._merge_research(stall.research)
+                    stall.research = self._ask_research(stall, checkpoint)
                 self._maybe_drop(played.handle)
                 self._rewind_to(checkpoint)
                 stall.rung += 1
                 stall.questions = 0
                 continue
-            if int(self._progress_of(played.state)) > int(stall.watermark):
+            if kept:
                 return played, "passed"
-            #Failed here: the macro is withdrawn from this checkpoint's questions.
-            stall.tried_at(checkpoint.t).append((macro.name, reached, died))
+            #Failed here: the macro was already withdrawn from this checkpoint's
+            #questions above, and this is the question it was one of.
             stall.questions += 1
-            self._rewind_to(checkpoint)
             if stall.questions >= self.max_questions_per_rung:
                 stall.rung += 1
                 stall.questions = 0
@@ -1591,7 +1649,7 @@ class Harness:
             if self.goal and self._goal_reached(head.state):
                 reason, goal = "goal", True
                 break
-            if getattr(self.client, "spent_usd", 0.0) >= self.budget_usd:
+            if self._spent_usd >= self.budget_usd:
                 reason = "budget"
                 break
             #A search with nothing legal left to play is stalled in every sense,
@@ -1630,7 +1688,8 @@ class Harness:
                        frames=measured["frames"], played_frames=self._played_frames,
                        decisions=getattr(self.client, "calls", 0),
                        loops=self.loop_count, stalls=self.stalls,
-                       spend_usd=getattr(self.client, "spent_usd", 0.0), wall_s=wall,
+                       spend_usd=self._spent_usd,
+                       research_spend_usd=self.research_spend_usd, wall_s=wall,
                        emulated_s=self._played_frames / FPS,
                        goal_reached=flat_goal if self.goal else goal,
                        chain_goal_reached=goal, chain_frames=head.frame,
@@ -1888,6 +1947,20 @@ def promote_tips(path, tips) -> int:
     return added
 
 
+def make_client(*, no_jev, budget, log_path):
+    """The vendor client, or `None` for the search-alone arm.
+
+    ADR-0238 section 5's first arm is the search with no model in it, so it is
+    the same macro library, the same caps and the same session - only the
+    question is missing. That arm needs no key, and this is the one place that
+    decides so: a `JevClient` is never built for it, which is why the harness
+    cannot refuse a `--no-jev` run for want of `OPENROUTER_API_KEY`.
+    """
+    if no_jev:
+        return None
+    return jev_client.JevClient(budget_usd=budget, log_path=log_path)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--rom", required=True)
@@ -1906,6 +1979,10 @@ def main(argv=None) -> int:
     parser.add_argument("--route-macros", action="store_true",
                         help="also offer F14.13's route_search windows (off by "
                              "default: with them the x 987 pin is not a stall)")
+    parser.add_argument("--no-jev", action="store_true",
+                        help="the search-alone arm of ADR-0238 section 5: never "
+                             "call Jev, need no key, and end the run at its first "
+                             "stall as `no-jev`")
     parser.add_argument("--macro", action="append", default=None,
                         metavar="NAME=BUTTONS[:TEXT]")
     parser.add_argument("--goal", default=None, metavar="FIELD:MIN",
@@ -1975,8 +2052,13 @@ def main(argv=None) -> int:
                   f"(ram-map.json's stage_id is not a verified address).",
                   file=sys.stderr)
 
+    if args.no_jev:
+        print("note: --no-jev: the run will not call Jev; its first stall ends it "
+              "as `no-jev`, which is the search-alone half of ADR-0238 section 5's "
+              "adoption criterion", file=sys.stderr)
     try:
-        client = jev_client.JevClient(budget_usd=args.budget, log_path=log_path)
+        client = make_client(no_jev=args.no_jev, budget=args.budget,
+                             log_path=log_path)
     except jev_client.MissingKeyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
