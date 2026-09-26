@@ -865,7 +865,8 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   entirely) and #549 (the §5 log called every game a CHR RAM one) were filed
   and fixed in PR #550 with tests that failed first; #551 (`--rom` unvalidated:
   a non-iNES file crashes after the §4 table, a directory passes `exists()`, a
-  truncated iNES is read as CHR RAM) is open. Evidence: SMB1's dump is the hack
+  truncated iNES is read as CHR RAM) was filed from that verification and fixed
+  in PR #553. Evidence: SMB1's dump is the hack
   *Super Mario Bros. Revisited*, not retail, so its row is real for that file
   and not comparable with a retail-keyed pack; and the Core dylib was rebuilt
   at 12:55 by a sibling session mid-wave, which split Mega Man 2's baseline

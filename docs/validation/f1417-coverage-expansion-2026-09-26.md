@@ -264,7 +264,10 @@ Named per game in each `RESULT.md`; the recurring ones:
 - **#551 — `--rom` is never validated** (a non-iNES file crashes after the §4
   table has printed, a directory passes `exists()`, and a truncated iNES is read
   as CHR RAM because a declared-but-absent CHR bank and a CHR RAM cartridge both
-  come back as `b""`). **Open**, filed from the independent verification of #550.
+  come back as `b""`). Filed from the independent verification of #550 and fixed in
+  PR #553: `artist_chr_kit.Rom` refuses a short or truncated dump, the metrics
+  reader turns that into a `ValueError` naming the path, and the CLI exits 2
+  before the report starts.
 - **The review of this slice found three sets that would have recorded
   nothing.** Dr. Mario's, Ice Climber's and Metroid's only route was pruned by
   `library_job.start_plan` — two because the name matched no mint, one because
