@@ -321,6 +321,7 @@ ApuDmcState DeltaModulationChannel::GetState()
 	state.SampleAddr = _sampleAddr;
 	state.NextSampleAddr = _currentAddr;
 	state.SampleLength = _sampleLength;
+	state.BitsRemaining = _bitsRemaining;
 	return state;
 }
 
