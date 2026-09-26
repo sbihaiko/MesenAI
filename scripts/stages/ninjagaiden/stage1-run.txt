@@ -1,28 +1,23 @@
 # Ninja Gaiden: 60 s of Act 1-1 from the state mint-stage1.txt writes (the job
-# mints it at frame 1082; the first frame of player control is 1075). 3 600
-# frames, the batch's 60 s.
+# mints it at frame 1082). 3 600 frames, the batch's 60 s.
 #
 # How far it gets. Absolute x is camera $0052:$0051 plus Ryu's screen x $0086
 # ($0052 is signed; walking left of the level start clamps it to $FF). The first
-# 660 frames are the windows a beam search accepted over that position
-# (runs/route-ninjagaiden/solve.py), and they carry Ryu from x 32 to x 988 - the
-# camera at 860 ($03:$5C) plus his 128 - 3.9 screens into the act, by frame 690.
-# The sidecar this replaces never passed x 223 (0.87 screens, measured the same
-# way): it oscillated inside the first screen for the whole minute.
+# 660 frames carry Ryu from x 32 to x 987 - the camera at 859 ($03:$5B) plus his
+# 128 - 3.86 screens into the act, by frame 688. The sidecar this replaces never
+# passed x 234 (0.91 screens, measured the same way): it stayed inside the first
+# screen for the whole minute.
 #
-# x 988 is the act's first section boundary and the game pins Ryu on it. From
-# there, holding Left for 600 frames moves him 0 px and leaves the camera at
-# 860; $0065 drains about 1 every 2 s; only a jump (Left+A) leaves the spot at
-# all. So the tail backs off into the screen and keeps the act with the same
-# 120-frame direction holds the previous sidecar used. $0076 stays 2 for
-# all 3 600 frames and $0065 ends at $0E - one hit in the whole minute, against
-# 10 -> 06 for the old sidecar's own run.
+# x 987 is where the game pins Ryu. From there, holding Left moves him 0 px and
+# leaves the camera at 859; only a jump (Left+A) leaves the spot at all. So the
+# tail backs off into the screen and keeps the act with 120-frame direction
+# holds. $0076 stays 2 for all 3 600 frames and $0065 ends at $0E - two ticks
+# ($10 -> $0F -> $0E) over the minute, against $02 for the old sidecar's run.
 #
 # What that costs: the recorder reads 125 silhouettes from 3 246 retained OAM
-# frames, 62 kept, 8 cycles (1 with a driver: cycle000, 2 phases, hold [5,5],
-# x661), against 220 / 103 / 13 / 2 for the run that kept moving. Tile coverage
-# is unchanged - 8 714 <tile> lines against 8 722. input.never: Select, Start,
-# Up, Down, Left+A, Left+B.
+# frames, 62 kept, 8 cycles (1 with a driver: cycle004, hold [5,5], x661),
+# against 103 poses for the run that kept moving. Tile coverage: 8 475 <tile>
+# lines against 8 375. input.never: Select, Start, Up, Down, Left+A, Left+B.
 #
 # RAM read to author this (public map: TASVideos "Game Resources / NES / Ninja
 # Gaiden" RAM Map, and Data Crystal "Ninja Gaiden (NES)/RAM map"): $0076 lives,
