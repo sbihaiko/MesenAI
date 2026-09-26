@@ -698,6 +698,17 @@ def test_every_versioned_stage_set_names_a_dump_and_routes_that_exist():
         check(bool(routes) and all(p.is_file() and p.stat().st_size for p in routes),
               f"{d.name}: holds at least one non-empty recordable route",
               f"{[p.name for p in routes]}")
+        # A route on disk is not a route the job can record: `start_plan` prunes
+        # every route whose state nothing produces, and a set whose every route
+        # is pruned is declared and then skipped in silence. That is how three
+        # sets shipped declaring nothing to record (#552): a route named after
+        # the screen rather than after the `mint-*.txt` that gets it there, and
+        # one set whose new mints turned its power-on route into a pruned one.
+        plan = L.start_plan(d)
+        pruned = {r: v["reason"] for r, v in plan["routes"].items() if v["start"] is None}
+        check(len(pruned) < len(plan["routes"]),
+              f"{d.name}: at least one route the library job can start",
+              "; ".join(f"{r}: {why}" for r, why in pruned.items())[:300])
     names = {s["name"] for s in sets.values()}
     check(names == set(declared),
           f"all {len(declared)} golden sets resolve through load_stage_sets",

@@ -712,6 +712,16 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   - No issue filed.
   [Log](../validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md).
 
+- **F14.11** (2026-09-25) — a capture draws only the cells it carries
+  (ADR-0236, #499). The recorder writes, per capture, a positional 32×30 record
+  of the key the run time reads at each cell origin, and a `<background>` with
+  the record draws a cell only when the live key there matches. Ninja Gaiden's
+  31 s frame no longer shows the stale `screen001` HUD, the 30-ROM library's
+  stale frames fall 2 995 → 618 with 219/219 captures kept, and packs without
+  the record are byte-identical. 1316/1316 core cases, 66 python tests,
+  `make doc-checks` 0.
+  [Log](../validation/f1411-capture-cell-guard-2026-09-25.md).
+
 - **F14.12** (2026-09-26) — a persistent step-mode session (ADR-0238 §1;
   go-ahead *"implemente usando o deepseek"*). `headless_record`'s `session` mode
   loads a ROM and a state once and serves one request per line
@@ -826,6 +836,43 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   never recorded, and the bosses and mid-stage rooms no selector reaches stay
   §1 rung 3 work.
   [Log](../validation/f1416-coverage-sweep-2026-09-26.md).
+
+- **F14.17** (2026-09-26) — coverage past the first stage, wave two, delivered
+  (ADR-0239; same go-ahead as the ADR's Status line quotes). Eight more
+  profiles take eight more games past stage 1, seven of them on rung 1: Mega
+  Man's STAGE SELECT — a ring of six portraits, not the 3×2 grid it draws —
+  (6 sessions), its sequel's own stage select (8), Dr. Mario's VIRUS LEVEL row
+  (21), Ice Climber's MOUNTAIN row (31, rung 2 available and not needed),
+  Lemmings' ACCESS CODE screen typed from the ROM's own 100-entry table (16),
+  Tetris' A-TYPE level and B-TYPE height selects (18), Metroid's password
+  screen (11, nothing pinned anywhere in the chain), and Super Mario Bros.
+  world 1–8 through a published RAM selector (8, the one rung-2 profile — the
+  game has no stage select at all). **119 sessions of 120 emulated seconds,
+  none `did-not-warp` except the identity value of four games**, and the union
+  with each game's stage-1 route moves ROM CHR coverage from 58.2 % to 60.1 %
+  (Dr. Mario), 58.0 % to 67.6 % (Ice Climber), 21.1 % to 43.9 % (Lemmings) and
+  26.3 % to 47.4 % (SMB1); the three CHR RAM games have no §5.2 denominator.
+  **Two of the eight rows are the finding**: Dr. Mario's twenty-one virus
+  levels buy +45 keys, 23 of them the clipboard's own digits, and Tetris' eighteen
+  level/height combinations buy +425 keys and **+4** tile data — what a level
+  select adds to those games is palette and counters, not tile, which only a
+  tile-data column can say. Metroid measured §4's converse failing: a published
+  password whose checksum does not reconcile never left the password screen and
+  still scored 143 `new` keys, so a non-zero `new` is not by itself proof of a
+  warp and the `ramCheck` is; 138 of that game's +856 keys are the selector's
+  own art. **Three defects found**: #548 (`--dry-run` wrote, and destroyed a
+  real sweep's record — three write sites, plus `--rescore` ignoring the flag
+  entirely) and #549 (the §5 log called every game a CHR RAM one) were filed
+  and fixed in PR #550 with tests that failed first; #551 (`--rom` unvalidated:
+  a non-iNES file crashes after the §4 table, a directory passes `exists()`, a
+  truncated iNES is read as CHR RAM) was filed from that verification and fixed
+  in PR #553. Evidence: SMB1's dump is the hack
+  *Super Mario Bros. Revisited*, not retail, so its row is real for that file
+  and not comparable with a retail-keyed pack; and the Core dylib was rebuilt
+  at 12:55 by a sibling session mid-wave, which split Mega Man 2's baseline
+  from its sessions — re-recorded on the current binary, and the correction is
+  kept beside the first reading.
+  [Log](../validation/f1417-coverage-expansion-2026-09-26.md).
 
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
@@ -1535,12 +1582,6 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
-| F14.11 | **A capture draws only the cells it carries (ADR-0236, #499).** The recorder writes, per capture, a positional 32×30 record of the key the run time reads at each cell origin (a new `hires.txt` tag bound to its `<background>`, grammar in the extension spec, carried by `mep_build`/`mep_carry`); at run time a `<background>` with the record draws a cell only when the live key there equals the recorded one — one predicate shared with `HdPackTileAtPositionCondition`, a per-frame mask (per scanline when the scroll ratio is not 0). A `<background>` without the record draws as today. Packs already written are not re-recorded. Replaces F14.10 (option 2, measured and not merged: `docs/validation/f1410-probe-evidence-2026-09-25.md`). | Accepted 2026-09-25 (*"Opção 3: guarda no render (Recommended)"*, re-confirmed *"Manter opção 3 (Recommended)"*); go-ahead verbatim *"sim, siga com 1, 3 e 4, usando os modelos que indiquei, rodando com workflows, paralelizando o que for possível"*; **delivered 2026-09-25** (`docs/validation/f1411-capture-cell-guard-2026-09-25.md`: Ninja Gaiden's 31 s HUD live, library stale frames 2 995 → 618 with 219/219 captures kept, packs without the record byte-identical). Stop when (1) Ninja Gaiden `stage1-run` re-recorded: its 31 s frame no longer shows the stale `screen001` HUD (TIMER/SCORE move, as in the no-pack control); (2) unit tests pin a live cell that differs from the record (masked), one that matches (drawn), a `<background>` without the record (unchanged), and the shared predicate; (3) the 30-ROM library, re-recorded, publishes before/after captures, drawn frames, stale frames and masked cells, naming per masked cell what filled it (vanilla vs a routed `<tile>` / bootstrap ramp), every game whose numbers move explained; (4) a hand-made pack with `<background>` lines (Contra80s) renders byte-identically. |
-| F14.12 | **Persistent step-mode emulator (ADR-0238 §1).** A long-lived headless session that loads a ROM and state once and serves run-N-frames-with-input, read-RAM and in-memory save/restore without a relaunch; transport (InteropDLL via ctypes, or a `headless_record` stdin/stdout mode) picked by measurement. Stop conditions: (1) the Ninja Gaiden search is ported to it; (2) its per-candidate cost is measured before and after, and the log is versioned. | ADR-0238; **delivered 2026-09-26** (`docs/validation/f1412-step-mode-emulator-2026-09-26.md`: transport is a `session` mode of `headless_record`, per candidate 0.232 s -> 0.091 s, the ported search matches the scratch search's own log 15/15 hops, and its RAM at frames 688/1800/3600 is byte-identical to a one-shot run's) |
-| F14.13 | **Fix the Ninja Gaiden search before Jev (ADR-0238 §2).** Add the Left+A jump macro Ryu's x 987 pin needs and re-run the search on F14.12. Stop condition: the search passes x 987, or the log shows it cannot with the macro available. | ADR-0238; **delivered 2026-09-26** (`docs/validation/f1413-ninjagaiden-search-2026-09-26.md`): the wall hop (`4f LA` + `25f RA`) joins `route_search.CANDIDATES` and the search passes the pin, reaching abs x 3 035 and a second section; a `--chunk` too short for a hop's fixed frames drops those candidates with a note. `scripts/stages/ninjagaiden/stage1-run.txt` is replaced (111 windows / 3 330 frames) and replays flat and deterministically — all 2 048 RAM bytes equal, twice per checkpoint at 7 cuts, and the positions agree with the search's log exactly at 4 of them (the rest differ because that log is a pre-#543 artifact). The beam's reserved slot is what carries the climb, so the archive comparison reads 12/15 where F14.12 read 15/15. Open: the route ends one window short of a death — every candidate at hop 113 loses a life, which is the stall F14.14 and F14.15 then measure |
-| F14.14 | **Jev as the stall helper (ADR-0238 §3–§4).** On no progress for a set number of emulated seconds, one Jev Choice (`typesafe/jev-1.13` via OpenRouter) over about seven fixed-duration macros, with RAM-derived JSON state; the output is a plain `scripts/stages/<game>/*.txt` script and replay never calls Jev. Key from `OPENROUTER_API_KEY` or the gitignored `.env`, never printed or logged; per-decision log of snapshot id, request id, choice and probabilities in `runs/`; US$ 1 hard cap. Stop condition: the harness refuses to run without the key and stops at the cap (both tested). ADR-0238; **delivered 2026-09-26** (`docs/validation/f1414-jev-stall-helper-2026-09-26.md`: from the minted Act 1-1 state the harness passed the x 987 pin to abs x 991 in 2 Jev decisions for US$ 0.000094 — wall 45.75 s for 159.49 emulated s, 3.49× real time — and the 1 232-frame script it wrote replayed with no AI matched abs x 545/987/991 and `lives`/`hp` at three frames. The search plays a chain of `play` calls and the artifact is one flat script: without `route_search`'s `1f -` boundary frame the flat replay reads 978, so the boundary is written, the completed script is replayed flat, and *that* replay decides the goal. 123 → 168 unit checks with the review fixes, 12/12 mutations caught. **Both opens of the first pass closed in the same slice's revision, each with a test that failed first:** the session applies and reports every cheat *before* it prints `ready`, so a cheated run is no longer refused (`scripts/test_session_protocol.py` drives the real binary through the malformed-request cases; Mega Man 3's three codes re-verified **by effect** — the earlier "two do not hold" was a readback artifact, because a NES RAM cheat substitutes on read), and `test_step_emu_rom.py` pins the route by content (`PINNED_ROUTE_SHA256`, re-pinned on F14.13's route: abs x 1 170.50 at window 30, 988 at frame 688) and prints `skip` rather than failing when a rewrite moves the pin. F14.15 then ran a cheat end to end (`cheat=00A2:9C`). Open: `--route-macros` offers the search's windows to Jev only — the harness has no flag that puts them in the base set) |
-| F14.15 | **Measure and decide (ADR-0238 §5).** Ninja Gaiden x 987 (if F14.13 left it standing) and one Mega Man 3 boss. Adopt beyond the spike only if Jev passes at least one stall the search could not **and** the kit gains cells the current route does not record; the hybrid run reaches ≥ 3× real time; Grok 4.6 replays the committed script with no AI and matches RAM checkpoints. | ADR-0238; **delivered 2026-09-26** (`docs/validation/f1415-jev-adoption-2026-09-26.md`): F14.13's `route_search` passes Ninja Gaiden's x 987 and it is no Jev case *there*, but the harness's own base search still stalls on it — that pin is F14.15's control (`goal`, 2 decisions, 4.03×). The Mega Man 3 stall was moved by measurement to page 3 / camera 184 (the briefed camera-187 point is not a stall). The search alone fails both (4.09–4.26× real time, new `--no-jev` arm). **First pass void** — its 0-of-8 came from four harness defects (rewind-ladder floor, loop-guard fingerprint, a one-byte wrapping `abs_x`, a research worker that could never answer), each fixed with a test that failed first. **Second pass: Jev passed the Mega Man 3 stall in 5 of 5 arms, tips on and off, 3.57–3.62× real time**, and 0 of 4 on Ninja Gaiden's. The gate's second clause still fails: that route bought the kit **0 keys** the committed routes do not already record. **Third pass: the verdict stands on harder numbers** — the clause was re-measured on a route 78 px further in (abs x 984) against the same-length search-alone recording: +97 cells and +22 keys, +13 over the two committed MM3 routes, and still **0 keys no other pack here has**; stall A's ladder lands on four distinct checkpoints and Jev still fails it (0 of 2), and the worker's tool restriction is real and checked per run. Verdict: **do not adopt beyond the spike** — one clause short |
-| F14.16 | **Coverage past the first stage (ADR-0239).** A `navigation.json` per deep-measured game (Excitebike, Castlevania, Punch-Out!!, SMB3, Ninja Gaiden), reaching each later stage through the game's own input selector or a published RAM selector pinned for the run, 120 s per session; `record_navigation_sweep.py` gains `navigation.kind`, per-value `entry`/`body`/`cheats`/`ramCheck`, `did-not-warp`, `--baseline` and `--rom-chr`. Stop condition: a before/after table (stage-1 route alone vs the union) per game in `docs/validation/f1416-coverage-sweep-2026-09-26.md`. | ADR-0239; **delivered 2026-09-26** (`docs/validation/f1416-coverage-sweep-2026-09-26.md`: five profiles, 73 sessions, none `did-not-warp`, ROM CHR 67.8→95.8 % on Excitebike, 13.4→67.1 % on Punch-Out!!, 7.3→17.1 % on SMB3, 8.6→42.6 % on Ninja Gaiden, reference 27.0→31.8 % on Castlevania; no lives pin, the inert control failed on both games it was tried on) |
 
 ### 5. Order of execution
 

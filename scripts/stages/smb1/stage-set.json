@@ -1,0 +1,8 @@
+{
+  "game": "Super Mario Bros.",
+  "rom": {
+    "noIntroSha1": ["B606D2CF1EC5E8732B8748D272417B7FECB4EEF7"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of the library file Super Mario Bros. (1985) (Nintendo).nes (whole-file SHA1 155C2E0936E8B4A44950195B81A94257F42D5D93; 40 976 bytes, a plain iNES header, mapper 0, 2 x 16 KB PRG + 1 x 8 KB CHR), computed with the README's mep_build._no_intro_sha1 command. IT IS NOT RETAIL SUPER MARIO BROS.: its title screen reads 'SUPER MARIO BROS. / REVISITED' over 'ONE PLUMBER / TWO PLUMBERS / TOP- 000000', where retail reads '1 PLAYER GAME / 2 PLAYER GAME' (screenshot kept at runs/f1417/smb1/probe/title/). Every SMB1-named ROM on this machine is this same file. The pin is honest in the only sense this project allows - mint-stage1.txt and stage1-run.txt were authored and recorded on THIS dump, and the navigation sweep's figures are this dump's - but a reader must not compare them with anything keyed to retail SMB1, and scripts/stages/smb3/stage-set.json recorded the same finding independently ('the old library's SMB1 file is a hack under a misleading name'). The published RAM map's selectors were measured to still hold on it: $075F at 0x00-0x07 loads eight distinct levels and the HUD reads Worlds 1-1 through 8-1."
+}

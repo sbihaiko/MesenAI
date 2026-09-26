@@ -1,0 +1,257 @@
+{
+  "_comment": [
+    "Navigation sweep profile for Tetris (1989) (Nintendo) - PRD Part A slice",
+    "F14.17, the ADR-0239 selector sweep extended to a game the first five did",
+    "not cover. Read by scripts/record_navigation_sweep.py.",
+    "",
+    "RUNG 1, AND THAT IS THE WHOLE POINT OF THIS GAME. navigation.kind is",
+    "'input', so no cheat rides with any session, no address is pinned, and",
+    "every session is an ADR-0184 s2 clean pass that all four of ADR-0183 s1's",
+    "surfaces may read. Rung 2 is available here - Data Crystal publishes both",
+    "bytes this selector writes, $0047 starting speed level and $0059 B-type",
+    "height level - but rung 1 reaches every place they name, so ADR-0239 s1's",
+    "ladder stops at the first rung.",
+    "",
+    "TETRIS IS THE SWEEP'S NEGATIVE CASE, and the profile is shaped to say so.",
+    "The place this selector reaches is a STARTING LEVEL, not a different",
+    "stage: the same well, the same seven tetrominoes and the same panels are",
+    "played, faster, and the level's own contribution to the art is the piece",
+    "palette it picks (and, for B-TYPE, the garbage rows the height pre-fills).",
+    "So the values below are the levels and the heights, and the interesting",
+    "number is whether a later starting level draws anything the first one does",
+    "not - which runs/f1417/tetris/RESULT.md reports without dressing up.",
+    "",
+    "THE SELECTOR, AS THIS ROM SHOWS IT (all read off this dump on 2026-09-26):",
+    "",
+    "  title          'PUSH START'. One Start pressed before it arrives skips",
+    "                 the copyright notice (measured: a Start at frame 150 -",
+    "                 2.5 s - lands on the title, so most of the notice is",
+    "                 skippable and the entries use 150 f).",
+    "  game select    'GAME TYPE' with 'A-TYPE' and 'B-TYPE', and 'MUSIC TYPE'",
+    "                 with 'MUSIC-1/2/3/OFF'. Left/Right picks within a row and",
+    "                 Up/Down moves between the two rows; Start goes on to the",
+    "                 selected type's LEVEL screen.",
+    "  level screen   'LEVEL' as a 2x5 grid (0-4 over 5-9). Right walks it in",
+    "                 reading order, wrapping 4 -> 5 and clamping on 9; Up/Down",
+    "                 switches rows with the column kept. B-TYPE's screen adds",
+    "                 'HEIGHT' as a 2x3 grid (0-2 over 3-5) BESIDE it, and",
+    "                 there - and only there - the A button does something: it",
+    "                 toggles which of the two grids the d-pad drives, leaving",
+    "                 the other grid's cursor where it was.",
+    "  levels 10-19   Not on the grid. Holding A down and pressing Start with",
+    "                 it still held starts the game ten levels above the",
+    "                 highlighted one. Measured both ways: a-level19's entry",
+    "                 reads $0047 = 19 at the start of the game, and pressing A",
+    "                 and Start on the SAME frames started nothing at all",
+    "                 ($0048 read 0), so the two have to be a sequence.",
+    "",
+    "THE PUBLISHED SOURCES, quoted rather than paraphrased. StrategyWiki,",
+    "'Tetris (NES)' (https://strategywiki.org/wiki/Tetris_(NES), retrieved",
+    "2026-09-26), 'Game modes': 'A-Type: Endless, choice of starting level (0",
+    "through 19), clear 10 lines to advance to the next level.' and 'B-Type:",
+    "Clear 25 lines, choice of starting level (0 through 19), and choice of",
+    "starting garbage height (0 through 5 ...)'; 'Other options': 'Music: Three",
+    "choices of music can be selected before each game'; 'Harder levels: To",
+    "start a game from levels 10 through 19, highlight a level from 0 through",
+    "9, press and hold [A], and press [Start] to begin a game at a level ten",
+    "higher than the one you highlighted.' Data Crystal, 'Tetris (NES):RAM",
+    "map' (archived copy of 2018-09-23, the live wiki is behind a JS",
+    "challenge): $0047 'starting speed level', $0059 'B-type height level',",
+    "$00C1 'game type (marathon = 0, 25lines = 1)', $0048 'Current game phase',",
+    "$001A 'number of pieces this poweron', $0046/$004F the left/right and down",
+    "autorepeat timers the body's holds rely on.",
+    "",
+    "WHAT THE TWO SOURCES DISAGREE ABOUT, and which one this profile follows.",
+    "StrategyWiki's 'choice of starting level (0 through 19)' is right about",
+    "the reachable range and wrong about the grid: the screen holds ten",
+    "entries, Right clamps on 9 (measured: ten Rights read $0047 = 9), and the",
+    "range above 9 exists only through the A-hold trick. That is why there is",
+    "no 'level 15' value on the grid - the value list follows the measurement.",
+    "",
+    "THE VALUES, 18 sessions. The selector reaches ten levels on the grid, ten",
+    "more through the A-hold trick, two game types and six heights, so the",
+    "place space is 2 x 20 x 6. What is swept is: every level the GRID holds",
+    "for A-TYPE (0-9), the far end of the extended range the A button adds",
+    "(19), every height at B-TYPE level 0 (0-5), and the corner the two grids",
+    "compose (B-TYPE level 9 height 5). WHAT IS LEFT OUT, and why: levels",
+    "10-18, because 19 is the extreme of the range the A button adds and the",
+    "sweep asks whether that range draws anything the grid does not, so 19",
+    "answers it for 10-18 as well; and the 110 level x height combinations of",
+    "B-TYPE beyond the corner, because level and height are independent knobs",
+    "on the same screen and each axis is swept complete on its own - the corner",
+    "is there to show they compose, not to enumerate them.",
+    "",
+    "A-TYPE LEVEL 0 IS ALSO THE 'BEFORE'. It is the game's own stage-1 route:",
+    "a run that answers every menu with the button that is already selected.",
+    "Its entry is mint-stage1.txt - the name scripts/stages/README.md gives a",
+    "walk from power-on to a stage's start - and it is recorded twice, once as",
+    "the sweep's own a-type-level0 value and once on its own into",
+    "runs/f1417/tetris/before/, which is the pack --baseline folds in as the",
+    "'before' side of ADR-0239 s5. Those two runs are the sweep's CONTROL: they",
+    "are the same route through two separate invocations of the recorder, so a",
+    "a-type-level0 session reporting new == 0 is not a failure but the check",
+    "that the before really is the game's first place and that the two arms",
+    "agree.",
+    "",
+    "NO RAM CHECK IS DECLARED, AND THAT IS A MEASUREMENT, NOT AN OVERSIGHT.",
+    "ADR-0239 s4 reads a check off the session's FINAL state, and a 120 s",
+    "Tetris session does not end where it played: the blind body tops out, the",
+    "game shows its GAME OVER and its score screen, and it returns to the",
+    "title, where the whole game-state block is reset. Measured 2026-09-26 on",
+    "the 120 s pilot (runs/f1417/tetris/pilot/): the final state's screenshot is",
+    "the title in all three arms tried, $0047 and $0059 read 00, and a",
+    "byte-for-byte diff of a played session's final RAM against a session that",
+    "never left the title finds 60 bytes - the sound engine ($0680-$06CE) and",
+    "the held-button register ($00F7) - and none of them the selector's. A",
+    "check on $0047 would therefore read 00 for all 18 values and would be",
+    "worse than no check at all: it would look like a gate and measure nothing.",
+    "This is Excitebike's case taken to its end - there a race ending returns",
+    "$004F to 00, here every place is cleared by the title - and the sweep",
+    "answers it the same way ADR-0239 s4 says to: `new` is the gate. The",
+    "per-value proof that each session started where its entry asked for lives",
+    "in runs/f1417/tetris/RESULT.md as a table read off short recordings of the",
+    "same entries, four seconds into the game, while $0047 and $0059 still hold",
+    "what the selector wrote.",
+    "",
+    "NO LIVES PIN, so ADR-0239 s3's inert control does not apply: Tetris has no",
+    "lives. A game ends by topping out and that is the game's own GAME OVER",
+    "(ADR-0184 s4), recorded rather than foreclosed. defaults.cheats is absent",
+    "and no process in this sweep is launched with a cheat at all.",
+    "",
+    "CAVEAT THAT APPLIES TO EVERY SESSION, and it is larger here than in any",
+    "other game's profile. A session that has topped out and returned to the",
+    "title spends the rest of its 120 s recording the title's own attract",
+    "material and its demo game, which the baseline holds too - so a session's",
+    "`new` is what its FIRST GAME drew, and the union's growth is bounded by",
+    "how much of the 120 s each level spent in play before topping out. The",
+    "corollary is the one ADR-0239 s6 states for every game: the stage-clear",
+    "transition is never recorded, and here neither is the transition from a",
+    "topped-out game back to the title as anything but the title itself."
+  ],
+
+  "game": "Tetris",
+  "rom": "Tetris (1989) (Nintendo).nes",
+  "romSha1": "A99F922E9DA20B2A27E4398348505D2E9D15271B",
+
+  "navigation": {
+    "kind": "input",
+    "label": "the title screen's GAME TYPE select (A-TYPE / B-TYPE) and the LEVEL screen behind it (ten grid entries plus the A-hold range above them; B-TYPE's screen adds HEIGHT)",
+    "source": "StrategyWiki, 'Tetris (NES)' (https://strategywiki.org/wiki/Tetris_(NES), retrieved 2026-09-26), 'Game modes' and 'Other options': A-Type and B-Type each take a 'choice of starting level (0 through 19)', B-Type adds a 'choice of starting garbage height (0 through 5)', three music choices sit beside them, and levels 10-19 are reached by highlighting 0-9 and pressing Start while A is held. Corroborated by this ROM's own GAME TYPE / LEVEL / HEIGHT screens, read off this dump the same day, and by the bytes the selector writes - $0047 starting speed level, $0059 B-type height level, $00C1 game type - which are Data Crystal's, 'Tetris (NES):RAM map', archived copy of 2018-09-23 (the live wiki is behind a JS challenge). ADR-0239 s1 rung 1: input, no cheat, no pinned address.",
+    "values": [
+      {
+        "name": "a-type-level0",
+        "title": "A-TYPE, starting LEVEL 0 - the game's own first place, and the sweep's control against the separately recorded before",
+        "entry": "mint-stage1.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level1",
+        "title": "A-TYPE, starting LEVEL 1",
+        "entry": "mint-a-level1.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level2",
+        "title": "A-TYPE, starting LEVEL 2",
+        "entry": "mint-a-level2.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level3",
+        "title": "A-TYPE, starting LEVEL 3",
+        "entry": "mint-a-level3.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level4",
+        "title": "A-TYPE, starting LEVEL 4",
+        "entry": "mint-a-level4.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level5",
+        "title": "A-TYPE, starting LEVEL 5 - the first entry on the grid's second row, so the entry reaches it by wrapping Right from 4",
+        "entry": "mint-a-level5.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level6",
+        "title": "A-TYPE, starting LEVEL 6",
+        "entry": "mint-a-level6.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level7",
+        "title": "A-TYPE, starting LEVEL 7",
+        "entry": "mint-a-level7.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level8",
+        "title": "A-TYPE, starting LEVEL 8",
+        "entry": "mint-a-level8.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level9",
+        "title": "A-TYPE, starting LEVEL 9 - the last entry the LEVEL grid holds",
+        "entry": "mint-a-level9.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "a-type-level19",
+        "title": "A-TYPE, starting LEVEL 19 - the far end of the A-hold range, reached by holding A and pressing Start on a highlight of 9",
+        "entry": "mint-a-level19.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height0",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 0 (the 25-line game with an empty well)",
+        "entry": "mint-b-height0.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height1",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 1 (the well opens with garbage rows)",
+        "entry": "mint-b-height1.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height2",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 2",
+        "entry": "mint-b-height2.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height3",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 3",
+        "entry": "mint-b-height3.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height4",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 4",
+        "entry": "mint-b-height4.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-height5",
+        "title": "B-TYPE, starting LEVEL 0, HEIGHT 5 - the tallest the HEIGHT grid holds",
+        "entry": "mint-b-height5.txt",
+        "body": "stage1-run.txt"
+      },
+      {
+        "name": "b-type-level9-height5",
+        "title": "B-TYPE, starting LEVEL 9 and HEIGHT 5 - the corner the LEVEL and HEIGHT grids compose",
+        "entry": "mint-b-level9-height5.txt",
+        "body": "stage1-run.txt"
+      }
+    ]
+  },
+
+  "defaults": {
+    "seconds": 120,
+    "entry": "mint-stage1.txt",
+    "body": "stage1-run.txt"
+  }
+}

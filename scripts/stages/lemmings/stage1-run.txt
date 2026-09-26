@@ -1,0 +1,28 @@
+# Lemmings (NES) stage-1 route: the run *from* the state `mint-stage1.txt`
+# mints, per scripts/stages/README.md (F9.22). It is also the play body
+# every sweep session repeats - ADR-0239 s6: the body is repeated to fill
+# the run - so one file serves both the sweep's 16 access-code sessions
+# and the library job's single level-1 route.
+#
+# The cursor is the view. In this port the D-pad moves the lemming-selection
+# cursor and the view scrolls once the cursor is held against an edge, so a
+# long pan is what draws the parts of a level the start view never shows
+# (measured 2026-09-26 on JUST DIG: a 900-frame Right hold moves the view).
+#
+# A is the assign button; on the "ALL LEMMINGS ACCOUNTED FOR" screen it is
+# TRY AGAIN, so a blind body that loses its lemmings re-enters the same level
+# instead of leaving the rest of the session parked on the fail screen
+# (measured: level 3 and level 12 both restart inside a 120 s session). B is
+# never pressed, because on that same screen B returns to the menu.
+300f R
+10f A
+30f -
+300f L
+10f A
+30f -
+200f D
+10f A
+30f -
+200f U
+10f A
+30f -

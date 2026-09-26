@@ -1,0 +1,74 @@
+# Metal Man: power-on to Metal Man's stage.
+#
+# The path is the game's own: the power-on story, the title screen, the
+# START/PASSWORD menu the title's Start opens, and the stage select cursor. It
+# is rung 1 of ADR-0239 section 1's ladder - the game's own selector, by input,
+# with no RAM cheat at all - so the run is an ADR-0184 section 2 clean pass
+# that all four surfaces may read.
+#
+# The Mega Man 2 instruction booklet (Capcom USA, 1989), 'GETTING STARTED':
+# 'The story of Mega Man will begin. If you would like to skip the story,
+# press START.' ... 'Use SELECT to choose NORMAL or DIFFICULT mode. Press
+# START to begin the game.' ... '3. You must now choose to START or enter a
+# PASSWORD. Press START to begin the game.' ... '4. The STAGE SELECT screen
+# will appear. This screen has pictures of all eight enemy robots plus a spot
+# in the middle for Dr. Wiley. Use the control pad to move the flashing box to
+# the opponent of your choice and press START.' (archive.org item
+# 'mega-man-2-nes-manual', file 'Mega-Man-2-Game-Manual_djvu.txt'.)
+#
+# Measured off this ROM on 2026-09-26 by running this script under
+# scripts/headless_record with its 'screenshot' flag and stepping the run
+# length (runs/f1417/megaman2/probe/, unversioned): black to about frame 250
+# (the power-on story and the title's fade-in), the NORMAL/DIFFICULT title
+# screen from about frame 360, the START/PASSWORD menu from about frame 420,
+# and the eight-robot stage select from about frame 450. SELECT is never
+# pressed, so the run keeps the NORMAL difficulty the title opens on.
+#
+# Eight START taps 30 frames apart from frame 240 cover all of that. The
+# redundancy is the point: a tap that arrives while a screen is still being
+# drawn is ignored (measured - a tap at frame 300 with no tap before it left
+# the run on the title 420 frames later, while the same tap preceded by one at
+# 240 opened the START/PASSWORD menu). A tap that lands after the stage select
+# is up costs nothing, because the cursor starts on Dr. Wily and START there
+# does nothing until the eight Robot Masters are beaten (measured - eight taps
+# with no direction press leave the select screen exactly where it was).
+#
+# The stage select. Down moves the cursor from Dr. Wily to Flash Man
+# ($002A=06) and left from Flash Man to Metal Man ($002A=07) (measured with
+# scripts/mss_ram.py on the final state of a run that stopped there).
+#
+# The grid is
+#
+#     Bubble 01   Air 02      Quick 03
+#     Heat 08     Dr. Wily 00 Wood 04
+#     Metal 07    Flash 06    Crash 05
+#
+# which is DataCrystal's numbering for $002A - "Stage select cursor position:
+# $00=Dr. Wily, $01-$08 clockwise starting from Bubble Man"
+# (https://datacrystal.tcrf.net/wiki/Mega_Man_2/RAM_map, read through the
+# Wayback Machine on 2026-09-26; the live page is behind a Cloudflare
+# challenge). Then Start enters the stage.
+240f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+20f T
+10f -
+30f -
+20f D
+20f -
+20f L
+20f -
+40f -
+20f T

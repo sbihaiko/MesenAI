@@ -185,17 +185,23 @@ scored at the CHR-pattern identity of item 3, and `--rom-chr` prints items
 
 ### 6. Scope and budget
 
-- **Games:** the five deep-measured ones: Excitebike, Castlevania,
-  Mike Tyson's Punch-Out!!, Super Mario Bros. 3 and Ninja Gaiden.
-- **Stages:** every stage (track, fight, world) rung 1 or 2 reaches, one
-  session each.
+- **Games:** the first batch is the five deep-measured ones — Excitebike,
+  Castlevania, Mike Tyson's Punch-Out!!, Super Mario Bros. 3 and Ninja Gaiden.
+  *(Amended 2026-09-26, the same day: the scope is the method, not the five.
+  The list is "every ROM in the library a rung reaches", and the batch that
+  first measured it is the one above. A sixth game is a profile, not a code
+  change — the same sentence the first text used to exclude it.)*
+- **Stages:** every stage (track, fight, world, area, level) rung 1 or 2
+  reaches, one session each.
 - **Budget:** 120 emulated seconds per session, with the body repeated to
   fill the run as Contra's profile does. That is the recorder's usual
   two-minute budget; ADR-0184 used 300 s runs.
-- **Out of scope:** Contra already has its sweep, and a sixth game is a
-  profile, not a code change.
+- **Out of scope:** Contra already has its sweep, and rung 3 (search, chain,
+  movie) stays per-room work a later measurement has to name.
 - **Evidence:** the results table with before and after goes to
-  `docs/validation/f1416-coverage-sweep-2026-09-26.md`.
+  `docs/validation/f1416-coverage-sweep-2026-09-26.md` for the first batch and
+  `docs/validation/f1417-coverage-expansion-2026-09-26.md` for the games added
+  after it, each row carrying its own command and exit code.
 
 ## Consequences
 

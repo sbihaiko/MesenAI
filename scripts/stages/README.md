@@ -13,6 +13,17 @@ folder per golden game. Four kinds:
   is the run the recorder can read a cycle's `driver` off; the stage and
   entry scripts hold one button most of the time and attribute nothing. Run
   it with the stage state copied beside it as `<stage>-probe.mss`.
+- `<stage>-run.txt` — the same thing under the name the navigation profiles
+  use (`stage1-run.txt`, `mountain-01-run.txt`, `level-00-run.txt`): the run
+  *from* the state its `mint-<stage>.txt` mints, and also the blind body the
+  sweep repeats to fill a session. `record_stages.sh` and `library_job` treat it
+  as a route by extension, not by the `-run` suffix — what makes it a route is
+  that a mint gets it into the game first, which `library_job.start_plan` reads
+  off the **file name**: the `<stage>` half must name a mint the folder actually
+  ships, character for character. `mountain-run` in a folder of
+  `mint-mountain-NN.txt` files names nothing, so the job prunes the route and
+  the set records nothing — `scripts/test_library_job.py` fails when a declared
+  set has no route left.
 - `<stage>.txt` — plays *from* the state for <= 60 s (<= 3600 frames, the
   batch's default duration; a longer script is cut where the run ends), holding a direction long
   enough for every loop to complete two turns on one track (ADR-0179 §3 needs
@@ -48,7 +59,7 @@ against, or the unattended job cannot use it:
   scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
   ```
 
-  All ten sets are declared (2026-09-19 → 2026-09-25): `mm3/` and `zelda/`
+  All seventeen sets are declared (2026-09-19 → 2026-09-26): `mm3/` and `zelda/`
   carry the hash of the working-checkout dump the F12.10 bounded-input run
   verified them against (2026-09-19); `contra/`, `metroid/`, `zelda2/` and
   `excitebike/` are pinned to the user's library dumps they were authored on
@@ -58,8 +69,26 @@ against, or the unattended job cannot use it:
   are pinned to the user's library dumps they were authored and recorded on —
   `punchout/` by hand (below), which since #465 the job mints at the same
   frame as that hand mint (below), and `ninjagaiden/` not yet through the job.
+  The seven sets the F14.17 navigation sweep added — `megaman/`, `megaman2/`,
+  `drmario/`, `iceclimber/`, `lemmings/`, `smb1/` and `tetris/` (2026-09-26) —
+  are pinned the same way, to the user's library dumps their profiles were
+  authored and recorded on, and none of them has been through
+  `scripts/record_library.sh` yet. Two carry a warning in the `note`:
+  `smb1/`'s dump is the hack *Super Mario Bros. Revisited*, not the retail ROM
+  (every SMB1 path in this environment shares that one hash), so its numbers
+  must not be compared with a pack keyed to retail. Four had their play loop
+  renamed on 2026-09-26, all for the job's own naming rule: `lemmings/`
+  (`body.txt` -> `stage1-run.txt`, which pairs with its `mint-stage1.txt`), and
+  `drmario/` (`bottle-run.txt` -> `level-00-run.txt`), `iceclimber/`
+  (`mountain-run.txt` -> `mountain-01-run.txt`) and `metroid/` (`stage1-run.txt`
+  -> `brinstar-suitless-run.txt`), whose old names matched no mint the folder
+  ships. `lemmings/`'s first name was also the job's own filter's problem: a
+  file named `body` reads as a route and records the title screen from power-on.
+  Everything those sweeps measured is in
+  `docs/validation/f1417-coverage-expansion-2026-09-26.md`.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
-  malformed SHA1, a SHA1 another set also claims, or no recordable route.
+  malformed SHA1, a SHA1 another set also claims, no recordable route, or no
+  route the job can start.
 
   The job produces each route's start state before recording it
   (`library_job.start_plan`, issues #407/#408): a state a `.chain.txt` yields, or
@@ -68,8 +97,10 @@ against, or the unattended job cannot use it:
   produced; a `<stage>-probe` copies `<stage>`'s state; any other route takes
   the longest mint that prefixes it. A route none of these reach is **not
   recorded** and is listed in `library-report.md` with the reason, because
-  from power-on it records the attract demo under its name. Only a set with no
-  mint, no chain and no room state (`metroid/`) records from power-on. On a
+  from power-on it records the attract demo under its name. A set with no
+  mint, no chain and no room state records from power-on; none does today —
+  `metroid/` was the last, until F14.17 gave it the eleven `mint-*.txt` files
+  its password profiles enter from. On a
   checkout that leaves Contra with six routes: `stage1-boss`, `stage2-base` and
   every `stage3-*`/`stage4-*` start from states that exist only under `runs/`,
   and `stage3-waterfall.mss`, which every chain here descends from, cannot be

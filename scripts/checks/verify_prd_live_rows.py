@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A shipped slice must not sit in a live slice table (PRD Phase 11, slice C.2).
+"""A slice that declares itself done must not sit in a live table (PRD Phase 11, slice C.2).
 
 `docs/roadmap/AGENTS.md` states the contract: when a slice ships, its row is
 deleted from the roadmap table and one line goes to the Part's shipped record.
@@ -8,19 +8,22 @@ live Phase 9 table for days before a human noticed.
 
 This check parses the slice tables of the PRD's *pending* sections — Part A
 "### 4. Roadmap — pending work, by slice" and Part B "### 8. Slices" — and
-fails when a row's Decision cell (the last cell) declares the slice shipped.
+fails when a row's Decision cell (the last cell) declares the slice done —
+shipped or delivered.
 
 The rule, deliberately narrow so it reads a declaration and not a mention:
 
   * split the Decision cell on `;`, `,` and ` — ` (em dash, spaced);
   * strip markdown emphasis and backticks from each fragment's edges;
-  * the row is an offender when any fragment *starts with* the word `shipped`.
+  * the row is an offender when any fragment *starts with* the word `shipped`
+    or `delivered` — the two ways this roadmap spells "done".
 
-So `accepted 2026-09-14, shipped` and `shipped (offline half); harness
-`cdl=` pending` are offenders, while a cell that merely mentions the word
-mid-sentence — `… fused poses. Flag shipped. **Amended 2026-09-14** …` — is
-not. Deciding a slice is done is a human act; this only refuses to let the
-roadmap keep a row that already says so.
+So `accepted 2026-09-14, shipped`, `shipped (offline half); harness
+`cdl=` pending` and `ADR-0239; **delivered 2026-09-26** (…)` are offenders,
+while a cell that merely mentions either word mid-sentence — `… fused poses.
+Flag shipped. **Amended 2026-09-14** …` or `… the run is delivered only after
+a second pass …` — is not. Deciding a slice is done is a human act; this only
+refuses to let the roadmap keep a row that already says so.
 
 Usage: python3 scripts/checks/verify_prd_live_rows.py [path/to/PRD.md]
 """
@@ -45,7 +48,7 @@ SLICE_HEADERS = ("slice", "spike")
 
 SEPARATORS = re.compile(r";|,|\s—\s")
 EMPHASIS = "*_`~ \t"
-DECLARES_SHIPPED = re.compile(r"^shipped\b", re.IGNORECASE)
+DECLARES_DONE = re.compile(r"^(?:shipped|delivered)\b", re.IGNORECASE)
 
 
 def is_divider(line: str) -> bool:
@@ -61,16 +64,16 @@ def cells(line: str) -> list:
     return [c.strip() for c in inner.split("|")]
 
 
-def declares_shipped(decision: str) -> bool:
-    """True when a fragment of the Decision cell opens with the word `shipped`."""
+def declares_done(decision: str) -> bool:
+    """True when a fragment of the Decision cell opens with `shipped` or `delivered`."""
     for fragment in SEPARATORS.split(decision):
-        if DECLARES_SHIPPED.match(fragment.strip().lstrip(EMPHASIS)):
+        if DECLARES_DONE.match(fragment.strip().lstrip(EMPHASIS)):
             return True
     return False
 
 
 def offenders(text: str) -> list:
-    """Return [(slice_id, decision_cell)] for every shipped row in a live table."""
+    """Return [(slice_id, decision_cell)] for every done row in a live table."""
     found = []
     in_pending = False
     header = None
@@ -99,7 +102,7 @@ def offenders(text: str) -> list:
             continue
         slice_id = row[0].strip().strip(EMPHASIS) or "(unnamed row)"
         decision = row[-1]
-        if declares_shipped(decision):
+        if declares_done(decision):
             found.append((slice_id, decision))
     return found
 
@@ -111,13 +114,13 @@ def main(argv) -> int:
         return 1
     bad = offenders(path.read_text(encoding="utf-8"))
     if bad:
-        print(f"FAIL verify_prd_live_rows: {len(bad)} shipped row(s) still in a live slice table")
+        print(f"FAIL verify_prd_live_rows: {len(bad)} row(s) declaring the slice done are still in a live slice table")
         for slice_id, decision in bad:
             print(f"  {slice_id}: {decision[:160]}")
         print("  A shipped slice loses its row and gains one line in the Part's")
         print("  shipped record — see docs/roadmap/AGENTS.md, Local Contracts.")
         return 1
-    print(f"PASS verify_prd_live_rows: no shipped row in a live slice table ({path.name})")
+    print(f"PASS verify_prd_live_rows: no row declaring its slice done in a live slice table ({path.name})")
     return 0
 
 

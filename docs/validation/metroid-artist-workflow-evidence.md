@@ -23,7 +23,7 @@ the artist's real bottleneck?* The answer the file gives is not "drawing".
 - ROM: `Metroid (USA).nes`, SHA1 `ecf39ec5a33e6a6f832f03e8ffc61c5d53f4f90b`.
   iNES header `4e45531a 08 00 10 00 ...` — mapper 1, 8 x 16KB PRG,
   **CHR bank count 0, i.e. CHR RAM**. This matters in §2.
-- Route: `scripts/stages/metroid/stage1-run.txt`, written for this run — boot
+- Route: `scripts/stages/metroid/brinstar-suitless-run.txt`, written for this run — boot
   through the title and password screens into the Brinstar entry shaft, then
   shoot, jump, morph and run the corridor in both directions.
 - Everything below was run in a throwaway worktree, against a copy of the ROM
@@ -37,7 +37,7 @@ caffeinate -dimsu make core && caffeinate -dimsu make capture-tool
 
 MESEN_SHEET_GRID_DUMP=$PWD/out/grid.txt caffeinate -dimsu ./scripts/headless_record \
   out/Metroid.nes 60 out/rec bootstrap hdpack-off \
-  input=scripts/stages/metroid/stage1-run.txt
+  input=scripts/stages/metroid/brinstar-suitless-run.txt
 
 python3 scripts/artist_kit.py     out/Metroid/auto --out out/kit --verify
 python3 scripts/artist_bg_kit.py  out/Metroid/auto --out out/kit --verify

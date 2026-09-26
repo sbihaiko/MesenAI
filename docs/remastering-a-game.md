@@ -387,7 +387,7 @@ spend a `bootstrap` run on the route:
 
 ```sh
 scripts/headless_record roms/Metroid.nes 60 out/probe screenshot hdpack-off \
-  input=scripts/stages/metroid/stage1-run.txt
+  input=scripts/stages/metroid/brinstar-suitless-run.txt
 ```
 
 It runs the route and saves the **final** frame to

@@ -1,0 +1,40 @@
+# Tetris (1989) (Nintendo): power-on -> the title -> the GAME TYPE / MUSIC TYPE
+# screen -> the LEVEL / HEIGHT screen -> the game, B-TYPE at starting LEVEL 0, HEIGHT 0.
+#
+# ADR-0239 s1 rung 1: the game's own selector, by input. No RAM cheat rides
+# with this run, so it is an ADR-0184 s2 clean pass and all four of ADR-0183
+# s1's surfaces may read it.
+#
+# THE MENU MECHANICS ARE MEASURED on this ROM (2026-09-26), with the published
+# RAM bytes as the oracle. Four screens, four Starts: the copyright notice
+# (which answers a Start only after about five seconds - a press at frame 150
+# leaves it up, one at frame 300 lands on the title), the title's PUSH START,
+# the GAME TYPE / MUSIC TYPE screen, and the chosen type's LEVEL screen. The
+# ten levels are a 2x5 grid (0-4 over 5-9) and Right walks it in reading
+# order, wrapping from 4 to 5 and clamping on 9. Only B-TYPE's screen has a
+# HEIGHT grid (0-2 over 3-5), and only there does the A button do anything: it
+# toggles which of the two grids the d-pad drives, leaving the other grid's
+# cursor where it was.
+#
+# Every press is 6 frames with a 24-frame release, and the recorder reads the
+# rest of a line as buttons, so no step line carries a comment.
+# the copyright notice: a Start at frame 330 skips it (at 150 it does not)
+330f -
+10f T
+# the title (PUSH START)
+180f -
+# Start -> the GAME TYPE / MUSIC TYPE screen, its cursor on A-TYPE
+10f T
+180f -
+# one Right moves the GAME TYPE cursor from A-TYPE to B-TYPE ($00C1 reads 1)
+6f R
+24f -
+# Start -> the chosen type's LEVEL screen (B-TYPE's has HEIGHT beside it)
+10f T
+240f -
+# A: only B-TYPE has a HEIGHT grid, and A toggles the d-pad onto it
+6f A
+24f -
+# no press: the HEIGHT grid opens on 0
+# Start begins the game from the selected level and height
+10f T
