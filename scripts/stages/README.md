@@ -48,13 +48,16 @@ against, or the unattended job cannot use it:
   scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
   ```
 
-  All six sets are declared since 2026-09-23 (F14.3,
-  `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
-  `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
-  authored on, and each was run once through the library job. `punchout/`
-  (2026-09-24) is pinned to the library dump it was authored and recorded on
-  by hand (below); since #465 the job mints its state at the same frame as
-  that hand mint (below).
+  All ten sets are declared (2026-09-19 → 2026-09-25): `mm3/` and `zelda/`
+  carry the hash of the working-checkout dump the F12.10 bounded-input run
+  verified them against (2026-09-19); `contra/`, `metroid/`, `zelda2/` and
+  `excitebike/` are pinned to the user's library dumps they were authored on
+  and were each run once through the library job (F14.3, 2026-09-23,
+  `docs/validation/f14.3-route-sets-2026-09-23.md`); `punchout/` and
+  `castlevania/` (2026-09-24), `smb3/` and `ninjagaiden/` (2026-09-25, #497)
+  are pinned to the user's library dumps they were authored and recorded on —
+  `punchout/` by hand (below), which since #465 the job mints at the same
+  frame as that hand mint (below), and `ninjagaiden/` not yet through the job.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, or no recordable route.
 
