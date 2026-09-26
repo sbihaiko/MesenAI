@@ -1,33 +1,63 @@
-# Ninja Gaiden: 60 s of Act 1-1 from the state mint-stage1.txt writes (the job
-# mints it at frame 1082). 3 600 frames, the batch's 60 s.
+# Ninja Gaiden: Act 1-1 and into the section after it, from the state
+# mint-stage1.txt writes (the job mints it at frame 1082). 3 330 frames, 111
+# windows of 30 (55.4 s). The search stops where it does because the window
+# after them loses a life in every one of its candidates; the route ends on the
+# last window that was still alive, with $0076 at 2.
 #
 # How far it gets. Absolute x is camera $0052:$0051 plus Ryu's screen x $0086
-# ($0052 is signed; walking left of the level start clamps it to $FF). The first
-# 660 frames carry Ryu from x 32 to x 987 - the camera at 859 ($03:$5B) plus his
-# 128 - 3.86 screens into the act, by frame 688. The sidecar this replaces never
-# passed x 234 (0.91 screens, measured the same way): it stayed inside the first
-# screen for the whole minute.
+# ($0052 is signed; walking left of the level start clamps it to $FF). The route
+# carries Ryu from x 32 to the act's own limit and past it: the peak is abs
+# x 3035 (11.9 screens) at windows 96-97, and at window 98 the section changes
+# under him - $006D goes 00 -> 01, $006E 0 -> 1, and the position restarts at
+# 219 ($0086 falls back to 32 at window 99). That is the game's own coordinate
+# space for the next section, not a death: $0076 stays 2 throughout. He then
+# stalls at abs x 220 in the new section with $0065 at 02, and that is where the
+# route ends.
 #
-# x 987 is where the game pins Ryu. From there, holding Left moves him 0 px and
-# leaves the camera at 859; only a jump (Left+A) leaves the spot at all. So the
-# tail backs off into the screen and keeps the act with 120-frame direction
-# holds. $0076 stays 2 for all 3 600 frames and $0065 ends at $0E - two ticks
-# ($10 -> $0F -> $0E) over the minute, against $02 for the old sidecar's run.
+# The move the previous route did not have. Act 1-1's first pin is abs x 988
+# (camera 860, Ryu at screen x 128) and nothing the old eight macros do leaves
+# it: from that state `A` alone and `R+A` do nothing at all, `L` does nothing,
+# and only `L+A` jumps. The way over the wall is the wall hop - jump *off* it
+# (`L+A`, 4 frames here) and come straight back at it holding the jump (`R+A`
+# for the rest of the window). Windows 22 and 23 are the two running jumps that
+# bring Ryu to the wall (abs 979 and 987, y 160 then 149), windows 24 and 25 are
+# the two hops - their ends read abs 991.5 and 1036.5, both at y 144, i.e. over
+# the wall and moving right - and window 26 is plain walking again. Absolute x
+# carries the first window past 988; y is what says the hop worked, since a
+# window that only walks ends on the same pixel with y 208.
 #
-# What that costs: the recorder reads 125 silhouettes from 3 246 retained OAM
-# frames, 62 kept, 8 cycles (1 with a driver: cycle004, hold [5,5], x661),
-# against 103 poses for the run that kept moving. Tile coverage: 8 475 <tile>
-# lines against 8 375. input.never: Select, Start, Up, Down, Left+A, Left+B.
+# How far past the old route it gets: peak abs x 3035 against the old route's
+# 988, so 2 047 px, eight screens further - and a whole section further.
+#
+# The old route (HEAD before this one, 2026-09-25) reached abs x 988 by frame
+# 690 and held the act there for the rest of the minute with 120-frame `L`/`R`
+# direction holds, because the search had no macro that leaves the pin. Its 60 s
+# shape kept $0076 at 2 and $0065 ended at $0E; the cost was that 48 s of its
+# recording is Ryu standing on one pixel, which is a third of the poses the
+# route before it fed the recorder.
+#
+# Replay. Same ROM, same minted state, same script give the same play:
+# `scripts/headless_record <rom> 55.4 <work>/rec bootstrap hdpack-off
+# input=scripts/stages/ninjagaiden/stage1-run.txt` run twice writes
+# byte-identical RAM (all 2 048 bytes) at windows 10, 20, 24, 30, 60, 90 and
+# 110, and those window ends agree with what `scripts/route_search.py` logged
+# for the same windows: exactly at windows 10, 60 and 110, and within two pixels
+# at 20, 24, 30 and 90 (the search's hop k ends at emulated frame 29k, this
+# script's window k at 30k, because the flat script writes the idle frame a
+# one-shot run needs and the search plays the 29 input frames - see
+# docs/validation/f1413-ninjagaiden-search-2026-09-26.md).
 #
 # RAM read to author this (public map: TASVideos "Game Resources / NES / Ninja
 # Gaiden" RAM Map, and Data Crystal "Ninja Gaiden (NES)/RAM map"): $0076 lives,
 # $0065 hit points (max $10), $0063/$0062 level timer s/f, $0084 state,
 # $0085/$0086 Ryu x (sub-pixel/pixels, screen-relative), $008A Ryu y,
 # $0050-$0052 level x ("temp Xpos"), $004E spawn block, $0060/$0061 score,
-# $0400+i/$0460+i/$0490+i enemy id/x/hp. A window here is 29 frames of input
-# plus the idle frame every headless_record run adds past its script, so a
-# window is 30 frames and a state boundary stays input-neutral
-# (scripts/stages/README.md).
+# $006D stage, $006E room, $0400+i/$0460+i/$0490+i enemy id/x/hp. A window here
+# is 29 frames of input plus the idle frame every headless_record run adds past
+# its script, so a window is 30 frames and a state boundary stays
+# input-neutral (scripts/stages/README.md). A window may hold more than one
+# macro (`4f LA` then `25f RA` is one window): a Ninja Gaiden jump is
+# edge-triggered and the wall hop is two moves.
 29f R
 1f -
 29f R
@@ -59,6 +89,44 @@
 29f R
 1f -
 29f RA
+1f -
+29f RB
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+4f LA
+25f RA
+1f -
+4f LA
+25f RA
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f B
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RB
 1f -
 29f R
 1f -
@@ -70,30 +138,156 @@
 1f -
 29f R
 1f -
+29f R
+1f -
+29f RB
+1f -
+29f R
+1f -
+4f LA
+25f RA
+1f -
+4f LA
+25f RA
+1f -
+29f R
+1f -
+29f R
+1f -
 29f RA
 1f -
-60f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
-120f R
-120f L
+29f R
+1f -
+29f RB
+1f -
+29f R
+1f -
+4f LA
+25f RA
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+4f LA
+25f RA
+1f -
+4f LA
+25f RA
+1f -
+4f LA
+25f RA
+1f -
+4f LA
+25f RA
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f B
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+5f LA
+24f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+4f LA
+25f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -

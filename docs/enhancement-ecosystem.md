@@ -51,6 +51,11 @@ open ecosystem:
   [`docs/specs/README.md`](specs/README.md) for the index.
 - **Redrawing a game's art, step by step:** [`docs/remastering-a-game.md`](remastering-a-game.md);
   **submitting the result:** [`docs/hd-pack-authoring.md`](hd-pack-authoring.md).
+- **A route the search cannot find, and the model asked at the stall:** ADR-0238
+  — a persistent step-mode session searches the route, and where it stalls a Jev
+  `Choice` through OpenRouter picks one macro of a fixed set. What the model
+  returns is an **input**, never evidence (ADR-0185, ADR-0188); the commands are
+  in ["Finding a route"](remastering-a-game.md#finding-a-route--search-it-with-jev-at-the-stalls).
 - **Where the inherited upstream toolchain still serves an author better,
   and the slice that answers each row:** [`docs/hd-pack-toolchain-comparison.md`](hd-pack-toolchain-comparison.md)
   ("Gaps this table names") → PRD Part A §4 (Phase 12 delivered those slices).

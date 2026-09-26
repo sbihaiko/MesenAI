@@ -30,6 +30,9 @@ audio_cleanup_suggest.py
 cdl_tool.py
 compose_engine.py
 fm2_to_bk2.py
+jev_client.py
+jev_harness.py
+jev_stall_research.py
 library_job.py
 mep_add_cell.py
 mep_addition.py
@@ -51,5 +54,7 @@ mss_ram.py
 ora_writer.py
 pack_id_rules.py
 palette_folds.py
+route_search.py
 sheet_pixel_fixes.py
 sheet_repaint.py
+step_emu.py

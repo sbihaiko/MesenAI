@@ -1,0 +1,72 @@
+{
+  "game": "Ninja Gaiden",
+  "console": "nes",
+  "note": "The named RAM fields the F14.14 harness (ADR-0238 sec. 3) turns into the JSON state a Jev Choice is asked over. Read with scripts/step_emu.py from the state scripts/stages/ninjagaiden/mint-stage1.txt writes (emulated frame 1083, lives $0076=2, Ryu x $0086=32, camera 0); the addresses and the fractional-word arithmetic are the ones scripts/route_search.py already steers a search by.",
+  "sources": [
+    "https://tasvideos.org/GameResources/NES/NinjaGaiden - RAM map",
+    "https://datacrystal.tcrf.net/wiki/Ninja_Gaiden_(NES)/RAM_map"
+  ],
+  "progress": "abs_x",
+  "screen": "camera_x",
+  "screen_width": 256,
+  "fields": {
+    "lives": {
+      "address": "0x0076",
+      "note": "verified on the minted state: reads 2, and the committed route loses none in 60 s"
+    },
+    "hp": {
+      "address": "0x0065",
+      "note": "verified on the minted state: reads 0x10 (16, the act's maximum)"
+    },
+    "ryu_screen_x": {
+      "address": "0x0086",
+      "note": "screen-relative: it stops at 128 once the camera follows Ryu"
+    },
+    "x_sub": {
+      "address": "0x0085"
+    },
+    "ryu_x": {
+      "expr": "ryu_screen_x + x_sub / 256",
+      "note": "Ryu's x inside the screen, with its fractional byte"
+    },
+    "camera_x": {
+      "address": ["0x0051", "0x0052"],
+      "signed_high": true,
+      "note": "signed high byte: walking left of the level start clamps it and the byte turns $FF"
+    },
+    "abs_x": {
+      "expr": "camera_x + ryu_x",
+      "note": "the progress metric: Act 1-1 pins Ryu at 987 (camera 859) until a Left+A jump leaves the spot"
+    },
+    "ryu_y": {
+      "address": "0x008A"
+    },
+    "ryu_state": {
+      "address": "0x0084",
+      "note": "the animation/action byte the harness reads as a coarse pose"
+    },
+    "room": {
+      "address": "0x006E"
+    },
+    "stage": {
+      "address": "0x006D"
+    },
+    "score_lo": {
+      "address": "0x0060"
+    },
+    "score_hi": {
+      "address": "0x0061"
+    },
+    "score": {
+      "expr": "score_hi * 256 + score_lo"
+    },
+    "timer_s": {
+      "address": "0x0063"
+    },
+    "enemies_near": {
+      "range": ["0x0400", "0x0407"],
+      "reduce": "count_nonzero",
+      "note": "how many of the eight enemy slots hold an id, so a question can say one is around"
+    }
+  }
+}

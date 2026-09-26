@@ -41,7 +41,8 @@ into a jumbled mess, I don't even know where to start untangling it"*, and
 *"sometimes I need several passes over a scene to record all the sprites/tiles"*.
 
 So the recorder has four drivers. Use them together; each reaches art the others
-cannot.
+cannot. Where no route exists yet, [search for one](#finding-a-route--search-it-with-jev-at-the-stalls) — the search hands
+back a Driver A script.
 
 ### Build the tool first
 
@@ -192,6 +193,165 @@ scripts/headless_record roms/Contra.nes 60 out/mint \
 
 `.mss` files are **never versioned** — a CHR-RAM state carries the game's
 graphics. Keep them in your working directory.
+
+### Finding a route — search it, with Jev at the stalls
+
+All four drivers assume a route exists. This produces one: two tools that
+write a Driver A script without a human at the pad, which you then record from
+like any other route.
+
+**The search — `scripts/route_search.py`.** It plays candidate input windows on
+one **step-mode session** (`scripts/headless_record … session`: a long-lived run
+of the same binary that loads a ROM and a state once and then serves `play` /
+`ram` / `save` / `restore` requests over stdin/stdout) instead of one recorder
+launch per candidate, and writes the winning path out as a flat script. A
+candidate — a state in, a 29-frame window played, the RAM it judges on read, a
+state out — costs **0.091 s against 0.232 s** for a launch each, **2.6× cheaper**
+serially; the `restore` behind a rewind is 0.37 ms, so going back to a checkpoint
+is free next to the emulation. `--sessions N` shards the candidates over N
+sessions — 15 hops take 31.5 s at `--sessions 1` and 6.9 s at `--sessions 8` —
+which is the parallelism a search that used to run eight recorder processes
+wants. Those numbers, and the check that the ported search finds what the old
+scratch driver found, are in
+[the F14.12 log](validation/f1412-step-mode-emulator-2026-09-26.md).
+
+```sh
+# Mint the state the search starts from (Driver D), then search from it.
+scripts/headless_record "$NG_ROM" 18 out/mint hdpack-off \
+  input=scripts/stages/ninjagaiden/mint-stage1.txt save-state=out/stages/stage1-run.mss
+python3 scripts/route_search.py --rom "$NG_ROM" \
+  --state out/stages/stage1-run.mss --work out/search --out out/search/route.txt \
+  --hops 120 --chunk 29 --beam 3 --sessions 8
+```
+
+The candidates are fixed in the script, and a candidate may be a *run* of parts
+rather than one hold. Ninja Gaiden's Act 1-1 pins Ryu at abs x 987, where no
+rightward press and no plain jump moves him, and the way out is a wall hop —
+`4f LA` then `25f RA`, window after window — which carried the search past the
+pin to abs x 3 035 and replaced `scripts/stages/ninjagaiden/stage1-run.txt` with
+a route that replays to byte-identical RAM over two runs per checkpoint. That is
+[the F14.13 log](validation/f1413-ninjagaiden-search-2026-09-26.md).
+
+**The stall helper — `scripts/jev_harness.py`.** A search stalls where the game
+needs a move its candidate set never tries. This harness plays the same kind of
+search, and when the game's own progress stays flat for `--stall-seconds`
+emulated seconds it asks **Jev** (TypeSafe's `typesafe/jev-1.13`, through
+OpenRouter) to pick one macro from a fixed set — the seven of
+[ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md),
+whose durations are fixed in the code and never chosen by the model. Nothing
+about the answer is trusted: the macro is played, and only a path that raises the
+progress watermark survives into the script.
+
+```sh
+python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
+  --state out/stages/stage1-run.mss --work out/jev \
+  --goal abs_x:990 --budget 0.05 --verify --out out/jev/route.txt
+```
+
+- **The key is the one thing you must supply.** `OPENROUTER_API_KEY` in the
+  environment, or as a line in a gitignored **repo-root `.env`**. It is never
+  printed, logged or passed on a command line, and the harness refuses to start
+  without it (exit 2). The search above needs no key at all — the search half is
+  free, local and deterministic.
+- **What Jev sees is RAM-derived numbers only:** the named fields of
+  `scripts/stages/<game>/ram-map.json`, plus the stall's own bookkeeping
+  (checkpoint, seconds stuck, what was already tried there). Never ROM bytes,
+  never a screenshot, never a pixel.
+- **Cost, latency, caps.** The budget is a hard cap per run, US$ 1.00 by default
+  (`--budget`); the harness stops at it (exit 5). One seven-option Choice
+  measured US$ 0.000023 at the vendor, and a spike run's decisions cost
+  US$ 0.000047 each (`runs/f1414/e2e4/decisions.jsonl`, not versioned, written up
+  in [the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)). Latency,
+  not money, is the constraint — about half a second per call — which is why the
+  model is asked only at a stall. Exit codes: 0 the goal was reached, 1 the run
+  ended without it, 2 a refusal, 5 the cap.
+- **`--no-jev` is the measuring arm, not a way to search.** It builds no client,
+  needs no key, and ends the run at its first stall as `no-jev` — the
+  search-alone half of the ADR's adoption gate. It bounds a stall; it does not
+  search one.
+- **Rewind ladder.** The harness keeps a checkpoint per emulated second over the
+  last `--ring-seconds` (24 s), and when a macro makes no progress it restores an
+  earlier one on a 1, 2, 4, 8, 16 s ladder — never before the **start of the
+  current screen** — with up to `--max-questions` (3) per rung. A macro that
+  failed at a checkpoint is withdrawn from that checkpoint's later questions. The
+  floor is the screen's start alone
+  ([ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
+  §3, amended 2026-09-26): "or the last real progress" was dropped because the
+  watermark rises on every window that moves, so that second floor sat a fraction
+  of a second behind the head and collapsed every rung onto one checkpoint
+  ([F14.15 §0](validation/f1415-jev-adoption-2026-09-26.md)). When the screen is
+  younger than a rung, several rungs land on its start: at a wall whose screen is
+  ~6 s long, F14.15 measured four distinct checkpoints and no rungs of 8 or 16 s.
+- **Situation tips.** A game may carry `scripts/stages/<game>/jev-tips.json`:
+  advice for its hard spots, each gated by a RAM trigger, written in our own
+  words with the pages it came from. Only the tips whose trigger holds on the
+  live state are folded into the question, and the decision log records the tips
+  file's hash. `ninjagaiden/jev-tips.json` is the worked example, and
+  [`scripts/stages/README.md`](../scripts/stages/README.md) has the file's shape.
+  A tip is advice, never evidence
+  ([ADR-0188](adr/0188-an-ai-judges-the-rendered-surface-and-its-judgement-is-a-proposal-that-never-becomes-evidence.md)).
+- **Loop guard.** Three detectors, each logged per decision: a state fingerprint
+  (position rounded to 8 px, camera, room, HP) seen three times in one stall, a
+  progress watermark flat for 60 emulated seconds, and a period-2..4 cycle
+  repeated three times in the last 12 choices. The first bans that cycle's macros
+  at the checkpoint and climbs a rung, the second goes to research, the third
+  ends the stall as `loop`.
+- **One web-research pass** when the ladder is spent: the stall report goes to a
+  single web-search worker, which proposes new tips and at most one new macro.
+  Its query carries the game and the spot — the same RAM-derived numbers a
+  question carries, never ROM bytes or pixels. The worker runs **sandboxed**:
+  `--tools WebSearch,WebFetch` plus a deny-list of every other built-in tool and
+  `--safe-mode`, and the run's log records the tool list the CLI's own init event
+  reports back — measured `["WebFetch", "WebSearch"]` on every pass
+  ([F14.15 §11.1](validation/f1415-jev-adoption-2026-09-26.md)). `--max-research-passes N`
+  bounds how many passes a run may pay for (0 keeps research out of a ladder
+  measurement entirely), and the cap covers **both** roads into the worker — the
+  spent ladder and the loop guard. A live pass costs **US$ 0.086–0.30 and 30–60 s
+  of wall clock**, against US$ 0.000023 for one Jev decision: the pass's
+  cost comes back into the run's ledger (`summary.research_spend_usd`), but
+  `--budget` cannot see it coming, which is why a run that reaches research misses
+  the ≥ 3× speed target (2.02× measured, F14.15 §11.2). What it proposes is kept
+  under `runs/`, never written to the versioned file: `--promote-tips` writes a
+  run's proposals into `jev-tips.json`, and the harness gates that on the run
+  having reached its goal (ADR-0238's rule: a tip is promoted only after the
+  stall it was written for passed).
+- **Cheats** (`--cheat AAAA:VV[:CC]`, repeatable) follow
+  [ADR-0184](adr/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md):
+  RAM addresses below `$0800` only, with Game Genie letters and mirror addresses
+  refused by name. A cheated script is a **coverage-pass** artifact — it ships
+  with its cheat list beside it and replays only with it, and a search-versus-Jev
+  comparison is valid only under the same cheat set. Two things to know before
+  reaching for one: a cheat is a read-time substitution, and the session's `ram`
+  request reads the console's RAM array directly, so it reports the **true** byte
+  and not the value the CPU sees — verify a cheat by its effect on the run, never
+  by reading its address. A step-mode session applies its cheats and reports each
+  one before it prints `ready`, so a cheated session run is an ordinary run
+  ([the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)); and a
+  cheat does not remove a **position** stall — measured on a stall that *is*
+  passed, the coverage pass under `00A2:9C` reached the same abs x 906 in the
+  same 208 frames as the uncheated run
+  ([F14.15 §5](validation/f1415-jev-adoption-2026-09-26.md)).
+
+**What it has been measured to do.** On two real stalls
+([F14.15](validation/f1415-jev-adoption-2026-09-26.md)): Mega Man 3's Snake Man
+stage, page 3 at abs x 824, where the search alone stops — Jev passed it in 5 of
+5 arms, tips on and off, at 3.57–3.62× real time, and the route it wrote goes on
+to abs x 984 uncheated; and Ninja Gaiden's section 1-2 death window, one hit from
+death with no legal candidate for the base search — Jev passed it in 0 of 4 arms,
+while the harness's own control, the x 987 pin, still passes on the first rung in
+two decisions. The verdict on adopting it is **do not adopt beyond the spike**:
+the route that passes a stall bought the recorded kit **0 keys** the committed
+routes do not already record.
+
+**What comes out is a plain input script.** `<n>f <buttons>` lines, one `1f -`
+boundary after each macro — a Driver A route, recorded like the shipped ones. The
+run measures the script itself, replayed flat from the minted state, and only a
+path that flat replay reaches ships (otherwise the run ends as
+`chain-not-reproduced`); `--verify` then replays it through a one-shot
+`headless_record` with no AI in it and compares RAM checkpoints. **Replay never
+calls the model**: same ROM, same state, same inputs, same frames. Jev's answer
+is an input, never evidence
+([ADR-0185](adr/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md)).
 
 ### Recording a whole folder of ROMs, unattended
 
@@ -1353,5 +1513,6 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 - [`ai-kit-review.md`](ai-kit-review.md) — the AI proposer protocol and how a review is scored.
 - [`enhancement-ecosystem.md`](enhancement-ecosystem.md) — what MEP is, for newcomers.
 - [`../scripts/stages/README.md`](../scripts/stages/README.md) — route script format and how stages are reached headlessly.
+- `docs/adr/0238` — the search and the stall helper of the route search: why the model is confined to a stall, what it is allowed to see, and why the artifact stays a plain input script.
 - `docs/adr/0182`–`0189` — the decisions behind per-stage coverage, the kit's four surfaces, the RAM-cheat rule, the TAS driver, the CDL map, the AI reviewer and the emitted conditions.
 - `docs/adr/0209`–`0236` — the decisions behind what this guide describes since then: naming a figure and returning its paint (0209), the static kit (0219), the layered `.ora` (0220), the behind-background flag (0224), the sheet reaching every palette a shape was drawn in (0230), the untouched cell keeping its recorded rule (0231), the CHR RAM bank's identity (0232) and the per-cell capture record (0236).
