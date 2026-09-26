@@ -202,7 +202,7 @@
     "",
     "seconds is ADR-0239 s6's budget, 120 emulated seconds per session, and the",
     "body is repeated by record_navigation_sweep.py until that budget is covered.",
-    "The body is scripts/stages/drmario/bottle-run.txt: the game's own controls",
+    "The body is scripts/stages/drmario/level-00-run.txt: the game's own controls",
     "driven blind - A and B tapped to turn the pill through its four orientations,",
     "Left and Right held to walk it to a wall, Down tapped to drop it fast. It",
     "cannot aim a match, so the bottle fills and the game ends on GAME OVER inside",
@@ -213,6 +213,6 @@
   "defaults": {
     "seconds": 120,
     "entry": "mint-level-00.txt",
-    "body": "bottle-run.txt"
+    "body": "level-00-run.txt"
   }
 }

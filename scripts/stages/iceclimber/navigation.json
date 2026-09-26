@@ -73,7 +73,7 @@
     "its last presses left the number",
     "(runs/f1417/iceclimber/probe/trace/*-synctrace.csv, watch:mountain). So",
     "Popo's walking is in the ENTRY script, once, immediately after START, and",
-    "mountain-run.txt holds no direction at all. The walk block is one balanced",
+    "mountain-01-run.txt holds no direction at all. The walk block is one balanced",
     "576-frame block, which is over inside the game on every mountain measured",
     "and therefore cannot reach the title screen's number.",
     "",
@@ -265,6 +265,6 @@
   "defaults": {
     "seconds": 120,
     "entry": "mint-mountain-01.txt",
-    "body": "mountain-run.txt"
+    "body": "mountain-01-run.txt"
   }
 }

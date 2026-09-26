@@ -361,7 +361,7 @@
     "the eleven.",
     "",
     "",
-    "body is this set's own stage-1 route (scripts/stages/metroid/stage1-run.txt,",
+    "body is this set's own stage-1 route (scripts/stages/metroid/brinstar-suitless-run.txt,",
     "the route the metroid stage set already carries), repeated by",
     "record_navigation_sweep.py until the 120 s budget is covered - exactly as",
     "Contra's and Ninja Gaiden's profiles do. It is a blind body: it walks",
@@ -377,6 +377,6 @@
   "defaults": {
     "seconds": 120,
     "entry": "mint-brinstar-suitless.txt",
-    "body": "stage1-run.txt"
+    "body": "brinstar-suitless-run.txt"
   }
 }

@@ -224,11 +224,24 @@ Named per game in each `RESULT.md`; the recurring ones:
 - **Dr. Mario has no `before/` directory**: its baseline is the `level-00`
   session inside `sweep/`, which is the same recording the profile's first value
   makes. The union is taken against that pack.
-- **Lemmings' body was renamed.** The play loop was `body.txt`; the library job's
-  own filter would have offered it as a route named `body` and recorded the title
-  screen from power-on. It is now `stage1-run.txt`, paired with
-  `mint-stage1.txt` — the mint/run pair `scripts/stages/README.md` describes — and
-  the folder declares a `stage-set.json`, so `test_library_job.py` covers it.
+- **Four play loops were renamed** (2026-09-26, in review of this slice). A
+  route's name is how `library_job.start_plan` finds the state it starts from:
+  the half before `-run` must be a mint the folder ships, character for
+  character (`scripts/stages/README.md`). Three of the eight sets named their
+  loop after the screen instead of after a mint — `bottle-run.txt`,
+  `mountain-run.txt` and `stage1-run.txt` — so the job pruned their only route
+  and the declared sets recorded nothing. They are now `level-00-run.txt`,
+  `mountain-01-run.txt` and `brinstar-suitless-run.txt`, each matching its
+  profile's own default entry mint. Metroid is the one that was not a naming
+  slip: its `stage1-run.txt` was a working power-on route on `main`, and adding
+  the eleven `mint-*.txt` files this wave needs turned it into a pruned one,
+  because a set that mints its states no longer records from power-on.
+  Lemmings' fourth rename (`body.txt` -> `stage1-run.txt`) is the same rule seen
+  from the other side: the job's own filter would have offered a file named
+  `body` as a route and recorded the title screen from power-on. The guard is
+  now in `scripts/test_library_job.py` — every declared set must have at least
+  one route the job can start — which is the check whose absence let three sets
+  ship declaring nothing to record.
 - **Wall-clock figures are not a property of the games**: up to eight sweeps
   recorded in the same worktree at once, and the per-session times show it
   (Dr. Mario 76–368 s for the same 120 emulated seconds).
@@ -252,6 +265,13 @@ Named per game in each `RESULT.md`; the recurring ones:
   table has printed, a directory passes `exists()`, and a truncated iNES is read
   as CHR RAM because a declared-but-absent CHR bank and a CHR RAM cartridge both
   come back as `b""`). **Open**, filed from the independent verification of #550.
+- **The review of this slice found three sets that would have recorded
+  nothing.** Dr. Mario's, Ice Climber's and Metroid's only route was pruned by
+  `library_job.start_plan` — two because the name matched no mint, one because
+  this wave's own mints turned a power-on route into a pruned one. The sets were
+  declared, the profiles ran, and the library job would have skipped all three in
+  silence. Fixed in this slice (the four renames above), guarded by a new case in
+  `scripts/test_library_job.py`, and verified on the real `scripts/stages/`.
 
 ## What the sweep cost
 

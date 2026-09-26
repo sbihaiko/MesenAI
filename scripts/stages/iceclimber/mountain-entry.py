@@ -39,7 +39,7 @@ mountain it selected. The game returns to the title only after GAME OVER -
 the third lost man - so the entry's walk phase is the last d-pad input of a
 session by construction, and it is one balanced block long: the body that
 follows holds no direction at all. `D-pad` never appears in
-`mountain-run.txt`, and `mountain-entry.py --check` fails if it ever does.
+`mountain-01-run.txt`, and `mountain-entry.py --check` fails if it ever does.
 
 Run it from the repository root:
 
@@ -66,7 +66,7 @@ HEADER = [
     "# (ADR-0239 s1 rung 1: the game's own selector, by input - no RAM cheat).",
     "# One 10-frame press of Right is one mountain; the game's own $0059 holds",
     "# the index it accepted (n - 1). The walk block after START is the last",
-    "# d-pad input of the session - mountain-run.txt holds no direction at all,",
+    "# d-pad input of the session - mountain-01-run.txt holds no direction at all,",
     "# so the title screen never moves the number the ramCheck reads.",
     "# See mountain-entry.py for the sources.",
 ]
@@ -124,7 +124,7 @@ def main():
             written.append(path.name)
     print(f"{len(written)} entry script(s) written: {', '.join(written) or 'none'}")
 
-    body = HERE / "mountain-run.txt"
+    body = HERE / "mountain-01-run.txt"
     if body.is_file():
         offending = body_is_dpad_free(body)
         if offending:

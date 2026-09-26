@@ -1,4 +1,4 @@
-# bottle-run.txt - Dr. Mario's blind body (F14.17, ADR-0239 s6).
+# level-00-run.txt - Dr. Mario's blind body (F14.17, ADR-0239 s6).
 #
 # The pill is the only thing the player drives: it spawns horizontal over the
 # middle column, A or B turns it a quarter turn, Left/Right walk it one column

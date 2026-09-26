@@ -2,7 +2,7 @@
 # (ADR-0239 s1 rung 1: the game's own selector, by input - no RAM cheat).
 # One 10-frame press of Right is one mountain; the game's own $0059 holds
 # the index it accepted (n - 1). The walk block after START is the last
-# d-pad input of the session - mountain-run.txt holds no direction at all,
+# d-pad input of the session - mountain-01-run.txt holds no direction at all,
 # so the title screen never moves the number the ramCheck reads.
 # See mountain-entry.py for the sources.
 60f -
