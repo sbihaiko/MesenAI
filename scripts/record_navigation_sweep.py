@@ -51,7 +51,12 @@ What it does, in order:
    pattern each rule names, and never at the `<tile>` field as a string: a
    community pack writes a decimal CHR index (`<ver>100`) where a bootstrapped
    one writes hex (`<ver>109`), so the strings intersect by accident and the
-   figure is constant (#545). The two files' dialects are noted beside it.
+   figure is constant (#545). The two files' dialects are noted beside it. A
+   reference pack that declares a `<patch>` is built for a patched ROM, so
+   §5.3 caveats the row - the patch named with its target sha1 and the iNES
+   header bytes it writes, above the tables and again on the union line - and
+   never prints the figure as plain coverage (#554; `artist_cover.py`'s
+   reading of `<patch>`, imported rather than repeated).
 
 Union. Each session keeps its own pack, the shape `record_stages.sh` already
 produces, and the surfaces union them downstream: the CHR kit's repeatable
@@ -115,6 +120,15 @@ from nav_sweep_metrics import (  # noqa: F401 - re-exported for callers
     summary_document,
     tile_data_keys, totals_document, version_note,
 )
+
+# artist_cover.py is imported as a library, not run as a tool: it is the one
+# place in this repo that decides what a `<patch>` line means - the regex, the
+# IPS reader and the reading of iNES header byte 5 - and §5.3 asks the sweep
+# for the answer its sibling already gives (#225 refuses the namespace mismatch
+# that is empty by construction, #231 caveats the rest). A second copy of that
+# reading would drift from the first, and the two consumers would then disagree
+# about the same pack.
+import artist_cover
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RECORDER = REPO_ROOT / "scripts" / "headless_record"
@@ -611,6 +625,141 @@ def placeholder_note(rom_path) -> str:
             "rounding error")
 
 
+def rom_chr_namespace(rom) -> bool | None:
+    """Whether the ROM at hand is a CHR ROM game: `False` for CHR RAM, `None`
+    when there is no ROM to read.
+
+    The state is byte 5's zero against non-zero, and `rom_chr_bytes` is the
+    reading of it - §5.2's own iNES reader, whose empty answer means exactly
+    "the header declares no CHR bank" and never "the file stops inside the bank
+    it declares" (a truncated dump is refused there, #551). So the boolean of
+    that call *is* the byte-5 question, and this is not a second parser of the
+    header (nor of the trainer bit, the mapper byte or the sizes beside it).
+    `None` is "no byte 5 to compare the patch against", which the caveat says
+    out loud instead of guessing what the write does.
+    """
+    if rom is None:
+        return None
+    try:
+        return bool(rom_chr_bytes(rom))
+    except ValueError:
+        return None
+
+
+def reference_patch_caveat(ref: Path, rom) -> tuple:
+    """The §5.3 caveat for a reference pack that declares a `<patch>`.
+
+    Returns `(text, marker)`: the block to print above the §5.3 tables and the
+    one-line form that rides the summary row so the figure is never read as
+    plain coverage. Both are `""` for a pack that declares no `<patch>`, which
+    is what leaves that report byte-identical to before (#554).
+
+    §5.3's reference row compares a recording against a third-party pack, and a
+    pack that declares a `<patch>` was built for a *patched* ROM: the two sides
+    are then different builds, and on a UxROM + CHR RAM game the patch's PRG
+    edits travel through the game's own loader into the tile data the pack was
+    authored against, so the percentage is not a coverage figure at all
+    (measured 2026-09-26 on the Mega Man pack: `SWEEP UNION 906 patterns 897 of
+    reference 33.4%`, exit 0, nothing about the patch). Whether the patch moves
+    the tiles is undecidable from the pack alone - an audio-only patch leaves
+    the keys valid, a mapper patch does not - so this is a caveat and not the
+    refusal ADR-0184 §1 prefers where the evidence is decisive; #225 refuses
+    only the namespace mismatch that is empty by construction, and #231 set
+    this shape for everything else. The reading of `<patch>` is
+    `artist_cover.py`'s, imported rather than repeated: it is the one place
+    that knows what the line and the IPS beside it mean.
+
+    One claim is *not* undecidable, and it is the only one made: whether the
+    write moves byte 5 across the line that keys the tiles, which is decided by
+    the ROM's own byte 5 against the value written. So `rom` - the `--rom` the
+    caller already resolved, which `--reference` requires - is read beside the
+    patch (P2 of the #554 review: the write alone is not evidence, because a
+    CHR size written into a ROM that already had one, or a `0` into a ROM that
+    was already CHR RAM, leaves both sides keyed the same way). Every other
+    case, including a ROM that cannot be read, gets the undecidable wording
+    that a patch leaving the header alone gets.
+    """
+    declared = artist_cover.patches(ref)
+    if not declared:
+        return "", ""
+    found, silent, unreadable, shas = artist_cover.patch_evidence(ref)
+    # One `<patch>` line is declared once per supported ROM sha1, so the file
+    # name repeats; name each file once and quote every target beside it.
+    names = ", ".join(sorted({name for name, _ in declared}))
+    body = [
+        f"the reference pack declares a <patch> ({names}), so it is built for a",
+        "patched ROM: the figures below compare two builds, not a coverage of the",
+        "recording. Not automatically fatal - a patch that leaves PRG/CHR alone, an",
+        "audio-only one say, leaves the tile keys valid - but which of the two this",
+        "is cannot be decided from the pack alone (#231).",
+        "patches declared:",
+    ]
+    for name, sha1s in shas.items():
+        body.append(f"  {name}, target sha1 {', '.join(sha1s)}")
+    for name, writes in found.items():
+        body.append(f"{name} rewrites the iNES header:")
+        for off in sorted(writes):
+            body.append(f"  offset {off} = 0x{writes[off]:02X}"
+                        f"  ({artist_cover.INES_FIELD.get(off, f'byte {off}')})")
+        if 5 in writes:
+            byte5 = writes[5]
+            state = rom_chr_namespace(rom)
+            body += [
+                f"byte 5 becomes 0x{byte5:02X} = {byte5 * 8} KB of CHR ROM. Byte 5 is the",
+                "field that decides the tile namespace (0 = CHR RAM, tiles keyed by",
+                "their 16-byte pattern; any other value = that many 8 KB banks of CHR",
+                "ROM, tiles keyed by bank index),",
+            ]
+            # The write is evidence of a namespace change only where it moves
+            # the ROM's own byte 5 across the zero/non-zero line (P2 of the
+            # #554 review) - a CHR size written into a ROM that already had one
+            # leaves the two sides keyed the same way.
+            if state is None:
+                body += [
+                    "but the ROM this sweep read could not be read here, so which",
+                    "side of that line its byte 5 is on is not decided either way:",
+                    "read the numbers below as indicative, not coverage.",
+                ]
+            else:
+                side = "non-zero, i.e. CHR ROM" if state else "0, i.e. CHR RAM"
+                if state == (byte5 != 0):
+                    body += [
+                        "but the ROM this sweep read is already on that side of it -",
+                        f"byte 5 is {side} - so the write does not move the zero/non-zero",
+                        "state the tiles are keyed by: what the patch changes is in the",
+                        "PRG/CHR body, where it may or may not move the tiles. Read the",
+                        "numbers below as indicative, not coverage.",
+                    ]
+                else:
+                    body += [
+                        "and the ROM this sweep read is on the other side of that line -",
+                        f"byte 5 is {side} - so these two builds provably do not address",
+                        "CHR the same way: read the numbers below as indicative, not coverage.",
+                    ]
+        else:
+            body += [
+                "it leaves byte 5 - the field that decides the tile namespace, CHR",
+                "RAM against CHR ROM - at its original value.",
+            ]
+    if silent:
+        body += [
+            f"{', '.join(sorted(set(silent)))} reads fine and does not rewrite the "
+            "iNES header, so what",
+            "it changes is in the PRG/CHR body: it may or may not move the tiles.",
+        ]
+    if unreadable:
+        body += [
+            f"{', '.join(sorted(set(unreadable)))} could not be read beside the "
+            "manifest, so how it",
+            "affects the tiles is unknown.",
+        ]
+    marker = (f"[caveat: the reference declares <patch> ({names}) and is built "
+              "for a patched ROM, so this compares two builds — not coverage]")
+    # The first line is the caller's to prefix with "   ! "; every other one is
+    # joined with the indent that lines it up under the first.
+    return "\n     ".join(body), marker
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Record a whole navigation sweep as one command (ADR-0184, "
@@ -911,6 +1060,12 @@ def main() -> int:
                                  + [Path(r["hires"]) for r in results
                                     if r.get("hires")]),
         }
+        # #554: a reference pack built for a patched ROM makes every figure
+        # below a comparison of two builds. Say it above the tables and on the
+        # summary row, and carry it in the machine-readable row beside the
+        # number it qualifies - the same treatment the sibling tool gives it.
+        patch_text, patch_marker = reference_patch_caveat(ref, rom)
+        coverage["patchCaveat"] = patch_text or None
         if base_pat:
             both = len((union_pat | base_pat) & ref_pat)
             coverage["baselineOfReference"] = len(base_pat & ref_pat)
@@ -921,13 +1076,18 @@ def main() -> int:
 
         print(f"\n== coverage against {ref} ({len(ref_pat)} distinct CHR patterns, "
               "the identity both sides share - #545)")
+        if patch_text:
+            print(f"   ! {patch_text}")
         if coverage["note"]:
             print(f"   ! {coverage['note']}")
         for p in per_session:
             print(f"   {p['name']:<14} {p['patterns']:>5} patterns  "
                   f"{p['ofReference']:>5} of reference  {p['pct']:>5.1f}%")
+        # The row a reader quotes: it must not read as a coverage figure when
+        # the reference is a pack for a patched ROM.
         print(f"   {'SWEEP UNION':<14} {len(union_pat):>5} patterns  "
-              f"{sweep_hit:>5} of reference  {coverage['sweepPct']:>5.1f}%")
+              f"{sweep_hit:>5} of reference  {coverage['sweepPct']:>5.1f}%"
+              + (f"  {patch_marker}" if patch_marker else ""))
         if base_pat:
             print(f"   {'baseline':<14} {len(base_pat):>5} patterns  "
                   f"{coverage['baselineOfReference']:>5} of reference  "

@@ -166,8 +166,31 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   same packs read 535/6208 = 8.6 % before against 2705/6208 = 43.6 % after
   (union + baseline; the sweep's own union is 2585/6208 = 41.6 %). The two
   files' `<ver>` bases are **noted** beside the figure when they differ — a
-  reader's provenance, never a gate, and §5.3's own refusal (a pack keyed for a
-  patched ROM, #225) is `artist_cover.py`'s and is untouched.
+  reader's provenance, never a gate.
+  A reference pack that declares a `<patch>` is **caveated, never refused**
+  (#554): it was built for a *patched* ROM, so the figures below it compare two
+  builds, and the report says so — every patch named with its file name and
+  target sha1, then the iNES header bytes it writes — above the §5.3 tables
+  and again on the `SWEEP UNION` line, where the marker is what keeps the one
+  row a reader quotes from reading as coverage; `sweep.json` carries the same
+  words as `coverage.patchCaveat`, beside the figure they qualify. A caveat and
+  not a refusal, because whether a patch moves the tiles is undecidable from
+  the pack alone — an audio-only patch leaves the tile keys valid, a mapper
+  patch does not. What the pack and the ROM decide *together* is whether the
+  write moves byte 5 across the zero/non-zero line the tile namespace is keyed
+  on (0 = CHR RAM, tiles keyed by their 16-byte pattern; any other value = that
+  many 8 KB banks of CHR ROM, tiles keyed by bank index), so the divergence is
+  claimed only where the write really moves it: a non-zero write into a dump
+  that is already CHR ROM — the ordinary mapper patch — leaves both sides keyed
+  the same way, and a ROM that cannot be read decides nothing, so both get the
+  undecidable wording a patch that leaves the header alone gets. That reading
+  is `nav_sweep_metrics.rom_chr_bytes`', §5.2's own iNES reader, which is also
+  why `--reference` needing `--rom` is what lets the claim be made at all.
+  §5.3's refusal stays where it belongs: #225's pack keyed for a patched ROM —
+  the namespace mismatch that is empty by construction and prints 0 % — is
+  `artist_cover.py`'s own, and so is the reading of `<patch>`, the line, the
+  IPS beside it and byte 5, imported rather than repeated so the two consumers
+  cannot disagree about the same pack.
   Measured 2026-09-14 on Contra, 11 sessions × 300 s, `--jobs 4`, ~7 min of
   wall clock (by `artist_cover.py`'s own run, unchanged): sweep union
   **56.6%** (1928/3404) against the amendment's 58.9%,
