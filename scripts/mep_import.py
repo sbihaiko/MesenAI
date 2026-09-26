@@ -106,9 +106,15 @@ _PREFIXED_TAGS = frozenset({"<tile>", "<background>"})
 # else is refused (never dropped). `<patch>` is read by `mep_patch.patch_lines`
 # and needs `--rom` at import time (ADR-0198 §3); the index read (ADR-0210 §3)
 # refuses an index-keyed `<patch>` pack by name and vets a 32-hex one per key.
+# Plus ADR-0224's argument-less `<bgPreservesBehindBgSprites>`:
+# `HdPackLoader` sets `PreservesBehindBgSprites` from it
+# (`HdBehindBgSpriteRule::IsTagLine`), and `HdPackBuilder::SaveHdPack` writes it
+# on every pack it saves (#530). Upstream Mesen 2 skips it as an unknown tag in
+# silence, which is what lets a recorded pack still open there, and a silent
+# skip is exactly the drop this tool refuses to make.
 _KNOWN_TAGS = frozenset(
     {"<tile>", "<background>", "<condition>", "<img>", "<addition>", "<fallback>",
-     "<bgm>", "<sfx>", "<patch>"}
+     "<bgm>", "<sfx>", "<patch>", "<bgPreservesBehindBgSprites>"}
     | {f"<{t}>" for t in mep_build._HEADER_TAGS})
 # The version at which the loader reads a short tileData field as hex.
 # Below it the field is decimal (ReadTileData), so a hex-token key source
