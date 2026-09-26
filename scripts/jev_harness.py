@@ -661,14 +661,26 @@ class Condition:
     equals: float | str | None = None
 
     def holds(self, state) -> bool:
+        """Whether the clause holds. Never raises: a trigger is data.
+
+        A bound on a field the state carries as text (`stage` is a run-level
+        `"snake-man"`, not a number) is *not* a match, and the comparison used to
+        be an unguarded `<` that took the whole run down with a `TypeError` when
+        a live research worker proposed exactly that clause for Mega Man 3
+        (measured 2026-09-26, `runs/f1415-sec/ext/stdout.txt`). A proposal is
+        advice (ADR-0188); advice must not be able to end a run.
+        """
         if self.field not in state:
             return False
         value = state[self.field]
         if self.equals is not None:
             return value == self.equals
-        if self.minimum is not None and value < self.minimum:
+        try:
+            if self.minimum is not None and value < self.minimum:
+                return False
+            return not (self.maximum is not None and value > self.maximum)
+        except TypeError:
             return False
-        return not (self.maximum is not None and value > self.maximum)
 
 
 @dataclass(frozen=True)
@@ -682,6 +694,18 @@ class Tip:
 
     def holds(self, state) -> bool:
         return all(condition.holds(state) for condition in self.conditions)
+
+
+def _bounds_on_a_text_field(ram_map, conditions) -> list:
+    """The clauses that put a numeric bound on a field this run carries as text.
+
+    `stage` is the run-level key - `"snake-man"`, not a number - so a `min`/`max`
+    clause on it can never hold. A research worker proposed exactly that for Mega
+    Man 3 on 2026-09-26, which is why the merge asks before it adopts.
+    """
+    return [condition.field for condition in conditions
+            if (condition.minimum is not None or condition.maximum is not None)
+            and isinstance(getattr(ram_map, "run_keys", {}).get(condition.field), str)]
 
 
 def _condition_from(item, path) -> Condition:
@@ -921,6 +945,7 @@ class Summary:
     chain_frames: int = 0
     out: object = None
     verified: object = None
+    research_passes: int = 0
 
     def as_json(self) -> dict:
         return {
@@ -938,6 +963,7 @@ class Summary:
             "stalls": self.stalls,
             "spend_usd": round(self.spend_usd, 6),
             "research_spend_usd": round(self.research_spend_usd, 6),
+            "research_passes": self.research_passes,
             "goal_reached": self.goal_reached,
             #The search plays a *chain* of play calls; the artifact is one flat
             #script, and only the flat replay of it is measured (measure_script).
@@ -958,7 +984,8 @@ class Harness:
                  max_questions_per_rung=3, max_decisions_per_stall=18,
                  max_stalls=8, max_emulated_seconds=600.0, budget_usd=1.0,
                  goal=None, log_path=None, dashboard=None, research=None,
-                 research_timeout=None, clock=time.monotonic):
+                 research_timeout=None, max_research_passes=None,
+                 clock=time.monotonic):
         self.emu = emu
         self.ram_map = ram_map
         self.frames = int(frames)
@@ -981,6 +1008,14 @@ class Harness:
         self.dashboard = dashboard if dashboard is not None else sys.stderr
         self.research = research or self._research_subprocess
         self.research_timeout = research_timeout
+        #How many web passes this run may pay for, `None` for "one per stall".
+        #A pass costs US$ 0.22-0.30 and the budget check runs *before* it, so
+        #`--budget` cannot express "at most N passes" - a pass overshoots it by
+        #an order of magnitude (F14.15 section 9.3). Zero is a real setting: it
+        #measures the ladder with the research variable held out, for nothing.
+        self.max_research_passes = (None if max_research_passes is None
+                                    else int(max_research_passes))
+        self.research_passes = 0
         self.clock = clock
         self.start_state = start_state
         self.start_handle = start_handle
@@ -1405,11 +1440,34 @@ class Harness:
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
 
+    def _research_allowed(self) -> bool:
+        """Whether this run may pay for another web pass.
+
+        Both roads into the worker ask this first - the ladder's end and the
+        loop guard's second detection - because the cost lands in the run's
+        budget only after the pass, so a post-hoc check cannot enforce a cap.
+        """
+        return (self.max_research_passes is None
+                or self.research_passes < self.max_research_passes)
+
     def _ask_research(self, stall: StallState, checkpoint: Checkpoint) -> dict:
         """One web pass for this stall, its proposals merged and its cost counted."""
+        self.research_passes += 1
         result = self.research(self._report(stall, checkpoint)) or {}
-        self.research_spend_usd += float(result.get("cost_usd") or 0.0)
-        self._merge_research(result)
+        cost = float(result.get("cost_usd") or 0.0)
+        self.research_spend_usd += cost
+        added = self._merge_research(result)
+        #What the CLI answered the worker with, one line per pass (F14.15 section
+        #9.4). ADR-0238 section 3 promises "a `claude -p` worker with web search
+        #and no other tool", and the argv alone was not that promise: the init
+        #event listed all 21 built-ins behind `--allowedTools` and a
+        #non-allow-listed tool ran. The line is written whatever the pass added,
+        #because the pass that answered nothing is the one a wide tool list would
+        #hide in.
+        self._log_jsonl({"event": "research_pass", "added": added,
+                         "cost_usd": round(cost, 6),
+                         "tools": list(result.get("tools") or []),
+                         "tools_unexpected": list(result.get("tools_unexpected") or [])})
         return result
 
     def _research_subprocess(self, report) -> dict:
@@ -1444,6 +1502,7 @@ class Harness:
         if not isinstance(proposals, dict):
             return 0
         added = 0
+        merged, dropped = [], []
         for macro in proposals.get("macros") or []:
             if not isinstance(macro, dict):
                 continue
@@ -1475,16 +1534,30 @@ class Harness:
                     tip.get("when", tip.get("trigger")), "research")
             except TipsError:
                 continue
+            #A numeric bound on a field this run carries as text can never hold,
+            #and the tip is dropped rather than the clause: a tip with no `when`
+            #fires everywhere, which is what the module's own instructions warn
+            #the worker against. Measured 2026-09-26 - a live worker proposed
+            #`{"field": "stage", "min": 0, "max": 0}` and the clause took the
+            #run down before the merge could be questioned.
+            unusable = _bounds_on_a_text_field(self.ram_map, conditions)
+            if unusable:
+                dropped.append((str(tip.get("id") or text[:24]), unusable))
+                continue
             self.tips.extra.append(Tip(
                 id=str(tip.get("id") or f"research{len(self.tips.extra) + 1}"),
                 text=text, macro=tip.get("macro"), conditions=conditions,
                 sources=tuple(tip.get("sources") or ()),
                 note=str(tip.get("note", ""))))
+            merged.append(self.tips.extra[-1].id)
             added += 1
-        if added:
+        if added or dropped:
             self._log_jsonl({"event": "research", "added": added,
                              "macros": list(proposals.get("macros") or []),
-                             "tips": [t.get("id") for t in proposals.get("tips") or []]})
+                             "tips": merged,
+                             "dropped": [name for name, _fields in dropped],
+                             "dropped_fields": sorted({field for _name, fields in dropped
+                                                       for field in fields})})
         return added
 
     def _stall(self, head: Head):
@@ -1521,6 +1594,8 @@ class Harness:
                     #One research pass per stall, and the ladder is only spent
                     #once it has been walked again with the proposals in hand.
                     return None, "exhausted"
+                if not self._research_allowed():
+                    return None, "research-cap"
                 checkpoint = self._checkpoint_at(head.t - LADDER[0]) or (
                     self.ring[0] if self.ring else None)
                 if checkpoint is None:
@@ -1566,7 +1641,11 @@ class Harness:
                 if stall.loops >= 3:
                     self._maybe_drop(played.handle)
                     return None, "loop"
-                if stall.loops == 2 and stall.research is None:
+                if stall.loops == 2 and stall.research is None and self._research_allowed():
+                    #The loop guard's own road to the worker, and it needs the
+                    #cap as much as the ladder's does: a `--max-research-passes
+                    #0` arm paid US$ 0.0923 for a pass asked for from here
+                    #(measured 2026-09-26, `runs/f1415-sec/B-ng-pre-tips-1`).
                     stall.research = self._ask_research(stall, checkpoint)
                 self._maybe_drop(played.handle)
                 self._rewind_to(checkpoint)
@@ -1690,6 +1769,7 @@ class Harness:
                        loops=self.loop_count, stalls=self.stalls,
                        spend_usd=self._spent_usd,
                        research_spend_usd=self.research_spend_usd, wall_s=wall,
+                       research_passes=self.research_passes,
                        emulated_s=self._played_frames / FPS,
                        goal_reached=flat_goal if self.goal else goal,
                        chain_goal_reached=goal, chain_frames=head.frame,
@@ -2000,6 +2080,11 @@ def main(argv=None) -> int:
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--research-timeout", type=float, default=None,
                         help="wall-clock cap on one web-research pass")
+    parser.add_argument("--max-research-passes", type=int, default=None,
+                        metavar="N",
+                        help="how many web-research passes this run may pay for "
+                             "(default: one per stall). 0 holds the research "
+                             "variable out of a ladder measurement entirely.")
     parser.add_argument("--progress-field", default=None)
     parser.add_argument("--screen-field", default=None)
     parser.add_argument("--stage", default=None, metavar="NAME",
@@ -2086,7 +2171,8 @@ def main(argv=None) -> int:
             max_stalls=args.max_stalls,
             max_decisions_per_stall=args.max_decisions_per_stall,
             max_emulated_seconds=args.max_emulated_seconds, budget_usd=args.budget,
-            goal=args.goal, log_path=log_path, research_timeout=args.research_timeout)
+            goal=args.goal, log_path=log_path, research_timeout=args.research_timeout,
+            max_research_passes=args.max_research_passes)
         summary = harness.run()
         if summary.script:
             summary.out = str(write_script(out, summary.script))

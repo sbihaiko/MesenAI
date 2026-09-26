@@ -782,8 +782,23 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   the game is CHR ROM and its bootstrap exports every bank index. The research
   path is live for the first time (one pass US$ 0.27, 58.7 s smoke test); the
   coverage pass with `00A2:9C` held its cheat and reached the same abs_x 906 in
-  the same 208 frames.
-  [Log](../validation/f1415-jev-adoption-2026-09-26.md).
+  the same 208 frames. **Third pass (same day): the verdict stands on harder
+  numbers.** The kit criterion was re-measured on a route that goes somewhere —
+  78 px past §4's stall, to abs_x 984, the wall plain `R` stops at — against the
+  same-length search-alone recording: 97 more cells and 22 more keys, 13 more
+  than the two committed MM3 routes, and **still 0 keys no other pack here
+  has**, so the second clause fails for a route that reaches new level, not for
+  one that stopped short. Stall A's ladder now lands on four distinct
+  checkpoints instead of one (the 20-second pre-roll the brief asked for was
+  measured and rejected: those 20 s are on the *previous* screen, where the
+  camera resets and `abs_x` drops by 2 800, so the base search stalls at 2859
+  and never reaches the wall) and Jev still does not pass it; the extended
+  route replays deterministically at three RAM checkpoints twice and is **not
+  published** — one mint generator short, §9.2's reason unchanged. The worker
+  is now restricted by `--tools`, a 23-name deny-list and `--safe-mode`, with
+  the CLI's own init event read back into every run's log, and
+  `--max-research-passes` closes §9.3 on both roads into the worker.
+  [Log](../validation/f1415-jev-adoption-2026-09-26.md) §11.
 
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em

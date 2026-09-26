@@ -17,8 +17,19 @@ model this CLI knows, so on this module's real prompt it returned nothing at all
 `answer_text` reads every shape the CLI produces, and the default is `sonnet`.
 Measured 2026-09-26, `runs/diag/`.
 
-Three things this module is careful about:
+Four things this module is careful about:
 
+* **The worker cannot reach a tool but the two web ones.** Web text is the one
+  input here that nobody on this machine wrote, and it flows straight into a
+  process that shares this shell, so `claude_argv` restricts the CLI three ways
+  over: `--tools` limits the *built-in set* (the flag that actually does it -
+  `--allowedTools` is not enforced, measured below), `--allowedTools` allow-lists
+  the same pair, and `--disallowedTools` denies every other built-in by name.
+  `--safe-mode` keeps this machine's own CLAUDE.md, hooks, skills and plugins out
+  of the worker. F14.15 section 9's open problem 4 is closed by `worker_tools`:
+  the init event of every pass is read back and anything outside the web pair is
+  reported as `tools_unexpected`, so the claim is checked on each run rather than
+  assumed from the argv.
 * **The query carries the game and a description of the spot, nothing else.**
   No ROM bytes, no pixels, no key: the report goes in on stdin as data, and the
   question is built from the game's name, the position and what was already
@@ -56,7 +67,17 @@ CLAUDE = "claude"
 #the trivial-question probes answer on either model, which is how the id looked
 #fine for two slices.
 MODEL = "sonnet"
-ALLOWED_TOOLS = "WebSearch,WebFetch"
+#The two tools the worker may reach, and every built-in it may not. The deny
+#list is belt to `--tools`' braces: `--tools` narrows the set the CLI offers,
+#`--disallowedTools` refuses the names even if a future CLI stops honouring it.
+WEB_TOOLS = ("WebSearch", "WebFetch")
+DENIED_TOOLS = (
+    "Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob", "Grep", "Task",
+    "Agent", "Skill", "ToolSearch", "CronCreate", "CronDelete", "CronList",
+    "EnterWorktree", "ExitWorktree", "ListAgents", "Monitor", "PushNotification",
+    "RemoteTrigger", "SendMessage", "TaskStop", "Workflow",
+)
+ALLOWED_TOOLS = ",".join(WEB_TOOLS)
 DEFAULT_TIMEOUT = 900.0
 PROPOSAL_KEYS = ("tips", "macros")
 
@@ -152,7 +173,25 @@ def extract_json(text: str) -> dict | None:
 
 
 def claude_argv(model=MODEL) -> list:
-    return [CLAUDE, "-p", "--model", model, "--allowedTools", ALLOWED_TOOLS,
+    """The worker's argv: web tools only, and no configuration of ours.
+
+    `--allowedTools` alone was this module's first attempt and it is **not
+    enforced by this CLI** - the init event listed all 21 built-in tools and a
+    non-listed one ran (F14.15 section 9.4). `--tools` is the flag that limits
+    the built-in set; measured 2026-09-26 with the same question and model,
+    `runs/f1415-sec/probe-red.json` (`--allowedTools` only) answers with 21 tool
+    names and `runs/f1415-sec/probe-tools.json` (`--tools`, `--disallowedTools`,
+    `--safe-mode`, `--strict-mcp-config`) with exactly `["WebFetch",
+    "WebSearch"]`. `--safe-mode` also keeps this machine's CLAUDE.md, hooks,
+    skills, plugins and MCP servers away from text the worker fetched off the
+    web, and `--strict-mcp-config` with no `--mcp-config` adds no server back.
+    No permission bypass is ever passed.
+    """
+    return [CLAUDE, "-p", "--model", model,
+            "--tools", ALLOWED_TOOLS,
+            "--allowedTools", ALLOWED_TOOLS,
+            "--disallowedTools", ",".join(DENIED_TOOLS),
+            "--safe-mode", "--strict-mcp-config",
             "--output-format", "json"]
 
 
@@ -185,6 +224,32 @@ def answer_text(stdout: str) -> tuple:
                     return "", event["result"][:400] or "the worker reported an error"
                 return event["result"], ""
     return text, ""
+
+
+def worker_tools(stdout: str) -> list:
+    """The tools the worker's own `init` event says it was given, or `[]`.
+
+    The argv is a request; this is what the CLI answered. F14.15's open problem
+    4 was exactly that gap - a worker whose argv said `--allowedTools
+    WebSearch,WebFetch` and whose init event listed `Task`, `Bash`, `Edit` and
+    eighteen more - so every pass reads its own init event back and reports the
+    names outside `WEB_TOOLS` as `tools_unexpected`.
+    """
+    try:
+        parsed = json.loads(stdout or "")
+    except json.JSONDecodeError:
+        return []
+    events = parsed if isinstance(parsed, list) else [parsed]
+    for event in events:
+        if (isinstance(event, dict) and event.get("type") == "system"
+                and event.get("subtype") == "init" and isinstance(event.get("tools"), list)):
+            return [str(name) for name in event["tools"]]
+    return []
+
+
+def tools_unexpected(tools) -> list:
+    """The names in an init event's tool list that are not the two web tools."""
+    return [name for name in tools or [] if name not in WEB_TOOLS]
 
 
 def worker_cost(stdout: str) -> float:
@@ -233,20 +298,28 @@ def research(report, *, out_dir=None, runner=subprocess.run, model=MODEL,
                 "query": query}
     except OSError as error:
         return {"error": f"could not run {CLAUDE}: {error}", "query": query}
+    #What the CLI actually gave the worker, not what the argv asked for: a tool
+    #list wider than the web pair is the finding F14.15 section 9.4 recorded,
+    #and it belongs in the run's own log rather than in a maintainer's memory.
+    #Read on every path, the failures included - a pass that died is exactly the
+    #one a wide tool list would go unnoticed in.
+    tools = worker_tools(done.stdout)
+    extra = {"tools": tools, "tools_unexpected": tools_unexpected(tools)}
+    cost = worker_cost(done.stdout)
     if done.returncode != 0:
         return {"error": f"the worker exited {done.returncode}",
-                "stderr": (done.stderr or "")[-400:], "query": query}
-    cost = worker_cost(done.stdout)
+                "stderr": (done.stderr or "")[-400:], "query": query, **extra}
     text, worker_error = answer_text(done.stdout)
     if worker_error:
         return {"error": f"the worker reported: {worker_error}", "query": query,
-                "raw": (done.stdout or "")[:400], "cost_usd": cost}
+                "raw": (done.stdout or "")[:400], "cost_usd": cost, **extra}
     proposals = extract_json(text)
     if proposals is None:
         return {"error": "the worker answered no JSON object", "query": query,
-                "raw": (text or done.stdout or "")[:400], "cost_usd": cost}
+                "raw": (text or done.stdout or "")[:400], "cost_usd": cost, **extra}
     proposals["query"] = proposals.get("query") or query
     proposals["cost_usd"] = cost
+    proposals.update(extra)
     if out_dir is not None:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)

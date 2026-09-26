@@ -30,6 +30,7 @@ import jev_harness  # noqa: E402
 import jev_stall_research  # noqa: E402
 
 NG = HERE / "stages" / "ninjagaiden"
+MM3 = HERE / "stages" / "mm3"
 FPS = jev_harness.FPS
 PIN = 987
 
@@ -221,18 +222,20 @@ def _no_research(report):
     return {}
 
 
-def make_harness(emu, client, tmp, *, research=None, **kwargs):
+def make_harness(emu, client, tmp, *, research=None, game=NG, run_keys=None,
+                 **kwargs):
     options = {"stall_seconds": 5.0, "settle_seconds": 1.0, "ring_seconds": 60.0,
                "max_questions_per_rung": 3, "max_decisions_per_stall": 12,
                "max_stalls": 1, "max_emulated_seconds": 600.0, "budget_usd": 1.0,
                "frames": 15}
     options.update(kwargs)
     log = Path(tmp) / "events.jsonl"
+    ram_map = jev_harness.RamMap.load(game / "ram-map.json", run_keys=run_keys)
     return jev_harness.Harness(
-        emu, jev_harness.RamMap.load(NG / "ram-map.json"),
+        emu, ram_map,
         start_handle=emu.start_handle, client=client,
-        tips=jev_harness.load_tips(NG / "jev-tips.json",
-                                   fields=jev_harness.RamMap.load(NG / "ram-map.json").fields),
+        tips=jev_harness.load_tips(game / "jev-tips.json",
+                                   fields=ram_map.fields),
         macros=jev_harness.macro_table(options["frames"]), work=Path(tmp),
         log_path=log, dashboard=io.StringIO(),
         research=research or _no_research, **options)
@@ -779,6 +782,181 @@ def test_ladder_exhausted_runs_one_research_pass_then_retries(tmp):
                and any("research says" in text for text in entry["criteria"].values())]
     check(retries, "after research the ladder is walked again with the proposals",
           f"questions={len(client.seen)}")
+
+
+def test_a_condition_that_cannot_be_compared_does_not_hold(tmp):
+    """A trigger clause must never be able to raise.
+
+    Measured 2026-09-26: a live research worker proposed
+    `{"field": "stage", "min": 0, "max": 0}` for Mega Man 3 - a numeric bound on
+    a field the harness carries as the string `"snake-man"` - and
+    `Condition.holds` raised `TypeError: '<' not supported between instances of
+    'str' and 'int'` out of the middle of the run
+    (`runs/f1415-sec/ext/stdout.txt`). ADR-0188 makes a proposal advice, never
+    evidence; advice that kills the harness is worse than advice that is ignored.
+    """
+    stage = jev_harness.Condition("stage", 0, 0)
+    check(stage.holds({"stage": "snake-man"}) is False,
+          "a numeric bound on a text field does not hold and does not raise",
+          "raised")
+    check(stage.holds({"stage": 0}) is True,
+          "the same clause still works on a field that really is a number",
+          "False")
+    check(jev_harness.Condition("stage", equals="snake-man").holds(
+              {"stage": "snake-man"}) is True,
+          "and the equality form, which is how a stage is meant to be pinned, "
+          "is untouched", "False")
+    check(jev_harness.Condition("abs_x", 900, 1023).holds({"abs_x": "984"}) is False,
+          "a text state value under a bound is the same story the other way",
+          "raised")
+
+
+def test_a_proposal_that_bounds_a_text_field_is_dropped_not_merged(tmp):
+    """The other half: the tip never enters the table, and the log says why.
+
+    Dropping only the clause would be worse than dropping the tip - a tip with
+    no `when` fires everywhere, which is exactly what the module's own
+    instructions warn the worker against.
+    """
+    emu = FakeEmu()
+    client = FakeJev(["WAIT_15"])
+
+    def research(_report):
+        return {"tips": [{"id": "bubukan-pole", "tip": "jump as he vaults",
+                          "macro": "JUMP_RIGHT",
+                          "when": [{"field": "stage", "min": 0, "max": 0}]},
+                         {"id": "kept", "tip": "hop left at the pole",
+                          "macro": "JUMP_LEFT",
+                          "when": [{"field": "abs_x", "min": 0, "max": 5000}]}],
+                "macros": [], "cost_usd": 0.02}
+
+    summary = make_harness(emu, client, tmp, max_decisions_per_stall=60,
+                           max_questions_per_rung=1, research=research,
+                           game=MM3, run_keys={"stage": "snake-man"}).run()
+    check(summary.reason != "error",
+          "the run survives a proposal it cannot use", str(summary.reason))
+    entries = [entry for entry in events(tmp) if entry.get("event") == "research"]
+    check(entries and entries[0]["tips"] == ["kept"],
+          "only the tip whose trigger can be evaluated is merged",
+          str(entries[0].get("tips")) if entries else "(no line)")
+    check(entries and entries[0].get("dropped") == ["bubukan-pole"],
+          "and the line names what was dropped, so the loss is not silent",
+          str(entries[0].get("dropped")) if entries else "(no line)")
+
+
+def test_a_run_can_cap_how_many_web_passes_it_pays_for(tmp):
+    """A pass costs US$ 0.22-0.30 and the run's own budget learns that only
+    after it is spent, so a slice that says "at most N passes" needs a cap of
+    its own (F14.15 section 9.3): `--budget` alone cannot express it, because the
+    harness checks the budget *before* asking and a pass overshoots it by an
+    order of magnitude."""
+    emu = FakeEmu()
+    client = FakeJev(["WAIT_15"])
+    researched = []
+
+    def research(report):
+        researched.append(report)
+        return {"tips": [], "macros": [], "cost_usd": 0.27}
+
+    summary = make_harness(emu, client, tmp, max_stalls=4,
+                           max_decisions_per_stall=60, max_questions_per_rung=1,
+                           research=research, max_research_passes=1).run()
+    check(len(researched) == 1,
+          "a run with `max_research_passes=1` pays for exactly one pass, "
+          "whatever its stall count", str(len(researched)))
+    check(summary.research_passes == 1 and summary.research_spend_usd > 0.26,
+          "the summary counts the passes and their cost, so a slice can check "
+          "its own cap after the fact as well as enforce it",
+          f"{summary.research_passes} ${summary.research_spend_usd}")
+
+    #Zero is the useful setting: a ladder-depth measurement with the research
+    #variable held out costs nothing at all, and the reason names the cap rather
+    #than a budget the run never came near.
+    off_tmp = Path(tmp) / "off"
+    off_tmp.mkdir()
+    off = []
+    off_summary = make_harness(
+        FakeEmu(), FakeJev(["WAIT_15"]), off_tmp, max_stalls=4,
+        max_decisions_per_stall=60, max_questions_per_rung=1,
+        research=lambda report: off.append(report) or {},
+        max_research_passes=0).run()
+    check(not off, "`max_research_passes=0` never asks, so the arm spends only "
+                   "on Jev decisions", str(len(off)))
+    check(off_summary.reason == "research-cap" and off_summary.research_passes == 0,
+          "and a run that stops there says so, instead of reporting a budget it "
+          "never reached", f"{off_summary.reason} ${off_summary.spend_usd}")
+
+    #The loop guard has a research call site of its own (ADR-0238 section 3: "a
+    #second loop goes to web research"), and the cap has to hold there too.
+    #Measured 2026-09-26: a `--max-research-passes 0` arm paid US$ 0.0923 for a
+    #pass the *loop guard* asked for, which is the one road into the worker the
+    #first version of this cap did not close
+    #(`runs/f1415-sec/B-ng-pre-tips-1/decisions.jsonl`: two `loop` events, then
+    #a `research_pass`).
+    loop_tmp = Path(tmp) / "loop"
+    loop_tmp.mkdir()
+    loop_calls = []
+    shipped_ladder = jev_harness.LADDER
+    jev_harness.LADDER = (1, 2, 3, 4, 5, 6, 7, 8)
+    try:
+        make_harness(FakeEmu(), FakeJev([], picker=lambda call, names: [
+            name for name in names if name != "JUMP_LEFT_15"][0 if call % 2 == 0 else -1]),
+            loop_tmp, max_decisions_per_stall=60, max_questions_per_rung=1,
+            stall_seconds=8.0, max_research_passes=0,
+            research=lambda report: loop_calls.append(report) or {}).run()
+    finally:
+        jev_harness.LADDER = shipped_ladder
+    check(not loop_calls,
+          "the cap holds on the loop guard's road to the worker too, not just "
+          "on the ladder's", str(len(loop_calls)))
+
+
+def test_a_research_pass_logs_the_tools_the_worker_was_really_given(tmp):
+    """ADR-0238 section 3 promises a worker with web search and no other tool.
+
+    The argv does not make that true on its own - F14.15 section 9.4 found the
+    init event listing all 21 built-ins behind `--allowedTools` - so the run's
+    own log carries what the CLI answered, and a wide list is legible after the
+    fact instead of living in a maintainer's memory.
+    """
+    emu = FakeEmu()
+    client = FakeJev(["WAIT_15"])
+
+    def restricted(_report):
+        return {"tips": [], "macros": [], "cost_usd": 0.02,
+                "tools": ["WebSearch", "WebFetch"], "tools_unexpected": []}
+
+    make_harness(emu, client, tmp, max_decisions_per_stall=60,
+                 max_questions_per_rung=1, research=restricted).run()
+    passes = [entry for entry in events(tmp) if entry.get("event") == "research_pass"]
+    check(passes, "a research pass leaves a line in the run's own log, even "
+                  "when it proposed nothing",
+          str([entry.get("event") for entry in events(tmp)]))
+    if passes:
+        check(passes[0]["tools"] == ["WebSearch", "WebFetch"],
+              "the line carries the tool list the CLI reported to the worker",
+              str(passes[0].get("tools")))
+        check(passes[0]["tools_unexpected"] == [],
+              "and nothing outside the web pair, for the run that was fine",
+              str(passes[0].get("tools_unexpected")))
+        check(abs(passes[0]["cost_usd"] - 0.02) < 1e-9,
+              "the pass's cost is on the same line", str(passes[0].get("cost_usd")))
+
+    leaking_tmp = Path(tmp) / "leak"
+    leaking_tmp.mkdir()
+
+    def leaking(_report):
+        return {"tips": [], "macros": [],
+                "tools": ["Task", "Bash", "WebSearch"], "tools_unexpected": ["Task", "Bash"]}
+
+    make_harness(FakeEmu(), FakeJev(["WAIT_15"]), leaking_tmp,
+                 max_decisions_per_stall=60, max_questions_per_rung=1,
+                 research=leaking).run()
+    leaked = [entry for entry in events(leaking_tmp)
+              if entry.get("event") == "research_pass"]
+    check(leaked and leaked[0]["tools_unexpected"] == ["Task", "Bash"],
+          "a worker that *was* handed the shell says so in the run's log",
+          str(leaked[0].get("tools_unexpected")) if leaked else "(no line)")
 
 
 def test_a_research_pass_costs_money_and_the_run_counts_it(tmp):
@@ -1387,6 +1565,10 @@ def main():
         test_budget_cap_stops_the_run,
         test_emulated_seconds_cap,
         test_ladder_exhausted_runs_one_research_pass_then_retries,
+        test_a_research_pass_logs_the_tools_the_worker_was_really_given,
+        test_a_condition_that_cannot_be_compared_does_not_hold,
+        test_a_proposal_that_bounds_a_text_field_is_dropped_not_merged,
+        test_a_run_can_cap_how_many_web_passes_it_pays_for,
         test_a_research_pass_costs_money_and_the_run_counts_it,
         test_research_merge_keeps_the_harness_duration,
         test_promote_tips_is_a_separate_step,

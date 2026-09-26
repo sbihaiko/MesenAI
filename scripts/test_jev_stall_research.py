@@ -81,12 +81,14 @@ def _result_event(text) -> str:
 
 
 def _runner(stdout="", *, returncode=0, stderr="", raises=None):
-    def run(argv, input=None, capture_output=True, text=True, timeout=None):
-        run.seen = (argv, input, timeout)
+    def run(argv, **kwargs):
+        run.seen = (argv, kwargs.get("input"), kwargs.get("timeout"))
+        run.kwargs = kwargs
         if raises is not None:
             raise raises
         return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
     run.seen = None
+    run.kwargs = {}
     return run
 
 
@@ -110,8 +112,78 @@ def test_the_worker_argv_pins_the_model_and_a_headless_json_run(tmp):
           "the worker is headless and its answer is machine-readable",
           " ".join(argv))
     check(argv[:1] == ["claude"], "it is the CLI, called by name", argv[0])
-    check("--model" in argv and len(argv) == len(set(argv)),
-          "no flag is repeated", " ".join(argv))
+    flags = [part for part in argv if part.startswith("--")]
+    check("--model" in argv and len(flags) == len(set(flags)),
+          "no flag is repeated", " ".join(flags))
+
+
+def test_the_worker_can_only_reach_the_web_tools(tmp):
+    """The argv has to *limit the built-in set*, not merely prefer a subset.
+
+    F14.15's open problem 4: `--allowedTools WebSearch,WebFetch` is not enforced
+    by this CLI - the worker's own init event listed every built-in tool, and a
+    non-allow-listed tool executed. Measured 2026-09-26 with the same question
+    and model on both argvs: `--allowedTools` alone answers with
+    `["Task", "Bash", "CronCreate", ... 21 names]`
+    (`runs/f1415-sec/probe-red.json`), and `--tools WebSearch,WebFetch` in front
+    of it answers with `["WebFetch", "WebSearch"]`
+    (`runs/f1415-sec/probe-tools.json`). Web text flows into this worker, so
+    "the argv intends it" is not what ADR-0238 section 3 claims.
+    """
+    argv = jev_stall_research.claude_argv()
+    check("--tools" in argv,
+          "the argv carries `--tools`, the flag that limits the built-in set "
+          "rather than the one that only allow-lists it", " ".join(argv))
+    if "--tools" not in argv or "--disallowedTools" not in argv:
+        return
+    tools = argv[argv.index("--tools") + 1].split(",")
+    check(sorted(tools) == ["WebFetch", "WebSearch"],
+          "`--tools` names the two web tools and nothing else", str(tools))
+    denied = argv[argv.index("--disallowedTools") + 1].split(",")
+    for name in ("Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob",
+                 "Grep", "Task", "Agent", "Skill"):
+        check(name in denied,
+              f"`--disallowedTools` also denies {name}, so the restriction does "
+              f"not rest on one flag's behaviour", str(denied))
+    check("--permission-mode" not in argv
+          and "--dangerously-skip-permissions" not in argv
+          and "--allow-dangerously-skip-permissions" not in argv,
+          "the worker is never handed a permission bypass on top of that",
+          " ".join(argv))
+    check("--safe-mode" in argv,
+          "the worker loads no CLAUDE.md, hook, skill or plugin of ours: the "
+          "machine's own configuration is not a thing web text should reach",
+          " ".join(argv))
+
+
+def test_the_key_is_not_in_the_workers_argv_environment_or_stdin(tmp):
+    """ADR-0238 section 3: the key is never printed, logged, committed or passed
+    on a command line. The worker does not need it - it runs on the CLI's own
+    credentials - so this pins that the module never touches it."""
+    source = (HERE / "jev_stall_research.py").read_text(encoding="utf-8")
+    check("OPENROUTER" not in source,
+          "the module does not read, name or forward the OpenRouter key at all",
+          [line for line in source.splitlines() if "OPENROUTER" in line][:3])
+    os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-THIS-MUST-NOT-LEAK"
+    try:
+        runner = _runner(_result_event(json.dumps(PROPOSAL)))
+        proposals = jev_stall_research.research(NG_REPORT, runner=runner)
+        argv, sent, _timeout = runner.seen
+        check(not any("sk-or-v1" in str(part) for part in argv),
+              "the key is not in the argv even when the environment carries it",
+              " ".join(argv))
+        check("sk-or-v1" not in json.dumps(runner.kwargs),
+              "and not in anything else the module passes to subprocess, an "
+              "environment included",
+              json.dumps(runner.kwargs)[:200])
+        check("sk-or-v1" not in (sent or ""),
+              "and not on the worker's stdin",
+              (sent or "")[:200])
+        check(not proposals.get("error"),
+              "the pass works with no key at all, so it does not need one",
+              str(proposals.get("error")))
+    finally:
+        del os.environ["OPENROUTER_API_KEY"]
 
 
 def test_the_worker_gets_a_hard_cap_below_the_runs_own_budget(tmp):
@@ -140,6 +212,40 @@ def test_the_answer_is_read_out_of_the_cli_event_stream(tmp):
           "a worker that answered through the event stream is read", str(proposals)[:200])
     check(proposals.get("query"),
           "and the proposal carries a query", str(proposals.get("query"))[:80])
+
+
+def test_the_pass_reports_the_tool_list_the_cli_actually_gave_the_worker(tmp):
+    """The argv is a request; the init event is what happened.
+
+    `_result_event`'s init event carries `tools: ["WebSearch"]`, one short of the
+    argv's pair, which is the point: what the module reports is read from the
+    event, not echoed from the flags it wrote.
+    """
+    proposals = jev_stall_research.research(
+        NG_REPORT, runner=_runner(_result_event(json.dumps(PROPOSAL))))
+    check(proposals.get("tools") == ["WebSearch"],
+          "the answer carries the init event's own tool list",
+          str(proposals.get("tools")))
+    check(proposals.get("tools_unexpected") == [],
+          "and names nothing outside the web pair as unexpected",
+          str(proposals.get("tools_unexpected")))
+    wider = json.dumps([
+        {"type": "system", "subtype": "init",
+         "tools": ["Task", "Bash", "Edit", "Read", "WebSearch", "WebFetch"]},
+        {"type": "result", "subtype": "success", "is_error": False,
+         "result": json.dumps(PROPOSAL), "total_cost_usd": 0.02},
+    ])
+    leaked = jev_stall_research.research(NG_REPORT, runner=_runner(wider))
+    check(leaked.get("tools_unexpected") == ["Task", "Bash", "Edit", "Read"],
+          "a worker that *was* handed the shell and the file tools says so, in "
+          "order, instead of looking restricted",
+          str(leaked.get("tools_unexpected")))
+    failed = jev_stall_research.research(
+        NG_REPORT, runner=_runner("", returncode=1, stderr="boom"))
+    check("tools_unexpected" in failed,
+          "a failed pass reports the tool list too - the run that never "
+          "answered is exactly the one a wide tool list would hide in",
+          str(sorted(failed))[:200])
 
 
 def test_a_fenced_answer_inside_a_result_event_is_read(tmp):
@@ -233,13 +339,25 @@ def test_live_smoke_one_real_pass_on_the_ninja_gaiden_stall(tmp):
     check(isinstance(proposals.get("tips"), list) and isinstance(proposals.get("macros"), list),
           "the answer carries the two proposal lists the harness merges",
           str(sorted(proposals))[:200])
+    #The one thing the mocked half cannot check: what the CLI really offers a
+    #worker whose argv restricts it. F14.15 section 9.4 is this assertion.
+    check(not proposals.get("tools_unexpected"),
+          "and the live worker's init event lists no tool outside the web pair",
+          f"tools={proposals.get('tools')} "
+          f"unexpected={proposals.get('tools_unexpected')}")
+    check(sorted(proposals.get("tools") or []) == ["WebFetch", "WebSearch"],
+          "the two web tools are the whole set the worker was given",
+          str(proposals.get("tools")))
 
 
 def main():
     tests = [
         test_the_worker_argv_pins_the_model_and_a_headless_json_run,
+        test_the_worker_can_only_reach_the_web_tools,
+        test_the_key_is_not_in_the_workers_argv_environment_or_stdin,
         test_the_worker_gets_a_hard_cap_below_the_runs_own_budget,
         test_the_answer_is_read_out_of_the_cli_event_stream,
+        test_the_pass_reports_the_tool_list_the_cli_actually_gave_the_worker,
         test_a_fenced_answer_inside_a_result_event_is_read,
         test_the_envelope_and_plain_text_shapes_still_parse,
         test_a_result_event_that_is_an_error_is_an_error,
