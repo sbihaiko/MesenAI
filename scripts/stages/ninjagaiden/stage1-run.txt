@@ -1,119 +1,104 @@
 # Ninja Gaiden: 60 s of Act 1-1 from the state mint-stage1.txt writes (the job
-# mints it at frame 1082; the first frame of player control is 1075 - that file
-# has both). Ten repeats of a 360-frame block: walk right, slash, jump forward,
-# walk back left, slash, jump back = 3 600 frames, the batch's 60 s.
+# mints it at frame 1082; the first frame of player control is 1075). 3 600
+# frames, the batch's 60 s.
 #
-# The direction holds are 120 frames. The recorder reads the walk out of this
-# very run as two period-3 cycles of hold [4,4,4], i.e. a 12-frame turn, driven
-# by port 1 (cycle000 x70, cycle001 x49), so one hold is ten turns - well past
-# the two ADR-0179 sec. 3 needs.
+# How far it gets. Absolute x is camera $0052:$0051 plus Ryu's screen x $0086
+# ($0052 is signed; walking left of the level start clamps it to $FF). The first
+# 660 frames are the windows a beam search accepted over that position
+# (runs/route-ninjagaiden/solve.py), and they carry Ryu from x 32 to x 988 - the
+# camera at 860 ($03:$5C) plus his 128 - 3.9 screens into the act, by frame 690.
+# The sidecar this replaces never passed x 223 (0.87 screens, measured the same
+# way): it oscillated inside the first screen for the whole minute.
 #
-# Oscillating inside the first screen is what keeps Ryu alive, and the proof is
-# the RAM: lives $0076 stays 2 and timer $0063 falls monotonically 149 -> 92
-# for the whole run, while the score climbs (kills connect). Holding Right from
-# the same state, blind, instead loses a life at about 27 s - $0063 jumps back
-# to 150 and $0076 goes 2 -> 1 - and is down to 0 lives by 60 s.
+# x 988 is the act's first section boundary and the game pins Ryu on it. From
+# there, holding Left for 600 frames moves him 0 px and leaves the camera at
+# 860; $0065 drains about 1 every 2 s; only a jump (Left+A) leaves the spot at
+# all. So the tail backs off into the screen and keeps the act with the same
+# 120-frame direction holds the previous sidecar used. $0076 stays 2 for
+# all 3 600 frames and $0065 ends at $0E - one hit in the whole minute, against
+# 10 -> 06 for the old sidecar's own run.
 #
-# What the run never holds (poses.json input.never): Select, Start, Up, Down,
-# Left+B, Right+B. The slash is always a standing one, so this sidecar cannot
-# hold a moving attack; the jump slashes are Right+A and Left+A.
+# What that costs: the recorder reads 125 silhouettes from 3 246 retained OAM
+# frames, 62 kept, 8 cycles (1 with a driver: cycle000, 2 phases, hold [5,5],
+# x661), against 220 / 103 / 13 / 2 for the run that kept moving. Tile coverage
+# is unchanged - 8 714 <tile> lines against 8 722. input.never: Select, Start,
+# Up, Down, Left+A, Left+B.
+#
+# RAM read to author this (public map: TASVideos "Game Resources / NES / Ninja
+# Gaiden" RAM Map, and Data Crystal "Ninja Gaiden (NES)/RAM map"): $0076 lives,
+# $0065 hit points (max $10), $0063/$0062 level timer s/f, $0084 state,
+# $0085/$0086 Ryu x (sub-pixel/pixels, screen-relative), $008A Ryu y,
+# $0050-$0052 level x ("temp Xpos"), $004E spawn block, $0060/$0061 score,
+# $0400+i/$0460+i/$0490+i enemy id/x/hp. A window here is 29 frames of input
+# plus the idle frame every headless_record run adds past its script, so a
+# window is 30 frames and a state boundary stays input-neutral
+# (scripts/stages/README.md).
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f R
+1f -
+29f R
+1f -
+29f RA
+1f -
+29f RB
+1f -
+29f R
+1f -
+29f RA
+1f -
+60f L
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
 120f R
-6f B
-14f -
-20f RA
-20f -
 120f L
-6f B
-14f -
-20f LA
-20f -
+120f R
+120f L
+120f R
+120f L
