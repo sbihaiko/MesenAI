@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The lines `mep_build.py build` carries over by file name — `<background>`
-and the `<bgm>`/`<sfx>` seed references — and how their names are resolved.
+(and the `<bgCellRecord>` bound to it, ADR-0236), plus the `<bgm>`/`<sfx>`
+seed references — and how their names are resolved.
 
 Split out of mep_build for #381. The one rule here: **a carried name is
 resolved the way HdPackLoader resolves it.** The loader rewrites every `\\`
@@ -20,12 +21,21 @@ can `exists()`-check, and the loader reads both spellings identically, so the
 rewrite changes nothing for the run time and stops the carried text and the
 disk from disagreeing. `mep_import.py verify` compares carried lines under
 the same normalization.
+
+The one line carried for a *reason* rather than for its name is ADR-0236's
+`<bgCellRecord>`: it is the frame a capture was taken from, it gates that
+capture at run time, and the loader binds it to the `<background>` line
+directly above it. So it is carried verbatim with that line and dropped with
+it — a record that outlived its capture would otherwise gate whichever
+background ends up above it after the rebuild.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import mep_cell_record  # ADR-0236 <bgCellRecord>: carried with its <background>, or not at all
 
 BG_TAG = re.compile(r"^(\[[^\]]*\])?<background>")
 BGM_RE = re.compile(r"^(\[[^\]]*\])?<bgm>(.*)$")
@@ -62,7 +72,27 @@ def carry_backgrounds(folder: Path, textures_dir: Path, body: list) -> list:
     """
     retired: dict = {}
     live = []
+    # ADR-0236: a `<bgCellRecord>` is bound to the `<background>` line above it
+    # (HdPackLoader::ProcessCellRecordTag attaches it to that one and to no
+    # other), so it is carried only when that line is. A record that outlives
+    # its capture would gate whichever background ends up above it — a wrong
+    # screen, silently — and a record with no `<background>` above it at all is
+    # dropped by the loader with an error. Both are dropped here instead, and
+    # the build says so once.
+    dropped_records = 0
+    retired_record = False
     for b in body:
+        if retired_record:
+            retired_record = False
+            if mep_cell_record.is_tag_line(b):
+                dropped_records += 1
+                continue
+        if mep_cell_record.is_tag_line(b):
+            if live and background_name(live[-1]):
+                live.append(b)
+            else:
+                dropped_records += 1
+            continue
         name = background_name(b)
         if not name:
             live.append(b)
@@ -74,11 +104,15 @@ def carry_backgrounds(folder: Path, textures_dir: Path, body: list) -> list:
             auto_cand = folder / "auto" / "textures" / name
             if not auto_cand.exists():
                 retired[name] = retired.get(name, 0) + 1
+                retired_record = True
                 continue
             (textures_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (textures_dir / name).write_bytes(auto_cand.read_bytes())
             print(f"info: copied background {name} from auto/textures into textures/")
         live.append(line)
+    if dropped_records:
+        print(f"warning: dropped {dropped_records} <bgCellRecord> line(s) with no <background> above them — "
+              f"a record gates the capture it was written for, and only that one (ADR-0236)")
     if retired:
         print(f"warning: retired {len(retired)} captured screen(s) missing from textures/ and "
               f"auto/textures/ — {sum(retired.values())} <background> line(s) dropped, so the "

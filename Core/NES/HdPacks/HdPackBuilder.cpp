@@ -240,6 +240,7 @@ void HdPackBuilder::AccumulateCoOccurrence()
 		_shapeFrames[shape]++;
 	}
 	std::memset(_frameTileSet, 0, sizeof(_frameTileSet));
+	std::memset(_frameCell.Named, 0, sizeof(_frameCell.Named));
 }
 
 //Measurement-only, and deliberately inert: when MESEN_TILENEARBY_EVIDENCE names
@@ -876,6 +877,9 @@ void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2], const uint8_t* internal
 	_frameOam.Buttons[0] = buttons[0];
 	_frameOam.Buttons[1] = buttons[1];
 
+	//ADR-0236: keep this frame's cell grid past the reset below; by the time
+	//CaptureScreen runs (same call) the frame's own grid is gone.
+	_capturedCell = _frameCell;
 	//F5.4e: accumulate this frame's background-tile adjacency pairs into the
 	//co-occurrence graph (grid filled in ProcessBgPixel), then reset the grid.
 	AccumulateCoOccurrence();
@@ -1866,6 +1870,7 @@ void HdPackBuilder::CaptureScreen()
 	PendingScreen pending;
 	pending.BaseName = baseName;
 	pending.RelPath = relPath;
+	pending.CellRecord = HdCellKeyRecord::FromCellGrid(_capturedCell.Named[0], [this](int i) -> const HdTileKey& { return _capturedCell.Keys[i / 32][i % 32]; }, _isChrRam);
 	pending.HasGridFrame = _gridFrameLive && !_gridFrames.empty();
 	pending.GridFrameIndex = pending.HasGridFrame ? _gridFrames.size() - 1 : 0;
 	uint8_t fineX = pending.HasGridFrame ? _gridFrames.back().FineX : 0;
@@ -2048,6 +2053,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 
 		HdBackgroundInfo bg = {};
 		bg.Data = _hdData.BackgroundFileData[pending.BitmapIndex].get();
+		bg.CellRecord = std::move(pending.CellRecord);
 		bg.Brightness = 255;
 		bg.HorizontalScrollRatio = 0;
 		bg.VerticalScrollRatio = 0;
@@ -2309,6 +2315,7 @@ void HdPackBuilder::SaveHdPack()
 	for(int i = 0; i < HdPackData::BgLayerCount; i++) {
 		for(HdBackgroundInfo& bgInfo : _hdData.BackgroundsByPriority[i]) {
 			ss << bgInfo.ToString() << std::endl;
+			bgInfo.WriteCellRecord(ss); //ADR-0236: the line under its <background>
 		}
 	}
 

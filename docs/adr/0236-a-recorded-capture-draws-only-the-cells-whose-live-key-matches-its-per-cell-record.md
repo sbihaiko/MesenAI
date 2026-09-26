@@ -1,7 +1,8 @@
 # ADR-0236: A recorded capture draws only the cells whose live key matches its per-cell record
 
-- Status: accepted (2026-09-25) — **not implemented**; pending PRD slice
-  F14.11, no build go-ahead yet. Owner's pick, verbatim: *"Opção 3: guarda no
+- Status: accepted (2026-09-25) — **implemented** by PRD slice F14.11
+  (`docs/validation/f1411-capture-cell-guard-2026-09-25.md`). Build go-ahead,
+  verbatim (2026-09-25, item 1 = #499): *"sim, siga com 1, 3 e 4, usando os modelos que indiquei, rodando com workflows, paralelizando o que for possível"*. Owner's pick, verbatim: *"Opção 3: guarda no
   render (Recommended)"*, re-confirmed after the cost was corrected (this does
   not fix packs already written either — none carries the record it needs)
   with *"Manter opção 3 (Recommended)"*.

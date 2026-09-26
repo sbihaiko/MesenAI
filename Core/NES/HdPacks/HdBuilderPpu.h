@@ -227,7 +227,11 @@ public:
 					mapper->CopyChrTile(lastTileEx.AbsoluteTileAddr & 0xFFFFFFF0, tile.TileData);
 
 					_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, lastTileEx.AbsoluteTileAddr, tile, mapper, false, bankIdOf(lastTileEx.TileAddr), hasBgSprite);
-					_hdPackBuilder->ProcessBgPixel(_cycle - 1, _scanline, tile, (uint8_t)backgroundColor);
+					//ADR-0236: the same gate HdNesPpu::DrawPixel applies before
+					//it names a tile - the recorder's cell record has to say
+					//"the run time named no tile here" wherever the run time
+					//would, or the guard masks a column the capture does hold.
+					_hdPackBuilder->ProcessBgPixel(_cycle - 1, _scanline, tile, (uint8_t)backgroundColor, _cycle > _minimumDrawBgCycle);
 				}
 			}
 		} else {

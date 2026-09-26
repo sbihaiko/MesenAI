@@ -68,6 +68,8 @@
 #include "NES/HdPacks/SpriteFetchLog.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
+#include "NES/HdPacks/HdCaptureCellGuard.h"
+#include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -11644,8 +11646,589 @@ void TestTheAdjacencySidecarLabelsAMaskNodeWithItsEvidence()
 		"visible=" + std::to_string(frontNode >= 0 ? stats.VisiblePixels[frontNode] : 0));
 }
 
+//ADR-0236 (F14.11, issue #499): the record a capture carries and the guard the
+//renderer reads. All of it host-free - HdCaptureCellGuard.h holds the record,
+//the tag grammar and the predicate, so these cases pin the recorder's write,
+//the loader's read and the run time's decision against one another with no
+//emulator, and the gate itself is driven through the real
+//HdPackTileAtPositionCondition, which is what makes "one predicate" (§2)
+//something the suite checks rather than something a comment claims.
+namespace CaptureCellGuardModel
+{
+	static constexpr int Rows = HdCellKeyRecord::Rows;
+	static constexpr int Cols = HdCellKeyRecord::Cols;
+
+	//The run time's own reading of a cell origin: what HdNesPpu stores there,
+	//`NoTile` included (background off for that pixel, or its leftmost 8
+	//clipped). Going through HdCellKeyOf rather than building a key by hand is
+	//the point - it is the same bridge HdNesPack::BuildCellMaskRows uses.
+	HdCellKey Live(int32_t tileIndex, uint32_t palette, uint8_t fill = 0, bool chrRam = false, int mirror = -1)
+	{
+		HdPpuTileInfo tile = {};
+		tile.TileIndex = tileIndex;
+		tile.PaletteColors = palette;
+		tile.IsChrRamTile = chrRam;
+		for(int i = 0; i < 16; i++) {
+			tile.TileData[i] = (uint8_t)(fill + (mirror > 0 ? i : 0));
+		}
+		return HdCellKeyOf(tile);
+	}
+
+	//A whole live screen of one key, so a case can move exactly the cells it is
+	//about.
+	struct LiveScreen
+	{
+		HdCellKey Keys[Rows][Cols];
+		LiveScreen(const HdCellKey& everywhere) { Fill(everywhere); }
+		void Fill(const HdCellKey& key)
+		{
+			for(int r = 0; r < Rows; r++) {
+				for(int c = 0; c < Cols; c++) {
+					Keys[r][c] = key;
+				}
+			}
+		}
+		HdCellKey At(int r, int c) const { return Keys[r][c]; }
+	};
+
+	//What the recorder writes for a screen it is looking at: HdCellKeyRecord's
+	//own funnel over the live grid.
+	HdCellKeyRecord RecordOfGrid(const LiveScreen& screen)
+	{
+		HdCellKeyRecord record;
+		record.Cells.reserve(HdCellKeyRecord::CellCount);
+		for(int r = 0; r < Rows; r++) {
+			for(int c = 0; c < Cols; c++) {
+				record.Cells.push_back(record.Intern(screen.Keys[r][c]));
+			}
+		}
+		return record;
+	}
+
+	void Build(HdCellGuard& guard, const LiveScreen& screen, int32_t scrollX = 0, int32_t scrollY = 0, int firstRow = 0, int lastRow = Rows - 1)
+	{
+		guard.Build(firstRow, lastRow, 0, 0, scrollX, scrollY,
+			[&screen](int r, int c) { return screen.At(r, c); },
+			[](int32_t) { return -1; });
+	}
+
+	//DrawBackgroundLayer's rule, in one line: a layer with no record has no
+	//guard at all; a layer with one draws only the cells its mask allows.
+	bool LayerDraws(const HdCellGuard& guard, uint32_t x, uint32_t y)
+	{
+		return guard.Record == nullptr || guard.Allows(x, y);
+	}
+}
+
+//The whole point of the slice: a cell whose live key moved on is left to the
+//tiles. Ninja Gaiden's `screen001` (issue #499) is a status-bar cell that did.
+void TestACaptureRecordMasksACellTheLiveFrameHasMovedOn()
+{
+	using namespace CaptureCellGuardModel;
+	const uint32_t palette = 0x1B1A1918;
+	LiveScreen captured(Live(0x42, palette));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x42, palette));
+	live.Keys[0][27] = Live(0x33, palette); //the HUD digit this frame, not the captured one
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 27 * 8, 0),
+		"F14.11: a cell whose live tile differs from the record is masked");
+	Check(!LayerDraws(guard, 27 * 8 + 7, 7),
+		"F14.11: the mask is per 8x8 cell, so the masked cell's whole block falls back");
+	Check(LayerDraws(guard, 0, 0) && LayerDraws(guard, 26 * 8, 0) && LayerDraws(guard, 248, 232),
+		"F14.11: every cell the record still holds draws, including the rest of the same row");
+	Check(guard.Record != nullptr && record.IsPresent(),
+		"F14.11: a record of the whole captured frame is what turned the guard on");
+}
+
+//A palette is part of the identity (HdTileKey's own rule): the same tile
+//repainted is not the frame the capture was taken from.
+void TestACaptureRecordTreatsARecolouredCellAsMovedOn()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x42, 0x1B1A1918));
+	live.Keys[12][3] = Live(0x42, 0x0F0E0D0C);
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 3 * 8, 12 * 8), "F14.11: a recoloured cell is a cell the capture does not hold");
+	Check(LayerDraws(guard, 4 * 8, 12 * 8), "F14.11: its neighbour with the captured palette still draws");
+}
+
+//A cell the run time names no tile at - the leftmost 8 pixels of a line the ROM
+//clips, or a line with rendering off - is a key like any other, so the capture
+//still draws the column it was taken with (ADR-0236 §2, HdCellKey::Kind::None).
+void TestACaptureRecordMatchesACellTheRunTimeNamesNoTileAt()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(HdPpuTileInfo::NoTile, 0));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+	Check(record.Keys.size() == 1 && record.Keys[0].KeyKind == HdCellKey::Kind::None,
+		"F14.11: a NoTile cell records as the None key, not as a real tile");
+
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, captured);
+	Check(LayerDraws(guard, 0, 0), "F14.11: a clipped column still draws on the frame it was captured for");
+
+	LiveScreen movedOn(Live(0x42, 0x1B1A1918));
+	HdCellGuard moved;
+	moved.Record = &record;
+	Build(moved, movedOn);
+	Check(!LayerDraws(moved, 0, 0),
+		"F14.11: and stops drawing as soon as the run time names a tile there, which is the frame it was not captured for");
+}
+
+//A pack may route a tile key to a different one (`<fallbackTile>`, the
+//bootstrap's neutral ramp does): the run time then *names* the fallback where
+//the capture recorded the key it stands in for, and the gate has always taken
+//that as the same tile. The guard has to, or every pack with a fallback would
+//stop drawing its captures the moment this slice shipped. Found by mutation
+//(runs/f1411/mutation-tests.txt: dropping `fallbackIndex == recorded.TileIndex`
+//left every case green).
+void TestACaptureRecordAcceptsTheTileThePackRoutesItsKeyTo()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0xAB, 0x1B1A1918));
+	live.Keys[7][7] = Live(0x99, 0x1B1A1918);
+	HdCellGuard guard;
+	guard.Record = &record;
+	//0x99 is the key the pack routes 0x42 to; 0xAB is a tile it does not.
+	guard.Build(0, HdCellKeyRecord::Rows - 1, 0, 0, 0, 0,
+		[&live](int r, int c) { return live.At(r, c); },
+		[](int32_t index) { return index == 0x99 ? 0x42 : -1; });
+
+	Check(LayerDraws(guard, 7 * 8, 7 * 8),
+		"F14.11: a cell the run time fills with the key's own fallback tile still draws the capture");
+	Check(!LayerDraws(guard, 0, 0),
+		"F14.11: and a cell whose tile routes nowhere is a cell the capture does not hold");
+	Build(guard, live);
+	//The same frame read with no fallback at all: the clause is what let it draw.
+	Check(!LayerDraws(guard, 7 * 8, 7 * 8),
+		"F14.11: without the fallback that same cell stops drawing, so the clause is what drew it");
+}
+
+//ADR-0236 §3: opt-in by the data. A `<background>` without a record draws
+//exactly as today, which is every hand-made pack and every pack on disk.
+void TestABackgroundWithoutARecordDrawsEveryCell()
+{
+	using namespace CaptureCellGuardModel;
+	HdBackgroundInfo handMade = {};
+	Check(!handMade.CellRecord.IsPresent() && handMade.CellRecord.IsEmpty(),
+		"F14.11: a <background> starts with no record");
+
+	HdCellGuard guard;
+	guard.Record = nullptr;
+	LiveScreen live(Live(0x42, 0x1B1A1918));
+	Build(guard, live); //Build must be inert with no record...
+
+	bool everyCellDraws = true;
+	for(int r = 0; r < Rows; r++) {
+		for(int c = 0; c < Cols; c++) {
+			everyCellDraws &= LayerDraws(guard, (uint32_t)(c * 8), (uint32_t)(r * 8));
+		}
+	}
+	Check(everyCellDraws,
+		"F14.11: with no record the guard never masks a pixel, so the pack renders byte-identically");
+	Check(!HdCellKeyRecord().IsPresent(),
+		"F14.11: an empty record is not a record - IsPresent gates the whole guard");
+}
+
+//ADR-0236 §2: the gate the recorder writes and the guard the renderer reads are
+//one predicate, so they cannot disagree about a key. Driven through the real
+//HdPackTileAtPositionCondition rather than through the shared function - the
+//claim is about the two *callers*.
+struct CaptureCellGuardPack : public BaseHdNesPack
+{
+	uint32_t GetScale() override { return 1; }
+	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&) override {}
+	void SetFallback(int32_t from, int32_t to) { _fallbackTiles[from] = to; }
+};
+
+void TestTheGateAndTheGuardAgreeOnEveryKeyTheRunTimeCanName()
+{
+	using namespace CaptureCellGuardModel;
+	static const uint32_t palettes[] = { 0x1B1A1918, 0x0F0E0D0C };
+	static const int32_t indices[] = { 0x00, 0x42, 0xFF };
+	int cases = 0;
+
+	//`ignorePalette` is not in the matrix: it is a flag of the *gate*, and the
+	//recorder never sets it on a `<background>`'s probe (FinalizeScreenAnchors
+	//passes false), while the record is an exact observation and always carries
+	//its palette. They are the same predicate either way; only the gate's own
+	//opt-out can loosen it, and no recorded background does that.
+	for(bool chrRam : {false, true}) {
+		for(uint32_t recordedPalette : palettes) {
+			for(int32_t recordedIndex : indices) {
+				for(int32_t liveIndex : {0x00, 0x42, 0xFF, 0x7F}) {
+					for(uint32_t livePalette : palettes) {
+						//The recorder's gate, built exactly as
+						//HdPackBuilder::FinalizeScreenAnchors builds one.
+						string tileData;
+						HdPackTileAtPositionCondition cond;
+						if(chrRam) {
+							for(int i = 0; i < 16; i++) {
+								tileData += HexUtilities::ToHex((uint8_t)0x11);
+							}
+						}
+						cond.Initialize(0, 0, recordedPalette, recordedIndex, tileData, false);
+
+						HdScreenInfo screen(false);
+						CaptureCellGuardPack pack;
+						HdPpuTileInfo& target = screen.ScreenTiles[0].Tile;
+						target.TileIndex = liveIndex;
+						target.PaletteColors = livePalette;
+						target.IsChrRamTile = chrRam;
+						for(int i = 0; i < 16; i++) {
+							target.TileData[i] = (uint8_t)(chrRam ? 0x11 : 0x00);
+						}
+						cond.HdPackCondition::Initialize(&screen, &pack);
+						bool gate = cond.CheckCondition(0, 0, nullptr);
+
+						//The same two keys, one cell, through the guard: a record
+						//of the frame the gate was written from, drawn on a frame
+						//that may have moved on.
+						LiveScreen captured(cond.RecordedKey());
+						HdCellKeyRecord record = RecordOfGrid(captured);
+						LiveScreen live(HdCellKeyFieldsOf(target));
+						HdCellGuard guard;
+						guard.Record = &record;
+						Build(guard, live);
+
+						if(gate != LayerDraws(guard, 0, 0)) {
+							Check(false, "F14.11: the gate and the guard must agree",
+								"chrRam=" + std::string(chrRam ? "1" : "0") + " idx=" + std::to_string(recordedIndex) +
+								" pal=" + HexUtilities::ToHex(recordedPalette, true) +
+								" liveIdx=" + std::to_string(liveIndex) + " livePal=" + HexUtilities::ToHex(livePalette, true) +
+								" gate=" + std::string(gate ? "1" : "0"));
+							return;
+						}
+						cases++;
+					}
+				}
+			}
+		}
+	}
+	Check(cases == 96, "F14.11: the gate/guard matrix ran in full", "cases=" + std::to_string(cases));
+}
+
+//The other half of the same claim, pinned rather than left to drift: at a pixel
+//the run time names *no* tile at, the gate keeps comparing the fields it always
+//compared (raw bytes the PPU leaves behind), while the guard reads `None` -
+//the only deterministic reading. Making the gate read `None` too would change
+//which frames an existing pack's <background> draws on, which ADR-0236 §3
+//forbids, so the difference stays and is asserted here.
+void TestTheGateKeepsComparingStaleBytesWhereTheGuardReadsNone()
+{
+	HdScreenInfo screen(false);
+	CaptureCellGuardPack pack;
+	HdPackTileAtPositionCondition cond;
+	string tileData;
+	for(int i = 0; i < 16; i++) {
+		tileData += HexUtilities::ToHex((uint8_t)0x22);
+	}
+	cond.Initialize(0, 0, 0x1B1A1918, -1, tileData, false);
+	HdPpuTileInfo& target = screen.ScreenTiles[0].Tile;
+	target.TileIndex = HdPpuTileInfo::NoTile;
+	target.PaletteColors = 0x1B1A1918;
+	target.IsChrRamTile = true;
+	for(int i = 0; i < 16; i++) {
+		target.TileData[i] = (uint8_t)0x22;
+	}
+	cond.HdPackCondition::Initialize(&screen, &pack);
+	Check(cond.CheckCondition(0, 0, nullptr),
+		"F14.11: the gate's data form still compares the target's fields at a NoTile pixel - its pre-0236 behaviour, unchanged");
+
+	HdCellKey live = HdCellKeyOf(target);
+	HdCellKey recorded;
+	recorded.KeyKind = HdCellKey::Kind::ChrData;
+	recorded.PaletteColors = 0x1B1A1918;
+	for(int i = 0; i < 16; i++) {
+		recorded.TileData[i] = (uint8_t)0x22;
+	}
+	Check(live.KeyKind == HdCellKey::Kind::None && !HdCellKeyMatches(live, recorded, false, -1),
+		"F14.11: the guard reads that same pixel as None, so it never draws a capture on evidence the PPU left behind");
+}
+
+//A record is positional, not a set of keys: #499 is exactly the case a key set
+//would pass - the live HUD digit appears elsewhere on the capture.
+void TestACaptureRecordIsPositionalNotAKeySet()
+{
+	using namespace CaptureCellGuardModel;
+	const uint32_t palette = 0x1B1A1918;
+	LiveScreen captured(Live(0x00, palette));
+	captured.Keys[0][27] = Live(0x42, palette); //the digit, where it was
+	captured.Keys[20][5] = Live(0x42, palette); //and the same tile elsewhere
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x00, palette));
+	live.Keys[20][5] = Live(0x42, palette);
+	live.Keys[0][27] = Live(0x33, palette); //the digit moved on
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 27 * 8, 0), "F14.11: the cell that recorded the digit is masked when the digit changes");
+	Check(LayerDraws(guard, 5 * 8, 20 * 8),
+		"F14.11: the cell that still holds it draws, so the guard is not asking whether the key exists anywhere on the screen");
+}
+
+//The recorder's own funnel: which cells get a key, and which get None.
+void TestTheRecorderSamplesTheRuntimesOwnGate()
+{
+	HdTileKey keys[HdCellKeyRecord::CellCount];
+	uint8_t named[HdCellKeyRecord::CellCount] = {};
+	for(int i = 0; i < HdCellKeyRecord::CellCount; i++) {
+		keys[i].TileIndex = 0x42 + i;
+		keys[i].PaletteColors = 0x1B1A1918;
+		keys[i].TileData[0] = (uint8_t)i;
+		named[i] = (i % 7 == 0) ? 1 : 0; //the clipped column, and every seventh cell
+	}
+	HdCellKeyRecord record = HdCellKeyRecord::FromCellGrid(named, [&keys](int i) -> const HdTileKey& { return keys[i]; }, false);
+
+	Check(record.IsPresent(), "F14.11: a sampled grid is a whole record");
+	Check(record.Cells.size() == (size_t)HdCellKeyRecord::CellCount,
+		"F14.11: the record is positional - 960 cells, whatever the dictionary holds");
+	Check(record.At(0, 0) != nullptr && record.At(0, 0)->KeyKind == HdCellKey::Kind::ChrIndex,
+		"F14.11: a cell the run time named a tile at is keyed by that tile");
+	Check(record.At(0, 1) != nullptr && record.At(0, 1)->KeyKind == HdCellKey::Kind::None,
+		"F14.11: a cell the run time named no tile at is keyed None, never by what the recorder drew there");
+	Check(record.At(0, 7) != nullptr && record.At(0, 7)->TileIndex == 0x42 + 7 && record.At(0, 7)->PaletteColors == 0x1B1A1918,
+		"F14.11: the key carries the index and the palette the run time holds, which is what the gate compares too");
+	Check(record.At(HdCellKeyRecord::Rows, 0) == nullptr,
+		"F14.11: outside the 32x30 grid the record has no key, and no key is never a match");
+}
+
+//The tag: its spelling, its grammar, and the round trip a rebuilt pack needs.
+void TestACaptureRecordTagRoundTripsThroughItsGrammar()
+{
+	using namespace CaptureCellGuardModel;
+	Check(HdCellKeyRecord::IsTagLine("<bgCellRecord>N;00") && !HdCellKeyRecord::IsTagLine("<bgPreservesBehindBgSprites>") &&
+		!HdCellKeyRecord::IsTagLine("[cond]<bgCellRecord>N;00"),
+		"F14.11: the tag is recognised on its own line and only there");
+
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	captured.Keys[3][4] = Live(HdPpuTileInfo::NoTile, 0);
+	HdCellKeyRecord record = RecordOfGrid(captured);
+	string line = record.ToString();
+	Check(line.compare(0, HdCellKeyRecord::TagLength, "<bgCellRecord>") == 0,
+		"F14.11: the record writes itself as one tag line");
+
+	HdCellKeyRecord parsed;
+	string error;
+	Check(HdCellKeyRecord::Parse(HdCellKeyRecord::PayloadOf(line), parsed, &error),
+		"F14.11: the loader's side of the grammar reads what the recorder wrote", error);
+	Check(parsed.IsPresent() && parsed.Keys.size() == record.Keys.size() && parsed.Cells == record.Cells,
+		"F14.11: the round trip keeps the dictionary and every one of the 960 cell indices");
+	Check(parsed.At(3, 4) != nullptr && parsed.At(3, 4)->KeyKind == HdCellKey::Kind::None &&
+		parsed.At(0, 0) != nullptr && parsed.At(0, 0)->TileIndex == 0x42,
+		"F14.11: including which cells are None and which name a tile");
+
+	//The three ways a hand-edited line can be wrong. Each must be refused, not
+	//silently re-indexed: a grid read one cell off is a wrong screen.
+	string payload = HdCellKeyRecord::PayloadOf(line);
+	Check(!HdCellKeyRecord::Parse(payload.substr(0, payload.size() - 1), parsed, &error),
+		"F14.11: a cell grid that is not 960 entries wide is refused", error);
+	Check(!HdCellKeyRecord::Parse(payload.substr(0, payload.find(';')) + ";", parsed, &error),
+		"F14.11: a record with no cells at all is refused", error);
+	Check(!HdCellKeyRecord::Parse("Q1:1;", parsed, &error),
+		"F14.11: a key kind that is not I, D or N is refused", error);
+	Check(!HdCellKeyRecord::Parse("I00000042:1B1A1918;" + string(HdCellKeyRecord::CellCount * 2, '9'), parsed, &error),
+		"F14.11: a cell naming a key the dictionary does not hold is refused", error);
+
+	//A CHR RAM record is keyed by the drawn bytes (ADR-0172), and the same
+	//grammar carries it.
+	LiveScreen chrRam(Live(0x42, 0x1B1A1918, 0x33, true));
+	HdCellKeyRecord dataRecord = RecordOfGrid(chrRam);
+	HdCellKeyRecord dataParsed;
+	Check(HdCellKeyRecord::Parse(HdCellKeyRecord::PayloadOf(dataRecord.ToString()), dataParsed, &error) &&
+		dataParsed.At(5, 5) != nullptr && dataParsed.At(5, 5)->KeyKind == HdCellKey::Kind::ChrData &&
+		dataParsed.At(5, 5)->TileData[3] == 0x33,
+		"F14.11: a CHR RAM record round-trips its 16 bytes, which is its identity", error);
+}
+
+//The writer's placement rule: the record is a line under its own
+//`<background>`, and a `<background>` without one writes nothing extra - which
+//is what keeps every pack on disk byte-identical when it is rebuilt.
+void TestABackgroundWritesItsRecordOnTheLineBelow()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdPackBitmapInfo bitmap = {};
+	bitmap.PngName = "backgrounds/screen001.png";
+	HdBackgroundInfo bg = {};
+	bg.Data = &bitmap;
+	bg.CellRecord = RecordOfGrid(captured);
+
+	std::stringstream out;
+	out << bg.ToString() << std::endl;
+	bg.WriteCellRecord(out);
+	string written = out.str();
+	size_t newline = written.find('\n');
+	Check(newline != string::npos && written.compare(newline + 1, HdCellKeyRecord::TagLength, HdCellKeyRecord::Tag) == 0,
+		"F14.11: the record line follows the <background> line it belongs to, and nothing sits between them");
+
+	std::stringstream bare;
+	HdBackgroundInfo handMade = {};
+	handMade.Data = &bitmap;
+	handMade.WriteCellRecord(bare);
+	Check(bare.str().empty(), "F14.11: a <background> with no record writes no extra line at all");
+}
+
+//The loader's half of the same rule, and the case that cost a whole route: with
+//the binding cleared at the top of every line - including the record's own -
+//every record in every recorded pack is dropped, silently, while the pack still
+//loads and still draws. Measured on Ninja Gaiden's `stage1-run`: 15 records
+//written, 15 dropped, `LoadHdPack ... backgrounds=15`, and the 31 s frame
+//byte-identical to the build without the guard.
+//
+//So the state machine, not two integers the loader clears by hand: `Line()` is
+//the read *and* the clear, and only a `<background>` on the line directly above
+//can ever be taken.
+void TestTheLoaderBindsARecordToTheLineDirectlyAbove()
+{
+	HdCellRecordBinder binder;
+	int32_t priority = -1, index = -1;
+
+	//Line 1: `<ver>106`. Nothing above it.
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: the first line of a manifest can carry no record");
+
+	//Line 2: a `<background>` that loaded - every file after it is a record
+	//waiting to happen.
+	binder.Line();
+	binder.Bound(20, 3);
+
+	//Line 3: the record. This is the binding.
+	binder.Line();
+	Check(binder.Take(priority, index) && priority == 20 && index == 3,
+		"F14.11: a record takes the <background> on the line directly above it");
+
+	//Line 4: the record was consumed, so the same <background> does not own a
+	//second one - the line mep_lint reports as an error.
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: a second record under one <background> takes nothing");
+
+	//Line 5: a `<background>` that failed to load. Its record is an orphan.
+	binder.Line();
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: a <background> that did not load leaves nothing to bind to");
+
+	//Line 6: a `<background>`, then any other line - `<tile>`, a comment, a
+	//blank one - and the record below that is an orphan. Nothing but the
+	//`<background>` branch calls Bound, so the intervening line binds nothing;
+	//the loader only skips *empty* lines, so a `#` comment breaks it too, and
+	//that is the rule mep_lint mirrors.
+	binder.Line();
+	binder.Bound(10, 0);
+	binder.Line(); //the `<tile>` line
+	binder.Line(); //the record line
+	Check(!binder.Take(priority, index),
+		"F14.11: a line between the <background> and the record breaks the binding, as the lint says");
+
+	//And the binding survives exactly one line: the line after a record that was
+	//never claimed is still an orphan.
+	binder.Line();
+	binder.Bound(30, 1);
+	binder.Line(); //the record line, claimed below
+	Check(binder.Take(priority, index) && priority == 30 && index == 1,
+		"F14.11: the binding is one line deep and does not go stale");
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: and the line after it holds nothing");
+}
+
+//ADR-0236 §2, review item 1: a blank line is a line. The spec allows nothing
+//between a `<background>` and its record - no comment, no other tag, no blank
+//line - and `mep_lint` and `mep_carry` refuse all three. The Core used to
+//disagree with them in *both* directions, which is why this is a test and not
+//a comment: it tested `lineContent.empty()` before rolling the binding, so an
+//LF blank line kept the binding (the Core accepted what the tools reject) while
+//a CRLF blank line cancelled it (a lone `\r` is not empty, so that spelling
+//rolled). The rule now lives in `Step`, which is both the roll and the
+//blank test, so the two spellings cannot diverge again and there is no call
+//site left where the order can be written wrong.
+//
+//The blank argument is the line exactly as the loader hands it over: `Step`
+//runs before the CR strip, so an LF blank arrives empty and a CRLF blank
+//arrives as a lone `\r`.
+void TestABlankLineEndsTheRecordBinding()
+{
+	const string blanks[] = { string(""), string("\r") };
+	for(const string& blank : blanks) {
+		const string spelling = blank.empty() ? "LF" : "CRLF";
+		HdCellRecordBinder binder;
+		int32_t priority = -1, index = -1;
+
+		Check(binder.Step("<ver>106") && binder.Step("<scale>4"),
+			"F14.11[" + spelling + "]: a manifest line that is not blank is parsed");
+		binder.Step("<background>backgrounds/a.png,1,0,0,20");
+		binder.Bound(20, 7);
+
+		//The control: with nothing between them the record binds, so a run where
+		//the blank case is red for the wrong reason cannot pass as a finding.
+		HdCellRecordBinder adjacent;
+		adjacent.Step("<background>backgrounds/a.png,1,0,0,20");
+		adjacent.Bound(20, 7);
+		adjacent.Step("<bgCellRecord>I0000013E:0F001032;...");
+		Check(adjacent.Take(priority, index) && priority == 20 && index == 7,
+			"F14.11[" + spelling + "]: the line directly under a <background> still takes it");
+
+		//The rule under test. `Take` is the *record line's* move - a blank line
+		//is never parsed, so it never asks - and the blank is what emptied the
+		//binding that line would have claimed: `Step` on the blank moved the
+		//`<background>`'s binding into the pending slot, and `Step` on the
+		//record line overwrote that slot before the record could read it.
+		bool parsed = binder.Step(blank);
+		binder.Step("<bgCellRecord>I0000013E:0F001032;...");
+		Check(!binder.Take(priority, index),
+			"F14.11[" + spelling + "]: a blank line between the <background> and the record ends the binding");
+
+		//And `Step`'s return is the loader's own skip: an empty line is not
+		//parsed, a lone `\r` is (it is stripped to empty later, and the dispatch
+		//then finds no tag on it). Both rolled, which is the point.
+		Check(parsed != blank.empty(),
+			"F14.11[" + spelling + "]: Step's return says whether the loader parses this line");
+	}
+
+	//A comment is the third spelling of "something in between", and the one the
+	//existing test above already covers at the `Line()` level: it goes through
+	//`Step` like every other line and ends the binding the same way.
+	HdCellRecordBinder commented;
+	int32_t priority = -1, index = -1;
+	commented.Step("<background>backgrounds/a.png,1,0,0,20");
+	commented.Bound(20, 7);
+	commented.Step("# a comment");
+	commented.Step("<bgCellRecord>I0000013E:0F001032;...");
+	Check(!commented.Take(priority, index), "F14.11: a comment ends the binding too, as the lint says");
+}
+
 int main()
 {
+	TestACaptureRecordMasksACellTheLiveFrameHasMovedOn();
+	TestACaptureRecordTreatsARecolouredCellAsMovedOn();
+	TestACaptureRecordMatchesACellTheRunTimeNamesNoTileAt();
+	TestACaptureRecordAcceptsTheTileThePackRoutesItsKeyTo();
+	TestABackgroundWithoutARecordDrawsEveryCell();
+	TestTheGateAndTheGuardAgreeOnEveryKeyTheRunTimeCanName();
+	TestTheGateKeepsComparingStaleBytesWhereTheGuardReadsNone();
+	TestACaptureRecordIsPositionalNotAKeySet();
+	TestTheRecorderSamplesTheRuntimesOwnGate();
+	TestACaptureRecordTagRoundTripsThroughItsGrammar();
+	TestABackgroundWritesItsRecordOnTheLineBelow();
+	TestTheLoaderBindsARecordToTheLineDirectlyAbove();
+	TestABlankLineEndsTheRecordBinding();
+
 	TestSilentChannelNotSfx();
 	TestFastSweepIsSfx();
 	TestSlowGlideStaysMusic();

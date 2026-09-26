@@ -296,7 +296,12 @@ bool HdPackLoader::LoadPack()
 			lineContent.insert(0, (char*)hdDefinition.data() + start, pos < len ? (pos - start - 1) : (len - start));
 			_currentLine++;
 
-			if(lineContent.empty()) {
+			//ADR-0236 §2: the record binding rolls on every physical line, and
+			//`Step` is what rolls it - so the blank-line skip is this call's
+			//return value and not a `continue` above it. A blank line therefore
+			//ends the binding, exactly as `mep_lint` and `mep_carry` say it
+			//does; the skip is a skip of the parse and of nothing else.
+			if(!_cellRecordBinder.Step(lineContent)) {
 				continue;
 			}
 
@@ -320,6 +325,10 @@ bool HdPackLoader::LoadPack()
 				lineContent = lineContent.substr(endOfCondition + 1);
 			}
 
+			//ADR-0236: a `<bgCellRecord>` binds to the line above it and to no
+			//other. The binding was rolled by `Step` above - the one call every
+			//physical line makes, blank included - so a record can only ever
+			//attach to a `<background>` on the line directly above.
 			vector<string> tokens;
 			if(lineContent.substr(0, 6) == "<tile>") {
 				tokens = StringUtilities::Split(lineContent.substr(6), ',');
@@ -380,6 +389,8 @@ bool HdPackLoader::LoadPack()
 				tokens = StringUtilities::Split(lineContent.substr(9), ',');
 				TrimTokens(tokens);
 				ProcessOptionTag(tokens);
+			} else if(HdCellKeyRecord::IsTagLine(lineContent)) {
+				ProcessCellRecordTag(HdCellKeyRecord::PayloadOf(lineContent));
 			} else if(HdBehindBgSpriteRule::IsTagLine(lineContent)) {
 				//ADR-0224: no arguments, no error path - an emulator that does
 				//not know the tag skips it exactly like this dispatch skips any
@@ -901,8 +912,36 @@ void HdPackLoader::ProcessBackgroundTag(vector<string>& tokens, vector<HdPackCon
 		}
 
 		_data->BackgroundsByPriority[backgroundInfo.Priority].push_back(backgroundInfo);
+		//ADR-0236: the record line that follows belongs to this entry (the one
+		//just pushed, not the freshly built local).
+		_cellRecordBinder.Bound(backgroundInfo.Priority, (int32_t)_data->BackgroundsByPriority[backgroundInfo.Priority].size() - 1);
 	} else {
+		//The entry did not load at all, so there is nothing for a record to
+		//attach to - and `Line()` will not carry this line's own failure forward.
 		checkConstraint(false, "Error while loading background: " + tokens[0]);
+	}
+}
+
+//ADR-0236 (F14.11, issue #499). The line under a `<background>` that carries
+//the frame it was captured from: one key per 32x30 screen cell, so the run time
+//can tell a frame the capture was frozen for from one whose cells have moved on
+//under it. Additive and self-contained: a loader that does not know the tag
+//skips the line, and the `<background>` above it then draws as it always did.
+void HdPackLoader::ProcessCellRecordTag(const string& payload)
+{
+	int32_t priority = -1, index = -1;
+	if(!_cellRecordBinder.Take(priority, index)) {
+		//Orphaned: a record is meaningless without the line it belongs to, and
+		//attaching it to whichever background came last would silently gate the
+		//wrong screen.
+		LogError("<bgCellRecord> does not follow a <background> line; the record was dropped");
+		return;
+	}
+	HdBackgroundInfo& bgInfo = _data->BackgroundsByPriority[priority][index];
+	string error;
+	if(!HdCellKeyRecord::Parse(payload, bgInfo.CellRecord, &error)) {
+		LogError("Invalid <bgCellRecord>: " + error + " (the <background> above it loads without the guard)");
+		return;
 	}
 }
 

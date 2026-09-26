@@ -670,7 +670,15 @@ def screen_residency_tests(root: Path):
     # condition-gated <background> in the body, PNG under auto/textures only.
     hires = folder / "textures" / "hires.txt"
     bg_line = "[screen001_A&screen001_B]<background>backgrounds/screen001.png,1,0,0,20"
-    hires.write_text(hires.read_text(encoding="utf-8") + bg_line + "\n", encoding="utf-8")
+    # ADR-0236 (F14.11, #499): the frame the capture was taken from, on the line
+    # directly under it. `build` never reads it - it is carried verbatim with the
+    # <background> it is bound to - and a rebuild that dropped it would put the
+    # capture back to drawing on every frame its tileAtPosition probes match.
+    # One dictionary entry (the run time named no tile at any of those cells) and
+    # a 960-cell plane at the 2 hex digits that dictionary implies; the grammar
+    # itself is pinned by scripts/test_mep_cell_record.py.
+    rec_line = "<bgCellRecord>N;" + "00" * 960
+    hires.write_text(hires.read_text(encoding="utf-8") + bg_line + "\n" + rec_line + "\n", encoding="utf-8")
     auto_bg = folder / "auto" / "textures" / "backgrounds"
     auto_bg.mkdir(parents=True)
     (auto_bg / "screen001.png").write_bytes(png(256, 240))
@@ -695,6 +703,15 @@ def screen_residency_tests(root: Path):
         fail("the captured screen was not copied up into textures/")
     else:
         ok("ADR-0156: the captured screen survives the rebuild, line and PNG")
+    # ADR-0236: and its record still sits directly under it, where the loader
+    # looks for it. Above the <background>, or orphaned by a reordering, the
+    # loader drops it and the capture is back to #499.
+    if rec_line not in body:
+        fail("the <bgCellRecord> line did not survive the rebuild - the capture lost its guard")
+    elif body.index(rec_line) != body.index(bg_line) + 1:
+        fail("the <bgCellRecord> survived but no longer directly under its <background>")
+    else:
+        ok("ADR-0236: the capture's <bgCellRecord> survives the rebuild, directly under its <background>")
 
     # Issue #170: a capture draws above every <tile>, so on the scenes it
     # covers the sheets are not the surface an artist paints. The build says so

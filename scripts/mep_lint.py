@@ -64,6 +64,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 import mep_addition  # ADR-0196 <addition> tags and their synthetic target keys
+import mep_cell_record  # ADR-0236 <bgCellRecord>: the frame a capture was taken from
 import palette_folds  # ADR-0230 item 2: sidecar `folds` validation
 import mep_conditions  # ADR-0197 authored conditions and their evaluation over routes
 import mep_content_id  # ADR-0139 tree content_id of the discovered pack root
@@ -119,7 +120,11 @@ FALLBACK_SUFFIXES = (
 KNOWN_SYSTEMS = {"nes", "gb", "gbc", "sms", "gg", "sg1000", "coleco", "snes"}
 # bgPreservesBehindBgSprites: ADR-0224's argument-less opt-in (MesenAI
 # extension, skipped by other emulators); accepted, never required.
-NES_TAGS = {"ver", "scale", "system", "supportedRom", "img", "tile", "background", "condition", "bgm", "sfx", "patch", "overscan", "options", "addition", "fallback", "bgPreservesBehindBgSprites"}
+# bgCellRecord: ADR-0236's per-cell record of the frame a capture was taken
+# from (MesenAI extension, skipped by other emulators). Accepted, never
+# required; its grammar is validated by mep_cell_record, which mirrors
+# HdCellKeyRecord::Parse.
+NES_TAGS = {"ver", "scale", "system", "supportedRom", "img", "tile", "background", "condition", "bgm", "sfx", "patch", "overscan", "options", "addition", "fallback", "bgPreservesBehindBgSprites", "bgCellRecord"}
 GBSMS_TAGS = {"ver", "scale", "system", "img", "tile", "supportedRom"}
 COND_TYPES = {"tileAtPosition", "tileNearby", "spriteAtPosition", "spriteNearby", "memoryCheck", "ppuMemoryCheck", "memoryCheckConstant", "ppuMemoryCheckConstant", "frameRange", "positionCheckX", "positionCheckY", "originPositionCheckX", "originPositionCheckY"}
 GLOBAL_CONDS = {"hmirror", "vmirror", "bgpriority", "sppalette0", "sppalette1", "sppalette2", "sppalette3"}
@@ -954,9 +959,17 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
     dups = []
     missing = {}
     badcase = {}
+    # ADR-0236: for <bgCellRecord>, the tag of the line above. The loader binds a
+    # record to the immediately preceding <background> and rolls the binding on
+    # EVERY physical line (`HdCellRecordBinder::Step`), blank (LF or CRLF) and
+    # `#` lines included. So the roll happens above the blank/comment
+    # `continue`: any line between the two breaks the binding, and lint agrees.
+    prev_tag = None
+    this_tag = None
     for n, raw in enumerate(text.splitlines(), 1):
         line = raw.rstrip("\r").strip()
         where = f"{rel}:{n}"
+        prev_tag, this_tag = this_tag, None
         if not line or line.startswith("#"):
             continue
         parsed = parse_line(line)
@@ -1001,6 +1014,22 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
             # HdPackLoader ignores it.
             if params.strip():
                 rep.warning(where, f"<bgPreservesBehindBgSprites> takes no arguments (ignored: {params.strip()[:40]})")
+        elif tag == "bgCellRecord":
+            # ADR-0236 (F14.11): the frame a captured <background> was taken
+            # from. Its absence is never reported - a pack without it draws
+            # exactly as it always did, which is every pack written before the
+            # tag and every hand-made one (ADR-0236 §3). A line the loader
+            # cannot read is an error, not a warning: the loader drops the
+            # record and the capture silently loses its guard, which is the
+            # one outcome a lint exists to catch.
+            if prev_tag != "background":
+                rep.error(where, "<bgCellRecord> must be the line directly under the <background> it belongs to "
+                                 "— HdPackLoader::ProcessCellRecordTag attaches it to that one and drops it otherwise")
+            try:
+                mep_cell_record.parse(line)
+            except ValueError as bad:
+                rep.error(where, f"invalid <bgCellRecord>: {bad} (mep_cell_record mirrors HdCellKeyRecord::Parse; "
+                                 f"the loader drops the record and the <background> above it loses its guard)")
         elif tag == "supportedRom":
             for h in tokens:
                 if not HEX40.match(h.strip()):
@@ -1060,6 +1089,9 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
             if len(tokens) < 2:
                 rep.error(where, "<background> needs file and brightness")
                 continue
+            # Set only where the loader's own path would have: its `_lastBackground`
+            # is assigned on the entry it pushed, and its failure branch resets it.
+            this_tag = "background"
             path = folder + tokens[0]
             if not src.exists(path):
                 real = src.exists_icase(path)

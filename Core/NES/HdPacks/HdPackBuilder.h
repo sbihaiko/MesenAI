@@ -89,6 +89,22 @@ private:
 	vector<uint32_t> _origBuffer;
 	vector<uint32_t> _frameBg;
 	vector<ScreenRun> _frameRuns;
+	//ADR-0236 (F14.11, issue #499): the frame's positional cell grid, the raw
+	//material of a capture's key record. Named[i] is consumed by
+	//HdCellKeyRecord::FromCellGrid, so it answers "would the run time have named
+	//a tile at this cell's origin on this frame" rather than "did the PPU draw
+	//the pixel" - the two differ on the leftmost 8 pixels of a line the ROM
+	//clips, where HdNesPpu stores NoTile and the recorder still holds the tile
+	//it drew. `_frameCell` is this frame's, cleared per frame like
+	//_frameTileSet; `_capturedCell` is the copy CaptureScreen reads, because by
+	//the time it runs the frame's own grid has been reset.
+	struct CapturedCellGrid
+	{
+		HdTileKey Keys[30][32] = {};
+		uint8_t Named[30][32] = {};
+	};
+	CapturedCellGrid _frameCell;
+	CapturedCellGrid _capturedCell;
 	HdTileKey _lastRunKey = {};
 	int32_t _lastRunY = -1;
 	uint32_t _frameHash = 0;
@@ -133,6 +149,12 @@ private:
 		bool HasGridFrame = false;   //false past the kMaxSheetFrames retention cap
 		vector<ScreenRun> Candidates;                       //condition payload
 		vector<MesenSheets::AnchorCandidate> Cells;         //1:1 grid coordinates
+		//ADR-0236 (F14.11): the key at every screen cell's origin on the frame
+		//the PNG was written from. Built here, at capture time, because that is
+		//the only moment the frame is still in hand - and kept (not rebuilt)
+		//because it is what the run time compares, cell by cell, to decide
+		//whether this capture still owns a cell.
+		HdCellKeyRecord CellRecord;
 	};
 	vector<PendingScreen> _pendingScreens;
 	void FinalizeScreenAnchors();
@@ -441,9 +463,15 @@ public:
 	//F5.4d: coverage report for the builder window (see HdPackCoverageReport above)
 	HdPackCoverageReport GetCoverageReport() const;
 
-	//Screen capture (see above); colorIndex = the 2-bit background pixel value
+	//Screen capture (see above); colorIndex = the 2-bit background pixel value.
+	//`runtimeNamesTile` is the PPU's own answer to "does the run time name a
+	//background tile at this pixel" - HdBuilderPpu's `_cycle > _minimumDrawBgCycle`,
+	//the gate HdNesPpu::DrawPixel applies before it stores a TileIndex at all.
+	//It is passed in rather than derived here because only the PPU knows it, and
+	//ADR-0236's record has to hold what the run time read (NoTile included), not
+	//what the recorder could see.
 	void EnableScreenCapture();
-	__forceinline void ProcessBgPixel(uint32_t x, uint32_t y, HdPpuTileInfo& tile, uint8_t colorIndex)
+	__forceinline void ProcessBgPixel(uint32_t x, uint32_t y, HdPpuTileInfo& tile, uint8_t colorIndex, bool runtimeNamesTile)
 	{
 		if(!_captureScreens || x >= 256 || y >= 240) {
 			return;
@@ -453,6 +481,12 @@ public:
 		if((x & 7) == 0 && (y & 7) == 0) {
 			_frameTileGrid[y >> 3][x >> 3] = tile.GetKey(true);
 			_frameTileSet[y >> 3][x >> 3] = 1;
+			//ADR-0236: the record's own sample, key and gate together. The
+			//assignment (not an OR) matches _frameTileGrid above: a cell origin
+			//the PPU revisits this frame keeps the last read, which is the one
+			//the run time would compare.
+			_frameCell.Keys[y >> 3][x >> 3] = tile;
+			_frameCell.Named[y >> 3][x >> 3] = runtimeNamesTile ? 1 : 0;
 		}
 		_frameBg[y * 256 + x] = _palette[(tile.PaletteColors >> ((3 - colorIndex) * 8)) & 0x3F] | 0xFF000000;
 		_bgPixels++;
