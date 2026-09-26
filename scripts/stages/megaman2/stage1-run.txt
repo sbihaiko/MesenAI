@@ -1,0 +1,45 @@
+# Mega Man 2 blind body (F14.17, ADR-0239 section 6): run right, jump the
+# gaps, shoot, and press START twice. 738 frames; record_navigation_sweep.py
+# repeats it to fill the 120 s budget.
+#
+# It is blind, like every other body in this folder: it never reads an enemy's
+# position and never aims. Mega Man walks into pits on most stages and loses
+# his three lives inside the run, which ADR-0184 section 4 asks for - the
+# deaths, the respawns and the GAME OVER menu are material the pack wants. The
+# bursts are long enough for the run cycle to complete two turns on one hold
+# (F9.22), which is what a probe needs to attribute a cycle to the pad.
+#
+# The two START presses at the end of every pass are what put the run back in
+# its own stage after that. Mega Man 2's GAME OVER menu is CONTINUE / STAGE
+# SELECT / PASSWORD with the cursor on CONTINUE, and the instruction booklet's
+# 'GETTING STARTED' step 3 describes it: 'You must now choose to START or enter
+# a PASSWORD. Press START to begin the game.' So the first press restarts the
+# stage through the game's own CONTINUE. The second is what keeps the pair
+# inert while the game is playing: the pause is a toggle on the press, so one
+# press would leave the game paused for the whole of the following pass.
+# Measured 2026-09-26 (runs/f1417/megaman2/probe/scan/, one session per value
+# at 120 s): with no press at all, four of the eight stages end the run on the
+# GAME OVER menu and $002A then reads 05 for all four instead of the stage id,
+# and the two values whose bodies survived to 120 s read their own stage id.
+90f R
+8f RA
+60f R
+10f RB
+90f R
+8f RA
+60f R
+10f RB
+40f -
+8f RB
+90f R
+8f RA
+60f R
+10f RB
+90f R
+8f RA
+20f -
+8f RA
+20f T
+10f -
+20f T
+10f -

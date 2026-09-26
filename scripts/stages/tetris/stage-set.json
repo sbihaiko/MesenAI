@@ -1,0 +1,8 @@
+{
+  "game": "Tetris",
+  "rom": {
+    "noIntroSha1": ["FD9079CB5E8479EB06D93C2AE5175BFCE871746A"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Tetris (1989) (Nintendo).nes from the user's ROM library (whole-file SHA1 A99F922E9DA20B2A27E4398348505D2E9D15271B; 2 PRG banks of 16 KB and 2 CHR banks of 8 KB, so 16384 bytes of CHR and a ROM CHR denominator of 1024 16-byte patterns), the dump every entry script under this folder and the F14.17 navigation sweep (ADR-0239, runs/f1417/tetris/) were authored and recorded on. Both hashes computed on this checkout 2026-09-26. The recordable route here is stage1-run.txt, the playing body, whose start state mint-stage1.txt produces: A-TYPE on LEVEL 0, which is the game's own first place because every menu opens with the wanted entry already selected."
+}

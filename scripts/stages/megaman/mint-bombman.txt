@@ -1,0 +1,30 @@
+# Mega Man: power-on to BOMBMAN's stage, chosen on the game's own STAGE SELECT
+# (ADR-0239 s1 rung 1 - the selector is input, so no RAM cheat rides with this
+# run). The screen is a ring of the six robot masters and Right walks it
+# clockwise: CUTMAN -> GUTSMAN -> ICEMAN -> BOMBMAN -> FIREMAN -> ELECMAN ->
+# CUTMAN. Three presses Three presses of Right from the ring's start, then Start.
+#
+# Two timings were measured on this ROM on 2026-09-26 and both are load-bearing:
+#
+#   * the screen needs about four seconds before it reads the pad at all. A
+#     Right pressed 70 frames after the select appeared is ignored (the
+#     session ends on CUTMAN whatever the press was), where the same press
+#     250 frames later moves the cursor. Hence the 240 idle frames below.
+#   * Right is what moves the cursor. Down was measured inert here: one, two
+#     and three Down presses each leave the session byte-identical to a
+#     session with no press at all (same final state, same screenshot,
+#     $0031 = 00, the CUTMAN stage).
+#
+# Every press is 40 frames with a 60-frame gap; the entry is
+# scripts/stages/megaman/navigation.json's value "bombman".
+120f -
+10f T
+240f -
+40f R
+60f -
+40f R
+60f -
+40f R
+60f -
+60f -
+10f T

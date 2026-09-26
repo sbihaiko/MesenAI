@@ -1,0 +1,70 @@
+# bottle-run.txt - Dr. Mario's blind body (F14.17, ADR-0239 s6).
+#
+# The pill is the only thing the player drives: it spawns horizontal over the
+# middle column, A or B turns it a quarter turn, Left/Right walk it one column
+# at a time, and Down drops it a row at a time. record_navigation_sweep.py
+# repeats this file to fill the session's 120 emulated seconds, after the
+# mint-level-NN.txt entry that selects the place.
+#
+# WHAT EACH SHAPE IS FOR, all measured on this ROM 2026-09-26:
+#
+#   * A and B are TAPPED, never held. A tap turns the pill (two taps change the
+#     frame's checksum, four return it to the start, so the turn is a quarter
+#     turn and the fourth tap is the first orientation again); a held A or B
+#     turns it once at most, because the turn is read on the press edge and the
+#     game does not auto-repeat it. Ten frames of release separate the taps.
+#   * Left and Right are HELD, because that is what moves a pill more than one
+#     column: the direction auto-repeats in the menu and in the bottle alike,
+#     and a 30-frame hold walks the pill to the wall. The body uses the wall as
+#     a known column instead of counting steps.
+#   * Down is tapped to make the pill fall fast. Measured: a tap takes the pill
+#     from row 15 to row 10 in the frames an un-tapped pill spends on two rows,
+#     so a session lands more pills per minute with it than without.
+#
+# The body is blind. It does not read the falling colours, the stack or the
+# viruses, so it cannot aim a match and it loses: the bottle fills and the game
+# ends on GAME OVER well inside the 120 s (measured at virus levels 00, 05, 10
+# and 20 - every one of them reaches GAME OVER). That is ADR-0184 s4 doing its
+# job, not a defect, and the sweep's sessions record the loss screen as well as
+# the play. What the body buys is a bottle that is being driven for the whole
+# time it is alive: all four orientations of the pill, both walls, and a
+# hard-dropped stack, instead of the one-column tower an idle pad builds.
+
+# A pass over the four orientations, in the middle of the bottle.
+20f -
+4f A
+10f -
+4f A
+10f -
+4f A
+10f -
+4f B
+20f -
+
+# Walk the pill into the left wall and drop it there.
+30f L
+10f -
+10f D
+60f -
+
+# Back out, turning as it goes, and drop this one on the right half.
+4f B
+10f -
+20f R
+10f -
+4f A
+10f -
+20f R
+10f -
+4f A
+10f -
+20f R
+10f -
+4f B
+10f -
+20f R
+10f -
+20f R
+10f -
+10f D
+60f -

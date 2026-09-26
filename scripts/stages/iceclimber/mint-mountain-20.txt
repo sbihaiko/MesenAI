@@ -1,0 +1,60 @@
+# mint from power-on to the start of MOUNTAIN 20
+# (ADR-0239 s1 rung 1: the game's own selector, by input - no RAM cheat).
+# One 10-frame press of Right is one mountain; the game's own $0059 holds
+# the index it accepted (n - 1). The walk block after START is the last
+# d-pad input of the session - mountain-run.txt holds no direction at all,
+# so the title screen never moves the number the ramCheck reads.
+# See mountain-entry.py for the sources.
+60f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+10f R
+10f -
+16f T
+16f -
+120f R
+12f RB
+12f -
+120f R
+12f RA
+12f -
+120f L
+12f LB
+12f -
+120f L
+12f LA
+12f -

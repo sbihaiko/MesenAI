@@ -1,0 +1,8 @@
+{
+  "game": "Mega Man",
+  "rom": {
+    "noIntroSha1": ["6047E52929DFE8ED4708D325766CCB8D3D583C7D"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Mega Man (1987) (Capcom).nes from the user's ROM library, the dump this set was authored and recorded on by the F14.17 navigation sweep (docs and numbers: runs/f1417/megaman/RESULT.md, 2026-09-26). Whole-file SHA1 2F88381557339A14C20428455F6991C1EB902C99, the hash the artist pack on disk declares in its <patch> line. The dump is 131 088 bytes: 8 PRG banks and 0 CHR banks, so this is UxROM with CHR RAM and there is no ROM CHR denominator for a coverage figure. mint-stage1.txt is the game's own stage-1 route (power-on, Start to the stage select, Start on the cursor the screen opens with, which is Cut Man), so stage1-run.txt is the one route the library job can reach; the other five mint-*.txt files are the same screen walked by the ADR-0239 navigation profile and serve no route of their own."
+}
