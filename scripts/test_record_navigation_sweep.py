@@ -956,6 +956,58 @@ def _the_union_row_is_the_rules_a_run_wrote():
               "the every-rule hit rides along", str(t["reference"]))
 
 
+# --- #549: the placeholder source is the ROM in hand's, not a constant -------
+def _the_placeholder_note_names_the_rom_in_hand():
+    """#549: the §5 block called every game a CHR RAM one.
+
+    The paragraph was printed unconditionally, so the F14.17 Lemmings sweep
+    (2026-09-26, a 16-CHR-bank ROM) was told its every-rule tile-data column
+    was "the builder's PRG scan" - the sentence Castlevania's 2581 distinct
+    PRG-scan patterns (F14.16) were measured for. A CHR ROM game enumerates
+    its own CHR indices instead, which is why its column is frozen at the
+    ROM's whole tile count: 8192 for 16 banks, 512 for Excitebike's one bank.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        # The ROM-less case needs no emulator and no recorder - --rescore
+        # prints the whole §5 block - and it is also where the counts live.
+        _hires(tmp / "sweep" / "s1" / "G" / "auto" / "textures" / "hires.txt",
+               109, ["AAAA", "BBBB"])
+        rc, out = _main_rc("--rescore", "--out", str(tmp / "sweep"))
+        para = out[out.index("the union columns"):out.index("nav_sweep_metrics.")]
+        check(rc == 0 and para.count(" -> ") == 2 and "keys and" in para
+              and "tile data," in para,
+              "the paragraph still carries both every-rule counts", para)
+        check("CHR RAM" not in para and "PRG scan" not in para,
+              "and with no --rom it claims neither placeholder source, instead "
+              "of calling the game a CHR RAM one", para)
+
+        # A CHR ROM game: the placeholders enumerate the ROM's own CHR.
+        note = sweep.placeholder_note(_rom(tmp / "chr.nes"))
+        check("CHR RAM" not in note,
+              "a CHR ROM game is never called a CHR RAM one", note)
+        check("CHR indices" in note,
+              "and its placeholders are named as the ROM's own CHR indices",
+              note)
+
+        # A CHR RAM game: no CHR to enumerate, so the PRG scan stands.
+        note = sweep.placeholder_note(_rom(tmp / "ram.nes", chr_ram=True))
+        check("CHR RAM" in note and "PRG scan" in note,
+              "a CHR RAM game keeps the PRG-scan sentence the Castlevania "
+              "measurement was written for", note)
+        check("CHR indices" not in note,
+              "and is not credited with CHR indices it has not got", note)
+
+        # No ROM: true of both, and a claim about neither.
+        note = sweep.placeholder_note(None)
+        check("CHR RAM" not in note and "CHR indices" not in note
+              and "PRG scan" not in note,
+              "with no --rom the note names neither source and guesses neither",
+              note)
+        check(note in para, "and that is the note the ROM-less report prints",
+              para)
+
+
 # --- #545: the reference is scored at the pattern, not at the string ---------
 P3 = bytes([0xAA] * 16)
 P4 = bytes([0x55] * 16)
@@ -1223,6 +1275,94 @@ def _the_run_notes_are_built_for_both_selector_kinds():
                       "selected, by title", out[-500:])
 
 
+def _tree(root: Path) -> dict:
+    """Every entry under `root` as `{relative path: bytes}`, a directory as None.
+
+    One comparison, so a dry run that writes, appends, empties, adds or removes
+    anything at all is caught - "the file is still there" is not the claim.
+    """
+    return {str(p.relative_to(root)): (None if p.is_dir() else p.read_bytes())
+            for p in sorted(root.rglob("*"))}
+
+
+def _tree_diff(before: dict, after: dict) -> str:
+    """The names whose entry was added, removed or rewritten."""
+    return ", ".join(sorted(k for k in set(before) | set(after)
+                            if before.get(k) != after.get(k))) or "(identical)"
+
+
+def _a_dry_run_writes_nothing():
+    """#548: `--dry-run` "prints the plan ... and runs nothing" - nothing includes
+    the filesystem.
+
+    Measured 2026-09-26 while recording the Mega Man profile (runs/f1417/
+    megaman): a `--dry-run` into the folder a real 6-session sweep had just
+    written replaced its `sweep.json` with the dry run's own degraded document -
+    every session `dry-run`, no `hires`/`pack`/`exit`, `totals` null and both
+    `scored` lists empty - so the record of what was recorded was gone. It also
+    `mkdir -p`'d `--out`, created one directory per session under it and wrote
+    one generated input script per session. `--rescore` returns before that
+    block, so only `--dry-run` destroyed a record it had just been handed.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = tmp / "Fake.nes"
+        rom.write_bytes(b"NES\x1a" + bytes(12))
+        prof = tmp / "prof"
+        prof.mkdir()
+        (prof / "mint.txt").write_text("10f S\n")
+        (prof / "body.txt").write_text("20f R\n")
+        (prof / "navigation.json").write_text(json.dumps({
+            "game": "Fake",
+            "navigation": {"kind": "ram", "address": "006D", "label": "stage",
+                           "source": "a published map",
+                           "values": [{"name": "one", "title": "One", "value": "01",
+                                       "entry": "mint.txt", "body": "body.txt"},
+                                      {"name": "two", "title": "Two", "value": "02",
+                                       "entry": "mint.txt", "body": "body.txt"}]},
+            "defaults": {"seconds": 1}}))
+        head = ["--profile", str(prof / "navigation.json"), "--rom", str(rom)]
+
+        # The record a real sweep leaves behind: its own `sweep.json` and a
+        # session directory holding a file the dry run has no business touching.
+        out = tmp / "sweep"
+        (out / "one").mkdir(parents=True)
+        (out / "one" / "rec_stdout.log").write_text("recorded\n")
+        (out / "sweep.json").write_text(json.dumps(
+            {"game": "Fake", "seconds": 1, "jobs": 4,
+             "sessions": [{"name": "one", "status": "ok", "exit": 0}],
+             "totals": {"before": {"keys": 3}, "after": {"keys": 9}}}) + "\n")
+        before = _tree(out)
+        rc, printed = _main_rc(*head, "--out", str(out), "--dry-run",
+                               "--summary", str(tmp / "dry-summary.json"))
+        check(rc == 0, "a dry run over a written sweep exits 0", str(rc))
+        after = _tree(out)
+        check(after == before,
+              "and leaves every entry under --out byte-identical - sweep.json "
+              "included, which a dry run used to replace with its own document",
+              _tree_diff(before, after))
+        check(not (tmp / "dry-summary.json").exists(),
+              "and writes no --summary file")
+
+        # A path that is not there yet: a dry run has nothing to put in one.
+        fresh = tmp / "never-written"
+        rc, _ = _main_rc(*head, "--out", str(fresh), "--dry-run")
+        check(rc == 0 and not fresh.exists(),
+              "a dry run into a path that does not exist leaves it absent",
+              f"rc={rc} exists={fresh.exists()}")
+
+        # And it still prints what it exists for: the plan, and the command line
+        # of every session, naming the script it did not write.
+        lines = printed.splitlines()
+        check(any("navigation sweep: 2 sessions" in ln for ln in lines),
+              "the dry run still prints the plan", lines[:3])
+        cmds = [ln for ln in lines if "headless_record" in ln]
+        check(len(cmds) == 2 and all("hdpack-off" in ln for ln in cmds)
+              and all("rec-input.txt" in ln for ln in cmds),
+              "and one command line per session, naming the generated script",
+              cmds)
+
+
 for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _per_value_scripts, _extra_pins, _ram_check_plan,
             _missing_scripts_are_named, _ram_check_reads,
@@ -1233,11 +1373,13 @@ for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _union_units, _rom_chr, _pack_hires_resolution,
             _rescore_reads_the_packs_a_sweep_left, _rescore_cli,
             _the_union_row_is_the_rules_a_run_wrote,
+            _the_placeholder_note_names_the_rom_in_hand,
             _the_two_dialects_meet_at_the_pattern_they_name,
             _an_index_needs_the_rom_and_a_pattern_does_not,
             _a_different_ver_base_is_provenance_not_a_gate,
             _the_rescore_scores_the_reference_at_the_pattern,
-            _summary_document, _the_run_notes_are_built_for_both_selector_kinds):
+            _summary_document, _the_run_notes_are_built_for_both_selector_kinds,
+            _a_dry_run_writes_nothing):
     case(_fn, _fn.__name__.lstrip("_"))
 
 print(f"{len(PASSED)}/{len(PASSED) + len(FAILED)} passed")

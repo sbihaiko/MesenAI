@@ -108,7 +108,8 @@ from nav_sweep_metrics import (  # noqa: F401 - re-exported for callers
     pack_rule_keys, pack_seen_rule_keys, pack_seen_tile_data, pack_tile_data,
     pack_version,
     ram_check, ram_check_spec,
-    rom_chr_coverage, rom_chr_seen_coverage, score_sessions, summary_document,
+    rom_chr_bytes, rom_chr_coverage, rom_chr_seen_coverage, score_sessions,
+    summary_document,
     tile_data_keys, totals_document, version_note,
 )
 
@@ -243,7 +244,8 @@ def script_body(path: Path) -> list:
             if l.strip() and not l.strip().startswith("#")]
 
 
-def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> dict:
+def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path,
+                       write: bool = True) -> dict:
     """Write <entry> once, then <body> repeated until the run is covered.
 
     ADR-0184's own measurement is the reason this exists: Contra's
@@ -252,6 +254,11 @@ def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> d
     the body to cover the whole run reached the same panorama a cheat had
     bought. Effective input time is the cheapest lever there is, and it costs
     nothing, so the sweep takes it by default.
+
+    `write=False` builds the same lines and returns the same counts without
+    touching the disk, which is what a `--dry-run` needs: the command line it
+    prints names a script, and the frame counts come from the lines, not from
+    the file (#548).
     """
     target = int(round(seconds * NTSC_FRAME_RATE))
     entry_lines = script_body(entry)
@@ -271,8 +278,9 @@ def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> d
     for i in range(repeats):
         out.append(f"# --- {body.name} pass {i + 1}/{repeats}")
         out += body_lines
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text("\n".join(out) + "\n")
+    if write:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text("\n".join(out) + "\n")
     return {
         "path": str(dest),
         "entryFrames": entry_frames,
@@ -492,13 +500,12 @@ def command_for(session: dict, rom_in_dir: Path, script_info) -> list:
 
 def run_session(session: dict, rom: Path, dry: bool) -> dict:
     sdir = session["dir"]
-    sdir.mkdir(parents=True, exist_ok=True)
     rom_in_dir = sdir / rom.name
     script_info = None
     if session["kind"] == "navigation":
         script_info = build_sweep_script(
             session["entry"], session["body"], session["seconds"],
-            Path(str(session["prefix"]) + "-input.txt"))
+            Path(str(session["prefix"]) + "-input.txt"), write=not dry)
     cmd = command_for(session, rom_in_dir, script_info)
     result = {
         "name": session["name"],
@@ -517,6 +524,9 @@ def run_session(session: dict, rom: Path, dry: bool) -> dict:
         result["status"] = "dry-run"
         return result
 
+    # Every write of the session is past that return, which is the point of it:
+    # a dry run used to leave a directory and an input script per session (#548).
+    sdir.mkdir(parents=True, exist_ok=True)
     if session["kind"] == "room" and session["state"] and not session["state"].exists():
         result["status"] = "skipped"
         result["why"] = (f"save state not found: {session['state']} - a room needs "
@@ -571,6 +581,31 @@ def _rom_chr_line(row, seen) -> str:
         return CHR_RAM_NOTE
     return (f"{seen['named']}/{seen['patterns']} ({seen['pct']:.1f}%) written"
             f"  [every rule: {row['pct']:.1f}%]")
+
+
+def placeholder_note(rom_path) -> str:
+    """What the builder's `defaultTile` placeholders are, for the ROM in hand.
+
+    The set is a property of the cartridge, not a constant: a CHR ROM game gets
+    one placeholder per index of its own CHR, so the every-rule tile-data column
+    is frozen at the ROM's whole tile count and is the same in every pack of it -
+    measured 2026-09-26 at 8192 for a 16-bank ROM (Lemmings, F14.17, which the
+    report had been calling a CHR RAM game) and 512 for Excitebike's single bank.
+    A CHR RAM game has no CHR to enumerate, so its placeholders are the patterns
+    the PRG scan harvests (Castlevania, 2581 distinct, F14.16). With no `--rom`
+    neither is known, and the note says only what holds for both.
+
+    `rom_chr_bytes` is the same iNES reader §5.2 scores against, and it is empty
+    for a CHR RAM game, which is the whole of the distinction.
+    """
+    if rom_path is None:
+        return ("which is the builder's\n   `defaultTile` placeholders - one set "
+                "shared by every pack of a ROM -\n   plus a rounding error")
+    if rom_chr_bytes(rom_path):
+        return ("which is the ROM's\n   own CHR indices' `defaultTile` set - the "
+                "same set in every pack of that\n   ROM - plus a rounding error")
+    return ("which on a CHR RAM\n   game is the builder's PRG scan plus a "
+            "rounding error")
 
 
 def main() -> int:
@@ -710,7 +745,8 @@ def main() -> int:
                   f"{'cheat=' + ','.join(s['cheats']) if s['cheats'] else 'no cheat':<20} "
                   f"{s['title']}")
 
-        args.out.mkdir(parents=True, exist_ok=True)
+        if not args.dry_run:
+            args.out.mkdir(parents=True, exist_ok=True)
         if jobs == 1:
             for s in sessions:
                 r = run_session(s, args.rom.resolve(), args.dry_run)
@@ -805,9 +841,9 @@ def main() -> int:
         print(f"   the union columns are the rules a run *wrote*; over every "
               f"rule they read\n   {before['keysAll']} -> {after['keysAll']} keys "
               f"and {before['tileDataAll']} -> {after['tileDataAll']} tile data, "
-              "which on a CHR RAM\n   game is the builder's PRG scan plus a "
-              "rounding error. Raised as a defect by the\n   F14.16 coordinator "
-              "2026-09-26; see nav_sweep_metrics.totals_document.")
+              + placeholder_note(args.rom) + ". Raised as a defect by the\n"
+              "   F14.16 coordinator 2026-09-26; see "
+              "nav_sweep_metrics.totals_document.")
 
     # --- coverage against a reference pack (ADR-0184's own metric) -----------
     coverage = None
@@ -945,14 +981,20 @@ def main() -> int:
         "totals": totals,
         "notes": notes,
     }
-    (args.out / "sweep.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"\nwrote {args.out / 'sweep.json'}")
+    # #548: a dry run writes nothing at all, and this document is the one that
+    # was doing the damage - nothing ran, so `totals` is null, every session
+    # reads "dry-run" and both `scored` lists are empty, and written over a real
+    # sweep's `sweep.json` it destroyed that sweep's record of what it recorded.
+    # The notes[] above are printed either way; only the files are held back.
+    if not args.dry_run:
+        (args.out / "sweep.json").write_text(json.dumps(summary, indent=2) + "\n")
+        print(f"\nwrote {args.out / 'sweep.json'}")
 
-    if args.summary:
-        doc = summary_document(profile["game"], args.rom, seconds, results, totals)
-        args.summary.parent.mkdir(parents=True, exist_ok=True)
-        args.summary.write_text(json.dumps(doc, indent=2) + "\n")
-        print(f"wrote {args.summary}")
+        if args.summary:
+            doc = summary_document(profile["game"], args.rom, seconds, results, totals)
+            args.summary.parent.mkdir(parents=True, exist_ok=True)
+            args.summary.write_text(json.dumps(doc, indent=2) + "\n")
+            print(f"wrote {args.summary}")
 
     failed = [r for r in results if r["status"] == "failed"]
     return 1 if failed else 0
