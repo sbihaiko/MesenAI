@@ -418,6 +418,13 @@ doc-checks: check-manifest
 	#live row whose Decision cell opens with "shipped" is a contract breach.
 	python3 scripts/checks/verify_prd_live_rows.py
 	python3 scripts/test_verify_prd_live_rows.py
+	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
+	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
+	#141, which a check reads as a missing string - verify_community_pack_
+	#labels_script.sh flaked twice that way under load. The test reruns that
+	#check against an oversized LABELS array (deterministic 141 before the fix)
+	#and then scans every script under scripts/ so the pattern cannot come back.
+	python3 scripts/test_check_pipeline_sigpipe.py
 	#Unit tests for the community-pack pipeline's leaf modules (stdlib-only,
 	#no network/PAT/ROM): the MEI/recipe/content-id/identity/meta/rules
 	#interpreters and dispatch keep their own golden/PASS-style checks.
@@ -564,6 +571,12 @@ core: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 #standard replacement. Measured 2026-09-14: those are the only two warnings
 #-Wall produces across the whole CUTSRC list.
 CUTFLAGS := -std=c++17 -O2 -Wall -Werror -Wno-deprecated-declarations -I . -I Core -I Utilities
+#ADR-0236 (F14.11) added Utilities/HexUtilities.cpp to the list below: the
+#suite drives the real HdPackTileAtPositionCondition for the "one predicate"
+#case of that ADR, and the condition's ToString (header-only, but reached
+#through its vtable) is HexUtilities' - the one symbol pair the set lacked.
+#Host-free and link-free are different properties, and only the first is what
+#ADR-0127 asks of a header.
 CUTSRC := \
   scripts/core_unit_tests.cpp \
   Core/Shared/Audio/ChannelRoleClassifier.cpp \
@@ -589,6 +602,7 @@ CUTSRC := \
   Core/NES/HdPacks/SheetRender.cpp \
   Core/NES/HdPacks/SpriteGrouping.cpp \
   Utilities/JsonReader.cpp \
+  Utilities/HexUtilities.cpp \
   Utilities/FolderUtilities.cpp \
   Utilities/UTF8Util.cpp \
   Utilities/sha256.cpp \

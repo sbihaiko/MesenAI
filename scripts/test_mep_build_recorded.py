@@ -41,6 +41,7 @@ Usage: python3 scripts/test_mep_build_recorded.py
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -509,6 +510,186 @@ def fold_follows_recorded_test(root: Path):
         ok("ADR-0231 §6: a painted cell's fold points at its crop at the fold's Brightness")
 
 
+def report_rows(out: str):
+    """`build`'s own report: the per-cell rows and its "and N more" count (#511)."""
+    rows = [l for l in out.splitlines() if l.startswith("report: sheets/")]
+    m = re.search(r"^report: \.\.\. and (\d+) more$", out, re.M)
+    return rows, int(m.group(1)) if m else 0
+
+
+def manifest_rule(text: str, data: str, pal: str):
+    """The bare `<tile>` line the built manifest carries for one key, or None."""
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith("<tile>"):
+            continue
+        f = [x.strip() for x in s[6:].split(",")]
+        if len(f) >= 6 and f[1].upper() == data and f[2].upper() == pal:
+            return s
+    return None
+
+
+def cell_rule_report_test(root: Path):
+    """Issue #511: the build reports the rule each cell the artist touched
+    produced, so criterion 5 is checked without opening `hires.txt`.
+
+    A painted cell gets one row per key it carries, naming the sheet, the cell
+    index, the key, the painted crop and the `<tile>` line itself. A cell the
+    placer added (`mep_add_cell.py`) is reported before it is painted too, and
+    its row carries the rule the build actually wrote — the recorded one, while
+    the cell is untouched (ADR-0231). The rows are capped."""
+    folder, _rules = make_recorded_pack(root, "report", shapes=range(24))
+    sheets = folder / "textures" / "sheets"
+    built = folder / "textures" / "hires.txt"
+    first = run("build", str(folder))
+    if first is None:
+        return
+    rows, more = report_rows(first)
+    if rows or more:
+        fail(f"#511: a build with nothing painted reports {len(rows) + more} cell(s)")
+    else:
+        ok("#511: a build where no cell was painted prints no cell report")
+
+    # Metatile cell 0 (shapes 0..3) sits at (1,1) at 1x.
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    text = built.read_text(encoding="utf-8")
+    rows, more = report_rows(out)
+    bad = []
+    for shape in range(4):
+        key = T.tile_hex(shape)
+        row = next((r for r in rows if f"tile {key} " in r), None)
+        want = manifest_rule(text, key, T.PAL_HEX)
+        if row is None:
+            bad.append(f"shape {shape}: no row")
+        elif ("sheets/metatiles.json cell 0 painted" not in row or f"palette {T.PAL_HEX} " not in row
+              or "at crop 2,2: " not in row or want is None or not row.endswith(want)):
+            bad.append(f"shape {shape}: {row}")
+    if len(rows) != 4 or more:
+        fail(f"#511: painting one four-tile cell printed {len(rows)} row(s) and {more} more, expected 4")
+    elif bad:
+        fail(f"#511: a painted cell's row does not name sheet/cell/key/crop/rule: {bad[:2]}")
+    else:
+        ok("#511: one row per key of a painted cell — sheet, cell index, key, crop and the <tile> line itself")
+
+    # A cell the placer added, before any paint on it. Shapes 20..23 are in the
+    # recording but on no sheet, so a pasted one keeps the recorded rule.
+    payload = json.dumps({"count": 1, "tiles": [{"tile": T.tile_hex(23), "palette": T.PAL_HEX}]})
+    p = subprocess.run([PY, str(T.REPO / "scripts" / "mep_add_cell.py"), str(folder), "-"],
+                       input=payload, capture_output=True, text=True)
+    if p.returncode != 0:
+        fail(f"#511: mep_add_cell refused the pasted cell: {(p.stdout + p.stderr)[-500:]}")
+        return
+    out = run("build", str(folder))
+    if out is None:
+        return
+    text = built.read_text(encoding="utf-8")
+    rows, _more = report_rows(out)
+    key = T.tile_hex(23)
+    row = next((r for r in rows if f"tile {key} " in r), None)
+    want = manifest_rule(text, key, T.PAL_HEX)
+    # index 6 on a 3-column, 16px, gutter-1 sheet is col 0 of row 2: (1,35) at 1x.
+    if row is None:
+        fail(f"#511: a cell mep_add_cell added is not reported:\n{out[-1200:]}")
+    elif ("sheets/metatiles.json cell 6 added" not in row or "at crop 2,70: " not in row
+          or want is None or not row.endswith(want)):
+        fail(f"#511: the added cell's row does not carry the rule the build wrote: {row}")
+    else:
+        ok("#511: a cell mep_add_cell placed is reported before it is painted, with the rule it produced")
+
+    # The cap: 20 shapes on metatiles, 8 on obj000.
+    cap, _ = make_recorded_pack(root, "report-cap")
+    T.paint(cap, "metatiles.png", 0, 0, 400, 0xFFFF00FF)
+    T.paint(cap, "obj000.png", 0, 0, 400, 0xFFFF00FF)
+    out = run("build", str(cap))
+    if out is None:
+        return
+    rows, more = report_rows(out)
+    if len(rows) == 20 and more == 8:
+        ok('#511: the report is capped at 20 rows and counts the rest ("... and 8 more")')
+    else:
+        fail(f"#511: a wholesale repaint printed {len(rows)} row(s) and {more} more, expected 20 + 8")
+
+
+def index_keyed_report_test(root: Path):
+    """Issue #524: on a CHR ROM pack the manifest is keyed by the tile's CHR
+    index (ADR-0172), while `Copy as MEP sheet cell` puts the 32-hex pattern on
+    the clipboard. A row that named only the index left the artist unable to
+    match the row to the pasted key without opening `hires.txt` — which is a
+    criterion-4 fail — so an index-keyed row names both. A pattern-keyed pack's
+    row is unchanged: there the key *is* the 32 hex."""
+    folder, _rules = make_recorded_pack(root, "report-chr-rom", shapes=range(8), chr_rom=True)
+    # Metatile cell 0 (shapes 0..3) sits at (1,1) at 1x, painted at scale 2.
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    bad = []
+    for shape in range(4):
+        index, data = f"{T.CHR_INDEX_BASE + shape:02X}", T.tile_hex(shape)
+        row = next((r for r in rows if f"tile {index} " in r), None)
+        if row is None:
+            bad.append(f"shape {shape}: no row for index {index}")
+        elif f"pattern {data} " not in row:
+            bad.append(f"shape {shape}: {row}")
+    if bad:
+        fail(f"#524: an index-keyed row does not name the pasted pattern key: {bad[:2]}")
+    else:
+        ok("#524: an index-keyed row names the pattern the clipboard carries, beside the CHR index")
+
+    # The control: a pattern-keyed pack is unchanged, i.e. named by that pattern
+    # alone — no second spelling of the same key.
+    plain, _ = make_recorded_pack(root, "report-pattern")
+    T.paint(plain, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(plain))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    row = next((r for r in rows if f"tile {T.tile_hex(0)} " in r), None)
+    if row is None:
+        fail(f"#524: a pattern-keyed row stopped naming its key:\n{out[-800:]}")
+    elif "pattern " in row:
+        fail(f"#524: a pattern-keyed row gained a pattern field it does not need: {row}")
+    else:
+        ok("#524: a pattern-keyed row is unchanged — its key was always the pasted pattern")
+
+
+def mirrored_index_keyed_report_test(root: Path):
+    """#524/ADR-0178: the row's pattern field is the key the artist's clipboard
+    carries, and on a cell the recorder stored with its OAM flip baked in that is
+    the un-baked `source` — the key the run time looks up and the emission loop
+    uses (`src or data`) — not the baked `tile` sitting beside it in the sidecar.
+    Printing the baked data would name a key nothing ever looks up, in exactly
+    the pack shape the ADR exists for."""
+    folder, _rules = make_recorded_pack(root, "report-mirrored", shapes=range(8), chr_rom=True,
+                                        flip_baked=True, sidecar_source=True, sprite_sheet=True)
+    # Metatile cell 0 (shapes 0..3) sits at (1,1) at 1x, painted at scale 2.
+    T.paint(folder, "metatiles.png", 1 * SCALE, 1 * SCALE, 16 * SCALE, 0xFFFF00FF)
+    out = run("build", str(folder))
+    if out is None:
+        return
+    rows, _more = report_rows(out)
+    bad = []
+    for shape in range(4):
+        index, src = f"{T.CHR_INDEX_BASE + shape:02X}", T.tile_hex(shape)
+        baked = T.flip_hex(src)
+        row = next((r for r in rows if f"tile {index} " in r), None)
+        if row is None:
+            bad.append(f"shape {shape}: no row for index {index}")
+        elif f"pattern {src} " not in row:
+            bad.append(f"shape {shape}: {row}")
+        elif baked in row:
+            bad.append(f"shape {shape}: the baked key is in the row: {row}")
+    if bad:
+        fail(f"#524/ADR-0178: a mirrored cell's row does not name the un-baked key the clipboard "
+             f"carries: {bad[:2]}")
+    else:
+        ok("#524/ADR-0178: a mirrored cell's pattern is the un-baked source, not the baked tile")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -524,6 +705,9 @@ def main() -> int:
         restored_page_test(root)
         external_source_test(root)
         fold_follows_recorded_test(root)
+        cell_rule_report_test(root)
+        index_keyed_report_test(root)
+        mirrored_index_keyed_report_test(root)
     return 1 if FAILED else 0
 
 

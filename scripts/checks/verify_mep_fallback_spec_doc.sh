@@ -20,16 +20,16 @@ fail() {
 SECTION_2_1="$(awk '/^### 2\.1 /{flag=1} /^## 3\. /{flag=0} flag' "$DOC")"
 [ -n "$SECTION_2_1" ] || fail "could not find section ### 2.1 in $DOC"
 
-echo "$SECTION_2_1" | grep -qi 'fallback' \
+echo "$SECTION_2_1" | grep -i 'fallback' >/dev/null \
   || fail "§2.1 does not mention 'fallback' (subfolder rule missing)"
 
-echo "$SECTION_2_1" | grep -qi 'last-priority\|last priority' \
+echo "$SECTION_2_1" | grep -i 'last-priority\|last priority' >/dev/null \
   || fail "§2.1 does not explicitly state that the fallback is the last-priority rule"
 
 # The fallback rule must come after rule 7 (the sibling folder / legacy HD
 # Pack / central containers precedence chain), not before it.
-PRECEDENCE_LINE="$(grep -n 'Precedence between origins' "$DOC" | head -1 | cut -d: -f1)"
-FALLBACK_LINE="$(grep -ni 'fallback' "$DOC" | head -1 | cut -d: -f1)"
+PRECEDENCE_LINE="$(grep -n 'Precedence between origins' "$DOC" | sed -n '1p' | cut -d: -f1)"
+FALLBACK_LINE="$(grep -ni 'fallback' "$DOC" | sed -n '1p' | cut -d: -f1)"
 [ -n "$PRECEDENCE_LINE" ] || fail "could not find rule 7 (the precedence chain) in $DOC"
 [ -n "$FALLBACK_LINE" ] || fail "could not find the fallback line in $DOC"
 if [ "$FALLBACK_LINE" -le "$PRECEDENCE_LINE" ]; then
@@ -37,25 +37,25 @@ if [ "$FALLBACK_LINE" -le "$PRECEDENCE_LINE" ]; then
 fi
 
 # Names the engine (name) vs. validators (structural) asymmetry.
-echo "$SECTION_2_1" | grep -qi 'asymmetry' \
+echo "$SECTION_2_1" | grep -i 'asymmetry' >/dev/null \
   || fail "§2.1 does not use the term 'asymmetry' for the engine-vs-validators divergence"
 
-echo "$SECTION_2_1" | grep -q 'PrepareZip' \
+echo "$SECTION_2_1" | grep 'PrepareZip' >/dev/null \
   || fail "§2.1 does not reference PrepareZip (the C++ engine) in the asymmetry explanation"
 
-echo "$SECTION_2_1" | grep -q 'MepZipValidator.cs' \
+echo "$SECTION_2_1" | grep 'MepZipValidator.cs' >/dev/null \
   || fail "§2.1 does not reference MepZipValidator.cs (C# validator) in the asymmetry explanation"
 
-echo "$SECTION_2_1" | grep -q 'mep_lint.py' \
+echo "$SECTION_2_1" | grep 'mep_lint.py' >/dev/null \
   || fail "§2.1 does not reference mep_lint.py (Python validator) in the asymmetry explanation"
 
-echo "$SECTION_2_1" | grep -qi 'name.*match' \
+echo "$SECTION_2_1" | grep -i 'name.*match' >/dev/null \
   || fail "§2.1 does not describe the engine's criterion (name matching)"
 
-echo "$SECTION_2_1" | grep -qi 'structural' \
+echo "$SECTION_2_1" | grep -i 'structural' >/dev/null \
   || fail "§2.1 does not describe the validators' criterion (structural matching)"
 
-echo "$SECTION_2_1" | grep -q 'ADR-0120' \
+echo "$SECTION_2_1" | grep 'ADR-0120' >/dev/null \
   || fail "§2.1 does not reference ADR-0120, which documents the full decision"
 
 echo "PASS: docs/specs/MEP-v1.md §2.1 documents the fallback as the last-priority rule and names the engine-vs-validators asymmetry (name vs structural)"

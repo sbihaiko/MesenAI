@@ -157,7 +157,10 @@ ADR-0222: `K <id> <32 hex tile data> <8 hex palette>` interns a shape and
 `P <id> <8 hex palette>` a palette word on first sight; then one line per
 retained frame — frame, repeat, port 1 and 2 button bytes, then
 `shape,x,y,pal` per sprite, `shape` being the recorder's ShapeId, the same id
-space as the grid dump's `K` lines; before 2026-09-22 the entry was `node,x,y`
+space as the grid dump's `K` lines; ADR-0234 appended `,visible,bg,hidden` —
+the pixels that sprite put on screen, its OAM priority bit and the pixels an
+opaque background hid, all absent from a dump written before 2026-09-25;
+before 2026-09-22 the entry was `node,x,y`
 with `node` a vocabulary index, which no reader resolves any more) and
 `MESEN_POSE_TRACK_DUMP` (one ADR-0179 track per line as `frame:pose:held`).
 Pointing the OAM dump at `oam.txt` beside a `grid.txt` is what lets

@@ -34,7 +34,7 @@
   captured screen only when every cell it changes is a cell whose content the
   capture already carries; a frame that adds content the capture lacks is a
   *rival* regardless of agreement ratio. ADR-0156 §Decision is **not** amended
-  (option D was not picked). ADR-0159 carries the matching "Amended 2026-09-22"
+  (option D was not picked here; ADR-0236 picked it for #499 on 2026-09-25, as an opt-in guard keyed by a new per-cell record). ADR-0159 carries the matching "Amended 2026-09-22"
   note.
 
 ## Context

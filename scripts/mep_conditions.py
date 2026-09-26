@@ -660,8 +660,10 @@ class OamFrame:
         self.repeat = repeat
         # ADR-0181: the packed button bytes of ports 1 and 2.
         self.ports = ports
-        # (shape, x, y, palette id) per sprite, in OAM order; an 8x16 sprite
-        # is two 8x8 entries.
+        # (shape, x, y, palette id[, visible pixels, behind bg, hidden
+        # pixels]) per sprite, in OAM order; an 8x16 sprite is two 8x8 entries.
+        # ADR-0234 appends the last three fields, so an entry may be 4 long (a
+        # dump written before it), 6 (before the third field settled) or 7.
         self.entries = []
         self._shapes = shapes
 
@@ -669,7 +671,7 @@ class OamFrame:
         """(tileData, palette) of one sprite entry, or None when the dump
         never interned its shape — the ADR-0159 rule: the per-entry palette id
         wins, the shape's own first-seen palette is the fallback."""
-        shape, _x, _y, pal = entry
+        shape, pal = entry[0], entry[3]
         rec = self._shapes.get(shape)
         if rec is None:
             return None
@@ -677,6 +679,26 @@ class OamFrame:
         if pal == UNKNOWN_PALETTE:
             return data, shape_pal
         return data, self._shapes.palette(pal, shape_pal)
+
+    def visible_pixels(self, entry):
+        """ADR-0234: how many pixels of this entry's own reached the screen,
+        or None when the dump predates the field. 0 on a behind-background
+        entry is the mask evidence: SMB3's piranha-plant pipe mask covers
+        ~207 000 pixels and puts none of them on screen."""
+        return entry[4] if len(entry) > 4 else None
+
+    def behind_bg(self, entry):
+        """ADR-0234: the entry's OAM attribute bit 5, or None when the dump
+        predates the field. It is the fact the mask verdict is checked against,
+        not the verdict itself."""
+        return bool(entry[5]) if len(entry) > 5 else None
+
+    def hidden_pixels(self, entry):
+        """ADR-0234: how many of the entry's pixels lost to an opaque
+        background, or None when the dump predates the field. A mask contended
+        for pixels and lost every one; an entry the PPU never drew (the
+        8-per-line limit) shows 0 here too and is a figure, not a mask."""
+        return entry[6] if len(entry) > 6 else None
 
     def keys_covering(self, px, py):
         """The keys of every sprite whose 8x8 block covers pixel (px, py) —
@@ -693,13 +715,17 @@ class OamStream:
     """A recorded OAM stream: its frames, shapes, and the played-frame index
     that joins it to the grid stream of the same recording."""
 
-    def __init__(self, frames, shapes, path=None):
+    def __init__(self, frames, shapes, path=None, has_visibility=False):
         self.frames = frames
         self.shapes = shapes
         self.path = path
         # A dump written before F12.14 has no `K` line: its entries are bare
         # indexes and no sprite can be resolved to tile data.
         self.has_tiles = bool(shapes)
+        # ADR-0234: a dump written before it carries neither the priority bit
+        # nor the visible-pixel count, so no entry can be told a mask from a
+        # sprite that simply never had a pixel to show.
+        self.has_visibility = has_visibility
         self._starts = []
         total = 0
         for f in frames:
@@ -739,10 +765,17 @@ def parse_oam_dump(path):
     A dump written before F12.14 has frame lines of `<node>,<x>,<y>` and no
     `K`/`P` lines; it parses (entries get `UNKNOWN_PALETTE`) and `has_tiles`
     says the sprites cannot be resolved.
+
+    ADR-0234 appends `<visible>,<bg>,<hidden>` to the entry token. All three
+    are optional on read: a dump written before it parses unchanged, and
+    `OamFrame.visible_pixels` / `behind_bg` / `hidden_pixels` return None for
+    such an entry rather than inventing a zero, which would read as mask
+    evidence.
     """
     path = Path(path)
     frames = []
     shapes = _Shapes()
+    has_visibility = False
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             if not line.strip():
@@ -765,21 +798,26 @@ def parse_oam_dump(path):
                     if len(fields) < 3:
                         continue
                     pal = int(fields[3]) if len(fields) > 3 else UNKNOWN_PALETTE
-                    frame.entries.append(
-                        (int(fields[0]), int(fields[1]), int(fields[2]), pal))
+                    entry = (int(fields[0]), int(fields[1]), int(fields[2]), pal)
+                    if len(fields) > 5:
+                        entry = entry + (int(fields[4]), int(fields[5]))
+                        has_visibility = True
+                    if len(fields) > 6:
+                        entry = entry + (int(fields[6]),)
+                    frame.entries.append(entry)
                 frames.append(frame)
-    return frames, shapes
+    return frames, shapes, has_visibility
 
 
 def load_oam_stream(path):
     """An `OamStream` from an OAM dump file, or raise `ConditionError`."""
     path = Path(path)
-    frames, shapes = parse_oam_dump(path)
+    frames, shapes, has_visibility = parse_oam_dump(path)
     if not frames:
         raise ConditionError(
             f"{path}: no OAM frames — was MESEN_OAM_STREAM_DUMP set on a run "
             "that drew a sprite?")
-    return OamStream(frames, shapes, path)
+    return OamStream(frames, shapes, path, has_visibility)
 
 
 def oam_path_for(grid_path):

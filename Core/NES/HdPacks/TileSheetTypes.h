@@ -64,6 +64,41 @@ namespace MesenSheets
 	//sightings in one place is no evidence of being pinned there.
 	constexpr uint32_t kScreenFixedMinFrames = 64;
 	constexpr uint32_t kScreenFixedRevisits = 32;
+	//ADR-0234 (issue #505): a mask sprite is a tile the game draws behind the
+	//background only to hide something in front of it - SMB3 pushes one in
+	//front of the piranha plant so the pipe hides both the plant and the tile
+	//that hides it. It is placed by the game and puts no pixel of its own on
+	//screen, so it is not part of any figure.
+	//
+	//The verdict is per *appearance*, not per tile: "this entry is behind the
+	//background and put no more than this many pixels on screen". 0 is the
+	//measured value, not a guess - on SMB3's World 1-1 route the mask's own
+	//pattern bytes are drawn 1608 times behind the background with nothing
+	//shown, 12 times behind it with 2-4 pixels shown, and 11 times in front and
+	//fully visible (the level-intro card reuses the art), so a judgement over
+	//the node declines and the mask stays in every pose it hides (ADR-0234,
+	//Context). The priority half is what keeps a *front* sprite the 8-per-line
+	//limit or a higher-priority sprite kept off the screen out of the class:
+	//the PPU dropped that one, the game did not hide it.
+	constexpr uint32_t kMaskMaxVisiblePixels = 0;
+
+	//The mask predicate, in one place so the pose pass and the adjacency label
+	//cannot disagree (SpriteGrouping's IsMaskEntry and SelectMaskNodes). All
+	//three facts are needed:
+	//
+	//- `hiddenPixels > 0` - the half contended for pixels and lost every one to
+	//  an opaque background. Without it the rule fires on every behind-BG entry
+	//  the PPU never drew: Punch-Out!!'s second-pass E2E measured 78 of its 463
+	//  nodes mislabelled and its poses going from 34 to 101 when the clause was
+	//  missing. A half the 8-per-line limit kept off the screen is a figure the
+	//  game placed, not something the background hid (ADR-0153 §2).
+	//- `visiblePixels <= kMaskMaxVisiblePixels` - nothing of it ever showed.
+	//- `behindBg` - kept because it is the fact the dump carries and the one a
+	//  reader checks the verdict against.
+	inline bool IsMaskEntry(bool behindBg, uint32_t visiblePixels, uint32_t hiddenPixels)
+	{
+		return behindBg && hiddenPixels > 0 && visiblePixels <= kMaskMaxVisiblePixels;
+	}
 	//---- F9.19 (ADR-0170): sheets/poses.json -----------------------------
 	//
 	//Two OAM entries belong to the same silhouette when their 8x8 boxes are
@@ -558,6 +593,48 @@ namespace MesenSheets
 
 	//---- OAM (F9.5) --------------------------------------------------------
 
+	//ADR-0234 (issue #505): what the PPU did with one latched sprite half in one
+	//frame, as the host measured it at the pixel. `BehindBg` is OAM attribute
+	//bit 5, `VisiblePixels` how many of the half's pixels reached the output
+	//buffer and `HiddenPixels` how many lost to an opaque background pixel. The
+	//three together are what tells a mask from everything else - see
+	//IsMaskEntry below.
+	struct SpriteDrawing
+	{
+		bool BehindBg = false;
+		uint8_t VisiblePixels = 0;
+		uint8_t HiddenPixels = 0;
+	};
+
+	//ADR-0234 (issue #505): what the sprite pipeline did with *one dot*, from the
+	//three things it decides it with - the colour of the winning shifter, whether
+	//the emulator draws the sprite layer at all, the background pixel under it
+	//and that shifter's priority bit. At most one of the two is true, and both are
+	//false when nothing contended: a transparent sprite pixel (colour 0) is not a
+	//contender, and neither is a sprite in the leftmost-8-columns clip, one whose
+	//rows PPUMASK hid, or the pre-render line's leftovers. This is the condition
+	//NesPpu::GetPixelColor returns the sprite's colour under, stated once - on
+	//the recorder's side, because the emulation path must not depend on it: the
+	//PPU reports the dot through BaseNesPpu::NoteSpritePixel and this classifies
+	//it. It is not readable off `_lastSprite`, which is the highest-priority
+	//*active* shifter - opaque or not.
+	struct SpritePixelVerdict
+	{
+		//The sprite's colour is the pixel that reaches the output buffer.
+		bool Drawn = false;
+		//The sprite's colour contended for the pixel and an opaque background
+		//pixel in front of a behind-the-background sprite took it.
+		bool Hidden = false;
+	};
+
+	inline SpritePixelVerdict SpritePixelVerdictOf(uint8_t spriteColor, bool spritesEnabled, uint8_t backgroundColor, bool backgroundPriority)
+	{
+		SpritePixelVerdict verdict;
+		verdict.Drawn = spriteColor != 0 && spritesEnabled && (backgroundColor == 0 || !backgroundPriority);
+		verdict.Hidden = spriteColor != 0 && spritesEnabled && !verdict.Drawn;
+		return verdict;
+	}
+
 	//One sprite as the recorder saw it: the 8x8 shape id - taken *after* the OAM
 	//flip bits are applied, so the mirrored half of a figure is its own shape and
 	//can sit beside its twin on a sheet - plus its screen origin in pixels. An
@@ -571,15 +648,64 @@ namespace MesenSheets
 	//purpose, so without it the OAM stream could settle the shape half of a
 	//spriteNearby condition and never its colour half. It is part of entry
 	//identity: two frames that differ only in sprite colour are two frames.
+	//One sprite half the PPU placed: the shape it was drawn from, its screen
+	//origin in pixels, and the palette its row was drawn in.
+	//
+	//#520: Shape == kEmptyCell is an *artless placement* - a half whose 16 bytes
+	//are all zero, which #470 (IsFullyTransparent) keeps out of the shape
+	//registry because the loader never draws one and no `<tile>` rule can exist
+	//for it. The cell is still part of the figure the game drew, which is what
+	//ADR-0170 §1 segments, so the OAM stream carries it with no shape rather
+	//than dropping it. Every shape-keyed consumer already skips kEmptyCell:
+	//BuildSpriteVocabulary, Accumulate, SpriteNearbyPalettes and the stream dump.
+	//
+	//ADR-0234: such a placement is the appearance nothing is known about - its
+	//drawing facts stay at their defaults (in front, no visible pixel, none
+	//hidden) - which is exactly why IsMaskEntry is false for it and why it stays
+	//a cell of the figure it was placed in.
 	struct OamEntry
 	{
 		ShapeId Shape = kEmptyCell;
 		uint8_t X = 0;
 		uint8_t Y = 0;
 		PaletteId Palette = kUnknownPalette;
+		//ADR-0234 (issue #505): the entry's OAM attribute bit 5, and how many
+		//of the entry's own pixels this frame put on screen (HdBuilderPpu
+		//reports it where NesPpu::GetPixelColor decides it, so a
+		//behind-background half under an opaque background reports none). The
+		//two are what tells a mask from a figure, and neither is part of entry
+		//identity: a frame that only changes how much of a hidden sprite shows
+		//still collapses (see SameEntries).
+		bool BehindBg = false;
+		uint8_t VisiblePixels = 0;
+		uint8_t HiddenPixels = 0;
 
 		bool operator==(const OamEntry& o) const { return Shape == o.Shape && X == o.X && Y == o.Y && Palette == o.Palette; }
 	};
+
+	//#520: the OAM entry an *artless placement* is - a sprite half the PPU
+	//placed whose 16 bytes are all zero (#470's IsFullyTransparent). It names no
+	//shape, so it reaches no sheet cell, no `<tile>` rule and no vocabulary node;
+	//it is a cell of the figure the game drew, which is what ADR-0170 §1
+	//segments. `HdPackBuilder::RecordSpritePlacement` is the only production
+	//caller and this is the only thing it builds, so a reader can pin the entry
+	//host-free, without HdPackBuilder.cpp in the unit-test link set (ADR-0127).
+	inline OamEntry PlacementEntry(uint8_t x, uint8_t y)
+	{
+		OamEntry entry;
+		entry.Shape = kEmptyCell;
+		entry.X = x;
+		entry.Y = y;
+		//No art was drawn, so no palette was observed on the half. The pose pass
+		//reads positions; the palette-keyed passes skip kUnknownPalette.
+		entry.Palette = kUnknownPalette;
+		//ADR-0234: the drawing facts stay at their defaults - in front, no
+		//visible pixel, none hidden - which is what an appearance nothing is
+		//known about looks like. IsMaskEntry requires `hiddenPixels > 0`, so it
+		//is false here and the placement is Shown: a cell of the figure that
+		//counts toward the pose floor, never a mask to be dropped.
+		return entry;
+	}
 
 	//One frame's OAM, in OAM order. Consecutive identical frames collapse into
 	//RepeatCount and the stream is capped at kMaxSheetFrames, exactly like
@@ -609,13 +735,22 @@ namespace MesenSheets
 	//palette>" interns a shape on first sight, "P <id> <8 hex palette>" interns
 	//a palette word on first sight, and each frame is one line,
 	//"<frame> <repeat> <port1> <port2>" (ADR-0181: the two button bytes) followed
-	//by "<shape>,<x>,<y>,<pal>" per sprite, where <shape> is the ShapeId - the
-	//same id space the grid stream's "K" lines use, since ShapeIdFor interns
-	//sprites and background cells into one table. The "K" tile data is the
-	//shape's drawable art (TileData, with the OAM flips baked in - ADR-0178),
-	//exactly what the grid dump writes for the same id. A palette id with no
-	//entry in `paletteColors` (kUnknownPalette: the id space ran out) gets no
-	//"P" line and a reader falls back to the shape's own first-seen palette.
+	//by "<shape>,<x>,<y>,<pal>,<visible>,<bg>" per sprite, where <shape> is the
+	//ShapeId - the same id space the grid stream's "K" lines use, since
+	//ShapeIdFor interns sprites and background cells into one table. The "K"
+	//tile data is the shape's drawable art (TileData, with the OAM flips baked
+	//in - ADR-0178), exactly what the grid dump writes for the same id. A
+	//palette id with no entry in `paletteColors` (kUnknownPalette: the id space
+	//ran out) gets no "P" line and a reader falls back to the shape's own
+	//first-seen palette.
+	//
+	//ADR-0234 (issue #505) appends the last three fields of the entry token:
+	//<visible> the entry's VisiblePixels, <bg> its BehindBg as 1 or 0 and
+	//<hidden> its HiddenPixels. They are additive on purpose - a reader written
+	//for the four-field form still resolves shape, x, y and palette out of the
+	//same token - and together they make the mask rule checkable offline: the
+	//priority bit and what the background did to the half are the two facts the
+	//PPU knew and the token never carried.
 	inline void WriteOamStreamDump(std::ostream& out, const std::vector<OamFrame>& frames, const std::vector<SheetTileKey>& shapeTiles, const std::vector<uint32_t>& paletteColors)
 	{
 		static const char* digits = "0123456789ABCDEF";
@@ -625,6 +760,14 @@ namespace MesenSheets
 		std::vector<bool> paletteEmitted(paletteColors.size(), false);
 		for(const OamFrame& frame : frames) {
 			for(const OamEntry& entry : frame.Entries) {
+				//#520: an artless placement (kEmptyCell, #470's fully
+				//transparent half) names no art, so there is nothing for the
+				//dump to resolve it to - and ADR-0222's contract is that every
+				//entry the dump lists does resolve to tile data and palette.
+				//The pose pass reads it; this dump does not carry it.
+				if(entry.Shape == kEmptyCell) {
+					continue;
+				}
 				if(entry.Shape < shapeTiles.size() && !shapeEmitted[entry.Shape]) {
 					shapeEmitted[entry.Shape] = true;
 					out << "K " << entry.Shape << ' ';
@@ -644,7 +787,12 @@ namespace MesenSheets
 			}
 			out << frame.FrameNumber << ' ' << frame.RepeatCount << ' ' << (int)frame.Buttons[0] << ' ' << (int)frame.Buttons[1];
 			for(const OamEntry& entry : frame.Entries) {
-				out << ' ' << entry.Shape << ',' << (int)entry.X << ',' << (int)entry.Y << ',' << (uint32_t)entry.Palette;
+				if(entry.Shape == kEmptyCell) {
+					continue; //#520: an artless placement resolves to nothing
+				}
+				out << ' ' << entry.Shape << ',' << (int)entry.X << ',' << (int)entry.Y << ',' << (uint32_t)entry.Palette
+					<< ',' << (uint32_t)entry.VisiblePixels << ',' << (entry.BehindBg ? 1 : 0)
+					<< ',' << (uint32_t)entry.HiddenPixels;
 			}
 			out << '\n';
 		}
@@ -711,6 +859,19 @@ namespace MesenSheets
 		//and not evidence of a ground it stands on (ADR-0173). Floors are kept
 		//either way - this is a label on the evidence, not a deletion of it.
 		std::vector<uint8_t> ScreenFixed;
+		//Per sprite-vocabulary index, ADR-0234: BehindBgAppearances counts the
+		//appearances that carried the OAM priority bit, VisiblePixels how many
+		//pixels of its own the shape put on screen over the whole recording,
+		//HiddenPixels how many it lost to an opaque background, MaskAppearances
+		//how many appearances IsMaskEntry hid and Mask says the game draws this
+		//shape as a mask at least once - so a reader that disagrees with the
+		//classification has the numbers behind it, the way ScreenFixed carries
+		//Positions and NodeFrames.
+		std::vector<uint32_t> BehindBgAppearances;
+		std::vector<uint32_t> VisiblePixels;
+		std::vector<uint32_t> HiddenPixels;
+		std::vector<uint32_t> MaskAppearances;
+		std::vector<uint8_t> Mask;
 		//Every unordered pair with CoFrames >= kAdjacencyMinPairCount, sorted
 		//by (A, B).
 		std::vector<SpritePairStat> Pairs;

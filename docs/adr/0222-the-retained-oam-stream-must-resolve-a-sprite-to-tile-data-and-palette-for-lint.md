@@ -22,6 +22,9 @@
   re-record of the F12.6a Contra route is required. `memoryCheck` ships with
   the same slice. Proposed earlier the same day with the three options below,
   which stay in the file as the record of what was weighed.
+  **Amended 2026-09-25 (ADR-0234, issue #505):** the entry token gains
+  `<visible>,<bg>,<hidden>`; see the dated note in the Decision section.
+  Additive, so this ADR's decision is extended rather than reversed.
 - Date: 2026-09-22
 - Related: ADR-0197 (§2 lint validates authored conditions against recorded
   routes; §3 the retained `$0000`–`$07FF` window, option (b), shipped as
@@ -131,6 +134,18 @@ gains a `parse_oam_dump` beside `parse_grid_dump`, and `spriteNearby`,
 verdict from the OAM file alone; `memoryCheck` reads its second operand from
 the `M` line as stated below. The pose-succession consumers of the old
 `node` token are named in the slice and their frozen logs keep their text.
+
+**Amended 2026-09-25 (ADR-0234, issue #505): the entry token gains three
+fields.** It is now `<shape>,<x>,<y>,<pal>,<visible>,<bg>,<hidden>` — `visible`
+the sprite half's pixels this frame put on screen, `hidden` the ones an opaque
+background took from it, `bg` its OAM attribute bit 5 (behind the background).
+None is identity: `SameEntries` still compares shape, x, y and palette only, so
+frame de-duplication is unmoved. The addition is additive and backward
+compatible, exactly as this ADR's option A promised a self-describing format
+would be — `parse_oam_dump` accepts a four-field entry and then reports the
+three facts as absent rather than as zero. ADR-0169's live viewer wire is
+deliberately **not** extended, so the two formats now differ by these three
+fields.
 
 ### The options as proposed
 

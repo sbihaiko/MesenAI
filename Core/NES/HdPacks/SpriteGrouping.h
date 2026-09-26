@@ -77,6 +77,25 @@ namespace MesenSheets
 	//read it without the pose pass.
 	InputStats BuildInputStats(const std::vector<OamFrame>& frames);
 
+	//ADR-0234 (issue #505): which sprite-vocabulary nodes are masks - tiles the
+	//game draws behind the background only to hide something in front of them,
+	//so that no pixel of their own ever reaches the screen (SMB3's piranha-plant
+	//pipe mask). One byte per vocabulary index, 1 for a mask.
+	//
+	//Whole-recording judgement, in ADR-0173's shape: the recorder classifies
+	//and labels, the consumer filters, nothing is deleted. A node is labelled
+	//when IsMaskEntry (TileSheetTypes.h) held for at least one of its
+	//appearances: that appearance was behind the background, contended for
+	//pixels and lost every one of them to it. The label is *evidence* - what
+	//BuildPoses acts on is the same predicate on the individual appearances,
+	//and even then only to leave a tile out of a pose it never once showed in
+	//(VisiblePoseTiles). Punch-Out!!'s two-pass fighters are behind the
+	//background in every appearance and still show in most of them, so they
+	//carry the label without losing a tile.
+	//
+	//The vocabulary, the sheets and adjacency.json keep every node either way.
+	std::vector<uint8_t> SelectMaskNodes(const std::vector<OamFrame>& frames, const Vocabulary& vocab);
+
 	//Policy D of the F9.28 measurement: one `spriteNearby` per non-root cell of
 	//a group - a spanning tree over the group's own Edges, rooted at its
 	//most-seen cell - and never the full pair table. Measured on four unlike

@@ -1,0 +1,31 @@
+# Ninja Gaiden: power-on to the first frame of player control in Act 1-1
+# (frame 1075). The TECMO logo runs to about 12 s; from frame 900 (15 s) eight
+# Start taps skip the title screen and the cinema that follows it, which one
+# tap alone does not. Act 1-1's HUD and background are up by frame 1024 with a
+# blank timer and no Ryu; he is drawn at 1075, and 1075 is the first frame the
+# pad does anything at all - holding Right from frame 980 changes pixels at
+# 1075 and not at 1074 across a frame-by-frame sweep (the session's scratch
+# log, runs/stages-ninjagaiden/PROBES.md, is not versioned).
+# record_library.sh mints it at the smallest whole number of seconds that
+# covers this script (#465): 1075 frames -> 18 s -> frame 1082, seven idle
+# frames past 1075 with Ryu still standing, which is the state stage1-run
+# starts from. By hand, the same state:
+#   scripts/headless_record <rom> 18 <mint>/mint input=mint-stage1.txt save-state=<work>/stage1-run.mss
+900f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+5f T
+5f -
+95f -

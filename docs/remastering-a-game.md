@@ -665,6 +665,7 @@ runs had to reverse-engineer it from the cells already there:
 | `context`, `label`, `metatile` | free text and an optional back-reference the tools write and carry. Copy them off a neighbouring cell; nothing requires them. Since ADR-0209 Q1 the recorder fills `label` with a default it infers from the grouping (`scene #142 x1004`, and on a `sprNNN`/`objNNN` sheet, a pose or a cycle in `poses.json` a one-line statement of its size and counts) beside `"labelSource": "inferred"`; to rename, edit the `label` and set `labelSource` to anything else, or put the name in a `names.json` handed to `artist_kit.py --names` / `mep_figure.py export --names`, which always wins over the inferred one. |
 | `columns`, `cell`, `gutter` | the grid: how many cells fit across, each cell's size, and the transparent margin between them. Written above `cells[]`, not inside it. |
 | `kind` | what the surface holds: `unsorted`, `misc`, `metatiles`, `object`, `sprite`, `sprites`, `font`, `hud`, `map`. With `cell` it decides which sheet a new cell belongs on — see *Which sheet a copied key goes on*. |
+| `addedBy` | `"mep_add_cell"` on a cell `mep_add_cell.py` placed. Nothing requires it, and nothing but `build` reads it: it is how the build knows to report that cell's rule by name even before you paint it (#511). A cell you wrote into the sidecar by hand does not carry it. |
 | `emptySlots` | `{ "col": n, "row": n }` per **blank** slot, written by the generators on the object and sprite sheets. It is not free space: a group sheet's grid is the bounding box of an L-shaped or otherwise non-rectangular figure, so a blank states where the figure is *not*, and the recorder never fills it (ADR-0175). A background key put in one lands in the hole of a named figure. To place a new cell, use a free-form sheet; where there is none, compute the slot from `columns`, `cell` and `gutter` — `metatiles.json` does not carry the list. |
 
 A `tiles[]` entry is `{"tile": "<32 uppercase hex>", "palette": "<8 hex>"}` —
@@ -711,8 +712,11 @@ rather not open a generated file, and that ratio is how most of the 2026-09-19
 cold reads got it. You need it twice: to paint the cell at `scale × x, scale × y`
 on the sheet, and to grow both PNGs consistently when the grid has no free slot.
 Get the factor wrong and the paint lands on a different cell: `build` exits 0,
-`mep_lint.py` exits 0, and the screen does not change. Reading `hires.txt` is
-fine — only *editing* it is thrown away.
+`mep_lint.py` exits 0, and the screen does not change. You never need to open
+the generated manifest to answer that, or anything else: the `<sheet>.png` ÷
+`<sheet>.orig.png` size ratio is the same number, and `build` prints the rule
+every cell you painted produced (see *The report*). Only *editing*
+`hires.txt` is thrown away.
 
 ### The tilemap is a picture of the nametable, not of the screen
 
@@ -795,6 +799,12 @@ describe. It also says, before you build, whether another sheet already claims
 the key and whether that cell was painted. `--dry-run` reports the placement
 without writing anything.
 
+It also marks the cell `"addedBy": "mep_add_cell"`, which is how the build
+knows to report it (see *The report*) — the marker is what makes a cell
+you place show up in that report **before** you paint it, when its pixels still
+equal the reference twin and nothing else could tell it apart from a cell the
+recorder wrote.
+
 Two things it will not do. It refuses a key whose palette leads with `FF` —
 that is how a sprite's transparent color 0 is packed, and a background key
 does not belong on a sprite sheet (`--allow-sprite-palette` if you know
@@ -872,7 +882,10 @@ Zelda II's worked example: `columns: 18`, `cell: 16×16`, `gutter: 1`,
 `metatiles.orig.png` 307×290, 298 cells. The pitch is 17, so the grid is 18×17 =
 306 slots and 8 are free; index 298 lands at `x = 1 + 17×10 = 171`,
 `y = 1 + 17×16 = 273`, painted at `(684, 1092)` on the scale-4 PNG, and no
-resize is needed. Donkey Kong is the same shape: `columns: 13`, a 222×222
+resize is needed. (That arithmetic reads a cell's `index` as its position, which
+holds on a sheet whose `cells[]` is in row-major order — Zelda II's is. Where it
+is not, ask which `x,y` no cell claims instead; see the trap below.) Donkey Kong
+is the same shape: `columns: 13`, a 222×222
 reference, 169 slots, 161 used, 8 free.
 
 Two traps around it, both measured:
@@ -880,15 +893,24 @@ Two traps around it, both measured:
 - **A key may already be claimed by another sheet.** Paste anyway: the build
   logs which cell won — `sheets/unsorted.png overrides tile <key> from
   sheets/misc.png (painted)` — and a *painted* cell beats an untouched one.
-  Check that line; a cell that loses builds and lints clean and changes
-  nothing. `mep_add_cell.py` says it at paste time instead
+  Check that line, or the report row for your own cell: `no <tile> — this key
+  produced no rule for this cell` means yours lost, and a cell that loses
+  builds and lints clean and changes nothing. `mep_add_cell.py` says it at
+  paste time instead
   (`metatiles.json cell 1 already claims … (painted)`), which is two steps
   earlier, and it reads the paint state through the build's own probe, so the
   two never disagree.
 - **Find a free slot, do not guess one.** A cell you overwrite silently
-  repaints whatever tile already lived there. The grid is `columns` wide and
-  `cells[]` is in row-major order, so the free slots are the ones no `index`
-  claims.
+  repaints whatever tile already lived there. The free slots are the ones no
+  cell's `x,y` claims, and `mep_add_cell.py` takes the first of them in
+  row-major order. Do not count `cells[]` to find it: a recorded sidecar's
+  cells are **not** in row-major order and skip slots — Mario Bros.'s
+  `unsorted` holds 30 cells at `index` 0..29 with rows 1 and 2 carrying only
+  columns 0–2 of 5, so the slot after the last cell (`x1,y55`) is cell 20's
+  own, and
+  pasting there grew the PNG by a row the lowest cell did not describe and made
+  `build` exit 2 (#503). A slot the grid leaves empty **above** the lowest cell
+  is free and needs no resize at all.
 
 - **A painted cell that reaches nothing now says so.** `build` names the sheet
   and the key in two cases: a painted key another crop already owns
@@ -998,6 +1020,62 @@ An unpainted one goes back unchanged. The block above lists every folder a
 kit can have, and a `cp` of a folder your kit lacks fails, so drop that line;
 the block in the kit's own `ARTIST.md` already names only the folders that kit
 has (#403).
+
+### The report: which rule your cell produced
+
+A build of a pack with painted cells prints one `report:` row per key of every
+cell whose pixels differ from its `.orig.png` twin, and per key of every cell
+`mep_add_cell.py` placed — the cells you touched, and nothing else:
+
+```
+report: sheets/unsorted.json cell 3 painted — tile 01D5 pattern C0C0C0C0C0C0C0C03F3F3F3F3F3F3F3F palette 0F202909 at crop 40,40: <tile>0,01D5,0F202909,40,40,1,N
+```
+
+**That row, not the manifest, is how you confirm a paste or a repaint landed.**
+The `<tile>` text at the end is the rule as it went into `hires.txt`, byte for
+byte, so a round trip is checked by reading the build's own output — no
+`grep`, no `cat`, no opening a generated file.
+
+Field by field: the sidecar's name; the cell's `index`, the `cells[]` ordinal
+`mep_add_cell.py` prints at paste time; `painted` or `added` (you painted the
+cell, or a tool placed it and you have not painted it yet); `tile`, the key the
+manifest is keyed by; `pattern`; the `palette` that key sits under; the
+`at crop` x,y in the sheet's own pixels at the pack's `<scale>`, which is where
+you painted; and after the colon the `<tile>` line the build wrote, verbatim.
+
+`pattern` is there because a CHR ROM pack's manifest is keyed by the tile's CHR
+index (ADR-0172) — `01D5` — while *Copy as MEP sheet cell* puts the 32-hex
+pattern on the clipboard. They are the same key, so `pattern` is the string to
+match against your clipboard and `tile` the one to match against the `<tile>`
+line beside it: that pair is the whole round trip, with no file to open. A
+sprite cell the recorder stored with its flip baked in is named by the un-baked
+key the run time looks up — its `"source"` (ADR-0178) — not by the flipped
+pixels beside it in the sidecar. On a pack keyed by pattern — a CHR RAM pack —
+the row has no `pattern` field, because there `tile` already *is* the 32 hex
+(`tile 00025F7C70604060003F7F7F7F7F7F7F`).
+
+Three things a row can tell you besides "it landed":
+
+- **The x,y inside the `<tile>` line is not the row's crop.** The cell is
+  untouched, so ADR-0231 kept its recorded rule and that line points at the
+  recorded `chr/` page instead. That is what the game draws now; paint the cell
+  and rebuild to point it at your crop.
+- **`added` instead of `painted`.** A cell `mep_add_cell.py` placed and you have
+  not painted yet. Its key is in the manifest — a pasted key whose tile the
+  recording already has keeps the recorded rule — and its crop is named so you
+  can paint it.
+- **`no <tile> — this key produced no rule for this cell`.** Another crop owns
+  that key, so the paint reaches nothing (#343); the row above it in the output
+  says which sheet took it, and *Which sheet a copied key goes on* is the fix.
+
+The rows are capped at twenty, then `report: ... and N more`: a pack painted
+wholesale is not a report. A sheet whose `.orig.png` twin is missing or
+unreadable gets no rows at all, because nothing can tell its painted cells from
+its untouched ones — the build says that in an `info:` line, and every cell of
+that sheet then counts as painted.
+
+The rows are the second half of the acceptance test below: the exit codes say
+the pack is valid, and the rows say the cells you painted are in it.
 
 That is the acceptance test: **`build` exit 0, `mep_lint.py` exit 0, and every
 generator's `--verify` PASS.** All three are mechanical, they take seconds, and

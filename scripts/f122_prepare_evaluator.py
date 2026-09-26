@@ -56,6 +56,21 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   that on its own: the recording's `chr/` pages hold the sprite tiles too, so on
   Bubble Bobble's black frame 23 "background" rules are drawn and every one of
   them is a bubble;
+- that count is also fooled from the other side, and since #494 the probe paints
+  the pack's **recorded screens** flat as well as its rules. A
+  `textures/backgrounds/screenNNN.png` is drawn at priority 20, i.e. *after* the
+  `<tile>` layer, and the recorder writes it opaque and the size of the screen
+  (ADR-0050, ADR-0156), so on a second it matches, the frame *is* that PNG and
+  every `<tile>` rule on it is invisible - no painted cell can reach the game
+  there. The colour count cannot see that on its own: the rule colours are
+  `(255, g, b)` and upscaled art carries pixels that match them by coincidence,
+  which the capture's own pixels then hide. Tetris 2's F14.2 re-score is the
+  measured case - a 40 s frame that is `screen002.png` came back "drawing 3
+  background rule(s)", the panel's cell (14,18) was under the capture, and
+  painting it changed no pixel (`docs/validation/`
+  `f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md`). A candidate whose
+  frame a recorded screen owns is dropped, and a game whose every sampled second
+  is owned is refused by name instead of handed over;
 - after the scan, `moment_agreement` measures the claim instead of asserting it:
   it re-renders the state with the texture layer off, redraws every copy-table
   cell in the emulator's own colours, and counts how many of the frame's 8x8
@@ -210,12 +225,24 @@ def sheet_kind(pack, rel):
 
 
 def paint_probe(pack, work, block=32, background_only=True):
-    """Repaint every crop a rule names, each in its own colour.
+    """Repaint every crop a rule names, each in its own colour, and every
+    recorded screen flat.
 
     `background_only` drops the sprite sheets: the cold read is a background
     read, and a frame carried entirely by sprite rules is a frame whose
     nametable - the thing the tilemap and the copy table describe - is not on
-    the screen. See *One moment* above."""
+    the screen. See *One moment* above.
+
+    The recorded screens are repainted too, one shade each, because a
+    `<background>` at priority 20 is drawn after the `<tile>` layer and the
+    recorder writes it opaque and the size of a whole screen: on a second it
+    matches, the frame is that PNG and every rule under it is invisible
+    (ADR-0050, ADR-0156, #494). Painting them flat does both halves of that -
+    a rule behind a screen is not counted as drawn at all, and
+    `capture_owned` can say which cells the screen owns - where leaving their
+    art in place leaves a rule colour findable by coincidence on a frame no
+    rule reaches. Returns the rule colours, the rule count, and
+    `{probe colour: name}` for the screens."""
     images, rules = rules_of(pack)
     if background_only:
         sprites = {i for i, rel in enumerate(images)
@@ -246,7 +273,21 @@ def paint_probe(pack, work, block=32, background_only=True):
                     off = img.offset(col, row)
                     img.px[off:off + 4] = bytes(rgba)
         _repaint.write_png(png, img)
-    return colors, len(rules)
+
+    #One shade per screen. `(254, g, 254)` is no NES palette entry and no blend
+    #of two of them, and its red channel is 254 where every rule above carries
+    #255, so a pixel of one can only be the screen it was painted on. A pack
+    #with more than 128 recorded screens repeats a shade and costs the log its
+    #name, not the answer: what is measured is the pixels, not the label.
+    captures = {}
+    for n, png in enumerate(sorted((work / "textures/backgrounds").glob("*.png"))):
+        rgb = (254, n & 0x7F, 254)
+        captures[rgb] = f"backgrounds/{png.name}"
+        img = _repaint.read_png(png)
+        for i in range(0, len(img.px), 4):
+            img.px[i:i + 4] = bytes(rgb) + b"\xff"
+        _repaint.write_png(png, img)
+    return colors, len(rules), captures
 
 
 def render(rom, seconds, prefix, load=None, save=None, flags=()):
@@ -287,6 +328,40 @@ def count_colors(shot, colors):
     return counts
 
 
+def capture_owned(shot, captures):
+    """Which cells of a rendered frame a recorded screen owns (#494).
+
+    `captures` is `paint_probe`'s map of the flat shade each recorded screen of
+    the pack was repainted in, so a pixel of one of those shades on the frame
+    can only be that screen's own pixels. A cell is owned when a screen is the
+    *majority* of it: a cell a screen only clips still shows most of the
+    painted `<tile>` rule, which is what the panel's criterion 3 counts, and
+    the majority is also what stops a stray pixel of art that happens to match
+    a shade from costing a candidate its frame.
+
+    Returns `{name: {(col, row), ...}}` in screen cells (0-31, 0-29)."""
+    if not captures:
+        return {}  #a pack with no recorded screens has nothing to own a frame
+    img = _repaint.read_png(shot)
+    want = {bytes(rgb): name for rgb, name in captures.items()}
+    scale = max(1, img.width // 256) * 8
+    owned = {}
+    for cy in range(0, img.height - scale + 1, scale):
+        for cx in range(0, img.width - scale + 1, scale):
+            seen = {}
+            for y in range(cy, cy + scale):
+                base = y * img.width * 4
+                for x in range(cx, cx + scale):
+                    off = base + x * 4
+                    rgb = bytes(img.px[off:off + 3])
+                    if rgb in want:
+                        seen[rgb] = seen.get(rgb, 0) + 1
+            for rgb, n in seen.items():
+                if n * 2 > scale * scale:
+                    owned.setdefault(want[rgb], set()).add((cx // scale, cy // scale))
+    return owned
+
+
 def choose_frame(rom, pack, out, candidates):
     """S6's missing half: which second of the recording draws the pack at all.
 
@@ -302,23 +377,32 @@ def choose_frame(rom, pack, out, candidates):
     candidate second is scored on is how much *background* the pack draws there.
     Returns the candidates that drew anything, best first, so a frame that then
     fails the one-moment gate can be replaced by the runner-up instead of
-    re-probing."""
-    colors, rules = paint_probe(pack, out / "probe-pack")
+    re-probing. A candidate a recorded screen owns is not among them: that
+    screen is the frame, it is drawn after every `<tile>` rule, and a panel
+    handed over on it cannot be won (#494)."""
+    colors, rules, captures = paint_probe(pack, out / "probe-pack")
     auto = rom.parent / rom.stem / "auto"
-    auto_colors, auto_rules = ({}, 0)
+    auto_colors, auto_rules, auto_captures = ({}, 0, {})
     if auto.is_dir():
-        auto_colors, auto_rules = paint_probe(auto, out / "probe-auto")
+        auto_colors, auto_rules, auto_captures = paint_probe(auto, out / "probe-auto")
         for c, k in auto_colors.items():
             colors.setdefault(c, f"auto:{k}")
+        #The auto layer's screens are never drawn while the human pack is
+        #installed - the loader keeps them out under a human layer - and its
+        #shades repeat the pack's, so `setdefault` keeps the pack's name. The
+        #shade still has to be painted flat: it is art otherwise.
+        for c, name in auto_captures.items():
+            captures.setdefault(c, f"auto:{name}")
     log("probe", f"{rules} background rule(s) repainted in the pack, {auto_rules} "
-                 f"in the recording's auto layer")
+                 f"in the recording's auto layer, {len(captures)} recorded screen(s) "
+                 f"flattened")
     mep = rom.parent / rom.stem / "mep"
     aside = rom.parent / rom.stem / "auto.probe-aside"
     if aside.exists() or mep.exists():
         raise PrepareError(f"{mep if mep.exists() else aside} is in the way - a "
                            "previous probe did not clean up")
 
-    ranked = []
+    ranked, owned_seconds = [], []
     try:
         if auto.is_dir():
             auto.rename(aside)
@@ -333,6 +417,18 @@ def choose_frame(rom, pack, out, candidates):
             shots = sorted((run / "mesen-home/Screenshots").glob("*.png"))
             if not shots:
                 log("probe", f"t={t}s: no screenshot")
+                continue
+            owned = capture_owned(shots[-1], captures)
+            if owned:
+                #The frame is a recorded screen, whole. It is opaque and drawn
+                #after the `<tile>` layer, so nothing painted on this second can
+                #reach the display, and the rules it hides are exactly the ones
+                #a colour count cannot see are gone (#494).
+                names = ", ".join(sorted(owned))
+                log("probe", f"t={t}s: {names} owns "
+                             f"{sum(len(c) for c in owned.values())} cell(s) of this "
+                             "frame - no painted cell can reach the game here")
+                owned_seconds.append(f"{t}s is {names}")
                 continue
             counts = count_colors(shots[-1], colors)
             #The same second with no pack over it, to ask the other half of the
@@ -363,7 +459,12 @@ def choose_frame(rom, pack, out, candidates):
             "no candidate second draws a single background <tile> rule, from the "
             "rebuilt pack or from the recording's own auto layer - the screen is "
             "drawn by a captured whole-screen <background>, which overrides every "
-            "<tile> rule, so no painted cell could ever show there")
+            "<tile> rule, so no painted cell could ever show there"
+            #Named apart: a screen that owns a frame is a different answer from
+            #a frame the pack simply does not cover, and the artist can retire
+            #that screen or paint it (#344).
+            + (f" - and the pack's own recorded screen owns a sampled second: "
+               f"{'; '.join(owned_seconds)}" if owned_seconds else ""))
     #A frame with a background on it beats a frame with more rules on it, always:
     #the rules of a blank screen are all sprite rules wearing a background's name.
     ranked.sort(key=lambda r: (not r[3], -r[1]))

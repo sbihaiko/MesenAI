@@ -535,6 +535,26 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   keep `mep_build.py` under its line ceiling. "Untouched" is read from
   the entry's claim flag, so a blank sprite key in a painted cell keeps
   its recorded rule too (#464).
+  **The cell report (#511, `report_cells`).** After the `built …` line a
+  build prints one `report:` row per key of every sheet cell the artist
+  touched — painted (its crop differs from the `*.orig.png` twin) or
+  marked `addedBy` by `mep_add_cell.py`, which is the only way to name a
+  cell that was placed and not yet painted. A row names the sidecar, the
+  cell's `index`, the key **as the emission loop keyed by** (the ADR-0172
+  index token on a CHR ROM pack, else the ADR-0178 un-baked `source`,
+  else the sidecar's `tile`), the painted crop in sheet pixels, and the
+  `<tile>` line the build wrote for it, verbatim. That is what makes
+  criterion 5 of the F14.2 cold read checkable from the tool's own output
+  instead of a read of `textures/hires.txt` (a criterion-4 fail, and why
+  4 of 5 runs went looking). Ownership is read from the same `winner` map
+  the emission used — the winning entry must sit in the cell's own slot
+  and its crop must be one the cell produced, because two sheets can put
+  a shape at the same x,y — so a key another crop took prints "produced
+  no rule for this cell" (#343) rather than the winner's line. A sheet
+  whose twin is missing or unreadable records no cells: it cannot tell
+  painted from untouched. Rows are capped at `REPORT_CAP` (20) with
+  `report: ... and N more`. Asserted in `test_mep_build_recorded.py`
+  (`cell_rule_report_test`); the marker itself in `test_mep_add_cell.py`.
   **Sidecar palette fields (ADR-0230, F14.9; producer contract in
   `Core/AGENTS.md`).** A sheet tile entry may carry `folds: [{"palette",
   "brightness"}]`. For each fold, `build` emits one extra exact
@@ -1073,13 +1093,29 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   then does one of two things. If the source cell owns every key it emits, it
   writes the source cell. Otherwise it copies each 8x8 sub-tile to the owner
   crop and leaves the source alone. In a kit project the owner is the
-  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1).
+  untouched `usrNNN` row (rank 4), which outranks `sprites` (rank 1) — and
+  that row is what the *fallback* writes too, because `export_pose_rows`
+  names it in each cell's sidecar (#498): a kit built from the recording's
+  own `chr/` rules has every untouched cell keeping its recorded rule
+  (ADR-0231), so no sheet owns those keys and the cell the figure names is
+  the only answer left. Naming the `sprites` vocabulary cell there put the
+  artist's paint into `sheets/sprites.png` — the one sheet ARTIST.md tells
+  them not to paint at all (ADR-0153 §3) — and the next build warned about
+  it. Only the return target is affected: the figure's art still comes from
+  `home_cell`, since a kit sheet is not part of the pack being exported from.
   Writing both is not an option: painted beats untouched (ADR-0153 §4)
   re-points the key, and a painted sprite crop that loses its key is a build
   error (#253). An owner whose `*.orig.png` art differs from the source's is
   never painted over. In that case, or when a key has no owner, the source is
   written and the report's `moves` says the next build re-points a rule, so
-  the reload (ADR-0212) cannot show it. `export_figure` overlays paint routed
+  the reload (ADR-0212) cannot show it. A built manifest with no `sheets/`
+  image at all is the same case, not a free one (#502): ADR-0231 keeps a
+  recorded key on `chr/`, so a pack whose recording covers every key has no
+  owner for anything, and writing the source re-points the key onto its crop.
+  The CLI's closing `next:` line follows that fact — `moves` without
+  `--verify`, the manifest change the same run measured with it — so the
+  advice never contradicts the `hires.txt changed/unchanged` line printed
+  above it. `export_figure` overlays paint routed
   to an owner, so a re-export shows it. `verify` reports `manifest_unchanged`
   (byte-identical rebuilt `hires.txt`) beside the key-set check; it is
   informational and does not fail the run. The throwaway build is also a

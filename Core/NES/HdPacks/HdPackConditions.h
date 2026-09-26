@@ -322,6 +322,23 @@ struct HdPackTileAtPositionCondition : public HdPackBaseTileCondition
 	HdPackConditionType GetConditionType() override { return HdPackConditionType::TileAtPos; }
 	string GetConditionName() override { return "tileAtPosition"; }
 
+	//ADR-0236 §2: this gate's comparison is `HdCellKeyMatches`, the one
+	//predicate the render-time cell guard also reads, so a recorder's gate and
+	//the guard it feeds can never disagree about a key. `RecordedKey` is the
+	//gate's own fields verbatim; the live side is `HdCellKeyFieldsOf`, the
+	//target's fields verbatim - deliberately not `HdCellKeyOf`, which reads
+	//`NoTile` as `Kind::None`: this condition compared the fields at such a
+	//pixel before the predicate was shared, and it keeps comparing them.
+	HdCellKey RecordedKey() const
+	{
+		HdCellKey key;
+		key.KeyKind = TileIndex >= 0 ? HdCellKey::Kind::ChrIndex : HdCellKey::Kind::ChrData;
+		key.TileIndex = TileIndex;
+		key.PaletteColors = PaletteColors;
+		memcpy(key.TileData, TileData, sizeof(key.TileData));
+		return key;
+	}
+
 	bool InternalCheckCondition(int x, int y, HdPpuTileInfo* tile) override
 	{
 		if(PixelOffset < 0 || PixelOffset >= NesConstants::ScreenPixelCount) {
@@ -329,15 +346,7 @@ struct HdPackTileAtPositionCondition : public HdPackBaseTileCondition
 			return false;
 		}
 		HdPpuTileInfo& target = _screenInfo->ScreenTiles[PixelOffset].Tile;
-		if(TileIndex >= 0) {
-			return (target.PaletteColors == PaletteColors || IgnorePalette) && (target.TileIndex == TileIndex || _hdPack->GetFallbackTile(target.TileIndex) == TileIndex);
-		} else {
-			if(IgnorePalette) {
-				return memcmp(&target.TileData, &TileData, sizeof(TileData)) == 0;
-			} else {
-				return memcmp(&target.PaletteColors, &PaletteColors, sizeof(PaletteColors) + sizeof(TileData)) == 0;
-			}
-		}
+		return HdCellKeyMatches(HdCellKeyFieldsOf(target), RecordedKey(), IgnorePalette, _hdPack->GetFallbackTile(target.TileIndex));
 	}
 };
 

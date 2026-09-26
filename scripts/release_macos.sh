@@ -148,7 +148,7 @@ fi
 # a binary built before that fix, or built on a machine with neither the CLT
 # nor an accepted Xcode licence. A release build must not leave the working
 # tree worse than it found it.
-RECORDER_REF="$("$OTOOL" -L "$RECORDER" | tail -n +2 | awk -v lib="$SHAREDLIB" '$1 ~ lib { print $1 }' | head -n 1)"
+RECORDER_REF="$("$OTOOL" -L "$RECORDER" | tail -n +2 | awk -v lib="$SHAREDLIB" '$1 ~ lib { print $1 }' | sed -n '1p')"
 if [[ -n "$RECORDER_REF" && "$RECORDER_REF" != "$CORE_DYLIB" ]]; then
 	echo "==> repairing the checkout's headless_record (install name was \"$RECORDER_REF\")"
 	"$INSTALL_NAME_TOOL" -change "$RECORDER_REF" "$CORE_DYLIB" "$RECORDER"
@@ -175,7 +175,10 @@ codesign --force --deep --sign - "$PUBLISH_APP"
 # sha256 above no longer matches by design. LC_UUID does not move: the linker
 # stamps it per build, and it survives codesigning. Comparing it is what proves
 # the SIGNED bundle still carries the core this run compiled, and nothing older.
-macho_uuid() { "$OTOOL" -l "$1" | awk '/LC_UUID/ { f = 1 } f && $1 == "uuid" { print $2; exit }'; }
+# Reads otool to EOF on purpose: an `exit` in the awk program closes the pipe
+# early and, under `set -o pipefail`, makes this function report 141 for the
+# one uuid it prints. `!d` keeps the first match without stopping the read.
+macho_uuid() { "$OTOOL" -l "$1" | awk '/LC_UUID/ { f = 1 } f && $1 == "uuid" && !d { print $2; d = 1 }'; }
 BUILT_UUID="$(macho_uuid "$CORE_DYLIB")"
 BUNDLED_UUID="$(macho_uuid "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB")"
 if [[ -z "$BUILT_UUID" ]]; then
@@ -224,7 +227,7 @@ ditto "$PUBLISH_APP" "$APP_STAGE/Mesen.app"
 cp -f "$RECORDER" "$APP_STAGE/headless_record"
 cp -f "$CORE_DYLIB" "$APP_STAGE/$SHAREDLIB"
 
-CURRENT_REF="$("$OTOOL" -L "$APP_STAGE/headless_record" | awk -v lib="$SHAREDLIB" '$1 ~ lib {print $1}' | head -n 1)"
+CURRENT_REF="$("$OTOOL" -L "$APP_STAGE/headless_record" | awk -v lib="$SHAREDLIB" '$1 ~ lib {print $1}' | sed -n '1p')"
 if [[ -n "$CURRENT_REF" && "$CURRENT_REF" != "@executable_path/$SHAREDLIB" ]]; then
 	"$INSTALL_NAME_TOOL" -change "$CURRENT_REF" "@executable_path/$SHAREDLIB" "$APP_STAGE/headless_record"
 fi

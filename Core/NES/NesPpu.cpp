@@ -908,6 +908,15 @@ template<class T> uint8_t NesPpu<T>::GetPixelColor()
 			}
 
 			if(spriteColor != 0) {
+				//ADR-0234 (issue #505): an opaque sprite pixel is this dot's
+				//contender for the output, and this is where the PPU decides what
+				//becomes of it. Only the HD recorder wants to know, so it is told
+				//through a hook that is empty for every other PPU - nothing below
+				//depends on it, and `_lastSprite` is not the answer to the same
+				//question (it is the highest-priority *active* shifter, so a
+				//transparent pixel leaves it set).
+				((T*)this)->NoteSpritePixel(spriteColor, backgroundColor, _spriteTiles[spriteIndex].BackgroundPriority);
+
 				if(_sprite0Visible && spriteIndex == 0 && spriteColor != 0 && spriteBgColor != 0 && _cycle != 256 && _mask.BackgroundEnabled && !_statusFlags.Sprite0Hit && _cycle > _minimumDrawSpriteStandardCycle) {
 					//"The hit condition is basically sprite zero is in range AND the first sprite output unit is outputting a non-zero pixel AND the background drawing unit is outputting a non-zero pixel."
 					//"Sprite zero hits do not register at x=255" (cycle 256)

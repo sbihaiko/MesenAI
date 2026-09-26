@@ -19,6 +19,10 @@ Covers:
     that lost its `#`) is carried instead of refused, the conditioned rule
     gets ADR-0189 §3's bare twin, and `verify` passes by default while
     `verify --strict` fails on that twin;
+  * the tag lines **the recorder writes** (#530): a pack carrying
+    `<options>automaticFallbackTiles` and ADR-0224's bare
+    `<bgPreservesBehindBgSprites>` imports, carries the tag into the key
+    source, re-emits it through `build`, and verifies;
   * an **index-keyed** (CHR ROM) round-trip: `<ver>` is raised to 103 and
     each `<tile>` key rewritten to the hex form `_index_token` emits, so
     the parsed key survives the round-trip even though the token *text*
@@ -346,6 +350,72 @@ def test_data_keyed(root: Path):
         fail(f"the rebuilt manifest's rules for the conditioned key are {conds}, expected ['', '[C1]']")
         return
     ok("the rebuilt manifest carries the conditioned rule and its bare fallback")
+
+
+# --- the tag lines a recorded pack carries (#530) ---------------------------
+
+# ADR-0224: `HdBehindBgSpriteRule::WriteHeaderTail` puts this line on every
+# pack `HdPackBuilder::SaveHdPack` writes, right after the `<options>` line —
+# which is where it sits here. It takes no arguments and is not a header tag,
+# so it travels through the import as a carried body line.
+BEHIND_BG_TAG = "<bgPreservesBehindBgSprites>"
+
+RECORDED_LINES = [
+    "<ver>100",
+    "<scale>2",
+    "<system>nes",
+    "<supportedRom>0000000000000000000000000000000000000000",
+    "<img>art.png",
+    "<img>art2.png",
+    "<condition>C1,spriteAtPosition,8,8," + HEX_B + "," + PAL_B,
+    "<background>bg.png,1,0,0,20",
+    "<options>automaticFallbackTiles",
+    BEHIND_BG_TAG,
+    "<tile>0," + HEX_A + "," + PAL_A + ",0,0,1,N",
+    "[C1]<tile>1," + HEX_B + "," + PAL_B + ",16,0,1,N",
+]
+RECORDED_FILES = {
+    "art.png": cell_png(2, 1, 2),
+    "art2.png": cell_png(2, 1, 2, tag=8),
+    "bg.png": cell_png(1, 1, 1),
+}
+
+
+def test_recorded_tag_lines_import(root: Path):
+    """Every tag line the recorder writes has to be one the import knows: a
+    refusal here is a refusal of every pack the recorder produces today, and
+    the tag it refused was ADR-0224's opt-in (#530)."""
+    try:
+        src, project, summary = imported_pack(root, "recorded", RECORDED_LINES, RECORDED_FILES)
+    except MI.PackError as e:
+        fail(f"the import refuses a pack the recorder itself writes: {e}")
+        return
+    if summary["strays"]:
+        fail(f"a recorded tag line was filed as a stray: {summary['strays']}")
+        return
+    ok("a pack carrying the recorder's own tag lines imports, none of them a stray")
+
+    key_source = project / "auto" / "textures" / "hires.txt"
+    if BEHIND_BG_TAG not in key_source.read_text(encoding="utf-8").splitlines():
+        fail("the key source did not carry the tag line verbatim")
+        return
+    ok("the key source carries the tag line verbatim")
+
+    rc, out = run_build(project)
+    if rc != 0:
+        fail(f"build on the imported project exited {rc}:\n{out}")
+        return
+    built = (project / "textures" / "hires.txt").read_text(encoding="utf-8")
+    if BEHIND_BG_TAG not in built.splitlines():
+        fail("the rebuilt manifest lost the tag line, so the rebuild is not the recording's pack")
+        return
+    ok("build re-emits the tag, so the rebuilt pack keeps its ADR-0224 opt-in")
+
+    rc, out = run_verify(src, project)
+    if rc != 0:
+        fail(f"verify failed on a pack carrying the tag ({rc}):\n{out}")
+        return
+    ok("verify round-trips a pack carrying the tag")
 
 
 # --- an index-keyed (CHR ROM) pack ------------------------------------------
@@ -1988,6 +2058,7 @@ def main():
         root = Path(tmp)
         test_png_codec(root)
         test_data_keyed(root)
+        test_recorded_tag_lines_import(root)
         test_index_keyed(root)
         test_refusals(root)
         test_split_pattern_round_trips(root)

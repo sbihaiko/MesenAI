@@ -240,6 +240,7 @@ void HdPackBuilder::AccumulateCoOccurrence()
 		_shapeFrames[shape]++;
 	}
 	std::memset(_frameTileSet, 0, sizeof(_frameTileSet));
+	std::memset(_frameCell.Named, 0, sizeof(_frameCell.Named));
 }
 
 //Measurement-only, and deliberately inert: when MESEN_TILENEARBY_EVIDENCE names
@@ -876,6 +877,9 @@ void HdPackBuilder::OnFrameEnd(const uint8_t buttons[2], const uint8_t* internal
 	_frameOam.Buttons[0] = buttons[0];
 	_frameOam.Buttons[1] = buttons[1];
 
+	//ADR-0236: keep this frame's cell grid past the reset below; by the time
+	//CaptureScreen runs (same call) the frame's own grid is gone.
+	_capturedCell = _frameCell;
 	//F5.4e: accumulate this frame's background-tile adjacency pairs into the
 	//co-occurrence graph (grid filled in ProcessBgPixel), then reset the grid.
 	AccumulateCoOccurrence();
@@ -1001,7 +1005,7 @@ void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t interna
 //and because HdBuilderPpu applies the OAM flip bits to TileData before calling
 //in, the left and right halves of a mirrored figure are distinct shapes and can
 //sit side by side on the sheet instead of collapsing into one cell.
-void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
+void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile, MesenSheets::SpriteDrawing drawing)
 {
 	if(!_captureScreens || _oamFrames.size() >= MesenSheets::kMaxSheetFrames || _frameOam.Entries.size() >= 128) {
 		return;
@@ -1015,7 +1019,39 @@ void HdPackBuilder::RecordSprite(uint8_t x, uint8_t y, HdPpuTileInfo& tile)
 	entry.X = x;
 	entry.Y = y;
 	entry.Palette = PaletteIdFor(tile.PaletteColors); //ADR-0222: same table as the grid's
+	//ADR-0234: none of these is part of entry identity (OamEntry::operator==
+	//compares shape, x, y and palette), so a frame that only changes how much
+	//of a hidden half shows still collapses into RepeatCount.
+	entry.BehindBg = drawing.BehindBg;
+	entry.VisiblePixels = drawing.VisiblePixels;
+	entry.HiddenPixels = drawing.HiddenPixels;
 	_frameOam.Entries.push_back(entry);
+}
+
+//#520: see HdPackBuilder.h. #470 stopped recording a fully transparent half at
+//all, which was right about the sheet and the `<tile>` rules - it has no art to
+//name - and wrong about the OAM stream, which ADR-0170 §1 segments and which
+//never promised that every cell it holds is drawable. Bubble Bobble draws every
+//figure as two 8x16 sprites with a blank upper half: four cells became two, the
+//cluster fell under ADR-0170 §2's kPoseMinTiles floor, and the ROM that used to
+//report 78 silhouettes and 395 tracks reported 0 of each (issue #520). The cell
+//comes back here, carrying kEmptyCell - the same "nothing here" shape the
+//loader's fallback tiles use - and nothing else in the pipeline changes:
+//BuildSpriteVocabulary skips it, so it is no vocabulary node and so reaches no
+//sheet; Accumulate and SpriteNearbyPalettes skip it; WriteOamStreamDump leaves
+//it out, because ADR-0222's dump exists to resolve a sprite to tile data and
+//palette and this half has neither. `_shapeTiles` never grows for it, so
+//`ShapeIdFor` still answers kEmptyCell for a blank tile and RecordSprite still
+//refuses it: #470's agreement between the registry and the rules is untouched.
+void HdPackBuilder::RecordSpritePlacement(uint8_t x, uint8_t y)
+{
+	if(!_captureScreens || _oamFrames.size() >= MesenSheets::kMaxSheetFrames || _frameOam.Entries.size() >= 128) {
+		return;
+	}
+	//The entry is built by the host-free helper the suite pins
+	//(MesenSheets::PlacementEntry), so the shape of what production records here
+	//is not a private detail of this file.
+	_frameOam.Entries.push_back(MesenSheets::PlacementEntry(x, y));
 }
 
 //De-duplication mirrors RecordGridFrame: a screen that holds still must not
@@ -1834,6 +1870,7 @@ void HdPackBuilder::CaptureScreen()
 	PendingScreen pending;
 	pending.BaseName = baseName;
 	pending.RelPath = relPath;
+	pending.CellRecord = HdCellKeyRecord::FromCellGrid(_capturedCell.Named[0], [this](int i) -> const HdTileKey& { return _capturedCell.Keys[i / 32][i % 32]; }, _isChrRam);
 	pending.HasGridFrame = _gridFrameLive && !_gridFrames.empty();
 	pending.GridFrameIndex = pending.HasGridFrame ? _gridFrames.size() - 1 : 0;
 	uint8_t fineX = pending.HasGridFrame ? _gridFrames.back().FineX : 0;
@@ -2016,6 +2053,7 @@ void HdPackBuilder::FinalizeScreenAnchors()
 
 		HdBackgroundInfo bg = {};
 		bg.Data = _hdData.BackgroundFileData[pending.BitmapIndex].get();
+		bg.CellRecord = std::move(pending.CellRecord);
 		bg.Brightness = 255;
 		bg.HorizontalScrollRatio = 0;
 		bg.VerticalScrollRatio = 0;
@@ -2277,6 +2315,7 @@ void HdPackBuilder::SaveHdPack()
 	for(int i = 0; i < HdPackData::BgLayerCount; i++) {
 		for(HdBackgroundInfo& bgInfo : _hdData.BackgroundsByPriority[i]) {
 			ss << bgInfo.ToString() << std::endl;
+			bgInfo.WriteCellRecord(ss); //ADR-0236: the line under its <background>
 		}
 	}
 

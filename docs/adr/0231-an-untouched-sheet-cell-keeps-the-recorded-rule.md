@@ -16,6 +16,11 @@
 
   This quote goes in the PR body too.
 - Date: 2026-09-24
+- Amended: 2026-09-25 (A4) — the first stroke on a cell swaps the whole 8×8
+  tile from the filtered page to the sheet cell, so it moves pixels the
+  artist never touched (1 painted pixel = 106 on-screen px; a rebuild
+  without painting = 0). Arms and method in "A4 follow-up" of
+  `docs/validation/smb3-ninjagaiden-deep-measurement-2026-09-25.md`.
 - Related: ADR-0183 (§4 the round-trip acceptance test), ADR-0153 (§4
   "Precedence when two sheets claim the same tile key", the `*.orig.png`
   twin), ADR-0178 (mirrored sprites and the `source` key), ADR-0212 (Reload
@@ -185,6 +190,26 @@ those pages reaches them, and *Reload Repainted Images* shows it in place
   bringing #447 back. `mep_figure import` already reports it: "N painted
   cell(s) will re-point a key in hires.txt at the next build — reopen the ROM
   to see them".
+- **A painted cell swaps the whole tile, not the pixels you touched.** The
+  first stroke takes the entire 8×8 cell from the filtered (xBRZ) recorded
+  art (`HdPackBuilder::GenerateHdTile`) to the nearest-neighbour art on the
+  sheet (`SheetRender::RenderTile`), so pixels of that cell the artist never
+  painted change with it. Measured on Super Mario Bros. 3 at 4×, one key,
+  against a control rebuild: **rebuild without painting** (the figure PNG
+  written back unchanged) **0 px** differ; **1 pixel** painted changes **106**
+  on-screen px (1 magenta + 105 untouched); one 4×4 block (16 px) changes
+  **116** (16 + 100); the whole cell (576 px) changes **598** (576 + 22).
+  The counts are the whole-tile swap's own arithmetic: 83 of the tile's px
+  are where the sheet's nearest-neighbour and the page's xBRZ disagree, and
+  22 are px the sheet cell does not draw at all. Arms, method and the
+  caveats: "A4 follow-up (2026-09-25)" in
+  `docs/validation/smb3-ninjagaiden-deep-measurement-2026-09-25.md`.
+- The 22 px a whole-cell stroke drops are, measured, px the sheet cell
+  leaves fully transparent (alpha 0) and the recorded page inks, so the
+  painted tile draws the backdrop there. Calling that page ink the scale
+  filter's soft edge is **attributed, not proven** — by analogy with
+  Excitebike's A4, and the opaque-count gap between the `chr/` and sheet
+  crops is 12, not 22. Do not restate it as measured.
 - The snapshot `textures/hires.recorded.txt` (about 369 KB on Castlevania)
   ships in the pack zip. The loader ignores it, since only `hires.txt` is a
   manifest.
@@ -212,4 +237,11 @@ with the ARTIST.md recipe. Full method in the validation log.
 - Painted arm (one figure cell painted magenta, then `mep_figure import`): 3
   rules point at the sheet crop and draw magenta, and 772 stay recorded. The
   t=40 screenshot differs from the recording by exactly the 848 painted
-  pixels.
+  pixels. **That equality is a property of that cell, not of the rule**
+  (amended 2026-09-25, A4): it held because the painted region covered every
+  pixel where the nearest-neighbour crop and the recorded xBRZ page
+  disagree. On a cell where it does not, the diff is larger than the paint
+  and includes px outside it — Super Mario Bros. 3's Mario head, one key:
+  **1 painted pixel, 106 on-screen px, 105 of them never touched**; the
+  whole cell, 598 (576 + 22). Arms and method: "A4 follow-up (2026-09-25)"
+  in `docs/validation/smb3-ninjagaiden-deep-measurement-2026-09-25.md`.

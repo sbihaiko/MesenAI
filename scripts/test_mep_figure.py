@@ -327,6 +327,93 @@ def test_an_owner_with_other_art_is_skipped_and_the_move_is_reported():
         check(not v["manifest_unchanged"], "verify reports the manifest change", json.dumps(v))
 
 
+RECORDED_PAGE = "chr/Chr_0.png"
+
+
+def _recorded_pack(root: Path, with_poses: bool) -> Path:
+    """`make_pack` with the key source replaced by a recording (ADR-0231): every
+    key is drawn from the recorder's own pattern page, so the built manifest
+    names no `sheets/` image at all and no key has a sheet owner (#498's shape).
+    The recorded crops carry colours no sheet cell has, standing in for the
+    scale filter the recorder's pages went through."""
+    root = make_pack(root, with_poses=with_poses)
+    textures = root / "textures"
+    keys = [_key(n) for n in SPRITE_NODES] + [(T._tiles()[0]["tile"], T._tiles()[0]["palette"])]
+    span = 8 * SCALE
+    page = sheet_repaint.Image(16 * span, 4 * span)
+    lines = ["<ver>109", f"<scale>{SCALE}", "<system>nes",
+             "<supportedRom>0000000000000000000000000000000000000000", f"<img>{RECORDED_PAGE}"]
+    for i, (tile, pal) in enumerate(keys):
+        x, y = (i % 16) * span, (i // 16) * span
+        for py in range(y, y + span):
+            for px in range(x, x + span):
+                page.set(px, py, (9 + i, 200, 30, 255))
+        lines.append(f"<tile>0,{tile},{pal},{x},{y},1,N,0,{i}")
+    (textures / "chr").mkdir(parents=True, exist_ok=True)
+    sheet_repaint.write_png(textures / RECORDED_PAGE, page)
+    (textures / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return root
+
+
+def _advice(text: str):
+    """The CLI's closing `next:` lines."""
+    return [ln for ln in text.splitlines() if ln.strip().startswith("next:")]
+
+
+def _cli_import(pack_dir: Path, out: Path) -> tuple:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = F.main(["import", str(pack_dir), str(out / "pose000-figure.png"), "--verify"])
+    return rc, buf.getvalue()
+
+
+def test_the_closing_advice_follows_what_the_import_did_to_hires_txt():
+    """#502, from #498's evidence: on a pack whose recording covers every key
+    (ADR-0231) the built manifest names no `sheets/` image, so `plan_targets`
+    found no owner and reported `moves=0`. The import still writes the source
+    cell, which re-points the key onto the sheet, and `--verify` said so in the
+    same run: the CLI closed with "next: ... Reload Repainted Images" under a
+    line reading "hires.txt changed by this import", and the artist who
+    followed the printed advice saw no change in game. The advice follows the
+    manifest fact — the one the same run measures — in both directions."""
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = _recorded_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recorded pack builds")
+        pack = E.Pack(pack_dir)
+        manifest = F.manifest_owners(pack)
+        check(not manifest[0], "no sheet owner: the manifest names only the recorded page (#498)",
+              str(manifest[0]))
+        sheet = next(s for s in pack.sheets if s.name == "sprites.png")
+        cell = next(c for c in sheet.cells if c.get("metatile") == 1)
+        check(F.plan_targets(pack, sheet, cell, SCALE, manifest)[2],
+              "the plan says the next build moves a key, so the reload cannot show the paint")
+        out = Path(td) / "figures"
+        doc = F.export_figure(pack, "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rc, text = _cli_import(pack_dir, out)
+        check(rc == 0 and "hires.txt changed by this import" in text,
+              "verify reports that the import changed hires.txt", text)
+        advice = _advice(text)
+        check(advice and all("reopen the ROM" in ln for ln in advice),
+              "so the closing advice is a ROM reopen, not a reload", text)
+
+    with tempfile.TemporaryDirectory() as td:
+        # The other direction: a pack whose built manifest draws the key from
+        # the sheet the import routes the paint to, so nothing moves (the #413
+        # shape) and the reload really does show the paint.
+        pack_dir = make_pack(Path(td) / "pack", with_poses=True)
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the plain pack builds")
+        out = Path(td) / "figures"
+        doc = F.export_figure(E.Pack(pack_dir), "pose000", out)
+        _paint_node(out, "pose000-figure", doc, 1, (255, 0, 255, 255))
+        rc, text = _cli_import(pack_dir, out)
+        check(rc == 0 and "hires.txt unchanged by this import" in text,
+              "verify reports that the import left hires.txt alone", text)
+        advice = _advice(text)
+        check(advice and all("Reload Repainted Images" in ln for ln in advice),
+              "so the closing advice is still the reload", text)
+
+
 def _k16(n):
     return {"tile": f"{0xA0 + n:032X}", "palette": "0F0F0F0F"}
 
@@ -633,6 +720,92 @@ def test_pixel_ownership_reads_a_mirrored_cell_in_the_figure_orientation():
         left, right = mirrored.get(0, 0), mirrored.get(4 * SCALE, 0)
         check(left == (0, 0, 0, 0) and right == magenta,
               "node 1 takes paint only where its tile is opaque; its transparent half stays a hole",
+              f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
+
+
+def _kit_row(pack_dir: Path, stem: str = "usr000") -> str:
+    """Give the pack a `usrNNN` sheet holding `spr000`'s cells: what a kit
+    copies into the pack copy it is built from (#498), so a figure's `home`
+    can name a row that is not the vocabulary."""
+    sheets = pack_dir / "textures" / "sheets"
+    doc = json.loads((sheets / "spr000.json").read_text(encoding="utf-8"))
+    doc["sheet"], doc["reference"], doc["composed"] = f"{stem}.png", f"{stem}.orig.png", True
+    (sheets / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+    for suffix in (".png", ".orig.png"):
+        shutil.copy2(sheets / f"spr000{suffix}", sheets / f"{stem}{suffix}")
+    return stem
+
+
+def _recorded_key_source(pack_dir: Path, nodes=SPRITE_NODES):
+    """Point every key's rule at a `chr/` page, which is what a recorder
+    writes. It is the state #498 is reachable from: with no `sheets/` rule for
+    a key and the untouched cell back to its `*.orig.png` twin, the built
+    manifest keeps the recorded rule (ADR-0231), so no sheet owns the key and
+    an import has only the cell the figure names to fall back to."""
+    sheets = pack_dir / "textures" / "sheets"
+    (pack_dir / "textures" / "chr").mkdir(parents=True, exist_ok=True)
+    sheet_repaint.write_png(pack_dir / "textures" / "chr" / "Chr_00.png",
+                            T._solid(16, (10, 20, 30, 255)))
+    lines = ["<ver>109", f"<scale>{SCALE}", "<img>chr/Chr_00.png"]
+    for node in nodes:
+        tile, pal = _key(node)
+        lines.append(f"<tile>0,{tile},{pal},0,0,1,N")
+    (pack_dir / "textures" / "hires.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_a_home_override_lands_on_the_kit_row_with_the_flip_and_the_mask_intact():
+    """#498 with #463 and ADR-0225 §3 in play: the cell a figure's `home` names
+    may be a flip-baked crop the first build un-bakes, and it may be overlapped
+    by another cell. The override moves the *return* target only - the paint
+    lands in the `usrNNN` cell, un-baked the way the build un-baked the crop
+    (ADR-0178, #463), and the shared pixels still go to whoever owns them."""
+    magenta = (255, 0, 255, 255)
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = make_pack(Path(td) / "pack", with_poses=False)
+        sheets = pack_dir / "textures" / "sheets"
+        # Node 1 in front, its true art opaque on the right half only, node 0
+        # behind and 4 px to its right - the fused, mirrored pair of the test
+        # above, so the cell `home` names is both flipped and half-owned.
+        _bake_recorded_mirror(pack_dir, 1, _two_halves(8, (0, 0, 0, 0), (200, 100, 50, 255)))
+        T._write_poses(sheets, {"version": 1, "unit": 8, "frames": 10, "poses": [
+            {"id": "pose000", "frames": 10, "size": [2, 1], "tiles": [
+                {"node": 1, "dx": 0, "dy": 0, "px": 0, "py": 0, "z": 0},
+                {"node": 0, "dx": 1, "dy": 0, "px": 4, "py": 0, "z": 1}]}]})
+        _kit_row(pack_dir)
+        _recorded_key_source(pack_dir)
+        row = json.loads((sheets / "usr000.json").read_text(encoding="utf-8"))
+        cell = next(c for c in row["cells"] if c.get("metatile") == 1)
+        out = Path(td) / "figures"
+        pose = E.Pack(pack_dir).poses.by_id("pose000")
+        doc = F.export_pose_rows(E.Pack(pack_dir), [[(pose, 0, 0)]], out, "usr000-figure",
+                                 home={"pose000": {1: ("usr000.json", cell["index"],
+                                                       cell["x"], cell["y"])}})
+        cells = {c["node"]: c for c in doc["cells"]}
+        # Node 0 is not named, so it keeps the art source it always had: the
+        # `sprites` vocabulary cell `_node_home` prefers (#498's cause).
+        check(cells[1]["sheet"] == "usr000.json" and cells[0]["sheet"] == "sprites.json",
+              "the home moves the node it names and leaves the others where they were",
+              json.dumps({n: c["sheet"] for n, c in cells.items()}))
+        check(cells[1].get("mirror") == ["H"], "and the flip the crop carries is still recorded",
+              json.dumps(cells[1].get("mirror")))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the recipe's first build")
+        fig = sheet_repaint.read_png(out / "usr000-figure.png")
+        for py in range(cells[1]["y"] * SCALE, (cells[1]["y"] + 8) * SCALE):
+            for px in range(cells[1]["x"] * SCALE, (cells[1]["x"] + 8) * SCALE):
+                if fig.get(px, py)[3]:
+                    fig.set(px, py, magenta)
+        sheet_repaint.write_png(out / "usr000-figure.png", fig)
+        # Node 1's box shares its left 4 columns with node 0's, so painting it
+        # paints both cells; only node 1's is a flip-baked crop, and only
+        # node 1's `home` is the kit row.
+        rep = F.import_figure(E.Pack(pack_dir), out / "usr000-figure.png")
+        check(rep["painted"] == 2 and "usr000.png" in rep["sheets"] and rep["unmirrored"] == 1,
+              "the paint is written to the kit row, un-mirrored (#463)", json.dumps(rep))
+        check(mep_build.main(["build", str(pack_dir), "--quiet"]) == 0, "the repainted pack builds")
+        drawn = _drawn_crop(pack_dir, 1)
+        left, right = drawn.get(0, 0), drawn.get(4 * SCALE, 0)
+        check(left == (0, 0, 0, 0) and right == magenta,
+              "the kit cell stores the paint un-baked and takes it only where it owns the pixel",
               f"left {left} right {right}; cells {json.dumps(doc['cells'])}")
 
 

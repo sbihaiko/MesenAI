@@ -241,6 +241,13 @@ def _recorded_done_steps(kit: dict) -> list:
         "says which cell is which tile. Leave every `.orig.png` in the kit - it is the "
         "untouched reference, and painting it is how your work becomes invisible.",
         "",
+        "With cells painted, the build prints one `report:` row per key of every cell you "
+        "painted (and of every cell `mep_add_cell.py` placed), naming the `<tile>` rule "
+        "that cell produced, its crop and the sheet it is on (#511). **That row is how you "
+        "confirm a repaint landed** - there is nothing to look up in the generated "
+        "`textures/hires.txt`. A row that says no `<tile>` means another crop already owns "
+        "the key, so that paint reaches nothing.",
+        "",
     ]
     if any(p.startswith("scene/") for p in paths):
         out.extend([
@@ -327,7 +334,11 @@ def render_markdown(kit: dict) -> str:
         "where you are standing. One exception: until you paint a sheet cell, its tile "
         "draws the recorded art (the filtered `chr/` page), so an unpainted rebuild "
         "shows exactly what was recorded (ADR-0231). The first stroke on a cell, or "
-        "painting it back to the original, moves that tile onto your sheet. Rebuild "
+        "painting it back to the original, moves that tile onto your sheet: the whole "
+        "8x8 tile switches from the recorded art to your sheet's "
+        "nearest-neighbour pixels, so the pixels of that cell you did not touch "
+        "change with it. Repaint a whole cell, not just the part you are changing. "
+        "Rebuild "
         "and reopen the ROM once, and after that the reload is enough. Painting a "
         "`chr/` page always reloads in place.",
         "",

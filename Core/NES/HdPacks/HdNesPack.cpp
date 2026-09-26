@@ -305,6 +305,14 @@ void HdNesPack<scale>::OnLineStart(HdPpuPixelInfo& lineFirstPixel, uint8_t y)
 
 			cfg.BgScrollX = (int32_t)(_scrollX * bgInfo.HorizontalScrollRatio);
 			cfg.BgScrollY = (int32_t)(scrollY * bgInfo.VerticalScrollRatio);
+			//ADR-0236 §2: a `<background>` whose record does not map 1:1 (a
+			//scroll ratio, so the PNG pixel this line's cells draw from moves
+			//with the line) rebuilds its one mask row here, per scanline. The
+			//1:1 case was built whole in PrepareCellGuards and is skipped.
+			HdCellGuard& guard = _bgCellGuard[layer * PriorityLevelsPerLayer + i];
+			if(guard.Record != nullptr && (bgInfo.HorizontalScrollRatio != 0 || bgInfo.VerticalScrollRatio != 0)) {
+				BuildCellMaskRows(guard, bgInfo, cfg.BgScrollX, cfg.BgScrollY, (int)(y >> 3), (int)(y >> 3));
+			}
 			if(y >= -cfg.BgScrollY && (y + bgInfo.Top + cfg.BgScrollY + 1) * scale <= bgInfo.Data->Height) {
 				cfg.BgMinX = -cfg.BgScrollX;
 				cfg.BgMaxX = bgInfo.Data->Width / scale - bgInfo.Left - cfg.BgScrollX - 1;
@@ -362,7 +370,54 @@ void HdNesPack<scale>::OnBeforeApplyFilter()
 		_activeBgCount[layer] = activeCount;
 	}
 
+	PrepareCellGuards();
 	ProcessAdditionalSprites();
+}
+
+//ADR-0236 §2 (F14.11): the guard's mask, once per frame, for every active
+//`<background>` that carries a record and maps it 1:1 - scroll ratio 0 and no
+//offset through Left/Top, which is every capture the recorder writes. The
+//per-scanline else-branch lives in OnLineStart.
+//
+//Every slot is written, including the inactive ones: a slot can hold a
+//different background on the next frame, and a guard left pointing at the
+//previous one's record would mask the new one's cells against the wrong
+//capture. Clearing is what makes "no record" mean "no record".
+template<uint32_t scale>
+void HdNesPack<scale>::PrepareCellGuards()
+{
+	for(int layer = 0; layer < 4; layer++) {
+		for(int i = 0; i < HdNesPack::PriorityLevelsPerLayer; i++) {
+			HdCellGuard& guard = _bgCellGuard[layer * HdNesPack::PriorityLevelsPerLayer + i];
+			guard.Record = nullptr;
+			if((uint32_t)i >= _activeBgCount[layer]) {
+				continue;
+			}
+			HdBgConfig& cfg = _bgConfig[layer * HdNesPack::PriorityLevelsPerLayer + i];
+			HdBackgroundInfo& bgInfo = _hdData->BackgroundsByPriority[cfg.BgPriority][cfg.BackgroundIndex];
+			if(!bgInfo.CellRecord.IsPresent()) {
+				continue;
+			}
+			guard.Record = &bgInfo.CellRecord;
+			if(bgInfo.HorizontalScrollRatio == 0 && bgInfo.VerticalScrollRatio == 0) {
+				BuildCellMaskRows(guard, bgInfo, 0, 0, 0, HdCellKeyRecord::Rows - 1);
+			}
+		}
+	}
+}
+
+//The two lookups `HdCellGuard::Build` is handed: the run time's own key at a
+//cell origin (the exact expression HdPackTileAtPositionCondition uses on its
+//target, so gate and guard read one pixel), and the fallback index the same
+//predicate takes from the pack.
+template<uint32_t scale>
+void HdNesPack<scale>::BuildCellMaskRows(HdCellGuard& guard, HdBackgroundInfo& bgInfo, int32_t scrollX, int32_t scrollY, int firstRow, int lastRow)
+{
+	auto liveKeyAt = [this](int row, int col) {
+		return HdCellKeyOf(_hdScreenInfo->ScreenTiles[((row << 3) << 8) | (col << 3)].Tile);
+	};
+	auto fallbackAt = [this](int32_t tileIndex) { return GetFallbackTile(tileIndex); };
+	guard.Build(firstRow, lastRow, (int32_t)bgInfo.Left, (int32_t)bgInfo.Top, scrollX, scrollY, liveKeyAt, fallbackAt);
 }
 
 template<uint32_t scale>
@@ -537,7 +592,20 @@ HdPackTileInfo* HdNesPack<scale>::GetMatchingTile(uint32_t x, uint32_t y, HdPpuT
 template<uint32_t scale>
 HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth)
 {
-	HdBgConfig bgConfig = _bgConfig[(int)priority];
+	//A reference, not a copy: the guard beside the config is what makes this
+	//function's per-pixel cost one bit test, and copying it per pixel to keep
+	//the old by-value form would be 30 words of memcpy for every pixel of every
+	//active layer.
+	HdBgConfig& bgConfig = _bgConfig[(int)priority];
+	const HdCellGuard& guard = _bgCellGuard[(int)priority];
+	if(guard.Record != nullptr && !guard.Allows(x, y)) {
+		//ADR-0236 §2: the live key at this cell's origin is not the one the
+		//capture recorded there, so this cell is a frame the capture was not
+		//taken from. Draw nothing: the `<tile>` rules below (or the ROM's own
+		//tiles) are what the pixel gets, exactly as if this line were absent
+		//for it.
+		return nullptr;
+	}
 	if((int32_t)x >= bgConfig.BgMinX && (int32_t)x <= bgConfig.BgMaxX) {
 		HdBackgroundInfo& bgInfo = _hdData->BackgroundsByPriority[bgConfig.BgPriority][bgConfig.BackgroundIndex];
 		switch(bgInfo.BlendMode) {

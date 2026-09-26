@@ -15,7 +15,8 @@
   decision **and** the go-ahead is quoted verbatim in this Status line
   **and** in the PR body. All three are true: `UI.Tests/Mep/MepSheetCellTests.cs`
   and `UI.HeadlessTests/CopyAsMepSheetCellTests.cs` cover the payload,
-  `scripts/test_mep_add_cell.py` (24 checks, wired into `make doc-checks`)
+  `scripts/test_mep_add_cell.py` (24 checks at acceptance, 32 since #503;
+  wired into `make doc-checks`)
   covers sheet choice, slot arithmetic, the two-file grow and the claim
   report, and PR #348 carries the quote. What shipped under answer 1 of
   *Corrections as shipped*, below, is narrower than the sentence the Decision
@@ -170,9 +171,10 @@ is the placer's to avoid, not the artist's: `mep_add_cell.py` sets the cell's
 `index` itself and carries `tiles[].index` through untouched, and the guide
 states which is which.
 
-### Corrections as shipped (2026-09-19, measured while implementing)
+### Corrections as shipped (2026-09-19, measured while implementing; extended
+2026-09-25)
 
-Three things the Decision above could not have known, and one it got wrong.
+Two things the Decision above could not have known, and three it got wrong.
 None changes an answer; each narrows what the answer means in code.
 
 - **The Sprite Viewer refusal is not implementable as written.** The Decision
@@ -197,6 +199,25 @@ None changes an answer; each narrows what the answer means in code.
   it was written** — it is corrected in `docs/remastering-a-game.md`, in the
   same change that this ADR's Consequences describe. The register now says so
   instead of claiming otherwise.
+- **`cells[]` is not always dense and row-major, so "the sheet is full" was
+  read wrong (2026-09-25, #503).** The Context above measures the 78 free-form
+  sheets of the 30 sweep packs and concludes that a sheet's free slots are the
+  tail of its last partial row; both the placer and the Context's "A free slot
+  is often not there" took that as a property of every recorded sidecar and
+  used `len(cells)` as the next ordinal's slot. The 16-game F14.2 retest of
+  2026-09-25 falsifies it: Mario Bros.'s `unsorted` holds 30 cells at `index`
+  0..29 while rows 1 and 2 carry only columns 0..2 of 5, so the slot after the
+  last cell, `x1,y55`, is cell 20's own — and it is at the same time the first
+  index of a row the lowest cell does not describe, so `mep_add_cell.py` grew
+  `unsorted.png` 184x256 -> 184x292 against a logical height of 64 and
+  `mep_build` exited 2 on the size it derives. **OPEN 3(a) is unchanged** —
+  the sheet still grows one row when it must, and both files with it — but
+  *when it must* is read from the `x,y` no cell claims, taken first in
+  row-major order, never from `len(cells)`. A hole in a row
+  `mep_build._logical_size` already describes is a free slot like any other
+  and grows nothing, which is what a sparse sidecar mostly has. The placer's
+  `grid()`/`free_slot()` carry it, and `docs/remastering-a-game.md` states the
+  same in *Find a free slot, do not guess one*.
 
 ### OPEN 1 — what lands on the clipboard
 

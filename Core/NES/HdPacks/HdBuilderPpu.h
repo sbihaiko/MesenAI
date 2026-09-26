@@ -27,6 +27,17 @@ private:
 	MesenSheets::ChrBankHashes _bankHashes;
 
 	NesSpriteInfoEx _exSpriteInfo[64] = {};
+	//ADR-0234: the sprite half each shifter of the current line belongs to, so
+	//a pixel DrawPixel puts on screen can be counted onto it. The PPU refills
+	//shifters 0.._spriteCount-1 in OAM order on every line, and _lastSprite
+	//always points inside that range, so a slot's entry is never stale.
+	OamFetchLatch::SpriteId _shifterSprite[64] = {};
+	//ADR-0234: the verdict for the dot being drawn, filled by NoteSpritePixel -
+	//the PPU's own report of the pixel, since `_lastSprite` is set on dots no
+	//sprite pixel reached. Reset next to `_lastSprite` in DrawPixel: a dot
+	//GetPixelColor returns early from never reports one, and the stale value
+	//would otherwise count a pixel nothing drew.
+	MesenSheets::SpritePixelVerdict _spritePixelVerdict;
 	NesTileInfoEx _previousTileEx = {};
 	NesTileInfoEx _currentTileEx = {};
 	NesTileInfoEx _nextTileEx = {};
@@ -57,7 +68,7 @@ public:
 		//their key a shape too, without placing the sprite a second time.
 		BaseMapper* mapper = _console->GetMapper();
 		_oamLatch.ForEachLatched(
-			[this](uint8_t x, uint8_t y, HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSprite(x, y, sprite); },
+			[this](uint8_t x, uint8_t y, HdPpuTileInfo& sprite, OamFetchLatch::Drawing drawing) { _hdPackBuilder->RecordSprite(x, y, sprite, drawing); },
 			[mapper](int32_t absoluteTileAddr, HdPpuTileInfo& sprite) {
 				if(!sprite.IsChrRamTile) {
 					sprite.TileIndex = absoluteTileAddr / 16;
@@ -65,7 +76,10 @@ public:
 				mapper->CopyChrTile((uint32_t)absoluteTileAddr & 0xFFFFFFF0, sprite.TileData);
 				ApplyFlips(sprite.TileData, sprite.HorizontalMirroring, sprite.VerticalMirroring);
 			},
-			[this](const HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSpriteBank(sprite); });
+			[this](const HdPpuTileInfo& sprite) { _hdPackBuilder->RecordSpriteBank(sprite); },
+			//#520: a blank half names no shape and reaches no sheet, but it is
+			//a half the PPU placed and the pose pass reads the placement.
+			[this](uint8_t x, uint8_t y) { _hdPackBuilder->RecordSpritePlacement(x, y); });
 		_oamLatch.Clear();
 		return nullptr;
 	}
@@ -83,6 +97,21 @@ public:
 		info.OffsetY = lineOffset;
 		info.LowByte = sprite.LowByte;
 		info.HighByte = sprite.HighByte;
+		//ADR-0234: the half this row belongs to, in the form the pixel tally
+		//looks it up by - the same identity SpriteFetchLog names a bank with.
+		_shifterSprite[_spriteIndex].X = sprite.SpriteX;
+		_shifterSprite[_spriteIndex].TileBase = (uint16_t)(tileAddr & 0xFFF0);
+		_shifterSprite[_spriteIndex].Top = OamFetchLatch::TopRowOf(_scanline + 1, tileAddr, verticalMirror);
+	}
+
+	//ADR-0234: NesPpu::GetPixelColor calls this on every dot an opaque sprite
+	//pixel contended for, and this is the whole of the recorder's interest in
+	//it - the verdict below is classified here, not there, so no line of the
+	//emulation path depends on the mask rule. Empty for every other PPU
+	//(BaseNesPpu's default), which is what keeps the call free.
+	__forceinline void NoteSpritePixel(uint8_t spriteColor, uint8_t backgroundColor, bool backgroundPriority)
+	{
+		_spritePixelVerdict = MesenSheets::SpritePixelVerdictOf(spriteColor, _emulatorSpritesEnabled, backgroundColor, backgroundPriority);
 	}
 
 	__forceinline void PushTileInformation()
@@ -123,6 +152,7 @@ public:
 			bool isChrRam = !mapper->HasChrRom();
 
 			_lastSprite = nullptr;
+			_spritePixelVerdict = {};
 			uint32_t color = GetPixelColor();
 			_currentOutputBuffer[(_scanline << 8) + _cycle - 1] = _paletteRam[color & 0x03 ? color : 0];
 			uint32_t backgroundColor = 0;
@@ -149,6 +179,22 @@ public:
 							break;
 						}
 					}
+				}
+
+				//ADR-0234: one dot of the tally, from the verdict the PPU just
+				//reported (NoteSpritePixel) - the sprite's colour either reached
+				//the output buffer, or an opaque background pixel in front of a
+				//behind-the-background sprite took it. SMB3's pipe mask is the
+				//case this measures: drawn in front of the piranha plant, behind
+				//the pipe, and so never once put on screen. Reaching this block
+				//proves nothing on its own: `_lastSprite` is the
+				//highest-priority *active* shifter, so a transparent pixel leaves
+				//it set, and so do the clip of the leftmost 8 columns and the
+				//pre-render line's leftovers - which report no verdict, and so
+				//count nothing.
+				MesenSheets::SpritePixelVerdict verdict = _spritePixelVerdict;
+				if((verdict.Drawn || verdict.Hidden) && OamFetchLatch::SpriteRowIsPlaced(_scanline)) {
+					_oamLatch.OnSpritePixel(_shifterSprite[spriteIndex].X, _shifterSprite[spriteIndex].TileBase, _shifterSprite[spriteIndex].Top, verdict);
 				}
 
 				//#479: row 0's sprites are pre-render leftovers no OAM entry
@@ -181,7 +227,11 @@ public:
 					mapper->CopyChrTile(lastTileEx.AbsoluteTileAddr & 0xFFFFFFF0, tile.TileData);
 
 					_hdPackBuilder->ProcessTile(_cycle - 1, _scanline, lastTileEx.AbsoluteTileAddr, tile, mapper, false, bankIdOf(lastTileEx.TileAddr), hasBgSprite);
-					_hdPackBuilder->ProcessBgPixel(_cycle - 1, _scanline, tile, (uint8_t)backgroundColor);
+					//ADR-0236: the same gate HdNesPpu::DrawPixel applies before
+					//it names a tile - the recorder's cell record has to say
+					//"the run time named no tile here" wherever the run time
+					//would, or the guard masks a column the capture does hold.
+					_hdPackBuilder->ProcessBgPixel(_cycle - 1, _scanline, tile, (uint8_t)backgroundColor, _cycle > _minimumDrawBgCycle);
 				}
 			}
 		} else {

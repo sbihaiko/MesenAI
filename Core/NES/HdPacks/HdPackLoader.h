@@ -41,6 +41,16 @@ private:
 	unordered_map<string, HdPackBitmapInfo*> _backgroundsByName;
 	unordered_map<string, string> _packFilesByLower;
 	bool _packFilesIndexed = false;
+	//ADR-0236 (F14.11): where the `<background>` line just parsed went, so a
+	//`<bgCellRecord>` on the very next line can attach its record - and nothing
+	//else can. The rule lives in HdCellRecordBinder (host-free, pinned by
+	//`make core-unit-tests`) rather than in two integers this class has to
+	//remember to clear: `Line()` is called once per line and is both the read
+	//and the clear, so the state that dropped every record in every recorded
+	//pack - clearing at the top of the very line the record is on - cannot be
+	//written by accident. Coordinates, not a pointer: the vector a slot lives in
+	//can reallocate, and a record on the wrong screen is worse than none.
+	HdCellRecordBinder _cellRecordBinder;
 
 	HdPackLoader();
 
@@ -75,6 +85,10 @@ private:
 	HdPackConditionOperator ParseConditionOperator(string& opString);
 	void ProcessTileTag(vector<string>& tokens, vector<HdPackCondition*> conditions);
 	void ProcessBackgroundTag(vector<string>& tokens, vector<HdPackCondition*> conditions);
+	//ADR-0236 (F14.11): the `<bgCellRecord>` line that follows its
+	//`<background>`. Unparseable or orphaned, it is logged and dropped - the
+	//`<background>` still loads and draws exactly as a pack without the record.
+	void ProcessCellRecordTag(const string& payload);
 	void ProcessAdditionTag(vector<string>& tokens);
 	void ProcessFallbackTag(vector<string>& tokens);
 	void ProcessOptionTag(vector<string>& tokens);

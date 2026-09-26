@@ -54,12 +54,28 @@ needs no local rules beyond the root DOX.
   time's key, where one index still serves every orientation.
 - **The shape registry and the `<tile>` rules name the same keys (#470,
   #471).** A fully transparent sprite tile (all 16 bytes zero,
-  `OamFetchLatch::IsFullyTransparent`) is recorded by neither: `DrawPixel`
-  writes no rule for it and `OamFetchLatch::ForEachLatched` hands no such
-  half, and no such extra bank of a half, to `RecordSprite` /
-  `RecordSpriteBank`, so a blank half is not an OAM entry either. The
+  `OamFetchLatch::IsFullyTransparent`) is recorded as a *shape* by neither:
+  `DrawPixel` writes no rule for it and `OamFetchLatch::ForEachLatched`
+  hands no such half, and no such extra bank of a half, to `RecordSprite` /
+  `RecordSpriteBank`. The
   loader never draws one (`HdNesPack::DrawTile` returns on
-  `IsFullyTransparent`). A background tile's shape is registered from every
+  `IsFullyTransparent`). **It is still a cell of the figure (#520):** the
+  same half reaches `RecordSpritePlacement` as a bare `(x, y)` and enters
+  the OAM stream with `Shape == kEmptyCell` (`MesenSheets::PlacementEntry`,
+  the one entry that function builds, so the suite can pin it host-free),
+  because ADR-0170 §1 segments
+  that stream and a game may draw a figure out of halves that are half
+  blank (Bubble Bobble's 8x16 bubbles). `OamFetchLatch::ForEachLatched`'s
+  four-callback overload is the seam: `emit`/`emitBank` name shapes,
+  `emitPlaced` gets exactly the blank halves. Nothing shape-keyed sees it:
+  `BuildSpriteVocabulary`, `Accumulate`, `SpriteNearbyPalettes` and
+  `WriteOamStreamDump` all skip `kEmptyCell`, `_shapeTiles` never grows for
+  it, so #470's registry ↔ rules agreement and ADR-0209's "no numbered
+  blank on a sheet" both still hold. ADR-0170 §2's floor counts the
+  **union of the cluster's cells**, not the sum of its two sets
+  (`MesenSheets::SegmentFrame`): `pc.Tiles` is a set of `(Node, Dx, Dy)` and
+  holds two entries for a cell two shapes were drawn on (ADR-0225 §1), and
+  an artless half on a cell some art already holds adds no cell either. A background tile's shape is registered from every
   scanline it was drawn on (`MesenSheets::LayOutGridRuns`), not only from a
   cell's origin scanline; the grid cell itself still takes the origin's
   tile, so a tile drawn only off it gets its cell on `unsorted.png` when no

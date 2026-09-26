@@ -173,7 +173,7 @@ echo "game=$GAME"
 CONSOLE=$(python3 -c "import re, sys; body = sys.stdin.read(); m = re.search(r'^###\s+Console\s*\n+(.*?)(?=\n###\s|\Z)', body, re.M | re.S); value = (m.group(1).strip() if m else '').splitlines(); print(value[0].strip() if value else '')" <<<"$BODY")
 echo "console=$CONSOLE"
 
-PACK_URL=$(printf '%s' "$BODY" | grep -oE 'https://[^ )]+' | head -n1 || true)
+PACK_URL=$(printf '%s' "$BODY" | grep -oE 'https://[^ )]+' | sed -n '1p' || true)
 if [ -z "$PACK_URL" ] && [ -z "$PACK_FILE" ]; then
   echo "error: no pack URL found in the issue body" >&2
   exit 1
@@ -730,7 +730,7 @@ with open(os.environ["PAYLOAD_PATH"], "w", encoding="utf-8") as handle:
 PYEOF
   COMMENT_ID=$(gh api "repos/$REPO/issues/$ISSUE/comments" --paginate \
     --jq ".[] | select((.user.login == \"$OWNER\") and (.body | test(\"<!-- mep-meta -->\"))) | .id" \
-    | head -n1)
+    | sed -n '1p')
   if [ -n "$COMMENT_ID" ]; then
     gh api --method PATCH "repos/$REPO/issues/comments/$COMMENT_ID" --input "$PAYLOAD_PATH" >/dev/null
     echo ":: mep-meta comment updated (id $COMMENT_ID)"

@@ -3,6 +3,7 @@
 #include <bitset>
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/SpriteFetchLog.h"
+#include "NES/HdPacks/TileSheetTypes.h"
 
 //Issue #450. The recorder's per-frame OAM snapshot (F9.5, ADR-0153 §2) used to
 //decode every sprite at frame end: OAM, PPUCTRL's sprite size and pattern
@@ -53,6 +54,36 @@ public:
 	//64 OAM entries, each at most two 8x8 halves.
 	static constexpr uint32_t SlotCount = 128;
 
+	//ADR-0234 (issue #505): which sprite half one fetched row belongs to, in
+	//the form the fetch log and the pixel tally both use - the half's x, its
+	//tile base (the 16-byte-aligned address of the half, quadrant included) and
+	//the screen line its top row is drawn on. The host keeps one of these per
+	//sprite shifter so a pixel it is about to put on screen can be counted
+	//onto the half that drew it without a second OAM read.
+	struct SpriteId
+	{
+		uint8_t X = 0;
+		uint16_t TileBase = 0;
+		int32_t Top = 0;
+	};
+
+	//ADR-0234: the screen line a fetched row's half starts on, from the line
+	//the row is drawn on and the PPU-space address the fetch read. The same
+	//arithmetic SpriteFetchLog::Record does, stated from the drawing end.
+	static int32_t TopRowOf(int32_t drawnLine, uint16_t patternAddr, bool verticalMirror)
+	{
+		uint8_t row = (uint8_t)(patternAddr & 0x07);
+		if(verticalMirror) {
+			row = 7 - row;
+		}
+		return drawnLine - row;
+	}
+
+	//ADR-0234: the per-frame drawing facts are MesenSheets::SpriteDrawing - the
+	//mask predicate needs the same three numbers the recorder stores, so the
+	//two sides name one type (TileSheetTypes.h).
+	using Drawing = MesenSheets::SpriteDrawing;
+
 	//One 8x8 half of an OAM entry, decoded with a given PPUCTRL.
 	struct Half
 	{
@@ -64,6 +95,9 @@ public:
 		uint8_t PaletteOffset = 0;
 		bool HorizontalMirror = false;
 		bool VerticalMirror = false;
+		//ADR-0234: OAM attribute bit 5, the priority bit - the half is drawn
+		//behind the background, so an opaque background pixel hides it.
+		bool BackgroundPriority = false;
 		//Set by the host's `resolve`: the absolute CHR address it decoded the
 		//half from, -1 when it does not say (then the row log always renames).
 		int32_t AbsoluteAddr = -1;
@@ -74,6 +108,7 @@ public:
 		_latched.reset();
 		_pending.reset();
 		_rows.Clear();
+		_tally.clear();
 	}
 
 	//#458: one sprite row as the PPU fetched it (StoreSpriteInformation), on
@@ -156,19 +191,31 @@ public:
 				_tileAddr[slot] = h.TileAddr;
 				_abs[slot] = h.AbsoluteAddr;
 				_ordinal[slot] = ordinal;
+				_behindBg[slot] = h.BackgroundPriority;
 				_pending.set(slot);
 			}
 		}
 	}
 
 	//The frame's latched halves in OAM order, top half first, each named by
-	//the bank of its topmost fetched row (#458). `rebank(absoluteAddr, tile)`
+	//the bank of its topmost fetched row (#458) and carrying the two facts
+	//ADR-0234 reads: its OAM priority bit and how many of its pixels this
+	//frame put on screen (`OnSpritePixel`). `rebank(absoluteAddr, tile)`
 	//re-reads a tile from another CHR address, keeping its palette and flips;
 	//`emitBank(tile)` receives the half as read from each further bank its
 	//rows came from - a key the <tile> rules carry, but not a second sprite.
 	//Neither receives a fully transparent tile (#470, IsFullyTransparent).
-	template<typename Emit, typename Rebank, typename EmitBank>
-	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
+	//
+	//#520: a blank half is still a half the PPU placed, and `emitPlaced` gets
+	//exactly those, as a bare (x, y) - no tile, because it has no art to name.
+	//It is not a sprite (it reaches `emit` never, so no shape is registered and
+	//no sheet cell or `<tile>` rule can exist for it) but it is a *placement*,
+	//and the pose pass reads the placements: Bubble Bobble draws every figure
+	//as two 8x16 sprites whose upper half is blank, so dropping the blank halves
+	//took two of a four-cell figure's cells and the cluster fell under
+	//ADR-0170 §2's floor - 78 silhouettes and 395 tracks became 0.
+	template<typename Emit, typename Rebank, typename EmitBank, typename EmitPlaced>
+	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank, EmitPlaced&& emitPlaced)
 	{
 		for(uint32_t slot = 0; slot < SlotCount; slot++) {
 			if(!_latched[slot]) {
@@ -182,7 +229,14 @@ public:
 			//#470: a blank half places no sprite, and a blank bank is no key;
 			//a drawn bank of a blank half still is (its rows made rules).
 			if(!IsFullyTransparent(tile)) {
-				emit(_x[slot], _y[slot], tile);
+				emit(_x[slot], _y[slot], tile, DrawingOf(slot));
+			} else {
+				//#520: the artless placement has no shape and no `<tile>` rule,
+				//so it is handed over as a position only - but it is a cell of
+				//the figure the game drew, and ADR-0234 leaves it without a
+				//drawing fact rather than calling it hidden (IsMaskEntry needs
+				//`hiddenPixels > 0`), which is what keeps it in the pose.
+				emitPlaced(_x[slot], _y[slot]);
 			}
 			for(size_t i = 1; i < _banks.size(); i++) {
 				HdPpuTileInfo other = tile;
@@ -194,14 +248,28 @@ public:
 		}
 	}
 
-	//The same, for a caller that only wants the halves as decoded (the row
-	//log is not consulted).
+	//The same, for a caller that wants the shapes and not the placements (#520):
+	//`emitPlaced` is a no-op, so a blank half is handed to nobody at all. What
+	//reaches `emit` and `emitBank` is unchanged - #470's filter still holds, and
+	//so does the bank pass.
+	template<typename Emit, typename Rebank, typename EmitBank>
+	void ForEachLatched(Emit&& emit, Rebank&& rebank, EmitBank&& emitBank)
+	{
+		ForEachLatched(emit, rebank, emitBank, [](uint8_t, uint8_t) {});
+	}
+
+	//The raw latch as the PPU filled it: no row log, no bank pass, and **no
+	//#470 filter** - a fully transparent half is emitted like any other, so a
+	//caller here sees a half the production path drops. Its only caller is
+	//`OamFetchLatchModel::RunFrame` (`scripts/core_unit_tests.cpp`), which reads
+	//back the halves of a modelled frame as fetched. Production goes through the
+	//4-arg overload above.
 	template<typename Emit>
 	void ForEachLatched(Emit&& emit)
 	{
 		for(uint32_t slot = 0; slot < SlotCount; slot++) {
 			if(_latched[slot]) {
-				emit(_x[slot], _y[slot], _tiles[slot]);
+				emit(_x[slot], _y[slot], _tiles[slot], DrawingOf(slot));
 			}
 		}
 	}
@@ -237,6 +305,9 @@ public:
 		h.PaletteOffset = ((attributes & 0x03) << 2) | 0x10;
 		h.HorizontalMirror = (attributes & 0x40) != 0;
 		h.VerticalMirror = (attributes & 0x80) != 0;
+		//ADR-0234: bit 5 is the one fact about this sprite's drawing the entry
+		//token never carried.
+		h.BackgroundPriority = (attributes & 0x20) != 0;
 		uint32_t halves = largeSprites ? 2 : 1;
 		uint32_t part = h.VerticalMirror ? (halves - 1 - half) : half;
 		h.TileAddr = largeSprites
@@ -257,7 +328,77 @@ public:
 		return scanline >= 1 && scanline <= 239;
 	}
 
+	//ADR-0234 (issue #505): one dot of this frame's picture, on which the half
+	//with this identity (x, tile base, top row - the fetch log's own identity)
+	//was the sprite pipeline's contender for the pixel.
+	//
+	//The host calls this from HdBuilderPpu::DrawPixel with the verdict for that
+	//dot (MesenSheets::SpritePixelVerdictOf, classified by
+	//HdBuilderPpu::NoteSpritePixel from what the PPU reported), and *only* for a
+	//dot that verdict says something
+	//about: a transparent sprite pixel, and the ones the clip, a hidden row or
+	//the pre-render line's leftovers leave to the background, are no contender
+	//and must not be reported - `_lastSprite` is set for them all the same. A
+	//verdict with neither flag is ignored here, so a caller that reports every
+	//pixel anyway changes nothing.
+	//
+	//Both counts are saturating and per frame (a half is 64 pixels wide, so
+	//neither can run away), and the frame's totals are what ForEachLatched
+	//hands over. The mask is the half that counted up `hidden` and never
+	//`visible`: SMB3's pipe mask contends for every one of its opaque pixels and
+	//loses all of them, while a half the 8-per-line limit kept off the screen
+	//contends for none.
+	void OnSpritePixel(uint8_t spriteX, uint16_t tileBase, int32_t top, MesenSheets::SpritePixelVerdict verdict)
+	{
+		if(!verdict.Drawn && !verdict.Hidden) {
+			return;
+		}
+		for(PixelTally& tally : _tally) {
+			if(tally.Id.X == spriteX && tally.Id.TileBase == tileBase && tally.Id.Top == top) {
+				uint8_t& count = verdict.Hidden ? tally.Hidden : tally.Visible;
+				if(count < 0xFF) {
+					count++;
+				}
+				return;
+			}
+		}
+		//A frame latches at most SlotCount halves, so the table cannot grow
+		//past that; the bound is stated rather than assumed.
+		if(_tally.size() < SlotCount) {
+			PixelTally fresh;
+			fresh.Id = SpriteId { spriteX, tileBase, top };
+			(verdict.Hidden ? fresh.Hidden : fresh.Visible) = 1;
+			_tally.push_back(fresh);
+		}
+	}
+
 private:
+	//The pixels this frame put on screen for one sprite half, and the ones it
+	//contended for and lost to the background. Two halves that share an
+	//identity (same x, tile and top row - twins the PPU drew on top of each
+	//other) share the counts, which can only make a mask look *less* hidden:
+	//the classification stays conservative.
+	struct PixelTally
+	{
+		SpriteId Id;
+		uint8_t Visible = 0;
+		uint8_t Hidden = 0;
+	};
+
+	Drawing DrawingOf(uint32_t slot) const
+	{
+		Drawing drawing;
+		drawing.BehindBg = _behindBg[slot];
+		for(const PixelTally& tally : _tally) {
+			if(tally.Id.X == _x[slot] && tally.Id.TileBase == (uint16_t)(_tileAddr[slot] & 0xFFF0) && tally.Id.Top == (int32_t)_y[slot]) {
+				drawing.VisiblePixels = tally.Visible;
+				drawing.HiddenPixels = tally.Hidden;
+				break;
+			}
+		}
+		return drawing;
+	}
+
 	HdPpuTileInfo _tiles[SlotCount] = {};
 	uint8_t _x[SlotCount] = {};
 	uint8_t _y[SlotCount] = {};
@@ -266,9 +407,13 @@ private:
 	int32_t _abs[SlotCount] = {};
 	//The half's rank among its twins on the row log (PR #476 review).
 	uint8_t _ordinal[SlotCount] = {};
+	//ADR-0234: the half's OAM priority bit, latched with the rest of the
+	//attributes.
+	bool _behindBg[SlotCount] = {};
 	std::bitset<SlotCount> _latched;
 	//Decoded at the last fetch, recorded once their row is drawn.
 	std::bitset<SlotCount> _pending;
 	SpriteFetchLog _rows;
 	std::vector<int32_t> _banks;
+	std::vector<PixelTally> _tally;
 };

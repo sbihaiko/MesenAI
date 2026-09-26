@@ -11,6 +11,7 @@
   named the action unaided, 5–55 s) and criterion 4 (one self-reported
   failure in 28). The original go-ahead, verbatim: *"quero usar o Fable,
   ajuste o que for necessário"*.
+  **Amended 2026-09-25 (criterion 1):** the action is findable *from the guide handed to the evaluator plus the visible labels*. The artist guide (`remastering-a-game.md`) names *Copy as MEP sheet cell* on purpose — a real artist should be told — so the F14.2 confirmation retest (`~/retest16/runs/retest16/COMPARE-confirm.md`, 4 of 5 DeepSeek runs) showed the old "without being told which" clause could not hold for anyone who reads the guide first. User go-ahead, verbatim: *"pode reescrever o C1 como você sugeriu"*. Criterion 1 now measures that the guide leads to the right menu line; a name reached from outside the sandbox (commit subjects, memory) is still contamination.
 - Date: 2026-09-19
 - Related: PRD Part A F12.2 (and any later Phase 12 slice whose stop rule is a cold-read of what the artist sees), ADR-0188 (an AI judgement is a proposal), ADR-0150 (Avalonia.Headless), C.5 logs (`docs/validation/c5-fable-artist-run-zelda-2026-09-14.md`, `…-mega-man-3-2026-09-14.md`), `docs/validation/f12.2-fable-panel-2026-09-19.md` (the Fable half, kept as the record of the two-game panel this amendment supersedes as the standing evaluator)
 - Amends: PRD Part A Phase 12 principle "a person who did not build it logs the cold-read rows"; F12.2's "human panel row"; the F12.2 mechanical-replay log's claim that the remaining half is only measurable on a person. Does **not** amend F9.18, S10.b, or ADR-0188 §5 (promotion stays gated).
@@ -111,8 +112,11 @@ context-menu entries at a selected tile, produced in setup (not on the
 evaluator's clock) and placed in the evaluator's sandbox as
 `tilemap-menu-labels.txt` — the menu a right-click would have shown. The
 same dump is pasted into the dated log's Binary and inputs header. The evaluator names the line it would click, in under two minutes
-from pause, without being told which. Picking *Copy tile (HD pack format)*
-is a fail of criterion 1, not a skip. Pointer-level discoverability
+from pause, reaching it from the guides in its sandbox and the dump — the
+guide naming the action is the intended path (amended 2026-09-25; the
+original clause was "without being told which"). Picking *Copy tile (HD pack
+format)* is a fail of criterion 1, not a skip; so is a name taken from
+outside the sandbox (commit subjects, memory), which is contamination. Pointer-level discoverability
 (hover vs click, grid off, flyout never appearing) stays **not
 evaluated** until a pointer harness exists; it is not recorded as a pass.
 
@@ -120,7 +124,7 @@ evaluated** until a pointer harness exists; it is not recorded as a pass.
 
 | # | Criterion | May the evaluator close it? |
 |---|---|---|
-| 1 | The action is findable from visible labels, under 2 min from pause | **yes**, on the label dump in §3. Pointer/AX discoverability is not evaluated |
+| 1 | The action is findable from the guide and the visible labels, under 2 min from pause | **yes**, on the label dump in §3. Pointer/AX discoverability is not evaluated |
 | 2 | Clipboard text is usable as-is | **yes** — paste into a scratch file; valid JSON, one line, no hand-edit of the object |
 | 3 | Paste-and-paint reaches the screen | **yes** — magenta (or any unmistakable recoulour) on the picked shape after `mep_build.py build` and a reopen; the mechanical replay remains the pixel oracle if the evaluator's pack is handed to it |
 | 4 | `hires.txt` never opened | **yes** — any read is a fail, with the clock time and the question it answered. This is the C.5 miss, now a gate |

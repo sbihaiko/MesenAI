@@ -38,6 +38,16 @@ import sheet_repaint  # noqa: E402 — Image/read_png/write_png, stdlib RGBA cod
 
 GUTTER = 1  # kSheetGutter (TileSheetTypes.h): the cell grid's transparent margin
 BAND_QUANTUM = 8  # ADR-0164 §1: sprite floors are quantised to 8 px (Y + 8)
+
+
+def cell_origin(cx: int, cy: int, unit: int) -> tuple:
+    """The 1x `x`/`y` a sidecar records for the cell at grid column/row
+    `(cx, cy)`. `compose_sheet` lays a sheet out with it and `mep_build` slices
+    the sheet back with it, so a caller that has to name a cell before it is
+    written (#498) reads the geometry from here instead of restating it."""
+    return (GUTTER + cx * (unit + GUTTER), GUTTER + cy * (unit + GUTTER))
+
+
 SHEET_VERSION = 1  # mep_build's ADR-0153 v1 schema
 #Below this alpha a source pixel does not cover what it is pasted over: a
 #sprite tile is mostly transparent, so pasting one opaquely would erase the
@@ -1524,13 +1534,12 @@ class Pack:
         cells = []
         for i, node in enumerate(nodes):
             cx, cy = coords[i]
-            x = (GUTTER + cx * (unit + GUTTER)) * scale
-            y = (GUTTER + cy * (unit + GUTTER)) * scale
-            canvas.paste(arts[i], x, y)
+            ox, oy = cell_origin(cx, cy, unit)
+            canvas.paste(arts[i], ox * scale, oy * scale)
             src = adj.sp.get(node) if sprite else adj.bg.get(node)
             cells.append({
                 "index": i,
-                "x": x // scale, "y": y // scale,
+                "x": ox, "y": oy,
                 "count": src.appearances if sprite and src else (src.count if src else 0),
                 "context": "" if sprite else (src.context if src else "scene"),
                 "metatile": node,
@@ -1539,10 +1548,10 @@ class Pack:
             })
         for j in range(extra):
             cx, cy = coords[len(nodes) + j]
+            ox, oy = cell_origin(cx, cy, unit)
             cells.append({
                 "index": len(nodes) + j,
-                "x": GUTTER + cx * (unit + GUTTER),
-                "y": GUTTER + cy * (unit + GUTTER),
+                "x": ox, "y": oy,
                 "count": 0, "context": "", "metatile": None, "label": "", "tiles": [],
             })
         return canvas, cells, columns, unit

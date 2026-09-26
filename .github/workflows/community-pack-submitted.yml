@@ -88,7 +88,7 @@ jobs:
           # The Issue Form renders the "Pack link" field as the first
           # http(s) URL in the structured body; grep it out defensively
           # rather than assuming a fixed line number.
-          PACK_URL=$(printf '%s\n' "$ISSUE_BODY" | grep -oE 'https?://[^[:space:]]+' | head -n1 || true)
+          PACK_URL=$(printf '%s\n' "$ISSUE_BODY" | grep -oE 'https?://[^[:space:]]+' | sed -n '1p' || true)
           if [ -z "$PACK_URL" ]; then
             echo "No pack URL found in the issue body (the 'Pack link' field)." >&2
             exit 1

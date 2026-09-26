@@ -5,7 +5,9 @@ ADR-0214 §4 hands criteria 3, 5 and 6 to a machine even though the run itself
 is cold: the evaluator says what it picked and pastes what the viewer copied,
 and this reads the result back. It never decides criterion 1 (whether the
 action was findable) or criterion 4 (`hires.txt` never opened) - those are
-facts about the evaluator and live in the log.
+facts about the evaluator and live in the log. This read of the manifest is
+the machine's; the evaluator's own criterion 5 comes from the build's
+`report:` row (#511), and the two must name the same `<tile>`.
 
 What it does, in the panel script's own step order:
 
@@ -101,6 +103,30 @@ def find_magenta(png, size=32):
                 if full:
                     hits.append((x, y))
     return hits
+
+
+def scan_sheets(pack):
+    """Every sheet the pack carries, the magenta squares on the ones that
+    decode, and the names of the ones that do not.
+
+    An unreadable sheet is a fact about the pack rather than a reason to stop:
+    a 0-byte `metatiles.png` is what `rm -rf metatiles.*` leaves behind (#510,
+    F14.2 retest16), and the panel still has everything the damage did not
+    touch. `read_png` refuses a file it cannot decode with `RepaintError` -
+    the same error the tool raises for a missing sheet - so that is the one
+    caught here; it is returned to the caller to report, never swallowed."""
+    found, unreadable = [], []
+    for sheet in sorted((pack / "textures/sheets").glob("*.png")):
+        if sheet.name.endswith(".orig.png"):
+            continue
+        try:
+            spots = find_magenta(sheet)
+        except (_repaint.RepaintError, OSError):
+            unreadable.append(sheet.name)
+            continue
+        for spot in spots:
+            found.append((sheet.name, spot))
+    return found, unreadable
 
 
 def read_roundtrip(hires, x, y, key):
@@ -246,12 +272,14 @@ def score(args):
     #Every sheet, not `misc.png`: the free-form sheet is `unsorted.png` in some
     #packs (Super Mario Bros. 3's is), and the copy action's target is decided by
     #the cell's own `context`, not by a filename this scorer can guess.
-    found = []
-    for sheet in sorted((pack / "textures/sheets").glob("*.png")):
-        if sheet.name.endswith(".orig.png"):
-            continue
-        for spot in find_magenta(sheet):
-            found.append((sheet.name, spot))
+    found, unreadable = scan_sheets(pack)
+    #Reported where they are found rather than through `report`, so the finding
+    #survives the ScoreError below: on a pack whose paint sat on the sheet that
+    #was destroyed, "no magenta square" is the damage, and a reader who is not
+    #told a sheet could not be read reads it as an evaluator who painted
+    #nothing.
+    for name in unreadable:
+        log("score", f"unreadable_sheet: {name}")
     report["magenta_blocks"] = found
     if not found:
         raise ScoreError(f"no 32x32 magenta square on any sheet of {pack} - the "

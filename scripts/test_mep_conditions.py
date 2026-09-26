@@ -393,6 +393,43 @@ def test_a_pre_f12_14_oam_dump_reports_no_tile_data():
               "the old 'vocabulary indexes' reason is retired")
 
 
+def test_an_adr_0234_oam_dump_carries_its_three_drawing_facts():
+    with tempfile.TemporaryDirectory() as td:
+        _oam(td, [f"K 5 {S} {PAL}", "P 2 " + PALS,
+                  "0 3 129 0 5,10,20,2,0,1,64 5,40,40,255,64,0,0",
+                  "1 1 0 0 5,12,20,2,3,1,61"])
+        stream = C.load_oam_stream(Path(td) / "oam.txt")
+        check(stream.has_visibility,
+              "a dump whose entries carry the ADR-0234 fields says so")
+        f0 = stream.frames[0]
+        check(f0.visible_pixels(f0.entries[0]) == 0 and f0.behind_bg(f0.entries[0])
+              and f0.hidden_pixels(f0.entries[0]) == 64,
+              "a mask contended for every pixel and lost all of them",
+              str(f0.entries[0]))
+        check(f0.visible_pixels(f0.entries[1]) == 64 and not f0.behind_bg(f0.entries[1])
+              and f0.hidden_pixels(f0.entries[1]) == 0,
+              "and a front sprite keeps its own counts and priority bit",
+              str(f0.entries[1]))
+        check(stream.frames[1].hidden_pixels(stream.frames[1].entries[0]) == 61,
+              "the counts are per entry, not per frame")
+
+
+def test_a_pre_adr_0234_oam_dump_reports_no_visibility():
+    with tempfile.TemporaryDirectory() as td:
+        _oam(td, [f"K 5 {S} {PAL}", "0 1 0 0 5,10,20,255"])
+        stream = C.load_oam_stream(Path(td) / "oam.txt")
+        entry = stream.frames[0].entries[0]
+        check(not stream.has_visibility,
+              "a dump written before ADR-0234 is not credited with the fields")
+        check(stream.frames[0].visible_pixels(entry) is None,
+              "an unrecorded pixel count reads as absent, never as a mask's 0")
+        check(stream.frames[0].behind_bg(entry) is None,
+              "and so does an unrecorded priority bit")
+        check(stream.frames[0].hidden_pixels(entry) is None,
+              "and an unrecorded hidden-pixel count: a 0 would read as a mask's")
+        check(len(entry) == 4, "the old four-field entry still parses whole")
+
+
 def test_oam_dumps_beside_a_route_are_read_with_it_not_as_routes():
     with tempfile.TemporaryDirectory() as td:
         _grid_with_t_at_cell(td, 2, 3)
@@ -753,6 +790,8 @@ def main():
         test_a_short_or_broken_m_line_is_dropped_not_half_read,
         test_an_oam_dump_parses_into_frames_shapes_and_palettes,
         test_a_pre_f12_14_oam_dump_reports_no_tile_data,
+        test_an_adr_0234_oam_dump_carries_its_three_drawing_facts,
+        test_a_pre_adr_0234_oam_dump_reports_no_visibility,
         test_oam_dumps_beside_a_route_are_read_with_it_not_as_routes,
         test_sprite_nearby_on_a_background_key_reads_the_joined_oam_frame,
         test_sprite_nearby_on_a_sprite_key_needs_no_join,

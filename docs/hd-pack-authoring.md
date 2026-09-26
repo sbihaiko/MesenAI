@@ -289,7 +289,14 @@ layer without recording audio manually:
    runs the MEP linter — the audio lint (fingerprints schema, resolved
    `<bgm>`/`<sfx>` targets, `loop` sanity) is part of that gate, so an
    invalid audio layer is a build failure, exactly like a broken texture
-   layer.
+   layer. It also prints one `report:` row per sheet cell you painted or
+   `mep_add_cell.py` placed, naming the `<tile>` rule that cell produced:
+   **that row is how a repaint is confirmed**, not a look inside
+   `textures/hires.txt` (#511, and *The report* in
+   [remastering-a-game.md](remastering-a-game.md)). The row names the key the
+   manifest is keyed by, so on a CHR ROM pack it carries the CHR index *and* —
+   beside it — the 32-hex pattern *Copy as MEP sheet cell* put on the
+   clipboard, which is the string the author matches the row against (#524).
 
 This is the seed-MIDI→OGG path: the seed MIDIs come from the game itself,
 are rendered once, and a human curates the result — no manual recording or

@@ -471,13 +471,22 @@ def export_figure(pack: E.Pack, figure_id: str, out_dir: Path, names=None) -> di
     return doc
 
 
-def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str = "") -> dict:
+def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str = "",
+                     home=None) -> dict:
     """The kit's Figures surface as one composed view (ADR-0225 §2):
     `rows` is `[[(pose, ox, oy), ...], ...]` — each pose drawn at pixel
     precision with its top-left at `(ox, oy)` 1x pixels. Same three files and
-    sidecar as `export_figure`, so `import` returns paint to the sprite
-    vocabulary cells the poses came from. Returns the sidecar, or None when
-    no sheet draws any tile of any pose."""
+    sidecar as `export_figure`. Returns the sidecar, or None when no sheet
+    draws any tile of any pose.
+
+    `home` is `{pose id: {node: (sidecar name, cell index, x, y)}}`: the cell
+    of the sheet the caller is laying these rows out on that holds that node
+    (#498). The kit passes it, so a painted figure comes back to the `usrNNN`
+    row — where ARTIST.md sends the artist — instead of the `sprites`
+    vocabulary cell the art was cut from, which no artist is meant to paint
+    (ADR-0153 §3). A node it does not name keeps that vocabulary cell, and
+    only the *return* target changes: the art still comes from `home_cell`,
+    since the caller's sheet is a kit file and not part of `pack`."""
     scale = pack.scale
     name = f"{stem}.png"
     N.require_asset_name(name, where=f"figure rows {stem}")
@@ -496,6 +505,9 @@ def export_pose_rows(pack: E.Pack, rows, out_dir: Path, stem: str, caption: str 
             unit = u
             for entry in placed:
                 homes[id(entry)] = home_cell(pack, figure, entry["node"])
+                target = (home or {}).get(pose.id, {}).get(entry["node"])
+                if target is not None:
+                    entry["sheet"], entry["index"], entry["sheetX"], entry["sheetY"] = target
             cells += placed
     if not cells:
         return None
@@ -853,7 +865,15 @@ def plan_targets(pack: E.Pack, sheet: E.Sheet, cell: dict, scale: int, manifest,
     path -> image), so an import decodes each twin once (#466 review)."""
     owners, index_keyed, version = manifest
     if not owners:
-        return True, [], False
+        # No rule of the built manifest draws a key this cell emits from a
+        # sheet, so the build has no `sheets/` image at all: ADR-0231 keeps a
+        # recorded key on the recorder's page, and a pack whose recording
+        # covers every key is exactly this (#498). Writing the source cell
+        # re-points those keys onto its crop — or adds the rule they never had
+        # — so the next build changes `hires.txt` and the in-place reload
+        # cannot show the paint (#502). The source is still the only place to
+        # write: there is no owner crop to route to.
+        return True, [], True
     by_name = {s.name: s for s in pack.sheets}
     cx, cy = int(cell["x"]), int(cell["y"])
     routes, self_owned, orphan, skipped = [], False, False, False
@@ -1131,6 +1151,20 @@ def cmd_export(args) -> int:
     return 0
 
 
+def _next_step(manifest_changed: bool) -> str:
+    """The CLI's closing line for an import that wrote a cell: what the artist
+    runs to see the paint. `manifest_changed` says whether the next build
+    changes `hires.txt` — the fact `verify` measures, by rebuilding the pack
+    with the sheets as they are and as they were. A key the rebuild moves onto
+    its crop is invisible to the in-place reload (ADR-0212), so the ROM is
+    reopened instead (ADR-0231: the first paint of an untouched cell is what
+    moves its key onto the sheet)."""
+    if manifest_changed:
+        return ("  next: python3 scripts/mep_build.py build <pack>, then reopen the ROM — the rebuild "
+                "changes hires.txt, which Reload Repainted Images cannot apply (ADR-0212)")
+    return "  next: python3 scripts/mep_build.py build <pack>, then HD Packs > Reload Repainted Images"
+
+
 def cmd_import(args) -> int:
     pack = _open_pack(args.pack)
     restore = figure_sheet_bytes(pack, Path(args.figure_png)) if args.verify else None
@@ -1158,8 +1192,6 @@ def cmd_import(args) -> int:
     if report["moves"]:
         print(f"  note: {report['moves']} painted cell(s) will re-point a key in hires.txt at the next "
               "build — reopen the ROM to see them; Reload Repainted Images cannot (ADR-0212)")
-    elif report["written"]:
-        print("  next: python3 scripts/mep_build.py build <pack>, then HD Packs > Reload Repainted Images")
     if args.verify:
         v = verify(Path(args.pack), restore, args.scratch)
         print(f"verify: build errors {v['errors']}, keys {v['keys_before']} -> {v['keys_after']}, "
@@ -1167,11 +1199,19 @@ def cmd_import(args) -> int:
         print("  hires.txt " + ("unchanged by this import: Reload Repainted Images shows it"
                                 if v["manifest_unchanged"] else
                                 "changed by this import: reopen the ROM to see it (ADR-0212)"))
+        if report["written"]:
+            # #502: `moves` is the plan's prediction, this is the measurement —
+            # verify rebuilt the pack with these sheets and with the ones the
+            # import replaced. Where they disagree the measured fact decides
+            # what the artist is told to do next.
+            print(_next_step(not v["manifest_unchanged"]))
         if v["drift_from_recording"]:
             print(f"  ({v['drift_from_recording']} key(s) differ between the recorded hires.txt and a "
                   "rebuild without this figure — the bootstrap-vs-sheets drift ADR-0172 accepted, "
                   "not this import's doing)")
         return 0 if v["ok"] else 1
+    if report["written"] and not report["moves"]:
+        print(_next_step(False))
     return 0
 
 

@@ -61,12 +61,15 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
+#include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/OamFetchLatch.h"
 #include "NES/HdPacks/SpriteFetchLog.h"
 #include "NES/HdPacks/HdPackErrorDedupe.h"
 #include "NES/HdPacks/HdTileSuppressionLog.h"
+#include "NES/HdPacks/HdCaptureCellGuard.h"
+#include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -5952,6 +5955,209 @@ namespace
 		}
 	}
 
+	//ADR-0228 (issue #504, SMB3's Piranha Plant): the whole figure is two columns
+	//of four, seen for 8 frames well inside the screen. Its left column turns up
+	//on its own for 5 frames at `columnX` only. At 248 the whole figure would
+	//start its right column at 256 - past the screen - so those frames never show
+	//the column standing alone; the screen edge cut it off.
+	PoseStats PoseEdgeClippedColumn(uint32_t columnX, Vocabulary& vocab)
+	{
+		std::vector<OamFrame> out;
+		uint32_t frameNumber = 0;
+		for(uint32_t f = 0; f < 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), 100, 100 + row * 8));
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), 108, 100 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		for(uint32_t f = 0; f < 5; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), columnX, 100 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		vocab = BuildSpriteVocabulary(out);
+		return BuildPoses(out, vocab);
+	}
+
+	void TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenIsNotAFusion()
+	{
+		//The control: the same two entries, but the column alone is seen at 200,
+		//where the whole figure would fit on screen. That is the column standing
+		//alone, so the whole stays a fusion of it.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeClippedColumn(200, vocab);
+			bool fused = stats.Poses.size() == 2 && stats.Poses[0].Tiles.size() == 8
+				&& stats.Poses[0].FusionOf.size() == 1 && stats.Poses[0].FusionOf[0] == 1;
+			Check(fused,
+				"BlocoP: ADR-0228 - a part seen alone inside the screen is still a fusion",
+				"poses=" + std::to_string(stats.Poses.size()) + " fusionOf="
+					+ std::to_string(stats.Poses.empty() ? 0 : stats.Poses[0].FusionOf.size()));
+		}
+		//The defect: at 248 every frame of the column alone has the figure's right
+		//column outside the visible screen, so there is no frame in which the
+		//recorder saw the column as a figure. The whole is one figure.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeClippedColumn(248, vocab);
+			Check(stats.Poses.size() == 2,
+				"BlocoP: ADR-0228 - the whole figure and its clipped column are two entries",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				return;
+			}
+			Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+				"BlocoP: ADR-0228 - a part only ever seen cut by the screen edge is not a second figure",
+				"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+					+ std::to_string(stats.Poses[0].FusionOf.size()));
+			Check(stats.Poses[1].FusionOf.empty(),
+				"BlocoP: ADR-0228 - the clipped column is not a fusion of anything either",
+				"fusionOf=" + std::to_string(stats.Poses[1].FusionOf.size()));
+		}
+	}
+
+	//ADR-0228 §6 (issue #504): a figure of two 4-tile blocks whose second sits
+	//`restDx`/`restDy` cells from the first - (1, 0) to the right of it, (-1, 0) to
+	//the left, (0, -4) above, (0, 4) below. The first block is an entry of its own,
+	//drawn `partFrames` times at (`partX`, `partY`) and `altFrames` times at
+	//(`altX`, `altY`); the second is an entry too when `restFrames` is non-zero,
+	//drawn at (`restX`, `restY`). The whole figure is drawn eight times with its
+	//own top-left at (100, 100), so it outranks both blocks.
+	PoseStats PoseEdgeHalves(Vocabulary& vocab, int32_t restDx, int32_t restDy, uint32_t partX, uint32_t partY, uint32_t partFrames, uint32_t restX, uint32_t restY, uint32_t restFrames, uint32_t altX = 0, uint32_t altY = 0, uint32_t altFrames = 0)
+	{
+		std::vector<OamFrame> out;
+		uint32_t frameNumber = 0;
+		uint32_t baseX = (uint32_t)(100 - std::min(0, restDx) * 8);
+		uint32_t baseY = (uint32_t)(100 - std::min(0, restDy) * 8);
+		for(uint32_t f = 0; f < 8; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), baseX, baseY + row * 8));
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), baseX + restDx * 8, baseY + restDy * 8 + row * 8));
+			}
+			out.push_back(frame);
+		}
+		const uint32_t appearances[2][3] = { { partX, partY, partFrames }, { altX, altY, altFrames } };
+		for(const uint32_t (&appearance)[3] : appearances) {
+			for(uint32_t f = 0; f < appearance[2]; f++) {
+				OamFrame frame;
+				frame.FrameNumber = frameNumber++;
+				for(uint32_t row = 0; row < 4; row++) {
+					frame.Entries.push_back(OamAt((ShapeId)(71 + row * 2), appearance[0], appearance[1] + row * 8));
+				}
+				out.push_back(frame);
+			}
+		}
+		for(uint32_t f = 0; f < restFrames; f++) {
+			OamFrame frame;
+			frame.FrameNumber = frameNumber++;
+			for(uint32_t row = 0; row < 4; row++) {
+				frame.Entries.push_back(OamAt((ShapeId)(72 + row * 2), restX, restY + row * 8));
+			}
+			out.push_back(frame);
+		}
+		vocab = BuildSpriteVocabulary(out);
+		return BuildPoses(out, vocab);
+	}
+
+	void TestAPoseWhosePartIsOnlyEverSeenClippedByAScreenEdgeIsNotAFusion()
+	{
+		//ADR-0228 §6: each of the four edges in turn. The first block is its own
+		//entry, seen only while the second lies past that edge - right of it at
+		//248 (the second would start at 256), left of it at 0 (the second would end
+		//before 0), above it at y=0, below it at y=208 (its last row is 240).
+		struct Edge
+		{
+			const char* Name;
+			int32_t RestDx;
+			int32_t RestDy;
+			uint32_t PartX;
+			uint32_t PartY;
+		};
+		const Edge edges[4] = {
+			{ "right", 1, 0, 248, 100 },
+			{ "left", -1, 0, 0, 100 },
+			{ "top", 0, -4, 100, 0 },
+			{ "bottom", 0, 4, 100, 208 },
+		};
+		for(const Edge& edge : edges) {
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, edge.RestDx, edge.RestDy, edge.PartX, edge.PartY, 5, 0, 0, 0);
+			Check(stats.Poses.size() == 2,
+				std::string("BlocoP: ADR-0228 - the figure and the block seen alone at the ") + edge.Name + " edge are two entries",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				continue;
+			}
+			Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+				std::string("BlocoP: ADR-0228 - a block only ever seen cut by the ") + edge.Name + " edge is not a second figure",
+				"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+					+ std::to_string(stats.Poses[0].FusionOf.size()));
+		}
+	}
+
+	void TestAPoseWhoseClippedPartIsAlsoSeenClearOfTheEdgesStaysAFusion()
+	{
+		//ADR-0228 §6 the other way: one appearance clear of all four edges is the
+		//block standing on its own, whatever the clipped ones were. The first case
+		//is the same fixture without that appearance.
+		{
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 5, 0, 0, 0);
+			Check(stats.Poses.size() == 2 && stats.Poses[0].FusionOf.empty(),
+				"BlocoP: ADR-0228 - the block seen only at the right edge is not a figure of its own",
+				"poses=" + std::to_string(stats.Poses.size()) + " fusionOf="
+					+ std::to_string(stats.Poses.empty() ? 0 : stats.Poses[0].FusionOf.size()));
+		}
+		{
+			//Three of its five appearances are the clipped ones; the other two are
+			//at x=180, where the figure's second block would have been on screen.
+			Vocabulary vocab;
+			PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 3, 0, 0, 0, 180, 100, 2);
+			Check(stats.Poses.size() == 2,
+				"BlocoP: ADR-0228 - a block seen both cut and clear is still one entry",
+				"poses=" + std::to_string(stats.Poses.size()));
+			if(stats.Poses.size() != 2) {
+				return;
+			}
+			Check(stats.Poses[0].FusionOf.size() == 1 && stats.Poses[0].FusionOf[0] == 1,
+				"BlocoP: ADR-0228 - one appearance clear of the edges keeps the whole a fusion of the block",
+				"fusionOf=" + std::to_string(stats.Poses[0].FusionOf.size()));
+		}
+	}
+
+	void TestATwoPartSplitWhoseHalvesAreBothEdgeClippedIsNotAFusion()
+	{
+		//ADR-0228 §2's two-part split, on the same fixture: the figure is the first
+		//block plus the second, and both are kept poses seen on their own. At the
+		//right edge only the first is drawn (the second would start at 256); at the
+		//left edge only the second (the first would end before 0). Neither half was
+		//ever seen as a figure, so this split is the screen's doing too.
+		Vocabulary vocab;
+		PoseStats stats = PoseEdgeHalves(vocab, 1, 0, 248, 100, 5, 0, 100, 5);
+		Check(stats.Poses.size() == 3,
+			"BlocoP: ADR-0228 - the figure and its two clipped halves are three entries",
+			"poses=" + std::to_string(stats.Poses.size()));
+		if(stats.Poses.size() != 3) {
+			return;
+		}
+		Check(stats.Poses[0].Tiles.size() == 8 && stats.Poses[0].FusionOf.empty(),
+			"BlocoP: ADR-0228 - a two-part split whose halves are both cut by a screen edge is not a fusion",
+			"tiles=" + std::to_string(stats.Poses[0].Tiles.size()) + " fusionOf="
+				+ std::to_string(stats.Poses[0].FusionOf.size()));
+		Check(stats.Poses[1].FusionOf.empty() && stats.Poses[2].FusionOf.empty(),
+			"BlocoP: ADR-0228 - neither clipped half is a fusion of anything",
+			"fusionOf=" + std::to_string(stats.Poses[1].FusionOf.size())
+				+ "/" + std::to_string(stats.Poses[2].FusionOf.size()));
+	}
+
 	void TestTwoCopiesOfOneShapeAreAFusionOfItWithItself()
 	{
 		//ADR-0177 §1: the two parts may be the same pose. Two identical
@@ -8886,12 +9092,14 @@ void TestOamStreamDumpIsSelfDescribing()
 		"ADR-0222: a palette word is interned on first sight as P <id> <8 hex>", lines.size() > 1 ? lines[1] : "");
 	Check(lines.size() > 2 && lines[2] == "K 0 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0F001020",
 		"ADR-0222: the second shape follows, in entry order", lines.size() > 2 ? lines[2] : "");
-	Check(lines.size() > 3 && lines[3] == "0 3 129 0 1,10,20,2 0,5,6,255",
-		"ADR-0222: <frame> <repeat> <port1> <port2> then <shape>,<x>,<y>,<pal>; kUnknownPalette has no P line",
+	Check(lines.size() > 3 && lines[3] == "0 3 129 0 1,10,20,2,0,0,0 0,5,6,255,0,0,0",
+		//ADR-0234 appends the entry's visible-pixel tally, its priority bit and
+		//the pixels the background hid.
+		"ADR-0222: <frame> <repeat> <port1> <port2> then <shape>,<x>,<y>,<pal>,<visible>,<bg>,<hidden>; kUnknownPalette has no P line",
 		lines.size() > 3 ? lines[3] : "");
 	Check(lines.size() > 4 && lines[4] == "P 1 0F112233",
 		"ADR-0222: a palette first seen on a later frame is interned before that frame's line", lines.size() > 4 ? lines[4] : "");
-	Check(lines.size() > 5 && lines[5] == "1 1 129 0 1,10,20,1",
+	Check(lines.size() > 5 && lines[5] == "1 1 129 0 1,10,20,1,0,0,0",
 		"ADR-0222: a shape already interned is not re-emitted", lines.size() > 5 ? lines[5] : "");
 }
 
@@ -9659,7 +9867,7 @@ void TestTheSheetQueueHoldsNoMapAndReleasesEachCanvasOnceWritten()
 //state - and reads back what the frame would hand to RecordSprite.
 namespace OamFetchLatchModel
 {
-	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; uint32_t Palette; };
+	struct Entry { uint8_t X; uint8_t Y; uint16_t TileAddr; uint32_t Palette; bool BehindBg = false; uint8_t VisiblePixels = 0; uint8_t HiddenPixels = 0; };
 
 	//The sprite palettes a line uses unless a test says otherwise, one per
 	//attribute palette index, in HdPpuTileInfo::PaletteColors form.
@@ -9713,8 +9921,8 @@ namespace OamFetchLatchModel
 				});
 		}
 		std::vector<Entry> out;
-		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) {
-			out.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors });
+		latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+			out.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
 		});
 		return out;
 	}
@@ -10052,7 +10260,10 @@ void TestALatchTileReadFromTwoBanksNamesBoth()
 namespace MmcLatchFrame
 {
 	struct Named { uint8_t X; uint8_t Y; int32_t Index; };
-	struct Result { std::vector<Named> Sprites; std::vector<int32_t> ExtraIndexes; };
+	//#520: `Placements` is what the 4-arg ForEachLatched hands `emitPlaced` - the
+	//artless halves, as bare positions. Production's 4th lambda is
+	//HdBuilderPpu's call to HdPackBuilder::RecordSpritePlacement.
+	struct Result { std::vector<Named> Sprites; std::vector<int32_t> ExtraIndexes; std::vector<std::pair<uint8_t, uint8_t>> Placements; };
 
 	//`rowsFetched` false leaves the row log empty - a sprite the 8-per-line
 	//limit hid on every row. The latch is reset to $FE at the start of every
@@ -10084,7 +10295,7 @@ namespace MmcLatchFrame
 		}
 		Result r;
 		latch.ForEachLatched(
-			[&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile) { r.Sprites.push_back({ x, y, tile.TileIndex }); },
+			[&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { r.Sprites.push_back({ x, y, tile.TileIndex }); },
 			[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 			[&](const HdPpuTileInfo& tile) { r.ExtraIndexes.push_back(tile.TileIndex); });
 		return r;
@@ -10140,7 +10351,7 @@ void TestTheOamLatchKeepsItsGuaranteesWithTheRowLog()
 	latch.OnSpriteFetch(99, true, OamFetchLatchModel::kSteadyPalettes, true, oam, false, 0x0000, resolve);
 	latch.OnSpriteFetch(100, true, OamFetchLatchModel::kSteadyPalettes, false, oam, false, 0x0000, resolve); //row 100 drawn
 	latch.ForEachLatched(
-		[&](uint8_t x, uint8_t, const HdPpuTileInfo& tile) { if(x == 48) { named = tile.TileIndex; } },
+		[&](uint8_t x, uint8_t, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { if(x == 48) { named = tile.TileIndex; } },
 		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 		[](const HdPpuTileInfo&) {});
 	Check(named == 0x0580, "#458: a cleared latch forgets the rows of the frame before (a state load clears it too)");
@@ -10223,7 +10434,7 @@ void TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites()
 	}
 	std::vector<int32_t> named, extra;
 	latch.ForEachLatched(
-		[&](uint8_t, uint8_t, const HdPpuTileInfo& tile) { named.push_back(tile.TileIndex); },
+		[&](uint8_t, uint8_t, const HdPpuTileInfo& tile, OamFetchLatch::Drawing) { named.push_back(tile.TileIndex); },
 		[](int32_t abs, HdPpuTileInfo& tile) { tile.TileIndex = abs / 16; },
 		[&](const HdPpuTileInfo& tile) { extra.push_back(tile.TileIndex); });
 	auto hex = [](const std::vector<int32_t>& v) {
@@ -10538,17 +10749,21 @@ namespace BlankHalfFrame
 			}
 		}
 		MmcLatchFrame::Result r;
+		//The 4-arg overload, exactly as HdBuilderPpu calls it (#520): `emit` and
+		//`emitBank` name shapes, `emitPlaced` names the bare position of a half
+		//whose art is blank.
 		latch.ForEachLatched(
-			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
+			[&](uint8_t sx, uint8_t sy, const HdPpuTileInfo& t, OamFetchLatch::Drawing) { r.Sprites.push_back({ sx, sy, t.TileIndex }); },
 			[](int32_t abs, HdPpuTileInfo& t) { t.TileIndex = abs / 16; Fill(t, abs); },
-			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); });
+			[&](const HdPpuTileInfo& t) { r.ExtraIndexes.push_back(t.TileIndex); },
+			[&](uint8_t sx, uint8_t sy) { r.Placements.push_back(std::make_pair(sx, sy)); });
 		return r;
 	}
 
 	std::string Describe(const MmcLatchFrame::Result& r)
 	{
 		std::string out = "named ";
-		char b[8];
+		char b[16];
 		for(const MmcLatchFrame::Named& n : r.Sprites) {
 			snprintf(b, sizeof(b), "%04X ", n.Index);
 			out += b;
@@ -10556,6 +10771,11 @@ namespace BlankHalfFrame
 		out += "extra ";
 		for(int32_t i : r.ExtraIndexes) {
 			snprintf(b, sizeof(b), "%04X ", i);
+			out += b;
+		}
+		out += "placed ";
+		for(const std::pair<uint8_t, uint8_t>& p : r.Placements) {
+			snprintf(b, sizeof(b), "(%u,%u) ", p.first, p.second);
 			out += b;
 		}
 		return out;
@@ -10581,6 +10801,182 @@ void TestAFullyTransparentSpriteHalfNeverReachesTheRegistry()
 	Check(OamFetchLatch::IsFullyTransparent(t), "#470: all-zero tile data is fully transparent");
 	t.TileData[15] = 0x01;
 	Check(!OamFetchLatch::IsFullyTransparent(t), "#470: one opaque pixel (a high-plane bit) is not");
+}
+
+//#520: the latch's own contract at the seam production uses. HdBuilderPpu's
+//OnBeforeSendFrame passes four callbacks - `emit` -> RecordSprite, `rebank`,
+//`emitBank` -> RecordSpriteBank and `emitPlaced` -> RecordSpritePlacement - and
+//the pose pass is only reached by the fourth. These two halves are the whole
+//rule: a blank half is handed to `emitPlaced` and to nobody else, an opaque half
+//to `emit` and never to `emitPlaced`.
+void TestTheLatchHandsABlankHalfToThePlacementCallbackAlone()
+{
+	using namespace BlankHalfFrame;
+	//Sprite 0 is $FD, read from bank $1C, which this model fills with zeroes;
+	//sprite 1 is the drawn neighbour $80 beside it.
+	MmcLatchFrame::Result r = Run(0xFD, 40, 0x1C, 0x1C, 0x1C);
+	Check(r.Placements.size() == 1 && r.Placements[0].first == 40 && r.Placements[0].second == 100,
+		"#520: the blank half reaches emitPlaced, at its own position and once", Describe(r));
+	Check(r.Sprites.size() == 1 && r.Sprites[0].Index == 0x0580,
+		"#520: and it never reaches emit, so it names no shape", Describe(r));
+
+	//The control: the same two halves with drawn art. The latch hands both to
+	//`emit`, and `emitPlaced` stays empty - the callback is not a second copy.
+	MmcLatchFrame::Result drawn = Run(0xFD, 40, 0x05, 0x05, 0x05);
+	Check(drawn.Sprites.size() == 2 && drawn.Placements.empty(),
+		"#520 control: an opaque half reaches emit only, never emitPlaced", Describe(drawn));
+}
+
+//#520: the figure a game places with a fully transparent half, as Bubble
+//Bobble's screen full of 8x16 bubbles is drawn - two sprites side by side, each
+//one art in its lower half and nothing in its upper one. `withBlanks` is the
+//difference #470 made to the OAM stream: the recorder stopped keeping the
+//artless halves, and these four cells became two.
+//
+//The artless half is written as the loader's own "nothing here" shape,
+//`kEmptyCell`, which every shape-keyed consumer already skips - it names no art
+//and can never be a sheet cell or a `<tile>` rule.
+std::vector<OamFrame> BlankHalfFigureFrames(uint32_t frames, bool withBlanks)
+{
+	std::vector<OamFrame> out;
+	for(uint32_t f = 0; f < frames; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		uint32_t x0 = 40 + f * 2;
+		uint32_t y0 = 90;
+		if(withBlanks) {
+			for(uint32_t i = 0; i < 2; i++) {
+				//The entry production records for a blank half (#520), so this
+				//fixture and RecordSpritePlacement cannot drift apart.
+				frame.Entries.push_back(MesenSheets::PlacementEntry((uint8_t)(x0 + i * 8), (uint8_t)y0));
+			}
+		}
+		for(uint32_t i = 0; i < 2; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = (uint8_t)(x0 + i * 8);
+			art.Y = (uint8_t)(y0 + 8);
+			frame.Entries.push_back(art);
+		}
+		out.push_back(frame);
+	}
+	return out;
+}
+
+void TestAPoseKeepsAFigureWhoseHalfIsArtless()
+{
+	std::vector<OamFrame> frames = BlankHalfFigureFrames(6, true);
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	Check(vocab.Entries.size() == 1, "#520: an artless placement names no vocabulary node",
+		"entries=" + std::to_string(vocab.Entries.size()));
+
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.PosesFound == 1,
+		"#520: the artless halves are the two cells that make the pair a figure, so it is a silhouette",
+		"found=" + std::to_string(stats.PosesFound) + " kept=" + std::to_string(stats.Poses.size()));
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 2,
+		"#520: the pose holds what the game draws - two tiles, never the transparent ones",
+		stats.Poses.empty() ? "no pose" : "tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	if(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 2) {
+		//ADR-0170 §1: normalised to the drawn figure's own top-left, so a
+		//transparent cell above it cannot move the origin.
+		Check(stats.Poses[0].Tiles[0].Dx == 0 && stats.Poses[0].Tiles[0].Dy == 0 &&
+			stats.Poses[0].Tiles[1].Dx == 1 && stats.Poses[0].Tiles[1].Dy == 0,
+			"#520: the pair reads left to right at dy 0, from the drawn top-left",
+			"t0=" + std::to_string(stats.Poses[0].Tiles[0].Dx) + "," + std::to_string(stats.Poses[0].Tiles[0].Dy) +
+			" t1=" + std::to_string(stats.Poses[0].Tiles[1].Dx) + "," + std::to_string(stats.Poses[0].Tiles[1].Dy));
+	}
+	Check(stats.Tracks > 0, "#520: the linker follows the figure, so the track count is not zero",
+		"tracks=" + std::to_string(stats.Tracks));
+
+	//The control is what #470's stream leaves behind: the same two drawn tiles
+	//with no placement above them. ADR-0170 §2's floor counts the tiles the
+	//cluster holds, and two cells are below it - so the figure disappears.
+	PoseStats alone = BuildPoses(BlankHalfFigureFrames(6, false), vocab);
+	Check(alone.PosesFound == 0, "#520 control: two cells alone stay under the kPoseMinTiles floor",
+		"found=" + std::to_string(alone.PosesFound));
+
+	//...and the floor still counts cells, not entries: four artless halves that
+	//all round onto one cell are one member, so they make no figure either.
+	std::vector<OamFrame> collapsed;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		for(uint32_t i = 0; i < 4; i++) {
+			OamEntry blank;
+			blank.Shape = kEmptyCell;
+			blank.X = (uint8_t)(40 + i);
+			blank.Y = (uint8_t)90;
+			frame.Entries.push_back(blank);
+		}
+		OamEntry art;
+		art.Shape = 7;
+		art.X = 40;
+		art.Y = 98;
+		frame.Entries.push_back(art);
+		collapsed.push_back(frame);
+	}
+	PoseStats degenerated = BuildPoses(collapsed, vocab);
+	Check(degenerated.PosesFound == 0,
+		"#520: artless cells that collapse onto one cell are one member, not four tiles",
+		"found=" + std::to_string(degenerated.PosesFound));
+}
+
+//#520 review: ADR-0170 §2's floor counts the *cells* a cluster holds, and a cell
+//is one cell however many entries sit on it - two shapes (ADR-0225 §1) or a
+//drawn tile and an artless half. Summing the drawn set and the artless set
+//counts such a cell twice, so a three-cell figure passes as a four-cell one and
+//transient junk gets a silhouette: the opposite of what the floor is for.
+void TestThePoseFloorCountsCellsNotTheSumOfTwoSets()
+{
+	//Three drawn cells, with the artless half the game placed stacked on one of
+	//them. Three cells, so no silhouette.
+	std::vector<OamFrame> stacked;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		const uint8_t xs[3] = { 40, 48, 40 };
+		const uint8_t ys[3] = { 90, 90, 98 };
+		for(int i = 0; i < 3; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = xs[i];
+			art.Y = ys[i];
+			frame.Entries.push_back(art);
+		}
+		frame.Entries.push_back(MesenSheets::PlacementEntry(40, 90));
+		stacked.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(stacked);
+	PoseStats s = BuildPoses(stacked, vocab);
+	Check(s.PosesFound == 0,
+		"#520: three drawn cells plus an artless half on one of them are three cells, under the floor",
+		"found=" + std::to_string(s.PosesFound) + " kept=" + std::to_string(s.Poses.size()));
+
+	//The union is still counted where the cells really are distinct: two drawn
+	//and two artless, none sharing a cell, are four.
+	std::vector<OamFrame> apart;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.RepeatCount = 1;
+		for(uint32_t i = 0; i < 2; i++) {
+			OamEntry art;
+			art.Shape = 7;
+			art.X = (uint8_t)(40 + i * 8);
+			art.Y = (uint8_t)98;
+			frame.Entries.push_back(art);
+			frame.Entries.push_back(MesenSheets::PlacementEntry((uint8_t)(40 + i * 8), 90));
+		}
+		apart.push_back(frame);
+	}
+	PoseStats u = BuildPoses(apart, vocab);
+	Check(u.PosesFound == 1 && u.Poses.size() == 1 && u.Poses[0].Tiles.size() == 2,
+		"#520 control: four distinct cells - two drawn, two artless - are a figure",
+		"found=" + std::to_string(u.PosesFound) + " tiles=" + std::to_string(u.Poses.empty() ? 0 : (int)u.Poses[0].Tiles.size()));
 }
 
 //ADR-0232 (#467): a fake $0000-$1FFF pattern space for the bank-id tests. `Write`
@@ -10718,8 +11114,1121 @@ void TestAPreFixChrRamTileIsRecognisedAndRehomed()
 	Check(!MesenSheets::RehomesOnRedraw(true, false, 0, 0x1234), "ADR-0232: a CHR ROM tile never moves");
 }
 
+//ADR-0234 (issue #505): a sprite the game draws behind the background only to
+//hide something in front of it - SMB3's piranha-plant pipe mask - is placed by
+//the game and never shows a pixel of its own. The recorder carries each OAM
+//entry's priority bit and how many of its pixels reached the screen, labels a
+//node that never did as a mask, and keeps it out of the pose clusters.
+namespace MaskSpriteFixture
+{
+	//The BlocoP OAM entry helper, with the three facts ADR-0234 adds. A behind
+	//background entry that drew pixels is a figure (ADR-0224); the default
+	//`hiddenPixels` of `visiblePixels` keeps that shape reading as one.
+	OamEntry OamWith(ShapeId shape, uint32_t x, uint32_t y, bool behindBg, uint8_t visiblePixels, int hiddenPixels = -1)
+	{
+		OamEntry entry;
+		entry.Shape = shape;
+		entry.X = (uint8_t)x;
+		entry.Y = (uint8_t)y;
+		entry.BehindBg = behindBg;
+		entry.VisiblePixels = visiblePixels;
+		entry.HiddenPixels = (uint8_t)(hiddenPixels < 0 ? visiblePixels : hiddenPixels);
+		return entry;
+	}
+
+	//One frame of a sprite, in the OamFetchLatchModel's timeline: the PPU state
+	//at cycle 257 of every visible line, so the latch decodes the half the way
+	//HdBuilderPpu does.
+	template<typename StateFor>
+	void DriveFrame(OamFetchLatch& latch, const uint8_t* oam, StateFor&& stateForLine)
+	{
+		using namespace OamFetchLatchModel;
+		latch.Clear();
+		for(int line = 0; line < 240; line++) {
+			LineState s = stateForLine(line);
+			latch.OnSpriteFetch(line, s.SpritesShownOnRow, s.PalettesOnRow, s.RenderingAt257, oam, s.LargeSprites, s.SpritePatternAddr,
+				[&](const OamFetchLatch::Half& h, HdPpuTileInfo& tile) {
+					tile.TileIndex = h.TileAddr;
+					tile.PaletteColors = s.PalettesAt257[(h.PaletteOffset >> 2) & 0x03];
+					return true;
+				});
+		}
+	}
+}
+
+void TestTheOamLatchCarriesThePriorityBitOfEachHalf()
+{
+	//OAM attribute bit 5 is the priority bit, and it is the one fact ADR-0234
+	//needs from the attribute byte: OamFetchLatch::Decode reads that byte for
+	//the palette id and the two flips and used to drop it.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //bit 5: behind the background
+	SetSprite(oam, 1, 20, 0x22, 0x00, 60); //in front of it
+	OamFetchLatch latch;
+	std::vector<Entry> got = RunFrame(latch, oam, [](int) { return LineState(); });
+	Check(got.size() == 2, "ADR-0234: both sprites of the line are latched", Describe(got));
+	if(got.size() != 2) {
+		return;
+	}
+	Check(got[0].BehindBg && !got[1].BehindBg,
+		"ADR-0234: the latch keeps the OAM priority bit of each half",
+		std::to_string(got[0].BehindBg ? 1 : 0) + "/" + std::to_string(got[1].BehindBg ? 1 : 0));
+}
+
+void TestTheOamLatchCountsOnlyThePixelsAHalfPutOnScreen()
+{
+	//The tally is the second half of the mask evidence, and the host reports
+	//it: HdBuilderPpu::DrawPixel calls OnSpritePixel with the PPU's own verdict
+	//for the dot (NesPpu::GetPixelColor), so a behind-background half that put
+	//pixels on screen counts them and one whose pixels an opaque background took
+	//counts those instead. The half is found by the same identity the fetch log
+	//uses (x, tile base, top row), so no OAM slot has to travel.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	SetSprite(oam, 1, 20, 0x22, 0x20, 56); //rows 21-28, behind it too
+	SetSprite(oam, 2, 60, 0x33, 0x00, 72); //rows 61-68, in front
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	//The frame's pixels: the first half was never output, the second was
+	//output 8 times, the front one 5 times.
+	for(int i = 0; i < 8; i++) {
+		latch.OnSpritePixel(56, 0x220, 21, MesenSheets::SpritePixelVerdictOf(1, true, 0, true));
+	}
+	for(int i = 0; i < 5; i++) {
+		latch.OnSpritePixel(72, 0x330, 61, MesenSheets::SpritePixelVerdictOf(1, true, 0, false));
+	}
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 3, "ADR-0234: the frame latches its three halves", Describe(counted));
+	if(counted.size() != 3) {
+		return;
+	}
+	Check(counted[0].VisiblePixels == 0,
+		"ADR-0234: a behind-background half the background always covered reports no visible pixel",
+		std::to_string(counted[0].VisiblePixels));
+	Check(counted[1].VisiblePixels == 8,
+		"ADR-0234: a half that put 8 pixels on screen reports 8",
+		std::to_string(counted[1].VisiblePixels));
+	Check(counted[2].VisiblePixels == 5 && !counted[2].BehindBg,
+		"ADR-0234: a front half that put 5 pixels on screen reports 5",
+		std::to_string(counted[2].VisiblePixels));
+}
+
+//ADR-0234 review round (issue #505): the tally's two facts are the PPU's
+//verdict for one dot, and neither of them is a read of `_lastSprite`. That
+//pointer is the highest-priority *active* shifter, opaque or not: a
+//transparent sprite pixel leaves it set, and so do the leftmost-8-columns clip
+//and the pre-render line's leftovers. Counting on it alone credits a sprite
+//with pixels it never contended for. NesPpu::GetPixelColor states the verdict
+//where it decides the pixel, from the three things it decides it with.
+namespace SpritePixelVerdictFixture
+{
+	std::string Describe(MesenSheets::SpritePixelVerdict v)
+	{
+		return std::string("drawn=") + (v.Drawn ? "1" : "0") + " hidden=" + (v.Hidden ? "1" : "0");
+	}
+
+	void CheckVerdict(const char* what, MesenSheets::SpritePixelVerdict v, bool drawn, bool hidden)
+	{
+		Check(v.Drawn == drawn && v.Hidden == hidden, what, Describe(v));
+	}
+}
+
+void TestASpritePixelOnlyCountsWhenThePpuPutsItOnScreen()
+{
+	using SpritePixelVerdictFixture::CheckVerdict;
+	CheckVerdict("ADR-0234: a transparent sprite pixel (colour 0) contends for nothing",
+		MesenSheets::SpritePixelVerdictOf(0, true, 3, true), false, false);
+	CheckVerdict("ADR-0234: a transparent sprite pixel over the backdrop contends for nothing either",
+		MesenSheets::SpritePixelVerdictOf(0, true, 0, false), false, false);
+	CheckVerdict("ADR-0234: an opaque behind-background pixel an opaque background covers is a hidden contender",
+		MesenSheets::SpritePixelVerdictOf(2, true, 3, true), false, true);
+	CheckVerdict("ADR-0234: over the backdrop a behind-background pixel is drawn",
+		MesenSheets::SpritePixelVerdictOf(2, true, 0, true), true, false);
+	CheckVerdict("ADR-0234: a front pixel is drawn over an opaque background",
+		MesenSheets::SpritePixelVerdictOf(2, true, 3, false), true, false);
+	CheckVerdict("ADR-0234: with the emulator's sprite layer off no sprite pixel is drawn or hidden",
+		MesenSheets::SpritePixelVerdictOf(2, false, 3, true), false, false);
+	//Over the backdrop the background-priority bit cannot hide anything, so
+	//the layer toggle is the only fact left that can keep the pixel off the
+	//screen - the case that tells it apart from the priority bit.
+	CheckVerdict("ADR-0234: a front pixel over the backdrop is not drawn with the sprite layer off",
+		MesenSheets::SpritePixelVerdictOf(2, false, 0, false), false, false);
+}
+
+void TestTheTallyIgnoresADotTheSpriteNeverContendedFor()
+{
+	//The same rule at the tally: HdBuilderPpu::DrawPixel runs for every pixel of
+	//the line, transparent ones included, so what it hands over is the verdict,
+	//not a boolean. A transparent dot is counted neither way, an opaque dot the
+	//background covered is the hidden count, an opaque dot that reached the
+	//buffer is the visible one.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	//Nine dots of one line: six transparent, one the sprite drew, two the
+	//background took.
+	for(int i = 0; i < 6; i++) {
+		latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(0, true, 3, true));
+	}
+	latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(4, true, 0, true));
+	for(int i = 0; i < 2; i++) {
+		latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(2, true, 3, true));
+	}
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 1, "ADR-0234: the frame latches its one half", Describe(counted));
+	if(counted.size() != 1) {
+		return;
+	}
+	Check(counted[0].VisiblePixels == 1,
+		"ADR-0234: only the dot the sprite put on screen is a visible pixel",
+		std::to_string(counted[0].VisiblePixels));
+	Check(counted[0].HiddenPixels == 2,
+		"ADR-0234: the dots the background took are the hidden count, a transparent dot is neither",
+		std::to_string(counted[0].HiddenPixels));
+}
+
+void TestADotThatContendedForNothingCannotPushOutOneThatDid()
+{
+	//The guard `OnSpritePixel` opens with is what keeps the tally a table of
+	//contenders: a verdict with neither flag is not a dot this half contended
+	//for, and taking a slot for it would let 128 dots nothing drew evict the
+	//handful that did - the table is bounded by SlotCount, not by the frame's
+	//pixels. Issue #520 makes this reachable from outside: a composition
+	//placement (kEmptyCell, no vocabulary node, no drawing facts) is an
+	//appearance nothing is known about, and reporting it must change nothing.
+	using namespace OamFetchLatchModel;
+	uint8_t oam[256];
+	ClearOam(oam);
+	SetSprite(oam, 0, 20, 0x11, 0x20, 40); //rows 21-28, behind the background
+	OamFetchLatch latch;
+	MaskSpriteFixture::DriveFrame(latch, oam, [](int) { return LineState(); });
+	MesenSheets::SpritePixelVerdict nothing = MesenSheets::SpritePixelVerdictOf(0, true, 3, true);
+	for(uint32_t i = 0; i < OamFetchLatch::SlotCount; i++) {
+		latch.OnSpritePixel((uint8_t)i, (uint16_t)(0x1000 + i * 16), (int32_t)i, nothing);
+	}
+	latch.OnSpritePixel(40, 0x110, 21, MesenSheets::SpritePixelVerdictOf(4, true, 0, true));
+	std::vector<Entry> counted;
+	latch.ForEachLatched([&](uint8_t x, uint8_t y, const HdPpuTileInfo& tile, OamFetchLatch::Drawing drawing) {
+		counted.push_back({ x, y, (uint16_t)tile.TileIndex, tile.PaletteColors, drawing.BehindBg, drawing.VisiblePixels, drawing.HiddenPixels });
+	});
+	Check(counted.size() == 1 && counted[0].VisiblePixels == 1,
+		"ADR-0234: a slot of the tally is a dot the sprite contended for, not a dot nothing drew",
+		Describe(counted));
+}
+
+void TestTheOamDumpCarriesThePixelTallyAndThePriorityBit()
+{
+	//ADR-0234 amends ADR-0222's entry token: two fields are appended, so a
+	//reader written for the four-field form still resolves shape, x, y and
+	//palette out of the same token.
+	std::vector<OamFrame> frames;
+	OamFrame frame;
+	frame.FrameNumber = 0;
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 24, 40, true, 0));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 32, 40, false, 12));
+	frames.push_back(frame);
+	std::vector<SheetTileKey> shapes(5);
+	std::vector<uint32_t> palettes(2, 0xFF0F3627);
+	std::ostringstream out;
+	MesenSheets::WriteOamStreamDump(out, frames, shapes, palettes);
+	std::string frameLine;
+	std::istringstream in(out.str());
+	std::string line;
+	while(std::getline(in, line)) {
+		if(!line.empty() && line[0] >= '0' && line[0] <= '9') {
+			frameLine = line;
+		}
+	}
+	//The whole line, so the field count is pinned: a reader that stops at the
+	//six-field form a review round found this test accepting would read the
+	//hidden count as the next entry.
+	Check(frameLine == "0 1 0 0 3,24,40,255,0,1,0 4,32,40,255,12,0,12",
+		"ADR-0234: every entry token carries all seven fields, tally and priority bit",
+		frameLine);
+}
+
+void TestAMaskNodeIsLabelledAndKeptOutOfThePoseClusters()
+{
+	//The plant: a four-tile figure plus one tile at a fixed spot the game draws
+	//behind the background to hide the stem. The mask never draws a pixel, so
+	//it is not part of the figure - the pose that reaches the artist is the
+	//plant's own four tiles.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	int32_t figureNode = SpriteNodeOf(vocab, 2);
+	Check(maskNode >= 0 && (size_t)maskNode < mask.size() && mask[maskNode] == 1,
+		"ADR-0234: a behind-background node that never drew a pixel is labelled a mask",
+		"node=" + std::to_string(maskNode));
+	Check(figureNode >= 0 && (size_t)figureNode < mask.size() && mask[figureNode] == 0,
+		"ADR-0234: a figure that drew pixels is not labelled",
+		"node=" + std::to_string(figureNode));
+
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1, "ADR-0234: the mask leaves one figure behind",
+		"poses=" + std::to_string(stats.Poses.size()));
+	if(stats.Poses.size() != 1) {
+		return;
+	}
+	Check(!PoseHoldsNode(stats.Poses[0], maskNode),
+		"ADR-0234: the mask tile is not a member of the pose",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	Check(PoseHoldsNode(stats.Poses[0], figureNode) && stats.Poses[0].Tiles.size() == 4,
+		"ADR-0234: the figure keeps its own four tiles",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	//Nothing is deleted: the shape is still in the vocabulary every sheet is
+	//built from (ADR-0229, ADR-0173's label-don't-delete rule).
+	Check(maskNode >= 0, "ADR-0234: the mask shape stays in the sprite vocabulary");
+}
+
+//The four-tile figure the ADR-0234 fixtures hang a mask on, one frame of it.
+void AddFigure(OamFrame& frame, int32_t top)
+{
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+	frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+}
+
+void TestATileHiddenForTheWholeLifeOfAPoseLeavesIt()
+{
+	//The pipe mask proper: a fifth tile the game draws behind the background,
+	//hidden in every frame the figure is seen in. The pose the artist gets is
+	//the figure's own four tiles, and the mask's shape stays in the vocabulary
+	//and in the sheets (ADR-0173: label, never delete).
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		AddFigure(frame, top);
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1, "ADR-0234: the figure survives the mask",
+		"poses=" + std::to_string(stats.Poses.size()));
+	if(stats.Poses.size() != 1) {
+		return;
+	}
+	Check(stats.Poses[0].Tiles.size() == 4 && !PoseHoldsNode(stats.Poses[0], maskNode),
+		"ADR-0234: a tile the background hid for the pose's whole life leaves it",
+		"tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
+	Check(maskNode >= 0, "ADR-0234: the shape stays in the vocabulary all the same");
+}
+
+void TestATileThatShowsInOneFrameOfAPoseStays()
+{
+	//The second E2E's lesson, measured on Punch-Out!!: a half that is behind
+	//the background in every appearance and hidden in most of them is still
+	//art the artist can see, and a rule that drops it per frame cuts one
+	//figure into a variant per occlusion (34 poses became 101). The verdict is
+	//therefore a property of the pose, not of the frame: the tile stays unless
+	//it never once showed in any frame the pose was seen in.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		AddFigure(frame, top);
+		//Behind the background throughout, and it shows for two of the frames.
+		bool shows = f >= 6;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true,
+			(uint8_t)(shows ? 64 : 0), shows ? 0 : 64));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 5,
+		"ADR-0234: one visible frame keeps the tile in the pose",
+		"poses=" + std::to_string(stats.Poses.size()) +
+			(stats.Poses.empty() ? "" : " tiles=" + std::to_string(stats.Poses[0].Tiles.size())));
+	//The label and its counts still say what the game does with the shape, so
+	//a reader can see that this pose's fifth tile is mostly hidden.
+	SpriteAdjacencyStats adj = AccumulateSpriteAdjacency(frames, vocab);
+	Check(maskNode >= 0 && (size_t)maskNode < adj.Mask.size() && adj.Mask[maskNode] == 1,
+		"ADR-0234: the shape is still labelled as one drawn as a mask",
+		"node=" + std::to_string(maskNode));
+	Check((size_t)maskNode < adj.MaskAppearances.size() && adj.MaskAppearances[maskNode] == 6
+		&& adj.BehindBgAppearances[maskNode] == 8 && adj.VisiblePixels[maskNode] == 128
+		&& adj.HiddenPixels[maskNode] == 384,
+		"ADR-0234: and the sidecar carries the counts the verdict came from",
+		maskNode >= 0 ? ("mask=" + std::to_string(adj.MaskAppearances[maskNode]) + " behind=" +
+			std::to_string(adj.BehindBgAppearances[maskNode]) + " visible=" +
+			std::to_string(adj.VisiblePixels[maskNode]) + " hidden=" +
+			std::to_string(adj.HiddenPixels[maskNode])) : "no node");
+}
+
+void TestABehindBackgroundSpriteThePpuNeverDrewIsNotAMask()
+{
+	//The second E2E of ADR-0234: Punch-Out!! records 463 sprite nodes and 78
+	//of them are behind the background with no pixel shown - its fighters are
+	//drawn in two passes and the PPU's 8-per-line limit leaves most of the
+	//second pass unfetched. A rule that reads "behind the background and no
+	//pixel shown" calls all 78 masks and its poses go from 34 to 101.
+	//
+	//A half that never contended for a pixel was not hidden by the background:
+	//it is a sprite the game placed and the PPU dropped, which ADR-0153 §2
+	//records on purpose. The hidden-pixel count is what tells the two apart.
+	//
+	//Issue #520 reads the same clause from the other side: an appearance that
+	//carries no drawing facts at all - the composition placements it hands
+	//SegmentFrame - is `behindBg, 0, 0` too, and this test is what pins that it
+	//is a tile of the figure rather than a mask to be dropped.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 8; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)(f % 2) * 8;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 64));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 64));
+		//Behind the background, and the PPU never gave it a pixel to lose.
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 100, top + 16, true, 0, 0));
+		frames.push_back(frame);
+	}
+
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	int32_t node = SpriteNodeOf(vocab, 9);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a behind-background half the PPU never drew is not a mask",
+		"node=" + std::to_string(node));
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 5,
+		"ADR-0234: and it stays a tile of the figure the game placed",
+		"poses=" + std::to_string(stats.Poses.size()) +
+			(stats.Poses.empty() ? "" : " tiles=" + std::to_string(stats.Poses[0].Tiles.size())));
+}
+
+void TestABehindBackgroundSpriteThatDrewIsStillPartOfAFigure()
+{
+	//ADR-0224's measured case: Punch-Out!!'s behind-background sprites are
+	//real figure halves that show over colour-0 canvas. The priority bit alone
+	//must never cost a figure its tiles.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, true, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, true, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 40));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 40));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t node = SpriteNodeOf(vocab, 2);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a behind-background sprite that drew pixels is not a mask",
+		"node=" + std::to_string(node));
+	PoseStats stats = BuildPoses(frames, vocab);
+	Check(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 4,
+		"ADR-0234: its figure keeps all four tiles",
+		"poses=" + std::to_string(stats.Poses.size()));
+}
+
+void TestAFrontSpriteThePpuNeverDrewIsNotAMask()
+{
+	//A sprite in front of the background that a higher-priority sprite kept
+	//off the screen is a figure the game placed and the PPU dropped - not a
+	//mask. The priority bit is what tells the two apart, which is why the rule
+	//needs both facts.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		int32_t top = 100 + (int32_t)f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, top, false, 0));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, top, false, 0));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, top + 8, false, 20));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(4, 108, top + 8, false, 20));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	int32_t node = SpriteNodeOf(vocab, 2);
+	Check(node >= 0 && (size_t)node < mask.size() && mask[node] == 0,
+		"ADR-0234: a front sprite that never reached the screen is not a mask",
+		"node=" + std::to_string(node));
+}
+
+void TestAnOamStreamWithNoVisibilityEvidenceLabelsNoMask()
+{
+	//A pack recorded before ADR-0234 carries neither fact, so every entry
+	//reads as "in front, never measured" - and a rule that needs the priority
+	//bit classifies nothing. Old recordings keep their poses.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.Entries.push_back(OamAt(2, 100, 100));
+		frame.Entries.push_back(OamAt(1, 108, 100));
+		frame.Entries.push_back(OamAt(3, 100, 108));
+		frame.Entries.push_back(OamAt(4, 108, 108));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	std::vector<uint8_t> mask = MesenSheets::SelectMaskNodes(frames, vocab);
+	bool any = false;
+	for(uint8_t flag : mask) {
+		any = any || flag != 0;
+	}
+	Check(!any, "ADR-0234: a stream with no priority bit and no tally labels no mask");
+}
+
+void TestTheAdjacencySidecarLabelsAMaskNodeWithItsEvidence()
+{
+	//ADR-0173's shape: the verdict travels with the two numbers behind it, so
+	//a reader that disagrees with the classification has the evidence.
+	std::vector<OamFrame> frames;
+	for(uint32_t f = 0; f < 6; f++) {
+		OamFrame frame;
+		frame.FrameNumber = f;
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(2, 100, 100, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(1, 108, 100, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(3, 100, 108, false, 30));
+		frame.Entries.push_back(MaskSpriteFixture::OamWith(9, 108, 108, true, 0, 64));
+		frames.push_back(frame);
+	}
+	Vocabulary vocab = BuildSpriteVocabulary(frames);
+	SpriteAdjacencyStats stats = AccumulateSpriteAdjacency(frames, vocab);
+	int32_t maskNode = SpriteNodeOf(vocab, 9);
+	Check(maskNode >= 0 && (size_t)maskNode < stats.Mask.size() && stats.Mask[maskNode] == 1,
+		"ADR-0234: the adjacency statistics label the mask node",
+		"node=" + std::to_string(maskNode));
+	if(maskNode < 0 || (size_t)maskNode >= stats.Mask.size()) {
+		return;
+	}
+	Check(stats.BehindBgAppearances[maskNode] == 6 && stats.MaskAppearances[maskNode] == 6
+		&& stats.VisiblePixels[maskNode] == 0,
+		"ADR-0234: the label travels with its three numbers",
+		"behind=" + std::to_string(stats.BehindBgAppearances[maskNode]) + " mask=" +
+		std::to_string(stats.MaskAppearances[maskNode]) + " visible=" +
+		std::to_string(stats.VisiblePixels[maskNode]));
+	int32_t frontNode = SpriteNodeOf(vocab, 2);
+	Check(frontNode >= 0 && (size_t)frontNode < stats.Mask.size() && stats.Mask[frontNode] == 0
+		&& stats.VisiblePixels[frontNode] == 180,
+		"ADR-0234: a drawn node carries its pixel count and no label",
+		"visible=" + std::to_string(frontNode >= 0 ? stats.VisiblePixels[frontNode] : 0));
+}
+
+//ADR-0236 (F14.11, issue #499): the record a capture carries and the guard the
+//renderer reads. All of it host-free - HdCaptureCellGuard.h holds the record,
+//the tag grammar and the predicate, so these cases pin the recorder's write,
+//the loader's read and the run time's decision against one another with no
+//emulator, and the gate itself is driven through the real
+//HdPackTileAtPositionCondition, which is what makes "one predicate" (§2)
+//something the suite checks rather than something a comment claims.
+namespace CaptureCellGuardModel
+{
+	static constexpr int Rows = HdCellKeyRecord::Rows;
+	static constexpr int Cols = HdCellKeyRecord::Cols;
+
+	//The run time's own reading of a cell origin: what HdNesPpu stores there,
+	//`NoTile` included (background off for that pixel, or its leftmost 8
+	//clipped). Going through HdCellKeyOf rather than building a key by hand is
+	//the point - it is the same bridge HdNesPack::BuildCellMaskRows uses.
+	HdCellKey Live(int32_t tileIndex, uint32_t palette, uint8_t fill = 0, bool chrRam = false, int mirror = -1)
+	{
+		HdPpuTileInfo tile = {};
+		tile.TileIndex = tileIndex;
+		tile.PaletteColors = palette;
+		tile.IsChrRamTile = chrRam;
+		for(int i = 0; i < 16; i++) {
+			tile.TileData[i] = (uint8_t)(fill + (mirror > 0 ? i : 0));
+		}
+		return HdCellKeyOf(tile);
+	}
+
+	//A whole live screen of one key, so a case can move exactly the cells it is
+	//about.
+	struct LiveScreen
+	{
+		HdCellKey Keys[Rows][Cols];
+		LiveScreen(const HdCellKey& everywhere) { Fill(everywhere); }
+		void Fill(const HdCellKey& key)
+		{
+			for(int r = 0; r < Rows; r++) {
+				for(int c = 0; c < Cols; c++) {
+					Keys[r][c] = key;
+				}
+			}
+		}
+		HdCellKey At(int r, int c) const { return Keys[r][c]; }
+	};
+
+	//What the recorder writes for a screen it is looking at: HdCellKeyRecord's
+	//own funnel over the live grid.
+	HdCellKeyRecord RecordOfGrid(const LiveScreen& screen)
+	{
+		HdCellKeyRecord record;
+		record.Cells.reserve(HdCellKeyRecord::CellCount);
+		for(int r = 0; r < Rows; r++) {
+			for(int c = 0; c < Cols; c++) {
+				record.Cells.push_back(record.Intern(screen.Keys[r][c]));
+			}
+		}
+		return record;
+	}
+
+	void Build(HdCellGuard& guard, const LiveScreen& screen, int32_t scrollX = 0, int32_t scrollY = 0, int firstRow = 0, int lastRow = Rows - 1)
+	{
+		guard.Build(firstRow, lastRow, 0, 0, scrollX, scrollY,
+			[&screen](int r, int c) { return screen.At(r, c); },
+			[](int32_t) { return -1; });
+	}
+
+	//DrawBackgroundLayer's rule, in one line: a layer with no record has no
+	//guard at all; a layer with one draws only the cells its mask allows.
+	bool LayerDraws(const HdCellGuard& guard, uint32_t x, uint32_t y)
+	{
+		return guard.Record == nullptr || guard.Allows(x, y);
+	}
+}
+
+//The whole point of the slice: a cell whose live key moved on is left to the
+//tiles. Ninja Gaiden's `screen001` (issue #499) is a status-bar cell that did.
+void TestACaptureRecordMasksACellTheLiveFrameHasMovedOn()
+{
+	using namespace CaptureCellGuardModel;
+	const uint32_t palette = 0x1B1A1918;
+	LiveScreen captured(Live(0x42, palette));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x42, palette));
+	live.Keys[0][27] = Live(0x33, palette); //the HUD digit this frame, not the captured one
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 27 * 8, 0),
+		"F14.11: a cell whose live tile differs from the record is masked");
+	Check(!LayerDraws(guard, 27 * 8 + 7, 7),
+		"F14.11: the mask is per 8x8 cell, so the masked cell's whole block falls back");
+	Check(LayerDraws(guard, 0, 0) && LayerDraws(guard, 26 * 8, 0) && LayerDraws(guard, 248, 232),
+		"F14.11: every cell the record still holds draws, including the rest of the same row");
+	Check(guard.Record != nullptr && record.IsPresent(),
+		"F14.11: a record of the whole captured frame is what turned the guard on");
+}
+
+//A palette is part of the identity (HdTileKey's own rule): the same tile
+//repainted is not the frame the capture was taken from.
+void TestACaptureRecordTreatsARecolouredCellAsMovedOn()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x42, 0x1B1A1918));
+	live.Keys[12][3] = Live(0x42, 0x0F0E0D0C);
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 3 * 8, 12 * 8), "F14.11: a recoloured cell is a cell the capture does not hold");
+	Check(LayerDraws(guard, 4 * 8, 12 * 8), "F14.11: its neighbour with the captured palette still draws");
+}
+
+//A cell the run time names no tile at - the leftmost 8 pixels of a line the ROM
+//clips, or a line with rendering off - is a key like any other, so the capture
+//still draws the column it was taken with (ADR-0236 §2, HdCellKey::Kind::None).
+void TestACaptureRecordMatchesACellTheRunTimeNamesNoTileAt()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(HdPpuTileInfo::NoTile, 0));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+	Check(record.Keys.size() == 1 && record.Keys[0].KeyKind == HdCellKey::Kind::None,
+		"F14.11: a NoTile cell records as the None key, not as a real tile");
+
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, captured);
+	Check(LayerDraws(guard, 0, 0), "F14.11: a clipped column still draws on the frame it was captured for");
+
+	LiveScreen movedOn(Live(0x42, 0x1B1A1918));
+	HdCellGuard moved;
+	moved.Record = &record;
+	Build(moved, movedOn);
+	Check(!LayerDraws(moved, 0, 0),
+		"F14.11: and stops drawing as soon as the run time names a tile there, which is the frame it was not captured for");
+}
+
+//A pack may route a tile key to a different one (`<fallbackTile>`, the
+//bootstrap's neutral ramp does): the run time then *names* the fallback where
+//the capture recorded the key it stands in for, and the gate has always taken
+//that as the same tile. The guard has to, or every pack with a fallback would
+//stop drawing its captures the moment this slice shipped. Found by mutation
+//(runs/f1411/mutation-tests.txt: dropping `fallbackIndex == recorded.TileIndex`
+//left every case green).
+void TestACaptureRecordAcceptsTheTileThePackRoutesItsKeyTo()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0xAB, 0x1B1A1918));
+	live.Keys[7][7] = Live(0x99, 0x1B1A1918);
+	HdCellGuard guard;
+	guard.Record = &record;
+	//0x99 is the key the pack routes 0x42 to; 0xAB is a tile it does not.
+	guard.Build(0, HdCellKeyRecord::Rows - 1, 0, 0, 0, 0,
+		[&live](int r, int c) { return live.At(r, c); },
+		[](int32_t index) { return index == 0x99 ? 0x42 : -1; });
+
+	Check(LayerDraws(guard, 7 * 8, 7 * 8),
+		"F14.11: a cell the run time fills with the key's own fallback tile still draws the capture");
+	Check(!LayerDraws(guard, 0, 0),
+		"F14.11: and a cell whose tile routes nowhere is a cell the capture does not hold");
+	Build(guard, live);
+	//The same frame read with no fallback at all: the clause is what let it draw.
+	Check(!LayerDraws(guard, 7 * 8, 7 * 8),
+		"F14.11: without the fallback that same cell stops drawing, so the clause is what drew it");
+}
+
+//ADR-0236 §3: opt-in by the data. A `<background>` without a record draws
+//exactly as today, which is every hand-made pack and every pack on disk.
+void TestABackgroundWithoutARecordDrawsEveryCell()
+{
+	using namespace CaptureCellGuardModel;
+	HdBackgroundInfo handMade = {};
+	Check(!handMade.CellRecord.IsPresent() && handMade.CellRecord.IsEmpty(),
+		"F14.11: a <background> starts with no record");
+
+	HdCellGuard guard;
+	guard.Record = nullptr;
+	LiveScreen live(Live(0x42, 0x1B1A1918));
+	Build(guard, live); //Build must be inert with no record...
+
+	bool everyCellDraws = true;
+	for(int r = 0; r < Rows; r++) {
+		for(int c = 0; c < Cols; c++) {
+			everyCellDraws &= LayerDraws(guard, (uint32_t)(c * 8), (uint32_t)(r * 8));
+		}
+	}
+	Check(everyCellDraws,
+		"F14.11: with no record the guard never masks a pixel, so the pack renders byte-identically");
+	Check(!HdCellKeyRecord().IsPresent(),
+		"F14.11: an empty record is not a record - IsPresent gates the whole guard");
+}
+
+//ADR-0236 §2: the gate the recorder writes and the guard the renderer reads are
+//one predicate, so they cannot disagree about a key. Driven through the real
+//HdPackTileAtPositionCondition rather than through the shared function - the
+//claim is about the two *callers*.
+struct CaptureCellGuardPack : public BaseHdNesPack
+{
+	uint32_t GetScale() override { return 1; }
+	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&) override {}
+	void SetFallback(int32_t from, int32_t to) { _fallbackTiles[from] = to; }
+};
+
+void TestTheGateAndTheGuardAgreeOnEveryKeyTheRunTimeCanName()
+{
+	using namespace CaptureCellGuardModel;
+	static const uint32_t palettes[] = { 0x1B1A1918, 0x0F0E0D0C };
+	static const int32_t indices[] = { 0x00, 0x42, 0xFF };
+	int cases = 0;
+
+	//`ignorePalette` is not in the matrix: it is a flag of the *gate*, and the
+	//recorder never sets it on a `<background>`'s probe (FinalizeScreenAnchors
+	//passes false), while the record is an exact observation and always carries
+	//its palette. They are the same predicate either way; only the gate's own
+	//opt-out can loosen it, and no recorded background does that.
+	for(bool chrRam : {false, true}) {
+		for(uint32_t recordedPalette : palettes) {
+			for(int32_t recordedIndex : indices) {
+				for(int32_t liveIndex : {0x00, 0x42, 0xFF, 0x7F}) {
+					for(uint32_t livePalette : palettes) {
+						//The recorder's gate, built exactly as
+						//HdPackBuilder::FinalizeScreenAnchors builds one.
+						string tileData;
+						HdPackTileAtPositionCondition cond;
+						if(chrRam) {
+							for(int i = 0; i < 16; i++) {
+								tileData += HexUtilities::ToHex((uint8_t)0x11);
+							}
+						}
+						cond.Initialize(0, 0, recordedPalette, recordedIndex, tileData, false);
+
+						HdScreenInfo screen(false);
+						CaptureCellGuardPack pack;
+						HdPpuTileInfo& target = screen.ScreenTiles[0].Tile;
+						target.TileIndex = liveIndex;
+						target.PaletteColors = livePalette;
+						target.IsChrRamTile = chrRam;
+						for(int i = 0; i < 16; i++) {
+							target.TileData[i] = (uint8_t)(chrRam ? 0x11 : 0x00);
+						}
+						cond.HdPackCondition::Initialize(&screen, &pack);
+						bool gate = cond.CheckCondition(0, 0, nullptr);
+
+						//The same two keys, one cell, through the guard: a record
+						//of the frame the gate was written from, drawn on a frame
+						//that may have moved on.
+						LiveScreen captured(cond.RecordedKey());
+						HdCellKeyRecord record = RecordOfGrid(captured);
+						LiveScreen live(HdCellKeyFieldsOf(target));
+						HdCellGuard guard;
+						guard.Record = &record;
+						Build(guard, live);
+
+						if(gate != LayerDraws(guard, 0, 0)) {
+							Check(false, "F14.11: the gate and the guard must agree",
+								"chrRam=" + std::string(chrRam ? "1" : "0") + " idx=" + std::to_string(recordedIndex) +
+								" pal=" + HexUtilities::ToHex(recordedPalette, true) +
+								" liveIdx=" + std::to_string(liveIndex) + " livePal=" + HexUtilities::ToHex(livePalette, true) +
+								" gate=" + std::string(gate ? "1" : "0"));
+							return;
+						}
+						cases++;
+					}
+				}
+			}
+		}
+	}
+	Check(cases == 96, "F14.11: the gate/guard matrix ran in full", "cases=" + std::to_string(cases));
+}
+
+//The other half of the same claim, pinned rather than left to drift: at a pixel
+//the run time names *no* tile at, the gate keeps comparing the fields it always
+//compared (raw bytes the PPU leaves behind), while the guard reads `None` -
+//the only deterministic reading. Making the gate read `None` too would change
+//which frames an existing pack's <background> draws on, which ADR-0236 §3
+//forbids, so the difference stays and is asserted here.
+void TestTheGateKeepsComparingStaleBytesWhereTheGuardReadsNone()
+{
+	HdScreenInfo screen(false);
+	CaptureCellGuardPack pack;
+	HdPackTileAtPositionCondition cond;
+	string tileData;
+	for(int i = 0; i < 16; i++) {
+		tileData += HexUtilities::ToHex((uint8_t)0x22);
+	}
+	cond.Initialize(0, 0, 0x1B1A1918, -1, tileData, false);
+	HdPpuTileInfo& target = screen.ScreenTiles[0].Tile;
+	target.TileIndex = HdPpuTileInfo::NoTile;
+	target.PaletteColors = 0x1B1A1918;
+	target.IsChrRamTile = true;
+	for(int i = 0; i < 16; i++) {
+		target.TileData[i] = (uint8_t)0x22;
+	}
+	cond.HdPackCondition::Initialize(&screen, &pack);
+	Check(cond.CheckCondition(0, 0, nullptr),
+		"F14.11: the gate's data form still compares the target's fields at a NoTile pixel - its pre-0236 behaviour, unchanged");
+
+	HdCellKey live = HdCellKeyOf(target);
+	HdCellKey recorded;
+	recorded.KeyKind = HdCellKey::Kind::ChrData;
+	recorded.PaletteColors = 0x1B1A1918;
+	for(int i = 0; i < 16; i++) {
+		recorded.TileData[i] = (uint8_t)0x22;
+	}
+	Check(live.KeyKind == HdCellKey::Kind::None && !HdCellKeyMatches(live, recorded, false, -1),
+		"F14.11: the guard reads that same pixel as None, so it never draws a capture on evidence the PPU left behind");
+}
+
+//A record is positional, not a set of keys: #499 is exactly the case a key set
+//would pass - the live HUD digit appears elsewhere on the capture.
+void TestACaptureRecordIsPositionalNotAKeySet()
+{
+	using namespace CaptureCellGuardModel;
+	const uint32_t palette = 0x1B1A1918;
+	LiveScreen captured(Live(0x00, palette));
+	captured.Keys[0][27] = Live(0x42, palette); //the digit, where it was
+	captured.Keys[20][5] = Live(0x42, palette); //and the same tile elsewhere
+	HdCellKeyRecord record = RecordOfGrid(captured);
+
+	LiveScreen live(Live(0x00, palette));
+	live.Keys[20][5] = Live(0x42, palette);
+	live.Keys[0][27] = Live(0x33, palette); //the digit moved on
+	HdCellGuard guard;
+	guard.Record = &record;
+	Build(guard, live);
+
+	Check(!LayerDraws(guard, 27 * 8, 0), "F14.11: the cell that recorded the digit is masked when the digit changes");
+	Check(LayerDraws(guard, 5 * 8, 20 * 8),
+		"F14.11: the cell that still holds it draws, so the guard is not asking whether the key exists anywhere on the screen");
+}
+
+//The recorder's own funnel: which cells get a key, and which get None.
+void TestTheRecorderSamplesTheRuntimesOwnGate()
+{
+	HdTileKey keys[HdCellKeyRecord::CellCount];
+	uint8_t named[HdCellKeyRecord::CellCount] = {};
+	for(int i = 0; i < HdCellKeyRecord::CellCount; i++) {
+		keys[i].TileIndex = 0x42 + i;
+		keys[i].PaletteColors = 0x1B1A1918;
+		keys[i].TileData[0] = (uint8_t)i;
+		named[i] = (i % 7 == 0) ? 1 : 0; //the clipped column, and every seventh cell
+	}
+	HdCellKeyRecord record = HdCellKeyRecord::FromCellGrid(named, [&keys](int i) -> const HdTileKey& { return keys[i]; }, false);
+
+	Check(record.IsPresent(), "F14.11: a sampled grid is a whole record");
+	Check(record.Cells.size() == (size_t)HdCellKeyRecord::CellCount,
+		"F14.11: the record is positional - 960 cells, whatever the dictionary holds");
+	Check(record.At(0, 0) != nullptr && record.At(0, 0)->KeyKind == HdCellKey::Kind::ChrIndex,
+		"F14.11: a cell the run time named a tile at is keyed by that tile");
+	Check(record.At(0, 1) != nullptr && record.At(0, 1)->KeyKind == HdCellKey::Kind::None,
+		"F14.11: a cell the run time named no tile at is keyed None, never by what the recorder drew there");
+	Check(record.At(0, 7) != nullptr && record.At(0, 7)->TileIndex == 0x42 + 7 && record.At(0, 7)->PaletteColors == 0x1B1A1918,
+		"F14.11: the key carries the index and the palette the run time holds, which is what the gate compares too");
+	Check(record.At(HdCellKeyRecord::Rows, 0) == nullptr,
+		"F14.11: outside the 32x30 grid the record has no key, and no key is never a match");
+}
+
+//The tag: its spelling, its grammar, and the round trip a rebuilt pack needs.
+void TestACaptureRecordTagRoundTripsThroughItsGrammar()
+{
+	using namespace CaptureCellGuardModel;
+	Check(HdCellKeyRecord::IsTagLine("<bgCellRecord>N;00") && !HdCellKeyRecord::IsTagLine("<bgPreservesBehindBgSprites>") &&
+		!HdCellKeyRecord::IsTagLine("[cond]<bgCellRecord>N;00"),
+		"F14.11: the tag is recognised on its own line and only there");
+
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	captured.Keys[3][4] = Live(HdPpuTileInfo::NoTile, 0);
+	HdCellKeyRecord record = RecordOfGrid(captured);
+	string line = record.ToString();
+	Check(line.compare(0, HdCellKeyRecord::TagLength, "<bgCellRecord>") == 0,
+		"F14.11: the record writes itself as one tag line");
+
+	HdCellKeyRecord parsed;
+	string error;
+	Check(HdCellKeyRecord::Parse(HdCellKeyRecord::PayloadOf(line), parsed, &error),
+		"F14.11: the loader's side of the grammar reads what the recorder wrote", error);
+	Check(parsed.IsPresent() && parsed.Keys.size() == record.Keys.size() && parsed.Cells == record.Cells,
+		"F14.11: the round trip keeps the dictionary and every one of the 960 cell indices");
+	Check(parsed.At(3, 4) != nullptr && parsed.At(3, 4)->KeyKind == HdCellKey::Kind::None &&
+		parsed.At(0, 0) != nullptr && parsed.At(0, 0)->TileIndex == 0x42,
+		"F14.11: including which cells are None and which name a tile");
+
+	//The three ways a hand-edited line can be wrong. Each must be refused, not
+	//silently re-indexed: a grid read one cell off is a wrong screen.
+	string payload = HdCellKeyRecord::PayloadOf(line);
+	Check(!HdCellKeyRecord::Parse(payload.substr(0, payload.size() - 1), parsed, &error),
+		"F14.11: a cell grid that is not 960 entries wide is refused", error);
+	Check(!HdCellKeyRecord::Parse(payload.substr(0, payload.find(';')) + ";", parsed, &error),
+		"F14.11: a record with no cells at all is refused", error);
+	Check(!HdCellKeyRecord::Parse("Q1:1;", parsed, &error),
+		"F14.11: a key kind that is not I, D or N is refused", error);
+	Check(!HdCellKeyRecord::Parse("I00000042:1B1A1918;" + string(HdCellKeyRecord::CellCount * 2, '9'), parsed, &error),
+		"F14.11: a cell naming a key the dictionary does not hold is refused", error);
+
+	//A CHR RAM record is keyed by the drawn bytes (ADR-0172), and the same
+	//grammar carries it.
+	LiveScreen chrRam(Live(0x42, 0x1B1A1918, 0x33, true));
+	HdCellKeyRecord dataRecord = RecordOfGrid(chrRam);
+	HdCellKeyRecord dataParsed;
+	Check(HdCellKeyRecord::Parse(HdCellKeyRecord::PayloadOf(dataRecord.ToString()), dataParsed, &error) &&
+		dataParsed.At(5, 5) != nullptr && dataParsed.At(5, 5)->KeyKind == HdCellKey::Kind::ChrData &&
+		dataParsed.At(5, 5)->TileData[3] == 0x33,
+		"F14.11: a CHR RAM record round-trips its 16 bytes, which is its identity", error);
+}
+
+//The writer's placement rule: the record is a line under its own
+//`<background>`, and a `<background>` without one writes nothing extra - which
+//is what keeps every pack on disk byte-identical when it is rebuilt.
+void TestABackgroundWritesItsRecordOnTheLineBelow()
+{
+	using namespace CaptureCellGuardModel;
+	LiveScreen captured(Live(0x42, 0x1B1A1918));
+	HdPackBitmapInfo bitmap = {};
+	bitmap.PngName = "backgrounds/screen001.png";
+	HdBackgroundInfo bg = {};
+	bg.Data = &bitmap;
+	bg.CellRecord = RecordOfGrid(captured);
+
+	std::stringstream out;
+	out << bg.ToString() << std::endl;
+	bg.WriteCellRecord(out);
+	string written = out.str();
+	size_t newline = written.find('\n');
+	Check(newline != string::npos && written.compare(newline + 1, HdCellKeyRecord::TagLength, HdCellKeyRecord::Tag) == 0,
+		"F14.11: the record line follows the <background> line it belongs to, and nothing sits between them");
+
+	std::stringstream bare;
+	HdBackgroundInfo handMade = {};
+	handMade.Data = &bitmap;
+	handMade.WriteCellRecord(bare);
+	Check(bare.str().empty(), "F14.11: a <background> with no record writes no extra line at all");
+}
+
+//The loader's half of the same rule, and the case that cost a whole route: with
+//the binding cleared at the top of every line - including the record's own -
+//every record in every recorded pack is dropped, silently, while the pack still
+//loads and still draws. Measured on Ninja Gaiden's `stage1-run`: 15 records
+//written, 15 dropped, `LoadHdPack ... backgrounds=15`, and the 31 s frame
+//byte-identical to the build without the guard.
+//
+//So the state machine, not two integers the loader clears by hand: `Line()` is
+//the read *and* the clear, and only a `<background>` on the line directly above
+//can ever be taken.
+void TestTheLoaderBindsARecordToTheLineDirectlyAbove()
+{
+	HdCellRecordBinder binder;
+	int32_t priority = -1, index = -1;
+
+	//Line 1: `<ver>106`. Nothing above it.
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: the first line of a manifest can carry no record");
+
+	//Line 2: a `<background>` that loaded - every file after it is a record
+	//waiting to happen.
+	binder.Line();
+	binder.Bound(20, 3);
+
+	//Line 3: the record. This is the binding.
+	binder.Line();
+	Check(binder.Take(priority, index) && priority == 20 && index == 3,
+		"F14.11: a record takes the <background> on the line directly above it");
+
+	//Line 4: the record was consumed, so the same <background> does not own a
+	//second one - the line mep_lint reports as an error.
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: a second record under one <background> takes nothing");
+
+	//Line 5: a `<background>` that failed to load. Its record is an orphan.
+	binder.Line();
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: a <background> that did not load leaves nothing to bind to");
+
+	//Line 6: a `<background>`, then any other line - `<tile>`, a comment, a
+	//blank one - and the record below that is an orphan. Nothing but the
+	//`<background>` branch calls Bound, so the intervening line binds nothing;
+	//the loader only skips *empty* lines, so a `#` comment breaks it too, and
+	//that is the rule mep_lint mirrors.
+	binder.Line();
+	binder.Bound(10, 0);
+	binder.Line(); //the `<tile>` line
+	binder.Line(); //the record line
+	Check(!binder.Take(priority, index),
+		"F14.11: a line between the <background> and the record breaks the binding, as the lint says");
+
+	//And the binding survives exactly one line: the line after a record that was
+	//never claimed is still an orphan.
+	binder.Line();
+	binder.Bound(30, 1);
+	binder.Line(); //the record line, claimed below
+	Check(binder.Take(priority, index) && priority == 30 && index == 1,
+		"F14.11: the binding is one line deep and does not go stale");
+	binder.Line();
+	Check(!binder.Take(priority, index), "F14.11: and the line after it holds nothing");
+}
+
+//ADR-0236 §2, review item 1: a blank line is a line. The spec allows nothing
+//between a `<background>` and its record - no comment, no other tag, no blank
+//line - and `mep_lint` and `mep_carry` refuse all three. The Core used to
+//disagree with them in *both* directions, which is why this is a test and not
+//a comment: it tested `lineContent.empty()` before rolling the binding, so an
+//LF blank line kept the binding (the Core accepted what the tools reject) while
+//a CRLF blank line cancelled it (a lone `\r` is not empty, so that spelling
+//rolled). The rule now lives in `Step`, which is both the roll and the
+//blank test, so the two spellings cannot diverge again and there is no call
+//site left where the order can be written wrong.
+//
+//The blank argument is the line exactly as the loader hands it over: `Step`
+//runs before the CR strip, so an LF blank arrives empty and a CRLF blank
+//arrives as a lone `\r`.
+void TestABlankLineEndsTheRecordBinding()
+{
+	const string blanks[] = { string(""), string("\r") };
+	for(const string& blank : blanks) {
+		const string spelling = blank.empty() ? "LF" : "CRLF";
+		HdCellRecordBinder binder;
+		int32_t priority = -1, index = -1;
+
+		Check(binder.Step("<ver>106") && binder.Step("<scale>4"),
+			"F14.11[" + spelling + "]: a manifest line that is not blank is parsed");
+		binder.Step("<background>backgrounds/a.png,1,0,0,20");
+		binder.Bound(20, 7);
+
+		//The control: with nothing between them the record binds, so a run where
+		//the blank case is red for the wrong reason cannot pass as a finding.
+		HdCellRecordBinder adjacent;
+		adjacent.Step("<background>backgrounds/a.png,1,0,0,20");
+		adjacent.Bound(20, 7);
+		adjacent.Step("<bgCellRecord>I0000013E:0F001032;...");
+		Check(adjacent.Take(priority, index) && priority == 20 && index == 7,
+			"F14.11[" + spelling + "]: the line directly under a <background> still takes it");
+
+		//The rule under test. `Take` is the *record line's* move - a blank line
+		//is never parsed, so it never asks - and the blank is what emptied the
+		//binding that line would have claimed: `Step` on the blank moved the
+		//`<background>`'s binding into the pending slot, and `Step` on the
+		//record line overwrote that slot before the record could read it.
+		bool parsed = binder.Step(blank);
+		binder.Step("<bgCellRecord>I0000013E:0F001032;...");
+		Check(!binder.Take(priority, index),
+			"F14.11[" + spelling + "]: a blank line between the <background> and the record ends the binding");
+
+		//And `Step`'s return is the loader's own skip: an empty line is not
+		//parsed, a lone `\r` is (it is stripped to empty later, and the dispatch
+		//then finds no tag on it). Both rolled, which is the point.
+		Check(parsed != blank.empty(),
+			"F14.11[" + spelling + "]: Step's return says whether the loader parses this line");
+	}
+
+	//A comment is the third spelling of "something in between", and the one the
+	//existing test above already covers at the `Line()` level: it goes through
+	//`Step` like every other line and ends the binding the same way.
+	HdCellRecordBinder commented;
+	int32_t priority = -1, index = -1;
+	commented.Step("<background>backgrounds/a.png,1,0,0,20");
+	commented.Bound(20, 7);
+	commented.Step("# a comment");
+	commented.Step("<bgCellRecord>I0000013E:0F001032;...");
+	Check(!commented.Take(priority, index), "F14.11: a comment ends the binding too, as the lint says");
+}
+
 int main()
 {
+	TestACaptureRecordMasksACellTheLiveFrameHasMovedOn();
+	TestACaptureRecordTreatsARecolouredCellAsMovedOn();
+	TestACaptureRecordMatchesACellTheRunTimeNamesNoTileAt();
+	TestACaptureRecordAcceptsTheTileThePackRoutesItsKeyTo();
+	TestABackgroundWithoutARecordDrawsEveryCell();
+	TestTheGateAndTheGuardAgreeOnEveryKeyTheRunTimeCanName();
+	TestTheGateKeepsComparingStaleBytesWhereTheGuardReadsNone();
+	TestACaptureRecordIsPositionalNotAKeySet();
+	TestTheRecorderSamplesTheRuntimesOwnGate();
+	TestACaptureRecordTagRoundTripsThroughItsGrammar();
+	TestABackgroundWritesItsRecordOnTheLineBelow();
+	TestTheLoaderBindsARecordToTheLineDirectlyAbove();
+	TestABlankLineEndsTheRecordBinding();
+
 	TestSilentChannelNotSfx();
 	TestFastSweepIsSfx();
 	TestSlowGlideStaysMusic();
@@ -10895,6 +12404,10 @@ int main()
 	TestAPoseThatSplitsIntoTwoPosesIsLabelledAFusion();
 	TestAFigurePlusALooseProjectileIsNotAFusion();
 	TestAPosePlusAPoseSizedUnseenRemainderIsAFusion();
+	TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenIsNotAFusion();
+	TestAPoseWhosePartIsOnlyEverSeenClippedByAScreenEdgeIsNotAFusion();
+	TestAPoseWhoseClippedPartIsAlsoSeenClearOfTheEdgesStaysAFusion();
+	TestATwoPartSplitWhoseHalvesAreBothEdgeClippedIsNotAFusion();
 	TestTwoCopiesOfOneShapeAreAFusionOfItWithItself();
 	TestPoseFramesCountRepeatCount();
 	TestPoseThresholdsDropWhatTheyClaim();
@@ -11048,6 +12561,21 @@ int main()
 	TestOamLatchDropsAHalfFetchedWithSpritesOnButHiddenOnEveryRow();
 	TestOamLatchNamesAHalfWithThePaletteItsRowsWereDrawnIn();
 
+	TestTheOamLatchCarriesThePriorityBitOfEachHalf();
+	TestTheOamLatchCountsOnlyThePixelsAHalfPutOnScreen();
+	TestASpritePixelOnlyCountsWhenThePpuPutsItOnScreen();
+	TestTheTallyIgnoresADotTheSpriteNeverContendedFor();
+	TestADotThatContendedForNothingCannotPushOutOneThatDid();
+	TestTheOamDumpCarriesThePixelTallyAndThePriorityBit();
+	TestAMaskNodeIsLabelledAndKeptOutOfThePoseClusters();
+	TestABehindBackgroundSpriteThatDrewIsStillPartOfAFigure();
+	TestATileHiddenForTheWholeLifeOfAPoseLeavesIt();
+	TestATileThatShowsInOneFrameOfAPoseStays();
+	TestABehindBackgroundSpriteThePpuNeverDrewIsNotAMask();
+	TestAFrontSpriteThePpuNeverDrewIsNotAMask();
+	TestAnOamStreamWithNoVisibilityEvidenceLabelsNoMask();
+	TestTheAdjacencySidecarLabelsAMaskNodeWithItsEvidence();
+
 
 	TestASpriteIsNamedByTheBankItsFetchReadNotTheBankLeftAtFrameEnd();
 	TestTheSameTileBeforeAndAfterALatchSwitchIsNamedTwice();
@@ -11060,6 +12588,9 @@ int main()
 	TestTheGridRegistersAShapeDrawnOnlyOffACellsOriginScanline();
 	TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape();
 	TestAFullyTransparentSpriteHalfNeverReachesTheRegistry();
+	TestTheLatchHandsABlankHalfToThePlacementCallbackAlone();
+	TestThePoseFloorCountsCellsNotTheSumOfTwoSets();
+	TestAPoseKeepsAFigureWhoseHalfIsArtless();
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();
