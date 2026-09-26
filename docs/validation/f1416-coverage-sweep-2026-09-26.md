@@ -1,9 +1,11 @@
 # Coverage past the first stage: the ADR-0239 selector sweep (2026-09-26)
 
 **Date:** 2026-09-26
-**Binary under test:** `99c274673` (`main`), plus the F14.16 work in
-`feat/adr0239-coverage-sweep`. The Core is unmodified by this slice; only
-`scripts/` and `docs/` changed, so every session ran on the shipped recorder.
+**Binary under test:** the tree at `99c274673` (`main`) plus the F14.16 work in
+`feat/adr0239-coverage-sweep`, each game's own `RESULT.md` naming the HEAD it
+recorded under. The Core is unmodified by this slice — `git diff --name-only
+main...HEAD` is `scripts/` and `docs/` only — so every session ran on the
+shipped recorder.
 **ADR:** `docs/adr/0239-coverage-past-the-first-stage-comes-from-a-selector-swept-per-game-and-is-measured-as-a-union.md`
 **PRD slice:** F14.16 (Part A).
 **Raw material:** unversioned, under `runs/f1416/<game>/` — `RESULT.md`,
@@ -74,10 +76,13 @@ the one rung-1 profile.
 
 ## What the sweep does not reach
 
-- **Stage-clear transitions.** A pinned selector never shows one (§6,
-  ADR-0184 amendment), and the blind bodies pace inside each stage. The
-  union metric makes this invisible, so it is stated here: no pack in this
-  sweep holds the frames that connect one stage to the next.
+- **The frames that connect one stage to the next.** A pinned selector never
+  shows them (§6, ADR-0184 amendment): the pin holds the selector, so the next
+  stage never starts. The union metric makes this invisible, so it is stated
+  here. It is *not* that the bodies never finish a stage — SMB3's route clears
+  World 1 and records that world's map inside its 120 s, and Castlevania's
+  bodies die their way through four lives (5 of its 17 sessions end on the
+  CONTINUE screen) — what no pack holds is the transition itself.
 - **Bosses and mid-stage rooms no selector reaches.** §1's rung 3 (search,
   chain, movie) is per-room work a later measurement has to name. Ninja
   Gaiden's 21 values cover its 21 stage numbers, not its four acts'
@@ -89,26 +94,37 @@ the one rung-1 profile.
 
 ## Caveats that belong to the numbers, not to the method
 
-- **SMB3's reference pack is invalid.** The pack beside that ROM on disk is
-  the folder's own `auto/` bootstrap (8192 placeholders + 984 written
-  rules), not an artist pack, and §5.3's line reads 100 % on both sides for
-  that reason. It is reported as a caveat, not as a row.
+- **SMB3 has no §5.3 row.** The only pack on disk for that ROM is the ROM
+  folder's own `auto/` bootstrap (8192 placeholders + 984 written rules), not
+  an artist pack, so scoring the union against it reads 100 % on both sides
+  and measures nothing. It is reported as a caveat, not as a row. The
+  `--baseline` the sweep folds into the union is a different file — the
+  stage-1 route re-recorded under `runs/f1416/smb3/before/by-stage/` (8192
+  placeholders + 2382 written rules, 1571 drawn keys, the table's before
+  column).
 - **Excitebike and Punch-Out!! have no artist pack on disk** — only the
   folder's `auto/` bootstrap — so they have no §5.3 row at all. Their
   headline evidence is §5.2, ROM CHR coverage, which needs no third-party
   pack.
-- **Castlevania's reference pack targets another build.** Its `pack.json`
-  names No-Intro SHA1 `3DCB69A8` (a build with `akuogg.ips`) and the dumped
-  ROM is `7A20C44F`, so §5.3's line compares two builds. The CHR RAM game
-  has no ROM CHR denominator either, so its table row is the only coverage
-  figure it gets.
+- **Castlevania's reference pack is keyed to this dump.** Its `pack.json`
+  names No-Intro SHA1 `3DCB69A8…DA3A`, which is this ROM's own No-Intro
+  payload hash, so §5.3's comparison is a real one. What the pack *also*
+  carries is a `<patch>akuogg.ips` for three whole-file SHA1s, none of them
+  this dump's `7A20C44F…B546` — an audio patch for other builds, not applied
+  here. `castlevania/RESULT.md` reads the two hashes as two builds; they are
+  one dump under two hash ranges (the No-Intro payload against the whole
+  iNES file). The CHR RAM game has no ROM CHR denominator, so this row is the
+  only coverage figure it gets.
 - **Ninja Gaiden's reference pack is `<ver>100`** (decimal, unpadded rule
   indices) while a bootstrapped pack is `<ver>109` (hex, padded). Until
   #545's fix the tool compared the two dialects' raw `tileData` strings and
   printed a constant 13.6 % for the baseline, for every session and for the
   union; the row above is the same comparison at the 16-byte CHR pattern
-  identity the two dialects share, and it moves the baseline too (102/7382
-  = 1.4 % under the raw string).
+  identity the two dialects share. The baseline moves too, and by unit: every
+  rule on both sides read 1003/7382 = 13.6 % (what the issue reports), while
+  the baseline's **written** rules against the reference's strings read
+  102/7382 = 1.4 % — under the written unit the accidental intersection was
+  even starker.
 - **The reference denominator is the reference's own written rules.**
   Castlevania's pack carries 2 222 distinct `tileData` strings but only
   2 006 patterns over its written (`N`) rules — the other 251 rules are
