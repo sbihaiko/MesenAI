@@ -379,7 +379,10 @@ doc-checks: check-manifest
 	#(scripts/tools-zip-manifest.txt). `make release-macos` runs this too, but a
 	#release is cut rarely, so the manifest would rot between releases and the
 	#rot would only show up as a ModuleNotFoundError on a pack author's machine.
+	#The required set is read out of the two guides (#538), so a command a guide
+	#prints for a tool the zip does not carry fails here instead of at the reader.
 	python3 scripts/check_tools_zip_closure.py
+	python3 scripts/test_check_tools_zip_closure.py
 	./scripts/checks/verify_mep_fallback_adr_provenance.sh
 	./scripts/checks/verify_mep_fallback_adr.sh
 	./scripts/checks/verify_mep_fallback_authoring_doc.sh
