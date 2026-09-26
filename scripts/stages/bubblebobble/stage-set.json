@@ -1,0 +1,8 @@
+{
+  "game": "Bubble Bobble",
+  "rom": {
+    "noIntroSha1": ["C1A8F6A9316080487CFEACA62F3D573CD9D484E9"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Bubble Bobble (1987) (Taito).nes from the user's ROM library, computed with scripts/mep_build.py's _no_intro_sha1 on 2026-09-26 (whole-file SHA1 0E40052299ADA46F6C2D1172323366F872F90570, iNES mapper 1 MMC1, 131 072 bytes PRG / 32 768 bytes CHR, CHR ROM). The mints were authored and recorded on that dump in this same sitting (runs/f1418/bubblebobble/). The route stage1-run mints from mint-stage1.txt, the main menu's own 1P START."
+}

@@ -1,0 +1,36 @@
+# Bubble Bobble (NES) round body - the default body of every value in
+# navigation.json (ADR-0239 section 6: the entry script selects the round, the
+# body is repeated to fill the 120 s run).
+#
+# Blind and mechanical on purpose. The round's own art, enemies and palette are
+# drawn by the round the entry selected; this body only has to keep the game on
+# it and keep it moving. A = jump, B = blow a bubble and, held against a wall,
+# ride it. Every press is 10 frames with the rest of the line released, the
+# cadence the whole set is calibrated at.
+300f -
+10f B
+40f -
+300f A
+60f R
+300f B
+60f -
+300f A
+60f L
+300f B
+60f -
+300f A
+60f R
+300f B
+60f -
+300f A
+60f -
+300f B
+60f A
+300f -
+300f B
+60f L
+300f A
+60f -
+300f B
+60f R
+300f -
