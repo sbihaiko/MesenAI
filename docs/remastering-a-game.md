@@ -265,12 +265,23 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   not money, is the constraint — about half a second per call — which is why the
   model is asked only at a stall. Exit codes: 0 the goal was reached, 1 the run
   ended without it, 2 a refusal, 5 the cap.
+- **`--no-jev` is the measuring arm, not a way to search.** It builds no client,
+  needs no key, and ends the run at its first stall as `no-jev` — the
+  search-alone half of the ADR's adoption gate. It bounds a stall; it does not
+  search one.
 - **Rewind ladder.** The harness keeps a checkpoint per emulated second over the
   last `--ring-seconds` (24 s), and when a macro makes no progress it restores an
-  earlier one on a 1, 2, 4, 8, 16 s ladder — never before the start of the
-  current screen or the last real progress — with up to `--max-questions` (3) per
-  rung. A macro that failed at a checkpoint is withdrawn from that checkpoint's
-  later questions.
+  earlier one on a 1, 2, 4, 8, 16 s ladder — never before the **start of the
+  current screen** — with up to `--max-questions` (3) per rung. A macro that
+  failed at a checkpoint is withdrawn from that checkpoint's later questions. The
+  floor is the screen's start alone
+  ([ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
+  §3, amended 2026-09-26): "or the last real progress" was dropped because the
+  watermark rises on every window that moves, so that second floor sat a fraction
+  of a second behind the head and collapsed every rung onto one checkpoint
+  ([F14.15 §0](validation/f1415-jev-adoption-2026-09-26.md)). When the screen is
+  younger than a rung, several rungs land on its start: at a wall whose screen is
+  ~6 s long, F14.15 measured four distinct checkpoints and no rungs of 8 or 16 s.
 - **Situation tips.** A game may carry `scripts/stages/<game>/jev-tips.json`:
   advice for its hard spots, each gated by a RAM trigger, written in our own
   words with the pages it came from. Only the tips whose trigger holds on the
@@ -288,11 +299,22 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
 - **One web-research pass** when the ladder is spent: the stall report goes to a
   single web-search worker, which proposes new tips and at most one new macro.
   Its query carries the game and the spot — the same RAM-derived numbers a
-  question carries, never ROM bytes or pixels. What it proposes is kept under
-  `runs/`, never written to the versioned file: `--promote-tips` writes a run's
-  proposals into `jev-tips.json`, and the harness gates that on the run having
-  reached its goal (ADR-0238's rule: a tip is promoted only after the stall it
-  was written for passed).
+  question carries, never ROM bytes or pixels. The worker runs **sandboxed**:
+  `--tools WebSearch,WebFetch` plus a deny-list of every other built-in tool and
+  `--safe-mode`, and the run's log records the tool list the CLI's own init event
+  reports back — measured `["WebFetch", "WebSearch"]` on every pass
+  ([F14.15 §11.1](validation/f1415-jev-adoption-2026-09-26.md)). `--max-research-passes N`
+  bounds how many passes a run may pay for (0 keeps research out of a ladder
+  measurement entirely), and the cap covers **both** roads into the worker — the
+  spent ladder and the loop guard. A live pass costs **US$ 0.086–0.30 and 30–60 s
+  of wall clock**, against US$ 0.000023 for one Jev decision: the pass's
+  cost comes back into the run's ledger (`summary.research_spend_usd`), but
+  `--budget` cannot see it coming, which is why a run that reaches research misses
+  the ≥ 3× speed target (2.02× measured, F14.15 §11.2). What it proposes is kept
+  under `runs/`, never written to the versioned file: `--promote-tips` writes a
+  run's proposals into `jev-tips.json`, and the harness gates that on the run
+  having reached its goal (ADR-0238's rule: a tip is promoted only after the
+  stall it was written for passed).
 - **Cheats** (`--cheat AAAA:VV[:CC]`, repeatable) follow
   [ADR-0184](adr/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md):
   RAM addresses below `$0800` only, with Game Genie letters and mirror addresses
@@ -302,9 +324,24 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   reaching for one: a cheat is a read-time substitution, and the session's `ram`
   request reads the console's RAM array directly, so it reports the **true** byte
   and not the value the CPU sees — verify a cheat by its effect on the run, never
-  by reading its address. And a cheated **session** run is refused today rather
-  than recorded, because the step-mode transport takes the process over before
-  `cheat=` is applied ([the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)).
+  by reading its address. A step-mode session applies its cheats and reports each
+  one before it prints `ready`, so a cheated session run is an ordinary run
+  ([the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)); and a
+  cheat does not remove a **position** stall — measured on a stall that *is*
+  passed, the coverage pass under `00A2:9C` reached the same abs x 906 in the
+  same 208 frames as the uncheated run
+  ([F14.15 §5](validation/f1415-jev-adoption-2026-09-26.md)).
+
+**What it has been measured to do.** On two real stalls
+([F14.15](validation/f1415-jev-adoption-2026-09-26.md)): Mega Man 3's Snake Man
+stage, page 3 at abs x 824, where the search alone stops — Jev passed it in 5 of
+5 arms, tips on and off, at 3.57–3.62× real time, and the route it wrote goes on
+to abs x 984 uncheated; and Ninja Gaiden's section 1-2 death window, one hit from
+death with no legal candidate for the base search — Jev passed it in 0 of 4 arms,
+while the harness's own control, the x 987 pin, still passes on the first rung in
+two decisions. The verdict on adopting it is **do not adopt beyond the spike**:
+the route that passes a stall bought the recorded kit **0 keys** the committed
+routes do not already record.
 
 **What comes out is a plain input script.** `<n>f <buttons>` lines, one `1f -`
 boundary after each macro — a Driver A route, recorded like the shipped ones. The

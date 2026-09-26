@@ -302,9 +302,12 @@ A project that measures its own claims should say what is and isn't shipped.
   that draws only the cells its own record carries (ADR-0236), importing a
   legacy `hires.txt` pack, 15 validated community packs auto-installing.
 - Route search on a persistent step-mode session, and the optional Jev stall
-  helper (ADR-0238). Measured on one real stall, Ninja Gaiden's Act 1-1 wall:
-  two Jev decisions, US$ 0.0001, and the script replays without the model to the
-  same positions.
+  helper (ADR-0238) — a **measured spike, not a shipped feature**. On two real
+  stalls: Jev passed Mega Man 3's page-3 wall in 5 of 5 arms, tips on and off, at
+  3.57–3.62× real time where the search alone stops, and the Ninja Gaiden control
+  on its first rung in two decisions; every script it wrote replays without the
+  model to the same positions. The adoption verdict is **do not adopt beyond the
+  spike** ([the F14.15 log](docs/validation/f1415-jev-adoption-2026-09-26.md)).
 - A CI gate on every pull request to `main` and every push to `main`: the
   structural suite, the Python tool suites, a headless boot of the real core,
   1316 dependency-free C++ unit tests and the C# xUnit suites.
@@ -326,9 +329,17 @@ A project that measures its own claims should say what is and isn't shipped.
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
   workflow end to end. Every acceptance so far is measured, but by proxy.
-- The Jev helper is proven on one stall only. A boss (Mega Man 3's Snake Man)
-  is the next measurement; RAM cheats do not reach a search session yet; and
-  the web-research step has run only against a mock.
+- The Jev stall helper is proven and **not adopted beyond the spike**
+  ([ADR-0238](docs/adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
+  §5, one clause short, [log](docs/validation/f1415-jev-adoption-2026-09-26.md)):
+  the route that passes a stall buys the recorded kit **0 keys** the committed
+  routes do not already have, and its Mega Man 3 route has no mint that rebuilds
+  its start state, so `scripts/stages/` refuses it. Ninja Gaiden's section 1-2
+  death window is still not passed — 0 of 4 arms in the second pass and 0 of 2 in
+  the third, because that state has no legal candidate for the base search and its
+  rewind ring holds one checkpoint — and a run that reaches the web-research step
+  pays 30–60 s for the pass, which drops a long hybrid run to 2.02× real time
+  against the ≥ 3× target.
 - Only macOS Apple Silicon is a tagged release. The Windows and Linux binaries,
   and macOS's own CI build, come from the on-demand channel in
   [Download](#download) — never from a tag.

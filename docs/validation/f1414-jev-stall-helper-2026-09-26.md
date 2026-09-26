@@ -56,6 +56,14 @@ whose stall the ADR was written about.
   (1, 2, 4, 8, 16 s, floored at the start of the current screen or the last
   real progress — the floor *clamps* the target, which measurement forced:
   dropping the rung instead blocked every rung), up to three Jev questions.
+  **Erratum (2026-09-26, F14.15's first pass,
+  [log](f1415-jev-adoption-2026-09-26.md) §0).** The floor is the **start of the
+  current screen and nothing else** (ADR-0238 §3, amended 2026-09-26): "or the
+  last real progress" sat a fraction of a second behind the head, because
+  `_commit` marks the newest checkpoint whenever the watermark rises, so all five
+  rungs clamped onto one checkpoint and every question was asked from one state.
+  Measured on a ring of forty one-second checkpoints, `[40.0, 40.0, 40.0, 40.0,
+  40.0]` against `[39.0, 38.0, 36.0, 32.0, 24.0]` after the fix (F14.15 §11.3).
   `tried_here` carries `(macro, progress, death)` per checkpoint and a macro
   that failed there is withdrawn from the next question at that checkpoint.
 * The **question** is a Jev `Choice` over the surviving macros, with the live
@@ -73,7 +81,9 @@ whose stall the ADR was written about.
   output on this module's own prompt at a 150 s and a 240 s cap), `--output-format
   json` writes an array of stream events rather than the `{"result": …}` envelope
   this log assumed it parsed, and `--allowedTools` does not restrict the worker.
-  The module is `MODEL = "sonnet"` and reads the event array.
+  The module is `MODEL = "sonnet"` and reads the event array, and the argv now
+  carries `--tools`, a 23-name `--disallowedTools` and `--safe-mode` as well
+  (F14.15 §11.1, which also reads the CLI's own init event back on every pass).
   Its proposals land under `runs/`, are re-stamped with the
   harness's own macro durations (a proposal never picks how long a press lasts),
   and reach the versioned tips file only through `--promote-tips`, after the
@@ -271,8 +281,9 @@ real binary with one malformed request per form and checks the session answers
    (`PINNED_ROUTE_SHA256`, re-pinned on F14.13's route: abs x 1 170.50 at window
    30, abs x 988 at frame 688, `$0076` 2 throughout), the route-specific facts
    are asserted only while the pin holds, and a rewritten route makes the file
-   print `skip` with both hashes rather than fail. 21 checks, `0 failure(s)`,
-   exit 0, three runs in a row.
+   print `skip` with both hashes rather than fail. 22 checks as the suite prints
+   them today (21 was this line's count), `0 failure(s)`, exit 0, three runs in a
+   row.
 2. **The chain-vs-flat relation is stated where the numbers are published**
    (**closed**). `route_search.py` searches over chains of `play` calls, so its
    log's frames are chain frames and a script it writes has to be replayed flat
@@ -287,27 +298,31 @@ real binary with one malformed request per form and checks the session answers
    `claude -p` proposal has never been merged into a live run. What is proven:
    the query carries the game and the spot only, the answer is parsed, the
    harness re-stamps the duration, and nothing reaches the versioned tips file
-   without `--promote-tips` after a passed stall.
+   without `--promote-tips` after a passed stall. **Closed in F14.15 §6**
+   ([log](f1415-jev-adoption-2026-09-26.md)): three arms reached the worker and
+   every one got an answer that was merged *and chosen*, and one live pass costs
+   US$ 0.086–0.31 and 30–60 s of wall clock — which is why `--max-research-passes`
+   bounds it (F14.15 §11.4).
 4. **Only one tip has ever fired.** `wall-pin` gated correctly on the live state
    in both E2E runs; the other three tips in the file (`enemy-behind`, `birds`,
    `barbarian-boss`) have unit coverage of their triggers and no live run. The
-   file says which of its gates are approximate.
+   file says which of its gates are approximate. **Superseded in F14.15 §3**:
+   all six Mega Man 3 tips fire live, each in a band of its own, once the level's
+   wrapping scroll byte (`$002D`) made `abs_x` monotone. Ninja Gaiden's stall A
+   is still off every band it has (F14.15 §9.5).
 5. **A cheat set reaches the console but no live run has used one**
-   (**half closed**). `scripts/stages/mm3/cheats.json` ships Mega Man 3's three
-   codes, all three verified by effect on this dump, and the session applies and
-   reports them (`scripts/test_session_protocol.py`, against the real binary).
-   What is still unexercised end to end: a Jev run that passes
-   `--cheats` and the coverage pass that reads the file - so ADR-0238 §4's
-   "a search-versus-Jev comparison is valid only under the same cheat set" is
-   written down and measured (the invincibility timer makes the same 188-frame
-   route reach *less* far) but not yet enforced by a run.
-6. **A Mega Man 3 tip can hold now, but none ever has** (**closed as
-   designed**). All six are gated on the run-level `stage` key as well as on a
-   position band, and the key now reaches the state: `--stage snake-man`, or a
-   `stage` in the stage set. What is left is a live run through the boss
-   arena - the gate is tested, the tip is not. Closing `ram-map.json`'s
-   `open.stage_id` would let the tips be gated on RAM like Ninja Gaiden's and
-   drop the run key; that is a measurement nobody has made.
+   (**closed in F14.15 §5**). `scripts/stages/mm3/cheats.json` ships Mega Man 3's
+   three codes, all three verified by effect on this dump, and the session
+   applies and reports them (`scripts/test_session_protocol.py`, against the real
+   binary). The run that was missing exists now: `C-mm3-cov` played the whole Jev
+   route under `cheat=00A2:9C` and reached the same abs_x 906 in the same 208
+   frames as the uncheated arm — ADR-0238 §4's "a cheat does not remove a
+   position stall", measured on a stall that *is* passed.
+6. **A Mega Man 3 tip can hold now, but none ever has** (**closed in F14.15
+   §3**). All six are gated on the run-level `stage` key as well as on a
+   position band, and the key reaches the state: `--stage snake-man`, or a
+   `stage` in the stage set. `ram-map.json`'s `open.stage_id` is still open — a
+   measurement nobody has made — and gating the tips on it would drop the run key.
 7. **`--route-macros` offers the search's windows to Jev only.** The route labels
    are not in `BASE_MACROS`, so the base search still never plays them (that is
    deliberate: it is what leaves the x 987 pin standing for F14.14 to be
