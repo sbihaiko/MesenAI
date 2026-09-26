@@ -319,11 +319,25 @@ class Rom:
         data = path.read_bytes()
         if data[:4] != b"NES\x1a":
             raise ChrKitError(f"{path}: not an iNES file")
+        if len(data) < 16:
+            raise ChrKitError(
+                f"{path}: {len(data)} byte(s), too short to hold an iNES header")
         self.path = path
         prg_size = data[4] * 16384
         chr_size = data[5] * 8192
         self.mapper = (data[6] >> 4) | (data[7] & 0xF0)
         off = 16 + (512 if data[6] & 0x04 else 0)
+        # The header's two sizes are a promise about the file, and a slice keeps
+        # it silently: a dump that stops inside its declared CHR came back with
+        # an empty `self.chr`, which is the value that reads as "this cartridge
+        # has no CHR, it is CHR RAM" to `has_chr_rom` and to everything keyed on
+        # it (#551). A dump that is shorter than its own header says is
+        # malformed, and the two must not read the same.
+        if len(data) < off + prg_size + chr_size:
+            raise ChrKitError(
+                f"{path}: the header declares {prg_size} PRG byte(s) and "
+                f"{chr_size} CHR byte(s) after a {off}-byte header, but the file "
+                f"is {len(data)} byte(s) - a truncated or malformed dump")
         self.prg = data[off:off + prg_size]
         self.chr = data[off + prg_size:off + prg_size + chr_size]
         self.has_chr_rom = chr_size > 0

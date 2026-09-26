@@ -686,9 +686,18 @@ def main() -> int:
     if not args.dry_run and not args.rescore and not RECORDER.exists():
         print(f"missing {RECORDER} - run: make capture-tool", file=sys.stderr)
         return 2
-    if args.rom and not args.rom.exists():
-        print(f"ROM not found: {args.rom}", file=sys.stderr)
-        return 2
+    # ADR-0184 s1's "refuse, do not warn", before the report's first line
+    # (#551): `Path.exists()` is satisfied by a directory and says nothing about
+    # the contents, so a bad `--rom` used to print the whole section 4 table and
+    # then die inside it - and a dump whose header declares a CHR bank the file
+    # does not carry was not even that loud: it read as an empty CHR, which is
+    # how the report says "this is a CHR RAM cartridge".
+    if args.rom:
+        try:
+            rom_chr_bytes(args.rom)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     # ADR-0184's "refuse, do not warn": a --baseline that resolves to nothing
     # is not an empty union, it is a wrong 'before' - every session would come
     # out with `new` equal to its whole pack.
