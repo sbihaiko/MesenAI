@@ -1,0 +1,37 @@
+# The Flintstones - The Surprise at Dinosaur Peak!: the blind body every value
+# of the navigation sweep plays, and the one recordable route this set ships
+# (`library_job.start_plan` resolves `room00` to the exact `mint-room00.txt`
+# beside it, which lands in room 00).
+#
+# 518 frames (8.6 s): walk right, jump, walk right again, jump, then turn and
+# walk back left, jumping once more. Two things decide the shape.
+#
+#   * It moves. A body that stands still feeds the recorder one pose and the
+#     union metric nothing, so the route holds a direction most of the time
+#     and jumps out of it twice per pass.
+#   * It is short, because scripts/record_navigation_sweep.py repeats it to
+#     fill the run (ADR-0184's own measurement: Contra's stage-1 body covered
+#     18% of a 300 s run and repeating it reached the same panorama a cheat
+#     had bought). Twelve passes cover the 120 s budget after the entry script
+#     has typed the code and the value.
+#
+# Measured 2026-09-26 on room 00: over a full 120 s run this body carries Fred
+# out of the house and back, loses three of the eight lives he starts with, and
+# leaves the level's own byte $0303 at 00 - the room he was sent to, which is
+# what the profile's ramCheck reads. The run is not a good *play* of the level
+# (nothing reads the screen); it is a way to draw it.
+120f R
+10f -
+6f RA
+44f R
+8f -
+120f R
+10f -
+6f RA
+44f R
+20f -
+60f L
+10f -
+6f LA
+44f L
+10f -

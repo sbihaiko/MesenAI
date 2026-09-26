@@ -874,6 +874,34 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   kept beside the first reading.
   [Log](../validation/f1417-coverage-expansion-2026-09-26.md).
 
+- **F14.18** (2026-09-26) — coverage past the first stage, wave three, delivered
+  (ADR-0239; same go-ahead as the ADR's Status line quotes). Four games that had
+  no set now have one and a fifth gets the profile it was missing: Bubble
+  Bobble's own password field (16 sessions, rung 1 — the field is
+  cursor-addressed and its three GameFAQs `H` codes are measured, rejected and
+  recorded), The Flintstones' hidden fourteen-press debug level select (37, rung
+  1, the number-to-room map measured because it is published nowhere), Life
+  Force's `$0030` (5, rung 2), Double Dragon's `$003D` (4, rung 2) and Zelda
+  II's `$0748` (36, rung 2, on the set that already existed). **98 sessions of
+  120 emulated seconds, none `did-not-warp` except the identity value of two
+  games**, and the union with each game's stage-1 route moves ROM CHR coverage
+  from 27.9 % to 46.1 % (Bubble Bobble), 11.5 % to 22.8 % (Double Dragon),
+  7.2 % to 44.4 % (The Flintstones) and 11.5 % to 36.5 % (Zelda II); Life Force
+  is CHR RAM and has no §5.2 denominator. One §5.3 reference line in the wave:
+  Zelda II's artist pack, 222 of 566 patterns (39.2 %) against a 20.1 %
+  baseline. **Three findings, all measured**: `new` is a threshold and not a
+  measure — Zelda II recorded twice on one binary held identical final RAM in
+  34 of 36 sessions but an identical `new` in only 4 — so a Core change is
+  quoted from the `ramCheck` or the pattern set; a pinned byte cannot always be
+  its own check (Double Dragon's `$003D` reads `04` where the counter ran past
+  its table, so the check is `$0018`); and The Flintstones' five rooms whose id
+  the final state no longer holds were re-recorded with a body that stands still
+  and still departed, so the rooms end on their own inside the 120 s and the
+  five are **reported, not tuned away** (32 of 37 values rest on the check).
+  Unchanged: no stage-clear transition is recorded, bosses and unlisted
+  mid-stage rooms stay §1 rung 3 work, and the sweep drives port 1 only.
+  [Log](../validation/f1418-coverage-wave-three-2026-09-26.md).
+
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
   paralelo"*, PR #395). The recorder writes per-tile `px`/`py` (and `z` on

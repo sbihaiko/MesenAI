@@ -1,0 +1,53 @@
+# Life Force (USA): the body every navigation session flies, repeated from the
+# state mint-stage1.txt writes. 840 frames, 14 s a repeat, repeated to fill
+# ADR-0239 s6's 120 emulated seconds.
+#
+# What it does. Four quarter-turns of the same length - right, up, left, down,
+# 120 frames each, with a 60 frame rest between them and a 12 frame Start tap
+# with a 48 frame settle after the up and after the down turn - so the pad is
+# never held in one direction for more than two seconds and the ship is moving
+# whenever the stage is. A is held with every direction, so the ship fires
+# through the whole turn.
+#
+# Why all four directions and not just right. Life Force alternates the axis it
+# scrolls on: measured 2026-09-26, $0040 (DataCrystal's "Is Stage Vertical?
+# (boolean)") reads 0 on the stages the selector reaches with 00, 02 and 04 -
+# stages 1, 3 and 5, the Cell, Prominence and Temple stages - and 1 on the ones
+# it reaches with 01, 03 and 05, the Volcanic, Cell 2 and Mechanical stages.
+# One body has to serve both, and a body that only holds right is a body that
+# does nothing at all on three of the six.
+#
+# The A/B behind the shape, runs/f1418/lifeforce/probe/ab/ (not versioned),
+# measured with scripts/nav_sweep_metrics.py's pack_seen_rule_keys at 120 s an
+# arm, the same entry, on a horizontal stage and a vertical one: see
+# navigation.json's _abComment.
+#
+# The Start taps are not a pause. Measured 2026-09-26: $0350 (P1 X Position)
+# reaches 232 in 120 frames of R with a Start tap in them exactly as it does
+# without one, so a tap neither stops the ship nor stops the scroll. They are
+# there for the run that has already lost its three ships: measured, a session
+# that flies nothing at all reads $0070 (DataCrystal's "P1 Status") = 06, "Game
+# Over (out of lives)", by 60 s and $0034 (P1 Lives) = 0 with it. A Start tap
+# after that starts a new game, and a new game reads the pinned $0030 - which
+# is what the entry script's own tap at frame 120 is, measured for all six
+# values of the selector - so the run comes back to the stage the session is
+# about instead of sitting on a title screen for the rest of its budget. It is
+# insurance that the session ends on the stage, not a claim that it always
+# dies.
+#
+# What is not in the body. No B: the button fires the missile/special and
+# nothing in ADR-0239 s5's metric asks for it. No Select. No second player.
+# No invulnerability or lives cheat rides with it - see navigation.json's
+# _livesComment.
+120f RA
+60f -
+120f UA
+60f -
+12f T
+48f -
+120f LA
+60f -
+120f DA
+60f -
+12f T
+48f -

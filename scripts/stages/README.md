@@ -59,7 +59,7 @@ against, or the unattended job cannot use it:
   scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
   ```
 
-  All seventeen sets are declared (2026-09-19 → 2026-09-26): `mm3/` and `zelda/`
+  All twenty-one sets are declared (2026-09-19 → 2026-09-26): `mm3/` and `zelda/`
   carry the hash of the working-checkout dump the F12.10 bounded-input run
   verified them against (2026-09-19); `contra/`, `metroid/`, `zelda2/` and
   `excitebike/` are pinned to the user's library dumps they were authored on
@@ -84,8 +84,16 @@ against, or the unattended job cannot use it:
   -> `brinstar-suitless-run.txt`), whose old names matched no mint the folder
   ships. `lemmings/`'s first name was also the job's own filter's problem: a
   file named `body` reads as a route and records the title screen from power-on.
-  Everything those sweeps measured is in
-  `docs/validation/f1417-coverage-expansion-2026-09-26.md`.
+  The four sets the F14.18 navigation sweep added — `bubblebobble/`,
+  `doubledragon/`, `flintstones/` and `lifeforce/` (2026-09-26) — are pinned the
+  same way, to the user's library dumps their profiles were authored and
+  recorded on, and none of them has been through `scripts/record_library.sh`
+  yet; `zelda2/`, declared above since F14.3, gained the `navigation.json` that
+  sweep measured. `lifeforce/`'s dump is CHR RAM, so its coverage carries no
+  §5.2 denominator and the `n/a` in its summary is the console, not a missing
+  figure. Everything those sweeps measured is in
+  `docs/validation/f1417-coverage-expansion-2026-09-26.md` and
+  `docs/validation/f1418-coverage-wave-three-2026-09-26.md`.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, no recordable route, or no
   route the job can start.
