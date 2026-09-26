@@ -32,6 +32,7 @@ mep_addition.py
 mep_build.py
 mep_capture_scan.py
 mep_carry.py
+mep_cell_record.py
 mep_compare.py
 mep_conditions.py
 mep_content_id.py

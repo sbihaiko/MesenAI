@@ -1,6 +1,12 @@
 #pragma once
 #include "pch.h"
 #include "NES/NesConstants.h"
+//ADR-0236 (F14.11): HdBackgroundInfo carries a capture's per-cell key record,
+//and HdCellKeyOf below is the one bridge between the run time's tile struct and
+//the guard's own key. The two are split that way so HdCaptureCellGuard.h stays
+//free of this header (and of everything it drags in) and the unit tests can
+//reach the record, the tag grammar and the predicate with no emulator at all.
+#include "NES/HdPacks/HdCaptureCellGuard.h"
 #include "Shared/MessageManager.h"
 #include "Utilities/PNGHelper.h"
 #include "Utilities/HexUtilities.h"
@@ -106,6 +112,34 @@ struct HdPpuTileInfo : public HdTileKey
 	uint8_t PpuBackgroundColor = 0;
 	uint8_t PaletteOffset = 0;
 };
+
+static_assert(HdCellKeyRecord::NoTileIndex == HdTileKey::NoTile, "the guard's no-tile value must be the run time's");
+
+//The tile's own three fields, verbatim and nothing else - what
+//`HdPackTileAtPositionCondition` has always compared, and what it keeps
+//comparing now that the comparison is shared (ADR-0236 §2). It does not read
+//`NoTile` as `Kind::None`: the gate compared the fields at such a pixel too.
+inline HdCellKey HdCellKeyFieldsOf(const HdPpuTileInfo& tile)
+{
+	HdCellKey key;
+	key.KeyKind = tile.IsChrRamTile ? HdCellKey::Kind::ChrData : HdCellKey::Kind::ChrIndex;
+	key.TileIndex = tile.TileIndex;
+	key.PaletteColors = tile.PaletteColors;
+	memcpy(key.TileData, tile.TileData, sizeof(key.TileData));
+	return key;
+}
+
+//ADR-0236 (F14.11): the run time's tile as the guard reads it. `NoTile` - what
+//HdNesPpu stores where the ROM's background is off for that pixel, or where its
+//leftmost 8 pixels are clipped - is `Kind::None`, the same value the recorder
+//writes for such a cell, so a clipped column still matches itself.
+inline HdCellKey HdCellKeyOf(const HdPpuTileInfo& tile)
+{
+	if(tile.TileIndex == HdPpuTileInfo::NoTile) {
+		return HdCellKey();
+	}
+	return HdCellKeyFieldsOf(tile);
+}
 
 //#474: the recorder's shape identity (HdPackBuilder::ShapeIdFor), and the
 //hasher for its map. HdTileKey is the run time's key: on a CHR ROM game it
@@ -602,6 +636,23 @@ struct HdBackgroundInfo
 	uint32_t Top;
 
 	HdPackBlendMode BlendMode;
+
+	//ADR-0236 (F14.11): the capture's positional cell-key record, present only
+	//on a `<background>` the recorder wrote from a frame and only since this
+	//slice - IsPresent() is the whole opt-in. Empty for every hand-made pack and
+	//for every pack already on disk, which is why the guard costs those packs
+	//nothing at all.
+	HdCellKeyRecord CellRecord;
+
+	//The record's line, written directly under the `<background>` line it
+	//belongs to and read back from there (HdPackLoader::LoadPack), so a pack
+	//that is edited, rebuilt or re-recorded keeps the guard or loses it whole.
+	void WriteCellRecord(stringstream& out) const
+	{
+		if(CellRecord.IsPresent()) {
+			out << CellRecord.ToString() << std::endl;
+		}
+	}
 
 	uint32_t* data()
 	{

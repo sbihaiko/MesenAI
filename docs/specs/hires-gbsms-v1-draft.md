@@ -5,7 +5,9 @@ community before any freeze** (ADR-0004). Nothing here is final; changes
 based on feedback are draft revisions, not breaking changes. Draft revision
 2 (2026-09-22) adds §7, a single NES-side additive tag (ADR-0224); draft
 revision 3 (same day) declares §7's layer-3 edge and its scope for packs
-that do not opt in (ADR-0224, amended). ·
+that do not opt in (ADR-0224, amended); draft revision 4 (2026-09-25) adds
+§8, a second NES-side additive tag and the first to sit under a
+`<background>` line (ADR-0236). ·
 **License for this spec:** CC0-1.0 ·
 **Golden file:** [`golden/hires-gbsms/hires.txt`](golden/hires-gbsms/hires.txt) ·
 **Validation:** `scripts/validate-specs.py`
@@ -161,3 +163,78 @@ file: a proposal, not a freeze.
 
 Decision record: ADR-0224 (amends ADR-0050's "sprites still draw on top" for
 behind-background sprites).
+
+## 8. Additive NES-side tag: `<bgCellRecord>` (MesenAI extension, draft)
+
+Same status and the same reason for living here as §7: the NES `hires.txt`
+format has no extension document of its own. Like §7 it is additive — a
+loader that does not know the tag skips the line and the pack renders as it
+always did — but it is the first tag in this draft that binds to the line
+**above** it rather than to the pack.
+
+```
+[<conditions>]<background>backgrounds/screen001.png,1,0,0,20
+<bgCellRecord><dict>;<cells>
+```
+
+- **Form.** One tag on one line, directly under the `<background>` line it
+  belongs to and separated from it by nothing — not a comment, not another
+  tag, not a blank line. It carries two fields separated by a single `;`:
+  - `<dict>` — the screen's distinct cell keys, `|`-separated. `N` is "the
+    run time named no tile at that cell's origin"; `I<8 hex>:<8 hex>` is a
+    CHR-ROM identity (tile index + palette, ADR-0172); `D<32 hex>:<8 hex>`
+    is a CHR-RAM identity (the 16 drawn bytes + palette).
+  - `<cells>` — exactly 960 cell indices, row-major, 32 per row, each
+    written in the same number of hex digits. That width is derived from the
+    dictionary size alone (2 digits up to 256 keys, 3 up to 4096, 4 above),
+    so the field needs no separator and no length. A line whose cell field is
+    not exactly `960 x width` digits, or a cell index at or past the
+    dictionary size, is **invalid**, and an implementation MUST reject the
+    whole line rather than read it short or re-index it: a grid read one cell
+    off is a different screen.
+- **Semantics (MUST, when honoured).** The record is the frame the capture
+  was taken from: for each of the 960 screen cells, the key the run time
+  read at that cell's origin pixel `(col*8, row*8)` on that frame, sampled
+  through the same comparison the pack's `tileAtPosition` condition makes.
+  When the `<background>` above it draws, a cell MUST draw only where the
+  live key at that cell's origin equals the recorded key; a cell that does
+  not match is left to whatever would draw without the capture — the pack's
+  `<tile>` rules, then the ROM's own tiles — exactly as if the `<background>`
+  line covered only the matching cells. The record is **positional**: a key
+  that appears elsewhere on the same frame MUST NOT license the cell that
+  recorded a different one. All `<background>` priorities are in scope.
+- **Enforcement of "separated by nothing".** Any line between the two — a
+  comment, another tag, a blank line — means the tag above it does not carry
+  a record, and an implementation MUST NOT bind it: the record is dropped and
+  the `<background>` loads without the guard. The two spellings of an empty
+  line, `LF` and `CRLF`, are the same line and MUST behave the same way; a
+  loader that skips blank lines must still close the binding on them.
+- **Why a tag and not a condition.** The same reason as §7: an unknown tag
+  is skipped in silence, so a pack carrying this line still opens in every
+  existing loader, only without the guard.
+- **Who writes it.** MesenAI's recorder emits it for every capture it
+  writes, on the line under that capture's `<background>`. A hand-written
+  pack opts in by adding the line; nothing adds it to a pack whose author did
+  not.
+- **Packs that do not opt in.** Opt-in is by the data and the default is
+  off: a `<background>` with no record below it MUST render byte-identically
+  to the pre-tag format — every community pack in the catalog today, every HD
+  Mesen pack, every pack recorded before the tag existed, and every
+  hand-made pack. An implementation MUST NOT infer the guard from anything
+  but the line, and MUST NOT apply it to a sibling `<background>`.
+- **Carrying it.** A tool that rewrites a pack's manifest MUST keep the line
+  with the `<background>` it is bound to and drop it with that line if the
+  background is retired: a record that outlived its capture would gate
+  whichever background ends up above it. `mep_build`/`mep_carry` do this;
+  `mep_lint` reports a line that does not follow a `<background>`, and any
+  line whose fields do not parse, as an error — the loader drops both, and a
+  silently dropped record is a capture drawing on frames it was never frozen
+  for.
+- **Cost.** The dictionary plus 960 indices is roughly 1–2 KB per captured
+  screen at the widths a recorded pack uses.
+- **Scope.** NES only (`HdNesPack`). In a MEP pack it lives in
+  `textures/hires.txt` (MEP v1 §5.1, ADR-0005); `pack.json` is not touched.
+
+Decision record: ADR-0236 (F14.11, issue #499: a recorded capture draws only
+the cells whose live key matches its per-cell record; supersedes nothing —
+the pre-tag behaviour for packs without a record is preserved exactly).

@@ -571,6 +571,12 @@ core: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 #standard replacement. Measured 2026-09-14: those are the only two warnings
 #-Wall produces across the whole CUTSRC list.
 CUTFLAGS := -std=c++17 -O2 -Wall -Werror -Wno-deprecated-declarations -I . -I Core -I Utilities
+#ADR-0236 (F14.11) added Utilities/HexUtilities.cpp to the list below: the
+#suite drives the real HdPackTileAtPositionCondition for the "one predicate"
+#case of that ADR, and the condition's ToString (header-only, but reached
+#through its vtable) is HexUtilities' - the one symbol pair the set lacked.
+#Host-free and link-free are different properties, and only the first is what
+#ADR-0127 asks of a header.
 CUTSRC := \
   scripts/core_unit_tests.cpp \
   Core/Shared/Audio/ChannelRoleClassifier.cpp \
@@ -596,6 +602,7 @@ CUTSRC := \
   Core/NES/HdPacks/SheetRender.cpp \
   Core/NES/HdPacks/SpriteGrouping.cpp \
   Utilities/JsonReader.cpp \
+  Utilities/HexUtilities.cpp \
   Utilities/FolderUtilities.cpp \
   Utilities/UTF8Util.cpp \
   Utilities/sha256.cpp \

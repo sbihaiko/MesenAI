@@ -114,7 +114,8 @@ _PREFIXED_TAGS = frozenset({"<tile>", "<background>"})
 # skip is exactly the drop this tool refuses to make.
 _KNOWN_TAGS = frozenset(
     {"<tile>", "<background>", "<condition>", "<img>", "<addition>", "<fallback>",
-     "<bgm>", "<sfx>", "<patch>", "<bgPreservesBehindBgSprites>"}
+     "<bgm>", "<sfx>", "<patch>", "<bgPreservesBehindBgSprites>",
+     "<bgCellRecord>"}
     | {f"<{t}>" for t in mep_build._HEADER_TAGS})
 # The version at which the loader reads a short tileData field as hex.
 # Below it the field is decimal (ReadTileData), so a hex-token key source

@@ -60,6 +60,16 @@ private:
 	uint8_t _activeBgCount[4] = {};
 	HdBgConfig _bgConfig[40] = {};
 
+	//ADR-0236 §2 (F14.11): one guard per background slot, holding the mask of
+	//screen cells the layer may draw. Built by PrepareCellGuards (once per
+	//frame, for a `<background>` whose record maps 1:1) and, for a scrolling
+	//one, per scanline in OnLineStart - the pointer stays null for every
+	//`<background>` without a record, which is every pack written before this
+	//slice and every hand-made one, so their output is byte-identical.
+	HdCellGuard _bgCellGuard[40];
+	void PrepareCellGuards();
+	void BuildCellMaskRows(HdCellGuard& guard, HdBackgroundInfo& bgInfo, int32_t scrollX, int32_t scrollY, int firstRow, int lastRow);
+
 	uint32_t _palette[512] = {};
 	HdPackTileInfo* _cachedTile = nullptr;
 	bool _cacheEnabled = false;
@@ -124,7 +134,9 @@ private:
 	__forceinline HdPackTileInfo* GetMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile, bool* disableCache = nullptr);
 
 	//Returns the background it drew, or nullptr when this pixel is outside it -
-	//the suppression diagnostic needs to name the layer that did the covering.
+	//the suppression diagnostic needs to name the layer that did the covering -
+	//and also when ADR-0236's guard masks the cell this pixel belongs to, which
+	//is the same statement: this layer has nothing to say about this pixel.
 	__forceinline HdBackgroundInfo* DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth);
 
 	template<HdPackBlendMode blendMode>
