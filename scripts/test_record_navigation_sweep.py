@@ -1395,10 +1395,18 @@ def _the_reference_patch_is_a_caveat_not_a_silent_score():
     """
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        rom = _rom(tmp / "g.nes", {1: P1, 10: P2})
+        # The stock dump is CHR RAM (byte 5 = 0) and the patch declares CHR ROM
+        # size: the write moves byte 5 across the zero/non-zero line, which is
+        # the one shape in which the caveat may call the two namespaces
+        # different - the Mega Man pack's own shape. A CHR RAM dump has no CHR
+        # to resolve an index through, so both packs name their pattern by
+        # value, §5.2's other reading.
+        rom = _rom(tmp / "g.nes", chr_ram=True)
+        by_value = P1.hex()  # 16 bytes: what a CHR RAM pack carries
         out = tmp / "sweep"
-        _hires(out / "s1" / "Fake" / "auto" / "textures" / "hires.txt", 109, ["01"])
-        manifest = _hires(tmp / "ref" / "hires.txt", 100, ["1"])
+        _hires(out / "s1" / "Fake" / "auto" / "textures" / "hires.txt", 109,
+               [by_value])
+        manifest = _hires(tmp / "ref" / "hires.txt", 100, [by_value])
         _ips(tmp / "ref" / "Super.ips", {5: 0x10})  # CHR ROM size, i.e. a mapper patch
         clean = manifest.read_text()
         head = ["--rescore", "--out", str(out), "--rom", str(rom),
@@ -1428,6 +1436,11 @@ def _the_reference_patch_is_a_caveat_not_a_silent_score():
         check(any("offset 5 = 0x10" in ln for ln in caveat),
               "and the iNES header bytes it writes - artist_cover's own reading "
               "of a <patch>, not a second one", caveat)
+        check("provably do not address CHR the same way"
+              in " ".join(" ".join(caveat).split()),
+              "and claims the namespaces differ only because the write does move "
+              "this ROM's own byte 5: a CHR RAM dump against a patch that "
+              "declares CHR ROM", caveat)
         union_at = next((i for i, ln in enumerate(lines) if "SWEEP UNION" in ln),
                         None)
         union = lines[union_at] if union_at is not None else ""
@@ -1454,6 +1467,74 @@ def _the_reference_patch_is_a_caveat_not_a_silent_score():
               "a pack declaring no <patch> prints exactly this report minus the "
               "caveat: byte-identical to today's output",
               _first_line_diff(stripped, no_patch.splitlines()))
+
+
+def _an_already_chr_rom_dump_is_not_a_namespace_change():
+    """#554 P2: rewriting byte 5 is not by itself a namespace change.
+
+    The caveat reached "provably do not address CHR the same way" from the
+    patch's write alone, never from the ROM it has in hand: a non-zero write
+    into a dump that is already CHR ROM - the ordinary mapper patch on a CHR
+    ROM game - leaves the tiles keyed exactly as they were, and so does a `0`
+    into an already-CHR-RAM one. The caveat itself stays, because the two sides
+    are still different builds, but in the undecidable wording a patch that
+    never touches the header gets: only the "provably" sentence goes. The
+    divergent direction has its own case above, where the write really does
+    move byte 5 (CHR RAM stock, CHR ROM patch).
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rom = _rom(tmp / "g.nes", {1: P1})  # byte 5 = 1, i.e. already CHR ROM
+        out = tmp / "sweep"
+        _hires(out / "s1" / "Fake" / "auto" / "textures" / "hires.txt", 109, ["01"])
+        manifest = _hires(tmp / "ref" / "hires.txt", 100, ["1"])
+        _ips(tmp / "ref" / "Super.ips", {5: 0x10})  # a CHR size, written anyway
+        manifest.write_text(manifest.read_text().replace(
+            "<ver>100\n", f"<ver>100\n<patch>Super.ips,{PATCH_SHA1}\n"))
+        rc, printed = _main_rc("--rescore", "--out", str(out), "--rom", str(rom),
+                               "--reference", str(manifest))
+        check(rc == 0, "a patched pack over an already-CHR-ROM dump scores",
+              str(rc))
+        lines = printed.splitlines()
+        at = next((i for i, ln in enumerate(lines) if "declares a <patch>" in ln),
+                  None)
+        caveat = []
+        if at is not None:  # the block: the headline, then its indented lines
+            caveat = [lines[at]]
+            for ln in lines[at + 1:]:
+                if not ln.startswith("     "):
+                    break
+                caveat.append(ln)
+        joined = " ".join(" ".join(caveat).split())
+        check(any("offset 5 = 0x10" in ln for ln in caveat),
+              "the write is still quoted - artist_cover's reading is unchanged",
+              caveat)
+        check("provably" not in joined,
+              "but the report does not claim the two builds address CHR "
+              "differently: the dump was already CHR ROM, so the write leaves "
+              "the namespace where it was", caveat)
+        check("indicative, not coverage" in joined,
+              "and it falls back to the undecidable wording a patch that leaves "
+              "the header alone gets", caveat)
+        union = next((ln for ln in lines if "SWEEP UNION" in ln), "")
+        check("[caveat:" in union and "Super.ips" in union,
+              "the caveat itself stays, marker and all, so the figure never "
+              "reads as plain coverage", union)
+
+        # The mirror of the same combination, which a run cannot build: a `0`
+        # written into a dump that is already CHR RAM is no change either. A
+        # CHR RAM dump refuses the index-form rules the run above scores, so
+        # this one is asked at the helper - it is the two sides compared, not
+        # just the value written.
+        ram_ref = _hires(tmp / "ram-ref" / "hires.txt", 100, ["1"])
+        _ips(tmp / "ram-ref" / "Super.ips", {5: 0x00})
+        ram_ref.write_text(ram_ref.read_text().replace(
+            "<ver>100\n", f"<ver>100\n<patch>Super.ips,{PATCH_SHA1}\n"))
+        text, _ = sweep.reference_patch_caveat(
+            ram_ref, _rom(tmp / "ram.nes", chr_ram=True))
+        check("provably" not in text and "indicative, not coverage" in text,
+              "a 0 written into a dump that is already CHR RAM is no namespace "
+              "change either", text)
 
 
 def _summary_document():
@@ -1651,6 +1732,7 @@ for _fn in (_input_kind_plan, _kind_is_explicit, _contra_plan_is_unchanged,
             _a_different_ver_base_is_provenance_not_a_gate,
             _the_rescore_scores_the_reference_at_the_pattern,
             _the_reference_patch_is_a_caveat_not_a_silent_score,
+            _an_already_chr_rom_dump_is_not_a_namespace_change,
             _summary_document, _the_run_notes_are_built_for_both_selector_kinds,
             _a_dry_run_writes_nothing):
     case(_fn, _fn.__name__.lstrip("_"))
