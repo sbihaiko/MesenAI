@@ -843,7 +843,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   (Dr. Mario), 58.0 % to 67.6 % (Ice Climber), 21.1 % to 43.9 % (Lemmings) and
   26.3 % to 47.4 % (SMB1); the three CHR RAM games have no §5.2 denominator.
   **Two of the eight rows are the finding**: Dr. Mario's twenty-one virus
-  levels buy +45 keys, 23 of them the clipboard's own digits, and Tetris' eight
+  levels buy +45 keys, 23 of them the clipboard's own digits, and Tetris' eighteen
   level/height combinations buy +425 keys and **+4** tile data — what a level
   select adds to those games is palette and counters, not tile, which only a
   tile-data column can say. Metroid measured §4's converse failing: a published
