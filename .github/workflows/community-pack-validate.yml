@@ -1049,10 +1049,18 @@ jobs:
             [ -z "$asset" ] && continue
             case "$asset" in
               textures|audio) L="assets:$asset"; gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
-              ips|bps) L="patch:$asset"; gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
               external) L="assets:external"; gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
             esac
           done < <(jq -r '.assets[]?' < "$RUNNER_TEMP/mep_classify_clean.json"; [ -n "$HAS_EXTERNAL_DEPS" ] && echo external || true)
+          # Bug #557: patch:ips|bps are decided from the lint (present AND wired),
+          # never from classify's `assets`; stale ones are dropped first.
+          WIRED_PATCH_LABELS=$(python3 scripts/pack_patch_labels.py "mep_lint_output.txt")
+          for L in patch:ips patch:bps; do
+            case " $WIRED_PATCH_LABELS " in
+              *" $L "*) gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+              *) gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "$L" ;;
+            esac
+          done
           # Effective verdict (post-downgrade) and the labels actually
           # applied, exposed as step outputs for the mep-meta upsert below
           # (ADR-0138 §20). Written BEFORE the Project writes so a partial
