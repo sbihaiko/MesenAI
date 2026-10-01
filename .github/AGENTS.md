@@ -326,6 +326,16 @@ what CI actually runs; this doc records why they're split the way they are.
   `check_apply_verdict_external_label_branch`,
   `check_apply_verdict_exposes_outputs`, and
   `check_apply_verdict_kind_matches_mei_rules_status_to_kind`.
+  **`patch:ips`/`patch:bps` are lint-derived (bug #557).** They are never read
+  from classify's `assets` array: `scripts/pack_patch_labels.py` parses
+  `mep_lint_output.txt` and returns a kind only for a whole record
+  `bundled patch: X.ips|bps (present, wired — applied on load)`, anchored so a
+  submitter-controlled archive member name cannot forge the marker. The
+  workflow and `scripts/validate_pack_local.sh` `--add-label` the kinds it
+  returns and `--remove-label` the other, so a stale label is dropped.
+  Checked by `check_apply_verdict_patch_labels_from_lint` (the old
+  `ips|bps) L="patch:$asset"` arm must not return and the helper must be
+  used) and by `scripts/test_pack_patch_labels.py`.
   **"Upsert mep-meta comment" (`id: upsert-mep-meta`, F6.2b complete;
   fence fix + `kind` field F6.3b).** Runs right after `apply-verdict`, on
   EVERY successful classify pass (`if: steps.classify.outcome ==

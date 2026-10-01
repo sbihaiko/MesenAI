@@ -23,6 +23,11 @@ DICT_VALUE_RE = re.compile(r':\s*"([^"]+)"')
 WORKFLOW_KIND_ASSIGN_RE = re.compile(r'KIND="([^"]+)"')
 
 
+# Bug #557: patch:ips|bps come from scripts/pack_patch_labels.py (the lint),
+# never from classify's `assets`. This is the arm that used to do it.
+PATCH_FROM_ASSETS_ARM = 'ips|bps) L="patch:$asset"'
+
+
 def _apply_verdict_block(text):
     blocks = [b for b in text.split("\n      - name:") if "id: apply-verdict" in b]
     if not blocks:
@@ -142,3 +147,15 @@ def check_apply_verdict_kind_matches_mei_rules_status_to_kind(text):
             f"{sorted(workflow_kinds)} are not textually consistent with "
             f"mei_rules.STATUS_TO_KIND's values {sorted(rules_kinds)}"
         )
+
+
+def check_apply_verdict_patch_labels_from_lint(text):
+    # Bug #557: the case loop must not map classify's ips/bps onto patch:*;
+    # the labels come from the lint via scripts/pack_patch_labels.py.
+    block = _apply_verdict_block(text)
+    if block is None:
+        return
+    if PATCH_FROM_ASSETS_ARM in block:
+        fail("apply-verdict maps classify's ips|bps assets onto patch:* labels (bug #557)")
+    if "pack_patch_labels.py" not in block:
+        fail("apply-verdict does not derive patch:* labels from scripts/pack_patch_labels.py")

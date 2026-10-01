@@ -478,6 +478,7 @@ doc-checks: check-manifest
 	python3 scripts/test_mep_addition.py
 	python3 scripts/test_mep_lint_addition.py
 	python3 scripts/test_mep_errata.py
+	python3 scripts/test_pack_patch_labels.py
 	python3 scripts/test_mep_audio_patch_resolution.py
 	#Downloader hop/shape rules and the lint decompression cap (review pass 2026-09-06).
 	python3 scripts/test_fetch_pack.py

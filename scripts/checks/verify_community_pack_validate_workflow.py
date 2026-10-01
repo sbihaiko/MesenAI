@@ -107,6 +107,7 @@ CHECKS = (
     apply_verdict.check_apply_verdict_exposes_outputs,
     apply_verdict.check_apply_verdict_kind_matches_mei_rules_status_to_kind,
     apply_verdict.check_apply_verdict_does_not_dump_full_lint,
+    apply_verdict.check_apply_verdict_patch_labels_from_lint,
     mep_meta.check_mep_meta_step_present_and_not_gated_on_recipe_status,
     mep_meta.check_mep_meta_find_then_patch,
     mep_meta.check_mep_meta_marker_in_comment_body,
