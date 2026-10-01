@@ -21,6 +21,7 @@ public static class ReplayShare
 	//notes are the only variable part and the untruncated Description is
 	//already in the .mmo's MovieInfo.txt.
 	public const int MaxUrlLength = 4000;
+	public const int MaxFileNameBytes = 255;
 
 	//Pre-filled issue URL. The title carries only the prefix: the workflow
 	//rewrites the whole title from the file (section 5), so a typed title is
@@ -57,6 +58,19 @@ public static class ReplayShare
 		if(baseName.Length == 0) {
 			baseName = "replay";
 		}
-		return baseName + " " + now.ToString("yyyy-MM-dd HH.mm.ss") + ".mmo";
+		string suffix = " " + now.ToString("yyyy-MM-dd HH.mm.ss") + ".mmo";
+		//Filesystems cap a name at 255 bytes (ext4, APFS): cut the stem on a rune
+		//boundary so the timestamp and extension always fit.
+		StringBuilder stem = new StringBuilder();
+		int bytes = 0;
+		foreach(Rune r in baseName.EnumerateRunes()) {
+			int size = r.Utf8SequenceLength;
+			if(bytes + size > MaxFileNameBytes - Encoding.UTF8.GetByteCount(suffix)) {
+				break;
+			}
+			stem.Append(r.ToString());
+			bytes += size;
+		}
+		return stem.ToString().TrimEnd() + suffix;
 	}
 }

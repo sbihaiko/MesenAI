@@ -211,6 +211,17 @@ def check_not_a_movie():
     ok("AC-6 anything that is not a Mesen .mmo is refused")
 
 
+def check_last_identity_key_wins():
+    # AC-9: MesenMovie::ParseSettings keeps the last SHA1/GameFile line.
+    decoy = "SHA1 " + "F" * 40 + "\nGameFile decoy.nes\n"
+    real = game_settings().decode()
+    result = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": (decoy + real).encode()})))
+    if result.facts.get("sha1") != SHA1 or result.facts.get("game_file") != "Contra (USA).nes":
+        fail(f"AC-9 the last SHA1/GameFile must win: {result.facts}")
+        return
+    ok("AC-9 duplicate identity keys: the last one wins, as in the Core")
+
+
 def check_malformed_members_are_refused():
     # AC-7: a hostile archive must be a verdict, never a traceback (a crash
     # leaves a stale replay:valid label on the issue).
@@ -255,6 +266,7 @@ def main():
     check_rom_identity()
     check_patch_and_extension()
     check_not_a_movie()
+    check_last_identity_key_wins()
     check_malformed_members_are_refused()
     check_power_on_state_is_deterministic()
     if FAILURES:

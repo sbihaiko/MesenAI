@@ -96,9 +96,11 @@ def parse_game_settings(text):
     for raw in text.splitlines():
         line = raw.rstrip("\r")
         key, _, value = line.partition(" ")
-        if key == "SHA1" and not facts["sha1"]:
+        # The last occurrence wins, as in MesenMovie::ParseSettings: the lint
+        # must read the identity the Core would play back, not a decoy line.
+        if key == "SHA1":
             facts["sha1"] = value.strip()
-        elif key == "GameFile" and not facts["game_file"]:
+        elif key == "GameFile":
             facts["game_file"] = value.strip()
         elif key == "Cheat":
             kind, _, code = value.partition(" ")

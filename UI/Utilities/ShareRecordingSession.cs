@@ -30,7 +30,13 @@ namespace Mesen.Utilities
 			}
 
 			string folder = Path.Combine(ConfigManager.MovieFolder, "Shared");
-			Directory.CreateDirectory(folder);
+			try {
+				Directory.CreateDirectory(folder);
+			} catch(Exception ex) when(ex is UnauthorizedAccessException || ex is IOException) {
+				EmuApi.WriteLogEntry("[RecordAndShare] UI: cannot create " + folder + ": " + ex.Message);
+				EmuApi.DisplayMessage("Movies", "MovieShareFolderError", folder);
+				return;
+			}
 			string file = Path.Combine(folder, ReplayShare.FileName(EmuApi.GetRomInfo().GetRomName(), DateTime.Now));
 
 			RecordMovieOptions options = new RecordMovieOptions(

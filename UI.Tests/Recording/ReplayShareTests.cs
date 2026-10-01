@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using Mesen.Logic;
 using Xunit;
 
@@ -48,6 +49,18 @@ namespace Mesen.Tests.Recording
 		{
 			string url = ReplayShare.BuildIssueUrl(new string('x', 10000));
 			Assert.True(url.Length <= ReplayShare.MaxUrlLength, "url length " + url.Length);
+		}
+
+		[Theory]
+		[InlineData("a", 300)]
+		[InlineData("\u3042", 300)]
+		[InlineData("\U0001F3AE", 300)]
+		public void FileName_StaysWithin255Bytes_AndKeepsTheTimestampAndExtension(string unit, int count)
+		{
+			string name = ReplayShare.FileName(string.Concat(System.Linq.Enumerable.Repeat(unit, count)), new DateTime(2026, 10, 1, 14, 5, 9));
+			Assert.True(Encoding.UTF8.GetByteCount(name) <= 255, "bytes " + Encoding.UTF8.GetByteCount(name));
+			Assert.EndsWith(" 2026-10-01 14.05.09.mmo", name);
+			Assert.DoesNotContain("\uFFFD", name);
 		}
 
 		[Fact]

@@ -38,6 +38,6 @@ body:
     id: notes
     attributes:
       label: "Notes"
-      description: "Optional. The first line becomes the title's subtitle; the rest stays here."
+      description: "Optional. Anything worth knowing about this replay. The title's subtitle is the first line of the replay file's own Description, not of this box."
     validations:
       required: false
