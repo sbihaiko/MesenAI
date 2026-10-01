@@ -434,6 +434,12 @@ doc-checks: check-manifest
 	#interpreters and dispatch keep their own golden/PASS-style checks.
 	python3 scripts/test_mei_rules.py
 	python3 scripts/test_rom_target.py
+	#ADR-0205 R.1: the shared-replay publish side. The section 3 lint, the
+	#issue -> verdict -> label round trip (no network), and the form/workflow/
+	#labels wiring. No ROM; the end-to-end proof is scripts/check_replay_recorded.sh.
+	python3 scripts/test_replay_lint.py
+	python3 scripts/test_replay_submission.py
+	python3 scripts/checks/verify_replay_form_and_workflow.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py

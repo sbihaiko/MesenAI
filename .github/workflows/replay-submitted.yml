@@ -1,0 +1,114 @@
+name: Replay Submitted
+
+# ADR-0205 sections 5 and 6, slice R.1: validates the file the author attached
+# to a `[Replay]` issue, rewrites the issue title from the file itself and sets
+# the verdict label. The shape is community-pack-submitted.yml's (an Issue Form
+# submission/edit, or an exact `/revalidate` comment, on an issue carrying the
+# form's label), without the Project board or the classify step: a replay has
+# no AI classification and no board field, only a structural lint.
+#
+# All logic lives in scripts/replay_submission.py (unit tested without a
+# network, scripts/test_replay_submission.py); this file only reads the issue,
+# calls it and applies its JSON with `gh`. Writes use GITHUB_TOKEN, whose edits
+# do not re-trigger workflows, so the title rewrite and the label changes below
+# cannot loop (the pack flow needs an edited-body guard because it writes with
+# a PAT).
+#
+# Untrusted text (issue body, title, login) reaches the shell only through
+# `env:`, never interpolated into a `run:` script.
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: replay-submitted-${{ github.event.issue.number }}
+  cancel-in-progress: ${{ github.event_name == 'issues' }}
+
+jobs:
+  validate:
+    if: >
+      (github.event_name == 'issues' &&
+       contains(github.event.issue.labels.*.name, 'replay')) ||
+      (github.event_name == 'issue_comment' &&
+       !github.event.issue.pull_request &&
+       github.event.comment.body == '/revalidate' &&
+       contains(github.event.issue.labels.*.name, 'replay'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_LOGIN: ${{ github.event.issue.user.login }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate the attachment (section 3 lint, section 5 title)
+        id: verdict
+        run: |
+          set -euo pipefail
+          # Re-read the issue: on `/revalidate` the payload body is current, but
+          # a fast edit may have landed since the event was queued.
+          gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json body,title,labels > issue.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("issue.json"))
+          open("body.txt", "w", encoding="utf-8").write(d["body"] or "")
+          open("title.txt", "w", encoding="utf-8").write(d["title"] or "")
+          open("labels.txt", "w", encoding="utf-8").write(",".join(l["name"] for l in d["labels"]))
+          PY
+          python3 scripts/replay_submission.py \
+            --body-file body.txt \
+            "--title=$(cat title.txt)" \
+            --login "$ISSUE_LOGIN" \
+            --labels "$(cat labels.txt)" > verdict.json
+          python3 - <<'PY'
+          import json
+          v = json.load(open("verdict.json"))
+          open("comment.md", "w", encoding="utf-8").write(v["comment"])
+          open("new_title.txt", "w", encoding="utf-8").write(v["title"])
+          print("verdict:", v["verdict"])
+          PY
+
+      - name: Apply title, labels and verdict comment
+        run: |
+          set -euo pipefail
+          # Section 5: the whole title is rewritten from the artifact and the
+          # rewrite is idempotent, so `/revalidate` is a no-op once it matches.
+          NEW_TITLE="$(cat new_title.txt)"
+          CURRENT_TITLE="$(cat title.txt)"
+          if [ "$NEW_TITLE" != "$CURRENT_TITLE" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --title "$NEW_TITLE"
+          fi
+          python3 - <<'PY' > label_args.txt
+          import json
+          v = json.load(open("verdict.json"))
+          have = set(open("labels.txt", encoding="utf-8").read().split(","))
+          for l in v["labels_add"]:
+              if l not in have:
+                  print("--add-label=" + l)
+          for l in v["labels_remove"]:
+              if l in have:
+                  print("--remove-label=" + l)
+          PY
+          if [ -s label_args.txt ]; then
+            mapfile -t ARGS < label_args.txt
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" "${ARGS[@]}"
+          fi
+          # One verdict comment, edited in place on a re-validation.
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file comment.md --edit-last --create-if-none
+
+      # A crash in the lint step must not leave an earlier "valid" standing:
+      # the artifact could have been swapped for one that cannot be checked.
+      - name: Withdraw replay:valid when the check itself failed
+        if: failure()
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "replay:valid" || true

@@ -7,6 +7,7 @@
 //Build:   make capture-tool
 //Usage:   scripts/headless_record <rom> <seconds> <output_prefix> [pal] [hdpack] [screenshot] [log] [hdpack-off|mep-off|mep-notextures|mep-nosynth|mep-disable=<container>] [romtiles] [filter=<name>] [live=<ms>]
 //         [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [movie=<file.bk2|file.mmo>] [cheat=AAAA:VV[:CC]]
+//         [record-share=<out.mmo>] [record-stock=<out.mmo>[@current|@save-data]]
 //
 //ADR-0184: "cheat=" takes a RAM-address code only - the AAAA:VV[:CC] form with
 //AAAA below $0800. A Game Genie letter code is refused, because it is a PRG
@@ -148,6 +149,7 @@
 //Read that header before changing anything below; it says which of the three
 //rules can be trusted to fail a run and which one only names a window.
 #include "Shared/MovieSyncGate.h"
+#include "Shared/Movies/MovieTypes.h"
 #include "Utilities/LiveRecordFormat.h"
 //"cdl=" - the CDL exports take the Core's own MemoryType enum; that header is
 //a bare enum with no further dependency, so it is included rather than mirrored.
@@ -330,6 +332,14 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//file (see the "movie=" note at the top of this file).
 	void MoviePlay(char* filename);
 	bool MoviePlaying();
+	//ADR-0205 section 2: the Record-and-share action itself, the same export the
+	//UI calls. MovieStop finalizes the .mmo (MovieManager::Stop writes it).
+	bool MovieRecordAndShare(RecordMovieOptions options);
+	void MovieStop();
+	//The ordinary movie recorder (the Movies > Record... path): the negative
+	//control for record-share=, whose output the section 3 lint must refuse.
+	void MovieRecord(RecordMovieOptions options);
+	bool MovieRecording();
 	//InteropDLL/EmuApiWrapper.cpp - F5.4d's builder-window counters, polled
 	//here once per sync sample so a movie-driven run carries its own evidence
 	//instead of being judged only by the one number it ends on (ADR-0185 sec. 4
@@ -1028,6 +1038,8 @@ int main(int argc, char** argv)
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
 			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
+			"       [record-share=<out.mmo>] (ADR-0205: the Record-and-share action; excludes movie= and state=)\n"
+			"       [record-stock=<out.mmo>[@current|@save-data]] (the ordinary recorder, the lint's negative control)\n"
 			"       [cheat=AAAA:VV[:CC]] (RAM addresses $0000-$07FF only, ADR-0184; repeatable)\n"
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
@@ -1080,6 +1092,16 @@ int main(int argc, char** argv)
 	//the top of this file for the two containers the Core accepts and for what a
 	//.mmo does to the settings pushed below.
 	std::string moviePath;
+//"record-share=": record the run with the Record-and-share action (ADR-0205
+//section 2) into this .mmo - the way slice R.1 produces its bounded input, and
+//the proof the scripts/replay_lint.py accepts the action's own output.
+std::string recordSharePath;
+//"record-stock=": the same recording through the ordinary recorder with the
+//player's stock settings - the artifact scripts/replay_lint.py must refuse
+//(ADR-0205 section 3). "@current" records from the current state (the UI's
+//default), "@save-data" from power-on with battery data (the command line's).
+std::string recordStockPath;
+RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate. Any
 	//hdpack recording writes <prefix>-synctrace.csv - one row per sample of the
 	//builder's own counters, the movie player's state and every declared watch
@@ -1211,6 +1233,21 @@ int main(int argc, char** argv)
 			fclose(f);
 		} else if(strncmp(argv[i], "movie=", 6) == 0) {
 			moviePath = argv[i] + 6;
+		} else if(strncmp(argv[i], "record-share=", 13) == 0) {
+			recordSharePath = argv[i] + 13;
+		} else if(strncmp(argv[i], "record-stock=", 13) == 0) {
+			recordStockPath = argv[i] + 13;
+			size_t at = recordStockPath.rfind('@');
+			if(at != std::string::npos) {
+				std::string mode = recordStockPath.substr(at + 1);
+				if(mode == "save-data") {
+					recordStockFrom = RecordMovieFrom::StartWithSaveData;
+				} else if(mode != "current") {
+					fprintf(stderr, "refused: record-stock mode @%s is neither @current nor @save-data\n", mode.c_str());
+					return 1;
+				}
+				recordStockPath.resize(at);
+			}
 		} else if(strncmp(argv[i], "sync-watch=", 11) == 0) {
 			//ADR-0185 sec. 4 as amended (issue #201). Refused, not warned
 			//about, for the reason every other parser here refuses: a watch
@@ -1273,6 +1310,15 @@ int main(int argc, char** argv)
 	}
 	if(!moviePath.empty() && !stateFile.empty()) {
 		fprintf(stderr, "refused: movie=%s and state=%s cannot be combined - a movie carries its own start state and power cycles the console\n", moviePath.c_str(), stateFile.c_str());
+		return 1;
+	}
+
+	if(!recordStockPath.empty() && !recordSharePath.empty()) {
+		fprintf(stderr, "refused: record-stock= and record-share= are two different recordings of the same run\n");
+		return 1;
+	}
+	if((!recordSharePath.empty() || !recordStockPath.empty()) && (!moviePath.empty() || !stateFile.empty())) {
+		fprintf(stderr, "refused: record-share=/record-stock= %s cannot be combined with movie= or state= - a shared replay is a run from power-on\n", recordSharePath.c_str());
 		return 1;
 	}
 
@@ -1369,7 +1415,13 @@ int main(int argc, char** argv)
 	//uninitialised RAM takes a different path, and the recording differs even
 	//when both runs cover the same frames. The core's own deterministic replay
 	//harness zeroes it for the same reason (RecordedRomTest::Run).
-	sms.RamPowerOnState = RamState::AllZeros;
+	//record-stock= is the negative control for record-share=: it must run under
+	//the player's stock settings (the shipped default is Random), which is what
+	//makes the ordinary recorder embed a save state. record-share= runs under the
+	//same stock settings on purpose: the action has to override them for the
+	//recording and put them back afterwards (printed below, ADR-0205 section 2).
+	const RamState harnessRamState = (recordStockPath.empty() && recordSharePath.empty()) ? RamState::AllZeros : RamState::Random;
+	sms.RamPowerOnState = harnessRamState;
 	SetSmsConfig(sms);
 
 	NesConfig nes = GetNesConfig();
@@ -1401,7 +1453,7 @@ int main(int argc, char** argv)
 	if(portTwo) {
 		nes.Port2.Type = ControllerType::NesController; //see the SmsConfig note above
 	}
-	nes.RamPowerOnState = RamState::AllZeros; //see the SmsConfig note above
+	nes.RamPowerOnState = harnessRamState; //see the SmsConfig note above
 	if(hdPackOff) {
 		nes.EnableHdPacks = false; //see the "hdpack-off" argument above
 	}
@@ -1416,7 +1468,7 @@ int main(int argc, char** argv)
 	//filter's output exactly (GbcAdjustColors/BlendFrames both recolor pixels)
 	gameboy.GbcAdjustColors = false;
 	gameboy.BlendFrames = false;
-	gameboy.RamPowerOnState = RamState::AllZeros; //see the SmsConfig note above
+	gameboy.RamPowerOnState = harnessRamState; //see the SmsConfig note above
 	SetGameboyConfig(gameboy);
 
 	//The screenshot pipeline (BaseVideoFilter::TakeScreenshot) runs the
@@ -1594,6 +1646,35 @@ int main(int argc, char** argv)
 	}
 
 	applyCheats();
+	//"record-share=": the action itself, started after LoadRom (it power cycles,
+	//which resets the frame counter, so the run's budget counts from power-on)
+	//and after the cheats, which a published replay carries (ADR-0205 section 4).
+	if(!recordSharePath.empty()) {
+		RecordMovieOptions shareOptions = {};
+		strncpy(shareOptions.Filename, recordSharePath.c_str(), sizeof(shareOptions.Filename) - 1);
+		strncpy(shareOptions.Author, "headless", sizeof(shareOptions.Author) - 1);
+		strncpy(shareOptions.Description, "R.1 Record and share (headless)", sizeof(shareOptions.Description) - 1);
+		if(!MovieRecordAndShare(shareOptions)) {
+			fprintf(stderr, "refused record-share=%s: the Record and share action did not start\n", recordSharePath.c_str());
+			Stop();
+			Release();
+			return 1;
+		}
+		printf("record-share: recording to %s\n", recordSharePath.c_str());
+	}
+	if(!recordStockPath.empty()) {
+		RecordMovieOptions stockOptions = {};
+		strncpy(stockOptions.Filename, recordStockPath.c_str(), sizeof(stockOptions.Filename) - 1);
+		stockOptions.RecordFrom = recordStockFrom;
+		MovieRecord(stockOptions);
+		if(!MovieRecording()) {
+			fprintf(stderr, "refused record-stock=%s: the ordinary recorder did not start\n", recordStockPath.c_str());
+			Stop();
+			Release();
+			return 1;
+		}
+		printf("record-stock: recording to %s\n", recordStockPath.c_str());
+	}
 	//"cdl=" - Code/Data Logger capture. The CDL is fed from the Debugger's
 	//instruction/read hooks (NesDebugger::ProcessInstruction / ProcessRead and
 	//the GB/SMS equivalents), which exist only while a Debugger is attached, so
@@ -2130,6 +2211,22 @@ int main(int argc, char** argv)
 		GetLog(log.data(), (uint32_t)log.size());
 		log.resize(strlen(log.c_str()));
 		printf("--- core log ---\n%s--- end log ---\n", log.c_str());
+	}
+	if(!recordSharePath.empty() || !recordStockPath.empty()) {
+		MovieStop();
+		const std::string& recordedPath = recordSharePath.empty() ? recordStockPath : recordSharePath;
+		std::error_code sizeError;
+		auto written = std::filesystem::file_size(recordedPath, sizeError);
+		if(sizeError) {
+			fprintf(stderr, "record: %s was not written\n", recordedPath.c_str());
+			Stop();
+			Release();
+			return 1;
+		}
+		if(!recordSharePath.empty()) {
+			printf("record-share: the player's NES RamPowerOnState after stop is %s (restored if Random)\n", GetNesConfig().RamPowerOnState == RamState::Random ? "Random" : "NOT Random");
+		}
+		printf("%s: wrote %s (%llu bytes)\n", recordSharePath.empty() ? "record-stock" : "record-share", recordedPath.c_str(), (unsigned long long)written);
 	}
 	if(emulatorFrozen) {
 		//Issue #506: the run was ended by freezing the emulation thread rather

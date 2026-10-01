@@ -43,6 +43,17 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   needs typing. Do not add a UI launcher or a path-discovery hook for it;
   the menu side is guarded by `UI.Tests/Recording/LiveRecorderMenuTests.cs`
   and `UI.HeadlessTests/LiveRecorderMenuTests.cs`.
+- **Shared replays, publish side (ADR-0205 R.1).** `replay_lint.py` is the
+  section 3 lint (8 MB cap on size alone, no `SaveState.mss`/`Battery*`, ROM
+  SHA-1 + bare file name; reads only `GameSettings.txt`/`MovieInfo.txt`).
+  `replay_submission.py` is the issue-level half (attachment URL, whole-title
+  rewrite `[Replay] <game> - <alias> - <subtitle>`, verdict labels
+  `replay:valid`/`replay:invalid`), downloading through `fetch_pack.py` with
+  `replay_host_allowlist.json` (deliberately not `pack_host_allowlist.json`;
+  that merge is R.2). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
+  `checks/verify_replay_form_and_workflow.py`. End-to-end with a ROM:
+  `check_replay_recorded.sh` (`headless_record record-share=` /
+  `record-stock=` are the action and its negative control).
 
 ## Work Guidance
 

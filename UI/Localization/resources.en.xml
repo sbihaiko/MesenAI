@@ -3748,6 +3748,7 @@ E
 			<Value ID="Movies">Movies</Value>
 			<Value ID="Play">Play...</Value>
 			<Value ID="Record">Record...</Value>
+			<Value ID="RecordAndShare">Record and share</Value>
 			<Value ID="Stop">Stop</Value>
 			<Value ID="SoundRecorder">Sound Recorder</Value>
 			<Value ID="VideoRecorder">Video Recorder</Value>

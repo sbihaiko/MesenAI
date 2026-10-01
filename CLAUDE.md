@@ -187,10 +187,13 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   `scripts/mei_catalog_entry.py` only when mep-meta's `recipe.sources.deps`
   is non-empty).
 - `scripts/ensure_community_pack_labels.sh` idempotently ensures the repo's
-  15 labels: `community-pack`, `pack:valid`, `pack:invalid`,
+  18 labels: `community-pack`, `pack:valid`, `pack:invalid`,
   `pack:needs-review`, `pack:split`, `pack:known-missing`,
   `assets:textures`, `assets:audio`, `assets:external`, `patch:ips`,
-  `patch:bps`, `console:nes`, `console:gb`, `console:gbc`, `console:sms`.
+  `patch:bps`, `console:nes`, `console:gb`, `console:gbc`, `console:sms`, and
+  the three shared-replay labels `replay`, `replay:valid`, `replay:invalid`
+  (ADR-0205, `.github/workflows/replay-submitted.yml`, a flow separate from
+  pack triage).
   `pack:known-missing` is applied by the validation run itself, from the
   errata resolved against the computed Pack Hash (ADR-0152) — never by the
   classify step, whose inputs are submitter-controlled.
