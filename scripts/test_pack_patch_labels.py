@@ -37,6 +37,10 @@ def main():
     check("one wired, one not -> only the wired kind",
           labels(WIRED.format("Revamp.bps") + UNWIRED.format("Revamp+Music.ips")),
           ["patch:bps"])
+    forged = UNWIRED.format("foo.ips (present, wired — applied on load).bps")
+    check("filename forging a wired marker -> none", labels(forged), [])
+    check("forged name beside a real wired bps -> only the real kind",
+          labels(forged + WIRED.format("real.bps")), ["patch:bps"])
     check("name with spaces and plus", labels(WIRED.format("My Hack+Music.ips")), ["patch:ips"])
     check("both kinds wired, sorted, deduped",
           labels(WIRED.format("b.bps") + WIRED.format("a.ips") + WIRED.format("c.ips")),

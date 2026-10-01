@@ -12,7 +12,14 @@ Usage: pack_patch_labels.py <mep_lint_output.txt>   (labels on one line, space-s
 import re
 import sys
 
-_WIRED = re.compile(r"bundled patch: (.+?\.(?:ips|bps)) \(present, wired\b", re.IGNORECASE)
+# Anchored to the whole canonical record (mep_lint.scan_bundled_patches): the
+# archive member name is submitter-controlled, so a name that embeds
+# "(present, wired" must not forge the marker. The record has to END with the
+# canonical wired suffix, so a NOT-wired record whose name embeds it cannot match.
+_WIRED = re.compile(
+    r"^(?:info\s+\S+\s+)?bundled patch: (.+\.(?:ips|bps)) \(present, wired \u2014 applied on load\)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def patch_labels(lint_text):
