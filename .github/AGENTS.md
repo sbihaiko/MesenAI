@@ -12,6 +12,15 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Local Contracts
 
+- `../.coderabbit.yaml` (repo root, not under `.github/`) configures the
+  CodeRabbit PR reviewer, a GitHub App installed by the owner on this repo
+  only. It sets en-US reviews, skips `runs/` and `roms/`, and gives path
+  instructions for workflows (third-party text must reach a step through
+  `env:`), ADRs (accepted ADRs are binding), docs and scripts. It is advisory:
+  it gates nothing, so a finding is answered on the PR like any other reviewer's
+  before merge. Keys follow the vendor's configuration reference; change them
+  there, not by guess.
+
 - `workflows/build.yml` — native + UI release build, **Linux only** since
   ADR-0191 (2026-09-14). The two Windows publish jobs and the four macOS legs
   were deleted from the file (history keeps them); what is left is the
