@@ -326,6 +326,22 @@ def check_coverage_of_subject(text: str, terms) -> None:
         check(term in text, f"the guide still covers {description} ({term})")
 
 
+def copies_kit_map(command: str) -> bool:
+    """True for a `cp` that names a `map` path component anywhere in its operands
+    (source or destination, glob, bare directory or `--target-directory=`)."""
+    words = command.split()
+    if words[:1] != ["cp"]:
+        return False
+    for word in words[1:]:
+        if word.startswith("--") and "=" in word:
+            word = word.split("=", 1)[1]
+        elif word.startswith("-"):
+            continue
+        if "map" in word.strip("/").split("/"):
+            return True
+    return False
+
+
 def check_no_map_copy(text: str, label: str) -> None:
     """A stage panorama is sliced back into sheets, never copied (#560).
 
@@ -336,8 +352,7 @@ def check_no_map_copy(text: str, label: str) -> None:
     """
     for lineno, body in fenced_blocks(text):
         for command in joined_commands(body):
-            words = command.split()
-            if words[:1] == ["cp"] and any("/map/" in word for word in words[1:-1]):
+            if copies_kit_map(command):
                 check(False, f"{label}: block at line {lineno} copies the kit's map/ into the pack "
                              f"(slice it with artist_map.py --slice instead): {command}")
 

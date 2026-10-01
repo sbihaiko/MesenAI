@@ -375,6 +375,7 @@ doc-checks: check-manifest
 	#every --flag they print is one the script it is printed for accepts. A guide
 	#whose commands rotted is the discoverability failure it was written to fix.
 	python3 scripts/checks/verify_artist_docs.py
+	python3 scripts/test_verify_artist_docs_map_copy.py
 	#Phase 11 C.4: the release tools zip is built from an explicit file list
 	#(scripts/tools-zip-manifest.txt). `make release-macos` runs this too, but a
 	#release is cut rarely, so the manifest would rot between releases and the
