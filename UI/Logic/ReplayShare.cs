@@ -33,7 +33,8 @@ public static class ReplayShare
 			+ "&labels=" + Uri.EscapeDataString(FormLabel);
 
 		StringBuilder escaped = new StringBuilder();
-		foreach(char c in notes ?? "") {
+		//By rune: escaping a surrogate half alone would percent-encode U+FFFD.
+		foreach(Rune c in (notes ?? "").EnumerateRunes()) {
 			string piece = Uri.EscapeDataString(c.ToString());
 			if(head.Length + "&notes=".Length + escaped.Length + piece.Length > MaxUrlLength) {
 				break;

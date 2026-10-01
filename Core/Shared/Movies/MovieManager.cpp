@@ -28,7 +28,10 @@ void MovieManager::Record(RecordMovieOptions options)
 
 bool MovieManager::RecordAndShare(RecordMovieOptions options)
 {
-	auto lock = _emu->AcquireLock();
+	//No debugger lock: Record() power-cycles the console, and holding the
+	//debugger lock across that is the deadlock Emulator::AcquireLock documents
+	//(MesenMovie takes the same non-debugger lock for the same reason).
+	auto lock = _emu->AcquireLock(false);
 
 	if(!_emu->GetConsole()) {
 		return false;

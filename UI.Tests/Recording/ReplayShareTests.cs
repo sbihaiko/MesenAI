@@ -36,6 +36,14 @@ namespace Mesen.Tests.Recording
 		}
 
 		[Fact]
+		public void IssueUrl_EscapesANonBmpCharacterWhole()
+		{
+			string query = new Uri(ReplayShare.BuildIssueUrl("run \U0001F3AE")).Query;
+			Assert.Contains("notes=" + Uri.EscapeDataString("run \U0001F3AE"), query);
+			Assert.DoesNotContain("%EF%BF%BD", query);
+		}
+
+		[Fact]
 		public void IssueUrl_BoundsALongDescription_SoTheBrowserAcceptsTheLink()
 		{
 			string url = ReplayShare.BuildIssueUrl(new string('x', 10000));

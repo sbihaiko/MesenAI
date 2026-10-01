@@ -48,7 +48,9 @@ namespace Mesen.Utilities
 		//hands the file over to the author.
 		public static void Stop()
 		{
-			string? file = _file;
+			//Core ends a shared recording itself (ROM unload, state load); a plain
+			//recording started afterwards must not reveal the old file.
+			string? file = RecordApi.MovieSharing() ? _file : null;
 			_file = null;
 			RecordApi.MovieStop();
 

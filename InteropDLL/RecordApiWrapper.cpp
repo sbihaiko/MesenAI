@@ -109,6 +109,10 @@ extern "C"
 		return _emu->GetMovieManager()->RecordAndShare(options);
 	}
 
+	//true while the active recording is the Record-and-share one, so the UI can
+	//tell it from a plain recording started after Core ended the shared one.
+	DllExport bool __stdcall MovieSharing() { return _emu->GetMovieManager()->SharingRecording(); }
+
 	//Live recording (ADR-0169's interactive producer): publishes frames + the
 	//sprite layer from the running emulator to liveDir, while a human plays with
 	//a real controller. Start/stop here never take the emulator lock - the

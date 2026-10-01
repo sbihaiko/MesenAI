@@ -107,6 +107,22 @@ def parse_game_settings(text):
     return facts
 
 
+def random_power_on_keys(text):
+    """Serialized settings lines that make the power-on state random, whatever
+    the console prefix or key casing (ShareRecordingSettings.h drives the same
+    fields false for the recording)."""
+    found = []
+    for raw in text.splitlines():
+        key, _, value = raw.rstrip("\r").partition(" ")
+        low, val = key.lower(), value.strip().lower()
+        if low.endswith(".rampoweronstate") and val == "random":
+            found.append(key)
+        elif low.endswith((".randomizemapperpoweronstate", ".enablerandompoweronstate",
+                           ".randomizecpuppualignment")) and val == "true":
+            found.append(key)
+    return found
+
+
 def parse_movie_info(text):
     """`MovieInfo.txt` is `Author <name>` then `Description` on its own line,
     then the free text (MovieRecorder::Stop)."""
@@ -167,10 +183,20 @@ def lint_bytes(data):
                 "share action ignores save data on disk (section 2).",
             )
 
-        facts = parse_game_settings(_read_text(zf, SETTINGS_MEMBER))
+        try:
+            settings_text = _read_text(zf, SETTINGS_MEMBER)
+            info_text = _read_text(zf, INFO_MEMBER) if INFO_MEMBER in names else None
+        except Exception as exc:  # encrypted, corrupt CRC, unsupported method...
+            result.add(
+                "not-a-movie",
+                f"a member of the archive cannot be read ({type(exc).__name__}): a Mesen .mmo is a plain, "
+                "intact zip (ADR-0205 section 1).",
+            )
+            return result
+        facts = parse_game_settings(settings_text)
         info = {"author": "", "description": ""}
-        if INFO_MEMBER in names:
-            info = parse_movie_info(_read_text(zf, INFO_MEMBER))
+        if info_text is not None:
+            info = parse_movie_info(info_text)
         facts.update(info)
         result.facts = facts
 
@@ -179,6 +205,15 @@ def lint_bytes(data):
                 "rom-hash",
                 "GameSettings.txt has no well-formed ROM SHA-1 (ADR-0205 section 3): the hash is the pairing key "
                 "and is required.",
+            )
+        random_keys = random_power_on_keys(settings_text)
+        if random_keys:
+            result.add(
+                "power-on",
+                f"GameSettings.txt records a random power-on state ({', '.join(random_keys)}); without a save "
+                "state such a replay cannot play back (ADR-0205 section 2). A settings change made while "
+                "recording causes this; record again with the Record and share action and leave the "
+                "settings alone until it stops.",
             )
         game_file = facts["game_file"]
         if not game_file or "/" in game_file or "\\" in game_file:

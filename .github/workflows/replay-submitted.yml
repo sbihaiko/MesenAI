@@ -46,8 +46,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
-      ISSUE_BODY: ${{ github.event.issue.body }}
-      ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_LOGIN: ${{ github.event.issue.user.login }}
     steps:
       - name: Checkout repo
@@ -69,7 +67,7 @@ jobs:
           PY
           python3 scripts/replay_submission.py \
             --body-file body.txt \
-            --title "$(cat title.txt)" \
+            "--title=$(cat title.txt)" \
             --login "$ISSUE_LOGIN" \
             --labels "$(cat labels.txt)" > verdict.json
           python3 - <<'PY'
@@ -107,3 +105,10 @@ jobs:
           fi
           # One verdict comment, edited in place on a re-validation.
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file comment.md --edit-last --create-if-none
+
+      # A crash in the lint step must not leave an earlier "valid" standing:
+      # the artifact could have been swapped for one that cannot be checked.
+      - name: Withdraw replay:valid when the check itself failed
+        if: failure()
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "replay:valid" || true

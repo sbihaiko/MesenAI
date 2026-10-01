@@ -211,6 +211,43 @@ def check_not_a_movie():
     ok("AC-6 anything that is not a Mesen .mmo is refused")
 
 
+def check_malformed_members_are_refused():
+    # AC-7: a hostile archive must be a verdict, never a traceback (a crash
+    # leaves a stale replay:valid label on the issue).
+    good = bytearray(build(clean_members(), compression=zipfile.ZIP_STORED))
+    marker = b"MesenVersion"
+    at = good.find(marker)
+    good[at] ^= 0x01  # stored payload no longer matches its CRC-32
+    try:
+        bad_crc = replay_lint.lint_bytes(bytes(good))
+    except Exception as exc:  # noqa: BLE001
+        fail(f"AC-7 a corrupt member crashed the lint: {type(exc).__name__}: {exc}")
+        return
+    if bad_crc.ok or "not-a-movie" not in codes(bad_crc):
+        fail(f"AC-7 a corrupt member is refused as not-a-movie: {codes(bad_crc)}")
+        return
+    ok("AC-7 a malformed member is a not-a-movie verdict, not a crash")
+
+
+def check_power_on_state_is_deterministic():
+    # AC-8: a config push mid-recording can leave `Random` in the serialized
+    # settings of a file that has no SaveState.mss; it can never replay.
+    for extra in ("nes.ramPowerOnState Random", "nes.randomizeMapperPowerOnState true",
+                  "snes.enableRandomPowerOnState true", "NES.RAMPOWERONSTATE random"):
+        text = game_settings().decode() + extra + "\n"
+        result = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+        if result.ok or "power-on" not in codes(result):
+            fail(f"AC-8 {extra!r} must be refused as power-on: {codes(result)}")
+            return
+    for extra in ("nes.ramPowerOnState AllZeros", "nes.randomizeMapperPowerOnState false"):
+        text = game_settings().decode() + extra + "\n"
+        result = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+        if not result.ok:
+            fail(f"AC-8 {extra!r} is deterministic and must be accepted: {codes(result)}")
+            return
+    ok("AC-8 a Random power-on state in GameSettings.txt is refused; deterministic ones pass")
+
+
 def main():
     check_accepts_action_output()
     check_refuses_other_recordings()
@@ -218,6 +255,8 @@ def main():
     check_rom_identity()
     check_patch_and_extension()
     check_not_a_movie()
+    check_malformed_members_are_refused()
+    check_power_on_state_is_deterministic()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

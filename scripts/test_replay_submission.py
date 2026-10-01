@@ -187,11 +187,38 @@ def check_failures_are_verdicts():
     ok("AC-4 a missing attachment and a failed download are verdicts, not crashes")
 
 
+def check_hostile_text_and_urls():
+    # AC-5: submitter-controlled text reaches a title and a comment.
+    long_alias = "x" * 240
+    big = run(archive(author=long_alias, description="d" * 200))
+    if len(big.title) > 256:
+        fail(f"AC-5 the title must fit GitHub's 256 characters: {len(big.title)}")
+        return
+    ping = run(archive(author="`@octocat @org/team #123"))
+    if "@octocat" in ping.comment.replace("@\u200b", "") and "@octocat" in ping.comment:
+        fail(f"AC-5 the comment must not ping a user: {ping.comment!r}")
+        return
+    if "`@" in ping.comment or "#123" in ping.comment or "@org/team" in ping.comment:
+        fail(f"AC-5 backticks, @mentions and #refs must be defanged in the comment: {ping.comment!r}")
+        return
+    ctrl = run(archive(author="bo\u202eb\x07ob"))
+    if any(c in ctrl.title for c in ("\u202e", "\x07")):
+        fail(f"AC-5 control and bidi characters must be stripped from the title: {ctrl.title!r}")
+        return
+    for bad in ("https://github.com/user-attachments/files/../../o/r/releases/download/v/x.zip",
+                "https://github.com/user-attachments/files/%2e%2e/o/x.zip"):
+        if rs.extract_attachment_url(body(bad)) is not None:
+            fail(f"AC-5 a traversing attachment URL must not be accepted: {bad}")
+            return
+    ok("AC-5 title length, mention/ref defanging, control chars and traversing URLs are handled")
+
+
 def main():
     check_url_extraction()
     check_title()
     check_round_trip()
     check_failures_are_verdicts()
+    check_hostile_text_and_urls()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

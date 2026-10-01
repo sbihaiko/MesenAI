@@ -32,6 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from collections import namedtuple
 from pathlib import Path
 
@@ -60,6 +61,8 @@ SUBTITLE_MAX = 60
 COMMENT_MARKER = "<!-- replay-verdict -->"
 
 ATTACHMENT_RE = re.compile(r"https://github\.com/user-attachments/(?:files|assets)/[^\s)\]>\"']+")
+# GitHub's title limit is 256; stay under it.
+TITLE_MAX = 250
 
 Verdict = namedtuple("Verdict", "verdict title title_changed labels_add labels_remove comment facts")
 
@@ -67,8 +70,13 @@ Verdict = namedtuple("Verdict", "verdict title title_changed labels_add labels_r
 def extract_attachment_url(body):
     """First `github.com/user-attachments/{files,assets}/...` link in the issue
     body, else None. Anything else the author pasted is not the replay."""
-    match = ATTACHMENT_RE.search(body or "")
-    return match.group(0) if match else None
+    for match in ATTACHMENT_RE.finditer(body or ""):
+        url = match.group(0)
+        # A traversing path could normalize onto another GitHub path (a release
+        # asset); the attachment is the artifact (ADR-0205 sections 6, 10).
+        if ".." not in url and "%2e" not in url.lower():
+            return url
+    return None
 
 
 def load_catalog(path=CATALOG):
@@ -100,14 +108,30 @@ def build_subtitle(description):
     return line
 
 
+def _plain(text):
+    """Submitter text for a title: control, format (bidi) and separator
+    characters dropped, whitespace collapsed."""
+    kept = "".join(" " if unicodedata.category(c) in ("Zl", "Zp") else c
+                   for c in text if unicodedata.category(c) not in ("Cc", "Cf"))
+    return " ".join(kept.split())
+
+
+def _defang(text):
+    """Text echoed in a comment: no code-span break-out, no @mention, no #ref."""
+    return text.replace("`", "'").replace("@", "@\u200b").replace("#", "#\u200b")
+
+
 def build_title(facts, login, catalog):
-    game = resolve_game(facts.get("sha1"), catalog, facts.get("game_file"))
-    alias = (facts.get("author") or "").strip() or login
+    game = _plain(resolve_game(facts.get("sha1"), catalog, facts.get("game_file")))
+    alias = _plain(facts.get("author") or "") or login
     parts = [game, alias]
-    subtitle = build_subtitle(facts.get("description"))
+    subtitle = _plain(build_subtitle(facts.get("description")))
     if subtitle:
         parts.append(subtitle)
-    return TITLE_PREFIX + SEPARATOR.join(parts)
+    title = TITLE_PREFIX + SEPARATOR.join(parts)
+    if len(title) > TITLE_MAX:
+        title = title[: TITLE_MAX - 1].rstrip() + "…"
+    return title
 
 
 def _labels_for(valid):
@@ -123,13 +147,13 @@ def _comment(valid, findings, url, title):
     if valid:
         lines.append("**Accepted.** This is a Record and share replay: no save state, no battery data, "
                      "a ROM SHA-1 and a ROM file name only (ADR-0205 section 3).")
-        lines.append(f"Retitled to: `{title}`")
+        lines.append(f"Retitled to: `{_defang(title)}`")
         lines.append("Edited the attachment? Comment `/revalidate`.")
     else:
         lines.append("**Not accepted.** The replay was refused for the reason(s) below. "
                      "Re-record it with the **Record and share** action, attach the new file and comment `/revalidate`.")
         for code, message in findings:
-            lines.append(f"- `{code}`: {message}")
+            lines.append(f"- `{code}`: {_defang(message)}")
     if url:
         lines.append(f"<sub>Checked attachment: {url}</sub>")
     return "\n\n".join(lines)
