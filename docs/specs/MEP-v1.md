@@ -1,6 +1,6 @@
 # MEP v1 — MesenCE Enhancement Pack
 
-**Status:** v1.7 (stable; 1.1 adds `patches[]`, the folder-form/sibling-folder and the `auto/` layer; 1.2 adds optional `targets[].md5`; 1.3 clarifies §2.1 rule 9 bare-basename discovery (ADR-0121) and §6 "as code" wording for recipes (ADR-0138); 1.4 adds the optional root `id` slug — the pack's product identity, `pack_id` (ADR-0140); 1.5 adds the optional `border` section — a decorative frame/bezel composited around the game viewport (ADR-0149, §5.4); 1.6 adds the optional root `generated` object — a machine-made pack disclosing itself (ADR-0154, §3.1) — all optional and backward-compatible; 1.7 only states, in §5.2, the rule that a manifest whose every `<bgm>`/`<sfx>` target is missing is `invalid` and its wired-patch exception (ADR-0144, ADR-0148, ADR-0151) — no field and no behavior change) ·
+**Status:** v1.7 (stable; 1.1 adds `patches[]`, the folder-form/sibling-folder and the `auto/` layer; 1.2 adds optional `targets[].md5`; 1.3 clarifies §2.1 rule 9 bare-basename discovery (ADR-0121) and §6 "as code" wording for recipes (ADR-0138); 1.4 adds the optional root `id` slug — the pack's product identity, `pack_id` (ADR-0140); 1.5 adds the optional `border` section — a decorative frame/bezel composited around the game viewport (ADR-0149, §5.4); 1.6 adds the optional root `generated` object — a machine-made pack disclosing itself (ADR-0154, §3.1) — all optional and backward-compatible; 1.7 only adds an informative note in §5.2 recording how the registry treats a manifest whose every `<bgm>`/`<sfx>` target is missing and its wired-patch exception (ADR-0144, ADR-0148, ADR-0151) — no field, no behavior change and no new conformance requirement) ·
 **License of this spec:** CC0-1.0 (public domain) ·
 **Versioning:** semver — new optional field = minor; semantic change = major ·
 **Golden file:** [`golden/mep/pack.json`](golden/mep/pack.json) ·
@@ -237,17 +237,21 @@ underlying format allows it). The sections defined by this version are
   `scripts/mep_render_audio.py` emits it for machine-rendered tracks from
   the MIDI's loop marker (a marker meta-event whose text is an integer = the
   loop point in MIDI ticks), if any.
-- **Missing targets (MUST, ADR-0151; clarification added in v1.7).** An
-  audio section counts as present only when its referenced files resolve
-  inside the archive: a manifest whose every `<bgm>`/`<sfx>` target is missing
-  is `invalid`. **Exception (ADR-0144 as amended by ADR-0148):** a bundled
-  `.ips`/`.bps` ROM patch that is also *wired* — referenced by a `<patch>`
-  line (`hires.txt`) or a `patches[]` entry (`pack.json`) — redeems an audio
-  section whose `.ogg` tracks are not bundled, because the extract-audio flow
-  (ADR-0135) is expected to produce them from the patched ROM; its
-  install-time wiring is tracked in PRD slice F6.9. A patch
-  that is merely present in the archive redeems nothing, and the patch
-  supplies audio only: it never redeems a missing texture target.
+- **Missing targets (informative, added in v1.7; no conformance requirement).**
+  This note records how the community-pack registry decides validity today
+  (ADR-0151, ADR-0144 as amended by ADR-0148); it adds no requirement on
+  hosts or authors. The registry counts an audio section as present only when
+  its referenced files resolve inside the archive, so it treats a manifest
+  whose every `<bgm>`/`<sfx>` target is missing as `invalid`. Its one
+  exception: a bundled `.ips`/`.bps` ROM patch that is also *wired* —
+  referenced by a `<patch>` line (`hires.txt`) or a `patches[]` entry
+  (`pack.json`) — keeps such an audio section usable, because the
+  extract-audio flow (ADR-0135) is expected to produce the tracks from the
+  patched ROM; the install-time wiring is tracked in PRD slice F6.9. A patch
+  that is merely present in the archive does not qualify, and the exception
+  covers audio only, never a missing texture target. Which targets the
+  patch must apply to in a multi-target pack is not decided by those ADRs and
+  is not stated here.
 
 ### 5.3 `synth`
 
