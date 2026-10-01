@@ -10,8 +10,9 @@ work lives in Part A, player-shell/chrome work lives in Part B — it is now
 expressed as parts of one file instead of two files.
 
 Part A is the pack/core roadmap: vision and legal principles, standards,
-the shipped record, and the pending slices: Phase 14 (proof at scale),
-Phase 12's open F12.11 row, the ADR-0205 replay slices (Phase 13),
+the shipped record, and the pending slices: Phase 14 (proof at scale; F14.8
+is its only live row), Phase 12's open F12.11 row, Phase 7's P.8 (shaders on
+macOS, ADR-0237), Phase 6's F6.9 (install-time audio generation, ADR-0144), the ADR-0205 replay slices (Phase 13),
 Phase 9's F9.18 human panel, the Phase 10 spike S10.b, and the
 manual/hardware-gated residue of the shipped phases. Phase 11
 consolidation is complete. Part B is the
@@ -25,7 +26,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; waits for a go-ahead), **F6.9** (Phase 6, install-time audio generation under ADR-0144; waits for a go-ahead), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -90,7 +91,7 @@ does not exist.
 | Patches | IPS/BPS in `patches[]` by sha1 (ADR-0044) | shipped |
 | Audio log / score | VGM 1.71 + GD3, SMF type 1 + GM | shipped (F1) |
 | **ESP v1** — Enhanced Synth Preset | `docs/specs/ESP-v1.md` | v1 |
-| **MEP v1** — pack container | `docs/specs/MEP-v1.md` (§2.1 folder-form, sibling folder, `auto/` layer; §3 `pack.json` optional; §4 hash; §5 sections; §6 security) | v1.6 (v1.1 `patches[]` + folder-form/`auto/`; v1.2 `targets[].md5`; v1.3 rule-9/§6 as-code wording, ADR-0121/0138; v1.4 root `id`, ADR-0140; v1.5 `border`, ADR-0149; v1.6 root `generated`, ADR-0154; all additive) |
+| **MEP v1** — pack container | `docs/specs/MEP-v1.md` (§2.1 folder-form, sibling folder, `auto/` layer; §3 `pack.json` optional; §4 hash; §5 sections; §6 security) | v1.7 (v1.1 `patches[]` + folder-form/`auto/`; v1.2 `targets[].md5`; v1.3 rule-9/§6 as-code wording, ADR-0121/0138; v1.4 root `id`, ADR-0140; v1.5 `border`, ADR-0149; v1.6 root `generated`, ADR-0154; v1.7 informative §5.2 note on missing audio targets, ADR-0151/0144/0148; all additive or informative) |
 | **MEI v1** — discovery index | `docs/specs/MEI-v1.md` (federated `manifest.json`) | v1.4 (Phase 6 made it real as v1.1; D3 v1.2 `rom.sha1s`, D13 v1.3 `pack_id`/`content_id`/`votes`, F6.8 v1.4 `errata` §2.6, all additive) |
 | hires.txt extension GB/SMS (OGG on GB/SMS) | `docs/specs/hires-gbsms-v1-draft.md` | draft, frozen until a second implementer appears |
 | **MEP Recipe v1** — re-packaging of split-distribution packs | `docs/specs/MEP-recipe-v1.md` | v1 |
@@ -639,6 +640,20 @@ or Part B §8. Dates below describe delivery, not a new validation run.
     never draws. Zelda passes only on a glyph, the same mechanism. Also
     filed: #432, where parallel native-core tests race the scan's hand-over.
     [Log](../validation/f14.2-rescore-after-419-421-2026-09-24.md).
+  - **Re-scored after #431** (2026-09-24, run 22:39–22:47, written up
+    2026-09-25; #431 is closed): Gauntlet and Tetris 2 only. The fade-palette
+    symptom is gone from both copy tables (0 lines carry `0F0F0F0F`).
+    **Gauntlet passes** (13 184 magenta pixels against 0 on the baseline).
+    **Tetris 2 fails as scored on disk**: the painted key is masked by
+    captured screen `backgrounds/screen002.png` (#494, closed), and the
+    painted and baseline screenshots are byte-identical. A Tetris 2 pass
+    after removing one capture was reported, but **no artifact records it**.
+    The binary is `351ee096`, which predates #449 onward, so nothing here
+    measures later `main`; the copy tables came from a deleted worktree at an
+    unknown SHA. Criterion 3 is **27/28 on disk** (the user's
+    decision): the Tetris 2 pass was reported but is not recorded, so 28/28
+    enters only once that pass is recorded
+    [Log](../validation/f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md).
 
 - **F14.5** (2026-09-24) — counter-locked cycles measured, nothing emitted
   (go-ahead *"Sim, como recomendado (Recommended)"*). Two recordings of each
@@ -711,6 +726,15 @@ or Part B §8. Dates below describe delivery, not a new validation run.
     today until painted.
   - No issue filed.
   [Log](../validation/f14.4-adr0230-palette-gap-measurement-2026-09-24.md).
+
+- **F14.10** (2026-09-25) — **measured, not merged.** ADR-0235 option 2: the
+  recorder reads each probe at the pixel the run time reads, per row (issue
+  #499). The read alone refused 97 of 219 library captures and did not close
+  #499; it closed only with an extra "missing evidence is not separation" rule,
+  at 219 → 87 captures. The branch `feat/f1410-probe-evidence` was pushed and
+  not merged, the slice is dropped, and the owner picked option 3 (a render-time
+  guard), which is F14.11 below (ADR-0236 supersedes ADR-0235).
+  [Log](../validation/f1410-probe-evidence-2026-09-25.md).
 
 - **F14.11** (2026-09-25) — a capture draws only the cells it carries
   (ADR-0236, #499). The recorder writes, per capture, a positional 32×30 record
@@ -948,6 +972,20 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   [Log](../validation/f12.19-flicker-tolerant-tracks-2026-09-23.md),
   [re-run cold read](../validation/f1219-contra-kit-coldread-rerun-2026-09-24.md).
 
+- **F12.2** (2026-09-19) — *Copy as MEP sheet cell* in the Tile, Tilemap and
+  Sprite viewers (ADR-0215/0216), closed by its evaluator row (ADR-0214). Two
+  fresh Fable sessions, one game each (Zelda 1, Contra), both PASS: 0 hard
+  stops, neither opened a `hires.txt`, magenta on screen in about 2 and 4 min
+  ([log](../validation/f12.2-fable-panel-2026-09-19.md)). The same protocol on
+  all 28 ROMs with Opus as the standing evaluator: criterion 1 28/28,
+  criterion 4 27/28, criterion 3 13/28 on the path as dispatched
+  ([log](../validation/f12.2-opus-sweep-2026-09-19.md); re-scored by F14.2
+  above). A mechanical replay of the panel setup and steps
+  (`scripts/replay_f122_panel.py`, `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`)
+  is green on both games
+  ([log](../validation/f12.2-mechanical-replay-2026-09-19.md)). Pointer-level
+  discoverability stays not evaluated.
+
 
 ### 4. Roadmap — pending work, by slice
 
@@ -962,6 +1000,13 @@ contribution path, install/update happens in the client.
 |---|---|
 | F6.5 native OS file-picker step of the user-supplied-audio install | manual; no live row can raise the prompt today (all rows `hd-legacy`); every other step of that pass is unit-tested |
 | CI live validation (`LIVE_VALIDATION_ENABLED` → `'true'`, also arms the autofix-PR step) | deferred by user decision 2026-08-29 |
+
+One accepted slice is open (ADR-0144 is decided; this row only sequences
+delivery, and it is not a bug):
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| F6.9 | **Install-time audio generation for packs whose audio is redeemed by a wired bundled patch (ADR-0144).** Installing such a pack (a bundled `.ips`/`.bps` referenced by a `<patch>` line or `patches[]` entry, ADR-0148) today yields its textures but silent audio: the extract-audio flow (ADR-0135, `NesConsole::ExtractAudioHdPack`) is not called from `UI/Services/CommunityPackInstallCoordinator.cs`, `CommunityPackInstallService.cs` or `UI/Logic/LegacyHdPackInstall.cs`, and its only other caller, the HD Pack Builder window's shortcut, is a manual probe that does not write `.ogg` (checked on `efa0a85d9`). | ADR-0144 decided; no go-ahead yet — implementation waits for the user's explicit go-ahead. Bounded input: Mega Man (#138) or Zelda II (#141). Stop when installing the pack through the coordinator registers its `<bgm>`/`<sfx>` tracks, proven by a unit test and a headless run. |
 
 Non-goals (unchanged): hosting or committing third-party content; scraping
 Google Drive/MEGA confirm flows (the user supplies those files); fabricating
@@ -1414,8 +1459,8 @@ available in git and the logs.
 
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
 ("Gaps this table names"). Delivered (§3): F12.1, F12.3–F12.10 and
-F12.12–F12.19 (2026-09-17 to 2026-09-24), plus ADR-0209 Q1–Q3; F12.2's
-evaluator row closed 2026-09-19. **F12.11 is the one open row:** ADR-0220 was
+F12.12–F12.19 (2026-09-17 to 2026-09-24), plus ADR-0209 Q1–Q3; F12.2 is
+delivered 2026-09-19 (§3; its row is removed). **F12.11 is the one open row:** ADR-0220 was
 accepted and its code landed on 2026-09-22; stop condition (3) (the paint
 round trip through F12.3) was met by Phase 14's F14.1 on 2026-09-23 (§3),
 and (2) (GIMP and Krita, logged by a person) moves into F14.8. F12.1's scale reference moved F12.3's
@@ -1482,10 +1527,6 @@ matching (ADR-0145); automatic emission of `frameRange`,
 `tileAtPosition` or `memoryCheckConstant` (ADR-0189 §4); any tool that picks
 a memory address for the author; automatic anti-flicker via `<addition>`;
 tile normalization by similarity; embedding the Python toolchain in the UI.
-
-| Slice | Deliverable | Decision |
-|---|---|---|
-| F12.2 | **Copy as MEP sheet cell.** The Tile/Tilemap/Sprite viewers' right-click menu gains *Copy as MEP sheet cell*, emitting the `(tileData, palette)` key in the exact form `mep_build.py` reads from a sheet sidecar, beside the inherited *Copy tile (HD pack format)*. | No prerequisite; UI only, no Core change. Bounded input: Zelda 1 and Contra paused in the viewers. Stop when the pasted text round-trips through `mep_build.py build` on both: the pasted key is emitted as a `<tile>` whose `x,y` is the painted cell's crop, and `mep_lint.py` exits 0. (Reworded 2026-09-17 — the rule named `mep_build.py --verify`, which does not exist; `verify` is a subcommand of `mep_import.py` and checks a different subject. A machine-readable `verify-cell` subcommand stays a possible follow-up slice.) **Evaluator (ADR-0214, 2026-09-19):** a fresh Fable session pastes one cell and paints it without reading `hires.txt`, from `docs/validation/f12.2-fable-evaluator-briefing.md`. The dispatcher script is `docs/validation/f12.2-copy-sheet-cell-panel-script.md` (S1 re-records both packs — the installed `auto/` recordings predate ADR-0178 and `build` refuses them); handing it to Fable invalidates the run. Re-measures "Picking a tile's key by hand". A **mechanical** replay of setup S1–S4 and of P9–P14 exists (`scripts/replay_f122_panel.py` plus `UI.HeadlessTests/CopyAsMepSheetCellTests.cs`) and is green on both games — log: `docs/validation/f12.2-mechanical-replay-2026-09-19.md`. The remaining row is the Fable dispatch, not a calendar wait for a person. P15 and pointer-level discoverability are observations / not evaluated. **Closed 2026-09-19:** two fresh Fable sessions, one game each, both PASS — 0 hard stops, neither opened a `hires.txt`, magenta on screen in ~2 min (Zelda 1) and ~4 min (Contra). Criteria 3/5/6 re-derived mechanically from the packs they left behind, 0 magenta on an unpainted baseline at the same frame. Log: `docs/validation/f12.2-fable-panel-2026-09-19.md`. The same log is the argument for the protocol: round 1 stopped **both** sessions on the same two dispatcher defects (a copy table keyed in pixels while the tilemap is labelled in tiles, and a screenshot path that did not match the tool), neither reachable by any green suite. |
 
 **Added 2026-09-23 (F12.18, F12.19).** Two decisions from the Contra pose
 investigation (`docs/validation/contra-pose-offsets-and-flicker-2026-09-23.md`):
@@ -1556,8 +1597,14 @@ their rows are removed): the painted round trip reached the running game
 pixel-exact through both paths, which closes F12.11 (3) and ADR-0209 Q2/Q3's
 "in-game reload not verified". The kit-figure reload gap F14.1 found (#413) was fixed 2026-09-24.
 **F14.2 is delivered** (2026-09-24, §3; its row is removed): criterion 3
-re-scored at 20/28, then 26/28 after #419–#421 (0 blank-tile passes; #431
-holds the 2 failures). **F14.5 is delivered** (2026-09-24, §3; its row is
+re-scored at 20/28, then 26/28 after #419–#421 (0 blank-tile passes), then
+re-scored again after #431 (closed): Gauntlet passes and Tetris 2 fails on disk
+because capture `screen002` covers the frame (#494, closed); a Tetris 2 pass
+was reported but is not recorded, and that log measures `351ee096`, which
+predates #449 onward
+(`docs/validation/f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md`):
+27/28 on disk (the user's decision); 28/28 enters only once the
+unrecorded Tetris 2 pass is recorded. **F14.5 is delivered** (2026-09-24, §3; its row is
 removed): 0/6 Metroid sprite cycles and 3/3 Contra water tracks
 counter-locked, the latter only until the next load. **ADR-0229 is
 superseded** (2026-09-24): its option (i), measured on a prototype, gained
@@ -1572,12 +1619,17 @@ ADR-0230 was accepted the same day as a hybrid, user's decision verbatim
 their own cell, folds ride on the cell with a Brightness, and the fold test
 measures against the cell. **F14.9 is delivered** (2026-09-24, §3; its row
 is removed): 100 % of drawn keys reach a sheet on both games, through exact
-folds and variant cells. F14.8 is not started.
-Two questions the review raised are already decided on open PR #397 and are
+folds and variant cells. **F14.10 was measured and not merged** (2026-09-25,
+ADR-0235 superseded by ADR-0236; §3). **F14.11–F14.18 are delivered**
+(2026-09-25/26, §3; ADR-0236 for F14.11, ADR-0238 for F14.12–F14.15, ADR-0239
+for F14.16–F14.18), and their rows are removed. **F14.8 is the only live
+Phase 14 row** and is not started; Phase 7's P.8 (ADR-0237) is the only live
+Core/UI row in this Part.
+Two questions the review raised are already decided in PR #397 (merged 2026-09-24) and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
 an `<addition>` anchor is keyed (*"Manter como está"*, recorded as an
 ADR-0196 §4 refinement), and Phase 10 names its subject from the kit (*"Pelo
-nome, no kit"*, the Phase 10 entry-point ADR on PR #397). The review
+nome, no kit"*, the Phase 10 entry-point ADR in PR #397). The review
 numbered those two F14.6 and F14.7, so F14.8 keeps its number.
 
 **Why this phase.** Phase 12 built the artist surfaces one cause at a time,
@@ -1602,7 +1654,7 @@ since 2026-09-24.
 **Prerequisite for the whole phase.** Issues #399, #400 and #401 — the three
 kit defects the 2026-09-23 Contra kit cold read found (painted figures never
 routed back into the pack, no phase order on a folded cycle, composites in
-the rest grid; open PR #398 carries the log) — merge first. The Contra
+the rest grid; PR #398 (merged 2026-09-24) carries the log) — merge first. The Contra
 re-record and that cold read are done (F12.18 (5) met, F12.19 (4) logged,
 verdict "no"), so F14.1 no longer re-records. All three merged, and the
 re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-coldread-rerun-2026-09-24.md`).
@@ -1637,7 +1689,8 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    criterion 4 27/28, criterion 3 13/28 on the path as dispatched; F14.2
    re-scored criterion 3 at 20/28 on 2026-09-24,
    `docs/validation/f14.2-cold-read-rescore-2026-09-24.md`, then 26/28 after
-   #419–#421, `docs/validation/f14.2-rescore-after-419-421-2026-09-24.md`). F12.5 still owes a hand-added overflow cell and F12.11 its
+   #419–#421, `docs/validation/f14.2-rescore-after-419-421-2026-09-24.md`, and
+   27/28 on disk after #431, `docs/validation/f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md`). F12.5 still owes a hand-added overflow cell and F12.11 its
    stop condition (2); both are carried by Phase 14's F14.8. F12.11 (3) was
    met by F14.1 (2026-09-23, §3).
 6. **Phase 14, then Phase 13** (user's decision, verbatim: *"Sim, como
@@ -1647,7 +1700,10 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    measured 2026-09-23 and it closed as (iii) on 2026-09-24, so F14.4
    measured for ADR-0230; both delivered 2026-09-24, §3; ADR-0230 accepted
    2026-09-24) → F14.9 (delivered 2026-09-24, §3) →
-   Phase 13 R.1/R.2, and F14.12–F14.15 (delivered 2026-09-26, §3) close
+   Phase 13 R.1/R.2. F14.10 was measured and not merged (2026-09-25, §3:
+   ADR-0235 superseded by ADR-0236); F14.11 (delivered 2026-09-25, §3)
+   implements ADR-0236; F14.16–F14.18 (delivered 2026-09-26, §3) implement
+   ADR-0239; and F14.12–F14.15 (delivered 2026-09-26, §3) close
    ADR-0238: F14.15 is the measurement its adoption gate is read from, and it
    returned **do not adopt Jev beyond the spike** — one clause short, since the
    second pass passed the stall the search could not and the kit still gained
@@ -1655,6 +1711,8 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    in (+97 cells, +22 keys against the same-length search-alone recording) and
    still found 0 keys no other pack here has. F14.8 runs whenever a person is
    available.
+   **P.8** (Phase 7, shaders on macOS, ADR-0237) is accepted but waits for a
+   go-ahead to implement.
 
 One implementation slice per task; architecture changes still require their
 ADR. This documentation update records work and acceptance, not completed runs.
@@ -1720,6 +1778,10 @@ files and in §3.
 | 0233/0235/0236 | **0236 accepted and implemented 2026-09-25 (slice F14.11)**; it supersedes 0235 (option 2, implemented as F14.10, measured and not merged), which superseded 0233 (option A measured, not shipped; its premise that the wrongly-gated frames were never retained was falsified). Option 2 cost 219 → 87 library captures. Picks verbatim *"Não mergear A; medir retenção (Recommended)"*, *"Opção 2: corrigir o gravador (Recommended)"*, then *"Opção 3: guarda no render (Recommended)"* and *"Manter opção 3 (Recommended)"* | a recorded capture carries a positional per-cell key record; at run time it draws a cell only where the live key matches the record; a `<background>` without the record draws as before |
 | 0237 | **accepted 2026-09-26, pending slice P.8**; user's pick verbatim *"escreva o ADR utilizando o natinvo no Metal"*, no go-ahead to implement yet | macOS gets shader support through a native Metal renderer running the librashader Metal filter chain; the software-path readback and waiting for upstream were rejected; shaders never touch recording or measurement |
 | 0238 | **accepted 2026-09-26, implemented — F14.12–F14.15 delivered (§3)**; F14.15's first pass is void (four harness defects, fixed with tests that failed first), its second pass measured two live stalls — **Jev passed the Mega Man 3 stall in 5 of 5 arms at 3.57–3.62×** and the Ninja Gaiden stall in 0 of 4 — and its third pass re-measured the kit clause on a route 78 px further in (+97 cells, +22 keys over the same-length search-alone recording) and still found **0 keys** no other pack here has: §5's first clause is met (the pin, the page-3 wall, and a 2859 wall Jev passed in 3 decisions), the second is not, so the verdict is *do not adopt beyond the spike*; §1–§4 stand ([log](../validation/f1415-jev-adoption-2026-09-26.md)). User's picks verbatim *"vamos usar o jev pelo ope router"* and *"pode escrever"*, go-ahead to implement verbatim *"implemente usando o deepseek"* | Jev via OpenRouter is a stall-point input generator behind a persistent step-mode emulator, never the default player (measured: Jev every 15 frames is 0.6× real time, ≈ 0.38 s per warm call); the search is fixed first; a route stays a plain input script replayed without AI |
+| 0215/0216 | accepted (2026-09-19); implemented in the same turn (PR #348; 0215 amended 2026-09-24 for `NoRule`) | a copied tile key is resolved through the CHR mapping that drew the frame, never the one the paused emulator holds (0215); the clipboard carries the cell and the script places it, with the four answers of 0216 (§3, F12.2) |
+| 0232 | **accepted 2026-09-25 — implemented the same turn** (#467); pick verbatim *"(a) via (c1) (Recommended)"*, go-ahead verbatim *"em paralelo corrija os bugs, mande pro main e limpe os WTs"* | a CHR RAM bank id names the CHR state a tile was drawn from, or stays a layout constant; unit tests in `scripts/core_unit_tests.cpp` and `scripts/test_artist_chr_kit.py` |
+| 0234 | **accepted 2026-09-25, option A — implemented in the same change** (#505); go-ahead verbatim *"siga com a opção A no #505"*, amended four times the same day | an appearance the background hid is a mask: the recorder carries each OAM entry's priority bit and visible and hidden pixel counts, and the pose clusters drop the hidden appearances |
+| 0239 | **accepted 2026-09-26 — F14.16–F14.18 delivered (§3)** (PRs #547, #552, #555); the user's go-ahead is quoted verbatim in the ADR's Status line | coverage past the first stage comes from a selector swept per game and is measured as a union against the ROM's own tiles |
 | 0210 | accepted (2026-09-20); §3 shipped as **F12.12** (2026-09-20, PR #361), bounded input measured 2026-09-20 ([log](../validation/f12.12-third-party-index-read-2026-09-20.md)); §2 is what F12.9 stands on. **Amended 2026-09-20** — Context item 2 retracted against that measurement (its "5 532 keys out of range" is a base-16 reading of a `<ver>`100 pack's decimal tokens) and the Consequences bullet that prescribed that reading corrected; the Decision is unchanged. **Amended 2026-09-24** and implemented the same turn, go-ahead verbatim *"em paralelo, rode a emenda da ADR-0210"*: filter 2 is per key — a 32-hex key of a `<patch>` pack is admitted only when its 16 bytes are verbatim in the stock dump, index-keyed `<patch>` packs stay refused; measured +550 shapes (Castlevania 249, Mega Man 257, Zelda 44), 0 admitted absent from stock ([log](../validation/adr0210-patch-verbatim-guard-2026-09-24.md)) | coverage has three sources in order — recording (`seen: true`), the ROM's own CHR (23 CHR ROM games, shape complete by construction, `defaultTile=Y` is the palette wildcard), a third-party key index as facts (palettes always, art only for the 7 CHR RAM games, conditions never). Acceptance unblocked F12.12 and, with an ADR-0183 §1 amendment, F12.9 |
 | 0214 | accepted (2026-09-19), amended the same day (Opus replaces Fable); protocol in use — the two-game Fable panel and the 28-ROM Opus sweep both ran 2026-09-19 | a fresh Opus session is the evaluator for a Phase 12 artist-surface cold read; the briefing is the goal, not the path; the menu's identity is the visible label; `hires.txt` is a fail gate; P15 is an observation. Does not amend F9.18 or ADR-0188 §5 |
 | 0217 | accepted (2026-09-20), implemented the same day (`186077d0`), re-recorded and **measured 2026-09-20** — 95 co-gated captures of 108 became 0 of 61 across four games, and the sweep extended the same day to the whole bounded library — **30 packs, 193 captures, 0 co-gated**, with the "before" run reproducing the F12.2 sweep's gate definitions byte for byte as a control; Punch-Out!! (issue #339's game) keeps all ten captures and skips none — Option C separates rather than discards ([log](../validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md)) | a captured screen draws only where its gate separates it from every other capture of the recording; Options A (refuse a capture whose gate an earlier one already satisfies) and C (every other capture is a rival) ship, D/E do not. Issues #339, #344
@@ -2252,7 +2314,7 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-No slice is pending. P.0–P.7 implementation history is in Part A §3, and
+No Part B slice is pending; P.8 (ADR-0237) is tracked in Part A §4, Phase 7. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 

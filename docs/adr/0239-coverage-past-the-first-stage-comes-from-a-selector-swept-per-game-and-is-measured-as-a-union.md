@@ -7,7 +7,8 @@
   resultados com o antes e o depois."* Same-turn implementation is allowed by
   CLAUDE.md only when the change ships with unit tests covering the decision
   and this go-ahead is quoted here and in the PR body. It is PRD Part A
-  slice F14.16.
+  slice F14.16. F14.16, F14.17 and F14.18 are
+  delivered (PRs #547, #552, #555; PRD §3).
 - Date: 2026-09-26
 - Related: ADR-0182 §3 (a later stage is played only when a measurement
   names the subject), ADR-0184 (RAM-only cheats; the 2026-09-14 navigation
