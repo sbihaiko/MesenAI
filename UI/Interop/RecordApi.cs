@@ -30,6 +30,9 @@ namespace Mesen.Interop
 
 		[DllImport(DllPath)] public static extern void MoviePlay([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
 		[DllImport(DllPath)] public static extern void MovieRecord(RecordMovieOptions options);
+		//ADR-0205 section 2: the single Record-and-share action. false = nothing
+		//was started (an unsupported console, or the file could not be written).
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool MovieRecordAndShare(RecordMovieOptions options);
 		[DllImport(DllPath)] public static extern void MovieStop();
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool MoviePlaying();
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool MovieRecording();

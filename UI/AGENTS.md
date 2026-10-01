@@ -223,6 +223,11 @@ can be exercised by real xunit tests without Avalonia or the native
     exact ratio.
   - The logical size is snapped back from the physical pixels, so
     `Width * dpi == RealWidth`.
+- **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
+  calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
+  `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the
+  pre-filled `[Replay]` issue form from the host-free `ReplayShare`
+  (`UI.Tests/Recording/ReplayShareTests.cs`). No upload, no credential.
 
 ## Work Guidance
 

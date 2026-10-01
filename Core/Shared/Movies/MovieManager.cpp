@@ -3,6 +3,8 @@
 #include "Utilities/VirtualFile.h"
 #include "Utilities/ZipReader.h"
 #include "Shared/Emulator.h"
+#include "Shared/EmuSettings.h"
+#include "Shared/MessageManager.h"
 #include "Shared/Movies/MovieManager.h"
 #include "Shared/Movies/MesenMovie.h"
 #include "Shared/Movies/BizHawkMovie.h"
@@ -21,6 +23,47 @@ void MovieManager::Record(RecordMovieOptions options)
 	shared_ptr<MovieRecorder> recorder(new MovieRecorder(_emu));
 	if(recorder->Record(options)) {
 		_recorder.reset(recorder);
+	}
+}
+
+bool MovieManager::RecordAndShare(RecordMovieOptions options)
+{
+	auto lock = _emu->AcquireLock();
+
+	if(!_emu->GetConsole()) {
+		return false;
+	}
+
+	//Ends any recording or playback first - and with it any earlier share, whose
+	//settings are restored here, before this call snapshots them again.
+	Stop();
+
+	ConsoleType consoleType = _emu->GetConsoleType();
+	EmuSettings* settings = _emu->GetSettings();
+	SharePowerOnState snapshot = ShareRecordingSettings::Capture(*settings);
+	if(!ShareRecordingSettings::Apply(*settings, consoleType)) {
+		//Refuse rather than record an archive the section 3 lint rejects.
+		MessageManager::DisplayMessage("Movies", "MovieShareUnsupportedConsole");
+		return false;
+	}
+
+	options.RecordFrom = RecordMovieFrom::StartWithoutSaveData;
+	Record(options);
+	if(!Recording()) {
+		ShareRecordingSettings::Restore(*settings, snapshot);
+		return false;
+	}
+
+	_shareRestore = snapshot;
+	_shareActive = true;
+	return true;
+}
+
+void MovieManager::RestoreShareSettings()
+{
+	if(_shareActive) {
+		_shareActive = false;
+		ShareRecordingSettings::Restore(*_emu->GetSettings(), _shareRestore);
 	}
 }
 
@@ -61,7 +104,10 @@ void MovieManager::Stop()
 		player->Stop();
 	}
 	_player.reset();
+	//Resetting the recorder writes the .mmo, and GameSettings.txt serializes the
+	//settings at that moment, so the player's own settings come back only after.
 	_recorder.reset();
+	RestoreShareSettings();
 }
 
 bool MovieManager::Playing()

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include <random>
 #include "Shared/EmuSettings.h"
+#include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/Video/AspectRatioMath.h"
 #include "Shared/KeyManager.h"
 #include "Shared/MessageManager.h"
@@ -615,16 +616,9 @@ bool EmuSettings::CheckDebuggerFlag(DebuggerFlags flag)
 
 bool EmuSettings::HasRandomPowerOnState(ConsoleType consoleType)
 {
-	switch(consoleType) {
-		case ConsoleType::Snes: return _snes.RamPowerOnState == RamState::Random || _snes.EnableRandomPowerOnState;
-		case ConsoleType::Gameboy: return _gameboy.RamPowerOnState == RamState::Random;
-		case ConsoleType::Nes: return _nes.RamPowerOnState == RamState::Random || _nes.RandomizeCpuPpuAlignment || _nes.RandomizeMapperPowerOnState;
-		case ConsoleType::PcEngine: return _pce.RamPowerOnState == RamState::Random || _pce.EnableRandomPowerOnState;
-		case ConsoleType::Sms: return _sms.RamPowerOnState == RamState::Random;
-		case ConsoleType::Gba: return _gba.RamPowerOnState == RamState::Random;
-	}
-
-	return false;
+	//One definition, shared with the Record-and-share action's settings
+	//contract and its host-free unit test (ADR-0205 section 2).
+	return PowerOnStateIsRandom(*this, consoleType);
 }
 
 void EmuSettings::InitializeRam(RamState state, void* data, uint32_t length)

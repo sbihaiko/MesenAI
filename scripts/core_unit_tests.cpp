@@ -58,6 +58,7 @@
 #include "Shared/HeadlessInputEngine.h"
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
+#include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
@@ -12213,8 +12214,121 @@ void TestABlankLineEndsTheRecordBinding()
 	Check(!commented.Take(priority, index), "F14.11: a comment ends the binding too, as the lint says");
 }
 
+//ADR-0205 sections 2 and 10 (slice R.1): the Record-and-share action's
+//settings contract, host-free. ShareRecordingSettings is a template over "a
+//settings object with Get/Set<Console>Config", so the real EmuSettings and
+//this fake share one implementation, and the cheap guard section "Consequences"
+//asks for - start, stop, original RamPowerOnState is back - runs here without
+//an Emulator.
+namespace
+{
+	struct FakeShareSettings
+	{
+		SnesConfig Snes;
+		GameboyConfig Gb;
+		NesConfig Nes;
+		PcEngineConfig Pce;
+		SmsConfig Sms;
+		GbaConfig Gba;
+
+		SnesConfig& GetSnesConfig() { return Snes; }
+		void SetSnesConfig(SnesConfig& c) { Snes = c; }
+		GameboyConfig& GetGameboyConfig() { return Gb; }
+		void SetGameboyConfig(GameboyConfig& c) { Gb = c; }
+		NesConfig& GetNesConfig() { return Nes; }
+		void SetNesConfig(NesConfig& c) { Nes = c; }
+		PcEngineConfig& GetPcEngineConfig() { return Pce; }
+		void SetPcEngineConfig(PcEngineConfig& c) { Pce = c; }
+		SmsConfig& GetSmsConfig() { return Sms; }
+		void SetSmsConfig(SmsConfig& c) { Sms = c; }
+		GbaConfig& GetGbaConfig() { return Gba; }
+		void SetGbaConfig(GbaConfig& c) { Gba = c; }
+	};
+
+	//Every shipped console config defaults RamPowerOnState to Random (GBA to
+	//AllZeros), and the NES also randomizes nothing else by default; the user
+	//may have turned the companion flags on, which is the worst case.
+	FakeShareSettings StockSettings()
+	{
+		FakeShareSettings s;
+		s.Nes.RamPowerOnState = RamState::Random;
+		s.Nes.RandomizeCpuPpuAlignment = true;
+		s.Nes.RandomizeMapperPowerOnState = true;
+		s.Gb.RamPowerOnState = RamState::Random;
+		s.Sms.RamPowerOnState = RamState::Random;
+		s.Gba.RamPowerOnState = RamState::Random;
+		s.Snes.RamPowerOnState = RamState::Random;
+		s.Snes.EnableRandomPowerOnState = true;
+		s.Pce.RamPowerOnState = RamState::Random;
+		s.Pce.EnableRandomPowerOnState = true;
+		return s;
+	}
+
+	const ConsoleType kShareConsoles[] = { ConsoleType::Nes, ConsoleType::Gameboy, ConsoleType::Sms, ConsoleType::Gba, ConsoleType::Snes, ConsoleType::PcEngine };
+}
+
+void TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole()
+{
+	for(ConsoleType console : kShareConsoles) {
+		FakeShareSettings s = StockSettings();
+		std::string name = "share " + std::to_string((int)console);
+		Check(PowerOnStateIsRandom(s, console), name + ": stock settings are random (the premise: a stock recording embeds a save state)");
+		Check(ShareRecordingSettings::Apply(s, console), name + ": Apply accepts a console the predicate knows");
+		Check(!PowerOnStateIsRandom(s, console), name + ": HasRandomPowerOnState reads false after Apply, so no SaveState.mss is written");
+	}
+	FakeShareSettings nes = StockSettings();
+	ShareRecordingSettings::Apply(nes, ConsoleType::Nes);
+	Check(nes.Nes.RamPowerOnState == RamState::AllZeros && !nes.Nes.RandomizeCpuPpuAlignment && !nes.Nes.RandomizeMapperPowerOnState,
+		"share NES: RamPowerOnState AllZeros and BOTH companion flags cleared");
+	FakeShareSettings gb = StockSettings();
+	ShareRecordingSettings::Apply(gb, ConsoleType::Gameboy);
+	Check(gb.Nes.RamPowerOnState == RamState::Random && gb.Sms.RamPowerOnState == RamState::Random,
+		"share GB: only the loaded console's settings are touched");
+}
+
+void TestShareRefusesAConsoleThePredicateDoesNotKnow()
+{
+	FakeShareSettings s = StockSettings();
+	Check(!ShareRecordingSettings::Apply(s, ConsoleType::Ws), "share: an unknown console (Ws) is refused rather than recorded");
+	Check(s.Nes.RamPowerOnState == RamState::Random && s.Gb.RamPowerOnState == RamState::Random,
+		"share: a refused console leaves every setting untouched");
+	Check(!PowerOnStateIsRandom(s, ConsoleType::Ws), "premise: the predicate answers false for Ws, which is why it cannot be trusted to certify one");
+}
+
+void TestShareRestoreBringsBackTheOriginalSettingsOnEveryExitPath()
+{
+	for(ConsoleType console : kShareConsoles) {
+		FakeShareSettings s = StockSettings();
+		s.Nes.RamPowerOnState = RamState::AllOnes; //a distinct, non-default player choice
+		SharePowerOnState snapshot = ShareRecordingSettings::Capture(s);
+		ShareRecordingSettings::Apply(s, console);
+		//A second Apply (a mid-recording re-push) must not corrupt what was captured.
+		ShareRecordingSettings::Apply(s, console);
+		ShareRecordingSettings::Restore(s, snapshot);
+		std::string name = "share restore " + std::to_string((int)console);
+		Check(s.Nes.RamPowerOnState == RamState::AllOnes && s.Nes.RandomizeCpuPpuAlignment && s.Nes.RandomizeMapperPowerOnState, name + ": NES settings back");
+		Check(s.Gb.RamPowerOnState == RamState::Random && s.Sms.RamPowerOnState == RamState::Random && s.Gba.RamPowerOnState == RamState::Random, name + ": GB/SMS/GBA back");
+		Check(s.Snes.EnableRandomPowerOnState && s.Pce.EnableRandomPowerOnState, name + ": SNES/PCE companion flags back");
+	}
+}
+
+void TestShareRestoreOnlyTouchesThePowerOnFields()
+{
+	FakeShareSettings s = StockSettings();
+	SharePowerOnState snapshot = ShareRecordingSettings::Capture(s);
+	ShareRecordingSettings::Apply(s, ConsoleType::Nes);
+	s.Nes.LightDetectionRadius = 200; //the player changed an unrelated setting while recording
+	ShareRecordingSettings::Restore(s, snapshot);
+	Check(s.Nes.LightDetectionRadius == 200, "share restore: an unrelated setting changed during the recording is not rolled back");
+}
+
 int main()
 {
+	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
+	TestShareRefusesAConsoleThePredicateDoesNotKnow();
+	TestShareRestoreBringsBackTheOriginalSettingsOnEveryExitPath();
+	TestShareRestoreOnlyTouchesThePowerOnFields();
+
 	TestACaptureRecordMasksACellTheLiveFrameHasMovedOn();
 	TestACaptureRecordTreatsARecolouredCellAsMovedOn();
 	TestACaptureRecordMatchesACellTheRunTimeNamesNoTileAt();

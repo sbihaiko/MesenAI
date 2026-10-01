@@ -1,0 +1,7 @@
+{
+  "_comment": "Hosts replay-submitted.yml may download a [Replay] attachment from (ADR-0205 section 6). Read by scripts/fetch_pack.py --allowlist, which enforces it on every redirect hop. This is deliberately NOT scripts/pack_host_allowlist.json: ADR-0205 section 6 says both hosts must enter the pack allow-list for the slice that fetches replays back into the client (R.2), mirrored in UI/Logic/CommunityPackHostAllowlist and drift-checked (ADR-0187); R.1 only needs the CI side, so its two hosts live here and a pack_link on user-attachments stays refused. Adding a host here is a trust-boundary decision -- review it like the workflow YAML. An issue attachment is served from github.com/user-attachments/{files,assets}/<id>/... and redirects to objects.githubusercontent.com (a signed, expiring URL).",
+  "hosts": [
+    {"host": "github.com", "path_contains_any": ["/user-attachments/files/", "/user-attachments/assets/"], "kind": "direct"},
+    {"host": "objects.githubusercontent.com", "kind": "direct"}
+  ]
+}

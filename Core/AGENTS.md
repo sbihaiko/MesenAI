@@ -269,6 +269,16 @@ needs no local rules beyond the root DOX.
   (#270); playback of a single-player `.bk2` on a two-port auto-config
   stays deterministic instead of silently feeding Commands into port 2.
 
+- **Record and share (ADR-0205 sec. 2, slice R.1).** `MovieManager::
+  RecordAndShare` (export `MovieRecordAndShare`) records from power-on
+  (`StartWithoutSaveData`) after `ShareRecordingSettings::Apply` drove the
+  loaded console's `PowerOnStateIsRandom` to false, so the `.mmo` has no
+  `SaveState.mss` and no `Battery*`. It refuses a console the predicate does
+  not know (e.g. Ws). `PowerOnStateIsRandom` is the single definition:
+  `EmuSettings::HasRandomPowerOnState` delegates to it. The player's power-on
+  fields are restored in `MovieManager::Stop()` *after* the recorder is reset,
+  because `GameSettings.txt` serializes the settings at write time. Host-free
+  and unit tested in `scripts/core_unit_tests.cpp` (`TestShare*`).
 ## Child DOX Index
 
 - (none) — sub-trees follow this file and the root DOX.
