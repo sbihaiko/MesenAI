@@ -326,6 +326,22 @@ def check_coverage_of_subject(text: str, terms) -> None:
         check(term in text, f"the guide still covers {description} ({term})")
 
 
+def check_no_map_copy(text: str, label: str) -> None:
+    """A stage panorama is sliced back into sheets, never copied (#560).
+
+    The kit's own ARTIST.md says "A stage map is not copied: it is sliced back
+    into tiles". Copying `<kit>/map/*.png` into `textures/sheets/` puts a
+    stitched panorama where `mep_build.py build` expects a sheet and fails it
+    (rc 2, "not an integer multiple of the sheet").
+    """
+    for lineno, body in fenced_blocks(text):
+        for command in joined_commands(body):
+            words = command.split()
+            if words[:1] == ["cp"] and any("/map/" in word for word in words[1:-1]):
+                check(False, f"{label}: block at line {lineno} copies the kit's map/ into the pack "
+                             f"(slice it with artist_map.py --slice instead): {command}")
+
+
 def main() -> int:
     for name, terms in GUIDES:
         text = read_doc(name)
@@ -338,6 +354,7 @@ def main() -> int:
         check_links(doc, text)
         check_script_paths(text, name)
         check_commands(text, name)
+        check_no_map_copy(text, name)
         check_coverage_of_subject(text, terms)
 
     if failures:
