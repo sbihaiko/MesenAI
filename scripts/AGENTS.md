@@ -1074,6 +1074,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `mep_build` refuses that size (#451). The only way back is `--slice`
   (ADR-0220 §5), and `--verify` goes through `--slice` too, so the ADR-0183 §4
   round trip exercises the artist's path.
+  `scripts/checks/verify_artist_docs.py` (`copies_kit_map`, with
+  `scripts/test_verify_artist_docs_map_copy.py`) fails any fenced `cp` in the
+  artist guides that names a `map` path component, so the guide cannot send the
+  panorama into `textures/sheets/` (#560).
   `--slice` cuts a painted strip back into that sheet: one key sits at many
   positions and a pack holds one art per key, so **first occurrence in (y, x)
   order wins** and every disagreeing position is printed, split into "both

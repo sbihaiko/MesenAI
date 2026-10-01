@@ -1207,13 +1207,15 @@ It cuts a painted panorama into ordinary pack sheets using the sidecar.
 ## 5. Build and verify
 
 The kit is a folder beside the recording, not the pack. Copy the recording,
-drop the painted files in, and build the copy:
+drop the painted files in, and build the copy. A painted panorama is not
+copied: slice it back into sheets first (`artist_map.py --slice`, §4, which
+writes `out/kit/sheets/`), and the `cp` of `out/kit/sheets` below carries the
+result:
 
 ```sh
 cp -R out/by-stage/stage1/Contra/auto out/painted
 cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
-cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
 cp out/kit/scene/*.png  out/painted/textures/backgrounds/   # whole screens go back where they came from
 scripts/mep_build.py build out/painted &&    # once before the figures: import plans against the built sheets (#435)
 sh -c 'for f in out/kit/figures/usr*-figure.png; do
