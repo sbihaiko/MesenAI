@@ -166,7 +166,8 @@ fi
 # 2. Inject the freshly built core, sign, and PROVE the bundle carries it
 # --------------------------------------------------------------------------
 echo "==> injecting the freshly built $SHAREDLIB into the .app"
-cp -f "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"
+# A new inode, never cp -f over the old one: issue #628.
+"$ROOT/scripts/replace_file_atomic.sh" "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"
 
 BUILT_SUM="$(shasum -a 256 "$CORE_DYLIB" | cut -d' ' -f1)"
 if ! cmp -s "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"; then
@@ -184,7 +185,7 @@ if [[ ! -f "$SHADER_LIB" ]]; then
 	echo "error: $SHADER_LIB is missing - run scripts/fetch_librashader_macos.sh first" >&2
 	exit 1
 fi
-cp -f "$SHADER_LIB" "$PUBLISH_APP/Contents/MacOS/librashader.dylib"
+"$ROOT/scripts/replace_file_atomic.sh" "$SHADER_LIB" "$PUBLISH_APP/Contents/MacOS/librashader.dylib"
 if ! cmp -s "$SHADER_LIB" "$PUBLISH_APP/Contents/MacOS/librashader.dylib"; then
 	echo "error: the librashader.dylib copy into the bundle did not land byte for byte" >&2
 	exit 1
@@ -248,7 +249,7 @@ rm -rf "$APP_STAGE"
 mkdir -p "$APP_STAGE"
 ditto "$PUBLISH_APP" "$APP_STAGE/Mesen.app"
 cp -f "$RECORDER" "$APP_STAGE/headless_record"
-cp -f "$CORE_DYLIB" "$APP_STAGE/$SHAREDLIB"
+"$ROOT/scripts/replace_file_atomic.sh" "$CORE_DYLIB" "$APP_STAGE/$SHAREDLIB"
 
 CURRENT_REF="$("$OTOOL" -L "$APP_STAGE/headless_record" | awk -v lib="$SHAREDLIB" '$1 ~ lib {print $1}' | sed -n '1p')"
 if [[ -n "$CURRENT_REF" && "$CURRENT_REF" != "@executable_path/$SHAREDLIB" ]]; then
