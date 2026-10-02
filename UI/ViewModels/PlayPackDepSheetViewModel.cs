@@ -95,7 +95,8 @@ namespace Mesen.ViewModels
 				string actual = await Task.Run(() => Sha256Of(path));
 				//The prompt can change (another game, another pack) while the
 				//file is hashed or copied: the result belongs to the old one.
-				if(!ReferenceEquals(Current, dep)) {
+				//Play Without It or Esc in the meantime abandons the add.
+				if(!StillAdding(dep)) {
 					return;
 				}
 				if(PlayPackDepPrompt.Check(actual, dep.Sha256) != PackDepFileCheck.Accepted) {
@@ -119,7 +120,10 @@ namespace Mesen.ViewModels
 						await Task.Run(() => File.Copy(path, target, false));
 					}
 				}
-				if(!ReferenceEquals(Current, dep)) {
+				//Closed during the copy: the file stays in the drop folder (the
+				//next load resolves it), but the game is not reloaded under the
+				//player.
+				if(!StillAdding(dep)) {
 					return;
 				}
 			} catch(Exception ex) {
@@ -131,6 +135,8 @@ namespace Mesen.ViewModels
 			Clear();
 			FileAdded?.Invoke();
 		}
+
+		private bool StillAdding(CommunityPackDepPrompt dep) => IsVisible && ReferenceEquals(Current, dep);
 
 		private static string Sha256Of(string path)
 		{

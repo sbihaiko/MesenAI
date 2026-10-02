@@ -79,5 +79,19 @@ namespace Mesen.Tests.Share
 			Assert.Equal("uses 1 cheat", ReplayWatch.CheatBadge(1));
 			Assert.Equal("uses 2 cheats", ReplayWatch.CheatBadge(2));
 		}
+
+		//#640: the download is awaited; closing the sheet (Esc, Done, quit game),
+		//reopening it, or another game loading in the meantime cancels the
+		//watch - playing would power-cycle whatever is loaded now.
+		[Fact]
+		public void A_finished_download_plays_only_for_the_same_watch_on_the_same_copy()
+		{
+			Assert.True(ReplayWatch.PlaysAfterDownload(sheetVisible: true, watchGeneration: 4, currentGeneration: 4, sheetRomSha1: "AB12", currentRomSha1: "ab12"));
+			Assert.False(ReplayWatch.PlaysAfterDownload(sheetVisible: false, 4, 4, "AB12", "AB12"));
+			Assert.False(ReplayWatch.PlaysAfterDownload(true, watchGeneration: 4, currentGeneration: 5, "AB12", "AB12"));
+			Assert.False(ReplayWatch.PlaysAfterDownload(true, 4, 4, "AB12", currentRomSha1: "CD34"));
+			Assert.False(ReplayWatch.PlaysAfterDownload(true, 4, 4, "AB12", currentRomSha1: ""));
+			Assert.False(ReplayWatch.PlaysAfterDownload(true, 4, 4, sheetRomSha1: "", currentRomSha1: ""));
+		}
 	}
 }

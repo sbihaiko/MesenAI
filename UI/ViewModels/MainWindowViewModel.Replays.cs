@@ -57,7 +57,7 @@ namespace Mesen.ViewModels
 			IsPlayerOverlayVisible = false;
 			string romSha1 = ReplayRomSha1();
 			ReplaysSheet.Open(romSha1, RomInfo.ConsoleType, CommunityReplaysLastKnown(), ReplayWatchReasonSource(),
-				ReplayOpenUrl, ReplayDownload, ReplayPlay);
+				ReplayOpenUrl, ReplayDownload, ReplayPlay, () => ReplayRomSha1());
 			_ = RefreshCommunityReplaysAsync(romSha1);
 		}
 

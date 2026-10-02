@@ -374,6 +374,33 @@ public class PlayEdgeFlowsTests : IDisposable
 		}
 	}
 
+	//A file dropped on the sheet is hashed and copied off the UI thread; Play
+	//Without It (or Esc) during that work abandons the add, so the game the
+	//player went back to is not reloaded under them when the copy ends. A
+	//sheet of its own: the window's FileAdded reloads the real core.
+	[AvaloniaFact]
+	public void Closing_the_pack_file_sheet_while_the_file_is_checked_does_not_reload_the_game()
+	{
+		string drop = Path.Combine(_folder, "drop");
+		string expected = Convert.ToHexString(SHA256.HashData(new byte[] { 1, 2, 3 }));
+		PlayPackDepSheetViewModel sheet = new();
+		sheet.SetPending("Contra Remastered", new[] { new CommunityPackDepPrompt("contra-usa", "Contra (USA).nes", "", drop, expected) });
+		sheet.Open();
+		Assert.True(sheet.IsVisible);
+		int added = 0;
+		sheet.FileAdded += () => added++;
+
+		string right = Path.Combine(_folder, "right.nes");
+		File.WriteAllBytes(right, new byte[] { 1, 2, 3 });
+		Task adding = sheet.TryFile(right);
+		sheet.PlayWithoutIt();
+		WaitTask(adding);
+
+		Assert.Equal(0, added);
+		Assert.False(sheet.IsVisible);
+		Assert.False(sheet.IsBusy);
+	}
+
 	//An install's post that lands after another open started is dropped, so
 	//the next game never inherits the previous game's pending file.
 	[AvaloniaFact]

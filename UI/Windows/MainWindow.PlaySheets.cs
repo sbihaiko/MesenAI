@@ -96,15 +96,22 @@ namespace Mesen.Windows
 
 		//W-P6's Restore (ADR-0147), after its one in-place confirm (rule 7): a
 		//job with the W-P9 pill, never a window (rule 6). On success the game
-		//restarts to load the restored files - the confirm said so.
+		//restarts to load the restored files - the confirm said so - unless
+		//another game was opened (or this one quit) during the download (#643).
 		private async void RestorePackFromDetail()
 		{
 			try {
+				int openGeneration = _model.OpenGeneration;
+				string romSha1 = EmuApi.GetMepRomSha1();
 				(bool ok, string error) = await CommunityPackInstallService.RestoreInstalledPack();
 				_model.RestoreFinished();
-				if(!ok) {
-					EmuApi.WriteLogEntry("[CommunityPack] W-P6 Restore failed: " + error);
-					return;
+				switch(RestoreFlow.After(ok, openGeneration, _model.OpenGeneration, romSha1, EmuApi.GetMepRomSha1())) {
+					case RestoreOutcome.Failed:
+						EmuApi.WriteLogEntry("[CommunityPack] W-P6 Restore failed: " + error);
+						return;
+					case RestoreOutcome.Stale:
+						EmuApi.WriteLogEntry("[CommunityPack] W-P6 Restore finished after the game changed; the loaded game is not restarted");
+						return;
 				}
 				ConfigManager.Config.EnhancementPacks.ApplyConfig();
 				_model.IsPackDetailVisible = false;
