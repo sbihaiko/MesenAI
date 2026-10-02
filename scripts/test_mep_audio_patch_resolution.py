@@ -194,7 +194,68 @@ def check_main_prints_bundled_patch():
     ok("main() report output (under --quiet) includes the bundled-patch line")
 
 
+def _bundled_verdicts(entries, hires_paths, pack_json=None):
+    """Lint every hires.txt in hires_paths (and pack.json when given), then
+    scan_bundled_patches; returns {patch name: True when reported wired}."""
+    files = dict(entries)
+    if pack_json is not None:
+        files["pack.json"] = pack_json
+    src = mep_lint.Source.from_zip_bytes(make_zip(files), label="scope.zip")
+    rep = mep_lint.Report()
+    for h in hires_paths:
+        mep_lint.lint_nes_hires(src, h, rep)
+    if pack_json is not None:
+        mep_lint.lint_pack_json(src, rep)
+    mep_lint.scan_bundled_patches(src, rep)
+    out = {}
+    for _, _, m in rep.items:
+        if m.startswith("bundled patch: "):
+            name = m[len("bundled patch: "):].split(" (present", 1)[0]
+            out[name] = "NOT wired" not in m
+    return out
+
+
+def check_wired_is_scoped_to_the_referencing_folder():
+    """ADR-0148 rule 2 / loader: a <patch> ref resolves against the folder of
+    the hires.txt that names it (ProcessPatchTag has no basename fallback).
+    textures/hires.txt naming a.ips wires textures/a.ips only; an unreferenced
+    audio/a.ips must stay NOT wired."""
+    base = {"textures/hires.txt": b"<ver>105\n<patch>a.ips," + SHA1.encode() + b"\n",
+            "audio/hires.txt": b"<ver>105\n<bgm>1,1,t.ogg\n"}
+    v = _bundled_verdicts({**base, "audio/a.ips": b"P"}, ["textures/hires.txt", "audio/hires.txt"])
+    if v.get("audio/a.ips") is not False:
+        fail(f"cross-folder same-basename patch must be NOT wired; got {v!r}")
+    else:
+        ok("a same-basename patch in another folder is NOT wired")
+    v = _bundled_verdicts({**base, "textures/a.ips": b"P", "audio/a.ips": b"P"},
+                          ["textures/hires.txt", "audio/hires.txt"])
+    if v.get("textures/a.ips") is not True or v.get("audio/a.ips") is not False:
+        fail(f"only textures/a.ips may be wired; got {v!r}")
+    else:
+        ok("<patch> in textures/ wires textures/a.ips only")
+    v = _bundled_verdicts({"textures/hires.txt": b"<ver>105\n<patch>A.IPS," + SHA1.encode() + b"\n",
+                           "textures/a.ips": b"P"}, ["textures/hires.txt"])
+    if v.get("textures/a.ips") is not True:
+        fail(f"case-insensitive exact ref must stay wired; got {v!r}")
+    else:
+        ok("a case-mismatched ref to the same path is still wired")
+
+
+def check_pack_json_patches_exact_path():
+    """pack.json patches[].file is pack-root-relative: it wires that exact
+    path, not every file with the same basename."""
+    pj = ('{"id":"x","name":"x","version":"1.0.0","targets":[{"system":"nes"}],'
+          '"patches":[{"file":"patches/Rev.bps"}]}').encode()
+    v = _bundled_verdicts({"patches/Rev.bps": b"P", "other/Rev.bps": b"P"}, [], pack_json=pj)
+    if v.get("patches/Rev.bps") is not True or v.get("other/Rev.bps") is not False:
+        fail(f"patches[].file must wire only its exact path; got {v!r}")
+    else:
+        ok("pack.json patches[].file wires its exact path only")
+
+
 def main():
+    check_wired_is_scoped_to_the_referencing_folder()
+    check_pack_json_patches_exact_path()
     check_patch_case_insensitive()
     check_audio_track_case_insensitive()
     check_bundled_patch_reported()

@@ -879,7 +879,7 @@ def lint_pack_json(src: Source, rep: Report, root_prefix: str = ""):
                 if not isinstance(p, dict) or not isinstance(p.get("file"), str):
                     rep.error(where, f"patches[{i}] needs 'file'")
                     continue
-                rep.wired_patches.add((root_prefix + p["file"]).lower())
+                rep.wired_patches.add((root_prefix + p["file"]).replace("\\", "/").lower())
                 # MEI v1.1 §2.3: patch ROM sha1 MAY be absent (an un-hashed
                 # patch is applied on user override with a warning).
                 p_sha1 = p.get("sha1")
@@ -1186,7 +1186,7 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
                 continue
             # The sha1 is matched by the emulator against the loaded ROM at run time (ADR-0044); the linter has no ROM, so it is not verified here.
             patch_file, _ = m.group(1).strip(), m.group(2)
-            rep.wired_patches.add((folder + patch_file).lower())
+            rep.wired_patches.add((folder + patch_file).replace("\\", "/").lower())
             if not src.exists(folder + patch_file):
                 real = src.exists_icase(folder + patch_file)
                 if real:
@@ -1585,13 +1585,17 @@ def scan_bundled_patches(src: Source, rep: Report):
     but printed even under --quiet (see main), so the classifier always
     sees it."""
     seen = set()
-    wired_bases = {w.rsplit("/", 1)[-1] for w in rep.wired_patches}
+    # Wired = the exact (case-insensitive) pack-relative path some <patch>
+    # line / patches[] entry resolves to. The loader joins the ref to the
+    # folder of the hires.txt naming it and has no basename fallback
+    # (HdPackLoader::ProcessPatchTag), so a same-named file elsewhere is
+    # NOT wired.
     for name in sorted(src.names):
         lower = name.lower()
         if not lower.endswith((".ips", ".bps")) or lower in seen:
             continue
         seen.add(lower)
-        if lower in rep.wired_patches or lower.rsplit("/", 1)[-1] in wired_bases:
+        if lower in rep.wired_patches:
             rep.info("pack", f"bundled patch: {name} (present, wired — applied on load)")
         else:
             rep.info("pack", f"bundled patch: {name} (present, NOT wired — no <patch> line / patches[] entry, never applied; ADR-0148)")

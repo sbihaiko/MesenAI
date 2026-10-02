@@ -61,6 +61,35 @@ namespace Mesen.Tests
 		}
 
 		[Fact]
+		public void CrossFolderSameBasename_IsNotWired_NoNotice()
+		{
+			//textures/hires.txt names a.ips (resolves to textures/a.ips, absent);
+			//the unreferenced audio/a.ips must not count as wired.
+			Write("textures/hires.txt", "<patch>a.ips," + Sha + "\n");
+			Write("audio/hires.txt", "<bgm>1,1,t.ogg\n");
+			Write("audio/a.ips");
+			Assert.Null(PackAudioNotice.Evaluate(_root));
+		}
+
+		[Fact]
+		public void HiresPatchWiresOnlyItsOwnFolderPath()
+		{
+			Write("textures/hires.txt", "<patch>a.ips," + Sha + "\n<bgm>1,1,t.ogg\n");
+			Write("textures/a.ips");
+			Write("audio/a.ips");
+			Assert.Equal("audio not generated: 1 of 1 tracks unresolved; supply the `.ogg` files", PackAudioNotice.Evaluate(_root));
+		}
+
+		[Fact]
+		public void PackJsonPatch_WiresExactPathOnly()
+		{
+			Write("pack.json", "{\"patches\":[{\"file\":\"patches/Rev.bps\"}]}");
+			Write("textures/hires.txt", "<bgm>1,1,t.ogg\n");
+			Write("other/Rev.bps");
+			Assert.Null(PackAudioNotice.Evaluate(_root));
+		}
+
+		[Fact]
 		public void WiredPatchReferencedButFileAbsent_NoNotice()
 		{
 			Write("textures/hires.txt", "<patch>Music.ips," + Sha + "\n<bgm>1,1,BGM/a.ogg\n");
