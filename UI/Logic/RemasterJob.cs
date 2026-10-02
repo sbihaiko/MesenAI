@@ -26,7 +26,9 @@ public enum RemasterJobKind
 {
 	Kit,
 	//G.8 (W-H3 step 1): `mep_build.py pack`, run by Share.
-	Pack
+	Pack,
+	//G.6: Build & show in game (`mep_project.py build`, RemasterBuild.cs).
+	Build
 }
 
 public enum RemasterJobStatus
@@ -57,6 +59,11 @@ public enum RemasterJobStep
 	Scenery,
 	PatternPages,
 	Assemble,
+	//G.6: the four steps of `mep_project.py build`.
+	Copy,
+	Build,
+	ImportFigures,
+	Check,
 	Other
 }
 
@@ -71,6 +78,10 @@ public static class RemasterJobs
 			"artist_bg_kit.py" => RemasterJobStep.Scenery,
 			"artist_chr_kit.py" => RemasterJobStep.PatternPages,
 			"artist_kit_assemble.py" => RemasterJobStep.Assemble,
+			"copy" => RemasterJobStep.Copy,
+			"build" => RemasterJobStep.Build,
+			"figures" => RemasterJobStep.ImportFigures,
+			"check" => RemasterJobStep.Check,
 			_ => RemasterJobStep.Other,
 		};
 	}
@@ -104,6 +115,11 @@ public sealed class RemasterJobRunner
 	private bool _stopRequested;
 	private string _lastError = "";
 	private int _generation;
+	private readonly List<string> _log = new();
+
+	//G.6 (W-R4's Show Log): every line of the current job, stdout and stderr
+	//in arrival order, the oldest dropped past LogLimit.
+	public const int LogLimit = 4000;
 
 	//Raised on every state change, on whatever thread the change happened.
 	public event Action<RemasterJobSnapshot>? Changed;
@@ -118,6 +134,11 @@ public sealed class RemasterJobRunner
 		get { lock(_lock) { return _snapshot; } }
 	}
 
+	public IReadOnlyList<string> Log
+	{
+		get { lock(_lock) { return _log.ToArray(); } }
+	}
+
 	//False (and nothing started) while a job already runs: one job at a time
 	//per workspace.
 	public bool Start(RemasterJobSpec spec)
@@ -130,6 +151,7 @@ public sealed class RemasterJobRunner
 			_spec = spec;
 			_stopRequested = false;
 			_lastError = "";
+			_log.Clear();
 			generation = ++_generation;
 			_snapshot = new RemasterJobSnapshot(RemasterJobStatus.Running, spec.Kind, 0, spec.TotalSteps, "", "", spec.GameName);
 		}
@@ -183,6 +205,10 @@ public sealed class RemasterJobRunner
 				return;
 			}
 			RemasterJobSnapshot s = _snapshot;
+			if(_log.Count >= LogLimit) {
+				_log.RemoveAt(0);
+			}
+			_log.Add(line);
 			if(isError) {
 				if(line.Trim().Length > 0) {
 					_lastError = line.Trim();
@@ -191,7 +217,10 @@ public sealed class RemasterJobRunner
 			}
 			//mep_project.cmd_kit prints "== <tool> -> <kit>" before a step and
 			//"ok   <tool> -> <kit>" / "FAIL <tool> -> <kit>" after it.
-			if(line.StartsWith("== ", StringComparison.Ordinal)) {
+			//mep_project.py build announces its step total first ("steps: 4").
+			if(line.StartsWith("steps: ", StringComparison.Ordinal) && int.TryParse(line.Substring(7).Trim(), out int total) && total > 0) {
+				_snapshot = s with { TotalSteps = total };
+			} else if(line.StartsWith("== ", StringComparison.Ordinal)) {
 				_snapshot = s with { CurrentStep = StepName(line.Substring(3)) };
 			} else if(line.StartsWith("ok ", StringComparison.Ordinal) || line.StartsWith("FAIL ", StringComparison.Ordinal)) {
 				bool failed = line.StartsWith("FAIL ", StringComparison.Ordinal);

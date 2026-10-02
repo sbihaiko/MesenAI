@@ -45,6 +45,10 @@ namespace Mesen.Utilities
 
 		private static void InternalLoadRom(ResourcePath romPath, ResourcePath? patchPath)
 		{
+			//G.6 (W-X3): a running recording asks before another game opens.
+			if(!MainWindowViewModel.Instance.ConfirmOpen(romPath.FileName, () => InternalLoadRom(romPath, patchPath))) {
+				return;
+			}
 			//Temporarily hide selection screen to allow displaying error messages
 			MainWindowViewModel.Instance.RecentGames.Visible = false;
 
@@ -60,6 +64,9 @@ namespace Mesen.Utilities
 
 		public static void LoadRecentGame(string filename, bool forceLoadState)
 		{
+			if(!MainWindowViewModel.Instance.ConfirmOpen(filename, () => LoadRecentGame(filename, forceLoadState))) {
+				return;
+			}
 			//Temporarily hide selection screen to allow displaying error messages
 			MainWindowViewModel.Instance.RecentGames.Visible = false;
 

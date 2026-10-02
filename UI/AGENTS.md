@@ -194,6 +194,18 @@ can be exercised by real xunit tests without Avalonia or the native
   `IReplayRecorder` (`StopAndKeep` stops without the menu's reveal and
   browser hand-off, which W-H4's after sheet does on click). Remaster
   reaches W-H3 through `RemasterWorkspaceViewModel.RequestShareProject`.
+- G.6 (PRD Part B §13.5.3 W-R3/W-R4, §13.5.5 W-X3) adds Build & show:
+  `RemasterBuilds.Spec` runs `mep_project.py build`; its `show:` line and
+  `RemasterShow.Decide` pick `EmuApi.RequestMepImageReload` (images only) or
+  `LoadRomHelper.ApplyPackChange` (manifest changed), only on the project's
+  own running NES game. `RemasterBuildProblemReader` turns the runner's
+  `Log` into W-R4 rows by caption (`RemasterKitIndex`, from `kit.json`);
+  an untranslated line is only counted. The Build half of the VM is
+  `RemasterWorkspaceViewModel.Build.cs`. W-X3's question is
+  `InterruptionViewModel` on `MainWindowViewModel.Interruption`
+  (`MainWindowViewModel.Interruptions.cs`), asked from
+  `MainWindow.OnClosing` and from `LoadRomHelper` before any ROM opens; it
+  replaces `ConfirmExit` when it asks, so quitting confirms once.
 - **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
   Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
   `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with

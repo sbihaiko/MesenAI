@@ -75,7 +75,7 @@ namespace Mesen.Tests.Remaster
 			RemasterScreenState s = RemasterScreen.Evaluate(Inputs());
 			Assert.Equal(RemasterControl.Off(RemasterReason.TasLater), s.RecordFromTas);
 			Assert.Equal(RemasterControl.Off(RemasterReason.AiNotReady), s.LetTheAiPlay);
-			Assert.Equal(RemasterControl.Off(RemasterReason.BuildLater), s.BuildAndShow);
+			Assert.Equal(RemasterControl.Off(RemasterReason.NoKitYet), s.BuildAndShow);
 			Assert.Equal(RemasterReason.TasNotInThisBuild, RemasterScreen.Evaluate(Inputs(headless: false)).RecordFromTas.Reason);
 		}
 

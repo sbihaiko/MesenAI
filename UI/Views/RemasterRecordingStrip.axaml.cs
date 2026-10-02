@@ -22,5 +22,11 @@ namespace Mesen.Views
 		{
 			(DataContext as RemasterWorkspaceViewModel)?.StopRecording();
 		}
+
+		//G.6: Back to Project from the build's game view.
+		private void OnBack(object? sender, RoutedEventArgs e)
+		{
+			(DataContext as RemasterWorkspaceViewModel)?.LeaveGameView();
+		}
 	}
 }

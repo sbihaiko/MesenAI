@@ -14,7 +14,8 @@
 	strip is the one pill and Stop (1 control, rule 2). It sits above the game,
 	not over it, because the native renderer draws above Avalonia content.-->
 	<Border Name="RemasterRecordingStripBorder" Background="#202020" Padding="12 6">
-		<DockPanel>
+		<Panel>
+		<DockPanel IsVisible="{Binding IsRecording}">
 			<Button Name="RemasterStopRecordingButton" DockPanel.Dock="Right" Content="{l:Translate btnStopRecording}" Click="OnStop" />
 			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
 				<TextBlock Text="●" Foreground="#FF3B30" VerticalAlignment="Center" />
@@ -23,5 +24,16 @@
 				<TextBlock Text="{l:Translate lblRecordingHint}" Foreground="#CCFFFFFF" VerticalAlignment="Center" />
 			</StackPanel>
 		</DockPanel>
+		<!--G.6: the same strip shows a build in the game - one pill and Back to
+		Project (Esc does the same).-->
+		<DockPanel Name="RemasterShowingStrip" IsVisible="{Binding IsShowingBuild}">
+			<Button Name="RemasterBackToProjectButton" DockPanel.Dock="Right" Content="{l:Translate btnBackToProject}" Click="OnBack" />
+			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+				<TextBlock Text="{l:Translate lblRecordingRemasterTag}" Foreground="#C9A0FF" FontWeight="Bold" VerticalAlignment="Center" />
+				<TextBlock Name="RemasterShowingPill" Text="{Binding ShowingPill}" Foreground="White" VerticalAlignment="Center" />
+				<TextBlock Text="{l:Translate lblShowingHint}" Foreground="#CCFFFFFF" VerticalAlignment="Center" />
+			</StackPanel>
+		</DockPanel>
+		</Panel>
 	</Border>
 </UserControl>

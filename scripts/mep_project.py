@@ -21,6 +21,7 @@ build keys from.
     scripts/mep_project.py packs <dir>             # every recorded pack dir under a tree
     scripts/mep_project.py next  <project>         # the id the next recording gets
     scripts/mep_project.py kit   <project> --rom ROM [--out DIR] [--title T] [--no-verify]
+    scripts/mep_project.py build <project> [--rom ROM]   # mep/ from the newest recording + its kit
 
 `kit` is the kit generators reading `auto/rec-*/`: figures (`artist_kit.py`)
 and scenery (`artist_bg_kit.py`) stay per recording, one kit each under
@@ -29,6 +30,9 @@ and scenery (`artist_bg_kit.py`) stay per recording, one kit each under
 `<out>/pages/`. Stage maps need a per-stage grid dump (`artist_map.py
 --stage/--dump`), which a recording does not keep, so `kit` does not make
 them. Each kit folder is assembled (`artist_kit_assemble.py`).
+
+`build` is Remaster's *Build & show in game* (slice G.6); it lives in
+`mep_project_build.py`, whose docstring says what it writes and what it refuses.
 
 Exit codes: 0 ok, 1 a recording or a generator failed, 2 usage error.
 """
@@ -252,6 +256,9 @@ def main(argv=None) -> int:
     p_kit.add_argument("--out", help="kit folder (default: <project>/kit)")
     p_kit.add_argument("--title", help="kit title prefix (default: the project folder name)")
     p_kit.add_argument("--no-verify", action="store_true", help="skip the generators' --verify round-trip")
+    p_build = sub.add_parser("build", help="rebuild mep/ from the newest recording and its kit (G.6)")
+    p_build.add_argument("project")
+    p_build.add_argument("--rom", help="passed to mep_build.py build (only an ADR-0196 overflow layer needs it)")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "list":
@@ -268,6 +275,9 @@ def main(argv=None) -> int:
         if args.cmd == "next":
             print(next_id(args.project))
             return 0
+        if args.cmd == "build":
+            import mep_project_build
+            return mep_project_build.run(args.project, args.rom)
         return cmd_kit(args)
     except ProjectError as exc:
         print(f"error: {exc}", file=sys.stderr)
