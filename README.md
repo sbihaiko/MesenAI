@@ -313,11 +313,13 @@ A project that measures its own claims should say what is and isn't shipped.
   1316 dependency-free C++ unit tests and the C# xUnit suites.
 
 **Not yet, and named as such**
-- Shaders are **Windows and Linux only**: RetroArch `.slangp` presets through
-  librashader, ported from upstream in the sync of 2026-09-24. macOS still
-  renders in software, and the native Metal renderer that closes the gap is
-  accepted ([ADR-0237](docs/adr/0237-macos-gets-shader-support-through-a-native-metal-renderer.md))
-  and not built — roadmap slice P.8.
+- Shaders on macOS are **built but not yet signed off by a person**: RetroArch
+  `.slangp` presets run through librashader on a native Metal renderer
+  ([ADR-0237](docs/adr/0237-macos-gets-shader-support-through-a-native-metal-renderer.md),
+  roadmap slice P.8), with the old software renderer kept behind the
+  `UseSoftwareRenderer` setting. The project ships no shaders: put presets in
+  the `Shaders` folder of the data directory. The headless checks pass; the
+  on-screen check (Retina, vsync, fullscreen) is still a human row.
 - Two limits stand by design, not as gaps: a changed `hires.txt` still needs the
   ROM reopened — the in-place reload covers a cell already painted, and a cell's
   first paint re-points its rule, so it wants one reopen of its own (ADR-0231) —

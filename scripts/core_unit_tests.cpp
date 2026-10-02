@@ -12322,12 +12322,50 @@ void TestShareRestoreOnlyTouchesThePowerOnFields()
 	Check(s.Nes.LightDetectionRadius == 200, "share restore: an unrelated setting changed during the recording is not rolled back");
 }
 
+//ADR-0205 section 2: MovieManager::Stop restores the player's settings through
+//ShareRestoreState::Finish. What Stop needs is the ORDER (the recorder is ended
+//- and writes GameSettings.txt - while the deterministic settings are still in
+//place, then the player's come back) and that the restore is one-shot.
+void TestShareStopRestoresAfterTheRecorderHasSerialized()
+{
+	FakeShareSettings s = StockSettings();
+	s.Nes.RamPowerOnState = RamState::AllOnes;
+	ShareRestoreState share;
+	share.Arm(ShareRecordingSettings::Capture(s));
+	ShareRecordingSettings::Apply(s, ConsoleType::Nes);
+	Check(share.Active(), "share stop: armed after the recording started");
+
+	bool serializedDeterministic = false;
+	share.Finish(s, [&]() { serializedDeterministic = !PowerOnStateIsRandom(s, ConsoleType::Nes) && s.Nes.RamPowerOnState == RamState::AllZeros; });
+	Check(serializedDeterministic, "share stop: the recorder ends (writes GameSettings.txt) before the restore, so the archive is deterministic");
+	Check(s.Nes.RamPowerOnState == RamState::AllOnes && s.Nes.RandomizeCpuPpuAlignment && s.Nes.RandomizeMapperPowerOnState, "share stop: the player's NES settings are back afterwards");
+	Check(!share.Active(), "share stop: no longer armed after Stop");
+}
+
+void TestShareStopRestoreIsOneShotAndInertWhenNotSharing()
+{
+	FakeShareSettings s = StockSettings();
+	ShareRestoreState share;
+	int ended = 0;
+	share.Finish(s, [&]() { ended++; });
+	Check(ended == 1 && s.Nes.RamPowerOnState == RamState::Random && s.Nes.RandomizeCpuPpuAlignment, "share stop: a plain recording's Stop ends the recorder and touches no setting");
+
+	share.Arm(ShareRecordingSettings::Capture(s));
+	ShareRecordingSettings::Apply(s, ConsoleType::Nes);
+	share.Finish(s, [&]() { ended++; });
+	s.Nes.RamPowerOnState = RamState::AllOnes; //the player changes it after the stop
+	share.Finish(s, [&]() { ended++; });
+	Check(ended == 3 && s.Nes.RamPowerOnState == RamState::AllOnes, "share stop: a second Stop does not roll back what the player set after the first");
+}
+
 int main()
 {
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();
 	TestShareRestoreBringsBackTheOriginalSettingsOnEveryExitPath();
 	TestShareRestoreOnlyTouchesThePowerOnFields();
+	TestShareStopRestoresAfterTheRecorderHasSerialized();
+	TestShareStopRestoreIsOneShotAndInertWhenNotSharing();
 
 	TestACaptureRecordMasksACellTheLiveFrameHasMovedOn();
 	TestACaptureRecordTreatsARecolouredCellAsMovedOn();

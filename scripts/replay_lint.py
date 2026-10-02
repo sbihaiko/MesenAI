@@ -34,6 +34,7 @@ import io
 import json
 import re
 import sys
+import unicodedata
 import zipfile
 from collections import namedtuple
 from pathlib import Path
@@ -52,6 +53,28 @@ SAVE_STATE_MEMBER = "SaveState.mss"
 SHA1_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
 
 Finding = namedtuple("Finding", "code message")
+
+
+def plain_text(text):
+    """Attacker-controlled text made safe to echo on one report line: line
+    breaks and other whitespace controls become a space, every other control
+    (C0, C1, DEL) and format character (bidi, zero-width) is dropped, and the
+    whitespace is collapsed. A zip member name or a GameSettings.txt value is
+    submitter-chosen, and the findings are posted into an issue comment."""
+    out = []
+    for c in str(text):
+        cat = unicodedata.category(c)
+        if cat in ("Zl", "Zp") or c in "\t\n\r\x0b\x0c\x85":
+            out.append(" ")
+        elif cat not in ("Cc", "Cf", "Cs", "Co", "Cn"):
+            out.append(c)
+    return " ".join("".join(out).split())
+
+
+def render_refusals(result):
+    """The human-readable report: exactly one `refused [code]: message` line per
+    finding, whatever the findings echo."""
+    return "\n".join(f"refused [{f.code}]: {plain_text(f.message)}" for f in result.findings)
 
 
 class LintResult:
@@ -180,7 +203,7 @@ def lint_bytes(data):
         if batteries:
             result.add(
                 "battery",
-                f"the archive carries battery data ({', '.join(batteries)}) (ADR-0205 section 3). It appears "
+                f"the archive carries battery data ({', '.join(plain_text(b) for b in batteries)}) (ADR-0205 section 3). It appears "
                 "when a replay is recorded with StartWithSaveData (the command-line recorder); the Record and "
                 "share action ignores save data on disk (section 2).",
             )
@@ -212,7 +235,7 @@ def lint_bytes(data):
         if random_keys:
             result.add(
                 "power-on",
-                f"GameSettings.txt records a random power-on state ({', '.join(random_keys)}); without a save "
+                f"GameSettings.txt records a random power-on state ({', '.join(plain_text(k) for k in random_keys)}); without a save "
                 "state such a replay cannot play back (ADR-0205 section 2). A settings change made while "
                 "recording causes this; record again with the Record and share action and leave the "
                 "settings alone until it stops.",
@@ -222,7 +245,7 @@ def lint_bytes(data):
             result.add(
                 "rom-path",
                 "GameSettings.txt must carry the ROM file name only, never a path (ADR-0205 section 3); "
-                f"found {game_file!r}.",
+                f"found {plain_text(game_file)!r}.",
             )
     return result
 
@@ -250,9 +273,10 @@ def main(argv):
             "facts": result.facts,
         }, indent=2))
     elif result.ok:
-        print(f"accepted: {args[0]} (rom sha1 {result.facts['sha1']}, game file {result.facts['game_file']})")
-    for finding in result.findings:
-        print(f"refused [{finding.code}]: {finding.message}", file=sys.stderr)
+        print(f"accepted: {plain_text(args[0])} (rom sha1 {result.facts['sha1']}, "
+              f"game file {plain_text(result.facts['game_file'])})")
+    if result.findings:
+        print(render_refusals(result), file=sys.stderr)
     return 0 if result.ok else 1
 
 

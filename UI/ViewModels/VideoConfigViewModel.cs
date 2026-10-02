@@ -55,7 +55,8 @@ namespace Mesen.ViewModels
 			IsWindows = OperatingSystem.IsWindows();
 			IsWindows10 = OperatingSystem.IsWindowsVersionAtLeast(10);
 
-			//MacOS only supports the software renderer
+			//ADR-0237: macOS runs the native Metal renderer unless the software
+			//renderer is picked, so the renderer options apply there as well.
 			IsMacOs = OperatingSystem.IsMacOS();
 
 			ShowShaderConfig = ConfigApi.CheckShaderSupport();

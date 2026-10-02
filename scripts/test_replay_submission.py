@@ -205,6 +205,15 @@ def check_hostile_text_and_urls():
     if any(c in ctrl.title for c in ("\u202e", "\x07")):
         fail(f"AC-5 control and bidi characters must be stripped from the title: {ctrl.title!r}")
         return
+    nl = rs._comment(False, [("battery", "names Battery\n- `forged`: ok\u202e\x1b[0m\u200b")], None, "t")
+    if any(c in nl for c in ("\u202e", "\x1b", "\u200b")) or "\n- `forged`" in nl:
+        fail(f"AC-5 a finding message must not forge a bullet or carry control characters: {nl!r}")
+        return
+    boom = rs.evaluate(body("https://github.com/user-attachments/files/1/a.mmo"), "t", (), "u", [],
+                       lambda _u: (_ for _ in ()).throw(OSError("bad\n- `forged`: x")))
+    if "\n- `forged`" in boom.comment:
+        fail(f"AC-5 a download error must not forge a bullet: {boom.comment!r}")
+        return
     for bad in ("https://github.com/user-attachments/files/../../o/r/releases/download/v/x.zip",
                 "https://github.com/user-attachments/files/%2e%2e/o/x.zip"):
         if rs.extract_attachment_url(body(bad)) is not None:

@@ -238,6 +238,14 @@ can be exercised by real xunit tests without Avalonia or the native
     exact ratio.
   - The logical size is snapped back from the physical pixels, so
     `Width * dpi == RealWidth`.
+- **Renderer choice and the shader group (`UI/Logic/RendererPolicy`,
+  ADR-0237 / P.8).** macOS is no longer forced to the software renderer:
+  only `VideoConfig.UseSoftwareRenderer` picks it, on every platform, and
+  the core falls back to software by itself when Metal cannot start. The
+  shader group shows when the core reports shader support, except on macOS
+  with the software renderer, which never runs a shader. Covered by
+  `UI.Tests/Config/RendererPolicyTests.cs`; there is no separate "use Metal"
+  setting.
 - **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
   calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the

@@ -30,10 +30,7 @@ private:
 	//ADR-0205 section 2: the player's power-on settings, snapshotted before
 	//Record and share changed them. Restored by Stop(), after the recorder has
 	//written GameSettings.txt (which serializes the settings as they are *now*).
-	SharePowerOnState _shareRestore;
-	bool _shareActive = false;
-
-	void RestoreShareSettings();
+	ShareRestoreState _share;
 
 public:
 	MovieManager(Emulator* emu);
@@ -46,7 +43,7 @@ public:
 	//ignored. Returns false - recording nothing, changing nothing - for a
 	//console it cannot make deterministic or when the file cannot be written.
 	bool RecordAndShare(RecordMovieOptions options);
-	bool SharingRecording() { return _shareActive; }
+	bool SharingRecording() { return _share.Active(); }
 	void Play(VirtualFile file, bool silent = false);
 	void Stop();
 	bool Playing();

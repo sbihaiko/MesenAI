@@ -26,7 +26,9 @@ public:
 #ifdef _WIN32
 		return IsWindows10OrGreater();
 #elif __APPLE__
-		return false;
+		//ADR-0237: the Metal renderer runs the filter chain; CheckShaderSupport()
+		//below stays the gate (no librashader.dylib -> no shader group).
+		return true;
 #else
 		return true;
 #endif
@@ -64,10 +66,17 @@ public:
 		libra_shader_preset_t preset;
 		libra_error_t error = libra.preset_create_with_options(shaderFile, nullptr, nullptr, &preset);
 		if(!error) {
-			libra_preset_param_list_t paramList;
-			libra.preset_get_runtime_params(&preset, &paramList);
-			uint32_t paramCount = paramList.length;
-			libra.preset_free_runtime_params(paramList);
+			//The list is only valid when the call succeeds: some presets make it fail
+			//and leave the list untouched, and freeing it then crashes
+			libra_preset_param_list_t paramList = {};
+			libra_error_t paramError = libra.preset_get_runtime_params(&preset, &paramList);
+			uint32_t paramCount = 0;
+			if(!paramError) {
+				paramCount = (uint32_t)paramList.length;
+				libra.preset_free_runtime_params(paramList);
+			} else {
+				libra.error_free(&paramError);
+			}
 			libra.preset_free(&preset);
 			return paramCount;
 		}
@@ -89,8 +98,13 @@ public:
 		libra_shader_preset_t preset;
 		libra_error_t error = libra.preset_create_with_options(shaderFile, nullptr, nullptr, &preset);
 		if(!error) {
-			libra_preset_param_list_t paramList;
-			libra.preset_get_runtime_params(&preset, &paramList);
+			libra_preset_param_list_t paramList = {};
+			libra_error_t paramError = libra.preset_get_runtime_params(&preset, &paramList);
+			if(paramError) {
+				libra.error_free(&paramError);
+				libra.preset_free(&preset);
+				return result;
+			}
 
 			for(uint64_t i = 0; i < paramList.length; i++) {
 				const libra_preset_param_t& p = paramList.parameters[i];
