@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import io
 import sys
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -259,6 +260,94 @@ def check_power_on_state_is_deterministic():
     ok("AC-8 a Random power-on state in GameSettings.txt is refused; deterministic ones pass")
 
 
+def check_hostile_text_cannot_forge_report_lines():
+    # AC-9: a member name or GameFile is attacker-controlled; echoed raw, a
+    # newline forges a line of the report that submission.py posts in a comment.
+    forged = "x\nrefused [forged]: fake\u202e\u200b\x1b[31m\x85\r"
+    result = replay_lint.lint_bytes(build(clean_members(**{"Battery" + forged: b"\x00"})))
+    if "battery" not in codes(result):
+        fail(f"AC-9 setup: a Battery member must be refused: {codes(result)}")
+        return
+    bad_game = game_settings(game_file="a/b\x1b[2J\u202e\u200bc").decode()
+    result2 = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": bad_game.encode()})))
+    for r in (result, result2):
+        for f in r.findings:
+            if len(f.message.splitlines()) != 1 or any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in f.message):
+                fail(f"AC-9 a finding message must not carry control/format characters or extra lines: {f.message!r}")
+                return
+    rendered = replay_lint.render_refusals(result)
+    if len(rendered.splitlines()) != len(result.findings):
+        fail(f"AC-9 the report must have exactly one line per finding: {rendered!r}")
+        return
+    got = replay_lint.plain_text("a\nb\u202ec\u200bd\x85e\tf\x07g")
+    if got != "a bcd e fg":
+        fail(f"AC-9 plain_text must space line breaks, drop other control/format chars: {got!r}")
+        return
+    ok("AC-9 duplicate identity keys: the last one wins, as in the Core")
+
+
+def check_malformed_members_are_refused():
+    # AC-7: a hostile archive must be a verdict, never a traceback (a crash
+    # leaves a stale replay:valid label on the issue).
+    good = bytearray(build(clean_members(), compression=zipfile.ZIP_STORED))
+    marker = b"MesenVersion"
+    at = good.find(marker)
+    good[at] ^= 0x01  # stored payload no longer matches its CRC-32
+    try:
+        bad_crc = replay_lint.lint_bytes(bytes(good))
+    except Exception as exc:  # noqa: BLE001
+        fail(f"AC-7 a corrupt member crashed the lint: {type(exc).__name__}: {exc}")
+        return
+    if bad_crc.ok or "not-a-movie" not in codes(bad_crc):
+        fail(f"AC-7 a corrupt member is refused as not-a-movie: {codes(bad_crc)}")
+        return
+    ok("AC-7 a malformed member is a not-a-movie verdict, not a crash")
+
+
+def check_power_on_state_is_deterministic():
+    # AC-8: a config push mid-recording can leave `Random` in the serialized
+    # settings of a file that has no SaveState.mss; it can never replay.
+    for extra in ("nes.ramPowerOnState Random", "nes.randomizeMapperPowerOnState true",
+                  "snes.enableRandomPowerOnState true", "NES.RAMPOWERONSTATE random"):
+        text = game_settings().decode() + extra + "\n"
+        result = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+        if result.ok or "power-on" not in codes(result):
+            fail(f"AC-8 {extra!r} must be refused as power-on: {codes(result)}")
+            return
+    for extra in ("nes.ramPowerOnState AllZeros", "nes.randomizeMapperPowerOnState false"):
+        text = game_settings().decode() + extra + "\n"
+        result = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+        if not result.ok:
+            fail(f"AC-8 {extra!r} is deterministic and must be accepted: {codes(result)}")
+            return
+    ok("AC-8 a Random power-on state in GameSettings.txt is refused; deterministic ones pass")
+
+
+def check_hostile_text_cannot_forge_report_lines():
+    # AC-9: a member name or GameFile is attacker-controlled; echoed raw, a
+    # newline forges a line of the report that submission.py posts in a comment.
+    forged = "x\nrefused [forged]: fake\u202e\u200b\x1b[31m\x85\r"
+    result = replay_lint.lint_bytes(build(clean_members(**{"Battery" + forged: b"\x00"})))
+    if "battery" not in codes(result):
+        fail(f"AC-9 setup: a Battery member must be refused: {codes(result)}")
+        return
+    bad_game = game_settings(game_file="a/b\x1b[2J\u202e\u200bc").decode()
+    result2 = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": bad_game.encode()})))
+    for r in (result, result2):
+        for f in r.findings:
+            if len(f.message.splitlines()) != 1 or any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in f.message):
+                fail(f"AC-9 a finding message must not carry control/format characters or extra lines: {f.message!r}")
+                return
+    rendered = replay_lint.render_refusals(result)
+    if len(rendered.splitlines()) != len(result.findings):
+        fail(f"AC-9 the report must have exactly one line per finding: {rendered!r}")
+        return
+    if replay_lint.plain_text("a\nb\u202ec\u200bd\x85e\tf") != "a b c d e f".replace(" c d", "cd"):
+        fail(f"AC-9 plain_text must drop control/format chars and collapse whitespace: {replay_lint.plain_text('a\nb\u202ec\u200bd')!r}")
+        return
+    ok("AC-9 attacker-controlled names cannot forge report lines or smuggle control characters")
+
+
 def main():
     check_accepts_action_output()
     check_refuses_other_recordings()
@@ -269,6 +358,7 @@ def main():
     check_last_identity_key_wins()
     check_malformed_members_are_refused()
     check_power_on_state_is_deterministic()
+    check_hostile_text_cannot_forge_report_lines()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

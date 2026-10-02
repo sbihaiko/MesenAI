@@ -118,7 +118,7 @@ def _plain(text):
 
 def _defang(text):
     """Text echoed in a comment: no code-span break-out, no @mention, no #ref."""
-    return text.replace("`", "'").replace("@", "@\u200b").replace("#", "#\u200b")
+    return replay_lint.plain_text(text).replace("`", "'").replace("@", "@\u200b").replace("#", "#\u200b")
 
 
 def build_title(facts, login, catalog):
