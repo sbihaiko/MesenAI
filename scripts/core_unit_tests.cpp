@@ -90,6 +90,7 @@
 #include "Utilities/StringUtilities.h"
 #include "Utilities/miniz.h"
 #include "Utilities/sha256.h"
+#include "Utilities/Video/LibrashaderUtilities.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -12358,6 +12359,153 @@ void TestShareStopRestoreIsOneShotAndInertWhenNotSharing()
 	Check(ended == 3 && s.Nes.RamPowerOnState == RamState::AllOnes, "share stop: a second Stop does not roll back what the player set after the first");
 }
 
+//--- Librashader param host logic (PR #581), against a fake instance ---------
+//LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
+//libra_instance_t, so these cases hand them a fake one: function pointers that
+//record their calls, no librashader library and no GPU. The crash fixed in #581
+//was freeing the param list after libra_preset_get_runtime_params had failed.
+
+struct FakeLibra
+{
+	libra_error_t createError = nullptr;
+	libra_error_t paramError = nullptr;
+	libra_preset_param_list_t listToWrite = {};
+	int createCalls = 0;
+	int getParamsCalls = 0;
+	int freeParamsCalls = 0;
+	int presetFreeCalls = 0;
+	int errorFreeCalls = 0;
+	libra_preset_param_list_t freedList = {};
+	libra_error_t freedError = nullptr;
+};
+
+FakeLibra gFakeLibra;
+int gFakeLibraCreateErrorObject;
+int gFakeLibraParamErrorObject;
+int gFakeLibraPresetObject;
+
+libra_error_t FakeLibraPresetCreate(const char*, libra_preset_ctx_t*, libra_preset_opt_t*, libra_shader_preset_t* out)
+{
+	gFakeLibra.createCalls++;
+	if(!gFakeLibra.createError) {
+		*out = reinterpret_cast<libra_shader_preset_t>(&gFakeLibraPresetObject);
+	}
+	return gFakeLibra.createError;
+}
+
+libra_error_t FakeLibraGetRuntimeParams(const libra_shader_preset_t*, libra_preset_param_list_t* out)
+{
+	gFakeLibra.getParamsCalls++;
+	//Written on failure too: a list the caller must not trust (or free) unless the call succeeded
+	*out = gFakeLibra.listToWrite;
+	return gFakeLibra.paramError;
+}
+
+libra_error_t FakeLibraFreeRuntimeParams(libra_preset_param_list_t list)
+{
+	gFakeLibra.freeParamsCalls++;
+	gFakeLibra.freedList = list;
+	return nullptr;
+}
+
+libra_error_t FakeLibraPresetFree(libra_shader_preset_t* preset)
+{
+	gFakeLibra.presetFreeCalls++;
+	*preset = nullptr;
+	return nullptr;
+}
+
+int32_t FakeLibraErrorFree(libra_error_t* error)
+{
+	gFakeLibra.errorFreeCalls++;
+	gFakeLibra.freedError = *error;
+	*error = nullptr;
+	return 0;
+}
+
+libra_instance_t MakeFakeLibra()
+{
+	gFakeLibra = FakeLibra();
+	libra_instance_t libra = __librashader_make_null_instance();
+	libra.preset_create_with_options = FakeLibraPresetCreate;
+	libra.preset_get_runtime_params = FakeLibraGetRuntimeParams;
+	libra.preset_free_runtime_params = FakeLibraFreeRuntimeParams;
+	libra.preset_free = FakeLibraPresetFree;
+	libra.error_free = FakeLibraErrorFree;
+	libra.instance_loaded = true;
+	return libra;
+}
+
+const libra_preset_param_t gPoisonParams[1] = { { "POISON", "never a real parameter", 0.5f, 0.0f, 1.0f, 0.1f } };
+
+const libra_preset_param_t gRealParams[2] = {
+	{ "CURVATURE", "Curvature", 0.25f, 0.0f, 1.0f, 0.05f },
+	{ "SCANLINE", "Scanline weight", 0.3f, 0.1f, 0.5f, 0.01f }
+};
+
+void ArmParamFailure()
+{
+	gFakeLibra.paramError = reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject);
+	gFakeLibra.listToWrite = { gPoisonParams, 1 };
+}
+
+void TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	ArmParamFailure();
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "crt-geom-deluxe.slangp");
+	Check(count == 0, "librashader count: a failed get_runtime_params counts zero params", "got " + std::to_string(count));
+	Check(gFakeLibra.freeParamsCalls == 0, "librashader count: a failed get_runtime_params frees no param list", "freed " + std::to_string(gFakeLibra.freeParamsCalls) + " time(s)");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject), "librashader count: the get_runtime_params error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
+	Check(gFakeLibra.presetFreeCalls == 1, "librashader count: the preset is still freed once after the param failure");
+}
+
+void TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	ArmParamFailure();
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "crt-geom-deluxe.slangp");
+	Check(params.empty(), "librashader params: a failed get_runtime_params returns no params", "got " + std::to_string(params.size()));
+	Check(gFakeLibra.freeParamsCalls == 0, "librashader params: a failed get_runtime_params frees no param list", "freed " + std::to_string(gFakeLibra.freeParamsCalls) + " time(s)");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject), "librashader params: the get_runtime_params error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
+	Check(gFakeLibra.presetFreeCalls == 1, "librashader params: the preset is still freed once after the param failure");
+}
+
+void TestShaderParamsAreReadAndTheListFreedOnceOnSuccess()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "crt-royale.slangp");
+	bool countFreedOnce = gFakeLibra.freeParamsCalls == 1 && gFakeLibra.freedList.parameters == gRealParams && gFakeLibra.freedList.length == 2;
+	Check(count == 2 && countFreedOnce && gFakeLibra.presetFreeCalls == 1 && gFakeLibra.errorFreeCalls == 0, "librashader count: success counts the list and frees it and the preset exactly once");
+
+	libra = MakeFakeLibra();
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "crt-royale.slangp");
+	bool readFreedOnce = gFakeLibra.freeParamsCalls == 1 && gFakeLibra.freedList.parameters == gRealParams && gFakeLibra.freedList.length == 2;
+	Check(params.size() == 2 && readFreedOnce && gFakeLibra.presetFreeCalls == 1 && gFakeLibra.errorFreeCalls == 0, "librashader params: success reads the list and frees it and the preset exactly once");
+	bool copied = params.size() == 2 && std::string(params[1].Name) == "SCANLINE" && std::string(params[1].Description) == "Scanline weight"
+		&& params[1].Initial == 0.3f && params[1].Min == 0.1f && params[1].Max == 0.5f && params[1].Step == 0.01f;
+	Check(copied, "librashader params: name, description and the four values are copied per param");
+}
+
+void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "missing.slangp");
+	bool countUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
+	Check(count == 0 && countUntouched, "librashader count: a preset that fails to load counts zero and frees nothing");
+
+	libra = MakeFakeLibra();
+	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "missing.slangp");
+	bool readUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
+	Check(params.empty() && readUntouched, "librashader params: a preset that fails to load returns nothing and frees nothing");
+}
+
 int main()
 {
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
@@ -12746,6 +12894,11 @@ int main()
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();
+
+	TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails();
+	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
+	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();
+	TestShaderParamsTouchNoListWhenThePresetFailsToLoad();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

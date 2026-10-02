@@ -127,4 +127,11 @@ void MacOSMetalRenderer::Render(RenderSurfaceInfo& emuHud, RenderSurfaceInfo& sc
 		frameNumber = _frameNumber;
 	}
 	_presenter.Present(_presented.data(), width, height, frameNumber, cfg.UseBilinearInterpolation, emu, script);
+
+	//Issue #584: a preset that hangs the GPU is dropped by the presenter. It is
+	//not reloaded until the configured shader changes (_shaderCfg keeps the
+	//file), so it cannot hang the GPU again on the next frame.
+	if(_presenter.TakeShaderDropped()) {
+		MessageManager::Log("[librashader] " + _presenter.LastError());
+	}
 }

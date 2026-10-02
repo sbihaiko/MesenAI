@@ -84,7 +84,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `roles_probe.cpp` / `headless_record.cpp` / `spike_sound_driver.cpp` run
   the emulator headless against a real ROM; they link `InteropDLL`'s shared
   lib and need `make core` first.
-- Shaders on macOS (ADR-0237, PRD P.8) have three tools here:
+- Shaders on macOS (ADR-0237, PRD P.8) have four tools here:
   - `metal_presenter_tests.mm` (`make metal-presenter-tests`, Darwin only,
     not a CI gate): it builds against `MacOS/MetalPresenter.mm` alone, with
     no `make core`. It needs a Metal device and
@@ -96,6 +96,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     uploads.
   - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
     `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
+    It tries the mirror (release `librashader-macos-arm64-01febce6` of this
+    repo) first, then the original SourMesen artifact of run 33975397584
+    until it expires on 2026-12-04; a resolved file that misses a pin is a
+    hard failure, never a fallback. `--source mirror|artifact` forces one.
     `--from <dylib>` takes a local build, which is checked for arm64 and the
     Metal symbols but is reported UNPINNED.
   - `check_headless_shader_invariance.sh <rom> [seconds] [preset] [workdir]
@@ -107,6 +111,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     is how its negative control is run. `headless_record shader=<preset>`
     only sets `ShaderConfig` (no renderer runs headless) and prints
     `shader configured: <preset>` on stderr, which the checker requires.
+  - `shader_sweep.py` + `shader_sweep_shot.mm` (`make shader-sweep
+    SHADERS=<slang-shaders dir>`) is a **manual** maintainer sweep of a whole
+    preset library, documented in `docs/shader-sweep.md`. One process per
+    preset (render through `MacOS/MetalPresenter.mm`, then `GetShaderParams`
+    through ctypes from `UI/Dependencies/` as the cwd), each with a timeout;
+    it exits 1 on any CRASH/TIMEOUT. It must never be wired into
+    `doc-checks`, `python-tests` or a workflow: the maintainer does not want
+    GPU runs in CI, and its numbers depend on the machine's GPU and driver.
+    Its reference frame is a built-in ROM-free pattern (no game content in
+    the repo); `--frame <png>` takes a real one.
 - `headless_record` copies the NES game DB into its per-run `mesen-home`
   from the binary's own location (`scripts/../UI/Dependencies/MesenNesDB.txt`,
   else `MesenNesDB.txt` beside the binary), **never from the cwd** (issue
@@ -1537,6 +1551,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `make metal-presenter-tests` (macOS only) - every check must print `PASS`
   and the binary must exit 0. Run `scripts/fetch_librashader_macos.sh`
   first.
+- `make shader-sweep SHADERS=<dir>` (macOS only, manual, never in CI) -
+  exit 0 means no preset crashed or timed out; the APPLIED/IDENTICAL/
+  *_FAIL counts in `summary.txt` are findings, not a pass/fail. See
+  `docs/shader-sweep.md`.
 - `python3 scripts/validate-specs.py` - specs/goldens under `docs/specs/`.
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any
