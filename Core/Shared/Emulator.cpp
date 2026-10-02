@@ -151,7 +151,9 @@ void Emulator::Run()
 		}
 	}
 
-	_stopFlag = false;
+	//_stopFlag is cleared by LoadRom before this thread is spawned; clearing it
+	//here again would erase a Stop() issued since then and its join() would
+	//never return (#636). A pending stop skips the loop below.
 	_isRunAheadFrame = false;
 
 	PlatformUtilities::EnableHighResolutionTimer();
