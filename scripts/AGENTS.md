@@ -68,6 +68,15 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   link stubs for the emulator members it never calls) and needs a C++
   compiler. Tests: `test_cheat_submission.py` (fixtures
   `tests/fixtures/cheat-submission/`), `checks/verify_cheat_form_and_workflow.py`.
+- **Cheat search by intent (ADR-0245 §4, ADR-0247; P.11, measured, not
+  adopted).** `cheat_intent.py` offers *one game's* `CheatDb.Nes.json`
+  entries as a closed Choice (`E<index>` plus `NONE`) to local Ollama
+  (loopback only, JSON-schema enum, no tools) or Jev (`jev_client.py`); the
+  only thing that passes is an exact offered name, and the output's
+  description and code are copied from the list, never from the model.
+  `cheat_intent_eval.py` scores the fixed set
+  `tests/fixtures/cheat-intent/intents.json`. Tests: `test_cheat_intent.py`
+  (fake backends; the key never in argv, body, stdout, stderr or the log).
 
 ## Work Guidance
 
