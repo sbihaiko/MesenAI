@@ -1,0 +1,127 @@
+{
+  "game": "Mega Man 2",
+  "console": "nes",
+  "rom": {
+    "noIntroSha1": ["2EC08F9341003DED125458DF8697CA5EF09D2209"]
+  },
+  "note": "F14.19 (ADR-0242 Q2): the progress fields scripts/jev_harness.py reads, for a golden game with no committed route past its first stall. stage1-run.txt is the F14.17 blind body; its own header says Mega Man walks into pits on most stages and loses his three lives inside the run, and on Bubble Man's stage plain Right ends in the first pit. Every field below was read on the pinned dump (whole-file SHA1 2290D8D839A303219E9327EA1451C5EEA430F53D) through scripts/step_emu.py from the states mint-stage1.txt (Bubble Man) and mint-woodman.txt write, and `verification` is the experiment scripts/test_ram_maps.py replays: each field is read at two checkpoints at least and seen to move (or hold) between them.",
+  "sources": [
+    "https://datacrystal.tcrf.net/wiki/Mega_Man_2_(NES)/RAM_map - used as a hypothesis only, each address kept because the checkpoints below reproduce it on this dump"
+  ],
+  "progress": "abs_x",
+  "screen": "camera_x",
+  "screen_width": 256,
+  "fields": {
+    "lives": {
+      "address": "00A8",
+      "note": "3 at a stage start; 2 once Mega Man has fallen into Bubble Man's first pit and respawned"
+    },
+    "hp": {
+      "address": "06C0",
+      "note": "28 full (the health bar's 28 units); falls on every hit, by the enemy's damage"
+    },
+    "stage": {
+      "address": "002A",
+      "note": "the robot master stage id: 3 on Bubble Man's stage, 2 on Wood Man's (the game's own order Heat 0, Air 1, Wood 2, Bubble 3, ...). Read on two mints, because one stage cannot show it change"
+    },
+    "camera_page": {
+      "address": "0020"
+    },
+    "camera_low": {
+      "address": "001F"
+    },
+    "camera_x": {
+      "expr": "camera_page * 256 + camera_low",
+      "note": "the camera's x in the stage"
+    },
+    "x_page": {
+      "address": "0440",
+      "note": "slot 0 of the object table's x-page column: Mega Man"
+    },
+    "x_low": {
+      "address": "0460",
+      "note": "slot 0 of the object table's x column: Mega Man"
+    },
+    "abs_x": {
+      "expr": "x_page * 256 + x_low",
+      "note": "Mega Man's x in the stage: the progress metric"
+    },
+    "screen_x": {
+      "expr": "abs_x - camera_x",
+      "note": "Mega Man's column on the screen: 128 while the camera follows him"
+    }
+  },
+  "open": {
+    "room": {
+      "method": "Mega Man 2's stages are a chain of screens joined by ladders and shutters. The candidate is the camera's page $0020, which on Wood Man's horizontal opening moves 0 -> 1 -> 2 in step with $0440; whether it keeps counting across a vertical (ladder) transition was not measured, because no checkpoint here climbs one. Until it is, the map names no `room`, and the harness's fingerprint uses `stage` and the position only."
+    }
+  },
+  "verification": {
+    "mint": "mint-stage1.txt",
+    "checkpoints": [
+      {
+        "id": "bubble-ready",
+        "input": ["700f -"],
+        "expect": {
+          "lives": {"equals": 3},
+          "hp": {"equals": 28},
+          "stage": {"equals": 3},
+          "camera_page": {"equals": 0},
+          "camera_low": {"equals": 0},
+          "camera_x": {"equals": 0},
+          "x_page": {"equals": 0},
+          "x_low": {"equals": 128},
+          "abs_x": {"equals": 128},
+          "screen_x": {"equals": 128}
+        }
+      },
+      {
+        "id": "bubble-walked",
+        "input": ["120f R"],
+        "expect": {
+          "abs_x": {"gt": "bubble-ready"},
+          "x_page": {"gt": "bubble-ready"},
+          "x_low": {"lt": "bubble-ready"},
+          "camera_x": {"gt": "bubble-ready"},
+          "camera_low": {"gt": "bubble-ready"},
+          "screen_x": {"eq": "bubble-ready"},
+          "hp": {"eq": "bubble-ready"},
+          "lives": {"eq": "bubble-ready"},
+          "stage": {"eq": "bubble-ready"}
+        }
+      },
+      {
+        "id": "bubble-fell",
+        "input": ["400f R"],
+        "expect": {
+          "lives": {"lt": "bubble-walked"},
+          "stage": {"eq": "bubble-walked"}
+        }
+      },
+      {
+        "id": "wood-ready",
+        "mint": "mint-woodman.txt",
+        "input": ["700f -"],
+        "expect": {
+          "stage": {"lt": "bubble-ready"},
+          "hp": {"equals": 28},
+          "lives": {"equals": 3},
+          "abs_x": {"equals": 128}
+        }
+      },
+      {
+        "id": "wood-hit",
+        "input": ["30f R", "10f RA", "30f R", "10f RA", "30f R", "10f RA", "30f R", "10f RA", "30f R", "10f RA", "30f R", "10f RA", "30f R", "10f RA"],
+        "expect": {
+          "hp": {"lt": "wood-ready"},
+          "stage": {"eq": "wood-ready"},
+          "camera_page": {"gt": "wood-ready"},
+          "x_page": {"gt": "wood-ready"},
+          "abs_x": {"gt": "wood-ready"},
+          "camera_x": {"gt": "wood-ready"},
+          "screen_x": {"equals": 128}
+        }
+      }
+    ]
+  }
+}
