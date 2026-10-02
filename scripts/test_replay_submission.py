@@ -24,11 +24,17 @@ Checks:
        touched.
   AC-4 no attachment / a download that fails is `replay:invalid` with a reason,
        never a crash.
+  AC-6 issue #624: on NES the movie's `SHA1` is the whole-file hash (iNES
+       header included), which never equals the catalog's No-Intro hash
+       (ADR-0003/ADR-0039); the game resolves through the movie's
+       `NoIntroSHA1`, and a movie without it falls back to the stem rather
+       than guessing a game from a name.
 
 Usage: python3 scripts/test_replay_submission.py
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import sys
 import zipfile
@@ -222,12 +228,39 @@ def check_hostile_text_and_urls():
     ok("AC-5 title length, mention/ref defanging, control chars and traversing URLs are handled")
 
 
+def _ines_rom():
+    """A synthetic iNES file: 16-byte header, 16 KB PRG, 8 KB CHR."""
+    header = b"NES\x1a" + bytes([1, 1, 0, 0]) + bytes(8)
+    payload = bytes((i * 7 + 3) & 0xFF for i in range(0x4000 + 0x2000))
+    return header + payload
+
+
+def check_nes_whole_file_hash():
+    rom = _ines_rom()
+    whole = hashlib.sha1(rom).hexdigest().upper()
+    no_intro = hashlib.sha1(rom[16:]).hexdigest().upper()  # ADR-0039: header skipped
+    catalog = [{"game": "Castlevania (USA)", "rom": {"sha1": no_intro}}]
+    settings = f"GameFile my dump.nes\nSHA1 {whole}\nNoIntroSHA1 {no_intro}\n".encode()
+    movie = archive({"GameSettings.txt": settings})
+    verdict = rs.evaluate(body(), "[Replay] typed", ["replay"], "octocat", catalog, lambda _u: movie)
+    if not verdict.title.startswith("[Replay] Castlevania (USA) —"):
+        fail(f"AC-6 an NES movie (whole-file SHA1) must resolve the catalog game by its No-Intro hash: {verdict.title!r}")
+        return
+    legacy = archive({"GameSettings.txt": f"GameFile my dump.nes\nSHA1 {whole}\n".encode()})
+    old = rs.evaluate(body(), "[Replay] typed", ["replay"], "octocat", catalog, lambda _u: legacy)
+    if not old.title.startswith("[Replay] my dump —"):
+        fail(f"AC-6 a movie without NoIntroSHA1 falls back to the ROM file stem: {old.title!r}")
+        return
+    ok("AC-6 an NES movie resolves its game by NoIntroSHA1, not the whole-file SHA1 (issue #624)")
+
+
 def main():
     check_url_extraction()
     check_title()
     check_round_trip()
     check_failures_are_verdicts()
     check_hostile_text_and_urls()
+    check_nes_whole_file_hash()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

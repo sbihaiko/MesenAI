@@ -115,7 +115,7 @@ def parse_game_settings(text):
     """The keys the lint and the title rule need. `GameSettings.txt` is
     `<Key> <value>` lines (MovieRecorder::GetGameSettings), then the
     serialized settings, then one `Cheat <Type> <Code>` line per active cheat."""
-    facts = {"sha1": "", "game_file": "", "cheats": []}
+    facts = {"sha1": "", "no_intro_sha1": "", "game_file": "", "cheats": []}
     for raw in text.splitlines():
         line = raw.rstrip("\r")
         key, _, value = line.partition(" ")
@@ -123,6 +123,8 @@ def parse_game_settings(text):
         # must read the identity the Core would play back, not a decoy line.
         if key == "SHA1":
             facts["sha1"] = value.strip()
+        elif key == "NoIntroSHA1":
+            facts["no_intro_sha1"] = value.strip()
         elif key == "GameFile":
             facts["game_file"] = value.strip()
         elif key == "Cheat":

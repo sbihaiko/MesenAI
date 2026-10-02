@@ -23,6 +23,9 @@ namespace MovieKeys
 	constexpr const char* MovieFormatVersion = "MovieFormatVersion";
 	constexpr const char* GameFile = "GameFile";
 	constexpr const char* Sha1 = "SHA1";
+	//No-Intro SHA-1 of the ROM as loaded, before any patch (ADR-0039 range).
+	//On NES `SHA1` hashes the whole file, header included (issue #624).
+	constexpr const char* NoIntroSha1 = "NoIntroSHA1";
 	constexpr const char* PatchFile = "PatchFile";
 	constexpr const char* PatchFileSha1 = "PatchFileSHA1";
 	constexpr const char* PatchedRomSha1 = "PatchedRomSHA1";

@@ -26,6 +26,11 @@
   `docs/community-packs.json`, so most ROMs get the stem, which the author
   controls. The hash-resolved name stays the goal and needs a data source this
   repository does not have.
+  **Amended 2026-10-02 (#624).** On NES `GameSettings.txt`'s `SHA1` is the
+  whole-file hash (iNES header included), so it never matched the catalog's
+  No-Intro hashes; the recorder now also writes `NoIntroSHA1` (ADR-0039 range,
+  ROM as loaded before any patch), which §5's lookup tries first. A movie
+  without the key keeps the `SHA1` lookup and the stem fallback.
 - Date: 2026-09-17
 - Related: ADR-0184 (a recording may use a RAM-only cheat — **this ADR does not
   amend it**, see §4), ADR-0185 (a published movie may drive a recording; its

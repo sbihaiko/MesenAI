@@ -86,17 +86,23 @@ def load_catalog(path=CATALOG):
         return []
 
 
-def resolve_game(sha1, catalog, game_file):
-    """The game name for the archive's ROM SHA-1 (section 5), from the catalog's
-    accepted rows (`rom.sha1` and `rom.sha1s`, the same hashes the client
-    matches on). An unknown hash falls back to the ROM file name's stem, which
-    is the artifact's own claim and the best the repository can say."""
-    wanted = (sha1 or "").upper()
+def resolve_game(sha1, catalog, game_file, no_intro_sha1=""):
+    """The game name for the archive's ROM (section 5), from the catalog's
+    accepted rows (`rom.sha1` and `rom.sha1s`, the No-Intro hashes the client
+    matches on). The movie's `NoIntroSHA1` is tried first: on NES its `SHA1`
+    is the whole-file hash, iNES header included, which never equals a
+    No-Intro hash (ADR-0003/ADR-0039, issue #624). An unknown hash falls back
+    to the ROM file name's stem, which is the artifact's own claim and the
+    best the repository can say."""
+    known = {}
     for row in catalog:
         rom = row.get("rom") or {}
-        hashes = [rom.get("sha1", "")] + list(rom.get("sha1s", []) or [])
-        if wanted and wanted in {h.upper() for h in hashes if h}:
-            return row.get("game", "")
+        for h in [rom.get("sha1", "")] + list(rom.get("sha1s", []) or []):
+            if h:
+                known.setdefault(h.upper(), row.get("game", ""))
+    for wanted in (no_intro_sha1, sha1):
+        if wanted and wanted.upper() in known:
+            return known[wanted.upper()]
     return re.sub(r"\.[A-Za-z0-9]{1,4}$", "", game_file or "").strip()
 
 
@@ -122,7 +128,8 @@ def _defang(text):
 
 
 def build_title(facts, login, catalog):
-    game = _plain(resolve_game(facts.get("sha1"), catalog, facts.get("game_file")))
+    game = _plain(resolve_game(facts.get("sha1"), catalog, facts.get("game_file"),
+                              facts.get("no_intro_sha1")))
     alias = _plain(facts.get("author") or "") or login
     parts = [game, alias]
     subtitle = _plain(build_subtitle(facts.get("description")))
