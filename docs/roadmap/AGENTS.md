@@ -16,8 +16,9 @@ The fork's planning lives in one consolidated PRD under this folder:
   slice table, and ADR map, which are the source of truth for that
   surface. Part B §13 is the **GUI redesign proposal** (Play / Remaster /
   Share workspaces, ADR-0241 accepted): wireframes and simplicity rules
-  for review, not shipped behavior beyond G.1 (the shell) and G.2 (the
-  Play home and pause overlay), both shipped 2026-10-02. ADR-0241 was accepted 2026-10-02; §13 stays as the design
+  for review, not shipped behavior beyond G.1 (the shell), G.2 (the Play
+  home and pause overlay) and G.3 (the Remaster project screen and
+  recording), all shipped 2026-10-02. ADR-0241 was accepted 2026-10-02; §13 stays as the design
   reference and the remaining work is cut into §8 slices, one at a time.
 
 This is the 2026-08-30 unification of the former two PRDs
