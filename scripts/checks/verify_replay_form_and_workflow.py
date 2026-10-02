@@ -84,12 +84,13 @@ def check_workflow():
     # the title is the trigger: a not-yet-existing form label is silently skipped
     if "startsWith(github.event.issue.title, '[Replay] ')" not in text:
         fail("workflow must also trigger on a title starting with '[Replay] ' (the form label does not exist on a fresh repo)")
-    for needle in ("gh label create", "--force"):
-        if needle not in text:
-            fail(f"workflow must create the replay labels itself ({needle!r} missing)")
+    creates = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("gh label create ")]
     for name in LABEL_NAMES:
-        if f"gh label create {name} " not in text and f'gh label create "{name}"' not in text:
+        mine = [ln for ln in creates if re.match(rf'gh label create "?{re.escape(name)}"?\s', ln)]
+        if not mine:
             fail(f"workflow must create label {name}")
+        if not all(re.search(r"\s--force(\s|$)", ln) for ln in mine):
+            fail(f"every `gh label create {name}` must carry --force (idempotence: a later run must not fail on an existing label)")
     if "--add-label=replay" not in text:
         fail("workflow must add the form label `replay` to an issue that lacks it")
     for job in data["jobs"].values():
