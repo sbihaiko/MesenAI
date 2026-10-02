@@ -317,6 +317,17 @@ can be exercised by real xunit tests without Avalonia or the native
   dereferences the running console in `GetRomHash`, so the hash is only read
   while `EmuApi.IsRunning()`. Rules in `UI.Tests/Cheats/`, wiring in
   `UI.HeadlessTests/PlayerCheatsSheetTests`.
+  **Community rows (R.4, ADR-0248 §2, §5).** `UI/Services/CommunityCheatCatalogFetcher`
+  fetches `docs/community-cheats.json` with the pack catalog's allow-list,
+  downloader and ETag cache rule (no confirmation, the GET only); the sheet
+  opens on the last known catalog and `SetCommunityCatalog` adds the fetched
+  one when it returns. `CommunityCheatCatalog.ForCopy` matches the exact
+  cheat SHA-1 and the console, never a name; `CheatSheet.BuildRows` puts the
+  rows (`CheatRowSource.Community`) between the bundled list and the user's
+  own codes under the same recording rule. The 👍 count and *Share This
+  Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
+  injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
+  are swapped in headless tests so none reaches the network.
 - **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
   calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the

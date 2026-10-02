@@ -451,6 +451,14 @@ what CI actually runs; this doc records why they're split the way they are.
   `GITHUB_TOKEN` and `env:` rules. Form: `ISSUE_TEMPLATE/cheat-code.yml`,
   whose field labels and console options are the strings the gate parses
   (`scripts/checks/verify_cheat_form_and_workflow.py` holds them together).
+- `workflows/community-cheat-catalog.yml` (ADR-0248 R.4) regenerates
+  `docs/community-cheats.json` (`scripts/generate_community_cheat_catalog.py`)
+  on a `[Cheat]` issue closed/reopened/relabelled, after every completed
+  `Cheat Submitted` run (`workflow_run`, because that workflow's
+  `GITHUB_TOKEN` label edits start no workflow), daily (`53 4 * * *`) and by
+  hand. It lands like `community-pack-catalog.yml`: a
+  `chore/community-cheat-catalog` branch, a PR opened with `PROJECT_PAT`, then
+  `--auto` merge; no diff closes a stale PR.
 
 ## Work Guidance
 

@@ -26,6 +26,8 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   for the contract.
 - Community-pack catalog rows (`docs/community-packs.md` / `.json`) are
   **generated** by the validate/catalog workflows — never hand-edit pack rows.
+  The same holds for `docs/community-cheats.json` (ADR-0248 R.4,
+  `community-cheat-catalog.yml`): close the submission issue to remove a row.
   Extra ROM hashes for auto-install belong in `scripts/rom_target.py`;
   `community-packs.json`'s `rom.sha1`/`rom.sha1s` must match that map. The
   intake mechanics (host allow-list, labels, Issue Form pipeline) are

@@ -479,6 +479,10 @@ doc-checks-2:
 	#and runs in `make python-tests`, not here.
 	python3 scripts/test_cheat_submission.py
 	python3 scripts/checks/verify_cheat_form_and_workflow.py
+	#ADR-0248 R.4: the community-cheat catalog generator over fixture issues
+	#(valid shows, closed leaves, most-voted-first, grouped by SHA-1) and the wiring
+	#of the workflow that commits docs/community-cheats.json through a PR.
+	python3 scripts/test_generate_community_cheat_catalog.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py

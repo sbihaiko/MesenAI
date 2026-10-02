@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
@@ -65,6 +66,9 @@ public class PlayerCheatsSheetTests : IDisposable
 		//G.2: Esc opens the pause overlay only over a loaded game (PlayEsc), so the
 		//stand-in RomInfo carries a format as well as the console.
 		model.RomInfo = new RomInfo() { ConsoleType = console, Format = console == ConsoleType.Gameboy ? RomFormat.Gb : RomFormat.iNes };
+		//R.4: no test reaches the network; the community catalog is fixed here.
+		model.CommunityCheatsLastKnown = () => Array.Empty<CommunityCheatGame>();
+		model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(Array.Empty<CommunityCheatGame>());
 		return (window, model);
 	}
 
@@ -204,5 +208,126 @@ public class PlayerCheatsSheetTests : IDisposable
 		model.TogglePlayerOverlay();
 		Dispatcher.UIThread.RunJobs();
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//R.4 (ADR-0248 §2, §5): the community rows of docs/community-cheats.json.
+	private const string CopySha1 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+	private const string GbSha1 = "1111111111111111111111111111111111111111";
+
+	private static readonly CommunityCheatGame[] CommunityCatalog = {
+		new(CopySha1, "Contra (USA)", new[] {
+			new CommunityCheat(201, "nes", "0436:09", "Start with 9 lives", 2),
+			new CommunityCheat(202, "nes", "SXIOPO", "Infinite energy", 12),
+		}),
+		new(GbSha1, "Test GB game", new[] { new CommunityCheat(204, "gb", "01FF16D0", "Infinite health", 1) }),
+	};
+
+	private static readonly CheatDbGame BundledContra = new("Contra (USA)", CopySha1, new[] { new CheatDbCode("Infinite lives - 1P game", "SZKGPAVG") });
+
+	private static string[] RowDescriptions(Window window) => window.FindNamed<ItemsControl>("CheatsList").FindAll<CheckBox>().Select(c => c.Content as string ?? "").ToArray();
+
+	//The stop rule, client half: a valid issue's code shows for the matching
+	//copy, below the bundled list, marked with its votes; the count opens the issue.
+	[AvaloniaFact]
+	public void Community_rows_show_below_the_bundled_list_and_the_count_opens_the_issue()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		List<string> opened = new();
+
+		model.CheatsSheet.Open(ConsoleType.Nes, CopySha1, new[] { BundledContra }, Array.Empty<StoredCheat>(), recordingArt: false, disableAll: false, _ => { },
+			gameName: "Contra (USA)", openUrl: opened.Add, community: CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(new[] { "Infinite lives - 1P game", "Infinite energy", "Start with 9 lives" }, RowDescriptions(window));
+		ItemsControl list = window.FindNamed<ItemsControl>("CheatsList");
+		Assert.Contains(CommunityCheatCatalog.CommunityMark, VisibleTexts(list));
+		Button[] votes = list.FindAll<Button>().Where(b => b.Name == "CheatsVotesButton" && b.IsOnScreen()).ToArray();
+		Assert.Equal(new[] { "👍 12 ↗", "👍 2 ↗" }, votes.Select(b => b.Content as string));
+		//Bundled and community rows are already shared: no share action on screen.
+		Assert.DoesNotContain(list.FindAll<Button>(), b => b.Name == "CheatsShareButton" && b.IsOnScreen());
+
+		Click(votes[0]);
+		Assert.Equal(new[] { "https://github.com/sbihaiko/MesenAI/issues/202" }, opened);
+	}
+
+	//...and not for another copy: the overlay opens the sheet with no game
+	//running (no cheat hash), so no catalog row matches, by name or otherwise.
+	[AvaloniaFact]
+	public void Community_rows_never_show_for_another_copy()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		model.CommunityCheatsLastKnown = () => CommunityCatalog;
+		model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(CommunityCatalog);
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+
+		Click(window.FindNamed<Button>("OverlayCheatsButton"));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.True(window.FindNamed<Border>("PlayerCheatsSheet").IsOnScreen());
+		Assert.Empty(RowDescriptions(window));
+		Assert.Equal(CheatSheet.NotInListLine, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
+
+		model.CheatsSheet.Open(ConsoleType.Nes, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", new[] { BundledContra }, Array.Empty<StoredCheat>(), false, false, _ => { }, community: CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Empty(RowDescriptions(window));
+	}
+
+	//The fetch returns after the sheet opened: its rows join the list in place.
+	[AvaloniaFact]
+	public void A_catalog_fetched_after_the_sheet_opened_adds_its_rows()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		model.CheatsSheet.Open(ConsoleType.Nes, CopySha1, new[] { BundledContra }, Array.Empty<StoredCheat>(), false, false, _ => { });
+		Dispatcher.UIThread.RunJobs();
+		Assert.Single(RowDescriptions(window));
+
+		model.CheatsSheet.SetCommunityCatalog(CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(3, RowDescriptions(window).Length);
+	}
+
+	//GB has no bundled list: community rows appear, and the "no list yet"
+	//line shows only when there are none.
+	[AvaloniaFact]
+	public void On_game_boy_community_rows_replace_the_no_list_line()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Gameboy);
+		model.CheatsSheet.Open(ConsoleType.Gameboy, GbSha1, Array.Empty<CheatDbGame>(), Array.Empty<StoredCheat>(), false, false, _ => { }, community: CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(new[] { "Infinite health" }, RowDescriptions(window));
+		Assert.NotEqual(CheatConsoleScope.NoListReason, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
+		Assert.True(window.FindNamed<TextBox>("CheatsSearchBox").IsEnabled);
+
+		model.CheatsSheet.Open(ConsoleType.Gameboy, "2222222222222222222222222222222222222222", Array.Empty<CheatDbGame>(), Array.Empty<StoredCheat>(), false, false, _ => { }, community: CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(CheatConsoleScope.NoListReason, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
+	}
+
+	//ADR-0248 §2: a code the user added carries *Share This Cheat ↗*, which
+	//opens the pre-filled `[Cheat]` form.
+	[AvaloniaFact]
+	public void Share_this_cheat_opens_the_prefilled_form_for_the_users_own_code()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		List<string> opened = new();
+		StoredCheat mine = new("Start with 30 lives", CheatType.NesCustom, "0032:1D", true);
+		model.CheatsSheet.Open(ConsoleType.Nes, CopySha1, new[] { BundledContra }, new[] { mine }, false, false, _ => { },
+			gameName: "Contra (USA)", openUrl: opened.Add, community: CommunityCatalog);
+		Dispatcher.UIThread.RunJobs();
+
+		Button share = Assert.Single(window.FindNamed<ItemsControl>("CheatsList").FindAll<Button>(), b => b.Name == "CheatsShareButton" && b.IsOnScreen());
+		Assert.Equal("Share This Cheat ↗", share.Content as string);
+		Assert.Equal("Start with 30 lives", (share.DataContext as PlayerCheatRow)?.Description);
+		Click(share);
+
+		Assert.Equal(new[] { CheatShare.BuildIssueUrl(CopySha1, "Contra (USA)", ConsoleType.Nes, "0032:1D", "Start with 30 lives") }, opened);
+		Assert.Contains("template=cheat-code.yml", opened[0]);
 	}
 }

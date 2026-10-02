@@ -1,0 +1,125 @@
+name: Community cheat catalog
+
+# ADR-0248 sections 4 and 6, slice R.4: regenerates docs/community-cheats.json
+# from the open `cheat:valid` issues (scripts/generate_community_cheat_catalog.py,
+# unit tested offline by scripts/test_generate_community_cheat_catalog.py). The
+# client reads the committed file (section 5).
+#
+# Triggers:
+#   * a `[Cheat]` issue closed or reopened - closing is how an author withdraws
+#     a code (section 6), so the row leaves on this run; reopening restores it.
+#     A label a person changes by hand also re-runs it.
+#   * every completed run of cheat-submitted.yml ("Cheat Submitted"): that
+#     workflow writes its verdict label with GITHUB_TOKEN, whose events start no
+#     workflow, so `issues: labeled` would never fire for it; `workflow_run`
+#     does. Its runs on unrelated issues end with no job run and regenerate
+#     nothing new (idempotent, no PR when there is no diff).
+#   * daily, and by hand.
+#
+# Landing: `main` requires a pull request (ruleset), and GITHUB_TOKEN cannot
+# open one in this repository, so - exactly as community-pack-catalog.yml -
+# this job pushes a dedicated branch and opens the PR with PROJECT_PAT, then
+# queues an auto-merge. Issues are public, so the read itself needs only
+# GITHUB_TOKEN. No issue text reaches a `run:` script: the generator reads the
+# issues through `gh` into a file.
+on:
+  workflow_dispatch:
+  schedule:
+    # Offset from the pack catalog's '47 4 * * *'.
+    - cron: '53 4 * * *'
+  issues:
+    types: [closed, reopened, labeled, unlabeled]
+  workflow_run:
+    workflows: ["Cheat Submitted"]
+    types: [completed]
+
+concurrency:
+  group: community-cheat-catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-catalog:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'issues' &&
+       (startsWith(github.event.issue.title, '[Cheat] ') ||
+        contains(github.event.issue.labels.*.name, 'cheat')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_PAT: ${{ secrets.PROJECT_PAT }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+
+      - name: Generate docs/community-cheats.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/generate_community_cheat_catalog.py
+
+      - name: Open or update catalog PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH=chore/community-cheat-catalog
+          CATALOG=docs/community-cheats.json
+          MESSAGE="chore: regenerate docs/community-cheats.json"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -- "$CATALOG"
+          if git diff --cached --quiet; then
+            echo "$CATALOG unchanged, nothing to commit."
+            if gh pr view "$BRANCH" --json number -q .number >/dev/null 2>&1; then
+              echo "closing stale catalog PR (no diff against main after regeneration)."
+              gh pr close "$BRANCH" --comment "Catalog regeneration produced no diff against main; closing." || true
+            fi
+            exit 0
+          fi
+
+          # Dedicated branch - never push to main (ruleset requires a PR).
+          git checkout -B "$BRANCH"
+          git add -- "$CATALOG"
+          git commit -m "$MESSAGE"
+          # This branch is owned by this workflow alone (concurrency group
+          # above); a rejected lease means another run just moved it, so
+          # regenerate once more on the latest main.
+          if ! git push -u origin "HEAD:refs/heads/$BRANCH" --force-with-lease; then
+            echo "force-with-lease rejected - regenerating on the latest main tip"
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/generate_community_cheat_catalog.py
+            git add -- "$CATALOG"
+            if git diff --cached --quiet; then
+              echo "the newer main already carries this regeneration, nothing to commit."
+              exit 0
+            fi
+            git commit -m "$MESSAGE"
+            git push -u origin "HEAD:refs/heads/$BRANCH" --force
+          fi
+
+          if gh pr view "$BRANCH" --json number -q .number >/dev/null 2>&1; then
+            echo "catalog PR already open for $BRANCH"
+          else
+            # GITHUB_TOKEN cannot open the PR here (see community-pack-catalog.yml).
+            if [ -z "${PROJECT_PAT:-}" ]; then
+              echo "::error::PROJECT_PAT is unset - branch $BRANCH is pushed, but the PR must be opened by hand: https://github.com/$GITHUB_REPOSITORY/pull/new/$BRANCH"
+              exit 1
+            fi
+            GH_TOKEN="$PROJECT_PAT" gh pr create --base main --head "$BRANCH" \
+              --title "chore: regenerate community cheat catalog" \
+              --body "Automated regeneration of \`docs/community-cheats.json\` from the open \`cheat:valid\` issues (ADR-0248 sections 4 and 6). Triggered by a closed/reopened submission, a gate run, the schedule or by hand."
+          fi
+          # Queue merge once the required status checks pass (ruleset).
+          gh pr merge "$BRANCH" --auto --squash || true
