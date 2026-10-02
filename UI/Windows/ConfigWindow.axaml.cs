@@ -64,12 +64,6 @@ namespace Mesen.Windows
 		{
 			base.OnKeyDown(e);
 			if(e.Key == Key.Escape) {
-				//W-P8: Esc closes a Play sheet back to W-P4 and keeps what was
-				//changed, like Done - there is no Cancel in Player mode.
-				if(_model.PlayerMode) {
-					_promptToSave = false;
-					_model.SaveConfig();
-				}
 				Close();
 			}
 		}
@@ -107,6 +101,13 @@ namespace Mesen.Windows
 			base.OnClosing(e);
 			if(Design.IsDesignMode) {
 				return;
+			}
+
+			//W-P8: Esc or the title bar closes a Play sheet back to W-P4 and keeps
+			//what was changed, like Done - there is no Cancel in Player mode.
+			if(_promptToSave && _model.PlayerMode) {
+				_promptToSave = false;
+				_model.SaveConfig();
 			}
 
 			if(_promptToSave && _model.IsDirty()) {

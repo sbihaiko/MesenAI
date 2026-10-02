@@ -93,9 +93,14 @@ namespace Mesen.Services
 					return (false, "the pack is no longer in the catalog (nothing to restore from)");
 				}
 				//Restore() is synchronous file/interop work - keep it off the UI thread.
+				//A throw here would skip RaiseFinished and leave the pill installing.
 				(bool ok, string error) = await Task.Run(() => {
-					bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
-					return (restored, restoreError);
+					try {
+						bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
+						return (restored, restoreError);
+					} catch(Exception ex) {
+						return (false, ex.Message);
+					}
 				});
 				RaiseFinished(ok, false);
 				if(!ok) {

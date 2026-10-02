@@ -27,15 +27,15 @@
 		<StackPanel Spacing="6" MinWidth="320" XYFocus.NavigationModes="Enabled">
 			<TextBlock Text="{l:Translate lblEnhancementsPanelTitle}" FontWeight="Bold" FontSize="16" />
 			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
 				<CheckBox Name="EnhancementsTexturesCheckBox" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding EnhTextures, Mode=TwoWay}" />
 			</DockPanel>
 			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
 				<CheckBox Name="EnhancementsAudioCheckBox" Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding EnhAudio, Mode=TwoWay}" />
 			</DockPanel>
 			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
 				<CheckBox Name="EnhancementsBorderCheckBox" Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding EnhBorder, Mode=TwoWay}" />
 			</DockPanel>
 			<CheckBox Name="EnhancementsWidescreenCheckBox" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" />
