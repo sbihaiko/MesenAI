@@ -19,7 +19,9 @@ namespace Mesen.Logic
 		//No pack.json target and the project's game is not the one running:
 		//mep_build.py pack needs --rom (or a declared target) for the hash.
 		NeedsGame,
-		JobRunning
+		JobRunning,
+		//#647: a Remaster job (kit, build) runs on this project's folder.
+		RemasterJobRunning
 	}
 
 	//What W-H3 shows about a project: its name for the title, and what step 3
@@ -72,10 +74,15 @@ namespace Mesen.Logic
 				PackShare.ConsoleOptionForSystem(system), built, hasTargets);
 		}
 
-		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning)
+		//remasterJobOnProject: Remaster's runner works on this project (#647);
+		//mep_build.py pack would zip mep/ while the build rewrites it.
+		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning, bool remasterJobOnProject = false)
 		{
 			if(jobRunning) {
 				return ShareBuildReason.JobRunning;
+			}
+			if(remasterJobOnProject) {
+				return ShareBuildReason.RemasterJobRunning;
 			}
 			if(!project.HasBuiltLayer) {
 				return ShareBuildReason.NothingBuilt;

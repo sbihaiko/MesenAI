@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Localization;
 using Mesen.Logic;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -17,6 +18,9 @@ namespace Mesen.ViewModels
 		private string _importPack = "";
 		private string _importDestination = "";
 		private bool _importPatched;
+		//#650: the destination was already there when the job started; a
+		//stopped import never deletes such a folder.
+		private bool _importDestinationExisted;
 
 		[ObservableProperty] public partial bool IsImportSheetVisible { get; private set; }
 		[ObservableProperty] public partial bool IsImportAsking { get; private set; }
@@ -65,6 +69,7 @@ namespace Mesen.ViewModels
 				return false;
 			}
 			_importDestination = RemasterHandOff.ImportDestination(_importPack, p => Directory.Exists(p) || File.Exists(p));
+			_importDestinationExisted = Directory.Exists(_importDestination) || File.Exists(_importDestination);
 			RemasterJobSpec spec = RemasterHandOff.ImportJob(_feasibility, _importPack, _importDestination, _romPath, _importPatched, ImportPackName);
 			_jobResultTimer?.Stop();
 			if(!_jobs.Start(spec)) {
@@ -82,6 +87,9 @@ namespace Mesen.ViewModels
 				_jobs.Stop();
 			}
 			if(_jobs.Snapshot.Kind == RemasterJobKind.Import && !_jobs.Snapshot.IsRunning) {
+				//A child that died at once is already Stopped: clean up before
+				//the result is cleared (a slower one is, in OnImportJobChanged).
+				RemovePartialImport(_jobs.Snapshot);
 				_jobs.Clear();
 			}
 			ShowImportState();
@@ -91,6 +99,10 @@ namespace Mesen.ViewModels
 		//Called by OnJobChanged after every change of the import job.
 		private void OnImportJobChanged(RemasterJobSnapshot job)
 		{
+			if(job.Kind == RemasterJobKind.Import) {
+				//Cancel hides the sheet before the child is gone: cleaned here.
+				RemovePartialImport(job);
+			}
 			if(job.Kind != RemasterJobKind.Import || !IsImportSheetVisible) {
 				return;
 			}
@@ -108,6 +120,24 @@ namespace Mesen.ViewModels
 					_jobs.Clear();
 					ShowImportState(asking: true);
 					break;
+			}
+		}
+
+		//#650: Cancel/Stop leaves `<pack> (editable)` half written; it goes,
+		//but only the folder this import created (never one that existed).
+		private void RemovePartialImport(RemasterJobSnapshot job)
+		{
+			string partial = RemasterHandOff.PartialImportToRemove(_importDestination, _importDestinationExisted, job.Status);
+			if(partial.Length == 0 || !RemasterProjectLocator.SameFolder(partial, job.ProjectFolder)) {
+				return;
+			}
+			_importDestination = "";
+			try {
+				if(Directory.Exists(partial)) {
+					Directory.Delete(partial, true);
+				}
+			} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException) {
+				//Left on disk: Open a project folder… shows it as not a project.
 			}
 		}
 

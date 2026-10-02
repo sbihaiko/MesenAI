@@ -85,6 +85,15 @@ public static class RemasterShow
 		}
 		return outcome.Show == RemasterShowKind.Images ? RemasterShowAction.ReloadImages : RemasterShowAction.ReloadPack;
 	}
+
+	//#649: a finished build reloads the pack by itself only when ADR-0244's
+	//plan keeps the player's place. Its restart (a movie, a shared-replay
+	//recording, netplay) would end what the player is doing for a change
+	//they did not ask for at that moment: the build plays next time instead.
+	public static RemasterShowAction PackReload(PackChangePlan plan)
+	{
+		return plan.Route == PackChangeRoute.InPlace ? RemasterShowAction.ReloadPack : RemasterShowAction.None;
+	}
 }
 
 //W-R1 zone ③: "2 files changed since the last build." A file counts when the

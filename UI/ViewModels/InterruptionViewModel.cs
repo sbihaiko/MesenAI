@@ -32,6 +32,7 @@ namespace Mesen.ViewModels
 			(string text, string keep, string goText) = kind switch {
 				InterruptionKind.QuitWhileRecording => (ResourceHelper.GetMessage("InterruptQuitWhileRecording", recording), "InterruptKeepRecording", "InterruptStopAndQuit"),
 				InterruptionKind.QuitWhileJob => (ResourceHelper.GetMessage(buildJob ? "InterruptQuitWhileBuild" : "InterruptQuitWhileKit"), "InterruptKeepRunning", "InterruptQuit"),
+				InterruptionKind.QuitWhilePackaging => (ResourceHelper.GetMessage("InterruptQuitWhilePackaging"), "InterruptKeepRunning", "InterruptQuit"),
 				InterruptionKind.OpenWhileRecording => (ResourceHelper.GetMessage("InterruptOpenWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndOpen"),
 				_ => (ResourceHelper.GetMessage("InterruptOpenWhileClassicBuilder", game), "InterruptCancel", "InterruptStopAndOpen"),
 			};

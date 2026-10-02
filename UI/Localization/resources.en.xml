@@ -2162,6 +2162,7 @@
 		<Message ID="RemasterReasonConsoleNotSupported">Remaster records NES, Game Boy and Master System games.</Message>
 		<Message ID="RemasterReasonNotThisProjectsGame">This is not the game the project was recorded from.</Message>
 		<Message ID="RemasterReasonJobRunning">Wait for the running job to finish.</Message>
+		<Message ID="RemasterReasonShareJobRunning">Share is packaging this project. Wait for it to finish.</Message>
 		<Message ID="RemasterReasonRecordingRunning">A recording is running.</Message>
 		<Message ID="RemasterReasonNesOnly">Figures and pages are NES only for now.</Message>
 		<Message ID="RemasterReasonNeedsPython">Needs Python 3.10 or newer.</Message>
@@ -2224,6 +2225,7 @@
 		<Message ID="ShareBuildReasonNeedsGame">Open this project's game first, so the pack knows which game it is for.</Message>
 		<Message ID="ShareBuildReasonNeedsPython">Needs Python 3.10 or newer.</Message>
 		<Message ID="ShareBuildReasonNeedsTools">Needs MesenAI's tools.</Message>
+		<Message ID="ShareBuildReasonRemasterJobRunning">Remaster is working on this project. Wait for it to finish.</Message>
 		<Message ID="ShareBuildRunning">Packaging and checking…</Message>
 		<Message ID="ShareBuildDone">✔ {0} · {1} · no problems</Message>
 		<Message ID="ShareBuildFailed">The pack has problems:</Message>
@@ -2268,6 +2270,7 @@
 		<Message ID="InterruptQuitWhileRecording">■ Quit while recording? What you recorded so far is kept as recording {0}.</Message>
 		<Message ID="InterruptQuitWhileBuild">⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.</Message>
 		<Message ID="InterruptQuitWhileKit">⚠ Your figures are being prepared. Quit anyway? It stops, and nothing you recorded is lost.</Message>
+		<Message ID="InterruptQuitWhilePackaging">⚠ Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.</Message>
 		<Message ID="InterruptOpenWhileRecording">■ Open {0}? This recording stops and is kept as recording {1}.</Message>
 		<Message ID="InterruptOpenWhileClassicBuilder">⚠ Open {0}? HD Pack Builder (classic) stops; what it wrote is kept.</Message>
 		<Message ID="InterruptKeepRecording">Keep Recording</Message>

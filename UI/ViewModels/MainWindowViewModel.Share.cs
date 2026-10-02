@@ -33,6 +33,8 @@ namespace Mesen.ViewModels
 				() => (RecordApi.MovieRecording() || RecordApi.MoviePlaying(), NetplayApi.IsConnected())
 			);
 			Share.RecordingChanged += UpdateShareSurfaces;
+			//#647: one job at a time per project, across the two workspaces.
+			WorkspaceJobs.Link(Remaster, Share);
 			//Remaster's "Share this project — opens Share" (W-R1 zone ③, §13.6).
 			Remaster.ShareProjectRequested += ShareProject;
 		}

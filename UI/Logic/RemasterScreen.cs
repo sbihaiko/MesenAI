@@ -33,7 +33,9 @@ public enum RemasterReason
 	TasLater,
 	AiNotReady,
 	//G.6: Build & show needs the kit the recording is painted on.
-	NoKitYet
+	NoKitYet,
+	//#647: Share packages this project's mep/ (mep_build.py pack).
+	ShareJobRunning
 }
 
 public sealed record RemasterControl(bool Enabled, RemasterReason Reason)
@@ -55,7 +57,9 @@ public sealed record RemasterInputs(
 	//headless_record ships in the macOS arm64 zip only (ADR-0243 Decision 6).
 	bool HasHeadlessRecorder,
 	//G.6: the project holds a kit (kit/ is not empty) to build from.
-	bool HasKit = false
+	bool HasKit = false,
+	//#647: Share's runner packages this project (RemasterJobs.RunsOn).
+	bool ShareJobOnProject = false
 );
 
 public sealed record RemasterScreenState(
@@ -89,6 +93,11 @@ public static class RemasterScreen
 		RemasterControl record = RecordControl(i);
 		RemasterControl prepare = PrepareControl(i);
 		bool canStartAny = !i.JobRunning && !i.Recording;
+		//#647: the kit writes the project too; it waits for Share's pack job.
+		RemasterControl prepareShown = canStartAny || !prepare.Enabled ? prepare : Off(i.JobRunning ? RemasterReason.JobRunning : RemasterReason.RecordingRunning);
+		if(prepareShown.Enabled && i.ShareJobOnProject) {
+			prepareShown = Off(RemasterReason.ShareJobRunning);
+		}
 
 		//W-R1 notes: TAS is headless_record bootstrap movie=… run as a job; the
 		//button is drawn (§13.8 Q2: stays visible) but the GUI path is not built
@@ -104,6 +113,7 @@ public static class RemasterScreen
 			: !i.HasKit ? Off(RemasterReason.NoKitYet)
 			: i.Recording ? Off(RemasterReason.RecordingRunning)
 			: i.JobRunning ? Off(RemasterReason.JobRunning)
+			: i.ShareJobOnProject ? Off(RemasterReason.ShareJobRunning)
 			: RemasterControl.On;
 
 		return new RemasterScreenState(
@@ -112,7 +122,7 @@ public static class RemasterScreen
 			Record: record,
 			RecordFromTas: tas,
 			LetTheAiPlay: ai,
-			PrepareFigures: canStartAny || !prepare.Enabled ? prepare : Off(i.JobRunning ? RemasterReason.JobRunning : RemasterReason.RecordingRunning),
+			PrepareFigures: prepareShown,
 			BuildAndShow: build,
 			ShowFeasibilityBanner: !i.Feasibility.CanRunJobs && view != RemasterView.Recording
 		);
@@ -168,7 +178,7 @@ public static class RemasterScreen
 	//can; otherwise W-R1 shows why zone ② is waiting.
 	public static bool RunKitAfterRecording(RemasterInputs afterStop)
 	{
-		return PrepareControl(afterStop).Enabled && !afterStop.JobRunning;
+		return PrepareControl(afterStop).Enabled && !afterStop.JobRunning && !afterStop.ShareJobOnProject;
 	}
 
 	//W-R2's pill: "Recording 01:42"; hours appear past 59:59.

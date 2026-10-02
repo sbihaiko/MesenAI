@@ -41,7 +41,9 @@ namespace Mesen.ViewModels
 		private string _gameProject = "";
 		private ShareProjectIdentity? _project;
 		private string _replayFile = "";
-		private bool _packedThisSession;
+		//#648: the project the last successful pack job ran on ("" = none this
+		//session), so another project's old zip never reads as fresh.
+		private string _packedFolder = "";
 
 		[ObservableProperty] public partial ShareView View { get; private set; } = ShareView.Home;
 		[ObservableProperty] public partial bool IsHome { get; private set; } = true;
@@ -90,6 +92,12 @@ namespace Mesen.ViewModels
 		public IReadOnlyList<string> ConsoleOptions => PackShare.ConsoleOptions;
 		public ShareProjectIdentity? Project => _project;
 		public RemasterJobSnapshot Job => _jobs.Snapshot;
+
+		//#647: Remaster's job, read by the Build gate (WorkspaceJobs.Link).
+		public Func<RemasterJobSnapshot> OtherWorkspaceJob { get; set; } = () => RemasterJobSnapshot.Idle;
+
+		//Raised after every change of this workspace's job, on the UI thread.
+		public event Action? JobChanged;
 
 		[Obsolete("For designer only")]
 		public ShareWorkspaceViewModel() : this(Array.Empty<CommunityPackHostEntry>(), new NullLauncher(), () => null, () => Array.Empty<string>(), new NullRecorder(), _ => { }, _ => { }, () => (false, false)) { }
@@ -183,7 +191,6 @@ namespace Mesen.ViewModels
 			_project = ShareProjectPackage.Read(folder);
 			if(!same) {
 				ProjectLink = "";
-				_packedThisSession = false;
 				if(!_jobs.Snapshot.IsRunning) {
 					_jobs.Clear();
 				}
@@ -260,13 +267,14 @@ namespace Mesen.ViewModels
 			RemasterJobSnapshot job = _jobs.Snapshot;
 			IsBuildRunning = job.IsRunning;
 			if(job.Status == RemasterJobStatus.Succeeded) {
-				_packedThisSession = true;
+				_packedFolder = job.ProjectFolder;
 			}
 			if(!job.IsRunning && _project != null) {
 				//pack.json now declares the target: the console is known.
 				_project = ShareProjectPackage.Read(_project.Folder);
 			}
 			RefreshProject();
+			JobChanged?.Invoke();
 		}
 
 		private void RefreshPack()
@@ -287,13 +295,15 @@ namespace Mesen.ViewModels
 				return;
 			}
 			ProjectTitle = ResourceHelper.GetMessage("ShareProjectTitle", _project.Name);
-			RemasterJobSnapshot job = _jobs.Snapshot;
+			//#648: a job that ended on another project is not this one's result.
+			RemasterJobSnapshot job = RemasterJobs.ShownFor(_jobs.Snapshot, _project.Folder);
 			RemasterFeasibility f = _feasibility() ?? PendingFeasibility;
-			ShareBuildReason build = ShareProjectPackage.BuildReason(_project, IsRunningGamesProject, f, job.IsRunning);
+			ShareBuildReason build = ShareProjectPackage.BuildReason(_project, IsRunningGamesProject, f, job.IsRunning,
+				RemasterJobs.RunsOn(OtherWorkspaceJob(), _project.Folder));
 			IsBuildEnabled = build == ShareBuildReason.None;
 			BuildReason = build is ShareBuildReason.None or ShareBuildReason.JobRunning ? "" : ResourceHelper.GetMessage("ShareBuildReason" + build);
 
-			IsZipReady = _packedThisSession && File.Exists(_project.ZipPath);
+			IsZipReady = RemasterProjectLocator.SameFolder(_packedFolder, _project.Folder) && File.Exists(_project.ZipPath);
 			BuildFailure = "";
 			BuildResult = job.Status switch {
 				RemasterJobStatus.Running => ResourceHelper.GetMessage("ShareBuildRunning"),
