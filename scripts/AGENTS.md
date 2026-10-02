@@ -96,6 +96,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     uploads.
   - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
     `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
+    It tries the mirror (release `librashader-macos-arm64-01febce6` of this
+    repo) first, then the original SourMesen artifact of run 33975397584
+    until it expires on 2026-12-04; a resolved file that misses a pin is a
+    hard failure, never a fallback. `--source mirror|artifact` forces one.
     `--from <dylib>` takes a local build, which is checked for arm64 and the
     Metal symbols but is reported UNPINNED.
   - `check_headless_shader_invariance.sh <rom> [seconds] [preset] [workdir]
