@@ -26,6 +26,7 @@ namespace Mesen.ViewModels
 		private readonly RemasterConfig _config;
 		private readonly Func<RemasterConfig, RemasterFeasibility> _measure;
 		private readonly RemasterJobRunner _jobs;
+		private readonly IJobProcessLauncher _launcher;
 		private readonly bool _hasHeadlessRecorder;
 		private readonly Stopwatch _recordingClock = new();
 		private DispatcherTimer? _recordingTimer;
@@ -119,6 +120,7 @@ namespace Mesen.ViewModels
 			_config = config;
 			_measure = measure;
 			_hasHeadlessRecorder = hasHeadlessRecorder;
+			_launcher = launcher;
 			_jobs = new RemasterJobRunner(launcher);
 			_jobs.Changed += _ => Dispatcher.UIThread.Post(OnJobChanged);
 			Refresh();
@@ -193,6 +195,9 @@ namespace Mesen.ViewModels
 		public bool OpenProjectFolder(string folder)
 		{
 			if(!RemasterProjectReader.IsProjectFolder(folder)) {
+				if(RemasterHandOff.Classify(folder) == RemasterFolderKind.FinishedPack) {
+					return BeginImport(folder);
+				}
 				NoticeText = ResourceHelper.GetMessage("RemasterNotAProject");
 				return false;
 			}
@@ -316,12 +321,12 @@ namespace Mesen.ViewModels
 			JobPercent = job.Percent;
 			switch(job.Status) {
 				case RemasterJobStatus.Running:
-					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobKitTitle");
-					JobDetail = ResourceHelper.GetMessage("RemasterJobStep", Math.Min(job.StepsDone + 1, Math.Max(job.TotalSteps, 1)), Math.Max(job.TotalSteps, 1),
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage(JobMessage(job.Kind, "RemasterJobKitTitle"));
+					JobDetail = job.Kind == RemasterJobKind.Import ? "" : ResourceHelper.GetMessage("RemasterJobStep", Math.Min(job.StepsDone + 1, Math.Max(job.TotalSteps, 1)), Math.Max(job.TotalSteps, 1),
 						ResourceHelper.GetMessage("RemasterStep" + RemasterJobs.StepOf(job.CurrentStep)));
 					break;
 				case RemasterJobStatus.Succeeded:
-					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobDone");
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage(JobMessage(job.Kind, "RemasterJobDone"));
 					JobDetail = "";
 					//W-R3: success collapses to one line for 5 s.
 					_jobResultTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, (_, _) => DismissJobResult());
@@ -330,7 +335,7 @@ namespace Mesen.ViewModels
 					break;
 				case RemasterJobStatus.Failed:
 					//The kit's failure is a plain line; a build's is W-R4 (G.6).
-					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobFailed");
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage(JobMessage(job.Kind, "RemasterJobFailed"));
 					JobDetail = job.Kind == RemasterJobKind.Build ? "" : job.FailureLine;
 					break;
 				case RemasterJobStatus.Stopped:
@@ -346,6 +351,7 @@ namespace Mesen.ViewModels
 				ReadProject();
 			}
 			Refresh();
+			OnImportJobChanged(job);
 		}
 
 		private void ReadProject()
@@ -417,6 +423,10 @@ namespace Mesen.ViewModels
 			BuildAndShow = Control(s.BuildAndShow);
 			PaintText = ResourceHelper.GetMessage(_project?.HasKit == true ? "RemasterKitReady" : "RemasterKitNotYet");
 
+			RefreshTiles();
+			RefreshImportControl();
+			RefreshCompose();
+
 			if(IsRecording) {
 				RecordingPill = ResourceHelper.GetMessage("RemasterRecordingPill", RemasterScreen.FormatElapsed(_recordingClock.Elapsed));
 			}
@@ -436,7 +446,7 @@ namespace Mesen.ViewModels
 		{
 			return Activity switch {
 				RemasterActivity.Recording => ResourceHelper.GetMessage("ShellStatusRemasterRecording", _gameName),
-				RemasterActivity.Job => ResourceHelper.GetMessage(_jobs.Snapshot.Kind == RemasterJobKind.Build ? "ShellStatusRemasterBuild" : "ShellStatusRemasterJob", _jobs.Snapshot.GameName, _jobs.Snapshot.Percent),
+				RemasterActivity.Job => ResourceHelper.GetMessage(_jobs.Snapshot.Kind == RemasterJobKind.Build ? "ShellStatusRemasterBuild" : JobMessage(_jobs.Snapshot.Kind, "ShellStatusRemasterJob"), _jobs.Snapshot.GameName, _jobs.Snapshot.Percent),
 				_ => "",
 			};
 		}

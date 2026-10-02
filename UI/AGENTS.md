@@ -206,6 +206,22 @@ can be exercised by real xunit tests without Avalonia or the native
   (`MainWindowViewModel.Interruptions.cs`), asked from
   `MainWindow.OnClosing` and from `LoadRomHelper` before any ROM opens; it
   replaces `ConfirmExit` when it asks, so quitting confirms once.
+- Remaster's tile browser and hand-offs (G.7, PRD Part B §13.5.3 W-R1 zone
+  ②, W-R5–W-R7) read only what the scripts write: `RemasterKitReader` reads
+  `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never
+  `kit-proposals.json`, ADR-0188); `RemasterPaintProbe` calls a surface
+  painted only when it differs from its `*.orig.png` twin upscaled
+  nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
+  units whose twin is a pre-paint copy (grid, object, element, panorama) -
+  pattern pages, scene captures and imported sheets say "cannot tell".
+  A tile opens with the OS default through `UI/Services/RemasterFileOpener.cs`
+  (ADR-0209's first user-configured launch). `RemasterHandOff` builds the
+  `mep_import.py import` job and the `compose_editor.py <recording>` child;
+  both tools are in `scripts/tools-zip-manifest.txt`, and a tools folder
+  without them disables the control with its reason. New files only: the
+  `RemasterWorkspaceViewModel.Tiles/.Import/.Compose.cs` partials and the
+  `RemasterTileBrowserView`, `RemasterImportSheet`, `RemasterComposeSheet`
+  views.
 - **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
   Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
   `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with

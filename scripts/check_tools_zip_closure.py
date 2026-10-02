@@ -82,6 +82,14 @@ EXTRA_ENTRY_POINTS = {
         "compares the automatic layer against an artist pack; the guides point at "
         "the comparison in prose only, so it needs to be asked for by name"
     ),
+    "mep_import": (
+        "G.7 (PRD Part B W-R6): the GUI runs it to make a finished pack editable "
+        "when the user opens one as a project folder"
+    ),
+    "compose_editor": (
+        "G.7 (PRD Part B W-R7): the GUI's Compose a Scene… starts it in its own "
+        "window on the project's newest recording"
+    ),
 }
 
 # The only third-party packages the closure is allowed to reach. Anything else

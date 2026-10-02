@@ -28,7 +28,9 @@ public enum RemasterJobKind
 	//G.8 (W-H3 step 1): `mep_build.py pack`, run by Share.
 	Pack,
 	//G.6: Build & show in game (`mep_project.py build`, RemasterBuild.cs).
-	Build
+	Build,
+	//G.7 W-R6: mep_import.py, a finished pack made editable.
+	Import
 }
 
 public enum RemasterJobStatus
