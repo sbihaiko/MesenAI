@@ -36,16 +36,19 @@ _results = []
 
 
 def check(cond, name, detail=""):
+    """Record a condition's truth value and print its result with failure details."""
     _results.append(bool(cond))
     print(("PASS " if cond else "FAIL ") + name + ("" if cond else f"  {detail}"))
 
 
 def run_helper(src, dst):
+    """Run the replacement helper and return its result with captured text output."""
     return subprocess.run(["bash", str(HELPER), str(src), str(dst)],
                           capture_output=True, text=True)
 
 
 def test_helper_behavior():
+    """Verify new-inode replacement, creation, cleanup, and missing-source safety."""
     if not HELPER.is_file():
         check(False, "helper exists", f"{HELPER.relative_to(ROOT)} is missing")
         return
@@ -100,11 +103,13 @@ NATIVE_DEST = re.compile(r"(SHAREDLIB\)?\}?\"?|\.dylib\"?|\.so\"?)\s*$")
 
 
 def bare_copies(lines):
+    """Return cp, ditto, or install commands targeting a native library path."""
     return [l for l in lines
             if re.match(r"^(cp|ditto|install)\b", l) and NATIVE_DEST.search(l)]
 
 
 def test_build_uses_the_helper():
+    """Check build recipes and macOS packaging scripts for in-place library copies."""
     make = (ROOT / "makefile").read_text()
     ui = recipe(make, "ui")
     check(ui, "makefile has a ui recipe")
@@ -124,6 +129,7 @@ def test_build_uses_the_helper():
 
 
 def build_dylib(cc, src_text, out):
+    """Write C source beside out and compile a dylib, raising on compiler failure."""
     c = out.with_suffix(".c")
     c.write_text(src_text)
     subprocess.run([cc, "-dynamiclib", str(c), "-o", str(out)], check=True,
@@ -135,6 +141,7 @@ HOLD = "import ctypes,sys,time; ctypes.CDLL(sys.argv[1]).f(); print('up', flush=
 
 
 def replace_while_held(tmp, name, replace):
+    """Replace a mapped dylib and return a new loader's exit code, cleaning up the holder."""
     lib = tmp / f"{name}.dylib"
     shutil.copyfile(tmp / "a.dylib", lib)
     holder = subprocess.Popen([sys.executable, "-c", HOLD, str(lib)],
@@ -149,6 +156,7 @@ def replace_while_held(tmp, name, replace):
 
 
 def test_kernel_scenario():
+    """On macOS with a compiler, verify held-dylib replacement and report a cp control."""
     cc = shutil.which("cc") or shutil.which("clang")
     if sys.platform != "darwin" or not cc or not HELPER.is_file():
         print("SKIP kernel scenario (macOS + cc + helper only)")
@@ -166,6 +174,7 @@ def test_kernel_scenario():
 
 
 def main():
+    """Run the checks, print their summary, and return 1 if any recorded check fails."""
     test_helper_behavior()
     test_build_uses_the_helper()
     test_kernel_scenario()
