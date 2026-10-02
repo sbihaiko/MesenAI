@@ -29,7 +29,7 @@ public static class TestAppBuilder
 	//soon as a settings.json sits next to the binary ("portable" mode), and only
 	//falls back to the user's Documents/AppData folder otherwise. Seeding an
 	//empty config in the test output folder therefore keeps every config read
-	//AND WRITE (the Welcome card's CTA calls Configuration.Save()) inside
+	//AND WRITE (e.g. a workspace switch calls Configuration.Save()) inside
 	//bin/, instead of mutating the developer's real MesenCE settings.
 	//Runs from a module initializer as well as from BuildAvaloniaApp, so it
 	//cannot lose the race against the first ConfigManager.HomeFolder read.
