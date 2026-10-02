@@ -2510,7 +2510,7 @@ should cite the rule.
    navigation never confirms.
 8. **Esc does one thing per context**: in Play it opens/closes the pause
    overlay; elsewhere it closes the topmost panel. A sheet opened from the
-   pause overlay (W-P5–W-P8, W-P10) closes back to the overlay, and the next
+   pause overlay (W-P5–W-P8, W-P10, W-P11) closes back to the overlay, and the next
    Esc resumes — today's `TogglePlayerOverlay` order (picker → panel →
    overlay), kept. Never five states.
 9. **Keyboard and gamepad reach everything in Play** (§6 already requires
@@ -2762,6 +2762,7 @@ Unchanged from today. The toast is the only pack feedback (§6).
 │ ░░░░░░░░░░░░░░░░░░░ │  🎞 Save states  Slot 1 · 2 min ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ▣ Pack          Contra 80s 1.2 ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ✦ Enhancements           5 on ▸  │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  ★ Cheats                 2 on ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ⚙  Settings                   ▸   │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  [Quit game]                       │ ░░░░░░░░░░░░░░░░ │
@@ -2778,7 +2779,13 @@ Unchanged from today. The toast is the only pack feedback (§6).
   here it powers the game off (`PowerOff`) and lands on W-P1/W-P2 (§13.6).
   Quitting the app is Tools ⋯ › File › Exit and the OS's own ⌘Q / Alt+F4.
   Esc closes the overlay; a second Esc does nothing more (rule 8).
-- Elements: Resume, Save states, Pack, Enhancements, Settings, Quit = 6. ✔
+- Elements: Resume, Save states, Pack, Enhancements, Cheats, Settings,
+  Quit = 7. ✔ (at the limit). *Cheats ▸* opens W-P11. It sits here, not
+  in W-P7, because a cheat changes the game rather than the pack's
+  presentation, it is reached mid-game when the player is stuck, and its
+  "2 on" stays visible on every pause — the cheats that are on are recorded
+  in a shared replay (W-H4). User's decision, 2026-10-02; the first draft
+  had it as a W-P7 row. A new pause item now has to replace or merge one.
   Save and Load were merged into one *Save states ▸* row (user's decision,
   2026-10-02; the first draft had a slot popup plus Save and Load = 8, one
   over rule 2). The row opens today's state grid (`GameScreenMode.SaveState`
@@ -2787,6 +2794,8 @@ Unchanged from today. The toast is the only pack feedback (§6).
   unchanged, so a save is still one key; from the menu it costs one more
   click.
 - The Pack row opens W-P5 when 2+ packs exist, or W-P6 to inspect the one pack.
+- The Cheats row reads "none" when nothing is on. On GB/SMS it still opens
+  W-P11, which offers manual entry only (rule 4: shown, with its reason).
 
 **W-P5 — Pack picker (2+ packs for this ROM; also opens over an un-enhanced first start, §5)**
 
@@ -2883,7 +2892,6 @@ Unchanged from today. The toast is the only pack feedback (§6).
                      │  [x] Border          applies on reload       │
                      │  [ ] Widescreen                              │
                      │  [ ] Overclock       ⟨not available on SMS⟩  │
-                     │  Cheats                            2 on  ▸   │
                      │                                              │
                      │  How the picture looks: Settings › Look      │
                      │                                              │
@@ -2897,8 +2905,8 @@ Unchanged from today. The toast is the only pack feedback (§6).
   keeps what the *pack and the console* add — art, sound, frame, width,
   speed — and points at the place for the look of the picture.
 
-Elements: 5 toggles + Cheats row + 1 = 7. ✔ (at the limit; *Cheats ▸* opens
-W-P11, ADR-0245.) The one console-dependent element is shown
+Elements: 5 toggles + 1 = 6. ✔ (Cheats moved to W-P4, 2026-10-02.) The one
+console-dependent element is shown
 disabled with its reason (rule 4). The button replaces today's immediate
 action on each toggle, so the player decides when the game restarts. Today
 there are two different restarts: Textures, Audio and Border go through
@@ -3050,7 +3058,7 @@ Rules the tab enforces, each from a measured fact rather than taste:
 Elements: tab strip, Art row, Pixels, Screen, Adjust, Hold to Compare, Done
 = 7. ✔ (at the limit)
 
-**W-P11 — Cheats (W-P7 › Cheats)** — ADR-0245, `proposed`
+**W-P11 — Cheats (W-P4 › Cheats)** — ADR-0245, `proposed`
 
 ![W-P11](../media/gui-redesign/W-P11.png)
 
@@ -3087,6 +3095,218 @@ Elements: tab strip, Art row, Pixels, Screen, Adjust, Hold to Compare, Done
 - An LLM never writes a code here. The later phases of ADR-0245 (search by
   intent, checked web lookup) only choose among listed or verified entries.
 - Elements: search, Add a Code…, Done = 3 (+ list rows). ✔
+
+**Edge flows (W-P12–W-P16).** Drawn 2026-10-02 after the review's group 3.
+Each one replaces a modal window or a transient message that today is the
+only way out of the case.
+
+**W-P12 — First run, one sheet (replaces the setup wizard)**
+
+![W-P12](../media/gui-redesign/W-P12.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  ▶  Welcome to MesenAI                       │
+                     │  Two choices, then you can play. Both can be │
+                     │  changed later in Settings.                  │
+                     │                                              │
+                     │  Keep your saves and settings                │
+                     │  (•) In your user folder                     │
+                     │      ⟨~/Library/Application Support/MesenAI⟩ │
+                     │  ( ) Next to the app (portable)              │
+                     │      ⟨move the app folder and everything     │
+                     │       comes with it⟩                         │
+                     │  ──────────────────────────────────────────  │
+                     │  Keyboard   [Arrow keys + S / A        ⌄]    │
+                     │  ⟨Xbox and PlayStation controllers work as   │
+                     │   soon as you plug them in. Another          │
+                     │   controller asks to be set up the first     │
+                     │   time you press a button.⟩                  │
+                     │                                              │
+                     │                          [▶ Start Playing]   │
+                     └──────────────────────────────────────────────┘
+```
+
+- Shown once, over W-P1, when there is no settings file. It replaces
+  `SetupWizardWindow`: same choices, fewer words.
+  - Storage: `StoreInUserProfile`, default the user folder.
+  - Keyboard: one popup over today's two exclusive checkboxes (*Arrow keys
+    + S / A*, *WASD + K / J*, `KeyPresets`), default arrows as today.
+  - Gamepads: today's Xbox and PlayStation presets are both applied, with
+    no checkbox. They bind different devices, so turning one off only
+    hides a pad the user may plug in later. A pad neither preset matches
+    goes through W-P15.
+- Windows and Linux add today's two checkboxes (*Check for updates*,
+  *Desktop shortcut*), both on by default. The ASCII is the macOS form.
+- Esc and the close button keep the defaults and continue. There is no
+  Cancel, because the app cannot run without a storage choice.
+- Elements: 2 radios, popup, Start Playing = 4 (6 on Windows/Linux). ✔
+  Gamepad: radios, popup and button are focusable.
+
+**W-P13 — A game needs a BIOS file**
+
+![W-P13](../media/gui-redesign/W-P13.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  🔒 This game needs a BIOS file               │
+                     │  Famicom Disk System games start from the    │
+                     │  console's own BIOS. MesenAI does not        │
+                     │  include it — choose your copy once and it   │
+                     │  is kept for every disk game.                │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │         Drop disksys.rom here          │  │
+                     │  │    ⟨8 KB · stays on this computer⟩     │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  ⚠ That file is 16 KB — the FDS BIOS is 8 KB. │  ← only after a wrong file
+                     │    Try another file.                         │
+                     │                        [Cancel] [Choose File…]│
+                     └──────────────────────────────────────────────┘
+```
+
+- Replaces today's `FirmwareNotFound` message box and file-dialog loop
+  (`FirmwareHelper.RequestFirmwareFile`). The Core's `MissingFirmware`
+  notification and `SelectFirmwareFile`'s copy into the Firmware folder are
+  unchanged. Only the surface changes.
+- The name, console and expected size come from `MissingFirmwareMessage`
+  (`Filename`, `Firmware`, `Size`/`AltSize`). The sentence is per firmware
+  type: FDS, GBA (`gba_bios.bin`, 16 KB), SMS/GG boot ROMs. A wrong size is
+  an inline line (W-X2 shape), not a new dialog, and the drop zone stays.
+- Cancel returns to the home with the status line "Zelda no Densetsu needs
+  the FDS BIOS"; the game does not load. Nothing is downloaded or suggested
+  from the web: MesenAI never points to a BIOS source.
+- Elements: drop zone, Cancel, Choose File… = 3. ✔
+
+**W-P14 — A file that does not open**
+
+![W-P14](../media/gui-redesign/W-P14.png)
+
+```
+│  Continue playing                                            [Open a ROM…]  │
+│  … (W-P2 unchanged) …                                                       │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ ⚠ "Contra.txt" is not a game MesenAI can open.        [Open Another…]  │ │
+│  │   MesenAI opens NES, Game Boy, Game Boy Color, Master System and       │ │
+│  │   Game Boy Advance games, or a zip holding one.                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+```
+
+- Today the Core shows `CouldNotLoadFile` as an OSD message on the last
+  frame and the UI stays where it was. The redesign puts one inline alert
+  (W-X2 shape) on the home, and it stays until the next open or a click on
+  ✕. The home is not replaced (rule 5).
+- One sentence per cause, the same alert:
+  - not a game file (`LoadRomResult::UnknownType`);
+  - a zip with no game in it;
+  - the file is damaged or cut short (a known console, but the loader
+    failed).
+- **A zip with several games** keeps today's chooser (`SelectRomWindow`,
+  which lists only game files and opens a one-game zip directly). It is
+  not redrawn: the native file dialog cannot browse into a zip on macOS or
+  Linux, and on Windows the files inside are not real paths, so a zip
+  cannot be "a folder" without an in-app file browser. The game picked is
+  stored as a recent entry with its inner file (`ResourcePath.InnerFile`),
+  so it becomes an ordinary W-P2 card and is never asked again. If Play
+  ever gains a game library (a ROM folder shown as cards), a zip joins it
+  as a folder there — its own decision, with an ADR.
+- Elements: W-P2's 2 + Open Another… = 3. ✔
+
+**W-P15 — A controller nobody has set up**
+
+![W-P15](../media/gui-redesign/W-P15.png)
+
+```
+   ⟨first press on an unknown controller — HUD pill, 8 s⟩
+   ┌──────────────────────────────────────────────────┐
+   │ ⚙ New controller. Press Start on it to set it up. │
+   └──────────────────────────────────────────────────┘
+
+                     ┌──────────────────────────────────────────────┐
+                     │  Set up "8BitDo SN30"                        │
+                     │  Use the controller itself — no keyboard     │
+                     │  needed.                                     │
+                     │        ┌─────────────────────────────┐       │
+                     │        │  ✚        ▬ ▬        (B) (A)│       │  ← the step's button lit
+                     │        └─────────────────────────────┘       │
+                     │        Press the button you want as  A       │
+                     │  ⟨Step 1 of 8 · A, B, Select, Start, Up,     │
+                     │   Down, Left, Right⟩                         │
+                     │  ▁▁▁▁▁▁▁▁▁▁░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
+                     │  ⟨Hold any button 2 seconds to skip this     │
+                     │   one. Press nothing for 10 seconds to stop  │
+                     │   — the keyboard keeps working.⟩             │
+                     │  [Skip]                            [Cancel]  │
+                     └──────────────────────────────────────────────┘
+```
+
+- **The case.** A pad neither preset matches (DirectInput or generic HID on
+  Windows/Linux; on macOS, a pad without `extendedGamepad`) sends keys that
+  no port-1 mapping uses. Today it does nothing in game and in the menus,
+  and fixing it needs the keyboard (Settings › Controls › bind each
+  button). That breaks rule 9.
+- **Detection rule.** The first press from a device none of whose keys
+  appear in any port mapping shows the pill once per device per session.
+  *Start* on that pad opens the sheet, pausing the game. Any other key
+  dismisses the pill.
+- **Driven by the pad being set up.** Each step lights the button on the
+  picture. The first press becomes the binding, a 2-second hold skips, and
+  10 seconds of silence cancel. Skip and Cancel are there for the mouse and
+  keyboard too. On finish the mapping is written to port 1's
+  `KeyMapping` (the first free mapping slot) and named after the device;
+  the pause overlay, sheets and game take it at once.
+- The picture is the NES pad for NES, the Game Boy for GB/GBC, the Master
+  System pad for SMS (8 steps for NES and GB; SMS has 6, GBA 10 with L/R).
+- **Prerequisite (a slice, not drawn as available):** the per-device
+  "first key" event and the device name. macOS already observes
+  `GCControllerDidConnectNotification`; Windows/Linux need a device id per
+  key. It is checked on hardware in the input tester's pending physical-pad
+  pass (Part A §4, *Host input tester*).
+- Elements: Skip, Cancel = 2. ✔ Rule 9: the whole flow needs no keyboard.
+
+**W-P16 — A pack waits for a file only you can add**
+
+![W-P16](../media/gui-redesign/W-P16.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  ▣ Contra Arcade Music needs one file        │
+                     │    ⟨Everything else is installed.⟩           │
+                     │  The pack's author could not share this      │
+                     │  file, so it is not downloaded. If you have  │
+                     │  it, add it and the pack completes.          │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │ Arcade soundtrack (MP3 set, 23 files)  │  │
+                     │  │ ⟨Licence: not declared⟩                │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │          Drop the file here            │  │
+                     │  │ ⟨it is copied into the pack's download │  │
+                     │  │  folder⟩                               │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  [Show Folder]  [Play Without It] [Choose File…]│
+                     └──────────────────────────────────────────────┘
+```
+
+- Replaces today's OSD line "Missing file '<hints>' (licence: …) - drop it
+  into <folder> and reload the ROM"
+  (`CommunityPackInstallService.NotifyPendingDeps`). The data is the same
+  `CommunityPackDepPrompt` (`Hints`, `License`, `DropFolder`). MEP-v1 §6
+  and MEI-v1 §2.3 are unchanged: the app never fetches a `user_supplied`
+  dep by itself.
+- How it opens: W-P9's install pill reads "Contra Arcade Music needs one
+  file · Esc", and the sheet opens from the pause overlay. W-P6 shows the
+  same thing as its orange line, with *Add the File…*. The game is never
+  interrupted.
+- A file dropped or chosen is copied into `DropFolder` and the pack is
+  re-resolved. With ADR-0244 (P.9) that applies in place; until then the
+  button reads *Add and Restart*, because today only a ROM reload
+  re-resolves deps (`OnGameLoaded` returns early on a power cycle, #156).
+  A file whose sha256 does not match the catalog row is refused inline:
+  "That is not the file this pack was made with".
+- *Play Without It* closes the sheet. The pack stays partial, as today, and
+  the status line says "waiting for one file".
+- Elements: drop zone, Show Folder, Play Without It, Choose File… = 4. ✔
 
 ##### 13.5.3 Remaster
 
@@ -3529,6 +3749,7 @@ closing sentence is the trust boundary, stated once.
 │   2  Put it somewhere public                                                 │
 │      Upload the .zip to a GitHub release, Google Drive, Dropbox, MediaFire   │
 │      or MEGA, and copy its download link. MesenAI does not host files.       │
+│      [ Open Google Drive ↗ ]  ⟨then drag the .zip from Finder into it⟩       │
 │                                                                              │
 │   3  Submit the link        ┌──────────────────────────────────────┐         │
 │                             │ https://                             │         │
@@ -3541,8 +3762,17 @@ closing sentence is the trust boundary, stated once.
   clean or the step shows W-R4.
 - Step 2 is the honest gap: MesenAI hosts nothing and uploads nothing
   (Part A §1 principles). The screen says so instead of hiding the step.
+  *Open Google Drive ↗* opens `https://drive.google.com/drive/my-drive` in
+  the browser, the most common of the accepted hosts; the user drags the
+  zip from *Show in Finder* and copies the share link. No credential, no
+  API and no upload by the app (user's decision, 2026-10-02: *"meio
+  termo"*, instead of a direct Drive upload through OAuth). The click plus
+  the ↗ glyph is the confirmation, as for *Continue on GitHub* (rule 7). A
+  direct upload stays a later decision, worth an ADR only if a human trial
+  (§13.9) shows this step still stops people.
 - Step 3 is W-H2 with Game/Console taken from the project.
-- Elements: ‹ Share, Build, Show file, link field, Continue = 5. ✔
+- Elements: ‹ Share, Build, Show file, Open Google Drive, link field,
+  Continue = 6. ✔
 
 **W-H4 — Record and share a replay (unchanged behaviour, new placement)**
 
@@ -3609,6 +3839,48 @@ Same pattern sheet as W-X1. *Try Again* appears where the user is looking at
 the pack (W-P6); the transient HUD pill (W-P9) carries no button. A console
 that cannot do something is never an error here — it is a disabled control
 with its reason (rule 4).
+
+**W-X3 — Interruptions: quitting or changing game while work runs**
+
+![W-X3](../media/gui-redesign/W-X3.png)
+
+```
+   Remaster  ■ Quit while recording? What you recorded so far is kept as recording 3.
+                                                            [Keep Recording] [Stop and Quit]
+   Remaster  ⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.
+                                                            [Keep Running] [Quit]
+   Remaster  ■ Open Castlevania? This recording stops and is kept as recording 3.
+                                                            [Cancel] [Stop and Open]
+   Play      ⚠ Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.
+                                                            [Cancel] [Stop and Open]
+
+   Builds and AI runs are separate processes: opening a game never stops them.
+   Status line in Play or Share while one runs:  ● Remaster: building Contra (USA) · 40 %
+```
+
+Same pattern sheet as W-X1. Only lost work asks; navigation never does
+(rule 7).
+
+- **Quit.** Today `MainWindow.OnClosing` closes every window and stops the
+  emulator, with no question. A bootstrap recording is cut wherever it is.
+  - A recording in progress asks first. The recording is closed cleanly and
+    kept as the next `rec-NNN` (ADR-0243 Q1).
+  - A job (W-R3: build, kit, AI run) asks once too. The child process is
+    stopped; its partial output is discarded, because a job re-runs from
+    the project.
+  - With nothing running, quitting never asks.
+- **Opening another game while recording.** W-R2 fills the window, so this
+  only happens from outside: a file dropped on the window, or opened from
+  the OS (which lands in Play, §13.6). The recording stops, is kept, and
+  the new game opens in Play.
+- **HD Pack Builder (classic).** Today `MainWindow` closes it on
+  `BeforeGameLoad` without a word, which breaks rule 5. It now asks first,
+  in the profile that is showing. The rule is the same for the live
+  recorder in Tools ⋯ (ADR-0243 Decision 4).
+- **Switching profile** never asks and never stops anything. A job keeps
+  running in Remaster, and the other profiles' status line names it (W-S1:
+  the status line is read-only). Clicking that line is not a control; the
+  user switches with the profile button.
 
 #### 13.6 Transitions
 

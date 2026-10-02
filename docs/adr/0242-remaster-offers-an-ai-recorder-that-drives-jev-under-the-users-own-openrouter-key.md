@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Related: ADR-0238 (Jev as the stall helper — §3 harness, §4 artifact rule, §5 adoption), ADR-0185 (a movie is input, never evidence), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0184 (RAM-only cheats), ADR-0241 (Play / Remaster / Share), PRD Part B §13 (W-R1, W-R3, W-R8)
 - Supersedes / amends: amends ADR-0238 — the "not the default recorder" non-goal stays, but §5's verdict no longer keeps Jev out of the GUI; the adoption criterion for the GUI is ADR-0238 §5 unchanged, applied to the games Q2's RAM maps cover (Q3). ADR-0238 §1–§4 are unchanged.
+- Amended by: ADR-0247 (`proposed`, 2026-10-02) — PRD Part A §1 principle 5 forbade `UI/` to "hold a key", which Q1 does. ADR-0247 rewords the principle to allow keeping a user-entered key in the OS credential store for an external script; F14.20 waits for it to be accepted.
 
 ## Context
 

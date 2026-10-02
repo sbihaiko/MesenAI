@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the GUI redesign wireframes (PRD Part B §13, ADR-0241) as PNGs.
 
-Writes one PNG per wireframe id (W-S1 ... W-X2) into docs/media/gui-redesign/.
+Writes one PNG per wireframe id (W-S1 ... W-X3) into docs/media/gui-redesign/.
 The PNGs are the visual reference for implementation; the ASCII wireframes in
 the PRD stay the structural spec (elements, order, wording). Every game image
 is an abstract placeholder drawn here, never art from a game.
@@ -719,7 +719,7 @@ def pause_panel(c):
     c.scene((gx, y0 + 53, gx + gw, y1 - 27), 0)
     c.blur((x0 + 1, y0 + 53, x1 - 1, y1 - 27), 8)
     c.overlay((x0 + 1, y0 + 53, x1 - 1, y1 - 27), (0, 0, 0, 90))
-    pw, ph = 380, 470
+    pw, ph = 380, 520
     pb = ((x0 + x1) / 2 - pw / 2, y0 + 80, (x0 + x1) / 2 + pw / 2, y0 + 80 + ph)
     c.shadow(pb, 18, blur=26, dy=12, alpha=110)
     c.rrect(pb, 18, fill=(250, 250, 252))
@@ -727,21 +727,22 @@ def pause_panel(c):
     c.text(px0 + 24, py0 + 34, "Contra (USA)", 20, 700, TEXT, "lm")
     c.text(px0 + 24, py0 + 58, "Paused", 13, 400, TEXT2, "lm")
     c.button(px0 + 24, py0 + 82, "Resume", "primary", TINT["play"], h=44, size=16, w=pw - 48, icon="play")
-    g2 = (px0 + 16, py0 + 150, px1 - 16, py0 + 150 + 200)
+    g2 = (px0 + 16, py0 + 150, px1 - 16, py0 + 150 + 250)
     c.rrect(g2, 12, fill=CARD, outline=(232, 232, 236))
     c.row(g2[0], g2[2], g2[1], 50, "Save States", "Slot 1 · 2 min ago", icon="film", tint=(88, 86, 214))
     c.row(g2[0], g2[2], g2[1] + 50, 50, "Pack", "Contra 80s 1.2", icon="box", tint=TINT["share"])
     c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "5 on", icon="sparkle", tint=ORANGE)
-    c.row(g2[0], g2[2], g2[1] + 150, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
-    c.button((px0 + px1) / 2, py0 + 384, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
-    c.text((px0 + px1) / 2, py0 + 446, "Esc to resume", 11.5, 400, TEXT3, "mm")
+    c.row(g2[0], g2[2], g2[1] + 150, 50, "Cheats", "2 on", icon="sparkle", tint=(255, 45, 85))
+    c.row(g2[0], g2[2], g2[1] + 200, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
+    c.button((px0 + px1) / 2, py0 + 434, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
+    c.text((px0 + px1) / 2, py0 + 496, "Esc to resume", 11.5, 400, TEXT3, "mm")
     return pb
 
 
 def w_p4():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2 · textures and audio", (52, 199, 89))
     pause_panel(c)
-    c.caption("W-P4", "Play — pause overlay (Esc)", 6)
+    c.caption("W-P4", "Play — pause overlay (Esc)", 7)
     return c
 
 
@@ -814,9 +815,9 @@ def w_p6():
 def w_p7():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
-    b = c.sheet(460, 436, "Enhancements")
+    b = c.sheet(460, 390, "Enhancements")
     x0, y0, x1, y1 = b
-    g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 6 * 46)
+    g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 5 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
     items = [("Textures", "Applies on reload", True, True), ("Audio", "Applies on reload", True, True),
              ("Border", "Applies on reload", True, True), ("Widescreen", None, False, True),
@@ -827,11 +828,11 @@ def w_p7():
         if sub:
             c.text(g[0] + 16, yy + 33, sub, 11.5, 400, TEXT2 if en else TEXT3, "lm")
         c.toggle(g[2] - 54, yy + 12, on, en)
-        c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
-    c.row(g[0], g[2], g[1] + 5 * 46, 46, "Cheats", "2 on", sep=False)
+        if i < 4:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
     c.text(x0 + 22, g[3] + 26, "How the picture looks: Settings › Look", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Apply & Reload", "primary", TINT["play"], anchor="r", h=32)
-    c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 7)
+    c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 6)
     return c
 
 
@@ -1000,7 +1001,153 @@ def w_p11():
     c.text(x0 + 22, g[3] + 46, "Cheats you have on are recorded in a shared replay.", 12, 400, TEXT3, "lm")
     c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32)
     c.button(x0 + 20, y1 - 50, "Add a Code…", "secondary", h=32)
-    c.caption("W-P11", "Play — cheats from the bundled list (W-P7 › Cheats)", 3)
+    c.caption("W-P11", "Play — cheats from the bundled list (W-P4 › Cheats)", 3)
+    return c
+
+
+def radio(c, x, y, on, tint=TINT["play"]):
+    c.circle(x, y, 8, fill=tint if on else CARD, outline=None if on else (200, 200, 205))
+    if on:
+        c.circle(x, y, 3, fill=CARD)
+
+
+def drop_zone(c, b, title, sub):
+    c.rrect(b, 12, fill=(248, 248, 250), outline=(200, 200, 205))
+    cx = (b[0] + b[2]) / 2
+    c.icon("folder", cx, b[1] + 30, 22, TEXT3)
+    c.text(cx, b[1] + 60, title, 13.5, 600, TEXT, "mm")
+    c.text(cx, b[1] + 80, sub, 12, 400, TEXT2, "mm")
+
+
+def w_p12():
+    c = base("play")
+    x0, y0, x1, y1 = c.content()
+    c.overlay((x0, y0, x1, y1), (0, 0, 0, 70), 0)
+    b = c.sheet(520, 440, dim=False)
+    sx0, sy0, sx1, sy1 = b
+    c.badge("play", sx0 + 24, sy0 + 22, 40, TINT["play"])
+    c.text(sx0 + 78, sy0 + 42, "Welcome to MesenAI", 19, 700, TEXT, "lm")
+    c.para(sx0 + 24, sy0 + 82, "Two choices, then you can play. Both can be changed later in Settings.", 470, 13.5, 400, TEXT)
+    c.text(sx0 + 24, sy0 + 132, "Keep your saves and settings", 13.5, 650, TEXT, "lm")
+    opts = [("In your user folder", "~/Library/Application Support/MesenAI", True),
+            ("Next to the app (portable)", "Move the app folder and everything comes with it", False)]
+    yy = sy0 + 150
+    for n, d, on in opts:
+        radio(c, sx0 + 34, yy + 14, on)
+        c.text(sx0 + 52, yy + 14, n, 13.5, 500, TEXT, "lm")
+        c.text(sx0 + 52, yy + 33, d, 12, 400, TEXT2, "lm")
+        yy += 50
+    c.line([(sx0 + 24, yy + 6), (sx1 - 24, yy + 6)], SEP)
+    yy += 22
+    c.text(sx0 + 24, yy + 12, "Keyboard", 13.5, 650, TEXT, "lm")
+    c.popup(sx0 + 150, yy, 220, "Arrow keys + S / A")
+    c.para(sx0 + 24, yy + 40, "Xbox and PlayStation controllers work as soon as you plug them in. Another controller "
+           "asks to be set up the first time you press a button.", 470, 12.5, 400, TEXT2)
+    c.text(sx0 + 24, sy1 - 82, "Windows and Linux add two checkboxes here: Check for updates, Desktop shortcut.", 11.5, 400, TEXT3, "lm")
+    c.button(sx1 - 24, sy1 - 52, "Start Playing", "primary", TINT["play"], anchor="r", h=34, icon="play")
+    c.caption("W-P12", "Play — first run, one sheet (replaces the setup wizard)", 4)
+    return c
+
+
+def w_p13():
+    c = base("play", "Opening Zelda no Densetsu (FDS)…", TEXT3)
+    play_home_recents(c)
+    b = c.sheet(480, 400)
+    x0, y0, x1, y1 = b
+    c.badge("lock", x0 + 24, y0 + 22, 40, (142, 142, 147))
+    c.text(x0 + 78, y0 + 42, "This game needs a BIOS file", 18, 700, TEXT, "lm")
+    c.para(x0 + 24, y0 + 82, "Famicom Disk System games start from the console's own BIOS. MesenAI does not "
+           "include it — choose your copy once and it is kept for every disk game.", 430, 13.5, 400, TEXT)
+    drop_zone(c, (x0 + 24, y0 + 146, x1 - 24, y0 + 246), "Drop disksys.rom here", "8 KB · stays on this computer")
+    eb = (x0 + 24, y0 + 260, x1 - 24, y0 + 296)
+    c.rrect(eb, 8, fill=(255, 244, 225))
+    c.icon("warn", eb[0] + 18, eb[1] + 18, 12, ORANGE)
+    c.text(eb[0] + 32, eb[1] + 18, "That file is 16 KB — the FDS BIOS is 8 KB. Try another file.", 12.5, 500, (150, 85, 0), "lm")
+    c.button(x1 - 24, y1 - 52, "Choose File…", "primary", TINT["play"], anchor="r", h=32)
+    c.button(x1 - 148, y1 - 52, "Cancel", "secondary", anchor="r", h=32)
+    c.caption("W-P13", "Play — a game needs a BIOS (the orange line shows only after a wrong file)", 3)
+    return c
+
+
+def w_p14():
+    c = base("play")
+    x0, y0, x1, y1 = c.content()
+    play_home_recents(c)
+    ab = (x0 + 40, y1 - 120, x1 - 40, y1 - 24)
+    c.shadow(ab, 12, blur=8, dy=3, alpha=40)
+    c.rrect(ab, 12, fill=(255, 248, 236), outline=(245, 214, 160))
+    c.icon("warn", ab[0] + 24, ab[1] + 28, 15, ORANGE)
+    c.text(ab[0] + 44, ab[1] + 28, "“Contra.txt” is not a game MesenAI can open.", 13.5, 650, TEXT, "lm")
+    c.text(ab[0] + 44, ab[1] + 50, "MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, "
+           "or a zip holding one.", 12.5, 400, TEXT2, "lm")
+    c.text(ab[0] + 44, ab[1] + 72, "Other cases, same place:  the zip has no game in it  ·  the file is damaged or cut short",
+           12, 400, TEXT3, "lm")
+    c.button(ab[2] - 14, ab[1] + 14, "Open Another…", "secondary", anchor="r", h=30, icon="folder")
+    c.caption("W-P14", "Play — a file that does not open (in place, the home stays)", 3)
+    return c
+
+
+def w_p15():
+    c = Canvas()
+    c.window(bg=(0, 0, 0))
+    x0, y0, x1, y1 = WIN
+    gw = (y1 - y0) * 4 / 3
+    gx = (x0 + x1) / 2 - gw / 2
+    c.scene((gx, y0 + 1, gx + gw, y1 - 1), 0, dim=0.55)
+    c.lights()
+    pb = ((x0 + x1) / 2 - 230, y0 + 120, (x0 + x1) / 2 + 230, y0 + 560)
+    c.shadow(pb, 18, blur=26, dy=12, alpha=110)
+    c.rrect(pb, 18, fill=(250, 250, 252))
+    px0, py0, px1, py1 = pb
+    c.text(px0 + 24, py0 + 34, "Set up “8BitDo SN30”", 19, 700, TEXT, "lm")
+    c.text(px0 + 24, py0 + 58, "Use the controller itself — no keyboard needed.", 13, 400, TEXT2, "lm")
+    pad = (px0 + 60, py0 + 90, px1 - 60, py0 + 230)
+    c.rrect(pad, 40, fill=(214, 214, 219))
+    cx, cy = pad[0] + 70, (pad[1] + pad[3]) / 2
+    c.rrect((cx - 36, cy - 12, cx + 36, cy + 12), 3, fill=(80, 80, 85))
+    c.rrect((cx - 12, cy - 36, cx + 12, cy + 36), 3, fill=(80, 80, 85))
+    for k, (dx, lab) in enumerate(((-26, "Select"), (26, "Start"))):
+        c.rrect(((pad[0] + pad[2]) / 2 + dx - 20, cy + 14, (pad[0] + pad[2]) / 2 + dx + 20, cy + 26), 6, fill=(120, 120, 125))
+    bx = pad[2] - 70
+    c.circle(bx - 26, cy + 14, 17, fill=(120, 120, 125))
+    c.circle(bx + 26, cy - 8, 17, fill=TINT["play"], outline=CARD, width=3)
+    c.text(bx + 26, cy - 8, "A", 13, 700, CARD, "mm")
+    c.text(bx - 26, cy + 14, "B", 13, 700, CARD, "mm")
+    c.text((px0 + px1) / 2, py0 + 262, "Press the button you want as  A", 16, 650, TEXT, "mm")
+    c.text((px0 + px1) / 2, py0 + 288, "Step 1 of 8 · A, B, Select, Start, Up, Down, Left, Right", 12.5, 400, TEXT2, "mm")
+    c.progress(px0 + 60, py0 + 308, px1 - px0 - 120, 1 / 8, TINT["play"])
+    c.para(px0 + 34, py0 + 334, "Hold any button 2 seconds to skip this one. Press nothing for 10 seconds to stop — "
+           "the keyboard keeps working.", 392, 12.5, 400, TEXT2)
+    c.button(px0 + 24, py1 - 52, "Skip", "secondary", h=32, w=90)
+    c.button(px1 - 24, py1 - 52, "Cancel", "secondary", anchor="r", h=32, w=100)
+    tb = ((x0 + x1) / 2 - 250, y0 + 40, (x0 + x1) / 2 + 250, y0 + 80)
+    c.text(tb[0] + 4, tb[1] - 12, "Before — the first press on an unknown controller (HUD pill, 8 s)", 11.5, 650, CARD, "lm")
+    c.hud(tb, 10)
+    c.icon("gear", tb[0] + 20, tb[1] + 20, 14, CARD)
+    c.text(tb[0] + 38, tb[1] + 20, "New controller. Press Start on it to set it up.", 13, 600, CARD, "lm")
+    c.caption("W-P15", "Play — a controller nobody has set up (driven by the controller)", 2)
+    return c
+
+
+def w_p16():
+    c = base("play", "Contra (Japan) · pack Contra Arcade Music 2.0 · waiting for one file", ORANGE)
+    pause_panel(c)
+    b = c.sheet(500, 390)
+    x0, y0, x1, y1 = b
+    c.badge("box", x0 + 24, y0 + 22, 40, TINT["share"])
+    c.text(x0 + 78, y0 + 34, "Contra Arcade Music needs one file", 17, 700, TEXT, "lm")
+    c.text(x0 + 78, y0 + 56, "Everything else is installed.", 12.5, 400, TEXT2, "lm")
+    c.para(x0 + 24, y0 + 90, "The pack's author could not share this file, so it is not downloaded. "
+           "If you have it, add it and the pack completes.", 450, 13.5, 400, TEXT)
+    ib = (x0 + 24, y0 + 146, x1 - 24, y0 + 196)
+    c.rrect(ib, 10, fill=(248, 248, 250), outline=(232, 232, 236))
+    c.text(ib[0] + 14, ib[1] + 17, "Arcade soundtrack (MP3 set, 23 files)", 13.5, 600, TEXT, "lm")
+    c.text(ib[0] + 14, ib[1] + 36, "Licence: not declared", 12, 400, TEXT2, "lm")
+    drop_zone(c, (x0 + 24, y0 + 210, x1 - 24, y0 + 310), "Drop the file here", "It is copied into the pack's download folder")
+    c.button(x1 - 24, y1 - 52, "Choose File…", "primary", TINT["play"], anchor="r", h=32)
+    c.button(x1 - 148, y1 - 52, "Play Without It", "secondary", anchor="r", h=32)
+    c.button(x0 + 24, y1 - 52, "Show Folder", "plain", TINT["play"], h=32, icon="folder")
+    c.caption("W-P16", "Play — a pack waits for a file only you can add", 4)
     return c
 
 
@@ -1175,7 +1322,7 @@ def w_r8():
            "game file. You pay OpenRouter with your own key.", 400, 12.5, 400, TEXT2)
     c.button(x1 - 24, y1 - 50, "Start", "primary", tint, anchor="r", h=32)
     c.button(x1 - 110, y1 - 50, "Cancel", "secondary", anchor="r", h=32)
-    c.caption("W-R8", "Remaster — let the AI play (your own key, ADR-0242 proposed)", 6)
+    c.caption("W-R8", "Remaster — let the AI play (your own key, ADR-0242)", 6)
     return c
 
 
@@ -1242,7 +1389,7 @@ def w_h3():
         c.text(fx + 14, yy + 14, str(i + 1), 13, 700, CARD, "mm")
         c.text(fx + 40, yy + 14, t, 16, 650, TEXT, "lm")
         if i < 2:
-            c.line([(fx + 14, yy + 32), (fx + 14, yy + (100 if i == 0 else 96))], SEP, 2)
+            c.line([(fx + 14, yy + 32), (fx + 14, yy + (100 if i == 0 else 136))], SEP, 2)
         if i == 0:
             c.button(fx + 40, yy + 34, "Build Pack .zip", "secondary", h=28)
             c.icon("check", fx + 186, yy + 48, 12, (36, 138, 61))
@@ -1252,11 +1399,13 @@ def w_h3():
         elif i == 1:
             c.para(fx + 40, yy + 34, "Upload the .zip to a GitHub release, Google Drive, Dropbox, MediaFire or MEGA, "
                    "and copy its download link. MesenAI does not host files.", fw - 40, 13)
-            yy += 100
+            c.button(fx + 40, yy + 84, "Open Google Drive", "secondary", h=28, icon="arrow_ur")
+            c.text(fx + 210, yy + 98, "then drag the .zip from Finder into it", 12, 400, TEXT2, "lm")
+            yy += 140
         else:
             c.field(fx + 40, yy + 34, fw - 40, "https://", placeholder=True, focused=True)
     c.button(fx + fw, yy + 90, "Continue on GitHub", "primary", TINT["share"], h=36, size=14, anchor="r", icon="arrow_ur")
-    c.caption("W-H3", "Share — package your project, host it, submit the link", 5)
+    c.caption("W-H3", "Share — package your project, host it, submit the link", 6)
     return c
 
 
@@ -1340,14 +1489,39 @@ def w_x2():
     return c
 
 
+def w_x3():
+    c = Canvas()
+    c.caption("W-X3", "Interruptions — quitting or changing game while work runs (a pattern sheet)")
+    c.card((50, 70, 1150, 560), 16)
+    c.text(90, 112, "Interruptions", 22, 700)
+    c.text(90, 140, "Only lost work asks. Switching profile never asks: the work keeps running where it started.",
+           13.5, 400, TEXT2)
+    ex = [("remaster", "stop", RED, "Quit while recording? What you recorded so far is kept as recording 3.",
+           [("Keep Recording", "secondary", TINT["play"]), ("Stop and Quit", "primary", TEXT)], (250, 240, 240)),
+          ("remaster", "warn", ORANGE, "A build is running. Quit anyway? It stops, and nothing you painted is lost.",
+           [("Keep Running", "secondary", TINT["play"]), ("Quit", "primary", TEXT)], (255, 248, 236)),
+          ("remaster", "stop", RED, "Open Castlevania? This recording stops and is kept as recording 3.",
+           [("Cancel", "secondary", TINT["play"]), ("Stop and Open", "primary", TINT["remaster"])], (250, 240, 240)),
+          ("play", "warn", ORANGE, "Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.",
+           [("Cancel", "secondary", TINT["play"]), ("Stop and Open", "primary", TINT["play"])], (255, 248, 236))]
+    for i, (pr, ic, t, txt, btns, bg) in enumerate(ex):
+        inline_alert(c, 180 + i * 80, 200, 1120, ic, t, txt, btns, bg, profile=pr)
+    c.text(90, 506, "Builds and AI runs are separate processes: opening a game never stops them. "
+           "In Play or Share the status line says one runs:", 12.5, 500, TEXT2, "lm")
+    c.circle(96, 532, 3.5, fill=TINT["remaster"])
+    c.text(106, 532, "Remaster: building Contra (USA) · 40 %", 12, 400, TEXT2, "lm")
+    return c
+
+
 SCREENS = [
     ("W-S1", w_s1), ("W-S2", w_s2), ("W-S3", w_s3),
     ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
     ("W-P7", w_p7), ("W-P8", w_p8), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
+    ("W-P12", w_p12), ("W-P13", w_p13), ("W-P14", w_p14), ("W-P15", w_p15), ("W-P16", w_p16),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),
     ("W-R5", w_r5), ("W-R6", w_r6), ("W-R7", w_r7), ("W-R8", w_r8),
     ("W-H1", w_h1), ("W-H2", w_h2), ("W-H3", w_h3), ("W-H4", w_h4),
-    ("W-X1", w_x1), ("W-X2", w_x2),
+    ("W-X1", w_x1), ("W-X2", w_x2), ("W-X3", w_x3),
 ]
 
 
