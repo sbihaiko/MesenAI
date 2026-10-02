@@ -612,6 +612,29 @@ void TestTheProjectManifestRoundTripsAndUpsertsByRecordingId()
 	Check(!RemasterProject::ParseManifest("[]", broken), "F12.20: a project.json that is not an object is refused");
 }
 
+//#612: durationSeconds is the recording's own length. headless_record starts
+//the recording on load (frame ~1) and only then loads `state=`, which puts the
+//console's counter back to the state's frame - 1362 in the report.
+void TestRecordingDurationCountsOnlyFramesPlayedSinceItStarted()
+{
+	RemasterProject::RecordingClock clock;
+	clock.Start(100);
+	Check(clock.ElapsedFrames(400) == 300, "#612: a recording with no state load lasts now - start", std::to_string(clock.ElapsedFrames(400)));
+
+	clock.Start(1);
+	clock.Rebase(5, 1362); //state= minted at console frame 1362
+	uint64_t frames = clock.ElapsedFrames(1362 + 781);
+	Check(frames == 785, "#612: a state loaded mid-recording does not add the state's age to the recording", std::to_string(frames));
+	double seconds = RemasterProject::DurationSecondsFor(frames, 60.0988);
+	Check(seconds == 13.06, "#612: a 13 s replay from a state minted at frame 1362 records about 13 s, not 35.67",
+		RemasterProject::FormatNumber(seconds));
+
+	clock.Start(0);
+	clock.Rebase(600, 570); //a load that steps the counter back keeps what was played
+	Check(clock.ElapsedFrames(600) == 630, "#612: frames played before a backward load still count", std::to_string(clock.ElapsedFrames(600)));
+	Check(RemasterProject::DurationSecondsFor(600, 0) == 0, "#612: no frame rate, no duration");
+}
+
 void TestRecordingSourcesAndTimestampsAreTheAdrsVocabulary()
 {
 	Check(RemasterProject::IsKnownSource("play") && RemasterProject::IsKnownSource("tas") && RemasterProject::IsKnownSource("ai") && RemasterProject::IsKnownSource("script"),
@@ -12902,6 +12925,7 @@ int main()
 	TestTheLoaderPlaysTheNewestRecordingOfEachSection();
 	TestTheDeclineRuleRefusesAForeignPackAndExemptsTheProjectsOwnLayers();
 	TestTheProjectManifestRoundTripsAndUpsertsByRecordingId();
+	TestRecordingDurationCountsOnlyFramesPlayedSinceItStarted();
 	TestRecordingSourcesAndTimestampsAreTheAdrsVocabulary();
 	TestDetectConventionLayoutBorderSection();
 

@@ -1087,9 +1087,16 @@ DeserializeResult Emulator::Deserialize(istream& in, uint32_t fileFormatVersion,
 		SV(_settings);
 	}
 
+	uint32_t frameBefore = _console->GetFrameCount();
 	s.Stream(_console, "");
 	if(s.HasError()) {
 		return DeserializeResult::SpecificError;
+	}
+	//#612: the state brought its own frame counter; a recording in progress
+	//must not count the state's age as its own length. Run-ahead's rollback
+	//is not a load: it undoes frames the recording never counted.
+	if(!_isRunAheadFrame) {
+		_mepPackManager->OnFrameCounterRestored(frameBefore, _console->GetFrameCount());
 	}
 
 	if(sendNotification) {

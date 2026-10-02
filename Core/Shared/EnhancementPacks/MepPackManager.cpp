@@ -307,7 +307,7 @@ bool MepPackManager::StartRecording(const string& source, const string& note)
 	_recordingFolder = recordingFolder;
 	_recordingEntry = RemasterProject::Recording{ recordingId, RemasterProject::FormatUtcTimestamp(std::time(nullptr)),
 		RemasterProject::IsKnownSource(source) ? source : "play", 0, note };
-	_recordingStartFrame = _emu->GetFrameCount();
+	_recordingClock.Start(_emu->GetFrameCount());
 	WriteRecordingEntry();
 
 	if(plan.NeedAudio) {
@@ -385,12 +385,7 @@ void MepPackManager::FinishRecordingEntry()
 		_bootstrapping = false;
 		return;
 	}
-	double fps = _emu->GetFps();
-	uint32_t now = _emu->GetFrameCount();
-	uint32_t frames = now >= _recordingStartFrame ? now - _recordingStartFrame : 0;
-	//Emulated seconds, rounded to a hundredth: the frame count is the run's
-	//truth, the wall clock is not (a headless run is faster than real time)
-	_recordingEntry.DurationSeconds = fps > 0 ? std::round(frames / fps * 100.0) / 100.0 : 0;
+	_recordingEntry.DurationSeconds = RemasterProject::DurationSecondsFor(_recordingClock.ElapsedFrames(_emu->GetFrameCount()), _emu->GetFps());
 	WriteRecordingEntry();
 	Log("bootstrap: " + _recordingEntry.Id + " finished (" + RemasterProject::FormatNumber(_recordingEntry.DurationSeconds) + " s emulated)");
 	_bootstrapping = false;
