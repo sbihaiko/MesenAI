@@ -12,7 +12,7 @@ expressed as parts of one file instead of two files.
 Part A is the pack/core roadmap: vision and legal principles, standards,
 the shipped record, and the pending slices: Phase 14 (proof at scale; F14.8
 is its only live row), Phase 12's open F12.11 row, Phase 7's P.8 (shaders on
-macOS, ADR-0237), Phase 6's F6.9 (install reports "audio not generated", ADR-0240) and F6.10 (the A4 spike), the ADR-0205 replay slices (Phase 13),
+macOS, ADR-0237), Phase 6's F6.10 (the ADR-0240 A4 spike), the ADR-0205 replay slices (Phase 13),
 Phase 9's F9.18 human panel, the Phase 10 spike S10.b, and the
 manual/hardware-gated residue of the shipped phases. Phase 11
 consolidation is complete. Part B is the
@@ -26,7 +26,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; waits for a go-ahead), **F6.9** (Phase 6, the install-time "audio not generated" notice under ADR-0240; waits for a go-ahead) and **F6.10** (its A4 spike; waits for a go-ahead), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; waits for a go-ahead), **F6.10** (Phase 6, the ADR-0240 A4 spike; waits for a go-ahead), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -110,6 +110,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **F6.0–F6.3b** — community intake, MEP Recipe, catalog and deterministic gates (ADR-0121/0138).
 - **F6.4a–c** — offline recipe interpreter, client download/install and shared discovery fixtures (ADR-0138).
 - **F6.5–F6.8** — rollout, headless smoke, automatic loading and known-missing errata (ADR-0146/0151/0152); native picker and live CI validation remain in §4.
+- **F6.9** (2026-10-02, ADR-0240 Option 1) — installing a pack whose audio is redeemed by a wired bundled patch, with unresolved `<bgm>`/`<sfx>` refs, finishes as `Installed` with one non-fatal notice ("audio not generated: N of M tracks unresolved; supply the `.ogg` files", M = distinct referenced files) on the outcome, the log and a toast; `UI/Logic/PackAudioNotice.cs`, 10 unit tests and a headless install test on a fixture pack. Nothing is generated; the real Mega Man/Zelda II packs were not run (no matching ROM).
 - **H1–H7 / D1–D13** — tests, doc gates, identity/spec reconciliation and ADR reference checks (ADR-0122–0131/0136/0137); explicit residual debts remain in §4.
 - **H8** — `NES_ONLY`/`LessUI` declined after measurement; per-translation-unit test compilation retained (ADR-0158).
 - **H9 / H10** — headless input tests and four-arm accuracy comparison (ADR-0127/0162); accuracy CI remains deferred.
@@ -1006,7 +1007,6 @@ delivery, and it is not a bug):
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| F6.9 | **Install reports a patch-redeemed pack's audio as "not generated" (ADR-0144, re-scoped by ADR-0240).** Installing a pack whose audio is redeemed by a wired bundled patch (a `.ips`/`.bps` referenced by a `<patch>` line or `patches[]` entry, ADR-0148) yields its textures but silent audio, with no word to the user: the extract-audio tool (`scripts/spike_sound_driver`, ADR-0135) writes MIDI, `fingerprints.json` and `enumeration.log` and never an `.ogg`, and nothing maps a fingerprint id to the names the pack's `<bgm>`/`<sfx>` lines use (ADR-0240 Context). | ADR-0240 accepted 2026-10-01 (Option 1); no go-ahead yet — implementation waits for the user's explicit go-ahead. Stop when installing a fixture pack with a wired patch and unresolved `<bgm>` refs returns `Installed` with the non-fatal notice "audio not generated: N of M tracks unresolved; supply the `.ogg` files" and an intact texture install, a pack without a patch gets no notice, proven by a unit test and a headless run that logs the notice. Bounded input: Zelda II (#141, no declared ROM hash); #138 is not usable until its listing is resolved (ADR-0240 Context 5). |
 | F6.10 | **Spike: do patched and unpatched trigger ids align? (ADR-0240 A4).** Run the patched ROM to record which `$41xx` album/track each trigger id writes (`HdPackLoader.cpp:1026`), run the unpatched ROM for the fingerprints, join on trigger id and report whether a per-pack name map can be derived instead of hand-authored. Measurement only; nothing merged unless it proves out. | ADR-0240 A4 accepted as a spike 2026-10-01; no go-ahead yet — waits for the user's explicit go-ahead and a ROM that matches a listed pack (none is available locally). Stop when the report states, with numbers on at least one ROM, whether the ids align. |
 
 Non-goals (unchanged): hosting or committing third-party content; scraping
