@@ -32,6 +32,18 @@ namespace Mesen.ViewModels
 
 		[ObservableProperty] public partial bool IsMenuVisible { get; set; }
 
+		//G.1 (PRD Part B §8, ADR-0241): the shell around the active workspace
+		//(profile button + switcher, Tools ⋯, status line). IsPlayWorkspace
+		//gates every Play surface (renderer, home, overlays, music player): under
+		//Remaster/Share none of them is on screen, but none is closed or reset -
+		//switching back shows them as they were, and the game keeps running.
+		public WorkspaceShellViewModel Shell { get; }
+		[ObservableProperty] public partial bool IsPlayWorkspace { get; private set; } = true;
+
+		//G.1: tracked from the core's GamePaused/GameResumed notifications
+		//(MainWindow.OnNotification), for the bar-visibility rule and status line.
+		[ObservableProperty] public partial bool IsGamePaused { get; set; }
+
 		//P.4 (PRD Part B §6): the thin Player-mode overlay panel (Resume,
 		//Save/Load slot, Pack, Settings, Advanced GUI, Quit), shown on top of the
 		//game while UiMode == Player. Opening it pauses the game so the couch
@@ -83,25 +95,87 @@ namespace Mesen.ViewModels
 			Instance = this;
 
 			Config = ConfigManager.Config;
+			//Before RomInfo: OnRomInfoChanged feeds the shell's status line.
+			Shell = new WorkspaceShellViewModel(Config.Preferences.Workspace, OperatingSystem.IsMacOS());
+			Shell.WorkspaceChanged += OnWorkspaceChanged;
+			IsPlayWorkspace = Shell.IsPlay;
+
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
 			RecentGames = new RecentGamesViewModel();
+			UpdateShellState();
 
 			UpdateMenuVisibility();
 		}
 
-		//P.4 (PRD Part B §6): Player hides the menu bar entirely (AutoHideMenu
-		//is ignored in Player - there is no menu bar); Advanced keeps the classic
-		//AutoHideMenu rule. Re-evaluated whenever UiMode changes (the Advanced GUI
-		//overlay item / the Preferences combo flip it, instant and persisted).
+		//G.1 (W-S3): the switcher rows and ⌘1/⌘2/⌘3 land here. Switching only
+		//changes what the window shows (§13.2): it never pauses, stops or resets
+		//the emulator, never picks a pack and rewrites no other setting - the one
+		//write is the persisted Workspace key itself.
+		public bool SelectWorkspace(Workspace target)
+		{
+			return Shell.Select(target);
+		}
+
+		private void OnWorkspaceChanged(Workspace workspace)
+		{
+			IsPlayWorkspace = Shell.IsPlay;
+			UpdateRendererVisibility();
+			Config.Preferences.Workspace = workspace;
+			Config.Save();
+		}
+
+		//G.1 (§13.6, rule 11): the one silent switch - a ROM opened from the
+		//operating system lands in Play.
+		public void LandInPlayForOsOpen()
+		{
+			SelectWorkspace(Workspace.Play);
+		}
+
+		//G.1 (W-S2): the Tools ⋯ "Show classic menu bar" checkbox, the only home
+		//of ShowClassicMenuBar (rule 12). The checkbox binds one-way; this is the
+		//single writer, then re-applies the chrome and persists the value.
+		public void ToggleClassicMenuBar()
+		{
+			Config.Preferences.ShowClassicMenuBar = !Config.Preferences.ShowClassicMenuBar;
+			UpdateMenuVisibility();
+			Config.Save();
+		}
+
+		//G.1 (§13.2, §13.8 Q4): an upgraded install gets "your menus are under
+		//Tools ⋯" once, then never again. Returns true when the toast was due
+		//(the caller displays it); the flag is persisted before returning.
+		public bool ConsumeClassicMenuNotice()
+		{
+			if(!ClassicMenuNotice.ShouldShow(Config.Preferences.ClassicMenuNoticeShown, Config.Preferences.ShowClassicMenuBar)) {
+				return false;
+			}
+			Config.Preferences.ClassicMenuNoticeShown = true;
+			Config.Save();
+			return true;
+		}
+
+		private void UpdateShellState()
+		{
+			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
+			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName);
+		}
+
+		partial void OnIsGamePausedChanged(bool value) => UpdateShellState();
+		partial void OnCurrentPackNameChanged(string value) => UpdateShellState();
+
+		//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu
+		//bar is hidden entirely (AutoHideMenu is ignored - the menus are under
+		//Tools ⋯); with it on, the classic AutoHideMenu rule applies. Re-evaluated
+		//whenever ShowClassicMenuBar changes (Tools ⋯ checkbox).
 		//The rule itself lives in PlayerChrome, shared with
 		//MouseManager.UpdateMainMenuVisibility() so the two cannot drift. At
 		//construction there is no window or cursor state yet, so the fullscreen /
 		//menu-open / hover-band inputs are all false, which reduces to the
-		//historical "UiMode != Player && !AutoHideMenu".
+		//"ShowClassicMenuBar && !AutoHideMenu".
 		private void UpdateMenuVisibility()
 		{
-			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.UiMode, false, Config.Preferences.AutoHideMenu, false, false);
+			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.ShowClassicMenuBar, false, Config.Preferences.AutoHideMenu, false, false);
 		}
 
 		//P.4 (PRD Part B §6): the overlay shortcut toggles the thin Player
@@ -414,10 +488,10 @@ namespace Mesen.ViewModels
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.VideoFilter))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Preferences)), (() => Config.Preferences, nameof(PreferencesConfig.ShowTitleBarInfo))], UpdateWindowTitle));
 			//P.4: UiMode switches (overlay "Advanced GUI" item or the Preferences
-			//combo) re-evaluate the chrome immediately - menu bar on/off, and the
-			//overlay hides when leaving Player.
+			//combo) re-evaluate the chrome immediately - the overlay hides when
+			//leaving Player. G.1: the menu bar follows ShowClassicMenuBar instead.
+			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.ShowClassicMenuBar))], UpdateMenuVisibility));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], () => {
-				UpdateMenuVisibility();
 				if(Config.Preferences.UiMode != UiMode.Player) {
 					IsPlayerOverlayVisible = false;
 					IsEnhancementsPanelVisible = false;
@@ -430,8 +504,11 @@ namespace Mesen.ViewModels
 
 		private void UpdateRendererVisibility()
 		{
-			IsNativeRendererVisible = !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
-			IsSoftwareRendererVisible = !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
+			//G.1: the native renderer is a native child view drawn above Avalonia
+			//content, so it is hidden explicitly outside Play (the emulator keeps
+			//running; only the picture is not shown).
+			IsNativeRendererVisible = IsPlayWorkspace && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
+			IsSoftwareRendererVisible = IsPlayWorkspace && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
 
 			if(Renderer != null) {
 				Dispatcher.UIThread.Post(() => {
@@ -453,6 +530,7 @@ namespace Mesen.ViewModels
 			}
 
 			UpdateWindowTitle();
+			UpdateShellState();
 		}
 
 		private void UpdateWindowTitle()

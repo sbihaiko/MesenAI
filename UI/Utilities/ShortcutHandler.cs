@@ -70,7 +70,10 @@ namespace Mesen.Utilities
 				//Pause there because UiModeShortcutPrecedence only suppresses the
 				//Pause binding in Player).
 				case EmulatorShortcut.ToggleOverlay:
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player) {
+					//G.1 (rule 8): the overlay is a Play surface - outside Play the
+					//press does nothing (it must not pause the game or open an
+					//overlay hidden behind Remaster/Share).
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayWorkspace) {
 						MainWindowModel.TogglePlayerOverlay();
 					}
 					break;

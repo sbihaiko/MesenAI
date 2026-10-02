@@ -1,0 +1,80 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:chrome="using:Avalonia.Controls.Chrome"
+	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="52"
+	x:DataType="vm:MainWindowViewModel"
+	x:Class="Mesen.Views.WorkspaceShellBar"
+>
+	<!--G.1 (PRD Part B §13.5.1 W-S1): the shell bar. Left: the ACTIVE profile
+	only (glyph, name, chevron) - a button opening the W-S3 switcher, not a tab
+	strip. Right: Tools ⋯, the classic MainMenuAction tree as one dropdown
+	(W-S2). Two elements at rest (rule 2).
+	On macOS the bar is the window's title bar (ShellTitleBar): its background
+	drags the window (ElementRole TitleBar), the two controls keep their input
+	(ElementRole User), and MainWindow pads the leading edge for the traffic
+	lights. The roles have no effect when the client area is not extended.-->
+	<DockPanel Name="TitleBarArea" Height="52" Background="{DynamicResource MesenMenuBackground}" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+		<c:MesenMenu Name="ToolsMenu" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0 0 8 0" chrome:WindowDecorationProperties.ElementRole="User">
+			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32">
+				<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding MainMenu.FileMenuItems}" />
+				<MenuItem Header="{l:Translate mnuGame}" ItemsSource="{Binding MainMenu.GameMenuItems}" />
+				<MenuItem Header="{l:Translate mnuOptions}" ItemsSource="{Binding MainMenu.OptionsMenuItems}" />
+				<MenuItem Name="ToolsMenuTools" Header="{l:Translate mnuTools}" ItemsSource="{Binding MainMenu.ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
+				<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding MainMenu.DebugMenuItems}" />
+				<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding MainMenu.HelpMenuItems}" />
+				<Separator />
+				<MenuItem Name="ShowClassicMenuBarItem" Header="{l:Translate mnuShowClassicMenuBar}" ToggleType="CheckBox" IsChecked="{Binding Config.Preferences.ShowClassicMenuBar, Mode=OneWay}" Click="OnToggleClassicMenuBar" />
+				<MenuItem Header="{l:Translate lblToolsHint}" IsEnabled="False" FontSize="11" />
+			</MenuItem>
+		</c:MesenMenu>
+
+		<Button Name="ProfileButton" DockPanel.Dock="Left" Margin="12 0 0 0" VerticalAlignment="Center" Padding="10 4" chrome:WindowDecorationProperties.ElementRole="User">
+			<StackPanel Orientation="Horizontal" Spacing="8">
+				<TextBlock Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
+				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
+				<TextBlock Text="⌄" VerticalAlignment="Center" />
+			</StackPanel>
+			<Button.Flyout>
+				<!--W-S3: a popover anchored to the profile button; Esc or a click
+				outside closes it with nothing changed (light dismiss). Fixed order
+				Play, Remaster, Share; the check mark moves, the rows do not.-->
+				<Flyout Placement="BottomEdgeAlignedLeft">
+					<StackPanel Name="SwitcherPanel" Spacing="4" MinWidth="360">
+						<ItemsControl Name="SwitcherRows" ItemsSource="{Binding Shell.Rows}">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<StackPanel Spacing="4" />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:WorkspaceSwitcherRowViewModel">
+									<Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Tag="{Binding Workspace}" Click="OnPickWorkspace">
+										<DockPanel>
+											<TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" FontSize="18" Width="28" VerticalAlignment="Center" />
+											<TextBlock DockPanel.Dock="Right" Text="✔" Margin="8 0 0 0" VerticalAlignment="Center" IsVisible="{Binding IsActive}" />
+											<TextBlock DockPanel.Dock="Right" Text="{Binding ShortcutHint}" Opacity="0.5" Margin="12 0 0 0" VerticalAlignment="Center" />
+											<StackPanel Spacing="2">
+												<TextBlock Text="{Binding Name}" FontWeight="Bold" />
+												<TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.7" />
+											</StackPanel>
+										</DockPanel>
+									</Button>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+						<Separator />
+						<TextBlock Text="{l:Translate lblSwitcherFooter}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" MaxWidth="360" />
+					</StackPanel>
+				</Flyout>
+			</Button.Flyout>
+		</Button>
+
+		<Panel />
+	</DockPanel>
+</UserControl>

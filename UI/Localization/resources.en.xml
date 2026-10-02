@@ -33,6 +33,17 @@
 			<Control ID="lblWelcomeCardBody">Load a ROM to get started. Enhancement packs and settings are available from the in-game menu (press Esc).</Control>
 			<Control ID="btnWelcomeCardLoadRom">Load ROM</Control>
 		</Form>
+		<Form ID="WorkspaceShellBar">
+			<Control ID="mnuFile">_File</Control>
+			<Control ID="mnuGame">_Game</Control>
+			<Control ID="mnuOptions">_Settings</Control>
+			<Control ID="mnuTools">_Tools</Control>
+			<Control ID="mnuDebug">_Debug</Control>
+			<Control ID="mnuHelp">_Help</Control>
+			<Control ID="lblSwitcherFooter">Switching keeps your game running. Only the chosen profile is shown.</Control>
+			<Control ID="mnuShowClassicMenuBar">Show classic menu bar</Control>
+			<Control ID="lblToolsHint">Debugger, Lua, HD Pack Builder, …</Control>
+		</Form>
 		<Form ID="PlayerCheatsSheetView">
 			<Control ID="lblCheatsTitle">Cheats</Control>
 			<Control ID="btnCheatsAddCode">Add a Code…</Control>
@@ -1893,6 +1904,23 @@
 	<Messages>
 		<Message ID="LastSession">Last Session</Message>
 		<Message ID="ContinueCardLabel">Continue: {0}</Message>
+		<Message ID="WorkspaceNamePlay">Play</Message>
+		<Message ID="WorkspaceNameRemaster">Remaster</Message>
+		<Message ID="WorkspaceNameShare">Share</Message>
+		<Message ID="WorkspaceDescriptionPlay">Open a game and play it, enhanced.</Message>
+		<Message ID="WorkspaceDescriptionRemaster">Record a game, paint its art, see it in game.</Message>
+		<Message ID="WorkspaceDescriptionShare">Send a pack or a replay to the community.</Message>
+		<Message ID="WorkspacePlaceholderTitleRemaster">Coming next: the Remaster project</Message>
+		<Message ID="WorkspacePlaceholderBodyRemaster">The next update turns this screen into your Remaster project: record a game, paint its art, see it in game. Your game keeps running in Play. Until then, the remastering tools are under Tools ⋯ › Tools.</Message>
+		<Message ID="WorkspacePlaceholderTitleShare">Coming next: Share</Message>
+		<Message ID="WorkspacePlaceholderBodyShare">The next update turns this screen into Share: send a pack link or a replay to the community. Your game keeps running in Play. Until then, Record and share is under Tools ⋯ › Tools › Movies.</Message>
+		<Message ID="ShellStatusNoGame">No game loaded</Message>
+		<Message ID="ShellStatusPlaying">Playing {0}</Message>
+		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>
+		<Message ID="ShellStatusPaused">{0} is paused</Message>
+		<Message ID="ShellStatusPausedWithPack">{0} is paused, with {1}</Message>
+		<Message ID="ClassicMenuNoticeTitle">Tools</Message>
+		<Message ID="ClassicMenuNoticeText">Your menus are under Tools ⋯</Message>
 		<Message ID="AutoSave">Auto-save</Message>
 		<Message ID="SlotNumber">Slot #{0}</Message>
 		<Message ID="LoadStateDialog">Load State Menu</Message>

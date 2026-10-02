@@ -68,6 +68,9 @@ public class LiveRecorderMenuTests
 	private static MenuItem RealizedLiveRecorderMenu()
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+		//G.1 (ADR-0241): the classic bar is ShowClassicMenuBar's, not UiMode's;
+		//the realized menu under test is that bar's.
+		ConfigManager.Config.Preferences.ShowClassicMenuBar = true;
 		MainWindow window = new();
 		window.Show();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
