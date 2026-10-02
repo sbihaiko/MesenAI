@@ -12440,7 +12440,8 @@ void TestAShaderFailureReasonIsTrimmedToOneShortLine()
 //LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
 //libra_instance_t, so these cases hand them a fake one: function pointers that
 //record their calls, no librashader library and no GPU. The crash fixed in #581
-//was freeing the param list after libra_preset_get_runtime_params had failed.
+//was freeing the param list after libra_preset_get_runtime_params had failed;
+//#589 was the preset_create_with_options error never reaching error_free.
 
 struct FakeLibra
 {
@@ -12574,6 +12575,7 @@ void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
 	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "missing.slangp");
 	bool countUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
 	Check(count == 0 && countUntouched, "librashader count: a preset that fails to load counts zero and frees nothing");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject), "librashader count: the preset_create_with_options error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
 
 	libra = MakeFakeLibra();
 	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
@@ -12581,6 +12583,7 @@ void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
 	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "missing.slangp");
 	bool readUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
 	Check(params.empty() && readUntouched, "librashader params: a preset that fails to load returns nothing and frees nothing");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject), "librashader params: the preset_create_with_options error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
 }
 
 int main()
