@@ -153,10 +153,7 @@ public class ChrBankDiagnosticTests
 			//Games that split mid-frame the same way every frame - Lemmings, Ninja
 			//Gaiden - are phase-independent and reproduce exactly whatever the count.
 			DebugApi.InitializeDebugger();
-			DebugApi.Step(CpuType.Nes, FramesStepped, StepType.PpuFrame);
-			Thread.Sleep(500);
-			EmuApi.Pause();
-			Thread.Sleep(100);
+			DebuggerStep.Frames(FramesStepped);
 			uint[] trace = ScanlineChrBankTrace();
 
 			//ADR-0215 as decided 2026-09-19: the same cells again, this time through

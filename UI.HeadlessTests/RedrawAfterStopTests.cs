@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Threading;
 using Mesen.Config;
 using Mesen.Interop;
 using Xunit;
@@ -41,10 +40,7 @@ public class RedrawAfterStopTests
 			//debugger, paused, debugger released, game stopped. The decoder holds
 			//the last frame and the pause flag survives the stop.
 			DebugApi.InitializeDebugger();
-			DebugApi.Step(CpuType.Nes, 3, StepType.PpuFrame);
-			Thread.Sleep(300);
-			EmuApi.Pause();
-			Thread.Sleep(100);
+			DebuggerStep.Frames(3);
 			DebugApi.ReleaseDebugger();
 			EmuApi.Stop();
 			Assert.False(EmuApi.IsRunning());

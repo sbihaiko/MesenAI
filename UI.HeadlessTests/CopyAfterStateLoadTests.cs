@@ -60,6 +60,7 @@ public class CopyAfterStateLoadTests
 
 			EmuApi.LoadStateFile(state);
 			EmuApi.Pause();
+			DebuggerStep.WaitForBreak("the pause after the state load");
 
 			Assert.Equal(NesScanlineTraceStatus.NotDrawnSinceLoad, TraceStatus());
 			HdPackCopyResult stale = CopyCellZero();
@@ -100,13 +101,10 @@ public class CopyAfterStateLoadTests
 	}
 
 	//A deterministic number of frame periods (the same Step ChrBankDiagnosticTests
-	//uses), then paused again once the step has run out.
+	//uses), returning once the debugger broke on it - issue #629, see DebuggerStep.
 	private static void DrawFrames(int frames)
 	{
-		DebugApi.Step(CpuType.Nes, frames, StepType.PpuFrame);
-		Thread.Sleep(300);
-		EmuApi.Pause();
-		Thread.Sleep(100);
+		DebuggerStep.Frames(frames);
 	}
 
 	private static bool WaitFor(Func<bool> condition)
