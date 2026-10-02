@@ -351,10 +351,7 @@ public class CopyAsMepSheetCellTests
 	{
 		DebugApi.InitializeDebugger();
 		for(int step = 0; step < 3 && DebugApi.GetNesScanlineTrace(out _, out _) != NesScanlineTraceStatus.Current; step++) {
-			DebugApi.Step(CpuType.Nes, 1, StepType.PpuFrame);
-			Thread.Sleep(300);
-			EmuApi.Pause();
-			Thread.Sleep(100);
+			DebuggerStep.Frames(1);
 		}
 		Assert.Equal(NesScanlineTraceStatus.Current, DebugApi.GetNesScanlineTrace(out _, out _));
 	}
