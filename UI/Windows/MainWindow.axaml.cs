@@ -43,6 +43,7 @@ namespace Mesen.Windows
 		private MouseManager? _mouseManager = null;
 		private ContentControl _audioPlayer;
 		private MainMenuView _mainMenu;
+		private WorkspaceShellBar _shellBar;
 		private CommandLineHelper? _cmdLine;
 
 		private bool _testModeEnabled;
@@ -129,6 +130,9 @@ namespace Mesen.Windows
 			_audioPlayer = this.GetControl<ContentControl>("AudioPlayer");
 			_mainMenu = this.GetControl<MainMenuView>("MainMenu");
 			_mainMenu.MainMenu.Opened += MainMenu_Opened;
+			_shellBar = this.GetControl<WorkspaceShellBar>("ShellBar");
+			_shellBar.ToolsMenu.Opened += MainMenu_Opened;
+			InitShellTitleBar();
 			ConfigManager.Config.MainWindow.LoadWindowSettings(this);
 
 			Console.CancelKeyPress += Console_CancelKeyPress;
@@ -420,8 +424,21 @@ namespace Mesen.Windows
 				SingleInstance.Instance.ArgumentsReceived += Instance_ArgumentsReceived;
 
 				Dispatcher.UIThread.Post(() => {
+					if(cmdLine.FilesToLoad.Count > 0) {
+						//G.1 (PRD Part B §13.6, rule 11): a ROM opened from the OS
+						//lands in Play.
+						_model.LandInPlayForOsOpen();
+					}
 					cmdLine.LoadFiles();
 					cmdLine.OnAfterInit(this);
+
+					//G.1 (§13.2, §13.8 Q4): an upgraded install learns once that its
+					//menus moved under Tools ⋯. The text is the UI's own localized
+					//string (the core shows an unknown key verbatim);
+					//DisplayMessageHelper makes it visible with no game loaded.
+					if(_model.ConsumeClassicMenuNotice()) {
+						DisplayMessageHelper.DisplayMessage(ResourceHelper.GetMessage("ClassicMenuNoticeTitle"), ResourceHelper.GetMessage("ClassicMenuNoticeText"));
+					}
 
 					if(ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates) {
 						_model.MainMenu.CheckForUpdate(this, true);
@@ -441,6 +458,9 @@ namespace Mesen.Windows
 				_cmdLine = cmdLine;
 
 				ConfigManager.Config.ApplyConfig();
+				if(cmdLine.FilesToLoad.Count > 0) {
+					_model.LandInPlayForOsOpen();
+				}
 				cmdLine.LoadFiles();
 			});
 		}
@@ -483,6 +503,8 @@ namespace Mesen.Windows
 					LiveRecordingSession.OnGameLoaded(romInfo);
 
 					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
+					bool loadedPaused = evtParams.IsPaused;
+					Dispatcher.UIThread.Post(() => _model.IsGamePaused = loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
 
 					//P.5 (PRD Part B §5/§6): Player pack UX - the picker opens
@@ -555,9 +577,16 @@ namespace Mesen.Windows
 					LoadRomHelper.ResetReloadCounter();
 					break;
 
+				//G.1 (W-S1): the shell bar shows while the game is paused.
+				case ConsoleNotificationType.GamePaused:
+				case ConsoleNotificationType.CodeBreak:
+					Dispatcher.UIThread.Post(() => _model.IsGamePaused = true);
+					break;
+
 				case ConsoleNotificationType.DebuggerResumed:
 				case ConsoleNotificationType.GameResumed:
 					Dispatcher.UIThread.Post(() => {
+						_model.IsGamePaused = false;
 						_model.RecentGames.Visible = false;
 						if(IsKeyboardFocusWithin) {
 							this.GetControl<Panel>("RendererPanel").Focus();
@@ -574,6 +603,7 @@ namespace Mesen.Windows
 				case ConsoleNotificationType.EmulationStopped:
 					LiveRecordingSession.OnEmulationStopped();
 					Dispatcher.UIThread.Post(() => {
+						_model.IsGamePaused = false;
 						_model.RomInfo = new RomInfo();
 						_model.RecentGames.Init(GameScreenMode.RecentGames);
 					});
@@ -657,7 +687,7 @@ namespace Mesen.Windows
 			double dpiScale = LayoutHelper.GetLayoutScale(this);
 			FrameInfo baseScreenSize = EmuApi.GetBaseScreenSize();
 			if(WindowState == WindowState.Normal) {
-				double menuHeight = ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height;
+				double menuHeight = (ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height) + ShellChromeHeight;
 				double height = ClientSize.Height - menuHeight - _audioPlayer.Bounds.Height;
 				if(baseScreenSize.Width == _prevScreenSize.Height && baseScreenSize.Height == _prevScreenSize.Width) {
 					//Rotation, swap sizes without changing scale
@@ -703,7 +733,7 @@ namespace Mesen.Windows
 				_rendererSize = new Size();
 
 				//When menu is set to auto-hide, don't count its height when calculating the window's final size
-				double menuHeight = ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height;
+				double menuHeight = (ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height) + ShellChromeHeight;
 
 				double width = Math.Max(MinWidth, Math.Round(screenSize.Height * aspectRatio * scale) / dpiScale);
 				double height = Math.Max(MinHeight, screenSize.Height * scale / dpiScale);
@@ -715,6 +745,10 @@ namespace Mesen.Windows
 				ResizeRenderer();
 			}
 		}
+
+		//G.1 (W-S1): the shell bar and status line, while on screen, take room
+		//from the game like the classic menu bar does.
+		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : 0;
 
 		private void ResizeRenderer()
 		{
@@ -779,6 +813,33 @@ namespace Mesen.Windows
 		{
 			_rendererSize = new Size();
 			ResizeRenderer();
+			UpdateShellTitleBarInset();
+		}
+
+		//G.1 (W-S1; user's choice 2026-10-02, "Integrar agora"): on macOS the
+		//shell bar is drawn in the title bar. It becomes the topmost row, so the
+		//optional classic bar sits right under it instead of above it (above
+		//would put the classic menus under the traffic lights). When the bar
+		//hides (a Play game running unpaused) the game fills the whole window
+		//and the traffic lights stay over its top-left corner; Esc/pause brings
+		//the bar back. Windows/Linux keep the in-window strip (ShellTitleBar).
+		private void InitShellTitleBar()
+		{
+			if(!ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS())) {
+				return;
+			}
+			ExtendClientAreaToDecorationsHint = true;
+			ExtendClientAreaTitleBarHeightHint = ShellTitleBar.Height;
+			if(_shellBar.Parent is DockPanel dock) {
+				dock.Children.Remove(_shellBar);
+				dock.Children.Insert(0, _shellBar);
+			}
+			UpdateShellTitleBarInset();
+		}
+
+		private void UpdateShellTitleBarInset()
+		{
+			_shellBar?.SetLeadingInset(ShellTitleBar.LeadingInset(ExtendClientAreaToDecorationsHint, WindowState == WindowState.FullScreen));
 		}
 
 		private void SetFullscreenMode(FullscreenMode mode, IntPtr windowHandle)
@@ -890,9 +951,37 @@ namespace Mesen.Windows
 			return false;
 		}
 
+		//G.1 (W-S3): ⌘1/⌘2/⌘3 (Ctrl+1/2/3 off macOS) switch to Play/Remaster/Share
+		//directly, in the switcher's fixed order. Handled before the key reaches
+		//the core, so it never doubles as an emulator input.
+		private bool ProcessWorkspaceShortcut(KeyEventArgs e)
+		{
+			KeyModifiers modifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+			if(e.KeyModifiers != modifier) {
+				return false;
+			}
+			int digit = e.Key switch {
+				Key.D1 or Key.NumPad1 => 1,
+				Key.D2 or Key.NumPad2 => 2,
+				Key.D3 or Key.NumPad3 => 3,
+				_ => 0
+			};
+			Workspace? target = WorkspaceShell.FromShortcutDigit(digit);
+			if(target == null) {
+				return false;
+			}
+			_model.SelectWorkspace(target.Value);
+			e.Handled = true;
+			return true;
+		}
+
 		private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
 		{
 			if(_testModeEnabled && e.KeyModifiers == KeyModifiers.Alt && ProcessTestModeShortcuts(e.Key)) {
+				return;
+			}
+
+			if(ProcessWorkspaceShortcut(e)) {
 				return;
 			}
 
@@ -975,7 +1064,7 @@ namespace Mesen.Windows
 
 		private void TimerUpdateBackgroundFlag(object? sender, EventArgs e)
 		{
-			bool focusInMenu = MenuHelper.IsFocusInMenu(_mainMenu.MainMenu);
+			bool focusInMenu = MenuHelper.IsFocusInMenu(_mainMenu.MainMenu) || MenuHelper.IsFocusInMenu(_shellBar.ToolsMenu);
 			if(focusInMenu && !_focusInMenu) {
 				InputApi.ResetKeyState();
 			}
@@ -992,7 +1081,7 @@ namespace Mesen.Windows
 			bool needPause = activeWindow == null && cfg.PauseWhenInBackground;
 			if(activeWindow != null) {
 				bool isConfigWindow = (activeWindow != this) && !DebugWindowManager.IsDebugWindow(activeWindow);
-				needPause |= cfg.PauseWhenInMenusAndConfig && !isConfigWindow && _mainMenu.MainMenu.IsOpen; //in main menu
+				needPause |= cfg.PauseWhenInMenusAndConfig && !isConfigWindow && (_mainMenu.MainMenu.IsOpen || _shellBar.ToolsMenu.IsOpen); //in main menu or Tools ⋯
 				needPause |= cfg.PauseWhenInMenusAndConfig && isConfigWindow; //in a window that's neither the main window nor a debug tool
 			}
 

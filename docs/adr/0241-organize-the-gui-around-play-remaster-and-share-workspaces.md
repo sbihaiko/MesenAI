@@ -1,7 +1,8 @@
 # ADR-0241: Organize the GUI around Play, Remaster, and Share workspaces
 
-- Status: accepted (2026-10-02). The user requires a GUI specialized for the README's three profiles, and accepted this model the same day (*"Aceitar"*), after two review rounds on PRD Part B §13. Not implemented. The work is cut into PRD Part B §8 slices, one at a time; the first is **G.1** (the shell). Each slice waits for an explicit go-ahead.
+- Status: accepted (2026-10-02). The user requires a GUI specialized for the README's three profiles, and accepted this model the same day (*"Aceitar"*), after two review rounds on PRD Part B §13. The work is cut into PRD Part B §8 slices, one at a time; each slice waits for an explicit go-ahead. **G.1 (the shell) implemented 2026-10-02** under the user's go-ahead (*"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"* and *"pode implementar em paralelo tudo que puder"*, 2026-10-02): the switcher (Play, Remaster, Share), Tools ⋯, the status line and `ShowClassicMenuBar` (record in PRD Part A §3); `UI/Logic/WorkspaceShell.cs` is unit-tested and the wiring is in `UI.HeadlessTests/WorkspaceShellTests.cs`. An upgraded install also starts with the classic bar hidden, with a one-time toast (see "Amended" below and PRD Part B §13.8 Q4). G.1 also retires the P.4 rule that gated the Debug menu on `UiMode` (user's choice, *"Aceitar (Recomendado)"*, 2026-10-02): the `UiMode` values keep their meaning and are not reinterpreted as workspaces; they simply no longer gate Debug, by that explicit decision. On macOS the shell bar is drawn in the window's title bar, as in the W-S1–W-S3 wireframes (user's choice, *"Integrar agora"*, 2026-10-02); Windows and Linux keep it as an in-window strip under the system title bar. Remaster and Share remain placeholders; the later slices are not implemented.
 - Date: 2026-10-02
+- Amended: 2026-10-02 — upgrade sentence aligned with PRD §13.8 Q4, user's choice verbatim: *"Some + toast (Recomendado)"*.
 - Related: PRD Part B §6 (Player/Advanced chrome), §13 (three-workspace proposal); ADR-0146 (automatic community packs), ADR-0147 (editable packs), ADR-0183 (artist surfaces), ADR-0209 (selection and external painting), ADR-0150 (UI wiring tests).
 - Supersedes / amends: amends the Player/Advanced-only navigation model in PRD Part B §6, not pack formats, discovery, identity, or community acceptance rules.
 
@@ -55,8 +56,11 @@ runs in Play the title bar is hidden; Esc brings it back with the pause
 overlay.
 
 **Advanced tools are an escape hatch, not a fourth audience.** Preserve the
-classic menus, debugger, Lua, and specialist windows. Existing Advanced users
-keep that entry experience on upgrade; opening a specialist tool from a task
+classic menus, debugger, Lua, and specialist windows. On upgrade the classic
+entry experience stays reachable through Tools ⋯ and its *Show classic menu
+bar* toggle; the bar itself starts hidden, and the upgraded install gets a
+one-time "your menus are under Tools ⋯" toast (PRD Part B §13.8 Q4,
+amended 2026-10-02); opening a specialist tool from a task
 workspace does not require abandoning the workspace. Fresh installations
 remain immediately playable. Persisted workspace selection is separate from
 technical-tool visibility; the existing `UiMode` values must not be silently

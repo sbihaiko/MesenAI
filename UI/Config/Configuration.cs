@@ -63,6 +63,9 @@ namespace Mesen.Config
 			//that is Player mode. An existing file without the UiMode key keeps
 			//the property's Advanced initializer (upgrade path).
 			cfg.Preferences.UiMode = UiModeDefaultRule.ForMissingKey(settingsFileExists: false);
+			//G.1 (PRD Part B §13.2): a fresh install never had the classic menu
+			//bar, so the one-time "your menus are under Tools ⋯" toast is not owed.
+			cfg.Preferences.ClassicMenuNoticeShown = ClassicMenuNotice.ShownForMissingKey(settingsFileExists: false);
 			return cfg;
 		}
 

@@ -104,7 +104,11 @@ namespace Mesen
 			}
 			foreach(IStorageItem file in fileArgs.Files) {
 				if(file.TryGetLocalPath() is string localPath) {
-					Dispatcher.UIThread.Post(() => LoadRomHelper.LoadFile(localPath));
+					Dispatcher.UIThread.Post(() => {
+						//G.1 (PRD Part B §13.6, rule 11): a ROM opened from the OS lands in Play.
+						MainWindowViewModel.Instance?.LandInPlayForOsOpen();
+						LoadRomHelper.LoadFile(localPath);
+					});
 				}
 			}
 		}

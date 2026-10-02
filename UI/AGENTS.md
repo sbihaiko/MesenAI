@@ -102,6 +102,28 @@ can be exercised by real xunit tests without Avalonia or the native
   crosses the interop boundary by value; the core also exempts it from the
   keyboard-block in `ShortcutKeyHandler::IsKeyPressed` so it stays reachable
   in keyboard games.
+- `WorkspaceShell` (G.1, ADR-0241, PRD Part B §13.2) is the host-free
+  shell model: the `Workspace` enum (`Play`, `Remaster`, `Share` — that
+  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'), `WorkspaceState`
+  (one active workspace; an undefined persisted value falls back to `Play`),
+  `IsBarVisible` (the bar hides only while a Play game runs unpaused),
+  `ShellStatusLine` (the one-sentence status kind) and `ClassicMenuNotice`
+  (`ShowClassicMenuBar` defaults to `false` on fresh installs and upgrades,
+  §13.8 Q4; the one-time toast is due only for an upgraded settings file
+  whose bar is off). `PreferencesConfig.Workspace` is separate from
+  `UiMode`, which is not reinterpreted. Switching never pauses or stops the
+  game; outside Play the native renderer and every Play surface are hidden.
+  Tools ⋯ binds the same `MainMenuViewModel` item lists as the classic bar
+  (its menu style templates `ActionIcon.Source`, because one `Image` cannot
+  have two visual parents). Since G.1 `PlayerChrome.IsMenuVisible` takes
+  `ShowClassicMenuBar`, not `UiMode`, and the P.4 Debug-menu gate on
+  `UiMode` is retired so every classic action is reachable from Tools ⋯.
+  `ShellTitleBar` decides the macOS title-bar integration: only macOS
+  extends the client area (height hint = the 52 px bar), the bar background
+  carries `WindowDecorationProperties.ElementRole="TitleBar"` and its two
+  controls `User`, the leading inset clears the traffic lights except in
+  fullscreen, and `MainWindow.InitShellTitleBar` moves the bar to the top
+  row so the optional classic bar sits under it.
 - `PlayerPackPicker` (P.5, §5) is the host-free decision for the Player pack
   picker: it opens only when 2+ distinct pack_ids exist (after the §5
   content_id merge — feed it `PackPreferenceResolver.Resolve`'s `Candidates`,

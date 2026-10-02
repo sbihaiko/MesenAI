@@ -77,8 +77,14 @@ public class PackAudioNoticeInstallTests
 			CommunityPackCatalogEntry entry = new() {
 				Kind = "hd-legacy", Name = "F69 fixture", Game = "fixture", System = "nes", Sha256 = new string('a', 64), PackId = "f69-fixture"
 			};
+			//The core log is process-global and never cleared, so read only what
+			//this install wrote: everything after a per-run marker.
+			string marker = "[PackAudioNoticeInstallTests] " + Guid.NewGuid().ToString("N");
+			EmuApi.WriteLogEntry(marker);
 			CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(entry, zipPath, new System.Collections.Generic.Dictionary<string, string>());
-			return (outcome, EmuApi.GetLog(), folder);
+			string log = EmuApi.GetLog();
+			int start = log.LastIndexOf(marker, StringComparison.Ordinal);
+			return (outcome, start < 0 ? log : log.Substring(start + marker.Length), folder);
 		} finally {
 			//Stop unloads the ROM; Release is NOT called (see CopyAsMepSheetCellTests).
 			EmuApi.Stop();
