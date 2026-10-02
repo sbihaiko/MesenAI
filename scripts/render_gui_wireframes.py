@@ -727,17 +727,12 @@ def pause_panel(c):
     c.text(px0 + 24, py0 + 34, "Contra (USA)", 20, 700, TEXT, "lm")
     c.text(px0 + 24, py0 + 58, "Paused", 13, 400, TEXT2, "lm")
     c.button(px0 + 24, py0 + 82, "Resume", "primary", TINT["play"], h=44, size=16, w=pw - 48, icon="play")
-    g = (px0 + 16, py0 + 146, px1 - 16, py0 + 196)
-    c.rrect(g, 12, fill=CARD, outline=(232, 232, 236))
-    c.text(g[0] + 14, g[1] + 25, "Save state", 13.5, 500, TEXT, "lm")
-    c.popup(g[0] + 104, g[1] + 13, 76, "Slot 1")
-    c.button(g[2] - 12, g[1] + 11, "Load", "secondary", anchor="r", h=28)
-    c.button(g[2] - 76, g[1] + 11, "Save", "secondary", anchor="r", h=28)
-    g2 = (px0 + 16, py0 + 210, px1 - 16, py0 + 210 + 150)
+    g2 = (px0 + 16, py0 + 150, px1 - 16, py0 + 150 + 200)
     c.rrect(g2, 12, fill=CARD, outline=(232, 232, 236))
-    c.row(g2[0], g2[2], g2[1], 50, "Pack", "Contra 80s 1.2", icon="box", tint=TINT["share"])
-    c.row(g2[0], g2[2], g2[1] + 50, 50, "Enhancements", "5 on", icon="sparkle", tint=ORANGE)
-    c.row(g2[0], g2[2], g2[1] + 100, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
+    c.row(g2[0], g2[2], g2[1], 50, "Save States", "Slot 1 · 2 min ago", icon="film", tint=(88, 86, 214))
+    c.row(g2[0], g2[2], g2[1] + 50, 50, "Pack", "Contra 80s 1.2", icon="box", tint=TINT["share"])
+    c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "5 on", icon="sparkle", tint=ORANGE)
+    c.row(g2[0], g2[2], g2[1] + 150, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
     c.button((px0 + px1) / 2, py0 + 384, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
     c.text((px0 + px1) / 2, py0 + 446, "Esc to resume", 11.5, 400, TEXT3, "mm")
     return pb
@@ -746,7 +741,7 @@ def pause_panel(c):
 def w_p4():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2 · textures and audio", (52, 199, 89))
     pause_panel(c)
-    c.caption("W-P4", "Play — pause overlay (Esc)", 8)
+    c.caption("W-P4", "Play — pause overlay (Esc)", 6)
     return c
 
 
@@ -819,9 +814,9 @@ def w_p6():
 def w_p7():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
-    b = c.sheet(460, 380, "Enhancements")
+    b = c.sheet(460, 436, "Enhancements")
     x0, y0, x1, y1 = b
-    g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 5 * 46)
+    g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 6 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
     items = [("Textures", "Applies on reload", True, True), ("Audio", "Applies on reload", True, True),
              ("Border", "Applies on reload", True, True), ("Widescreen", None, False, True),
@@ -832,11 +827,11 @@ def w_p7():
         if sub:
             c.text(g[0] + 16, yy + 33, sub, 11.5, 400, TEXT2 if en else TEXT3, "lm")
         c.toggle(g[2] - 54, yy + 12, on, en)
-        if i < 4:
-            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+        c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.row(g[0], g[2], g[1] + 5 * 46, 46, "Cheats", "2 on", sep=False)
     c.text(x0 + 22, g[3] + 26, "How the picture looks: Settings › Look", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Apply & Reload", "primary", TINT["play"], anchor="r", h=32)
-    c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 6)
+    c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 7)
     return c
 
 
@@ -981,6 +976,34 @@ def remaster_start(c, banner=False):
     c.row(g[0], g[2], g[1] + 52, 52, "The Legend of Zelda (USA)", "1 recording · 28 cells painted", icon="brush", tint=tint, sep=False)
 
 
+def w_p11():
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    b = c.sheet(500, 520, "Cheats")
+    x0, y0, x1, y1 = b
+    c.field(x0 + 20, y0 + 52, x1 - x0 - 40, "Search: lives, jump, weapon…", placeholder=True, h=30)
+    g = (x0 + 20, y0 + 98, x1 - 20, y0 + 98 + 5 * 50)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    items = [("Infinite lives — 1P game", "From the cheat list", True, True),
+             ("Start with 30 lives", "From the cheat list", True, True),
+             ("Keep weapon after dying", "From the cheat list", False, True),
+             ("Start on stage 5", "From the cheat list", False, True),
+             ("Invincibility (RAM)", "From the cheat list · allowed while recording art", False, True)]
+    for i, (n, sub, on, en) in enumerate(items):
+        yy = g[1] + i * 50
+        c.text(g[0] + 16, yy + 18, n, 13.5, 500, TEXT, "lm")
+        c.text(g[0] + 16, yy + 35, sub, 11.5, 400, TEXT2, "lm")
+        c.toggle(g[2] - 54, yy + 14, on, en)
+        if i < 4:
+            c.line([(g[0] + 16, yy + 50), (g[2], yy + 50)], SEP)
+    c.text(x0 + 22, g[3] + 24, "2 on · matched to your copy of Contra (USA)", 12.5, 400, TEXT2, "lm")
+    c.text(x0 + 22, g[3] + 46, "Cheats you have on are recorded in a shared replay.", 12, 400, TEXT3, "lm")
+    c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32)
+    c.button(x0 + 20, y1 - 50, "Add a Code…", "secondary", h=32)
+    c.caption("W-P11", "Play — cheats from the bundled list (W-P7 › Cheats)", 3)
+    return c
+
+
 def w_r0():
     c = base("remaster", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     remaster_start(c)
@@ -1063,7 +1086,6 @@ def w_r5():
     c.icon("pencil", b[0] + 22, b[1] + 72, 11, TINT["remaster"])
     c.text(b[0] + 36, b[1] + 72, "Painted: 2 of 6 phases", 12.5, 500, TEXT, "lm")
     c.button(b[0] + 16, b[1] + 102, "Open", "primary", TINT["remaster"], h=28)
-    c.button(b[0] + 84, b[1] + 102, "Open Layered Copy", "secondary", h=28)
     # second popover: a pattern page (the only surface that carries fill cells)
     x0, y0, x1, y1 = c.content()
     pb = (x1 - 380, y0 + 452, x1 - 60, y0 + 636)
@@ -1321,7 +1343,7 @@ def w_x2():
 SCREENS = [
     ("W-S1", w_s1), ("W-S2", w_s2), ("W-S3", w_s3),
     ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
-    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P9", w_p9), ("W-P10", w_p10),
+    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),
     ("W-R5", w_r5), ("W-R6", w_r6), ("W-R7", w_r7), ("W-R8", w_r8),
     ("W-H1", w_h1), ("W-H2", w_h2), ("W-H3", w_h3), ("W-H4", w_h4),

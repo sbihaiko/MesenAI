@@ -1665,6 +1665,8 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
+| F14.19 | **RAM maps for games without a route (ADR-0242 Q2).** `scripts/stages/<game>/ram-map.json` (position, camera, room, HP — the progress fields `jev_harness.py` reads) for golden games that have **no committed route** past their first stall, each field verified on the pinned dump against two RAM checkpoints. Inputs: the golden list in `scripts/stages/`; stop rule: at least two games mapped, or every candidate recorded with why its map failed. | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, still `proposed`). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 ### 5. Order of execution
 
@@ -2474,7 +2476,9 @@ same person at the same ROM.
 **Relation to `UiMode`.** `Player`/`Advanced` is not reinterpreted. Proposed:
 a new persisted `Workspace` key (`Play` default) plus a `ShowClassicMenuBar`
 boolean that replaces `UiMode` as the "upgrade keeps my menus" rule of §6
-(existing settings file without the key → `true`; fresh install → `false`).
+(default `false` everywhere, user's decision 2026-10-02: an upgraded install
+shows a one-time toast "your menus are under Tools ⋯" instead of keeping the
+bar).
 The classic menu bar, when shown, sits above the switcher and is exactly
 today's `MainMenuView`. ADR-0241 owns this; the migration is a slice.
 
@@ -2755,9 +2759,7 @@ Unchanged from today. The toast is the only pack feedback (§6).
 │ ░░░░░░░░░░░░░░░░░░░ │  Paused                            │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  [ ▶ Resume ]                      │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
-│ ░░░░░░░░░░░░░░░░░░░ │  Save state [Slot 1 ▾] [Save][Load]│ ░░░░░░░░░░░░░░░░ │
-│ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
-│ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  🎞 Save states  Slot 1 · 2 min ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ▣ Pack          Contra 80s 1.2 ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ✦ Enhancements           5 on ▸  │ ░░░░░░░░░░░░░░░░ │
 │ ░░░░░░░░░░░░░░░░░░░ │  ⚙  Settings                   ▸   │ ░░░░░░░░░░░░░░░░ │
@@ -2776,9 +2778,14 @@ Unchanged from today. The toast is the only pack feedback (§6).
   here it powers the game off (`PowerOff`) and lands on W-P1/W-P2 (§13.6).
   Quitting the app is Tools ⋯ › File › Exit and the OS's own ⌘Q / Alt+F4.
   Esc closes the overlay; a second Esc does nothing more (rule 8).
-- Elements: Resume, slot popup, Save, Load, Pack, Enhancements, Settings, Quit
-  = 8. **One over rule 2.** Candidate cut for review: merge Save/Load into one
-  "Save states ▸" row (→ 6) — the trade is one more click to save.
+- Elements: Resume, Save states, Pack, Enhancements, Settings, Quit = 6. ✔
+  Save and Load were merged into one *Save states ▸* row (user's decision,
+  2026-10-02; the first draft had a slot popup plus Save and Load = 8, one
+  over rule 2). The row opens today's state grid (`GameScreenMode.SaveState`
+  / `LoadState`, thumbnails, 10 slots plus auto-save) as a sheet with *Save
+  here* / *Load* per slot. The quick-save/quick-load shortcuts are
+  unchanged, so a save is still one key; from the menu it costs one more
+  click.
 - The Pack row opens W-P5 when 2+ packs exist, or W-P6 to inspect the one pack.
 
 **W-P5 — Pack picker (2+ packs for this ROM; also opens over an un-enhanced first start, §5)**
@@ -2876,6 +2883,7 @@ Unchanged from today. The toast is the only pack feedback (§6).
                      │  [x] Border          applies on reload       │
                      │  [ ] Widescreen                              │
                      │  [ ] Overclock       ⟨not available on SMS⟩  │
+                     │  Cheats                            2 on  ▸   │
                      │                                              │
                      │  How the picture looks: Settings › Look      │
                      │                                              │
@@ -2889,7 +2897,8 @@ Unchanged from today. The toast is the only pack feedback (§6).
   keeps what the *pack and the console* add — art, sound, frame, width,
   speed — and points at the place for the look of the picture.
 
-Elements: 5 toggles + 1 = 6. ✔ The one console-dependent element is shown
+Elements: 5 toggles + Cheats row + 1 = 7. ✔ (at the limit; *Cheats ▸* opens
+W-P11, ADR-0245.) The one console-dependent element is shown
 disabled with its reason (rule 4). The button replaces today's immediate
 action on each toggle, so the player decides when the game restarts. Today
 there are two different restarts: Textures, Audio and Border go through
@@ -2952,7 +2961,7 @@ toast. On failure: one pill sentence and nothing else; the log has the rest
 (rule 6: never a window). With the overlay open the same text is in the
 status line.
 
-**W-P10 — Settings › Look: art, pixels, screen**
+**W-P10 — Settings › Look: art, pixels, screen** — ADR-0246, `proposed`
 
 ![W-P10](../media/gui-redesign/W-P10.png)
 
@@ -3000,7 +3009,8 @@ Rules the tab enforces, each from a measured fact rather than taste:
   (`VideoDecoder.cpp` applies `_scaleFilter` after the console filter), so
   HQ4× over a 4× pack smooths the artist's work into mush and multiplies the
   frame size. Today nothing stops it. Rule 4's shape: shown, disabled,
-  "Off while a pack draws the art".
+  "Off while a pack draws the art". The Look tab never overrides it; Tools ⋯ ›
+  Options still can, for the user who wants it (§13.8 Q9).
 - **The NTSC choice says it does nothing over a pack.** `NesConsole::
   GetVideoFilter` returns `HdVideoFilter` whenever the pack has video
   content, so a chosen NTSC filter is silently ignored. The row shows
@@ -3018,11 +3028,10 @@ Rules the tab enforces, each from a measured fact rather than taste:
   (§6.1's restore-not-clobber rule, kept).
 - **Screen is one popup**, labelled *Effect* rather than *Shader* because it
   also holds the NTSC filter — *None*, *TV signal (NTSC)* (NES only, rule 4
-  disabled elsewhere), recent shader files, *Choose a shader file…*. No
-  bundled catalogue of looks: ADR-0237 lists "no bundled preset catalogue"
-  as a non-goal, so the popup offers the user's own `.slangp` files.
-  Curated names like "CRT" or "Handheld LCD" need that non-goal amended
-  first (§13.8).
+  disabled elsewhere), two or three **named looks** bundled with the app
+  (*CRT TV*, *Handheld LCD*: ADR-0237's non-goal amended 2026-10-02, licence
+  recorded per preset), recent shader files, *Choose a shader file…*. A
+  named look is a `.slangp` like any other, so *Adjust…* works on it too.
 - **Adjust…** opens the existing per-shader parameter list (`ShaderConfig`)
   as a sheet; it is disabled for *None*. Parameters never appear inline.
 - **Shader not available** (librashader missing, `CheckShaderSupport()`
@@ -3040,6 +3049,44 @@ Rules the tab enforces, each from a measured fact rather than taste:
 
 Elements: tab strip, Art row, Pixels, Screen, Adjust, Hold to Compare, Done
 = 7. ✔ (at the limit)
+
+**W-P11 — Cheats (W-P7 › Cheats)** — ADR-0245, `proposed`
+
+![W-P11](../media/gui-redesign/W-P11.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Cheats                                      │
+                     │  [Search: lives, jump, weapon…            ]  │
+                     │                                              │
+                     │  Infinite lives — 1P game              [x]   │
+                     │  Start with 30 lives                   [x]   │
+                     │  Keep weapon after dying               [ ]   │
+                     │  Start on stage 5                      [ ]   │
+                     │  Invincibility (RAM)                   [ ]   │
+                     │  ⟨allowed while recording art⟩               │
+                     │                                              │
+                     │  2 on · matched to your copy of Contra (USA) │
+                     │  ⟨cheats you have on are recorded in a       │
+                     │   shared replay⟩                             │
+                     │  [Add a Code…]                       [Done]  │
+                     └──────────────────────────────────────────────┘
+```
+
+- The list is `CheatDb.Nes.json` for the loaded ROM
+  (`HashType.Sha1Cheat`). The toggles are stored in the same `CheatCodes`
+  the classic cheat list uses, so both windows agree (rule 12). *Add a
+  Code…* takes a code typed by hand; the full editor stays in Tools ⋯.
+- Not in the list: "This copy of the game isn't in the cheat list", plus a
+  search by game name. An entry picked that way is marked "made for another
+  copy — may not work".
+- In Remaster's game view, Game Genie entries (about 78 % of the list) show
+  disabled with "Changes the game itself — not allowed while recording art"
+  (ADR-0184). RAM entries (`XXXX:YY`, 22 %) stay on.
+- GB/SMS: no list yet, so the sheet shows *Add a Code…* only, with the reason.
+- An LLM never writes a code here. The later phases of ADR-0245 (search by
+  intent, checked web lookup) only choose among listed or verified entries.
+- Elements: search, Add a Code…, Done = 3 (+ list rows). ✔
 
 ##### 13.5.3 Remaster
 
@@ -3152,7 +3199,7 @@ Elements: 2 in the banner + 2 of W-R0 = 4. ✔
   `record_viewer.py`, so neither feeds this screen. TAS is
   `headless_record bootstrap movie=…` (ADR-0185) run as a job into the same
   project; `headless_record` ships only in the macOS arm64 zip today, so
-  elsewhere the button is disabled with "Not in this build". *Let the AI play…* (W-R8, ADR-0242 `proposed`) runs
+  elsewhere the button is disabled with "Not in this build". *Let the AI play…* (W-R8, ADR-0242, slice F14.20) runs
   ADR-0238's search + Jev harness as a job under the user's own key; it is
   disabled with a reason when the game has no RAM map. Scripted route/cheat drivers stay in `scripts/`
   (they need authored files) — reachable from the project menu, not shown.
@@ -3170,10 +3217,11 @@ Elements: 2 in the banner + 2 of W-R0 = 4. ✔
   never hidden (W-R5).
 - Clicking a tile exports if needed and opens the PNG with the OS default
   (`open`/`xdg-open`/`ShellExecute` — ADR-0209 Consequences names this as
-  the first user-configured launch; a slice records it). The `.ora` twin is
-  offered as *Open Layered Copy* in the tile's popover (W-R5) for GIMP/Krita
-  users (ADR-0220), with
-  the sentence "save the flat PNG, not this file".
+  the first user-configured launch; a slice records it). The `.ora` twin
+  (ADR-0220) is **not** offered on this screen. While ADR-0220's stop
+  condition 2 is open (GIMP and Krita open it with the base layer active),
+  the flat PNG is the only path shown. The layered copy stays reachable
+  from Tools ⋯ for the artist who wants it (user's decision, 2026-10-02).
 - Zone ③ is one button that runs `mep_figure.py import` for changed figures,
   `mep_build.py build`, `mep_lint.py`, then `RequestMepImageReload`
   (ADR-0212) — or, when the build changed the manifest, reopens the ROM at
@@ -3264,7 +3312,7 @@ problem's *Open file* is a row action). ✔
                  │ "run" · 6 phases · from recording 2  │
                  │ ✔ Seen in the game                    │
                  │ ✎ Painted: 2 of 6 phases              │
-                 │ [Open]  [Open Layered Copy]           │
+                 │ [Open]                                │
                  └──────────────────────────────────────┘
 
                  ┌──────────────────────────────────────┐
@@ -3334,7 +3382,7 @@ Launches `scripts/compose_editor.py <project>` as a child process. It is
 "Record again to get the layout data", and the button is disabled (rule 4
 by analogy). Elements: 2. ✔
 
-**W-R8 — Let the AI play (W-R1 › Let the AI Play…)** — ADR-0242, `proposed`
+**W-R8 — Let the AI play (W-R1 › Let the AI Play…)** — ADR-0242, accepted (slices F14.19, F14.20)
 
 ![W-R8](../media/gui-redesign/W-R8.png)
 
@@ -3621,7 +3669,8 @@ switcher (W-S3) or a link that names its destination (rule 11).
    instead of pretending it away.
 8. **Simplicity is enforced by count.** Rule 2's tally is on every wireframe
    so a reviewer can refuse one without arguing taste, and the PNG's caption
-   pill repeats it. One wireframe (W-P4) is one over and carries a named cut.
+   pill repeats it. No wireframe is over: W-P4's 8 became 6 by merging Save
+   and Load into one row (user's decision, 2026-10-02).
 9. **One profile at a time.** The first draft had three always-visible tabs.
    Review rejected it (2026-10-02): every screen then carried two
    destinations its user did not come for. The title bar names the current
@@ -3639,29 +3688,25 @@ switcher (W-S3) or a link that names its destination (rule 11).
 
 #### 13.8 Open questions for the review
 
-1. W-P4: merge Save/Load into one row, or accept 8 elements?
-2. W-R1: should *Record from a TAS movie* stay visible, or move into the
-   project menu with the scripted drivers? (W-R1 is within rule 2 either way.)
-3. Should the `.ora` layered copy appear at all in zone ②, or only in
-   Tools ⋯? (ADR-0220 stop condition 2 — GIMP/Krita open with the base layer
-   active — is still open.)
-4. `ShowClassicMenuBar` default on upgrade: `true` (keeps today's §6 promise)
-   or `false` with a one-time toast "your menus are under Tools ⋯"?
-5. Does Remaster need gamepad navigation (rule 9 says no)?
-6. Which console(s) must the first Remaster slice support? The recorder and
-   the kit are NES today; GB/SMS recordings are frame-only (ADR-0169 §4).
-7. W-P10 Screen: amend ADR-0237's "no bundled preset catalogue" non-goal so
-   the popup can offer two or three named looks (*CRT TV*, *Handheld LCD*),
-   or keep it to the user's own `.slangp` files?
-8. W-P10 *Hold to Compare* versus a split before/after view of the paused
-   frame: the split explains more but needs the renderer to draw two paths
-   at once; hold-to-compare reuses existing config switches.
-9. Should Look › Pixels stay enabled over a pack for a user who insists
-   (an "allow anyway" in Options), or is the disablement absolute?
-10. W-R8 (ADR-0242, `proposed`): accept an AI recorder at all, given
-    ADR-0238's F14.15 verdict? If yes — where the key lives (Q1 there), and
-    whether the button ships disabled until more games have a RAM map
-    (today only Mega Man 3 and Ninja Gaiden, which already have routes).
+1. ~~W-P4~~ — merged Save/Load into one *Save states ▸* row (→ 6), 2026-10-02.
+2. ~~W-R1 TAS~~ — stays visible in zone ① (2026-10-02).
+3. ~~`.ora` in zone ②~~ — no; only in Tools ⋯ while ADR-0220 stop
+   condition 2 is open (2026-10-02).
+4. ~~`ShowClassicMenuBar` on upgrade~~ — `false`, with a one-time toast
+   "your menus are under Tools ⋯" (2026-10-02). This replaces today's §6
+   promise of a visible bar.
+5. ~~Remaster gamepad~~ — no; mouse/trackpad (rule 9 stands, 2026-10-02).
+6. ~~Remaster consoles~~ — answered by ADR-0243 Decision 5: NES first. On
+   GB/SMS *Record* is enabled and the paint zone is disabled with its reason;
+   GBA is disabled.
+7. ~~W-P10 named looks~~ — yes, two or three, licence-compatible;
+   ADR-0237's non-goal amended 2026-10-02.
+8. ~~W-P10 comparison~~ — *Hold to Compare* (2026-10-02); no split view.
+9. ~~Pixels over a pack~~ — Look keeps it disabled with its reason; Tools ⋯
+   › Options still lets an advanced user set a scale filter over a pack, as
+   today (2026-10-02).
+10. ~~W-R8 / ADR-0242~~ — accepted 2026-10-02; slices F14.19 (RAM maps) and
+    F14.20 (the recorder), Part A §4, Phase 14.
 11. ~~ADR-0243~~ — accepted 2026-10-02; slice F12.20 (Part A §4, Phase 12).
 12. ~~ADR-0244~~ — accepted 2026-10-02; slice P.9 (Part A §4, Phase 7).
 

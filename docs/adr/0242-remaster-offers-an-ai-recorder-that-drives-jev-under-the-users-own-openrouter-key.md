@@ -1,9 +1,9 @@
 # ADR-0242: Remaster offers an AI recorder that drives Jev under the user's own OpenRouter key
 
-- Status: proposed. The user asked for it verbatim, *"quero adiciona um gravador como o JEV como AI e BYK"* (2026-10-02), and chose to keep it despite ADR-0238's F14.15 verdict, with RAM maps first (Q2). Q1, Q2 and Q4 are answered; Q3, the adoption criterion, is still open. It contradicts ADR-0238's "do not adopt beyond the spike" until accepted. Nothing is implemented. Wireframe: PRD Part B §13, W-R8; entry point on W-R1.
+- Status: accepted (2026-10-02). The user picked *"Aceito"* after answering Q1–Q4 (below). It was requested verbatim: *"quero adiciona um gravador como o JEV como AI e BYK"*. Listed as slices **F14.19** (RAM maps first) and **F14.20** (the recorder) in PRD Part A §4, Phase 14. Not implemented. Accepting is a request for work, and implementation waits for an explicit go-ahead. The button stays disabled until ADR-0238 §5's two clauses pass on the F14.19 games (Q3). Wireframe: PRD Part B §13, W-R8; entry point on W-R1.
 - Date: 2026-10-02
 - Related: ADR-0238 (Jev as the stall helper — §3 harness, §4 artifact rule, §5 adoption), ADR-0185 (a movie is input, never evidence), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0184 (RAM-only cheats), ADR-0241 (Play / Remaster / Share), PRD Part B §13 (W-R1, W-R3, W-R8)
-- Supersedes / amends: if accepted, amends ADR-0238 — the "not the default recorder" non-goal stays, but §5's verdict no longer keeps Jev out of the GUI; the adoption criterion for the GUI is Q3 below. ADR-0238 §1–§4 are unchanged.
+- Supersedes / amends: amends ADR-0238 — the "not the default recorder" non-goal stays, but §5's verdict no longer keeps Jev out of the GUI; the adoption criterion for the GUI is ADR-0238 §5 unchanged, applied to the games Q2's RAM maps cover (Q3). ADR-0238 §1–§4 are unchanged.
 
 ## Context
 
@@ -81,7 +81,7 @@ Non-goals:
    the project. As with a TAS, it is input, never evidence (ADR-0185,
    ADR-0188).
 
-## Open questions — three answered (user, 2026-10-02), one open
+## Open questions — all four answered (user, 2026-10-02)
 
 - **Q1 — the key lives in the OS credential store** (*"Cofre do sistema"*):
   - macOS Keychain, Windows Credential Manager, libsecret on Linux, behind
@@ -96,10 +96,13 @@ Non-goals:
   **no committed route** past their first stall. Until at least two such
   games have a map, the button stays disabled with its reason. The
   feature is kept, not archived.
-- **Q3 — the GUI adoption criterion. Open.** Proposed: on at least two
-  games without a committed route past the stall, a user-level run records
-  past a stall the user did not pass, and the replay matches its RAM
-  checkpoints.
+- **Q3 — adoption keeps ADR-0238's kit criterion** (*"Ganho no kit"*). The
+  GUI recorder is adopted only when an AI-driven recording adds keys that
+  no existing pack or committed route has: the two clauses of ADR-0238 §5,
+  clause 2 included, measured on the games Q2's maps cover. Until then the
+  button stays disabled. Passing a stall the user could not pass is
+  necessary, but it is not enough.
+
 - **Q4 — the harness runs on the user's Python** (*"Mesmo gate do
   Python"*). It sits behind the same W-R0b "Needs Python 3" gate as the kit
   and the build, so nothing new is packaged. Not ported to C#.
