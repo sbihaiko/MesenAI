@@ -49,6 +49,12 @@
 		game runs unpaused in Play (WorkspaceShell.IsBarVisible).-->
 		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" />
 
+		<!--G.3 (W-R2): Remaster's recording strip - one pill and Stop - above the
+		game, which fills the rest of the window inside Remaster.-->
+		<Panel Name="RemasterRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsRemasterGameView}">
+			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
+		</Panel>
+
 		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
 		with the bar.-->
 		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" Background="{DynamicResource MesenMenuBackground}" IsVisible="{Binding Shell.IsBarVisible}">
@@ -61,28 +67,31 @@
 		<ContentControl Name="AudioPlayer" DockPanel.Dock="Bottom" Content="{Binding AudioPlayer}" IsVisible="{Binding IsPlayWorkspace}" />
 
 		<Panel Name="RendererPanel" Background="Black" Focusable="True">
+			<!--G.3: the game picture is its own layer, shown in Play and in
+			Remaster's recording view (IsGameViewVisible); Play's own surfaces
+			stay in PlayWorkspace above it.-->
+			<Canvas IsVisible="{Binding IsGameViewVisible}">
+				<ContentControl
+					Name="RendererContainer"
+					UseLayoutRounding="False"
+				/>
+			</Canvas>
+
+			<Panel IsVisible="{Binding IsSoftwareRendererVisible}">
+				<c:SoftwareRendererView
+					Name="SoftwareRenderer"
+					DataContext="{Binding SoftwareRenderer}"
+					Width="{Binding Width}"
+					Height="{Binding Height}"
+			  />
+			</Panel>
+
 			<!--G.1: every Play surface lives in PlayWorkspace. Outside Play it is
 			hidden as a whole (never closed or reset), so nothing of Play is on
 			screen under Remaster/Share and switching back shows it as it was.
 			The native renderer is hidden with it (UpdateRendererVisibility).-->
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}">
 				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
-
-				<Canvas>
-					<ContentControl
-						Name="RendererContainer"
-						UseLayoutRounding="False"
-					/>
-				</Canvas>
-
-				<Panel IsVisible="{Binding IsSoftwareRendererVisible}">
-					<c:SoftwareRendererView
-						Name="SoftwareRenderer"
-						DataContext="{Binding SoftwareRenderer}"
-						Width="{Binding Width}"
-						Height="{Binding Height}"
-				  />
-				</Panel>
 
 				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
 				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
@@ -246,9 +255,15 @@
 				</Border>
 			</Panel>
 
-			<!--G.1: Remaster and Share are placeholders that name the next slice;
-			the game keeps running behind them.-->
-			<Border Name="WorkspacePlaceholder" Background="#181818" IsVisible="{Binding !IsPlayWorkspace}">
+			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
+			W-R1, the W-R3 card); the game keeps running behind them.-->
+			<Panel Name="RemasterWorkspaceHost" IsVisible="{Binding IsRemasterProjectScreenVisible}">
+				<v:RemasterWorkspaceView Name="RemasterWorkspace" DataContext="{Binding Remaster}" />
+			</Panel>
+
+			<!--G.1: Share is a placeholder that names the next slice; the game
+			keeps running behind it.-->
+			<Border Name="WorkspacePlaceholder" Background="#181818" IsVisible="{Binding Shell.HasPlaceholder}">
 				<StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center">
 					<TextBlock Name="WorkspacePlaceholderTitle" Text="{Binding Shell.PlaceholderTitle}" FontWeight="Bold" FontSize="18" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" />
 					<TextBlock Name="WorkspacePlaceholderBody" Text="{Binding Shell.PlaceholderBody}" Foreground="#CCFFFFFF" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />

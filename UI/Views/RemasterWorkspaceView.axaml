@@ -1,0 +1,181 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
+	x:DataType="vm:RemasterWorkspaceViewModel"
+	x:Class="Mesen.Views.RemasterWorkspaceView"
+>
+	<!--G.3 (PRD Part B §13.5.3): the Remaster screens that are not the game -
+	W-R0 (no project yet), the W-R0b banner, W-R1 (the one project screen) and
+	the W-R3 job card in zone ③. The screen never changes shape; zones fill in.
+	Every disabled control shows its reason under it (rule 4). W-R2, the
+	recording view, is RemasterRecordingStrip over the game, not this view.-->
+	<UserControl.Styles>
+		<Style Selector="TextBlock">
+			<Setter Property="Foreground" Value="White" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="TextBlock.reason">
+			<Setter Property="FontSize" Value="11" />
+			<Setter Property="Opacity" Value="0.7" />
+		</Style>
+		<Style Selector="TextBlock.zone">
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="Opacity" Value="0.8" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="#262626" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="16" />
+		</Style>
+	</UserControl.Styles>
+
+	<ScrollViewer Background="#181818">
+		<StackPanel Margin="24" Spacing="16" MaxWidth="960">
+			<!--W-R0b: a banner inside W-R0/W-R1 until resolved, never a modal.
+			Two buttons: locate, and how to get it (which asks before opening the
+			browser, rule 7).-->
+			<Border Name="RemasterFeasibilityBanner" Classes="card" Background="#3A2F14" IsVisible="{Binding IsBannerVisible}">
+				<StackPanel Spacing="8">
+					<DockPanel>
+						<StackPanel DockPanel.Dock="Right" Spacing="6" Margin="12 0 0 0">
+							<Button Name="LocatePythonButton" Content="{l:Translate btnLocatePython}" HorizontalAlignment="Stretch" IsVisible="{Binding IsPythonMissing}" Click="OnLocatePython" />
+							<Button Content="{l:Translate btnHowToInstallPython}" HorizontalAlignment="Stretch" IsVisible="{Binding IsPythonMissing}" Click="OnHowToInstallPython" />
+							<Button Name="LocateToolsButton" Content="{l:Translate btnLocateTools}" HorizontalAlignment="Stretch" IsVisible="{Binding IsToolsMissing}" Click="OnLocateTools" />
+							<Button Content="{l:Translate btnHowToGetTools}" HorizontalAlignment="Stretch" IsVisible="{Binding IsToolsMissing}" Click="OnHowToGetTools" />
+						</StackPanel>
+						<TextBlock Name="RemasterFeasibilityText" Text="{Binding BannerText}" VerticalAlignment="Center" />
+					</DockPanel>
+					<DockPanel IsVisible="{Binding PendingBrowserUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+						<Button DockPanel.Dock="Right" Content="{l:Translate btnOpenBrowser}" Margin="6 0 0 0" Click="OnConfirmBrowser" />
+						<Button DockPanel.Dock="Right" Content="{l:Translate btnCancelBrowser}" Click="OnCancelBrowser" />
+						<TextBlock Text="{Binding BrowserConfirmText}" VerticalAlignment="Center" />
+					</DockPanel>
+				</StackPanel>
+			</Border>
+
+			<TextBlock Name="RemasterNotice" Text="{Binding NoticeText}" Foreground="#FFB4A0" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+			<!--W-R0: Remaster, no project yet. Two elements + rows (rule 2).-->
+			<StackPanel Name="RemasterNoProject" Spacing="16" IsVisible="{Binding IsNoProject}">
+				<TextBlock Text="{l:Translate lblRemasterTitle}" FontSize="22" FontWeight="Bold" />
+				<TextBlock Text="{l:Translate lblRemasterIntro}" Opacity="0.85" />
+				<UniformGrid Columns="2">
+					<Border Classes="card" Margin="0 0 8 0">
+						<StackPanel Spacing="8">
+							<TextBlock Text="{l:Translate lblStartWithRunningGame}" FontWeight="Bold" />
+							<TextBlock Name="RemasterStartGame" Text="{Binding StartCardGame}" Opacity="0.8" />
+							<Button Name="RemasterStartButton" Content="{Binding StartButtonText}" IsEnabled="{Binding IsStartEnabled}" Classes="accent" Click="OnStart" />
+							<TextBlock Classes="reason" Text="{Binding StartReason}" IsVisible="{Binding StartReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						</StackPanel>
+					</Border>
+					<Border Classes="card" Margin="8 0 0 0">
+						<StackPanel Spacing="8">
+							<TextBlock Text="{l:Translate lblOpenProjectFolder}" FontWeight="Bold" />
+							<TextBlock Text="{l:Translate lblOpenProjectFolderHint}" Opacity="0.8" />
+							<Button Name="RemasterChooseFolderButton" Content="{l:Translate btnChooseProjectFolder}" Click="OnChooseFolder" />
+						</StackPanel>
+					</Border>
+				</UniformGrid>
+			</StackPanel>
+
+			<!--W-R1: the one project screen, three zones in loop order. At rest:
+			project menu, Record, TAS, AI, Prepare Figures, Build = 6 (rule 2).-->
+			<StackPanel Name="RemasterProjectScreen" Spacing="16" IsVisible="{Binding IsProject}">
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<Button Name="RemasterProjectMenu" Padding="10 4">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<TextBlock Name="RemasterProjectName" Text="{Binding ProjectName}" FontSize="20" FontWeight="Bold" TextWrapping="NoWrap" />
+							<TextBlock Text="⌄" VerticalAlignment="Center" />
+						</StackPanel>
+						<Button.Flyout>
+							<MenuFlyout>
+								<MenuItem Header="{l:Translate mnuRemasterShowFolder}" Click="OnShowFolder" />
+								<MenuItem Header="{l:Translate mnuRemasterSwitchProject}" Click="OnChooseFolder" />
+							</MenuFlyout>
+						</Button.Flyout>
+					</Button>
+					<TextBlock Text="{l:Translate lblRemasterProject}" VerticalAlignment="Center" Opacity="0.7" />
+				</StackPanel>
+
+				<TextBlock Classes="zone" Text="{l:Translate lblZoneRecord}" />
+				<Border Classes="card">
+					<StackPanel Spacing="12">
+						<DockPanel>
+							<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+								<StackPanel Spacing="2" MaxWidth="200">
+									<Button Name="RemasterRecordButton" Content="{l:Translate btnRecordWhileIPlay}" Background="#D93A2B" Foreground="White" IsEnabled="{Binding Record.IsEnabled}" Click="OnRecord" />
+									<TextBlock Classes="reason" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
+								</StackPanel>
+								<StackPanel Spacing="2" MaxWidth="200">
+									<Button Name="RemasterTasButton" Content="{l:Translate btnRecordFromTas}" IsEnabled="{Binding RecordFromTas.IsEnabled}" />
+									<TextBlock Name="RemasterTasReason" Classes="reason" Text="{Binding RecordFromTas.Reason}" IsVisible="{Binding RecordFromTas.HasReason}" />
+								</StackPanel>
+								<StackPanel Spacing="2" MaxWidth="200">
+									<Button Name="RemasterAiButton" Content="{l:Translate btnLetTheAiPlay}" IsEnabled="{Binding LetTheAiPlay.IsEnabled}" />
+									<TextBlock Name="RemasterAiReason" Classes="reason" Text="{Binding LetTheAiPlay.Reason}" IsVisible="{Binding LetTheAiPlay.HasReason}" />
+								</StackPanel>
+							</StackPanel>
+							<TextBlock Name="RemasterRecordSummary" Text="{Binding RecordSummary}" FontWeight="Bold" VerticalAlignment="Center" />
+						</DockPanel>
+						<ItemsControl Name="RemasterRecordingList" ItemsSource="{Binding Recordings}">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<StackPanel Spacing="4" />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:RemasterRecordingRow">
+									<StackPanel Orientation="Horizontal" Spacing="10">
+										<TextBlock Text="{Binding Title}" FontWeight="Bold" TextWrapping="NoWrap" />
+										<TextBlock Text="{Binding Detail}" Opacity="0.75" />
+									</StackPanel>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</StackPanel>
+				</Border>
+
+				<TextBlock Classes="zone" Text="{l:Translate lblZonePaint}" />
+				<Border Classes="card">
+					<DockPanel>
+						<StackPanel DockPanel.Dock="Right" Spacing="2" MaxWidth="220" Margin="12 0 0 0">
+							<Button Name="RemasterPrepareButton" Content="{l:Translate btnPrepareFigures}" IsEnabled="{Binding PrepareFigures.IsEnabled}" Click="OnPrepare" />
+							<TextBlock Name="RemasterPrepareReason" Classes="reason" Text="{Binding PrepareFigures.Reason}" IsVisible="{Binding PrepareFigures.HasReason}" />
+						</StackPanel>
+						<TextBlock Text="{Binding PaintText}" VerticalAlignment="Center" />
+					</DockPanel>
+				</Border>
+
+				<TextBlock Classes="zone" Text="{l:Translate lblZoneSeeIt}" />
+				<Border Classes="card">
+					<Panel>
+						<!--W-R3: the job card replaces the Build button (rule 6).-->
+						<StackPanel Name="RemasterJobCard" Spacing="8" IsVisible="{Binding IsJobCardVisible}">
+							<DockPanel>
+								<Button Name="RemasterJobStopButton" DockPanel.Dock="Right" Content="{l:Translate btnJobStop}" IsVisible="{Binding IsJobRunning}" Click="OnStopJob" />
+								<Button DockPanel.Dock="Right" Content="{l:Translate btnJobDismiss}" IsVisible="{Binding !IsJobRunning}" Click="OnDismissJob" />
+								<StackPanel Spacing="2">
+									<TextBlock Name="RemasterJobTitle" Text="{Binding JobTitle}" FontWeight="Bold" />
+									<TextBlock Name="RemasterJobDetail" Text="{Binding JobDetail}" Opacity="0.8" IsVisible="{Binding JobDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+								</StackPanel>
+							</DockPanel>
+							<ProgressBar Name="RemasterJobProgress" Minimum="0" Maximum="100" Value="{Binding JobPercent}" IsVisible="{Binding IsJobRunning}" />
+						</StackPanel>
+						<DockPanel IsVisible="{Binding !IsJobCardVisible}">
+							<StackPanel DockPanel.Dock="Right" Spacing="2" MaxWidth="220" Margin="12 0 0 0">
+								<Button Name="RemasterBuildButton" Content="{l:Translate btnBuildAndShow}" IsEnabled="{Binding BuildAndShow.IsEnabled}" />
+								<TextBlock Name="RemasterBuildReason" Classes="reason" Text="{Binding BuildAndShow.Reason}" IsVisible="{Binding BuildAndShow.HasReason}" />
+							</StackPanel>
+							<TextBlock Text="{l:Translate lblSeeItHint}" VerticalAlignment="Center" />
+						</DockPanel>
+					</Panel>
+				</Border>
+			</StackPanel>
+		</StackPanel>
+	</ScrollViewer>
+</UserControl>
