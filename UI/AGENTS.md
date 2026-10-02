@@ -206,6 +206,21 @@ can be exercised by real xunit tests without Avalonia or the native
   does not re-fetch. A ROM switch during the download does not power-cycle.
   A failed or thrown auto-install clears the per-session ROM sha1 attempt
   so the next load retries.
+  ADR-0240 / F6.9: after a successful install (MEP-recipe or hd-legacy),
+  `CommunityPackInstallCoordinator.WithAudioNotice` asks the host-free
+  `PackAudioNotice.Evaluate(outFolder)` whether a WIRED bundled `.ips`/`.bps`
+  (referenced by a `<patch>` line or a `pack.json` `patches[]` entry, and
+  present; same meaning as `scripts/mep_lint.py` `scan_bundled_patches`)
+  redeems `<bgm>`/`<sfx>` refs that do not resolve in the installed pack (as
+  written, then case-insensitively, like `HdPackLoader::CheckFile`). If so
+  the outcome stays `Installed` and carries ONE non-fatal
+  `CommunityPackInstallOutcome.Notices` entry, "audio not generated: N of M
+  tracks unresolved; supply the `.ogg` files" (M = distinct referenced
+  files, not lines), which is also written to the log and toasted by
+  `CommunityPackInstallService.Surface`. Nothing is generated, spawned or
+  patched; no patch wired, no audio, or all refs resolved means no notice.
+  Pinned by `UI.Tests/CommunityPacks/PackAudioNoticeTests` and the real-coordinator wiring
+  test `UI.HeadlessTests/PackAudioNoticeInstallTests`.
   `CommunityPackDownloader` follows only 301/302/303/307/308
   (`CommunityPackHttpStatus.IsFollowableRedirect`); HTTP 304 is a terminal
   catalog-cache status for `CommunityCatalogCacheDecision`, never a
