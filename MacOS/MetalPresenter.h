@@ -62,6 +62,12 @@ public:
 	bool ShaderActive() const;
 	const std::string& LastError() const;
 
+	//Issue #584: true once after Present() dropped the filter chain because a
+	//command buffer that ran it completed with an error (a GPU hang, for one);
+	//the reason is in LastError(). The caller logs it - the presenter itself
+	//has no log - and the picture keeps being presented unfiltered.
+	bool TakeShaderDropped();
+
 	//Uploads the frame (BGRA, width*height) and presents it. With a shader
 	//active the filter chain runs from the frame into the drawable; without
 	//one the frame is scaled into the drawable (nearest, or bilinear when

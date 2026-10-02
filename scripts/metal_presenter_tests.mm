@@ -12,6 +12,10 @@
 //    on macOS) can back a CAMetalLayer, and a handle that is not an NSView is
 //    refused. That the *live Avalonia* view is an NSView is NOT proven here;
 //    see the P.8 notes in the PRD.
+//  - Issue #584: a chain whose command buffers macOS kills as a GPU hang is
+//    dropped, the command queue is replaced (two hangs make macOS ignore every
+//    later submission on a queue), and the unfiltered picture keeps coming.
+//    tests/fixtures/shaders/gpu-hang.slangp really hangs the GPU, briefly.
 //  - Not proven: anything visible on a real display (stop condition 3).
 //
 //Run from the repo root with librashader.dylib in the working directory or
@@ -27,6 +31,7 @@
 #include <vector>
 
 #include "Core/Shared/Video/RendererSelection.h"
+#include "Core/Shared/Video/ShaderPresetApply.h"
 #include "MacOS/MetalPresenter.h"
 
 static int gCases = 0;
@@ -194,8 +199,89 @@ static void TestBrokenShaderFallsBack(MetalPresenter& p, const std::vector<uint3
 	CHECK(!p.SetShader("tests/fixtures/shaders/does-not-exist.slangp", {}), "a missing preset is rejected");
 	CHECK(!p.ShaderActive(), "no shader is active after the failure");
 	CHECK(!p.LastError().empty(), "the failure carries a reason");
+	//#585: the reason the on-screen message carries, cut from librashader's real text.
+	std::string reason = ShaderFailureReason(p.LastError());
+	printf("  note: on-screen reason: %s\n", reason.c_str());
+	CHECK(!reason.empty() && reason.find(" failed: ") == std::string::npos && reason.find('\n') == std::string::npos, "the on-screen reason is one line without the API name");
 	std::vector<uint32_t> out;
 	CHECK(Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "the frame is still presented, unfiltered");
+}
+
+static double Now()
+{
+	return [NSDate timeIntervalSinceReferenceDate];
+}
+
+//Issue #584: some presets (bezel/scanline-classic's slot-mask chains) make
+//macOS kill the command buffer with "Caused GPU Hang Error". The fixture
+//reproduces that with a long vertex-stage loop. The chain must be dropped and
+//the unfiltered picture must keep coming, without stalling the caller.
+static const char* kHangPreset = "tests/fixtures/shaders/gpu-hang.slangp";
+
+static bool ErrorNamesTheGpu(const std::string& error)
+{
+	return error.find("GPU") != std::string::npos;
+}
+
+static void TestGpuHangWithReadback(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("a chain that hangs the GPU is dropped (readback: the fault is seen on the same frame)\n");
+	bool loaded = p.SetShader(kHangPreset, {});
+	if(!loaded) {
+		printf("  note: SetShader failed: %s\n", p.LastError().c_str());
+	}
+	CHECK(loaded && p.ShaderActive(), "the GPU-hang fixture compiles into a filter chain");
+
+	double start = Now();
+	std::vector<uint32_t> out;
+	bool firstOk = Present(p, frame, out);
+	printf("  note: first frame: %s (%s)\n", firstOk ? "completed" : "faulted", p.LastError().c_str());
+	CHECK(!firstOk, "the fixture's frame faults on the GPU (the fixture still reproduces #584)");
+	CHECK(p.TakeShaderDropped(), "the presenter reports the chain as dropped, once");
+	CHECK(!p.TakeShaderDropped(), "and only once");
+	CHECK(!p.ShaderActive(), "no shader is active after the fault");
+	CHECK(ErrorNamesTheGpu(p.LastError()), "the reason carries the GPU's error");
+
+	std::vector<uint32_t> next;
+	CHECK(Present(p, frame, next) && next.size() == ref.size() && memcmp(next.data(), ref.data(), ref.size() * 4) == 0, "the next frame is presented, unfiltered");
+	double secs = Now() - start;
+	printf("  note: fault + recovery took %.3f s\n", secs);
+	CHECK(secs < 2.0, "the fault and the recovery do not stall the caller");
+
+	printf("the queue still works after a GPU fault\n");
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}) && p.ShaderActive(), "another preset loads after the dropped one");
+	std::vector<uint32_t> filtered;
+	CHECK(Present(p, frame, filtered) && memcmp(filtered.data(), ref.data(), ref.size() * 4) != 0, "and filters the picture again");
+	CHECK(!p.TakeShaderDropped(), "a healthy chain is not reported as dropped");
+	p.ClearShader();
+}
+
+static void TestGpuHangWithoutReadback(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("a chain that hangs the GPU is dropped (app path: the fault arrives asynchronously)\n");
+	p.SetReadbackEnabled(false);
+	CHECK(p.SetShader(kHangPreset, {}) && p.ShaderActive(), "the GPU-hang fixture loads");
+
+	//Present like the video thread does: never wait for the GPU. Bounded so a
+	//presenter that never notices the fault fails here instead of looping.
+	double start = Now();
+	int frames = 0;
+	bool presentedAll = true;
+	while(p.ShaderActive() && frames < 600 && Now() - start < 5.0) {
+		presentedAll &= p.Present(frame.data(), kSrcW, kSrcH, (uint32_t)frames + 1, false, MetalOverlay(), MetalOverlay());
+		frames++;
+	}
+	double secs = Now() - start;
+	printf("  note: chain dropped after %d frames, %.3f s\n", frames, secs);
+	CHECK(!p.ShaderActive(), "the chain is dropped without anyone waiting on the GPU");
+	CHECK(presentedAll, "every frame meanwhile was accepted by Present()");
+	CHECK(p.TakeShaderDropped(), "the drop is reported for the log");
+	CHECK(ErrorNamesTheGpu(p.LastError()), "with the GPU's reason");
+	CHECK(secs < 2.0, "within 2 s (a few frames in flight), not after a stall");
+
+	p.SetReadbackEnabled(true);
+	std::vector<uint32_t> out;
+	CHECK(Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "the picture keeps coming, unfiltered");
 }
 
 static void TestOverlay(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
@@ -212,9 +298,10 @@ static void TestOverlay(MetalPresenter& p, const std::vector<uint32_t>& frame, c
 	overlay.Width = kSrcW;
 	overlay.Height = kSrcH;
 	std::vector<uint32_t> out;
-	CHECK(Present(p, frame, out, overlay), "Present() with an overlay");
-	CHECK(out[(10 * kScale + 1) * kOutW + (10 * kScale + 1)] == 0xFFFF0000u, "an opaque overlay pixel replaces the picture");
-	CHECK(out[(100 * kScale) * kOutW + (100 * kScale)] == ref[(100 * kScale) * kOutW + (100 * kScale)], "a transparent overlay pixel leaves the picture alone");
+	bool shown = Present(p, frame, out, overlay);
+	CHECK(shown, "Present() with an overlay");
+	CHECK(shown && out[(10 * kScale + 1) * kOutW + (10 * kScale + 1)] == 0xFFFF0000u, "an opaque overlay pixel replaces the picture");
+	CHECK(shown && out[(100 * kScale) * kOutW + (100 * kScale)] == ref[(100 * kScale) * kOutW + (100 * kScale)], "a transparent overlay pixel leaves the picture alone");
 }
 
 //The handle the UI passes is NativeControlHost's default child. In Avalonia
@@ -311,6 +398,8 @@ int main()
 		TestUnfilteredMatchesSoftwareScale(p, frame, ref);
 		TestShader(p, frame, ref);
 		TestBrokenShaderFallsBack(p, frame, ref);
+		TestGpuHangWithReadback(p, frame, ref);
+		TestGpuHangWithoutReadback(p, frame, ref);
 		TestOverlay(p, frame, ref);
 		TestOverlayUploadsOnlyWhenDirty(p, frame);
 		TestDrawableSizeIsEnforced(p, view, frame);

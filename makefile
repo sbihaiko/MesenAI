@@ -697,11 +697,25 @@ core-unit-tests: scripts/core_unit_tests
 #the shader cases (scripts/fetch_librashader_macos.sh). Separate from
 #core-unit-tests on purpose: that suite is host-free and runs on Linux CI.
 ifeq ($(UNAME_S),Darwin)
-scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h
+scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -o $@
 
 metal-presenter-tests: scripts/metal_presenter_tests
 	cd $(CURDIR) && DYLD_LIBRARY_PATH=$(CURDIR)/UI/Dependencies scripts/metal_presenter_tests
+
+#ADR-0237: manual shader sweep (docs/shader-sweep.md). Every .slangp under
+#SHADERS=<slang-shaders checkout> goes through the presenter above and through
+#GetShaderParams, one process per preset. A maintainer tool on a Metal Mac -
+#deliberately NOT part of doc-checks or any CI workflow: GPU results depend on
+#the machine. Extra flags: SWEEP_ARGS="--sample 30 --nframes 300 ...".
+scripts/shader_sweep_shot: scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h
+	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -framework ImageIO -o $@
+
+shader-sweep-tool: scripts/shader_sweep_shot
+
+shader-sweep: scripts/shader_sweep_shot InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
+	@test -n "$(SHADERS)" || { echo "usage: make shader-sweep SHADERS=<slang-shaders dir> [SWEEP_ARGS=...]" >&2; exit 2; }
+	python3 scripts/shader_sweep.py "$(SHADERS)" $(SWEEP_ARGS)
 endif
 
 #Phase 11 C.1: every scripts/test_*.py, one process per file. `doc-checks`

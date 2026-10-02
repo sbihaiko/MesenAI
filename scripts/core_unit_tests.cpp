@@ -52,6 +52,7 @@
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
+#include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
 #include "Shared/Video/AspectRatioMath.h"
@@ -90,6 +91,7 @@
 #include "Utilities/StringUtilities.h"
 #include "Utilities/miniz.h"
 #include "Utilities/sha256.h"
+#include "Utilities/Video/LibrashaderUtilities.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -12358,6 +12360,229 @@ void TestShareStopRestoreIsOneShotAndInertWhenNotSharing()
 	Check(ended == 3 && s.Nes.RamPowerOnState == RamState::AllOnes, "share stop: a second Stop does not roll back what the player set after the first");
 }
 
+//--- #585: a shader preset that fails to load says so on screen -----------
+
+struct RecordingMessageManager : public IMessageManager
+{
+	std::vector<std::pair<std::string, std::string>> Shown;
+	void DisplayMessage(string title, string message) override { Shown.push_back({ title, message }); }
+};
+
+struct FakeShaderPresenter
+{
+	bool LoadSucceeds = false;
+	std::string Error;
+	int Loads = 0;
+	int Clears = 0;
+	int ParamUpdates = 0;
+	bool SetShader(const std::string&, const std::vector<int>&)
+	{
+		Loads++;
+		return LoadSucceeds;
+	}
+	void ClearShader() { Clears++; }
+	void UpdateShaderParams(const std::vector<int>&) { ParamUpdates++; }
+	const std::string& LastError() const { return Error; }
+};
+
+void TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason()
+{
+	std::error_code ec;
+	std::filesystem::path home = std::filesystem::temp_directory_path() / "mesence-shader-notice-home";
+	std::filesystem::create_directories(home, ec);
+	FolderUtilities::SetHomeFolder(home.string()); //MessageManager::Log needs a home folder to be set at all
+
+	RecordingMessageManager osd;
+	MessageManager::RegisterMessageManager(&osd);
+	FakeShaderPresenter presenter;
+	presenter.Error = "mtl_filter_chain_create failed: UnknownSemantics(\"EnableHDR\")\nat pass 3";
+	std::vector<int> params;
+
+	ApplyShaderPreset(presenter, "", "/shaders/crt/crt-geom-deluxe.slangp", params);
+	bool one = osd.Shown.size() == 1;
+	std::string msg = one ? osd.Shown[0].second : "";
+	Check(one, "shader load failure: exactly one on-screen message", "got " + std::to_string(osd.Shown.size()));
+	Check(msg.find("crt-geom-deluxe.slangp") != std::string::npos, "shader load failure: the message names the preset file", msg);
+	Check(msg.find("/shaders/crt/") == std::string::npos, "shader load failure: the message names the file, not the whole path", msg);
+	Check(msg.find("UnknownSemantics(\"EnableHDR\")") != std::string::npos, "shader load failure: the message carries librashader's reason", msg);
+	Check(msg.find("mtl_filter_chain_create") == std::string::npos && msg.find('\n') == std::string::npos, "shader load failure: the reason is short (no API name, one line)", msg);
+	Check(one && osd.Shown[0].first == MessageManager::Localize("Shaders") && MessageManager::Localize("ShaderLoadFailed") != "ShaderLoadFailed", "shader load failure: the title and the text come from the localized resources", one ? osd.Shown[0].first : "");
+
+	//A parameter change on the same (failed) preset does not reload or repeat.
+	ApplyShaderPreset(presenter, "/shaders/crt/crt-geom-deluxe.slangp", "/shaders/crt/crt-geom-deluxe.slangp", params);
+	Check(osd.Shown.size() == 1 && presenter.Loads == 1, "shader load failure: a parameter change does not repeat the message");
+
+	//Each new failed load is its own message.
+	presenter.Error = "preset_create_with_options failed: the file could not be read";
+	ApplyShaderPreset(presenter, "/shaders/crt/crt-geom-deluxe.slangp", "/shaders/oled.slangp", params);
+	Check(osd.Shown.size() == 2 && osd.Shown.back().second.find("oled.slangp") != std::string::npos, "shader load failure: a second failed preset gets its own message");
+
+	//A preset that loads, and clearing the shader, say nothing.
+	presenter.LoadSucceeds = true;
+	ApplyShaderPreset(presenter, "/shaders/oled.slangp", "/shaders/ok.slangp", params);
+	ApplyShaderPreset(presenter, "/shaders/ok.slangp", "", params);
+	Check(osd.Shown.size() == 2 && presenter.Clears == 1, "shader load failure: a successful load and a clear show nothing");
+
+	MessageManager::UnregisterMessageManager(&osd);
+	std::filesystem::remove_all(home, ec); //mesen.log written into it by MessageManager::Log
+}
+
+void TestAShaderFailureReasonIsTrimmedToOneShortLine()
+{
+	std::string longReason = "parse error: " + std::string(400, 'x');
+	std::string shortened = ShaderFailureReason("preset_create_with_options failed: " + longReason);
+	Check(shortened.size() <= 120 && shortened.rfind("parse error: ", 0) == 0, "shader reason: a long reason is capped", std::to_string(shortened.size()));
+	Check(ShaderFailureReason("librashader.dylib is not available") == "librashader.dylib is not available", "shader reason: a message without an API prefix is kept as is");
+	Check(ShaderFailureReason("  \n").empty(), "shader reason: a blank reason stays blank");
+}
+
+//--- Librashader param host logic (PR #581), against a fake instance ---------
+//LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
+//libra_instance_t, so these cases hand them a fake one: function pointers that
+//record their calls, no librashader library and no GPU. The crash fixed in #581
+//was freeing the param list after libra_preset_get_runtime_params had failed.
+
+struct FakeLibra
+{
+	libra_error_t createError = nullptr;
+	libra_error_t paramError = nullptr;
+	libra_preset_param_list_t listToWrite = {};
+	int createCalls = 0;
+	int getParamsCalls = 0;
+	int freeParamsCalls = 0;
+	int presetFreeCalls = 0;
+	int errorFreeCalls = 0;
+	libra_preset_param_list_t freedList = {};
+	libra_error_t freedError = nullptr;
+};
+
+FakeLibra gFakeLibra;
+int gFakeLibraCreateErrorObject;
+int gFakeLibraParamErrorObject;
+int gFakeLibraPresetObject;
+
+libra_error_t FakeLibraPresetCreate(const char*, libra_preset_ctx_t*, libra_preset_opt_t*, libra_shader_preset_t* out)
+{
+	gFakeLibra.createCalls++;
+	if(!gFakeLibra.createError) {
+		*out = reinterpret_cast<libra_shader_preset_t>(&gFakeLibraPresetObject);
+	}
+	return gFakeLibra.createError;
+}
+
+libra_error_t FakeLibraGetRuntimeParams(const libra_shader_preset_t*, libra_preset_param_list_t* out)
+{
+	gFakeLibra.getParamsCalls++;
+	//Written on failure too: a list the caller must not trust (or free) unless the call succeeded
+	*out = gFakeLibra.listToWrite;
+	return gFakeLibra.paramError;
+}
+
+libra_error_t FakeLibraFreeRuntimeParams(libra_preset_param_list_t list)
+{
+	gFakeLibra.freeParamsCalls++;
+	gFakeLibra.freedList = list;
+	return nullptr;
+}
+
+libra_error_t FakeLibraPresetFree(libra_shader_preset_t* preset)
+{
+	gFakeLibra.presetFreeCalls++;
+	*preset = nullptr;
+	return nullptr;
+}
+
+int32_t FakeLibraErrorFree(libra_error_t* error)
+{
+	gFakeLibra.errorFreeCalls++;
+	gFakeLibra.freedError = *error;
+	*error = nullptr;
+	return 0;
+}
+
+libra_instance_t MakeFakeLibra()
+{
+	gFakeLibra = FakeLibra();
+	libra_instance_t libra = __librashader_make_null_instance();
+	libra.preset_create_with_options = FakeLibraPresetCreate;
+	libra.preset_get_runtime_params = FakeLibraGetRuntimeParams;
+	libra.preset_free_runtime_params = FakeLibraFreeRuntimeParams;
+	libra.preset_free = FakeLibraPresetFree;
+	libra.error_free = FakeLibraErrorFree;
+	libra.instance_loaded = true;
+	return libra;
+}
+
+const libra_preset_param_t gPoisonParams[1] = { { "POISON", "never a real parameter", 0.5f, 0.0f, 1.0f, 0.1f } };
+
+const libra_preset_param_t gRealParams[2] = {
+	{ "CURVATURE", "Curvature", 0.25f, 0.0f, 1.0f, 0.05f },
+	{ "SCANLINE", "Scanline weight", 0.3f, 0.1f, 0.5f, 0.01f }
+};
+
+void ArmParamFailure()
+{
+	gFakeLibra.paramError = reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject);
+	gFakeLibra.listToWrite = { gPoisonParams, 1 };
+}
+
+void TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	ArmParamFailure();
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "crt-geom-deluxe.slangp");
+	Check(count == 0, "librashader count: a failed get_runtime_params counts zero params", "got " + std::to_string(count));
+	Check(gFakeLibra.freeParamsCalls == 0, "librashader count: a failed get_runtime_params frees no param list", "freed " + std::to_string(gFakeLibra.freeParamsCalls) + " time(s)");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject), "librashader count: the get_runtime_params error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
+	Check(gFakeLibra.presetFreeCalls == 1, "librashader count: the preset is still freed once after the param failure");
+}
+
+void TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	ArmParamFailure();
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "crt-geom-deluxe.slangp");
+	Check(params.empty(), "librashader params: a failed get_runtime_params returns no params", "got " + std::to_string(params.size()));
+	Check(gFakeLibra.freeParamsCalls == 0, "librashader params: a failed get_runtime_params frees no param list", "freed " + std::to_string(gFakeLibra.freeParamsCalls) + " time(s)");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraParamErrorObject), "librashader params: the get_runtime_params error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
+	Check(gFakeLibra.presetFreeCalls == 1, "librashader params: the preset is still freed once after the param failure");
+}
+
+void TestShaderParamsAreReadAndTheListFreedOnceOnSuccess()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "crt-royale.slangp");
+	bool countFreedOnce = gFakeLibra.freeParamsCalls == 1 && gFakeLibra.freedList.parameters == gRealParams && gFakeLibra.freedList.length == 2;
+	Check(count == 2 && countFreedOnce && gFakeLibra.presetFreeCalls == 1 && gFakeLibra.errorFreeCalls == 0, "librashader count: success counts the list and frees it and the preset exactly once");
+
+	libra = MakeFakeLibra();
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "crt-royale.slangp");
+	bool readFreedOnce = gFakeLibra.freeParamsCalls == 1 && gFakeLibra.freedList.parameters == gRealParams && gFakeLibra.freedList.length == 2;
+	Check(params.size() == 2 && readFreedOnce && gFakeLibra.presetFreeCalls == 1 && gFakeLibra.errorFreeCalls == 0, "librashader params: success reads the list and frees it and the preset exactly once");
+	bool copied = params.size() == 2 && std::string(params[1].Name) == "SCANLINE" && std::string(params[1].Description) == "Scanline weight"
+		&& params[1].Initial == 0.3f && params[1].Min == 0.1f && params[1].Max == 0.5f && params[1].Step == 0.01f;
+	Check(copied, "librashader params: name, description and the four values are copied per param");
+}
+
+void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
+{
+	libra_instance_t libra = MakeFakeLibra();
+	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "missing.slangp");
+	bool countUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
+	Check(count == 0 && countUntouched, "librashader count: a preset that fails to load counts zero and frees nothing");
+
+	libra = MakeFakeLibra();
+	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
+	gFakeLibra.listToWrite = { gRealParams, 2 };
+	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "missing.slangp");
+	bool readUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
+	Check(params.empty() && readUntouched, "librashader params: a preset that fails to load returns nothing and frees nothing");
+}
+
 int main()
 {
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
@@ -12746,6 +12971,13 @@ int main()
 	TestAnUnfetchedSpriteFallsBackAndAClearedLogForgetsTheFrame();
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();
+
+	TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason();
+	TestAShaderFailureReasonIsTrimmedToOneShortLine();
+	TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails();
+	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
+	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();
+	TestShaderParamsTouchNoListWhenThePresetFailsToLoad();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;
