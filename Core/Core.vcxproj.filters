@@ -1059,6 +1059,9 @@
     <ClInclude Include="Shared\EnhancementPacks\MepLocalIdentityCache.h">
       <Filter>Shared\EnhancementPacks</Filter>
     </ClInclude>
+    <ClInclude Include="Shared\EnhancementPacks\RemasterProject.h">
+      <Filter>Shared\EnhancementPacks</Filter>
+    </ClInclude>
     <ClInclude Include="Shared\EnhancementPacks\AudioFingerprint.h">
       <Filter>Shared\EnhancementPacks</Filter>
     </ClInclude>

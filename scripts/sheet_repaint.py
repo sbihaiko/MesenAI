@@ -251,7 +251,7 @@ def find_sheets_dir(target: Path) -> Path:
         target,
         target / "sheets",
         target / "textures" / "sheets",
-        target / "auto" / "textures" / "sheets",
+        mep_build.mep_project.auto_textures(target) / "sheets",  # newest auto/rec-NNN (ADR-0243)
     ]
     for cand in candidates:
         if cand.is_dir() and any(p.suffix == ".json" for p in cand.iterdir()):
@@ -1253,7 +1253,7 @@ def find_hires_txt(target: Path) -> Path:
     `find_sheets_dir`, so one positional argument serves both targets."""
     for cand in (target / "hires.txt",
                  target / "textures" / "hires.txt",
-                 target / "auto" / "textures" / "hires.txt"):
+                 mep_build.mep_project.auto_textures(target) / "hires.txt"):
         if cand.is_file():
             return cand
     raise RepaintError(
@@ -1449,10 +1449,10 @@ def stamp_pack_json(out_root: Path, backend_name: str, scale: int, source_rel: s
 
 
 def default_out_dir(sheets_dir: Path) -> Path:
-    """ADR-0154 §4: `<Game>/auto/repaint`. A *sub*folder of `auto/`, because
-    `bootstrap_auto_packs.sh` does `rm -rf auto/textures` on every re-record,
-    and because overwriting the recorder's sheets would destroy the reference
-    the artist and PRD test 8 compare against."""
+    """ADR-0154 §4: `<Game>/auto/repaint`. A *sub*folder of `auto/`, beside
+    the recordings (`auto/rec-NNN/`, ADR-0243) and never inside one, because
+    overwriting the recorder's sheets would destroy the reference the artist
+    and PRD test 8 compare against."""
     for parent in sheets_dir.parents:
         if parent.name == "auto":
             return parent / "repaint"

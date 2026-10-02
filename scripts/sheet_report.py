@@ -14,7 +14,7 @@ Usage:
   scripts/sheet_report.py <pack-or-library> [--json] [--fail-noise] [--fail-menu-only]
 
 <pack-or-library> may be a pack folder (containing sheets/ or textures/sheets/)
-or a ROM library, in which case every <Game>/auto/textures/sheets is reported.
+or a ROM library, in which case every <Game>/auto/[rec-NNN/]textures/sheets is reported.
 """
 import argparse
 import json

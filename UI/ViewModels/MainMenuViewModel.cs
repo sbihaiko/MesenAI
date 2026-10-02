@@ -920,8 +920,8 @@ namespace Mesen.ViewModels
 		{
 			//Shaped like the Sound/Video/Music recorders above it (Record/Stop),
 			//with no dialog and no user-typed fields: the recorder publishes to
-			//the LiveRecordingFolder convention slot (ADR-0169), which feeds the
-			//artist kit. The ROM, the interval and the path are never typed -
+			//the LiveRecordingFolder convention slot (ADR-0169), which feeds
+			//record_viewer.py, not the artist kit (ADR-0243 Decision 4). The ROM, the interval and the path are never typed -
 			//LiveRecordingSession keeps the recorder pointed at whatever ROM is
 			//open (its OnGameLoaded / OnEmulationStopped are wired in MainWindow's
 			//notification handler).

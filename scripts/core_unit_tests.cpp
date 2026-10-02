@@ -51,6 +51,7 @@
 #include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
+#include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
@@ -497,6 +498,125 @@ namespace
 	Check(pack.GetSectionAutoPath(MepSectionType::Textures) == (dir / "auto" / "textures").string(), "BlocoD: textures machine layer resolves to auto/textures, a sibling of mep/", pack.GetSectionAutoPath(MepSectionType::Textures));
 
 	std::filesystem::remove_all(dir, ec);
+}
+
+//ADR-0243 (F12.20): a Remaster project is the ROM's enhancement folder, and
+//every recording is one auto/rec-NNN/ folder. These cases drive the
+//host-free half (RemasterProject.h) and the loader's choice of auto layer.
+void TestRecordingIdsAreThreeDigitsAndOnlyRecFoldersParse()
+{
+	Check(RemasterProject::FormatRecordingId(1) == "rec-001", "F12.20: the first recording id is rec-001", RemasterProject::FormatRecordingId(1));
+	Check(RemasterProject::FormatRecordingId(42) == "rec-042", "F12.20: ids are zero-padded to three digits");
+	Check(RemasterProject::FormatRecordingId(1234) == "rec-1234", "F12.20: an id past 999 keeps every digit");
+	Check(RemasterProject::ParseRecordingNumber("rec-012") == 12, "F12.20: rec-012 parses as 12");
+	Check(RemasterProject::ParseRecordingNumber("rec-") == 0, "F12.20: a bare rec- prefix is not a recording");
+	Check(RemasterProject::ParseRecordingNumber("rec-01a") == 0, "F12.20: a non-digit suffix is not a recording");
+	Check(RemasterProject::ParseRecordingNumber("rec-000") == 0, "F12.20: rec-000 is not a recording (ids start at 1)");
+	Check(RemasterProject::ParseRecordingNumber("textures") == 0, "F12.20: the bare section folder is not a rec- folder");
+}
+
+void TestNextRecordingIdCountsTheBareLayoutAsRec001()
+{
+	using V = vector<string>;
+	Check(RemasterProject::NextRecordingId(V{}) == "rec-001", "F12.20: an empty auto/ allocates rec-001");
+	Check(RemasterProject::NextRecordingId(V{ "textures" }) == "rec-002", "F12.20: a bare auto/textures is rec-001, so the next one is rec-002");
+	Check(RemasterProject::NextRecordingId(V{ "audio" }) == "rec-002", "F12.20: a bare auto/audio is rec-001 too");
+	Check(RemasterProject::NextRecordingId(V{ "rec-001", "rec-003" }) == "rec-004", "F12.20: allocation is one past the highest id, a gap is never refilled");
+	Check(RemasterProject::NextRecordingId(V{ "textures", "rec-002" }) == "rec-003", "F12.20: bare + rec-002 allocates rec-003");
+	Check(RemasterProject::NextRecordingId(V{ "repaint", "rec-x" }) == "rec-001", "F12.20: folders that are not recordings do not take an id");
+}
+
+void TestTheLoaderPlaysTheNewestRecordingOfEachSection()
+{
+	std::filesystem::path dir = MakeTempPackDir("f1220_newest_recording");
+	std::error_code ec;
+	std::filesystem::create_directories(dir / "auto" / "textures", ec);
+	std::filesystem::create_directories(dir / "auto" / "rec-002" / "textures", ec);
+	std::filesystem::create_directories(dir / "auto" / "rec-003" / "audio", ec);
+	WriteTestFile(dir / "auto" / "textures" / "hires.txt", "<ver>106\n");
+	WriteTestFile(dir / "auto" / "rec-002" / "textures" / "hires.txt", "<ver>106\n");
+	WriteTestFile(dir / "auto" / "rec-003" / "audio" / "fingerprints.json", "{}");
+
+	MepPack pack;
+	pack.RootFolder = dir.string();
+	Check(pack.DetectConventionLayout("mep"), "F12.20: a project with rec-NNN recordings has a layer");
+	Check(pack.GetSectionAutoPath(MepSectionType::Textures) == (dir / "auto" / "rec-002" / "textures").string(),
+		"F12.20: the textures auto layer is the newest recording that has textures (rec-002 over the bare rec-001)", pack.GetSectionAutoPath(MepSectionType::Textures));
+	Check(pack.GetSectionAutoPath(MepSectionType::Audio) == (dir / "auto" / "rec-003" / "audio").string(),
+		"F12.20: the audio auto layer is the newest recording that has audio", pack.GetSectionAutoPath(MepSectionType::Audio));
+	Check(!pack.Sections[(int)MepSectionType::Textures].HasHuman, "F12.20: a recording is never a human layer");
+
+	MepPack bare;
+	std::filesystem::remove_all(dir / "auto" / "rec-002", ec);
+	std::filesystem::remove_all(dir / "auto" / "rec-003", ec);
+	bare.RootFolder = dir.string();
+	bare.DetectConventionLayout("mep");
+	Check(bare.GetSectionAutoPath(MepSectionType::Textures) == (dir / "auto" / "textures").string(),
+		"F12.20: a project recorded before ADR-0243 keeps reading its bare auto/textures, unmoved", bare.GetSectionAutoPath(MepSectionType::Textures));
+	std::filesystem::remove_all(dir, ec);
+}
+
+void TestTheDeclineRuleRefusesAForeignPackAndExemptsTheProjectsOwnLayers()
+{
+	using RemasterProject::LayerOwner;
+	using RemasterProject::PlanRecording;
+	//#142: the bootstrap never records over someone else's art.
+	RemasterProject::RecordingPlan foreign = PlanRecording(LayerOwner{ true, false }, false, LayerOwner{ true, false }, true);
+	Check(!foreign.NeedTextures && !foreign.NeedAudio && foreign.Declined(), "F12.20/#142: a foreign textures+audio pack still declines the whole recording");
+	RemasterProject::RecordingPlan loose = PlanRecording(LayerOwner{}, true, LayerOwner{}, true);
+	Check(!loose.NeedTextures && loose.NeedAudio, "F12.20/#142: a loose HdPacks/<rom>/ pack still declines the textures half");
+	//ADR-0243 Decision 3: the project's own mep/ (or its own earlier recordings) is not "a pack someone already has".
+	RemasterProject::RecordingPlan own = PlanRecording(LayerOwner{ true, true }, false, LayerOwner{ true, true }, true);
+	Check(own.NeedTextures && own.NeedAudio && !own.Declined(), "F12.20: the project's own layers do not decline a second recording");
+	RemasterProject::RecordingPlan gb = PlanRecording(LayerOwner{}, false, LayerOwner{}, false);
+	Check(gb.NeedTextures && !gb.NeedAudio, "F12.20: audio fingerprints stay NES only");
+
+	using RemasterProject::IsOwnProjectSection;
+	Check(IsOwnProjectSection(true, true, "mep/textures"), "F12.20: the project's mep/ human layer is its own");
+	Check(IsOwnProjectSection(true, false, ""), "F12.20: the project's auto-only layer (an earlier recording) is its own");
+	Check(!IsOwnProjectSection(true, true, "textures"), "F12.20/#142: a legacy human layer at the sibling root is not the project's mep/ - still declines");
+	Check(!IsOwnProjectSection(false, true, "mep/textures"), "F12.20/#142: a community or loose pack is never the project's own");
+	Check(!IsOwnProjectSection(false, false, ""), "F12.20/#142: an auto-only layer of another container is not the project's own either");
+}
+
+void TestTheProjectManifestRoundTripsAndUpsertsByRecordingId()
+{
+	RemasterProject::Manifest manifest;
+	manifest.Name = "Castlevania (USA)";
+	RemasterProject::Recording second{ "rec-002", "2026-10-02T12:00:00Z", "tas", 30.5, "boss \"room\"\nsecond try" };
+	RemasterProject::Recording first{ "rec-001", "2026-10-02T11:00:00Z", "play", 60, "" };
+	RemasterProject::UpsertRecording(manifest, second);
+	RemasterProject::UpsertRecording(manifest, first);
+	string text = RemasterProject::FormatManifest(manifest);
+
+	RemasterProject::Manifest parsed;
+	Check(RemasterProject::ParseManifest(text, parsed), "F12.20: project.json written by the core parses back", text);
+	Check(parsed.Name == "Castlevania (USA)", "F12.20: the display name round-trips");
+	Check(parsed.Recordings.size() == 2 && parsed.Recordings[0].Id == "rec-001" && parsed.Recordings[1].Id == "rec-002",
+		"F12.20: recordings are written in id order whatever the insertion order");
+	Check(parsed.Recordings.size() == 2 && parsed.Recordings[1].Note == "boss \"room\"\nsecond try", "F12.20: a note with quotes and a newline round-trips");
+	Check(parsed.Recordings.size() == 2 && parsed.Recordings[1].Source == "tas" && parsed.Recordings[1].DurationSeconds == 30.5,
+		"F12.20: source and durationSeconds round-trip");
+
+	RemasterProject::Recording finished = first;
+	finished.DurationSeconds = 61.25;
+	RemasterProject::UpsertRecording(parsed, finished);
+	Check(parsed.Recordings.size() == 2 && parsed.Recordings[0].DurationSeconds == 61.25, "F12.20: an upsert of an existing id replaces it instead of appending");
+	Check(RemasterProject::FormatNumber(30) == "30" && RemasterProject::FormatNumber(61.25) == "61.25" && RemasterProject::FormatNumber(0.1) == "0.1",
+		"F12.20: durations are written as plain decimals", RemasterProject::FormatNumber(30));
+
+	RemasterProject::Manifest broken;
+	Check(!RemasterProject::ParseManifest("{ not json", broken), "F12.20: a malformed project.json is refused, not half-read");
+	Check(!RemasterProject::ParseManifest("[]", broken), "F12.20: a project.json that is not an object is refused");
+}
+
+void TestRecordingSourcesAndTimestampsAreTheAdrsVocabulary()
+{
+	Check(RemasterProject::IsKnownSource("play") && RemasterProject::IsKnownSource("tas") && RemasterProject::IsKnownSource("ai") && RemasterProject::IsKnownSource("script"),
+		"F12.20: play/tas/ai/script are the four recording sources (ADR-0243 Q2)");
+	Check(!RemasterProject::IsKnownSource("") && !RemasterProject::IsKnownSource("movie"), "F12.20: anything else is not a source");
+	Check(RemasterProject::FormatUtcTimestamp(0) == "1970-01-01T00:00:00Z", "F12.20: recordedAt is ISO-8601 UTC", RemasterProject::FormatUtcTimestamp(0));
+	Check(RemasterProject::FormatUtcTimestamp(1790000000) == "2026-09-21T14:13:20Z", "F12.20: a 2026 timestamp formats in UTC", RemasterProject::FormatUtcTimestamp(1790000000));
 }
 
 void TestDetectConventionLayoutBorderSection()
@@ -12625,6 +12745,12 @@ int main()
 	TestDetectConventionLayoutConventionWinsOverBareRoot();
 	TestDetectConventionLayoutNoHiresTxtAtAll();
 	TestDetectConventionLayoutMepHumanLayer();
+	TestRecordingIdsAreThreeDigitsAndOnlyRecFoldersParse();
+	TestNextRecordingIdCountsTheBareLayoutAsRec001();
+	TestTheLoaderPlaysTheNewestRecordingOfEachSection();
+	TestTheDeclineRuleRefusesAForeignPackAndExemptsTheProjectsOwnLayers();
+	TestTheProjectManifestRoundTripsAndUpsertsByRecordingId();
+	TestRecordingSourcesAndTimestampsAreTheAdrsVocabulary();
 	TestDetectConventionLayoutBorderSection();
 
 	TestSha256KnownAnswer();

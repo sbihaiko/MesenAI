@@ -117,6 +117,7 @@ import mep_capture_scan  # #422: which live capture draws a painted key
 import mep_carry  # #381: carried <background>/<bgm>/<sfx> names, resolved as the loader does
 import mep_conditions  # ADR-0197 §1: shared with mep_lint --routes
 import mep_lint
+import mep_project  # ADR-0243: auto/rec-NNN/ recordings; a bare auto/textures is rec-001
 import mep_recorded  # ADR-0231 (#447): an untouched cell keeps the recorded rule
 import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
 import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 colour 0, sheet + twin in lockstep
@@ -1059,7 +1060,7 @@ def cmd_build(args) -> int:
     # --- key source (where the tile keys come from) ---
     source = Path(args.source).resolve() if args.source else None
     if source is None:
-        for cand in (folder / "textures" / "hires.txt", folder / "auto" / "textures" / "hires.txt"):
+        for cand in (folder / "textures" / "hires.txt", mep_project.auto_textures(folder) / "hires.txt"):
             if cand.exists():
                 source = cand
                 break
@@ -1828,7 +1829,7 @@ def cmd_check_coverage(args) -> int:
         print(f"error: no manifest to check at {candidate} — check-coverage takes the pack folder "
               f"itself, the one holding textures/, exactly like `build`", file=sys.stderr)
         return 2
-    baseline = Path(args.baseline).resolve() if args.baseline else folder / "auto" / "textures" / "hires.txt"
+    baseline = Path(args.baseline).resolve() if args.baseline else mep_project.auto_textures(folder) / "hires.txt"
     if not baseline.is_file():
         print(f"error: no baseline manifest to compare against.\n"
               f"       The baseline is a sheet-derived textures/hires.txt — one `build` wrote — as "

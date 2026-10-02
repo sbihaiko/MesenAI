@@ -38,6 +38,7 @@ std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "HdPackExtractAudioStartFailed", u8"Extract audio: failed to launch the tool process" },
 	{ "MEP", u8"MEP" },
 	{ "MepPackApplied", u8"Applied %1" },
+	{ "MepBootstrapNowOnDemand", u8"Recording while you play is still on for this install. New installs record only when you press Record (Remaster); turn it off under Enhancement Packs." },
 	{ "PatchFailed", u8"Failed to apply patch: %1" },
 	{ "CheatApplied", u8"1 cheat applied." },
 	{ "CheatsApplied", u8"%1 cheats applied." },

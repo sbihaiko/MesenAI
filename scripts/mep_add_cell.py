@@ -204,7 +204,7 @@ def find_sheets_dir(target: Path) -> Path:
     """`target` may be the sheets folder, a pack folder, or a game folder with
     an `auto/` sibling (ADR-0147). Most specific first, first hit wins."""
     for cand in (target, target / "sheets", target / "textures" / "sheets",
-                 target / "auto" / "textures" / "sheets"):
+                 mep_build.mep_project.auto_textures(target) / "sheets"):  # ADR-0243
         if cand.is_dir() and any(p.suffix == ".json" for p in cand.iterdir()):
             return cand
     raise AddCellError(f"no sheets/ folder with sidecar JSON under {target}")
