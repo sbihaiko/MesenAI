@@ -114,3 +114,15 @@ decided here rather than as separate ADRs:
    of a cap (file headers, ADR-0034) are informative; when they disagree, the
    makefile wins and the prose is fixed. A data file the script iterates is
    not worth it for one entry.
+5. **Amendment 2026-10-02: the recipe is four targets (user's decision).** The
+   `doc-checks` recipe is split into `doc-checks-1`..`-4`, in the same order,
+   with no command added, dropped or repeated (verified by diffing
+   `make -n doc-checks` before and after). `doc-checks` stays the target
+   everything cites: it now runs the four in sequence, so locally and in
+   `build.yml` it is still one serial, fail-fast run. `checks.yml` runs the
+   four as parallel jobs behind a fan-in job named `checks`, because one
+   command (the smoke verifier, which compiles Core/) was ~95 % of an
+   ~11-minute gate. Items 1 and 4 are unaffected: the `check-file-loc.sh`
+   lines are still in the `doc-checks` recipe family and are still the
+   single authoritative list of caps. Harness-dependent checks stay in shard 1
+   (see `.github/AGENTS.md`).

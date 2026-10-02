@@ -1383,7 +1383,10 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `checks/verify_core_no_http_client.sh`, and
   `checks/verify_fetcher_no_filesystem_allowlist_load.sh` (see `checks/`
   below) - run directly by `doc-checks`, in order, failing on the first
-  non-zero exit. `verify-ui-logic-firewall.sh` additionally runs ahead of
+  non-zero exit (the recipe is split into `doc-checks-1`..`-4`, run one after
+  another by the umbrella and in parallel CI jobs by `checks.yml`; the order
+  holds inside each shard, and the harness-dependent checks stay in shard 1,
+  see `.github/AGENTS.md`). `verify-ui-logic-firewall.sh` additionally runs ahead of
   `dotnet test` in `make unit-tests` and the `ui-tests` CI job (ADR-0123,
   H5): the dual-compile is the authoritative gate, this is the fast
   pre-check whose readable diagnostics name the offending file/dependency,

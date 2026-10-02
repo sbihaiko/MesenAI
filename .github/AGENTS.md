@@ -60,7 +60,38 @@ what CI actually runs; this doc records why they're split the way they are.
   a red job names which contract broke. ADR-0191, later the same day, folded
   `unit-tests.yml`'s two jobs in here and deleted that file, so the count is
   **five**:
-  - `checks` — `make doc-checks`, as above.
+  - `checks` — the verdict of `make doc-checks`, **split into four parallel
+    shards on 2026-10-02** (the user picked "split doc-checks in parallel").
+    Serial, the target took ~11 minutes (a typical PR run: ~659 s of a 688 s
+    job), ~95 % of it one command, `verify_smoke_pack_headless.sh`, which
+    compiles Core/; the other four jobs finished in under two minutes. The
+    makefile now has `doc-checks-1`..`-4` (the same ~104 commands in the
+    same order, none dropped, none repeated; `make doc-checks` is the
+    umbrella that runs them one after another, so local use and `build.yml`'s
+    `make doc-checks` steps are unchanged). In `checks.yml` the work is the
+    matrix job `doc-checks-shard` (display name "Doc checks shard N",
+    `fail-fast: false`), and **`checks` is now a fan-in job**: `needs:
+    [doc-checks-shard]`, `if: always()`, and it fails unless the shards'
+    aggregate result is exactly `success` (a failed, cancelled or skipped
+    shard fails it). Rules that keep this honest:
+    - **No shard job may be named like a required context** (`checks`,
+      `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests`):
+      a shard that was would satisfy the requirement alone. The `main`
+      ruleset is unchanged and still requires exactly those five names;
+      `checks` means "all doc checks passed" as before.
+    - **Shard 1 is the only one that compiles** and the only one that installs
+      SDL2. It pre-builds the harness with `make -j$(nproc) capture-tool`
+      (the verifier's own `make -s capture-tool` is single-core), and
+      `verify_synthetic_nrom.sh` must stay in the same shard, after the smoke
+      verifier: it exits 0 with a SKIP when `scripts/headless_record` is not
+      built, so in a shard that never builds it it would pass vacuously.
+    - **A new check goes into a shard by the same rule as before** (the
+      makefile recipe is still the single list, ADR-0137 §4): add it to
+      whichever `doc-checks-N` is shortest, unless it needs the harness
+      (shard 1). Shards must not read what another shard writes.
+    - Do not run `make -j doc-checks`: the umbrella is a sequence of sub-makes
+      on purpose, because a Python suite under compilation load dies with a
+      false SIGBUS.
   - `python-tests` — `make python-tests`, i.e.
     `scripts/checks/run_python_tests.sh`: every `scripts/test_*.py` as its own
     process, exit non-zero on any file's failure. A loop over the files, never
