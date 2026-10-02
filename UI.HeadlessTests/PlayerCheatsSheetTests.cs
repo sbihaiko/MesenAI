@@ -63,7 +63,9 @@ public class PlayerCheatsSheetTests : IDisposable
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
-		model.RomInfo = new RomInfo() { ConsoleType = console };
+		//G.2: Esc opens the pause overlay only over a loaded game (PlayEsc), so the
+		//stand-in RomInfo carries a format as well as the console.
+		model.RomInfo = new RomInfo() { ConsoleType = console, Format = console == ConsoleType.Gameboy ? RomFormat.Gb : RomFormat.iNes };
 		//R.4: no test reaches the network; the community catalog is fixed here.
 		model.CommunityCheatsLastKnown = () => Array.Empty<CommunityCheatGame>();
 		model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(Array.Empty<CommunityCheatGame>());

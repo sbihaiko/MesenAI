@@ -26,25 +26,10 @@
 			<v:AudioPlayerView />
 		</DataTemplate>
 		<DataTemplate DataType="{x:Type vm:RecentGamesViewModel}">
-			<DockPanel>
-				<!--P.7 (PRD Part B §6.2): Welcome card - shown once, on the very
-				first Player-mode boot (recents necessarily empty); its one CTA
-				("Load ROM") is also what dismisses it for good.-->
-				<Border Name="PlayerWelcomeCard" DockPanel.Dock="Top" Background="#22FFFFFF" Padding="16" Margin="0 0 0 8" IsVisible="{Binding ShowWelcomeCard}">
-					<StackPanel Spacing="8" HorizontalAlignment="Center">
-						<TextBlock Text="{l:Translate lblWelcomeCardTitle}" FontWeight="Bold" FontSize="18" HorizontalAlignment="Center" />
-						<TextBlock Text="{l:Translate lblWelcomeCardBody}" TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Center" />
-						<Button Content="{l:Translate btnWelcomeCardLoadRom}" HorizontalAlignment="Center" Click="OnWelcomeCardLoadRom" />
-					</StackPanel>
-				</Border>
-				<!--P.7 (§6.2): Continue card - not first-run gated, simply shown
-				whenever there is a most-recent game to resume; sits alongside the
-				recent-games grid, same as any other home entry.-->
-				<Border Name="PlayerContinueCard" DockPanel.Dock="Top" Background="#22FFFFFF" Padding="12" Margin="0 0 0 8" IsVisible="{Binding ShowContinueCard}">
-					<Button HorizontalAlignment="Stretch" Click="OnContinueCard" Content="{Binding ContinueLabel}" />
-				</Border>
-				<c:StateGrid IsVisible="{Binding Visible}" Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
-			</DockPanel>
+			<!--G.2 (PRD Part B §13.5.2): the Play home (W-P1 first run, W-P2 with
+			recents) and, unchanged, the classic grid for Advanced's game selection
+			and the Save/Load state screens.-->
+			<v:PlayHomeView />
 		</DataTemplate>
 	</Window.DataTemplates>
 	
@@ -99,44 +84,91 @@
 				  />
 				</Panel>
 
-				<!--P.4 (PRD Part B §6): the thin Player-mode overlay. Painted on
-				top of the game; D-pad/A/B navigation comes from Avalonia focus
-				(normal buttons, no pointer required). "Save/Load slot" is two buttons
-				here (Save slot / Load slot) for clarity; the Pack item opens the pack
-				window for now - the pack picker that replaces it is P.5.-->
+				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
+				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
+				states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
+				and quitting the app moved to Tools ⋯ in the bar the overlay reveals.
+				D-pad/A/B and arrows move through the rows (XY focus); Resume has
+				focus on open. Esc resumes (rule 8).-->
 				<Border
 					Name="PlayerOverlay"
-					Background="#CC000000"
+					Background="#E6202022"
+					CornerRadius="14"
 					HorizontalAlignment="Center"
 					VerticalAlignment="Center"
-					Padding="24"
+					Padding="24 20"
 					IsVisible="{Binding IsPlayerOverlayVisible}"
 				>
-					<StackPanel Spacing="10" MinWidth="220">
-						<Button Name="OverlayResumeButton" Content="{l:Translate btnOverlayResume}" HorizontalAlignment="Stretch" Click="OnOverlayResume" />
-						<Button Content="{l:Translate btnOverlaySaveSlot}" HorizontalAlignment="Stretch" Click="OnOverlaySave" />
-						<Button Content="{l:Translate btnOverlayLoadSlot}" HorizontalAlignment="Stretch" Click="OnOverlayLoad" />
-						<!--P.5 (§5): the current pack chip - shows the applied pack and
-						opens the picker (2+ choices) or the pack window (single).-->
-						<Button HorizontalAlignment="Stretch" Click="OnOverlayPack">
-							<StackPanel Orientation="Horizontal" Spacing="6">
+					<StackPanel Name="OverlayControls" Spacing="6" MinWidth="340" XYFocus.NavigationModes="Enabled">
+						<TextBlock Name="OverlayGameTitle" Text="{Binding OverlayGameTitle}" FontWeight="Bold" FontSize="20" Foreground="White" TextTrimming="CharacterEllipsis" />
+						<TextBlock Text="{l:Translate lblOverlayPaused}" Foreground="#AAFFFFFF" Margin="0 0 0 8" />
+						<Button Name="OverlayResumeButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="10 8" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnOverlayResume" Margin="0 0 0 10">
+							<TextBlock Text="{l:Translate btnOverlayResume}" />
+						</Button>
+						<Button Name="OverlaySaveStatesButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySaveStates">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlaySaveStates}" />
+							</DockPanel>
+						</Button>
+						<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
+						<Button Name="OverlayPackButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayPack">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" Opacity="0.7" />
 								<TextBlock Text="{l:Translate btnOverlayPack}" />
-								<TextBlock Text="{Binding CurrentPackName}" FontWeight="Bold" />
-							</StackPanel>
+							</DockPanel>
 						</Button>
-						<!--P.7 (§6.1): the quick-toggle panel for Texture/Audio/WideScrn/
-						HiRes/Overclock.-->
-						<Button Content="{l:Translate btnOverlayEnhancements}" HorizontalAlignment="Stretch" Click="OnOverlayEnhancements" />
+						<!--P.7 (§6.1): the quick-toggle panel.-->
+						<Button Name="OverlayEnhancementsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayEnhancements">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlayEnhancements}" />
+							</DockPanel>
+						</Button>
 						<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
-						<Button Name="OverlayCheatsButton" HorizontalAlignment="Stretch" Click="OnOverlayCheats">
-							<StackPanel Orientation="Horizontal" Spacing="6">
+						<Button Name="OverlayCheatsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayCheats">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" Opacity="0.7" />
 								<TextBlock Text="{l:Translate btnOverlayCheats}" />
-								<TextBlock Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" FontWeight="Bold" />
-							</StackPanel>
+							</DockPanel>
 						</Button>
-						<Button Content="{l:Translate btnOverlaySettings}" HorizontalAlignment="Stretch" Click="OnOverlaySettings" />
-						<Button Content="{l:Translate btnOverlayAdvancedGui}" HorizontalAlignment="Stretch" Click="OnOverlayAdvanced" />
-						<Button Content="{l:Translate btnOverlayQuit}" HorizontalAlignment="Stretch" Click="OnOverlayQuit" />
+						<Button Name="OverlaySettingsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySettings">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock Text="{l:Translate btnOverlaySettings}" />
+							</DockPanel>
+						</Button>
+						<!--W-P4: powers the game off and lands on the Play home; it no
+						longer closes the app (Tools ⋯ › File › Exit, ⌘Q / Alt+F4).-->
+						<Button Name="OverlayQuitGameButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Foreground="#FF6B6B" Click="OnOverlayQuitGame" Margin="0 12 0 0">
+							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
+						</Button>
+						<TextBlock Text="{l:Translate lblOverlayEscHint}" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" Margin="0 6 0 0" />
+					</StackPanel>
+				</Border>
+
+				<!--G.2 (W-P4 Save states row): Save and Load merged into one row; this
+				sheet opens today's slot grid in either mode. Esc (or Back) returns
+				to the overlay.-->
+				<Border
+					Name="PlayerSaveStatesSheet"
+					Background="#E6202022"
+					CornerRadius="14"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center"
+					Padding="24 20"
+					IsVisible="{Binding IsSaveStatesSheetVisible}"
+				>
+					<StackPanel Spacing="10" MinWidth="300" XYFocus.NavigationModes="Enabled">
+						<TextBlock Text="{l:Translate lblSaveStatesSheetTitle}" FontWeight="Bold" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+						<TextBlock Text="{Binding SaveStatesRowValue}" Opacity="0.7" HorizontalAlignment="Center" />
+						<Button Name="SaveStatesSaveButton" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesSave" />
+						<Button Name="SaveStatesLoadButton" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesLoad" />
+						<Button Name="SaveStatesBackButton" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesBack" />
 					</StackPanel>
 				</Border>
 

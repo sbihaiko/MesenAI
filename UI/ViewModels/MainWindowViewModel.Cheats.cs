@@ -24,10 +24,8 @@ namespace Mesen.ViewModels
 			get {
 				if(_cheatsSheet == null) {
 					_cheatsSheet = new PlayerCheatsSheetViewModel();
-					_cheatsSheet.Closed += () => {
-						IsPlayerOverlayVisible = true;
-						RefreshCheatsSummary();
-					};
+					//G.2: back to W-P4 with its row values refreshed.
+					_cheatsSheet.Closed += OpenPauseOverlay;
 				}
 				return _cheatsSheet;
 			}

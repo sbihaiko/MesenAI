@@ -93,19 +93,5 @@ namespace Mesen.Tests.Config
 		{
 			Assert.Equal(expected, PlayerEnhancementsToggle.SupportsOverclock(consoleType));
 		}
-
-		[Fact]
-		public void ShouldShowWelcomeCard_OnlyWhenNotDismissed()
-		{
-			Assert.True(PlayerEnhancementsToggle.ShouldShowWelcomeCard(welcomeCardDismissed: false));
-			Assert.False(PlayerEnhancementsToggle.ShouldShowWelcomeCard(welcomeCardDismissed: true));
-		}
-
-		[Fact]
-		public void ShouldShowContinueCard_OnlyWhenRecentGamesExist()
-		{
-			Assert.True(PlayerEnhancementsToggle.ShouldShowContinueCard(hasRecentGames: true));
-			Assert.False(PlayerEnhancementsToggle.ShouldShowContinueCard(hasRecentGames: false));
-		}
 	}
 }
