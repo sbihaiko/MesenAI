@@ -55,6 +55,7 @@ typedef HMODULE _LIBRASHADER_IMPL_HANDLE;
 #define _LIBRASHADER_LOAD LoadLibraryW(L"librashader.dll")
 #elif defined(__APPLE__)
 #include <dlfcn.h>
+#include <string>
 #define _LIBRASHADER_ASSIGN(HMOD, INSTANCE, NAME)        \
     {                                                    \
         void *address = dlsym(HMOD, "libra_" #NAME);     \
@@ -63,9 +64,26 @@ typedef HMODULE _LIBRASHADER_IMPL_HANDLE;
         }                                                \
     }
 typedef void *_LIBRASHADER_IMPL_HANDLE;
+/* ADR-0237: a bare dlopen name only resolves against the working directory and
+   dyld's default paths, and which directory that is depends on how the app was
+   started (the UI moves it to the home folder, where Dependencies.zip puts a
+   copy; a test or tool may not). So try the directory of the image this code
+   was compiled into first - the loaded MesenCore.dylib, which has
+   librashader.dylib beside it both in Contents/MacOS and in the home folder.
+   The two bare-name lookups stay as fallbacks. */
 #define _LIBRASHADER_LOAD \
 	([]() { \
-		void* handle = dlopen("./librashader.dylib", RTLD_LAZY); \
+		void* handle = nullptr; \
+		static int anchor; \
+		Dl_info info; \
+		if (dladdr((const void*)&anchor, &info) && info.dli_fname) { \
+			std::string path = info.dli_fname; \
+			size_t slash = path.find_last_of('/'); \
+			if (slash != std::string::npos) { \
+				handle = dlopen((path.substr(0, slash + 1) + "librashader.dylib").c_str(), RTLD_LAZY); \
+			} \
+		} \
+		if (!handle) handle = dlopen("./librashader.dylib", RTLD_LAZY); \
 		if (!handle) handle = dlopen("librashader.dylib", RTLD_LAZY); \
 		return handle; \
 	}())

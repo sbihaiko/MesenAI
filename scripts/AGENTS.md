@@ -33,8 +33,8 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   verify their `#include` list has no further undeclared link dependency
   before adding a makefile target for it.
 - Compiled binaries (`core_unit_tests`, `roles_probe`, `headless_record`,
-  `spike_sound_driver`) are build output, not source - never `git add` them.
-  `.gitignore` at the repo root lists all four by name, so none of them show
+  `spike_sound_driver`, `metal_presenter_tests`) are build output, not source -
+  never `git add` them. `.gitignore` at the repo root lists all five by name, so none of them show
   as untracked after building.
 - `record_viewer.py` is a developer/diagnostic tool, **launched by hand
   only** (ADR-0169 §4, amended 2026-09-23): the emulator UI never starts it
@@ -84,6 +84,29 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
 - `roles_probe.cpp` / `headless_record.cpp` / `spike_sound_driver.cpp` run
   the emulator headless against a real ROM; they link `InteropDLL`'s shared
   lib and need `make core` first.
+- Shaders on macOS (ADR-0237, PRD P.8) have three tools here:
+  - `metal_presenter_tests.mm` (`make metal-presenter-tests`, Darwin only,
+    not a CI gate): it builds against `MacOS/MetalPresenter.mm` alone, with
+    no `make core`. It needs a Metal device and
+    `UI/Dependencies/librashader.dylib`. It asserts the renderer choice,
+    the NSView shape Avalonia's `NativeControlHost` hands over, an unfiltered
+    present that is byte-identical to a CPU nearest scale, and the fixture
+    shader `tests/fixtures/shaders/scanlines.slangp` (its parameters,
+    clearing it, a broken preset falling back), plus the HUD overlay
+    uploads.
+  - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
+    `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
+    `--from <dylib>` takes a local build, which is checked for arm64 and the
+    Metal symbols but is reported UNPINNED.
+  - `check_headless_shader_invariance.sh <rom> [seconds] [preset] [workdir]
+    [input]` is stop condition (2). It runs `headless_record` in screenshot
+    capture, hdpack, bootstrap and audio modes, three times each (base, a
+    no-shader determinism control, `shader=<preset>`). It compares every
+    output byte for byte; logs are compared without their wall-clock stamps
+    and `.rgd`/`.zip` files member by member. `HEADLESS_RECORD=<wrapper>`
+    is how its negative control is run. `headless_record shader=<preset>`
+    only sets `ShaderConfig` (no renderer runs headless) and prints
+    `shader configured: <preset>` on stderr, which the checker requires.
 - `headless_record` copies the NES game DB into its per-run `mesen-home`
   from the binary's own location (`scripts/../UI/Dependencies/MesenNesDB.txt`,
   else `MesenNesDB.txt` beside the binary), **never from the cwd** (issue
@@ -1503,6 +1526,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   Bloco here).
 - `make roles-probe` / `make capture-tool` / `make spike-sound-driver` -
   each depends on `make core` first.
+- `make metal-presenter-tests` (macOS only) - every check must print `PASS`
+  and the binary must exit 0. Run `scripts/fetch_librashader_macos.sh`
+  first.
 - `python3 scripts/validate-specs.py` - specs/goldens under `docs/specs/`.
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any

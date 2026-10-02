@@ -90,6 +90,10 @@
 //4x/6x/8x/10x); the default is "none", i.e. a 1:1 native-resolution frame.
 //A scaling filter multiplies the PNG dimensions by its scale factor - this is
 //what scripts/check_hq4x_screenshot.sh asserts for HQ4x (P.7).
+//With "shader=<preset.slangp>" a RetroArch shader preset is configured the way
+//the Video settings configure one. It must change nothing this tool writes - a
+//shader is a display effect, never a recording one (ADR-0237);
+//scripts/check_headless_shader_invariance.sh is the check.
 //With the "capture" flag the final frame is pulled into this process' memory
 //(HeadlessCaptureFrame/HeadlessReadCapturedPixels, F9.15) instead of - or as
 //well as - being written to a PNG, and its dimensions, frame number, FNV-1a
@@ -262,6 +266,7 @@ extern "C"
 	void SetGameboyConfig(GameboyConfig config);
 	void SetEnhancementPackConfig(EnhancementPackConfig config);
 	void SetVideoConfig(VideoConfig config);
+	void SetShaderConfig(InteropShaderConfig config);
 	void SetEmulationConfig(EmulationConfig config);
 	void SetMepPackEnabled(const char* containerName, bool enabled);
 	//F9.14 (ADR-0157) - InteropDLL/EmuApiWrapperHeadless.cpp
@@ -1033,7 +1038,7 @@ int main(int argc, char** argv)
 {
 	if(argc < 4) {
 		fprintf(stderr, "usage: %s <rom> <seconds> <output-prefix> [pal] [hdpack] [romtiles]\n"
-			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [mep-off]\n"
+			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [shader=<preset.slangp>] [mep-off]\n"
 "       [reload-at-frame=<n>] [replace=<destination>=<source>]...\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
@@ -1058,6 +1063,12 @@ int main(int argc, char** argv)
 	bool romTiles = false;
 	bool screenshot = false;
 	bool capture = false;
+	//ADR-0237 (P.8): "shader=<preset.slangp>" hands the core a shader preset,
+	//exactly as the UI's Video settings do (SetShaderConfig). A shader is a
+	//display effect and a headless run builds no renderer, so every output must
+	//be byte-identical with and without it;
+	//scripts/check_headless_shader_invariance.sh asserts exactly that.
+	std::string shaderPreset;
 	bool dumpLog = false;
 	//F12.3 (ADR-0212): "reload-at-frame=<n>" asks for a pack image reload once
 	//the run reaches that emulated frame; "replace=<dst>=<src>" copies one file
@@ -1170,6 +1181,8 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 				fprintf(stderr, "unknown filter name: %s\n", name);
 				return 1;
 			}
+		} else if(strncmp(argv[i], "shader=", 7) == 0) {
+			shaderPreset = argv[i] + 7;
 		} else if(strcmp(argv[i], "log") == 0) {
 			dumpLog = true;
 		} else if(strcmp(argv[i], "mep-off") == 0) {
@@ -1386,6 +1399,14 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//Same headless pattern as UI/Utilities/TestRunner.cs: null handles mean
 	//no renderer/sound/input backends are created at all.
 	InitializeEmu(home.string().c_str(), nullptr, nullptr, true, true, true, true);
+	if(!shaderPreset.empty()) {
+		InteropShaderConfig shader = {};
+		shader.ConfigVersion = 1;
+		shader.ShaderFile = shaderPreset.c_str();
+		SetShaderConfig(shader);
+		//stderr on purpose: stdout is part of what must not change.
+		fprintf(stderr, "shader configured: %s\n", shaderPreset.c_str());
+	}
 
 	//The GUI normally pushes every config struct at startup; headless we must
 	//supply the audible channel volumes ourselves - the core-side defaults

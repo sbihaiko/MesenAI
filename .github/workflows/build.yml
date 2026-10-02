@@ -200,6 +200,12 @@ jobs:
       # statuses. Running it here repeated the serial recipe, and a Core/
       # recompile with it, in each of these jobs (10-12 minutes apiece).
 
+      # ADR-0237: the Metal renderer's shader runtime, sha256-pinned (unlike the
+      # Windows/Linux fetch above). It lands in UI/Dependencies/, which the UI
+      # build zips into the app the way librashader.dll ships on Windows.
+      - name: Get librashader library
+        run: scripts/fetch_librashader_macos.sh
+
       # stderr is not detected as a TTY, so diagnostics are by default printed without colours;
       # forcing colours makes the log a little nicer to read.
       - name: Build Mesen

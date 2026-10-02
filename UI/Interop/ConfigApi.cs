@@ -1,5 +1,6 @@
 ﻿using Mesen.Config;
 using Mesen.Config.Shortcuts;
+using Mesen.Logic;
 using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
@@ -55,8 +56,11 @@ namespace Mesen.Interop
 		public static bool CheckShaderSupport()
 		{
 			if(_shadersSupported == null) {
-				_shadersSupported = CheckShaderSupportWrapper();
-				if(_shadersSupported == false) {
+				bool coreSupport = CheckShaderSupportWrapper();
+				//ADR-0237: on macOS only the Metal renderer applies shaders.
+				bool usesSoftware = RendererPolicy.UsesSoftwareRenderer(ConfigManager.Config.Video.UseSoftwareRenderer, OperatingSystem.IsMacOS());
+				_shadersSupported = RendererPolicy.ShaderGroupAvailable(coreSupport, OperatingSystem.IsMacOS(), usesSoftware);
+				if(coreSupport == false) {
 					EmuApi.WriteLogEntry("[librashader] Could not load librashader (missing file, or wrong version)");
 				}
 			}

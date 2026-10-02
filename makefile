@@ -147,7 +147,7 @@ ifneq ($(STATICLINK),false)
 endif
 
 ifeq ($(MESENOS),osx)
-	LINKOPTIONS += -framework Foundation -framework Cocoa -framework GameController -framework CoreHaptics -Wl,-rpath,/opt/local/lib
+	LINKOPTIONS += -framework Foundation -framework Cocoa -framework GameController -framework CoreHaptics -framework Metal -framework QuartzCore -Wl,-rpath,/opt/local/lib
 endif
 
 CXXFLAGS = -fPIC -Wall --std=c++17 -MMD -MP $(MESENFLAGS) -I $(realpath ./) -I $(realpath ./Core) -I $(realpath ./Utilities) -I $(realpath ./Sdl) -I $(realpath ./Linux) -I $(realpath ./MacOS)
@@ -691,6 +691,19 @@ scripts/core_unit_tests: $(CUTOBJ)
 core-unit-tests: scripts/core_unit_tests
 	scripts/core_unit_tests
 
+#ADR-0237 / PRD slice P.8: the macOS Metal presenter and the renderer-selection
+#policy, driven against an offscreen NSView with the drawable read back. macOS
+#only, needs a Metal device, and needs UI/Dependencies/librashader.dylib for
+#the shader cases (scripts/fetch_librashader_macos.sh). Separate from
+#core-unit-tests on purpose: that suite is host-free and runs on Linux CI.
+ifeq ($(UNAME_S),Darwin)
+scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h
+	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -o $@
+
+metal-presenter-tests: scripts/metal_presenter_tests
+	cd $(CURDIR) && DYLD_LIBRARY_PATH=$(CURDIR)/UI/Dependencies scripts/metal_presenter_tests
+endif
+
 #Phase 11 C.1: every scripts/test_*.py, one process per file. `doc-checks`
 #above names a hand-picked subset file by file (it predates this target and
 #stays as it is, so a doc-checks run keeps its own explicit list); this target
@@ -724,6 +737,8 @@ pgohelper: InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 	
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+MacOS/MetalPresenter.o MacOS/MacOSMetalRenderer.o: OBJCXXFLAGS += -fobjc-arc
 
 %.o: %.mm
 	$(CXX) $(OBJCXXFLAGS) -c $< -o $@

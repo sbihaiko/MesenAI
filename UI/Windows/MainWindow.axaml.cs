@@ -84,7 +84,7 @@ namespace Mesen.Windows
 		{
 			_testModeEnabled = ConfigManager.Config.EnableTestMode || System.Diagnostics.Debugger.IsAttached;
 			_isLinux = OperatingSystem.IsLinux();
-			_usesSoftwareRenderer = ConfigManager.Config.Video.UseSoftwareRenderer || OperatingSystem.IsMacOS();
+			_usesSoftwareRenderer = RendererPolicy.UsesSoftwareRenderer(ConfigManager.Config.Video.UseSoftwareRenderer, OperatingSystem.IsMacOS());
 
 			_model = new MainWindowViewModel();
 			DataContext = _model;

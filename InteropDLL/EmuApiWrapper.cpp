@@ -27,6 +27,7 @@
 	#include "Windows/WindowsKeyManager.h"
 	#include "Windows/WindowsMouseManager.h"
 #elif __APPLE__
+	#include "MacOS/MacOSMetalRenderer.h"
 	#include "Sdl/SdlSoundManager.h"
 	#include "MacOS/MacOSKeyManager.h"
 	#include "MacOS/MacOSMouseManager.h"
@@ -38,6 +39,7 @@
 #endif
 
 #include "Shared/Video/SoftwareRenderer.h"
+#include "Shared/Video/RendererSelection.h"
 
 unique_ptr<IKeyManager> _keyManager;
 unique_ptr<IMouseManager> _mouseManager;
@@ -81,7 +83,12 @@ IRenderingDevice* InitRenderer()
 #ifdef _WIN32
 		return new Renderer(_emu.get(), (HWND)_viewerHandle);
 #elif __APPLE__
-		return new SoftwareRenderer(_emu.get());
+		//ADR-0237: Metal when it comes up on the viewer's native view, otherwise
+		//the software renderer, so a handle that cannot back a CAMetalLayer
+		//never leaves the window black.
+		IRenderingDevice* metal = MacOSMetalRenderer::Create(_emu.get(), _viewerHandle);
+		MacRendererKind kind = ChooseMacRenderer(false, metal != nullptr);
+		return kind == MacRendererKind::Metal ? metal : new SoftwareRenderer(_emu.get());
 #else
 		return new LinuxOglRenderer(_emu.get(), _viewerHandle);
 #endif

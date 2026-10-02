@@ -175,6 +175,22 @@ if ! cmp -s "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"; then
 fi
 echo "ok: the .app now carries the freshly built core ($BUILT_SUM)"
 
+# ADR-0237: the Metal renderer's shader runtime. The core looks for it next to
+# its own image first (Utilities/Video/librashader_ld.h), so it goes beside the
+# bundled core and is signed with the rest of the bundle. It is never committed;
+# scripts/fetch_librashader_macos.sh puts the pinned arm64 build in place.
+SHADER_LIB="$ROOT/UI/Dependencies/librashader.dylib"
+if [[ ! -f "$SHADER_LIB" ]]; then
+	echo "error: $SHADER_LIB is missing - run scripts/fetch_librashader_macos.sh first" >&2
+	exit 1
+fi
+cp -f "$SHADER_LIB" "$PUBLISH_APP/Contents/MacOS/librashader.dylib"
+if ! cmp -s "$SHADER_LIB" "$PUBLISH_APP/Contents/MacOS/librashader.dylib"; then
+	echo "error: the librashader.dylib copy into the bundle did not land byte for byte" >&2
+	exit 1
+fi
+echo "ok: the .app carries librashader.dylib ($(shasum -a 256 "$SHADER_LIB" | cut -d' ' -f1))"
+
 echo "==> ad-hoc codesigning the .app"
 codesign --force --deep --sign - "$PUBLISH_APP"
 

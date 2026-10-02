@@ -26,7 +26,9 @@ public:
 #ifdef _WIN32
 		return IsWindows10OrGreater();
 #elif __APPLE__
-		return false;
+		//ADR-0237: the Metal renderer runs the filter chain; CheckShaderSupport()
+		//below stays the gate (no librashader.dylib -> no shader group).
+		return true;
 #else
 		return true;
 #endif
