@@ -98,7 +98,7 @@ namespace Mesen.ViewModels
 		}
 
 		//W-P5's Use This Pack: the P.5 pick (stored preference, then the reload
-		//that applies it - LoadRomHelper.ApplyPackChange once P.9 lands).
+		//that applies it in place through LoadRomHelper.ApplyPackChange, P.9).
 		public void UseSelectedPack()
 		{
 			PlayerPackChoice? selected = PlayerPackChoices.FirstOrDefault(c => c.IsSelected);
