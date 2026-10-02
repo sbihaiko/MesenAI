@@ -135,6 +135,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   plus `scripts/p1_local_identity_check.py` (cold/warm, nested edit, pruning,
   adoption, zip-with-prefix).
 - **G.1** (2026-10-02, ADR-0241; Part B §13.2, §13.5.1) — the workspace shell: the active-profile button and switcher popover (Play, Remaster, Share; ⌘1/⌘2/⌘3, Ctrl elsewhere), Tools ⋯ rendering the `MainMenuAction` tree as one dropdown, a one-sentence read-only status line, the bar hidden while a Play game runs unpaused, `ShowClassicMenuBar` defaulting to `false` (fresh install and upgrade, §13.8 Q4) with a one-time "Your menus are under Tools ⋯" toast. Remaster and Share show a placeholder naming the next slice; switching keeps the game running. On macOS the bar is the window's title bar (client-area extension, room for the traffic lights, the classic bar under it); Windows/Linux keep the in-window strip. The P.4 UiMode Debug gate is retired so Tools ⋯ reaches every classic action in either `UiMode`. `UI/Logic/WorkspaceShell.cs` with unit tests; wiring in `UI.HeadlessTests/WorkspaceShellTests.cs`. The window was not opened by a person: the title-bar look, drag and double-click zoom, and full-speed emulation with the native renderer hidden under Remaster/Share are unchecked on a real display.
+- **G.2** (2026-10-02, ADR-0241; Part B §13.5.2 W-P1–W-P4, rules 2, 8, 9, 10) — the Play home and the pause overlay, under the go-ahead *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"*, *"pode implementar em paralelo tudo que puder"* and *"pode seguir com a segunda leva em paralelo"* (2026-10-02). W-P1 (no recents: *Drop a game here or open one*, one control, *Open a ROM…*, focused, plus the orientation sentence only where the settings make it true) replaces the P.7 Welcome card; W-P2 is *Continue playing* (the newest game, "last played …", focused) + *Open a ROM…* + the Recent grid of the other games; W-P3 is unchanged (the bar hides while the game runs). W-P4 replaces P.4's overlay with seven controls — Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game — with row values (newest slot and age, current pack, "N on"); Save/Load merged into a *Save states* sheet that opens today's slot grids, *Advanced GUI* moved to Tools ⋯ › Settings › Preferences and quitting the app to Tools ⋯ › File › Exit, and *Quit game* powers the game off and lands on the home. Esc goes game → W-P4 → resume; the Save states sheet and its slot grid, Enhancements, Cheats (P.10's sheet, untouched) and a picker opened from the Pack row close back to W-P4. Stop rule met in tests: a first-run user reaches a playing game in ≤2 actions from W-P1 (*Open a ROM…* + the file pick, or one drop), W-P4 shows 7 controls with every former overlay action still reachable, the arrow keys reach every W-P4 control, and Esc order is game → W-P4 → resume. Rules in `UI/Logic/PlayHome.cs` and `UI/Logic/PlayPauseOverlay.cs` (`UI.Tests/Play`); wiring in `UI.HeadlessTests/PlayHomeViewTests.cs` and `PauseOverlayViewTests.cs` (real core, synthetic NROM). Not taken: W-P2's 📦 glyph and the pack half of its subtitle (the §13.5.2 recent-entry ROM-hash data slice), the Continue card's thumbnail, a combined per-slot *Save here* / *Load* grid (the sheet offers today's two grids), and *Exit fullscreen* inside Settings (P.4's overlay never had it). The window was not opened by a person: the look against the PNGs and a real gamepad pass are unchecked on a real display.
 - **F8.1–F8.3** — pack border layer (ADR-0149); optional rendering/lint residue is F8.4.
 - **F9.0–F9.5** — legible vocabulary, maps, sheets and sprite grouping (ADR-0153); delivered on spot checks, not a completed human panel.
 - **F9.6** — external repaint scaffold and classical output (ADR-0154/0161); ADR-0192 retires the unmeasured generative commitment.
@@ -1885,7 +1886,7 @@ files and in §3.
 
 ## Part B — Player shell and task-oriented GUI
 
-**GUI redesign proposal (2026-10-02):** [§13 — Play, Remaster, Share](#13-gui-redesign-proposal--play-remaster-share) translates the README's three entrances into specialized workspaces. ADR-0241 is **accepted** (2026-10-02); G.1, the shell, shipped 2026-10-02 (Part A §3) — Remaster and Share are placeholders until their slices are cut in Part B §8. Sections §1–§12 retain the Phase 7 baseline, amended where G.1 changed it (§6 menu bar and debugger rows).
+**GUI redesign proposal (2026-10-02):** [§13 — Play, Remaster, Share](#13-gui-redesign-proposal--play-remaster-share) translates the README's three entrances into specialized workspaces. ADR-0241 is **accepted** (2026-10-02); G.1, the shell, and G.2, the Play home and pause overlay, shipped 2026-10-02 (Part A §3) — Remaster and Share are placeholders until their slices are cut in Part B §8. Sections §1–§12 retain the Phase 7 baseline, amended where G.1 and G.2 changed it (§6 menu bar, home, playing and debugger rows; §6.2).
 
 **Phase 7 baseline status:** **Phase 7 delivered, P.1-local included** (2026-08-28 → 2026-09-01;
 P.1-local 2026-09-17, ADR-0206; record in Part A §3). Product text of §3–§6
@@ -2285,8 +2286,8 @@ One process. `PreferencesConfig.UiMode`: `Player` | `Advanced`.
 | | Player (default on a fresh install) | Advanced |
 |---|---|---|
 | Menu bar | since G.1, governed by `ShowClassicMenuBar` (default `false`, §13.8 Q4, upgrades included — user's choice *"Some + toast (Recomendado)"*, 2026-10-02) in both modes, not by `UiMode`; the classic menus stay reachable from Tools ⋯ in the shell bar, which on macOS is the window's title bar (user's choice *"Integrar agora"*, 2026-10-02) | same rule |
-| Home (no ROM) | the existing recent-games grid (`RecentGamesViewModel`), always shown; drop a ROM anywhere; **P.7** adds a first-run welcome card (Load ROM CTA, shown once — recents are necessarily empty on a true first run) and, independently, a persistent "Continue: \<last game\>" entry whenever `GameEntries` is non-empty (not gated on first-run — see §8 P.7) | same grid, as today (`GameSelectionScreenMode` keeps its current meaning: what happens when a recent game is clicked; `Disabled` still hides the grid) |
-| Playing | game fills the window; the overlay shortcut opens a thin overlay: Resume, Save/Load slot, Pack (if 2+ `pack_id`s, or to inspect the current one), Settings (video / audio / input essentials), Advanced GUI, Quit. **P.7** adds an "Enhancements" panel (quick toggles for Texture/Audio/WideScrn/HiRes/Overclock — no new Save/Load buttons, it reuses the overlay's existing Save/Load slot row) | current menus and windows |
+| Home (no ROM) | since G.2 the Play home (§13.5.2): W-P1 when there is no recent game (*Open a ROM…*, replacing the P.7 welcome card) and W-P2 otherwise (*Continue playing* the newest game + *Open a ROM…* + the Recent grid of the others, from `RecentGamesViewModel`); drop a ROM anywhere | same grid, as today (`GameSelectionScreenMode` keeps its current meaning: what happens when a recent game is clicked; `Disabled` still hides the grid) |
+| Playing | game fills the window; since G.2 the overlay shortcut opens the W-P4 pause overlay (§13.5.2): Resume, Save states (one row; its sheet opens the save/load slot grids), Pack (picker if 2+ `pack_id`s, else the pack window), Enhancements (the P.7 panel), Cheats (P.10), Settings (video / audio / input essentials), Quit game (powers the game off, lands on the home). *Advanced GUI* and quitting the app moved to Tools ⋯ (Settings › Preferences; File › Exit), in the bar the overlay reveals. Esc order: game → overlay → resume; a sheet opened from the overlay closes back to it | current menus and windows |
 | Overlay shortcut | a new configurable `EmulatorShortcut` (default Esc on keyboard; `KeyCombination` already accepts controller buttons, so a gamepad binding is a config choice, no new code). Default rule in Player: while a ROM runs, Esc opens the overlay and never leaves fullscreen; "Exit fullscreen" is an overlay item. P.4 implements that precedence inside the shortcut config, not by hard-coding | n/a |
 | Gamepad navigation | the overlay and the pack picker are fully operable with D-pad/A/B (Avalonia focus navigation; no pointer required). Acceptance of P.4/P.5 includes a keyboard-arrows pass as proxy | n/a |
 | Pack feedback | OSD toast on apply/update ("Applied Contra 80s — textures"); pack name on the overlay chip | Enhancement Packs window |
@@ -2331,6 +2332,11 @@ gated by `EnhancementPackConfig.EnableBorder` and backed by `border.png` + optio
 
 #### 6.2 Welcome card and "Continue" (P.7)
 
+Since G.2 (§13.5.2) the Play home's W-P1 replaces the Welcome card — it is
+what the home shows whenever there is no recent game — and W-P2's *Continue
+playing* card replaces the "Continue" entry below. The P.7 text is kept as
+the baseline it amends.
+
 Two distinct, independent affordances — not one dialog wearing two hats:
 
 - **Welcome card**: shown once, on the very first Player-mode boot (the
@@ -2370,9 +2376,9 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-P.8 (ADR-0237), P.9 (ADR-0244), P.10–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7. The GUI redesign (ADR-0241, §13) is cut here, one slice at a time. G.1 (the shell) shipped 2026-10-02 (Part A §3); no further slice is defined yet.
+P.8 (ADR-0237), P.9 (ADR-0244), P.10–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7. The GUI redesign (ADR-0241, §13) is cut here, one slice at a time. G.1 (the shell) and G.2 (the Play home W-P1–W-P3 and the W-P4 pause overlay) shipped 2026-10-02 (Part A §3); no further slice is defined yet.
 
-The next slices (Play home, pause overlay, Remaster project, Share) are cut one at a time, each against its §13 wireframes. P.0–P.7 implementation history is in Part A §3, and
+The next slices (Remaster project, Share, and the remaining Play sheets W-P5–W-P9 and edge flows W-P12–W-P16) are cut one at a time, each against its §13 wireframes. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 

@@ -110,6 +110,9 @@ namespace Mesen.Windows
 					Dispatcher.UIThread.Post(() => this.GetControl<ItemsControl>("PackPickerList")?.GetVisualDescendants().OfType<Button>().FirstOrDefault()?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
 					Dispatcher.UIThread.Post(() => this.GetControl<CheckBox>("EnhancementsTexturesCheckBox")?.Focus());
+				} else if(e.PropertyName == nameof(MainWindowViewModel.IsSaveStatesSheetVisible) && _model.IsSaveStatesSheetVisible) {
+					//G.2: the W-P4 Save states sheet, same D-pad/A/B reason.
+					Dispatcher.UIThread.Post(() => this.GetControl<Button>("SaveStatesSaveButton")?.Focus());
 				}
 			};
 			//P.10: the Cheats sheet gets focus on its search box (or Done when the
@@ -259,12 +262,10 @@ namespace Mesen.Windows
 			}
 		}
 
-		//P.4 (PRD Part B §6): Player-mode overlay items. The overlay is the
-		//couch surface - Resume/Quit pause-safe, Save/Load route to the existing
-		//slot grid (the same path the SaveStateDialog/LoadStateDialog shortcuts
-		//use), Pack opens the pack window (the pack picker is P.5), Settings
-		//opens the Preferences tab, and Advanced GUI switches modes (instant and
-		//persisted, chrome re-applies via the UiMode observer).
+		//P.4/G.2 (PRD Part B §6, §13.5.2 W-P4): the pause overlay's rows. Each
+		//one routes at a surface that already exists - the slot grids, the pack
+		//picker/window, the Enhancements panel, the Cheats sheet, the reduced
+		//Settings page - and a sheet opened here closes back to the overlay.
 
 		private void OnOverlayResume(object? sender, RoutedEventArgs e)
 		{
@@ -272,31 +273,27 @@ namespace Mesen.Windows
 			EmuApi.Resume();
 		}
 
-		private void OnOverlaySave(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
-				ToggleFullscreen();
-			}
-			_model.RecentGames.Init(GameScreenMode.SaveState);
-		}
+		private void OnOverlaySaveStates(object? sender, RoutedEventArgs e) => _model.OpenSaveStatesSheet();
+		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
+		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
+		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
 
-		private void OnOverlayLoad(object? sender, RoutedEventArgs e)
+		//Same path the former Save slot / Load slot items took (and the
+		//SaveStateDialog/LoadStateDialog shortcuts use).
+		private void OpenSlotGrid(GameScreenMode mode)
 		{
-			_model.IsPlayerOverlayVisible = false;
 			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
 				ToggleFullscreen();
 			}
-			_model.RecentGames.Init(GameScreenMode.LoadState);
+			_model.OpenSlotGrid(mode);
 		}
 
 		private void OnOverlayPack(object? sender, RoutedEventArgs e)
 		{
-			_model.IsPlayerOverlayVisible = false;
-			//P.5 §5: the current-pack chip opens the picker when 2+ distinct
-			//pack_ids exist (even with a stored choice - "changing the choice
-			//later"); otherwise the pack window inspects the single pack.
-			if(!_model.OpenPlayerPackPickerForChange(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1())) {
+			//P.5 §5: the Pack row opens the picker when 2+ distinct pack_ids
+			//exist (even with a stored choice - "changing the choice later");
+			//otherwise the pack window inspects the single pack.
+			if(!_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1())) {
 				ApplicationHelper.GetOrCreateUniqueWindow(this, () => new EnhancementPacksWindow());
 			}
 		}
@@ -343,36 +340,17 @@ namespace Mesen.Windows
 			ApplicationHelper.GetOrCreateUniqueWindow(this, () => new ConfigWindow(ConfigWindowTab.Audio, playerMode: true));
 		}
 
-		private void OnOverlayAdvanced(object? sender, RoutedEventArgs e)
+		//W-P4's Quit game powers the game off and lands on the Play home
+		//(§13.6); the emulator and the window stay open. The existing
+		//ConfirmExitResetPower preference still asks first, in place over the
+		//overlay, which stays up when the answer is no.
+		private async void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
 		{
-			//SwitchToAdvancedMode closes the overlay through the UiMode observer.
-			_model.SwitchToAdvancedMode();
-		}
-
-		private void OnOverlayQuit(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			Close();
-		}
-
-		//P.7 (§6.2): the Welcome card's one CTA doubles as its own dismissal -
-		//it never reappears once clicked, whether or not a ROM is actually
-		//chosen from the dialog. Reuses the existing Open-ROM shortcut/dialog
-		//(ShortcutHandler.OpenFile), not a new file-picker path.
-		private void OnWelcomeCardLoadRom(object? sender, RoutedEventArgs e)
-		{
-			ConfigManager.Config.PlayerEnhancements.WelcomeCardDismissed = true;
-			ConfigManager.Config.Save();
-			EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.OpenFile });
-		}
-
-		//P.7 (§6.2): resumes the most recent game, same action as clicking its
-		//tile in the recent-games grid.
-		private void OnContinueCard(object? sender, RoutedEventArgs e)
-		{
-			if(_model.RecentGames.GameEntries.Count > 0) {
-				_model.RecentGames.GameEntries[0].Load();
+			if(ConfigManager.Config.Preferences.ConfirmExitResetPower && await MesenMsgBox.Show(this, "ConfirmPowerOff", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
+				return;
 			}
+			_model.IsPlayerOverlayVisible = false;
+			LoadRomHelper.PowerOff();
 		}
 
 		protected override void OnOpened(EventArgs e)

@@ -124,6 +124,24 @@ can be exercised by real xunit tests without Avalonia or the native
   controls `User`, the leading inset clears the traffic lights except in
   fullscreen, and `MainWindow.InitShellTitleBar` moves the bar to the top
   row so the optional classic bar sits under it.
+- `PlayHome` and `PlayPauseOverlay` (G.2, ADR-0241, PRD Part B §13.5.2) are
+  the host-free Play rules. `PlayHome.Classify` picks W-P1 (no recents; it
+  replaced the P.7 Welcome card, so `PlayerEnhancementsConfig.WelcomeCardDismissed`
+  is no longer read) or W-P2, whose Recent grid is `RecentGrid` (every entry
+  but the Continue game); `LastPlayed` counts calendar days; `Orientation`
+  only states what `EnableAudio`/`AutoInstallCommunityPacks` make true. The
+  Player home lives in `UI/Views/PlayHomeView.axaml` (the
+  `RecentGamesViewModel` DataTemplate); Advanced's game selection and the
+  Save/Load slot screens keep the plain `StateGrid` there. `PauseOverlay.Controls`
+  is W-P4's seven controls (rule 2: a new pause item replaces or merges one)
+  and `WhereNow` maps every P.4/P.7/P.10 overlay action to its row or Tools ⋯
+  path. `PlayEsc.Next` is the one Esc router `MainWindowViewModel.TogglePlayerOverlay`
+  (`MainWindowViewModel.PauseOverlay.cs`) follows: game → W-P4 → resume, a
+  sheet opened from W-P4 (Save states and its slot grid, Enhancements,
+  Cheats, a picker from the Pack row) closes back to W-P4, the first-start
+  picker is dismissed, and Esc on the home does nothing. *Quit game* powers
+  the game off (`LoadRomHelper.PowerOff`, after the existing
+  `ConfirmExitResetPower` prompt) and never closes the app.
 - `PlayerPackPicker` (P.5, §5) is the host-free decision for the Player pack
   picker: it opens only when 2+ distinct pack_ids exist (after the §5
   content_id merge — feed it `PackPreferenceResolver.Resolve`'s `Candidates`,

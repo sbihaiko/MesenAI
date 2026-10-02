@@ -10,15 +10,19 @@
 			<Control ID="mnuHelp">_Help</Control>
 		</Form>
 		<Form ID="MainWindow">
-			<Control ID="btnOverlayResume">Resume</Control>
-			<Control ID="btnOverlaySaveSlot">Save slot</Control>
-			<Control ID="btnOverlayLoadSlot">Load slot</Control>
+			<Control ID="btnOverlayResume">▶ Resume</Control>
+			<Control ID="lblOverlayPaused">Paused</Control>
+			<Control ID="btnOverlaySaveStates">Save states</Control>
 			<Control ID="btnOverlayPack">Pack</Control>
 			<Control ID="btnOverlayEnhancements">Enhancements</Control>
 			<Control ID="btnOverlayCheats">Cheats</Control>
 			<Control ID="btnOverlaySettings">Settings</Control>
-			<Control ID="btnOverlayAdvancedGui">Advanced GUI</Control>
-			<Control ID="btnOverlayQuit">Quit</Control>
+			<Control ID="btnOverlayQuitGame">Quit game</Control>
+			<Control ID="lblOverlayEscHint">Esc to resume</Control>
+			<Control ID="lblSaveStatesSheetTitle">Save states</Control>
+			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
+			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
+			<Control ID="btnSaveStatesBack">Back</Control>
 			<Control ID="lblChoosePackForThisGame">Choose a pack for this game</Control>
 			<Control ID="btnPlayWithoutPack">Play without a pack</Control>
 			<Control ID="lblEnhancementsPanelTitle">Enhancements</Control>
@@ -29,9 +33,14 @@
 			<Control ID="chkEnhancementsHiRes">Hi-res filter</Control>
 			<Control ID="chkEnhancementsOverclock">Reduce slowdown (overclock)</Control>
 			<Control ID="btnEnhancementsClose">Close</Control>
-			<Control ID="lblWelcomeCardTitle">Welcome to MesenCE</Control>
-			<Control ID="lblWelcomeCardBody">Load a ROM to get started. Enhancement packs and settings are available from the in-game menu (press Esc).</Control>
-			<Control ID="btnWelcomeCardLoadRom">Load ROM</Control>
+		</Form>
+		<Form ID="PlayHomeView">
+			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
+			<Control ID="lblPlayHomeDropSubtitle">or open one.</Control>
+			<Control ID="btnPlayHomeOpenRom">Open a ROM…</Control>
+			<Control ID="lblPlayHomeContinueHeader">Continue playing</Control>
+			<Control ID="btnPlayHomeContinue">▶ Continue</Control>
+			<Control ID="lblPlayHomeRecentHeader">Recent</Control>
 		</Form>
 		<Form ID="WorkspaceShellBar">
 			<Control ID="mnuFile">_File</Control>
@@ -1903,7 +1912,21 @@
 	</Forms>
 	<Messages>
 		<Message ID="LastSession">Last Session</Message>
-		<Message ID="ContinueCardLabel">Continue: {0}</Message>
+		<Message ID="PlayHomeOrientationAudioAndPacks">Enhanced audio is on. If the game has a community pack, it downloads, installs and loads by itself.</Message>
+		<Message ID="PlayHomeOrientationAudioOnly">Enhanced audio is on.</Message>
+		<Message ID="PlayHomeOrientationPacksOnly">If the game has a community pack, it downloads, installs and loads by itself.</Message>
+		<Message ID="PlayHomeLastPlayedToday">Last played today</Message>
+		<Message ID="PlayHomeLastPlayedYesterday">Last played yesterday</Message>
+		<Message ID="PlayHomeLastPlayedDaysAgo">Last played {0} days ago</Message>
+		<Message ID="PlayHomeLastPlayedOn">Last played {0}</Message>
+		<Message ID="OverlayRowNone">none</Message>
+		<Message ID="OverlayRowCountOn">{0} on</Message>
+		<Message ID="SaveStatesRowEmpty">empty</Message>
+		<Message ID="SaveStatesRowSlot">Slot {0} · {1}</Message>
+		<Message ID="AgeJustNow">just now</Message>
+		<Message ID="AgeMinutes">{0} min ago</Message>
+		<Message ID="AgeHours">{0} h ago</Message>
+		<Message ID="AgeDays">{0} d ago</Message>
 		<Message ID="WorkspaceNamePlay">Play</Message>
 		<Message ID="WorkspaceNameRemaster">Remaster</Message>
 		<Message ID="WorkspaceNameShare">Share</Message>
