@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <cstring>
+#include <memory>
+#include <mutex>
 
 //ADR-0237 / PRD slice P.8. See MetalPresenter.h for the contract.
 
@@ -73,6 +75,25 @@ struct Plane
 	uint64_t SlotVersion[kRing] = {};
 };
 
+//Issue #584: written by the command buffers' completion handlers (a Metal
+//thread), read by Present() on the video thread. Shared so a handler that runs
+//late never touches a freed Impl.
+struct GpuFaultState
+{
+	std::atomic<bool> Pending{ false };
+	std::mutex Lock;
+	std::string Reason;
+
+	void Record(id<MTLCommandBuffer> cmd)
+	{
+		std::lock_guard<std::mutex> guard(Lock);
+		if(!Pending.load()) {
+			Reason = cmd.error ? cmd.error.localizedDescription.UTF8String : "a command buffer failed on the GPU";
+			Pending = true;
+		}
+	}
+};
+
 struct MetalPresenter::Impl
 {
 	id<MTLDevice> Device = nil;
@@ -97,7 +118,9 @@ struct MetalPresenter::Impl
 	libra_instance_t Libra = {};
 	libra_mtl_filter_chain_t Chain = nullptr;
 	bool ShaderOn = false;
+	bool ShaderDropped = false;
 	std::string Error;
+	std::shared_ptr<GpuFaultState> Fault = std::make_shared<GpuFaultState>();
 
 	uint64_t OverlayUploads = 0;
 
@@ -124,6 +147,40 @@ struct MetalPresenter::Impl
 		}
 		Chain = nullptr;
 		ShaderOn = false;
+	}
+
+	//Issue #584. Measured on Apple Silicon (macOS 26): after two command
+	//buffers on one queue fail with "Caused GPU Hang Error", macOS answers every
+	//later submission on that queue - an unfiltered blit included, and still
+	//after 5 s - with "Ignored (for causing prior/excessive GPU errors)", so the
+	//picture freezes for good. A new queue on the same device is accepted
+	//again. So a fault drops the chain (which keeps hanging every frame) and
+	//replaces the queue; the next frame is presented unfiltered.
+	void RecoverFromGpuFault()
+	{
+		if(!Fault->Pending.load()) {
+			return;
+		}
+		//Frames still in flight may fault too; wait them out before reading.
+		Drain();
+		std::string reason;
+		{
+			std::lock_guard<std::mutex> guard(Fault->Lock);
+			reason = Fault->Reason;
+			Fault->Reason.clear();
+			Fault->Pending = false;
+		}
+		if(ShaderOn) {
+			FreeChain();
+			ShaderDropped = true;
+			Error = "the shader was disabled after a GPU error (" + reason + "); presenting unfiltered";
+		} else {
+			Error = "a frame failed on the GPU (" + reason + ")";
+		}
+		id<MTLCommandQueue> queue = [Device newCommandQueue];
+		if(queue) {
+			Queue = queue;
+		}
 	}
 
 	void SetLibraError(const char* what, libra_error_t error)
@@ -349,6 +406,8 @@ void MetalPresenter::SetVsync(bool enabled)
 bool MetalPresenter::SetShader(const std::string& presetPath, const std::vector<MetalShaderParam>& params)
 {
 	_impl->Drain();
+	//The new chain is built on the queue: never on one macOS stopped accepting.
+	_impl->RecoverFromGpuFault();
 	_impl->FreeChain();
 	_impl->Error.clear();
 
@@ -409,6 +468,13 @@ const std::string& MetalPresenter::LastError() const
 	return _impl->Error;
 }
 
+bool MetalPresenter::TakeShaderDropped()
+{
+	bool dropped = _impl->ShaderDropped;
+	_impl->ShaderDropped = false;
+	return dropped;
+}
+
 void MetalPresenter::SetReadbackEnabled(bool enabled)
 {
 	_impl->Readback = enabled;
@@ -444,6 +510,7 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 	}
 
 	@autoreleasepool {
+		m.RecoverFromGpuFault();
 		dispatch_semaphore_wait(m.InFlight, DISPATCH_TIME_FOREVER);
 		m.Ring = (m.Ring + 1) % kRing;
 
@@ -512,7 +579,11 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 		[enc endEncoding];
 
 		dispatch_semaphore_t sem = m.InFlight;
-		[cmd addCompletedHandler:^(id<MTLCommandBuffer>) {
+		std::shared_ptr<GpuFaultState> fault = m.Fault;
+		[cmd addCompletedHandler:^(id<MTLCommandBuffer> done) {
+			if(done.status == MTLCommandBufferStatusError) {
+				fault->Record(done);
+			}
 			dispatch_semaphore_signal(sem);
 		}];
 		[cmd presentDrawable:drawable];
@@ -521,7 +592,10 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 		if(m.Readback) {
 			[cmd waitUntilCompleted];
 			if(cmd.status != MTLCommandBufferStatusCompleted) {
-				m.Error = "command buffer did not complete";
+				//The completion handler may not have run yet; record the fault
+				//here too and recover now, so the caller sees it on this frame.
+				m.Fault->Record(cmd);
+				m.RecoverFromGpuFault();
 				return false;
 			}
 			id<MTLTexture> t = drawable.texture;
