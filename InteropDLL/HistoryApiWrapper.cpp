@@ -18,7 +18,7 @@
 	#include "Sdl/SdlSoundManager.h"
 #endif
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 extern bool _softwareRenderer;
 
 unique_ptr<Emulator> _historyPlayer;

@@ -5,7 +5,7 @@
 #include "Core/Shared/Movies/MovieManager.h"
 #include "Core/Shared/LiveFrameRecorder.h"
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 extern "C"
 {

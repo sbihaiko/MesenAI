@@ -6,7 +6,7 @@
 #include "Core/Shared/Emulator.h"
 #include "Utilities/StringUtilities.h"
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 //F6.4b - client-side MEP-recipe-v1 auto-install (ADR-0138 clarifications
 //4/37/38). Sibling file to EmuApiWrapper.cpp (already at its 200-line

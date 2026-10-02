@@ -42,9 +42,18 @@
 #include "Shared/Video/SoftwareRenderer.h"
 #include "Shared/Video/RendererSelection.h"
 
-unique_ptr<IKeyManager> _keyManager;
-unique_ptr<IMouseManager> _mouseManager;
-unique_ptr<Emulator> _emu(new Emulator());
+//Issue #621: the process-global core is torn down only by Release(), never by
+//the C++ static destructors that exit() runs. A host that exits without
+//Release() (the headless UI test process, a ctypes script) still has managed
+//thread-pool work in flight - an update-check continuation calling
+//GetMesenVersion, a timer calling IsPaused - and ~unique_ptr<Emulator> nulled
+//and deleted the emulator under those threads: SIGSEGV after every test had
+//passed. Each holder is heap-allocated and never destroyed, so the objects
+//outlive every caller until the OS reclaims the process; Release() still
+//resets them explicitly, exactly as before.
+unique_ptr<IKeyManager>& _keyManager = *new unique_ptr<IKeyManager>();
+unique_ptr<IMouseManager>& _mouseManager = *new unique_ptr<IMouseManager>();
+unique_ptr<Emulator>& _emu = *new unique_ptr<Emulator>(new Emulator());
 bool _softwareRenderer = false;
 
 static void* _windowHandle = nullptr;

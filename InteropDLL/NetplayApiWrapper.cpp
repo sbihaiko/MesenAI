@@ -5,7 +5,7 @@
 #include "Core/Netplay/GameServer.h"
 #include "Core/Netplay/GameClient.h"
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 extern "C"
 {
