@@ -392,7 +392,7 @@ what CI actually runs; this doc records why they're split the way they are.
   (classify schema → assembly → gate → apply-verdict → mep-meta upsert);
   F6.3b hardens the `kind` field and the fence on top of it.
 - `workflows/replay-submitted.yml` (ADR-0205 R.1) validates the file attached
-  to a `[Replay]` issue (label `replay`; `issues` opened/edited or an exact
+  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the three labels itself; `issues` opened/edited or an exact
   `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid`
   via `scripts/replay_submission.py`. Writes use `GITHUB_TOKEN`
   (`issues: write`), so its edits cannot re-trigger it; issue text reaches the

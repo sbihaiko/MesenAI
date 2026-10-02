@@ -35,11 +35,13 @@ jobs:
   validate:
     if: >
       (github.event_name == 'issues' &&
-       contains(github.event.issue.labels.*.name, 'replay')) ||
+       (startsWith(github.event.issue.title, '[Replay] ') ||
+        contains(github.event.issue.labels.*.name, 'replay'))) ||
       (github.event_name == 'issue_comment' &&
        !github.event.issue.pull_request &&
        github.event.comment.body == '/revalidate' &&
-       contains(github.event.issue.labels.*.name, 'replay'))
+       (startsWith(github.event.issue.title, '[Replay] ') ||
+        contains(github.event.issue.labels.*.name, 'replay')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -50,6 +52,18 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      # GitHub applies an Issue Form's `labels:` only when the label already
+      # exists, so on a fresh repo the form's `replay` label is skipped and a
+      # label-only trigger would never fire. The title prefix is the trigger;
+      # the labels are created here, idempotently (--force updates in place),
+      # so nothing has to be set up by hand.
+      - name: Ensure the replay labels exist
+        run: |
+          set -euo pipefail
+          gh label create replay --repo "$REPO" --color 1D76DB --description "Community-submitted gameplay replay (ADR-0205)" --force
+          gh label create replay:valid --repo "$REPO" --color 0E8A16 --description "Accepted: a Record and share .mmo that passes the ADR-0205 section 3 lint" --force
+          gh label create replay:invalid --repo "$REPO" --color D93F0B --description "Rejected: the attachment fails the ADR-0205 section 3 lint" --force
 
       - name: Validate the attachment (section 3 lint, section 5 title)
         id: verdict
@@ -92,6 +106,9 @@ jobs:
           import json
           v = json.load(open("verdict.json"))
           have = set(open("labels.txt", encoding="utf-8").read().split(","))
+          # The form's own label, when GitHub skipped it (see "Ensure the replay labels exist").
+          if "replay" not in have:
+              print("--add-label=replay")
           for l in v["labels_add"]:
               if l not in have:
                   print("--add-label=" + l)
