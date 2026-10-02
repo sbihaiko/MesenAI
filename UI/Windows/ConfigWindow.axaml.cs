@@ -27,8 +27,18 @@ namespace Mesen.Windows
 		{
 			InitializeComponent();
 
-			_model = new ConfigViewModel(tab, playerMode);
+			_model = new ConfigViewModel(tab, playerMode, CreateDisplaySettings);
 			DataContext = _model;
+		}
+
+		//G.4 (W-P8): Display edits the main window - its full screen and scale.
+		private static PlayerDisplaySettingsViewModel CreateDisplaySettings()
+		{
+			VideoConfig video = ConfigManager.Config.Video;
+			if(ApplicationHelper.GetMainWindow() is MainWindow main) {
+				return new PlayerDisplaySettingsViewModel(video, main.WindowState == WindowState.FullScreen, main.CurrentScale, main.ToggleFullscreen, main.SetScale);
+			}
+			return new PlayerDisplaySettingsViewModel(video, false, 0, () => { }, _ => { });
 		}
 
 		private void InitializeComponent()
@@ -54,6 +64,12 @@ namespace Mesen.Windows
 		{
 			base.OnKeyDown(e);
 			if(e.Key == Key.Escape) {
+				//W-P8: Esc closes a Play sheet back to W-P4 and keeps what was
+				//changed, like Done - there is no Cancel in Player mode.
+				if(_model.PlayerMode) {
+					_promptToSave = false;
+					_model.SaveConfig();
+				}
 				Close();
 			}
 		}

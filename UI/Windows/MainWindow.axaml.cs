@@ -32,7 +32,7 @@ using System.Threading.Tasks;
 
 namespace Mesen.Windows
 {
-	public class MainWindow : MesenWindow
+	public partial class MainWindow : MesenWindow
 	{
 		private DispatcherTimer _timerBackgroundFlag = new DispatcherTimer();
 		private MainWindowViewModel _model = null!;
@@ -107,9 +107,12 @@ namespace Mesen.Windows
 				if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerOverlayVisible) && _model.IsPlayerOverlayVisible) {
 					Dispatcher.UIThread.Post(() => this.GetControl<Button>("OverlayResumeButton")?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerPackPickerVisible) && _model.IsPlayerPackPickerVisible) {
-					Dispatcher.UIThread.Post(() => this.GetControl<ItemsControl>("PackPickerList")?.GetVisualDescendants().OfType<Button>().FirstOrDefault()?.Focus());
+					Dispatcher.UIThread.Post(FocusPackPickerChoice);
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
-					Dispatcher.UIThread.Post(() => this.GetControl<CheckBox>("EnhancementsTexturesCheckBox")?.Focus());
+					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsTexturesCheckBox")?.Focus());
+				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPackDetailVisible) && _model.IsPackDetailVisible) {
+					//G.4 (W-P6): Change pack… when it can act, else Done.
+					Dispatcher.UIThread.Post(() => FindNamedDescendant(_model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton")?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsSaveStatesSheetVisible) && _model.IsSaveStatesSheetVisible) {
 					//G.2: the W-P4 Save states sheet, same D-pad/A/B reason.
 					Dispatcher.UIThread.Post(() => this.GetControl<Button>("SaveStatesSaveButton")?.Focus());
@@ -147,6 +150,7 @@ namespace Mesen.Windows
 			_shellBar = this.GetControl<WorkspaceShellBar>("ShellBar");
 			_shellBar.ToolsMenu.Opened += MainMenu_Opened;
 			InitShellTitleBar();
+			InitPlaySheets();
 			ConfigManager.Config.MainWindow.LoadWindowSettings(this);
 
 			Console.CancelKeyPress += Console_CancelKeyPress;
@@ -288,28 +292,6 @@ namespace Mesen.Windows
 			_model.OpenSlotGrid(mode);
 		}
 
-		private void OnOverlayPack(object? sender, RoutedEventArgs e)
-		{
-			//P.5 §5: the Pack row opens the picker when 2+ distinct pack_ids
-			//exist (even with a stored choice - "changing the choice later");
-			//otherwise the pack window inspects the single pack.
-			if(!_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1())) {
-				ApplicationHelper.GetOrCreateUniqueWindow(this, () => new EnhancementPacksWindow());
-			}
-		}
-
-		private void OnPickPlayerPack(object? sender, RoutedEventArgs e)
-		{
-			if(sender is Button button && button.Tag is string container) {
-				_model.PickPlayerPack(container);
-			}
-		}
-
-		private void OnDismissPlayerPackPicker(object? sender, RoutedEventArgs e)
-		{
-			_model.DismissPlayerPackPicker();
-		}
-
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
 		{
 			//P.7 (§6.1): replaces the overlay with the quick-toggle panel,
@@ -319,25 +301,6 @@ namespace Mesen.Windows
 
 		//P.10 (W-P11): replaces the overlay with the Cheats sheet.
 		private void OnOverlayCheats(object? sender, RoutedEventArgs e) => _model.OpenCheatsSheet();
-
-		private void OnToggleTextures(object? sender, RoutedEventArgs e) => _model.ToggleTextures();
-		private void OnToggleAudio(object? sender, RoutedEventArgs e) => _model.ToggleAudio();
-		private void OnToggleBorder(object? sender, RoutedEventArgs e) => _model.ToggleBorder();
-		private void OnToggleWideScrn(object? sender, RoutedEventArgs e) => _model.ToggleWideScrn();
-		private void OnToggleOverclock(object? sender, RoutedEventArgs e) => _model.ToggleOverclock();
-
-		private void OnCloseEnhancementsPanel(object? sender, RoutedEventArgs e)
-		{
-			_model.CloseEnhancementsPanel();
-		}
-
-		private void OnOverlaySettings(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			//PRD Part B §6: Player mode's Settings is the reduced essentials
-			//page (video / audio / input), not the full Preferences tab.
-			ApplicationHelper.GetOrCreateUniqueWindow(this, () => new ConfigWindow(ConfigWindowTab.Audio, playerMode: true));
-		}
 
 		//W-P4's Quit game powers the game off and lands on the Play home
 		//(§13.6); the emulator and the window stay open. The existing

@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d"
+	x:Class="Mesen.Views.PlayerPackPickerSheetView"
+	x:DataType="vm:MainWindowViewModel"
+>
+	<!--G.4 (PRD Part B §13.5.2 W-P5; P.5 §5): the pack picker. Opens once over
+	the un-enhanced game when 2+ competing pack_ids exist and no stored choice
+	applies, and from W-P4's Pack row to change the choice. One radio per pack
+	(the stored choice, else the 👍-first row, starts selected); Use This Pack
+	stores the per-ROM preference (P.3) and applies it; Cancel/Esc plays
+	un-enhanced and asks again next launch. The "No pack" row needs a core
+	"no pack" preference that does not exist yet (W-P5 calls it a slice).-->
+	<Border
+		Name="PlayerPackPicker"
+		Background="#DD000000"
+		CornerRadius="14"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center"
+		Padding="24"
+		IsVisible="{Binding IsPlayerPackPickerVisible}"
+	>
+		<StackPanel Spacing="10" MinWidth="380" MaxWidth="520" XYFocus.NavigationModes="Enabled">
+			<TextBlock Name="PackPickerTitle" Text="{Binding PackPickerTitle}" FontWeight="Bold" FontSize="16" TextWrapping="Wrap" />
+			<ItemsControl Name="PackPickerList" ItemsSource="{Binding PlayerPackChoices}" XYFocus.NavigationModes="Enabled">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="8" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:PlayerPackChoice">
+						<RadioButton GroupName="PlayerPackPickerChoices" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+							IsChecked="{Binding IsSelected, Mode=TwoWay}" Tag="{Binding Container}" Click="OnSelectChoice">
+							<StackPanel Spacing="2">
+								<TextBlock FontWeight="Bold" Text="{Binding Name}" />
+								<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding Detail}" />
+								<!-- ADR-0152: a reviewed known-missing declaration is shown on the
+								     row it belongs to, naming MesenCE validation as its source so the
+								     gap is never read as the author's claim. The ADR's wording is kept
+								     over the wireframe's shorter one. Collapsed when absent. -->
+								<StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasKnownMissing}">
+									<TextBlock FontSize="11" Text="⚠" />
+									<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" MaxWidth="420" Text="{Binding KnownMissingNote}" />
+								</StackPanel>
+								<TextBlock FontSize="11" Opacity="0.8" IsVisible="{Binding HasVotes}" Text="{Binding VotesText}" />
+							</StackPanel>
+						</RadioButton>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+			<TextBlock Text="{l:Translate lblPackPickerRemembered}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Name="PackPickerCancelButton" Content="{l:Translate btnPackPickerCancel}" Click="OnCancel" />
+				<Button Name="PackPickerUseButton" Content="{l:Translate btnPackPickerUse}" IsEnabled="{Binding CanUseSelectedPack}" Click="OnUse" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

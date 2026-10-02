@@ -1,0 +1,23 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="300"
+	x:DataType="vm:PlayerDisplaySettingsViewModel"
+	x:Class="Mesen.Views.PlayerDisplaySettingsView"
+>
+	<!--G.4 (W-P8): Settings › Display - three rows. The aspect ratio and the
+	scale keep a value set elsewhere as their current item.-->
+	<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="10" XYFocus.NavigationModes="Enabled">
+		<TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Translate lblDisplayFullscreen}" VerticalAlignment="Center" Margin="0 0 20 8" />
+		<CheckBox Grid.Row="0" Grid.Column="1" Name="chkDisplayFullscreen" IsChecked="{Binding IsFullscreen}" Margin="0 0 0 8" />
+		<TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Translate lblDisplayAspectRatio}" VerticalAlignment="Center" Margin="0 0 20 8" />
+		<c:EnumComboBox Grid.Row="1" Grid.Column="1" Name="cboDisplayAspectRatio" AvailableValues="{Binding AspectRatios}" SelectedItem="{Binding Config.AspectRatio}" MinWidth="200" HorizontalAlignment="Left" Margin="0 0 0 8" />
+		<TextBlock Grid.Row="2" Grid.Column="0" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" Margin="0 0 20 0" />
+		<ComboBox Grid.Row="2" Grid.Column="1" Name="cboDisplayScale" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" MinWidth="200" HorizontalAlignment="Left" />
+	</Grid>
+</UserControl>

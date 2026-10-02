@@ -45,6 +45,9 @@ namespace Mesen.ViewModels
 			if(IsEnhancementsPanelVisible) {
 				return PlaySheet.Enhancements;
 			}
+			if(IsPackDetailVisible) {
+				return PlaySheet.PackDetail;
+			}
 			if(_cheatsSheet?.IsVisible == true) {
 				return PlaySheet.Cheats;
 			}
@@ -91,6 +94,7 @@ namespace Mesen.ViewModels
 			switch(sheet) {
 				case PlaySheet.PackPickerFromOverlay: DismissPlayerPackPicker(); break;
 				case PlaySheet.Enhancements: IsEnhancementsPanelVisible = false; break;
+				case PlaySheet.PackDetail: IsPackDetailVisible = false; CancelRestore(); break;
 				//The sheet's own Closed handler re-shows the overlay too.
 				case PlaySheet.Cheats: CloseCheatsSheetOnEsc(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
@@ -169,14 +173,8 @@ namespace Mesen.ViewModels
 			RecentGames.Init(mode);
 		}
 
-		//W-P4's Pack row: W-P5 for 2+ packs (Esc returns to the overlay), else
-		//the pack window. Returns true when the picker opened.
-		public bool OpenPackFromOverlay(string packListText, string romSha1)
-		{
-			IsPlayerOverlayVisible = false;
-			_packPickerFromOverlay = OpenPlayerPackPickerForChange(packListText, romSha1);
-			return _packPickerFromOverlay;
-		}
+		//W-P4's Pack row: OpenPackFromOverlay (MainWindowViewModel.PlaySheets.cs,
+		//G.4) opens W-P5 for 2+ packs or W-P6; Esc returns to the overlay.
 
 		//Any path that leaves the game (power off, a load failure, another ROM)
 		//takes the overlay and its sheets down; the home is shown instead
@@ -192,6 +190,7 @@ namespace Mesen.ViewModels
 			}
 			IsSaveStatesSheetVisible = false;
 			IsEnhancementsPanelVisible = false;
+			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;
 			//Last: closing the Cheats sheet re-shows the overlay.
 			IsPlayerOverlayVisible = false;

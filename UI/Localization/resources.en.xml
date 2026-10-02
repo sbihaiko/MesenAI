@@ -23,15 +23,35 @@
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
-			<Control ID="lblChoosePackForThisGame">Choose a pack for this game</Control>
-			<Control ID="btnPlayWithoutPack">Play without a pack</Control>
+		</Form>
+		<Form ID="PlayerPackPickerSheetView">
+			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
+			<Control ID="btnPackPickerCancel">Cancel</Control>
+			<Control ID="btnPackPickerUse">Use This Pack</Control>
+		</Form>
+		<Form ID="PlayerPackDetailSheetView">
+			<Control ID="lblPackDetailTextures">textures</Control>
+			<Control ID="lblPackDetailAudio">audio</Control>
+			<Control ID="lblPackDetailPatch">patch</Control>
+			<Control ID="lblPackDetailMissingMusicTitle">⚠ Some music is missing</Control>
+			<Control ID="btnPackDetailChange">Change pack…</Control>
+			<Control ID="btnPackDetailShowFolder">Show pack folder</Control>
+			<Control ID="btnPackDetailRestore">Restore original files</Control>
+			<Control ID="lblPackDetailRestoreConfirm">Download the pack again and replace its files? Your changes to them are lost, and the game restarts.</Control>
+			<Control ID="btnPackDetailRestoreConfirm">Restore</Control>
+			<Control ID="btnPackDetailRestoreKeep">Keep my files</Control>
+			<Control ID="btnPackDetailDetails">Details ▸</Control>
+			<Control ID="btnPackDetailDone">Done</Control>
+		</Form>
+		<Form ID="PlayerEnhancementsSheetView">
 			<Control ID="lblEnhancementsPanelTitle">Enhancements</Control>
 			<Control ID="chkEnhancementsTextures">Texture pack</Control>
 			<Control ID="chkEnhancementsAudio">Audio pack</Control>
 			<Control ID="chkEnhancementsBorder">Border</Control>
 			<Control ID="chkEnhancementsWideScrn">Widescreen (16:9)</Control>
 			<Control ID="chkEnhancementsOverclock">Reduce slowdown (overclock)</Control>
-			<Control ID="btnEnhancementsClose">Close</Control>
+			<Control ID="lblEnhancementsAppliesOnReload">applies on reload</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -812,6 +832,11 @@
 			<Control ID="colBinding1">Keys</Control>
 		</Form>
 
+		<Form ID="PlayerDisplaySettingsView">
+			<Control ID="lblDisplayFullscreen">Fullscreen</Control>
+			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
+			<Control ID="lblDisplayScale">Scale</Control>
+		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>
 
@@ -820,6 +845,10 @@
 			<Control ID="tabInput">Input</Control>
 			<Control ID="tabVideo">Video</Control>
 			<Control ID="tabLook">Look</Control>
+			<Control ID="tabDisplay">Display</Control>
+			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
+			<Control ID="btnPlayerSettingsDone">Done</Control>
 			<Control ID="tabNes">NES</Control>
 			<Control ID="tabSnes">SNES</Control>
 			<Control ID="tabGameboy">Game Boy</Control>
@@ -2164,6 +2193,24 @@ E
 		<Message ID="AddressHasOtherLabel">Another label exists for this address: {0}</Message>
 
 		<Message ID="RecentShaders">Recent shaders </Message>
+
+		<Message ID="PackPickerTitle">Choose a pack for {0}</Message>
+		<Message ID="PackByAuthor">by {0}</Message>
+		<Message ID="PackAuthorUnknown">author unknown</Message>
+		<Message ID="PackDetailVersion">version {0}</Message>
+		<Message ID="PackDetailNoPackTitle">No pack</Message>
+		<Message ID="PackDetailNoPackBody">No enhancement pack is installed for this game.</Message>
+		<Message ID="PackDetailMissingMusicBody">{0} of {1} tracks have no audio file. Add the .ogg files to the pack.</Message>
+		<Message ID="PackDetailChangeSibling">The pack in the folder next to the game always wins.</Message>
+		<Message ID="PackDetailChangeOnlyOne">There is no other pack for this game.</Message>
+		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
+		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
+		<Message ID="EnhancementsApply">Apply</Message>
+		<Message ID="EnhancementsApplyReload">Apply &amp; Reload</Message>
+		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>
+		<Message ID="EnhancementsDone">Done</Message>
+		<Message ID="PackInstallPillInstalling">Installing {0}…</Message>
+		<Message ID="PackInstallPillFailed">⚠ The pack could not be downloaded. Playing without it.</Message>
 	</Messages>
 	<Enums>
 		<Enum ID="EmulatorShortcut">

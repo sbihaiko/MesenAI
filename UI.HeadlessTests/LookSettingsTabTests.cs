@@ -20,7 +20,7 @@ namespace Mesen.HeadlessTests;
 //P.13 (ADR-0246): Settings › Look. The rules (which choice is offered, enabled,
 //marked, selected, and what picking it writes) are pinned host-free in
 //UI.Tests/Look; this checks the crossing into XAML: the Look tab sits after
-//Video in the overlay's Settings, it shows Art/Pixels/Screen with a mark on the
+//Display in the overlay's Settings strip (W-P8, G.4), it shows Art/Pixels/Screen with a mark on the
 //selected choice, a value set in Options shows as the current item and
 //survives, a pick writes VideoConfig and Cancel restores it, Hold to Compare
 //follows the pointer, and the two moved settings are gone from their old homes.
@@ -59,9 +59,9 @@ public class LookSettingsTabTests : IDisposable
 		return model;
 	}
 
-	private static (ConfigWindow Window, ConfigViewModel Model) ShowSettings(ConfigWindowTab tab)
+	private static (ConfigWindow Window, ConfigViewModel Model) ShowSettings(ConfigWindowTab tab, bool playerMode = true)
 	{
-		ConfigWindow window = new(tab, playerMode: true);
+		ConfigWindow window = new(tab, playerMode);
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
 		return (window, Assert.IsType<ConfigViewModel>(window.DataContext));
@@ -80,7 +80,7 @@ public class LookSettingsTabTests : IDisposable
 	}
 
 	[AvaloniaFact]
-	public void Look_is_the_tab_after_video_and_shows_art_pixels_and_screen_with_their_marks()
+	public void Look_is_the_tab_after_display_and_shows_art_pixels_and_screen_with_their_marks()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
@@ -88,12 +88,13 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.ShaderFile = "";
 
 		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Look);
-		List<TabItem> tabs = window.FindAll<TabControl>().First().Items.Cast<TabItem>().ToList();
-		TabItem look = tabs[ConfigWindowTabOrder.IndexOf(ConfigWindowTab.Look)];
-		Assert.Equal("tabLook", look.Name);
+		//G.4 (W-P8): Player mode's own strip, Display | Look | Audio | Controls.
+		List<TabItem> tabs = window.FindNamed<TabControl>("PlayerSettingsTabs").Items.Cast<TabItem>().ToList();
+		TabItem look = tabs[PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look)];
+		Assert.Equal("tabPlayerLook", look.Name);
 		Assert.True(look.IsSelected);
 		Assert.True(look.IsOnScreen());
-		Assert.Equal(ConfigWindowTabOrder.IndexOf(ConfigWindowTab.Video) + 1, tabs.IndexOf(look));
+		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display) + 1, tabs.IndexOf(look));
 
 		string[] texts = VisibleTexts(window);
 		Assert.Contains("Art", texts);
@@ -205,7 +206,8 @@ public class LookSettingsTabTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
-		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Video);
+		//Video is Options-only since W-P8 (Display + Look replace it in Play).
+		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Video, playerMode: false);
 		Mesen.Views.VideoConfigView video = Assert.Single(window.FindAll<Mesen.Views.VideoConfigView>());
 		//The selector lived on the Picture page; only the selected page is realized.
 		TabControl pages = video.FindAll<TabControl>().First();
@@ -235,6 +237,8 @@ public class LookSettingsTabTests : IDisposable
 		string[] boxes = panel.FindAll<CheckBox>().Select(c => c.Content as string ?? "").ToArray();
 		Assert.Contains("Widescreen (16:9)", boxes);
 		Assert.Equal(new[] { "Texture pack", "Audio pack", "Border", "Widescreen (16:9)", "Reduce slowdown (overclock)" }, boxes);
+		//...and the sheet points at the place for the look of the picture (W-P7).
+		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Look");
 	}
 
 	//The window used to bind the tab id as the TabControl index; ids have holes
@@ -250,7 +254,7 @@ public class LookSettingsTabTests : IDisposable
 		ConfigWindow window = new(tab, playerMode: false);
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
-		TabItem selected = window.FindAll<TabControl>().First().Items.Cast<TabItem>().Single(t => t.IsSelected);
+		TabItem selected = window.FindNamed<TabControl>("AdvancedSettingsTabs").Items.Cast<TabItem>().Single(t => t.IsSelected);
 		Assert.IsType(content, selected.Content);
 		window.Close();
 	}

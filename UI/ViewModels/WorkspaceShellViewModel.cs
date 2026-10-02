@@ -24,6 +24,7 @@ namespace Mesen.ViewModels
 		private string _packName = "";
 		private RemasterActivity _remasterActivity;
 		private string _remasterStatus = "";
+		private string _packInstallStatus = "";
 
 		[ObservableProperty] public partial Workspace Active { get; private set; }
 		[ObservableProperty] public partial bool IsPlay { get; private set; }
@@ -82,6 +83,14 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
+		//G.4 (W-P9): a pack installing while the game plays; with the overlay
+		//open, the status line carries the pill's sentence. Empty = none.
+		public void UpdatePackInstall(string text)
+		{
+			_packInstallStatus = text ?? "";
+			RefreshChrome();
+		}
+
 		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName)
 		{
 			_gameLoaded = gameLoaded;
@@ -120,6 +129,9 @@ namespace Mesen.ViewModels
 			ShowsActivityDot = RemasterActivityIndicator.ShowsDot(_state.Active, _remasterActivity);
 			ShowsRecordingDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Recording;
 			ShowsJobDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Job;
+			if(_state.IsPlay && _packInstallStatus.Length > 0) {
+				StatusText = _packInstallStatus;
+			}
 			//W-X3: in Play or Share the status line names Remaster's work.
 			if(ShowsActivityDot && _remasterStatus.Length > 0) {
 				StatusText = _remasterStatus;

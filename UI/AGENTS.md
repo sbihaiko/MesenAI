@@ -159,6 +159,26 @@ can be exercised by real xunit tests without Avalonia or the native
   say so). During W-R2 the renderer is shown under Remaster with one strip
   docked above it (the native renderer draws over Avalonia, so nothing is
   overlaid on the game), and Esc (`ToggleOverlay`) stops the recording.
+- The Play sheets (G.4, ADR-0241, PRD Part B §13.5.2 W-P5–W-P9) keep their
+  rules host-free: `PackRowRoute.For` picks W-P5 (2+ distinct `pack_id`s, no
+  sibling) or W-P6; `PackPickerRow`/`PackDetail` build a row, the chips, the
+  folder and the Restore visibility (catalog installs only, ADR-0147);
+  `RestoreFlow` is the one in-place confirm; `PackAudioNotice.Scan` is the
+  counted ADR-0240 check W-P6 re-reads when it opens. `EnhancementsSheet.Pending`
+  names W-P7's button from the applied state and the draft; the ViewModel
+  (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
+  `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9
+  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip; `ConfigWindowTab.Display`
+  is Player-only (not in `ConfigWindowTabOrder`) and `ConfigViewModel` keeps
+  `SelectedTabIndex`/`PlayerTabIndex` at -1 for the hidden strip, so a tab's
+  content is realized once. `PackInstallPill` is W-P9's state;
+  `CommunityPackInstallService.InstallStarted`/`InstallFinished` feed it on the
+  UI thread and the sentence goes to the core HUD (`EmuApi.DisplayMessage`,
+  the native renderer draws over Avalonia) and the status line. The sheets
+  are `UI/Views/PlayerPackPickerSheetView`, `PlayerPackDetailSheetView`,
+  `PlayerEnhancementsSheetView` and `PlayerDisplaySettingsView`; their names
+  are in the UserControls' scopes, so `MainWindow` finds them through the
+  visual tree (`MainWindow.PlaySheets.cs`), not `GetControl`.
 - **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
   Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
   `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with

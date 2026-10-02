@@ -23,7 +23,10 @@ public enum ConfigWindowTab
 	//separator
 	Preferences = 14,
 	//ADR-0246 (P.13): Settings › Look - Art / Pixels / Screen.
-	Look = 15
+	Look = 15,
+	//G.4 (W-P8): Play's Settings › Display - the window, not the pixels. Shown
+	//only in Player mode; not part of ConfigWindowTabOrder (the Advanced tabs).
+	Display = 16
 }
 
 //The ConfigWindow.axaml TabControl, in markup order; null is a separator row
