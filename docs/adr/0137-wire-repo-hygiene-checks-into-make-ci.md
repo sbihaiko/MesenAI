@@ -126,3 +126,10 @@ decided here rather than as separate ADRs:
    lines are still in the `doc-checks` recipe family and are still the
    single authoritative list of caps. Harness-dependent checks stay in shard 1
    (see `.github/AGENTS.md`).
+6. **Amendment 2026-10-02: shard 1 caches its compiler output.** After the
+   split, shard 1's 5-minute `make -j$(nproc) capture-tool` is the whole gate
+   (measured on PR #570: 6m01s of a 6m12s run). `checks.yml` now installs
+   ccache there (the makefile already prefixes the compiler with it when
+   `command -v ccache` finds one) and persists `~/.cache/ccache` with
+   `actions/cache`, keyed by SHA with a prefix restore-key. No check changes.
+   The effect is measured, not assumed: see the PR that introduced this item.

@@ -131,7 +131,25 @@ jobs:
         if: matrix.shard == 1
         run: |
           sudo apt-get update -qy
-          sudo apt-get install -qy libsdl2-dev
+          sudo apt-get install -qy libsdl2-dev ccache
+
+      # Shard 1 only. The 5 minute compile of Core/ is the whole cost of the
+      # gate since the split (ADR-0137 amendment 5), and Core/ rarely changes
+      # between runs. The makefile prefixes the compiler with ccache whenever
+      # `command -v ccache` finds one, so installing it above is all the
+      # wiring there is; this step only persists the cache directory.
+      # The key carries the SHA because a cache entry is immutable once saved:
+      # a fixed key would freeze the first run's objects forever. The prefix
+      # restore-key picks the newest entry, and a push to `main` (this
+      # workflow runs on it) saves the one every pull request can read.
+      - name: Restore the compiler cache
+        if: matrix.shard == 1
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: /home/runner/.cache/ccache
+          key: ccache-doc-checks-${{ github.sha }}
+          restore-keys: |
+            ccache-doc-checks-
 
       - name: Install Python dependencies
         run: python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners) # doc-checks verify scripts need PyYAML/Pillow/numpy (not preinstalled everywhere)
@@ -146,7 +164,13 @@ jobs:
       # would have failed on the same build anyway.
       - name: Build scripts/headless_record in parallel
         if: matrix.shard == 1
-        run: make -j$(nproc) capture-tool
+        env:
+          CCACHE_DIR: /home/runner/.cache/ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_MAXSIZE: 500M
+        run: |
+          make -j$(nproc) capture-tool
+          ccache -s
 
       - name: Run doc checks (shard ${{ matrix.shard }} of 4)
         run: make doc-checks-${{ matrix.shard }}
