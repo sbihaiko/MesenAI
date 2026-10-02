@@ -7,7 +7,10 @@ Given a `[Replay]` submission issue it
   2. downloads it -- allow-listed hosts only, capped at the section 3 size
      before a byte is inflated -- by reusing scripts/fetch_pack.py with the
      replay-specific allow-list scripts/replay_host_allowlist.json,
-  3. runs the section 3 lint (scripts/replay_lint.py) over it,
+  3. runs the section 3 lint and the section 8 structural gate
+     (scripts/replay_lint.py) over it, and refuses a copy of a recording the
+     committed catalog already lists (section 7: the row key is the issue
+     number, the dedupe key the archive's sha256),
   4. decides the verdict: label `replay:valid` or `replay:invalid`, the comment
      the workflow posts, and the whole-title rewrite of section 5
      (`[Replay] <game> -- <alias> -- <subtitle>`, every part read off the
@@ -20,7 +23,7 @@ issue -> label round trip without a network.
 
 Usage (the workflow's call):
   python3 scripts/replay_submission.py --body-file B --title T --login L
-      [--labels "replay,replay:invalid"] [--archive file]   > verdict.json
+      [--labels "replay,replay:invalid"] [--number N] [--archive file]   > verdict.json
 
 Stdlib only.
 """
@@ -43,6 +46,9 @@ import replay_lint  # noqa: E402
 ROOT = SCRIPTS.parent
 ALLOWLIST = SCRIPTS / "replay_host_allowlist.json"
 CATALOG = ROOT / "docs" / "community-packs.json"
+# Section 7's live rows, for the duplicate check (written by
+# scripts/generate_community_replay_catalog.py).
+REPLAY_CATALOG = ROOT / "docs" / "community-replays.json"
 
 # Labels. ADR-0205 names only `replay:removed` (section 9, slice R.2); the
 # submission and verdict labels below follow the pack flow's
@@ -84,6 +90,20 @@ def load_catalog(path=CATALOG):
         return json.loads(Path(path).read_text(encoding="utf-8")).get("packs", [])
     except (OSError, ValueError):
         return []
+
+
+def load_live_replays(path=REPLAY_CATALOG):
+    """(issue, sha256) of every row of the committed replay catalog."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    rows = []
+    for game in data.get("games", []) if isinstance(data, dict) else []:
+        for row in game.get("replays", []) if isinstance(game, dict) else []:
+            if isinstance(row, dict) and isinstance(row.get("issue"), int) and row.get("sha256"):
+                rows.append((row["issue"], str(row["sha256"]).lower()))
+    return rows
 
 
 def resolve_game(sha1, catalog, game_file, no_intro_sha1=""):
@@ -149,7 +169,7 @@ def _labels_for(valid):
     return ([LABEL_VALID], [LABEL_INVALID]) if valid else ([LABEL_INVALID], [LABEL_VALID])
 
 
-def _comment(valid, findings, url, title):
+def _comment(valid, findings, url, title, earlier=0):
     lines = [COMMENT_MARKER]
     if valid:
         lines.append("**Accepted.** This is a Record and share replay: no save state, no battery data, "
@@ -161,14 +181,19 @@ def _comment(valid, findings, url, title):
                      "Re-record it with the **Record and share** action, attach the new file and comment `/revalidate`.")
         for code, message in findings:
             lines.append(f"- `{code}`: {_defang(message)}")
+        if earlier:
+            # An int from the committed catalog, so the reference is not defanged.
+            lines.append(f"The same recording is already listed as #{earlier}; vote there with 👍.")
     if url:
         lines.append(f"<sub>Checked attachment: {url}</sub>")
     return "\n\n".join(lines)
 
 
-def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch):
+def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch, number=0, live=()):
     """Pure verdict for one submission. `fetch(url) -> bytes` raises on any
-    download refusal (allow-list, size cap, network)."""
+    download refusal (allow-list, size cap, network). `live` is the committed
+    catalog's (issue, sha256) rows (load_live_replays); `number` is this
+    issue's, so a re-validation never finds itself."""
     url = extract_attachment_url(issue_body)
     findings = []
     facts = {}
@@ -185,6 +210,12 @@ def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch):
         result = replay_lint.lint_bytes(data)
         facts = result.facts
         findings.extend((f.code, f.message) for f in result.findings)
+    earlier = 0
+    if not findings and facts.get("sha256"):
+        earlier = next((issue for issue, sha in live if sha == facts["sha256"] and issue != number), 0)
+        if earlier:
+            findings.append(("duplicate", "this archive is byte-identical to a replay the catalog already lists "
+                                          "(ADR-0205 section 7): one recording is one row."))
 
     valid = not findings
     title = issue_title
@@ -199,7 +230,7 @@ def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch):
         title_changed=title != issue_title,
         labels_add=add,
         labels_remove=remove,
-        comment=_comment(valid, findings, url, title),
+        comment=_comment(valid, findings, url, title, earlier),
         facts=facts,
     )
 
@@ -226,13 +257,15 @@ def main(argv):
     ap.add_argument("--title", required=True)
     ap.add_argument("--login", required=True)
     ap.add_argument("--labels", default="")
+    ap.add_argument("--number", type=int, default=0, help="this issue's number (section 7 duplicate check)")
     ap.add_argument("--archive", help="use this local file instead of downloading the attachment")
     args = ap.parse_args(argv[1:])
 
     body = Path(args.body_file).read_text(encoding="utf-8")
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     fetch = (lambda _url: Path(args.archive).read_bytes()) if args.archive else fetch_via_fetch_pack
-    verdict = evaluate(body, args.title, labels, args.login, load_catalog(), fetch)
+    verdict = evaluate(body, args.title, labels, args.login, load_catalog(), fetch,
+                       number=args.number, live=load_live_replays())
     print(json.dumps(verdict._asdict(), indent=2))
     return 0
 

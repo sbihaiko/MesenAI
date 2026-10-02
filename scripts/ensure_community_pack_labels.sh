@@ -34,6 +34,7 @@ LABELS=(
   "replay|1D76DB|Community-submitted gameplay replay (ADR-0205)"
   "replay:valid|0E8A16|Accepted — a Record and share .mmo that passes the ADR-0205 section 3 lint"
   "replay:invalid|D93F0B|Rejected — the attachment fails the ADR-0205 section 3 lint (reason in the bot comment)"
+  "replay:removed|5319E7|De-listed by a maintainer whatever the issue state (ADR-0205 section 9); never applied by a workflow"
   "cheat|1D76DB|Community-submitted cheat code (ADR-0248)"
   "cheat:valid|0E8A16|Accepted — passes the ADR-0248 section 3 structural gate (form, not effect)"
   "cheat:invalid|D93F0B|Rejected — fails the ADR-0248 section 3 structural gate (check named in the bot comment)"

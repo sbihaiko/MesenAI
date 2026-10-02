@@ -64,8 +64,10 @@ jobs:
           gh label create replay --repo "$REPO" --color 1D76DB --description "Community-submitted gameplay replay (ADR-0205)" --force
           gh label create replay:valid --repo "$REPO" --color 0E8A16 --description "Accepted: a Record and share .mmo that passes the ADR-0205 section 3 lint" --force
           gh label create replay:invalid --repo "$REPO" --color D93F0B --description "Rejected: the attachment fails the ADR-0205 section 3 lint" --force
+          # Section 9's maintainer lever (R.2): never applied by this workflow.
+          gh label create replay:removed --repo "$REPO" --color 5319E7 --description "De-listed by a maintainer whatever the issue state (ADR-0205 section 9)" --force
 
-      - name: Validate the attachment (section 3 lint, section 5 title)
+      - name: Validate the attachment (section 3 lint, section 8 gate, section 7 duplicate, section 5 title)
         id: verdict
         run: |
           set -euo pipefail
@@ -83,6 +85,7 @@ jobs:
             --body-file body.txt \
             "--title=$(cat title.txt)" \
             --login "$ISSUE_LOGIN" \
+            --number "$ISSUE_NUMBER" \
             --labels "$(cat labels.txt)" > verdict.json
           python3 - <<'PY'
           import json

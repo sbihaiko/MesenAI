@@ -187,6 +187,9 @@
 						<TextBlock Text="{Binding SaveStatesRowValue}" Opacity="0.7" HorizontalAlignment="Center" />
 						<Button Name="SaveStatesSaveButton" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesSave" />
 						<Button Name="SaveStatesLoadButton" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesLoad" />
+						<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
+						replays for this copy open from here.-->
+						<Button Name="SaveStatesReplaysButton" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesReplays" />
 						<Button Name="SaveStatesBackButton" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesBack" />
 					</StackPanel>
 				</Border>
@@ -196,6 +199,9 @@
 
 				<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
 				<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
+
+				<!--R.2 (ADR-0205 §7): Save states › Shared replays.-->
+				<v:PlayerReplaysSheetView Name="PlayerReplaysSheetHost" DataContext="{Binding ReplaysSheet}" IsVisible="{Binding IsVisible}" />
 
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />

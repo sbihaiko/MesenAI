@@ -12,7 +12,8 @@ Form, the `replay-submitted.yml` workflow and the labels they use.
     apply a form label that does not exist yet), with least-privilege permissions, a per-issue concurrency group, and runs
     scripts/replay_submission.py. Untrusted issue text (body, title, login)
     must reach the shell only through `env:`, never interpolated into `run:`.
-  * the workflow creates the three labels itself (`gh label create --force`,
+  * the workflow creates the four labels itself (R.2 added section 9's
+    `replay:removed`, which no workflow ever applies) (`gh label create --force`,
     idempotent) and adds `replay` to the issue, so nothing has to be set up by
     hand; scripts/ensure_community_pack_labels.sh still declares them.
 
@@ -28,7 +29,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 FORM = ROOT / ".github" / "ISSUE_TEMPLATE" / "replay.yml"
 WORKFLOW = ROOT / ".github" / "workflows" / "replay-submitted.yml"
 LABELS = ROOT / "scripts" / "ensure_community_pack_labels.sh"
-LABEL_NAMES = ("replay", "replay:valid", "replay:invalid")
+LABEL_NAMES = ("replay", "replay:valid", "replay:invalid", "replay:removed")
 
 
 def fail(msg):
@@ -78,7 +79,8 @@ def check_workflow():
         fail(f"permissions must be exactly contents: read, issues: write; found {data.get('permissions')!r}")
     if "concurrency" not in data:
         fail("a per-issue concurrency group is required")
-    for needle in ("'replay'", "'/revalidate'", "scripts/replay_submission.py", "--add-label", "--remove-label"):
+    for needle in ("'replay'", "'/revalidate'", "scripts/replay_submission.py", "--add-label", "--remove-label",
+                   '--number "$ISSUE_NUMBER"'):
         if needle not in text:
             fail(f"workflow must contain {needle}")
     # the title is the trigger: a not-yet-existing form label is silently skipped
@@ -111,7 +113,7 @@ def main():
     check_form()
     check_workflow()
     check_labels()
-    print("PASS: replay.yml form, replay-submitted.yml workflow and the three replay labels are wired")
+    print("PASS: replay.yml form, replay-submitted.yml workflow and the four replay labels are wired")
     return 0
 
 

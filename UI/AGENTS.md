@@ -432,6 +432,24 @@ can be exercised by real xunit tests without Avalonia or the native
   Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
   injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
   are swapped in headless tests so none reaches the network.
+- **Shared replays sheet (`UI/Logic/CommunityReplayCatalog`, `ReplayWatch`,
+  R.2 / ADR-0205 §7–§9).** W-P4 › Save states › *Shared replays…* opens
+  `UI/Views/PlayerReplaysSheetView` (W-P4 is at its seven controls, so it is
+  not an overlay row). `UI/Services/CommunityReplayCatalogFetcher` fetches
+  `docs/community-replays.json` like the cheat catalog (pack allow-list, ETag
+  cache rule, no confirmation, the GET only) and downloads a row through the
+  embedded `scripts/replay_host_allowlist.json` (resource
+  `Mesen.replay_host_allowlist.json`, drift-checked) under the 8 MB cap,
+  then checks size and sha256 before it writes `downloads/<sha256>.mmo`.
+  `ForRom` matches the movie's own ROM SHA-1 (`GetRomHash(HashType.Sha1)`,
+  the ROM as loaded, before a patch) and the console, never a title. Watch
+  asks once in place ("Restart & watch") because `MesenMovie::Play`
+  power-cycles; it is off, with the reason, with no game, during a movie or
+  in netplay. `MainWindowViewModel.CommunityReplaysSource`/`LastKnown`,
+  `ReplayRomSha1`, `ReplayOpenUrl`, `ReplayDownload`, `ReplayPlay` and
+  `ReplayWatchReasonSource` are swapped in `UI.HeadlessTests/PlayerReplaysSheetTests`
+  so none reaches the network or the core's movie player. Rules in
+  `UI.Tests/Share/CommunityReplayCatalogTests` and `ReplayWatchTests`.
 - **Settings › Look (`UI/Logic/LookLayers`, `NamedLookManifest`, P.13 /
   ADR-0246).** Art / Pixels / Screen in `LookConfigView`, a ConfigWindow tab
   after Video. Every rule (items, selection, enable, reason, ◉/◌ mark, what a

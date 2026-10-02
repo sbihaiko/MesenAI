@@ -127,6 +127,8 @@ namespace Mesen.Tests.Play
 		[InlineData(PlaySheet.SaveStateGrid)]
 		//G.4 (W-P6): the current-pack detail.
 		[InlineData(PlaySheet.PackDetail)]
+		//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet.
+		[InlineData(PlaySheet.Replays)]
 		public void A_sheet_opened_from_the_overlay_closes_back_to_it(PlaySheet sheet)
 		{
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));

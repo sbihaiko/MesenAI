@@ -187,12 +187,13 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   `scripts/mei_catalog_entry.py` only when mep-meta's `recipe.sources.deps`
   is non-empty).
 - `scripts/ensure_community_pack_labels.sh` idempotently ensures the repo's
-  21 labels: `community-pack`, `pack:valid`, `pack:invalid`,
+  22 labels: `community-pack`, `pack:valid`, `pack:invalid`,
   `pack:needs-review`, `pack:split`, `pack:known-missing`,
   `assets:textures`, `assets:audio`, `assets:external`, `patch:ips`,
   `patch:bps`, `console:nes`, `console:gb`, `console:gbc`, `console:sms`,
-  the three shared-replay labels `replay`, `replay:valid`, `replay:invalid`
-  (ADR-0205, `.github/workflows/replay-submitted.yml`), and the three
+  the four shared-replay labels `replay`, `replay:valid`, `replay:invalid`
+  (ADR-0205, `.github/workflows/replay-submitted.yml`) and `replay:removed`
+  (ADR-0205 §9, the maintainer's de-list lever, never applied by a workflow), and the three
   community-cheat labels `cheat`, `cheat:valid`, `cheat:invalid` (ADR-0248,
   `.github/workflows/cheat-submitted.yml`, which also applies the
   `console:*` labels) — both flows separate from pack triage.

@@ -54,6 +54,9 @@ namespace Mesen.ViewModels
 			if(_cheatsSheet?.IsVisible == true) {
 				return PlaySheet.Cheats;
 			}
+			if(_replaysSheet?.IsVisible == true) {
+				return PlaySheet.Replays;
+			}
 			if(IsSaveStatesSheetVisible) {
 				return PlaySheet.SaveStates;
 			}
@@ -103,6 +106,7 @@ namespace Mesen.ViewModels
 				case PlaySheet.PackDetail: IsPackDetailVisible = false; CancelRestore(); break;
 				//The sheet's own Closed handler re-shows the overlay too.
 				case PlaySheet.Cheats: CloseCheatsSheetOnEsc(); break;
+				case PlaySheet.Replays: CloseReplaysSheetOnEsc(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.SaveStateGrid:
@@ -198,12 +202,15 @@ namespace Mesen.ViewModels
 			if(_cheatsSheet?.IsVisible == true) {
 				_cheatsSheet.Close();
 			}
+			if(_replaysSheet?.IsVisible == true) {
+				_replaysSheet.Close();
+			}
 			IsSaveStatesSheetVisible = false;
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;
 			ClearPackDepWithoutGame();
-			//Last: closing the Cheats sheet re-shows the overlay.
+			//Last: closing the Cheats or Replays sheet re-shows the overlay.
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;
