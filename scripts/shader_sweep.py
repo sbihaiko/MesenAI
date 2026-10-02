@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HARNESS = os.path.join(ROOT, "scripts", "shader_sweep_shot")
 FAILING = ("CRASH", "TIMEOUT")
-LINE = re.compile(r"^SWEEP set=(\d) present=(\d) w=(\d+) h=(\d+) diffpx=(\d+) black=([\d.]+) mean=([\d.]+) err=(.*)$", re.M)
+LINE = re.compile(r"^SWEEP set=(\d) present=(\d) frame=(\d) w=(\d+) h=(\d+) diffpx=(\d+) black=([\d.]+) mean=([\d.]+) err=(.*)$", re.M)
 
 
 class ParamDef(ctypes.Structure):
@@ -88,13 +88,15 @@ def render(a, preset, image, nframes=None, timeout=None):
     m = LINE.search(out)
     if not m:
         return "CRASH", "no SWEEP line: " + out.strip()[-200:], secs, "0"
-    st, pr, w, h, diff, black, mean, msg = m.groups()
+    st, pr, fr, w, h, diff, black, mean, msg = m.groups()
     if st == "0":
         if msg.startswith("preset_create"):
             return "PARSE_FAIL", msg, secs, "0"
         return "CHAIN_FAIL", msg, secs, "0"
-    if pr == "0" or msg.startswith("mtl_filter_chain_frame"):
-        # "command buffer did not complete" is a GPU fault/hang the driver gave up on.
+    if pr == "0" or fr == "1":
+        # present=0: a GPU fault/hang the driver gave up on. frame=1: the chain's
+        # frame call failed and the frame went out unfiltered (#593), so its pixels
+        # would otherwise read as IDENTICAL.
         return "FRAME_FAIL", msg or "present failed", secs, "0"
     cls = "APPLIED" if int(diff) else "IDENTICAL"
     return cls, f"{w}x{h} diffpx={diff} black={black}% mean={mean}", secs, "0"

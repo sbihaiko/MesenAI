@@ -52,6 +52,7 @@
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
+#include "Shared/Video/ShaderFrameFailures.h"
 #include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
@@ -12436,6 +12437,106 @@ void TestAShaderFailureReasonIsTrimmedToOneShortLine()
 	Check(ShaderFailureReason("  \n").empty(), "shader reason: a blank reason stays blank");
 }
 
+//--- #593: a filter chain that fails per frame is reported once per episode --
+
+void TestShaderFrameFailuresAreReportedOncePerEpisode()
+{
+	const uint32_t limit = ShaderFrameFailures::Limit;
+	ShaderFrameFailures f;
+	std::string error;
+	Check(!f.Take(error), "frame failures: nothing to report before any failure");
+
+	Check(!f.Failed("mtl_filter_chain_frame failed: first"), "frame failures: one failure does not drop the chain");
+	for(uint32_t i = 0; i < 10; i++) {
+		f.Failed("mtl_filter_chain_frame failed: later");
+	}
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: first", "frame failures: a persistent failure is reported once, with the episode's first error", error);
+	Check(!f.Take(error), "frame failures: and not again while the episode lasts");
+
+	//A short recovery does not end the episode: a chain that flaps between
+	//failing and rendering must not put a message on screen every other frame.
+	f.Succeeded();
+	f.Failed("mtl_filter_chain_frame failed: flap");
+	Check(!f.Take(error), "frame failures: a flapping chain is not reported again");
+
+	//A recovery that holds for `limit` frames ends the episode; the next failure reports again.
+	for(uint32_t i = 0; i < limit; i++) {
+		f.Succeeded();
+	}
+	f.Failed("mtl_filter_chain_frame failed: again");
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: again", "frame failures: a failure after a lasting recovery is a new episode", error);
+
+	//A new chain is a new episode too.
+	f.ChainChanged();
+	f.Failed("mtl_filter_chain_frame failed: new chain");
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: new chain", "frame failures: a reloaded chain reports its own failure", error);
+
+	//`limit` failures in one episode drop the chain, consecutive or not.
+	f.ChainChanged();
+	uint32_t dropAt = 0;
+	for(uint32_t i = 1; i <= limit && !dropAt; i++) {
+		if(f.Failed("x")) {
+			dropAt = i;
+		}
+		f.Succeeded();
+	}
+	Check(dropAt == limit, "frame failures: the chain is dropped at the limit-th failure of an episode", std::to_string(dropAt));
+}
+
+struct FrameErrorPresenter : public FakeShaderPresenter
+{
+	std::string FrameError;
+	bool Dropped = false;
+	bool TakeFrameError(std::string& error)
+	{
+		if(FrameError.empty()) {
+			return false;
+		}
+		error = FrameError;
+		FrameError.clear();
+		return true;
+	}
+	bool TakeShaderDropped()
+	{
+		bool dropped = Dropped;
+		Dropped = false;
+		return dropped;
+	}
+};
+
+void TestAShaderFrameFailureShowsOneMessageNamingThePresetAndTheReason()
+{
+	std::error_code ec;
+	std::filesystem::path home = std::filesystem::temp_directory_path() / "mesence-shader-frame-home";
+	std::filesystem::create_directories(home, ec);
+	FolderUtilities::SetHomeFolder(home.string());
+
+	RecordingMessageManager osd;
+	MessageManager::RegisterMessageManager(&osd);
+	FrameErrorPresenter presenter;
+
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	Check(osd.Shown.empty(), "shader frame failure: a healthy frame shows nothing");
+
+	presenter.FrameError = "mtl_filter_chain_frame failed: FailedToCreateTexture\ndetails";
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	bool one = osd.Shown.size() == 1;
+	std::string msg = one ? osd.Shown[0].second : "";
+	Check(one, "shader frame failure: exactly one on-screen message per reported episode", "got " + std::to_string(osd.Shown.size()));
+	Check(msg.find("crt-geom.slangp") != std::string::npos && msg.find("/shaders/crt/") == std::string::npos, "shader frame failure: the message names the preset file", msg);
+	Check(msg.find("FailedToCreateTexture") != std::string::npos && msg.find("mtl_filter_chain_frame") == std::string::npos && msg.find('\n') == std::string::npos, "shader frame failure: the reason is librashader's, short", msg);
+	Check(MessageManager::Localize("ShaderFrameFailed") != "ShaderFrameFailed" && msg != MessageManager::Localize("ShaderLoadFailed"), "shader frame failure: the text comes from its own localized resource", msg);
+
+	//A drop is logged, not shown again: the episode already put a message on screen.
+	presenter.Dropped = true;
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	Check(osd.Shown.size() == 1 && !presenter.Dropped, "shader frame failure: a drop is consumed and adds no second message");
+
+	MessageManager::UnregisterMessageManager(&osd);
+	std::filesystem::remove_all(home, ec);
+}
+
 //--- Librashader param host logic (PR #581), against a fake instance ---------
 //LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
 //libra_instance_t, so these cases hand them a fake one: function pointers that
@@ -12977,6 +13078,8 @@ int main()
 
 	TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason();
 	TestAShaderFailureReasonIsTrimmedToOneShortLine();
+	TestShaderFrameFailuresAreReportedOncePerEpisode();
+	TestAShaderFrameFailureShowsOneMessageNamingThePresetAndTheReason();
 	TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();

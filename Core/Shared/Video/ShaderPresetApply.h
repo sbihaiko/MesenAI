@@ -73,3 +73,24 @@ void ApplyShaderPreset(TPresenter& presenter, const std::string& previousFile, c
 		MessageManager::DisplayMessage("Shaders", "ShaderLoadFailed", FolderUtilities::GetFilename(newFile, true), ShaderFailureReason(presenter.LastError()));
 	}
 }
+
+//What a renderer does after every Present(). TPresenter also needs
+//bool TakeFrameError(std::string&) and bool TakeShaderDropped().
+//  - #593: a frame the chain failed on was presented unfiltered. Reported
+//    once per failure episode (Core/Shared/Video/ShaderFrameFailures.h): the
+//    full error to the log, the preset file and a short reason on screen.
+//  - #584: a dropped chain (a GPU fault, or #593's failure limit) goes to the
+//    log only. The renderer does not reload it until the configured preset
+//    changes, so it is not dropped again on the next frame.
+template<typename TPresenter>
+void ReportShaderFrameProblems(TPresenter& presenter, const std::string& shaderFile)
+{
+	std::string error;
+	if(presenter.TakeFrameError(error)) {
+		MessageManager::Log("[librashader] " + error);
+		MessageManager::DisplayMessage("Shaders", "ShaderFrameFailed", FolderUtilities::GetFilename(shaderFile, true), ShaderFailureReason(error));
+	}
+	if(presenter.TakeShaderDropped()) {
+		MessageManager::Log("[librashader] " + presenter.LastError());
+	}
+}

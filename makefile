@@ -697,7 +697,7 @@ core-unit-tests: scripts/core_unit_tests
 #the shader cases (scripts/fetch_librashader_macos.sh). Separate from
 #core-unit-tests on purpose: that suite is host-free and runs on Linux CI.
 ifeq ($(UNAME_S),Darwin)
-scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
+scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/ShaderFrameFailures.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -o $@
 
 metal-presenter-tests: scripts/metal_presenter_tests
@@ -708,7 +708,7 @@ metal-presenter-tests: scripts/metal_presenter_tests
 #GetShaderParams, one process per preset. A maintainer tool on a Metal Mac -
 #deliberately NOT part of doc-checks or any CI workflow: GPU results depend on
 #the machine. Extra flags: SWEEP_ARGS="--sample 30 --nframes 300 ...".
-scripts/shader_sweep_shot: scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h
+scripts/shader_sweep_shot: scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/ShaderFrameFailures.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -framework ImageIO -o $@
 
 shader-sweep-tool: scripts/shader_sweep_shot

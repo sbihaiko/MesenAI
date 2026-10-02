@@ -16,6 +16,10 @@
 //    dropped, the command queue is replaced (two hangs make macOS ignore every
 //    later submission on a queue), and the unfiltered picture keeps coming.
 //    tests/fixtures/shaders/gpu-hang.slangp really hangs the GPU, briefly.
+//  - Issue #593: a frame the chain's frame call fails on is presented
+//    unfiltered and reported once per failure episode (TakeFrameError); a
+//    chain that keeps failing is dropped. The failure is injected
+//    (InjectFrameFailures): no fixture makes the real call fail on demand.
 //  - Not proven: anything visible on a real display (stop condition 3).
 //
 //Run from the repo root with librashader.dylib in the working directory or
@@ -31,6 +35,7 @@
 #include <vector>
 
 #include "Core/Shared/Video/RendererSelection.h"
+#include "Core/Shared/Video/ShaderFrameFailures.h"
 #include "Core/Shared/Video/ShaderPresetApply.h"
 #include "MacOS/MetalPresenter.h"
 
@@ -284,6 +289,65 @@ static void TestGpuHangWithoutReadback(MetalPresenter& p, const std::vector<uint
 	CHECK(Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "the picture keeps coming, unfiltered");
 }
 
+//Issue #593: a frame whose mtl_filter_chain_frame call fails is presented
+//unfiltered and Present() returns true, so without TakeFrameError() nobody
+//sees it. With the presenter's fixed formats and librashader's 16384 size
+//clamp, the call only fails when Metal refuses an allocation, which no
+//fixture triggers on demand; InjectFrameFailures() stands in for that.
+static bool Same(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b)
+{
+	return a.size() == b.size() && memcmp(a.data(), b.data(), a.size() * 4) == 0;
+}
+
+static void TestFrameErrors(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("a frame the filter chain fails on is reported once per episode (#593)\n");
+	const uint32_t limit = ShaderFrameFailures::Limit;
+	std::string error;
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}) && p.ShaderActive(), "the fixture preset loads");
+	std::vector<uint32_t> out;
+	CHECK(Present(p, frame, out) && !Same(out, ref) && !p.TakeFrameError(error), "a healthy frame is filtered and reports no frame error");
+
+	p.InjectFrameFailures(5);
+	bool allUnfiltered = true;
+	for(int i = 0; i < 5; i++) {
+		allUnfiltered &= Present(p, frame, out) && Same(out, ref);
+	}
+	CHECK(allUnfiltered, "each failed frame is still presented, unfiltered");
+	CHECK(p.TakeFrameError(error) && error.find("mtl_filter_chain_frame") != std::string::npos, "the failure is reported, with the full error");
+	printf("  note: frame error: %s\n", error.c_str());
+	CHECK(!p.TakeFrameError(error), "five failing frames are one report, not five");
+	CHECK(p.ShaderActive() && !p.TakeShaderDropped(), "a short failure keeps the chain");
+	CHECK(Present(p, frame, out) && !Same(out, ref), "the next good frame is filtered again");
+
+	bool held = true;
+	for(uint32_t i = 0; i < limit; i++) {
+		held &= Present(p, frame, out);
+	}
+	p.InjectFrameFailures(1);
+	CHECK(held && Present(p, frame, out) && p.TakeFrameError(error), "after a lasting recovery a new failure is reported again");
+
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}), "the preset reloads");
+	p.InjectFrameFailures(1);
+	CHECK(Present(p, frame, out) && p.TakeFrameError(error), "a reloaded chain reports its own failure");
+
+	printf("a chain that keeps failing is dropped, like a GPU fault (#586)\n");
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}), "the preset reloads (a fresh episode)");
+	p.InjectFrameFailures(limit + 10);
+	uint32_t frames = 0;
+	while(p.ShaderActive() && frames < limit + 10) {
+		Present(p, frame, out);
+		frames++;
+	}
+	printf("  note: dropped after %u failing frames\n", frames);
+	CHECK(!p.ShaderActive() && frames == limit, "the chain is dropped at the limit-th failed frame");
+	CHECK(p.TakeShaderDropped() && p.LastError().find("disabled") != std::string::npos, "the drop is reported with its reason");
+	CHECK(p.TakeFrameError(error) && !p.TakeFrameError(error), "the episode itself was reported exactly once");
+	p.InjectFrameFailures(0);
+	CHECK(Present(p, frame, out) && Same(out, ref), "the picture keeps coming, unfiltered");
+	p.ClearShader();
+}
+
 static void TestOverlay(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
 {
 	printf("HUD overlay is blended over the picture\n");
@@ -400,6 +464,7 @@ int main()
 		TestBrokenShaderFallsBack(p, frame, ref);
 		TestGpuHangWithReadback(p, frame, ref);
 		TestGpuHangWithoutReadback(p, frame, ref);
+		TestFrameErrors(p, frame, ref);
 		TestOverlay(p, frame, ref);
 		TestOverlayUploadsOnlyWhenDirty(p, frame);
 		TestDrawableSizeIsEnforced(p, view, frame);

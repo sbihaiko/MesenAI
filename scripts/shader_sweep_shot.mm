@@ -10,7 +10,12 @@
 //which is what the presenter shows with no shader.
 //
 //usage: shader_sweep_shot <frame.png|builtin> <scale> <nframes> <preset|none> [out.png]
-//prints one line: SWEEP set=<0|1> present=<0|1> w=<w> h=<h> diffpx=<n> black=<%> mean=<v> err=<text>
+//prints one line: SWEEP set=<0|1> present=<0|1> frame=<0|1> w=<w> h=<h> diffpx=<n> black=<%> mean=<v> err=<text>
+//frame=1: a frame call of the filter chain failed (MetalPresenter::TakeFrameError,
+//#593). That frame was presented unfiltered and Present() still returned true,
+//so the pixels alone would read as IDENTICAL; err= then carries the frame error.
+//MESEN_SWEEP_INJECT_FRAME_FAILURES=<n> fails the first n frame calls on purpose
+//(MetalPresenter::InjectFrameFailures), to check that path of the sweep itself.
 //librashader.dylib is found next to this binary, then in the working directory.
 #import <AppKit/AppKit.h>
 #import <ImageIO/ImageIO.h>
@@ -97,14 +102,14 @@ static void SavePng(const std::string& path, const std::vector<uint32_t>& px, ui
 	CGColorSpaceRelease(cs);
 }
 
-static void Report(bool set, bool present, uint32_t w, uint32_t h, size_t diff, double black, double mean, std::string err)
+static void Report(bool set, bool present, bool frameFailed, uint32_t w, uint32_t h, size_t diff, double black, double mean, std::string err)
 {
 	for(char& c : err) {
 		if(c == '\n' || c == '\r' || c == '\t') {
 			c = ' ';
 		}
 	}
-	printf("SWEEP set=%d present=%d w=%u h=%u diffpx=%zu black=%.1f mean=%.1f err=%s\n", set, present, w, h, diff, black, mean, err.c_str());
+	printf("SWEEP set=%d present=%d frame=%d w=%u h=%u diffpx=%zu black=%.1f mean=%.1f err=%s\n", set, present, frameFailed, w, h, diff, black, mean, err.c_str());
 	fflush(stdout);
 }
 
@@ -146,24 +151,32 @@ int main(int argc, char** argv)
 		if(preset != "none") {
 			set = p.SetShader(preset, {});
 			if(!set) {
-				Report(false, false, 0, 0, 0, 0, 0, p.LastError());
+				Report(false, false, false, 0, 0, 0, 0, 0, p.LastError());
 				return 0;
 			}
 		}
 
+		if(const char* inject = getenv("MESEN_SWEEP_INJECT_FRAME_FAILURES")) {
+			p.InjectFrameFailures((uint32_t)atoi(inject));
+		}
+
 		bool ok = true;
+		bool frameFailed = false;
+		std::string frameError;
 		for(uint32_t f = 1; f <= nframes && ok; f++) {
 			ok = p.Present(frame.data(), fw, fh, f, false, MetalOverlay(), MetalOverlay());
-			//A frame error makes the presenter fall back to an unfiltered blit;
-			//keep the first one, later frames would only repeat it.
-			if(ok && !p.LastError().empty()) {
+			//A frame error makes the presenter fall back to an unfiltered blit
+			//and Present() still succeed; keep the first one, later frames
+			//would only repeat it.
+			if(p.TakeFrameError(frameError)) {
+				frameFailed = true;
 				break;
 			}
 		}
 		std::vector<uint32_t> out;
 		uint32_t w = 0, h = 0;
 		if(!ok || !p.GetLastPresented(out, w, h)) {
-			Report(set, false, 0, 0, 0, 0, 0, p.LastError());
+			Report(set, false, frameFailed, 0, 0, 0, 0, 0, frameFailed ? frameError : p.LastError());
 			return 0;
 		}
 
@@ -183,7 +196,7 @@ int main(int argc, char** argv)
 			diff = out.size();
 		}
 		double n = out.empty() ? 1.0 : (double)out.size();
-		Report(set, true, w, h, diff, 100.0 * black / n, sum / (3.0 * n), p.LastError());
+		Report(set, true, frameFailed, w, h, diff, 100.0 * black / n, sum / (3.0 * n), frameFailed ? frameError : p.LastError());
 		if(argc > 5) {
 			SavePng(argv[5], out, w, h);
 		}
