@@ -59,7 +59,7 @@ does not exist end to end. Five independent gaps:
 Two further findings change what "generate" can honestly mean:
 
 - **A patch that routes music to the pack usually removes it from the APU.**
-  `NesConsole.cpp:546-548` states that a `<bgm>` pack's patch "strips the music
+  `NesConsole.cpp:543-547` states that a `<bgm>` pack's patch "strips the music
   out of the PRG" so the game asks the pack for an OGG, and warns when the
   audio layer is off (`WarnAboutSilentPatchedMusic`). So extracting from the
   *patched* ROM may enumerate nothing; extracting from the *unpatched* ROM
