@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "Utilities/JsonReader.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -148,6 +149,42 @@ namespace RemasterProject
 	inline bool IsKnownSource(const string& source)
 	{
 		return source == "play" || source == "tas" || source == "ai" || source == "script";
+	}
+
+	//durationSeconds is the recording's own emulated length (#612). The
+	//console's frame counter is not a clock the recording owns: a save state
+	//restores the counter it was saved at, so a recording started on load and
+	//then fed a state minted at frame 1362 would otherwise count from power-on.
+	struct RecordingClock
+	{
+		uint32_t StartFrame = 0;
+		uint64_t BankedFrames = 0;
+
+		void Start(uint32_t frame)
+		{
+			StartFrame = frame;
+			BankedFrames = 0;
+		}
+
+		//The counter jumped from `before` to `after` (a state load): bank what
+		//was played so far and count on from the restored frame
+		void Rebase(uint32_t before, uint32_t after)
+		{
+			BankedFrames = ElapsedFrames(before);
+			StartFrame = after;
+		}
+
+		uint64_t ElapsedFrames(uint32_t now) const
+		{
+			return BankedFrames + (now >= StartFrame ? now - StartFrame : 0);
+		}
+	};
+
+	//Emulated seconds, rounded to a hundredth: the frame count is the run's
+	//truth, the wall clock is not (a headless run is faster than real time)
+	inline double DurationSecondsFor(uint64_t frames, double fps)
+	{
+		return fps > 0 ? std::round(frames / fps * 100.0) / 100.0 : 0;
 	}
 
 	struct Recording

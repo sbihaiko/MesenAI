@@ -74,12 +74,12 @@ private:
 	bool _bootstrapping = false;
 	string _bootstrapSaveFolder; //owns the char* handed to HdPackBuilderOptions
 	//ADR-0243 (F12.20): the recording in progress - its project root, its
-	//auto/rec-NNN/ folder, the project.json entry it owns and the frame it
-	//started on (durationSeconds is emulated time)
+	//auto/rec-NNN/ folder, the project.json entry it owns and the emulated
+	//frames it has played (durationSeconds; a state load rebases it, #612)
 	string _recordingProjectRoot;
 	string _recordingFolder;
 	RemasterProject::Recording _recordingEntry;
-	uint32_t _recordingStartFrame = 0;
+	RemasterProject::RecordingClock _recordingClock;
 	//Source/note the next on-load bootstrap records with (headless_record
 	//says "tas" for movie=, "script" for input=); "play" by default
 	string _nextRecordingSource = "play";
@@ -238,6 +238,15 @@ public:
 	//Closes the manifest entry of a recording that was never stopped (the
 	//emulator stops or another ROM loads); its builder goes with the console.
 	void FinishRecordingEntry();
+	//A state load restored the console's frame counter from `before` to
+	//`after`; the recording in progress keeps counting its own frames (#612).
+	//Called by Emulator::Deserialize, which every state load goes through.
+	void OnFrameCounterRestored(uint32_t before, uint32_t after)
+	{
+		if(_bootstrapping) {
+			_recordingClock.Rebase(before, after);
+		}
+	}
 	void SetNextRecordingSource(const string& source, const string& note);
 	bool IsBootstrapping() const { return _bootstrapping; }
 	//Absolute auto/rec-NNN/ folder of the recording in progress (or of the
