@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "Core/Shared/Video/RendererSelection.h"
+#include "Core/Shared/Video/ShaderPresetApply.h"
 #include "MacOS/MetalPresenter.h"
 
 static int gCases = 0;
@@ -198,6 +199,10 @@ static void TestBrokenShaderFallsBack(MetalPresenter& p, const std::vector<uint3
 	CHECK(!p.SetShader("tests/fixtures/shaders/does-not-exist.slangp", {}), "a missing preset is rejected");
 	CHECK(!p.ShaderActive(), "no shader is active after the failure");
 	CHECK(!p.LastError().empty(), "the failure carries a reason");
+	//#585: the reason the on-screen message carries, cut from librashader's real text.
+	std::string reason = ShaderFailureReason(p.LastError());
+	printf("  note: on-screen reason: %s\n", reason.c_str());
+	CHECK(!reason.empty() && reason.find(" failed: ") == std::string::npos && reason.find('\n') == std::string::npos, "the on-screen reason is one line without the API name");
 	std::vector<uint32_t> out;
 	CHECK(Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "the frame is still presented, unfiltered");
 }

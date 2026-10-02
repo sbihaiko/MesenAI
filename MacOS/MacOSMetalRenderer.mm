@@ -4,6 +4,7 @@
 #include "Core/Shared/MessageManager.h"
 #include "Core/Shared/RenderedFrame.h"
 #include "Core/Shared/Video/VideoRenderer.h"
+#include "Core/Shared/Video/ShaderPresetApply.h"
 
 MacOSMetalRenderer::MacOSMetalRenderer(Emulator* emu) : _emu(emu)
 {
@@ -77,16 +78,7 @@ void MacOSMetalRenderer::UpdateShader()
 		params.push_back({ p.Name, (float)p.Value });
 	}
 
-	if(cfg.ShaderFile != _shaderCfg.ShaderFile) {
-		if(cfg.ShaderFile.empty()) {
-			_presenter.ClearShader();
-		} else if(!_presenter.SetShader(cfg.ShaderFile, params)) {
-			//Keep presenting unfiltered; the reason goes to the log.
-			MessageManager::Log("[librashader] " + _presenter.LastError());
-		}
-	} else {
-		_presenter.UpdateShaderParams(params);
-	}
+	ApplyShaderPreset(_presenter, _shaderCfg.ShaderFile, cfg.ShaderFile, params);
 	_shaderCfg = cfg;
 }
 

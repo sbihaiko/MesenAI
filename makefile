@@ -697,7 +697,7 @@ core-unit-tests: scripts/core_unit_tests
 #the shader cases (scripts/fetch_librashader_macos.sh). Separate from
 #core-unit-tests on purpose: that suite is host-free and runs on Linux CI.
 ifeq ($(UNAME_S),Darwin)
-scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h
+scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -o $@
 
 metal-presenter-tests: scripts/metal_presenter_tests

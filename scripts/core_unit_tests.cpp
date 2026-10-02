@@ -52,6 +52,7 @@
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
+#include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
 #include "Shared/Video/AspectRatioMath.h"
@@ -12359,6 +12360,82 @@ void TestShareStopRestoreIsOneShotAndInertWhenNotSharing()
 	Check(ended == 3 && s.Nes.RamPowerOnState == RamState::AllOnes, "share stop: a second Stop does not roll back what the player set after the first");
 }
 
+//--- #585: a shader preset that fails to load says so on screen -----------
+
+struct RecordingMessageManager : public IMessageManager
+{
+	std::vector<std::pair<std::string, std::string>> Shown;
+	void DisplayMessage(string title, string message) override { Shown.push_back({ title, message }); }
+};
+
+struct FakeShaderPresenter
+{
+	bool LoadSucceeds = false;
+	std::string Error;
+	int Loads = 0;
+	int Clears = 0;
+	int ParamUpdates = 0;
+	bool SetShader(const std::string&, const std::vector<int>&)
+	{
+		Loads++;
+		return LoadSucceeds;
+	}
+	void ClearShader() { Clears++; }
+	void UpdateShaderParams(const std::vector<int>&) { ParamUpdates++; }
+	const std::string& LastError() const { return Error; }
+};
+
+void TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason()
+{
+	std::error_code ec;
+	std::filesystem::path home = std::filesystem::temp_directory_path() / "mesence-shader-notice-home";
+	std::filesystem::create_directories(home, ec);
+	FolderUtilities::SetHomeFolder(home.string()); //MessageManager::Log needs a home folder to be set at all
+
+	RecordingMessageManager osd;
+	MessageManager::RegisterMessageManager(&osd);
+	FakeShaderPresenter presenter;
+	presenter.Error = "mtl_filter_chain_create failed: UnknownSemantics(\"EnableHDR\")\nat pass 3";
+	std::vector<int> params;
+
+	ApplyShaderPreset(presenter, "", "/shaders/crt/crt-geom-deluxe.slangp", params);
+	bool one = osd.Shown.size() == 1;
+	std::string msg = one ? osd.Shown[0].second : "";
+	Check(one, "shader load failure: exactly one on-screen message", "got " + std::to_string(osd.Shown.size()));
+	Check(msg.find("crt-geom-deluxe.slangp") != std::string::npos, "shader load failure: the message names the preset file", msg);
+	Check(msg.find("/shaders/crt/") == std::string::npos, "shader load failure: the message names the file, not the whole path", msg);
+	Check(msg.find("UnknownSemantics(\"EnableHDR\")") != std::string::npos, "shader load failure: the message carries librashader's reason", msg);
+	Check(msg.find("mtl_filter_chain_create") == std::string::npos && msg.find('\n') == std::string::npos, "shader load failure: the reason is short (no API name, one line)", msg);
+	Check(one && osd.Shown[0].first == MessageManager::Localize("Shaders") && MessageManager::Localize("ShaderLoadFailed") != "ShaderLoadFailed", "shader load failure: the title and the text come from the localized resources", one ? osd.Shown[0].first : "");
+
+	//A parameter change on the same (failed) preset does not reload or repeat.
+	ApplyShaderPreset(presenter, "/shaders/crt/crt-geom-deluxe.slangp", "/shaders/crt/crt-geom-deluxe.slangp", params);
+	Check(osd.Shown.size() == 1 && presenter.Loads == 1, "shader load failure: a parameter change does not repeat the message");
+
+	//Each new failed load is its own message.
+	presenter.Error = "preset_create_with_options failed: the file could not be read";
+	ApplyShaderPreset(presenter, "/shaders/crt/crt-geom-deluxe.slangp", "/shaders/oled.slangp", params);
+	Check(osd.Shown.size() == 2 && osd.Shown.back().second.find("oled.slangp") != std::string::npos, "shader load failure: a second failed preset gets its own message");
+
+	//A preset that loads, and clearing the shader, say nothing.
+	presenter.LoadSucceeds = true;
+	ApplyShaderPreset(presenter, "/shaders/oled.slangp", "/shaders/ok.slangp", params);
+	ApplyShaderPreset(presenter, "/shaders/ok.slangp", "", params);
+	Check(osd.Shown.size() == 2 && presenter.Clears == 1, "shader load failure: a successful load and a clear show nothing");
+
+	MessageManager::UnregisterMessageManager(&osd);
+	std::filesystem::remove_all(home, ec); //mesen.log written into it by MessageManager::Log
+}
+
+void TestAShaderFailureReasonIsTrimmedToOneShortLine()
+{
+	std::string longReason = "parse error: " + std::string(400, 'x');
+	std::string shortened = ShaderFailureReason("preset_create_with_options failed: " + longReason);
+	Check(shortened.size() <= 120 && shortened.rfind("parse error: ", 0) == 0, "shader reason: a long reason is capped", std::to_string(shortened.size()));
+	Check(ShaderFailureReason("librashader.dylib is not available") == "librashader.dylib is not available", "shader reason: a message without an API prefix is kept as is");
+	Check(ShaderFailureReason("  \n").empty(), "shader reason: a blank reason stays blank");
+}
+
 //--- Librashader param host logic (PR #581), against a fake instance ---------
 //LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
 //libra_instance_t, so these cases hand them a fake one: function pointers that
@@ -12895,6 +12972,8 @@ int main()
 	TestTheRowLogNamesAHalfOnlyByRowsThatShowedSprites();
 	TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace();
 
+	TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason();
+	TestAShaderFailureReasonIsTrimmedToOneShortLine();
 	TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();
