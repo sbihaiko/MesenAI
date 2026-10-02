@@ -1,0 +1,88 @@
+# DESIGN mode: the track editor (ADR-0239 rung 1, DESIGN from the title menu).
+#
+# The editor's own screen set is what this body records: the palette strip
+# (`A`-`S`, `CL`, `END`, `LP`), the mark that walks it, the three canvas bands
+# and the rider moving over them. `mint-design.txt` is the entry; this body is
+# repeated by record_navigation_sweep.py to fill the 120 s run (ADR-0239 s6).
+#
+# WHAT IT DELIBERATELY DOES NOT DO, and why: it never presses `B`. The editor's
+# placement control is `B` ("move the mark to the letter from A to S ... press
+# the B button and that hurdle will be set in that location", Excitebike
+# instruction booklet, DESIGN MODE), and `B` is also what clears the canvas
+# when the mark sits on `CL` and what leaves the editor when it sits on `END`.
+# The mark wraps and auto-repeats on a held direction - measured on this ROM
+# 2026-09-26: an 800-frame hold of either direction moves it 19-20 entries, and
+# it wraps off `A` onto the `LP`/`CL` end rather than clamping - so a blind body
+# cannot know where the mark is after its first sweep, and a stray `B` on `CL`
+# or `END` would wipe the design or end the session's screen set. The 19
+# hurdle graphics are the same art the five tracks draw as obstacles, which the
+# ten track sessions record in play.
+#
+# `A` moves the rider to the mark's position and the d-pad moves it around the
+# canvas; neither of those places anything, and neither can leave the editor.
+
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f L
+20f -
+20f L
+20f -
+20f U
+20f -
+20f A
+20f -
+20f U
+20f -
+20f A
+20f -
+20f D
+20f -
+20f A
+20f -
+20f D
+20f -
+20f A
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f R
+20f -
+20f L
+20f -
+20f L
+20f -
+20f L
+20f -
+20f L
+20f -
+20f L
+20f -
+20f U
+20f -
+20f A
+20f -
+20f D
+20f -
+20f A
+20f -
+20f L
+20f -
+20f L
+20f -

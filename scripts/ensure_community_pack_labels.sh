@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Idempotently ensures the labels used by the "Community HD/MEP Packs"
-# triage flow exist (CLAUDE.md, "Community HD/MEP Pack triage" section).
+# triage flow (CLAUDE.md, "Community HD/MEP Pack triage" section) and by the
+# shared-replay flow (ADR-0205, replay-submitted.yml) exist.
 # Run once when setting up the repository, or again at any time — labels
 # that already exist are skipped.
 #
@@ -29,6 +30,9 @@ LABELS=(
   "pack:needs-review|C5DEF5|Pack claims an existing pack_id from a different origin — human triage (PRD §3.3)"
   "pack:split|C5DEF5|Multi-game submission split into one issue per game (ADR-0143)"
   "pack:known-missing|D4C5F9|References files it does not ship; gap declared by MesenCE validation (ADR-0152)"
+  "replay|1D76DB|Community-submitted gameplay replay (ADR-0205)"
+  "replay:valid|0E8A16|Accepted — a Record and share .mmo that passes the ADR-0205 section 3 lint"
+  "replay:invalid|D93F0B|Rejected — the attachment fails the ADR-0205 section 3 lint (reason in the bot comment)"
 )
 
 for entry in "${LABELS[@]}"; do

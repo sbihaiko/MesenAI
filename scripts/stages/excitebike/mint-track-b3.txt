@@ -1,0 +1,13 @@
+# mint from power-on to the start of SELECTION B track 3
+# (ADR-0239 rung 1: the game's own selector, by input - no RAM cheat)
+60f -
+20f D
+40f -
+20f T
+60f -
+20f R
+20f -
+20f R
+20f -
+40f -
+20f T

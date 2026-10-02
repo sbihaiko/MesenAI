@@ -1,30 +1,81 @@
 # Super Mario Bros. 3 - World 1-1, 60 s from the state mint-stage1.txt writes
 # (frame 1023: small Mario at the level's start, x = 24, timer 300, 4 lives).
 #
-# The opening is the run's whole action, because World 1-1's first screen is
-# the only part of the level a blind script survives: walk right into the two
-# Goombas that walk toward Mario and come down on them (jumping late is a
-# death, not a stomp - walking right for 240 f without a jump dies on the
-# first Goomba at ~frame 180), then walk back to the level's start and pace
-# there for the rest of the minute. Right of the ? blocks the first screen
-# ends in a Piranha Plant's pipe (progress ~340): a script that keeps walking
-# right lands on the plant and dies between 7 s and 8 s, and every blind
-# "walk N frames, jump, repeat" shape (N = 40..600) is dead by 25 s.
+# The route clears World 1-1. It runs right with the jumps the level needs and
+# stops the level's camera at $0075 = 11, $00FD = 253 - 3 069 px, twelve
+# screens - around frame 1 620. The goal card comes up at frame ~1 680 (~28 s),
+# Mario stopped there while the timer runs down 57 to 0; the World 1 map the
+# clear leads to is up by ~1 860 (x = y = 0, $0075 = 32, timer 0) and holds for
+# the rest of the minute, all 4 lives kept throughout. The route it replaces
+# stays where it is minted: 60 s of pacing leave it at camera $0075 = 1,
+# $00FD = 212, 468 px into the level (timer 220, score 200).
 #
-# The two long holds every loop are the point of the tail: 400 f of Right and
-# 400 f of Left are far more than the two turns of the walk cycle ADR-0179
-# section 3 asks for (the pace covers progress 16..339, the level's first
-# screen). Measured on this script, 60 s from the state: 4 lives (unchanged),
-# score 200 (the two Goombas), timer 220, and the level still running.
-60f R
-20f RA
-40f R
-300f L
-400f L
-400f R
-400f L
-400f R
-400f L
-400f R
-400f L
-380f R
+# Progress is read off the camera, not off the player: $0075 is the level's
+# horizontal position in 256 px units and $00FD the scroll inside the unit, so
+# the camera's x is $0075 * 256 + $00FD (DataCrystal, "Super Mario Bros. 3/RAM
+# map"; the same map gives $0090 the player's x, $00A2 their y, $00CF/$00D8
+# their vertical velocity and in-air flag, $0736 their lives and $05EE-$05F0
+# the timer). The calibration is 100 frames of RB from the minted state: they
+# leave $00FD = 45, where R alone leaves 26.
+#
+# This is a search artefact, not a hand route: runs/route-smb3/search/solver.py
+# tries 60-frame input blocks from the minted state, keeps the ones that stay
+# alive and move the camera, and chains the winners through their save states.
+# Every block was recorded at <seconds> = (frames - 1) / 60.0988, which lands
+# the state one frame past the target, so the accepted blocks concatenate into
+# this one flat script with no padding. The 1 980-frame tail is a plain hold.
+60f RB
+8f RB
+22f RAB
+30f RB
+22f AB
+38f RB
+16f RB
+7f RAB
+37f RB
+60f RB
+8f RB
+7f RAB
+45f RB
+60f -
+22f RAB
+38f RB
+22f RAB
+38f RB
+8f RB
+7f RAB
+45f RB
+60f RB
+16f RB
+7f RAB
+37f RB
+22f AB
+38f RB
+4f -
+6f RB
+22f RAB
+28f RB
+30f LB
+80f RB
+24f RAB
+106f RB
+22f AB
+38f RB
+22f AB
+38f RB
+8f RB
+7f RAB
+45f RB
+8f RB
+22f RAB
+30f RB
+16f RB
+22f RAB
+22f -
+60f RB
+8f RB
+22f RAB
+30f RB
+60f RB
+60f RB
+1980f -

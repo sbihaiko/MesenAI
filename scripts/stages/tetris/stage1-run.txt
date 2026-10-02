@@ -1,0 +1,46 @@
+# Tetris (1989) (Nintendo) - the playing body, run from the starting LEVEL and
+# HEIGHT the profile's entry script selected (ADR-0239 s2/s6).
+#
+# WHAT IT IS FOR. This game's selector picks a STARTING LEVEL, not a different
+# stage: the same well, the same seven tetrominoes and the same panels are
+# played, faster. The material that can differ between two sessions is the
+# piece palette the level chooses and the board rows the height pre-fills, so
+# the body does the one thing that draws a playfield - it walks the falling
+# piece across the well, rotates it, and soft-drops it, over and over.
+#
+# IT IS BLIND, and it is meant to be: it never reads the board, so the stack
+# grows until the game tops out. That is the game's own GAME OVER and the score
+# screen that follows (ADR-0184 s4 asks for them to be on the record, not
+# avoided), and it is why 120 s of this body is enough to see a whole game.
+#
+# TWO BUTTONS ARE NEVER PRESSED, on purpose:
+#   Start - it pauses the game, and the pause screen is not the game's art.
+#   Up    - it does nothing on this ROM's playing screen.
+#
+# THE SHAPE is the one scripts/stages/README.md asks for: a hold long enough
+# that the game's own auto-repeat walks the piece into a wall and parks it
+# there (the left/right timer is $0046 and the soft-drop hold timer $004F,
+# Data Crystal's Tetris (NES) RAM map, archived 2018-09-23), with a release
+# between holds so every press is read on its own rather than fused with the
+# next. A and B both rotate the piece, one each way.
+
+120f L
+20f -
+40f A
+20f -
+120f R
+20f -
+40f B
+20f -
+60f D
+20f -
+120f D
+20f -
+40f A
+20f -
+120f L
+20f -
+40f B
+20f -
+120f D
+20f -

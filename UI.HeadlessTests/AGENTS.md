@@ -57,6 +57,16 @@ override it with `-p:RuntimeIdentifier=<rid>` (the makefile does this via
 `App.Initialize()` attaches Avalonia developer tools under `#if DEBUG`, and
 headless builds a fresh `Application` per test — the second attach throws.
 
+## Real-coordinator install proof
+
+`PackAudioNoticeInstallTests` (ADR-0240 / F6.9) drives the real
+`CommunityPackInstallCoordinator.Install` over a fixture hd-legacy zip and a
+synthetic NROM (needs a built core; skips otherwise) and asserts the notice on
+the outcome and in `EmuApi.GetLog()`. It points `ConfigManager._homeFolder` (by
+reflection) at a temp folder so the install registry and cache never touch the
+user's real home. The decision itself is pinned in `UI.Tests`; this checks
+wiring only.
+
 ## Test hygiene
 
 - **Every test class that reaches the native core carries

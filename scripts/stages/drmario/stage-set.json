@@ -1,0 +1,8 @@
+{
+  "game": "Dr. Mario",
+  "rom": {
+    "noIntroSha1": ["FF6459BC3AF5743E3D303823999F33D74ABDF1AA"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Dr. Mario (1990) (Nintendo).nes from the user's ROM library (whole-file SHA1 01DE1E04C396298358E86468BA96148066688194, which is the range the two hashes differ by; 2 PRG banks of 16 KB and 4 CHR banks of 8 KB, so 32768 bytes of CHR and a ROM CHR denominator of 1093 distinct non-blank 16-byte patterns), the dump every entry script and the F14.17 navigation sweep (ADR-0239, runs/f1417/drmario/) were authored and recorded on. Both hashes computed on this checkout 2026-09-26. The one recordable route here is bottle-run.txt, the blind playing body; the start states are the mint-level-NN.txt entries, of which mint-level-00.txt is level 00, the game's own first place and the 'before' side of the sweep's union metric."
+}

@@ -1,0 +1,118 @@
+# The Flintstones - The Surprise at Dinosaur Peak!: power-on to the
+# start of the level the debug level select's number 30 loads
+# (ADR-0239 s1 rung 1 - the game's own selector, by input, so no RAM
+# cheat rides with the run).
+#
+# The code is TCRF's, verbatim: "Press A, B, Right, A, Down, Down,
+# Down, Down, B, Left, Left, B, A, Start at the title screen"
+# (tcrf.net, 'The Flintstones: The Surprise at Dinosaur Peak!',
+# Debug Mode). Every press is 6 frames with a 6-frame gap: measured
+# 2026-09-26, a press the screen is still reading is dropped and the
+# debug screen never appears.
+#
+# "After pressing any button, a number will appear which acts as a
+# combination sound test/stage select ... press Left or Right to
+# change the number ... and Start to begin the game on the selected
+# stage" (the same page). The first Start below reveals the number,
+# the second begins the game on it.
+#
+# 30 step(s) of `4f R` + `12f -` between them: the hold
+# is short enough not to repeat and the gap is long enough that the
+# screen has read it, so 30 presses leave the number reading 30
+# (measured 2026-09-26 with runs/f1418/flintstones/probe-steps.py: on
+# the number screen $03CE equals the press count for every count below
+# 100, and in decimal on the screen).
+900f -
+6f A
+6f -
+6f B
+6f -
+6f R
+6f -
+6f A
+6f -
+6f D
+6f -
+6f D
+6f -
+6f D
+6f -
+6f D
+6f -
+6f B
+6f -
+6f L
+6f -
+6f L
+6f -
+6f B
+6f -
+6f A
+6f -
+6f T
+6f -
+60f -
+4f T
+60f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+4f R
+12f -
+12f -
+4f T

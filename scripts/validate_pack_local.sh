@@ -613,10 +613,18 @@ PY
     [ -z "$asset" ] && continue
     case "$asset" in
       textures|audio) L="assets:$asset"; gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
-      ips|bps) L="patch:$asset"; gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
       external) L="assets:external"; gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
     esac
   done < <(jq -r '.assets[]?' "$WORK/classify_clean.json"; [ -n "$HAS_EXTERNAL_DEPS" ] && echo external || true)
+  # Bug #557: patch:ips|bps are decided from the lint (present AND wired),
+  # never from classify's `assets`; stale ones are dropped first.
+  WIRED_PATCH_LABELS=$(python3 scripts/pack_patch_labels.py "$WORK/mep_lint_output.txt")
+  for L in patch:ips patch:bps; do
+    case " $WIRED_PATCH_LABELS " in
+      *" $L "*) gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+      *) gh issue edit "$ISSUE" --repo "$REPO" --remove-label "$L" ;;
+    esac
+  done
 
   ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "https://github.com/$REPO/issues/$ISSUE" --format json -q '.id')
   gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \

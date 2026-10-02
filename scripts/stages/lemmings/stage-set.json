@@ -1,0 +1,10 @@
+{
+  "game": "Lemmings",
+  "rom": {
+    "noIntroSha1": [
+      "8C13584F22D1FDE5711DB2C59940EB37E6FC1ECE"
+    ]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Lemmings (1993) (Sunsoft).nes from the user's ROM library, the dump the F14.17 navigation sweep was authored and recorded on (numbers and method: runs/f1417/lemmings/RESULT.md, 2026-09-26). Whole-file SHA1 62E587CE49FF641FAC3BE1E6268D21038212D0FA, 262160 bytes: 8 PRG banks, 16 CHR banks, mapper 1. No artist pack for this dump exists on disk, so the sweep has no ADR-0239 s5.3 row; the ROM's own CHR is the s5.2 denominator (6729 distinct non-blank patterns). Two kinds of script live here: `mint-stage1.txt` is the game's own default path (power-on to level 1) and `stage1-run.txt` is the run from the state it mints - the pair scripts/stages/README.md describes, and the one route this folder offers the library job - while the sixteen `mint-level-*.txt` files type this port's own access codes (the ROM's 100-entry table) and serve the sweep, which reaches levels 2-100 from them."
+}

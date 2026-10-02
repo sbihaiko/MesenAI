@@ -1,0 +1,8 @@
+{
+  "game": "Ice Climber",
+  "rom": {
+    "noIntroSha1": ["22D57AC6066529D199FCD299159D94820042C7D0"]
+  },
+  "mechanisms": [],
+  "note": "No-Intro SHA1 of Ice Climber (USA, Europe, Korea).nes from the user's ROM library, computed with the README's mep_build._no_intro_sha1 command on the dump the F14.17 sweep recorded on (whole-file SHA1 09D97003BF9D676F24A75CF3E1DCED28CDA3BE59, 24592 bytes, NROM: 1 PRG bank, 1 CHR bank, mapper 0). Not yet run through scripts/record_library.sh, so the pin is the dump the sweep's 32 entry scripts were measured against, not a library-job pass. The ROM is the user's own dump and is never copied into the repository."
+}

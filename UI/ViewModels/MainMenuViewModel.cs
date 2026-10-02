@@ -724,10 +724,20 @@ namespace Mesen.ViewModels
 						}
 					},
 					new MainMenuAction() {
+						//ADR-0205 section 2: the one action that yields a publishable
+						//replay. Starts from power-on with the console's power-on state
+						//made deterministic; nothing is asked of the user.
+						ActionType = ActionType.RecordAndShare,
+						IsEnabled = () => IsGameRunning && !RecordApi.MovieRecording() && !RecordApi.MoviePlaying() && !NetplayApi.IsConnected(),
+						OnClick = () => ShareRecordingSession.Start()
+					},
+					new MainMenuAction() {
 						ActionType = ActionType.Stop,
 						IsEnabled = () => IsGameRunning && (RecordApi.MovieRecording() || RecordApi.MoviePlaying()),
 						OnClick = () => {
-							RecordApi.MovieStop();
+							//Finishes a Record and share session too (reveals the file and
+							//opens the issue form); a plain recording or playback just stops.
+							ShareRecordingSession.Stop();
 						}
 					}
 				}

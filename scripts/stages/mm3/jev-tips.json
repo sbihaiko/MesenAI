@@ -1,0 +1,150 @@
+{
+  "game": "Mega Man 3",
+  "console": "nes",
+  "schema": "f14.14-tips-1",
+  "note": "F14.14's situation tips (ADR-0238 sec. 3, amended 2026-09-26): per-situation advice for the hard spots of Snake Man's stage, each gated by RAM so a Jev question only carries the tips that hold where the search is stuck. The shape is the one scripts/stages/ninjagaiden/jev-tips.json declares ('f14.14-tips-1'), so the harness reads one schema across games. A `when` field names a key of this set's ram-map.json - a key that set does not verify is skipped, never guessed - or the run-level key `stage`, which is not a RAM address at all: mm3/ram-map.json's stage_id is still open and this file says so rather than pretending. Written in our own words from the sources below; no source was copied. A tip is advice and never evidence (ADR-0188), and a tip that reaches a versioned file is one that passed the stall it was written for (ADR-0238 sec. 3), so `confirmed` is absent on every tip here: none of them has been through a stall yet. Measured 2026-09-26 (F14.15's second pass, docs/validation/f1415-jev-adoption-2026-09-26.md sec. 3): the abs_x these bands are written on is now monotone - ram-map.json's abs_x is level_page($002D) * 256 + camera_scroll_x($0025), plus the player's column modulo 256 - and each of the route's four measured states (abs_x 315/408/657/824) lands in a band of its own, the stall on cloud-platforms. The bands were already the right scale; before the page counter was found they were read against a one-byte field that wrapped, so nothing fired.",
+  "ramMap": "scripts/stages/mm3/ram-map.json",
+  "runKeys": {
+    "_comment": "Fields a `when` may name that are not RAM addresses. Everything else must be a key of ram-map.json's `verified` map.",
+    "stage": "the run's own stage-set entry, not a RAM address - ram-map.json's stage_id is open"
+  },
+  "macroVocabulary": {
+    "_comment": "The fixed-duration macros the tips ask for, in ADR-0238 sec. 3's vocabulary. Durations are fixed in code, never by the model.",
+    "RIGHT": "hold Right for the fixed window",
+    "SHOOT": "B, one burst per window",
+    "JUMP": "A",
+    "JUMP_RIGHT": "A + Right",
+    "SLIDE": "Down + A",
+    "WAIT": "no button"
+  },
+  "sources": [
+    "https://themmnetwork.com/2012/08/19/a-critical-look-at-mega-man-3-stages-snake-man/",
+    "https://gamefaqs.gamespot.com/nes/563443-mega-man-3/faqs/76922/chapter-six-snake-man",
+    "https://megaman.miraheze.org/wiki/Snake_Man",
+    "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+  ],
+  "tips": [
+    {
+      "id": "big-snakey",
+      "tip": "Big Snakey is the armoured snake that fills the corridor: buster shots bounce off its body, so do not stand in front of it holding SHOOT. Keep a mid distance - roughly half a screen - and fire single shots on its approach; about eight connected shots finish it. Close range costs a hit, and behind it the corridor is what the search is trying to cross.",
+      "macro": "SHOOT",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 140,
+          "max": 250
+        }
+      ],
+      "sources": [
+        "https://themmnetwork.com/2012/08/19/a-critical-look-at-mega-man-3-stages-snake-man/",
+        "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+      ]
+    },
+    {
+      "id": "petit-snakey-stairs",
+      "tip": "The Petit Snakeys come up the stairs one at a time and each one dies to a single hit, so the fight is about not letting two arrive together: take one out with SHOOT, wait for the next to climb into range, then shoot it. Hold JUMP only for the step, not for the whole staircase.",
+      "macro": "SHOOT",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 250,
+          "max": 380
+        }
+      ],
+      "sources": [
+        "https://gamefaqs.gamespot.com/nes/563443-mega-man-3/faqs/76922/chapter-six-snake-man",
+        "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+      ]
+    },
+    {
+      "id": "bubukan-pole",
+      "tip": "Bubukan is invulnerable while it is still on its pole - shots pass through it. Wait for it to vault off and land; only then does it take damage. Once it has vaulted, JUMP_RIGHT over it and keep going: standing to fight it on the pole wastes the window, and the pole itself is not a target.",
+      "macro": "JUMP_RIGHT",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 380,
+          "max": 520
+        }
+      ],
+      "sources": [
+        "https://themmnetwork.com/2012/08/19/a-critical-look-at-mega-man-3-stages-snake-man/",
+        "https://megaman.miraheze.org/wiki/Snake_Man"
+      ]
+    },
+    {
+      "id": "long-pit",
+      "tip": "Past the second Big Snakey a long pit opens: the jump only crosses it from the far lip at full walk speed, so clear whatever is standing there first, back off to the lip, then JUMP_RIGHT. Jumping early or from a standstill falls short.",
+      "macro": "JUMP_RIGHT",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 520,
+          "max": 700
+        }
+      ],
+      "sources": [
+        "https://gamefaqs.gamespot.com/nes/563443-mega-man-3/faqs/76922/chapter-six-snake-man",
+        "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+      ]
+    },
+    {
+      "id": "cloud-platforms",
+      "tip": "The cloud platforms are one jump each: land, let the platform stop moving, then JUMP to the next one. A jump taken while the platform is still drifting misses it, and two jumps in a row leave the ground with no platform underfoot.",
+      "macro": "JUMP",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 700,
+          "max": 900
+        }
+      ],
+      "sources": [
+        "https://themmnetwork.com/2012/08/19/a-critical-look-at-mega-man-3-stages-snake-man/",
+        "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+      ]
+    },
+    {
+      "id": "snake-man-boss",
+      "tip": "Snake Man stops at the left, right or centre pillar, jumps, and releases two Search Snakes that climb the walls after you. Stand on the centre pillar, jump over him when he comes, and shoot while you are above him - but not through the centre platform: a shot fired across it is blocked, so fire from the pillar's edge where the line is clear. The Search Snakes are a distraction; they die to a shot, and the fight is lost by chasing them rather than by standing still.",
+      "macro": "JUMP",
+      "when": [
+        {
+          "field": "stage",
+          "value": "snake-man"
+        },
+        {
+          "field": "abs_x",
+          "min": 900,
+          "max": 1023
+        }
+      ],
+      "sources": [
+        "https://megaman.miraheze.org/wiki/Snake_Man",
+        "https://gamefaqs.gamespot.com/nes/563443-mega-man-3/faqs/76922/chapter-six-snake-man",
+        "https://strategywiki.org/wiki/Mega_Man_3/Snake_Man"
+      ],
+      "note": "The abs_x range is the last screen of the stage, which the route has not reached: scripts/stages/mm3/ram-map.json's boss_fight_on is open, so this tip is gated on the run-level `stage` key and on position together - it never fires on position alone, and a run that carries no `stage` never fires it at all. It is here because the sources agree on the fight and the trigger cannot be better until the boss room is reachable."
+    }
+  ]
+}

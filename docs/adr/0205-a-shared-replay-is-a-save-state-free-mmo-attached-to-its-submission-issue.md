@@ -1,8 +1,8 @@
 # ADR-0205: A shared replay is a `.mmo` recorded by a single Record-and-share action, attached to its submission issue, listed in the client by ROM and ranked by votes
 
 - Status: accepted (2026-09-17, at the user's direction: "aceito, pode marcar
-  como accepted e commitar"). Nothing is implemented yet; the work is two
-  pending slices — publish (§2–§6: share action, lint, Issue Form, workflow)
+  como accepted e commitar"). Nothing was implemented at acceptance; the work was two
+  slices — publish (§2–§6: share action, lint, Issue Form, workflow)
   and consume (§7–§9: recordings catalog, client overlay, `replay:removed`) —
   to be added to `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part A by
   the first implementing PR, which also amends the PRD's pack-browser non-goal
@@ -10,6 +10,22 @@
   console and restores settings, §7 drops the MEI confirmation and defines row
   identity, §8 no longer claims a round-trip the artifact cannot support, §9
   gains a maintainer override.
+  **Amended 2026-10-02 (R.1 delivered, #564/#568).** The publish half (§2–§6,
+  §10) is implemented; §7–§9 (R.2) are not. Three implementation choices were
+  ratified by the user (verbatim picks: "Ratificar (Recomendado)" for the
+  labels, "Ratificar (Recomendado)" for the allow-list, "Interim + emendar a
+  ADR (Recomendado)" for the game name): (1) the verdict labels are `replay`
+  (the form's), `replay:valid` and `replay:invalid`, beside §9's
+  `replay:removed`; (2) R.1's CI fetch reads its own
+  `scripts/replay_host_allowlist.json`, so a `pack_link` on `user-attachments`
+  stays refused, and §6's "both hosts must enter `pack_host_allowlist.json`,
+  mirrored in the client with the ADR-0187 drift check" is deferred to R.2,
+  which is the slice that needs the client side; (3) §5's `<game>` is, for
+  now, the catalog name for the archive's ROM SHA-1 and otherwise the ROM file
+  stem — the repository has no No-Intro hash-to-name source beyond
+  `docs/community-packs.json`, so most ROMs get the stem, which the author
+  controls. The hash-resolved name stays the goal and needs a data source this
+  repository does not have.
 - Date: 2026-09-17
 - Related: ADR-0184 (a recording may use a RAM-only cheat — **this ADR does not
   amend it**, see §4), ADR-0185 (a published movie may drive a recording; its
@@ -202,7 +218,9 @@ the pre-filled box, so a typed title is not evidence. The rewrite is idempotent,
 so `/revalidate` is a no-op once it matches.
 
 - `<game>` is the No-Intro name resolved from the archive's ROM SHA-1
-  (ADR-0003/ADR-0039). The pack flow must trust the typed `rom_target`; this one
+  (ADR-0003/ADR-0039). *Interim, ratified 2026-10-02 (Status): until a
+  hash-to-name source exists, R.1 uses the catalog name for the hash and
+  falls back to the ROM file stem.* The pack flow must trust the typed `rom_target`; this one
   need not, and the title cannot disagree with the game the archive replays.
 - `<alias>` is `MovieInfo.txt`'s `Author` — the artifact's, never the GitHub
   login that opened the issue, which is the rule the pack pipeline already

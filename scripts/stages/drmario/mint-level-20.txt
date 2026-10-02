@@ -1,0 +1,53 @@
+# mint-level-20.txt - Dr. Mario (1990) (Nintendo) from power-on to the
+# bottle at VIRUS LEVEL 20 (F14.17, ADR-0239 rung 1: the game's own
+# selector, by input - no RAM cheat).
+#
+# Title -> Start -> the option screen -> 20 press(es) of Right on the VIRUS
+# LEVEL row -> Start. The cursor clamps at 20 and never wraps, and each press is
+# 2 frames of hold plus 38 of release so no auto-repeat can add a step the count
+# does not name. Rebuild every mint with scripts/stages/drmario/gen-entries.py.
+60f -
+30f T
+60f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f R
+38f -
+2f T
+20f -

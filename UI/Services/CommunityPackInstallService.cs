@@ -199,6 +199,9 @@ namespace Mesen.Services
 						//§6: a patch whose dependency is missing is withheld, never applied blindly.
 						Notify("Patch withheld (missing dependency): " + withheld);
 					}
+					foreach(string notice in outcome.Notices) {
+						Notify(notice);
+					}
 					NotifyPendingDeps(outcome.PendingDeps);
 					ApplyInstalledPack(installedRomSha1);
 					break;

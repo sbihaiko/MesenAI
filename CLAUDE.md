@@ -128,10 +128,16 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   label applied.
 - `.github/workflows/community-pack-submitted.yml` triggers the reusable
   `.github/workflows/community-pack-validate.yml`, which:
-  - downloads the pack, restricted to a host allow-list
-    (`github.com/*/releases/*`, `raw.githubusercontent.com`,
-    `gist.githubusercontent.com`, `gist.github.com`, Google Drive, MediaFire
-    `www.mediafire.com/file/*` plus `downloadN.mediafire.com`), 300MB cap;
+  - downloads the pack, restricted to the host allow-list in
+    `scripts/pack_host_allowlist.json`, which is the source of truth
+    (ADR-0138 §41, ADR-0187): `github.com` (`/releases/`, `/archive/`),
+    `codeload.github.com`, `release-assets.githubusercontent.com`,
+    `raw.githubusercontent.com`, `gist.githubusercontent.com`,
+    `gist.github.com`, `drive.google.com`,
+    `drive.usercontent.google.com`, `www.mediafire.com` and `mediafire.com`
+    (`/file/`) plus `*.mediafire.com`, `www.dropbox.com` and `dropbox.com`
+    (`/s/`, `/scl/fi/`) plus `*.dropboxusercontent.com`, `mega.nz` (`/file/`),
+    `g.api.mega.co.nz`, `*.userstorage.mega.co.nz` — 300MB cap;
   - runs `python3 scripts/mep_lint.py` unmodified against it;
   - always computes the content `sha256` and writes it to the "Pack Hash"
     field (`PVTF_lAHOB1MsbM4BhjpNzhge9Is`);
@@ -164,9 +170,9 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   the link's hash changed since the last pass. The daily schedule is
   currently `disabled_manually` by the user's decision (2026-09-14), so Pack
   Hash, label reconciliation and catalog updates happen only on
-  `/revalidate` or a manual `gh workflow run
-  community-pack-drift-check.yml`; re-enabling it is `gh workflow enable
-  community-pack-drift-check.yml`.
+  `/revalidate`. A disabled workflow refuses `gh workflow run`, so a manual
+  pass needs `gh workflow enable community-pack-drift-check.yml` first (and
+  re-enabling also restores the daily schedule).
 - `scripts/generate_community_pack_catalog.py` generates
   `docs/community-packs.md` from the board's accepted items
   (game/console/author/date/👍), the 👍 cell linking to the submission issue
@@ -181,10 +187,13 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   `scripts/mei_catalog_entry.py` only when mep-meta's `recipe.sources.deps`
   is non-empty).
 - `scripts/ensure_community_pack_labels.sh` idempotently ensures the repo's
-  15 labels: `community-pack`, `pack:valid`, `pack:invalid`,
+  18 labels: `community-pack`, `pack:valid`, `pack:invalid`,
   `pack:needs-review`, `pack:split`, `pack:known-missing`,
   `assets:textures`, `assets:audio`, `assets:external`, `patch:ips`,
-  `patch:bps`, `console:nes`, `console:gb`, `console:gbc`, `console:sms`.
+  `patch:bps`, `console:nes`, `console:gb`, `console:gbc`, `console:sms`, and
+  the three shared-replay labels `replay`, `replay:valid`, `replay:invalid`
+  (ADR-0205, `.github/workflows/replay-submitted.yml`, a flow separate from
+  pack triage).
   `pack:known-missing` is applied by the validation run itself, from the
   errata resolved against the computed Pack Hash (ADR-0152) — never by the
   classify step, whose inputs are submitter-controlled.

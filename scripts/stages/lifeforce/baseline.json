@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "The stage-1 baseline and the selector's inertness control, in one pass",
+    "(ADR-0239 s5's \"before\" and s3's inert control).",
+    "",
+    "navigation.kind is \"input\" because there is nothing to pin in the",
+    "`baseline` half: the whole point of the pair is that one arm carries no",
+    "cheat at all. The `control` half carries `cheat=0030:00` - the selector",
+    "pinned at the value stage 1 already is - so the two arms differ in exactly",
+    "one thing, and s3's test applies: the pin is inert when the two",
+    "`textures/` trees are byte-identical.",
+    "",
+    "This is NOT a navigation sweep and not a rung: it reaches one place, the",
+    "place the game goes on its own. It lives beside navigation.json because",
+    "the baseline it records is a required half of ADR-0239 s5's metric, and",
+    "the sweep is run with `--baseline runs/f1418/lifeforce/before/baseline`.",
+    "",
+    "Run it with the same command as the sweep, at 120 s:",
+    "",
+    "  caffeinate -dimsu python3 scripts/record_navigation_sweep.py \\",
+    "    --profile scripts/stages/lifeforce/baseline.json \\",
+    "    --rom \"<library>/Lifeforce (1988) (Konami).nes\" \\",
+    "    --out runs/f1418/lifeforce/before --jobs 2",
+    "",
+    "Read by scripts/record_navigation_sweep.py."
+  ],
+
+  "game": "Life Force",
+  "rom": "Lifeforce (1988) (Konami).nes",
+  "romSha1": "351EDB1FDF4BCE3BFC56D1EECCCFDC6A21BB14F4",
+
+  "navigation": {
+    "kind": "input",
+    "label": "stage selector held at its stage-1 value",
+    "source": "Almar's Guides, Life Force Action Replay Codes (USA) (almarsguides.com/retro/walkthroughs/nes/games/LifeForce/ActionReplay/): \"Stage Select - Stage 1/Cell Stage:  0030:00\". DataCrystal's Life Force (NES)/RAM map (datacrystal.tcrf.net/wiki/Life_Force/RAM_map) lists the byte as \"0x0030  ??? (Linked to stage, music theme?)\" without a value table. The value 00 is stage 1, which is where the game loads without a selector at all, so pinning it there is the one configuration in which a difference between the arms could only be the pin's.",
+    "values": [
+      {
+        "name": "baseline",
+        "title": "Stage 1 (Cell Stage), no cheat",
+        "ramCheck": { "address": "000F", "expect": "00" }
+      },
+      {
+        "name": "control",
+        "title": "Stage 1 (Cell Stage), cheat=0030:00 held for the whole run",
+        "ramCheck": { "address": "000F", "expect": "00" },
+        "cheats": [
+          {
+            "code": "0030:00",
+            "label": "stage selector at stage 1",
+            "source": "Almar's Guides, Life Force Action Replay Codes (USA): \"Stage Select - Stage 1/Cell Stage:  0030:00\"."
+          }
+        ]
+      }
+    ]
+  },
+
+  "defaults": {
+    "seconds": 120,
+    "entry": "mint-stage1.txt",
+    "body": "stage1-run.txt"
+  }
+}

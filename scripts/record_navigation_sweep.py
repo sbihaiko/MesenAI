@@ -20,11 +20,12 @@ A second game is a second profile beside `navigation.json`, not a code change.
 
 What it does, in order:
 
-1. Reads the profile and builds a plan. Every cheat is validated against
-   ADR-0184 s1 *here*, before a single process starts: the `AAAA:VV[:CC]` form
-   only, and `AAAA < 0x0800`. `headless_record`'s own `parseRamCheat()` is the
-   second gate; a plan that would be refused there is refused here first, so an
-   artist never watches ten good sessions run and the eleventh die.
+1. Reads the profile and builds a plan. Every cheat - the selector and every
+   extra pin - is validated against ADR-0184 s1 *here*, before a single process
+   starts: the `AAAA:VV[:CC]` form only, and `AAAA < 0x0800`. `headless_record`'s
+   own `parseRamCheat()` is the second gate; a plan that would be refused there
+   is refused here first, so an artist never watches ten good sessions run and
+   the eleventh die.
 2. Runs one `headless_record` per navigation value, in parallel (`--jobs`).
    Each session gets its own directory with its own hard-linked copy of the ROM
    and therefore its own `mesen-home` (`headless_record.cpp:801` puts the home
@@ -36,10 +37,26 @@ What it does, in order:
    writes the cheat verbatim into a `notes[]` line, and the sweep writes a
    `notes[]` summary naming the address, its published source and every value
    swept. Those lines are what a kit generator hands to ADR-0183 s3.
-4. Optionally measures coverage against a reference pack (`--reference`), per
-   session and for the union, using the same metric the ADR reports: the
-   fraction of the reference pack's *distinct tile-data strings* that the
-   recording also holds.
+4. Measures (ADR-0239 s4, s5). A session must prove it went somewhere: `new` is
+   the drawn keys - `(tileData, palette)`, the placeholders excluded - that the
+   *baseline* packs do not hold, and a session with none of it is reported
+   `did-not-warp` and counts in no total. `unique` is the keys no other session
+   of the sweep and no baseline holds, reported beside it and never gating: two
+   tracks that share a tileset are both legitimate warps with `unique == 0`. The
+   totals are ADR-0194 s4's union - drawn keys *and* distinct tile data - with
+   `--baseline` folding the game's existing pack in as *before*, and `--rom-chr`
+   adding the denominator that needs no third-party pack: the ROM's own
+   non-blank CHR patterns the union names. `--reference` scores a third-party
+   pack for the same ROM at the identity both files share, the 16-byte CHR
+   pattern each rule names, and never at the `<tile>` field as a string: a
+   community pack writes a decimal CHR index (`<ver>100`) where a bootstrapped
+   one writes hex (`<ver>109`), so the strings intersect by accident and the
+   figure is constant (#545). The two files' dialects are noted beside it. A
+   reference pack that declares a `<patch>` is built for a patched ROM, so
+   §5.3 caveats the row - the patch named with its target sha1 and the iNES
+   header bytes it writes, above the tables and again on the union line - and
+   never prints the figure as plain coverage (#554; `artist_cover.py`'s
+   reading of `<patch>`, imported rather than repeated).
 
 Union. Each session keeps its own pack, the shape `record_stages.sh` already
 produces, and the surfaces union them downstream: the CHR kit's repeatable
@@ -60,8 +77,23 @@ first's 16.7 s and the pack's tile count did not move (2173 -> 2173). A shared
 folder therefore silently records nothing, which is worse than no union at all,
 so this script does not offer one.
 
+The profile's `navigation.kind` is `"ram"` (the default, and the amendment's
+mechanism: `address` is required and each value is pinned as `address:value`)
+or `"input"`, where the place is reached by the game's own selector - a menu, a
+track choice, a password - and the value's own `entry` script is what selects
+it, so the session carries no cheat at all (ADR-0239 s1's first rung). Either
+way a value may override `defaults.entry`/`defaults.body`, and
+`defaults.cheats`/`values[].cheats` add RAM-only pins that ride with the run
+(ADR-0239 s3: a lives pin keeps a blind body on the stage instead of recording
+GAME OVER). A value may also carry a `ramCheck` - an address and the value(s)
+the session's final state must read there - which is what tells a warp that
+worked from one that left the game where it was.
+
 `--dry-run` prints the plan, the generated input scripts' lengths and every
-command line, and runs nothing.
+command line, and runs nothing. On `--rescore` there is no plan and nothing to
+run - the packs are already on disk - so it prints that path's report and writes
+neither `--summary` nor `<out>/rescore.json`, which is what shows a rescore
+without overwriting the record a sweep left under either name (#548).
 """
 
 import argparse
@@ -76,11 +108,35 @@ import sys
 import time
 from pathlib import Path
 
+# ADR-0239 s2/s4/s5 split the recorder from the metric: everything host-free
+# and countable lives in nav_sweep_metrics.py, and it is re-exported here so a
+# caller (and this repo's test) has one entry point.
+from nav_sweep_metrics import (  # noqa: F401 - re-exported for callers
+    CHR_RAM_NOTE, find_pack_hires, pack_hires, pack_named_patterns,
+    pack_rule_keys, pack_seen_rule_keys, pack_seen_tile_data, pack_tile_data,
+    pack_version,
+    ram_check, ram_check_spec,
+    rom_chr_bytes, rom_chr_coverage, rom_chr_seen_coverage, score_sessions,
+    summary_document,
+    tile_data_keys, totals_document, version_note,
+)
+
+# artist_cover.py is imported as a library, not run as a tool: it is the one
+# place in this repo that decides what a `<patch>` line means - the regex, the
+# IPS reader and the reading of iNES header byte 5 - and §5.3 asks the sweep
+# for the answer its sibling already gives (#225 refuses the namespace mismatch
+# that is empty by construction, #231 caveats the rest). A second copy of that
+# reading would drift from the first, and the two consumers would then disagree
+# about the same pack.
+import artist_cover
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RECORDER = REPO_ROOT / "scripts" / "headless_record"
 NTSC_FRAME_RATE = 60.0988  # HeadlessInputScript::NtscFrameRate
 
 ADR = "ADR-0184 (amended 2026-09-14)"
+ADR_0239 = "ADR-0239"
+KINDS = ("ram", "input")
 
 
 # --- ADR-0184 s1: the cheat rule, checked before anything is launched --------
@@ -106,6 +162,73 @@ def validate_ram_cheat(code: str) -> str:
             f"internal RAM ($0000-$07FF) ({ADR} s1)."
         )
     return code
+
+
+def pin_list(raw, where: str) -> list:
+    """ADR-0239 s2/s3: the extra RAM-only pins a session carries.
+
+    Each is `{"code", "label", "source"}`. The code goes through ADR-0184 s1
+    here, before anything runs, and the source is required: s5 says "a cheat
+    used by a recording comes from a source that names it", so a pin nobody
+    published is refused rather than recorded as provenance that says nothing.
+    """
+    out = []
+    for pin in raw or []:
+        code = str(pin.get("code", "")).strip()
+        source = str(pin.get("source", "")).strip()
+        if not source:
+            raise ValueError(
+                f'{where}: RAM pin "{code}" carries no source. {ADR} s5: a code '
+                "that a recording uses comes from a source that names it, and a "
+                "pin without one is a code somebody invented."
+            )
+        out.append({"code": validate_ram_cheat(code).upper(),
+                    "label": str(pin.get("label", "")).strip(),
+                    "source": source})
+    return out
+
+
+def pins_note(pins: list) -> str:
+    """The pin sentences ADR-0184 s2 obliges a kit's `notes[]` line to carry."""
+    return "".join(
+        f" Extra RAM pin {p['code']}"
+        f"{' (' + p['label'] + ')' if p['label'] else ''} pinned for the whole "
+        f"run as well: {p['source']}" for p in pins)
+
+
+def pinned_addresses(codes) -> dict:
+    """Every address a session pins, as `{address: pinned byte}` (ADR-0239 §4).
+
+    A session pins more than its selector: `defaults.cheats` and
+    `values[].cheats` are pinned for the whole run too, and on a `kind:
+    "input"` profile they are the only pins there are. The caveat fires on the
+    address, not on the role, so the map is built from the cheat codes the
+    session really carries - `session["cheats"]`, which already holds the
+    selector for a `kind: "ram"` session and holds nothing extra for a room,
+    because a room applies no selector cheat. The `CC` compare byte of an
+    `AAAA:VV:CC` code is the condition, not the substituted byte, so `VV` is
+    what a reader is shown.
+    """
+    out = {}
+    for code in codes or []:
+        m = CHEAT_RE.match(str(code).strip().upper())
+        if m:
+            out[m.group(1).upper()] = m.group(2).upper()
+    return out
+
+
+def checked_ram(session: dict) -> dict:
+    """A session's declared RAM check, read with every address it pins.
+
+    ADR-0239 §4's check is read off the session's final state; the caveat that
+    says what a pin can and cannot prove fires on any of the session's pins.
+    This is the one call site the map reaches, so a scalar here is the bug
+    #546 filed - `nav_sweep_metrics.ram_check` refuses one loudly instead of
+    reading it as a string. `session["ramCheck"]` must be set: a profile that
+    declares no check runs through `run_session`'s guard.
+    """
+    return ram_check(session["ramCheck"], session["stateOut"],
+                     pinned_addresses=session["pinnedAddresses"])
 
 
 # --- input scripts -----------------------------------------------------------
@@ -138,7 +261,8 @@ def script_body(path: Path) -> list:
             if l.strip() and not l.strip().startswith("#")]
 
 
-def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> dict:
+def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path,
+                       write: bool = True) -> dict:
     """Write <entry> once, then <body> repeated until the run is covered.
 
     ADR-0184's own measurement is the reason this exists: Contra's
@@ -147,6 +271,11 @@ def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> d
     the body to cover the whole run reached the same panorama a cheat had
     bought. Effective input time is the cheapest lever there is, and it costs
     nothing, so the sweep takes it by default.
+
+    `write=False` builds the same lines and returns the same counts without
+    touching the disk, which is what a `--dry-run` needs: the command line it
+    prints names a script, and the frame counts come from the lines, not from
+    the file (#548).
     """
     target = int(round(seconds * NTSC_FRAME_RATE))
     entry_lines = script_body(entry)
@@ -166,8 +295,9 @@ def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> d
     for i in range(repeats):
         out.append(f"# --- {body.name} pass {i + 1}/{repeats}")
         out += body_lines
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text("\n".join(out) + "\n")
+    if write:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text("\n".join(out) + "\n")
     return {
         "path": str(dest),
         "entryFrames": entry_frames,
@@ -178,81 +308,101 @@ def build_sweep_script(entry: Path, body: Path, seconds: float, dest: Path) -> d
     }
 
 
-# --- coverage ----------------------------------------------------------------
-def tile_data_keys(hires: Path) -> set:
-    """The distinct tile-data strings a pack definition holds.
-
-    `artist_cover.py` owns this metric and this parser - the unit is
-    `tileData`, not `(tileData, palette)`, because "the same tile under a
-    stage's other palette is a different `hires.txt` key, so keys undercount
-    figures the artist repaints per stage" (`artist_cover.py:8-10`), and it is
-    the unit ADR-0184's amendment quotes. Its `parse()` is imported rather than
-    reimplemented so the sweep's acceptance number cannot drift from the tool
-    the ADR was measured with; Contra's reference pack has 3404 distinct
-    tile-data strings there, and the amendment's 64.6% - 53.8% = 367 tiles is
-    10.8% of exactly that.
-
-    Run `artist_cover.py` itself for the full report (per-image rows, the
-    sprite/background split, the `$30` gate); this is the headline line only.
-    """
-    if not hires.exists():
-        return set()
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    import artist_cover  # noqa: E402  - same folder, stdlib only
-    return {data for _, data, _, _ in artist_cover.parse(str(hires))}
-
-
-def find_pack_hires(session_dir: Path) -> Path:
-    """The bootstrap pack a session wrote.
-
-    `MepPackManager::GetSiblingFolder` puts it beside the ROM, at
-    `<rom stem>/auto/textures/hires.txt`.
-    """
-    for pattern in ("*/auto/textures/hires.txt", "*/auto/hires.txt"):
-        hits = sorted(session_dir.glob(pattern))
-        if hits:
-            return hits[0]
-    hits = sorted(session_dir.rglob("hires.txt"))
-    return hits[0] if hits else session_dir / "hires.txt"
-
-
 # --- the plan ----------------------------------------------------------------
+def _script(prof_dir: Path, rel: str, what: str, who: str) -> Path:
+    """A declared script path, refused at plan time when nothing is declared.
+
+    `prof_dir / ""` is the profile's own folder, so a missing declaration used
+    to be read as a *directory* script and died inside `read_text` - after the
+    header had been printed and the first session had started.
+    """
+    if not rel:
+        raise ValueError(
+            f'{who} declares no {what} script: give it one, or declare '
+            f"defaults.{what} ({ADR_0239} s2).")
+    return prof_dir / rel
+
+
 def build_plan(profile: dict, prof_dir: Path, rom: Path, out: Path,
                states: Path, seconds: float, only: set) -> list:
     nav = profile["navigation"]
-    addr = nav["address"].upper()
+    kind = nav.get("kind", "ram")
+    if kind not in KINDS:
+        raise ValueError(
+            f'navigation.kind "{kind}" is neither "ram" (a published RAM '
+            'selector pinned for the run) nor "input" (the game\'s own '
+            f"selector, typed by the value's entry script) ({ADR_0239} s2).")
+    addr = ""
+    if kind == "ram":
+        if not nav.get("address"):
+            raise ValueError(
+                f'navigation.kind is "ram" and the profile declares no '
+                f"navigation.address: a RAM selector is an address and the "
+                f"values it is set to ({ADR_0239} s2).")
+        addr = nav["address"].upper()
     defaults = profile.get("defaults", {})
-    entry = prof_dir / defaults.get("entry", "")
-    body = prof_dir / defaults.get("body", "")
+    entry = defaults.get("entry", "")
+    body = defaults.get("body", "")
+    default_pins = pin_list(defaults.get("cheats"), "defaults.cheats")
     sessions = []
 
     for item in nav.get("values", []):
         name = item["name"]
         if only and name not in only:
             continue
-        cheat = validate_ram_cheat(f"{addr}:{item['value'].upper()}")
+        who = f'navigation value "{name}"'
         sdir = out / name
-        sessions.append({
-            "name": name,
-            "kind": "navigation",
-            "title": item.get("title", ""),
-            "cheat": cheat,
-            "dir": sdir,
-            "entry": entry,
-            "body": body,
-            "state": None,
-            "input": None,
-            "seconds": seconds,
-            "note": (
+        s_entry = _script(prof_dir, item.get("entry") or entry, "entry", who)
+        s_body = _script(prof_dir, item.get("body") or body, "body", who)
+        pins = default_pins + pin_list(item.get("cheats"), f"{who}.cheats")
+        checks = item.get("ramCheck")
+        check = ram_check_spec(checks, f"{who}.ramCheck") if checks else None
+        title = item.get("title", "")
+        if kind == "ram":
+            if not item.get("value"):
+                raise ValueError(
+                    f'{who} declares no value: a RAM selector is pinned as '
+                    f"address:value ({ADR_0239} s2).")
+            cheat = validate_ram_cheat(f"{addr}:{item['value'].upper()}")
+            note = (
                 f"navigation pass ({ADR} s2, third row): RAM cheat {cheat} pinned "
                 f"for the whole run - ${addr} is {profile['game']}'s "
                 f"{nav.get('label', 'navigation selector')}, value 0x{item['value'].upper()}"
-                f"{' = ' + item['title'] if item.get('title') else ''}. "
+                f"{' = ' + title if title else ''}. "
                 f"Source: {nav['source']} "
-                f"Recorded {seconds:g} s from power-on with {entry.name} + "
-                f"{body.name} repeated. The selector is pinned for the whole run, "
+                f"Recorded {seconds:g} s from power-on with {s_entry.name} + "
+                f"{s_body.name} repeated. The selector is pinned for the whole run, "
                 "so the stage-clear transition is never recorded."
-            ),
+            )
+            cheats = [cheat] + [p["code"] for p in pins]
+        else:
+            # ADR-0239 s1's first rung: the game's own selector, as input.
+            cheat = None
+            note = (
+                f"navigation pass ({ADR} s2, first row): the selector is input, "
+                f"not a cheat. {title or name} is chosen by {s_entry.name} from "
+                f"power-on ({nav.get('label', 'navigation selector')}: "
+                f"{nav['source']} Recorded {seconds:g} s with {s_body.name} "
+                "repeated. The run never clears the stage, so the stage-clear "
+                "transition is never recorded."
+            )
+            cheats = [p["code"] for p in pins]
+        sessions.append({
+            "name": name,
+            "kind": "navigation",
+            "title": title,
+            "cheat": cheat,
+            "cheats": cheats,
+            "dir": sdir,
+            "entry": s_entry,
+            "body": s_body,
+            "state": None,
+            "input": None,
+            "seconds": seconds,
+            "ramCheck": check,
+            "pinnedAddresses": pinned_addresses(cheats),
+            "pins": pins,
+            "note": note + pins_note(pins),
         })
 
     for room in profile.get("rooms", []):
@@ -260,28 +410,93 @@ def build_plan(profile: dict, prof_dir: Path, rom: Path, out: Path,
         if only and name not in only:
             continue
         state = (states / room["state"]) if states else None
+        pins = default_pins
+        # A level selector picks a level, not a room inside one. With the
+        # default kind that is the address; with an input selector there is no
+        # address to name, so the sentence names the selector instead.
+        why = (f"${addr} selects a level and not a room inside it" if addr else
+               f"the {nav.get('label', 'selector')} is chosen by input and "
+               "reaches no room inside it")
+        head = ("clean pass " + f"({ADR} s2, first row): no selector cheat; the "
+                f"run carries {len(pins)} RAM pin(s) the selector does not need."
+                if pins else
+                f"clean pass ({ADR} s2, first row): no cheat.")
         sessions.append({
             "name": name,
             "kind": "room",
             "title": room.get("title", ""),
             "cheat": None,
+            "cheats": [p["code"] for p in pins],
             "dir": out / name,
             "entry": None,
             "body": None,
             "state": state,
             "input": prof_dir / room["input"],
             "seconds": seconds,
+            "ramCheck": None,
+            "pinnedAddresses": pinned_addresses([p["code"] for p in pins]),
+            "pins": pins,
             "note": (
-                f"clean pass ({ADR} s2, first row): no cheat. ${addr} selects a "
-                "level and not a room inside it, so this room is entered from the "
+                f"{head} {why}, so this room is entered from the "
                 f"save state {room['state']} minted by the F9.22 chain and played "
-                f"by {room['input']}."
+                f"by {room['input']}." + pins_note(pins)
             ),
         })
 
     for s in sessions:
         s["prefix"] = s["dir"] / "rec"
+        # ADR-0239 s4: the state a named ramCheck is read off. Written by
+        # `save-state=`, which the recorder only writes when the run reached
+        # its frame target - an incomplete run leaves no state, and the check
+        # reports exactly that instead of passing on a stale file.
+        s["stateOut"] = Path(str(s["prefix"]) + "-final.mss")
     return sessions
+
+
+def discover_sessions(out: Path, only=None):
+    """The sessions a previous sweep left in `out`, as `score_sessions` reads them.
+
+    `--rescore` exists because §4's gate can be amended - it was, on
+    2026-09-26 - without re-recording anything: the packs on disk carry
+    everything §4 and §5 need, and re-running five games' sessions to re-read a
+    verdict would spend the whole capture budget again.
+
+    Returns `(sessions, empty)`. A directory that holds no pack is named in
+    `empty`, never scored: that is the shape a crashed or skipped session
+    leaves, and `new == 0` would call it `did-not-warp`, which is a claim about
+    what the run recorded. A `--out` that is not a directory is refused, for the
+    same reason a `--baseline` that resolves to nothing is (ADR-0184 §1).
+    """
+    out = Path(out)
+    if not out.is_dir():
+        raise ValueError(f"--rescore: {out} is not a directory to read sessions from")
+    sessions, empty = [], []
+    for d in sorted(p for p in out.iterdir() if p.is_dir()):
+        if only and d.name not in only:
+            continue
+        hires = find_pack_hires(d)
+        if hires.is_file():
+            sessions.append({"name": d.name, "status": "ok", "hires": str(hires)})
+        else:
+            empty.append(d.name)
+    return sessions, empty
+
+
+def missing_scripts(sessions: list) -> list:
+    """The declared scripts a plan needs and does not have (ADR-0184 s1).
+
+    `headless_record` writes a pack from a script it can read; one it cannot is
+    a session that dies after its neighbours have run. The cheat rule is
+    refused at plan time for exactly that reason, so a script path is too - and
+    the path is named, because "no such file" without the file is the message
+    that costs an hour.
+    """
+    out = []
+    for s in sessions:
+        for script in (s["entry"], s["body"], s["input"]):
+            if script and not script.exists():
+                out.append((s["name"], script))
+    return out
 
 
 def command_for(session: dict, rom_in_dir: Path, script_info) -> list:
@@ -289,39 +504,46 @@ def command_for(session: dict, rom_in_dir: Path, script_info) -> list:
             str(session["prefix"]), "bootstrap", "hdpack-off"]
     if session["kind"] == "navigation":
         args.append(f"input={script_info['path']}")
-        args.append(f"cheat={session['cheat']}")
     else:
         args.append(f"input={session['input']}")
         if session["state"]:
             args.append(f"state={session['state']}")
+    for cheat in session["cheats"]:
+        args.append(f"cheat={cheat}")
+    if session["ramCheck"]:
+        args.append(f"save-state={session['stateOut']}")
     return args
 
 
 def run_session(session: dict, rom: Path, dry: bool) -> dict:
     sdir = session["dir"]
-    sdir.mkdir(parents=True, exist_ok=True)
     rom_in_dir = sdir / rom.name
     script_info = None
     if session["kind"] == "navigation":
         script_info = build_sweep_script(
             session["entry"], session["body"], session["seconds"],
-            Path(str(session["prefix"]) + "-input.txt"))
+            Path(str(session["prefix"]) + "-input.txt"), write=not dry)
     cmd = command_for(session, rom_in_dir, script_info)
     result = {
         "name": session["name"],
         "kind": session["kind"],
         "title": session["title"],
         "cheat": session["cheat"],
+        "cheats": list(session["cheats"]),
         "seconds": session["seconds"],
         "dir": str(sdir),
         "command": cmd,
         "inputScript": script_info,
         "note": session["note"],
+        "ramCheck": None,
     }
     if dry:
         result["status"] = "dry-run"
         return result
 
+    # Every write of the session is past that return, which is the point of it:
+    # a dry run used to leave a directory and an input script per session (#548).
+    sdir.mkdir(parents=True, exist_ok=True)
     if session["kind"] == "room" and session["state"] and not session["state"].exists():
         result["status"] = "skipped"
         result["why"] = (f"save state not found: {session['state']} - a room needs "
@@ -356,15 +578,197 @@ def run_session(session: dict, rom: Path, dry: bool) -> dict:
     else:
         result["hires"] = None
         result["pack"] = None
+    if session["ramCheck"]:
+        result["ramCheck"] = checked_ram(session)
     return result
+
+
+def _rom_chr_line(row, seen) -> str:
+    """§5.2's row, with the row that can move beside it.
+
+    A pack the recorder wrote carries a `defaultTile` placeholder for every CHR
+    index, so §5.2 read literally is 100% for every CHR ROM game (measured
+    2026-09-26 on all four of the F14.16 baselines). The bracketed figure is
+    that row; the leading one counts the rules a run really wrote, which is
+    what a reader means by coverage.
+    """
+    if row is None:
+        return "--  (needs --rom-chr)"
+    if row["status"] == CHR_RAM_NOTE:
+        return CHR_RAM_NOTE
+    return (f"{seen['named']}/{seen['patterns']} ({seen['pct']:.1f}%) written"
+            f"  [every rule: {row['pct']:.1f}%]")
+
+
+def placeholder_note(rom_path) -> str:
+    """What the builder's `defaultTile` placeholders are, for the ROM in hand.
+
+    The set is a property of the cartridge, not a constant: a CHR ROM game gets
+    one placeholder per index of its own CHR, so the every-rule tile-data column
+    is frozen at the ROM's whole tile count and is the same in every pack of it -
+    measured 2026-09-26 at 8192 for a 16-bank ROM (Lemmings, F14.17, which the
+    report had been calling a CHR RAM game) and 512 for Excitebike's single bank.
+    A CHR RAM game has no CHR to enumerate, so its placeholders are the patterns
+    the PRG scan harvests (Castlevania, 2581 distinct, F14.16). With no `--rom`
+    neither is known, and the note says only what holds for both.
+
+    `rom_chr_bytes` is the same iNES reader §5.2 scores against, and it is empty
+    for a CHR RAM game, which is the whole of the distinction.
+    """
+    if rom_path is None:
+        return ("which is the builder's\n   `defaultTile` placeholders - one set "
+                "shared by every pack of a ROM -\n   plus a rounding error")
+    if rom_chr_bytes(rom_path):
+        return ("which is the ROM's\n   own CHR indices' `defaultTile` set - the "
+                "same set in every pack of that\n   ROM - plus a rounding error")
+    return ("which on a CHR RAM\n   game is the builder's PRG scan plus a "
+            "rounding error")
+
+
+def rom_chr_namespace(rom) -> bool | None:
+    """Whether the ROM at hand is a CHR ROM game: `False` for CHR RAM, `None`
+    when there is no ROM to read.
+
+    The state is byte 5's zero against non-zero, and `rom_chr_bytes` is the
+    reading of it - §5.2's own iNES reader, whose empty answer means exactly
+    "the header declares no CHR bank" and never "the file stops inside the bank
+    it declares" (a truncated dump is refused there, #551). So the boolean of
+    that call *is* the byte-5 question, and this is not a second parser of the
+    header (nor of the trainer bit, the mapper byte or the sizes beside it).
+    `None` is "no byte 5 to compare the patch against", which the caveat says
+    out loud instead of guessing what the write does.
+    """
+    if rom is None:
+        return None
+    try:
+        return bool(rom_chr_bytes(rom))
+    except ValueError:
+        return None
+
+
+def reference_patch_caveat(ref: Path, rom) -> tuple:
+    """The §5.3 caveat for a reference pack that declares a `<patch>`.
+
+    Returns `(text, marker)`: the block to print above the §5.3 tables and the
+    one-line form that rides the summary row so the figure is never read as
+    plain coverage. Both are `""` for a pack that declares no `<patch>`, which
+    is what leaves that report byte-identical to before (#554).
+
+    §5.3's reference row compares a recording against a third-party pack, and a
+    pack that declares a `<patch>` was built for a *patched* ROM: the two sides
+    are then different builds, and on a UxROM + CHR RAM game the patch's PRG
+    edits travel through the game's own loader into the tile data the pack was
+    authored against, so the percentage is not a coverage figure at all
+    (measured 2026-09-26 on the Mega Man pack: `SWEEP UNION 906 patterns 897 of
+    reference 33.4%`, exit 0, nothing about the patch). Whether the patch moves
+    the tiles is undecidable from the pack alone - an audio-only patch leaves
+    the keys valid, a mapper patch does not - so this is a caveat and not the
+    refusal ADR-0184 §1 prefers where the evidence is decisive; #225 refuses
+    only the namespace mismatch that is empty by construction, and #231 set
+    this shape for everything else. The reading of `<patch>` is
+    `artist_cover.py`'s, imported rather than repeated: it is the one place
+    that knows what the line and the IPS beside it mean.
+
+    One claim is *not* undecidable, and it is the only one made: whether the
+    write moves byte 5 across the line that keys the tiles, which is decided by
+    the ROM's own byte 5 against the value written. So `rom` - the `--rom` the
+    caller already resolved, which `--reference` requires - is read beside the
+    patch (P2 of the #554 review: the write alone is not evidence, because a
+    CHR size written into a ROM that already had one, or a `0` into a ROM that
+    was already CHR RAM, leaves both sides keyed the same way). Every other
+    case, including a ROM that cannot be read, gets the undecidable wording
+    that a patch leaving the header alone gets.
+    """
+    declared = artist_cover.patches(ref)
+    if not declared:
+        return "", ""
+    found, silent, unreadable, shas = artist_cover.patch_evidence(ref)
+    # One `<patch>` line is declared once per supported ROM sha1, so the file
+    # name repeats; name each file once and quote every target beside it.
+    names = ", ".join(sorted({name for name, _ in declared}))
+    body = [
+        f"the reference pack declares a <patch> ({names}), so it is built for a",
+        "patched ROM: the figures below compare two builds, not a coverage of the",
+        "recording. Not automatically fatal - a patch that leaves PRG/CHR alone, an",
+        "audio-only one say, leaves the tile keys valid - but which of the two this",
+        "is cannot be decided from the pack alone (#231).",
+        "patches declared:",
+    ]
+    for name, sha1s in shas.items():
+        body.append(f"  {name}, target sha1 {', '.join(sha1s)}")
+    for name, writes in found.items():
+        body.append(f"{name} rewrites the iNES header:")
+        for off in sorted(writes):
+            body.append(f"  offset {off} = 0x{writes[off]:02X}"
+                        f"  ({artist_cover.INES_FIELD.get(off, f'byte {off}')})")
+        if 5 in writes:
+            byte5 = writes[5]
+            state = rom_chr_namespace(rom)
+            body += [
+                f"byte 5 becomes 0x{byte5:02X} = {byte5 * 8} KB of CHR ROM. Byte 5 is the",
+                "field that decides the tile namespace (0 = CHR RAM, tiles keyed by",
+                "their 16-byte pattern; any other value = that many 8 KB banks of CHR",
+                "ROM, tiles keyed by bank index),",
+            ]
+            # The write is evidence of a namespace change only where it moves
+            # the ROM's own byte 5 across the zero/non-zero line (P2 of the
+            # #554 review) - a CHR size written into a ROM that already had one
+            # leaves the two sides keyed the same way.
+            if state is None:
+                body += [
+                    "but the ROM this sweep read could not be read here, so which",
+                    "side of that line its byte 5 is on is not decided either way:",
+                    "read the numbers below as indicative, not coverage.",
+                ]
+            else:
+                side = "non-zero, i.e. CHR ROM" if state else "0, i.e. CHR RAM"
+                if state == (byte5 != 0):
+                    body += [
+                        "but the ROM this sweep read is already on that side of it -",
+                        f"byte 5 is {side} - so the write does not move the zero/non-zero",
+                        "state the tiles are keyed by: what the patch changes is in the",
+                        "PRG/CHR body, where it may or may not move the tiles. Read the",
+                        "numbers below as indicative, not coverage.",
+                    ]
+                else:
+                    body += [
+                        "and the ROM this sweep read is on the other side of that line -",
+                        f"byte 5 is {side} - so these two builds provably do not address",
+                        "CHR the same way: read the numbers below as indicative, not coverage.",
+                    ]
+        else:
+            body += [
+                "it leaves byte 5 - the field that decides the tile namespace, CHR",
+                "RAM against CHR ROM - at its original value.",
+            ]
+    if silent:
+        body += [
+            f"{', '.join(sorted(set(silent)))} reads fine and does not rewrite the "
+            "iNES header, so what",
+            "it changes is in the PRG/CHR body: it may or may not move the tiles.",
+        ]
+    if unreadable:
+        body += [
+            f"{', '.join(sorted(set(unreadable)))} could not be read beside the "
+            "manifest, so how it",
+            "affects the tiles is unknown.",
+        ]
+    marker = (f"[caveat: the reference declares <patch> ({names}) and is built "
+              "for a patched ROM, so this compares two builds — not coverage]")
+    # The first line is the caller's to prefix with "   ! "; every other one is
+    # joined with the indent that lines it up under the first.
+    return "\n     ".join(body), marker
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Record a whole navigation sweep as one command (ADR-0184).")
-    ap.add_argument("--profile", type=Path, required=True,
-                    help="game profile, e.g. scripts/stages/contra/navigation.json")
-    ap.add_argument("--rom", type=Path, required=True)
+        description="Record a whole navigation sweep as one command (ADR-0184, "
+                    "ADR-0239 s2/s4/s5).")
+    ap.add_argument("--profile", type=Path, default=None,
+                    help="game profile, e.g. scripts/stages/contra/navigation.json "
+                         "(with --rescore it only names the game and supplies the "
+                         "default --seconds)")
+    ap.add_argument("--rom", type=Path, default=None)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--states", type=Path, default=None,
                     help="folder holding the rooms' .mss files (never versioned)")
@@ -378,13 +782,40 @@ def main() -> int:
                     help="reference pack hires.txt (or its folder) to measure "
                          "coverage against")
     ap.add_argument("--baseline", type=Path, action="append", default=[],
-                    help="an existing recording's hires.txt (or folder) to union "
-                         "with the sweep for the second coverage number; repeatable")
+                    help="an existing pack to union with the sweep as the "
+                         "'before' side: a pack dir (the auto/ folder, or one "
+                         "holding textures/hires.txt), a hires.txt or a whole "
+                         "recording dir; repeatable (ADR-0239 s5)")
+    ap.add_argument("--rom-chr", action="store_true",
+                    help="add the ROM's own non-blank CHR patterns as the "
+                         "denominator that needs no third-party pack (ADR-0239 "
+                         "s5.2); a CHR RAM game reports n/a")
+    ap.add_argument("--summary", type=Path, default=None,
+                    help="write the machine-readable per-session + totals JSON")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--rescore", action="store_true",
+                    help="score the packs a previous sweep already wrote under "
+                         "--out instead of recording anything: no ROM, no "
+                         "emulator, no session rerun (ADR-0239 s4/s5)")
     args = ap.parse_args()
 
-    profile = json.loads(args.profile.read_text())
-    prof_dir = args.profile.resolve().parent
+    profile = json.loads(args.profile.read_text()) if args.profile else {}
+    if not args.rescore and not args.profile:
+        ap.error("--profile is required unless --rescore reads an existing sweep")
+    if not args.rescore and not args.rom:
+        ap.error("--rom is required unless --rescore reads an existing sweep")
+    if args.rom_chr and not args.rom:
+        ap.error("--rom-chr needs --rom: the denominator is the ROM's own CHR")
+    # ADR-0184 s1's "refuse, do not warn", in the shape #545 asks for: the
+    # reference comparison is scored at the CHR-pattern identity, and a rule
+    # that names a tile by index resolves to a pattern only through the ROM's
+    # own CHR. Without one it would score 0 of 0, which is the figure §5.3
+    # forbids printing.
+    if args.reference and not args.rom:
+        ap.error("--reference needs --rom: the comparison is scored at the "
+                 "CHR-pattern identity, and an index becomes a pattern only "
+                 "through the ROM's own CHR (ADR-0239 s5.2/s5.3)")
+    prof_dir = args.profile.resolve().parent if args.profile else Path.cwd()
     seconds = args.seconds if args.seconds is not None else \
         profile.get("defaults", {}).get("seconds", 300)
     only = set(x.strip() for x in args.only.split(",")) if args.only else set()
@@ -393,120 +824,323 @@ def main() -> int:
     # full command. Left parallel, --dry-run printed "dry-run in None s" (there
     # is no wall clock to report) and printed no command at all - the one thing
     # it exists to show.
-    jobs = 1 if args.dry_run else max(1, args.jobs)
+    jobs = 1 if (args.dry_run or args.rescore) else max(1, args.jobs)
+    # A rescore's sessions are the packs already on disk, so a dry run of it
+    # still has something to score: the report *is* what "show me the rescore
+    # without overwriting my summary" asks for, and suppressing it left the dry
+    # run printing its header and nothing else. The sweep's dry run has nothing
+    # to score - no session ran - and stays suppressed.
+    report = not args.dry_run or args.rescore
 
-    if not args.dry_run and not RECORDER.exists():
+    if not args.dry_run and not args.rescore and not RECORDER.exists():
         print(f"missing {RECORDER} - run: make capture-tool", file=sys.stderr)
         return 2
-    if not args.rom.exists():
-        print(f"ROM not found: {args.rom}", file=sys.stderr)
-        return 2
+    # ADR-0184 s1's "refuse, do not warn", before the report's first line
+    # (#551): `Path.exists()` is satisfied by a directory and says nothing about
+    # the contents, so a bad `--rom` used to print the whole section 4 table and
+    # then die inside it - and a dump whose header declares a CHR bank the file
+    # does not carry was not even that loud: it read as an empty CHR, which is
+    # how the report says "this is a CHR RAM cartridge".
+    if args.rom:
+        try:
+            rom_chr_bytes(args.rom)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    # ADR-0184's "refuse, do not warn": a --baseline that resolves to nothing
+    # is not an empty union, it is a wrong 'before' - every session would come
+    # out with `new` equal to its whole pack.
+    baseline_hires = []
+    for b in args.baseline:
+        h = pack_hires(b)
+        if not h.is_file():
+            print(f"--baseline {b} holds no pack definition (looked for {h})",
+                  file=sys.stderr)
+            return 2
+        baseline_hires.append(h)
+    reference = pack_hires(args.reference) if args.reference else None
 
-    try:
-        sessions = build_plan(profile, prof_dir, args.rom.resolve(),
-                              args.out.resolve(), args.states.resolve()
-                              if args.states else None, seconds, only)
-    except ValueError as exc:  # ADR-0184 s1 - refuse, do not warn
-        print(exc, file=sys.stderr)
-        return 2
-    if not sessions:
-        print("no session matched --only", file=sys.stderr)
-        return 2
-
-    nav = profile["navigation"]
-    swept = [s["cheat"] for s in sessions if s["cheat"]]
-    print(f"== {profile['game']} navigation sweep: {len(sessions)} sessions, "
-          f"{seconds:g} s each, jobs={jobs}")
-    print(f"   address ${nav['address'].upper()} ({nav.get('label', '')}) - "
-          f"{nav['source']}")
-    for s in sessions:
-        print(f"   {s['name']:<14} {s['kind']:<10} "
-              f"{'cheat=' + s['cheat'] if s['cheat'] else 'no cheat':<18} "
-              f"{s['title']}")
-
-    args.out.mkdir(parents=True, exist_ok=True)
     results = []
-    if jobs == 1:
-        for s in sessions:
-            r = run_session(s, args.rom.resolve(), args.dry_run)
-            results.append(r)
-            print(f"-- {r['name']}: {r['status']}"
-                  f"{'' if args.dry_run else ' in ' + str(r.get('wallSeconds')) + ' s'}")
-            if args.dry_run:
-                print("   " + " ".join(f'"{a}"' if " " in a else a for a in r["command"]))
+    if args.rescore:
+        # Nothing is planned, nothing runs: the packs a previous sweep wrote are
+        # the input, which is what lets an amended §4 rule be re-read without
+        # spending the capture budget again.
+        try:
+            results, empty = discover_sessions(args.out, only)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        if not results:
+            print(f"--rescore: no session pack under {args.out} - point --out at "
+                  "the folder a sweep wrote its sessions into", file=sys.stderr)
+            return 2
+        print(f"== {args.out}: rescoring {len(results)} session(s) already on disk "
+              f"({', '.join(r['name'] for r in results)})")
+        if empty:
+            print("   no pack, not scored: " + ", ".join(empty))
     else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-            futures = {pool.submit(run_session, s, args.rom.resolve(), args.dry_run): s
-                       for s in sessions}
-            for fut in concurrent.futures.as_completed(futures):
-                r = fut.result()
-                results.append(r)
-                print(f"-- {r['name']}: {r['status']} in {r.get('wallSeconds')} s")
-        results.sort(key=lambda r: [s["name"] for s in sessions].index(r["name"]))
+        try:
+            sessions = build_plan(profile, prof_dir, args.rom.resolve(),
+                                  args.out.resolve(), args.states.resolve()
+                                  if args.states else None, seconds, only)
+        except ValueError as exc:  # ADR-0184 s1 - refuse, do not warn
+            print(exc, file=sys.stderr)
+            return 2
+        if not sessions:
+            print("no session matched --only", file=sys.stderr)
+            return 2
+        if not args.dry_run:
+            missing = missing_scripts(sessions)
+            if missing:
+                name, script = missing[0]
+                print(f"session {name} needs {script}, which is not there - a "
+                      "profile's entry/body/room scripts are read relative to the "
+                      "profile's own folder", file=sys.stderr)
+                return 2
 
-    # --- coverage ------------------------------------------------------------
+        nav = profile["navigation"]
+        kind = nav.get("kind", "ram")
+        print(f"== {profile['game']} navigation sweep: {len(sessions)} sessions, "
+              f"{seconds:g} s each, jobs={jobs}")
+        if kind == "ram":
+            print(f"   address ${nav['address'].upper()} ({nav.get('label', '')}) - "
+                  f"{nav['source']}")
+        else:
+            print(f"   input selector ({nav.get('label', '')}) - {nav['source']}")
+        for s in sessions:
+            print(f"   {s['name']:<14} {s['kind']:<10} "
+                  f"{'cheat=' + ','.join(s['cheats']) if s['cheats'] else 'no cheat':<20} "
+                  f"{s['title']}")
+
+        if not args.dry_run:
+            args.out.mkdir(parents=True, exist_ok=True)
+        if jobs == 1:
+            for s in sessions:
+                r = run_session(s, args.rom.resolve(), args.dry_run)
+                results.append(r)
+                print(f"-- {r['name']}: {r['status']}"
+                      f"{'' if args.dry_run else ' in ' + str(r.get('wallSeconds')) + ' s'}")
+                if args.dry_run:
+                    print("   " + " ".join(f'"{a}"' if " " in a else a
+                                           for a in r["command"]))
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+                futures = {pool.submit(run_session, s, args.rom.resolve(), args.dry_run): s
+                           for s in sessions}
+                for fut in concurrent.futures.as_completed(futures):
+                    r = fut.result()
+                    results.append(r)
+                    print(f"-- {r['name']}: {r['status']} in {r.get('wallSeconds')} s")
+            results.sort(key=lambda r: [s["name"] for s in sessions].index(r["name"]))
+
+    # --- ADR-0239 s4: did each session go somewhere? --------------------------
+    scored = {"counted": [], "didNotWarp": [], "unionHires": []}
+    totals = None
+    after_hires = list(baseline_hires)
+    if report:
+        scored = score_sessions(results, baseline_hires)
+        after_hires = list(baseline_hires) + scored["unionHires"]
+        # The ROM resolves an index to a pattern for §5.3's reference row as
+        # well as for §5.2's denominator, so it is handed over whenever either
+        # is asked for; `--rom-chr` still decides whether the row is printed.
+        totals = totals_document(baseline_hires, after_hires,
+                                 args.rom.resolve()
+                                 if (args.rom_chr or reference) else None,
+                                 reference)
+        print("\n== sessions (ADR-0239 s4: a session must prove it went somewhere)")
+        print(f"   {'name':<16}{'status':<14}{'tiles':>6}{'keys':>7}"
+              f"{'new':>6}{'unq':>6}  RAM check")
+        for r in results:
+            check = r.get("ramCheck")
+            line = (f"${check['address']}={check['actual'] or '--'} "
+                    f"{'ok' if check['ok'] else 'FAIL: ' + check['why']}"
+                    if check else "")
+            print(f"   {r['name']:<16}{r['status']:<14}"
+                  f"{r.get('tiles', 0):>6}"
+                  f"{'' if r.get('keys') is None else r['keys']:>7}"
+                  f"{'' if r.get('new') is None else r['new']:>6}"
+                  f"{'' if r.get('unique') is None else r['unique']:>6}  {line}")
+        # One line, always true, because the difference between `new` and §4
+        # read as tile-data strings is invisible in this table and decides four
+        # of the five games in the F14.16 sweep.
+        print("   new = drawn keys, (tileData, palette) - the cell identity "
+              "ADR-0194 s2 names, the\n   background placeholders excluded - that "
+              "the baseline packs do not hold; it is the gate\n   (`new == 0` = "
+              "did-not-warp). unique = the same keys that no other session and\n"
+              "   no baseline holds: reported, never a gate, because two tracks "
+              "that share a tileset\n   are both legitimate warps with unique == 0."
+              + ("" if baseline_hires else "  No --baseline given,\n   so every "
+                 "session's whole pack counts as new.") + "\n   `tiles` counts "
+              "distinct tile data over every rule, which on a CHR ROM game is\n"
+              "   the same set for every session (the builder writes a "
+              "`defaultTile` placeholder\n   per CHR index) - see newTiles/seen "
+              "in --summary.")
+        for r in results:
+            if (r.get("ramCheck") or {}).get("caveat"):
+                print(f"   ! {r['name']}: {r['ramCheck']['caveat']}")
+        if scored["didNotWarp"]:
+            # §4's "counts in no total" is about the count; §5's union is "every
+            # sweep session", and on this rule a did-not-warp session holds
+            # nothing the baseline does not, so it cannot inflate the union.
+            print("   did-not-warp (not counted; nothing the baseline lacks, so "
+                  "the union is the same with or without it): "
+                  + ", ".join(scored["didNotWarp"]))
+
+        # --- ADR-0239 s5: the union, against two denominators ----------------
+        before, after = totals["before"], totals["after"]
+        print(f"\n== coverage ({ADR_0239} s5): drawn keys and distinct tile data")
+        for label, row in (("before", before), ("after", after)):
+            # The row is computed whenever the ROM is known (a --reference
+            # needs it too) and printed when it was asked for.
+            print(f"   {label:<8}{row['keys']:>6} keys {row['tileData']:>6} tile "
+                  "data"
+                  + (f"   romChr {_rom_chr_line(row['romChr'], row['romChrSeen'])}"
+                     if args.rom_chr else ""))
+        print(f"   gained  {after['keys'] - before['keys']:>+6} keys "
+              f"{after['tileData'] - before['tileData']:>+6} tile data "
+              + (f"over {len(baseline_hires)} baseline pack(s)" if baseline_hires
+                 else "(no --baseline given: before is empty)"))
+        # Measured 2026-09-26 (Castlevania, CHR RAM): the placeholders are not
+        # a small constant - they are 2581 distinct PRG-scan patterns, the same
+        # in every pack of the ROM - so an every-rule column is that scan plus
+        # a rounding error and hides the warps. The written rows are the ones
+        # §5.1 asks for; the every-rule counts stay beside them.
+        print(f"   the union columns are the rules a run *wrote*; over every "
+              f"rule they read\n   {before['keysAll']} -> {after['keysAll']} keys "
+              f"and {before['tileDataAll']} -> {after['tileDataAll']} tile data, "
+              + placeholder_note(args.rom) + ". Raised as a defect by the\n"
+              "   F14.16 coordinator 2026-09-26; see "
+              "nav_sweep_metrics.totals_document.")
+
+    # --- coverage against a reference pack (ADR-0184's own metric) -----------
     coverage = None
-    if args.reference and not args.dry_run:
-        ref = args.reference
-        if ref.is_dir():
-            ref = ref / "hires.txt"
-        ref_keys = tile_data_keys(ref)
-        union_keys = set()
+    if reference and report:
+        ref = reference
+        # #545: the identity is the CHR pattern each rule names, never the
+        # `<tile>` field as a string. A community pack is `<ver>100` and writes
+        # a decimal CHR index, a bootstrapped one `<ver>109` and writes hex, so
+        # a string comparison compares two spellings of the same tile: on Ninja
+        # Gaiden it read 1003/7382 = 13.6 % for the baseline, for each session
+        # and for the union. At the pattern the same packs read 535/6208 =
+        # 8.6 % before against 2705/6208 = 43.6 % after.
+        rom = args.rom.resolve() if args.rom else None
+        ref_pat = pack_named_patterns([ref], rom)
+        union_pat = set()
         per_session = []
         for r in results:
             if not r.get("hires"):
                 continue
-            keys = tile_data_keys(Path(r["hires"]))
-            union_keys |= keys
-            hit = len(keys & ref_keys)
+            # Drawn rows: a pattern the record never painted is not a pattern
+            # the recording holds, and the placeholder scan paints thousands of
+            # bytes nobody drew (nav_sweep_metrics.totals_document).
+            pats = pack_named_patterns([Path(r["hires"])], rom)
+            union_pat |= pats
+            hit = len(pats & ref_pat)
             per_session.append({
-                "name": r["name"], "tiles": len(keys), "ofReference": hit,
-                "pct": round(100.0 * hit / len(ref_keys), 1) if ref_keys else 0.0,
+                "name": r["name"], "patterns": len(pats), "ofReference": hit,
+                "pct": round(100.0 * hit / len(ref_pat), 1) if ref_pat else 0.0,
             })
-        base_keys = set()
-        for b in args.baseline:
-            p = Path(b)
-            if p.is_dir():
-                p = p / "hires.txt"
-            base_keys |= tile_data_keys(p)
-        sweep_hit = len(union_keys & ref_keys)
+        base_pat = pack_named_patterns(baseline_hires, rom)
+        sweep_hit = len(union_pat & ref_pat)
         coverage = {
             "reference": str(ref),
-            "referenceTiles": len(ref_keys),
+            "unit": "chr-pattern",
+            "referencePatterns": len(ref_pat),
             "perSession": per_session,
-            "sweepUnionTiles": len(union_keys),
+            "sweepUnionPatterns": len(union_pat),
             "sweepOfReference": sweep_hit,
-            "sweepPct": round(100.0 * sweep_hit / len(ref_keys), 1) if ref_keys else 0.0,
+            "sweepPct": round(100.0 * sweep_hit / len(ref_pat), 1) if ref_pat else 0.0,
+            "versions": {
+                "reference": pack_version(ref),
+                "compared": sorted({pack_version(Path(r["hires"]))
+                                    for r in results if r.get("hires")}
+                                   | {pack_version(h) for h in baseline_hires}),
+            },
+            "note": version_note(ref, baseline_hires
+                                 + [Path(r["hires"]) for r in results
+                                    if r.get("hires")]),
         }
-        if base_keys:
-            both = len((union_keys | base_keys) & ref_keys)
-            coverage["baselineOfReference"] = len(base_keys & ref_keys)
-            coverage["baselinePct"] = round(100.0 * len(base_keys & ref_keys) / len(ref_keys), 1)
+        # #554: a reference pack built for a patched ROM makes every figure
+        # below a comparison of two builds. Say it above the tables and on the
+        # summary row, and carry it in the machine-readable row beside the
+        # number it qualifies - the same treatment the sibling tool gives it.
+        patch_text, patch_marker = reference_patch_caveat(ref, rom)
+        coverage["patchCaveat"] = patch_text or None
+        if base_pat:
+            both = len((union_pat | base_pat) & ref_pat)
+            coverage["baselineOfReference"] = len(base_pat & ref_pat)
+            coverage["baselinePct"] = round(100.0 * len(base_pat & ref_pat) / len(ref_pat), 1)
             coverage["unionWithBaselineOfReference"] = both
-            coverage["unionWithBaselinePct"] = round(100.0 * both / len(ref_keys), 1)
-            coverage["gainedOverBaseline"] = both - len(base_keys & ref_keys)
+            coverage["unionWithBaselinePct"] = round(100.0 * both / len(ref_pat), 1)
+            coverage["gainedOverBaseline"] = both - len(base_pat & ref_pat)
 
-        print(f"\n== coverage against {ref} ({len(ref_keys)} distinct tile-data strings)")
+        print(f"\n== coverage against {ref} ({len(ref_pat)} distinct CHR patterns, "
+              "the identity both sides share - #545)")
+        if patch_text:
+            print(f"   ! {patch_text}")
+        if coverage["note"]:
+            print(f"   ! {coverage['note']}")
         for p in per_session:
-            print(f"   {p['name']:<14} {p['tiles']:>5} tiles  "
+            print(f"   {p['name']:<14} {p['patterns']:>5} patterns  "
                   f"{p['ofReference']:>5} of reference  {p['pct']:>5.1f}%")
-        print(f"   {'SWEEP UNION':<14} {len(union_keys):>5} tiles  "
-              f"{sweep_hit:>5} of reference  {coverage['sweepPct']:>5.1f}%")
-        if base_keys:
-            print(f"   {'baseline':<14} {len(base_keys):>5} tiles  "
+        # The row a reader quotes: it must not read as a coverage figure when
+        # the reference is a pack for a patched ROM.
+        print(f"   {'SWEEP UNION':<14} {len(union_pat):>5} patterns  "
+              f"{sweep_hit:>5} of reference  {coverage['sweepPct']:>5.1f}%"
+              + (f"  {patch_marker}" if patch_marker else ""))
+        if base_pat:
+            print(f"   {'baseline':<14} {len(base_pat):>5} patterns  "
                   f"{coverage['baselineOfReference']:>5} of reference  "
                   f"{coverage['baselinePct']:>5.1f}%")
             print(f"   {'UNION + base':<14} {'':>5}        "
                   f"{coverage['unionWithBaselineOfReference']:>5} of reference  "
                   f"{coverage['unionWithBaselinePct']:>5.1f}%  "
-                  f"(+{coverage['gainedOverBaseline']} tiles the baseline never held)")
+                  f"(+{coverage['gainedOverBaseline']} patterns the baseline never held)")
 
     # --- notes[] (ADR-0183 s3, ADR-0184: the code travels with the art) ------
-    notes = [
-        f"{profile['game']} navigation sweep, {ADR}: RAM address "
-        f"${nav['address'].upper()} ({nav.get('label', '')}), values swept "
-        + ", ".join(v for v in swept) + ". " + nav["source"],
-    ]
+    # A rescore wrote no art and ran no session, so there is nothing to hand a
+    # kit generator: the packs it read are the sweep's, and their notes are in
+    # that sweep's own sweep.json.
+    if args.rescore:
+        # #548's promise, on this path: the writes are the whole of what a dry
+        # run must not do here, and both of them land on a record somebody
+        # already has - `--summary` (a rescore nulls its per-session `ramCheck`
+        # column, because it reads no state and cannot re-derive the check) and
+        # `<out>/rescore.json`. The report above is printed either way.
+        if not args.dry_run:
+            doc = summary_document(profile.get("game", args.out.name),
+                                   str(args.rom or ""), seconds, results, totals)
+            if args.summary:
+                args.summary.parent.mkdir(parents=True, exist_ok=True)
+                args.summary.write_text(json.dumps(doc, indent=2) + "\n")
+                print(f"wrote {args.summary}")
+            elif args.out.is_dir():
+                dest = args.out / "rescore.json"
+                dest.write_text(json.dumps(doc, indent=2) + "\n")
+                print(f"wrote {dest}")
+        return 0
+
+    # The two lists the note names, read off the plan this run just made: the
+    # selector cheats a RAM sweep pinned and the places an input selector
+    # reached. Both were used but never assigned on the F14.16 branch, which
+    # aborted a real sweep here - the last thing before `sweep.json` - after
+    # every capture had been paid for.
+    swept = [s["cheat"] for s in sessions if s["cheat"]]
+    picked = [s["title"] or s["name"] for s in sessions if s["kind"] == "navigation"]
+
+    if kind == "ram":
+        notes = [
+            f"{profile['game']} navigation sweep, {ADR}: RAM address "
+            f"${nav['address'].upper()} ({nav.get('label', '')}), values swept "
+            + ", ".join(swept) + ". " + nav["source"],
+        ]
+    else:
+        notes = [
+            f"{profile['game']} navigation sweep, {ADR}: input selector "
+            f"({nav.get('label', '')}), places swept " + ", ".join(picked)
+            + ". No cheat: the profile's own entry scripts select the place "
+            "(ADR-0239 s1, first rung). " + nav["source"],
+        ]
     notes += [f"{r['name']}: {r['note']}" for r in results]
     print("\n== notes[] (ADR-0183 s3 - hand these to the kit generators verbatim)")
     for n in notes:
@@ -521,12 +1155,30 @@ def main() -> int:
         "jobs": jobs,
         "navigation": nav,
         "cheatsSwept": swept,
+        "cheatsPinned": sorted({c for r in results for c in r["cheats"]}),
+        "baseline": [str(h) for h in baseline_hires],
         "sessions": results,
+        # The after-side of the union is Paths because that is what a caller
+        # wants; json needs the strings.
+        "scored": dict(scored, unionHires=[str(h) for h in scored["unionHires"]]),
         "coverage": coverage,
+        "totals": totals,
         "notes": notes,
     }
-    (args.out / "sweep.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"\nwrote {args.out / 'sweep.json'}")
+    # #548: a dry run writes nothing at all, and this document is the one that
+    # was doing the damage - nothing ran, so `totals` is null, every session
+    # reads "dry-run" and both `scored` lists are empty, and written over a real
+    # sweep's `sweep.json` it destroyed that sweep's record of what it recorded.
+    # The notes[] above are printed either way; only the files are held back.
+    if not args.dry_run:
+        (args.out / "sweep.json").write_text(json.dumps(summary, indent=2) + "\n")
+        print(f"\nwrote {args.out / 'sweep.json'}")
+
+        if args.summary:
+            doc = summary_document(profile["game"], args.rom, seconds, results, totals)
+            args.summary.parent.mkdir(parents=True, exist_ok=True)
+            args.summary.write_text(json.dumps(doc, indent=2) + "\n")
+            print(f"wrote {args.summary}")
 
     failed = [r for r in results if r["status"] == "failed"]
     return 1 if failed else 0

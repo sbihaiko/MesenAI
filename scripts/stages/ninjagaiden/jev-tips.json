@@ -1,0 +1,65 @@
+{
+  "game": "Ninja Gaiden",
+  "console": "nes",
+  "schema": "f14.14-tips-1",
+  "note": "Situation tips for the F14.14 harness (ADR-0238 sec. 3, amended 2026-09-26). Each tip is written in our own words, carries a RAM trigger, and is folded into a Jev question only while that trigger holds on the live state - a tip whose trigger does not hold is never sent, so a boss tip cannot leak into a corridor question. `macro` names a macro of the harness's fixed table (scripts/jev_harness.py), never a duration: a tip may ask for a move the default set does not offer (that is how the Left+A jump of ADR-0238's F14.13 enters a question), and the harness adds it to the option set for that question only. A tip reaches this versioned file only through `--promote-tips`, after the stall it was written for passed. The gates marked approximate are the ones the RAM map does not settle: $006D (stage) reads $00 in Act 1-1, so the acts are counted from 0 here, and no boss flag is mapped yet - the boss tips are gated on how far Ryu has got instead.",
+  "sources": [
+    "https://strategywiki.org/wiki/Ninja_Gaiden_(NES)/Gameplay",
+    "https://ninjagaiden.fandom.com/wiki/Barbarian",
+    "https://ninjagaiden.fandom.com/wiki/Bird",
+    "https://gamefaqs.gamespot.com/nes/587488-ninja-gaiden/faqs/3071"
+  ],
+  "tips": [
+    {
+      "id": "wall-pin",
+      "tip": "Ryu is pinned against a wall and holding Right does nothing. Cling to it and jump off the other way - Left together with A - to clear the ledge above him.",
+      "macro": "JUMP_LEFT",
+      "when": [
+        {"field": "abs_x", "min": 950, "max": 1035}
+      ],
+      "sources": [
+        "https://strategywiki.org/wiki/Ninja_Gaiden_(NES)/Gameplay"
+      ],
+      "note": "The measured pin: Act 1-1 stops at abs_x 987 (camera 859 + Ryu's screen x 128) and no rightward press or plain jump leaves it (ADR-0238, and the 60 s route this stage ships)."
+    },
+    {
+      "id": "enemy-behind",
+      "tip": "Something is on him: an enemy is in the room and Ryu has already taken damage. Stop walking into it - turn, face the other way and slash with B.",
+      "macro": "ATTACK_LEFT",
+      "when": [
+        {"field": "enemies_near", "min": 1},
+        {"field": "hp", "max": 12}
+      ],
+      "sources": [
+        "https://strategywiki.org/wiki/Ninja_Gaiden_(NES)/Gameplay"
+      ],
+      "note": "`enemies_near` is a count of occupied enemy slots, not a direction - the tip says so instead of pretending to know where the enemy is."
+    },
+    {
+      "id": "birds",
+      "tip": "Birds dive at Ryu from the front. Wait for the dive and slash it out of the air; never jump over a pit while one is coming, because the recovery lands him in it.",
+      "when": [
+        {"field": "stage", "min": 2},
+        {"field": "enemies_near", "min": 1}
+      ],
+      "sources": [
+        "https://ninjagaiden.fandom.com/wiki/Bird"
+      ],
+      "note": "Approximate gate: the stage byte is 0-based here, so `stage >= 2` is expected to mean Act 3 onward. The tip names no macro - it is advice about the timing of whatever macro is chosen."
+    },
+    {
+      "id": "barbarian-boss",
+      "tip": "Act 1's boss is slow and swings two or three times before he turns around. Stay just outside his swing, duck under it, and if he corners Ryu, cling to the wall and jump over him rather than trading hits.",
+      "macro": "JUMP_LEFT",
+      "when": [
+        {"field": "stage", "max": 0},
+        {"field": "abs_x", "min": 1100}
+      ],
+      "sources": [
+        "https://ninjagaiden.fandom.com/wiki/Barbarian",
+        "https://gamefaqs.gamespot.com/nes/587488-ninja-gaiden/faqs/3071"
+      ],
+      "note": "Approximate gate: no boss-fight flag is mapped for this game yet, so this tip is gated on Ryu having passed the wall pin's screen in Act 1. It is the only tip that may hold in the act the harness's own smoke runs in."
+    }
+  ]
+}

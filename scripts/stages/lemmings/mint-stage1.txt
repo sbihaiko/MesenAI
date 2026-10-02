@@ -1,0 +1,20 @@
+# Lemmings (NES) stage-1 route: power-on -> the title -> the main menu ->
+# click START -> the LEVEL 1 preview -> START to begin. This is the game's own
+# default path (no access code) and it is what the sweep's "before" side
+# records (ADR-0239 s5): the profile's own values start at level 2, because a
+# session that records level 1 under a code adds nothing this route does not
+# already hold and would read as did-not-warp.
+#
+# The main menu is a pointer, not a cursor: the D-pad moves the lemming-shaped
+# arrow and A clicks it, so START is one A press with the arrow already parked
+# on START (measured 2026-09-26; the same click with Right first opens the
+# ACCESS CODE screen instead).
+900f -
+10f T
+120f -
+10f A
+120f -
+10f T
+120f -
+10f T
+60f -

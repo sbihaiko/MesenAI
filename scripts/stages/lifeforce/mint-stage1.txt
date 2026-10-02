@@ -1,0 +1,29 @@
+# Life Force (1988) (Konami), USA dump: power-on to the first frames of player
+# control in stage 1, the Cell Stage.
+#
+# The boot, measured on this checkout's dump (runs/f1418/lifeforce/probe/,
+# unversioned):
+#
+#   frame     what is on screen
+#   0-119     Konami logo and the title screen
+#   120-131   one Start tap; without a tap the game never leaves its attract
+#             demo, and the demo ALSO reads the pinned $0030, so a session with
+#             no tap reaches the pinned stage with $0034 (P1 Lives) = 0 - it is
+#             the demo and not a game
+#   ~240      the first stage's loader runs ($0040 "Is Stage Vertical?" takes
+#             its value, $0034 becomes 3)
+#   300-360   $0070 (P1 Status) is 03, player control
+#
+# The two idle blocks are deliberate. 120 f is where the tap lands and 180 f
+# after it is the settle that makes this script end on the first frames of
+# control rather than inside the load, so a sweep session's body starts with a
+# ship that answers the pad.
+#
+# This file is both the sweep's `entry` and the library job's mint for
+# `stage1-run`: `record_navigation_sweep.py` runs it as *input* from power-on
+# with the pin already set, and the job runs it with `save-state=` to mint the
+# state `stage1-run.txt` starts from.
+120f -
+12f T
+48f -
+180f -

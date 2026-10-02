@@ -114,3 +114,22 @@ decided here rather than as separate ADRs:
    of a cap (file headers, ADR-0034) are informative; when they disagree, the
    makefile wins and the prose is fixed. A data file the script iterates is
    not worth it for one entry.
+5. **Amendment 2026-10-02: the recipe is four targets (user's decision).** The
+   `doc-checks` recipe is split into `doc-checks-1`..`-4`, in the same order,
+   with no command added, dropped or repeated (verified by diffing
+   `make -n doc-checks` before and after). `doc-checks` stays the target
+   everything cites: it now runs the four in sequence, so locally and in
+   `build.yml` it is still one serial, fail-fast run. `checks.yml` runs the
+   four as parallel jobs behind a fan-in job named `checks`, because one
+   command (the smoke verifier, which compiles Core/) was ~95 % of an
+   ~11-minute gate. Items 1 and 4 are unaffected: the `check-file-loc.sh`
+   lines are still in the `doc-checks` recipe family and are still the
+   single authoritative list of caps. Harness-dependent checks stay in shard 1
+   (see `.github/AGENTS.md`).
+6. **Amendment 2026-10-02: shard 1 caches its compiler output.** After the
+   split, shard 1's 5-minute `make -j$(nproc) capture-tool` is the whole gate
+   (measured on PR #570: 6m01s of a 6m12s run). `checks.yml` now installs
+   ccache there (the makefile already prefixes the compiler with it when
+   `command -v ccache` finds one) and persists `~/.cache/ccache` with
+   `actions/cache`, keyed by SHA with a prefix restore-key. No check changes.
+   The effect is measured, not assumed: see the PR that introduced this item.

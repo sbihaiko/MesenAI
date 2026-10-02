@@ -1,0 +1,27 @@
+# Super Mario Bros. - power-on to the first frame of player control in the
+# level the world byte selects. Rung 2 of ADR-0239 s1: the RAM selector $075F
+# is pinned for the whole run and this script is what starts a game, so the
+# pin is what decides WHICH level the boot loads.
+#
+# The title screen offers "ONE PLUMBER" and "TWO PLUMBERS" and START begins a
+# one-player game; the run presses START once and nothing else. Measured on
+# this dump: the title holds until the press, and player control begins around
+# frame 480, when the level's prelevel card has faded out (a 20 s run from
+# power-on already reads the level timer 30 units down, which is ~720 frames
+# of level at the game's 24-frame time unit).
+#
+# These are the frames every value of the profile records from; the pin is in
+# place from frame 0, so the boot's own level load is what it steers and no
+# save state travels with the profile.
+#
+# By hand:
+#   scripts/headless_record <rom> 15 <work>/mint input=mint-stage1.txt \
+#     save-state=<work>/stage1.mss cheat=075F:00
+# 15 s covers this 610-frame script.
+
+# power-on: the title screen, the banner and the menu
+300f -
+# title -> ONE PLUMBER (a one-player game)
+10f T
+# the prelevel card ("WORLD 1-1" and Mario's lives), then the level fades in
+300f -

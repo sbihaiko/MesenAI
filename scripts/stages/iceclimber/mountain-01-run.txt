@@ -1,0 +1,33 @@
+# The blind body every Ice Climber sweep session repeats (ADR-0239 s6: the
+# body is repeated to fill the 120 s budget, as Contra's profile does).
+#
+# IT HOLDS NO DIRECTION, and that is the load-bearing property, not an
+# oversight. On this game the d-pad IS the mountain selector - the title
+# screen's `MOUNTAIN 01` row is walked with it - so a d-pad press that lands
+# on the title screen after GAME OVER moves the game's own level index in
+# `$0059`, which is the address every value's ramCheck reads. Popo's walk
+# belongs to the entry script instead (mountain-entry.py, WALK): the entry is
+# the one place a d-pad press is known to be inside the game, and it is one
+# block long so it is over long before the session's third lost man.
+#
+# What is left is the hammer and the jump, which is what a player who never
+# walks can draw, plus the whole of the mountain's own screen: the background,
+# the toppies and the nitpicker are drawn whether or not Popo moves. Each
+# press is 12 frames with 28-48 frames of release, so the swing and the jump
+# animation get their own frames and the artist kit's cycle reader has holds
+# long enough to turn over (ADR-0179 s3 wants two turns of a hold).
+#
+# No cheat rides with this body: `mountain-entry.py --check` and the profile's
+# own validation both refuse one that is not published (ADR-0184 s1/s5).
+12f B
+28f -
+12f B
+28f -
+12f A
+48f -
+12f A
+48f -
+12f AB
+28f -
+12f B
+28f -

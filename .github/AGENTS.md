@@ -12,6 +12,15 @@ what CI actually runs; this doc records why they're split the way they are.
 
 ## Local Contracts
 
+- `../.coderabbit.yaml` (repo root, not under `.github/`) configures the
+  CodeRabbit PR reviewer, a GitHub App installed by the owner on this repo
+  only. It sets en-US reviews, skips `runs/` and `roms/`, and gives path
+  instructions for workflows (third-party text must reach a step through
+  `env:`), ADRs (accepted ADRs are binding), docs and scripts. It is advisory:
+  it gates nothing, so a finding is answered on the PR like any other reviewer's
+  before merge. Keys follow the vendor's configuration reference; change them
+  there, not by guess.
+
 - `workflows/build.yml` — native + UI release build, **Linux only** since
   ADR-0191 (2026-09-14). The two Windows publish jobs and the four macOS legs
   were deleted from the file (history keeps them); what is left is the
@@ -51,7 +60,42 @@ what CI actually runs; this doc records why they're split the way they are.
   a red job names which contract broke. ADR-0191, later the same day, folded
   `unit-tests.yml`'s two jobs in here and deleted that file, so the count is
   **five**:
-  - `checks` — `make doc-checks`, as above.
+  - `checks` — the verdict of `make doc-checks`, **split into four parallel
+    shards on 2026-10-02** (the user picked "split doc-checks in parallel").
+    Serial, the target took ~11 minutes (a typical PR run: ~659 s of a 688 s
+    job), ~95 % of it one command, `verify_smoke_pack_headless.sh`, which
+    compiles Core/; the other four jobs finished in under two minutes. The
+    makefile now has `doc-checks-1`..`-4` (the same ~104 commands in the
+    same order, none dropped, none repeated; `make doc-checks` is the
+    umbrella that runs them one after another, so local use and `build.yml`'s
+    `make doc-checks` steps are unchanged). In `checks.yml` the work is the
+    matrix job `doc-checks-shard` (display name "Doc checks shard N",
+    `fail-fast: false`), and **`checks` is now a fan-in job**: `needs:
+    [doc-checks-shard]`, `if: always()`, and it fails unless the shards'
+    aggregate result is exactly `success` (a failed, cancelled or skipped
+    shard fails it). Rules that keep this honest:
+    - **No shard job may be named like a required context** (`checks`,
+      `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests`):
+      a shard that was would satisfy the requirement alone. The `main`
+      ruleset is unchanged and still requires exactly those five names;
+      `checks` means "all doc checks passed" as before.
+    - **Shard 1 is the only one that compiles** and the only one that installs
+      SDL2. It pre-builds the harness with `make -j$(nproc) capture-tool`
+      (the verifier's own `make -s capture-tool` is single-core), and
+      `verify_synthetic_nrom.sh` must stay in the same shard, after the smoke
+      verifier: it exits 0 with a SKIP when `scripts/headless_record` is not
+      built, so in a shard that never builds it it would pass vacuously.
+    - **A new check goes into a shard by the same rule as before** (the
+      makefile recipe is still the single list, ADR-0137 §4): add it to
+      whichever `doc-checks-N` is shortest, unless it needs the harness
+      (shard 1). Shards must not read what another shard writes.
+    - **Shard 1 caches its compiler output**: it restores/saves a ccache
+      directory (key `ccache-doc-checks-<sha>`, prefix restore-key) so the
+      Core/ compile is a cache hit when Core/ did not change. The other
+      shards never compile and do not touch it.
+    - Do not run `make -j doc-checks`: the umbrella is a sequence of sub-makes
+      on purpose, because a Python suite under compilation load dies with a
+      false SIGBUS.
   - `python-tests` — `make python-tests`, i.e.
     `scripts/checks/run_python_tests.sh`: every `scripts/test_*.py` as its own
     process, exit non-zero on any file's failure. A loop over the files, never
@@ -326,6 +370,16 @@ what CI actually runs; this doc records why they're split the way they are.
   `check_apply_verdict_external_label_branch`,
   `check_apply_verdict_exposes_outputs`, and
   `check_apply_verdict_kind_matches_mei_rules_status_to_kind`.
+  **`patch:ips`/`patch:bps` are lint-derived (bug #557).** They are never read
+  from classify's `assets` array: `scripts/pack_patch_labels.py` parses
+  `mep_lint_output.txt` and returns a kind only for a whole record
+  `bundled patch: X.ips|bps (present, wired — applied on load)`, anchored so a
+  submitter-controlled archive member name cannot forge the marker. The
+  workflow and `scripts/validate_pack_local.sh` `--add-label` the kinds it
+  returns and `--remove-label` the other, so a stale label is dropped.
+  Checked by `check_apply_verdict_patch_labels_from_lint` (the old
+  `ips|bps) L="patch:$asset"` arm must not return and the helper must be
+  used) and by `scripts/test_pack_patch_labels.py`.
   **"Upsert mep-meta comment" (`id: upsert-mep-meta`, F6.2b complete;
   fence fix + `kind` field F6.3b).** Runs right after `apply-verdict`, on
   EVERY successful classify pass (`if: steps.classify.outcome ==
@@ -372,6 +426,12 @@ what CI actually runs; this doc records why they're split the way they are.
   `check_mep_meta_fence_not_hardcoded`. F6.2b is complete end-to-end
   (classify schema → assembly → gate → apply-verdict → mep-meta upsert);
   F6.3b hardens the `kind` field and the fence on top of it.
+- `workflows/replay-submitted.yml` (ADR-0205 R.1) validates the file attached
+  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the three labels itself; `issues` opened/edited or an exact
+  `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid`
+  via `scripts/replay_submission.py`. Writes use `GITHUB_TOKEN`
+  (`issues: write`), so its edits cannot re-trigger it; issue text reaches the
+  shell only through `env:`. Form: `ISSUE_TEMPLATE/replay.yml`.
 
 ## Work Guidance
 

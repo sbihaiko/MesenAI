@@ -13,6 +13,17 @@ folder per golden game. Four kinds:
   is the run the recorder can read a cycle's `driver` off; the stage and
   entry scripts hold one button most of the time and attribute nothing. Run
   it with the stage state copied beside it as `<stage>-probe.mss`.
+- `<stage>-run.txt` — the same thing under the name the navigation profiles
+  use (`stage1-run.txt`, `mountain-01-run.txt`, `level-00-run.txt`): the run
+  *from* the state its `mint-<stage>.txt` mints, and also the blind body the
+  sweep repeats to fill a session. `record_stages.sh` and `library_job` treat it
+  as a route by extension, not by the `-run` suffix — what makes it a route is
+  that a mint gets it into the game first, which `library_job.start_plan` reads
+  off the **file name**: the `<stage>` half must name a mint the folder actually
+  ships, character for character. `mountain-run` in a folder of
+  `mint-mountain-NN.txt` files names nothing, so the job prunes the route and
+  the set records nothing — `scripts/test_library_job.py` fails when a declared
+  set has no route left.
 - `<stage>.txt` — plays *from* the state for <= 60 s (<= 3600 frames, the
   batch's default duration; a longer script is cut where the run ends), holding a direction long
   enough for every loop to complete two turns on one track (ADR-0179 §3 needs
@@ -48,15 +59,44 @@ against, or the unattended job cannot use it:
   scripts/record_library.sh <folder holding that rom> <out> 60   # and read the report
   ```
 
-  All six sets are declared since 2026-09-23 (F14.3,
-  `docs/validation/f14.3-route-sets-2026-09-23.md`): `contra/`, `metroid/`,
-  `zelda2/` and `excitebike/` are pinned to the user's library dumps they were
-  authored on, and each was run once through the library job. `punchout/`
-  (2026-09-24) is pinned to the library dump it was authored and recorded on
-  by hand (below); since #465 the job mints its state at the same frame as
-  that hand mint (below).
+  All twenty-one sets are declared (2026-09-19 → 2026-09-26): `mm3/` and `zelda/`
+  carry the hash of the working-checkout dump the F12.10 bounded-input run
+  verified them against (2026-09-19); `contra/`, `metroid/`, `zelda2/` and
+  `excitebike/` are pinned to the user's library dumps they were authored on
+  and were each run once through the library job (F14.3, 2026-09-23,
+  `docs/validation/f14.3-route-sets-2026-09-23.md`); `punchout/` and
+  `castlevania/` (2026-09-24), `smb3/` and `ninjagaiden/` (2026-09-25, #497)
+  are pinned to the user's library dumps they were authored and recorded on —
+  `punchout/` by hand (below), which since #465 the job mints at the same
+  frame as that hand mint (below), and `ninjagaiden/` not yet through the job.
+  The seven sets the F14.17 navigation sweep added — `megaman/`, `megaman2/`,
+  `drmario/`, `iceclimber/`, `lemmings/`, `smb1/` and `tetris/` (2026-09-26) —
+  are pinned the same way, to the user's library dumps their profiles were
+  authored and recorded on, and none of them has been through
+  `scripts/record_library.sh` yet. Two carry a warning in the `note`:
+  `smb1/`'s dump is the hack *Super Mario Bros. Revisited*, not the retail ROM
+  (every SMB1 path in this environment shares that one hash), so its numbers
+  must not be compared with a pack keyed to retail. Four had their play loop
+  renamed on 2026-09-26, all for the job's own naming rule: `lemmings/`
+  (`body.txt` -> `stage1-run.txt`, which pairs with its `mint-stage1.txt`), and
+  `drmario/` (`bottle-run.txt` -> `level-00-run.txt`), `iceclimber/`
+  (`mountain-run.txt` -> `mountain-01-run.txt`) and `metroid/` (`stage1-run.txt`
+  -> `brinstar-suitless-run.txt`), whose old names matched no mint the folder
+  ships. `lemmings/`'s first name was also the job's own filter's problem: a
+  file named `body` reads as a route and records the title screen from power-on.
+  The four sets the F14.18 navigation sweep added — `bubblebobble/`,
+  `doubledragon/`, `flintstones/` and `lifeforce/` (2026-09-26) — are pinned the
+  same way, to the user's library dumps their profiles were authored and
+  recorded on, and none of them has been through `scripts/record_library.sh`
+  yet; `zelda2/`, declared above since F14.3, gained the `navigation.json` that
+  sweep measured. `lifeforce/`'s dump is CHR RAM, so its coverage carries no
+  §5.2 denominator and the `n/a` in its summary is the console, not a missing
+  figure. Everything those sweeps measured is in
+  `docs/validation/f1417-coverage-expansion-2026-09-26.md` and
+  `docs/validation/f1418-coverage-wave-three-2026-09-26.md`.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
-  malformed SHA1, a SHA1 another set also claims, or no recordable route.
+  malformed SHA1, a SHA1 another set also claims, no recordable route, or no
+  route the job can start.
 
   The job produces each route's start state before recording it
   (`library_job.start_plan`, issues #407/#408): a state a `.chain.txt` yields, or
@@ -65,8 +105,10 @@ against, or the unattended job cannot use it:
   produced; a `<stage>-probe` copies `<stage>`'s state; any other route takes
   the longest mint that prefixes it. A route none of these reach is **not
   recorded** and is listed in `library-report.md` with the reason, because
-  from power-on it records the attract demo under its name. Only a set with no
-  mint, no chain and no room state (`metroid/`) records from power-on. On a
+  from power-on it records the attract demo under its name. A set with no
+  mint, no chain and no room state records from power-on; none does today —
+  `metroid/` was the last, until F14.17 gave it the eleven `mint-*.txt` files
+  its password profiles enter from. On a
   checkout that leaves Contra with six routes: `stage1-boss`, `stage2-base` and
   every `stage3-*`/`stage4-*` start from states that exist only under `runs/`,
   and `stage3-waterfall.mss`, which every chain here descends from, cannot be
@@ -414,3 +456,68 @@ made from it).
 Only Glass Joe (and his gloves) is sprites; **Little Mac and the referee are
 background tiles**, so the kit's figures cover the opponent and Mac shows up
 only on the pattern pages and the BG sheets.
+
+## Situation tips (F14.14, ADR-0238 §3)
+
+A game may carry a `jev-tips.json` beside its routes: per-situation advice for
+the spots a search stalls on, each entry gated by RAM so a Jev question only
+carries the tips that hold where the run is stuck. `scripts/jev_harness.py`
+reads one thing from the file: a `tips` array of `{id, tip, macro, when,
+sources}`, where `when` is a list of `{field, min?, max?}` (or `value`, the
+file's name for pinning one — a number or a string, read as `equals`). The other
+top-level keys are notes for a human, with one exception: the names under
+`runKeys` are *declared*, so a `when` may gate on one of them as well as on a RAM
+field. A `when` naming a field the game's `ram-map.json` does not define and the
+file does not declare is refused at load (exit 2), not skipped, so an unresolved
+address never becomes a guessed tip; a `_`-prefixed key (`_comment`) is a
+comment and declares nothing. `sources` are the pages the advice came from and
+the text is our own wording, never a copy. A tip is advice and never evidence
+(ADR-0188): the file records where a tip came from and `runs/` records whether it
+worked, which is why a tip that has not been through the stall it was written for
+carries no `confirmed` line. `mm3/jev-tips.json` and `ninjagaiden/jev-tips.json`
+are the two worked examples; Ninja Gaiden gates on its RAM stage byte `$006D`,
+and `mm3/` gates on the run-level `stage` because its own `stage_id` is still
+open — which means an mm3 tip holds only once a run carries that key, and both
+files say so.
+
+## The data a Jev run reads (F14.14, ADR-0238 §3)
+
+A game `scripts/jev_harness.py` drives carries the tips file above and one more
+beside its routes:
+
+- `ram-map.json` — the named fields a **state** is read out of. A field is an
+  `address`, an `[lo, hi]` word (`signed_high` for a signed high byte, as Ninja
+  Gaiden's camera `$0052` is), a `range` with a `reduce`, or an `expr`: names,
+  numbers and arithmetic over the fields declared before it, which is how Ryu's
+  absolute x is the camera plus a screen-relative byte. An address is hex with or
+  without the `0x` (`0027` and `0x27` are the same byte), and a spec whose
+  `address` is `null` is how a map records a number that is **not** RAM at all —
+  Mega Man 3's `state_frame` is the save state's `ppu.frameCount` — so it is
+  skipped, named in the loader's own report, and never asked of the emulator.
+  `%` is allowed, and Mega Man 3 is why: its `$0025` and `$0027` are one byte
+  each, so the level's position is `level_page($002D) * 256 + camera_scroll_x`
+  plus `(player_x_low - camera_scroll_x) % 256` — three fields, two of them
+  `expr`, and the modulo is what keeps a column a column while both bytes wrap
+  (F14.15, `docs/validation/f1415-jev-adoption-2026-09-26.md` §3).
+  Two of its top-level keys name the fields the run judges on — `progress` (the
+  number the search maximises and a stall is measured against) and `screen`, with
+  `screen_width`, so "the start of the current screen" is a boundary the rewind
+  ladder can hold. `--ram-map`, `--progress-field` and `--screen-field` override
+  the file and its defaults.
+- `jev-tips.json` — optional, and the schema above.
+
+`--no-jev` (F14.15, ADR-0238 §5) is the **search-alone arm**: no client is
+built, no `OPENROUTER_API_KEY` is required, and the run ends at its first stall
+as `no-jev` instead of asking anyone. It is the same macro library, the same
+session and the same caps as a Jev run, so `--no-jev` against a Jev run is the
+A/B the ADR's adoption criterion is read from — and the base search alone runs
+at ≳ 3.9× real time where a run that reaches the web-research pass does not.
+
+One more file the format allows and **nothing reads yet**: `cheats.json`, the
+RAM-only cheats a coverage pass may use (ADR-0184), each with the measurement
+that re-verified it on this checkout's dump. Today a cheat reaches a run on the
+command line (`--cheat AAAA:VV[:CC]`) and the coverage sidecar is written beside
+the script it produced. What that measurement has to be is worth saying: on the
+NES a RAM cheat substitutes the value the CPU *reads* and leaves the byte in
+memory alone, so the evidence in the file is what the game did after reading the
+code's value — never `this byte did not change`.

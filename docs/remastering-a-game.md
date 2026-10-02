@@ -41,7 +41,8 @@ into a jumbled mess, I don't even know where to start untangling it"*, and
 *"sometimes I need several passes over a scene to record all the sprites/tiles"*.
 
 So the recorder has four drivers. Use them together; each reaches art the others
-cannot.
+cannot. Where no route exists yet, [search for one](#finding-a-route--search-it-with-jev-at-the-stalls) — the search hands
+back a Driver A script.
 
 ### Build the tool first
 
@@ -50,10 +51,20 @@ make core
 make capture-tool        # writes scripts/headless_record
 ```
 
-**Using a binary release?** The release already includes `headless_record` and
-`MesenCore.dylib`; do not run `make`. Run the prebuilt executable from the
-unpacked release directory, keeping the dylib beside it, and run the bundled
-Python tools from that same release.
+**Using a binary release?** The tagged release — macOS Apple Silicon only —
+carries `headless_record` inside `MesenAI-<version>-macos-arm64.zip` and the
+Python tools in `mesenai-tools-<version>.zip`; do not run `make`. Run the
+prebuilt executable from the unpacked release directory with `MesenCore.dylib`
+beside it, and run from the tools zip what it carries. **The tools zip is a
+snapshot of its tag, not of this guide**, and the only tag published so far —
+`mesence-v0.1.0` (2026-09-15) — predates three tools this guide names:
+`scripts/mep_figure.py` and `scripts/mep_add_cell.py` do not exist in that tag
+at all, and `scripts/record_library.sh` is in no published tools zip (#538 adds the
+missing two to the zip, so a tag cut after it carries all three). Its route sets are a snapshot too — six games then, the ten of `scripts/stages/` now. Take the
+missing tools and routes from a checkout of `main`. The CI channel covers Linux
+x64, Linux arm64, macOS Apple Silicon and Windows x64 (ADR-0203, ADR-0204), but
+its zips carry **the emulator alone** and no tools zip at all, so on those
+platforms build the tools from source as above.
 
 ### The three positional arguments
 
@@ -80,14 +91,17 @@ Buttons are `U D L R A B S T`, `-` means nothing held, and a second player is
 `<count>f <port1>|<port2>`. A bare count with no buttons is a parse error. The
 full contract, including the *probe* scripts that let the recorder read a
 sprite's animation cycle, is [`scripts/stages/README.md`](../scripts/stages/README.md),
-and `scripts/stages/` ships working sets for Contra, Zelda, Mega Man 3 and
-Excitebike.
+and `scripts/stages/` ships working sets for ten games: Castlevania, Contra,
+Excitebike, Metroid, Mega Man 3, Mike Tyson's Punch-Out!!, Ninja Gaiden, Super
+Mario Bros. 3, Zelda and Zelda II.
 
 ```sh
 # `scripts/stages/` ships the routes (`.txt`) and never the states (`.mss`):
 # a state carries the game's graphics, so it is not versioned. Mint one into
-# your own working directory first (Driver D below), then replay it.
-scripts/headless_record roms/Contra.nes 60 out/mint bootstrap hdpack-off \
+# your own working directory first (Driver D below), then replay it. Mint
+# WITHOUT `bootstrap`: that flag writes a pack beside the ROM, and the next run
+# over the same ROM would then decline to record over it.
+scripts/headless_record roms/Contra.nes 60 out/mint hdpack-off \
   input=scripts/stages/contra/mint-stage1.txt save-state=out/stages/stage1-run.mss
 scripts/headless_record roms/Contra.nes 60 out/rec bootstrap hdpack-off \
   input=scripts/stages/contra/stage1-run.txt state=out/stages/stage1-run.mss
@@ -103,7 +117,8 @@ cp -R scripts/stages/contra out/stages
 scripts/record_stages.sh roms/Contra.nes out/stages out/by-stage 60
 ```
 
-That writes one recorded pack per stage under `out/by-stage/<stage>/<rom name>/auto/`.
+That writes one recorded pack per stage under `out/by-stage/<stage>/<rom stem>/auto/`
+(the pack builder names the folder after the ROM file without its extension).
 Nothing is merged — you judge them as a union, and a stage that came out thin is
 the stage you record again. A `<stage>.txt` whose `<stage>.mss` is not there
 yet is **replayed from power-on instead**, which is not the same recording:
@@ -179,6 +194,165 @@ scripts/headless_record roms/Contra.nes 60 out/mint \
 `.mss` files are **never versioned** — a CHR-RAM state carries the game's
 graphics. Keep them in your working directory.
 
+### Finding a route — search it, with Jev at the stalls
+
+All four drivers assume a route exists. This produces one: two tools that
+write a Driver A script without a human at the pad, which you then record from
+like any other route.
+
+**The search — `scripts/route_search.py`.** It plays candidate input windows on
+one **step-mode session** (`scripts/headless_record … session`: a long-lived run
+of the same binary that loads a ROM and a state once and then serves `play` /
+`ram` / `save` / `restore` requests over stdin/stdout) instead of one recorder
+launch per candidate, and writes the winning path out as a flat script. A
+candidate — a state in, a 29-frame window played, the RAM it judges on read, a
+state out — costs **0.091 s against 0.232 s** for a launch each, **2.6× cheaper**
+serially; the `restore` behind a rewind is 0.37 ms, so going back to a checkpoint
+is free next to the emulation. `--sessions N` shards the candidates over N
+sessions — 15 hops take 31.5 s at `--sessions 1` and 6.9 s at `--sessions 8` —
+which is the parallelism a search that used to run eight recorder processes
+wants. Those numbers, and the check that the ported search finds what the old
+scratch driver found, are in
+[the F14.12 log](validation/f1412-step-mode-emulator-2026-09-26.md).
+
+```sh
+# Mint the state the search starts from (Driver D), then search from it.
+scripts/headless_record "$NG_ROM" 18 out/mint hdpack-off \
+  input=scripts/stages/ninjagaiden/mint-stage1.txt save-state=out/stages/stage1-run.mss
+python3 scripts/route_search.py --rom "$NG_ROM" \
+  --state out/stages/stage1-run.mss --work out/search --out out/search/route.txt \
+  --hops 120 --chunk 29 --beam 3 --sessions 8
+```
+
+The candidates are fixed in the script, and a candidate may be a *run* of parts
+rather than one hold. Ninja Gaiden's Act 1-1 pins Ryu at abs x 987, where no
+rightward press and no plain jump moves him, and the way out is a wall hop —
+`4f LA` then `25f RA`, window after window — which carried the search past the
+pin to abs x 3 035 and replaced `scripts/stages/ninjagaiden/stage1-run.txt` with
+a route that replays to byte-identical RAM over two runs per checkpoint. That is
+[the F14.13 log](validation/f1413-ninjagaiden-search-2026-09-26.md).
+
+**The stall helper — `scripts/jev_harness.py`.** A search stalls where the game
+needs a move its candidate set never tries. This harness plays the same kind of
+search, and when the game's own progress stays flat for `--stall-seconds`
+emulated seconds it asks **Jev** (TypeSafe's `typesafe/jev-1.13`, through
+OpenRouter) to pick one macro from a fixed set — the seven of
+[ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md),
+whose durations are fixed in the code and never chosen by the model. Nothing
+about the answer is trusted: the macro is played, and only a path that raises the
+progress watermark survives into the script.
+
+```sh
+python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
+  --state out/stages/stage1-run.mss --work out/jev \
+  --goal abs_x:990 --budget 0.05 --verify --out out/jev/route.txt
+```
+
+- **The key is the one thing you must supply.** `OPENROUTER_API_KEY` in the
+  environment, or as a line in a gitignored **repo-root `.env`**. It is never
+  printed, logged or passed on a command line, and the harness refuses to start
+  without it (exit 2). The search above needs no key at all — the search half is
+  free, local and deterministic.
+- **What Jev sees is RAM-derived numbers only:** the named fields of
+  `scripts/stages/<game>/ram-map.json`, plus the stall's own bookkeeping
+  (checkpoint, seconds stuck, what was already tried there). Never ROM bytes,
+  never a screenshot, never a pixel.
+- **Cost, latency, caps.** The budget is a hard cap per run, US$ 1.00 by default
+  (`--budget`); the harness stops at it (exit 5). One seven-option Choice
+  measured US$ 0.000023 at the vendor, and a spike run's decisions cost
+  US$ 0.000047 each (`runs/f1414/e2e4/decisions.jsonl`, not versioned, written up
+  in [the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)). Latency,
+  not money, is the constraint — about half a second per call — which is why the
+  model is asked only at a stall. Exit codes: 0 the goal was reached, 1 the run
+  ended without it, 2 a refusal, 5 the cap.
+- **`--no-jev` is the measuring arm, not a way to search.** It builds no client,
+  needs no key, and ends the run at its first stall as `no-jev` — the
+  search-alone half of the ADR's adoption gate. It bounds a stall; it does not
+  search one.
+- **Rewind ladder.** The harness keeps a checkpoint per emulated second over the
+  last `--ring-seconds` (24 s), and when a macro makes no progress it restores an
+  earlier one on a 1, 2, 4, 8, 16 s ladder — never before the **start of the
+  current screen** — with up to `--max-questions` (3) per rung. A macro that
+  failed at a checkpoint is withdrawn from that checkpoint's later questions. The
+  floor is the screen's start alone
+  ([ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
+  §3, amended 2026-09-26): "or the last real progress" was dropped because the
+  watermark rises on every window that moves, so that second floor sat a fraction
+  of a second behind the head and collapsed every rung onto one checkpoint
+  ([F14.15 §0](validation/f1415-jev-adoption-2026-09-26.md)). When the screen is
+  younger than a rung, several rungs land on its start: at a wall whose screen is
+  ~6 s long, F14.15 measured four distinct checkpoints and no rungs of 8 or 16 s.
+- **Situation tips.** A game may carry `scripts/stages/<game>/jev-tips.json`:
+  advice for its hard spots, each gated by a RAM trigger, written in our own
+  words with the pages it came from. Only the tips whose trigger holds on the
+  live state are folded into the question, and the decision log records the tips
+  file's hash. `ninjagaiden/jev-tips.json` is the worked example, and
+  [`scripts/stages/README.md`](../scripts/stages/README.md) has the file's shape.
+  A tip is advice, never evidence
+  ([ADR-0188](adr/0188-an-ai-judges-the-rendered-surface-and-its-judgement-is-a-proposal-that-never-becomes-evidence.md)).
+- **Loop guard.** Three detectors, each logged per decision: a state fingerprint
+  (position rounded to 8 px, camera, room, HP) seen three times in one stall, a
+  progress watermark flat for 60 emulated seconds, and a period-2..4 cycle
+  repeated three times in the last 12 choices. The first bans that cycle's macros
+  at the checkpoint and climbs a rung, the second goes to research, the third
+  ends the stall as `loop`.
+- **One web-research pass** when the ladder is spent: the stall report goes to a
+  single web-search worker, which proposes new tips and at most one new macro.
+  Its query carries the game and the spot — the same RAM-derived numbers a
+  question carries, never ROM bytes or pixels. The worker runs **sandboxed**:
+  `--tools WebSearch,WebFetch` plus a deny-list of every other built-in tool and
+  `--safe-mode`, and the run's log records the tool list the CLI's own init event
+  reports back — measured `["WebFetch", "WebSearch"]` on every pass
+  ([F14.15 §11.1](validation/f1415-jev-adoption-2026-09-26.md)). `--max-research-passes N`
+  bounds how many passes a run may pay for (0 keeps research out of a ladder
+  measurement entirely), and the cap covers **both** roads into the worker — the
+  spent ladder and the loop guard. A live pass costs **US$ 0.086–0.30 and 30–60 s
+  of wall clock**, against US$ 0.000023 for one Jev decision: the pass's
+  cost comes back into the run's ledger (`summary.research_spend_usd`), but
+  `--budget` cannot see it coming, which is why a run that reaches research misses
+  the ≥ 3× speed target (2.02× measured, F14.15 §11.2). What it proposes is kept
+  under `runs/`, never written to the versioned file: `--promote-tips` writes a
+  run's proposals into `jev-tips.json`, and the harness gates that on the run
+  having reached its goal (ADR-0238's rule: a tip is promoted only after the
+  stall it was written for passed).
+- **Cheats** (`--cheat AAAA:VV[:CC]`, repeatable) follow
+  [ADR-0184](adr/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md):
+  RAM addresses below `$0800` only, with Game Genie letters and mirror addresses
+  refused by name. A cheated script is a **coverage-pass** artifact — it ships
+  with its cheat list beside it and replays only with it, and a search-versus-Jev
+  comparison is valid only under the same cheat set. Two things to know before
+  reaching for one: a cheat is a read-time substitution, and the session's `ram`
+  request reads the console's RAM array directly, so it reports the **true** byte
+  and not the value the CPU sees — verify a cheat by its effect on the run, never
+  by reading its address. A step-mode session applies its cheats and reports each
+  one before it prints `ready`, so a cheated session run is an ordinary run
+  ([the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)); and a
+  cheat does not remove a **position** stall — measured on a stall that *is*
+  passed, the coverage pass under `00A2:9C` reached the same abs x 906 in the
+  same 208 frames as the uncheated run
+  ([F14.15 §5](validation/f1415-jev-adoption-2026-09-26.md)).
+
+**What it has been measured to do.** On two real stalls
+([F14.15](validation/f1415-jev-adoption-2026-09-26.md)): Mega Man 3's Snake Man
+stage, page 3 at abs x 824, where the search alone stops — Jev passed it in 5 of
+5 arms, tips on and off, at 3.57–3.62× real time, and the route it wrote goes on
+to abs x 984 uncheated; and Ninja Gaiden's section 1-2 death window, one hit from
+death with no legal candidate for the base search — Jev passed it in 0 of 4 arms,
+while the harness's own control, the x 987 pin, still passes on the first rung in
+two decisions. The verdict on adopting it is **do not adopt beyond the spike**:
+the route that passes a stall bought the recorded kit **0 keys** the committed
+routes do not already record.
+
+**What comes out is a plain input script.** `<n>f <buttons>` lines, one `1f -`
+boundary after each macro — a Driver A route, recorded like the shipped ones. The
+run measures the script itself, replayed flat from the minted state, and only a
+path that flat replay reaches ships (otherwise the run ends as
+`chain-not-reproduced`); `--verify` then replays it through a one-shot
+`headless_record` with no AI in it and compares RAM checkpoints. **Replay never
+calls the model**: same ROM, same state, same inputs, same frames. Jev's answer
+is an input, never evidence
+([ADR-0185](adr/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md)).
+
 ### Recording a whole folder of ROMs, unattended
 
 When you have route sets already, the per-ROM steps above can run as one job:
@@ -195,8 +369,12 @@ ROM with the driver, retained frames, `seen` %, surface counts and the kit's
 `--verify` result. It never waits for you, and a ROM it cannot record is a row
 saying why, not a stop.
 
-A ROM that matches nothing gets driver `static` and no kit — there is nothing to
-record. A route set is matched only through its `stage-set.json`
+A ROM that matches nothing gets driver `static`. There is nothing to record,
+but on a **CHR ROM** game the job still writes a kit: `artist_chr_kit.py
+--static` projects the pattern pages over the ROM alone, every cell `fill` and
+`seen: false`, with no emulator started (F12.9, ADR-0219). A CHR RAM game has
+nothing to fall back on — the generator refuses it, and the report says so in
+the ROM's row. A route set is matched only through its `stage-set.json`
 (`scripts/stages/README.md`), never by folder name.
 
 ### Check the route before you trust the recording
@@ -209,7 +387,7 @@ spend a `bootstrap` run on the route:
 
 ```sh
 scripts/headless_record roms/Metroid.nes 60 out/probe screenshot hdpack-off \
-  input=scripts/stages/metroid/stage1-run.txt
+  input=scripts/stages/metroid/brinstar-suitless-run.txt
 ```
 
 It runs the route and saves the **final** frame to
@@ -229,7 +407,7 @@ after is a flag, and the order of the flags does not matter.
 | `bootstrap` | Runs the pack builder as the game plays, so a pack is written beside the ROM. **This is what makes a recording**, and it costs about 3x the emulation time. Without it the run is only audio export or a screenshot. |
 | `hdpack-off` | Disables HD pack / MEP texture substitution for the run, so you record the game's own art. Omit it on a run whose purpose is to *look at* a pack you installed — that is the difference between recording and reviewing. |
 | `hdpack` | The opposite switch: record a pack skeleton to `<prefix>-hdpack/` from the first `<seconds>` with no input fed. Used by the tooling's own tests; you do not need it to remaster a game. |
-| `screenshot` | Saves the final frame to `<output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png`. The route check above and the pack review later both depend on it. |
+| `screenshot` | Saves the final frame to `<dir of output prefix>/mesen-home/Screenshots/<rom stem>_NNN.png` — beside the prefix, not under it, because the harness builds its `mesen-home` from the prefix's parent directory. The route check above and the pack review later both depend on it. |
 | `input=<file>` | Plays an input script (`.txt`, `<frames>f <buttons>` per line) instead of idling. This is the route. |
 | `state=<file>` / `save-state=<file>` | `state=` starts the run from a saved state; `save-state=` writes one at the end. Minting a stage state and then recording from it is two runs, as above. |
 
@@ -292,8 +470,16 @@ folder leaves the pack you already had. It says so, on its own line, since
 issue #229 was fixed on 2026-09-14:
 
 ```
-[MEP] bootstrap: no tiles were recorded - '<rom>' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.
+[MEP] bootstrap: nothing was recorded - '<rom>' already dresses this ROM, so the bootstrap kept it as it was. The pack is unchanged and this run still exits 0.
 ```
+
+That is the usual line: the run that filled an empty folder writes every section
+the console has there (textures and audio, on NES), so the next one has nothing
+left to add. A pack that already has its textures but not its audio gets the
+narrower variant instead —
+`no tiles were recorded - '<rom>' already dresses this ROM. Only the audio
+section was written by this run; the textures are unchanged.` — which means the
+run added the audio half alone.
 
 Read that line as *the pack on disk is the old one*. Clear `auto/`, but **move
 a `mep/` layer aside rather than deleting the whole folder**, because since
@@ -337,10 +523,10 @@ community Metroid pack is the worked example: it declares the stock
 with **CHR RAM**, so a recording keys every tile by its 32-hex-character pattern
 (`<tile>0,3E7FFF7007FFFC1E00061F000007D01E,...`), while the patched ROM has CHR
 ROM and the artist keys by index (`<tile>0,00,...`). The two namespaces cannot
-intersect, and today the tool reports that as a flat `0/1465` with no warning —
-see issue #225. Check the reference for `<patch>` lines and compare a couple of
-`<tile>` rows from each file before you believe a coverage number, in either
-direction.
+intersect, so the tool refuses the comparison instead of printing a confident
+`0/1465` — see *When it refuses instead of measuring* below. A `<patch>` whose
+keys do share the recording's shape is a different case: it is not refused, and
+the tables carry a caveat naming it.
 
 Measured on Contra against the Contra80s reference: blind route recording
 reached **53.8%**, adding eleven per-stage and per-boss sessions took it to
@@ -374,13 +560,21 @@ PRG/CHR body rather than the board type keys its tiles by index on both sides,
 so every key is the right shape and the intersection is a real one, just between
 two different builds.
 
-Nothing in the output says so today. Measured on the Zelda II "Revamp" pack,
-whose `hires.txt` line 4 is a `<patch>`: the table looks plausible and is not —
-`Characters/hero_Normal.png` classified as *background*, `blank.png` with 30
-cells seen. **Open the reference's `hires.txt` and look for a `<patch>` line
-before steering by the percentages.** It is not automatically fatal (a patch
-that only touches audio leaves the tiles alone), but it is never visible, and it
-is tracked as issue #231.
+It cannot refuse this one — whether that patch invalidates the keys is not
+decidable from the pack alone, and refusing would delete the only measurement
+half the installed reference packs can give — so it says so instead. A
+`warning:` block goes above the tables, on **stderr**, naming each `<patch>`,
+its target SHA1 and the iNES header bytes the patch rewrites (byte 5, the one
+that decides the tile namespace, called out first). The summary line on stdout
+repeats it:
+`[caveat: … built for a patched ROM, so this compares two builds — not coverage]`.
+
+Measured on the Zelda II "Revamp" pack, whose `hires.txt` line 4 is a
+`<patch>`: the table looks plausible and is not —
+`Characters/hero_Normal.png` classified as *background*, `blank.png` with
+30 cells seen. **Read the caveat before steering by the percentages.** It is not
+automatically fatal (a patch that only touches audio leaves the tiles alone),
+but a figure under it is never a coverage number (#231).
 
 ---
 
@@ -413,11 +607,23 @@ The last line writes **`<kit>/ARTIST.md` — the page you open first** — plus
 | `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually travelled, so a short recording gives a short strip. **CHR RAM games only** — see below |
 | `artist_chr_kit.py` | `<kit>/chr/Chr_*.png` | complete pattern pages — every tile of a CHR bank, in ROM order |
 
-A measured 60-second stage-1 recording yields, for scale: 4 parts, 43 files,
-6922 cells; 18 CHR pages over 9 banks from a 2-bank ROM (`--fill-rules none`:
-246 recorded, 109 filled from ROM, 157 unrecoverable — 69% complete); and a
-592x240 panorama covering 5.6% of the pack's tile keys. Painting a *whole* stage
-means recording the whole stage.
+`artist_chr_kit.py` also runs with **no recording at all**: `--static` takes a
+missing or empty pack folder and derives every page from `--rom`, so a CHR ROM
+game you have not played yet still hands you completed pattern pages — one page
+per 4 KB CHR bank, every cell `fill` / `seen: false`, an `ARTIST.md` whose first
+line says nothing on them was seen in play, and no figure, scenery or map
+surface, because nothing was observed (F12.9, ADR-0219). A CHR RAM game is
+refused. You give it the `<scale>` with `--scale`, there being no recording to
+read one from.
+
+A 60-second stage-1 recording yields up to one part per generator —
+`kit-part-sprites.json`, `kit-part-background.json`, `kit-part-chr.json`,
+`kit-part-map.json` — a `chr/` page per 4 KB bank of the ROM, and a panorama
+whose length is exactly how far the camera travelled and nothing more. Painting
+a *whole* stage means recording the whole stage. The counts for a particular
+kit are in its own `kit.json` and the parts beside it, and they move whenever a
+kit feature changes what a cell is — the variant and fold cells of F14.9 are
+the latest — so read yours rather than a number from an older guide.
 
 Each writes a `.legend.png` / sidecar next to the PNG naming what it holds.
 `--verify` is the round trip: it rebuilds a throwaway pack with your kit dropped
@@ -474,7 +680,12 @@ the recording never reached. Precedence, per cell of a bank's rank-0 page:
 2. **borrowed** — this bank's tile from a lower-ranked page;
 3. **donated** — a tile **another recording of the same ROM** drew, via
    `--also <other pack>`, repeatable. A donor is refused unless its
-   `<supportedRom>` SHA1 matches yours;
+   `<supportedRom>` SHA1 matches yours **and** the two packs agree on which CHR
+   bank a cell belongs to: on a CHR RAM game a bank is named by a hash of the
+   CHR state it was drawn from (ADR-0232), so a pack recorded before 2026-09-25
+   — every drawn tile of which sits under the all-zero bank's id, leaving its
+   banks recovered from page layout alone and marked unknown — donates nothing.
+   Re-record it;
 4. **fill** — read statically from the ROM, marked `seen: false` in the legend;
 5. **empty**.
 
@@ -487,8 +698,13 @@ Two more things the CHR kit does that matter for how much work you have:
   this took 4712 cells to 3439. Folding is **colour-only**: a palette that
   changes the hue of anything you painted is never folded, and no pixel is ever
   altered by it.
-- `--fill-rules observed|all` controls whether the ROM fill is limited to tiles
-  the recording's rules actually reach, or every cell of the bank.
+- `--fill-rules none|observed|all` decides which **filled** cells also get a
+  `<tile>` row, in `chr/fill-rules.hires.txt` and never in the pack: `none` (the
+  default) emits none, so a filled cell is pixels with no rule behind it;
+  `observed` emits one only for a `(pattern, palette)` key the pack already
+  holds, re-binding that key to the filled image and adding no key; `all` emits
+  one for every cell of the bank, which is unsafe because it changes what a
+  rebuilt pack renders.
 
 ### A second recording is evidence
 
@@ -582,6 +798,12 @@ paint. A cell painted for the first time still re-points its tile from the
 recorded page to the sheet (ADR-0231, see above). The import prints a note
 when that happens: "N painted cell(s) will re-point a key in hires.txt at the
 next build — reopen the ROM to see them".
+The figure sidecar also records, per cell, the OAM flip the figure shows its
+crop in, so `import` un-mirrors the paint wherever the build has since
+un-baked that crop, and the art lands the way the game draws it — the import
+counts those cells as `unmirrored` (ADR-0209, amended 2026-09-25, #463). A
+figure exported before that amendment carries no such field and imports exactly
+as it always did — re-export it to gain the field.
 A later `export` shows paint that was placed this way. `import` refuses a pack
 that was never built with the sheets it holds (a kit just copied into a
 recording, or a fresh recording) and writes nothing: that first build
@@ -939,15 +1161,34 @@ including frames it was never frozen for, whose own art it then erases. Mike
 Tyson's Punch-Out!! is the measured case: the pre-fight card renders with the
 game's own `STARRING` / `LITTLE MAC` text missing, and no capture in the pack
 matches that frame exactly (the closest, `screen003.png`, is 16 047 pixels
-away). ADR-0050 and ADR-0156 make a *present* capture's precedence deliberate
-and that has not changed; what changed is that the build now says the gate is
-approximate, and that you have a way out.
+away; that pack carries none of the per-cell records below). ADR-0050 and
+ADR-0156 make a *present* capture's precedence deliberate and that has not
+changed; what changed is that the build now says the gate is approximate, and
+that you have a way out.
+
+**Since F14.11, the gate decides less.** Every capture the recorder writes now
+carries a `<bgCellRecord>` line too — on the very next line, with nothing
+between it and its `<background>` line: the key the run time read at the origin
+pixel of each of the 960 screen cells, on the frame the capture was taken from
+(ADR-0236, #499). A `<background>` that carries the record draws a cell only
+where the live key at that cell's origin equals the recorded one; a cell that
+does not match falls back to the pack's own `<tile>` rules and then to the ROM,
+exactly as if the capture covered only the matching cells. So the gate still
+decides *whether* the capture draws on a frame, and the record decides *which of
+its cells* land — on the 30-ROM library that cut frames a capture drew more than
+2 000 pixels off the live plane from 2 995 to 618, keeping all 219 captures. A
+pack with no record — every pack recorded before F14.11, and every hand-made
+one, the Contra80s pack's 3 007 `<background>` lines included — renders exactly
+as it always did, and `mep_build` carries the record along with the PNG, so a
+rebuild does not lose it.
 
 **Retiring a capture.** Delete `textures/backgrounds/screenNNN.png` (and the
 `auto/textures/` copy, if the pack still carries the recorder layer) and
-rebuild. `build` drops the `<background>` line with it and reports
-`info: retired N captured screen(s) ... (#344)`; those frames are drawn from
-the sheets again. Deleting the PNG used to fail the build with one
+rebuild. `build` drops the `<background>` line with it — and the
+`<bgCellRecord>` bound to it — and reports
+`warning: retired N captured screen(s) ...`; it is a warning and not an `info:`
+line on purpose, because it drops manifest lines (#344, #381). Those frames are
+drawn from the sheets again. Deleting the PNG used to fail the build with one
 `error: <background> ... does not exist` per file even though the engine
 itself drops a dangling entry harmlessly at load, which left keeping the
 capture — and living with a no-op repaint — as the only option.
@@ -966,13 +1207,15 @@ It cuts a painted panorama into ordinary pack sheets using the sidecar.
 ## 5. Build and verify
 
 The kit is a folder beside the recording, not the pack. Copy the recording,
-drop the painted files in, and build the copy:
+drop the painted files in, and build the copy. A painted panorama is not
+copied: slice it back into sheets first (`artist_map.py --slice`, §4, which
+writes `out/kit/sheets/`), and the `cp` of `out/kit/sheets` below carries the
+result:
 
 ```sh
 cp -R out/by-stage/stage1/Contra/auto out/painted
 cp out/kit/sheets/*.png out/kit/sheets/*.json out/painted/textures/sheets/
 cp out/kit/chr/*.png    out/kit/chr/*.json    out/painted/textures/chr/
-cp out/kit/map/*.png    out/kit/map/*.json    out/painted/textures/sheets/
 cp out/kit/scene/*.png  out/painted/textures/backgrounds/   # whole screens go back where they came from
 scripts/mep_build.py build out/painted &&    # once before the figures: import plans against the built sheets (#435)
 sh -c 'for f in out/kit/figures/usr*-figure.png; do
@@ -1170,14 +1413,18 @@ available underneath it.
 Put the community pack back when you are done comparing — `mv
 "$MEP.community" "$MEP"` — or keep your own and leave it moved aside. The
 automatic install itself is the `Automatically install matching community
-packs` switch in Preferences, if you would rather it stopped happening while
-you work.
+packs` checkbox in the **Enhancement Packs** window — Tools → HD Packs (NES) →
+Enhancement Packs (MEP)… — if you would rather it stopped happening while you
+work.
 
 If `build` reports dropped duplicate keys, do this screenshot check before you
 call the edit done. A sheet may share `(tile, palette)` keys with other sheets;
-a lint-clean build can still leave part of a figure supplied by `auto/`. Track
-key ownership manually for now; issue #253 covers an artist-facing ownership
-report.
+a lint-clean build can still leave part of a figure supplied by `auto/`. The
+build reports ownership itself, so there is nothing to track by hand: it prints
+`info: <sheet> overrides tile <key> from <other sheet> (painted)` as it merges
+the sheets, and your own cell's `report:` row reads `no <tile> — this key
+produced no rule for this cell` when it lost (#343, #511) — both are in *The
+report* and *Which sheet a copied key goes on* above.
 
 `mep_build.py check-coverage` answers a different question — "did this repaint
 lose a tile the previous build carried?" — and its `--baseline` has to be a
@@ -1250,8 +1497,8 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 | A movie-driven run fails with a `sync-watch` finding | The movie desynced from your ROM revision. That is the gate working; get a movie for your revision. |
 | A recording has almost no sprites | Frames after the retained-stream cap are dropped. Use several shorter runs (`record_stages.sh`) instead of one long one. |
 | A recording holds the title screen and little else | The route died partway and the run recorded the game-over and password screens. Re-run it with the `screenshot` flag and look at the final frame. |
-| `artist_cover.py` reports every reference image `unseen` and `0/N` | The reference keys tiles in a different namespace — most often because it ships a `<patch>` and is authored against the patched ROM. Compare a `<tile>` row from each file: a 32-hex-character pattern never matches a short CHR ROM index. Issue #225. |
-| A second `bootstrap` run changes nothing in the pack | Something already dresses the ROM — `<rom stem>/auto/`, or a `mep/` layer beside it — so the bootstrap declines and keeps it — it logs `no tiles were recorded - '<rom>' already dresses this ROM`. Clear `auto/` and the sibling `.bootstrap` stamp, moving any `mep/` aside first (step 1), or record through `record_stages.sh`. |
+| `artist_cover.py` prints a `warning:` about a `<patch>` above the tables | The reference pack is built for a patched ROM, so every figure compares two builds. Not automatically fatal, but read the bytes the patch rewrites and the `<tile>` rows of both files before steering by the percentages — see step 2. |
+| A second `bootstrap` run changes nothing in the pack | Something already dresses the ROM — `<rom stem>/auto/`, or a `mep/` layer beside it — so the bootstrap declines and keeps it — it logs `nothing was recorded - '<rom>' already dresses this ROM, so the bootstrap kept it as it was`. Clear `auto/` and the sibling `.bootstrap` stamp, moving any `mep/` aside first (step 1), or record through `record_stages.sh`. |
 | `artist_map.py` refuses: "keys its tiles by CHR index" | A CHR ROM game; there is no panorama for it yet. |
 | A stage's tiles are missing from the coverage table | No recording reached them. Record that stage — `artist_cover.py`'s per-state table names which state exhibited what. |
 | `artist_cover.py` refuses: "different namespaces" | The reference pack is built for a patched ROM whose board has CHR ROM where the stock one has CHR RAM (or the reverse), so the two sides key tiles differently and no key can match. Record the patched ROM, or use a reference built for the ROM you recorded — see step 2. |
@@ -1268,4 +1515,6 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 - [`ai-kit-review.md`](ai-kit-review.md) — the AI proposer protocol and how a review is scored.
 - [`enhancement-ecosystem.md`](enhancement-ecosystem.md) — what MEP is, for newcomers.
 - [`../scripts/stages/README.md`](../scripts/stages/README.md) — route script format and how stages are reached headlessly.
+- `docs/adr/0238` — the search and the stall helper of the route search: why the model is confined to a stall, what it is allowed to see, and why the artifact stays a plain input script.
 - `docs/adr/0182`–`0189` — the decisions behind per-stage coverage, the kit's four surfaces, the RAM-cheat rule, the TAS driver, the CDL map, the AI reviewer and the emitted conditions.
+- `docs/adr/0209`–`0236` — the decisions behind what this guide describes since then: naming a figure and returning its paint (0209), the static kit (0219), the layered `.ora` (0220), the behind-background flag (0224), the sheet reaching every palette a shape was drawn in (0230), the untouched cell keeping its recorded rule (0231), the CHR RAM bank's identity (0232) and the per-cell capture record (0236).

@@ -1,0 +1,10 @@
+{
+  "game": "Life Force",
+  "rom": {
+    "noIntroSha1": ["351EDB1FDF4BCE3BFC56D1EECCCFDC6A21BB14F4"]
+  },
+  "mechanisms": [
+    "a distinct area"
+  ],
+  "note": "No-Intro SHA1 of Lifeforce (1988) (Konami).nes from the user's ROM library, the 16-byte iNES header and all, computed on this checkout with the README's command (python3 -c \"from mep_build import _no_intro_sha1 as h; ...\") and cross-checked against the vendored cheat database UI/Dependencies/Internal/CheatDb.Nes.json, whose games[395] entry is {\"name\": \"Life Force (USA)\", \"sha1\": \"351EDB1FDF4BCE3BFC56D1EECCCFDC6A21BB14F4\"} - so the library dump is the USA release the two published $0030 stage-select tables are for, which is what makes the pin admissible. It is not a different release under a USA name: the ROM's PRG holds the strings LIFE and FORCE and no SALAMANDER, and Almar's Salamander (Japan) address list shifts six of the addresses the USA one publishes and has no stage select. The whole-file SHA1 of the same dump is 56167C8FB79645B830934ABA5F916D44BB36CAD6, which is the number the bootstrap builder stamps into <supportedRom> (ADR-0211) and is a different number for the same file, not a second dump. Not yet run through scripts/record_library.sh; the routes were authored and the sweep recorded on this dump directly, with the sweep tool hard-linking it into each session directory. Mechanisms: only 'a distinct area' is declared, and it is the one this set's own measurement shows - six stages, each contributing drawn keys the others do not hold (ADR-0239 s5's union, runs/f1418/lifeforce/RESULT.md). Nothing else on ADR-0182 s1's list is claimed: no boss, because a 120 s blind body does not reach one and no session was run that does; no second player, because the sweep drives port 1 only, even though the game is two-player simultaneous; and no cycle, fusion or projectile-variant claim, because this set was not put through the F9.22 probe and a mechanism nobody probed for is not evidence."
+}

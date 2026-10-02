@@ -277,7 +277,35 @@ check-download-links:
 #ADR-0138 §41: the three F6.4b-2 guardrails (host allow-list embed parity,
 #Core stays HTTP-client-free, the fetcher never loads the allow-list from
 #the filesystem) join the same target.
-doc-checks: check-manifest
+#Umbrella over the four shards below. The recipe was one 290-line serial run of
+#about 104 commands, and one of them (verify_smoke_pack_headless.sh) builds the
+#whole Core, so ~95% of the wall time was that one command and CI waited for it
+#before starting anything else. The recipe is now split into four independent
+#targets in the same order, so `checks.yml` can run them as parallel jobs
+#(`doc-checks-shard`, fan-in job `checks`). Nothing was added, dropped or
+#reworded: `make -n doc-checks` before and the union of `make -n doc-checks-N`
+#after list the same commands (see .github/AGENTS.md).
+#
+#Locally this stays one serial, fail-fast run, as before. It is a sequence of
+#sub-makes rather than prerequisites ON PURPOSE: with prerequisites, `make -j
+#doc-checks` would run shard 1 (a C++ compile) concurrently with the Python
+#shards, and a Python suite under compilation load dies with a false SIGBUS
+#(exit 138, no output). Each shard is also independent of the others - no shard
+#reads a file another one writes - so any one can be run alone.
+doc-checks:
+	$(MAKE) doc-checks-1
+	$(MAKE) doc-checks-2
+	$(MAKE) doc-checks-3
+	$(MAKE) doc-checks-4
+
+#Shard 1 of 4 (~95% of the work): everything up to and including the checks
+#that need scripts/headless_record. verify_smoke_pack_headless.sh builds it
+#(`make capture-tool`, a compile of Core/) and verify_synthetic_nrom.sh SKIPs
+#with exit 0 when it is not built, so the two MUST stay in this shard, smoke
+#first: moved to a shard that never builds the harness, the second check would
+#pass vacuously. CI pre-builds the harness with `make -j$(nproc) capture-tool`
+#in this shard's job (the verifier's own build is serial).
+doc-checks-1: check-manifest
 	./scripts/verify-fase0-1-dox.sh
 	./scripts/verify-ui-logic-firewall.sh
 	./scripts/check-file-loc.sh Core/Shared/Audio/MidiExporter.cpp 200
@@ -375,11 +403,15 @@ doc-checks: check-manifest
 	#every --flag they print is one the script it is printed for accepts. A guide
 	#whose commands rotted is the discoverability failure it was written to fix.
 	python3 scripts/checks/verify_artist_docs.py
+	python3 scripts/test_verify_artist_docs_map_copy.py
 	#Phase 11 C.4: the release tools zip is built from an explicit file list
 	#(scripts/tools-zip-manifest.txt). `make release-macos` runs this too, but a
 	#release is cut rarely, so the manifest would rot between releases and the
 	#rot would only show up as a ModuleNotFoundError on a pack author's machine.
+	#The required set is read out of the two guides (#538), so a command a guide
+	#prints for a tool the zip does not carry fails here instead of at the reader.
 	python3 scripts/check_tools_zip_closure.py
+	python3 scripts/test_check_tools_zip_closure.py
 	./scripts/checks/verify_mep_fallback_adr_provenance.sh
 	./scripts/checks/verify_mep_fallback_adr.sh
 	./scripts/checks/verify_mep_fallback_authoring_doc.sh
@@ -390,6 +422,11 @@ doc-checks: check-manifest
 	./scripts/checks/verify_mep_nested_zip_fallback.sh
 	./scripts/checks/verify_status_kind_parity.sh
 	./scripts/checks/verify_synthetic_nrom.sh
+
+#Shard 2 of 4 (~15 s locally): the CI-platform, release-asset and download-
+#channel guards, ADR/PRD integrity, and the first half of the pack/MEP unit
+#tests. Python and shell only; no compile.
+doc-checks-2:
 	#ADR-0191 (checks.yml compiles Linux only) + ADR-0203 (build.yml restores
 	#a Windows job and an Apple-Silicon-only macOS job). Both were accepted
 	#and implemented in the same change as their code, so this grep suite is
@@ -430,6 +467,12 @@ doc-checks: check-manifest
 	#interpreters and dispatch keep their own golden/PASS-style checks.
 	python3 scripts/test_mei_rules.py
 	python3 scripts/test_rom_target.py
+	#ADR-0205 R.1: the shared-replay publish side. The section 3 lint, the
+	#issue -> verdict -> label round trip (no network), and the form/workflow/
+	#labels wiring. No ROM; the end-to-end proof is scripts/check_replay_recorded.sh.
+	python3 scripts/test_replay_lint.py
+	python3 scripts/test_replay_submission.py
+	python3 scripts/checks/verify_replay_form_and_workflow.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py
@@ -440,6 +483,22 @@ doc-checks: check-manifest
 	#ADR-0199: the classify step's API call — body shape (no `tools`), the
 	#Interactions-API response walk, and the exit codes. No network.
 	python3 scripts/test_gemini_classify.py
+	#ADR-0238 §3 (F14.14): the Jev client — the Choice wire shape, the option
+	#looked up by name, the US$ cap, the per-decision JSONL that holds neither
+	#the state nor the key, and the key kept off argv and out of exceptions.
+	#An injected transport throughout; no network.
+	python3 scripts/test_jev_client.py
+	#ADR-0238 §1 (F14.12): the step-mode session the searches drive — the
+	#request grammar, and the framing against a stand-in for the tool, so the
+	#init chatter skip and the request/reply pairing are exercised without a
+	#ROM. The ROM-backed determinism check is scripts/test_step_emu_rom.py,
+	#which is not listed here because it needs the ROM and the emulator.
+	python3 scripts/test_step_emu.py
+	#ADR-0238 §2 (F14.13): the Ninja Gaiden search's windows — the Left+A jump
+	#and the wall techniques as fixed durations, the frame count every window
+	#has to fill — and the beam rule that keeps a window which does not improve
+	#on abs x alive across the hops a wall climb takes. No ROM, no session.
+	python3 scripts/test_route_search.py
 	python3 scripts/test_mep_build.py
 	#ADR-0231 (#447): an untouched sheet cell keeps the recorded rule and pixels.
 	python3 scripts/test_mep_build_recorded.py
@@ -459,11 +518,16 @@ doc-checks: check-manifest
 	python3 scripts/test_mep_addition.py
 	python3 scripts/test_mep_lint_addition.py
 	python3 scripts/test_mep_errata.py
+	python3 scripts/test_pack_patch_labels.py
 	python3 scripts/test_mep_audio_patch_resolution.py
 	#Downloader hop/shape rules and the lint decompression cap (review pass 2026-09-06).
 	python3 scripts/test_fetch_pack.py
 	python3 scripts/test_mep_lint_caps.py
 	python3 scripts/test_mep_lint_usage.py
+
+#Shard 3 of 4 (~15 s locally): the sheet-repaint / gameplay-probe / artist-kit
+#test files. Python only.
+doc-checks-3:
 	#F9.6 (ADR-0154): the external repaint's own suite -- stdlib-only Python,
 	#no model, no weights, no network (its diffusion backend is exercised only
 	#against a loopback stub and through its unavailable paths).
@@ -518,6 +582,11 @@ doc-checks: check-manifest
 	#the cut rule, the HUD band, and a panorama that slices back into a pack
 	#sheet. Synthetic recording in a temp dir; no emulator, no ROM.
 	python3 scripts/test_artist_map.py
+
+#Shard 4 of 4 (~16 s locally): the CHR pattern-page kit tests (the slowest
+#Python file here, test_artist_chr_kit.py, is ~15 s), the artist coverage
+#measurement, the spec/golden gates.
+doc-checks-4:
 	#F9.24 (ADR-0183 §2.4): the kit's pattern-page half -- a CHR ROM bank
 	#completed to all 256 tiles, a CHR RAM bank filled only where a PRG block
 	#explains it, evidence never repainted, and hires.txt left untouched.

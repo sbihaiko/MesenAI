@@ -60,6 +60,11 @@ AOT/publish flow (see `.github/AGENTS.md` for the CI split).
 - `CommunityPacks/LegacyHdPackInstallTests` covers nested-wrapper extract
   (`ExtractToFolder` must write while the inner zip is still open) and
   LiQuiDz-style per-game folder zips (`FindGameFolderZip`).
+- `CommunityPacks/PackAudioNoticeTests` covers ADR-0240's "audio not generated"
+  notice: wired patch (hires.txt `<patch>` and pack.json `patches[]`) + unresolved
+  refs notices; unwired, absent, no-patch, no-audio and all-resolved do not; M
+  counts distinct files. Keep the "present but not wired" and "referenced but absent"
+  negatives - they pin the `mep_lint.py` meaning of wired.
 - `CommunityPacks/SupportedRomGuardTests` covers ADR-0211's four verdicts; keep
   the patch-target case (a pack declaring its own patched hash, ADR-0198 §2) and
   the unparseable-declaration cases when touching `DecideSupportedRom` — both

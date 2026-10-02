@@ -1,0 +1,46 @@
+# Super Mario Bros. - the blind body the navigation sweep repeats to fill its
+# 120 emulated seconds (ADR-0239 s6). It is not a route: it holds B and Right
+# and taps A on a fixed rhythm, which is what the recorder needs (a figure's
+# cycle needs two turns of one hold) and not what clears a level.
+#
+# The rhythm is a blind attempt at survival, and it was chosen by measurement
+# rather than by taste. Three shapes were tried on World 3-1, 120 s each, same
+# entry, same pin, and read against the stage-1 baseline's 236 drawn keys:
+#
+#   run 20 f, jump 16 f (this file)   81 new keys
+#   run 34 f, jump 18 f               65 new keys
+#   run 12 f, jump 12 f               56 new keys
+#
+# The middle one wins because SMB1's jumps are short and its Goombas are what
+# kill a blind body: a hop every 36 frames clears the ones a hop every 52
+# arrives late for, and a hop every 24 never gets a full run going. The
+# arms live under runs/f1417/smb1/probe/bodyA and .../bodyB (unversioned).
+#
+# The body is still blind and still loses Mario inside the budget - that is
+# the point, ADR-0184 s4 wants the deaths recorded - and a session it loses
+# ends on the game's own attract demo, which the sweep's report shows rather
+# than hides. Walk and jump are the only buttons: A alone is the jump, B is
+# the run, and holding both with Right is the running jump the level asks for.
+#
+# 360 frames, repeated by scripts/record_navigation_sweep.py until the run is
+# covered (20 repeats for a 120 s session).
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB
+20f RB
+16f RAB

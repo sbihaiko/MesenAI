@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Framework-free checks for scripts/checks/verify_prd_live_rows.py (PRD C.2).
 
-The three fixtures are the ones the rule was designed against:
+The fixtures are the ones the rule was designed against:
 
-  * the two historical offenders that sat in the live Phase 9 table —
-    `accepted 2026-09-14, shipped` (F9.26) and
-    `` shipped (offline half); harness `cdl=` pending `` (F9.27);
-  * the legitimate F9.25 cell, which says "Flag shipped." mid-sentence and
-    still owes work, plus the C.1 cell, which says nothing about shipping.
+  * the offenders that sat in a live table — the two historical Phase 9
+    rows, `accepted 2026-09-14, shipped` (F9.26) and
+    `` shipped (offline half); harness `cdl=` pending `` (F9.27), plus the
+    F14.17 cell that declares the slice `delivered` instead of `shipped`;
+  * the legitimate cells: F9.25, which says "Flag shipped." mid-sentence and
+    still owes work; C.1, which says nothing about shipping; and a cell that
+    mentions "delivered" mid-sentence.
 
 Usage: python3 scripts/test_verify_prd_live_rows.py
 """
@@ -18,7 +20,7 @@ from pathlib import Path
 
 CHECKS = Path(__file__).resolve().parent / "checks"
 sys.path.insert(0, str(CHECKS))
-from verify_prd_live_rows import declares_shipped, offenders  # noqa: E402
+from verify_prd_live_rows import declares_done, offenders  # noqa: E402
 
 FAILURES = []
 
@@ -34,6 +36,12 @@ def ok(msg):
 
 OFFENDER_A = "accepted 2026-09-14, shipped"
 OFFENDER_B = "shipped (offline half); harness `cdl=` pending"
+# F14.17's real cell on 2026-09-26, shortened: the slice shipped, and the row
+# said so with the other word.
+OFFENDER_C = (
+    "ADR-0239; **delivered 2026-09-26** "
+    "(`docs/validation/x.md`: 119 sessions, 120 emulated seconds each)"
+)
 LEGIT_F925 = (
     "**accepted 2026-09-13** — ADR-0184, measured on Contra stage 1: 99 lives "
     "buys survival and no ground. Flag shipped. **Amended 2026-09-14** "
@@ -43,23 +51,28 @@ LEGIT_C1 = (
     "accepted 2026-09-14; Binaries stay on demand; amends the "
     "`.github/AGENTS.md` CI contract (ADR-0131) — say so in that file"
 )
+LEGIT_MENTION = (
+    "ADR-0238 §5; the run is delivered only after a second pass, so the "
+    "clause stays open"
+)
 
 
 def check_cells():
-    for cell in (OFFENDER_A, OFFENDER_B):
-        if not declares_shipped(cell):
-            fail(f"should be flagged as shipped: {cell!r}")
+    for cell in (OFFENDER_A, OFFENDER_B, OFFENDER_C):
+        if not declares_done(cell):
+            fail(f"should be flagged as shipped/delivered: {cell!r}")
             return
-    ok("both historical offenders are flagged")
+    ok("the two historical offenders and a `delivered` cell are all flagged")
 
-    for cell in (LEGIT_F925, LEGIT_C1):
-        if declares_shipped(cell):
+    for cell in (LEGIT_F925, LEGIT_C1, LEGIT_MENTION):
+        if declares_done(cell):
             fail(f"should NOT be flagged: {cell!r}")
             return
-    ok("a mid-sentence 'Flag shipped.' and a plain decision are not flagged")
+    ok("a mid-sentence 'Flag shipped.', a mid-sentence 'delivered' and a "
+       "plain decision are not flagged")
 
     # Emphasis and backticks around the declaration must not hide it.
-    if not declares_shipped("accepted 2026-09-14; **shipped** as F9.30"):
+    if not declares_done("accepted 2026-09-14; **shipped** as F9.30"):
         fail("markdown emphasis should not hide a shipped declaration")
         return
     ok("markdown emphasis around `shipped` is stripped before the test")
@@ -77,6 +90,12 @@ TABLE = """## Part A
 | F9.26 | The TAS driver | {a} |
 | F9.27 | The code/data map | {b} |
 
+#### Phase 14 — the navigation sweep
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| F14.17 | Wave two coverage | {c} |
+
 | Risk | Mitigation |
 |---|---|
 | Something | shipped, but this is not a slice table |
@@ -90,12 +109,12 @@ TABLE = """## Part A
 
 
 def check_table():
-    text = TABLE.format(legit=LEGIT_F925, a=OFFENDER_A, b=OFFENDER_B)
+    text = TABLE.format(legit=LEGIT_F925, a=OFFENDER_A, b=OFFENDER_B, c=OFFENDER_C)
     got = [slice_id for slice_id, _ in offenders(text)]
-    if got != ["F9.26", "F9.27"]:
-        fail(f"expected exactly F9.26 and F9.27 to be reported, got {got!r}")
+    if got != ["F9.26", "F9.27", "F14.17"]:
+        fail(f"expected exactly F9.26, F9.27 and F14.17 to be reported, got {got!r}")
         return
-    ok("only the two shipped rows of the live slice table are reported")
+    ok("the shipped and the delivered rows of the live slice tables are reported")
     ok("the risk table and the shipped-record section are left alone")
 
 

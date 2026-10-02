@@ -1,0 +1,39 @@
+# CodeRabbit configuration. Keys follow https://docs.coderabbit.ai/reference/configuration
+language: "en-US"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!runs/**"
+    - "!roms/**"
+  path_instructions:
+    - path: ".github/workflows/**"
+      instructions: >-
+        Issue titles, issue bodies, comments and attachments are written by
+        third parties. Flag any place where such text, or any other
+        `github.event.*` value, is interpolated into a `run:` script or used to
+        decide a label or verdict; it must reach the step through `env:` and be
+        treated as data. Flag a new `permissions:` grant that is wider than the
+        job needs.
+    - path: "docs/adr/**"
+      instructions: >-
+        Accepted ADRs are binding. Flag a change that alters a decision's
+        text without a superseding ADR, a status other than `proposed`,
+        `accepted` or `superseded`, or an ADR id that is reused.
+    - path: "docs/**"
+      instructions: >-
+        Docs are written in en-US. Flag a claim of delivered or measured work
+        that the cited log, PR or file does not support.
+    - path: "scripts/**"
+      instructions: >-
+        Scripts are stdlib-only unless an ADR says otherwise. A bug fix should
+        come with a test that fails without it.
+
+chat:
+  auto_reply: true

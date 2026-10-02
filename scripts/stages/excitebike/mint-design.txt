@@ -1,0 +1,13 @@
+# mint from power-on to the DESIGN mode track editor (ADR-0239 rung 1)
+60f -
+20f D
+40f -
+20f D
+40f -
+20f T
+40f -
+20f D
+20f -
+20f D
+40f -
+20f T

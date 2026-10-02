@@ -1,0 +1,42 @@
+# Double Dragon - the City Slum (Stage 1), from the state mint-city-slum.txt
+# writes. 64 frames, repeated to fill whatever budget the caller has.
+#
+# The route walks Billy to the right and swings both attacks - A is the punch
+# and B the kick - because that is the only thing that brings enemies on
+# screen, and enemies are up to half of what this stage draws. It presses no
+# START, which on this game pauses, and no SELECT, which is the title's MODE
+# A/B menu; it is d-pad and the two buttons, and nothing else, so a run of it
+# is the same run under any recorder.
+#
+# The 6-frame settles are not padding. The game reads its input once a frame
+# and an attack is a one-shot: pressing A for 6 frames and then holding nothing
+# for 6 leaves the punch where the next press finds it, while holding A down
+# for 20 frames reads as one punch the game has already consumed.
+#
+# What is not in this route is the rest of the stage. Double Dragon's stages are
+# long, a blind body cannot fight its way through one, and this route runs the
+# lives counter out inside the budget. Measured on this dump with the selector
+# pinned at 003D:00, so the numbers belong to this route's own stage: `$0043`,
+# the lives counter, reads 02 at 60 s, 01 at 90 s and 00 at 120 s, and `$03B4`,
+# the health byte, is back at 00 at 120 s. On Stage 2 the same counter drops
+# 02 -> 01 between frames 3 750 and 3 780. So the route records the stage's
+# opening screens and the checkpoint it respawns on, not its later ones, and
+# runs/f1418/doubledragon/RESULT.md says so in the "what is not reached"
+# section rather than letting the session count read as coverage.
+#
+# Both addresses above are cited, not invented: Almar's Guides' "Double Dragon
+# Action Replay Codes (USA)" publishes `Infinite Lives: 0043:04` and
+# `Infinite Energy P1: 03B4:50` (probe/sources/almar-actionreplay-2026-09-26.html,
+# fetched HTTP 200; the excerpt beside it keeps the Level Select block), and the
+# vendored UI/Dependencies/Internal/CheatDb.Nes.json files 03B4:64. No pin from
+# either is used here - see navigation.json's _livesComment for why this set
+# carries none.
+#
+# The route is the sweep's body too (navigation.json's defaults.body), so the
+# session and the baseline differ in the pin and in nothing else.
+20f R
+6f RA
+6f -
+6f RB
+6f -
+20f -

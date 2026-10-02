@@ -1,0 +1,43 @@
+name: "Share a Replay"
+description: >-
+  Share a gameplay replay you recorded with Record and share — drag the file
+  in and a bot takes it from there.
+title: "[Replay] "
+labels:
+  - replay
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **One file and you're done.** 🎮
+
+        Record the replay with **Tools ▸ Movies ▸ Record and share** — it starts
+        from power-on and writes a small `.mmo` that carries no save state and
+        no game data. When you stop, the emulator shows the file and opens this
+        form; drag the file into the box below.
+
+        The moment you hit *Create*, a bot downloads the file, checks it, and
+        **posts the result right here as a comment**. It also rewrites the issue
+        title from the file itself (`[Replay] <game> — <alias> — <subtitle>`), so
+        there is nothing to type there. Attached a new file later? Comment
+        `/revalidate`.
+
+        A replay recorded any other way (stock settings, from the current state,
+        from the command line) is refused with the reason named. GitHub does not
+        accept a `.mmo` upload: if the box refuses it, rename the file to `.zip`
+        — it is the same file.
+  - type: textarea
+    id: attachment
+    attributes:
+      label: "Replay file"
+      description: "Drag the `.mmo` (or the same file renamed to `.zip`) here."
+      placeholder: "Drag the file into this box"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "Optional. Anything worth knowing about this replay. The title's subtitle is the first line of the replay file's own Description, not of this box."
+    validations:
+      required: false

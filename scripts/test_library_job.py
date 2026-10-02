@@ -665,14 +665,16 @@ def test_every_versioned_stage_set_names_a_dump_and_routes_that_exist():
     each manifest must carry a well-formed No-Intro SHA1, no two sets may claim
     one dump, and the set must hold at least one recordable route on disk.
     Every folder must declare: an undeclared set is silently `static`, which is
-    what four of the six were until F14.3.
+    what four of the then-six were until F14.3.
     """
     root = Path(__file__).resolve().parent / "stages"
     sets, undeclared = L.load_stage_sets(root)
     check(not undeclared, "every versioned stage folder has a stage-set.json",
           f"undeclared: {undeclared}")
+    folders = sorted(p for p in root.iterdir() if p.is_dir())
+    declared = [d.name for d in folders if (d / L.SET_MANIFEST).is_file()]
     claimed = {}
-    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+    for d in folders:
         manifest = d / L.SET_MANIFEST
         if not manifest.is_file():
             continue
@@ -696,8 +698,21 @@ def test_every_versioned_stage_set_names_a_dump_and_routes_that_exist():
         check(bool(routes) and all(p.is_file() and p.stat().st_size for p in routes),
               f"{d.name}: holds at least one non-empty recordable route",
               f"{[p.name for p in routes]}")
-    check(len(sets) >= 6, "all six golden sets resolve through load_stage_sets",
-          f"{sorted({s['name'] for s in sets.values()})}")
+        # A route on disk is not a route the job can record: `start_plan` prunes
+        # every route whose state nothing produces, and a set whose every route
+        # is pruned is declared and then skipped in silence. That is how three
+        # sets shipped declaring nothing to record (#552): a route named after
+        # the screen rather than after the `mint-*.txt` that gets it there, and
+        # one set whose new mints turned its power-on route into a pruned one.
+        plan = L.start_plan(d)
+        pruned = {r: v["reason"] for r, v in plan["routes"].items() if v["start"] is None}
+        check(len(pruned) < len(plan["routes"]),
+              f"{d.name}: at least one route the library job can start",
+              "; ".join(f"{r}: {why}" for r, why in pruned.items())[:300])
+    names = {s["name"] for s in sets.values()}
+    check(names == set(declared),
+          f"all {len(declared)} golden sets resolve through load_stage_sets",
+          f"declared {declared}, load_stage_sets returned {sorted(names)}")
 
 
 def main():

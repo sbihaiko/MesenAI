@@ -52,10 +52,11 @@ namespace Mesen.Services
 				//prompts still get surfaced so the user knows what to drop where.
 				if(outcome.Status == CommunityPackInstallStatus.Installed) {
 					RecordInstall(entry, containerName, outFolder);
+					outcome = WithAudioNotice(outcome, outFolder);
 				}
 				return pending.Count == 0 || outcome.Status != CommunityPackInstallStatus.Installed
 					? outcome
-					: new CommunityPackInstallOutcome(outcome.Status, outcome.ContainerName, outcome.Message, outcome.Withheld, pending);
+					: outcome with { PendingDeps = pending };
 			}
 
 			EmuApi.WriteLogEntry("[CommunityPackInstall] calling EmuApi.InstallMepRecipe: recipeLen=" + (entry.Recipe?.GetRawText()?.Length ?? 0) +
@@ -66,9 +67,21 @@ namespace Mesen.Services
 			EmuApi.WriteLogEntry("[CommunityPackInstall] InstallMepRecipe returned success=" + success + " resultText=" + resultText.Replace("\n", "\\n"));
 			if(success) {
 				RecordInstall(entry, containerName, outFolder);
-				return CommunityPackInstallOutcome.Installed(containerName, ParseWithheld(resultText), pending);
+				return WithAudioNotice(CommunityPackInstallOutcome.Installed(containerName, ParseWithheld(resultText), pending), outFolder);
 			}
 			return CommunityPackInstallOutcome.Failed(ParseError(resultText));
+		}
+
+		//ADR-0240 / F6.9: a patch-redeemed pack whose <bgm>/<sfx> refs are missing stays
+		//Installed; one non-fatal notice goes to the outcome and the log (PackAudioNotice).
+		private static CommunityPackInstallOutcome WithAudioNotice(CommunityPackInstallOutcome outcome, string outFolder)
+		{
+			string? notice = PackAudioNotice.Evaluate(outFolder);
+			if(notice == null) {
+				return outcome;
+			}
+			EmuApi.WriteLogEntry("[CommunityPackInstall] " + notice);
+			return outcome with { Notices = new[] { notice } };
 		}
 
 		//Legacy HD pack install (kind: "hd-legacy", no MEP recipe - MEI-v1
@@ -513,6 +526,8 @@ namespace Mesen.Services
 		CommunityPackInstallStatus Status, string ContainerName, string Message,
 		IReadOnlyList<string> Withheld, IReadOnlyList<CommunityPackDepPrompt> PendingDeps)
 	{
+		//Non-fatal install notices (ADR-0240: "audio not generated: ..."); the status stays Installed.
+		public IReadOnlyList<string> Notices { get; init; } = Array.Empty<string>();
 		public static CommunityPackInstallOutcome Skipped(string reason) => new(CommunityPackInstallStatus.Skipped, "", reason, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		public static CommunityPackInstallOutcome Failed(string error) => new(CommunityPackInstallStatus.Failed, "", error, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		public static CommunityPackInstallOutcome UpdateAvailable(string message) => new(CommunityPackInstallStatus.UpdateAvailable, "", message, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());

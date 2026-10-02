@@ -41,6 +41,13 @@ cd "$ROOT"
 VERSION="${VERSION:-v0.1.0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 
+# The shell tools the guides tell a pack author to run, staged into the zip
+# beside the Python ones. One list with two readers: the staging loop in step 4,
+# and scripts/check_tools_zip_closure.py, which fails the release when a guide
+# prints a command for a shell tool this list does not carry. `replay_chain.sh`
+# is here because record_library.sh runs it, not because a guide names it.
+SHELL_TOOLS="record_library.sh record_stages.sh replay_chain.sh"
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--version) VERSION="$2"; shift ;;
@@ -260,7 +267,9 @@ while read -r module; do
 	case "$module" in ''|'#'*) continue ;; esac
 	cp "$ROOT/scripts/$module" "$TOOLS_STAGE/scripts/$module"
 done < <(sed 's/#.*//' "$ROOT/scripts/tools-zip-manifest.txt")
-cp "$ROOT/scripts/record_stages.sh" "$TOOLS_STAGE/scripts/record_stages.sh"
+for tool in $SHELL_TOOLS; do
+	cp "$ROOT/scripts/$tool" "$TOOLS_STAGE/scripts/$tool"
+done
 ditto "$ROOT/scripts/stages" "$TOOLS_STAGE/scripts/stages"
 for doc in remastering-a-game hd-pack-authoring enhancement-ecosystem; do
 	cp "$ROOT/docs/$doc.md" "$TOOLS_STAGE/docs/$doc.md"

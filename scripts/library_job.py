@@ -242,8 +242,9 @@ def start_plan(stage_dir):
     * **a mint** — the longest `mint-*.txt` whose name prefixes the route
       (`mint-stage1.txt` -> `stage1-run`, `stage1-long`, `stage1-probe`).
     * **power-on** — only in a set that ships no mint at all, whose routes boot
-      the game themselves (Metroid's `stage1-run`). In a set that mints its
-      states, a route nothing produces is **skipped and reported**: run from
+      the game themselves; no set does today (Metroid's `stage1-run` was the
+      last, until F14.17 gave that folder its mint scripts). In a set that mints
+      its states, a route nothing produces is **skipped and reported**: run from
       power-on it records the attract demo and reads like a recording (#407).
 
     Returns `{"steps": [...], "routes": {route: {...}}}`. A step is

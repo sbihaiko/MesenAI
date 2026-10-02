@@ -1,0 +1,36 @@
+# Mega Man: the blind body a navigation session repeats to fill its 120 s
+# (ADR-0239 s6 - one body, every place the stage select reaches). It is not a
+# route that clears anything: it runs right into whatever the stage puts in the
+# way, jumps, shoots, then runs back left and does the same, so the recorder
+# sees both of Mega Man's walks and the Mega Buster from the screen the stage
+# opens on.
+#
+# Why the holds are this long. ADR-0179 s3 needs two turns of a figure's cycle
+# inside one hold, and the shape the project settled on for that is a
+# 100-120 frame hold followed by a release (scripts/stages/README.md, the
+# Contra probe: 104 f Right then 104 f Left oscillates on the first screen
+# instead of walking into an enemy). Mega Man's run is a handful of frames a
+# turn, so 120 frames is many times the minimum and one turn is measurable.
+#
+# The 10-frame taps are one jump (A) and one shot (B); A and B together is the
+# jump-and-shoot, which the game draws as two sprites and which the OAM
+# vocabulary of ADR-0183 therefore reads as two figures meeting. `10f RAB` and
+# `10f RB` are Mega Man shooting on the way up and on the way down.
+#
+# What it costs. The body is blind, so it dies: a pit or a spike it cannot see
+# takes Mega Man and the run respawns with one life fewer. ADR-0184 s4 asks for
+# exactly that (a clean pass may end in death; only the GAME OVER screen is at
+# risk) and ADR-0239 s6 accepts it. Mega Man's blocks below are 600 frames, so
+# `record_navigation_sweep.py` repeats this file five times across a 120 s run.
+120f R
+10f RAB
+120f R
+10f RA
+120f R
+10f RB
+60f L
+10f LAB
+60f L
+10f LA
+60f L
+10f LB
