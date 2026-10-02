@@ -26,7 +26,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; waits for a go-ahead), **F6.10** (Phase 6, the ADR-0240 A4 spike; waits for a go-ahead), and **Phase 13** (ADR-0205, R.1/R.2, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; waits for a go-ahead), **F6.10** (Phase 6, the ADR-0240 A4 spike; waits for a go-ahead), and **Phase 13** (ADR-0205; R.1 delivered 2026-10-01, R.2 live, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -110,6 +110,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **F6.0–F6.3b** — community intake, MEP Recipe, catalog and deterministic gates (ADR-0121/0138).
 - **F6.4a–c** — offline recipe interpreter, client download/install and shared discovery fixtures (ADR-0138).
 - **F6.5–F6.8** — rollout, headless smoke, automatic loading and known-missing errata (ADR-0146/0151/0152); native picker and live CI validation remain in §4.
+- **R.1** (2026-10-01/02, ADR-0205 §2–§6, §10; #564, #568) — the *Record and share* action (a save-state-free `.mmo` from power-on, settings restored on stop), `scripts/replay_lint.py` (§3), the `[Replay]` Issue Form and `replay-submitted.yml` (title rewrite, `replay:valid`/`replay:invalid`, triggered by the `[Replay] ` title and creating its own labels). Verified by unit tests and the doc checks; the workflow and the attachment path have **not** run against a real issue.
 - **F6.9** (2026-10-02, ADR-0240 Option 1) — installing a pack whose audio is redeemed by a wired bundled patch, with unresolved `<bgm>`/`<sfx>` refs, finishes as `Installed` with one non-fatal notice ("audio not generated: N of M tracks unresolved; supply the `.ogg` files", M = distinct referenced files) on the outcome, the log and a toast; `UI/Logic/PackAudioNotice.cs`, 10 unit tests and a headless install test on a fixture pack. Nothing is generated; the real Mega Man/Zelda II packs were not run (no matching ROM).
 - **H1–H7 / D1–D13** — tests, doc gates, identity/spec reconciliation and ADR reference checks (ADR-0122–0131/0136/0137); explicit residual debts remain in §4.
 - **H8** — `NES_ONLY`/`LessUI` declined after measurement; per-translation-unit test compilation retained (ADR-0158).
@@ -1576,7 +1577,9 @@ cold-read row is logged (principles above).
 
 #### Phase 13 — Shared replays (ADR-0205)
 
-**Status:** ADR-0205 accepted 2026-09-17, nothing implemented. Added to this
+**Shipped** — R.1 (publish), 2026-10-01/02 (#564, #568; ADR-0205 §2–§6 and §10); record in §3. Its three implementation choices (verdict labels, a separate CI allow-list, the interim `<game>` rule) were ratified on 2026-10-02 and are in the ADR's Status. The workflow has never run on a real issue.
+
+**Status:** ADR-0205 accepted 2026-09-17; R.1 delivered 2026-10-01/02, R.2 not started. Added to this
 roadmap 2026-09-19 — the ADR names the two slices and the PRD had none, which
 is the "accepted and invisible" state the Phase 11 C.2 check was built to
 refuse. Scope, format and trust model are the ADR's; the rows below only
@@ -1584,7 +1587,6 @@ sequence and bound the work.
 
 | Slice | Deliverable | Decision |
 |---|---|---|
-| R.1 | **Publish.** The single *Record and share* action (ADR-0205 §2) producing a `.mmo` from power-on with the settings the ADR fixes; a `scripts/` lint that re-checks what the action guarantees (§3); the `[Replay]` Issue Form and title rule (§5); the author attaches the file to the issue in their own browser (§6); the workflow that validates the attachment and labels it. | ADR-0205 §1–§6 decided. Core/UI change for the action; stdlib for the lint; no new host — the attachment lives on the issue (§10). Bounded input: one Contra replay recorded by the action on the dev machine. Stop when the lint accepts the action's own output and refuses a `.mmo` recorded any other way with the §3 reason named, and the issue round-trips through the workflow into the label the ADR names. |
 | R.2 | **Consume.** The recordings catalog generated from accepted replay issues, listed in the client by loaded ROM and ranked by 👍 (§7); the structural gate that validates before listing (§8); removal by the author closing the issue, mirrored by `replay:removed` (§9). | ADR-0205 §7–§9 decided. Prerequisite: R.1 (there is nothing to list before something is published). Catalog script stdlib, client overlay in the UI project. Bounded input: the R.1 replay plus one closed issue. Stop when the client lists the open one for the matching ROM, hides it for any other ROM, and drops it within one catalog regeneration after the issue closes. |
 
 #### Phase 14 — Proof at scale
