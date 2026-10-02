@@ -26,7 +26,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; implemented under a go-ahead 2026-10-02, stop conditions (1)–(2) met headless, (3) needs a person), and **Phase 13** (ADR-0205; R.1 delivered 2026-10-01, R.2 live, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239; F14.19 delivered 2026-10-02 under ADR-0242, leaving **F14.8** and **F14.20** as the live Phase 14 rows), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; implemented under a go-ahead 2026-10-02, stop conditions (1)–(2) met headless, (3) needs a person), and **Phase 13** (ADR-0205; R.1 delivered 2026-10-01, R.2 live, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -935,6 +935,38 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   mid-stage rooms stay §1 rung 3 work, and the sweep drives port 1 only.
   [Log](../validation/f1418-coverage-wave-three-2026-09-26.md).
 
+- **F14.19** (2026-10-02) — RAM maps for golden games without a route,
+  delivered (ADR-0242 Q2). Go-ahead (user, 2026-10-02): *"sim, pode seguir.
+  depois que tudo estiver no main, pode implementar usando paralelismo de tudo
+  que puder"* and *"pode implementar em paralelo tudo que puder"*. All 21
+  golden sets were classified. Contra, Mega Man 3 and Ninja Gaiden already
+  have routes past their stalls, and five puzzle, fight or single-screen games
+  have no x progress. Two games whose only committed route is a blind body
+  that dies at its first stall are mapped:
+  - **Castlevania** (`scripts/stages/castlevania/ram-map.json`): lives `$002A`,
+    HP `$0045`, room `$0028`, camera `$002E/$002F`, abs x `$0040/$0041`. Its
+    progress is `room * 4096 + abs_x`, because abs x restarts at the castle
+    door.
+  - **Mega Man 2** (`scripts/stages/megaman2/ram-map.json`): lives `$00A8`,
+    HP `$06C0`, stage `$002A`, camera `$0020·256+$001F`, abs x
+    `$0440·256+$0460`. `room` stays open because no ladder transition was
+    measured.
+
+  Each field is verified on the pinned dump at two checkpoints at least,
+  with one relation among them. The proof is that each field moves as named:
+  Simon's HP 64 → 56 on a zombie hit, room 0 → 1 at the door, lives 4 → 3;
+  Mega Man's lives 3 → 2 in the first pit, HP 28 → 24 on Wood Man's stage,
+  stage 3 vs 2 across two mints. `scripts/test_ram_maps.py` checks every
+  map's shape. With the ROM present it replays the checkpoints through
+  `step_emu` and `RamMap.read`: 333 ok, exit 0. A wrong-address negative
+  control fails (exit 1), and a missing ROM skips with its reason.
+  `jev_harness.py --no-jev` runs on both maps and stops at their first stalls:
+  Castlevania's courtyard wall at abs x 751, and Mega Man 2's first pit at
+  abs x 325. US$ 0, no model called. The W-R8 button stays disabled: ADR-0242
+  Q3's adoption measurement (ADR-0238 §5, both clauses) on these two games
+  is F14.20's.
+  [Log](../validation/f1419-ram-maps-2026-10-02.md).
+
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
   paralelo"*, PR #395). The recorder writes per-tile `px`/`py` (and `z` on
@@ -1638,8 +1670,10 @@ is removed): 100 % of drawn keys reach a sheet on both games, through exact
 folds and variant cells. **F14.10 was measured and not merged** (2026-09-25,
 ADR-0235 superseded by ADR-0236; §3). **F14.11–F14.18 are delivered**
 (2026-09-25/26, §3; ADR-0236 for F14.11, ADR-0238 for F14.12–F14.15, ADR-0239
-for F14.16–F14.18), and their rows are removed. **F14.8 is the only live
-Phase 14 row** and is not started; Phase 7's P.8 (ADR-0237) is the only live
+for F14.16–F14.18), and their rows are removed. **F14.19 is delivered**
+(2026-10-02, §3; ADR-0242 Q2; its row is removed). **F14.8** (not started)
+and **F14.20** (ADR-0242, waiting on F12.20 and the Remaster workspace) are
+the live Phase 14 rows; Phase 7's P.8 (ADR-0237) is the only live
 Core/UI row in this Part.
 Two questions the review raised are already decided in PR #397 (merged 2026-09-24) and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
@@ -1678,8 +1712,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
-| F14.19 | **RAM maps for games without a route (ADR-0242 Q2).** `scripts/stages/<game>/ram-map.json` (position, camera, room, HP — the progress fields `jev_harness.py` reads) for golden games that have **no committed route** past their first stall, each field verified on the pinned dump against two RAM checkpoints. Inputs: the golden list in `scripts/stages/`; stop rule: at least two games mapped, or every candidate recorded with why its map failed. | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
-| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games (Castlevania and Mega Man 2); until then it is disabled with its reason. Prerequisites: F14.19 (delivered 2026-10-02, §3), F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 ### 5. Order of execution
 
@@ -1727,8 +1760,9 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    second pass passed the stall the search could not and the kit still gained
    nothing, and the third pass re-measured that clause on a route 78 px further
    in (+97 cells, +22 keys against the same-length search-alone recording) and
-   still found 0 keys no other pack here has. F14.8 runs whenever a person is
-   available.
+   still found 0 keys no other pack here has. F14.19 (delivered 2026-10-02,
+   §3) gives ADR-0242's recorder its first two games without a route. F14.8
+   runs whenever a person is available.
    **P.8** (Phase 7, shaders on macOS, ADR-0237) is implemented under a
    go-ahead (2026-10-02); stop conditions (1) and (2) are met headless and (3),
    the person on a real display, is not evaluated.
@@ -3664,8 +3698,8 @@ by analogy). Elements: 2. ✔
 - Elements: Start from, Goal, Change…, Spend limit, Cancel, Start = 6. ✔
 - Drawn on the Contra project for continuity with W-R1. Today Contra has
   no `ram-map.json`, so on this project the button would be disabled with
-  "No AI map for this game yet" — only `mm3/` and `ninjagaiden/` have one
-  (ADR-0242 Q2).
+  "No AI map for this game yet" — `mm3/`, `ninjagaiden/`, `castlevania/` and
+  `megaman2/` have one, the last two from F14.19 (ADR-0242 Q2).
 
 ##### 13.5.4 Share
 

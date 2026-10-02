@@ -1,0 +1,102 @@
+{
+  "game": "Castlevania",
+  "console": "nes",
+  "rom": {
+    "noIntroSha1": ["3DCB69A8C861C041AEB56C04E39ADF6D332EDA3A"]
+  },
+  "note": "F14.19 (ADR-0242 Q2): the progress fields scripts/jev_harness.py reads, for a golden game with no committed route past its first stall. stage1-run.txt is the blind walk-and-whip body; it dies in the castle hall, and its own stage-set note says the stage-1 route ends in a death. Every field below was read on the pinned dump (whole-file SHA1 7A20C44F302FB2F1B7ADFFA6B619E3E1CAE7B546) through scripts/step_emu.py from the state mint-stage1.txt writes, and `verification` is the experiment scripts/test_ram_maps.py replays: each field is read at two checkpoints at least and seen to move (or hold) between them.",
+  "sources": [
+    "https://datacrystal.tcrf.net/wiki/Castlevania_(NES)/RAM_map - $0028 Stage, $002A Lives, $0045 Player HP; used as a hypothesis only, each address kept because the checkpoints below reproduce it on this dump"
+  ],
+  "progress": "progress_x",
+  "screen": "camera_x",
+  "screen_width": 256,
+  "fields": {
+    "lives": {
+      "address": "002A",
+      "note": "4 at the stage start; 3 once Simon has died and respawned (the blind walk right dies to the hall's zombies)"
+    },
+    "hp": {
+      "address": "0045",
+      "note": "0x40 (64) full; a zombie hit takes 8 (two of the health bar's sixteen cells)"
+    },
+    "room": {
+      "address": "0028",
+      "note": "the game's area index: 0 in the courtyard the game opens on, 1 once Simon walks through the castle door. It is the same byte navigation.json pins as the stage selector, and both values draw STAGE 01 on the status bar"
+    },
+    "camera_x": {
+      "address": ["002E", "002F"],
+      "note": "the camera's x in the area, scroll low byte $002E and page $002F; it restarts at 0 in a new area"
+    },
+    "abs_x": {
+      "address": ["0040", "0041"],
+      "note": "Simon's x in the area, low byte $0040 and page $0041. It restarts in a new area (48 at the hall's door), so a search reads it together with `room`"
+    },
+    "screen_x": {
+      "expr": "abs_x - camera_x",
+      "note": "Simon's column on the screen: 128 while the camera follows him"
+    },
+    "progress_x": {
+      "expr": "room * 4096 + abs_x",
+      "note": "the progress metric: abs_x restarts when an area changes (751 at the courtyard's door, 48 inside the hall), so a search steering by abs_x alone reads walking through the door as going backwards. One area is narrower than 4096 px (the hall's camera stops at 1280), so this is monotone across the door"
+    }
+  },
+  "verification": {
+    "mint": "mint-stage1.txt",
+    "checkpoints": [
+      {
+        "id": "courtyard",
+        "input": ["400f -"],
+        "expect": {
+          "lives": {"equals": 4},
+          "hp": {"equals": 64},
+          "room": {"equals": 0},
+          "camera_x": {"equals": 0},
+          "abs_x": {"equals": 50},
+          "progress_x": {"equals": 50},
+          "screen_x": {"equals": 50}
+        }
+      },
+      {
+        "id": "walked",
+        "input": ["480f R"],
+        "expect": {
+          "abs_x": {"gt": "courtyard"},
+          "camera_x": {"gt": "courtyard"},
+          "room": {"eq": "courtyard"},
+          "hp": {"eq": "courtyard"},
+          "lives": {"eq": "courtyard"},
+          "screen_x": {"equals": 128}
+        }
+      },
+      {
+        "id": "hall",
+        "input": ["400f R"],
+        "expect": {
+          "room": {"gt": "walked"},
+          "abs_x": {"lt": "walked"},
+          "progress_x": {"gt": "walked"},
+          "camera_x": {"lt": "walked"}
+        }
+      },
+      {
+        "id": "hit",
+        "input": ["300f R"],
+        "expect": {
+          "hp": {"lt": "hall"},
+          "abs_x": {"gt": "hall"},
+          "camera_x": {"gt": "hall"},
+          "screen_x": {"eq": "walked"}
+        }
+      },
+      {
+        "id": "respawned",
+        "input": ["2000f R"],
+        "expect": {
+          "lives": {"lt": "hit"},
+          "room": {"eq": "hit"}
+        }
+      }
+    ]
+  }
+}
