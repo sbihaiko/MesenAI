@@ -47,6 +47,10 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   Also documents the split-distribution/MEP Recipe flow (ADR-0138 §12):
   the `external_assets`/`external_assets_license` form fields and the
   `assets:external` label, citing `docs/specs/MEP-recipe-v1.md`.
+- `shader-sweep.md` - the maintainer's manual macOS shader sweep
+  (`make shader-sweep`, ADR-0237): prerequisites, the classes it reports and
+  how to read them. Not a CI gate and never to become one - the maintainer
+  does not want GPU runs in CI.
 - F12.2 cold-read protocol (ADR-0214, amended 2026-09-19: the evaluator is a
   fresh **Opus** session): `docs/validation/f12.2-sweep-evaluator-briefing.md`
   is the only evaluator-facing document for the 28-ROM sweep;
