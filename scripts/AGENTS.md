@@ -53,7 +53,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   that merge is R.2). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
   `checks/verify_replay_form_and_workflow.py`. End-to-end with a ROM:
   `check_replay_recorded.sh` (`headless_record record-share=` /
-  `record-stock=` are the action and its negative control).
+  `record-stock=` are the action and its negative control). The title's game
+  is looked up by `GameSettings.txt`'s `NoIntroSHA1` first: on NES its `SHA1`
+  is the whole-file hash and never matches a No-Intro hash (#624).
 - **Community cheats, publish side (ADR-0248 R.3).** `cheat_decoder.py` ports
   the Core's NES/GB/SMS converters of `Core/Shared/CheatManager.cpp` (every
   regex, bit table and quirk); `cheat_submission.py` is the section 3 gate of
