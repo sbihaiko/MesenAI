@@ -57,17 +57,8 @@ bool MovieManager::RecordAndShare(RecordMovieOptions options)
 		return false;
 	}
 
-	_shareRestore = snapshot;
-	_shareActive = true;
+	_share.Arm(snapshot);
 	return true;
-}
-
-void MovieManager::RestoreShareSettings()
-{
-	if(_shareActive) {
-		_shareActive = false;
-		ShareRecordingSettings::Restore(*_emu->GetSettings(), _shareRestore);
-	}
 }
 
 void MovieManager::Play(VirtualFile file, bool forTest)
@@ -109,8 +100,7 @@ void MovieManager::Stop()
 	_player.reset();
 	//Resetting the recorder writes the .mmo, and GameSettings.txt serializes the
 	//settings at that moment, so the player's own settings come back only after.
-	_recorder.reset();
-	RestoreShareSettings();
+	_share.Finish(*_emu->GetSettings(), [this]() { _recorder.reset(); });
 }
 
 bool MovieManager::Playing()
