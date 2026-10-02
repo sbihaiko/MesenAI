@@ -1,25 +1,31 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Avalonia.Platform;
+using Avalonia.Threading;
 using Mesen.ViewModels;
 using System;
 
 namespace Mesen.Windows
 {
+	//G.5 (PRD Part B §13.5.2 W-P12): shown once, before the main window, when
+	//there is no settings file - the storage choice decides where that file
+	//(and the core library) lives, so it runs before MainWindow can exist.
 	public class SetupWizardWindow : MesenWindow
 	{
-		private SetupWizardViewModel _model;
+		private readonly SetupWizardViewModel _model;
+		private bool _confirmed;
 
-		public SetupWizardWindow()
+		public SetupWizardWindow() : this(new SetupWizardViewModel())
 		{
-			_model = new SetupWizardViewModel();
+		}
+
+		//The headless tests pass a model whose Confirm writes nothing.
+		public SetupWizardWindow(SetupWizardViewModel model)
+		{
+			_model = model;
 			DataContext = _model;
 			InitializeComponent();
-
 		}
 
 		private void InitializeComponent()
@@ -27,36 +33,38 @@ namespace Mesen.Windows
 			AvaloniaXamlLoader.Load(this);
 		}
 
-		private void BtnOk_OnClick(object? sender, RoutedEventArgs e)
+		protected override void OnOpened(EventArgs e)
 		{
-			if(_model.Confirm(this)) {
+			base.OnOpened(e);
+			Dispatcher.UIThread.Post(() => this.GetControl<Button>("FirstRunStartPlaying").Focus());
+		}
+
+		protected override void OnKeyDown(KeyEventArgs e)
+		{
+			//Esc keeps the choice and continues, like the close button.
+			if(e.Key == Key.Escape) {
+				e.Handled = true;
 				Close();
+				return;
+			}
+			base.OnKeyDown(e);
+		}
+
+		protected override void OnClosing(WindowClosingEventArgs e)
+		{
+			base.OnClosing(e);
+			if(!_confirmed) {
+				//The app cannot run without a storage choice: closing applies the
+				//one on screen. A folder that cannot be written keeps the sheet
+				//open with its sentence (W-X2).
+				_confirmed = _model.Confirm();
+				e.Cancel = !_confirmed;
 			}
 		}
 
-		private void LblCancel_Tapped(object? sender, TappedEventArgs e)
+		private void BtnStart_OnClick(object? sender, RoutedEventArgs e)
 		{
 			Close();
-		}
-
-		private void XboxIcon_Tapped(object? sender, TappedEventArgs e)
-		{
-			_model.EnableXboxMappings = !_model.EnableXboxMappings;
-		}
-
-		private void PsIcon_Tapped(object? sender, TappedEventArgs e)
-		{
-			_model.EnablePsMappings = !_model.EnablePsMappings;
-		}
-
-		private void WasdIcon_Tapped(object? sender, TappedEventArgs e)
-		{
-			_model.EnableWasdMappings = !_model.EnableWasdMappings;
-		}
-
-		private void ArrowIcon_Tapped(object? sender, TappedEventArgs e)
-		{
-			_model.EnableArrowMappings = !_model.EnableArrowMappings;
 		}
 	}
 }

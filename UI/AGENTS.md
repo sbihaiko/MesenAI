@@ -142,6 +142,18 @@ can be exercised by real xunit tests without Avalonia or the native
   picker is dismissed, and Esc on the home does nothing. *Quit game* powers
   the game off (`LoadRomHelper.PowerOff`, after the existing
   `ConfirmExitResetPower` prompt) and never closes the app.
+- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P12–W-P16) are
+  host-free in `UI/Logic/PlayFirstRun.cs`, `PlayBiosPrompt.cs`,
+  `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and `PlayControllerSetup.cs`.
+  W-P12 is `SetupWizardWindow` redrawn: it still runs before `MainWindow`
+  (the storage choice decides `HomeFolder`), always applies both gamepad
+  presets, and its close/Esc applies the choice (no Cancel). W-P13, W-P14,
+  W-P15 and W-P16 are Player-mode only, in Play; Advanced keeps the
+  `FirmwareNotFound` dialog loop, the OSD load error with the home hidden,
+  and the OSD pending-dep line. `PlaySheet.PackDep` closes back to W-P4; the
+  BIOS and controller sheets take Esc first (`HandleEdgeFlowEsc`, as Cancel).
+  The W-P15 poll lives in `UI/Windows/PlayEdgeFlowsWiring.cs` and writes only
+  a free port-1 mapping slot, never over a binding.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way

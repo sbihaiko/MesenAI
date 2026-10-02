@@ -1,0 +1,116 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Mesen.Config;
+using Mesen.Interop;
+using Mesen.Localization;
+using Mesen.Logic;
+using Mesen.Services;
+
+namespace Mesen.ViewModels
+{
+	//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P13–W-P16): the Play edge flows -
+	//the BIOS sheet, the load-failure alert, the unknown-controller setup and
+	//the pending pack file - and the shell status sentence they leave behind.
+	//Player mode only; Advanced keeps the classic dialogs and OSD lines. Kept
+	//in its own partial so MainWindowViewModel.cs does not grow.
+	public partial class MainWindowViewModel
+	{
+		public PlayBiosSheetViewModel BiosSheet { get; } = new();
+		public PlayPackDepSheetViewModel PackDepSheet { get; } = new();
+		public PlayControllerSetupViewModel ControllerSetup { get; } = new();
+
+		public bool IsPlayerMode => Config.Preferences.UiMode == UiMode.Player;
+
+		//Any open (a recent card, Open a ROM…, a drop): the W-P14 alert and a
+		//W-P13 "needs the BIOS" sentence belong to the previous attempt.
+		public void OnOpenStarted()
+		{
+			Interlocked.Increment(ref _openGeneration);
+			RecentGames.OnOpenStarted();
+			Shell.SetPlayNotice("");
+			PackDepSheet.Clear();
+		}
+
+		//W-P13: the Core's MissingFirmware, in Player mode. True when a file
+		//was installed (the Core then retries the load).
+		public async System.Threading.Tasks.Task<bool> RequestBios(FirmwareType type, string fileName, uint size, uint altSize, string gameName)
+		{
+			bool installed = await BiosSheet.Request(type, fileName, size, altSize, gameName);
+			if(!installed && BiosSheet.LastRequestCancelled) {
+				Shell.SetPlayNotice(BiosSheet.CancelNotice);
+			}
+			return installed;
+		}
+
+		//Bumped by every open: an install's late post for the previous game is
+		//dropped (PlayPackDepPrompt.BelongsToCurrentLoad). Read off the UI thread.
+		private int _openGeneration;
+		public int OpenGeneration => Volatile.Read(ref _openGeneration);
+
+		//The install's post: applied only when it still belongs to the loaded
+		//game. True when it was applied.
+		public bool SetPendingPackDeps(string packName, IReadOnlyList<CommunityPackDepPrompt> pending, int installOpenGeneration, string installRomSha1, string currentRomSha1)
+		{
+			if(!PlayPackDepPrompt.BelongsToCurrentLoad(installOpenGeneration, OpenGeneration, installRomSha1, currentRomSha1)) {
+				return false;
+			}
+			SetPendingPackDeps(packName, pending);
+			return true;
+		}
+
+		//W-P16: CommunityPackInstallService found a file only the user can add.
+		//The status line carries it; the sheet opens with the pause overlay.
+		public void SetPendingPackDeps(string packName, IReadOnlyList<CommunityPackDepPrompt> pending)
+		{
+			if(pending.Count == 0) {
+				PackDepSheet.Clear();
+				Shell.SetPlayNotice("");
+				return;
+			}
+			PackDepSheet.SetPending(packName, pending);
+			Shell.SetPlayNotice(ResourceHelper.GetMessage("PackDepWaitingStatus"));
+		}
+
+		//Called by OpenPauseOverlay: the first overlay after a notice opens
+		//the W-P16 sheet on top of it, once per notice.
+		private bool OpenPackDepSheetWithOverlay()
+		{
+			if(!PackDepSheet.Notice.ShouldOpenWithOverlay()) {
+				return false;
+			}
+			IsPlayerOverlayVisible = false;
+			PackDepSheet.Open();
+			return PackDepSheet.IsVisible;
+		}
+
+		//The game is gone (Quit game, power off): its pack's pending file goes
+		//with it. A W-P13 sentence stays - it belongs to the load that failed.
+		private void ClearPackDepWithoutGame()
+		{
+			if(PackDepSheet.Notice.HasPending || PackDepSheet.IsVisible) {
+				PackDepSheet.Clear();
+				Shell.SetPlayNotice("");
+			}
+		}
+
+		//The file landed in the drop folder: the status sentence is gone.
+		public void OnPackDepFileAdded() => Shell.SetPlayNotice("");
+
+		//Esc on a sheet that does not belong to the overlay: the BIOS sheet
+		//cancels (the game does not load), the controller setup cancels and
+		//resumes. True when Esc was taken.
+		private bool HandleEdgeFlowEsc()
+		{
+			if(BiosSheet.IsVisible) {
+				BiosSheet.Cancel();
+				return true;
+			}
+			if(ControllerSetup.IsVisible) {
+				ControllerSetup.Cancel();
+				return true;
+			}
+			return false;
+		}
+	}
+}

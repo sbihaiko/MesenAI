@@ -43,22 +43,65 @@ namespace Mesen.Utilities
 			InternalLoadRom(romPath, patchPath);
 		}
 
+		//G.5 (W-P13): the game a BIOS sheet names when it is cancelled.
+		public static string RequestedGameName { get; private set; } = "";
+
+		//G.5 (PRD Part B §13.5.2 W-P14): in Player mode's Play workspace the home
+		//stays while a file opens (rule 5) and a failure is an inline alert on
+		//it, so the home is not hidden to make room for the on-screen error message.
+		private static bool KeepsHomeDuringLoad => PlayLoadFailure.KeepsHomeDuringLoad(
+			ConfigManager.Config.Preferences.UiMode == UiMode.Player, MainWindowViewModel.Instance.IsPlayWorkspace);
+
+		//Decided once, on the UI thread, for the whole load.
+		private static bool BeginLoad(string gameName)
+		{
+			RequestedGameName = gameName;
+			MainWindowViewModel.Instance.OnOpenStarted();
+			bool keepsHome = KeepsHomeDuringLoad;
+			if(!keepsHome) {
+				//Temporarily hide selection screen to allow displaying error messages
+				MainWindowViewModel.Instance.RecentGames.Visible = false;
+			}
+			return keepsHome;
+		}
+
 		private static void InternalLoadRom(ResourcePath romPath, ResourcePath? patchPath)
 		{
 			//G.6 (W-X3): a running recording asks before another game opens.
 			if(!MainWindowViewModel.Instance.ConfirmOpen(romPath.FileName, () => InternalLoadRom(romPath, patchPath))) {
 				return;
 			}
-			//Temporarily hide selection screen to allow displaying error messages
-			MainWindowViewModel.Instance.RecentGames.Visible = false;
+			bool keepsHome = BeginLoad(Path.GetFileNameWithoutExtension(string.IsNullOrEmpty(romPath.InnerFile) ? romPath.FileName : romPath.InnerFile));
 
 			Task.Run(() => {
 				//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side
 				if(EmuApi.LoadRom(romPath, patchPath)) {
 					ConfigManager.Config.RecentFiles.AddRecentFile(romPath, patchPath);
 					ConfigManager.Config.Save();
+				} else if(keepsHome) {
+					ReportLoadFailure(romPath);
+					return;
 				}
 				ShowSelectionOnScreenAfterError();
+			});
+		}
+
+		//W-P14: one sentence per cause. A load the user stopped by cancelling the
+		//BIOS sheet is not a broken file, and a failure while another game keeps
+		//running stays today's on-screen message (the home is not on screen).
+		private static void ReportLoadFailure(ResourcePath romPath)
+		{
+			bool isArchive = FolderHelper.IsArchiveFile(romPath.Path);
+			string shownName = isArchive && !string.IsNullOrEmpty(romPath.InnerFile) ? Path.GetFileName(romPath.InnerFile) : Path.GetFileName(romPath.Path);
+			LoadFailureCause cause = PlayLoadFailure.Classify(shownName, FolderHelper.IsRomFile(romPath.Path), isArchive, !string.IsNullOrEmpty(romPath.InnerFile));
+			Dispatcher.UIThread.Post(() => {
+				MainWindowViewModel model = MainWindowViewModel.Instance;
+				bool cancelled = model.BiosSheet.ConsumeCancelled();
+				if(EmuApi.IsRunning() || !PlayLoadFailure.ShowsAlert(cancelled)) {
+					return;
+				}
+				model.RecentGames.Visible = true;
+				model.RecentGames.ShowLoadFailure(cause, shownName);
 			});
 		}
 
@@ -67,8 +110,7 @@ namespace Mesen.Utilities
 			if(!MainWindowViewModel.Instance.ConfirmOpen(filename, () => LoadRecentGame(filename, forceLoadState))) {
 				return;
 			}
-			//Temporarily hide selection screen to allow displaying error messages
-			MainWindowViewModel.Instance.RecentGames.Visible = false;
+			BeginLoad(Path.GetFileNameWithoutExtension(filename));
 
 			Task.Run(() => {
 				//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side

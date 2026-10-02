@@ -25,6 +25,8 @@ namespace Mesen.ViewModels
 		private RemasterActivity _remasterActivity;
 		private string _remasterStatus = "";
 		private string _packInstallStatus = "";
+		//G.5 (W-P13/W-P16): one clause an edge flow adds to Play's status line.
+		private string _playNotice = "";
 
 		[ObservableProperty] public partial Workspace Active { get; private set; }
 		[ObservableProperty] public partial bool IsPlay { get; private set; }
@@ -96,6 +98,16 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
+		//G.5: "Zelda needs the FDS BIOS" (no game) or "waiting for one file"
+		//(appended while the game runs). Empty clears it.
+		public void SetPlayNotice(string notice)
+		{
+			_playNotice = notice ?? "";
+			RefreshChrome();
+		}
+
+		public string PlayNotice => _playNotice;
+
 		private void Refresh()
 		{
 			Active = _state.Active;
@@ -119,6 +131,9 @@ namespace Mesen.ViewModels
 				ShellStatusKind.PausedWithPack => ResourceHelper.GetMessage("ShellStatusPausedWithPack", _gameName, _packName),
 				_ => ResourceHelper.GetMessage("ShellStatusNoGame"),
 			};
+			if(_state.IsPlay) {
+				StatusText = PlayStatusNotice.Compose(StatusText, _playNotice, _gameLoaded);
+			}
 			ShowsActivityDot = RemasterActivityIndicator.ShowsDot(_state.Active, _remasterActivity);
 			ShowsRecordingDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Recording;
 			ShowsJobDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Job;

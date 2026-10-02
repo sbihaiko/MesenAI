@@ -58,6 +58,32 @@ namespace Mesen.Utilities
 			}
 		}
 
+		//G.5 (PRD Part B §13.5.2 W-P13): the sheet's half of SelectFirmwareFile,
+		//with no dialog. The size was already checked (PlayBiosPrompt.CheckSize);
+		//an unknown dump returns false unless the user confirmed it in place
+		//(W-X1). The copy goes where SelectFirmwareFile puts it; a file already
+		//there is the one the Core just refused, so it is replaced.
+		//Reads the file itself (not FileHelper's retry-and-message-box path): an
+		//unreadable file throws, and the sheet turns that into its inline line.
+		public static bool IsKnownDump(FirmwareType type, string selectedFile)
+		{
+			string fileHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(selectedFile)));
+			foreach(FirmwareFileInfo knownFirmware in type.GetFirmwareInfo()) {
+				if(Array.IndexOf(knownFirmware.Hashes, fileHash) >= 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		public static void CopyFirmwareFile(FirmwareType type, string selectedFile)
+		{
+			string destination = Path.Combine(ConfigManager.FirmwareFolder, type.GetFirmwareInfo().Names[0]);
+			if(selectedFile != destination) {
+				File.Copy(selectedFile, destination, true);
+			}
+		}
+
 		public static async Task<bool> SelectFirmwareFile(FirmwareType type, string selectedFile, Window? wnd)
 		{
 			FirmwareFiles knownFirmwares = type.GetFirmwareInfo();

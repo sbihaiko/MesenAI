@@ -130,6 +130,9 @@ namespace Mesen.Windows
 				}
 			};
 
+			//G.5: the Play edge-flow sheets' focus, reload and controller poll.
+			PlayEdgeFlowsWiring.Attach(this, _model);
+
 			_shortcutHandler = new ShortcutHandler(this);
 
 			AddHandler(DragDrop.DropEvent, OnDrop);
@@ -586,7 +589,14 @@ namespace Mesen.Windows
 					MissingFirmwareMessage msg = Marshal.PtrToStructure<MissingFirmwareMessage>(e.Parameter);
 					TaskCompletionSource tcs = new TaskCompletionSource();
 					Dispatcher.UIThread.Post(async () => {
-						await FirmwareHelper.RequestFirmwareFile(msg);
+						//G.5 W-P13: Player mode's Play gets the in-place sheet;
+						//Advanced (and Remaster/Share) keep the classic dialog loop.
+						if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
+							string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
+							await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
+						} else {
+							await FirmwareHelper.RequestFirmwareFile(msg);
+						}
 						tcs.SetResult();
 					});
 					tcs.Task.Wait();

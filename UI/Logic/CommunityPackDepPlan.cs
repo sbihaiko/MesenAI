@@ -50,7 +50,7 @@ namespace Mesen.Logic
 					resolved[dep.Id] = resolution.ResolvedPath;
 					known.Add(dep.Id);
 				} else {
-					pending.Add(new CommunityPackPendingDep(dep.Id, resolution.Hints, resolution.License));
+					pending.Add(new CommunityPackPendingDep(dep.Id, resolution.Hints, resolution.License, dep.Sha256 ?? ""));
 				}
 			}
 
@@ -66,6 +66,8 @@ namespace Mesen.Logic
 
 	//An unresolved user_supplied dep (MEI-v1.md §2.3): the host-free payload
 	//behind Services.CommunityPackDepPrompt. License is never blank - the
-	//resolver substitutes the literal "not declared".
-	public sealed record CommunityPackPendingDep(string DepId, string Hints, string License);
+	//resolver substitutes the literal "not declared". Sha256 is the declared
+	//content hash, so a file the user adds can be checked before it is copied
+	//(G.5, W-P16: "That is not the file this pack was made with").
+	public sealed record CommunityPackPendingDep(string DepId, string Hints, string License, string Sha256 = "");
 }

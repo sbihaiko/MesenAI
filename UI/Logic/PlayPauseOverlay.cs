@@ -151,7 +151,9 @@ public enum PlaySheet
 	//Save states sheet.
 	SaveStateGrid,
 	//G.4: W-P6, the current pack's detail, opened from W-P4's Pack row.
-	PackDetail
+	PackDetail,
+	//G.5 W-P16: a pack waits for a file, opened with the overlay.
+	PackDep
 }
 
 public enum PlayEscAction
@@ -181,6 +183,7 @@ public static class PlayEsc
 			case PlaySheet.SaveStates:
 			case PlaySheet.SaveStateGrid:
 			case PlaySheet.PackDetail:
+			case PlaySheet.PackDep:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

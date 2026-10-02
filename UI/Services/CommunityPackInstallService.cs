@@ -1,7 +1,9 @@
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
+using Mesen.Localization;
 using Mesen.Utilities;
+using Mesen.ViewModels;
 using Mesen.Windows;
 using System;
 using System.Collections.Concurrent;
@@ -130,10 +132,13 @@ namespace Mesen.Services
 				EmuApi.WriteLogEntry("[CommunityPack] skipped: a previous load's install is still in flight");
 				return; //a previous load's install is still in flight
 			}
-			_ = Task.Run(RunAsync);
+			//G.5 W-P16: the open this install belongs to - a later open drops its
+			//pending-file post (MainWindowViewModel.SetPendingPackDeps).
+			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
+			_ = Task.Run(() => RunAsync(openGeneration));
 		}
 
-		private static async Task RunAsync()
+		private static async Task RunAsync(int openGeneration)
 		{
 			string romSha1 = "";
 			try {
@@ -202,7 +207,7 @@ namespace Mesen.Services
 				if(pillShown) {
 					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable);
 				}
-				Surface(outcome, romSha1);
+				Surface(outcome, romSha1, openGeneration);
 			} catch(Exception ex) {
 				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
@@ -223,7 +228,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static void Surface(CommunityPackInstallOutcome outcome, string installedRomSha1)
+		private static void Surface(CommunityPackInstallOutcome outcome, string installedRomSha1, int openGeneration)
 		{
 			switch(outcome.Status) {
 				case CommunityPackInstallStatus.Installed:
@@ -235,7 +240,7 @@ namespace Mesen.Services
 					foreach(string notice in outcome.Notices) {
 						Notify(notice);
 					}
-					NotifyPendingDeps(outcome.PendingDeps);
+					NotifyPendingDeps(outcome.ContainerName, outcome.PendingDeps, installedRomSha1, openGeneration);
 					ApplyInstalledPack(installedRomSha1);
 					break;
 
@@ -277,8 +282,22 @@ namespace Mesen.Services
 
 		//MEI-v1.md §2.3 user_supplied deps: tell the user what to drop where, with the
 		//declared licence (or "not declared") so they can judge the source themselves.
-		private static void NotifyPendingDeps(IReadOnlyList<CommunityPackDepPrompt> pending)
+		private static void NotifyPendingDeps(string packName, IReadOnlyList<CommunityPackDepPrompt> pending, string installedRomSha1, int openGeneration)
 		{
+			//G.5 W-P16: Player mode gets the sheet (with the pause overlay) and a
+			//status sentence instead of one OSD line per file - unless another
+			//open started since the install began (the post belongs to that game).
+			if(ConfigManager.Config.Preferences.UiMode == UiMode.Player) {
+				Dispatcher.UIThread.Post(() => {
+					bool applied = MainWindowViewModel.Instance.SetPendingPackDeps(packName, pending, openGeneration, installedRomSha1, EmuApi.GetMepRomSha1());
+					if(!applied) {
+						EmuApi.WriteLogEntry("[CommunityPack] pending files not shown: another game was opened since the install started");
+					} else if(pending.Count > 0) {
+						DisplayMessageHelper.DisplayMessage(MessageTitle, ResourceHelper.GetMessage("PackDepPill", packName));
+					}
+				});
+				return;
+			}
 			foreach(CommunityPackDepPrompt dep in pending) {
 				string license = string.IsNullOrWhiteSpace(dep.License) ? "not declared" : dep.License;
 				string hints = string.IsNullOrWhiteSpace(dep.Hints) ? dep.DepId : dep.Hints;
