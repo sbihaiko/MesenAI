@@ -1,9 +1,9 @@
 # ADR-0237: macOS gets shader support through a native Metal renderer running the librashader Metal filter chain
 
-- Status: accepted (2026-09-26, user's pick verbatim: *"escreva o ADR utilizando o natinvo no Metal"*); slice P.8 in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A §4, Phase 7) **implemented 2026-10-02** under a go-ahead relayed by the coordinating session that day, except acceptance item 3 (the human check on a real display), which is not evaluated. §1, §2 and acceptance items 1–2 are reflected in code: `MacOS/MacOSMetalRenderer`, `MacOS/MetalPresenter`, `make metal-presenter-tests`, `scripts/check_headless_shader_invariance.sh`. **§3 amendment (2026-10-02) is proposed, not accepted:** it records what the slice actually ships — a prebuilt, sha256-pinned SourMesen CI dylib, mirrored as an asset of this repo's release `librashader-macos-arm64-01febce6` — in place of the original "built from source". `scripts/fetch_librashader_macos.sh` already prefers that mirror and falls back to the original artifact until it expires on 2026-12-04; the mirror release does not exist until the maintainer creates it. The amendment needs the maintainer's pick (accept it as written, or ask for a source build instead); until then the original §3 text, kept below, is the accepted one and the code diverges from it.
+- Status: accepted (2026-09-26, user's pick verbatim: *"escreva o ADR utilizando o natinvo no Metal"*); slice P.8 in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A §4, Phase 7) **implemented 2026-10-02** under a go-ahead relayed by the coordinating session that day, except acceptance item 3 (the human check on a real display), which is not evaluated. §1, §2 and acceptance items 1–2 are reflected in code: `MacOS/MacOSMetalRenderer`, `MacOS/MetalPresenter`, `make metal-presenter-tests`, `scripts/check_headless_shader_invariance.sh`. **§3 amendment accepted (2026-10-02, user's pick verbatim: *"Criar release e aceitar (Recomendado)"*):** it records what the slice actually ships — a prebuilt, sha256-pinned SourMesen CI dylib, mirrored as an asset of this repo's release `librashader-macos-arm64-01febce6` — in place of the original "built from source". The mirror release was created the same day (`gh release create ... --latest=false`; `scripts/fetch_librashader_macos.sh --source mirror` resolves it and the sha256 matches the pin); the script falls back to the original artifact until it expires on 2026-12-04. The original §3 text is kept below.
 - Date: 2026-09-26
 - Related: ADR-0163 (fork–upstream coexistence tiers), ADR-0203 (CI builds Windows and macOS Apple Silicon), ADR-0204 (download channel), upstream `392421500` "Added support for shaders (Windows + Linux) (#270)", merged here by PR #440
-- Supersedes / amends: nothing; amended in place 2026-10-02 (§3, proposed — see Status)
+- Supersedes / amends: nothing; amended in place 2026-10-02 (§3, accepted — see Status)
 - Amended by: ADR-0246 (accepted 2026-10-02) — non-goals: a short bundled list of named looks is allowed (the amended non-goal bullet). The original clause is kept in git history; ADR-0246 §4 carries the decision and its rationale.
 
 ## Context
@@ -87,8 +87,7 @@ Non-goals:
    - `IsShaderSupportEnabled()` returns `true` on Apple, and
      `CheckShaderSupport()` stays the gate: when the dylib is missing, the
      shader group stays hidden and the renderer runs unfiltered.
-3. **The library.** *(Amended 2026-10-02 — proposed, awaiting the
-   maintainer's pick. The text accepted on 2026-09-26 read: "`librashader.dylib`
+3. **The library.** *(Amended 2026-10-02 — accepted by the maintainer. The text accepted on 2026-09-26 read: "`librashader.dylib`
    for macOS arm64 is built from source, since SourMesen publishes none. It
    is pinned to the same librashader revision the other two platforms
    fetch." Its premise was false: SourMesen/librashader's `build` workflow
