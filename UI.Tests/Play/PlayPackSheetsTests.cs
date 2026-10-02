@@ -109,5 +109,18 @@ namespace Mesen.Tests.Play
 			Assert.Equal(RestoreStep.Idle, RestoreFlow.Cancel(RestoreStep.Confirming));
 			Assert.Equal(RestoreStep.Running, RestoreFlow.Cancel(RestoreStep.Running));
 		}
+
+		//#643: the restore downloads up to 300 MB; the game it restarts must be
+		//the one it restored for - no open since it started, same MEP ROM SHA-1.
+		[Fact]
+		public void A_finished_restore_power_cycles_only_the_load_it_was_for()
+		{
+			Assert.Equal(RestoreOutcome.PowerCycle, RestoreFlow.After(ok: true, restoreOpenGeneration: 3, currentOpenGeneration: 3, restoreRomSha1: "AB12", currentRomSha1: "ab12"));
+			Assert.Equal(RestoreOutcome.Failed, RestoreFlow.After(ok: false, 3, 3, "AB12", "AB12"));
+			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, restoreOpenGeneration: 3, currentOpenGeneration: 4, "AB12", "AB12"));
+			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, "AB12", currentRomSha1: "CD34"));
+			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, "AB12", currentRomSha1: ""));
+			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, restoreRomSha1: "", currentRomSha1: ""));
+		}
 	}
 }

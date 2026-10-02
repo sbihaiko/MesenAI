@@ -53,6 +53,9 @@ public class PlayerReplaysSheetTests
 		public List<int> Downloaded = new();
 		public List<string> Played = new();
 		public ReplayFetchFailure Failure = ReplayFetchFailure.None;
+		//When set, the download stays pending until the test completes it.
+		public TaskCompletionSource<ReplayFetchResult>? Pending;
+		public string RomSha1 = "";
 	}
 
 	private static Harness ShowPlayer(string romSha1, IReadOnlyList<CommunityReplayGame> catalog, IReadOnlyList<CommunityReplayGame>? fetched = null)
@@ -66,11 +69,15 @@ public class PlayerReplaysSheetTests
 		h.Model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		h.Model.CommunityReplaysLastKnown = () => catalog;
 		h.Model.CommunityReplaysSource = () => Task.FromResult(fetched);
-		h.Model.ReplayRomSha1 = () => romSha1;
+		h.RomSha1 = romSha1;
+		h.Model.ReplayRomSha1 = () => h.RomSha1;
 		h.Model.ReplayWatchReasonSource = () => ReplayWatchReason.None;
 		h.Model.ReplayOpenUrl = h.Opened.Add;
 		h.Model.ReplayDownload = row => {
 			h.Downloaded.Add(row.Issue);
+			if(h.Pending != null) {
+				return h.Pending.Task;
+			}
 			return Task.FromResult(h.Failure == ReplayFetchFailure.None ? new ReplayFetchResult("/cache/" + row.Issue + ".mmo", ReplayFetchFailure.None) : new ReplayFetchResult(null, h.Failure));
 		};
 		h.Model.ReplayPlay = h.Played.Add;
@@ -211,6 +218,68 @@ public class PlayerReplaysSheetTests
 		OpenFromSaveStatesAgain(h);
 		Click(h.Window.FindNamed<Button>("ReplaysDoneButton"));
 		Assert.True(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//#640: Restart & watch, then the download is still running.
+	private static Harness WatchPending(string romSha1)
+	{
+		Harness h = ShowPlayer(romSha1, Full);
+		h.Pending = new TaskCompletionSource<ReplayFetchResult>();
+		OpenFromSaveStates(h);
+		Click(Named(h.Window, "ReplaysWatchButton")[0]);
+		Click(Named(h.Window, "ReplaysWatchButton")[0]);
+		Assert.Equal(new[] { 302 }, h.Downloaded);
+		Assert.Empty(h.Played);
+		return h;
+	}
+
+	private static void FinishDownload(Harness h)
+	{
+		h.Pending!.SetResult(new ReplayFetchResult("/cache/302.mmo", ReplayFetchFailure.None));
+		Dispatcher.UIThread.RunJobs();
+	}
+
+	[AvaloniaFact]
+	public void Esc_during_the_download_cancels_the_watch()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = WatchPending(ContraSha1);
+
+		h.Model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+		FinishDownload(h);
+
+		Assert.Empty(h.Played);
+		Assert.False(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
+		Assert.True(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	[AvaloniaFact]
+	public void Reopening_the_sheet_does_not_revive_a_cancelled_watch()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = WatchPending(ContraSha1);
+
+		Click(h.Window.FindNamed<Button>("ReplaysDoneButton"));
+		OpenFromSaveStatesAgain(h);
+		FinishDownload(h);
+
+		Assert.Empty(h.Played);
+		Assert.True(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
+		Assert.All(Named(h.Window, "ReplaysWatchButton"), b => Assert.True(b.IsEnabled));
+	}
+
+	[AvaloniaFact]
+	public void Another_game_loaded_during_the_download_cancels_the_watch()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = WatchPending(ContraSha1);
+
+		h.RomSha1 = OtherSha1;
+		FinishDownload(h);
+
+		Assert.Empty(h.Played);
+		Assert.All(Named(h.Window, "ReplaysWatchButton"), b => Assert.True(b.IsEnabled));
 	}
 
 	private static void OpenFromSaveStatesAgain(Harness h)

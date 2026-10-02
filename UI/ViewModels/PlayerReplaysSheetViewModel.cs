@@ -38,20 +38,26 @@ namespace Mesen.ViewModels
 		private Action<string> _openUrl = _ => { };
 		private Func<CommunityReplay, Task<ReplayFetchResult>> _download = _ => Task.FromResult(new ReplayFetchResult(null, ReplayFetchFailure.Unavailable));
 		private Action<string> _play = _ => { };
+		private Func<string> _currentRomSha1 = () => "";
+		//Bumped by Open and Close: a download that ends after the sheet was
+		//closed or reopened belongs to a Watch that no longer exists (#640).
+		private int _generation;
 
 		//The ROM hash the sheet was opened for, so a late fetch can check it
 		//still applies.
 		public string RomSha1 => _romSha1;
 
 		public void Open(string romSha1, ConsoleType console, IReadOnlyList<CommunityReplayGame> catalog, ReplayWatchReason reason,
-			Action<string> openUrl, Func<CommunityReplay, Task<ReplayFetchResult>> download, Action<string> play)
+			Action<string> openUrl, Func<CommunityReplay, Task<ReplayFetchResult>> download, Action<string> play, Func<string> currentRomSha1)
 		{
+			_generation++;
 			_romSha1 = romSha1 ?? "";
 			_console = console;
 			_reason = reason;
 			_openUrl = openUrl;
 			_download = download;
 			_play = play;
+			_currentRomSha1 = currentRomSha1;
 			_armedIssue = 0;
 			IsBusy = false;
 			NoticeLine = ReplayWatch.ReasonText(reason);
@@ -93,10 +99,22 @@ namespace Mesen.ViewModels
 			IsBusy = true;
 			NoticeLine = "";
 			Refresh();
+			int generation = _generation;
 			ReplayFetchResult result = await _download(row.Replay);
+			if(generation != _generation) {
+				//Closed (Esc, Done, quit game) or reopened meanwhile: that sheet
+				//owns IsBusy now, and nothing plays.
+				return;
+			}
 			IsBusy = false;
 			if(result.Failure != ReplayFetchFailure.None || result.Path == null) {
 				NoticeLine = ReplayWatch.FailureText(result.Failure == ReplayFetchFailure.None ? ReplayFetchFailure.Unavailable : result.Failure);
+				Refresh();
+				return;
+			}
+			//Playing power-cycles the loaded game: only the copy the rows were
+			//listed for, never one opened while the file downloaded.
+			if(!ReplayWatch.PlaysAfterDownload(IsVisible, generation, _generation, _romSha1, _currentRomSha1())) {
 				Refresh();
 				return;
 			}
@@ -107,6 +125,8 @@ namespace Mesen.ViewModels
 
 		public void Close()
 		{
+			_generation++;
+			IsBusy = false;
 			IsVisible = false;
 			_armedIssue = 0;
 			Closed?.Invoke();

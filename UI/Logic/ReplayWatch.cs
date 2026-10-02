@@ -101,6 +101,18 @@ namespace Mesen.Logic
 			};
 		}
 
+		//#640: the verified download is awaited (up to the size cap), and
+		//playing power-cycles whatever is loaded. It plays only while the sheet
+		//is still up for the same Watch (Close and Open bump the generation)
+		//and the loaded ROM is still the copy the rows were listed for.
+		public static bool PlaysAfterDownload(bool sheetVisible, int watchGeneration, int currentGeneration, string sheetRomSha1, string currentRomSha1)
+		{
+			return sheetVisible
+				&& watchGeneration == currentGeneration
+				&& !string.IsNullOrEmpty(sheetRomSha1)
+				&& string.Equals(sheetRomSha1, currentRomSha1, StringComparison.OrdinalIgnoreCase);
+		}
+
 		public static string WatchLabel(bool armed) => armed ? "Restart & watch" : "Watch";
 
 		public const string ArmedText = "Watching restarts the game: unsaved progress is lost. Press Restart & watch to go on.";

@@ -165,4 +165,26 @@ public static class RestoreFlow
 	}
 
 	public static RestoreStep Cancel(RestoreStep step) => step == RestoreStep.Running ? step : RestoreStep.Idle;
+
+	//#643: the restore downloads up to 300 MB; meanwhile the player may quit
+	//and open another game. The restart that loads the restored files runs
+	//only for the load the restore was for (the W-P16 rule,
+	//PlayPackDepPrompt.BelongsToCurrentLoad).
+	public static RestoreOutcome After(bool ok, int restoreOpenGeneration, int currentOpenGeneration, string restoreRomSha1, string currentRomSha1)
+	{
+		if(!ok) {
+			return RestoreOutcome.Failed;
+		}
+		return PlayPackDepPrompt.BelongsToCurrentLoad(restoreOpenGeneration, currentOpenGeneration, restoreRomSha1, currentRomSha1) ? RestoreOutcome.PowerCycle : RestoreOutcome.Stale;
+	}
+}
+
+public enum RestoreOutcome
+{
+	Failed,
+	//Another game was opened (or the game was quit) during the restore: the
+	//files are restored, but the game now loaded is left alone.
+	Stale,
+	//Restart the game so it loads the restored files - the confirm said so.
+	PowerCycle
 }
