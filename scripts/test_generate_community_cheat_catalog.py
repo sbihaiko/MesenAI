@@ -153,6 +153,19 @@ def main():
     check(not re.search(r"\$\{\{\s*github\.event\.(issue|comment)\.(title|body)", text),
           "C-8 no issue title/body is interpolated into the workflow")
 
+    # C-9: a list that reaches gh's --limit may be truncated; never treat it as complete
+    real_run = gen.subprocess.run
+    for count, refuse in ((gen.FETCH_LIMIT, True), (gen.FETCH_LIMIT - 1, False)):
+        gen.subprocess.run = lambda *a, n=count, **k: subprocess.CompletedProcess(a, 0, json.dumps([{}] * n), "")
+        try:
+            got = len(gen.fetch_issues())
+            refused = False
+        except SystemExit:
+            refused = True
+        finally:
+            gen.subprocess.run = real_run
+        check(refused == refuse, f"C-9 fetch_issues {'refuses' if refuse else 'accepts'} {count} issues (limit {gen.FETCH_LIMIT})")
+
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed")
         return 1

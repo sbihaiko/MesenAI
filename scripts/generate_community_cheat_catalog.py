@@ -115,10 +115,18 @@ def render(catalog):
     return json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
 
 
+# A result that reaches the limit may be truncated: refuse it rather than drop live rows
+FETCH_LIMIT = 5000
+
+
 def fetch_issues():
     out = subprocess.run(["gh", "issue", "list", "--repo", REPO, "--label", cs.LABEL_VALID, "--state", "open",
-                          "--limit", "1000", "--json", GH_FIELDS], capture_output=True, text=True, check=True).stdout
-    return json.loads(out)
+                          "--limit", str(FETCH_LIMIT), "--json", GH_FIELDS], capture_output=True, text=True,
+                         check=True).stdout
+    issues = json.loads(out)
+    if len(issues) >= FETCH_LIMIT:
+        raise SystemExit(f"gh returned {len(issues)} issues (the limit); refusing to write a truncated catalog")
+    return issues
 
 
 def main(argv):
