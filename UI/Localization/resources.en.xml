@@ -15,6 +15,7 @@
 			<Control ID="btnOverlayLoadSlot">Load slot</Control>
 			<Control ID="btnOverlayPack">Pack</Control>
 			<Control ID="btnOverlayEnhancements">Enhancements</Control>
+			<Control ID="btnOverlayCheats">Cheats</Control>
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayAdvancedGui">Advanced GUI</Control>
 			<Control ID="btnOverlayQuit">Quit</Control>
@@ -31,6 +32,15 @@
 			<Control ID="lblWelcomeCardTitle">Welcome to MesenCE</Control>
 			<Control ID="lblWelcomeCardBody">Load a ROM to get started. Enhancement packs and settings are available from the in-game menu (press Esc).</Control>
 			<Control ID="btnWelcomeCardLoadRom">Load ROM</Control>
+		</Form>
+		<Form ID="PlayerCheatsSheetView">
+			<Control ID="lblCheatsTitle">Cheats</Control>
+			<Control ID="btnCheatsAddCode">Add a Code…</Control>
+			<Control ID="btnCheatsDone">Done</Control>
+			<Control ID="btnCheatsAdd">Add</Control>
+			<Control ID="btnCheatsChangeGame">Choose another game</Control>
+			<Control ID="lblCheatsCodePlaceholder">Code, e.g. SXIOPO or 0032:09</Control>
+			<Control ID="lblCheatsDescriptionPlaceholder">What it does (optional)</Control>
 		</Form>
 		<Form ID="AudioConfigView">
 			<Control ID="tpgGeneral">General</Control>
