@@ -14,8 +14,10 @@ namespace Mesen.Logic
 	//
 	//"Wired" mirrors scripts/mep_lint.py scan_bundled_patches: a .ips/.bps
 	//that is present in the pack AND referenced by a `<patch>` line of a
-	//hires.txt or a pack.json `patches[]` entry (full path or basename match,
-	//case-insensitive). An unreferenced patch redeems nothing.
+	//hires.txt (resolved against that hires.txt's folder, as the loader does)
+	//or a pack.json `patches[]` entry (pack-root-relative): exact pack-relative
+	//path, case-insensitive, no basename fallback (HdPackLoader::
+	//ProcessPatchTag has none). An unreferenced patch redeems nothing.
 	//
 	//"Unresolved" mirrors the loader (HdPackLoader::ProcessBgmTag/
 	//ProcessSfxTag -> CheckFile): the ref, relative to the folder of the
@@ -45,7 +47,7 @@ namespace Mesen.Logic
 
 		private static string? EvaluateCore(string packRoot)
 		{
-			HashSet<string> references = new(StringComparer.OrdinalIgnoreCase); //full pack-relative paths and basenames
+			HashSet<string> references = new(StringComparer.OrdinalIgnoreCase); //pack-relative paths
 			HashSet<string> tracks = new(StringComparer.OrdinalIgnoreCase);
 			HashSet<string> unresolved = new(StringComparer.OrdinalIgnoreCase);
 
@@ -120,9 +122,7 @@ namespace Mesen.Logic
 
 		private static void AddReference(HashSet<string> references, string packRelative)
 		{
-			string norm = packRelative.Replace('\\', '/');
-			references.Add(norm);
-			references.Add(norm.Substring(norm.LastIndexOf('/') + 1));
+			references.Add(packRelative.Replace('\\', '/'));
 		}
 
 		private static bool HasWiredPatch(string packRoot, HashSet<string> references)
@@ -132,7 +132,7 @@ namespace Mesen.Logic
 					continue;
 				}
 				string rel = Path.GetRelativePath(packRoot, path).Replace('\\', '/');
-				if(references.Contains(rel) || references.Contains(rel.Substring(rel.LastIndexOf('/') + 1))) {
+				if(references.Contains(rel)) {
 					return true;
 				}
 			}
