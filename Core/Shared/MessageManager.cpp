@@ -38,6 +38,12 @@ std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "HdPackExtractAudioStartFailed", u8"Extract audio: failed to launch the tool process" },
 	{ "MEP", u8"MEP" },
 	{ "MepPackApplied", u8"Applied %1" },
+	//ADR-0244 (P.9): what a pack change did (UI/Logic/PackChangePolicy.cs)
+	{ "MepPackChangedInPlace", u8"Pack changed · rewind history cleared" },
+	{ "MepPackChangeRestarted", u8"Couldn't keep your place — the game restarted" },
+	{ "MepPackChangePatchRestart", u8"This pack changes the game itself — it restarts" },
+	{ "MepPackChangeNotWhileRecording", u8"Not while recording — the game restarts" },
+	{ "MepPackChangeNotDuringNetplay", u8"Not during netplay — the game restarts" },
 	{ "MepBootstrapNowOnDemand", u8"Recording while you play is still on for this install. New installs record only when you press Record (Remaster); turn it off under Enhancement Packs." },
 	{ "PatchFailed", u8"Failed to apply patch: %1" },
 	{ "CheatApplied", u8"1 cheat applied." },

@@ -198,6 +198,13 @@ namespace Mesen.Interop
 			return RequestMepImageReloadWrapper();
 		}
 
+		//ADR-0244 (P.9): applies a pack change in place - saves the state to
+		//memory, reloads the ROM with the current pack switches, loads the state
+		//back. Blocking (it waits for the reload, like ExecReloadRom), so call
+		//it off the UI thread. Returns a Mesen.Logic.InPlaceReloadResult value;
+		//LoadRomHelper.ApplyPackChange decides when to call it at all.
+		[DllImport(DllPath)] public static extern byte ReloadRomKeepingState();
+
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);
 

@@ -350,6 +350,29 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `PoseInput` — ADR-0181 §2's `held`/`never`, None when the block is
   absent) tolerates every optional field being missing; the producer
   contract is in `Core/AGENTS.md`.
+- **Pack-change exactness (P.9, ADR-0244)** — `pack_swap_exactness.py
+  [--console nes|sms|gb]` measures the in-place pack change
+  (`ReloadRomKeepingState`: save state to memory, reload, load it back)
+  against a fresh process launched with the target switches that loads the
+  same state from a file: every one of M frames pixel-identical (`capture`),
+  per-frame NES RAM, and the final `cpu.*`/video (`ppu.*` or `vdp.*`)/RAM
+  state fields byte-identical. It copies the ROM into its scratch folder
+  first — in the library the ROM's sibling-folder pack outranks every
+  installed one, and the swaps change nothing on screen (the first run
+  "passed" that way). Fixtures are minted per run, never committed. A
+  negative control (swap to B, reference A) must FAIL, and the two ROM-patch
+  transitions must answer `patch-restarted`. `test_pack_swap_exactness.py`
+  holds those verdicts and two static guards (the UI/Core
+  `InPlaceReloadResult` values, and the toggles/picker going through
+  `LoadRomHelper.ApplyPackChange`). Session verbs it drives
+  (`headless_record session`, `step_emu.py`): `mep <textures|audio|border>
+  <on|off>`, `mep <enable|disable> <container>`, `swap` (`ok
+  <restored|restarted|patch-restarted> <frame> <ms>`), `capture` (parks, waits
+  for the decoder — `HeadlessWaitForFrameDecode` — then `ok <frame> <w> <h>
+  <fnv-1a>`), `hd`, `logfile <path>`; launch flags `mep-noaudio`,
+  `mep-noborder`, and `mep-disable=` is repeatable. ⚠️ Without the decoder
+  wait a capture could return the previous frame on SMS (it stamps a frame
+  with the counter after its increment), which read as a one-frame mismatch.
 - `headless_record.cpp` counts a run in **emulated frames**, never in host
   seconds (ADR-0157/F9.14). Its `<seconds>` argument keeps its meaning and is
   converted to a frame count at startup; an `input=<script>` line is

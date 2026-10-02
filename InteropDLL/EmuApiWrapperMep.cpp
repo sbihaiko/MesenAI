@@ -115,4 +115,15 @@ extern "C"
 		}
 		return false;
 	}
+
+	//ADR-0244 (P.9): apply a pack change in place - save the state to memory,
+	//reload the ROM (which re-reads the packs), load the state back. Blocking:
+	//the caller waits for the reload, so call it off the UI thread, the way
+	//LoadRomHelper runs ExecReloadRom. Returns an InPlaceReloadResult (see
+	//Emulator.h); the caller decides which pack changes may use it and what to
+	//tell the player.
+	DllExport uint8_t __stdcall ReloadRomKeepingState()
+	{
+		return (uint8_t)_emu->ReloadRomKeepingState();
+	}
 }

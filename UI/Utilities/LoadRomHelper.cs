@@ -4,6 +4,7 @@ using Mesen.Config;
 using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using System;
@@ -167,6 +168,42 @@ namespace Mesen.Utilities
 			if(Interlocked.Increment(ref _reloadRequestCounter) == 1) {
 				Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = shortcut }));
 			}
+		}
+
+		//ADR-0244 (P.9): a pack change - Textures/Audio/Border, or a pack picked -
+		//that keeps the player's place wherever PackChangePolicy allows it, and
+		//says on the HUD what happened. `restart` is the pre-ADR-0244 path
+		//(ReloadRom, or PowerCycle for the picker), taken for everything the
+		//policy keeps on a restart and when the core refuses after all.
+		private static readonly object _packChangeLock = new();
+		public static void ApplyPackChange(ConsoleType console, Action restart)
+		{
+			bool movieActive = RecordApi.MoviePlaying() || RecordApi.MovieRecording();
+			bool netplayActive = NetplayApi.IsConnected() || NetplayApi.IsServerRunning();
+			PackChangePlan plan = PackChangePolicy.Plan(console, movieActive, netplayActive);
+			if(plan.Route == PackChangeRoute.Restart) {
+				if(plan.NoticeKey != null) {
+					EmuApi.DisplayMessage("MEP", plan.NoticeKey);
+				}
+				restart();
+				return;
+			}
+
+			Task.Run(() => {
+				//One swap at a time. Each reloads with the switches as they are
+				//when it runs, so a second toggle flipped during the first one is
+				//applied by its own swap and never lost.
+				PackChangeOutcome outcome;
+				lock(_packChangeLock) {
+					outcome = PackChangePolicy.Outcome((InPlaceReloadResult)EmuApi.ReloadRomKeepingState());
+				}
+				if(outcome.NoticeKey != null) {
+					EmuApi.DisplayMessage("MEP", outcome.NoticeKey);
+				}
+				if(outcome.RestartNeeded) {
+					Dispatcher.UIThread.Post(restart);
+				}
+			});
 		}
 
 		public static void Reset() { Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.ExecReset })); }

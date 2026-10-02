@@ -125,6 +125,17 @@ extern "C"
 		return !_headlessCaptureInfo.IsEmpty();
 	}
 
+	//ADR-0244 (P.9): returns once the video decoder has finished the last frame
+	//the console handed it. With the emulator parked (HeadlessLockEmulator),
+	//that is the frame it parked on, so a HeadlessCaptureFrame after this reads
+	//that frame and never the one before it - which a check on the decoded
+	//frame number alone cannot rule out on every console (the SMS stamps a
+	//frame with the counter after its increment, the NES before it).
+	DllExport void __stdcall HeadlessWaitForFrameDecode()
+	{
+		_emu->GetVideoDecoder()->WaitForAsyncFrameDecode();
+	}
+
 	//Copy the pixels of the last HeadlessCaptureFrame into the caller's
 	//buffer, 0xAARRGGBB, row-major. Returns how many pixels were copied
 	//(never more than maxPixels, never more than the capture holds).
