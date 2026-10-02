@@ -45,8 +45,10 @@ namespace Mesen.ViewModels
 		public Func<Task<IReadOnlyList<CommunityCheatGame>?>> CommunityCheatsSource { get; set; } = CommunityCheatCatalogFetcher.FetchAsync;
 		public Func<IReadOnlyList<CommunityCheatGame>> CommunityCheatsLastKnown { get; set; } = () => CommunityCheatCatalogFetcher.LastKnown;
 
-		//Play is unrestricted (ADR-0245 §3), so recordingArt is false here; the
-		//Remaster game view is the context that will pass true.
+		//Play is unrestricted (ADR-0245 §3), so recordingArt is false in Play;
+		//it is true in Remaster and while a Remaster recording runs, which
+		//switching to Play does not stop (§13.6): Game Genie rows are disabled
+		//with their reason and Add a Code refuses them.
 		public void OpenCheatsSheet()
 		{
 			IsPlayerOverlayVisible = false;
@@ -59,7 +61,7 @@ namespace Mesen.ViewModels
 				cheatSha1,
 				PlayerCheatsStore.LoadDatabase(console),
 				PlayerCheatsStore.LoadStored(),
-				recordingArt: false,
+				recordingArt: CheatRecordingRule.IsRecordingArtContext(Shell.Active == Workspace.Remaster, Remaster.IsRecording),
 				Config.Cheats.DisableAllCheats,
 				PlayerCheatsStore.SaveAndApply,
 				gameName: EmuApi.IsRunning() ? EmuApi.GetRomInfo().GetRomName() : "",

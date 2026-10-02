@@ -220,7 +220,17 @@ namespace Mesen.ViewModels
 			if(!state.Record.Enabled) {
 				return false;
 			}
+			//ADR-0184 §1: a cheat that is not a RAM code refuses the run, named.
+			string refusal = CheatRefusal();
+			if(refusal.Length > 0) {
+				NoticeText = refusal;
+				Refresh();
+				return false;
+			}
+			//Held back from here on, so nothing turned on later reaches the core.
+			BeginRecordingArtCheats();
 			if(!EmuApi.StartMepRecording("play", "")) {
+				EndRecordingArtCheats();
 				NoticeText = ResourceHelper.GetMessage("RemasterRecordFailed");
 				Refresh();
 				return false;
@@ -259,6 +269,7 @@ namespace Mesen.ViewModels
 
 		private void EndRecordingView()
 		{
+			EndRecordingArtCheats();
 			IsRecording = false;
 			_recordingClock.Reset();
 			_recordingTimer?.Stop();

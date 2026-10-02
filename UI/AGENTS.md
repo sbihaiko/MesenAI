@@ -417,10 +417,16 @@ can be exercised by real xunit tests without Avalonia or the native
   below `0x0800`); `CheatConsoleScope` gives NES the bundled list and GB/SMS
   manual entry only, with the reason. `TryParseCodes` is a separate entry
   point from the parity-frozen `CheatTypeDetector` (ADR-0128). Play passes
-  `recordingArt: false`; the Remaster game view will pass `true`. The core
+  `recordingArt: false`; `CheatRecordingRule.IsRecordingArtContext` makes it
+  `true` in Remaster or while a Remaster recording runs (W-R2 has no overlay;
+  switching to Play keeps the recording). `RemasterWorkspaceViewModel.Cheats.cs`
+  refuses *Record While I Play* while a non-RAM code is on, naming it
+  (ADR-0184 §1), and `CheatCodes.RecordingArt` makes `ApplyCheats` - every
+  path to the core, the classic window included - hold back non-RAM codes
+  until Stop (`HeldForRecording`, named on the W-R2 strip). The core
   dereferences the running console in `GetRomHash`, so the hash is only read
   while `EmuApi.IsRunning()`. Rules in `UI.Tests/Cheats/`, wiring in
-  `UI.HeadlessTests/PlayerCheatsSheetTests`.
+  `UI.HeadlessTests/PlayerCheatsSheetTests` and `RemasterCheatsTests`.
   **Community rows (R.4, ADR-0248 §2, §5).** `UI/Services/CommunityCheatCatalogFetcher`
   fetches `docs/community-cheats.json` with the pack catalog's allow-list,
   downloader and ETag cache rule (no confirmation, the GET only); the sheet

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
 using Mesen.Interop;
 
@@ -46,6 +48,32 @@ namespace Mesen.Logic
 				default:
 					return false;
 			}
+		}
+
+		//The Remaster context (ADR-0245 §3): Remaster is the active workspace,
+		//or a Remaster recording runs - switching profile never stops one
+		//(PRD Part B §13.6), so Play over a running recording is recording art too.
+		public static bool IsRecordingArtContext(bool remasterActive, bool remasterRecording)
+		{
+			return remasterActive || remasterRecording;
+		}
+
+		//The cheats that would reach the core and are not RAM codes: a Remaster
+		//recording refuses to start while any is on (ADR-0184 §1: refuse, not
+		//warn), and while one records they are held back from the core. None
+		//when every cheat is switched off (CheatWindowConfig.DisableAllCheats).
+		public static IReadOnlyList<StoredCheat> Refused(IEnumerable<StoredCheat> stored, bool disableAll)
+		{
+			if(disableAll) {
+				return Array.Empty<StoredCheat>();
+			}
+			return stored.Where(c => c.Enabled && !IsRamCode(c.Type, c.Codes)).ToList();
+		}
+
+		//ADR-0184 §1: the refusal names each offending code - "description (code, code)".
+		public static string Names(IEnumerable<StoredCheat> refused)
+		{
+			return string.Join(", ", refused.Select(c => c.Description + " (" + string.Join(", ", CheatConsoleScope.SplitCodes(c.Codes)) + ")"));
 		}
 	}
 }
