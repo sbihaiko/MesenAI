@@ -196,3 +196,17 @@ public static class PlayEsc
 		return gameLoaded ? PlayEscAction.OpenOverlayAndPause : PlayEscAction.None;
 	}
 }
+
+//#639: the pause overlay and the sheets opened from it belong to the game
+//they were opened for. Opening another ROM directly (A → B) stops A without
+//EmulationStopped, so the game changes without passing through "no game":
+//the surfaces close on any change of game, and when it is gone. A reload of
+//the same file (power cycle, an in-place pack change) keeps them. The game is
+//the ROM path as loaded (an archive's inner file included).
+public static class PlaySurfaceGame
+{
+	public static bool ClosesSurfaces(bool wasLoaded, string wasRomPath, bool isLoaded, string isRomPath)
+	{
+		return !wasLoaded || !isLoaded || !string.Equals(wasRomPath, isRomPath, StringComparison.Ordinal);
+	}
+}

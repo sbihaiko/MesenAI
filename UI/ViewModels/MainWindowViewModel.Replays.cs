@@ -76,14 +76,12 @@ namespace Mesen.ViewModels
 			});
 		}
 
-		//Esc while the sheet is up closes it back to the overlay.
-		private bool CloseReplaysSheetOnEsc()
+		//Hides the sheet without raising Closed (see HideCheatsSheet).
+		private void HideReplaysSheet()
 		{
-			if(_replaysSheet?.IsVisible != true) {
-				return false;
+			if(_replaysSheet != null) {
+				_replaysSheet.IsVisible = false;
 			}
-			_replaysSheet.Close();
-			return true;
 		}
 	}
 }

@@ -484,11 +484,7 @@ namespace Mesen.ViewModels
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.ShowClassicMenuBar))], UpdateMenuVisibility));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], () => {
 				if(Config.Preferences.UiMode != UiMode.Player) {
-					IsPlayerOverlayVisible = false;
-					IsEnhancementsPanelVisible = false;
-					IsPackDetailVisible = false;
-					IsSaveStatesSheetVisible = false;
-					CheatsSheet.IsVisible = false;
+					ClosePlaySurfaces();
 				}
 			}));
 
@@ -548,7 +544,7 @@ namespace Mesen.ViewModels
 
 			UpdateWindowTitle();
 			UpdateShellState();
-			ClosePauseSurfacesWithoutGame();
+			ClosePauseSurfacesOnGameChange();
 
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
 			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
