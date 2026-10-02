@@ -23,15 +23,35 @@
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
-			<Control ID="lblChoosePackForThisGame">Choose a pack for this game</Control>
-			<Control ID="btnPlayWithoutPack">Play without a pack</Control>
+		</Form>
+		<Form ID="PlayerPackPickerSheetView">
+			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
+			<Control ID="btnPackPickerCancel">Cancel</Control>
+			<Control ID="btnPackPickerUse">Use This Pack</Control>
+		</Form>
+		<Form ID="PlayerPackDetailSheetView">
+			<Control ID="lblPackDetailTextures">textures</Control>
+			<Control ID="lblPackDetailAudio">audio</Control>
+			<Control ID="lblPackDetailPatch">patch</Control>
+			<Control ID="lblPackDetailMissingMusicTitle">⚠ Some music is missing</Control>
+			<Control ID="btnPackDetailChange">Change pack…</Control>
+			<Control ID="btnPackDetailShowFolder">Show pack folder</Control>
+			<Control ID="btnPackDetailRestore">Restore original files</Control>
+			<Control ID="lblPackDetailRestoreConfirm">Download the pack again and replace its files? Your changes to them are lost, and the game restarts.</Control>
+			<Control ID="btnPackDetailRestoreConfirm">Restore</Control>
+			<Control ID="btnPackDetailRestoreKeep">Keep my files</Control>
+			<Control ID="btnPackDetailDetails">Details ▸</Control>
+			<Control ID="btnPackDetailDone">Done</Control>
+		</Form>
+		<Form ID="PlayerEnhancementsSheetView">
 			<Control ID="lblEnhancementsPanelTitle">Enhancements</Control>
 			<Control ID="chkEnhancementsTextures">Texture pack</Control>
 			<Control ID="chkEnhancementsAudio">Audio pack</Control>
 			<Control ID="chkEnhancementsBorder">Border</Control>
 			<Control ID="chkEnhancementsWideScrn">Widescreen (16:9)</Control>
 			<Control ID="chkEnhancementsOverclock">Reduce slowdown (overclock)</Control>
-			<Control ID="btnEnhancementsClose">Close</Control>
+			<Control ID="lblEnhancementsAppliesOnReload">applies on reload</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -84,6 +104,46 @@
 			<Control ID="btnStopRecording">■ Stop</Control>
 			<Control ID="lblRecordingRemasterTag">✎ Remaster</Control>
 			<Control ID="lblRecordingHint">Play through what you want to repaint. Esc stops.</Control>
+		</Form>
+		<Form ID="ShareWorkspaceView">
+			<Control ID="lblShareTitle">Share with the community</Control>
+			<Control ID="lblSharePackCard">▣ A pack</Control>
+			<Control ID="lblSharePackCardBody">Made one, or found one you love? Paste one link. A bot checks it and lists it in the catalog.</Control>
+			<Control ID="btnShareAPack">Share a Pack</Control>
+			<Control ID="lblShareReplayCard">● A replay</Control>
+			<Control ID="lblShareReplayCardBody">Record a run from power-on and share it. Others can watch it in MesenAI.</Control>
+			<Control ID="btnRecordAndShare">Record and Share</Control>
+			<Control ID="lblShareTrust">🔒 Submissions open on GitHub in your browser. MesenAI never uploads anything or signs in for you.</Control>
+			<Control ID="btnShareBack">‹ Share</Control>
+			<Control ID="lblSharePackTitle">Share a pack</Control>
+			<Control ID="lblSharePackIntro">Three fields. A bot downloads it, checks it, and replies on GitHub in a few minutes.</Control>
+			<Control ID="lblPackLink">Pack link</Control>
+			<Control ID="lblPackLinkHosts">GitHub release, gist, raw file, Google Drive, MediaFire, Dropbox or MEGA</Control>
+			<Control ID="lblPackGame">Game</Control>
+			<Control ID="lblPackConsole">Console</Control>
+			<Control ID="lblPackGameHint">Filled in from the game you are playing. Change it if the pack is for another one.</Control>
+			<Control ID="lblShareOwnRemaster">Want to share your own remaster?</Control>
+			<Control ID="btnPackageAProject">Package a Project…</Control>
+			<Control ID="lblShareNoProjects">Remaster has no project open yet. Choose a project folder, or record one in Remaster.</Control>
+			<Control ID="btnShareChooseFolder">Choose Folder…</Control>
+			<Control ID="btnContinueOnGitHub">↗ Continue on GitHub</Control>
+			<Control ID="lblShareStep1">1  Package it</Control>
+			<Control ID="btnBuildPackZip">Build Pack .zip</Control>
+			<Control ID="btnShareBuildStop">Stop</Control>
+			<Control ID="btnShowInFinder">Show in Finder</Control>
+			<Control ID="lblShareStep2">2  Put it somewhere public</Control>
+			<Control ID="lblShareStep2Body">Upload the .zip to a GitHub release, Google Drive, Dropbox, MediaFire or MEGA, and copy its download link. MesenAI does not host files.</Control>
+			<Control ID="btnOpenGoogleDrive">↗ Open Google Drive</Control>
+			<Control ID="lblShareStep2Hint">then drag the .zip from Finder into it</Control>
+			<Control ID="lblShareStep3">3  Submit the link</Control>
+			<Control ID="lblShareReplaySheetBody">The game restarts from power-on and records until you stop. Loading a save state ends the recording; cheats you have on are recorded with it.</Control>
+			<Control ID="btnShareCancel">Cancel</Control>
+			<Control ID="btnStartReplayRecording">● Start Recording</Control>
+			<Control ID="lblReplaySaved">✔ Replay saved</Control>
+			<Control ID="lblReplaySavedBody">Drag the file into the GitHub form that opens next.</Control>
+		</Form>
+		<Form ID="ShareRecordingStrip">
+			<Control ID="btnStopReplay">■ Stop</Control>
 		</Form>
 		<Form ID="PlayerCheatsSheetView">
 			<Control ID="lblCheatsTitle">Cheats</Control>
@@ -812,6 +872,11 @@
 			<Control ID="colBinding1">Keys</Control>
 		</Form>
 
+		<Form ID="PlayerDisplaySettingsView">
+			<Control ID="lblDisplayFullscreen">Fullscreen</Control>
+			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
+			<Control ID="lblDisplayScale">Scale</Control>
+		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>
 
@@ -820,6 +885,10 @@
 			<Control ID="tabInput">Input</Control>
 			<Control ID="tabVideo">Video</Control>
 			<Control ID="tabLook">Look</Control>
+			<Control ID="tabDisplay">Display</Control>
+			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
+			<Control ID="btnPlayerSettingsDone">Done</Control>
 			<Control ID="tabNes">NES</Control>
 			<Control ID="tabSnes">SNES</Control>
 			<Control ID="tabGameboy">Game Boy</Control>
@@ -1996,8 +2065,6 @@
 		<Message ID="WorkspaceDescriptionPlay">Open a game and play it, enhanced.</Message>
 		<Message ID="WorkspaceDescriptionRemaster">Record a game, paint its art, see it in game.</Message>
 		<Message ID="WorkspaceDescriptionShare">Send a pack or a replay to the community.</Message>
-		<Message ID="WorkspacePlaceholderTitleShare">Coming next: Share</Message>
-		<Message ID="WorkspacePlaceholderBodyShare">The next update turns this screen into Share: send a pack link or a replay to the community. Your game keeps running in Play. Until then, Record and share is under Tools ⋯ › Tools › Movies.</Message>
 		<Message ID="ShellStatusNoGame">No game loaded</Message>
 		<Message ID="ShellStatusRemasterRecording">● Remaster: recording {0}</Message>
 		<Message ID="ShellStatusRemasterJob">● Remaster: preparing figures for {0} · {1} %</Message>
@@ -2046,6 +2113,28 @@
 		<Message ID="RemasterReasonTasLater">Coming in a later version.</Message>
 		<Message ID="RemasterReasonAiNotReady">Not available yet: the AI recorder is still being tested.</Message>
 		<Message ID="RemasterReasonBuildLater">Coming in a later version.</Message>
+		<Message ID="ShareHostNotAccepted">⚠ This host is not accepted. Use a GitHub release, Google Drive, MediaFire, Dropbox or MEGA.</Message>
+		<Message ID="ShareReasonNeedsLink">Paste the pack's download link first.</Message>
+		<Message ID="ShareReasonNeedsGame">Name the game the pack is for.</Message>
+		<Message ID="ShareReasonNeedsConsole">Pick the console.</Message>
+		<Message ID="ShareProjectTitle">Share your {0} project</Message>
+		<Message ID="ShareBuildReasonNothingBuilt">Nothing to package yet: the project has no built pack in its mep folder.</Message>
+		<Message ID="ShareBuildReasonNeedsGame">Open this project's game first, so the pack knows which game it is for.</Message>
+		<Message ID="ShareBuildReasonNeedsPython">Needs Python 3.10 or newer.</Message>
+		<Message ID="ShareBuildReasonNeedsTools">Needs MesenAI's tools.</Message>
+		<Message ID="ShareBuildRunning">Packaging and checking…</Message>
+		<Message ID="ShareBuildDone">✔ {0} · {1} · no problems</Message>
+		<Message ID="ShareBuildFailed">The pack has problems:</Message>
+		<Message ID="ShareBuildStopped">Stopped. Build Pack .zip runs it again.</Message>
+		<Message ID="ShareReplaySheetTitle">Record and share — {0}</Message>
+		<Message ID="ShareReplaySheetTitleNoGame">Record and share</Message>
+		<Message ID="ShareReplayReasonNoGame">Open a game first.</Message>
+		<Message ID="ShareReplayReasonConsoleNotSupported">Replays cannot be shared for this console.</Message>
+		<Message ID="ShareReplayReasonMovieBusy">A movie is already recording or playing (Tools ⋯ › Tools › Movies).</Message>
+		<Message ID="ShareReplayReasonNetplay">Replays cannot be recorded during netplay.</Message>
+		<Message ID="ShareReplayRefused">Nothing was recorded. Tools ⋯ › Tools › Log Window says why.</Message>
+		<Message ID="ShareReplayEnded">The replay recording ended outside this screen: a save state was loaded, the game closed, or it was stopped from Tools ⋯ › Tools › Movies.</Message>
+		<Message ID="ShareRecordingPill">Recording a replay {0} · Esc stops</Message>
 		<Message ID="ShellStatusPlaying">Playing {0}</Message>
 		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>
 		<Message ID="ShellStatusPaused">{0} is paused</Message>
@@ -2164,6 +2253,24 @@ E
 		<Message ID="AddressHasOtherLabel">Another label exists for this address: {0}</Message>
 
 		<Message ID="RecentShaders">Recent shaders </Message>
+
+		<Message ID="PackPickerTitle">Choose a pack for {0}</Message>
+		<Message ID="PackByAuthor">by {0}</Message>
+		<Message ID="PackAuthorUnknown">author unknown</Message>
+		<Message ID="PackDetailVersion">version {0}</Message>
+		<Message ID="PackDetailNoPackTitle">No pack</Message>
+		<Message ID="PackDetailNoPackBody">No enhancement pack is installed for this game.</Message>
+		<Message ID="PackDetailMissingMusicBody">{0} of {1} tracks have no audio file. Add the .ogg files to the pack.</Message>
+		<Message ID="PackDetailChangeSibling">The pack in the folder next to the game always wins.</Message>
+		<Message ID="PackDetailChangeOnlyOne">There is no other pack for this game.</Message>
+		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
+		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
+		<Message ID="EnhancementsApply">Apply</Message>
+		<Message ID="EnhancementsApplyReload">Apply &amp; Reload</Message>
+		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>
+		<Message ID="EnhancementsDone">Done</Message>
+		<Message ID="PackInstallPillInstalling">Installing {0}…</Message>
+		<Message ID="PackInstallPillFailed">⚠ The pack could not be downloaded. Playing without it.</Message>
 	</Messages>
 	<Enums>
 		<Enum ID="EmulatorShortcut">

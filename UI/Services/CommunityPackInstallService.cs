@@ -42,6 +42,17 @@ namespace Mesen.Services
 		//in the installed tree, it only makes a reviewed gap legible in the picker.
 		private static readonly ConcurrentDictionary<string, CommunityPackErrata> _catalogErrataByPackId = new(StringComparer.OrdinalIgnoreCase);
 
+		//G.4 (W-P9): the HUD pill of an auto-install. Started(name) when a
+		//catalog row matches and its artifact is not the one already installed
+		//(PackInstallPill.ShowsFor); Finished(installed, silent) when the run
+		//ends. Raised on the UI thread. Restore raises them too (rule 6: a job
+		//is a pill, never a window).
+		public static event Action<string>? InstallStarted;
+		public static event Action<bool, bool>? InstallFinished;
+
+		private static void RaiseStarted(string name) => Dispatcher.UIThread.Post(() => InstallStarted?.Invoke(name));
+		private static void RaiseFinished(bool installed, bool silent) => Dispatcher.UIThread.Post(() => InstallFinished?.Invoke(installed, silent));
+
 		public static int GetVotes(string packId)
 		{
 			return _catalogVotesByPackId.TryGetValue(packId, out int votes) ? votes : 0;
@@ -76,15 +87,22 @@ namespace Mesen.Services
 				//The catalog fetch re-verifies an up-to-300MB artifact (SHA-256); start it
 				//on the thread pool so that CPU work and its continuations stay off the UI
 				//thread (this Restore is user-triggered from the Enhancement Packs window).
-				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync());
+				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => RaiseStarted(entry.Name)));
 				if(fetched == null) {
+					RaiseFinished(false, false);
 					return (false, "the pack is no longer in the catalog (nothing to restore from)");
 				}
 				//Restore() is synchronous file/interop work - keep it off the UI thread.
+				//A throw here would skip RaiseFinished and leave the pill installing.
 				(bool ok, string error) = await Task.Run(() => {
-					bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
-					return (restored, restoreError);
+					try {
+						bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
+						return (restored, restoreError);
+					} catch(Exception ex) {
+						return (false, ex.Message);
+					}
 				});
+				RaiseFinished(ok, false);
 				if(!ok) {
 					return (false, error);
 				}
@@ -134,8 +152,19 @@ namespace Mesen.Services
 					}
 				}
 
-				CommunityPackFetchResult? fetched = await CommunityPackCatalogFetcher.FetchMatchingPackAsync();
+				string installedSha256 = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256 ?? "";
+				bool pillShown = false;
+				CommunityPackFetchResult? fetched = await CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => {
+					if(PackInstallPill.ShowsFor(installedSha256, entry.Sha256)) {
+						pillShown = true;
+						RaiseStarted(entry.Name);
+					}
+				});
 				if(fetched == null) {
+					if(pillShown) {
+						//W-P9: a matched pack whose download failed.
+						RaiseFinished(false, false);
+					}
 					//No catalog row for this dump (or a failed download): allow a
 					//later load this session to retry, so a catalog update is
 					//picked up without restarting the process.
@@ -170,8 +199,12 @@ namespace Mesen.Services
 				if(outcome.Status == CommunityPackInstallStatus.Failed || outcome.PendingDeps.Count > 0) {
 					ClearAttempt(romSha1);
 				}
+				if(pillShown) {
+					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable);
+				}
 				Surface(outcome, romSha1);
 			} catch(Exception ex) {
+				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
 				EmuApi.WriteLogEntry("[CommunityPack] RunAsync threw: " + ex);
 				Notify("Community pack auto-install failed: " + ex.Message);

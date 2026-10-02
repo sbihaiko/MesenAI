@@ -284,21 +284,21 @@ public class WorkspaceShellTests : IDisposable
 		Assert.False(flyout.IsOpen);
 	}
 
-	//G.3 replaced Remaster's placeholder with its own screens
-	//(RemasterWorkspaceTests); Share still names its next slice.
-	[AvaloniaTheory]
-	[InlineData(Workspace.Share, "Share")]
-	public void Share_shows_only_a_placeholder_naming_the_next_slice(Workspace workspace, string nextSlice)
+	//G.3 and G.8 replaced G.1's placeholders with each workspace's own
+	//screens (RemasterWorkspaceTests, ShareWorkspaceTests); this pins the
+	//shell's half: Share's home is shown and nothing of Play is.
+	[AvaloniaFact]
+	public void Share_shows_its_home_and_nothing_of_play()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();
 		model.IsPlayerOverlayVisible = true;
 
-		model.SelectWorkspace(workspace);
+		model.SelectWorkspace(Workspace.Share);
 		Dispatcher.UIThread.RunJobs();
 
-		Assert.True(window.FindNamed<Border>("WorkspacePlaceholder").IsOnScreen());
-		Assert.Contains(nextSlice, window.FindNamed<TextBlock>("WorkspacePlaceholderTitle").Text);
+		Assert.True(window.FindNamed<Panel>("ShareWorkspaceHost").IsOnScreen());
+		Assert.True(window.FindNamed<Button>("ShareAPackButton").IsOnScreen());
 		//Nothing of Play is on screen: home, renderer, the pause overlay.
 		Assert.False(window.FindNamed<Panel>("PlayWorkspace").IsOnScreen());
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
@@ -307,7 +307,7 @@ public class WorkspaceShellTests : IDisposable
 		model.SelectWorkspace(Workspace.Play);
 		Dispatcher.UIThread.RunJobs();
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-		Assert.False(window.FindNamed<Border>("WorkspacePlaceholder").IsOnScreen());
+		Assert.False(window.FindNamed<Panel>("ShareWorkspaceHost").IsOnScreen());
 	}
 
 	[AvaloniaFact]

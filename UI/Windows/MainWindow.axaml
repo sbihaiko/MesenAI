@@ -55,6 +55,11 @@
 			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
 		</Panel>
 
+		<!--G.8 (W-H4): the replay pill and Stop above the game, inside Share.-->
+		<Panel Name="ShareRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsShareGameView}">
+			<v:ShareRecordingStrip Name="ShareRecordingStrip" DataContext="{Binding Share}" />
+		</Panel>
+
 		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
 		with the bar.-->
 		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" Background="{DynamicResource MesenMenuBackground}" IsVisible="{Binding Shell.IsBarVisible}">
@@ -181,77 +186,15 @@
 					</StackPanel>
 				</Border>
 
-				<!--P.7 (PRD Part B §6.1): the Enhancements quick-toggle panel - a
-				checkbox grid over config that already exists elsewhere
-				(EnhancementPackConfig.EnableTextures/EnableAudio, VideoConfig.
-				AspectRatio/VideoFilter, the per-console overclock field). On/off is
-				derived from that config, not a second stored flag; Click (not
-				IsCheckedChanged) drives the toggle so the checkbox's visual state
-				always reflects what the ViewModel just confirmed was applied.
-				Overclock is disabled (not hidden, so the grid layout never shifts
-				per console) where the loaded console has no overclock knob (SMS).-->
-				<Border
-					Name="PlayerEnhancementsPanel"
-					Background="#DD000000"
-					HorizontalAlignment="Center"
-					VerticalAlignment="Center"
-					Padding="24"
-					IsVisible="{Binding IsEnhancementsPanelVisible}"
-				>
-					<StackPanel Spacing="10" MinWidth="260">
-						<TextBlock Text="{l:Translate lblEnhancementsPanelTitle}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
-						<CheckBox Name="EnhancementsTexturesCheckBox" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding IsTexturesEnabled, Mode=OneWay}" Click="OnToggleTextures" />
-						<CheckBox Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding IsAudioEnabled, Mode=OneWay}" Click="OnToggleAudio" />
-						<CheckBox Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding IsBorderEnabled, Mode=OneWay}" Click="OnToggleBorder" />
-						<CheckBox Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding IsWideScrnEnabled, Mode=OneWay}" Click="OnToggleWideScrn" />
-						<CheckBox Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding IsOverclockEnabled, Mode=OneWay}" IsEnabled="{Binding IsOverclockSupported}" Click="OnToggleOverclock" />
-						<Button Content="{l:Translate btnEnhancementsClose}" HorizontalAlignment="Stretch" Click="OnCloseEnhancementsPanel" />
-					</StackPanel>
-				</Border>
+				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
+				<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
 
 				<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
 				<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
 
-				<!--P.5 (PRD Part B §5): the pack picker - opens once over the
-				un-enhanced game when 2+ competing pack_ids exist and no stored choice
-				applies. Picking stores the per-ROM preference (P.3) and power-cycles;
-				dismissing plays un-enhanced and asks again next launch. D-pad/A/B via
-				Avalonia focus (first choice auto-focused on open).-->
-				<Border
-					Name="PlayerPackPicker"
-					Background="#DD000000"
-					HorizontalAlignment="Center"
-					VerticalAlignment="Center"
-					Padding="24"
-					IsVisible="{Binding IsPlayerPackPickerVisible}"
-				>
-					<StackPanel Spacing="10" MinWidth="340" MaxWidth="520">
-						<TextBlock Text="{l:Translate lblChoosePackForThisGame}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
-						<ItemsControl Name="PackPickerList" ItemsSource="{Binding PlayerPackChoices}" XYFocus.NavigationModes="Enabled">
-							<ItemsControl.ItemsPanel>
-								<ItemsPanelTemplate>
-									<StackPanel Spacing="8" />
-								</ItemsPanelTemplate>
-							</ItemsControl.ItemsPanel>
-							<ItemsControl.ItemTemplate>
-								<DataTemplate>
-									<Button HorizontalAlignment="Stretch" Tag="{Binding Container}" Click="OnPickPlayerPack">
-										<StackPanel Spacing="2">
-											<TextBlock FontWeight="Bold" Text="{Binding Name}" />
-											<TextBlock FontSize="11" Opacity="0.7" Text="{Binding Detail}" />
-											<!-- ADR-0152: a reviewed known-missing declaration is shown on the
-											     row it belongs to, naming MesenCE validation as its source so the
-											     gap is never read as the author's claim. Collapsed when absent. -->
-											<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap"
-												IsVisible="{Binding HasKnownMissing}" Text="{Binding KnownMissingNote}" />
-										</StackPanel>
-									</Button>
-								</DataTemplate>
-							</ItemsControl.ItemTemplate>
-						</ItemsControl>
-						<Button Content="{l:Translate btnPlayWithoutPack}" HorizontalAlignment="Stretch" Click="OnDismissPlayerPackPicker" />
-					</StackPanel>
-				</Border>
+				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
+				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
+				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
 			</Panel>
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
@@ -260,14 +203,11 @@
 				<v:RemasterWorkspaceView Name="RemasterWorkspace" DataContext="{Binding Remaster}" />
 			</Panel>
 
-			<!--G.1: Share is a placeholder that names the next slice; the game
-			keeps running behind it.-->
-			<Border Name="WorkspacePlaceholder" Background="#181818" IsVisible="{Binding Shell.HasPlaceholder}">
-				<StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center">
-					<TextBlock Name="WorkspacePlaceholderTitle" Text="{Binding Shell.PlaceholderTitle}" FontWeight="Bold" FontSize="18" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" />
-					<TextBlock Name="WorkspacePlaceholderBody" Text="{Binding Shell.PlaceholderBody}" Foreground="#CCFFFFFF" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
-				</StackPanel>
-			</Border>
+			<!--G.8 (PRD Part B §13.5.4): Share's screens (W-H1-W-H3, W-H4's
+			sheets); the game keeps running behind them.-->
+			<Panel Name="ShareWorkspaceHost" IsVisible="{Binding IsShareScreenVisible}">
+				<v:ShareWorkspaceView Name="ShareWorkspace" DataContext="{Binding Share}" />
+			</Panel>
 		</Panel>
 	</DockPanel>
 </Window>

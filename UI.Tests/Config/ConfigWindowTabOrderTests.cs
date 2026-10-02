@@ -18,15 +18,21 @@ namespace Mesen.Tests.Config
 			Assert.Equal(ConfigWindowTabOrder.IndexOf(ConfigWindowTab.Video) + 1, ConfigWindowTabOrder.IndexOf(ConfigWindowTab.Look));
 		}
 
+		//G.4 (W-P8): Display is Play's own tab, in the Player strip only
+		//(PlayerSettingsEssentials.Tabs); every other id is an Advanced tab.
 		[Fact]
 		public void Every_defined_tab_has_exactly_one_index_and_maps_back()
 		{
 			foreach(ConfigWindowTab tab in Enum.GetValues<ConfigWindowTab>()) {
+				if(tab == ConfigWindowTab.Display) {
+					Assert.Equal(tab, PlayerSettingsEssentials.TabAt(PlayerSettingsEssentials.IndexOf(tab)));
+					continue;
+				}
 				int index = ConfigWindowTabOrder.IndexOf(tab);
 				Assert.True(index >= 0, $"{tab} has no tab");
 				Assert.Equal(tab, ConfigWindowTabOrder.TabAt(index));
 			}
-			Assert.Equal(Enum.GetValues<ConfigWindowTab>().Length, ConfigWindowTabOrder.Tabs.Count(t => t != null));
+			Assert.Equal(Enum.GetValues<ConfigWindowTab>().Length - 1, ConfigWindowTabOrder.Tabs.Count(t => t != null));
 		}
 
 		[Fact]

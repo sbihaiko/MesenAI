@@ -28,6 +28,14 @@ namespace Mesen.Logic
 	//
 	//M = distinct referenced files (resolved path, case-insensitive), not
 	//lines: Zelda II-style packs list one file under several album/track ids.
+	//Missing/Total: distinct referenced audio files that do not resolve, and
+	//all of them. HasWiredPatch: a bundled .ips/.bps is wired (the meaning
+	//above). The notice is due only when both hold (ADR-0240 Option 1).
+	public sealed record PackAudioScan(int Missing, int Total, bool HasWiredPatch)
+	{
+		public bool ShowsNotice => Missing > 0 && HasWiredPatch;
+	}
+
 	public static class PackAudioNotice
 	{
 		//hires.txt locations of a MEP pack folder (MEP-v1 §2: sections
@@ -37,15 +45,27 @@ namespace Mesen.Logic
 		//Returns the notice text, or null when there is nothing to report.
 		public static string? Evaluate(string packRoot)
 		{
+			PackAudioScan? scan = Scan(packRoot);
+			if(scan == null || !scan.ShowsNotice) {
+				return null;
+			}
+			return "audio not generated: " + scan.Missing + " of " + scan.Total + " tracks unresolved; supply the `.ogg` files";
+		}
+
+		//G.4 (W-P6): the same scan as Evaluate, as counts, so the pack detail
+		//sheet can say it in plain words and show the Patch chip. Null when the
+		//folder cannot be read (best effort, like Evaluate).
+		public static PackAudioScan? Scan(string packRoot)
+		{
 			try {
-				return EvaluateCore(packRoot);
+				return ScanCore(packRoot);
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or JsonException) {
 				//Best effort: a notice must never turn a finished install into a failure.
 				return null;
 			}
 		}
 
-		private static string? EvaluateCore(string packRoot)
+		private static PackAudioScan ScanCore(string packRoot)
 		{
 			HashSet<string> references = new(StringComparer.OrdinalIgnoreCase); //pack-relative paths
 			HashSet<string> tracks = new(StringComparer.OrdinalIgnoreCase);
@@ -91,10 +111,7 @@ namespace Mesen.Logic
 				}
 			}
 
-			if(unresolved.Count == 0 || !HasWiredPatch(packRoot, references)) {
-				return null;
-			}
-			return "audio not generated: " + unresolved.Count + " of " + tracks.Count + " tracks unresolved; supply the `.ogg` files";
+			return new PackAudioScan(unresolved.Count, tracks.Count, HasWiredPatch(packRoot, references));
 		}
 
 		//<patch>file.ips,<sha1> - the sha1 is the LAST comma field and the

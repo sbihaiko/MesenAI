@@ -79,6 +79,10 @@ namespace Mesen.Utilities
 						//G.3 (W-R2): in Remaster's recording view Esc stops the
 						//recording and returns to the project screen.
 						MainWindowModel.Remaster.StopRecording();
+					} else if(MainWindowModel.Shell.Active == Workspace.Share) {
+						//G.8 (rule 8, ShareEsc): stops a replay recording, or closes
+						//the topmost sheet or list.
+						MainWindowModel.Share.HandleEsc();
 					}
 					break;
 

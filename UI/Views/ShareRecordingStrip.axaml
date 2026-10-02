@@ -1,0 +1,25 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="44"
+	x:DataType="vm:ShareWorkspaceViewModel"
+	x:Class="Mesen.Views.ShareRecordingStrip"
+>
+	<!--G.8 (PRD Part B §13.5.4 W-H4): a replay is recording. The game fills the
+	rest of the window inside Share (as W-R2); this strip is the one pill, plus
+	the same Stop as W-R2 for a mouse. It sits above the game, not over it,
+	because the native renderer draws above Avalonia content.-->
+	<Border Name="ShareRecordingStripBorder" Background="#202020" Padding="12 6">
+		<DockPanel>
+			<Button Name="ShareStopRecordingButton" DockPanel.Dock="Right" Content="{l:Translate btnStopReplay}" Click="OnStop" />
+			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+				<TextBlock Text="●" Foreground="#FF3B30" VerticalAlignment="Center" />
+				<TextBlock Name="ShareRecordingPill" Text="{Binding RecordingPill}" Foreground="White" FontWeight="Bold" VerticalAlignment="Center" />
+			</StackPanel>
+		</DockPanel>
+	</Border>
+</UserControl>

@@ -114,6 +114,7 @@ namespace Mesen.ViewModels
 			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
 				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 			Remaster.ActivityChanged += OnRemasterActivityChanged;
+			InitShare();
 
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
@@ -282,6 +283,8 @@ namespace Mesen.ViewModels
 				.OrderByDescending(c => c.Votes)
 				.ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
 				.ToList();
+			//G.4 (W-P5): one radio starts selected.
+			SelectInitialPackChoice(resolution.PreferredContainer);
 		}
 
 		//The current pack (chip/toast): the preferred container, else the
@@ -344,6 +347,8 @@ namespace Mesen.ViewModels
 		{
 			IsPlayerOverlayVisible = false;
 			RefreshEnhancementsState();
+			//G.4 (W-P7): the switches edit a draft that the Apply button applies.
+			LoadEnhancementsDraft();
 			IsEnhancementsPanelVisible = true;
 		}
 
@@ -481,6 +486,7 @@ namespace Mesen.ViewModels
 				if(Config.Preferences.UiMode != UiMode.Player) {
 					IsPlayerOverlayVisible = false;
 					IsEnhancementsPanelVisible = false;
+					IsPackDetailVisible = false;
 					IsSaveStatesSheetVisible = false;
 					CheatsSheet.IsVisible = false;
 				}
@@ -495,12 +501,12 @@ namespace Mesen.ViewModels
 			bool remaster = Shell.Active == Workspace.Remaster;
 			IsRemasterGameView = remaster && Remaster.IsRecording;
 			IsRemasterProjectScreenVisible = remaster && !Remaster.IsRecording;
-			IsGameViewVisible = IsPlayWorkspace || IsRemasterGameView;
 			if(remaster) {
 				//W-R0b: the feasibility gate is measured once, when Remaster is first shown.
 				Remaster.EnsureFeasibilityMeasured();
 			}
-			UpdateRendererVisibility();
+			//G.8: Share's surfaces, then the game picture's layer and the renderer.
+			UpdateShareSurfaces();
 		}
 
 		private void OnRemasterActivityChanged()
@@ -546,6 +552,7 @@ namespace Mesen.ViewModels
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
 			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
 				gameLoaded ? EmuApi.GetMepSiblingFolder() : "", ConfigManager.EnhancementPackFolder);
+			UpdateShareGame(gameLoaded, gameLoaded ? EmuApi.GetMepSiblingFolder() : "");
 		}
 
 		private void UpdateWindowTitle()
@@ -572,8 +579,17 @@ namespace Mesen.ViewModels
 	//content-merged competing pack. Name/author/version/license/layers come
 	//from the core's GetPackListText columns; PackId is the effective pack_id
 	//(ADR-0140 id, else the local:<container> rule-4 fallback) that P.3 stores.
-	public sealed class PlayerPackChoice
+	//G.4 (W-P5): one radio row of the picker. IsSelected is the radio; the
+	//rows of one picker are exclusive (the sheet's GroupName).
+	public sealed partial class PlayerPackChoice : ObservableObject
 	{
+		[ObservableProperty] public partial bool IsSelected { get; set; }
+		//"👍 41"; empty for a local-only pack (no catalog row, votes 0).
+		public string VotesText => Votes > 0 ? "👍 " + Votes : "";
+		public bool HasVotes => Votes > 0;
+		public string Origin { get; } = "";
+		public string ContentId { get; } = "";
+
 		public string Container { get; }
 		public string PackId { get; }
 		public string Name { get; }
@@ -584,7 +600,7 @@ namespace Mesen.ViewModels
 		//P.6 §5: community 👍 count (catalog MEI `votes`); 0 for local-only packs,
 		//which sort by name. Not a download ranking - it only orders the picker.
 		public int Votes { get; }
-		//One-line metadata row for the picker: "v1.0 · Author · textures, audio · MIT"
+		//One-line metadata row for the picker: "by Author · 1.0 · textures, audio"
 		public string Detail { get; }
 		//ADR-0152: the picker's known-missing line, e.g. "1 known-missing asset —
 		//declared by MesenCE validation, not by the author". Empty when the row's
@@ -602,21 +618,13 @@ namespace Mesen.ViewModels
 			License = entry?.License ?? "";
 			Layers = string.IsNullOrEmpty(entry?.Sections) ? "" : entry.Sections.Replace(",", ", ");
 			Votes = Math.Max(0, votes);
+			Origin = entry?.Source ?? "";
+			ContentId = candidate.ContentId ?? "";
 
-			List<string> detail = new();
-			if(!string.IsNullOrEmpty(Version)) {
-				detail.Add("v" + Version);
-			}
-			if(!string.IsNullOrEmpty(Author)) {
-				detail.Add(Author);
-			}
-			if(!string.IsNullOrEmpty(Layers)) {
-				detail.Add(Layers);
-			}
-			if(!string.IsNullOrEmpty(License)) {
-				detail.Add(License);
-			}
-			Detail = string.Join(" · ", detail);
+			//G.4 (W-P5): "by Tastic · 1.2 · textures, audio"; the license moved
+			//to the pack detail (W-P6, rule 3). GetMessage always formats, so the
+			//"by {0}" pattern is read back by formatting it with its own "{0}".
+			Detail = PackPickerRow.Detail(Author, Version, Layers, ResourceHelper.GetMessage("PackByAuthor", "{0}"), ResourceHelper.GetMessage("PackAuthorUnknown"));
 			KnownMissingNote = BuildKnownMissingNote(errata);
 		}
 
