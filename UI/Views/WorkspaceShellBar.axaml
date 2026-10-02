@@ -39,6 +39,10 @@
 				<TextBlock Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
 				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
 				<TextBlock Text="⌄" VerticalAlignment="Center" />
+				<!--G.3 (§13.6): red = Remaster is recording, tint = a Remaster job
+				runs, while another profile is shown.-->
+				<TextBlock Name="ProfileRecordingDot" Text="●" FontSize="10" VerticalAlignment="Center" Foreground="#FF3B30" IsVisible="{Binding Shell.ShowsRecordingDot}" />
+				<TextBlock Name="ProfileJobDot" Text="●" FontSize="10" VerticalAlignment="Center" Foreground="#C9A0FF" IsVisible="{Binding Shell.ShowsJobDot}" />
 			</StackPanel>
 			<Button.Flyout>
 				<!--W-S3: a popover anchored to the profile button; Esc or a click

@@ -22,6 +22,8 @@ namespace Mesen.ViewModels
 		private bool _paused;
 		private string _gameName = "";
 		private string _packName = "";
+		private RemasterActivity _remasterActivity;
+		private string _remasterStatus = "";
 
 		[ObservableProperty] public partial Workspace Active { get; private set; }
 		[ObservableProperty] public partial bool IsPlay { get; private set; }
@@ -32,6 +34,13 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string StatusText { get; private set; } = "";
 		[ObservableProperty] public partial string PlaceholderTitle { get; private set; } = "";
 		[ObservableProperty] public partial string PlaceholderBody { get; private set; } = "";
+		//G.3: Remaster has its own screens now; only Share still shows a placeholder.
+		[ObservableProperty] public partial bool HasPlaceholder { get; private set; }
+		//G.3 (§13.6): the profile button's dot while Remaster records or runs a
+		//job and another profile is shown - red for a recording, tint for a job.
+		[ObservableProperty] public partial bool ShowsActivityDot { get; private set; }
+		[ObservableProperty] public partial bool ShowsRecordingDot { get; private set; }
+		[ObservableProperty] public partial bool ShowsJobDot { get; private set; }
 
 		//Raised after the active workspace changed (never for a no-op pick).
 		public event Action<Workspace>? WorkspaceChanged;
@@ -65,6 +74,14 @@ namespace Mesen.ViewModels
 			return true;
 		}
 
+		//G.3: fed by the Remaster workspace whenever its recording or job changes.
+		public void UpdateRemasterActivity(RemasterActivity activity, string status)
+		{
+			_remasterActivity = activity;
+			_remasterStatus = status ?? "";
+			RefreshChrome();
+		}
+
 		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName)
 		{
 			_gameLoaded = gameLoaded;
@@ -84,8 +101,9 @@ namespace Mesen.ViewModels
 				r.Workspace, WorkspaceGlyph(r.Workspace), WorkspaceName(r.Workspace),
 				ResourceHelper.GetMessage("WorkspaceDescription" + r.Workspace), ShortcutHint(r.Workspace), r.IsActive
 			)).ToList();
-			PlaceholderTitle = IsPlay ? "" : ResourceHelper.GetMessage("WorkspacePlaceholderTitle" + Active);
-			PlaceholderBody = IsPlay ? "" : ResourceHelper.GetMessage("WorkspacePlaceholderBody" + Active);
+			HasPlaceholder = Active == Workspace.Share;
+			PlaceholderTitle = HasPlaceholder ? ResourceHelper.GetMessage("WorkspacePlaceholderTitle" + Active) : "";
+			PlaceholderBody = HasPlaceholder ? ResourceHelper.GetMessage("WorkspacePlaceholderBody" + Active) : "";
 			RefreshChrome();
 		}
 
@@ -99,6 +117,13 @@ namespace Mesen.ViewModels
 				ShellStatusKind.PausedWithPack => ResourceHelper.GetMessage("ShellStatusPausedWithPack", _gameName, _packName),
 				_ => ResourceHelper.GetMessage("ShellStatusNoGame"),
 			};
+			ShowsActivityDot = RemasterActivityIndicator.ShowsDot(_state.Active, _remasterActivity);
+			ShowsRecordingDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Recording;
+			ShowsJobDot = ShowsActivityDot && _remasterActivity == RemasterActivity.Job;
+			//W-X3: in Play or Share the status line names Remaster's work.
+			if(ShowsActivityDot && _remasterStatus.Length > 0) {
+				StatusText = _remasterStatus;
+			}
 		}
 
 		private static string WorkspaceName(Workspace workspace) => ResourceHelper.GetMessage("WorkspaceName" + workspace);

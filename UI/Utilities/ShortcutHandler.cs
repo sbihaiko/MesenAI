@@ -75,6 +75,10 @@ namespace Mesen.Utilities
 					//overlay hidden behind Remaster/Share).
 					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayWorkspace) {
 						MainWindowModel.TogglePlayerOverlay();
+					} else if(MainWindowModel.IsRemasterGameView) {
+						//G.3 (W-R2): in Remaster's recording view Esc stops the
+						//recording and returns to the project screen.
+						MainWindowModel.Remaster.StopRecording();
 					}
 					break;
 

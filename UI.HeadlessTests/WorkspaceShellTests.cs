@@ -284,10 +284,11 @@ public class WorkspaceShellTests : IDisposable
 		Assert.False(flyout.IsOpen);
 	}
 
+	//G.3 replaced Remaster's placeholder with its own screens
+	//(RemasterWorkspaceTests); Share still names its next slice.
 	[AvaloniaTheory]
-	[InlineData(Workspace.Remaster, "Remaster project")]
 	[InlineData(Workspace.Share, "Share")]
-	public void Remaster_and_share_show_only_a_placeholder_naming_the_next_slice(Workspace workspace, string nextSlice)
+	public void Share_shows_only_a_placeholder_naming_the_next_slice(Workspace workspace, string nextSlice)
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();

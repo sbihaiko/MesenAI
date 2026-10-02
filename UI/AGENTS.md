@@ -124,6 +124,23 @@ can be exercised by real xunit tests without Avalonia or the native
   controls `User`, the leading inset clears the traffic lights except in
   fullscreen, and `MainWindow.InitShellTitleBar` moves the bar to the top
   row so the optional classic bar sits under it.
+- The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
+  W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
+  `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
+  `scripts/mep_project.py` does (a bare `auto/textures` is rec-001);
+  `PythonLocator` needs Python 3.10+ (3.9 fails on PEP 604 in
+  `artist_chr_kit.py`) and never probes the macOS `/usr/bin` stub;
+  `RemasterToolsLocator` finds `mep_project.py` because the app bundle ships
+  no `scripts/`; `RemasterJobRunner` runs `mep_project.py kit` behind
+  `IJobProcessLauncher` (real processes in `UI/Services/RemasterProcesses.cs`,
+  argv through `ArgumentList`, never a joined command line) and counts
+  steps from its `==`/`ok`/`FAIL` lines; `RemasterScreen.Evaluate` gives
+  every control its enabled state and reason. Recording goes through
+  `EmuApi.StartMepRecording("play", "")`/`StopMepRecording`; switching
+  workspace never stops it (the profile button's dot and the status line
+  say so). During W-R2 the renderer is shown under Remaster with one strip
+  docked above it (the native renderer draws over Avalonia, so nothing is
+  overlaid on the game), and Esc (`ToggleOverlay`) stops the recording.
 - `PlayerPackPicker` (P.5, §5) is the host-free decision for the Player pack
   picker: it opens only when 2+ distinct pack_ids exist (after the §5
   content_id merge — feed it `PackPreferenceResolver.Resolve`'s `Candidates`,

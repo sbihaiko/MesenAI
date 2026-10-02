@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -39,6 +40,17 @@ namespace Mesen.ViewModels
 		//switching back shows them as they were, and the game keeps running.
 		public WorkspaceShellViewModel Shell { get; }
 		[ObservableProperty] public partial bool IsPlayWorkspace { get; private set; } = true;
+
+		//G.3 (PRD Part B §13.5.3, ADR-0243): the Remaster workspace. Its project
+		//screen (W-R0/W-R1) covers the content area; while it records (W-R2) the
+		//game is shown inside Remaster with the recording strip above it, and
+		//nothing of Play is on screen (rule 11). Switching profile never stops a
+		//recording or a job (§13.6).
+		public RemasterWorkspaceViewModel Remaster { get; }
+		[ObservableProperty] public partial bool IsRemasterProjectScreenVisible { get; private set; }
+		[ObservableProperty] public partial bool IsRemasterGameView { get; private set; }
+		//The game picture's layer: Play, or Remaster while recording.
+		[ObservableProperty] public partial bool IsGameViewVisible { get; private set; } = true;
 
 		//G.1: tracked from the core's GamePaused/GameResumed notifications
 		//(MainWindow.OnNotification), for the bar-visibility rule and status line.
@@ -99,11 +111,15 @@ namespace Mesen.ViewModels
 			Shell = new WorkspaceShellViewModel(Config.Preferences.Workspace, OperatingSystem.IsMacOS());
 			Shell.WorkspaceChanged += OnWorkspaceChanged;
 			IsPlayWorkspace = Shell.IsPlay;
+			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
+				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
+			Remaster.ActivityChanged += OnRemasterActivityChanged;
 
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
 			RecentGames = new RecentGamesViewModel();
 			UpdateShellState();
+			UpdateRemasterSurfaces();
 
 			UpdateMenuVisibility();
 		}
@@ -120,7 +136,7 @@ namespace Mesen.ViewModels
 		private void OnWorkspaceChanged(Workspace workspace)
 		{
 			IsPlayWorkspace = Shell.IsPlay;
-			UpdateRendererVisibility();
+			UpdateRemasterSurfaces();
 			Config.Preferences.Workspace = workspace;
 			Config.Save();
 		}
@@ -502,13 +518,36 @@ namespace Mesen.ViewModels
 			UpdateWindowTitle();
 		}
 
+		//G.3: which Remaster surface is on screen, then the game picture.
+		private void UpdateRemasterSurfaces()
+		{
+			bool remaster = Shell.Active == Workspace.Remaster;
+			IsRemasterGameView = remaster && Remaster.IsRecording;
+			IsRemasterProjectScreenVisible = remaster && !Remaster.IsRecording;
+			IsGameViewVisible = IsPlayWorkspace || IsRemasterGameView;
+			if(remaster) {
+				//W-R0b: the feasibility gate is measured once, when Remaster is first shown.
+				Remaster.EnsureFeasibilityMeasured();
+			}
+			UpdateRendererVisibility();
+		}
+
+		private void OnRemasterActivityChanged()
+		{
+			if(IsRemasterGameView != (Shell.Active == Workspace.Remaster && Remaster.IsRecording)) {
+				UpdateRemasterSurfaces();
+			}
+			Shell.UpdateRemasterActivity(Remaster.Activity, Remaster.ActivityStatus());
+		}
+
 		private void UpdateRendererVisibility()
 		{
 			//G.1: the native renderer is a native child view drawn above Avalonia
 			//content, so it is hidden explicitly outside Play (the emulator keeps
-			//running; only the picture is not shown).
-			IsNativeRendererVisible = IsPlayWorkspace && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
-			IsSoftwareRendererVisible = IsPlayWorkspace && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
+			//running; only the picture is not shown). G.3: Remaster's recording
+			//view (W-R2) shows it too.
+			IsNativeRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
+			IsSoftwareRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
 
 			if(Renderer != null) {
 				Dispatcher.UIThread.Post(() => {
@@ -531,6 +570,10 @@ namespace Mesen.ViewModels
 
 			UpdateWindowTitle();
 			UpdateShellState();
+
+			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
+			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
+				gameLoaded ? EmuApi.GetMepSiblingFolder() : "", ConfigManager.EnhancementPackFolder);
 		}
 
 		private void UpdateWindowTitle()
