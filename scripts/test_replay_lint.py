@@ -343,7 +343,8 @@ def check_hostile_text_cannot_forge_report_lines():
         fail(f"AC-9 the report must have exactly one line per finding: {rendered!r}")
         return
     if replay_lint.plain_text("a\nb\u202ec\u200bd\x85e\tf") != "a b c d e f".replace(" c d", "cd"):
-        fail(f"AC-9 plain_text must drop control/format chars and collapse whitespace: {replay_lint.plain_text('a\nb\u202ec\u200bd')!r}")
+        cleaned = replay_lint.plain_text('a\nb\u202ec\u200bd')
+        fail(f"AC-9 plain_text must drop control/format chars and collapse whitespace: {cleaned!r}")
         return
     ok("AC-9 attacker-controlled names cannot forge report lines or smuggle control characters")
 
