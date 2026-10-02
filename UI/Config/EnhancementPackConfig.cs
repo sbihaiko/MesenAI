@@ -17,7 +17,10 @@ public partial class EnhancementPackConfig : BaseConfig<EnhancementPackConfig>
 	[ObservableProperty] public partial bool EnableSynth { get; set; } = true;
 	[ObservableProperty] public partial bool EnablePatches { get; set; } = true;
 	[ObservableProperty] public partial bool ApplyPatchOnHashMismatch { get; set; } = false;
-	[ObservableProperty] public partial bool BootstrapEnhancementFolder { get; set; } = true;
+	//ADR-0243 Q3: the initializer is the upgrade value (an existing settings.json
+	//without the key keeps recording on load); CreateConfig writes the new-install
+	//value, off - recording is Remaster's Record (EmuApi.StartMepRecording).
+	[ObservableProperty] public partial bool BootstrapEnhancementFolder { get; set; } = BootstrapRecordingDefault.ForExistingSettingsWithoutKey;
 	//ADR-0138/ADR-0146 (F6.4b): the single master switch for auto-installing a
 	//matching community pack from the MEP recipe catalog (default on; a per-pack
 	//DisabledPacks entry still overrides). Exposed in the Enhancement Packs

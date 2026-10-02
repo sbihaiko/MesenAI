@@ -30,6 +30,7 @@
 #include "Core/Debugger/ITraceLogger.h"
 #include "Core/NES/NesTypes.h"
 #include "Core/Shared/Interfaces/INotificationListener.h"
+#include "Core/Shared/EnhancementPacks/RemasterProject.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -1259,9 +1260,21 @@ int main(int argc, char** argv)
 		std::filesystem::path found;
 		for(auto& entry : std::filesystem::directory_iterator(recRoot, ec)) {
 			if(entry.is_directory(ec)) {
-				std::filesystem::path candidate = entry.path() / "auto" / "audio";
-				if(std::filesystem::exists(candidate / "fingerprints.json", ec)) {
-					found = candidate;
+				//ADR-0243: the recorder writes <Game>/auto/rec-NNN/audio/ (newest
+				//first); a bare auto/audio/ is a pre-ADR-0243 recording
+				std::filesystem::path autoRoot = entry.path() / "auto";
+				std::vector<std::filesystem::path> candidates;
+				for(const std::string& recording : RemasterProject::ListRecordingsNewestFirst(autoRoot.u8string())) {
+					candidates.push_back(autoRoot / recording / "audio");
+				}
+				candidates.push_back(autoRoot / "audio");
+				for(const std::filesystem::path& candidate : candidates) {
+					if(std::filesystem::exists(candidate / "fingerprints.json", ec)) {
+						found = candidate;
+						break;
+					}
+				}
+				if(!found.empty()) {
 					break;
 				}
 			}

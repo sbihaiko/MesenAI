@@ -1029,7 +1029,7 @@
 			<Control ID="chkEnableSynth">Synth preset</Control>
 			<Control ID="chkEnablePatches">ROM patch</Control>
 			<Control ID="tipEnablePatches">Apply the pack's IPS patch. A patch that routes the game's music to the pack's OGG tracks is skipped on its own while Audio (OGG) is off, so the game's own music plays - textures may glitch where the patch changed graphics.</Control>
-			<Control ID="chkBootstrapEnhancementFolder">Bootstrap an enhancement folder beside played ROMs (records the game's tiles upscaled into &lt;Game&gt;/auto/ when no pack applies yet)</Control>
+			<Control ID="chkBootstrapEnhancementFolder">Record while I play: every game load records its tiles (upscaled) into a new &lt;Game&gt;/auto/rec-NNN/ unless another pack dresses it. Off by default - Remaster's Record does this on demand</Control>
 			<Control ID="btnOpenSiblingFolder">Open Game Folder</Control>
 			<Control ID="chkApplyPatchOnHashMismatch">Apply ROM patches even when the hash does not match (may break other revisions)</Control>
 			<Control ID="chkAutoInstallCommunityPacks">Automatically install matching community packs</Control>

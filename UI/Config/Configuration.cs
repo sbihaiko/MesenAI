@@ -66,6 +66,8 @@ namespace Mesen.Config
 			//G.1 (PRD Part B §13.2): a fresh install never had the classic menu
 			//bar, so the one-time "your menus are under Tools ⋯" toast is not owed.
 			cfg.Preferences.ClassicMenuNoticeShown = ClassicMenuNotice.ShownForMissingKey(settingsFileExists: false);
+			//ADR-0243 Q3: a new install records only on Remaster's Record
+			cfg.EnhancementPacks.BootstrapEnhancementFolder = BootstrapRecordingDefault.ForNewInstall;
 			return cfg;
 		}
 
@@ -130,6 +132,12 @@ namespace Mesen.Config
 				if(OperatingSystem.IsWindows()) {
 					Audio.AudioLatency = 30;
 				}
+			}
+
+			//ADR-0243 Q3: an upgrade that kept "record while I play" on says so once
+			if(BootstrapRecordingDefault.UpgradeNoticeDue(ConfigUpgrade < (int)ConfigUpgradeHint.RecordingOnDemand, EnhancementPacks.BootstrapEnhancementFolder)) {
+				EmuApi.WriteLogEntry("[MEP] ADR-0243: BootstrapEnhancementFolder stays on for this install; new installs record only on Remaster's Record");
+				EmuApi.DisplayMessage("MEP", "MepBootstrapNowOnDemand");
 			}
 
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
@@ -322,6 +330,7 @@ namespace Mesen.Config
 		CvInput,
 		WsInput,
 		WindowsAudioLatency,
+		RecordingOnDemand,
 		NextValue,
 	}
 }

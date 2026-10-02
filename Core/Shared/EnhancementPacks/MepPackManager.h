@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "Shared/EnhancementPacks/MepPack.h"
 #include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
+#include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Utilities/SimpleLock.h"
 
 class VirtualFile;
@@ -72,6 +73,17 @@ private:
 	bool _texturesIsOptimistic = false;
 	bool _bootstrapping = false;
 	string _bootstrapSaveFolder; //owns the char* handed to HdPackBuilderOptions
+	//ADR-0243 (F12.20): the recording in progress - its project root, its
+	//auto/rec-NNN/ folder, the project.json entry it owns and the frame it
+	//started on (durationSeconds is emulated time)
+	string _recordingProjectRoot;
+	string _recordingFolder;
+	RemasterProject::Recording _recordingEntry;
+	uint32_t _recordingStartFrame = 0;
+	//Source/note the next on-load bootstrap records with (headless_record
+	//says "tas" for movie=, "script" for input=); "play" by default
+	string _nextRecordingSource = "play";
+	string _nextRecordingNote;
 
 	void ScanAndMatch();
 	void ScanSiblingFolder();
@@ -84,6 +96,13 @@ private:
 	//ADR-0147: true when the sibling holds mep/ as the human pack layer
 	//(a section probe under mep/, or a mep/pack.json exists)
 	bool HasSiblingMepPack(const string& sibling) const;
+	//ADR-0243 Decision 3: whether the winning pack's section is the project's
+	//own (its mep/ or an earlier recording) rather than a foreign pack (#142)
+	bool IsOwnProjectLayer(const MepPack* pack, MepSectionType type) const;
+	//EnhancementPacks/<Game>/: the project root when the ROM folder is read-only
+	string GetProjectFallbackRoot() const;
+	//Read-modify-write of <project>/project.json with _recordingEntry
+	void WriteRecordingEntry();
 	static string SystemFromExtension(const string& lowerExt);
 	//Comma-joined names of the pack's present sections (log + pack-list text)
 	static string JoinPresentSections(const MepPack& pack);
@@ -198,13 +217,32 @@ public:
 	//Sibling folder of the loaded ROM ("" when no ROM)
 	string GetSiblingFolder() const;
 
-	//F5.2: when BootstrapEnhancementFolder is on and no textures layer applies
-	//to this ROM (no sibling/MEP textures, no loose HdPacks/<rom>/), export
-	//the ROM tiles and start recording played tiles (xBRZ 4x) into
-	//<sibling>/auto/textures/ (fallback: EnhancementPacks/<Game>/ when the
-	//ROM's folder is not writable). Call once the console is initialised.
+	//F5.2, amended by ADR-0243 Q3: on ROM load, only when
+	//BootstrapEnhancementFolder is on (off for new installs; headless_record's
+	//"bootstrap" flag), starts a recording exactly as StartRecording does.
+	//Call once the console is initialised.
 	void StartBootstrapIfNeeded();
+	//ADR-0243 (F12.20): Remaster's Record. Exports the ROM tiles and records
+	//played tiles (xBRZ 4x) plus, on NES, music fingerprints into the next
+	//<project>/auto/rec-NNN/ (project = the sibling folder, or
+	//EnhancementPacks/<Game>/ when the ROM folder is read-only), and lists it
+	//in <project>/project.json. source is play/tas/ai/script (anything else
+	//reads as play). Declines - logs why and returns false - when a foreign
+	//pack dresses the ROM (#142); the project's own mep/ and earlier
+	//recordings never decline it. Thread-safe (takes the emulation lock).
+	bool StartRecording(const string& source, const string& note);
+	//Stops the recording in progress: the builder writes its files, the audio
+	//fingerprints are saved, project.json gets the emulated duration. False
+	//when nothing was recording. Thread-safe.
+	bool StopRecording();
+	//Closes the manifest entry of a recording that was never stopped (the
+	//emulator stops or another ROM loads); its builder goes with the console.
+	void FinishRecordingEntry();
+	void SetNextRecordingSource(const string& source, const string& note);
 	bool IsBootstrapping() const { return _bootstrapping; }
+	//Absolute auto/rec-NNN/ folder of the recording in progress (or of the
+	//last one started this session); "" before any
+	const string& GetRecordingFolder() const { return _recordingFolder; }
 	const string& GetRomName() const { return _romName; }
 
 	const string& GetRomSha1() const { return _romSha1; }

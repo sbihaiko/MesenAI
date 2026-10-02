@@ -349,6 +349,10 @@ void Emulator::Stop(bool sendNotification, bool preventRecentGameSave, bool save
 	_videoDecoder->StopThread();
 	_rewindManager->Reset();
 
+	//ADR-0243: a recording nobody stopped is closed here, while the frame
+	//count still belongs to it; the builder writes its files with the console
+	_mepPackManager->FinishRecordingEntry();
+
 	if(_console) {
 		_console.reset();
 	}

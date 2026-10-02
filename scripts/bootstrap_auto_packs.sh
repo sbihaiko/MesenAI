@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Batch-regenerate the sibling auto/textures packs (ADR-0049/0147) of a ROM
+# Batch-regenerate the sibling auto/ recordings (ADR-0049/0147/0243) of a ROM
 # library, including the artist-legible sheets of ADR-0153 (Phase 9).
 #
 # Each ROM is staged into its own scratch folder and run through the *production*
 # bootstrap (scripts/headless_record ... bootstrap): static tile export, then
-# recording with screen capture, xBRZ 4x, into <stage>/<Game>/auto/textures.
+# recording with screen capture, xBRZ 4x, into <stage>/<Game>/auto/rec-001/textures.
 # Staging matters for two reasons: the bootstrap only fires when nothing already
 # dresses the ROM, and a game with a hand-made mep/ pack next to it would never
-# bootstrap in place. Only auto/textures is installed back - auto/audio and any
-# mep/ pack in the library are left untouched.
+# bootstrap in place. Only textures/ is installed back, as the project's next
+# recording <Game>/auto/rec-NNN/ (ADR-0243: a recording is never overwritten, the
+# newest one plays) - earlier recordings, audio and any mep/ pack are untouched.
 #
 # Usage: scripts/bootstrap_auto_packs.sh <roms-dir> [seconds] [jobs] [stage-dir]
 #
@@ -82,7 +83,7 @@ record_one() {
 	local rc=0
 	"$RECORDER" "$work/$base" "$secs" "$work/out" bootstrap log "input=$script" > "$stage/$name.log" 2>&1 || rc=$?
 
-	out="$work/$name/auto/textures"
+	out="$work/$name/auto/rec-001/textures"
 	if [ ! -f "$out/hires.txt" ]; then
 		# No pack: the exit code is the only thing to report, and it matters.
 		if [ "$rc" -ne 0 ]; then
@@ -100,9 +101,10 @@ record_one() {
 	# seconds, which stopped meaning anything once the frame limiter came off
 	# (#165). Judge the artefact, report the code.
 
-	rm -rf "$folder/auto/textures"
-	mkdir -p "$folder/auto"
-	cp -R "$out" "$folder/auto/textures"
+	local rec
+	rec=$(python3 "$ROOT/scripts/mep_project.py" next "$folder") || { echo "FAIL   $name (cannot number the next recording of $folder)"; return 0; }
+	mkdir -p "$folder/auto/$rec"
+	cp -R "$out" "$folder/auto/$rec/textures"
 
 	local sheets=0 screens=0 probe verdict
 	[ -d "$out/sheets" ] && sheets=$(/usr/bin/find "$out/sheets" -name '*.png' | grep -cv '\.orig\.png$' || true)

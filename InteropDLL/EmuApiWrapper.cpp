@@ -342,6 +342,31 @@ extern "C"
 		return _emu->GetEnhancementPackManager()->IsBootstrapping();
 	}
 
+	//ADR-0243 (F12.20): Remaster's Record / Stop. The bootstrap recorder writes
+	//the next <project>/auto/rec-NNN/ and lists it in project.json; source is
+	//play/tas/ai/script. False when it declined (a foreign pack dresses the
+	//ROM, #142 - the reason is in the log) or nothing is loaded.
+	DllExport bool __stdcall StartMepRecording(const char* source, const char* note)
+	{
+		return _emu->GetEnhancementPackManager()->StartRecording(source ? source : "play", note ? note : "");
+	}
+
+	DllExport bool __stdcall StopMepRecording()
+	{
+		return _emu->GetEnhancementPackManager()->StopRecording();
+	}
+
+	//Source/note the next on-load bootstrap records with (BootstrapEnhancementFolder)
+	DllExport void __stdcall SetMepNextRecordingSource(const char* source, const char* note)
+	{
+		_emu->GetEnhancementPackManager()->SetNextRecordingSource(source ? source : "play", note ? note : "");
+	}
+
+	DllExport void __stdcall GetMepRecordingFolder(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRecordingFolder(), outBuffer, maxLength);
+	}
+
 	DllExport void __stdcall SetMepPackEnabled(const char* containerName, bool enabled)
 	{
 		_emu->GetEnhancementPackManager()->SetPackEnabled(containerName ? containerName : "", enabled);

@@ -177,9 +177,11 @@ for k in ("name", "rom", "driver", "stages", "movie", "entry"):
   esac
 
   # --- the kit, from whatever packs the recording left -----------------------
+  # One pack dir per recording, auto/rec-NNN/ (ADR-0243) or a bare auto/ from
+  # before it - mep_project.py is the one reader of that layout.
   packs=()
   while IFS= read -r p; do packs+=("$p"); done < <(
-    find "$romout" -maxdepth 4 -type d -name auto 2>/dev/null | sort)
+    python3 "$here/mep_project.py" packs "$romout" 2>/dev/null)
 
   kit="$romout/kit"
   if [ "${#packs[@]}" -gt 0 ]; then

@@ -608,6 +608,11 @@ void NesConsole::StartAudioBootstrap(const string& audioFolder)
 	_audioBootstrap.reset(new NesAudioBootstrap(audioFolder));
 }
 
+void NesConsole::StopAudioBootstrap()
+{
+	_audioBootstrap.reset();
+}
+
 void NesConsole::UpdateRegion(bool forceUpdate)
 {
 	ConsoleRegion region = GetNesConfig().Region;
