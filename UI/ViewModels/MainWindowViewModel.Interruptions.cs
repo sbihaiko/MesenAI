@@ -16,7 +16,7 @@ namespace Mesen.ViewModels
 		//question is up; quit runs after Stop and Quit / Quit.
 		public bool ConfirmQuit(Action quit)
 		{
-			InterruptionKind kind = Interruptions.ForQuit(Remaster.IsRecording, Remaster.Job.IsRunning);
+			InterruptionKind kind = Interruptions.ForQuit(Remaster.IsRecording, Remaster.Job.IsRunning, Share.Job.IsRunning);
 			if(kind == InterruptionKind.None) {
 				return true;
 			}
@@ -27,6 +27,8 @@ namespace Mesen.ViewModels
 					Remaster.StopRecording(prepareFigures: false);
 				}
 				Remaster.StopJob();
+				//#650: Share's mep_build.py pack would outlive the app.
+				Share.StopBuild();
 				quit();
 			});
 			return false;

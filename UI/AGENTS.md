@@ -200,7 +200,12 @@ can be exercised by real xunit tests without Avalonia or the native
   `ShareProjectPackage.cs` reads a project's game/console (`.bootstrap`
   `rom=`, `mep/pack.json` `targets[0].system`) and builds the
   `mep_build.py pack` job (`RemasterJobKind.Pack`, run by Share's own
-  `RemasterJobRunner`); `ShareScreen.cs` holds the view enum, the replay
+  `RemasterJobRunner`). The two runners are linked by
+  `WorkspaceJobs.Link` (#647): a job snapshot carries its `ProjectFolder`,
+  each workspace's job gate refuses, with its reason, while the other runs a
+  job on the same project (`RemasterJobs.RunsOn`), and a finished job is a
+  result only on the project it ran on (`RemasterJobs.ShownFor`, #648);
+  `ShareScreen.cs` holds the view enum, the replay
   start gate (mirror of the core's `ShareRecordingSettings::IsSupported`)
   and the Esc router. Replays reuse `ShareRecordingSession` through
   `IReplayRecorder` (`StopAndKeep` stops without the menu's reveal and
@@ -210,14 +215,19 @@ can be exercised by real xunit tests without Avalonia or the native
   `RemasterBuilds.Spec` runs `mep_project.py build`; its `show:` line and
   `RemasterShow.Decide` pick `EmuApi.RequestMepImageReload` (images only) or
   `LoadRomHelper.ApplyPackChange` (manifest changed), only on the project's
-  own running NES game. `RemasterBuildProblemReader` turns the runner's
+  own running NES game, and the pack reload only when ADR-0244's plan is in
+  place (`RemasterShow.PackReload`, #649: never a restart during a movie,
+  shared replay or netplay - the build then plays next time). `RemasterBuildProblemReader` turns the runner's
   `Log` into W-R4 rows by caption (`RemasterKitIndex`, from `kit.json`);
   an untranslated line is only counted. The Build half of the VM is
   `RemasterWorkspaceViewModel.Build.cs`. W-X3's question is
   `InterruptionViewModel` on `MainWindowViewModel.Interruption`
   (`MainWindowViewModel.Interruptions.cs`), asked from
   `MainWindow.OnClosing` and from `LoadRomHelper` before any ROM opens; it
-  replaces `ConfirmExit` when it asks, so quitting confirms once.
+  replaces `ConfirmExit` when it asks, so quitting confirms once. Quitting
+  asks about, and stops, Share's pack job too (#650); a stopped import
+  removes the `<pack> (editable)` folder only when that import created it
+  (`RemasterHandOff.PartialImportToRemove`).
 - Remaster's tile browser and hand-offs (G.7, PRD Part B §13.5.3 W-R1 zone
   ②, W-R5–W-R7) read only what the scripts write: `RemasterKitReader` reads
   `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never

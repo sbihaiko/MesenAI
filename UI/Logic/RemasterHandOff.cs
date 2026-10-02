@@ -128,6 +128,15 @@ public static class RemasterHandOff
 		return new RemasterJobSpec(RemasterJobKind.Import, argv, feasibility.ToolsFolder, 0, destination, gameName);
 	}
 
+	//#650: a stopped import (Cancel, Esc) leaves `<pack> (editable)` half
+	//written; it is removed only when this import created it - a folder that
+	//existed before the job started is never deleted. Returns the folder to
+	//remove, or "".
+	public static string PartialImportToRemove(string destination, bool existedBefore, RemasterJobStatus status)
+	{
+		return status == RemasterJobStatus.Stopped && !existedBefore && !string.IsNullOrEmpty(destination) ? destination : "";
+	}
+
 	private static readonly Regex CitedLine = new(@"^(?:error:\s*)?(?<file>.+?\.txt):(?<line>\d+):\s*(?<text>.+)$", RegexOptions.CultureInvariant);
 
 	//mep_import prints one `error: <manifest>:<line>: <why>` and stops (exit 2);

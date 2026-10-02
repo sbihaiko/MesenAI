@@ -40,6 +40,10 @@ namespace Mesen.ViewModels
 		//run without the core.
 		public Func<RemasterShowAction, bool> ShowInGame { get; set; } = DefaultShowInGame;
 
+		//#649: ADR-0244's plan for a pack change right now (a movie, a shared
+		//replay or netplay make it a restart). Replaced by tests.
+		public Func<PackChangePlan> PlanPackChange { get; set; } = () => LoadRomHelper.PlanPackChange(ConsoleType.Nes);
+
 		private string _buildProject = "";
 		private int _buildSerial;
 		private int _handledBuildSerial;
@@ -117,11 +121,15 @@ namespace Mesen.ViewModels
 			_handledBuildSerial = _buildSerial;
 			RemasterBuildOutcome outcome = RemasterBuildOutcome.Parse(_jobs.Log);
 			RemasterShowAction action = RemasterShow.Decide(outcome, _gameLoaded && IsGamesProject(_buildProject), _console == ConsoleType.Nes);
+			if(action == RemasterShowAction.ReloadPack) {
+				//#649: never a restart the player did not ask for (ADR-0244 §2).
+				action = RemasterShow.PackReload(PlanPackChange());
+			}
 			bool shown = action != RemasterShowAction.None && ShowInGame(action);
 			if(!shown && action == RemasterShowAction.ReloadImages) {
 				//The image reload had no NES console to talk to: reload the pack.
-				action = RemasterShowAction.ReloadPack;
-				shown = ShowInGame(action);
+				action = RemasterShow.PackReload(PlanPackChange());
+				shown = action != RemasterShowAction.None && ShowInGame(action);
 			}
 			if(!shown) {
 				return ResourceHelper.GetMessage("RemasterJobBuiltNotShown", _jobs.Snapshot.GameName);
@@ -188,8 +196,11 @@ namespace Mesen.ViewModels
 					return EmuApi.RequestMepImageReload();
 				case RemasterShowAction.ReloadPack:
 					//The manifest changed: ADR-0244's pack change keeps the
-					//player's place, or restarts with its own HUD notice.
-					LoadRomHelper.ApplyPackChange(ConsoleType.Nes, LoadRomHelper.ReloadRom);
+					//player's place (ShowBuild asked only when the plan is in
+					//place). A movie or netplay that started since makes the core
+					//refuse; a build never restarts the game itself (#649), so
+					//then it plays next time.
+					LoadRomHelper.ApplyPackChange(ConsoleType.Nes, () => { });
 					return true;
 				default:
 					return false;

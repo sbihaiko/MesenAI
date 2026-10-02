@@ -108,6 +108,12 @@ namespace Mesen.ViewModels
 		}
 
 		public RemasterJobSnapshot Job => _jobs.Snapshot;
+
+		//#647: Share's job, read by the job buttons' gate (WorkspaceJobs.Link).
+		public Func<RemasterJobSnapshot> OtherWorkspaceJob { get; set; } = () => RemasterJobSnapshot.Idle;
+
+		//Raised after every change of this workspace's job, on the UI thread.
+		public event Action? JobChanged;
 		public RemasterFeasibility? Feasibility => _feasibility;
 		public RemasterProjectInfo? Project => _project;
 		public string GameName => _gameName;
@@ -367,6 +373,7 @@ namespace Mesen.ViewModels
 			}
 			Refresh();
 			OnImportJobChanged(job);
+			JobChanged?.Invoke();
 		}
 
 		private void ReadProject()
@@ -379,7 +386,8 @@ namespace Mesen.ViewModels
 		{
 			string shown = _project?.Folder ?? "";
 			return new RemasterInputs(_gameLoaded, _console, IsRecording, _jobs.Snapshot.IsRunning, shown, IsGamesProject(shown) && _gameLoaded,
-				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder, _project?.HasKit ?? false);
+				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder, _project?.HasKit ?? false,
+				RemasterJobs.RunsOn(OtherWorkspaceJob(), shown));
 		}
 
 		//Before the first recording the game's project does not exist yet; a

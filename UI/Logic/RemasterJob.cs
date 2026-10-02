@@ -44,7 +44,9 @@ public enum RemasterJobStatus
 
 public sealed record RemasterJobSpec(RemasterJobKind Kind, IReadOnlyList<string> Argv, string WorkingDirectory, int TotalSteps, string ProjectFolder, string GameName);
 
-public sealed record RemasterJobSnapshot(RemasterJobStatus Status, RemasterJobKind Kind, int StepsDone, int TotalSteps, string CurrentStep, string FailureLine, string GameName)
+//ProjectFolder is the spec's (#648): the project the job runs on, so a result
+//is applied only to that project and the other workspace's gate can see it.
+public sealed record RemasterJobSnapshot(RemasterJobStatus Status, RemasterJobKind Kind, int StepsDone, int TotalSteps, string CurrentStep, string FailureLine, string GameName, string ProjectFolder = "")
 {
 	public bool IsRunning => Status == RemasterJobStatus.Running;
 
@@ -105,6 +107,23 @@ public static class RemasterJobs
 		argv.Add(romPath);
 		return new RemasterJobSpec(RemasterJobKind.Kit, argv, toolsFolder, KitSteps(texturedRecordings), projectFolder, gameName);
 	}
+
+	//#647: Remaster (kit, build, import) and Share (pack) each own a runner, so
+	//one job per workspace does not stop both from writing the same project's
+	//mep/ at once. A job of the other workspace that runs on this project
+	//holds this workspace's job buttons, with the reason shown (rule 4).
+	public static bool RunsOn(RemasterJobSnapshot job, string projectFolder)
+	{
+		return job.IsRunning && RemasterProjectLocator.SameFolder(job.ProjectFolder, projectFolder);
+	}
+
+	//#648: the job a project screen shows. A running job is the workspace's
+	//one job and stays on its card (its Stop included); a finished one is a
+	//result only for the project it ran on - another project shows nothing.
+	public static RemasterJobSnapshot ShownFor(RemasterJobSnapshot job, string projectFolder)
+	{
+		return job.IsRunning || RemasterProjectLocator.SameFolder(job.ProjectFolder, projectFolder) ? job : RemasterJobSnapshot.Idle;
+	}
 }
 
 public sealed class RemasterJobRunner
@@ -155,7 +174,7 @@ public sealed class RemasterJobRunner
 			_lastError = "";
 			_log.Clear();
 			generation = ++_generation;
-			_snapshot = new RemasterJobSnapshot(RemasterJobStatus.Running, spec.Kind, 0, spec.TotalSteps, "", "", spec.GameName);
+			_snapshot = new RemasterJobSnapshot(RemasterJobStatus.Running, spec.Kind, 0, spec.TotalSteps, "", "", spec.GameName, spec.ProjectFolder);
 		}
 		Raise();
 		try {
