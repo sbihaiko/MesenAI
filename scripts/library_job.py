@@ -62,6 +62,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # hash this job matches a route set on is the hash `mep_build` writes into
 # `<supportedRom>`, and two implementations of that would eventually disagree.
 from mep_build import _no_intro_sha1 as no_intro_sha1  # noqa: E402
+import mep_project  # noqa: E402 - ADR-0243: a recording is auto/rec-NNN/
 
 ROM_EXTS = (".nes", ".gb", ".gbc", ".sms", ".gg", ".sg")
 SET_MANIFEST = "stage-set.json"
@@ -790,7 +791,7 @@ def route_evidence(rom_out):
         info = routes[name]
         d = rom_out / "stages" / name
         sil, ret = _poses_line(d / "mesen-home" / "mesen.log")
-        hires = sorted(d.glob("*/auto/textures/hires.txt"))
+        hires = mep_project.recorded_hires(d) if d.is_dir() else []
         fp = _h.sha1(hires[0].read_bytes()).hexdigest() if hires else None  # noqa: S324
         at_start = None
         state = work / f"{name}.mss"

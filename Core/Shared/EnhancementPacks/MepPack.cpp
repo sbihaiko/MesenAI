@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Shared/EnhancementPacks/MepPack.h"
+#include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Utilities/JsonReader.h"
 #include "Utilities/StringUtilities.h"
 #include "Utilities/FolderUtilities.h"
@@ -111,23 +112,43 @@ bool MepPack::DetectConventionLayout(const string& humanPrefix)
 	//of auto/, not a child of it). A non-empty humanPrefix shifts the human
 	//probe and the section Path; the machine (auto/) layer is unchanged.
 	string layerRoot = humanPrefix.empty() ? "" : (humanPrefix + "/");
+	vector<string> recordings = RemasterProject::ListRecordingsNewestFirst(FolderUtilities::CombinePath(RootFolder, AutoFolderName));
+	auto HasAutoProbe = [this](const string& layerRelative, int section) {
+		string layer = FolderUtilities::CombinePath(RootFolder, layerRelative);
+		if((bool)ifstream(FolderUtilities::CombinePath(layer, kConventionProbe[section]))) {
+			return true;
+		}
+		return section == (int)MepSectionType::Audio && (bool)ifstream(FolderUtilities::CombinePath(FolderUtilities::CombinePath(layer, kConventionPaths[section]), "fingerprints.json"));
+	};
 	for(int i = 0; i < kMepSectionCount; i++) {
 		MepSection& section = Sections[i];
 		string humanProbe = FolderUtilities::CombinePath(RootFolder, layerRoot + kConventionProbe[i]);
-		string autoProbe = FolderUtilities::CombinePath(FolderUtilities::CombinePath(RootFolder, AutoFolderName), kConventionProbe[i]);
 		bool human = (bool)ifstream(humanProbe);
-		bool automatic = (bool)ifstream(autoProbe);
 		if(i == (int)MepSectionType::Audio) {
 			//audio/ may hold fingerprints.json (ADR-0047) instead of a hires.txt
 			human = human || (bool)ifstream(FolderUtilities::CombinePath(FolderUtilities::CombinePath(RootFolder, layerRoot + kConventionPaths[i]), "fingerprints.json"));
-			automatic = automatic || (bool)ifstream(FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::CombinePath(RootFolder, AutoFolderName), kConventionPaths[i]), "fingerprints.json"));
 		}
+		//ADR-0243 (F12.20): every recording is auto/rec-NNN/<section>; the
+		//machine layer that plays is the newest recording holding the section,
+		//else the bare auto/<section> a pre-ADR-0243 recording left (rec-001).
+		string autoRelative;
+		for(const string& recording : recordings) {
+			string candidate = string(AutoFolderName) + "/" + recording;
+			if(HasAutoProbe(candidate, i)) {
+				autoRelative = candidate;
+				break;
+			}
+		}
+		if(autoRelative.empty() && HasAutoProbe(AutoFolderName, i)) {
+			autoRelative = AutoFolderName;
+		}
+		bool automatic = !autoRelative.empty();
 		if(human) {
 			section.HasHuman = true;
 			section.Path = humanPrefix.empty() ? kConventionPaths[i] : (layerRoot + kConventionPaths[i]);
 		}
 		if(automatic) {
-			section.AutoPath = string(AutoFolderName) + "/" + kConventionPaths[i];
+			section.AutoPath = autoRelative + "/" + kConventionPaths[i];
 		}
 		if(human || automatic) {
 			section.Present = true;

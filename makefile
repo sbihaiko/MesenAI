@@ -506,6 +506,8 @@ doc-checks-2:
 	#on abs x alive across the hops a wall climb takes. No ROM, no session.
 	python3 scripts/test_route_search.py
 	python3 scripts/test_mep_build.py
+	#ADR-0243 (F12.20): auto/rec-NNN/ recordings, project.json, the project kit.
+	python3 scripts/test_mep_project.py
 	#ADR-0231 (#447): an untouched sheet cell keeps the recorded rule and pixels.
 	python3 scripts/test_mep_build_recorded.py
 	#464: a blank sprite key never claims paint through a crop it shares.

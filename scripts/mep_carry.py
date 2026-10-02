@@ -35,6 +35,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import mep_project  # ADR-0243: the machine layer is the newest auto/rec-NNN/textures
 import mep_cell_record  # ADR-0236 <bgCellRecord>: carried with its <background>, or not at all
 
 BG_TAG = re.compile(r"^(\[[^\]]*\])?<background>")
@@ -101,7 +102,7 @@ def carry_backgrounds(folder: Path, textures_dir: Path, body: list) -> list:
         rest = b[m.end():].split(",", 1)
         line = f"{b[:m.end()]}{name}{',' + rest[1] if len(rest) > 1 else ''}"
         if not (textures_dir / name).exists():
-            auto_cand = folder / "auto" / "textures" / name
+            auto_cand = mep_project.auto_textures(folder) / name
             if not auto_cand.exists():
                 retired[name] = retired.get(name, 0) + 1
                 retired_record = True

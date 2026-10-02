@@ -63,6 +63,8 @@ namespace Mesen.Config
 			//that is Player mode. An existing file without the UiMode key keeps
 			//the property's Advanced initializer (upgrade path).
 			cfg.Preferences.UiMode = UiModeDefaultRule.ForMissingKey(settingsFileExists: false);
+			//ADR-0243 Q3: a new install records only on Remaster's Record
+			cfg.EnhancementPacks.BootstrapEnhancementFolder = BootstrapRecordingDefault.ForNewInstall;
 			return cfg;
 		}
 
@@ -127,6 +129,12 @@ namespace Mesen.Config
 				if(OperatingSystem.IsWindows()) {
 					Audio.AudioLatency = 30;
 				}
+			}
+
+			//ADR-0243 Q3: an upgrade that kept "record while I play" on says so once
+			if(BootstrapRecordingDefault.UpgradeNoticeDue(ConfigUpgrade < (int)ConfigUpgradeHint.RecordingOnDemand, EnhancementPacks.BootstrapEnhancementFolder)) {
+				EmuApi.WriteLogEntry("[MEP] ADR-0243: BootstrapEnhancementFolder stays on for this install; new installs record only on Remaster's Record");
+				EmuApi.DisplayMessage("MEP", "MepBootstrapNowOnDemand");
 			}
 
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
@@ -319,6 +327,7 @@ namespace Mesen.Config
 		CvInput,
 		WsInput,
 		WindowsAudioLatency,
+		RecordingOnDemand,
 		NextValue,
 	}
 }

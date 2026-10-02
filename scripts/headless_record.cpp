@@ -269,6 +269,8 @@ extern "C"
 	void SetShaderConfig(InteropShaderConfig config);
 	void SetEmulationConfig(EmulationConfig config);
 	void SetMepPackEnabled(const char* containerName, bool enabled);
+	//ADR-0243 (F12.20) - InteropDLL/EmuApiWrapper.cpp
+	void SetMepNextRecordingSource(const char* source, const char* note);
 	//F9.14 (ADR-0157) - InteropDLL/EmuApiWrapperHeadless.cpp
 	bool HeadlessLoadInputScript(const char* scriptText, double frameRate, char* outError, uint32_t maxErrorLength);
 	void HeadlessSetPauseFrame(uint32_t frame);
@@ -1543,6 +1545,11 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//HeadlessSetOsdEnabled(true) is turned on for the one instant a capture run
 	//queues its own test toast (see the capture block below).
 	HeadlessSetOsdEnabled(false);
+
+	//ADR-0243 Q2: project.json says what drove the recording - a movie is
+	//"tas", an input script "script", a run with neither the attract demo
+	//("play", the only thing a headless run plays by itself)
+	SetMepNextRecordingSource(!moviePath.empty() ? "tas" : !inputScriptPath.empty() ? "script" : "play", "");
 
 	if(!LoadRom((char*)rom.c_str(), (char*)"")) {
 		fprintf(stderr, "failed to load ROM: %s\n", rom.c_str());

@@ -191,8 +191,19 @@ def find_pack_hires(session_dir: Path) -> Path:
     """The bootstrap pack a session wrote.
 
     `MepPackManager::GetSiblingFolder` puts it beside the ROM, at
-    `<rom stem>/auto/textures/hires.txt`.
+    `<rom stem>/auto/rec-NNN/textures/hires.txt` (ADR-0243; the newest
+    recording, the one the loader plays), or `<rom stem>/auto/textures/` from
+    before that ADR.
     """
+    sys.path.insert(0, str(SCRIPT_DIR))
+    import mep_project  # noqa: E402 - the one reader of the recording layout
+    for auto in sorted(session_dir.glob("*/auto")):
+        try:
+            rec = mep_project.latest(auto.parent, "textures")
+        except mep_project.ProjectError:
+            rec = None  # two rec-001s: fall through to the literal paths below
+        if rec and not rec.bare:
+            return rec.textures / "hires.txt"
     for pattern in ("*/auto/textures/hires.txt", "*/auto/hires.txt"):
         hits = sorted(session_dir.glob(pattern))
         if hits:

@@ -381,7 +381,7 @@ def choose_frame(rom, pack, out, candidates):
     screen is the frame, it is drawn after every `<tile>` rule, and a panel
     handed over on it cannot be won (#494)."""
     colors, rules, captures = paint_probe(pack, out / "probe-pack")
-    auto = rom.parent / rom.stem / "auto"
+    auto = _repaint.mep_build.mep_project.auto_textures(rom.parent / rom.stem).parent  # ADR-0243 rec-NNN
     auto_colors, auto_rules, auto_captures = ({}, 0, {})
     if auto.is_dir():
         auto_colors, auto_rules, auto_captures = paint_probe(auto, out / "probe-auto")

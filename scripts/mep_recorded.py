@@ -40,6 +40,8 @@ so a page found only beside the recording (`auto/textures/chr/…` in every
 
 from pathlib import Path
 
+import mep_project  # ADR-0243: the recording is the newest auto/rec-NNN/, a bare auto/textures is rec-001
+
 SNAPSHOT = "hires.recorded.txt"
 # The comment line above the re-emitted rules. `check-coverage` reads the
 # `<img>` lines after it as build output (#218), and a manifest carrying it is
@@ -194,7 +196,7 @@ def _read_rules(rec: Recorded, lines, textures: Path, beside: Path, png_size, sc
 def load(folder: Path, source: Path, source_lines, scale: int, png_size, tile_re) -> Recorded:
     """The recording this build keeps untouched rules from (module docstring)."""
     textures = folder / "textures"
-    snap, auto = textures / SNAPSHOT, folder / "auto" / "textures" / "hires.txt"
+    snap, auto = textures / SNAPSHOT, mep_project.auto_textures(folder) / "hires.txt"
     path, lines = None, None
     for cand in (snap, auto):
         if cand.is_file():
