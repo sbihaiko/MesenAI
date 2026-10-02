@@ -109,10 +109,16 @@ BaseVideoFilter* VideoDecoder::GetFrameFilter(bool compare)
 
 void VideoDecoder::RedrawPausedFrame()
 {
-	if(!_emu->IsPaused() || _emu->GetVideoRenderer()->IsRecording() || _frame.FrameBuffer == nullptr) {
+	//#616: Stop() keeps the pause flag, so "paused" alone does not mean a game
+	//is loaded. With no console there is nothing to redraw, and the console's
+	//video filter would dereference it (NesDefaultVideoFilter reads its PPU).
+	if(!_emu->IsRunning() || !_emu->IsPaused() || _emu->GetVideoRenderer()->IsRecording() || _frame.FrameBuffer == nullptr) {
 		return;
 	}
 	auto lock = _emu->AcquireLock();
+	if(!_emu->IsRunning() || _frame.FrameBuffer == nullptr) {
+		return;
+	}
 	UpdateFrame(_frame, true, false);
 }
 
@@ -258,6 +264,10 @@ void VideoDecoder::StopThread()
 		_decodeThread->join();
 
 		_decodeThread.reset();
+
+		//#616: the last frame points into the buffer of the console being
+		//stopped or replaced; drop it so RedrawPausedFrame can never decode it.
+		_frame = RenderedFrame();
 
 		//Clear whole screen
 		_emu->GetVideoRenderer()->ClearFrame();
