@@ -133,3 +133,15 @@ decided here rather than as separate ADRs:
    `command -v ccache` finds one) and persists `~/.cache/ccache` with
    `actions/cache`, keyed by SHA with a prefix restore-key. No check changes.
    The effect is measured, not assumed: see the PR that introduced this item.
+7. **Amendment 2026-10-02: the build legs no longer run `doc-checks` (user's
+   decision).** Item 2 required every workflow that builds the core or the UI
+   to run `make doc-checks` before its build step. That is now `checks.yml`
+   alone. Measured on the pull request into `prod` of 2026-10-02 (24m31s): the
+   macOS and Linux legs of `build.yml` each spent 10m46s-11m57s in "Run doc
+   checks", the macOS clang leg being the slowest job at 24m21s, while
+   `checks.yml` runs the same recipe in about 2 minutes warm. Dropping the step
+   cuts those legs by about half. What stays guaranteed: a pull request into
+   `main` and every push to `main` run the gate. What no longer is: a pull
+   request into `prod` whose head is not `main` would not run the doc checks
+   (the ones so far are promotions, whose head carries the gate's statuses).
+   Windows and AppImage legs never ran it.
