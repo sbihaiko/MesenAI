@@ -100,7 +100,7 @@ namespace Mesen.Services
 		}
 
 		//§41: strictly the assembly manifest, never the filesystem.
-		private static IReadOnlyList<CommunityPackHostEntry> LoadAllowlist()
+		internal static IReadOnlyList<CommunityPackHostEntry> LoadAllowlist()
 		{
 			using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(AllowlistResourceName);
 			return stream == null ? Array.Empty<CommunityPackHostEntry>() : CommunityPackHostAllowlist.LoadFromStream(stream);

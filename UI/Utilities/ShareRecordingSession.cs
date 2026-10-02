@@ -23,10 +23,11 @@ namespace Mesen.Utilities
 		//The user chooses nothing: no path, no "record from" mode. Author and
 		//description are the ones already kept for the ordinary movie recorder
 		//(MovieInfo.txt is the artifact's attribution, section 1).
-		public static void Start()
+		//Returns the file it records to, or null when nothing started.
+		public static string? Start()
 		{
 			if(!EmuApi.IsRunning() || RecordApi.MovieRecording() || RecordApi.MoviePlaying() || NetplayApi.IsConnected()) {
-				return;
+				return null;
 			}
 
 			string folder = Path.Combine(ConfigManager.MovieFolder, "Shared");
@@ -35,7 +36,7 @@ namespace Mesen.Utilities
 			} catch(Exception ex) when(ex is UnauthorizedAccessException || ex is IOException) {
 				EmuApi.WriteLogEntry("[RecordAndShare] UI: cannot create " + folder + ": " + ex.Message);
 				EmuApi.DisplayMessage("Movies", "MovieShareFolderError", folder);
-				return;
+				return null;
 			}
 			string file = Path.Combine(folder, ReplayShare.FileName(EmuApi.GetRomInfo().GetRomName(), DateTime.Now));
 
@@ -48,26 +49,34 @@ namespace Mesen.Utilities
 			bool started = RecordApi.MovieRecordAndShare(options);
 			_file = started ? file : null;
 			EmuApi.WriteLogEntry("[RecordAndShare] UI: start -> " + (started ? "recording to " + file : "REFUSED"));
+			return _file;
 		}
 
 		//Stops any recording or playback; when it was a Record and share session,
 		//hands the file over to the author.
 		public static void Stop()
 		{
-			//Core ends a shared recording itself (ROM unload, state load); a plain
-			//recording started afterwards must not reveal the old file.
-			string? file = RecordApi.MovieSharing() ? _file : null;
-			_file = null;
-			RecordApi.MovieStop();
-
-			if(file != null && File.Exists(file)) {
+			string? file = StopAndKeep();
+			if(file != null) {
 				EmuApi.DisplayMessage("Movies", "MovieShareReady", Path.GetFileName(file));
 				Reveal(file);
 				ApplicationHelper.OpenBrowser(ReplayShare.BuildIssueUrl(ConfigManager.Config.MovieRecord.Description));
 			}
 		}
 
-		private static void Reveal(string file)
+		//G.8 (W-H4): stops like Stop, but only hands the file back - Share's
+		//"Replay saved" sheet reveals it and opens the form on the user's click.
+		public static string? StopAndKeep()
+		{
+			//Core ends a shared recording itself (ROM unload, state load); a plain
+			//recording started afterwards must not reveal the old file.
+			string? file = RecordApi.MovieSharing() ? _file : null;
+			_file = null;
+			RecordApi.MovieStop();
+			return file != null && File.Exists(file) ? file : null;
+		}
+
+		public static void Reveal(string file)
 		{
 			try {
 				if(OperatingSystem.IsMacOS()) {
@@ -81,5 +90,14 @@ namespace Mesen.Utilities
 				EmuApi.WriteLogEntry("[RecordAndShare] UI: could not reveal " + file + ": " + ex.Message);
 			}
 		}
+	}
+
+	//G.8: the session as Share's ViewModel sees it (UI/Logic/ShareScreen.cs).
+	public sealed class CoreReplayRecorder : IReplayRecorder
+	{
+		public bool IsSharing => RecordApi.MovieSharing();
+		public string? Start() => ShareRecordingSession.Start();
+		public string? StopAndKeep() => ShareRecordingSession.StopAndKeep();
+		public string IssueUrl() => ReplayShare.BuildIssueUrl(ConfigManager.Config.MovieRecord.Description);
 	}
 }

@@ -55,6 +55,11 @@
 			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
 		</Panel>
 
+		<!--G.8 (W-H4): the replay pill and Stop above the game, inside Share.-->
+		<Panel Name="ShareRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsShareGameView}">
+			<v:ShareRecordingStrip Name="ShareRecordingStrip" DataContext="{Binding Share}" />
+		</Panel>
+
 		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
 		with the bar.-->
 		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" Background="{DynamicResource MesenMenuBackground}" IsVisible="{Binding Shell.IsBarVisible}">
@@ -198,14 +203,11 @@
 				<v:RemasterWorkspaceView Name="RemasterWorkspace" DataContext="{Binding Remaster}" />
 			</Panel>
 
-			<!--G.1: Share is a placeholder that names the next slice; the game
-			keeps running behind it.-->
-			<Border Name="WorkspacePlaceholder" Background="#181818" IsVisible="{Binding Shell.HasPlaceholder}">
-				<StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center">
-					<TextBlock Name="WorkspacePlaceholderTitle" Text="{Binding Shell.PlaceholderTitle}" FontWeight="Bold" FontSize="18" Foreground="White" HorizontalAlignment="Center" TextWrapping="Wrap" />
-					<TextBlock Name="WorkspacePlaceholderBody" Text="{Binding Shell.PlaceholderBody}" Foreground="#CCFFFFFF" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
-				</StackPanel>
-			</Border>
+			<!--G.8 (PRD Part B §13.5.4): Share's screens (W-H1-W-H3, W-H4's
+			sheets); the game keeps running behind them.-->
+			<Panel Name="ShareWorkspaceHost" IsVisible="{Binding IsShareScreenVisible}">
+				<v:ShareWorkspaceView Name="ShareWorkspace" DataContext="{Binding Share}" />
+			</Panel>
 		</Panel>
 	</DockPanel>
 </Window>
