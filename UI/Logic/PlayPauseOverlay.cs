@@ -149,7 +149,9 @@ public enum PlaySheet
 	SaveStates,
 	//Today's slot grid (GameScreenMode.SaveState/LoadState) opened from the
 	//Save states sheet.
-	SaveStateGrid
+	SaveStateGrid,
+	//G.4: W-P6, the current pack's detail, opened from W-P4's Pack row.
+	PackDetail
 }
 
 public enum PlayEscAction
@@ -178,6 +180,7 @@ public static class PlayEsc
 			case PlaySheet.Cheats:
 			case PlaySheet.SaveStates:
 			case PlaySheet.SaveStateGrid:
+			case PlaySheet.PackDetail:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

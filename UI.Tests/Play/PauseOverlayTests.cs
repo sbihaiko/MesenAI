@@ -125,6 +125,8 @@ namespace Mesen.Tests.Play
 		[InlineData(PlaySheet.Cheats)]
 		[InlineData(PlaySheet.SaveStates)]
 		[InlineData(PlaySheet.SaveStateGrid)]
+		//G.4 (W-P6): the current-pack detail.
+		[InlineData(PlaySheet.PackDetail)]
 		public void A_sheet_opened_from_the_overlay_closes_back_to_it(PlaySheet sheet)
 		{
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));

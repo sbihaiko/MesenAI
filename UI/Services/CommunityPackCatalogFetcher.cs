@@ -40,7 +40,9 @@ namespace Mesen.Services
 		private static string CatalogCachePath => Path.Combine(CacheFolder, "community-packs.json");
 		private static string CatalogEtagPath => Path.Combine(CacheFolder, "community-packs.etag");
 
-		public static async Task<CommunityPackFetchResult?> FetchMatchingPackAsync()
+		//onMatched (G.4, W-P9): called once a catalog row matches, before its
+		//download starts, so the Play HUD can show which pack is installing.
+		public static async Task<CommunityPackFetchResult?> FetchMatchingPackAsync(Action<CommunityPackCatalogEntry>? onMatched = null)
 		{
 			string romSha1 = EmuApi.GetMepRomSha1();
 			if(string.IsNullOrWhiteSpace(romSha1)) {
@@ -65,6 +67,7 @@ namespace Mesen.Services
 			if(entry == null) {
 				return null;
 			}
+			onMatched?.Invoke(entry);
 
 			string? primaryPath = await DownloadAndVerifyAsync(entry.Url, entry.Sha256, allowedHosts);
 			EmuApi.WriteLogEntry("[CommunityPackFetch] primary download+verify: " + (primaryPath ?? "FAILED (see [CommunityPackDownload] lines above)"));

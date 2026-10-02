@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d"
+	x:Class="Mesen.Views.PlayerPackDetailSheetView"
+	x:DataType="vm:MainWindowViewModel"
+>
+	<!--G.4 (PRD Part B §13.5.2 W-P6): the current pack's detail, opened from
+	W-P4's Pack row when there is no choice to make (one pack, a sibling pack,
+	or none). The chips and the ⚠ music line come from the pack folder read
+	when the sheet opens (PackAudioNotice.Scan, ADR-0240 Option 1 in plain
+	words). Change pack… is disabled with its reason when there is nothing to
+	change to (rule 4); Restore (ADR-0147) appears only for a catalog-installed
+	pack and confirms once in place (rule 7). Details ▸ is the one place in Play
+	where ids appear. Esc and Done close back to W-P4.-->
+	<Border
+		Name="PlayerPackDetailSheet"
+		Background="#DD000000"
+		CornerRadius="14"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center"
+		Padding="24"
+		IsVisible="{Binding IsPackDetailVisible}"
+	>
+		<StackPanel Spacing="8" MinWidth="380" MaxWidth="520" XYFocus.NavigationModes="Enabled">
+			<TextBlock Name="PackDetailTitle" Text="{Binding PackDetailTitle}" FontWeight="Bold" FontSize="16" TextWrapping="Wrap" />
+			<TextBlock Name="PackDetailByline" Text="{Binding PackDetailByline}" Opacity="0.7" TextWrapping="Wrap" />
+			<StackPanel Name="PackDetailChips" Orientation="Horizontal" Spacing="16" IsVisible="{Binding PackDetailHasPack}">
+				<StackPanel Orientation="Horizontal" Spacing="4">
+					<TextBlock Text="{l:Translate lblPackDetailTextures}" />
+					<TextBlock Text="✔" IsVisible="{Binding PackDetailTextures}" />
+					<TextBlock Text="—" IsVisible="{Binding !PackDetailTextures}" />
+				</StackPanel>
+				<StackPanel Orientation="Horizontal" Spacing="4">
+					<TextBlock Text="{l:Translate lblPackDetailAudio}" />
+					<TextBlock Text="✔" IsVisible="{Binding PackDetailAudio}" />
+					<TextBlock Text="—" IsVisible="{Binding !PackDetailAudio}" />
+				</StackPanel>
+				<StackPanel Orientation="Horizontal" Spacing="4">
+					<TextBlock Text="{l:Translate lblPackDetailPatch}" />
+					<TextBlock Text="✔" IsVisible="{Binding PackDetailPatch}" />
+					<TextBlock Text="—" IsVisible="{Binding !PackDetailPatch}" />
+				</StackPanel>
+			</StackPanel>
+
+			<StackPanel Name="PackDetailNotice" Spacing="2" IsVisible="{Binding PackDetailHasNotice}" Margin="0 4 0 0">
+				<TextBlock Text="{l:Translate lblPackDetailMissingMusicTitle}" FontWeight="Bold" />
+				<TextBlock Name="PackDetailNoticeBody" Text="{Binding PackDetailNoticeBody}" Opacity="0.8" TextWrapping="Wrap" Margin="16 0 0 0" />
+			</StackPanel>
+
+			<StackPanel Orientation="Horizontal" Spacing="8" Margin="0 6 0 0">
+				<Button Name="PackDetailChangeButton" Content="{l:Translate btnPackDetailChange}" IsEnabled="{Binding PackDetailCanChange}" Click="OnChange" />
+				<Button Name="PackDetailFolderButton" Content="{l:Translate btnPackDetailShowFolder}" IsVisible="{Binding PackDetailHasFolder}" Click="OnShowFolder" />
+			</StackPanel>
+			<TextBlock Name="PackDetailChangeReason" Text="{Binding PackDetailChangeReason}" FontSize="11" Opacity="0.6" TextWrapping="Wrap" IsVisible="{Binding !PackDetailCanChange}" />
+
+			<StackPanel Spacing="4" IsVisible="{Binding PackDetailShowsRestore}">
+				<Button Name="PackDetailRestoreButton" Content="{l:Translate btnPackDetailRestore}" IsVisible="{Binding !PackDetailConfirmingRestore}" IsEnabled="{Binding !PackDetailRestoreRunning}" Click="OnRestore" />
+				<StackPanel Name="PackDetailRestoreConfirm" Spacing="4" IsVisible="{Binding PackDetailConfirmingRestore}">
+					<TextBlock Text="{l:Translate lblPackDetailRestoreConfirm}" TextWrapping="Wrap" />
+					<StackPanel Orientation="Horizontal" Spacing="8">
+						<Button Name="PackDetailRestoreConfirmButton" Content="{l:Translate btnPackDetailRestoreConfirm}" Click="OnRestore" />
+						<Button Name="PackDetailRestoreKeepButton" Content="{l:Translate btnPackDetailRestoreKeep}" Click="OnKeep" />
+					</StackPanel>
+				</StackPanel>
+			</StackPanel>
+
+			<ToggleButton Name="PackDetailIdsToggle" Content="{l:Translate btnPackDetailDetails}" IsChecked="{Binding PackDetailShowsIds, Mode=TwoWay}" IsVisible="{Binding PackDetailHasPack}" Margin="0 6 0 0" />
+			<SelectableTextBlock Name="PackDetailIds" Text="{Binding PackDetailIds}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding PackDetailShowsIds}" />
+
+			<Button Name="PackDetailDoneButton" Content="{l:Translate btnPackDetailDone}" HorizontalAlignment="Right" Click="OnDone" />
+		</StackPanel>
+	</Border>
+</UserControl>

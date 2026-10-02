@@ -176,11 +176,17 @@ namespace Mesen.Utilities
 		//(ReloadRom, or PowerCycle for the picker), taken for everything the
 		//policy keeps on a restart and when the core refuses after all.
 		private static readonly object _packChangeLock = new();
-		public static void ApplyPackChange(ConsoleType console, Action restart)
+		//What ApplyPackChange would do right now: W-P7 names its button from it.
+		public static PackChangePlan PlanPackChange(ConsoleType console)
 		{
 			bool movieActive = RecordApi.MoviePlaying() || RecordApi.MovieRecording();
 			bool netplayActive = NetplayApi.IsConnected() || NetplayApi.IsServerRunning();
-			PackChangePlan plan = PackChangePolicy.Plan(console, movieActive, netplayActive);
+			return PackChangePolicy.Plan(console, movieActive, netplayActive);
+		}
+
+		public static void ApplyPackChange(ConsoleType console, Action restart)
+		{
+			PackChangePlan plan = PlanPackChange(console);
 			if(plan.Route == PackChangeRoute.Restart) {
 				if(plan.NoticeKey != null) {
 					EmuApi.DisplayMessage("MEP", plan.NoticeKey);

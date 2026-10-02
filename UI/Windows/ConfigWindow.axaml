@@ -35,6 +35,9 @@
 		<DataTemplate DataType="{x:Type vm:LookConfigViewModel}">
 			<v:LookConfigView />
 		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:PlayerDisplaySettingsViewModel}">
+			<v:PlayerDisplaySettingsView />
+		</DataTemplate>
 		<DataTemplate DataType="{x:Type vm:NesConfigViewModel}">
 			<v:NesConfigView />
 		</DataTemplate>
@@ -58,12 +61,26 @@
 				<c:ButtonWithIcon Grid.Column="0" Click="OpenMesenFolder" Icon="Assets/Folder.png" Text="{l:Translate btnOpenMesenFolder}" IsVisible="{Binding !PlayerMode}" />
 				<c:ButtonWithIcon Grid.Column="1" Click="ResetAllSettings" Icon="Assets/ResetSettings.png" Text="{l:Translate btnResetSettings}" IsVisible="{Binding !PlayerMode}" />
 
-				<Button Grid.Column="3" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnOK}" />
-				<Button Grid.Column="4" MinWidth="70" HorizontalContentAlignment="Center" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
+				<Button Grid.Column="3" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnOK}" IsVisible="{Binding !PlayerMode}" />
+				<Button Grid.Column="4" MinWidth="70" HorizontalContentAlignment="Center" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" IsVisible="{Binding !PlayerMode}" />
+				<!--G.4 (W-P8): rule 10 applied to settings, and one Done that keeps
+				the changes (Esc does the same in Player mode).-->
+				<TextBlock Grid.Column="0" Grid.ColumnSpan="3" Name="lblPlayerSettingsEverythingElse" Text="{l:Translate lblPlayerSettingsEverythingElse}" VerticalAlignment="Center" Opacity="0.75" IsVisible="{Binding PlayerMode}" />
+				<Button Grid.Column="4" Name="btnPlayerSettingsDone" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnPlayerSettingsDone}" IsVisible="{Binding PlayerMode}" />
 			</Grid>
 		</Panel>
-		
-		<TabControl TabStripPlacement="Left" Background="#20888888" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}" Padding="0">
+
+		<!--G.4 (PRD Part B §13.5.2 W-P8): Player mode's own strip, in
+		PlayerSettingsEssentials.Tabs order - Display (the window) and Look (the
+		pixels) are the two halves of Advanced's Video tab.-->
+		<TabControl Name="PlayerSettingsTabs" TabStripPlacement="Top" Background="#20888888" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0" IsVisible="{Binding PlayerMode}">
+			<TabItem Name="tabPlayerDisplay" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
+			<TabItem Name="tabPlayerLook" Header="{l:Translate tabLook}" Content="{Binding Look}" />
+			<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding Audio}" />
+			<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding Input}" />
+		</TabControl>
+
+		<TabControl Name="AdvancedSettingsTabs" TabStripPlacement="Left" IsVisible="{Binding !PlayerMode}" Background="#20888888" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}" Padding="0">
 			<TabItem Content="{Binding Audio}">
 				<TabItem.Header>
 					<StackPanel Orientation="Horizontal">
