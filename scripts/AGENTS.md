@@ -32,6 +32,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   no `core` prerequisite) must compile those `.cpp` files standalone -
   verify their `#include` list has no further undeclared link dependency
   before adding a makefile target for it.
+- A native library dropped onto an existing path (`MesenCore.dylib`/`.so`,
+  `librashader.dylib`) goes through `replace_file_atomic.sh` (temp file +
+  `mv`, a new inode), never a bare `cp`: on macOS a signed Mach-O rewritten
+  in place is SIGKILLed on the next load when the old image was still mapped
+  (#628). Guarded by `test_native_lib_atomic_replace.py`.
 - Compiled binaries (`core_unit_tests`, `roles_probe`, `headless_record`,
   `spike_sound_driver`, `metal_presenter_tests`) are build output, not source -
   never `git add` them. `.gitignore` at the repo root lists all five by name, so none of them show

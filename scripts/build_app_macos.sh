@@ -105,7 +105,8 @@ fi
 # `dotnet publish -t:BundleApp` caches the dylib copy; force the freshly
 # built one into the bundle so the app actually carries the new core.
 echo "==> injecting freshly built $SHAREDLIB into the .app"
-cp -f "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"
+# A new inode, never cp -f over the old one: issue #628.
+"$ROOT/scripts/replace_file_atomic.sh" "$CORE_DYLIB" "$PUBLISH_APP/Contents/MacOS/$SHAREDLIB"
 
 # adhoc codesign so macOS accepts the (re-written) bundle.
 echo "==> ad-hoc codesigning the .app"
