@@ -53,6 +53,7 @@ mep_lint.py
 mep_patch.py
 mep_project.py
 mep_project_build.py
+mep_project_kit.py
 mep_recipe_common.py
 mep_recorded.py
 mep_render_audio.py

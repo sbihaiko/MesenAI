@@ -198,6 +198,71 @@ def test_sync_removes_what_the_build_no_longer_has():
               "an identical file is not rewritten, so its mtime stays (ADR-0212)")
 
 
+
+def test_the_pack_json_share_wrote_survives_a_rebuild():
+    """#645: Share's `mep_build.py pack` writes mep/pack.json (targets, the
+    ADR-0140 id, author, license) and a rebuild must not delete it; neither
+    the zip beside mep/ nor a patch the pack.json declares may go either."""
+    with tempfile.TemporaryDirectory() as td:
+        project = make_project(Path(td))
+        rc, _ = build(project)
+        mep = project / "mep"
+        (mep / "patches").mkdir()
+        (mep / "patches" / "fix.ips").write_bytes(b"PATCHEOF")
+        pack = {"mep": "1.1.0", "name": "Game", "version": "1.0.0", "id": "game-remaster",
+                "license": "CC-BY-4.0", "author": "someone", "targets": [{"system": "nes", "sha1": "A" * 40}],
+                "patches": [{"sha1": "B" * 40, "file": "patches/fix.ips"}],
+                "sections": {"textures": {"path": "textures"}}}
+        (mep / "pack.json").write_text(json.dumps(pack, indent=2) + "\n")
+        written = (mep / "pack.json").read_bytes()
+        zip_path = project / "game-mep.zip"
+        zip_path.write_bytes(b"PK")
+        rc, out = build(project)
+        check(rc == 0, "a project Share packed rebuilds", out[-600:])
+        check((mep / "pack.json").is_file() and (mep / "pack.json").read_bytes() == written,
+              "mep/pack.json keeps its targets and id", out[-400:])
+        check((mep / "patches" / "fix.ips").is_file(), "a patch the pack.json declares is kept")
+        check(zip_path.read_bytes() == b"PK", "the zip beside mep/ is not touched")
+        check(show_line(out) == "show: images", "a kept pack.json is not a manifest change", show_line(out))
+
+
+def test_an_interrupted_first_build_does_not_lock_the_project_out():
+    """#646: a first build stopped halfway through the sync left a stampless
+    mep/ that every later build refused as foreign."""
+    with tempfile.TemporaryDirectory() as td:
+        project = make_project(Path(td))
+        real = PB.sync_into
+
+        def interrupted(stage, mep):
+            mep.mkdir(parents=True, exist_ok=True)
+            first = next(p for p in sorted(stage.rglob("*")) if p.is_file())
+            (mep / first.relative_to(stage)).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(first, mep / first.relative_to(stage))
+            raise OSError("disk went away")
+
+        PB.sync_into = interrupted
+        try:
+            rc = PB.run(project)
+        finally:
+            PB.sync_into = real
+        check(rc == 1 and (project / "mep").is_dir(), "the interrupted build failed with mep/ half written", str(rc))
+        rc, out = build(project)
+        check(rc == 0, "the next build proceeds instead of refusing a foreign pack", out[-400:])
+        check((project / "mep" / "textures" / "hires.txt").is_file(), "and finishes mep/")
+
+
+def test_a_hand_made_mep_is_still_refused():
+    """The #646 fix must not weaken the guard: a mep/ with no stamp that this
+    build never started is someone else's pack."""
+    with tempfile.TemporaryDirectory() as td:
+        project = make_project(Path(td))
+        (project / "mep" / "textures").mkdir(parents=True)
+        (project / "mep" / "textures" / "hires.txt").write_text("<ver>106\n")
+        rc, out = build(project)
+        check(rc == 2 and "did not write" in out, "a hand-made mep/ is refused", out[-400:])
+        check(not PB.stamp_path(project).exists(), "and is not stamped")
+
+
 def main():
     tests = [
         test_a_clean_build_writes_mep_and_says_the_rom_must_be_reopened,
@@ -208,6 +273,9 @@ def main():
         test_pages_join_only_the_recording_they_were_made_for,
         test_the_newest_textured_recording_is_built,
         test_sync_removes_what_the_build_no_longer_has,
+        test_the_pack_json_share_wrote_survives_a_rebuild,
+        test_an_interrupted_first_build_does_not_lock_the_project_out,
+        test_a_hand_made_mep_is_still_refused,
     ]
     for t in tests:
         t()

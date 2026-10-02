@@ -31,6 +31,16 @@ and scenery (`artist_bg_kit.py`) stay per recording, one kit each under
 --stage/--dump`), which a recording does not keep, so `kit` does not make
 them. Each kit folder is assembled (`artist_kit_assemble.py`).
 
+`kit` runs after every Stop recording, and the artist paints inside `kit/`, so
+a rerun must never cost a painting (#644). A per-recording generator whose
+fragment (`kit-part-sprites.json`, `kit-part-background.json`) is already in
+that recording's kit is skipped - rerunning it into its own folder mints
+duplicate `usrNNN` sheets - and so is the assemble of a kit nothing changed.
+The pattern pages are regenerated into `<out>/.pages-new/` and carried into
+`<out>/pages/` by `mep_project_kit.merge_kit`, which keeps every painted page
+with its twin, sidecar and `.ora`. A skipped step still prints its `==`/`ok`
+pair, so the step count the job card shows does not move.
+
 `build` is Remaster's *Build & show in game* (slice G.6); it lives in
 `mep_project_build.py`, whose docstring says what it writes and what it refuses.
 
@@ -49,6 +59,7 @@ HERE = Path(__file__).resolve().parent
 AUTO = "auto"
 MANIFEST = "project.json"
 SOURCES = ("play", "tas", "ai", "script")
+PAGES_FRESH = ".pages-new"
 _REC = re.compile(r"rec-(\d{1,6})")
 BARE_SECTIONS = ("textures", "audio")
 # A section is present in a recording when its probe exists (the core's
@@ -209,18 +220,50 @@ def kit_plan(project, rom: Path, out: Path, title: str = "", verify: bool = True
     steps, kits = [], []
     for rec in recs:
         kit = Path(out) / rec.id
-        kits.append((kit, f"{title or project.name}, {rec.id}"))
-        steps.append({"kit": kit, "argv": [py, str(HERE / "artist_kit.py"), str(rec.path), "--out", str(kit)] + flag})
-        steps.append({"kit": kit, "argv": [py, str(HERE / "artist_bg_kit.py"), str(rec.path), "--out", str(kit)] + flag})
+        done = [(kit / f"kit-part-{part}.json").is_file() for part in ("sprites", "background")]
+        kits.append((kit, f"{title or project.name}, {rec.id}", all(done) and (kit / "kit.json").is_file()))
+        for tool, skip in zip(("artist_kit.py", "artist_bg_kit.py"), done):
+            step = {"kit": kit, "argv": [py, str(HERE / tool), str(rec.path), "--out", str(kit)] + flag}
+            steps.append({**step, "skip": "already kitted"} if skip else step)
     if recs:
         pages = Path(out) / "pages"
+        fresh = Path(out) / PAGES_FRESH
         also = [a for rec in recs[1:] for a in ("--also", str(rec.path))]
-        kits.append((pages, f"{title or project.name}, pattern pages"))
-        steps.append({"kit": pages, "argv": [py, str(HERE / "artist_chr_kit.py"), str(recs[0].path), "--rom", str(rom),
-                                             "--out", str(pages)] + also + flag})
-    for kit, kit_title in kits:
-        steps.append({"kit": kit, "argv": [py, str(HERE / "artist_kit_assemble.py"), str(kit), "--title", kit_title]})
+        kits.append((pages, f"{title or project.name}, pattern pages", False))
+        steps.append({"kit": pages, "merge": fresh,
+                      "argv": [py, str(HERE / "artist_chr_kit.py"), str(recs[0].path), "--rom", str(rom),
+                               "--out", str(fresh)] + also + flag})
+    for kit, kit_title, skip in kits:
+        step = {"kit": kit, "argv": [py, str(HERE / "artist_kit_assemble.py"), str(kit), "--title", kit_title]}
+        steps.append({**step, "skip": "nothing changed"} if skip else step)
     return steps
+
+
+def _run_step(step) -> int:
+    """One generator run; a `merge` step writes into its fresh folder and is
+    carried into the kit only by `merge_kit` (#644)."""
+    fresh = step.get("merge")
+    if fresh is None:
+        return subprocess.run(step["argv"]).returncode
+    import shutil
+    import mep_project_kit
+    shutil.rmtree(fresh, ignore_errors=True)
+    try:
+        rc = subprocess.run(step["argv"]).returncode
+        # A run that failed its --verify still wrote its fragment, which says
+        # so to the artist (ADR-0183); a run that wrote nothing changes nothing.
+        if not any(Path(fresh).glob("kit-part-*.json")):
+            return rc or 1
+        try:
+            merged = mep_project_kit.merge_kit(fresh, step["kit"])
+        except OSError as exc:
+            print(f"error: could not carry the new pages into {step['kit']}: {exc}", file=sys.stderr, flush=True)
+            return 1
+        for family, surface in sorted(merged["kept"].items()):
+            print(f"kept {surface}: painted - its page was not regenerated (delete it to regenerate)", flush=True)
+        return rc
+    finally:
+        shutil.rmtree(fresh, ignore_errors=True)
 
 
 def cmd_kit(args) -> int:
@@ -235,7 +278,10 @@ def cmd_kit(args) -> int:
         # The generators' own output goes to this process's stdout, never into
         # the kit: a kit holds surfaces and their manifests, nothing else.
         print(f"== {Path(step['argv'][1]).name} -> {step['kit']}", flush=True)
-        rc = subprocess.run(step["argv"]).returncode
+        if step.get("skip"):
+            print(f"ok   {Path(step['argv'][1]).name} -> {step['kit']} ({step['skip']}, not rerun)", flush=True)
+            continue
+        rc = _run_step(step)
         print(f"{'ok  ' if rc == 0 else 'FAIL'} {Path(step['argv'][1]).name} -> {step['kit']}", flush=True)
         failed += rc != 0
     return 1 if failed else 0
