@@ -320,6 +320,15 @@ A project that measures its own claims should say what is and isn't shipped.
   `UseSoftwareRenderer` setting. The project ships no shaders: put presets in
   the `Shaders` folder of the data directory. The headless checks pass; the
   on-screen check (Retina, vsync, fullscreen) is still a human row.
+  Take presets from [libretro/slang-shaders](https://github.com/libretro/slang-shaders)
+  (copy the whole repository: most presets reach for its `include/` and
+  `stock.slang`; it is not bundled because its shaders carry mixed licenses).
+  These checked out on the Metal path, no GPU hang, and look right on a
+  256x240 picture: `crt/zfast-crt` (the cheapest), `crt/crt-lottes-fast`,
+  `crt/crt-easymode`, `crt/crt-geom` and `crt/crt-guest-advanced-fastest`.
+  Some presets are known not to load (for example the `-wcg` and
+  `steamdeck-oled-native` variants under `bezel/scanline-classic`, which use
+  an outdated HDR name): a failed load keeps the unfiltered picture.
 - Two limits stand by design, not as gaps: a changed `hires.txt` still needs the
   ROM reopened — the in-place reload covers a cell already painted, and a cell's
   first paint re-points its rule, so it wants one reopen of its own (ADR-0231) —
