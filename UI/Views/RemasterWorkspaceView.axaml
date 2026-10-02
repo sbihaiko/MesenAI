@@ -61,6 +61,10 @@
 
 			<TextBlock Name="RemasterNotice" Text="{Binding NoticeText}" Foreground="#FFB4A0" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
+			<!--G.7: W-R6 (a finished pack picked as a folder) and W-R7 (Compose a Scene…), in place.-->
+			<v:RemasterImportSheet Name="RemasterImportSheet" />
+			<v:RemasterComposeSheet Name="RemasterComposeSheet" />
+
 			<!--W-R0: Remaster, no project yet. Two elements + rows (rule 2).-->
 			<StackPanel Name="RemasterNoProject" Spacing="16" IsVisible="{Binding IsNoProject}">
 				<TextBlock Text="{l:Translate lblRemasterTitle}" FontSize="22" FontWeight="Bold" />
@@ -97,6 +101,7 @@
 							<MenuFlyout>
 								<MenuItem Header="{l:Translate mnuRemasterShowFolder}" Click="OnShowFolder" />
 								<MenuItem Header="{l:Translate mnuRemasterSwitchProject}" Click="OnChooseFolder" />
+								<MenuItem Name="RemasterComposeMenuItem" Header="{l:Translate mnuRemasterComposeScene}" Click="OnCompose" />
 							</MenuFlyout>
 						</Button.Flyout>
 					</Button>
@@ -143,13 +148,16 @@
 
 				<TextBlock Classes="zone" Text="{l:Translate lblZonePaint}" />
 				<Border Classes="card">
+					<StackPanel Spacing="12">
+					<v:RemasterTileBrowserView Name="RemasterTileBrowser" />
 					<DockPanel>
 						<StackPanel DockPanel.Dock="Right" Spacing="2" MaxWidth="220" Margin="12 0 0 0">
 							<Button Name="RemasterPrepareButton" Content="{l:Translate btnPrepareFigures}" IsEnabled="{Binding PrepareFigures.IsEnabled}" Click="OnPrepare" />
 							<TextBlock Name="RemasterPrepareReason" Classes="reason" Text="{Binding PrepareFigures.Reason}" IsVisible="{Binding PrepareFigures.HasReason}" />
 						</StackPanel>
-						<TextBlock Text="{Binding PaintText}" VerticalAlignment="Center" />
+						<TextBlock Name="RemasterPaintText" Text="{Binding PaintText}" VerticalAlignment="Center" />
 					</DockPanel>
+					</StackPanel>
 				</Border>
 
 				<TextBlock Classes="zone" Text="{l:Translate lblZoneSeeIt}" />

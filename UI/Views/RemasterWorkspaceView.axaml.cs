@@ -56,6 +56,8 @@ namespace Mesen.Views
 
 		private void OnDismissJob(object? sender, RoutedEventArgs e) => Model?.DismissJobResult();
 
+		private void OnCompose(object? sender, RoutedEventArgs e) => Model?.ShowCompose();
+
 		private void OnShowFolder(object? sender, RoutedEventArgs e)
 		{
 			if(Model != null) {
