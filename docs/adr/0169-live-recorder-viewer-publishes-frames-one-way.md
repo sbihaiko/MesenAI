@@ -9,6 +9,7 @@
   the user's decision and go-ahead, quoted verbatim: "manter o script como ferramenta de desenvolvimento e diagnóstico, e tirar o "Open Viewer" do menu que o jogador ou artista vê. O Record/Stop continua, porque alimenta o kit. Seria uma emenda à ADR-0169 §4, que foi quem colocou o viewer no menu, e não um bug. Não medi uso real, então é uma leitura do fluxo atual, não um dado."
   Covered by `UI.HeadlessTests/LiveRecorderMenuTests.cs`.
 - Date: 2026-09-08
+- Amended by: ADR-0243 (accepted 2026-10-02) — the `LiveRecording` slot feeds `record_viewer.py`, not the artist kit. No kit, compose or `mep_*` script reads it; the kit's only source is the bootstrap recording.
 - Updated: 2026-09-08 — the sprite-layer read channel switched from the
   debugger-based `GetMemoryState` to direct console exports under
   `Emulator::Lock()` (Context bullet 3, Decision 2, Consequences bullet 1); the

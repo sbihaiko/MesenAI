@@ -1401,6 +1401,14 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   refreshes `~/Desktop/mesen/Mesen.app` with a timestamped backup. No CI
   step or other script depends on it; see its header comment for the
   prerequisites.
+- `render_gui_wireframes.py` renders the GUI redesign wireframes (PRD
+  Part B §13, ADR-0241 `proposed`) as PNGs into `docs/media/gui-redesign/`,
+  one `W-xx.png` per wireframe id (`--only W-R1,W-P4` for a subset). Pillow
+  plus the macOS system font `/System/Library/Fonts/SFNS.ttf`; exits 2 when
+  the font is missing. Game images are abstract placeholders drawn by the
+  script — never art from a game (`docs/AGENTS.md` media rule). The PNG is
+  the visual reference, the PRD's ASCII block the structural spec: change
+  both in the same commit. Not wired into any check or CI step.
 - `scripts/requirements.txt` pins Pillow/numpy/PyYAML to the versions
   `.github/workflows/checks.yml` installs (Phase 11 C.7). Prefer
   `pip install -r scripts/requirements.txt` over copying versions from CI.

@@ -4,6 +4,7 @@
 - Date: 2026-09-26
 - Related: ADR-0163 (fork–upstream coexistence tiers), ADR-0203 (CI builds Windows and macOS Apple Silicon), ADR-0204 (download channel), upstream `392421500` "Added support for shaders (Windows + Linux) (#270)", merged here by PR #440
 - Supersedes / amends: nothing; amended in place 2026-10-02 (§3, proposed — see Status)
+- Amended by: ADR-0246 (accepted 2026-10-02) — non-goals: a short bundled list of named looks is allowed (the amended non-goal bullet). The original clause is kept in git history; ADR-0246 §4 carries the decision and its rationale.
 
 ## Context
 
@@ -53,8 +54,19 @@ Non-goals:
 - Shaders never touch recording, capture, HD-pack building or any
   measurement surface. `headless_record` screenshots, OAM dumps and the
   artist kit stay unfiltered; a shader is a display effect only.
-- No shader authoring, bundled preset catalogue or per-game shader policy —
-  the user points at an existing RetroArch `.slangp`, as upstream does.
+- No shader authoring or per-game shader policy. The user points at an
+  existing RetroArch `.slangp`, as upstream does.
+  - **Amended 2026-10-02 (user's decision, *"Sim, 2–3 estilos"*):** the
+    "no bundled preset catalogue" clause is lifted for a **short named
+    list** of two or three looks (for example *CRT TV* and *Handheld LCD*),
+    offered by Settings › Look › Screen (PRD Part B §13, W-P10).
+  - Each bundled preset is a `.slangp` plus its passes. It must carry a
+    license compatible with the app's (GPL-3.0). The slice that picks
+    them records each preset's source, license and sha256.
+  - The display-only rule above is unchanged: a bundled look never
+    reaches screenshots, recordings or the kit.
+  - This is not a catalogue browser and not a download path; adding a
+    look is a code change.
 - No Intel macOS leg (ADR-0203 narrowed the release to Apple Silicon).
 
 ## Decision

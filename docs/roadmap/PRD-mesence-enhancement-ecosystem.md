@@ -64,12 +64,18 @@ Principles that every phase below obeys:
    no monetisation (*MGM v. Grokster*, Yuzu 2024).
 4. **Hosts never execute pack content as code** (MEP-v1 §6). Patches and
    recipes are declarative data interpreted by a fixed vocabulary.
-5. **No LLM in the client.** LLMs run only in CI (the community-pack classify
-   step); whatever they emit is validated by deterministic scripts before a
-   human or the client sees it. `Core/`, `UI/` and the installer never call
-   a model, hold a key or carry a prompt. An external tool under `scripts/`
-   is not the client, but what it may send off the machine is governed by
-   ADR-0154, not by this principle (see Phase 10).
+5. **No LLM in the client.** `Core/`, `UI/` and the installer never call
+   a model, never carry a prompt and never ship a key. Models run in CI
+   (the community-pack classify step) or in an external script under
+   `scripts/` that the user starts. The client may keep a key **the user
+   entered** in the OS credential store, and hand it to such a script only
+   through the child process's environment — never on a command line, in
+   `settings.json`, logs, `runs/` sidecars or crash reports the app
+   writes. Whatever a
+   model returns reaches the client only as data checked by deterministic
+   code. What a script may send off the machine is governed by ADR-0154,
+   not by this principle (see Phase 10). *(Reworded 2026-10-02 by
+   ADR-0247.)*
 
 Product consoles on `main`: **NES, GB/GBC/GBS, SMS/GG/SG-1000, GBA**. SNES
 (incl. Super Game Boy), PC Engine, WonderSwan and ColecoVision were removed
@@ -1067,7 +1073,7 @@ automatic remapping, browser Gamepad API, stats collection.
 #### Phase 7 — Player shell (minimal GUI)
 
 **Delivered** — P.0–P.7, 2026-08-28 → 2026-09-01, and P.1-local on 2026-09-17
-(ADR-0206). One slice is open: P.8 (ADR-0237, below). Record in §3, normative
+(ADR-0206). Two slices are open: P.8 (ADR-0237) and P.9 (ADR-0244), below. Record in §3, normative
 text and slice list in Part B (do not duplicate that prose here). Pack
 identity is the pair `pack_id` (product) + `content_id` (revision); the
 catalog keeps one live slot per `pack_id`. The letterbox fit, once the last
@@ -1077,6 +1083,11 @@ the native file picker (F6.5).
 | Slice | Deliverable | Decision |
 |---|---|---|
 | P.8 | **Shaders on macOS (ADR-0237).** A native `MacOSMetalRenderer` presents into a `CAMetalLayer` and runs the librashader Metal filter chain when a shader is set; a `librashader.dylib` for arm64 is bundled and signed in the `.app` (sha256-pinned prebuilt SourMesen CI artifact, mirrored as an asset of this repo's release `librashader-macos-arm64-01febce6`, `scripts/fetch_librashader_macos.sh`; ADR-0237 §3 is amended to say so, 2026-10-02, pending the maintainer's pick, and the mirror resolves only once the maintainer creates that release). Stop conditions: (1) with a shader set, the presented frame differs from the unfiltered one, and with none set it matches the software path; (2) every `headless_record` output is byte-identical with and without a shader configured; (3) a person on a real display sees the Video settings shader group, a CRT preset applied, and no stutter at native resolution. First risk to confirm: the viewer handle can back a `CAMetalLayer`. Progress 2026-10-02: implemented; (1) is asserted by `make metal-presenter-tests` (40 checks, a mutation per path killed) and (2) by `scripts/check_headless_shader_invariance.sh` (Castlevania gameplay, four modes, 199 files, determinism control and negative control); the first risk is confirmed against Avalonia 12.1.1's `NativeControlHost` view shape in that test, not in a live window; (3) is not evaluated. | ADR-0237 |
+| P.9 | **Pack change in place (ADR-0244).** First step, before any GUI change: a headless exactness test on a committed NES state — play N frames, save to memory, swap the pack (none → pack, pack → none, pack A → pack B, audio-only pack on/off), restore, play M frames — against the same M frames from a fresh load of the target pack with the state loaded the ordinary way; pass = CPU/RAM/PPU registers byte-identical and frames pixel-identical, per transition, then GB/SMS through `HdTileVideoFilter`. Only the transitions that pass get the in-place path (`ToggleLayer`/picker: save state → `ReloadRom` → load state, fallback to a fresh load with a notice); a ROM-patch pack, a movie/shared-replay recording or netplay keep the restart with the reason shown. Inputs: one committed state per console, the existing packs under test fixtures; stop rule: any mismatch is recorded and that transition keeps the restart. | ADR-0244 (accepted 2026-10-02); go-ahead to implement not yet given |
+| P.10 | **Cheats in Play, phase 1 (ADR-0245 §1–§3, §5).** W-P11 from the pause overlay (W-P4 › Cheats): the bundled `CheatDb.Nes.json` entries for the loaded ROM (`HashType.Sha1Cheat`) as toggles with a search over descriptions, stored in the same `CheatCodes` the classic cheat list uses; "this copy isn't in the cheat list" with a search by game name and the "made for another copy" mark; *Add a Code…*; Game Genie disabled with its reason in Remaster's game view (RAM codes allowed); GB/SMS manual entry only, with the reason. No network, no model. | ADR-0245 accepted 2026-10-02. Does not wait for ADR-0241: until the redesign exists, the *Cheats* row goes into today's player overlay (§6). Rules in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when a toggle in W-P11 and the classic cheat window show the same state, and a Game Genie entry refuses in Remaster with its reason. |
+| P.11 | **Cheats, phase 2 — search by intent (ADR-0245 §4).** An external script (ADR-0247) matches a typed intent against *this game's* database descriptions as a closed Choice (Jev, a tool-free model, or local Ollama); an answer outside the list is discarded. | Accepted only on its own numbers: the share of intents answered with a correct entry on a fixed intent set. Prerequisite: P.10 and principle 5 edited per ADR-0247. |
+| P.12 | **Cheats, phase 3 — checked web lookup (ADR-0245 §4).** An external script proposes codes for a game not in the database from public lists; each is evidence-free (ADR-0188) until a headless check confirms it: `scripts/step_emu.py` on the user's loaded ROM (by path, never uploaded) from a `.mss` minted from the current game, N frames off and N on from the same state, passing when the target address holds the promised value in every "on" frame and the "off" run differs there; a code with no RAM target cannot pass. Only checked codes are offered, labelled "found online, checked on your copy". | Accepted only on its own numbers: the share of web proposals that pass the check. The slice fixes N and records it. Prerequisite: P.11. |
+| P.13 | **The picture's three layers (ADR-0246).** Settings › Look (W-P10): Art / Pixels / Screen in the order they apply; Pixels (`VideoConfig.VideoFilter`) disabled over pack art with "Off while a pack draws the art" — Look never overrides it, Tools ⋯ › Options still can (§3); NTSC labelled "Not applied while a pack draws the art"; the "shows in screenshots" / "only on your display" mark per choice; 2–3 bundled named looks with license, source and sha256 recorded per file; *Hold to Compare*; unavailable shaders shown with their reason; *Hi-res filter* leaves the quick panel and the shader selector leaves Video settings. | ADR-0246 accepted 2026-10-02. Needs G.1's Settings sheet. Before the compare: measure the shader swap and bypass the chain for held frames if it stutters (§5). Rules in `UI/Logic/` tested host-free. Stop when every Look choice shows where its result goes, Pixels reads disabled with its reason over pack art on NES, GB and SMS, and a value set in Options that is not in Look's list shows as the current item without being overwritten. |
 
 #### Phase 8 — Enhancement pack border layer
 
@@ -1355,8 +1366,9 @@ measures layout fidelity on a contact sheet and does not depend on how the
 subject is chosen.
 
 **Constraints that hold regardless of outcome.**
-- Part A §1 principle 5 as written: no model call, key or prompt in
-  `Core/`, `UI/` or the installer. If a studio exists it is an external
+- Part A §1 principle 5 (as reworded by ADR-0247): no model call or
+  prompt in `Core/`, `UI/` or the installer; the client may only keep a
+  user-entered key and hand it to an external script. If a studio exists it is an external
   script in `scripts/`, like the viewer and the composition editor
   (ADR-0165, ADR-0169).
 - ADR-0192 supersedes ADR-0154 §2 Option A: generative repaint is not a
@@ -1460,7 +1472,7 @@ available in git and the logs.
 **Status:** opened 2026-09-16 from `docs/hd-pack-toolchain-comparison.md`
 ("Gaps this table names"). Delivered (§3): F12.1, F12.3–F12.10 and
 F12.12–F12.19 (2026-09-17 to 2026-09-24), plus ADR-0209 Q1–Q3; F12.2 is
-delivered 2026-09-19 (§3; its row is removed). **F12.11 is the one open row:** ADR-0220 was
+delivered 2026-09-19 (§3; its row is removed). **Open rows: F12.11 and F12.20 (ADR-0243).** F12.11: ADR-0220 was
 accepted and its code landed on 2026-09-22; stop condition (3) (the paint
 round trip through F12.3) was met by Phase 14's F14.1 on 2026-09-23 (§3),
 and (2) (GIMP and Krita, logged by a person) moves into F14.8. F12.1's scale reference moved F12.3's
@@ -1563,6 +1575,7 @@ by the paint program; **nothing in the pack is ever read out of it**.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F12.11 | **Layered surface for the paint program (OpenRaster).** Beside every surface PNG the kit writes `<name>.ora` — a zip with `stack.xml`, `mergedimage.png`, `Thumbnails/thumbnail.png` and one PNG per layer, written with `zipfile` + `xml.etree` and the PNG writer the generators already have. Layers, bottom to top — **five on a recorded surface, four on an F12.9 static page**: `orig` (the `*.orig.png` twin, `edit-locked`), `context` (the 1x stitched-map crop around a figure at 50 % opacity — only when a recording exists, absent on F12.9 pages), `paint` (fully transparent, the **selected** layer, the only one the artist touches), `guides` (cell grid, pose / cycle captions from `names.json` or the sidecar ids, hatch over `seen: false` cells — drawn in one sentinel colour outside every NES palette, `visibility="hidden"` for export), `palettes` (a swatch strip of the palettes recorded for that sheet, hidden). GIMP, Krita and MyPaint open `.ora` natively; Photoshop and Aseprite do not and stay on F12.4's per-layer asset names — **no `.psd` or `.aseprite` writer**, stated in `docs/remastering-a-game.md`. F12.11 is a second path beside F12.4, not its replacement: the artist evidence measured so far (Metroid, a spreadsheet user) does not show a GIMP/Krita population, so F12.4 stays the default path and this one is measured against it. **The return path does not change:** the artist exports a flat PNG over the F12.4 name; `sheet_repaint` keeps only cells that differ from `orig`, and `mep_lint.py` fails a cell that contains the sentinel colour (the guides layer was left visible) naming the cell. | **ADR-0220 accepted 2026-09-22 (*"aceito o F12.11. nao implemente ainda."*); code landed 2026-09-22 (`scripts/ora_writer.py`, `scripts/mep_sentinel.py`, 16 unit tests; build go-ahead *"dispara as frentes 1, 2, 3 e 4 em paralelo usando workflows"*), stop conditions (1) and (4) met by the automated pass; **(3) — a stroke on `paint`, exported flat, reaching the game through F12.3 — has no recorded run** (no test or log exercises that path yet), and **(2) — GIMP and Krita, logged by a person — is open**, so the row stays live. **2026-09-23 follow-up:** a person opened one four-layer sheet in GIMP 2.10 and Krita 5.3.4 — every layer named, but both readers open with `orig` active and no stack order fixes both, so by the user's option (b) the order stays and `ARTIST.md` / `docs/remastering-a-game.md` say "select `paint` before painting" (ADR-0220 amended); captions are fitted to the canvas and the `palettes` band follows first use; (2) still needs a person's log on the regenerated files including a five-layer surface, and (3) is still unevaluated (`docs/validation/f12.11-stop3-and-gimp-findings-2026-09-23.md`).** **(3) met 2026-09-23 by F14.1** (§3): a stroke on `paint` of the kit's `usr003.ora`, exported flat, is pixel-exact in the running game after the reload, and the unchanged cells are dropped (`docs/validation/f14.1-painted-round-trip-2026-09-23.md`); only (2) keeps the row live. The ADR was needed before start because it adds a fifth file kind to ADR-0183 §2's surfaces and fixes the layer contract; it must also state that `.ora` is **write-only** for the toolchain (reading `paint` out of it is stdlib-trivial and is refused on purpose, or the sheet stops being the source of truth). Prerequisite chain, in full: F12.3 (the reload that shows it) → F12.4 (the name the flat export lands on) → F12.11; the SMB bounded input additionally needs F12.9. Bounded input: one Contra figure sheet (recorded, five layers) and one SMB static page from F12.9 (four layers). Stop when (1) `stack.xml` validates against the OpenRaster 0.0.5 schema shape the three programs read and each `.ora` round-trips through `zipfile` unchanged; (2) GIMP and Krita open both files with every layer named (five and four respectively) and `paint` selected — this row is logged by a person, per this phase's cold-read rule; (3) a stroke on `paint`, exported flat, reaches the game pixel-exact via F12.3 with the unchanged cells dropped; (4) the same export with `guides` left visible is refused by lint with the offending cell named. What we measure is ours: file validity, layer order, refusal, pixel-exact result. Re-measures "Painting, end to end" and the **"simple"** constraint: open one file, paint, export, look at the game. |
+| F12.20 | **A Remaster project is the ROM's enhancement folder (ADR-0243).** (1) The bootstrap records into `auto/rec-NNN/`, one complete output per recording, and is started and stopped explicitly (it no longer runs by itself in Play: `BootstrapEnhancementFolder` defaults to off for new installs, existing `true` kept, one upgrade notice); (2) the decline rule exempts the project's own `mep/` but still refuses a foreign pack (the #142 guard keeps failing for a foreign pack and passes for the project's own layer); (3) a machine-written `project.json` lists recordings (`id`, `recordedAt`, `source` play/tas/ai/script, `durationSeconds`, `note`), absent = derived from folder names; (4) `mep_build.py` and the kit generators read `auto/rec-*/`, a bare `auto/textures/` reads as `rec-001` without moving; figures/scenery/maps stay per recording and pattern pages are the union (ADR-0194). Inputs: one NES golden game, two recordings. Stop rule: the kit built from two recordings equals the per-recording kits plus the union pages, byte for byte. GUI (W-R0–W-R2) is not part of this slice. | ADR-0243 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 **Order.** Of this block, F12.9, F12.10 and F12.12 are delivered (§3);
 F12.10 shipped first, and F12.9 completed its path (d), so a ROM matching no
@@ -1586,6 +1599,8 @@ sequence and bound the work.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | R.2 | **Consume.** The recordings catalog generated from accepted replay issues, listed in the client by loaded ROM and ranked by 👍 (§7); the structural gate that validates before listing (§8); removal by the author closing the issue, mirrored by `replay:removed` (§9). | ADR-0205 §7–§9 decided. Prerequisite: R.1 (there is nothing to list before something is published). Catalog script stdlib, client overlay in the UI project. Bounded input: the R.1 replay plus one closed issue. Stop when the client lists the open one for the matching ROM, hides it for any other ROM, and drops it within one catalog regeneration after the issue closes. |
+| R.3 | **Community cheats — publish** (ADR-0248, same pattern as R.1). The `cheat-code.yml` issue form; `cheat-submitted.yml` with the structural gate (§3: decodes for the console's `CheatType`, known SHA-1, 80-character one-line description with no links, no duplicate of a live row or a bundled entry) and `/revalidate`; the title rewrite; the labels `cheat`, `cheat:valid`, `cheat:invalid` (the ensure-labels script goes from 18 to 21, CLAUDE.md in the same change). | ADR-0248 §1, §3, §7 decided (accepted 2026-10-02). Gate: the Python decoder's parity test over the 9 829 bundled codes. Bounded input: three hand-made issues (valid, malformed, duplicate). Stop when each gets its verdict and its comment names the check. |
+| R.4 | **Community cheats — consume.** `scripts/generate_community_cheat_catalog.py` → `docs/community-cheats.json` (by SHA-1, most-👍-first, removal by closing); the client fetch through `UI/Services/`; community rows in W-P11 below the bundled list, exact SHA-1 match only, with the Remaster Game Genie rule; *Share This Cheat ↗* on the user's own codes. | ADR-0248 §2, §4–§6. Prerequisites: R.3, and W-P11 built (P.10; ADR-0248 has no screen of its own). Stop when a valid issue's code shows for the matching ROM, not for another, and leaves within one catalog run after the issue closes. |
 
 #### Phase 14 — Proof at scale
 
@@ -1663,6 +1678,8 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
+| F14.19 | **RAM maps for games without a route (ADR-0242 Q2).** `scripts/stages/<game>/ram-map.json` (position, camera, room, HP — the progress fields `jev_harness.py` reads) for golden games that have **no committed route** past their first stall, each field verified on the pinned dump against two RAM checkpoints. Inputs: the golden list in `scripts/stages/`; stop rule: at least two games mapped, or every candidate recorded with why its map failed. | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 ### 5. Order of execution
 
@@ -1831,9 +1848,11 @@ files and in §3.
 
 ---
 
-## Part B — Player shell (default GUI)
+## Part B — Player shell and task-oriented GUI
 
-**Status:** **Phase 7 delivered, P.1-local included** (2026-08-28 → 2026-09-01;
+**GUI redesign proposal (2026-10-02):** [§13 — Play, Remaster, Share](#13-gui-redesign-proposal--play-remaster-share) translates the README's three entrances into specialized workspaces. ADR-0241 is **accepted** (2026-10-02); nothing is implemented, and the work is cut into Part B §8 slices (G.1 first). Sections §1–§12 retain the Phase 7 baseline, not a claim that the new workspaces exist.
+
+**Phase 7 baseline status:** **Phase 7 delivered, P.1-local included** (2026-08-28 → 2026-09-01;
 P.1-local 2026-09-17, ADR-0206; record in Part A §3). Product text of §3–§6
 accepted by the user 2026-08-28. No implementation debt remains (§8). One
 accepted slice is open: **P.8**, shaders on macOS (ADR-0237; slice row in Part A §4, Phase 7). Manual
@@ -2316,7 +2335,13 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-No Part B slice is pending; P.8 (ADR-0237) is tracked in Part A §4, Phase 7. P.0–P.7 implementation history is in Part A §3, and
+P.8 (ADR-0237), P.9 (ADR-0244), P.10–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7. The GUI redesign (ADR-0241, §13) is cut here, one slice at a time; only the first is defined:
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| G.1 | **The shell (W-S1–W-S3).** The active-profile button and its switcher popover (fixed order Play, Remaster, Share; ⌘1/⌘2/⌘3), Tools ⋯ rendering the existing `MainMenuAction` tree as one dropdown, the one-sentence read-only status line, the bar hidden while a Play game runs unpaused, `ShowClassicMenuBar` defaulting to `false` with the one-time "your menus are under Tools ⋯" toast. Play shows today's player surfaces; Remaster and Share show a placeholder that names the next slice. | ADR-0241 accepted 2026-10-02; §13.2, §13.5.1, rules 2, 8, 11. Workspace switch and bar visibility in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when switching keeps the game running, nothing of another profile is on screen, and every classic menu action is still reachable from Tools ⋯. |
+
+Later slices (Play home, pause overlay, Remaster project, Share) are cut after G.1, each against its §13 wireframes. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 
@@ -2350,6 +2375,7 @@ for a local drop.
 | Enhancements quick-toggle panel + welcome/Continue cards (§6.1, §6.2) | not needed — UI over config that already exists | P.7 |
 | ADR-0039/0040/0044/0049/0120/0121 | accepted | precedence and ROM hash-matching do not change |
 | ADR-0138 (except §37 as above) | accepted | F6.4b is the network installer this shell consumes |
+| ADR-0244 — a pack change applies in place through an in-memory save state and a reload; ROM-patch packs, movies, shared replays and netplay keep the restart | **accepted** (2026-10-02) | Slice P.9 (Part A §4, Phase 7): exactness test first, GUI after; not implemented.
 
 ### 10. Risks
 
@@ -2393,3 +2419,1595 @@ here only when a slice surfaces a trade-off §3–§6 do not settle.
   `UI/Config/EnhancementPackConfig.cs`
 - Current chrome: `UI/Views/MainMenuView.axaml`,
   `UI/Windows/MainWindow.axaml`, `UI/ViewModels/RecentGamesViewModel.cs`
+
+---
+
+### 13. GUI redesign proposal — Play, Remaster, Share
+
+**Status:** design reference (2026-10-02). Architecture decision: ADR-0241,
+accepted 2026-10-02. Nothing in this section is implemented. The section
+stays as the design reference; the work is cut into bounded slices in §8,
+one at a time, each with its own acceptance and its own go-ahead. A
+wireframe here is a target, not a shipped capability.
+
+#### 13.1 Why the GUI changes
+
+The README offers three doors: *I want to play*, *I want to remaster a game*,
+*I made (or found) a pack*. The GUI answers a different question — how much
+of Mesen to show (`UiMode` Player/Advanced, §6). The result, measured against
+the three doors on 2026-10-02:
+
+| Door | What exists in the GUI today | Where the rest lives |
+|---|---|---|
+| Play | Player home (Welcome/Continue cards, recents grid), Esc overlay (Resume, Save/Load slot, Pack chip, Enhancements, Settings, Advanced GUI, Quit), auto-install, pack picker, toasts | — complete, but the Pack chip falls back to the Advanced `EnhancementPacksWindow` (dense table, SHA1 field) |
+| Remaster | Advanced only, scattered: Tools › HD Packs › {Install, HD Pack Builder, Reload Repainted Images, Enhancement Packs}, Tools › Live Recorder, debugger viewers' *Copy as MEP sheet cell*. The HD Packs menu is hidden until a NES/GB/SMS ROM is loaded | **every other stage is a terminal script**: `headless_record` and its drivers, `artist_cover.py`, `artist_kit*.py`, `mep_figure.py`, `compose_editor.py`, `mep_build.py`, `mep_lint.py`, `mep_build.py pack` (`docs/remastering-a-game.md`) |
+| Share | nothing for packs. Replays only: Tools › Movies › *Record and share* (Advanced only, `ShareRecordingSession`, `ReplayShare.BuildIssueUrl`) | the browser Issue Form `.github/ISSUE_TEMPLATE/community-pack.yml` (three fields: `pack_link`, `rom_target`, `console`) |
+
+Two problems, then. The artist's door opens onto a terminal, and the
+contributor's door does not exist in the app. The Player/Advanced axis cannot
+fix either, because it sorts by expertise, and an artist is not an emulator
+expert.
+
+**The second constraint is ergonomics.** The current GUI, including the parts
+built in Phase 7, is complicated to operate: nested menus that appear and
+disappear with the loaded console, windows that close on every game load
+(`HdPackBuilderWindow`), a pack window that asks for a SHA1, five Esc states
+that replace one another. The redesign is judged first on simplicity. The
+rules it must satisfy are in §13.3, and a wireframe that breaks one is wrong
+even if it is complete.
+
+#### 13.2 The model — three task workspaces, one app
+
+```
+   ● ● ●   [▶ Play ⌄]                                                    [⋯]
+            └─ the active profile only; click to switch (W-S3)        └─ Tools
+```
+
+**One profile at a time.** The window shows exactly one profile: its name in
+the title bar, its screens below. The other two are not tabs, not icons, not
+sidebar entries — they exist only inside the switcher popover (W-S3), one
+click away. A player never sees a Record button; an artist painting never
+sees the pause menu's Quit; a contributor never sees the recents grid.
+Showing all three at once was the first draft of this proposal and was
+rejected on review (2026-10-02): three always-visible destinations make every
+screen ask "which of these am I?", which is the complexity the redesign
+exists to remove.
+
+- **Play**: the game. Open a ROM, continue, pause, pack choice, essentials.
+- **Remaster**: one *project* (a game folder with `auto/` and `mep/`, ADR-0147)
+  and the loop **Record → Paint → See it**. The unit is a figure, a scenery
+  element, a stage map or a pattern page (ADR-0183) — never a tile key.
+- **Share**: a link or a built pack, three fields, the browser form. Also the
+  existing *Record and share* for replays (ADR-0205), as a separate card.
+- **Tools ⋯** (top right, always present, never a profile): the classic
+  Mesen menus, debugger, Lua, netplay, HD Pack Builder, cheats. This is where
+  today's Advanced mode goes. It opens a menu, not a mode switch.
+
+Switching workspaces changes what the window shows; it never stops the game,
+rewrites settings, picks a pack, deletes a file or publishes anything. Each
+workspace remembers where it was. The game keeps running under Remaster (that
+is the point of *See it*) and is paused under Share only if the user pauses.
+
+What this is **not**: not three executables, not a first-launch "who are
+you?" question, not a permission model. A player who starts painting is the
+same person at the same ROM.
+
+**Relation to `UiMode`.** `Player`/`Advanced` is not reinterpreted. Proposed:
+a new persisted `Workspace` key (`Play` default) plus a `ShowClassicMenuBar`
+boolean that replaces `UiMode` as the "upgrade keeps my menus" rule of §6
+(default `false` everywhere, user's decision 2026-10-02: an upgraded install
+shows a one-time toast "your menus are under Tools ⋯" instead of keeping the
+bar).
+The classic menu bar, when shown, sits above the switcher and is exactly
+today's `MainMenuView`. ADR-0241 owns this; the migration is a slice.
+
+#### 13.3 Simplicity rules (acceptance, not taste)
+
+Every screen in §13.5 must pass all of these. A reviewer rejecting a wireframe
+should cite the rule.
+
+1. **One primary action per screen**, visually dominant. Everything else is
+   secondary or hidden behind "More".
+2. **Seven or fewer interactive elements** visible at rest, excluding list
+   rows and the row actions inside them. A segmented control (tab strip)
+   counts as one element, like a popup. The shell's profile button and ⋯ are
+   counted once, in W-S1, not on every screen. Count them in the wireframe;
+   the PNG's caption pill carries the same number.
+3. **Plain words.** No `SHA1`, `content_id`, `pack_id`, `hires.txt`, `CHR`,
+   `OAM`, "sibling", "section" on any surface outside Tools ⋯. The word for a
+   pack is *pack*; for the artist's work, *project*; for the surfaces,
+   *figures / scenery / stage maps / pattern pages*.
+4. **Nothing appears or disappears based on which console is loaded** except
+   the one element that genuinely cannot work, and that element is shown
+   disabled with a one-line reason (the §6.1 Overclock/SMS rule, generalised).
+5. **No screen closes because a game loaded.** State survives ROM changes.
+6. **A long job is a card with a progress bar and a Stop button**, in the
+   workspace that started it. It never blocks the workspace, never opens a
+   window, never needs a terminal.
+7. **Every destructive or external action confirms once, in place**: replace
+   a pack folder, restore a pack, delete a recording, open the browser. Mere
+   navigation never confirms.
+8. **Esc does one thing per context**: in Play it opens/closes the pause
+   overlay; elsewhere it closes the topmost panel. A sheet opened from the
+   pause overlay (W-P5–W-P8, W-P10, W-P11) closes back to the overlay, and the next
+   Esc resumes — today's `TogglePlayerOverlay` order (picker → panel →
+   overlay), kept. Never five states.
+9. **Keyboard and gamepad reach everything in Play** (§6 already requires
+   this); Remaster and Share may assume mouse/trackpad.
+10. **The next step is written on the screen.** When the user cannot proceed
+    (no ROM, no recording, nothing painted), the screen says what to do, in
+    one sentence, with the button that does it.
+11. **One profile on screen.** No surface shows another profile's controls.
+    When a screen needs to send the user elsewhere (a built project ready to
+    share), the link names the destination ("Share this project — opens
+    Share") and switching is the click itself; the title bar then shows the
+    new profile. Nothing switches profile silently except opening a ROM from
+    the OS, which lands in Play (§13.6).
+12. **One place per setting.** A setting that changes how the game looks or
+    sounds has exactly one home on these surfaces. Two toggles for the same
+    config key (today's *Hi-res filter* in Enhancements and the filter list in
+    Options) are a defect, not a shortcut.
+
+#### 13.4 What each workspace may and may not do (ADR boundaries)
+
+| Workspace | Does | Does not (and the ADR that says so) |
+|---|---|---|
+| Play | auto-install accepted packs (ADR-0146), picker for 2+ packs (§5), Enhancements panel (§6.1), audio notice (ADR-0240 Option 1) | browse the whole catalog (§7 non-goal; a replay/pack list is R.2 and amends that non-goal first); generate audio (ADR-0240 Option 2 not accepted) |
+| Remaster | start/stop a recording from the running game (the bootstrap recorder with screen capture, ADR-0243 `proposed` — not the HD Pack Builder window, not the live recorder), run the kit generators and `mep_build`/`mep_lint` as **jobs**, list projects and surfaces with their provenance, open a surface in the artist's own paint program, reload repainted images (ADR-0212), reopen the ROM when the build changed the manifest | paint (ADR-0209: we own selection and return, not the brush); embed the composition editor (ADR-0165: external, stdlib, never in `UI/`); read `.ora` or `mergedimage.png` (ADR-0220: write-only; the flat PNG is the only return path); watch files (ADR-0209 Q3(g) rejected — reload is explicit); merge recordings (ADR-0194); launch `record_viewer.py` (ADR-0169 §4 amendment); present a static kit as complete (ADR-0219: every cell `fill`, `seen: false`, no figures/scenery/maps); hide the patched-ROM namespace (ADR-0198 §3) |
+| Share | build the pre-filled Issue URL for the three fields and open the browser; *Record and share* a replay (ADR-0205 §2, R.1); reveal the built `.zip` for the user to attach | upload anything, hold a GitHub credential, apply a label, guess a verdict (CI owns all of it: `community-pack-validate.yml`, ADR-0199); mix pack and replay pipelines (ADR-0205) |
+| Tools ⋯ | everything today's Advanced mode does, unchanged | gain new features in this proposal |
+
+**Feasibility gate for Remaster jobs.** The generators are Python under
+`scripts/` with no third-party dependency (ADR-0165, ADR-0154) and are shipped
+to authors as `scripts/tools-zip-manifest.txt`. A packaged `.app`/`.exe`
+running them needs a located `python3` or a bundled runtime. That is a
+measurement the first Remaster slice makes before promising "no terminal";
+until it is made, the Remaster screens below carry a visible **"Needs Python
+3 — [Locate…]"** state (W-R0b) rather than hiding the gap.
+
+#### 13.5 Wireframes
+
+Conventions: `[Button]` is a button, `( ) / (•)` radio, `[x]` checkbox,
+`▸` opens a detail, `…` more, `▁▁▁` progress, grey text in `⟨angle brackets⟩`
+is a hint. Each wireframe has an id (W-xx) for review comments. Counts after
+each wireframe are the §13.3 rule-2 tally. Window is ~1024×640 at 1×; the
+game area keeps the §6 letterbox rules.
+
+Each wireframe has two forms. The **PNG** under its heading
+(`docs/media/gui-redesign/W-xx.png`, rendered by
+`scripts/render_gui_wireframes.py`) is the visual reference: spacing,
+hierarchy, colour, the macOS look. The **ASCII** block is the structural
+spec: which elements exist, their order and their wording. When the two
+disagree, the PNG wins on styling and the ASCII wins on content; fix the
+loser in the same change. Game images in the PNGs are abstract placeholders
+drawn by the script, never art from a game. Two differences are styling,
+not content: PNG buttons use macOS Title Case (*Use This Pack*) where the
+ASCII uses sentence case, and the PNG says *Show in Finder* where the ASCII
+says *Show file*/*Show folder* — the platform's own term is used on each OS
+(Finder, Explorer, the file manager).
+
+##### 13.5.1 Shell
+
+**W-S1 — Shell frame (every workspace shares it)**
+
+![W-S1](../media/gui-redesign/W-S1.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▶ Play ⌄]                                                               [⋯] │  ← 52 px bar
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                        ⟨ workspace content ⟩                                 │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● ⟨one status sentence, e.g. "No game loaded"⟩                               │  ← 26 px, read-only
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- The bar is **hidden while a game runs in Play and nothing is paused**: the
+  game fills the window (§6). Esc brings the pause overlay (W-P4) and the bar
+  back together. In Remaster and Share the bar is always visible.
+- The status line is one sentence, never a control. It is the one place
+  that always names the current pack while the bar is visible; W-P2's
+  Continue card and W-P4's Pack row repeat it where the user acts on it.
+- Tools ⋯ opens the classic menus as a dropdown tree (File, Game, Options,
+  Tools, Debug, Help) — the same `MainMenuAction` data, rendered as one menu.
+  Optional `ShowClassicMenuBar` puts them back as a bar above (§13.2).
+- The left of the bar is the **active profile only** — tinted glyph, name,
+  chevron. It is a button that opens W-S3; it is not a tab strip.
+- Elements at rest: 2 (profile switcher + Tools). ✔
+
+**W-S2 — Tools ⋯ dropdown**
+
+![W-S2](../media/gui-redesign/W-S2.png)
+
+```
+                                                       ┌──────────────────────┐
+                                                       │ File              ▸  │
+                                                       │ Game              ▸  │
+                                                       │ Options           ▸  │
+                                                       │ Tools             ▸  │
+                                                       │ Debug             ▸  │
+                                                       │ Help              ▸  │
+                                                       ├──────────────────────┤
+                                                       │ [x] Show classic     │
+                                                       │     menu bar         │
+                                                       │ ⟨Debugger, Lua, HD   │
+                                                       │  Pack Builder, …⟩    │
+                                                       └──────────────────────┘
+```
+
+Unchanged content; one new checkbox. This is where `HdPackBuilderWindow`,
+`EnhancementPacksWindow`, debugger, Lua, netplay, cheats and *Record Music*
+stay reachable. Nothing is removed from them in this proposal.
+
+**W-S3 — Profile switcher (the only place the other profiles appear)**
+
+![W-S3](../media/gui-redesign/W-S3.png)
+
+```
+   [▶ Play ⌄]
+   ┌──────────────────────────────────────────────┐
+   │ ▶  Play                                ⌘1 ✔ │
+   │    Open a game and play it, enhanced.        │
+   │ ✎  Remaster                            ⌘2   │
+   │ Record a game, paint its art, see it in game.│
+   │ ▣  Share                               ⌘3   │
+   │    Send a pack or a replay to the community. │
+   ├──────────────────────────────────────────────┤
+   │ Switching keeps your game running. Only the  │
+   │ chosen profile is shown.                     │
+   └──────────────────────────────────────────────┘
+```
+
+- A popover anchored to the profile button, not a window. Picking a row
+  replaces the window's content and the title bar's name; Esc or a click
+  outside closes it with nothing changed.
+- Each row's one-line description is the README door in the app's words, so
+  the switcher teaches the model once and needs no onboarding screen.
+- **Fixed order: 1. Play, 2. Remaster, 3. Share** — the README's door order
+  and the order a person usually meets them (plays, then repaints, then
+  shares). The order never changes with the current profile, recent use or
+  the loaded console; the check mark moves, the rows do not.
+- Shortcuts ⌘1/⌘2/⌘3 switch directly, in that order; they are printed grey
+  on the rows as in a macOS menu (a hint, not a control — rule 2).
+- Elements: 3 rows. ✔
+
+##### 13.5.2 Play
+
+**W-P1 — Play home, true first run (no recents)**
+
+![W-P1](../media/gui-redesign/W-P1.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▶ Play ⌄]                                                               [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                                                                              │
+│                          Drop a game here                                    │
+│                          or open one.                                        │
+│                     ┌────────────────────────────┐                           │
+│                     │       [ Open a ROM… ]      │   ← primary               │
+│                     └────────────────────────────┘                           │
+│                                                                              │
+│          Enhanced audio is on. If the game has a community pack,             │
+│          it downloads, installs and loads by itself.                         │
+│                                                                              │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ No game loaded                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Replaces the Welcome card (§6.2). Elements: 1. ✔ Rule 10: the
+sentence says what happens next.
+
+**W-P2 — Play home with recents**
+
+![W-P2](../media/gui-redesign/W-P2.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▶ Play ⌄]                                                               [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Continue playing                                            [Open a ROM…]  │
+│  ┌──────────────────────────────────────────────────────────┐                │
+│  │ ░░░░░░  Contra (USA)                                     │                │
+│  │ ░░░░░░  last played today · Contra 80s 1.2               │                │
+│  │ ░░░░░░  [ ▶ Continue ]                                   │                │
+│  └──────────────────────────────────────────────────────────┘                │
+│                                                                              │
+│  Recent                                                                      │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │
+│  │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │            │
+│  │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │ │ ░░░░░░░░ │            │
+│  │ Castlev… │ │ Zelda    │ │ Mega Man │ │ Metroid  │ │ Punch-O… │            │
+│  │ 📦       │ │ 📦       │ │          │ │ 📦       │ │          │            │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘            │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ No game loaded                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Continue is the primary action (today's Continue card, §6.2). 📦 on a tile
+  means "a pack is installed for this game" — a glyph, no text.
+  **Prerequisite (a data slice):** `RecentGameInfo` stores only `FileName`,
+  `StateIndex`, `Name` and `SaveMode`, with no ROM hash and no pack lookup.
+  The glyph needs the recent entry to carry the ROM's SHA1 and to be
+  resolved through the same discovery the loader uses (sibling folder,
+  installed catalog pack, bootstrap `auto/` — ADR-0049/0050, ADR-0146). The
+  glyph is cut if that slice is not taken.
+- Elements: 2 + tiles. ✔ Gamepad: tiles and the two buttons are focusable
+  (today's `StateGrid` arrow navigation).
+
+**W-P3 — Playing (bar hidden)**
+
+![W-P3](../media/gui-redesign/W-P3.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                              ⟨ game, letterboxed ⟩                           │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                           ┌────────────────────────────────┐ │
+│                                           │ Applied Contra 80s — textures  │ │  ← toast, 3 s
+│                                           └────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Unchanged from today. The toast is the only pack feedback (§6).
+
+**W-P4 — Pause overlay (Esc)**
+
+![W-P4](../media/gui-redesign/W-P4.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▶ Play ⌄]                                                               [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ game, dimmed ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ ┌────────────────────────────────────┐ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  Contra (USA)                      │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  Paused                            │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  [ ▶ Resume ]                      │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  🎞 Save states  Slot 1 · 2 min ▸  │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  ▣ Pack          Contra 80s 1.2 ▸  │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  ✦ Enhancements           5 on ▸  │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  ★ Cheats                 2 on ▸  │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  ⚙  Settings                   ▸   │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │                                    │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │  [Quit game]                       │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ │        ⟨Esc to resume⟩             │ ░░░░░░░░░░░░░░░░ │
+│ ░░░░░░░░░░░░░░░░░░░ └────────────────────────────────────┘ ░░░░░░░░░░░░░░░░ │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● Contra (USA) · pack: Contra 80s 1.2 · textures+audio                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Differences from today's overlay: *Advanced GUI* is gone (Tools ⋯ is in the
+  bar, which the overlay reveals); *Exit fullscreen* moves into Settings.
+  *Quit Game* changes meaning: today `OnOverlayQuit` closes the whole app;
+  here it powers the game off (`PowerOff`) and lands on W-P1/W-P2 (§13.6).
+  Quitting the app is Tools ⋯ › File › Exit and the OS's own ⌘Q / Alt+F4.
+  Esc closes the overlay; a second Esc does nothing more (rule 8).
+- Elements: Resume, Save states, Pack, Enhancements, Cheats, Settings,
+  Quit = 7. ✔ (at the limit). *Cheats ▸* opens W-P11. It sits here, not
+  in W-P7, because a cheat changes the game rather than the pack's
+  presentation, it is reached mid-game when the player is stuck, and its
+  "2 on" stays visible on every pause — the cheats that are on are recorded
+  in a shared replay (W-H4). User's decision, 2026-10-02; the first draft
+  had it as a W-P7 row. A new pause item now has to replace or merge one.
+  Save and Load were merged into one *Save states ▸* row (user's decision,
+  2026-10-02; the first draft had a slot popup plus Save and Load = 8, one
+  over rule 2). The row opens today's state grid (`GameScreenMode.SaveState`
+  / `LoadState`, thumbnails, 10 slots plus auto-save) as a sheet with *Save
+  here* / *Load* per slot. The quick-save/quick-load shortcuts are
+  unchanged, so a save is still one key; from the menu it costs one more
+  click.
+- The Pack row opens W-P5 when 2+ packs exist, or W-P6 to inspect the one pack.
+- The Cheats row reads "none" when nothing is on. On GB/SMS it still opens
+  W-P11, which offers manual entry only (rule 4: shown, with its reason).
+
+**W-P5 — Pack picker (2+ packs for this ROM; also opens over an un-enhanced first start, §5)**
+
+![W-P5](../media/gui-redesign/W-P5.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Choose a pack for Contra (USA)              │
+                     │                                              │
+                     │  (•) Contra 80s                     👍 41    │
+                     │      by Tastic · 1.2 · textures, audio       │
+                     │                                              │
+                     │  ( ) Contra HD Remix                👍 9     │
+                     │      author unknown · validated Aug 30 ·     │
+                     │      textures                                │
+                     │      ⚠ 2 images known to be missing          │
+                     │                                              │
+                     │  ( ) No pack                                 │
+                     │      Play with enhanced audio only           │
+                     │                                              │
+                     │  Remembered for this game. Change it any     │
+                     │  time from the pause menu.                   │
+                     │                                              │
+                     │              [Cancel]   [ Use This Pack ]    │
+                     └──────────────────────────────────────────────┘
+```
+
+- Same data as §5 (name, author, version or validation date, layers, 👍 as
+  sort key, known-missing note). A pack that names no author reads *author
+  unknown* here; the catalog's `?` is a table convention, not a sentence. Dropped from the surface: license and the
+  short `content_id` — both move to the ▸ detail in W-P6 (rule 3).
+- What it does today versus here (`PlayerPackPicker.ShouldShow`): the picker
+  opens only for 2+ distinct `pack_id`s with no stored choice and no sibling
+  pack. *Cancel* and Esc keep today's dismissal — nothing is stored, the
+  game plays un-enhanced this session and the picker asks again next
+  launch. *No pack* is **new**: it stores an explicit "no pack" preference
+  for this ROM, which `SetRomPackPreference` does not have yet (a slice).
+  Choosing a pack power-cycles the game, as today.
+- Elements: 3 radios + 2 buttons = 5. ✔ Gamepad: radios and buttons.
+
+**W-P6 — Current pack detail**
+
+![W-P6](../media/gui-redesign/W-P6.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Contra 80s                                  │
+                     │  by Tastic · version 1.2 · CC BY-NC 4.0      │
+                     │  textures ✔   audio ✔   patch —              │
+                     │                                              │
+                     │  ⚠ Some music is missing                     │
+                     │    3 of 17 tracks have no audio file. Add    │
+                     │    the .ogg files to the pack.               │
+                     │                                              │
+                     │  [Change pack…]  [Show pack folder]          │
+                     │  [Restore original files]                    │
+                     │                                              │
+                     │  Details ▸                ⟨ids and hashes⟩   │
+                     │                                              │
+                     │                                   [Done]     │
+                     └──────────────────────────────────────────────┘
+```
+
+- The ⚠ line is `PackAudioNotice` (ADR-0240 Option 1) in plain words — the
+  Core's string says "audio not generated", which reads as a step the user
+  could run, and Option 2 (generation) is not accepted. Shown where it is
+  useful, not only as a 3-second toast. No "Generate" button (Option 2 not
+  accepted).
+- The ⚠ line needs the notice to outlive the install: today
+  `PackAudioNotice.Evaluate` runs once, at the end of an install
+  (`CommunityPackInstallCoordinator`), and its text only reaches a toast.
+  The slice either stores it with the install record or re-evaluates the
+  pack folder when W-P6 opens (`Evaluate` is BCL-only and cheap).
+- *Restore* is ADR-0147's Restore; it confirms once in place (rule 7). It is
+  shown only for a pack installed from the catalog, because
+  `RestoreInstalledPack` needs the install record's `SourceSha256` and
+  re-downloads the archive (up to 300 MB). It therefore runs as a job with
+  the W-P9 pill (rule 6). A local or sibling pack has nothing to restore
+  from, so the button is absent there, not disabled.
+- *Details ▸* reveals ids and hashes for the curious — the only place in Play
+  they appear.
+- Elements: 5. ✔
+
+**W-P7 — Enhancements panel (§6.1 minus *Hi-res filter*)**
+
+![W-P7](../media/gui-redesign/W-P7.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Enhancements                                │
+                     │                                              │
+                     │  [x] Textures        applies on reload       │
+                     │  [x] Audio           applies on reload       │
+                     │  [x] Border          applies on reload       │
+                     │  [ ] Widescreen                              │
+                     │  [ ] Overclock       ⟨not available on SMS⟩  │
+                     │                                              │
+                     │  How the picture looks: Settings › Look      │
+                     │                                              │
+                     │                            [Apply & Reload]  │
+                     └──────────────────────────────────────────────┘
+```
+
+- *Hi-res filter* leaves this panel. It was a second switch for
+  `VideoConfig.VideoFilter`, which already has a home in the picture
+  settings; it now lives once, as Look › Pixels (W-P10, rule 12). The panel
+  keeps what the *pack and the console* add — art, sound, frame, width,
+  speed — and points at the place for the look of the picture.
+
+Elements: 5 toggles + 1 = 6. ✔ (Cheats moved to W-P4, 2026-10-02.) The one
+console-dependent element is shown
+disabled with its reason (rule 4). The button replaces today's immediate
+action on each toggle, so the player decides when the game restarts. Today
+there are two different restarts: Textures, Audio and Border go through
+`ToggleLayer` → `ReloadRom`, and Overclock goes through `PowerCycle`. The
+button names the bigger one that is pending: *Apply & Reload*, or *Apply &
+Restart* when Overclock changed (a restart loses unsaved progress, so it
+says so).
+ADR-0244 (accepted, slice P.9) makes a pack change keep the player's place
+(in-memory save state → reload → restore). Once P.9 passes, the button reads
+*Apply*, and *Apply & Restart* only for Overclock, a pack with a ROM patch,
+or while a movie, shared replay or netplay is on.
+
+**W-P8 — Play settings (essentials)**
+
+![W-P8](../media/gui-redesign/W-P8.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Settings                                    │
+                     │                                              │
+                     │  Display │ Look │ Audio │ Controls           │
+                     │  ────────┘                                   │
+                     │  Fullscreen           [x]                    │
+                     │  Aspect ratio         [Auto        ▾]        │
+                     │  Scale                [3×          ▾]        │
+                     │                                              │
+                     │  Everything else: Tools ⋯ › Options          │
+                     │                                   [Done]     │
+                     └──────────────────────────────────────────────┘
+```
+
+Today's `PlayerSettingsEssentials` tabs, with *Video* split in two:
+**Display** is the window (size, shape, full screen) and **Look** (W-P10) is
+what the pixels look like. The shader selector moves out of here into Look,
+next to the filter it is usually confused with. The last line is rule 10
+applied to settings. Elements: tab strip, 3 rows, Done = 5. ✔
+
+**W-P9 — A pack installs while the game starts (a HUD pill, not a dialog)**
+
+![W-P9](../media/gui-redesign/W-P9.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                         ┌──────────────────────────────────┐ │
+│                                         │ ▣ Installing Contra 80s…         │ │
+│                                         │   ░░░░▁▁▁▁▁░░░░░░░░░░ ⟨moving⟩   │ │
+│                                         └──────────────────────────────────┘ │
+│                              ⟨ game, letterboxed ⟩                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+   failure, same place, 5 s:
+                     ⚠ The pack could not be downloaded. Playing without it.
+```
+
+Single-flight install (`CommunityPackInstallService`) runs while the game
+plays. The bar is **indeterminate**: `RunAsync` takes no `IProgress` and
+its only output today is the final `DisplayMessage`, so a percentage needs
+a fetcher slice first; until then the pill never shows a number. In W-P3 the bar is hidden, so the status line is not visible; the
+progress therefore rides in a HUD pill over the game and ends in the W-P3
+toast. On failure: one pill sentence and nothing else; the log has the rest
+(rule 6: never a window). With the overlay open the same text is in the
+status line.
+
+**W-P10 — Settings › Look: art, pixels, screen** — ADR-0246, accepted (P.13)
+
+![W-P10](../media/gui-redesign/W-P10.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Settings                                    │
+                     │  Display │ Look │ Audio │ Controls           │
+                     │          └──────┘                            │
+                     │  ART  ⟨drawn by an artist⟩                   │
+                     │  ▣ Contra 80s · textures                ▸    │
+                     │                                              │
+                     │  PIXELS  ⟨the emulator smooths the edges⟩    │
+                     │  Smoothing   [Sharp — original pixels   ▾]   │
+                     │  ⟨ off while a pack draws the art ⟩          │
+                     │  ⟨ ◉ shows in screenshots and videos ⟩       │
+                     │                                              │
+                     │  SCREEN  ⟨imitates a TV or a handheld⟩       │
+                     │  Effect   [crt-royale.slangp ▾]   [Adjust…]  │
+                     │  ⟨ ◌ only on your display — never in         │
+                     │    screenshots, videos or recordings ⟩       │
+                     │                                              │
+                     │  [Hold to Compare]  ⟨shows the original      │
+                     │   pixels while held⟩                 [Done]  │
+                     └──────────────────────────────────────────────┘
+```
+
+Shaders and video filters are two different machines that today sit in two
+places and look like one idea ("make it prettier"). Add the pack's art and
+there are three things a player can mistake for each other. The tab names
+them by **what they change**, in the order they are applied, and says on the
+surface where each one's result goes:
+
+| Layer | What it is, in the user's words | What it is in the code | Where the result shows |
+|---|---|---|---|
+| **Art** | a person repainted the game | the HD pack's textures (`HdVideoFilter`, NES; the GB/SMS equivalents) | everywhere — it *is* the frame |
+| **Pixels** | the emulator smooths the blocky edges by itself | `VideoConfig.VideoFilter` scale family (HQx, xBRZ, Scale2x, 2xSaI, Prescale): CPU, in the Core's `VideoDecoder` after the console filter | screenshots and AVI/GIF videos (`VideoDecoder::TakeScreenshot` reads the filtered buffer) |
+| **Screen** | imitates the glass it was played on — CRT, scanlines, handheld LCD | a RetroArch `.slangp` shader (librashader, GPU, in the renderer: ADR-0237 on macOS, upstream on Windows/Linux); also the built-in NTSC filters and `LcdGrid`, which are CPU filters | the shader: **your display only** — ADR-0237 non-goals keep it off screenshots, recordings, captures and the kit. NTSC/LcdGrid: screenshots and videos |
+
+Rules the tab enforces, each from a measured fact rather than taste:
+
+- **Pixels is disabled, with its reason, while a pack draws the art** — on
+  every console with HD art: NES (`HdVideoFilter`) and the GB/SMS tile
+  filters (the shared `HdTileVideoFilter`, `SmsHdTileVideoFilter` on SMS) alike. In the
+  Core the scale filter still runs on top of `HdVideoFilter`'s output
+  (`VideoDecoder.cpp` applies `_scaleFilter` after the console filter), so
+  HQ4× over a 4× pack smooths the artist's work into mush and multiplies the
+  frame size. Today nothing stops it. Rule 4's shape: shown, disabled,
+  "Off while a pack draws the art". The Look tab never overrides it; Tools ⋯ ›
+  Options still can, for the user who wants it (§13.8 Q9).
+- **The NTSC choice says it does nothing over a pack.** `NesConsole::
+  GetVideoFilter` returns `HdVideoFilter` whenever the pack has video
+  content, so a chosen NTSC filter is silently ignored. The row shows
+  "Not applied while a pack draws the art" instead of pretending.
+- **A shader works over everything**, pack art included — it is the last
+  step, on the GPU. That is why Screen is the layer to recommend to a player
+  who wants "the TV look" on a remastered game.
+- **Each choice carries its capture footnote** (◉ captured / ◌ display-only),
+  because the difference that bites is "my screenshot doesn't look like my
+  screen". The footnote changes with the selection: NTSC under Screen shows
+  ◉, a shader shows ◌.
+- **Pixels is one popup** — *Sharp (original pixels)*, *Smooth — HQ4×*,
+  *Smooth — xBRZ 4×*, then *More in Options…*. A value set in Options that is
+  not in the short list is shown as the current item, never overwritten
+  (§6.1's restore-not-clobber rule, kept).
+- **Screen is one popup**, labelled *Effect* rather than *Shader* because it
+  also holds the NTSC filter — *None*, *TV signal (NTSC)* (NES only, rule 4
+  disabled elsewhere), two or three **named looks** bundled with the app
+  (*CRT TV*, *Handheld LCD*: ADR-0237's non-goal amended 2026-10-02, license
+  recorded per preset), recent shader files, *Choose a shader file…*. A
+  named look is a `.slangp` like any other, so *Adjust…* works on it too.
+- **Adjust…** opens the existing per-shader parameter list (`ShaderConfig`)
+  as a sheet; it is disabled for *None*. Parameters never appear inline.
+- **Shader not available** (librashader missing, `CheckShaderSupport()`
+  false): the shader items are shown disabled with "Shaders are not
+  available in this build" instead of today's hidden group (rule 4). On
+  macOS with the software renderer the reason reads "Needs the Metal
+  renderer — restart after changing it", because `CheckShaderSupport()` is
+  cached for the process (`ConfigApi`) and `RendererPolicy` decides at
+  startup.
+- **Hold to Compare** shows the original pixels while held — Art stays, Pixels
+  and Screen drop — so the difference is seen, not read. Feasibility item:
+  swapping the shader chain may recompile it; the first slice measures the
+  swap and, if it stutters, keeps the chain and bypasses it in the renderer
+  for the held frames instead.
+
+Elements: tab strip, Art row, Pixels, Screen, Adjust, Hold to Compare, Done
+= 7. ✔ (at the limit)
+
+**W-P11 — Cheats (W-P4 › Cheats)** — ADR-0245, accepted (P.10)
+
+![W-P11](../media/gui-redesign/W-P11.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Cheats                                      │
+                     │  [Search: lives, jump, weapon…            ]  │
+                     │                                              │
+                     │  Infinite lives — 1P game              [x]   │
+                     │  Start with 30 lives                   [x]   │
+                     │  Keep weapon after dying               [ ]   │
+                     │  Start on stage 5                      [ ]   │
+                     │  Invincibility (RAM)                   [ ]   │
+                     │  ⟨allowed while recording art⟩               │
+                     │                                              │
+                     │  2 on · matched to your copy of Contra (USA) │
+                     │  ⟨cheats you have on are recorded in a       │
+                     │   shared replay⟩                             │
+                     │  [Add a Code…]                       [Done]  │
+                     └──────────────────────────────────────────────┘
+```
+
+- The list is `CheatDb.Nes.json` for the loaded ROM
+  (`HashType.Sha1Cheat`). The toggles are stored in the same `CheatCodes`
+  the classic cheat list uses, so both windows agree (rule 12). *Add a
+  Code…* takes a code typed by hand; the full editor stays in Tools ⋯.
+- Not in the list: "This copy of the game isn't in the cheat list", plus a
+  search by game name. An entry picked that way is marked "made for another
+  copy — may not work".
+- In Remaster's game view, Game Genie entries (about 78 % of the list) show
+  disabled with "Changes the game itself — not allowed while recording art"
+  (ADR-0184). RAM entries (`XXXX:YY`, 22 %) stay on.
+- GB/SMS: no list yet, so the sheet shows *Add a Code…* only, with the reason.
+- An LLM never writes a code here. The later phases of ADR-0245 (search by
+  intent, checked web lookup) only choose among listed or verified entries.
+- Elements: search, Add a Code…, Done = 3 (+ list rows). ✔
+
+**Edge flows (W-P12–W-P16).** Drawn 2026-10-02 after the review's group 3.
+Each one replaces a modal window or a transient message that today is the
+only way out of the case.
+
+**W-P12 — First run, one sheet (replaces the setup wizard)**
+
+![W-P12](../media/gui-redesign/W-P12.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  ▶  Welcome to MesenAI                       │
+                     │  Two choices, then you can play. Both can be │
+                     │  changed later in Settings.                  │
+                     │                                              │
+                     │  Keep your saves and settings                │
+                     │  (•) In your user folder                     │
+                     │      ⟨~/Library/Application Support/MesenAI⟩ │
+                     │  ( ) Next to the app (portable)              │
+                     │      ⟨move the app folder and everything     │
+                     │       comes with it⟩                         │
+                     │  ──────────────────────────────────────────  │
+                     │  Keyboard   [Arrow keys + S / A        ⌄]    │
+                     │  ⟨Xbox and PlayStation controllers work as   │
+                     │   soon as you plug them in. Another          │
+                     │   controller asks to be set up the first     │
+                     │   time you press a button.⟩                  │
+                     │                                              │
+                     │                          [▶ Start Playing]   │
+                     └──────────────────────────────────────────────┘
+```
+
+- Shown once, over W-P1, when there is no settings file. It replaces
+  `SetupWizardWindow`: same choices, fewer words.
+  - Storage: `StoreInUserProfile`, default the user folder.
+  - Keyboard: one popup over today's two exclusive checkboxes (*Arrow keys
+    + S / A*, *WASD + K / J*, `KeyPresets`), default arrows as today.
+  - Gamepads: today's Xbox and PlayStation presets are both applied, with
+    no checkbox. They bind different devices, so turning one off only
+    hides a pad the user may plug in later. A pad neither preset matches
+    goes through W-P15.
+- Windows and Linux add today's two checkboxes (*Check for updates*,
+  *Desktop shortcut*), both on by default. The ASCII is the macOS form.
+- Esc and the close button keep the defaults and continue. There is no
+  Cancel, because the app cannot run without a storage choice.
+- Elements: 2 radios, popup, Start Playing = 4 (6 on Windows/Linux). ✔
+  Gamepad: radios, popup and button are focusable.
+
+**W-P13 — A game needs a BIOS file**
+
+![W-P13](../media/gui-redesign/W-P13.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  🔒 This game needs a BIOS file               │
+                     │  Famicom Disk System games start from the    │
+                     │  console's own BIOS. MesenAI does not        │
+                     │  include it — choose your copy once and it   │
+                     │  is kept for every disk game.                │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │         Drop disksys.rom here          │  │
+                     │  │    ⟨8 KB · stays on this computer⟩     │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  ⚠ That file is 16 KB — the FDS BIOS is 8 KB. │  ← only after a wrong file
+                     │    Try another file.                         │
+                     │                        [Cancel] [Choose File…]│
+                     └──────────────────────────────────────────────┘
+```
+
+- Replaces today's `FirmwareNotFound` message box and file-dialog loop
+  (`FirmwareHelper.RequestFirmwareFile`). The Core's `MissingFirmware`
+  notification and `SelectFirmwareFile`'s copy into the Firmware folder are
+  unchanged. Only the surface changes.
+- The name, console and expected size come from `MissingFirmwareMessage`
+  (`Filename`, `Firmware`, `Size`/`AltSize`). The sentence is per firmware
+  type: FDS, GBA (`gba_bios.bin`, 16 KB), SMS/GG boot ROMs. A wrong size is
+  an inline line (W-X2 shape), not a new dialog, and the drop zone stays.
+- Cancel returns to the home with the status line "Zelda no Densetsu needs
+  the FDS BIOS"; the game does not load. Nothing is downloaded or suggested
+  from the web: MesenAI never points to a BIOS source.
+- Elements: drop zone, Cancel, Choose File… = 3. ✔
+
+**W-P14 — A file that does not open**
+
+![W-P14](../media/gui-redesign/W-P14.png)
+
+```
+│  Continue playing                                            [Open a ROM…]  │
+│  … (W-P2 unchanged) …                                                       │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ ⚠ "Contra.txt" is not a game MesenAI can open.        [Open Another…]  │ │
+│  │   MesenAI opens NES, Game Boy, Game Boy Color, Master System and       │ │
+│  │   Game Boy Advance games, or a zip holding one.                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+```
+
+- Today the Core shows `CouldNotLoadFile` as an OSD message on the last
+  frame and the UI stays where it was. The redesign puts one inline alert
+  (W-X2 shape) on the home, and it stays until the next open or a click on
+  ✕. The home is not replaced (rule 5).
+- One sentence per cause, the same alert:
+  - not a game file (`LoadRomResult::UnknownType`);
+  - a zip with no game in it;
+  - the file is damaged or cut short (a known console, but the loader
+    failed).
+- **A zip with several games** keeps today's chooser (`SelectRomWindow`,
+  which lists only game files and opens a one-game zip directly). It is
+  not redrawn: the native file dialog cannot browse into a zip on macOS or
+  Linux, and on Windows the files inside are not real paths, so a zip
+  cannot be "a folder" without an in-app file browser. The game picked is
+  stored as a recent entry with its inner file (`ResourcePath.InnerFile`),
+  so it becomes an ordinary W-P2 card and is never asked again. If Play
+  ever gains a game library (a ROM folder shown as cards), a zip joins it
+  as a folder there — its own decision, with an ADR.
+- Elements: W-P2's 2 + Open Another… = 3. ✔
+
+**W-P15 — A controller nobody has set up**
+
+![W-P15](../media/gui-redesign/W-P15.png)
+
+```
+   ⟨first press on an unknown controller — HUD pill, 8 s⟩
+   ┌──────────────────────────────────────────────────┐
+   │ ⚙ New controller. Press Start on it to set it up. │
+   └──────────────────────────────────────────────────┘
+
+                     ┌──────────────────────────────────────────────┐
+                     │  Set up "8BitDo SN30"                        │
+                     │  Use the controller itself — no keyboard     │
+                     │  needed.                                     │
+                     │        ┌─────────────────────────────┐       │
+                     │        │  ✚        ▬ ▬        (B) (A)│       │  ← the step's button lit
+                     │        └─────────────────────────────┘       │
+                     │        Press the button you want as  A       │
+                     │  ⟨Step 1 of 8 · A, B, Select, Start, Up,     │
+                     │   Down, Left, Right⟩                         │
+                     │  ▁▁▁▁▁▁▁▁▁▁░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
+                     │  ⟨Hold any button 2 seconds to skip this     │
+                     │   one. Press nothing for 10 seconds to stop  │
+                     │   — the keyboard keeps working.⟩             │
+                     │  [Skip]                            [Cancel]  │
+                     └──────────────────────────────────────────────┘
+```
+
+- **The case.** A pad neither preset matches (DirectInput or generic HID on
+  Windows/Linux; on macOS, a pad without `extendedGamepad`) sends keys that
+  no port-1 mapping uses. Today it does nothing in game and in the menus,
+  and fixing it needs the keyboard (Settings › Controls › bind each
+  button). That breaks rule 9.
+- **Detection rule.** The first press from a device none of whose keys
+  appear in any port mapping shows the pill once per device per session.
+  *Start* on that pad opens the sheet, pausing the game. Any other key
+  dismisses the pill.
+- **Driven by the pad being set up.** Each step lights the button on the
+  picture. The first press becomes the binding, a 2-second hold skips, and
+  10 seconds of silence cancel. Skip and Cancel are there for the mouse and
+  keyboard too. On finish the mapping is written to port 1's
+  `KeyMapping` (the first free mapping slot) and named after the device;
+  the pause overlay, sheets and game take it at once.
+- The picture is the NES pad for NES, the Game Boy for GB/GBC, the Master
+  System pad for SMS (8 steps for NES and GB; SMS has 6, GBA 10 with L/R).
+- **Prerequisite (a slice, not drawn as available):** the per-device
+  "first key" event and the device name. macOS already observes
+  `GCControllerDidConnectNotification`; Windows/Linux need a device id per
+  key. It is checked on hardware in the input tester's pending physical-pad
+  pass (Part A §4, *Host input tester*).
+- Elements: Skip, Cancel = 2. ✔ Rule 9: the whole flow needs no keyboard.
+
+**W-P16 — A pack waits for a file only you can add**
+
+![W-P16](../media/gui-redesign/W-P16.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  ▣ Contra Arcade Music needs one file        │
+                     │    ⟨Everything else is installed.⟩           │
+                     │  The pack's author could not share this      │
+                     │  file, so it is not downloaded. If you have  │
+                     │  it, add it and the pack completes.          │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │ Arcade soundtrack (MP3 set, 23 files)  │  │
+                     │  │ ⟨Licence: not declared⟩                │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │          Drop the file here            │  │
+                     │  │ ⟨it is copied into the pack's download │  │
+                     │  │  folder⟩                               │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  [Show Folder]  [Play Without It] [Choose File…]│
+                     └──────────────────────────────────────────────┘
+```
+
+- Replaces today's OSD line "Missing file '<hints>' (licence: …) - drop it
+  into <folder> and reload the ROM"
+  (`CommunityPackInstallService.NotifyPendingDeps`). The data is the same
+  `CommunityPackDepPrompt` (`Hints`, `License`, `DropFolder`). MEP-v1 §6
+  and MEI-v1 §2.3 are unchanged: the app never fetches a `user_supplied`
+  dep by itself.
+- How it opens: W-P9's install pill reads "Contra Arcade Music needs one
+  file · Esc", and the sheet opens from the pause overlay. W-P6 shows the
+  same thing as its orange line, with *Add the File…*. The game is never
+  interrupted.
+- A file dropped or chosen is copied into `DropFolder` and the pack is
+  re-resolved. With ADR-0244 (P.9) that applies in place; until then the
+  button reads *Add and Restart*, because today only a ROM reload
+  re-resolves deps (`OnGameLoaded` returns early on a power cycle, #156).
+  A file whose sha256 does not match the catalog row is refused inline:
+  "That is not the file this pack was made with".
+- *Play Without It* closes the sheet. The pack stays partial, as today, and
+  the status line says "waiting for one file".
+- Elements: drop zone, Show Folder, Play Without It, Choose File… = 4. ✔
+
+##### 13.5.3 Remaster
+
+The artist's loop is three verbs. The workspace is one screen with three
+zones in that order, and the screen never changes shape — zones fill in.
+
+**W-R0 — Remaster, no project yet**
+
+![W-R0](../media/gui-redesign/W-R0.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [✎ Remaster ⌄]                                                           [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Remaster a game                                                            │
+│                                                                              │
+│   Play the game once while MesenAI records it. You get its figures,          │
+│   scenery and stage maps as pictures to paint in your own program.           │
+│   Come back and see them in the game.                                        │
+│                                                                              │
+│   ┌──────────────────────────────────┐   ┌──────────────────────────────┐    │
+│   │ ● Start with the running game    │   │ ▤ Open a project folder…     │    │
+│   │   Contra (USA)                   │   │   ⟨a game folder you already │    │
+│   │   [ Start Recording ]            │   │    worked on⟩                │    │
+│   │                                  │   │   [Choose Folder…]           │    │
+│   └──────────────────────────────────┘   └──────────────────────────────┘    │
+│                                                                              │
+│   Recent projects                                                            │
+│   · Castlevania (USA)        3 recordings · 412 cells painted   ▸           │
+│   · The Legend of Zelda (USA)  1 recording · 28 cells painted ▸             │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● Contra (USA) · pack: Contra 80s 1.2                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- *Start Recording* creates the project for the running game and starts
+  recording in one click (W-R2). It is primary when a game is running; when
+  none is, it reads `[ Open a ROM to Start ]` and goes to the file dialog
+  (rule 10).
+- "Project" = the ROM's enhancement folder (ADR-0243, accepted — slice F12.20): the
+  ADR-0049 sibling `<Game>/` — or `EnhancementPacks/<Game>/` when the ROM
+  folder is read-only — holding `auto/` (recordings), `mep/` (the artist's
+  pack, ADR-0147), `kit/` (ADR-0183) and the `.bootstrap` stamp. No new
+  format beyond ADR-0243's answers: one `auto/rec-NNN/` per recording and a
+  machine-written `project.json` listing them (source: play, TAS, AI, script).
+- Today the bootstrap refuses to record when anything dresses the ROM, the
+  project's own `mep/` included, so a second recording would be silently
+  refused. ADR-0243 Decision 3 makes the project's own layer an exception.
+- Elements: 2 + rows. ✔
+
+**W-R0b — Remaster, Python not found (feasibility state, §13.4)**
+
+![W-R0b](../media/gui-redesign/W-R0b.png)
+
+```
+│  ⚠ Painting needs Python 3, which MesenAI could not find.                    │
+│    You can still record. Your figures are prepared once     [Locate Python…] │
+│    Python is available.                                     [How to Install] │
+```
+
+Shown as a banner inside W-R0/W-R1 until resolved. Never a modal.
+Elements: 2 in the banner + 2 of W-R0 = 4. ✔
+
+**W-R1 — Project screen (the one Remaster screen)**
+
+![W-R1](../media/gui-redesign/W-R1.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [✎ Remaster ⌄]                                                           [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  [Contra (USA) ⌄]  Project                                                   │
+│                                                                              │
+│  ① RECORD                                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ 2 recordings · stage 1 and the base · 1 240 shapes seen while you play │  │
+│  │ [ ● Record while I play ]  [ Record from a TAS movie… ] [ Let the AI play… ]│  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ② PAINT                                                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  Figures (27)   Scenery (8)   Stage maps (2)   Pattern pages (24)      │  │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐        │  │
+│  │  │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │  …     │  │
+│  │  │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │ │ ▓▓▓▓ │        │  │
+│  │  │ run  │ │ jump │ │ prone│ │ climb│ │ death│ │ boss │ │fig 7 │        │  │
+│  │  │ 6 ph │ │ 2 ph │ │ 1 ph │ │ 4 ph │ │ 3 ph │ │ 2 ph │ │ 1 ph │        │  │
+│  │  │ ✎    │ │      │ │      │ │ ✎    │ │      │ │      │ │      │        │  │
+│  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘        │  │
+│  │  Click a tile to open it in your paint program. Save it as the same    │  │
+│  │  PNG and come back.                                                     │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ③ SEE IT                                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ 2 files changed since the last build.          [ ▶ Build & show in game ]│ │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● Contra (USA) · playing your project · 412 cells painted                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Zone ① is the **bootstrap recorder** (ADR-0243, accepted — slice F12.20):
+  `StartRecordHdPack` with screen capture on, the only path that writes the
+  `sheets/`, `poses.json` and `adjacency.json` the kit reads. It is started
+  and stopped by the user here, rather than running by itself on load. The
+  HD Pack Builder window writes no sheets, and the live recorder only feeds
+  `record_viewer.py`, so neither feeds this screen. TAS is
+  `headless_record bootstrap movie=…` (ADR-0185) run as a job into the same
+  project; `headless_record` ships only in the macOS arm64 zip today, so
+  elsewhere the button is disabled with "Not in this build". *Let the AI play…* (W-R8, ADR-0242, slice F14.20) runs
+  ADR-0238's search + Jev harness as a job under the user's own key; it is
+  disabled with a reason when the game has no RAM map. Scripted route/cheat drivers stay in `scripts/`
+  (they need authored files) — reachable from the project menu, not shown.
+- The **project menu** is the title `Contra (USA) ⌄`: *Switch Project…*,
+  *Show Project Folder*, *Compose a Scene…* (W-R7), *Scripted Recording…*.
+  One button holds what would otherwise be four (rule 2).
+- Zone ② is the ADR-0183 kit, in its reading order. A tile is a figure
+  (`mep_figure.py export`), a scenery sheet, a stitched map or a page.
+  Captions come from `names.json` › inferred `label` › id (ADR-0209 Q1) — the
+  `figure 7` tile (`fig 7` in the ASCII, for width) has neither a name nor an
+  inferred label, so it shows its id.
+  `✎` = painted (the *Painted* badge in the PNG). Every figure was seen while
+  recording; a cell completed from the ROM (`fill`, `seen: false`, ADR-0183
+  §3 / ADR-0219) exists only on pattern pages and is shown dimmer there,
+  never hidden (W-R5).
+- Clicking a tile exports if needed and opens the PNG with the OS default
+  (`open`/`xdg-open`/`ShellExecute` — ADR-0209 Consequences names this as
+  the first user-configured launch; a slice records it). The `.ora` twin
+  (ADR-0220) is **not** offered on this screen. While ADR-0220's stop
+  condition 2 is open (GIMP and Krita open it with the base layer active),
+  the flat PNG is the only path shown. The layered copy stays reachable
+  from Tools ⋯ for the artist who wants it (user's decision, 2026-10-02).
+- Zone ③ is one button that runs `mep_figure.py import` for changed figures,
+  `mep_build.py build`, `mep_lint.py`, then `RequestMepImageReload`
+  (ADR-0212) — or, when the build changed the manifest, reopens the ROM at
+  the same save state (ADR-0209 constraint 3). The user sees one progress
+  card (W-R3) and then the game.
+- *The game* here is shown **inside Remaster** (rule 11): the project screen
+  gives way to the running game full-window, with one HUD pill
+  "✎ Remaster · Esc returns to the project". Esc goes back to W-R1, not to
+  Play's pause overlay; Play's controls (slots, pack picker, Quit) are not
+  on this screen. Recording (W-R2) uses the same game view.
+- When the last build is clean, zone ③ adds a plain link
+  *Share this project — opens Share*, the one cross-profile link in
+  Remaster; it switches the profile to Share and lands on W-H3 (rule 11).
+- Elements at rest: project menu, Record, Record from TAS, Let the AI
+  play, the category strip, Build = 6. ✔ (5 before W-R8 was added.) (The first count, 8, took the strip as four elements
+  and *Switch project* and the folder link as two; rule 2 now counts a strip
+  once and the folder moved into the project menu.)
+
+**W-R2 — Recording in progress (the game fills the window, inside Remaster)**
+
+![W-R2](../media/gui-redesign/W-R2.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ┌──────────────────────────────────────────────────────────┐                 │
+│ │ ✎ Remaster ● 01:42 · 318 new shapes · 2 screens captured │        [■ Stop] │
+│ └──────────────────────────────────────────────────────────┘                 │
+│                                                                              │
+│                              ⟨ game, letterboxed ⟩                           │
+│                                                                              │
+│              ⟨Play through what you want to repaint. Esc stops.⟩             │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+The game fills the window — you cannot record what you cannot see — with
+one HUD pill and Stop. This is Remaster's game view (W-R1 notes), not Play:
+no pause overlay, no slots. Esc or Stop ends the recording, returns to W-R1
+and runs the kit generators as a job (W-R3), which refreshes zone ②.
+Switching profile does not stop the recording; the title-bar profile button
+carries a red dot meanwhile (§13.6). Elements: Stop = 1. ✔
+
+**W-R3 — Job card (shared by Stop, Build & show, TAS and AI recording)**
+
+![W-R3](../media/gui-redesign/W-R3.png)
+
+```
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ Building your project…  step 2 of 4 · figures imported (3)             │  │
+│  │ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  │
+│  │                                                        [ Stop ]        │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+```
+
+Rule 6. The card replaces the Build button in zone ③; zones ① and ② stay
+usable, but the three record buttons (*Record*, *Record from a TAS Movie…*,
+*Let the AI Play…*) are disabled while a build runs. On success the card
+collapses to one line (`Built · no problems · showing in game`) for 5 s. On
+failure, W-R4. Elements: project menu, Record (disabled), TAS (disabled), AI (disabled),
+strip, Stop = 6. ✔
+
+**W-R4 — Build problems (inline, replaces the job card)**
+
+![W-R4](../media/gui-redesign/W-R4.png)
+
+```
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ ⚠ 2 problems stopped the build.                                        │  │
+│  │ · "run" phase 3 — the canvas was resized (was 192×64). Undo the        │  │
+│  │   resize and save again.                                [Open file]    │  │
+│  │ · "stage 1 map" — a pink marker is still on the image. Paint over it   │  │
+│  │   and save again.                                       [Open file]    │  │
+│  │                                           [Show log]  [ Try again ]    │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+```
+
+Each `mep_lint`/`mep_build` error is rewritten against the surface's
+caption, in words, with the file to open. A problem without a translation
+shows the raw line under *Show log* — never on the surface (rule 3).
+Elements: project menu, Record, TAS, strip, Show log, Try again = 6 (each
+problem's *Open file* is a row action). ✔
+
+**W-R5 — Provenance badges (hover/▸ on a tile; the honesty surface)**
+
+![W-R5](../media/gui-redesign/W-R5.png)
+
+```
+                 ┌──────────────────────────────────────┐
+                 │ "run" · 6 phases · from recording 2  │
+                 │ ✔ Seen in the game                    │
+                 │ ✎ Painted: 2 of 6 phases              │
+                 │ [Open]                                │
+                 └──────────────────────────────────────┘
+
+                 ┌──────────────────────────────────────┐
+                 │ page 17 · Pattern Pages               │
+                 │ ⚠ 12 of 64 cells not seen in the game │
+                 │ Filled from the game's own data. Play │
+                 │ further while recording to see them.  │
+                 │ [Open]                                │
+                 └──────────────────────────────────────┘
+```
+
+The first popover is on a figure (Figures strip), the second on a pattern
+page (Pattern Pages strip); the PNG shows both side by side. Per-recording
+provenance (ADR-0194), `seen`/`fill` (ADR-0219: only pages carry fill — a
+static kit has no figures or maps), and — when
+the project was imported against a patched ROM — a banner across zone ②:
+`This project paints a patched version of the game. New recordings will not
+connect to it.` (ADR-0198 §3).
+
+**W-R6 — Import an existing pack as a project (from W-R0 *Open a project folder…* when the folder is a legacy pack)**
+
+![W-R6](../media/gui-redesign/W-R6.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  This is a finished pack                     │
+                     │                                              │
+                     │  Make it editable? MesenAI cuts its images   │
+                     │  into figures and pages you can paint. The   │
+                     │  original pack is not changed.               │
+                     │                                              │
+                     │  ⚠ This pack is made for a patched version   │
+                     │    of the game. You can paint it, but new    │
+                     │    recordings will not connect to it.        │
+                     │                                              │
+                     │              [Cancel]   [ Make editable ]    │
+                     └──────────────────────────────────────────────┘
+```
+
+`mep_import.py` (ADR-0198 §1/§3) as a job; the ⚠ paragraph appears only in
+the §3 case. Refusals are per rule, each citing the `hires.txt` line it
+stopped at, so a refused import shows them as a list in the W-R4 shape
+(one plain sentence per rule, *Show line* per row) and no *Make editable*
+button. Elements: 2. ✔
+
+**W-R7 — Composition editor hand-off (project menu › Compose a Scene…)**
+
+![W-R7](../media/gui-redesign/W-R7.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Compose a scene                             │
+                     │                                              │
+                     │  The scene composer is a separate tool. It   │
+                     │  opens in its own window and saves into this │
+                     │  project.                                    │
+                     │                                              │
+                     │  ✔ This project has the layout data the      │
+                     │    composer needs                            │
+                     │                                              │
+                     │              [Cancel]   [ Open Composer ↗ ]  │
+                     └──────────────────────────────────────────────┘
+```
+
+Launches `scripts/compose_editor.py <project>` as a child process. It is
+**not** embedded (ADR-0165). When `adjacency.json` is missing the hint reads
+"Record again to get the layout data", and the button is disabled (rule 4
+by analogy). Elements: 2. ✔
+
+**W-R8 — Let the AI play (W-R1 › Let the AI Play…)** — ADR-0242, accepted (slices F14.19, F14.20)
+
+![W-R8](../media/gui-redesign/W-R8.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Let the AI play                             │
+                     │                                              │
+                     │  The AI plays the stage for you and records  │
+                     │  it. It only steps in where the game gets    │
+                     │  stuck, so it runs slower than real time.    │
+                     │                                              │
+                     │  Start from   [Stage 1 — your recording ▾]   │
+                     │  Goal         [End of the stage ▾]           │
+                     │                                              │
+                     │  OpenRouter key  •••••••••••• 4f2a [Change…] │
+                     │  ⟨stored in your Keychain, never in files⟩   │
+                     │  Spend limit  [US$ 0.25 ▾] ⟨≈ 10 000 moves⟩  │
+                     │                                              │
+                     │  🔒 The AI sees numbers read from the game's  │
+                     │     memory — never the picture or the game   │
+                     │     file. You pay OpenRouter with your key.  │
+                     │                                              │
+                     │                       [Cancel]  [ Start ]    │
+                     └──────────────────────────────────────────────┘
+```
+
+- Runs `jev_harness.py` (ADR-0238 §3) as a job on the W-R3 card:
+  `AI playing · stage 1 · 2 stuck spots passed · US$ 0.004 · [Stop]`. The
+  game is not shown live — the emulator pauses while the AI decides.
+- On finish, the produced `<n>f <buttons>` script is replayed by the
+  ordinary recorder (no AI call) and lands in zone ① as one more
+  recording (ADR-0238 §4). A give-up reads "Stopped at stage 1, x 2 859 —
+  record that part yourself", never as an error.
+- No key yet: the key row is *[Paste Key…]* plus *Get a key at
+  openrouter.ai ↗*, and *Start* is disabled until a key is saved. A
+  402/429 reads "Your key is out of credit", never as a crash.
+- Where the key lives is ADR-0242 Q1 (recommended: the OS credential
+  store). It never reaches `settings.json`, logs, `runs/` or a command
+  line.
+- Elements: Start from, Goal, Change…, Spend limit, Cancel, Start = 6. ✔
+- Drawn on the Contra project for continuity with W-R1. Today Contra has
+  no `ram-map.json`, so on this project the button would be disabled with
+  "No AI map for this game yet" — only `mm3/` and `ninjagaiden/` have one
+  (ADR-0242 Q2).
+
+##### 13.5.4 Share
+
+**W-H1 — Share home**
+
+![W-H1](../media/gui-redesign/W-H1.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▣ Share ⌄]                                                              [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Share with the community                                                   │
+│                                                                              │
+│   ┌──────────────────────────────────┐  ┌──────────────────────────────────┐ │
+│   │ 📦 A pack                        │  │ 🎞 A replay                       │ │
+│   │                                  │  │                                  │ │
+│   │ Made one, or found one you love? │  │ Record a run from power-on and   │ │
+│   │ Paste one link. A bot checks it  │  │ share it. Others can watch it in │ │
+│   │ and lists it in the catalog.     │  │ MesenAI.                         │ │
+│   │                                  │  │                                  │ │
+│   │ [ Share a pack ]                 │  │ [ Record and share ]             │ │
+│   └──────────────────────────────────┘  └──────────────────────────────────┘ │
+│                                                                              │
+│   Submissions open on GitHub in your browser. MesenAI never uploads          │
+│   anything or signs in for you.                                              │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● Contra (USA) · pack: Contra 80s 1.2                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Two cards, two pipelines (ADR-0205 keeps them apart). Elements: 2. ✔ The
+closing sentence is the trust boundary, stated once.
+
+**W-H2 — Share a pack (one screen, three fields)**
+
+![W-H2](../media/gui-redesign/W-H2.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▣ Share ⌄]                                                              [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  ‹ Share                                                                     │
+│                                                                              │
+│   Share a pack                                                               │
+│   ⟨Three fields. A bot downloads it, checks it, and replies on GitHub in a    │
+│    few minutes.⟩                                                             │
+│   Pack link                                                                  │
+│   ┌────────────────────────────────────────────────────────────────────┐     │
+│   │ https://github.com/<user>/<repo>/releases/download/…               │     │
+│   └────────────────────────────────────────────────────────────────────┘     │
+│   ⟨ GitHub release, gist, raw file, Google Drive, MediaFire, Dropbox, MEGA ⟩ │
+│                                                                              │
+│   Game                                     Console                           │
+│   ┌──────────────────────────────┐         ┌──────────────┐                  │
+│   │ Contra (USA)                 │         │ NES        ▾ │                  │
+│   └──────────────────────────────┘         └──────────────┘                  │
+│   ⟨ filled from the running game — change it if the pack is for another ⟩    │
+│                                                                              │
+│   Want to share your own remaster?  [Package a Project…]                     │
+│                                                                              │
+│                                              [ Continue on GitHub ↗ ]        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ● Contra (USA) · pack: Contra 80s 1.2                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Exactly the Issue Form's three fields, same labels in spirit; the button
+  builds the pre-filled `issues/new?template=community-pack.yml&…` URL (the
+  `ReplayShare.BuildIssueUrl` pattern) and opens the browser. Confirmation is
+  the click itself plus the ↗ glyph (rule 7).
+- Host hint lists only `scripts/pack_host_allowlist.json` hosts; a link on
+  another host shows an inline `⟨ this host isn't accepted — see the list ⟩`
+  before the user leaves the app.
+- No ROM required: Game/Console are plain text and a dropdown, prefilled when
+  a game runs.
+- "I found this pack" is the default framing; authorship is read off the pack
+  by CI, never asked here.
+- *Package a Project…* stays inside Share (rule 11): it lists the projects
+  Remaster knows and opens W-H3 for the one picked. It never jumps to the
+  Remaster profile.
+- Elements: ‹ Share, 3 fields, *Package a Project…*, Continue = 6. ✔
+
+**W-H3 — Share my project (from *Package a Project…*, or Remaster's "Share this project — opens Share")**
+
+![W-H3](../media/gui-redesign/W-H3.png)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [▣ Share ⌄]                                                              [⋯] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  ‹ Share                                                                     │
+│                                                                              │
+│   Share your Contra (USA) project                                            │
+│                                                                              │
+│   1  Package it            [ Build pack .zip ]                               │
+│      ✔ contra-usa-mep.zip · 38 MB · no problems               [Show file]    │
+│                                                                              │
+│   2  Put it somewhere public                                                 │
+│      Upload the .zip to a GitHub release, Google Drive, Dropbox, MediaFire   │
+│      or MEGA, and copy its download link. MesenAI does not host files.       │
+│      [ Open Google Drive ↗ ]  ⟨then drag the .zip from Finder into it⟩       │
+│                                                                              │
+│   3  Submit the link        ┌──────────────────────────────────────┐         │
+│                             │ https://                             │         │
+│                             └──────────────────────────────────────┘         │
+│                                              [ Continue on GitHub ↗ ]        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Step 1 is `mep_build.py pack` as a job (W-R3 card); `mep_lint` must be
+  clean or the step shows W-R4.
+- Step 2 is the honest gap: MesenAI hosts nothing and uploads nothing
+  (Part A §1 principles). The screen says so instead of hiding the step.
+  *Open Google Drive ↗* opens `https://drive.google.com/drive/my-drive` in
+  the browser, the most common of the accepted hosts; the user drags the
+  zip from *Show in Finder* and copies the share link. No credential, no
+  API and no upload by the app (user's decision, 2026-10-02: *"meio
+  termo"*, instead of a direct Drive upload through OAuth). The click plus
+  the ↗ glyph is the confirmation, as for *Continue on GitHub* (rule 7). A
+  direct upload stays a later decision, worth an ADR only if a human trial
+  (§13.9) shows this step still stops people.
+- Step 3 is W-H2 with Game/Console taken from the project.
+- Elements: ‹ Share, Build, Show file, Open Google Drive, link field,
+  Continue = 6. ✔
+
+**W-H4 — Record and share a replay (unchanged behaviour, new placement)**
+
+![W-H4](../media/gui-redesign/W-H4.png)
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │  Record and share — Contra (USA)             │
+                     │                                              │
+                     │  The game restarts from power-on and         │
+                     │  records until you stop. Loading a save      │
+                     │  state ends the recording; cheats you have   │
+                     │  on are recorded with it.                    │
+                     │                                              │
+                     │              [Cancel]   [ ● Start Recording ]│
+                     └──────────────────────────────────────────────┘
+
+   while recording, the game fills the window inside Share (as W-R2), one pill:
+   ● Recording a replay 02:15 · Esc stops
+
+   on stop:
+                     ┌──────────────────────────────────────────────┐
+                     │  ✔ Replay saved                              │
+                     │  contra-usa-2026-10-02.mmo                   │
+                     │  Drag the file into the GitHub form that     │
+                     │  opens next.                                 │
+                     │                                              │
+                     │  [Show file]            [ Continue on GitHub ↗ ] │
+                     └──────────────────────────────────────────────┘
+```
+
+`ShareRecordingSession` + `ReplayShare` as they are (ADR-0205 §2/§6, R.1).
+A console the share settings do not support shows the dialog with Start
+disabled and the one-line reason (rule 4). Elements: 2 per sheet. ✔ The PNG
+shows the two sheets side by side.
+
+##### 13.5.5 Cross-cutting states
+
+**W-X1 — Confirmations (rule 7), all the same shape, inline where possible**
+
+![W-X1](../media/gui-redesign/W-X1.png)
+
+```
+   Play      Restore original files? Your edits to this pack will be lost.   [Keep Edits] [Restore]
+   Play      Use Contra HD Remix instead? The game restarts.                 [Cancel] [Switch Pack]
+   Remaster  Stop recording? Your figures are made from what you played so far. [Keep Going] [Stop]
+```
+
+A pattern sheet, not a screen: each example is tagged with the profile it
+appears in, and appears only there (rule 11). Switching packs restarts the
+game, because textures need a ROM reload (§6.1).
+
+**W-X2 — Errors are sentences with a next step, never codes**
+
+![W-X2](../media/gui-redesign/W-X2.png)
+
+```
+   Play      ⚠ This pack could not be downloaded (the host did not answer). Playing without it.  [Try Again]
+   Remaster  ⚠ This is not the game the project was recorded from.        [Open the Right Game…]
+   Share     ⚠ This host is not accepted. Use a GitHub release, Google Drive, MediaFire, Dropbox or MEGA.
+```
+
+Same pattern sheet as W-X1. *Try Again* appears where the user is looking at
+the pack (W-P6); the transient HUD pill (W-P9) carries no button. A console
+that cannot do something is never an error here — it is a disabled control
+with its reason (rule 4).
+
+**W-X3 — Interruptions: quitting or changing game while work runs**
+
+![W-X3](../media/gui-redesign/W-X3.png)
+
+```
+   Remaster  ■ Quit while recording? What you recorded so far is kept as recording 3.
+                                                            [Keep Recording] [Stop and Quit]
+   Remaster  ⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.
+                                                            [Keep Running] [Quit]
+   Remaster  ■ Open Castlevania? This recording stops and is kept as recording 3.
+                                                            [Cancel] [Stop and Open]
+   Play      ⚠ Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.
+                                                            [Cancel] [Stop and Open]
+
+   Builds and AI runs are separate processes: opening a game never stops them.
+   Status line in Play or Share while one runs:  ● Remaster: building Contra (USA) · 40 %
+```
+
+Same pattern sheet as W-X1. Only lost work asks; navigation never does
+(rule 7).
+
+- **Quit.** Today `MainWindow.OnClosing` closes every window and stops the
+  emulator, with no question. A bootstrap recording is cut wherever it is.
+  - A recording in progress asks first. The recording is closed cleanly and
+    kept as the next `rec-NNN` (ADR-0243 Q1).
+  - A job (W-R3: build, kit, AI run) asks once too. The child process is
+    stopped; its partial output is discarded, because a job re-runs from
+    the project.
+  - With nothing running, quitting never asks.
+- **Opening another game while recording.** W-R2 fills the window, so this
+  only happens from outside: a file dropped on the window, or opened from
+  the OS (which lands in Play, §13.6). The recording stops, is kept, and
+  the new game opens in Play.
+- **HD Pack Builder (classic).** Today `MainWindow` closes it on
+  `BeforeGameLoad` without a word, which breaks rule 5. It now asks first,
+  in the profile that is showing. The rule is the same for the live
+  recorder in Tools ⋯ (ADR-0243 Decision 4).
+- **Switching profile** never asks and never stops anything. A job keeps
+  running in Remaster, and the other profiles' status line names it (W-S1:
+  the status line is read-only). Clicking that line is not a control; the
+  user switches with the profile button.
+
+#### 13.6 Transitions
+
+Each profile is its own graph; the only edges between graphs go through the
+switcher (W-S3) or a link that names its destination (rule 11).
+
+```
+   PLAY        W-P1/W-P2 ──open ROM / Continue──► W-P3 ──Esc──► W-P4
+                   ▲                              (W-P9 pill)       │
+                   └──────────── Quit game ─────────────────────────┤
+                                                 W-P5 / W-P6 / W-P7 / W-P8 ──► W-P10
+
+   REMASTER    W-R0 ──► W-R1 ◄──────────────────────────────┐
+                         │ ① Record ──► game view (W-R2) ───┤
+                         │ ① Let the AI play ──► W-R8 ──► W-R3 ┘
+                         │ ② click tile ──► OS paint program (external)
+                         │ ③ Build & show ──► W-R3 ──► game view, or W-R4
+                         │ project menu ──► W-R7 · W-R0 folder ──► W-R6
+                         └ "Share this project — opens Share" ══╗
+                                                                ║ profile switch
+   SHARE       W-H1 ──► W-H2 ──► browser                        ║
+                 │  └─► Package a Project… ──► W-H3 ◄═══════════╝
+                 └────► W-H4 ──► browser
+
+   ANY STATE   [profile ⌄] ──► W-S3 ──► the chosen profile, where it was left
+```
+
+- Switching is allowed in any state and never stops the game, a recording or
+  a job. Each profile reopens where it was left.
+- A ROM opened from the OS while in Remaster/Share switches to Play (W-P3),
+  because that is what opening a ROM means — the one silent switch, and the
+  title bar shows it.
+- A recording or a build running in Remaster keeps running while another
+  profile is shown; the title bar's profile button carries a small dot
+  (red = recording, tint = job) so the work is not invisible, without
+  showing Remaster's controls.
+
+#### 13.7 Decisions this proposal makes, and why
+
+1. **Tasks over expertise.** Sorting by Player/Advanced put the artist in the
+   expert bucket and gave the contributor nothing. Sorting by task gives each
+   door its own next step.
+2. **The classic UI survives untouched, behind one button.** Removing it
+   would strand current Mesen users and every debugger-based workflow; hiding
+   it costs one click. Nothing in Tools ⋯ is redesigned here.
+3. **Remaster is one screen, three zones, in loop order.** Wizards and
+   multi-step pipelines were rejected: the artist repeats *Paint → See it*
+   dozens of times, and a wizard makes every repeat start over.
+4. **No embedded editor.** ADR-0209's constraint, and the right call: GIMP,
+   Krita, Aseprite and Photoshop exist. The GUI owns selection and return.
+5. **Jobs, not windows.** Every script becomes a progress card in place.
+   Terminals are the wall the artist's door currently opens onto.
+6. **Honesty on the surface.** `fill`/`seen`, recording provenance and the
+   patched-ROM caveat are shown as badges and banners, because ADR-0183 §3
+   and ADR-0219 make them part of the deliverable, not footnotes.
+7. **Share never uploads.** The project's legal posture (Part A §1) says the
+   channel carries links and hashes. The screen states the hosting step
+   instead of pretending it away.
+8. **Simplicity is enforced by count.** Rule 2's tally is on every wireframe
+   so a reviewer can refuse one without arguing taste, and the PNG's caption
+   pill repeats it. No wireframe is over: W-P4's 8 became 6 by merging Save
+   and Load into one row (user's decision, 2026-10-02).
+9. **One profile at a time.** The first draft had three always-visible tabs.
+   Review rejected it (2026-10-02): every screen then carried two
+   destinations its user did not come for. The title bar names the current
+   profile and the switcher holds the others (W-S3, rule 11). The cost is one
+   click more to change task, which happens a few times per session; the
+   gain is on every screen.
+10. **The picture is explained as three layers, in one place.** Art (the
+   pack), Pixels (video filters) and Screen (shaders) are named by what they
+   change and annotated with where their result goes (captured vs
+   display-only), in one tab (W-P10, rule 12). The alternative — a shader in
+   Settings, a filter switch in Enhancements and the full list in Options —
+   is today's state and the source of the confusion. Combinations the Core
+   makes wrong (a scale filter over pack art, NTSC ignored under a pack) are
+   disabled with their reason instead of allowed silently.
+
+#### 13.8 Open questions for the review
+
+1. ~~W-P4~~ — merged Save/Load into one *Save states ▸* row (→ 6), 2026-10-02.
+2. ~~W-R1 TAS~~ — stays visible in zone ① (2026-10-02).
+3. ~~`.ora` in zone ②~~ — no; only in Tools ⋯ while ADR-0220 stop
+   condition 2 is open (2026-10-02).
+4. ~~`ShowClassicMenuBar` on upgrade~~ — `false`, with a one-time toast
+   "your menus are under Tools ⋯" (2026-10-02). This replaces today's §6
+   promise of a visible bar.
+5. ~~Remaster gamepad~~ — no; mouse/trackpad (rule 9 stands, 2026-10-02).
+6. ~~Remaster consoles~~ — answered by ADR-0243 Decision 5: NES first. On
+   GB/SMS *Record* is enabled and the paint zone is disabled with its reason;
+   GBA is disabled.
+7. ~~W-P10 named looks~~ — yes, two or three, license-compatible;
+   ADR-0237's non-goal amended 2026-10-02.
+8. ~~W-P10 comparison~~ — *Hold to Compare* (2026-10-02); no split view.
+9. ~~Pixels over a pack~~ — Look keeps it disabled with its reason; Tools ⋯
+   › Options still lets an advanced user set a scale filter over a pack, as
+   today (2026-10-02).
+10. ~~W-R8 / ADR-0242~~ — accepted 2026-10-02; slices F14.19 (RAM maps) and
+    F14.20 (the recorder), Part A §4, Phase 14.
+11. ~~ADR-0243~~ — accepted 2026-10-02; slice F12.20 (Part A §4, Phase 12).
+12. ~~ADR-0244~~ — accepted 2026-10-02; slice P.9 (Part A §4, Phase 7).
+
+#### 13.9 Verification this proposal would need
+
+- Rules in `UI/Logic/` (workspace switch, bar visibility, element enablement
+  reasons, Issue URL builder, lint-error translation), tested in `UI.Tests`
+  host-free; wiring (which card is visible when) in `UI.HeadlessTests`
+  (ADR-0150). Pixel baselines stay out of scope.
+- The §13.3 tally is a review step, not a test.
+- Human trials, one per door, written up in `docs/validation/` with the
+  binary hash — a passing headless suite is not product acceptance
+  (`docs/roadmap/AGENTS.md`).
