@@ -56,10 +56,11 @@ namespace Mesen.ViewModels
 		//(MainWindow.OnNotification), for the bar-visibility rule and status line.
 		[ObservableProperty] public partial bool IsGamePaused { get; set; }
 
-		//P.4 (PRD Part B §6): the thin Player-mode overlay panel (Resume,
-		//Save/Load slot, Pack, Settings, Advanced GUI, Quit), shown on top of the
-		//game while UiMode == Player. Opening it pauses the game so the couch
-		//user can navigate; closing never auto-resumes - Resume is an overlay item.
+		//P.4/G.2 (PRD Part B §6, §13.5.2 W-P4): the Player-mode pause overlay
+		//(Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game),
+		//shown on top of the game while UiMode == Player. Opening it pauses the
+		//game so the couch user can navigate; Esc or Resume closes it and resumes
+		//(rule 8: game → W-P4 → resume).
 		[ObservableProperty] public partial bool IsPlayerOverlayVisible { get; set; }
 
 		//P.5 (PRD Part B §5): the Player-mode pack picker. Opens once over
@@ -194,49 +195,11 @@ namespace Mesen.ViewModels
 			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.ShowClassicMenuBar, false, Config.Preferences.AutoHideMenu, false, false);
 		}
 
-		//P.4 (PRD Part B §6): the overlay shortcut toggles the thin Player
-		//overlay. Opening pauses the game (so the couch user can navigate with
-		//D-pad/A/B); closing never auto-resumes - Resume is an overlay item. The
-		//overlay only exists in Player mode; in Advanced the press is ignored
-		//(ShortcutHandler checks the mode before acting).
-		public void TogglePlayerOverlay()
-		{
-			//P.5: while the pack picker is up, Esc dismisses it (un-enhanced this
-			//session) instead of toggling the overlay.
-			if(IsPlayerPackPickerVisible) {
-				IsPlayerPackPickerVisible = false;
-				return;
-			}
-			//P.7: same precedence for the Enhancements panel - Esc closes it and
-			//returns to the overlay underneath (which OpenEnhancementsPanel hid),
-			//instead of closing the overlay too.
-			if(IsEnhancementsPanelVisible) {
-				IsEnhancementsPanelVisible = false;
-				IsPlayerOverlayVisible = true;
-				return;
-			}
-			//P.10: the Cheats sheet (W-P11) closes back to the overlay too.
-			if(CloseCheatsSheetOnEsc()) {
-				return;
-			}
-			if(IsPlayerOverlayVisible) {
-				IsPlayerOverlayVisible = false;
-			} else {
-				RefreshCheatsSummary();
-				IsPlayerOverlayVisible = true;
-				EmuApi.Pause();
-			}
-		}
-
-		//P.4: "Advanced GUI" overlay item - switches to Advanced mode, instant and
-		//persisted. The chrome re-applies via the UiMode observer (menu bar back,
-		//overlay hidden).
-		public void SwitchToAdvancedMode()
-		{
-			Config.Preferences.UiMode = UiMode.Advanced;
-			Config.ApplyConfig();
-			Config.Save();
-		}
+		//P.4/G.2: the overlay shortcut lands in TogglePlayerOverlay
+		//(MainWindowViewModel.PauseOverlay.cs), which routes Esc through the
+		//host-free PlayEsc order: game → W-P4 → resume. P.4's "Advanced GUI"
+		//overlay item is gone (W-P4): the UiMode choice is reached from Tools ⋯ ›
+		//Settings › Preferences, in the bar the overlay reveals.
 
 		//P.5 (PRD Part B §5): decides whether the Player picker opens for
 		//the loaded ROM and, when it does, fills the competing choices. Data is
@@ -355,6 +318,7 @@ namespace Mesen.ViewModels
 			Config.ApplyConfig();
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
+			_packPickerFromOverlay = false;
 			LoadRomHelper.PowerCycle();
 		}
 
@@ -363,6 +327,11 @@ namespace Mesen.ViewModels
 		public void DismissPlayerPackPicker()
 		{
 			IsPlayerPackPickerVisible = false;
+			//G.2 (rule 8): opened from W-P4's Pack row, it closes back to W-P4.
+			if(_packPickerFromOverlay) {
+				_packPickerFromOverlay = false;
+				OpenPauseOverlay();
+			}
 		}
 
 		//P.7 (PRD Part B §6.1): the overlay's "Enhancements" item - refreshes
@@ -373,6 +342,13 @@ namespace Mesen.ViewModels
 		public void OpenEnhancementsPanel()
 		{
 			IsPlayerOverlayVisible = false;
+			RefreshEnhancementsState();
+			IsEnhancementsPanelVisible = true;
+		}
+
+		//Also feeds W-P4's "Enhancements · N on" row (G.2).
+		private void RefreshEnhancementsState()
+		{
 			IsTexturesEnabled = Config.EnhancementPacks.EnableTextures;
 			IsAudioEnabled = Config.EnhancementPacks.EnableAudio;
 			IsBorderEnabled = Config.EnhancementPacks.EnableBorder;
@@ -385,13 +361,12 @@ namespace Mesen.ViewModels
 				ConsoleType.Gba => PlayerEnhancementsToggle.IsScanlineOverclockOn(Config.Gba.OverclockScanlineCount),
 				_ => false
 			};
-			IsEnhancementsPanelVisible = true;
 		}
 
 		public void CloseEnhancementsPanel()
 		{
 			IsEnhancementsPanelVisible = false;
-			IsPlayerOverlayVisible = true;
+			OpenPauseOverlay();
 		}
 
 		//Texture/Audio/Border (§6.1, ADR-0149): plain passthrough to the existing MEP layer
@@ -491,6 +466,10 @@ namespace Mesen.ViewModels
 			RecentGames.Init(GameScreenMode.RecentGames);
 
 			AddDisposable(RecentGames.ObserveProp(nameof(RecentGamesViewModel.Visible), () => {
+				if(!RecentGames.Visible) {
+					//G.2: a slot grid opened from W-P4 is gone (slot picked or closed).
+					_stateGridFromOverlay = false;
+				}
 				UpdateRendererVisibility();
 			}));
 
@@ -503,14 +482,15 @@ namespace Mesen.ViewModels
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.AspectRatio))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.VideoFilter))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Preferences)), (() => Config.Preferences, nameof(PreferencesConfig.ShowTitleBarInfo))], UpdateWindowTitle));
-			//P.4: UiMode switches (overlay "Advanced GUI" item or the Preferences
-			//combo) re-evaluate the chrome immediately - the overlay hides when
+			//P.4: UiMode switches (the Preferences combo, under Tools ⋯ › Settings
+			//since G.2 removed the overlay's "Advanced GUI" item) re-evaluate the chrome immediately - the overlay hides when
 			//leaving Player. G.1: the menu bar follows ShowClassicMenuBar instead.
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.ShowClassicMenuBar))], UpdateMenuVisibility));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], () => {
 				if(Config.Preferences.UiMode != UiMode.Player) {
 					IsPlayerOverlayVisible = false;
 					IsEnhancementsPanelVisible = false;
+					IsSaveStatesSheetVisible = false;
 					CheatsSheet.IsVisible = false;
 				}
 			}));
@@ -570,6 +550,7 @@ namespace Mesen.ViewModels
 
 			UpdateWindowTitle();
 			UpdateShellState();
+			ClosePauseSurfacesWithoutGame();
 
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
 			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,

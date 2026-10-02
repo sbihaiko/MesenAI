@@ -67,13 +67,5 @@ namespace Mesen.Logic
 				_ => false
 			};
 		}
-
-		//§6.2: the Welcome card shows once, on the very first Player-mode boot,
-		//and never again once dismissed.
-		public static bool ShouldShowWelcomeCard(bool welcomeCardDismissed) => !welcomeCardDismissed;
-
-		//§6.2: the Continue card is not gated on first-run - it is simply what
-		//the Player home shows whenever there is a game to resume.
-		public static bool ShouldShowContinueCard(bool hasRecentGames) => hasRecentGames;
 	}
 }

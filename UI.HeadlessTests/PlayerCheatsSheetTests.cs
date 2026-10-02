@@ -62,7 +62,9 @@ public class PlayerCheatsSheetTests : IDisposable
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
-		model.RomInfo = new RomInfo() { ConsoleType = console };
+		//G.2: Esc opens the pause overlay only over a loaded game (PlayEsc), so the
+		//stand-in RomInfo carries a format as well as the console.
+		model.RomInfo = new RomInfo() { ConsoleType = console, Format = console == ConsoleType.Gameboy ? RomFormat.Gb : RomFormat.iNes };
 		return (window, model);
 	}
 
