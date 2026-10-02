@@ -187,6 +187,7 @@ public:
 	ShortcutState IsShortcutAllowed(EmulatorShortcut shortcut, uint32_t shortcutParam) override;
 
 	BaseVideoFilter* GetVideoFilter(bool getDefaultFilter) override;
+	bool IsDrawingPackArt() override;
 
 	string GetHash(HashType hashType) override;
 	RomFormat GetRomFormat() override;

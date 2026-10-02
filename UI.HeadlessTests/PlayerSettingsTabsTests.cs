@@ -12,26 +12,19 @@ namespace Mesen.HeadlessTests;
 //rendering". `PlayerSettingsEssentials` (which tab counts as essential) is
 //covered host-free in UI.Tests; what is covered here is the step after it -
 //that ConfigWindow.axaml's per-tab IsVisible="{Binding !PlayerMode}" really
-//leaves exactly the video / audio / input tabs on screen.
+//leaves exactly the video / audio / input / look tabs on screen.
 [NativeCoreFree("Opens ConfigWindow on the Input tab; only the Audio/Video tab view-models reach ConfigApi/EmuApi on construction.")]
 public class PlayerSettingsTabsTests
 {
-	//ConfigWindow.axaml's TabControl, in markup order. The two unnamed separator
-	//rows are TabItems too, and are part of what Player mode must hide.
-	private const int TabAudio = 0;
-	private const int TabEmulation = 1;
-	private const int TabInput = 2;
-	private const int TabVideo = 3;
-	private const int TabSeparator1 = 4;
-	private const int TabNes = 5;
-	private const int TabGameboy = 6;
-	private const int TabGba = 7;
-	private const int TabSms = 8;
-	private const int TabSeparator2 = 9;
-	private const int TabPreferences = 10;
+	//ConfigWindow.axaml's TabControl, in markup order (ConfigWindowTabOrder).
+	//The two unnamed separator rows are TabItems too, and are part of what
+	//Player mode must hide.
+	private static int At(ConfigWindowTab tab) => ConfigWindowTabOrder.IndexOf(tab);
+	private const int TabSeparator1 = 5;
+	private const int TabSeparator2 = 10;
 
-	private static readonly int[] EssentialTabs = { TabAudio, TabInput, TabVideo };
-	private static readonly int[] AdvancedOnlyTabs = { TabEmulation, TabSeparator1, TabNes, TabGameboy, TabGba, TabSms, TabSeparator2, TabPreferences };
+	private static readonly int[] EssentialTabs = { At(ConfigWindowTab.Audio), At(ConfigWindowTab.Input), At(ConfigWindowTab.Video), At(ConfigWindowTab.Look) };
+	private static readonly int[] AdvancedOnlyTabs = { At(ConfigWindowTab.Emulation), TabSeparator1, At(ConfigWindowTab.Nes), At(ConfigWindowTab.Gameboy), At(ConfigWindowTab.Gba), At(ConfigWindowTab.Sms), TabSeparator2, At(ConfigWindowTab.Preferences) };
 
 	private static List<TabItem> ShowSettings(bool playerMode)
 	{
@@ -50,7 +43,7 @@ public class PlayerSettingsTabsTests
 	{
 		List<TabItem> tabs = ShowSettings(playerMode: true);
 
-		Assert.Equal(11, tabs.Count);
+		Assert.Equal(ConfigWindowTabOrder.Tabs.Length, tabs.Count);
 		foreach(int index in EssentialTabs) {
 			Assert.True(tabs[index].IsOnScreen(), $"Tab {index} must stay visible in Player mode.");
 		}
@@ -58,7 +51,8 @@ public class PlayerSettingsTabsTests
 			Assert.False(tabs[index].IsOnScreen(), $"Tab {index} must be hidden in Player mode.");
 		}
 		//The rule itself, applied by the window: Player never lands on a hidden tab.
-		Assert.True(PlayerSettingsEssentials.IsEssentials((ConfigWindowTab)tabs.FindIndex(t => t.IsSelected)));
+		Assert.Equal(At(ConfigWindowTab.Input), tabs.FindIndex(t => t.IsSelected));
+		Assert.True(PlayerSettingsEssentials.IsEssentials(ConfigWindowTabOrder.TabAt(tabs.FindIndex(t => t.IsSelected))!.Value));
 	}
 
 	[AvaloniaFact]
@@ -68,7 +62,7 @@ public class PlayerSettingsTabsTests
 		//PlayerMode - the failure mode a grep of the markup cannot tell apart.
 		List<TabItem> tabs = ShowSettings(playerMode: false);
 
-		Assert.Equal(11, tabs.Count);
+		Assert.Equal(ConfigWindowTabOrder.Tabs.Length, tabs.Count);
 		Assert.All(tabs, tab => Assert.True(tab.IsOnScreen()));
 	}
 }

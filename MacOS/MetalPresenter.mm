@@ -119,6 +119,8 @@ struct MetalPresenter::Impl
 	libra_instance_t Libra = {};
 	libra_mtl_filter_chain_t Chain = nullptr;
 	bool ShaderOn = false;
+	//ADR-0246 §5: Hold to Compare - present unfiltered, keep the chain.
+	bool Bypass = false;
 	bool ShaderDropped = false;
 	std::string Error;
 	//Issue #593: failures of the frame call itself (not of the GPU work).
@@ -492,6 +494,11 @@ void MetalPresenter::ClearShader()
 	_impl->FreeChain();
 }
 
+void MetalPresenter::SetShaderBypass(bool bypass)
+{
+	_impl->Bypass = bypass;
+}
+
 bool MetalPresenter::ShaderActive() const
 {
 	return _impl->ShaderOn;
@@ -587,7 +594,7 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 		bool filtered = false;
 		bool dropChain = false;
 
-		if(m.ShaderOn && m.Chain) {
+		if(m.ShaderOn && m.Chain && !m.Bypass) {
 			filtered = m.RunChain(cmd, drawable, frameNumber);
 			if(filtered) {
 				m.FrameFailures.Succeeded();

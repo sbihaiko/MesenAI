@@ -80,6 +80,7 @@ public:
 	PpuFrameInfo GetPpuFrame() override;
 	uint32_t GetFrameCount() override;
 	BaseVideoFilter* GetVideoFilter(bool getDefaultFilter) override;
+	bool IsDrawingPackArt() override;
 
 	uint64_t GetMasterClock() override;
 	uint32_t GetMasterClockRate() override;

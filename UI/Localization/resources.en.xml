@@ -30,7 +30,6 @@
 			<Control ID="chkEnhancementsAudio">Audio pack</Control>
 			<Control ID="chkEnhancementsBorder">Border</Control>
 			<Control ID="chkEnhancementsWideScrn">Widescreen (16:9)</Control>
-			<Control ID="chkEnhancementsHiRes">Hi-res filter</Control>
 			<Control ID="chkEnhancementsOverclock">Reduce slowdown (overclock)</Control>
 			<Control ID="btnEnhancementsClose">Close</Control>
 		</Form>
@@ -249,6 +248,15 @@
 			<Control ID="lblBottom">Bottom</Control>
 			<Control ID="lblRight">Right</Control>
 		</Form>
+		<Form ID="LookConfigView">
+			<Control ID="lblLookArt">Art</Control>
+			<Control ID="btnLookPackDetails">Pack details…</Control>
+			<Control ID="lblLookPixels">Pixels</Control>
+			<Control ID="lblLookScreen">Screen</Control>
+			<Control ID="lblLookEffect">Effect:</Control>
+			<Control ID="btnLookAdjust">Adjust…</Control>
+			<Control ID="btnLookHoldToCompare">Hold to Compare</Control>
+		</Form>
 		<Form ID="VideoConfigView">
 			<Control ID="tpgGeneral">General</Control>
 			<Control ID="chkIntegerFpsMode">Enable integer FPS mode (e.g: run at 60 fps instead of 60.1)</Control>
@@ -309,7 +317,6 @@
 			<Control ID="mnuPresetRgb">RGB</Control>
 			<Control ID="mnuPresetMonochrome">Monochrome</Control>
 			
-			<Control ID="lblShaderSettings">Shader settings</Control>
 
 			<Control ID="tpgAdvanced">Advanced</Control>
 			<Control ID="lblScreenRotation">Screen Rotation:</Control>
@@ -812,6 +819,7 @@
 			<Control ID="tabEmulation">Emulation</Control>
 			<Control ID="tabInput">Input</Control>
 			<Control ID="tabVideo">Video</Control>
+			<Control ID="tabLook">Look</Control>
 			<Control ID="tabNes">NES</Control>
 			<Control ID="tabSnes">SNES</Control>
 			<Control ID="tabGameboy">Game Boy</Control>
@@ -1945,6 +1953,27 @@
 		</Form>
 	</Forms>
 	<Messages>
+		<Message ID="LookArtNone">The game's own art (no pack)</Message>
+		<Message ID="LookArtUnnamedPack">A pack draws the art</Message>
+		<Message ID="LookPixelsSharp">Sharp (original pixels)</Message>
+		<Message ID="LookPixelsHq4x">Smooth — HQ4x</Message>
+		<Message ID="LookPixelsXbrz4x">Smooth — xBRZ 4x</Message>
+		<Message ID="LookPixelsMore">More in Options…</Message>
+		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>
+		<Message ID="LookScreenNone">None</Message>
+		<Message ID="LookScreenNtsc">TV signal (NTSC)</Message>
+		<Message ID="LookScreenChooseFile">Choose a shader file…</Message>
+		<Message ID="LookMarkCaptured">◉ Shows in screenshots and videos</Message>
+		<Message ID="LookMarkDisplayOnly">◌ Only on your display — not in screenshots, videos or recordings</Message>
+		<Message ID="LookMarkMixed">◉ The filter shows in screenshots and videos; ◌ the shader only on your display</Message>
+		<Message ID="LookMarkNone">Adds nothing to the picture</Message>
+		<Message ID="LookReasonPackDrawsArt">Off while a pack draws the art</Message>
+		<Message ID="LookReasonShadersNotInBuild">Shaders are not available in this build</Message>
+		<Message ID="LookReasonShadersNeedMetalRenderer">Needs the Metal renderer — restart after changing it</Message>
+		<Message ID="LookReasonNtscNesOnly">NES games only</Message>
+		<Message ID="LookReasonNtscNotAppliedUnderPack">Not applied while a pack draws the art</Message>
+		<Message ID="LookReasonNothingToCompare">Nothing to compare: Pixels and Screen are off</Message>
+		<Message ID="LookCompareHint">Hold to see the picture without Pixels and Screen; the art stays</Message>
 		<Message ID="LastSession">Last Session</Message>
 		<Message ID="PlayHomeOrientationAudioAndPacks">Enhanced audio is on. If the game has a community pack, it downloads, installs and loads by itself.</Message>
 		<Message ID="PlayHomeOrientationAudioOnly">Enhanced audio is on.</Message>

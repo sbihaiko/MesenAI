@@ -52,6 +52,15 @@ namespace Mesen.Interop
 
 		[DllImport(DllPath, EntryPoint = "CheckShaderSupport")][return: MarshalAs(UnmanagedType.I1)] public static extern bool CheckShaderSupportWrapper();
 		private static bool? _shadersSupported = null;
+		private static ShaderAvailability _shaderAvailability = ShaderAvailability.NotInBuild;
+
+		//ADR-0246 §6: why shaders cannot run, for Settings › Look's reason line.
+		//Decided once at startup, like CheckShaderSupport.
+		public static ShaderAvailability GetShaderAvailability()
+		{
+			CheckShaderSupport();
+			return _shaderAvailability;
+		}
 
 		public static bool CheckShaderSupport()
 		{
@@ -59,6 +68,7 @@ namespace Mesen.Interop
 				bool coreSupport = CheckShaderSupportWrapper();
 				//ADR-0237: on macOS only the Metal renderer applies shaders.
 				bool usesSoftware = RendererPolicy.UsesSoftwareRenderer(ConfigManager.Config.Video.UseSoftwareRenderer, OperatingSystem.IsMacOS());
+				_shaderAvailability = LookLayers.ResolveShaderAvailability(coreSupport, OperatingSystem.IsMacOS(), usesSoftware);
 				_shadersSupported = RendererPolicy.ShaderGroupAvailable(coreSupport, OperatingSystem.IsMacOS(), usesSoftware);
 				if(coreSupport == false) {
 					EmuApi.WriteLogEntry("[librashader] Could not load librashader (missing file, or wrong version)");

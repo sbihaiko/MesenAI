@@ -1,0 +1,88 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
+	VerticalAlignment="Stretch"
+	HorizontalAlignment="Stretch"
+	x:DataType="vm:LookConfigViewModel"
+	x:Class="Mesen.Views.LookConfigView"
+>
+	<!-- ADR-0246 (P.13): Art, Pixels and Screen in the order they apply, each
+	     with the mark of where its result goes. -->
+	<UserControl.Styles>
+		<Style Selector="ComboBox.lookChoices ComboBoxItem">
+			<Setter Property="IsEnabled" Value="{Binding IsEnabled, DataType={x:Type vm:LookChoice}}" />
+		</Style>
+		<Style Selector="TextBlock.lookNote">
+			<Setter Property="Opacity" Value="0.75" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+			<Setter Property="Margin" Value="0 3 0 0" />
+		</Style>
+	</UserControl.Styles>
+
+	<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">
+		<StackPanel Margin="5">
+			<c:OptionSection Header="{l:Translate lblLookArt}">
+				<StackPanel Orientation="Horizontal">
+					<TextBlock Name="txtLookArt" Text="{Binding ArtText}" VerticalAlignment="Center" Margin="0 0 10 0" />
+					<Button Name="btnLookPackDetails" Content="{l:Translate btnLookPackDetails}" IsVisible="{Binding HasArt}" Click="OnPackDetails" />
+				</StackPanel>
+			</c:OptionSection>
+
+			<c:OptionSection Header="{l:Translate lblLookPixels}">
+				<StackPanel>
+					<ComboBox
+						Name="cboLookPixels"
+						Classes="lookChoices"
+						MinWidth="260"
+						ItemsSource="{Binding PixelsChoices}"
+						SelectedItem="{Binding SelectedPixels, Mode=TwoWay}"
+						IsEnabled="{Binding PixelsEnabled}"
+					>
+						<ComboBox.ItemTemplate>
+							<DataTemplate DataType="vm:LookChoice">
+								<TextBlock Text="{Binding Label}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
+					<TextBlock Name="txtLookPixelsReason" Classes="lookNote" Text="{Binding PixelsReason}" IsVisible="{Binding PixelsReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+					<TextBlock Name="txtLookPixelsMark" Classes="lookNote" Text="{Binding PixelsMark}" />
+				</StackPanel>
+			</c:OptionSection>
+
+			<c:OptionSection Header="{l:Translate lblLookScreen}">
+				<StackPanel>
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="{l:Translate lblLookEffect}" VerticalAlignment="Center" Margin="0 0 5 0" />
+						<ComboBox
+							Name="cboLookScreen"
+							Classes="lookChoices"
+							MinWidth="260"
+							ItemsSource="{Binding ScreenChoices}"
+							SelectedItem="{Binding SelectedScreen, Mode=TwoWay}"
+						>
+							<ComboBox.ItemTemplate>
+								<DataTemplate DataType="vm:LookChoice">
+									<TextBlock Text="{Binding Label}" />
+								</DataTemplate>
+							</ComboBox.ItemTemplate>
+						</ComboBox>
+						<Button Name="btnLookAdjust" Content="{l:Translate btnLookAdjust}" IsEnabled="{Binding CanAdjust}" Margin="5 0 0 0" Click="OnAdjust" />
+					</StackPanel>
+					<TextBlock Name="txtLookScreenNote" Classes="lookNote" Text="{Binding ScreenNote}" IsVisible="{Binding ScreenNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+					<TextBlock Name="txtLookScreenMark" Classes="lookNote" Text="{Binding ScreenMark}" />
+				</StackPanel>
+			</c:OptionSection>
+
+			<StackPanel Margin="0 10 0 0">
+				<Button Name="btnLookHoldToCompare" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" />
+				<TextBlock Name="txtLookCompareReason" Classes="lookNote" Text="{Binding CompareReason}" />
+			</StackPanel>
+		</StackPanel>
+	</ScrollViewer>
+</UserControl>

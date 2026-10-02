@@ -691,13 +691,19 @@ uint32_t Gameboy::GetMasterClockRate()
 	return _memoryManager->IsHighSpeed() ? 4194304 * 2 : 4194304;
 }
 
+bool Gameboy::IsDrawingPackArt()
+{
+	//The condition GetVideoFilter below uses to pick HdTileVideoFilter (ADR-0246).
+	return GetRomFormat() != RomFormat::Gbs && _hdPack && !_hdPackBuilder;
+}
+
 BaseVideoFilter* Gameboy::GetVideoFilter(bool getDefaultFilter)
 {
 	if(getDefaultFilter || GetRomFormat() == RomFormat::Gbs) {
 		return new GbDefaultVideoFilter(_emu, false);
 	}
 
-	if(_hdPack && !_hdPackBuilder) {
+	if(IsDrawingPackArt()) {
 		return new HdTileVideoFilter(_emu, _hdPack.get());
 	}
 

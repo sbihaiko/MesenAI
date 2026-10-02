@@ -82,7 +82,6 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsAudioEnabled { get; set; }
 		[ObservableProperty] public partial bool IsBorderEnabled { get; set; }
 		[ObservableProperty] public partial bool IsWideScrnEnabled { get; set; }
-		[ObservableProperty] public partial bool IsHiResEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockSupported { get; set; }
 
@@ -353,7 +352,6 @@ namespace Mesen.ViewModels
 			IsAudioEnabled = Config.EnhancementPacks.EnableAudio;
 			IsBorderEnabled = Config.EnhancementPacks.EnableBorder;
 			IsWideScrnEnabled = Config.Video.AspectRatio == VideoAspectRatio.Widescreen;
-			IsHiResEnabled = Config.Video.VideoFilter == VideoFilterType.HQ4x;
 			IsOverclockSupported = PlayerEnhancementsToggle.SupportsOverclock(RomInfo.ConsoleType);
 			IsOverclockEnabled = RomInfo.ConsoleType switch {
 				ConsoleType.Nes => PlayerEnhancementsToggle.IsNesOverclockOn(Config.Nes.PpuExtraScanlinesBeforeNmi, Config.Nes.PpuExtraScanlinesAfterNmi),
@@ -398,7 +396,7 @@ namespace Mesen.ViewModels
 			return next;
 		}
 
-		//WideScrn/HiRes (§6.1): restore-not-clobber via the host-free
+		//WideScrn (§6.1; Hi-res filter moved to Settings › Look, ADR-0246): restore-not-clobber via the host-free
 		//PlayerEnhancementsToggle.ToggleEnumPreset - turning on stashes whatever
 		//Advanced had configured (unless it's already the preset), turning off
 		//restores exactly that. Applies immediately (renderer-only, no reload).
@@ -411,17 +409,6 @@ namespace Mesen.ViewModels
 			Config.Video.ApplyConfig();
 			Config.Save();
 			IsWideScrnEnabled = newCurrent == VideoAspectRatio.Widescreen;
-		}
-
-		public void ToggleHiRes()
-		{
-			(VideoFilterType newCurrent, VideoFilterType newPrior) = PlayerEnhancementsToggle.ToggleEnumPreset(
-				Config.Video.VideoFilter, Config.PlayerEnhancements.HiResPriorFilter, VideoFilterType.HQ4x, !IsHiResEnabled);
-			Config.Video.VideoFilter = newCurrent;
-			Config.PlayerEnhancements.HiResPriorFilter = newPrior;
-			Config.Video.ApplyConfig();
-			Config.Save();
-			IsHiResEnabled = newCurrent == VideoFilterType.HQ4x;
 		}
 
 		//Overclock (§6.1): plain 0/preset toggle (no restore-not-clobber - see

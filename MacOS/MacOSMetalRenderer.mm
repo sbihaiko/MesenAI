@@ -100,6 +100,7 @@ void MacOSMetalRenderer::Render(RenderSurfaceInfo& emuHud, RenderSurfaceInfo& sc
 		_presenter.SetVsync(_vsync);
 	}
 	UpdateShader();
+	_presenter.SetShaderBypass(_emu->GetSettings()->IsLookCompare());
 
 	MetalOverlay emu = { emuHud.Buffer, emuHud.Width, emuHud.Height, emuHud.IsDirty };
 	MetalOverlay script = { scriptHud.Buffer, scriptHud.Width, scriptHud.Height, scriptHud.IsDirty };

@@ -2,6 +2,7 @@
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/Video/VideoDecoder.h"
+#include "Core/Shared/Interfaces/IConsole.h"
 #include "Core/Shared/Video/VideoRenderer.h"
 #include "Core/Shared/SystemActionManager.h"
 #include "Core/Shared/MessageManager.h"
@@ -221,6 +222,30 @@ extern "C"
 			report.ScreensSeen = r.ScreensSeen;
 			report.IsChrRam = r.IsChrRam ? 1 : 0;
 		}
+	}
+
+	//ADR-0246 (P.13): does a loaded pack draw this game's picture? The same
+	//decision GetVideoFilter makes (IConsole::IsDrawingPackArt) - Settings >
+	//Look disables Pixels and labels NTSC as not applied while it is true.
+	DllExport bool __stdcall IsDrawingPackArt()
+	{
+		shared_ptr<IConsole> console = _emu->GetConsole();
+		return console ? console->IsDrawingPackArt() : false;
+	}
+
+	//ADR-0246 §5: Hold to Compare. On: the decoder skips Pixels and NTSC and
+	//the renderer bypasses the shader chain (kept loaded); off restores both.
+	//A paused game is redrawn so the change shows at once.
+	DllExport void __stdcall SetLookCompare(bool enabled)
+	{
+		_emu->GetSettings()->SetLookCompare(enabled);
+		_emu->GetVideoDecoder()->RedrawPausedFrame();
+	}
+
+	//ADR-0246: a Look change made while paused shows without resuming.
+	DllExport void __stdcall RedrawPausedFrame()
+	{
+		_emu->GetVideoDecoder()->RedrawPausedFrame();
 	}
 
 	DllExport void __stdcall TakeScreenshot()

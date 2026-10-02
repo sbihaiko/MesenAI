@@ -116,7 +116,7 @@ namespace Mesen.ViewModels
 			PackSummary = string.IsNullOrWhiteSpace(CurrentPackName) ? ResourceHelper.GetMessage("OverlayRowNone") : CurrentPackName;
 
 			RefreshEnhancementsState();
-			int on = PauseOverlay.EnhancementsOn(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsHiResEnabled, IsOverclockEnabled, IsOverclockSupported);
+			int on = PauseOverlay.EnhancementsOn(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled, IsOverclockSupported);
 			EnhancementsSummary = on == 0 ? ResourceHelper.GetMessage("OverlayRowNone") : ResourceHelper.GetMessage("OverlayRowCountOn", on);
 
 			SaveStatesRowValue = BuildSaveStatesSummary();

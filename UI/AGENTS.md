@@ -344,6 +344,18 @@ can be exercised by real xunit tests without Avalonia or the native
   Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
   injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
   are swapped in headless tests so none reaches the network.
+- **Settings › Look (`UI/Logic/LookLayers`, `NamedLookManifest`, P.13 /
+  ADR-0246).** Art / Pixels / Screen in `LookConfigView`, a ConfigWindow tab
+  after Video. Every rule (items, selection, enable, reason, ◉/◌ mark, what a
+  pick writes) is `LookLayers`; the VM only reads inputs and writes what
+  `Apply*` returns. Pack art is the core's `EmuApi.IsDrawingPackArt()`, the
+  same condition each console's `GetVideoFilter` uses. A value Look does not
+  list shows as the current item and is never rewritten. The ConfigWindow
+  TabControl binds a position through `ConfigWindowTabOrder`, never the
+  `ConfigWindowTab` id (ids have holes). Bundled looks are listed in
+  `UI/Dependencies/Shaders/Looks/looks.json`; every file there needs its
+  license, pinned source and sha256 (`UI.Tests/Look/NamedLookManifestTests`).
+  Rules in `UI.Tests/Look/`, wiring in `UI.HeadlessTests/LookSettingsTabTests`.
 - **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
   calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the

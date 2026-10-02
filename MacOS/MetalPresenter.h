@@ -59,6 +59,11 @@ public:
 	bool SetShader(const std::string& presetPath, const std::vector<MetalShaderParam>& params);
 	void UpdateShaderParams(const std::vector<MetalShaderParam>& params);
 	void ClearShader();
+	//ADR-0246 §5 (Hold to Compare): while bypassed, Present() draws the frame
+	//as if no shader were set, but the loaded chain stays built, so turning the
+	//bypass off costs nothing - unlike ClearShader() + SetShader(), which
+	//recompiles the preset. ShaderActive() keeps reporting the loaded chain.
+	void SetShaderBypass(bool bypass);
 	bool ShaderActive() const;
 	const std::string& LastError() const;
 
