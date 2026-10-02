@@ -5,7 +5,7 @@
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/StringUtilities.h"
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 shared_ptr<RecordedRomTest> _recordedRomTest;
 
 extern "C"

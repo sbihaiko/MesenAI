@@ -166,6 +166,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_headless_record_cwd.py` runs the built binary from a temp cwd and
   the repo root and asserts both load the same non-empty DB (it skips when
   the binary is not built).
+- The process-global core in `InteropDLL/EmuApiWrapper.cpp` (`_emu`,
+  `_keyManager`, `_mouseManager`) is destroyed only by `Release()`, never by
+  the static destructors `exit()` runs (issue #621: the headless test host
+  exits without `Release()` while thread-pool work still calls the core).
+  `test_core_exit_race.py` loads the built MesenCore through ctypes, keeps a
+  thread calling an export and calls C `exit()`; the child must exit 0 (it
+  skips when the core is not built; `MESEN_CORE_LIB=<path>` picks a build).
 - **Navigation sweep (ADR-0184, amended 2026-09-14; ADR-0239 §2/§4/§5)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]

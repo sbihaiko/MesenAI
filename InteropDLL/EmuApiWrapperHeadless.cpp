@@ -22,7 +22,7 @@
 //marshaling over HeadlessInputProvider; the capture and OSD exports marshal
 //over VideoRenderer/MessageManager directly - no scheduling logic lives here.
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 //Kept alive for the process' lifetime: NotificationManager holds listeners by
 //weak_ptr, so dropping this would silently unsubscribe the provider from

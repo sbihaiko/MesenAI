@@ -30,7 +30,7 @@
 #include "Core/NES/HdPacks/HdData.h"
 #include "Utilities/StringUtilities.h"
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 template<typename T>
 T WrapDebuggerCall(std::function<T(Debugger* debugger)> func)
