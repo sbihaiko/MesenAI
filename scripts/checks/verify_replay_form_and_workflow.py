@@ -7,11 +7,14 @@ Form, the `replay-submitted.yml` workflow and the labels they use.
     the file in, section 6) and an optional `notes` textarea -- and no
     `pack_link`-style field: "paste a link" is the model section 6 rejects here.
   * .github/workflows/replay-submitted.yml triggers on issues opened/edited and
-    an exact `/revalidate` comment, only for issues carrying `replay`, with
-    least-privilege permissions, a per-issue concurrency group, and runs
+    an exact `/revalidate` comment, only for issues titled `[Replay] ` or
+    already carrying `replay` (the title is the trigger because GitHub does not
+    apply a form label that does not exist yet), with least-privilege permissions, a per-issue concurrency group, and runs
     scripts/replay_submission.py. Untrusted issue text (body, title, login)
     must reach the shell only through `env:`, never interpolated into `run:`.
-  * scripts/ensure_community_pack_labels.sh declares the three labels.
+  * the workflow creates the three labels itself (`gh label create --force`,
+    idempotent) and adds `replay` to the issue, so nothing has to be set up by
+    hand; scripts/ensure_community_pack_labels.sh still declares them.
 
 Usage: python3 scripts/checks/verify_replay_form_and_workflow.py
 """
@@ -78,6 +81,17 @@ def check_workflow():
     for needle in ("'replay'", "'/revalidate'", "scripts/replay_submission.py", "--add-label", "--remove-label"):
         if needle not in text:
             fail(f"workflow must contain {needle}")
+    # the title is the trigger: a not-yet-existing form label is silently skipped
+    if "startsWith(github.event.issue.title, '[Replay] ')" not in text:
+        fail("workflow must also trigger on a title starting with '[Replay] ' (the form label does not exist on a fresh repo)")
+    for needle in ("gh label create", "--force"):
+        if needle not in text:
+            fail(f"workflow must create the replay labels itself ({needle!r} missing)")
+    for name in LABEL_NAMES:
+        if f"gh label create {name} " not in text and f'gh label create "{name}"' not in text:
+            fail(f"workflow must create label {name}")
+    if "--add-label=replay" not in text:
+        fail("workflow must add the form label `replay` to an issue that lacks it")
     for job in data["jobs"].values():
         for step in job.get("steps", []):
             run = step.get("run") or ""
