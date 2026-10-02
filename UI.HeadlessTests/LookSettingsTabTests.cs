@@ -52,7 +52,7 @@ public class LookSettingsTabTests : IDisposable
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		MainWindow main = new();
-		main.Show();
+		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
 		model.RomInfo = new RomInfo() { ConsoleType = console, Format = format };
@@ -225,7 +225,7 @@ public class LookSettingsTabTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		MainWindow main = new();
-		main.Show();
+		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
 		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };

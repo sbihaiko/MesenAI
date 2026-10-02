@@ -5,6 +5,7 @@ using Mesen.Logic;
 using Mesen.Services;
 using Mesen.Utilities;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
 {
@@ -59,6 +60,10 @@ namespace Mesen.ViewModels
 				gameLoaded ? RemasterProjectLocator.ForGame(siblingFolder, ConfigManager.EnhancementPackFolder) : "");
 		}
 
+		//#619: the Share refreshes queued behind the gate measurement post from
+		//the thread pool. Headless tests wait on them before they end.
+		public Task ShareGateRefresh { get; private set; } = Task.CompletedTask;
+
 		//Which Share surface is on screen. Called from UpdateRemasterSurfaces,
 		//which then sets the game picture's layer.
 		private void UpdateShareSurfaces()
@@ -68,7 +73,8 @@ namespace Mesen.ViewModels
 			IsShareScreenVisible = share && !Share.IsRecording;
 			if(share) {
 				//W-H3's Build needs the same Python/tools gate as Remaster's jobs.
-				Remaster.EnsureFeasibilityMeasured().ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(Share.Refresh));
+				Task refresh = Remaster.EnsureFeasibilityMeasured().ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(Share.Refresh));
+				ShareGateRefresh = Task.WhenAll(ShareGateRefresh, refresh);
 			}
 			IsGameViewVisible = IsPlayWorkspace || IsRemasterGameView || IsShareGameView;
 			UpdateRendererVisibility();

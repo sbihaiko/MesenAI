@@ -50,7 +50,7 @@ public class PlaySheetsViewTests : IDisposable
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		//A loaded game as far as the sheets are concerned (Esc's order needs one).

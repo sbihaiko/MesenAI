@@ -22,6 +22,11 @@ public static class TestAppBuilder
 	public static AppBuilder BuildAvaloniaApp()
 	{
 		UsePortableHomeFolder();
+		//#619: every MainWindow's startup checks for updates on a thread-pool
+		//thread and posts its answer to Dispatcher.UIThread whenever the network
+		//replies - after its test ended, possibly while Avalonia is resetting the
+		//dispatcher for the next one. A test never needs the network.
+		Mesen.Config.ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = false;
 		return AppBuilder.Configure<Mesen.App>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
 	}
 

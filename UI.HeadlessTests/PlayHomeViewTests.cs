@@ -36,14 +36,18 @@ public class PlayHomeViewTests : IDisposable
 
 	public void Dispose()
 	{
+		//#619: the recent games go first. Dispose runs after SettleMainWindows,
+		//so a restore below that rebuilds the home's grid must find no file to
+		//start a preview load for - that load would post to Dispatcher.UIThread
+		//from the thread pool after the test.
+		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
+			File.Delete(stale);
+		}
 		ConfigManager.Config.Preferences.UiMode = _uiMode;
 		ConfigManager.Config.Preferences.Workspace = _workspace;
 		ConfigManager.Config.EnhancementPacks.EnableAudio = _audio;
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
 		ConfigManager.Config.Preferences.GameSelectionScreenMode = _selection;
-		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
-			File.Delete(stale);
-		}
 	}
 
 	//recentGames are listed newest first.
@@ -65,7 +69,7 @@ public class PlayHomeViewTests : IDisposable
 		}
 
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		//The same call MainWindow makes whenever it returns to the home screen.
 		model.RecentGames.Init(GameScreenMode.RecentGames);

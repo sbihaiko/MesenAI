@@ -60,7 +60,7 @@ public class PlayerCheatsSheetTests : IDisposable
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		ConfigManager.Config.Cheats.DisableAllCheats = false;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		//G.2: Esc opens the pause overlay only over a loaded game (PlayEsc), so the

@@ -12,6 +12,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mesen.Controls
@@ -82,6 +83,12 @@ namespace Mesen.Controls
 			}
 		}
 
+		//#619: previews load on a thread-pool thread and post back to
+		//Dispatcher.UIThread, also for entries a grid rebuild has dropped since.
+		//Headless tests wait until none is in flight before they end.
+		private static int _thumbnailsInFlight;
+		public static bool ThumbnailsInFlight => Volatile.Read(ref _thumbnailsInFlight) > 0;
+
 		public StateGridEntry()
 		{
 			InitializeComponent();
@@ -125,6 +132,7 @@ namespace Mesen.Controls
 			Image = StateGridEntry.EmptyImage;
 
 			if(fileExists) {
+				Interlocked.Increment(ref _thumbnailsInFlight);
 				Task.Run(() => {
 					Bitmap? img = null;
 					double aspectRatio = 0;
@@ -166,6 +174,7 @@ namespace Mesen.Controls
 						Image = img ?? StateGridEntry.EmptyImage;
 						AspectRatio = aspectRatio;
 					});
+					Interlocked.Decrement(ref _thumbnailsInFlight);
 				});
 			}
 		}

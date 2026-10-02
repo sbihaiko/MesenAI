@@ -284,7 +284,7 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		ConfigManager.Config.EnhancementPacks.ApplyConfig();
 
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 

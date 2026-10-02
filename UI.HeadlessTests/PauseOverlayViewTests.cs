@@ -65,7 +65,7 @@ public class PauseOverlayViewTests : IDisposable
 		prefs.PauseWhenInMenusAndConfig = false;
 
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus (MainMenuViewModel.Initialize).");
 		return (window, model);
