@@ -1,9 +1,9 @@
 # ADR-0246: The picture has three named layers — Art, Pixels and Screen — each with its capture rule
 
-- Status: proposed. Requested by the user, verbatim: *"Sim"* (2026-10-02), to the question whether to write a separate ADR for the three Look layers. It writes down what PRD Part B §13 W-P10 already proposes, together with the user's answers of 2026-10-02: named looks bundled, Hold to Compare, and the Pixels override only in Options. Nothing is implemented.
+- Status: accepted (2026-10-02). Requested by the user, verbatim: *"Sim"* (2026-10-02), to the question whether to write a separate ADR for the three Look layers; accepted the same day (*"Aceitar"*). It writes down PRD Part B §13 W-P10 together with the user's answers of 2026-10-02: named looks bundled, Hold to Compare, and the Pixels override only in Options. Listed as slice **P.13** in PRD Part A §4, Phase 7. Not implemented; implementation waits for an explicit go-ahead.
 - Date: 2026-10-02
 - Related: ADR-0237 (shaders on macOS; non-goal amended 2026-10-02 for 2–3 named looks), ADR-0241 / PRD Part B §13 (W-P7, W-P8, W-P10), PRD Part B §6.1 (restore-not-clobber for the quick panel)
-- Supersedes / amends: none. It moves *Hi-res filter* out of the quick panel (PRD §6.1), and the shader selector out of Video settings into Look.
+- Supersedes / amends: amends ADR-0237's non-goals ("no bundled preset catalogue" is lifted for a short named list; §4 below). It also moves *Hi-res filter* out of the quick panel (PRD §6.1), and the shader selector out of Video settings into Look.
 
 ## Context
 
@@ -52,7 +52,7 @@ Measured facts that make the mix-up costly:
    - **Shaders over pack art are allowed**, and are what Look recommends
      for "the TV look" on a remastered game.
 4. **Named looks.** Two or three bundled `.slangp` presets, *CRT TV* and
-   *Handheld LCD* first, each with a GPL-3.0-compatible licence recorded
+   *Handheld LCD* first, each with a GPL-3.0-compatible license recorded
    with its source and sha256 (ADR-0237 as amended). Adding one is a code
    change; there is no catalogue browser.
 5. **Hold to Compare.** While held, Pixels and Screen drop and the original
@@ -74,5 +74,5 @@ Measured facts that make the mix-up costly:
 - A user who had HQx on with a pack sees it disabled after the upgrade.
   The reason line has to carry that change, and the first slice checks
   how it reads to someone who never knew it was blurring the art.
-- Bundling presets brings licence review into the release. The slice
+- Bundling presets brings license review into the release. The slice
   records it per file.

@@ -4,7 +4,7 @@
 - Date: 2026-09-26
 - Related: ADR-0163 (fork–upstream coexistence tiers), ADR-0203 (CI builds Windows and macOS Apple Silicon), ADR-0204 (download channel), upstream `392421500` "Added support for shaders (Windows + Linux) (#270)", merged here by PR #440
 - Supersedes / amends: nothing
-- Amended: 2026-10-02 — non-goals: a short bundled list of named looks is allowed (see the amended non-goal bullet)
+- Amended by: ADR-0246 (accepted 2026-10-02) — non-goals: a short bundled list of named looks is allowed (the amended non-goal bullet). The original clause is kept in git history; ADR-0246 §4 carries the decision and its rationale.
 
 ## Context
 
@@ -59,8 +59,8 @@ Non-goals:
     list** of two or three looks (for example *CRT TV* and *Handheld LCD*),
     offered by Settings › Look › Screen (PRD Part B §13, W-P10).
   - Each bundled preset is a `.slangp` plus its passes. It must carry a
-    licence compatible with the app's (GPL-3.0). The slice that picks
-    them records each preset's source, licence and sha256.
+    license compatible with the app's (GPL-3.0). The slice that picks
+    them records each preset's source, license and sha256.
   - The display-only rule above is unchanged: a bundled look never
     reaches screenshots, recordings or the kit.
   - This is not a catalogue browser and not a download path; adding a

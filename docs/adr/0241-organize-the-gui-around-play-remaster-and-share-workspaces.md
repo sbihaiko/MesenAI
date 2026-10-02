@@ -1,9 +1,9 @@
 # ADR-0241: Organize the GUI around Play, Remaster, and Share workspaces
 
-- Status: proposed — the user requires a GUI specialized for the README's three profiles; the workspace design below is a recommendation for review, not an accepted implementation request. Detailed proposal: PRD Part B §13. No runtime changes or implementation go-ahead accompany this record.
+- Status: accepted (2026-10-02). The user requires a GUI specialized for the README's three profiles, and accepted this model the same day (*"Aceitar"*), after two review rounds on PRD Part B §13. Not implemented. The work is cut into PRD Part B §8 slices, one at a time; the first is **G.1** (the shell). Each slice waits for an explicit go-ahead.
 - Date: 2026-10-02
 - Related: PRD Part B §6 (Player/Advanced chrome), §13 (three-workspace proposal); ADR-0146 (automatic community packs), ADR-0147 (editable packs), ADR-0183 (artist surfaces), ADR-0209 (selection and external painting), ADR-0150 (UI wiring tests).
-- Supersedes / amends: none while proposed. Acceptance would amend the Player/Advanced-only navigation model in PRD Part B §6, not pack formats, discovery, identity, or community acceptance rules.
+- Supersedes / amends: amends the Player/Advanced-only navigation model in PRD Part B §6, not pack formats, discovery, identity, or community acceptance rules.
 
 ## Context
 

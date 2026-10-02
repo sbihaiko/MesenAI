@@ -4,7 +4,7 @@
 - Date: 2026-10-02
 - Related: ADR-0238 (Jev as the stall helper — §3 harness, §4 artifact rule, §5 adoption), ADR-0185 (a movie is input, never evidence), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0184 (RAM-only cheats), ADR-0241 (Play / Remaster / Share), PRD Part B §13 (W-R1, W-R3, W-R8)
 - Supersedes / amends: amends ADR-0238 — the "not the default recorder" non-goal stays, but §5's verdict no longer keeps Jev out of the GUI; the adoption criterion for the GUI is ADR-0238 §5 unchanged, applied to the games Q2's RAM maps cover (Q3). ADR-0238 §1–§4 are unchanged.
-- Amended by: ADR-0247 (`proposed`, 2026-10-02) — PRD Part A §1 principle 5 forbade `UI/` to "hold a key", which Q1 does. ADR-0247 rewords the principle to allow keeping a user-entered key in the OS credential store for an external script; F14.20 waits for it to be accepted.
+- Amended by: ADR-0247 (accepted 2026-10-02) — PRD Part A §1 principle 5 forbade `UI/` to "hold a key", which Q1 does. ADR-0247 rewords the principle to allow keeping a user-entered key in the OS credential store for an external script; principle 5 was reworded the same day.
 
 ## Context
 
@@ -48,7 +48,10 @@ Non-goals:
 - Jev never becomes the default recorder and never runs without the
   user's own key. MesenAI ships no key and pays for nothing.
 - No pixels, screenshots or ROM bytes leave the machine (ADR-0238
-  non-goal, unchanged). Jev only receives numbers derived from RAM.
+  non-goal, unchanged). A Jev request (ADR-0238 §3) carries the game
+  state as numbers derived from RAM, plus text the project or the run
+  wrote: the fixed macro choices and their descriptions, any per-game
+  tips folded into them, and the list of options already tried.
 - The `claude -p` web-research worker (ADR-0238 §3) is not part of the
   GUI path. It needs the Claude CLI and web search, and it writes tips
   that a maintainer reviews.
@@ -66,7 +69,8 @@ Non-goals:
    - *Spend limit*: per run, default US$ 0.25.
 
    One sentence states what leaves the machine: "The AI sees numbers read
-   from the game's memory — never the picture or the game file."
+   from the game's memory and the list of moves it may choose from — never
+   the picture or the game file."
 3. **The run** is `jev_harness.py` as a job, using the W-R3 job card.
    The card shows the stage, the stalls passed, the spend and *Stop*. The
    stage's game view is not shown while it runs, because Jev pauses the
@@ -75,9 +79,12 @@ Non-goals:
    in the project like any other (ADR-0238 §4). A stall the AI gives up
    on is reported as "Stopped at <stage> x <pos> — try recording that
    part yourself".
-4. **The key never touches** `settings.json`, logs, `runs/` sidecars,
-   command lines or crash reports. It is passed to the harness through
-   the child's environment only.
+4. **The key never touches** `settings.json`, logs, `runs/` sidecars or
+   command lines, and MesenAI's own crash dialog never prints it. It is
+   passed to the harness through the child's environment only. An OS-level
+   process dump (macOS crash reporter, Windows WER) can capture a process's
+   memory and environment; the app cannot redact that, so ADR-0247
+   Decision 1 scopes the guarantee to what the app writes.
 5. **The artifact** is the script plus its cheat list (if any), saved in
    the project. As with a TAS, it is input, never evidence (ADR-0185,
    ADR-0188).

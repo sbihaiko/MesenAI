@@ -1,11 +1,11 @@
 # ADR-0245: Play offers cheats from the bundled database; Remaster allows RAM codes only, and an LLM may only pick from the list
 
-- Status: proposed. Requested by the user, verbatim: *"Sim, W-P11 + ADR"* (2026-10-02), after asking whether cheats are worth loading, how to pick and identify them, and whether a (free) LLM could find codes. Wireframe: PRD Part B §13, W-P11. Nothing is implemented.
+- Status: accepted (2026-10-02). Requested by the user, verbatim: *"Sim, W-P11 + ADR"*, after asking whether cheats are worth loading, how to pick and identify them, and whether a (free) LLM could find codes; accepted the same day (*"Aceitar"*). Listed as slices **P.10** (phase 1: W-P11, the bundled list, the Remaster rule), **P.11** (search by intent) and **P.12** (checked web lookup) in PRD Part A §4, Phase 7; P.11 and P.12 are each adopted only on their own measurement (Consequences). Wireframe: PRD Part B §13, W-P11. Not implemented; implementation waits for an explicit go-ahead.
 - Date: 2026-10-02
 - Related: ADR-0184 (a recording may use a RAM-only cheat, never a PRG patch), ADR-0205 §4 (cheats are unrestricted in a shared replay and are recorded in the `.mmo`), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0238 (Jev answers a closed Choice), ADR-0242 (the OS credential store holds BYOK keys), ADR-0128 (cheat type detection), ADR-0241 / PRD Part B §13 (W-P4, W-P11)
 - Supersedes / amends: none
-- Amended by: ADR-0247 (`proposed`, 2026-10-02) — Decision 4's phases run as external scripts; the cheats sheet never calls a model. Also 2026-10-02: the sheet's entry moved from W-P7 to W-P4 (Decision 1).
-- Amended by: ADR-0248 (`proposed`, 2026-10-02) — community-shared codes, one issue per code, listed below the bundled list in W-P11.
+- Amended by: ADR-0247 (accepted 2026-10-02) — Decision 4's phases run as external scripts; the cheats sheet never calls a model. Also 2026-10-02: the sheet's entry moved from W-P7 to W-P4 (Decision 1).
+- Amended by: ADR-0248 (accepted 2026-10-02) — community-shared codes, one issue per code, listed below the bundled list in W-P11.
 
 ## Context
 
@@ -82,10 +82,19 @@ Non-goals:
      is discarded, never shown.
    - **Web lookup for games not in the database.** A worker reads public
      code lists for the game and proposes codes. Each proposal is
-     *evidence-free* (ADR-0188) until a headless check confirms it: apply
-     the code to a committed state and see the RAM change it promises.
+     *evidence-free* (ADR-0188) until a headless check confirms it:
+     - runner: `scripts/step_emu.py` (the step-mode emulator ADR-0238
+       uses), started by the same external script;
+     - ROM: the user's loaded copy, by path, never uploaded; state: a
+       `.mss` minted from the current game when the lookup starts;
+     - check: run N frames with the code off and N with it on from the
+       same state; the code passes when its target address holds the
+       promised value in every "on" frame and the "off" run differs there.
+       A code with no RAM target (a PRG patch) cannot pass and is not
+       offered.
+
      Only checked codes are offered, labelled "found online, checked on
-     your copy".
+     your copy". The slice (P.12) fixes N and records it.
    - Keys for hosted models use the OS credential store (ADR-0242 Q1).
 5. **Console scope.** NES gets phases 1–3. GB/SMS show the sheet with
    manual entry only ("No cheat list for this console yet", rule 4). GBA

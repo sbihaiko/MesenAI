@@ -3,7 +3,7 @@
 - Status: accepted (2026-10-02). The user accepted it verbatim: *"aceito a 0244"*. Earlier, *"eu aceito, pode fazer"* had accepted the recommendation to write it. Listed as slice **P.9** in PRD Part A §4, Phase 7. Not implemented. Accepting is a request for work, and implementation waits for an explicit go-ahead.
 - Date: 2026-10-02
 - Related: ADR-0209 (save-state / reload / restore named as a third strategy; "pixel exactness after restore is the test"), ADR-0212 (in-place image reload, F12.3), ADR-0049 (pack discovery), ADR-0144/ADR-0148 (bundled ROM patches), ADR-0205 (shared replay recording), ADR-0241 / PRD Part B §13 (W-P5, W-P7)
-- Supersedes / amends: none. If accepted, it changes the PRD's W-P7 *Apply & Reload* and W-P5's power cycle.
+- Supersedes / amends: none among ADRs. It changes the PRD's W-P7 *Apply & Reload* and W-P5's power cycle (Decision 3).
 
 ## Context
 
@@ -46,7 +46,7 @@ What it cannot cover:
   in `InternalLoadRom`).
 - **Rewind history** is reset (`InitHistory`), and cheats are cleared on
   load (`ClearCheats`). Unverified: whether the UI re-applies the user's
-  cheats afterwards.
+  cheats afterward.
 
 Non-goals:
 
@@ -66,7 +66,7 @@ Non-goals:
      (`HdNesPpu` or the plain one), the audio device and the bootstrap all
      behave as on a fresh load.
    - On a failed restore (`DeserializeResult` not success), it falls back
-     to the old behaviour: the game is left freshly loaded, and the user is
+     to the old behavior: the game is left freshly loaded, and the user is
      told "Couldn't keep your place — the game restarted".
    - The in-place PPU swap of `StartRecordingHdPack` is the faster
      alternative. The slice measures both and keeps the reload unless the

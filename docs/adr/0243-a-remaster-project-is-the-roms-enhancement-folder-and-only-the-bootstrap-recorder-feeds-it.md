@@ -24,10 +24,15 @@ calls it a "project folder". Kits go to `kit/` beside the pack (ADR-0183 §1).
 
 Two facts shape what a project can be:
 
-- **The bootstrap records only into an empty folder.** If anything already
-  dresses the ROM, `StartBootstrapIfNeeded` declines and logs "delete that
-  pack (and the sibling `.bootstrap` stamp) or record into an empty
-  directory". `scripts/record_stages.sh` gives every stage its own
+- **The bootstrap records only what is missing, into fixed folders.**
+  Today `StartBootstrapIfNeeded` declines only when neither section is
+  needed: no textures (a textures pack, or an existing
+  `HdPacks/<rom>/hires.txt`, covers them) and no audio (NES only). It then
+  logs "delete that pack (and the sibling `.bootstrap` stamp) or record
+  into an empty directory". Otherwise it records the missing sections
+  under `auto/textures/` and `auto/audio/`, even when another pack covers
+  the other section. A second recording of the same section has nowhere
+  to go: there is no `auto/rec-NNN/` yet (that is this ADR's Decision). `scripts/record_stages.sh` gives every stage its own
   directory for that reason. A project with "2 recordings" (W-R1) is
   therefore two folders today, measured as a union (ADR-0239).
 - **It runs by itself.** With `EnableMepPacks` and

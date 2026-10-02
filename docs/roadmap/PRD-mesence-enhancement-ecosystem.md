@@ -64,12 +64,18 @@ Principles that every phase below obeys:
    no monetisation (*MGM v. Grokster*, Yuzu 2024).
 4. **Hosts never execute pack content as code** (MEP-v1 §6). Patches and
    recipes are declarative data interpreted by a fixed vocabulary.
-5. **No LLM in the client.** LLMs run only in CI (the community-pack classify
-   step); whatever they emit is validated by deterministic scripts before a
-   human or the client sees it. `Core/`, `UI/` and the installer never call
-   a model, hold a key or carry a prompt. An external tool under `scripts/`
-   is not the client, but what it may send off the machine is governed by
-   ADR-0154, not by this principle (see Phase 10).
+5. **No LLM in the client.** `Core/`, `UI/` and the installer never call
+   a model, never carry a prompt and never ship a key. Models run in CI
+   (the community-pack classify step) or in an external script under
+   `scripts/` that the user starts. The client may keep a key **the user
+   entered** in the OS credential store, and hand it to such a script only
+   through the child process's environment — never on a command line, in
+   `settings.json`, logs, `runs/` sidecars or crash reports the app
+   writes. Whatever a
+   model returns reaches the client only as data checked by deterministic
+   code. What a script may send off the machine is governed by ADR-0154,
+   not by this principle (see Phase 10). *(Reworded 2026-10-02 by
+   ADR-0247.)*
 
 Product consoles on `main`: **NES, GB/GBC/GBS, SMS/GG/SG-1000, GBA**. SNES
 (incl. Super Game Boy), PC Engine, WonderSwan and ColecoVision were removed
@@ -1078,6 +1084,10 @@ the native file picker (F6.5).
 |---|---|---|
 | P.8 | **Shaders on macOS (ADR-0237).** A native `MacOSMetalRenderer` presents into a `CAMetalLayer` and runs the librashader Metal filter chain when a shader is set; a `librashader.dylib` for arm64 is bundled and signed in the `.app` (sha256-pinned SourMesen CI artifact, `scripts/fetch_librashader_macos.sh`; ADR-0237 §3 still says source-built and needs the amendment named in its Status line). Stop conditions: (1) with a shader set, the presented frame differs from the unfiltered one, and with none set it matches the software path; (2) every `headless_record` output is byte-identical with and without a shader configured; (3) a person on a real display sees the Video settings shader group, a CRT preset applied, and no stutter at native resolution. First risk to confirm: the viewer handle can back a `CAMetalLayer`. Progress 2026-10-02: implemented; (1) is asserted by `make metal-presenter-tests` (40 checks, a mutation per path killed) and (2) by `scripts/check_headless_shader_invariance.sh` (Castlevania gameplay, four modes, 199 files, determinism control and negative control); the first risk is confirmed against Avalonia 12.1.1's `NativeControlHost` view shape in that test, not in a live window; (3) is not evaluated. | ADR-0237 |
 | P.9 | **Pack change in place (ADR-0244).** First step, before any GUI change: a headless exactness test on a committed NES state — play N frames, save to memory, swap the pack (none → pack, pack → none, pack A → pack B, audio-only pack on/off), restore, play M frames — against the same M frames from a fresh load of the target pack with the state loaded the ordinary way; pass = CPU/RAM/PPU registers byte-identical and frames pixel-identical, per transition, then GB/SMS through `HdTileVideoFilter`. Only the transitions that pass get the in-place path (`ToggleLayer`/picker: save state → `ReloadRom` → load state, fallback to a fresh load with a notice); a ROM-patch pack, a movie/shared-replay recording or netplay keep the restart with the reason shown. Inputs: one committed state per console, the existing packs under test fixtures; stop rule: any mismatch is recorded and that transition keeps the restart. | ADR-0244 (accepted 2026-10-02); go-ahead to implement not yet given |
+| P.10 | **Cheats in Play, phase 1 (ADR-0245 §1–§3, §5).** W-P11 from the pause overlay (W-P4 › Cheats): the bundled `CheatDb.Nes.json` entries for the loaded ROM (`HashType.Sha1Cheat`) as toggles with a search over descriptions, stored in the same `CheatCodes` the classic cheat list uses; "this copy isn't in the cheat list" with a search by game name and the "made for another copy" mark; *Add a Code…*; Game Genie disabled with its reason in Remaster's game view (RAM codes allowed); GB/SMS manual entry only, with the reason. No network, no model. | ADR-0245 accepted 2026-10-02. Does not wait for ADR-0241: until the redesign exists, the *Cheats* row goes into today's player overlay (§6). Rules in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when a toggle in W-P11 and the classic cheat window show the same state, and a Game Genie entry refuses in Remaster with its reason. |
+| P.11 | **Cheats, phase 2 — search by intent (ADR-0245 §4).** An external script (ADR-0247) matches a typed intent against *this game's* database descriptions as a closed Choice (Jev, a tool-free model, or local Ollama); an answer outside the list is discarded. | Accepted only on its own numbers: the share of intents answered with a correct entry on a fixed intent set. Prerequisite: P.10 and principle 5 edited per ADR-0247. |
+| P.12 | **Cheats, phase 3 — checked web lookup (ADR-0245 §4).** An external script proposes codes for a game not in the database from public lists; each is evidence-free (ADR-0188) until a headless check on a committed state shows the promised RAM change; only checked codes are offered, labelled "found online, checked on your copy". | Accepted only on its own numbers: the share of web proposals that pass the check. Prerequisite: P.11. |
+| P.13 | **The picture's three layers (ADR-0246).** Settings › Look (W-P10): Art / Pixels / Screen in the order they apply; Pixels (`VideoConfig.VideoFilter`) disabled over pack art with "Off while a pack draws the art" — Look never overrides it, Tools ⋯ › Options still can (§3); NTSC labelled "Not applied while a pack draws the art"; the "shows in screenshots" / "only on your display" mark per choice; 2–3 bundled named looks with license, source and sha256 recorded per file; *Hold to Compare*; unavailable shaders shown with their reason; *Hi-res filter* leaves the quick panel and the shader selector leaves Video settings. | ADR-0246 accepted 2026-10-02. Needs G.1's Settings sheet. Before the compare: measure the shader swap and bypass the chain for held frames if it stutters (§5). Rules in `UI/Logic/` tested host-free. Stop when every Look choice shows where its result goes, Pixels reads disabled with its reason over pack art on NES, GB and SMS, and a value set in Options that is not in Look's list shows as the current item without being overwritten. |
 
 #### Phase 8 — Enhancement pack border layer
 
@@ -1356,8 +1366,9 @@ measures layout fidelity on a contact sheet and does not depend on how the
 subject is chosen.
 
 **Constraints that hold regardless of outcome.**
-- Part A §1 principle 5 as written: no model call, key or prompt in
-  `Core/`, `UI/` or the installer. If a studio exists it is an external
+- Part A §1 principle 5 (as reworded by ADR-0247): no model call or
+  prompt in `Core/`, `UI/` or the installer; the client may only keep a
+  user-entered key and hand it to an external script. If a studio exists it is an external
   script in `scripts/`, like the viewer and the composition editor
   (ADR-0165, ADR-0169).
 - ADR-0192 supersedes ADR-0154 §2 Option A: generative repaint is not a
@@ -1588,6 +1599,8 @@ sequence and bound the work.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | R.2 | **Consume.** The recordings catalog generated from accepted replay issues, listed in the client by loaded ROM and ranked by 👍 (§7); the structural gate that validates before listing (§8); removal by the author closing the issue, mirrored by `replay:removed` (§9). | ADR-0205 §7–§9 decided. Prerequisite: R.1 (there is nothing to list before something is published). Catalog script stdlib, client overlay in the UI project. Bounded input: the R.1 replay plus one closed issue. Stop when the client lists the open one for the matching ROM, hides it for any other ROM, and drops it within one catalog regeneration after the issue closes. |
+| R.3 | **Community cheats — publish** (ADR-0248, same pattern as R.1). The `cheat-code.yml` issue form; `cheat-submitted.yml` with the structural gate (§3: decodes for the console's `CheatType`, known SHA-1, 80-character one-line description with no links, no duplicate of a live row or a bundled entry) and `/revalidate`; the title rewrite; the labels `cheat`, `cheat:valid`, `cheat:invalid` (the ensure-labels script goes from 18 to 21, CLAUDE.md in the same change). | ADR-0248 §1, §3, §7 decided (accepted 2026-10-02). Gate: the Python decoder's parity test over the 9 829 bundled codes. Bounded input: three hand-made issues (valid, malformed, duplicate). Stop when each gets its verdict and its comment names the check. |
+| R.4 | **Community cheats — consume.** `scripts/generate_community_cheat_catalog.py` → `docs/community-cheats.json` (by SHA-1, most-👍-first, removal by closing); the client fetch through `UI/Services/`; community rows in W-P11 below the bundled list, exact SHA-1 match only, with the Remaster Game Genie rule; *Share This Cheat ↗* on the user's own codes. | ADR-0248 §2, §4–§6. Prerequisites: R.3, and W-P11 built (P.10; ADR-0248 has no screen of its own). Stop when a valid issue's code shows for the matching ROM, not for another, and leaves within one catalog run after the issue closes. |
 
 #### Phase 14 — Proof at scale
 
@@ -1666,7 +1679,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
 | F14.19 | **RAM maps for games without a route (ADR-0242 Q2).** `scripts/stages/<game>/ram-map.json` (position, camera, room, HP — the progress fields `jev_harness.py` reads) for golden games that have **no committed route** past their first stall, each field verified on the pinned dump against two RAM checkpoints. Inputs: the golden list in `scripts/stages/`; stop rule: at least two games mapped, or every candidate recorded with why its map failed. | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
-| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, still `proposed`). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 ### 5. Order of execution
 
@@ -1837,7 +1850,7 @@ files and in §3.
 
 ## Part B — Player shell and task-oriented GUI
 
-**GUI redesign proposal (2026-10-02):** [§13 — Play, Remaster, Share](#13-gui-redesign-proposal--play-remaster-share) translates the README's three entrances into specialized workspaces. ADR-0241 is **proposed**; neither the detailed design nor implementation is approved. Sections §1–§12 retain the Phase 7 baseline, not a claim that the new workspaces exist.
+**GUI redesign proposal (2026-10-02):** [§13 — Play, Remaster, Share](#13-gui-redesign-proposal--play-remaster-share) translates the README's three entrances into specialized workspaces. ADR-0241 is **accepted** (2026-10-02); nothing is implemented, and the work is cut into Part B §8 slices (G.1 first). Sections §1–§12 retain the Phase 7 baseline, not a claim that the new workspaces exist.
 
 **Phase 7 baseline status:** **Phase 7 delivered, P.1-local included** (2026-08-28 → 2026-09-01;
 P.1-local 2026-09-17, ADR-0206; record in Part A §3). Product text of §3–§6
@@ -2322,7 +2335,13 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 
 ### 8. Slices
 
-No Part B slice is pending; P.8 (ADR-0237) and P.9 (ADR-0244) are tracked in Part A §4, Phase 7. P.0–P.7 implementation history is in Part A §3, and
+P.8 (ADR-0237), P.9 (ADR-0244), P.10–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7. The GUI redesign (ADR-0241, §13) is cut here, one slice at a time; only the first is defined:
+
+| Slice | Deliverable | Decision |
+|---|---|---|
+| G.1 | **The shell (W-S1–W-S3).** The active-profile button and its switcher popover (fixed order Play, Remaster, Share; ⌘1/⌘2/⌘3), Tools ⋯ rendering the existing `MainMenuAction` tree as one dropdown, the one-sentence read-only status line, the bar hidden while a Play game runs unpaused, `ShowClassicMenuBar` defaulting to `false` with the one-time "your menus are under Tools ⋯" toast. Play shows today's player surfaces; Remaster and Share show a placeholder that names the next slice. | ADR-0241 accepted 2026-10-02; §13.2, §13.5.1, rules 2, 8, 11. Workspace switch and bar visibility in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when switching keeps the game running, nothing of another profile is on screen, and every classic menu action is still reachable from Tools ⋯. |
+
+Later slices (Play home, pause overlay, Remaster project, Share) are cut after G.1, each against its §13 wireframes. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 
@@ -2405,11 +2424,11 @@ here only when a slice surfaces a trade-off §3–§6 do not settle.
 
 ### 13. GUI redesign proposal — Play, Remaster, Share
 
-**Status:** proposal for review (2026-10-02). Architecture decision: ADR-0241
-(`proposed`). Nothing in this section is implemented, accepted, or scheduled;
-every wireframe below is here to be criticised before a single slice is cut.
-When a decision is taken, ADR-0241 moves to `accepted` and this section is
-replaced by bounded slices in §8, each with its own acceptance.
+**Status:** design reference (2026-10-02). Architecture decision: ADR-0241,
+accepted 2026-10-02. Nothing in this section is implemented. The section
+stays as the design reference; the work is cut into bounded slices in §8,
+one at a time, each with its own acceptance and its own go-ahead. A
+wireframe here is a target, not a shipped capability.
 
 #### 13.1 Why the GUI changes
 
@@ -2969,7 +2988,7 @@ toast. On failure: one pill sentence and nothing else; the log has the rest
 (rule 6: never a window). With the overlay open the same text is in the
 status line.
 
-**W-P10 — Settings › Look: art, pixels, screen** — ADR-0246, `proposed`
+**W-P10 — Settings › Look: art, pixels, screen** — ADR-0246, accepted (P.13)
 
 ![W-P10](../media/gui-redesign/W-P10.png)
 
@@ -3037,7 +3056,7 @@ Rules the tab enforces, each from a measured fact rather than taste:
 - **Screen is one popup**, labelled *Effect* rather than *Shader* because it
   also holds the NTSC filter — *None*, *TV signal (NTSC)* (NES only, rule 4
   disabled elsewhere), two or three **named looks** bundled with the app
-  (*CRT TV*, *Handheld LCD*: ADR-0237's non-goal amended 2026-10-02, licence
+  (*CRT TV*, *Handheld LCD*: ADR-0237's non-goal amended 2026-10-02, license
   recorded per preset), recent shader files, *Choose a shader file…*. A
   named look is a `.slangp` like any other, so *Adjust…* works on it too.
 - **Adjust…** opens the existing per-shader parameter list (`ShaderConfig`)
@@ -3058,7 +3077,7 @@ Rules the tab enforces, each from a measured fact rather than taste:
 Elements: tab strip, Art row, Pixels, Screen, Adjust, Hold to Compare, Done
 = 7. ✔ (at the limit)
 
-**W-P11 — Cheats (W-P4 › Cheats)** — ADR-0245, `proposed`
+**W-P11 — Cheats (W-P4 › Cheats)** — ADR-0245, accepted (P.10)
 
 ![W-P11](../media/gui-redesign/W-P11.png)
 
@@ -3971,7 +3990,7 @@ switcher (W-S3) or a link that names its destination (rule 11).
 6. ~~Remaster consoles~~ — answered by ADR-0243 Decision 5: NES first. On
    GB/SMS *Record* is enabled and the paint zone is disabled with its reason;
    GBA is disabled.
-7. ~~W-P10 named looks~~ — yes, two or three, licence-compatible;
+7. ~~W-P10 named looks~~ — yes, two or three, license-compatible;
    ADR-0237's non-goal amended 2026-10-02.
 8. ~~W-P10 comparison~~ — *Hold to Compare* (2026-10-02); no split view.
 9. ~~Pixels over a pack~~ — Look keeps it disabled with its reason; Tools ⋯

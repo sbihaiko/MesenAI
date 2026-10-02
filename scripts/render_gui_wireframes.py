@@ -1536,6 +1536,10 @@ def main():
         return 2
     os.makedirs(args.out, exist_ok=True)
     only = {s.strip() for s in args.only.split(",") if s.strip()}
+    unknown = only - {wid for wid, _ in SCREENS}
+    if unknown:
+        print(f"render_gui_wireframes: unknown ids: {', '.join(sorted(unknown))}", file=sys.stderr)
+        return 2
     for wid, fn in SCREENS:
         if only and wid not in only:
             continue

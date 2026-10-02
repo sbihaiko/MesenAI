@@ -1,6 +1,6 @@
 # ADR-0247: The client may hold a user's own model key for an external script, but never calls a model itself
 
-- Status: proposed. The user chose option A of three on 2026-10-02, verbatim: *"concordo com a opcao A que vc sugeriu"*. It is written `proposed` as announced, for a last read of the wording. Nothing is implemented. On acceptance, the work is one text edit: Part A §1 principle 5 of the PRD is replaced by Decision 1's wording. ADR-0242's implementation (F14.20) follows that edit, and is not unblocked before it.
+- Status: accepted (2026-10-02) and reflected in the docs. The user chose option A of three, verbatim: *"concordo com a opcao A que vc sugeriu"*, then accepted the wording (*"Aceitar"*, same day). Go-ahead for the text edit, verbatim: *"Sim, edite agora (Recomendado)"*, then *"sim, pode seguir"*. PRD Part A §1 principle 5 now carries Decision 1's wording, and the Phase 10 constraint that quoted it was updated with it. ADR-0242's implementation (F14.20) is no longer blocked by this ADR.
 - Date: 2026-10-02
 - Related: PRD Part A §1 (principle 5), PRD Part A §4 Phase 10 ("Constraints that hold regardless of outcome"), ADR-0154 (what an external tool may send off the machine; §4), ADR-0192, ADR-0242 (AI recorder, Q1: OS credential store), ADR-0245 (cheats; Decision 4's LLM phases), ADR-0238 (Jev harness), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0199 (tool-free Gemini call in CI)
 - Supersedes / amends: amends PRD Part A §1 principle 5. It makes ADR-0242's Q1 and Decision 4 consistent with that principle, and constrains ADR-0245 Decision 4 (below). ADR-0154 is unchanged.
@@ -66,7 +66,8 @@ Non-goals:
    > `scripts/` that the user starts. The client may keep a key **the user
    > entered** in the OS credential store, and hand it to such a script
    > only through the child process's environment — never on a command
-   > line, in `settings.json`, logs, `runs/` sidecars or crash reports.
+   > line, in `settings.json`, logs, `runs/` sidecars or crash reports
+   > the app writes.
    > Whatever a model returns reaches the client only as data checked by
    > deterministic code. What a script may send off the machine is governed
    > by ADR-0154, not by this principle.
@@ -103,7 +104,14 @@ Non-goals:
   client gains no model client.
 - The client becomes the place where a user's secret lives. A leak through
   logs or crash reports is now possible in principle, so every BYOK slice
-  ships a test that the key never reaches those sinks.
+  ships a test that the key never reaches the sinks the app writes:
+  `settings.json`, logs, `runs/` sidecars, the child's argv, and the text
+  of `MesenMsgBox.ShowException` (the only crash surface today; there is no
+  crash reporter). The key is read from the credential store only when a
+  job starts and is not kept in a long-lived field. An OS-level dump
+  (macOS crash reporter, Windows WER, a core dump) of the client or the
+  child can still contain it; that is outside what the app controls, and
+  the key sheet says the key is stored on this computer.
 - The Phase 10 constraint "no model call, key or prompt in `Core/`, `UI/`
   or the installer" is read against the new wording: the studio may
   receive a key from the client, and still calls the model only from

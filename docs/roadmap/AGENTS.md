@@ -15,9 +15,9 @@ The fork's planning lives in one consolidated PRD under this folder:
   quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row and the ADR-0205 replay slices (Phase 13). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface. Part B §13 is the **GUI redesign proposal** (Play / Remaster /
-  Share workspaces, ADR-0241 `proposed`): wireframes and simplicity rules
-  for review, not shipped behaviour — when accepted it dissolves into §8
-  slices.
+  Share workspaces, ADR-0241 accepted): wireframes and simplicity rules
+  for review, not shipped behavior. ADR-0241 was accepted 2026-10-02; §13 stays
+  as the design reference and the work is cut into §8 slices (G.1 first).
 
 This is the 2026-08-30 unification of the former two PRDs
 (`PRD-mesence-enhancement-ecosystem.md` and `PRD-player-shell.md`) into a
