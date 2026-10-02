@@ -89,6 +89,10 @@ what CI actually runs; this doc records why they're split the way they are.
       makefile recipe is still the single list, ADR-0137 §4): add it to
       whichever `doc-checks-N` is shortest, unless it needs the harness
       (shard 1). Shards must not read what another shard writes.
+    - **Shard 1 caches its compiler output**: it restores/saves a ccache
+      directory (key `ccache-doc-checks-<sha>`, prefix restore-key) so the
+      Core/ compile is a cache hit when Core/ did not change. The other
+      shards never compile and do not touch it.
     - Do not run `make -j doc-checks`: the umbrella is a sequence of sub-makes
       on purpose, because a Python suite under compilation load dies with a
       false SIGBUS.
