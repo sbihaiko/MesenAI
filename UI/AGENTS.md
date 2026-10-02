@@ -159,6 +159,22 @@ can be exercised by real xunit tests without Avalonia or the native
   say so). During W-R2 the renderer is shown under Remaster with one strip
   docked above it (the native renderer draws over Avalonia, so nothing is
   overlaid on the game), and Esc (`ToggleOverlay`) stops the recording.
+- **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
+  Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
+  `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with
+  `MacKeychainByokKeyStore` (Security framework SecItem API via P/Invoke -
+  never the `security` CLI, which would put the key on a command line),
+  `WindowsCredentialByokKeyStore` (advapi32 CredRead/CredWrite/CredDelete),
+  Linux `UnsupportedByokKeyStore` with its reason, and the test double
+  `InMemoryByokKeyStore`. `ByokJobLauncher.Start` reads the key when a job
+  starts, passes it to the child through its environment only (refused on
+  argv), drops it from the `ProcessStartInfo` after the start and redacts it
+  from every output line; no custody type keeps it in a field. Guarded by
+  `UI.Tests/Byok/*` (argv, output, start-failure text as
+  `MesenMsgBox.ShowException` prints it, no fields; the live Keychain
+  round-trip is opt-in, `MESENAI_BYOK_LIVE=1`) and
+  `UI.HeadlessTests/ByokSettingsSerializationTests` (settings.json). Any later
+  BYOK feature uses this interface; none may add a second key store.
 - `PlayerPackPicker` (P.5, §5) is the host-free decision for the Player pack
   picker: it opens only when 2+ distinct pack_ids exist (after the §5
   content_id merge — feed it `PackPreferenceResolver.Resolve`'s `Candidates`,

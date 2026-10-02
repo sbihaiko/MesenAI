@@ -1051,6 +1051,8 @@ int main(int argc, char** argv)
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n"
+			"       [recording-source=<play|tas|ai|script>] [recording-note=<text>] (ADR-0243 Q2: what\n"
+			"                  project.json records as having driven this recording)\n"
 			"       [session] (F14.12: serve run/ram/state requests on stdin until quit,\n"
 			"                  instead of running <seconds> once - see RunStepSession)\n", argv[0]);
 		return 1;
@@ -1105,6 +1107,11 @@ int main(int argc, char** argv)
 	//the top of this file for the two containers the Core accepts and for what a
 	//.mmo does to the settings pushed below.
 	std::string moviePath;
+	//"recording-source=" / "recording-note=" (ADR-0243 Q2, F14.20): override what
+	//project.json says drove the recording. An AI-produced script replayed here
+	//is "ai" (ADR-0242 Decision 3), not "script"; empty means the default below.
+	std::string recordingSource;
+	std::string recordingNote;
 //"record-share=": record the run with the Record-and-share action (ADR-0205
 //section 2) into this .mmo - the way slice R.1 produces its bounded input, and
 //the proof the scripts/replay_lint.py accepts the action's own output.
@@ -1246,6 +1253,17 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 				inputScriptText.append(buffer, read);
 			}
 			fclose(f);
+		} else if(strncmp(argv[i], "recording-source=", 17) == 0) {
+			recordingSource = argv[i] + 17;
+			//The same four names RemasterProject::IsKnownSource accepts (not
+			//included here: that header pulls in JsonReader, which this tool
+			//does not link)
+			if(recordingSource != "play" && recordingSource != "tas" && recordingSource != "ai" && recordingSource != "script") {
+				fprintf(stderr, "recording-source must be one of play, tas, ai, script: %s\n", recordingSource.c_str());
+				return 1;
+			}
+		} else if(strncmp(argv[i], "recording-note=", 15) == 0) {
+			recordingNote = argv[i] + 15;
 		} else if(strncmp(argv[i], "movie=", 6) == 0) {
 			moviePath = argv[i] + 6;
 		} else if(strncmp(argv[i], "record-share=", 13) == 0) {
@@ -1549,7 +1567,10 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//ADR-0243 Q2: project.json says what drove the recording - a movie is
 	//"tas", an input script "script", a run with neither the attract demo
 	//("play", the only thing a headless run plays by itself)
-	SetMepNextRecordingSource(!moviePath.empty() ? "tas" : !inputScriptPath.empty() ? "script" : "play", "");
+	//("play", the only thing a headless run plays by itself); recording-source=
+	//overrides it, e.g. "ai" for a script jev_harness.py produced (F14.20)
+	std::string defaultSource = !moviePath.empty() ? "tas" : !inputScriptPath.empty() ? "script" : "play";
+	SetMepNextRecordingSource(recordingSource.empty() ? defaultSource.c_str() : recordingSource.c_str(), recordingNote.c_str());
 
 	if(!LoadRom((char*)rom.c_str(), (char*)"")) {
 		fprintf(stderr, "failed to load ROM: %s\n", rom.c_str());

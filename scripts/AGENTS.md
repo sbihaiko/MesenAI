@@ -1568,6 +1568,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   or unparseable in any of the three, and separately asserts the literal
   values 4/2000 and three-way cross-language equality.
 
+**Kit-key comparison (F14.20, ADR-0238 §5 clause 2):**
+`kit_new_keys.py --candidate LABEL=PATH --baseline LABEL=PATH...` counts
+`hires.txt` keys `(tileData, palette)` per pack and the candidate's keys no
+baseline has; a project folder unions its `auto/rec-NNN/` recordings. It is
+F14.15's unversioned `runs/f1415/cells.py`, versioned; `test_kit_new_keys.py`
+covers conditions, the decimal-below-`<ver>103` index rule and the union.
+`headless_record recording-source=<play|tas|ai|script>` (with
+`recording-note=`) overrides what ADR-0243's `project.json` says drove a
+recording; a `jev_harness.py` script replayed by the recorder is `ai`.
+
 ## Verification
 
 - `make unit-tests` (repo root) - runs

@@ -1675,7 +1675,7 @@ ADR-0235 superseded by ADR-0236; §3). **F14.11–F14.18 are delivered**
 (2026-09-25/26, §3; ADR-0236 for F14.11, ADR-0238 for F14.12–F14.15, ADR-0239
 for F14.16–F14.18), and their rows are removed. **F14.19 is delivered**
 (2026-10-02, §3; ADR-0242 Q2; its row is removed). **F14.8** (not started)
-and **F14.20** (ADR-0242, waiting on F12.20 and the Remaster workspace) are
+and **F14.20** (ADR-0242; part 1, the adoption verdict and the key custody interface, delivered 2026-10-02 — the W-R8 button waits for G.3 and stays disabled) are
 the live Phase 14 rows; Phase 7's P.8 (ADR-0237) is the only live
 Core/UI row in this Part.
 Two questions the review raised are already decided in PR #397 (merged 2026-09-24) and are
@@ -1715,7 +1715,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
-| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games (Castlevania and Mega Man 2); until then it is disabled with its reason. Prerequisites: F14.19 (delivered 2026-10-02, §3), F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games (Castlevania and Mega Man 2); until then it is disabled with its reason. Prerequisites: F14.19 (delivered 2026-10-02, §3), F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02). Go-ahead (user, 2026-10-02): *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"*, *"pode implementar em paralelo tudo que puder"* and *"pode seguir com a segunda leva em paralelo"*. **Part 1 delivered 2026-10-02: adoption measurement verdict + custody interface; the W-R8 button waits for G.3.** Verdict ([log](../validation/f1420-ai-recorder-adoption-2026-10-02.md)): Mega Man 2 passes both clauses — Jev passes the stalls at abs x 460 and 594 that the search alone stops at, 2 of 2 identical repeats, replay verified, and the AI recording adds 30 keys no pack or committed route has (0 new tile patterns), but only with 30-frame macros and a 4 s settle; Castlevania passes neither (0 of 6 arms, 0 new keys; its `progress_x` cannot reward the hall's staircase). So the button **stays disabled** with its reason ("passed on Mega Man 2, not on Castlevania"); whether one game is enough is the user's call. Custody: `UI/Logic/ByokKeyStore*.cs` (macOS Keychain through Security.framework, Windows Credential Manager through advapi32, Linux unsupported with its reason, an in-memory fake) and `ByokJobLauncher` (key in the child's environment only, redacted output), with the sink tests; `headless_record recording-source=ai`; `scripts/kit_new_keys.py`. Spend US$ 0.005. |
 
 ### 5. Order of execution
 
@@ -1764,7 +1764,9 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    nothing, and the third pass re-measured that clause on a route 78 px further
    in (+97 cells, +22 keys against the same-length search-alone recording) and
    still found 0 keys no other pack here has. F14.19 (delivered 2026-10-02,
-   §3) gives ADR-0242's recorder its first two games without a route. F14.8
+   §3) gives ADR-0242's recorder its first two games without a route, and
+   F14.20 part 1 (2026-10-02) measured them: both clauses pass on Mega Man 2
+   and neither on Castlevania, so the W-R8 button stays disabled. F14.8
    runs whenever a person is available.
    **P.8** (Phase 7, shaders on macOS, ADR-0237) is implemented under a
    go-ahead (2026-10-02); stop conditions (1) and (2) are met headless and (3),
