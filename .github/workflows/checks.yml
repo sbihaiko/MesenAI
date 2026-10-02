@@ -65,8 +65,11 @@ name: Checks
 # (ADR-0137, ADR-0138 §41), ADR-reference integrity, the community-pack pipeline
 # verifiers, and the HD-pack and artist-kit script suites. It also compiles —
 # `verify_smoke_pack_headless.sh` builds `scripts/headless_record` and FAILs here
-# if it cannot — which is why the job installs SDL2. That is the core-only
-# helper, not the GUI/LTO/AOT artifact `build.yml` produces.
+# if it cannot — which is why shard 1 installs SDL2. That is the core-only
+# helper, not the GUI/LTO/AOT artifact `build.yml` produces. In this file the
+# suite runs as four parallel `doc-checks-shard` jobs behind a fan-in job named
+# `checks` (see the comments on those jobs); `make doc-checks` itself is
+# unchanged for local use and for `build.yml`.
 
 on:
   # The gate. Reports the five required checks of the `main` ruleset.
@@ -90,8 +93,30 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
-  checks:
+  # `make doc-checks` split into four parallel shards (`doc-checks-1`..`-4` in
+  # the makefile; the same ~104 commands in the same order, none dropped or
+  # repeated). Serial it took ~11 minutes, ~95% of it one command
+  # (`verify_smoke_pack_headless.sh`, which compiles Core/) and the rest queued
+  # behind it; the other four required checks finished in under two minutes.
+  #
+  # THIS JOB'S NAME MUST NOT BE ANY REQUIRED CONTEXT. The `main` ruleset
+  # requires the contexts `checks`, `python-tests`, `core-unit-tests`,
+  # `ui-tests` and `headless-ui-tests`, matched by job name. A shard that was
+  # called `checks` would satisfy the requirement all by itself while the other
+  # three were still running or had failed. The shards therefore carry a
+  # display `name:` of their own, and the job below that IS called `checks`
+  # reports the verdict of all of them.
+  #
+  # `fail-fast: false`: a red shard must not cancel its siblings, because the
+  # point of splitting is that one run names every contract that broke, not just
+  # the first shard to fail.
+  doc-checks-shard:
+    name: Doc checks shard ${{ matrix.shard }}
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout repo
@@ -99,19 +124,62 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install dependencies
+      # Shard 1 only: it is the one that compiles. scripts/headless_record
+      # (built by verify_smoke_pack_headless.sh) links the core, which needs
+      # SDL2. The other shards run shell and Python and never touch it.
+      - name: Install SDL2
+        if: matrix.shard == 1
         run: |
           sudo apt-get update -qy
-          sudo apt-get install -qy libsdl2-dev # scripts/headless_record (built by doc-checks) links the core, which needs SDL2
-          python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners) # doc-checks verify scripts need PyYAML/Pillow/numpy (not preinstalled everywhere)
+          sudo apt-get install -qy libsdl2-dev
 
-      - name: Run doc checks
-        run: make doc-checks
+      - name: Install Python dependencies
+        run: python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners) # doc-checks verify scripts need PyYAML/Pillow/numpy (not preinstalled everywhere)
+
+      # Shard 1 only. verify_smoke_pack_headless.sh builds the harness itself
+      # when it is missing, but with a bare `make -s capture-tool`, i.e. on one
+      # core - the dominant cost of the whole gate. Building it here first with
+      # every core leaves the harness up to date, so that verifier's staleness
+      # check finds nothing to rebuild and runs unchanged. It is the same
+      # target, the same flags and the same -Werror; only the parallelism
+      # differs. Not a check: a failure here fails the shard, and the verifier
+      # would have failed on the same build anyway.
+      - name: Build scripts/headless_record in parallel
+        if: matrix.shard == 1
+        run: make -j$(nproc) capture-tool
+
+      - name: Run doc checks (shard ${{ matrix.shard }} of 4)
+        run: make doc-checks-${{ matrix.shard }}
+
+  # The required context `checks`: "every doc check passed". It runs even when a
+  # shard failed, was skipped or was cancelled (`if: always()`), and fails
+  # unless the shard job's aggregate result is exactly `success`. For a matrix
+  # job `needs.<id>.result` is `success` only when EVERY leg succeeded; one
+  # failed leg makes it `failure`, a cancelled run `cancelled`, a skipped job
+  # `skipped`. Comparing for equality with `success` (rather than testing for
+  # `failure`) is what makes a skipped or cancelled shard fail the gate too. A
+  # job without `if: always()` would be skipped when a shard fails, and a
+  # skipped required check is one GitHub can count as satisfied.
+  checks:
+    needs: [doc-checks-shard]
+    if: always()
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Require every doc-checks shard to have succeeded
+        env:
+          SHARDS_RESULT: ${{ needs.doc-checks-shard.result }}
+        run: |
+          echo "doc-checks-shard (all four legs): ${SHARDS_RESULT}"
+          if [ "${SHARDS_RESULT}" != "success" ]; then
+            echo "::error::a doc-checks shard did not succeed (${SHARDS_RESULT}); see the 'Doc checks shard N' jobs"
+            exit 1
+          fi
 
   # Every `scripts/test_*.py`, one process per file. Most of them carry their
   # own `main()` runner rather than `unittest.TestCase` subclasses, so
   # `unittest discover` collects a small fraction of the cases; the runner
-  # loops over the files instead. Same Python deps as the `checks` job, minus
+  # loops over the files instead. Same Python deps as the doc-checks shards, minus
   # SDL2 (no compilation here). Measured 2026-09-14: 38 files, ~25 s.
   python-tests:
     runs-on: ubuntu-22.04
