@@ -200,6 +200,11 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+
+				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
+				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
+				<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
+				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
 			</Panel>
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,

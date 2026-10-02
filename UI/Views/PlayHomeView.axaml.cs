@@ -89,6 +89,15 @@ namespace Mesen.Views
 			EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.OpenFile });
 		}
 
+		//G.5 (W-P14): the alert's next step is the same Open a ROM… dialog.
+		private void OnOpenAnother(object? sender, RoutedEventArgs e)
+		{
+			Model?.OnOpenStarted();
+			OnOpenRom(sender, e);
+		}
+
+		private void OnDismissLoadAlert(object? sender, RoutedEventArgs e) => Model?.DismissLoadAlert();
+
 		private void OnContinue(object? sender, RoutedEventArgs e)
 		{
 			if(Model?.GameEntries.Count > 0) {

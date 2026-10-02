@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlayControllerSetupView"
+	x:DataType="vm:PlayControllerSetupViewModel"
+>
+	<!--G.5 (PRD Part B §13.5.2 W-P15): the HUD pill for an unknown pad, and the
+	setup sheet the pad itself drives. Rule 2: Skip, Cancel = 2.-->
+	<Panel>
+		<Border Name="ControllerSetupPill" IsVisible="{Binding IsPillVisible}" Background="#E61C1C1E" CornerRadius="18" Padding="16 8" Margin="0 24 0 0" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
+			<TextBlock Text="{l:Translate lblControllerSetupPill}" Foreground="White" />
+		</Border>
+		<Panel Name="ControllerSetupBackdrop" IsVisible="{Binding IsVisible}" Background="#80000000">
+			<Border Name="ControllerSetupSheet" Background="White" CornerRadius="14" Padding="28 24" MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center">
+				<StackPanel Spacing="12" XYFocus.NavigationModes="Enabled">
+					<TextBlock Name="ControllerSetupTitle" Text="{Binding Title}" FontSize="19" FontWeight="Bold" Foreground="#1C1C1E" />
+					<TextBlock Text="{l:Translate lblControllerSetupIntro}" Foreground="#6E6E73" TextWrapping="Wrap" />
+					<!--The picture: the console's buttons, the step's one lit.-->
+					<ItemsControl Name="ControllerSetupChips" ItemsSource="{Binding Chips}" HorizontalAlignment="Center">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<WrapPanel Orientation="Horizontal" />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:ControllerSetupChip">
+								<Border Margin="3" Padding="10 4" CornerRadius="12" BorderBrush="#C7C7CC" BorderThickness="1"
+									Classes.current="{Binding IsCurrent}" Classes.done="{Binding IsDone}">
+									<!--The sheet is white in either theme: the label's colour is set
+									here (dark, white on the lit chip), never inherited.-->
+									<Border.Styles>
+										<Style Selector="Border.current"><Setter Property="Background" Value="#0A84FF" /></Style>
+										<Style Selector="Border.done"><Setter Property="Background" Value="#D1F2DB" /></Style>
+										<Style Selector="Border > TextBlock"><Setter Property="Foreground" Value="#1C1C1E" /></Style>
+										<Style Selector="Border.current > TextBlock"><Setter Property="Foreground" Value="White" /></Style>
+									</Border.Styles>
+									<TextBlock Name="ControllerSetupChipLabel" Text="{Binding Name}" FontWeight="Bold" />
+								</Border>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+					<TextBlock Name="ControllerSetupPrompt" Text="{Binding Prompt}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#1C1C1E" />
+					<TextBlock Name="ControllerSetupStep" Text="{Binding StepText}" Foreground="#6E6E73" TextWrapping="Wrap" />
+					<ProgressBar Name="ControllerSetupProgress" Minimum="0" Maximum="1" Value="{Binding Progress}" Height="6" />
+					<TextBlock Text="{l:Translate lblControllerSetupHint}" Foreground="#6E6E73" TextWrapping="Wrap" />
+					<DockPanel Margin="0 8 0 0">
+						<Button Name="ControllerSetupSkip" DockPanel.Dock="Left" Content="{l:Translate btnControllerSetupSkip}" Padding="16 6" Click="OnSkip" />
+						<Button Name="ControllerSetupCancel" HorizontalAlignment="Right" Content="{l:Translate btnControllerSetupCancel}" Padding="16 6" Click="OnCancel" />
+					</DockPanel>
+				</StackPanel>
+			</Border>
+		</Panel>
+	</Panel>
+</UserControl>

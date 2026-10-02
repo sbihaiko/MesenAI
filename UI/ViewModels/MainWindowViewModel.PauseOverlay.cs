@@ -39,6 +39,9 @@ namespace Mesen.ViewModels
 
 		private PlaySheet CurrentPlaySheet()
 		{
+			if(PackDepSheet.IsVisible) {
+				return PlaySheet.PackDep;
+			}
 			if(IsPlayerPackPickerVisible) {
 				return _packPickerFromOverlay ? PlaySheet.PackPickerFromOverlay : PlaySheet.PackPickerOnLoad;
 			}
@@ -65,6 +68,9 @@ namespace Mesen.ViewModels
 		//opened from W-P4 closes back to it.
 		public void TogglePlayerOverlay()
 		{
+			if(HandleEdgeFlowEsc()) {
+				return;
+			}
 			PlaySheet sheet = CurrentPlaySheet();
 			switch(PlayEsc.Next(IsGameLoaded, sheet, IsPlayerOverlayVisible)) {
 				case PlayEscAction.DismissPackPicker:
@@ -98,6 +104,7 @@ namespace Mesen.ViewModels
 				//The sheet's own Closed handler re-shows the overlay too.
 				case PlaySheet.Cheats: CloseCheatsSheetOnEsc(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
+				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.SaveStateGrid:
 					//Init with the grid's own mode hides it (RecentGamesViewModel);
 					//the overlay had already paused, so nothing resumes.
@@ -110,6 +117,9 @@ namespace Mesen.ViewModels
 		public void OpenPauseOverlay()
 		{
 			RefreshPauseOverlay();
+			if(OpenPackDepSheetWithOverlay()) {
+				return;
+			}
 			IsPlayerOverlayVisible = true;
 		}
 
@@ -192,6 +202,7 @@ namespace Mesen.ViewModels
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;
+			ClearPackDepWithoutGame();
 			//Last: closing the Cheats sheet re-shows the overlay.
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;

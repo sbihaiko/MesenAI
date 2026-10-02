@@ -47,6 +47,20 @@
 			</Panel>
 		</DockPanel>
 
+		<!--G.5 (W-P14): a file that does not open - one inline alert under the
+		home's content (W-X2: a sentence and the next step, never a code). W-P2's
+		2 controls + Open Another… = 3; the ✕ only closes it.-->
+		<Border Name="PlayHomeLoadAlert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Background="#FFF4E5" CornerRadius="10" Padding="16 12" IsVisible="{Binding IsLoadAlertVisible}">
+			<DockPanel>
+				<Button Name="PlayHomeLoadAlertClose" DockPanel.Dock="Right" Content="✕" Background="Transparent" Foreground="#B25000" VerticalAlignment="Top" Margin="8 0 0 0" Click="OnDismissLoadAlert" />
+				<Button Name="PlayHomeOpenAnother" DockPanel.Dock="Right" Content="{l:Translate btnPlayHomeOpenAnother}" VerticalAlignment="Top" Click="OnOpenAnother" />
+				<StackPanel Spacing="2">
+					<TextBlock Name="PlayHomeLoadAlertTitle" Text="{Binding LoadAlertTitle}" FontWeight="Bold" Foreground="#B25000" TextWrapping="Wrap" />
+					<TextBlock Name="PlayHomeLoadAlertBody" Text="{Binding LoadAlertBody}" Foreground="#7A3E00" TextWrapping="Wrap" />
+				</StackPanel>
+			</DockPanel>
+		</Border>
+
 		<!--Advanced's game selection and the Save/Load state screens: the
 		classic grid of every entry, unchanged by G.2.-->
 		<Panel Name="PlayHomePlainGrid" IsVisible="{Binding ShowPlainGrid}">

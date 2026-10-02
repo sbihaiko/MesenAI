@@ -341,7 +341,7 @@ namespace Mesen.Services
 			}
 			foreach(CommunityPackPendingDep dep in plan.Pending) {
 				//Unresolved: MepRecipeInstaller withholds the dependent patch (§6).
-				pending.Add(new CommunityPackDepPrompt(dep.DepId, dep.Hints, dep.License, GetDownloadsCacheFolder()));
+				pending.Add(new CommunityPackDepPrompt(dep.DepId, dep.Hints, dep.License, GetDownloadsCacheFolder(), dep.Sha256));
 			}
 			return (depPaths, pending);
 		}
@@ -536,5 +536,5 @@ namespace Mesen.Services
 	}
 
 	//Unresolved user_supplied dep (MEI-v1.md §2.3): caller prompts with Hints/License/DropFolder.
-	public sealed record CommunityPackDepPrompt(string DepId, string Hints, string License, string DropFolder);
+	public sealed record CommunityPackDepPrompt(string DepId, string Hints, string License, string DropFolder, string Sha256 = "");
 }
