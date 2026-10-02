@@ -631,7 +631,11 @@ void Renderer::InitShader()
 void Renderer::UpdateShaderParams()
 {
 	for(ShaderParam& param : _shaderCfg.Params) {
-		_libra.d3d11_filter_chain_set_param(&_filterChain, param.Name, param.Value);
+		libra_error_t error = _libra.d3d11_filter_chain_set_param(&_filterChain, param.Name, param.Value);
+		if(error) {
+			//An unknown parameter name is not fatal for the preset; release the error (#589)
+			_libra.error_free(&error);
+		}
 	}
 }
 
