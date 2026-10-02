@@ -1,6 +1,6 @@
 # ADR-0240: F6.9 is re-scoped: install reports a patch-redeemed pack's audio as "not generated", and generation is a separate opt-in job driven by a per-pack name map
 
-- Status: proposed (2026-10-01). Not decided: the options below are for the user to pick. Nothing here is implemented; the PRD row F6.9 still reads as ADR-0144 left it and is not implementable as written (Context).
+- Status: accepted (2026-10-01), decided by the user's pick "Opção 1 + spike da A4" (verbatim, asked after this ADR was drafted as `proposed`): **Option 1** (report, do not generate) is the decision; Option 2 is **not** accepted and stays a future idea with no go-ahead; the **A4** two-pass correlation becomes its own spike slice, F6.10. Both are listed as slices in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (F6.9, F6.10); nothing is implemented yet and implementation waits for a separate go-ahead (CLAUDE.md: accepting an ADR is a request for work, not a note).
 - Date: 2026-10-01
 - Related: ADR-0144 (the audio exception; "Not implemented" paragraph), ADR-0148 (wired-patch tightening; catalog self-containment), ADR-0135 (extract-audio runtime contract), ADR-0047 (APU fingerprint trigger), ADR-0049 (sibling `auto/` layer), ADR-0041 (NES OGG scope), ADR-0138 (split distribution, recipe deps), ADR-0203 (Windows + macOS arm64 binary policy), PRD Part A row F6.9
 - Supersedes / amends: none yet. Options A3 and the "tracks" wording would amend ADR-0144 Decision ("extraction must produce exactly the referenced paths"); that amendment is the user's call and is not made here.
@@ -77,8 +77,9 @@ classification verdicts of ADR-0144/0148; GB/SMS audio (ADR-0041, NES only).
 
 ## Decision
 
-**Recommendation: Option 1 now, Option 2 only if the user wants generated
-stand-in tracks.** The user picks; this ADR stays `proposed`.
+**Decided (2026-10-01): Option 1 now; Option 2 only if the user later wants
+generated stand-in tracks; A4 is spiked first (F6.10).** The text below keeps
+the options as they were weighed.
 
 ### Option 1 (recommended): report, do not generate
 
