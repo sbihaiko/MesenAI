@@ -104,6 +104,13 @@
 					<!--P.7 (§6.1): the quick-toggle panel for Texture/Audio/WideScrn/
 					HiRes/Overclock.-->
 					<Button Content="{l:Translate btnOverlayEnhancements}" HorizontalAlignment="Stretch" Click="OnOverlayEnhancements" />
+					<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
+					<Button Name="OverlayCheatsButton" HorizontalAlignment="Stretch" Click="OnOverlayCheats">
+						<StackPanel Orientation="Horizontal" Spacing="6">
+							<TextBlock Text="{l:Translate btnOverlayCheats}" />
+							<TextBlock Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" FontWeight="Bold" />
+						</StackPanel>
+					</Button>
 					<Button Content="{l:Translate btnOverlaySettings}" HorizontalAlignment="Stretch" Click="OnOverlaySettings" />
 					<Button Content="{l:Translate btnOverlayAdvancedGui}" HorizontalAlignment="Stretch" Click="OnOverlayAdvanced" />
 					<Button Content="{l:Translate btnOverlayQuit}" HorizontalAlignment="Stretch" Click="OnOverlayQuit" />
@@ -138,6 +145,9 @@
 					<Button Content="{l:Translate btnEnhancementsClose}" HorizontalAlignment="Stretch" Click="OnCloseEnhancementsPanel" />
 				</StackPanel>
 			</Border>
+
+			<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
+			<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
 
 			<!--P.5 (PRD Part B §5): the pack picker - opens once over the
 			un-enhanced game when 2+ competing pack_ids exist and no stored choice
