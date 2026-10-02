@@ -40,7 +40,7 @@ public class RendererLetterboxTests
 		MainWindow window = new();
 		window.Width = WindowWidth;
 		window.Height = WindowHeight;
-		window.Show();
+		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);

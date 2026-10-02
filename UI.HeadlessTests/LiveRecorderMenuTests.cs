@@ -72,7 +72,7 @@ public class LiveRecorderMenuTests
 		//the realized menu under test is that bar's.
 		ConfigManager.Config.Preferences.ShowClassicMenuBar = true;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitForMenus(model.MainMenu);
 

@@ -58,6 +58,11 @@ namespace Mesen.Windows
 		private Size _rendererSize;
 		private bool _usesSoftwareRenderer;
 
+		//#619: the startup work OnOpened runs on a thread-pool thread (the core
+		//init, then Dispatcher.UIThread.Post). Headless tests wait on it, so it
+		//never outlives the test that opened the window.
+		public Task Startup { get; private set; } = Task.CompletedTask;
+
 		private FrameInfo _prevScreenSize;
 
 		private Size _originalSize;
@@ -349,7 +354,7 @@ namespace Mesen.Windows
 			//This also enables keyboard/gamepad navigation on the selection screen without having to click it first
 			this.FindDescendantOfType<StateGrid>()?.Focus();
 
-			Task.Run(() => {
+			Startup = Task.Run(() => {
 				CommandLineHelper cmdLine = new CommandLineHelper(Program.CommandLineArgs, true);
 				_cmdLine = cmdLine;
 

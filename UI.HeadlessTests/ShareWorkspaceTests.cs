@@ -383,7 +383,7 @@ public class ShareWorkspaceTests : IDisposable
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = false;
 		ConfigManager.Config.EnhancementPacks.ApplyConfig();
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 
@@ -451,7 +451,7 @@ public class ShareWorkspaceTests : IDisposable
 		ConfigManager.Config.Preferences.Workspace = Workspace.Remaster;
 		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 		string project = Project("Contra (USA)", built: true);

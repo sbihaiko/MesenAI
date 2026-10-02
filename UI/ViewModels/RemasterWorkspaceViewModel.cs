@@ -126,6 +126,10 @@ namespace Mesen.ViewModels
 			Refresh();
 		}
 
+		//#619: the measurement in flight (it posts its result from the thread
+		//pool), without starting one. Headless tests wait on it before they end.
+		public Task Measuring => _measuring ?? Task.CompletedTask;
+
 		//The first time Remaster is shown: measure the gate once (off the UI
 		//thread - it spawns a few `python -c` children). Returns the measurement.
 		public Task EnsureFeasibilityMeasured()
