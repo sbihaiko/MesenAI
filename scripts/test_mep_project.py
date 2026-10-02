@@ -266,6 +266,161 @@ def test_kit_plan_is_per_recording_surfaces_plus_union_pages():
               "every kit folder is assembled after its generators ran", str(assembled))
 
 
+
+def _kit_cli(project: Path, rom: Path):
+    out = subprocess.run([sys.executable, str(HERE / "mep_project.py"), "kit", str(project), "--rom", str(rom),
+                          "--no-verify"], capture_output=True, text=True)
+    return out.returncode, out.stdout + out.stderr
+
+
+def _chr_project(td: Path):
+    """rec-001 is a CHR ROM recording; the second recording of the same ROM
+    (with cells and a whole bank rec-001 never saw) is returned unplaced, so a
+    test can add it after the first kit, the way Stop recording does."""
+    import shutil
+    import test_artist_chr_kit as CK
+    primary, donor, rom = CK.chr_rom_pair_fixture(td)
+    project = td / "Game"
+    (project / "auto").mkdir(parents=True)
+    shutil.move(str(primary), str(project / "auto" / "rec-001"))
+    return project, donor, rom
+
+
+def _repaint(png: Path) -> bytes:
+    from sheet_repaint import read_png, write_png
+    img = read_png(png)
+    for x in range(4):
+        img.set(x, 0, (0x12, 0x34, 0x56, 0xFF))
+    write_png(png, img)
+    return png.read_bytes()
+
+
+def _donated(sidecar: Path) -> int:
+    return sum(1 for c in json.loads(sidecar.read_text())["cells"] if c.get("state") == "donated")
+
+
+def test_a_rerun_kit_never_overwrites_a_painted_pattern_page():
+    """#644: Stop recording reruns the kit; a page the artist painted keeps its
+    whole family (PNG, twin, sidecar, legend, .ora), and a page nobody painted
+    still takes the new recording's cells."""
+    import shutil
+    with tempfile.TemporaryDirectory() as td:
+        project, donor, rom = _chr_project(Path(td))
+        _kit_cli(project, rom)
+        chr_dir = project / "kit" / "pages" / "chr"
+        painted, open_page = chr_dir / "Chr_00_1.png", chr_dir / "Chr_00_0.json"
+        if not (painted.is_file() and open_page.is_file()):
+            check(False, "the first kit writes the pattern pages",
+                  str(sorted(p.name for p in chr_dir.glob("*"))) if chr_dir.is_dir() else "no kit/pages/chr")
+            return
+        painted_bytes = _repaint(painted)
+        family = {n: (chr_dir / n).read_bytes() for n in ("Chr_00_1.json", "Chr_00_1.orig.png", "Chr_00_1.ora")}
+        shutil.move(str(donor), str(project / "auto" / "rec-002"))
+        rc, out = _kit_cli(project, rom)
+        check(painted.read_bytes() == painted_bytes, "a painted page PNG survives a rerun kit", out[-600:])
+        check(all((chr_dir / n).read_bytes() == b for n, b in family.items()),
+              "its sidecar, twin and .ora stay the ones it was painted against")
+        check("Chr_00_1.png" in out and "painted" in out, "the run says which painted page it kept", out[-600:])
+        check(_donated(open_page) > 0, "an unpainted page still takes the new recording's cells",
+              str(_donated(open_page)))
+        frag = json.loads((project / "kit" / "pages" / "kit-part-chr.json").read_text())
+        check(frag.get("pack") and Path(frag["pack"]).resolve() == (project / "auto" / "rec-001").resolve(),
+              "the pages are still made for the first recording (ADR-0194 §2)", str(frag.get("pack")))
+        _repaint(painted)
+        rc, out = _kit_cli(project, rom)
+        check(not list((project / "kit").glob(".pages*")), "no staging folder is left in kit/",
+              str(sorted(p.name for p in (project / "kit").iterdir())))
+
+
+def test_a_page_saved_through_its_ora_is_never_overwritten():
+    """ADR-0220: the `.ora` is write-only for the tools, but an artist who
+    saves it in Krita has painted it - the page keeps its family."""
+    import shutil
+    with tempfile.TemporaryDirectory() as td:
+        project, donor, rom = _chr_project(Path(td))
+        _kit_cli(project, rom)
+        chr_dir = project / "kit" / "pages" / "chr"
+        ora = chr_dir / "Chr_00_0.ora"
+        if not ora.is_file():
+            check(False, "the first kit writes the page's .ora")
+            return
+        ora.write_bytes(ora.read_bytes() + b"saved by a paint program")
+        saved = ora.read_bytes()
+        sidecar = (chr_dir / "Chr_00_0.json").read_bytes()
+        shutil.move(str(donor), str(project / "auto" / "rec-002"))
+        rc, out = _kit_cli(project, rom)
+        check(ora.read_bytes() == saved, "a page saved through its .ora survives a rerun kit", out[-600:])
+        check((chr_dir / "Chr_00_0.json").read_bytes() == sidecar,
+              "and its sidecar is the one the .ora was painted against")
+
+
+def test_a_legacy_kit_page_that_matches_the_generator_is_regenerated():
+    """A kit written before the kit kept a record of its own bytes: a page
+    equal to what the generator writes is the generator's, any other page is
+    kept (the conservative reading - it may be painted)."""
+    with tempfile.TemporaryDirectory() as td:
+        project, _donor, rom = _chr_project(Path(td))
+        _kit_cli(project, rom)
+        pages = project / "kit" / "pages"
+        for ledger in pages.glob(".kit-written*"):
+            ledger.unlink()
+        page = pages / "chr" / "Chr_00_0.png"
+        if not page.is_file():
+            check(False, "the first kit writes the pattern pages")
+            return
+        painted_bytes = _repaint(page)
+        rc, out = _kit_cli(project, rom)
+        check(page.read_bytes() == painted_bytes, "an unrecorded page that differs from the generator is kept",
+              out[-600:])
+        check((pages / "chr" / "Chr_00_1.png").is_file(), "an unrecorded page equal to the generator stays")
+
+
+def test_merge_removes_only_what_the_kit_wrote_and_nobody_touched():
+    import mep_project_kit as MK
+    with tempfile.TemporaryDirectory() as td:
+        fresh, kit = Path(td) / "fresh", Path(td) / "kit"
+        (fresh / "chr").mkdir(parents=True)
+        for name in ("Chr_0.png", "Chr_0.json", "Chr_1.png", "Chr_1.json"):
+            (fresh / "chr" / name).write_bytes(name.encode())
+        MK.merge_kit(fresh, kit)
+        (kit / "chr" / "mine.png").write_bytes(b"the artist's own file")
+        for name in ("Chr_1.png", "Chr_1.json"):
+            (fresh / "chr" / name).unlink()
+        (fresh / "chr" / "Chr_0.json").write_bytes(b"new sidecar")
+        report = MK.merge_kit(fresh, kit)
+        check(not (kit / "chr" / "Chr_1.png").exists() and not (kit / "chr" / "Chr_1.json").exists(),
+              "an untouched page the generator no longer makes is removed", str(report))
+        check((kit / "chr" / "mine.png").read_bytes() == b"the artist's own file",
+              "a file the kit never wrote is never removed or replaced")
+        check((kit / "chr" / "Chr_0.json").read_bytes() == b"new sidecar" and "chr/mine" in report["kept"],
+              "an unpainted page takes the new sidecar", str(report))
+
+
+def test_kit_plan_skips_the_generators_of_a_recording_already_kitted():
+    """#644: rerunning a per-recording generator into its own kit mints a new
+    `usrNNN` sheet beside the old one, so a recording whose kit part exists is
+    not kitted again. The step count the job card shows does not move."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _recording(root, "rec-001")
+        _recording(root, "rec-002")
+        kit = root / "kit" / "rec-001"
+        kit.mkdir(parents=True)
+        for name in ("kit-part-sprites.json", "kit-part-background.json", "kit.json"):
+            (kit / name).write_text("{}")
+        plan = P.kit_plan(root, rom=Path("game.nes"), out=root / "kit")
+        check(len(plan) == 3 * 2 + 2, "the plan keeps one step per generator and kit", str(len(plan)))
+        skipped = sorted((s["kit"].name, Path(s["argv"][1]).name) for s in plan if s.get("skip"))
+        check(skipped == [("rec-001", "artist_bg_kit.py"), ("rec-001", "artist_kit.py"),
+                          ("rec-001", "artist_kit_assemble.py")],
+              "every step of the kitted recording is skipped, none of the new one", str(skipped))
+        (kit / "kit-part-background.json").unlink()
+        plan = P.kit_plan(root, rom=Path("game.nes"), out=root / "kit")
+        skipped = sorted((s["kit"].name, Path(s["argv"][1]).name) for s in plan if s.get("skip"))
+        check(skipped == [("rec-001", "artist_kit.py")],
+              "a kit missing one part reruns only that generator and its assemble", str(skipped))
+
+
 def _build(*argv):
     out = subprocess.run([sys.executable, str(HERE / "mep_build.py"), *argv], capture_output=True, text=True)
     return out.returncode, out.stdout + out.stderr

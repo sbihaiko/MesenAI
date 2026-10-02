@@ -30,8 +30,16 @@ by the artist, into a staging copy `<project>/.mep-build/`:
 Only a clean build reaches `mep/`. The staging copy is synced into it file by
 file: a file whose bytes did not change is not rewritten, so its mtime stays
 and ADR-0212's reload re-decodes only the images that moved; a file the new
-build no longer has is removed. A failed or stopped build leaves `mep/` as the
-last good build, and nothing under `kit/` or `auto/` is ever written.
+build no longer has is removed - except what Share wrote there (#645):
+`pack.json` (`mep_build.py pack`: targets, the ADR-0140 id, author, license)
+and every patch file its `patches[]` names, which no build ever makes. A
+failed or stopped build leaves `mep/` as the last good build, and nothing
+under `kit/` or `auto/` is ever written.
+
+The stamp is written into `mep/` before the first file is synced (#646): a
+build stopped mid-sync leaves a stamped, half-written `mep/` the next build
+simply finishes, never a stampless one it would refuse as foreign. It is
+rewritten after a clean sync, so its mtime is the last good build's.
 
 A `mep/` this tool did not write (no `.remaster-build.json` stamp — an
 installed catalog pack, ADR-0147, or a hand-made one) is never touched: the
@@ -72,6 +80,8 @@ STEPS = ("copy", "build", "figures", "check")
 # The manifests a host parses once at load; any change to them needs the ROM
 # reopened, because ADR-0212's reload re-decodes images and nothing else.
 MANIFESTS = ("textures/hires.txt", "audio/hires.txt", "pack.json")
+# Written into mep/ by Share (`mep_build.py pack`), never by a build (#645).
+PACK_JSON = "pack.json"
 
 
 class BuildRefused(Exception):
@@ -170,9 +180,28 @@ def build_argv(python: str, stage: Path, rom) -> list:
     return argv
 
 
+def kept_files(mep: Path) -> set:
+    """What a sync never removes from `mep`: the stamp, Share's `pack.json`
+    and the patch files that `pack.json` declares (MEP-v1 §3.1 `patches[]`,
+    ADR-0044) - relative paths. An unreadable `pack.json` keeps only itself."""
+    kept = {Path(STAMP), Path(PACK_JSON)}
+    try:
+        doc = json.loads((mep / PACK_JSON).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return kept
+    patches = doc.get("patches") if isinstance(doc, dict) else None
+    for patch in patches if isinstance(patches, list) else []:
+        name = patch.get("file") if isinstance(patch, dict) else None
+        if isinstance(name, str) and name and not Path(name).is_absolute() and ".." not in Path(name).parts:
+            kept.add(Path(name))
+    return kept
+
+
 def manifests_differ(old: Path, new: Path) -> bool:
     for rel in MANIFESTS:
         a, b = old / rel, new / rel
+        if rel == PACK_JSON and not b.is_file():
+            continue  # the build never makes one; Share's is kept as it is (#645)
         if a.is_file() != b.is_file():
             return True
         if a.is_file() and not filecmp.cmp(a, b, shallow=False):
@@ -185,6 +214,7 @@ def sync_into(stage: Path, mep: Path) -> int:
     Returns how many files were written."""
     written = 0
     mep.mkdir(parents=True, exist_ok=True)
+    kept = kept_files(mep)
     wanted = set()
     for root, _dirs, files in os.walk(stage):
         rel_root = Path(root).relative_to(stage)
@@ -201,7 +231,7 @@ def sync_into(stage: Path, mep: Path) -> int:
         rel_root = Path(root).relative_to(mep)
         for name in files:
             rel = rel_root / name
-            if rel not in wanted and rel != Path(STAMP):
+            if rel not in wanted and rel not in kept:
                 (mep / rel).unlink()
         for name in dirs:
             d = Path(root) / name
@@ -210,10 +240,15 @@ def sync_into(stage: Path, mep: Path) -> int:
     return written
 
 
-def write_stamp(project: Path, rec) -> None:
+def write_stamp(project: Path, rec, complete: bool = True) -> None:
+    """`complete: false` is the claim written before the sync (#646)."""
     doc = {"generator": "scripts/mep_project.py build", "recording": rec.id,
-           "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    stamp_path(project).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+           "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "complete": complete}
+    path = stamp_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _step(name: str, ok: bool) -> None:
@@ -277,6 +312,10 @@ def _build(project: Path, rec, rom, python: str, stage: Path, mep: Path) -> int:
 
     reload = not mep.is_dir() or manifests_differ(mep, stage)
     try:
+        # check_mep_is_ours passed, so mep/ is absent or already stamped: claim
+        # it before the first file lands, or a stop mid-sync locks it out (#646).
+        if not stamp_path(project).is_file():
+            write_stamp(project, rec, complete=False)
         written = sync_into(stage, mep)
         write_stamp(project, rec)
     except OSError as exc:
