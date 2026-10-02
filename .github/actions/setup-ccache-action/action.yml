@@ -23,6 +23,11 @@ runs:
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ matrix.compiler }}-${{ matrix.platform.os }}
+          # The key carries the SHA because a cache entry is immutable once saved:
+          # the old fixed key froze the first run's objects forever. `-sha-` is a
+          # delimiter, not decoration: `ubuntu-22.04` is a prefix of
+          # `ubuntu-22.04-arm` (and `clang` of `clang_aot`), so a prefix
+          # restore-key without it would pull another leg's cache.
+          key: ccache-v2-${{ matrix.compiler }}-${{ matrix.platform.os }}-sha-${{ github.sha }}
           restore-keys: |
-            ccache-${{ matrix.compiler }}
+            ccache-v2-${{ matrix.compiler }}-${{ matrix.platform.os }}-sha-
