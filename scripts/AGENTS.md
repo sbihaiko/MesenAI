@@ -92,8 +92,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     the NSView shape Avalonia's `NativeControlHost` hands over, an unfiltered
     present that is byte-identical to a CPU nearest scale, and the fixture
     shader `tests/fixtures/shaders/scanlines.slangp` (its parameters,
-    clearing it, a broken preset falling back), plus the HUD overlay
-    uploads.
+    clearing it, a broken preset falling back), the GPU-hang drop (#584),
+    a per-frame chain failure reported once per episode (#593, injected
+    through `InjectFrameFailures`), plus the HUD overlay uploads.
   - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
     `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
     It tries the mirror (release `librashader-macos-arm64-01febce6` of this
