@@ -1,0 +1,202 @@
+[
+  {
+    "number": 201,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nd608f769333b13da9c67f07599e405944893a950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0436:09\n\n### Description\n\nStart with 9 rolls\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 2
+        }
+      }
+    ]
+  },
+  {
+    "number": 202,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0437:05 + 0438:01\n\n### Description\n\nStart on stage 5\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 7
+        }
+      }
+    ]
+  },
+  {
+    "number": 203,
+    "state": "CLOSED",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0439:09\n\n### Description\n\nWithdrawn by its author\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 40
+        }
+      }
+    ]
+  },
+  {
+    "number": 204,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\n1111111111111111111111111111111111111111\n\n### Game name\n\nTest GB game\n\n### Console\n\nGame Boy\n\n### Code\n\n01FF16D0\n\n### Description\n\nInfinite health\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:gb"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 1
+        }
+      }
+    ]
+  },
+  {
+    "number": 205,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0440:09\n\n### Description\n\nStill invalid\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:invalid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 9
+        }
+      }
+    ]
+  },
+  {
+    "number": 206,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\nNOT-A-CODE\n\n### Description\n\nLabel applied by hand\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 3
+        }
+      }
+    ]
+  },
+  {
+    "number": 207,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0436:09\n\n### Description\n\nSame patch as 201, later\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 5
+        }
+      }
+    ]
+  },
+  {
+    "number": 208,
+    "state": "OPEN",
+    "title": "[Cheat] x",
+    "body": "### Game SHA-1\n\nD608F769333B13DA9C67F07599E405944893A950\n\n### Game name\n\n1942\n\n### Console\n\nNES\n\n### Code\n\n0441:09\n\n### Description\n\nTie with 202 on votes\n",
+    "labels": [
+      {
+        "name": "cheat"
+      },
+      {
+        "name": "cheat:valid"
+      },
+      {
+        "name": "console:nes"
+      }
+    ],
+    "reactionGroups": [
+      {
+        "content": "THUMBS_UP",
+        "users": {
+          "totalCount": 7
+        }
+      }
+    ]
+  }
+]

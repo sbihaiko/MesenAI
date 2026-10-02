@@ -36,6 +36,20 @@ namespace Mesen.Views
 			}
 		}
 
+		private void OnOpenIssue(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerCheatRow row }) {
+				Model?.OpenIssue(row);
+			}
+		}
+
+		private void OnShareCheat(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerCheatRow row }) {
+				Model?.Share(row);
+			}
+		}
+
 		private void OnChangeGame(object? sender, RoutedEventArgs e) => Model?.ChangeGame();
 		private void OnAddCode(object? sender, RoutedEventArgs e) => Model?.ToggleAddCode();
 		private void OnConfirmAddCode(object? sender, RoutedEventArgs e) => Model?.AddCode();

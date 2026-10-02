@@ -68,6 +68,15 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   link stubs for the emulator members it never calls) and needs a C++
   compiler. Tests: `test_cheat_submission.py` (fixtures
   `tests/fixtures/cheat-submission/`), `checks/verify_cheat_form_and_workflow.py`.
+- **Community cheats, consume side (ADR-0248 R.4).**
+  `generate_community_cheat_catalog.py` writes `docs/community-cheats.json`
+  from the open `cheat:valid` issues: grouped by SHA-1, one row per issue
+  (issue, console, code, description, 👍), most-👍-first. Each row is
+  re-checked with `cheat_submission.evaluate` against the other open rows and
+  the bundled list, so a hand-set label or a later duplicate stays out. The
+  file has no date (an idle run diffs nothing). `--issues-file` runs it
+  offline. Tests: `test_generate_community_cheat_catalog.py` (fixtures
+  `tests/fixtures/community-cheat-catalog/issues.json`).
 
 ## Work Guidance
 

@@ -50,6 +50,7 @@
 			<Control ID="btnCheatsDone">Done</Control>
 			<Control ID="btnCheatsAdd">Add</Control>
 			<Control ID="btnCheatsChangeGame">Choose another game</Control>
+			<Control ID="btnCheatsShare">Share This Cheat ↗</Control>
 			<Control ID="lblCheatsCodePlaceholder">Code, e.g. SXIOPO or 0032:09</Control>
 			<Control ID="lblCheatsDescriptionPlaceholder">What it does (optional)</Control>
 		</Form>

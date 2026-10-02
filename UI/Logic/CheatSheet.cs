@@ -23,13 +23,16 @@ namespace Mesen.Logic
 		AnotherCopy,
 		//A stored code that matches no listed entry (typed by hand, or added
 		//in the classic window).
-		Yours
+		Yours,
+		//From docs/community-cheats.json for the loaded copy (R.4, ADR-0248 §5).
+		Community
 	}
 
 	//One W-P11 row. IsOn mirrors the stored list; CanToggle is false only for
 	//a code the recording rule refuses that is not on yet (one already on can
 	//always be turned off). Note is the row's one-line mark, "" when none.
-	public sealed record CheatSheetRow(string Description, CheatType Type, string Codes, bool IsOn, bool CanToggle, string Note, CheatRowSource Source);
+	//Issue and Votes are a community row's submission issue and 👍 (0 otherwise).
+	public sealed record CheatSheetRow(string Description, CheatType Type, string Codes, bool IsOn, bool CanToggle, string Note, CheatRowSource Source, int Issue = 0, int Votes = 0);
 
 	//P.10 (ADR-0245 §1-§3, PRD Part B §13 W-P11): the Play Cheats sheet's rules.
 	//Every toggle is written to the same CheatCodes list the classic cheat
@@ -43,6 +46,7 @@ namespace Mesen.Logic
 		public const string AnotherCopyMark = "made for another copy — may not work";
 		public const string ReplayNote = "Cheats you have on are recorded in a shared replay";
 		public const string AllOffNote = "All cheats are switched off in Tools ⋯ › Cheats";
+		public const string CommunityOnlyLine = "codes from the community for your copy";
 		public const int MaxGameResults = 20;
 
 		public static CheatDbGame? FindGameForCopy(IEnumerable<CheatDbGame> db, string cheatSha1)
@@ -66,6 +70,18 @@ namespace Mesen.Logic
 
 		public static IReadOnlyList<CheatSheetRow> BuildRows(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, IReadOnlyList<StoredCheat> stored, bool recordingArt, string search)
 		{
+			return BuildRows(console, game, gameIsAnotherCopy, stored, recordingArt, search, Array.Empty<CommunityCheat>());
+		}
+
+		//R.4 (ADR-0248 §5): the community rows for the loaded copy
+		//(CommunityCheatCatalog.ForCopy, exact SHA-1) come below the bundled
+		//list and above the user's own codes, under the same recording rule
+		//(ADR-0245 Decision 3). They are listed on every console the catalog
+		//has rows for, so GB/SMS gain a list this way. A row the console cannot
+		//store as one code (mixed types, an unknown form) is skipped, and so is
+		//one that repeats a bundled row already listed.
+		public static IReadOnlyList<CheatSheetRow> BuildRows(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, IReadOnlyList<StoredCheat> stored, bool recordingArt, string search, IReadOnlyList<CommunityCheat> community)
+		{
 			List<CheatSheetRow> rows = new();
 			HashSet<int> matchedStored = new();
 
@@ -80,6 +96,18 @@ namespace Mesen.Logic
 					}
 					rows.Add(MakeRow(entry.Description, type, codes, index >= 0 && stored[index].Enabled, recordingArt, source));
 				}
+			}
+
+			foreach(CommunityCheat cheat in community) {
+				if(!CheatConsoleScope.TryParseCodes(console, cheat.Code, out CheatType type, out string codes)
+					|| rows.Any(r => r.Description == cheat.Description && r.Type == type && CheatConsoleScope.SplitCodes(r.Codes).SequenceEqual(CheatConsoleScope.SplitCodes(codes)))) {
+					continue;
+				}
+				int index = IndexOf(stored, cheat.Description, type, codes);
+				if(index >= 0) {
+					matchedStored.Add(index);
+				}
+				rows.Add(MakeRow(cheat.Description, type, codes, index >= 0 && stored[index].Enabled, recordingArt, CheatRowSource.Community) with { Issue = cheat.Issue, Votes = cheat.Votes });
 			}
 
 			for(int i = 0; i < stored.Count; i++) {
@@ -151,11 +179,18 @@ namespace Mesen.Logic
 		//The line under the list: which copy the codes are for, or why there is no list.
 		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn)
 		{
-			if(!CheatConsoleScope.HasCheatList(console)) {
-				return CheatConsoleScope.NoListReason;
-			}
-			if(game == null) {
-				return NotInListLine;
+			return StatusLine(console, game, gameIsAnotherCopy, countOn, 0);
+		}
+
+		//With community rows for the copy, the "no list yet" and "not in the
+		//list" lines give way to saying where the codes come from (ADR-0248 §5).
+		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount)
+		{
+			if(game == null || !CheatConsoleScope.HasCheatList(console)) {
+				if(communityCount > 0) {
+					return countOn + " on · " + CommunityOnlyLine;
+				}
+				return CheatConsoleScope.HasCheatList(console) ? NotInListLine : CheatConsoleScope.NoListReason;
 			}
 			if(gameIsAnotherCopy) {
 				return countOn + " on · codes from " + game.Name + " — made for another copy, may not work";
