@@ -85,8 +85,7 @@ stand-in tracks.** The user picks; this ADR stays `proposed`.
 Install of a pack whose `<bgm>`/`<sfx>` refs do not resolve and whose audio is
 redeemed by a wired patch finishes as `Installed` (texture install never fails
 because of audio) and adds one non-fatal notice to the outcome and the log:
-"audio not generated: N of M tracks unresolved; run Extract audio or supply
-the `.ogg` files". No process is spawned, no patch is applied, no toolchain is
+"audio not generated: N of M tracks unresolved; supply the `.ogg` files". No process is spawned, no patch is applied, no toolchain is
 needed, and it behaves identically on Windows and macOS arm64. The ADR-0144
 exception stays what it is, a classification rule. Cost: the user still hears
 silence for those tracks until they act.
@@ -221,7 +220,7 @@ Not run, so unverified: the tool on any ROM; whether it validates a trigger on
 Zelda II or Mega Man; whether the patched ROM is silent on the APU for these
 specific patches (`Revamp+Music.ips`, `Revamp.ips`, `Megaman - Super.ips`; the
 `NesConsole.cpp` comment says "typically"); whether #141's patches are *wired*
-(the issue comment says "present", ADR-0148 requires wired); the Zelda II
+(the issue comment says "present", ADR-0148 requires the patch to be wired); the Zelda II
 `<bgm>` album/track numbers (the lint shows paths only); A4's trigger-id
 alignment; whether #138 is currently listed on the live board; the render
 toolchain on Windows. No pack was downloaded.
