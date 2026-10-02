@@ -177,3 +177,37 @@ public:
 		settings.SetGbaConfig(gba);
 	}
 };
+
+//The restore half of the share lifecycle, host-free so the order MovieManager::
+//Stop depends on is unit tested (ADR-0205 section 2, "restore on stop"). Armed
+//when a Record-and-share recording starts, consumed exactly once by Finish().
+class ShareRestoreState
+{
+private:
+	SharePowerOnState _snapshot;
+	bool _active = false;
+
+public:
+	bool Active() const { return _active; }
+
+	void Arm(const SharePowerOnState& snapshot)
+	{
+		_snapshot = snapshot;
+		_active = true;
+	}
+
+	//Runs endRecording first - ending the recorder writes GameSettings.txt,
+	//which serializes the settings as they are at that moment, so they must
+	//still be the deterministic ones - and only then puts the player's settings
+	//back. A no-op restore when no share is armed, and one-shot when it is, so
+	//a later change by the player is never rolled back.
+	template<typename TSettings, typename TEndRecording>
+	void Finish(TSettings& settings, TEndRecording endRecording)
+	{
+		endRecording();
+		if(_active) {
+			_active = false;
+			ShareRecordingSettings::Restore(settings, _snapshot);
+		}
+	}
+};
