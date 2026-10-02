@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="560"
+	x:Class="Mesen.Views.PlayHomeView"
+	x:DataType="vm:RecentGamesViewModel"
+>
+	<!--G.2 (PRD Part B §8, ADR-0241, §13.5.2): the Play home. Which of the three
+	panels shows is decided by RecentGamesViewModel through the host-free
+	UI/Logic/PlayHome; this view only binds it. A ROM dropped anywhere on the
+	window still loads it (MainWindow.OnDrop).-->
+	<Panel>
+		<!--W-P1, true first run (no recents): one primary action (rule 2: 1
+		control), and a sentence that says what happens next (rule 10).-->
+		<StackPanel Name="PlayHomeFirstRun" Spacing="14" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ShowFirstRunHome}">
+			<TextBlock Text="{l:Translate lblPlayHomeDropTitle}" FontSize="22" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" />
+			<TextBlock Text="{l:Translate lblPlayHomeDropSubtitle}" FontSize="16" Foreground="#CCFFFFFF" HorizontalAlignment="Center" />
+			<Button Name="PlayHomeOpenRomPrimary" Content="{l:Translate btnPlayHomeOpenRom}" HorizontalAlignment="Center" MinWidth="240" HorizontalContentAlignment="Center" Padding="16 10" FontSize="15" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnOpenRom" />
+			<TextBlock Name="PlayHomeOrientation" Text="{Binding FirstRunOrientation}" IsVisible="{Binding FirstRunOrientation.Length}" Foreground="#AAFFFFFF" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
+		</StackPanel>
+
+		<!--W-P2, with recents: Continue is the primary action; Open a ROM… the
+		second control; the tiles are list rows (rule 2: 2 + tiles). Gamepad:
+		the two buttons and the grid are focusable (XY focus), and the grid keeps
+		today's StateGrid arrow navigation.-->
+		<DockPanel Name="PlayHomeWithRecents" Margin="32 24" IsVisible="{Binding ShowRecentsHome}" XYFocus.NavigationModes="Enabled">
+			<DockPanel DockPanel.Dock="Top" Margin="0 0 0 8">
+				<Button Name="PlayHomeOpenRomSecondary" DockPanel.Dock="Right" Content="{l:Translate btnPlayHomeOpenRom}" VerticalAlignment="Center" Click="OnOpenRom" />
+				<TextBlock Text="{l:Translate lblPlayHomeContinueHeader}" FontSize="22" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+			</DockPanel>
+			<Border Name="PlayHomeContinueCard" DockPanel.Dock="Top" Background="#22FFFFFF" CornerRadius="10" Padding="20 16" Margin="0 0 0 20">
+				<StackPanel Spacing="6">
+					<TextBlock Name="PlayHomeContinueTitle" Text="{Binding ContinueTitle}" FontSize="20" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+					<TextBlock Name="PlayHomeContinueSubtitle" Text="{Binding ContinueSubtitle}" IsVisible="{Binding ContinueSubtitle.Length}" Foreground="#AAFFFFFF" />
+					<Button Name="PlayHomeContinueButton" Content="{l:Translate btnPlayHomeContinue}" Margin="0 6 0 0" Padding="18 8" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnContinue" />
+				</StackPanel>
+			</Border>
+			<TextBlock DockPanel.Dock="Top" Text="{l:Translate lblPlayHomeRecentHeader}" FontWeight="Bold" Foreground="White" Margin="0 0 0 6" IsVisible="{Binding ShowHomeGrid}" />
+			<!--StateGrid names its own root ("root", for its ElementName bindings),
+			so the test handle is the Panel around it.-->
+			<Panel Name="PlayHomeRecentGrid" IsVisible="{Binding ShowHomeGrid}">
+				<c:StateGrid Entries="{Binding HomeGridEntries}" Title="" Mode="{Binding Mode}" />
+			</Panel>
+		</DockPanel>
+
+		<!--Advanced's game selection and the Save/Load state screens: the
+		classic grid of every entry, unchanged by G.2.-->
+		<Panel Name="PlayHomePlainGrid" IsVisible="{Binding ShowPlainGrid}">
+			<c:StateGrid Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
+		</Panel>
+	</Panel>
+</UserControl>

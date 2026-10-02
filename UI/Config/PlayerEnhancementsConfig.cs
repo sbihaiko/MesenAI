@@ -19,7 +19,9 @@ public partial class PlayerEnhancementsConfig : BaseConfig<PlayerEnhancementsCon
 	[ObservableProperty] public partial VideoAspectRatio WideScrnPriorAspectRatio { get; set; } = VideoAspectRatio.NoStretching;
 	[ObservableProperty] public partial VideoFilterType HiResPriorFilter { get; set; } = VideoFilterType.None;
 
-	//The Welcome card (§6.2) shows once, on the very first Player-mode
-	//boot, and never again once dismissed.
+	//The Welcome card (§6.2) showed once, on the very first Player-mode
+	//boot. G.2 replaced it with the W-P1 first-run home, which shows whenever
+	//there is no recent game, so nothing reads this key any more; it is kept
+	//so an existing settings.json still round-trips it unchanged.
 	[ObservableProperty] public partial bool WelcomeCardDismissed { get; set; } = false;
 }
