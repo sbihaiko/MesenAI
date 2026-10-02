@@ -11,7 +11,8 @@ public static class PlayerSettingsEssentials
 {
 	public static bool IsEssentials(ConfigWindowTab tab)
 	{
-		return tab == ConfigWindowTab.Audio || tab == ConfigWindowTab.Input || tab == ConfigWindowTab.Video;
+		//ADR-0246 / W-P8: Look (Art / Pixels / Screen) is an essentials tab.
+		return tab == ConfigWindowTab.Audio || tab == ConfigWindowTab.Input || tab == ConfigWindowTab.Video || tab == ConfigWindowTab.Look;
 	}
 
 	public static ConfigWindowTab ClampToEssentials(ConfigWindowTab tab)

@@ -38,9 +38,17 @@ private:
 	VideoFilterType _videoFilterType = VideoFilterType::None;
 	unique_ptr<BaseVideoFilter> _videoFilter;
 	unique_ptr<ScaleFilter> _scaleFilter;
+	//ADR-0246 §5: the console's default filter, used instead of an NTSC filter
+	//while Hold to Compare is on. Built on the first compared frame and kept
+	//until the filters are rebuilt, so holding again costs nothing.
+	unique_ptr<BaseVideoFilter> _compareFilter;
+	//Whether _videoFilter is the pack-art filter (IConsole::IsDrawingPackArt
+	//when it was built). Compare never replaces it: Art stays.
+	bool _videoFilterIsPackArt = false;
 	unique_ptr<RotateFilter> _rotateFilter;
 
 	void UpdateVideoFilter();
+	BaseVideoFilter* GetFrameFilter(bool compare);
 
 	void DecodeThread();
 
@@ -59,6 +67,13 @@ public:
 	ScreenshotCapture CaptureScreenshot(vector<uint32_t>& out);
 
 	void ForceFilterUpdate() { _forceFilterUpdate = true; }
+
+	//ADR-0246 §5: while paused no new frame reaches the decoder, so a Look
+	//change (or Hold to Compare) would not show until the game resumes. Decodes
+	//the last frame again through the current filters - the same path a state
+	//loaded while paused takes (SaveStateManager::LoadState). No-op while
+	//running, while recording, or before the first frame.
+	void RedrawPausedFrame();
 
 	uint32_t GetFrameCount();
 	FrameInfo GetBaseFrameInfo(bool removeOverscan);

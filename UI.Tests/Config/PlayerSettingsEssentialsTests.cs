@@ -18,6 +18,14 @@ namespace Mesen.Tests.Config
 		}
 
 		[Fact]
+		public void Look_is_an_essentials_tab()
+		{
+			//ADR-0246 / W-P8: Settings carries Display | Look | Audio | Controls.
+			Assert.True(PlayerSettingsEssentials.IsEssentials(ConfigWindowTab.Look));
+			Assert.Equal(ConfigWindowTab.Look, PlayerSettingsEssentials.ClampToEssentials(ConfigWindowTab.Look));
+		}
+
+		[Fact]
 		public void NonEssentials_AreNotEssentials()
 		{
 			Assert.False(PlayerSettingsEssentials.IsEssentials(ConfigWindowTab.Emulation));

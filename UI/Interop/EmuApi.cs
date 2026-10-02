@@ -52,6 +52,14 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void Resume();
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsPaused();
 
+		//ADR-0246 (P.13): true while the loaded game's pack draws the art (the HD
+		//filter is the console filter), so Settings › Look disables Pixels.
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDrawingPackArt();
+		//Hold to Compare: drops Pixels and Screen from the frames while held
+		//(Art stays) and redraws the paused frame so the change shows at once.
+		[DllImport(DllPath)] public static extern void SetLookCompare([MarshalAs(UnmanagedType.I1)] bool compare);
+		[DllImport(DllPath)] public static extern void RedrawPausedFrame();
+
 		[DllImport(DllPath)] public static extern void TakeScreenshot();
 
 		[DllImport(DllPath)] public static extern void ProcessAudioPlayerAction(AudioPlayerActionParams p);

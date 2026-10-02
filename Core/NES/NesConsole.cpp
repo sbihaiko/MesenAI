@@ -868,11 +868,18 @@ ShortcutState NesConsole::IsShortcutAllowed(EmulatorShortcut shortcut, uint32_t 
 	return ShortcutState::Default;
 }
 
+bool NesConsole::IsDrawingPackArt()
+{
+	//The condition GetVideoFilter below uses to pick HdVideoFilter - one place,
+	//so Settings > Look (ADR-0246) cannot disagree with the filter that runs.
+	return GetRomFormat() != RomFormat::Nsf && IsHdPackVideoActive() && !_hdPackBuilder;
+}
+
 BaseVideoFilter* NesConsole::GetVideoFilter(bool getDefaultFilter)
 {
 	if(getDefaultFilter || GetRomFormat() == RomFormat::Nsf) {
 		return new NesDefaultVideoFilter(_emu);
-	} else if(_hdData && _hdData->HasVideoContent() && !_hdPackBuilder) {
+	} else if(IsDrawingPackArt()) {
 		return new HdVideoFilter(this, _emu, _hdData.get());
 	} else {
 		VideoFilterType filterType = _emu->GetSettings()->GetVideoConfig().VideoFilter;

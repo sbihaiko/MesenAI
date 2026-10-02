@@ -1,5 +1,4 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using HarfBuzzSharp;
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.Utilities;
@@ -12,6 +11,7 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial AudioConfigViewModel? Audio { get; set; }
 		[ObservableProperty] public partial InputConfigViewModel? Input { get; set; }
 		[ObservableProperty] public partial VideoConfigViewModel? Video { get; set; }
+		[ObservableProperty] public partial LookConfigViewModel? Look { get; set; }
 		[ObservableProperty] public partial PreferencesConfigViewModel? Preferences { get; set; }
 		[ObservableProperty] public partial EmulationConfigViewModel? Emulation { get; set; }
 
@@ -21,6 +21,14 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial SmsConfigViewModel? Sms { get; set; }
 
 		[ObservableProperty] public partial ConfigWindowTab SelectedIndex { get; set; }
+		//The TabControl's position: tab ids have holes, positions do not
+		//(ConfigWindowTabOrder). Binding the id directly opened the wrong tab
+		//for Game Boy, GBA, SMS and Preferences.
+		[ObservableProperty] public partial int SelectedTabIndex { get; set; }
+
+		//Video and Look edit the same VideoConfig, so they share one snapshot
+		//for Cancel/IsDirty, taken when the first of them opens.
+		private VideoConfig? _originalVideo;
 		//PRD Part B §6: Player mode's Settings page shows only the
 		//essentials tabs (video / audio / input); the window hides the rest.
 		[ObservableProperty] public partial bool PlayerMode { get; set; }
@@ -45,6 +53,13 @@ namespace Mesen.ViewModels
 			SelectTab(value);
 		}
 
+		partial void OnSelectedTabIndexChanged(int value)
+		{
+			if(ConfigWindowTabOrder.TabAt(value) is ConfigWindowTab tab) {
+				SelectTab(tab);
+			}
+		}
+
 		public void SelectTab(ConfigWindowTab tab)
 		{
 			//Create each view model when the corresponding tab is clicked, for performance
@@ -52,7 +67,15 @@ namespace Mesen.ViewModels
 				case ConfigWindowTab.Audio: Audio ??= AddDisposable(new AudioConfigViewModel()); break;
 				case ConfigWindowTab.Emulation: Emulation ??= AddDisposable(new EmulationConfigViewModel()); break;
 				case ConfigWindowTab.Input: Input ??= AddDisposable(new InputConfigViewModel()); break;
-				case ConfigWindowTab.Video: Video ??= AddDisposable(new VideoConfigViewModel()); break;
+				case ConfigWindowTab.Video:
+					_originalVideo ??= ConfigManager.Config.Video.Clone();
+					Video ??= AddDisposable(new VideoConfigViewModel() { OriginalConfig = _originalVideo });
+					break;
+				case ConfigWindowTab.Look:
+					_originalVideo ??= ConfigManager.Config.Video.Clone();
+					Look ??= AddDisposable(new LookConfigViewModel() { OpenTab = SelectTab });
+					Look.Refresh();
+					break;
 
 				case ConfigWindowTab.Nes:
 					//TODOv2 fix this patch
@@ -68,6 +91,7 @@ namespace Mesen.ViewModels
 			}
 
 			SelectedIndex = tab;
+			SelectedTabIndex = ConfigWindowTabOrder.IndexOf(tab);
 		}
 
 		public void SaveConfig()
@@ -81,7 +105,7 @@ namespace Mesen.ViewModels
 		{
 			ConfigManager.Config.Audio = Audio?.OriginalConfig ?? ConfigManager.Config.Audio;
 			ConfigManager.Config.Input = Input?.OriginalConfig ?? ConfigManager.Config.Input;
-			ConfigManager.Config.Video = Video?.OriginalConfig ?? ConfigManager.Config.Video;
+			ConfigManager.Config.Video = _originalVideo ?? ConfigManager.Config.Video;
 			ConfigManager.Config.Preferences = Preferences?.OriginalConfig ?? ConfigManager.Config.Preferences;
 			ConfigManager.Config.Emulation = Emulation?.OriginalConfig ?? ConfigManager.Config.Emulation;
 			ConfigManager.Config.Nes = Nes?.OriginalConfig ?? ConfigManager.Config.Nes;
@@ -97,7 +121,7 @@ namespace Mesen.ViewModels
 			return (
 				Audio?.OriginalConfig.IsIdentical(ConfigManager.Config.Audio) == false ||
 				Input?.OriginalConfig.IsIdentical(ConfigManager.Config.Input) == false ||
-				Video?.OriginalConfig.IsIdentical(ConfigManager.Config.Video) == false ||
+				_originalVideo?.IsIdentical(ConfigManager.Config.Video) == false ||
 				Preferences?.OriginalConfig.IsIdentical(ConfigManager.Config.Preferences) == false ||
 				Emulation?.OriginalConfig.IsIdentical(ConfigManager.Config.Emulation) == false ||
 				Nes?.OriginalConfig.IsIdentical(ConfigManager.Config.Nes) == false ||

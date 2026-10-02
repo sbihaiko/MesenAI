@@ -32,6 +32,9 @@
 		<DataTemplate DataType="{x:Type vm:VideoConfigViewModel}">
 			<v:VideoConfigView />
 		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:LookConfigViewModel}">
+			<v:LookConfigView />
+		</DataTemplate>
 		<DataTemplate DataType="{x:Type vm:NesConfigViewModel}">
 			<v:NesConfigView />
 		</DataTemplate>
@@ -60,7 +63,7 @@
 			</Grid>
 		</Panel>
 		
-		<TabControl TabStripPlacement="Left" Background="#20888888" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}" Padding="0">
+		<TabControl TabStripPlacement="Left" Background="#20888888" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}" Padding="0">
 			<TabItem Content="{Binding Audio}">
 				<TabItem.Header>
 					<StackPanel Orientation="Horizontal">
@@ -90,6 +93,16 @@
 					<StackPanel Orientation="Horizontal">
 						<Image Source="/Assets/VideoOptions.png" Margin="0 0 10 0" />
 						<TextBlock VerticalAlignment="Center" Text="{l:Translate tabVideo}" />
+					</StackPanel>
+				</TabItem.Header>
+			</TabItem>
+			<!-- ADR-0246 (P.13): Look - Art / Pixels / Screen. The markup order is
+			     ConfigWindowTabOrder's; keep the two in step. -->
+			<TabItem Name="tabLook" Content="{Binding Look}">
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal">
+						<Image Source="/Assets/VideoFilter.png" Margin="0 0 10 0" />
+						<TextBlock VerticalAlignment="Center" Text="{l:Translate tabLook}" />
 					</StackPanel>
 				</TabItem.Header>
 			</TabItem>

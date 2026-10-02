@@ -12,6 +12,7 @@
 #include "Shared/Video/ScanlineFilter.h"
 #include "Shared/Video/DebugHud.h"
 #include "Shared/RenderedFrame.h"
+#include "Shared/Interfaces/IConsole.h"
 
 VideoDecoder::VideoDecoder(Emulator* emu)
 {
@@ -73,6 +74,9 @@ void VideoDecoder::UpdateVideoFilter()
 
 		_videoFilter.reset(_emu->GetVideoFilter());
 		_scaleFilter = ScaleFilter::GetScaleFilter(_emu, _videoFilterType);
+		_compareFilter.reset();
+		shared_ptr<IConsole> console = _emu->GetConsole();
+		_videoFilterIsPackArt = console && console->IsDrawingPackArt();
 		_forceFilterUpdate = false;
 	}
 
@@ -88,9 +92,35 @@ void VideoDecoder::UpdateVideoFilter()
 	}
 }
 
+BaseVideoFilter* VideoDecoder::GetFrameFilter(bool compare)
+{
+	//ADR-0246 §5: Hold to Compare drops the NTSC console filter (Screen) but
+	//never the pack-art filter (Art). Every other console filter already is the
+	//default one.
+	bool isNtsc = _videoFilterType == VideoFilterType::NtscBlargg || _videoFilterType == VideoFilterType::NtscBisqwit;
+	if(!compare || !isNtsc || _videoFilterIsPackArt) {
+		return _videoFilter.get();
+	}
+	if(!_compareFilter) {
+		_compareFilter.reset(_emu->GetVideoFilter(true));
+	}
+	return _compareFilter.get();
+}
+
+void VideoDecoder::RedrawPausedFrame()
+{
+	if(!_emu->IsPaused() || _emu->GetVideoRenderer()->IsRecording() || _frame.FrameBuffer == nullptr) {
+		return;
+	}
+	auto lock = _emu->AcquireLock();
+	UpdateFrame(_frame, true, false);
+}
+
 void VideoDecoder::DecodeFrame(bool forRewind)
 {
 	UpdateVideoFilter();
+	bool compare = _emu->GetSettings()->IsLookCompare();
+	BaseVideoFilter* videoFilter = GetFrameFilter(compare);
 
 	bool isAudioPlayer = _emu->GetAudioPlayerHud() != nullptr;
 	if(isAudioPlayer) {
@@ -102,12 +132,12 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 		_baseFrameSize.Height = _frame.Height;
 	}
 
-	_videoFilter->SetBaseFrameInfo(_baseFrameSize);
-	FrameInfo frameSize = _videoFilter->SendFrame((uint16_t*)_frame.FrameBuffer, _frame.FrameNumber, _frame.VideoPhase, _frame.Data, true, _frame);
+	videoFilter->SetBaseFrameInfo(_baseFrameSize);
+	FrameInfo frameSize = videoFilter->SendFrame((uint16_t*)_frame.FrameBuffer, _frame.FrameNumber, _frame.VideoPhase, _frame.Data, true, _frame);
 
-	uint32_t* outputBuffer = _videoFilter->GetOutputBuffer();
+	uint32_t* outputBuffer = videoFilter->GetOutputBuffer();
 
-	OverscanDimensions overscan = _videoFilter->GetOverscan();
+	OverscanDimensions overscan = videoFilter->GetOverscan();
 
 	if(_rotateFilter && !isAudioPlayer) {
 		outputBuffer = _rotateFilter->ApplyFilter(outputBuffer, frameSize.Width, frameSize.Height);
@@ -118,9 +148,10 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 		}
 	}
 
-	_emu->GetDebugHud()->Draw(outputBuffer, frameSize, overscan, _frame.FrameNumber, _videoFilter->GetScaleFactor());
+	_emu->GetDebugHud()->Draw(outputBuffer, frameSize, overscan, _frame.FrameNumber, videoFilter->GetScaleFactor());
 
-	if(_scaleFilter && !isAudioPlayer) {
+	//ADR-0246 §5: Hold to Compare drops Pixels (the scale filter, LcdGrid too).
+	if(_scaleFilter && !isAudioPlayer && !compare) {
 		outputBuffer = _scaleFilter->ApplyFilter(outputBuffer, frameSize.Width, frameSize.Height);
 		frameSize = _scaleFilter->GetFrameInfo(frameSize);
 	}

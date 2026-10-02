@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "about": "ADR-0246 section 4 / ADR-0237 (amended non-goal): the named looks bundled with the app, offered by Settings > Look > Screen. Every file in this folder is listed here with its source, license and sha256; UI.Tests/Config/NamedLookManifestTests checks the bytes against these hashes. Adding a look is a code change.",
+  "looks": [
+    {
+      "id": "crt-tv",
+      "name": "CRT TV",
+      "preset": "crt/crt-geom.slangp",
+      "files": [
+        {
+          "path": "crt/crt-geom.slangp",
+          "sha256": "637eb5fbe7dc6eafa336e5d7f0f3a6142cb6469b380a8012bca71b0417f36e6b",
+          "license": "GPL-3.0-or-later",
+          "source": "authored in this repository; same passes and options as https://github.com/libretro/slang-shaders/blob/0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/crt/crt-geom.slangp"
+        },
+        {
+          "path": "crt/shaders/crt-geom.slang",
+          "sha256": "6533ad97601445f35a1b4f25ad54974ee9983fef0337ffec11c9c372226dbb58",
+          "license": "GPL-2.0-or-later",
+          "copyright": "Copyright (C) 2010-2012 cgwg, Themaister and DOLLS",
+          "source": "https://github.com/libretro/slang-shaders/blob/0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/crt/shaders/crt-geom.slang"
+        }
+      ]
+    },
+    {
+      "id": "handheld-lcd",
+      "name": "Handheld LCD",
+      "preset": "handheld/zfast-lcd.slangp",
+      "files": [
+        {
+          "path": "handheld/zfast-lcd.slangp",
+          "sha256": "8b6c7662bdc0cfa784815324c297714562e319332259b84b4b268345f362356f",
+          "license": "GPL-3.0-or-later",
+          "source": "authored in this repository; same passes and options as https://github.com/libretro/slang-shaders/blob/0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/handheld/zfast-lcd.slangp"
+        },
+        {
+          "path": "handheld/shaders/zfast_lcd.slang",
+          "sha256": "a6fe1e5076c0452c1eef3086923bfbb65ac9797a5c97e523c2156dc08603f008",
+          "license": "GPL-2.0-or-later",
+          "copyright": "Copyright (C) 2017 Greg Hogan (SoltanGris42)",
+          "source": "https://github.com/libretro/slang-shaders/blob/0b3ff0b240f82f4cb5e5d0117f8f2080e2764cf7/handheld/shaders/zfast_lcd.slang"
+        }
+      ]
+    }
+  ]
+}

@@ -204,7 +204,6 @@
 						<CheckBox Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding IsAudioEnabled, Mode=OneWay}" Click="OnToggleAudio" />
 						<CheckBox Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding IsBorderEnabled, Mode=OneWay}" Click="OnToggleBorder" />
 						<CheckBox Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding IsWideScrnEnabled, Mode=OneWay}" Click="OnToggleWideScrn" />
-						<CheckBox Content="{l:Translate chkEnhancementsHiRes}" IsChecked="{Binding IsHiResEnabled, Mode=OneWay}" Click="OnToggleHiRes" />
 						<CheckBox Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding IsOverclockEnabled, Mode=OneWay}" IsEnabled="{Binding IsOverclockSupported}" Click="OnToggleOverclock" />
 						<Button Content="{l:Translate btnEnhancementsClose}" HorizontalAlignment="Stretch" Click="OnCloseEnhancementsPanel" />
 					</StackPanel>
