@@ -2128,6 +2128,8 @@
 		<Message ID="RemasterStartRecording">Start Recording</Message>
 		<Message ID="RemasterOpenRomToStart">Open a ROM to Start</Message>
 		<Message ID="RemasterNotAProject">This folder is not a project. A project is the folder MesenAI records a game into, next to the game.</Message>
+		<Message ID="RemasterRecordRefusedCheats">Not recording: these cheats change the game itself and would corrupt the recorded art. Turn them off first: {0}</Message>
+		<Message ID="RemasterCheatsHeld">Off while recording art: {0}</Message>
 		<Message ID="RemasterRecordFailed">Nothing was recorded: another pack already covers this game, or this game cannot be recorded. Tools ⋯ › Tools › Log Window says which.</Message>
 		<Message ID="RemasterNeedsPython">⚠ Painting needs Python 3.10 or newer, which MesenAI could not find. You can still record. Your figures are prepared once Python is available.</Message>
 		<Message ID="RemasterPythonTooOld">⚠ Painting needs Python 3.10 or newer; MesenAI found Python {0}. You can still record. Your figures are prepared once a newer Python is available.</Message>
