@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Services;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -329,5 +330,70 @@ public class PlayerCheatsSheetTests : IDisposable
 
 		Assert.Equal(new[] { CheatShare.BuildIssueUrl(CopySha1, "Contra (USA)", ConsoleType.Nes, "0032:1D", "Start with 30 lives") }, opened);
 		Assert.Contains("template=cheat-code.yml", opened[0]);
+	}
+
+	//#639: opening another ROM directly (A → B, no EmulationStopped) changes
+	//RomInfo from one game to another. The overlay and the sheet belonged to A:
+	//both close, and closing the sheet does not bring A's overlay back.
+	[AvaloniaFact]
+	public void Opening_another_rom_directly_closes_the_overlay_and_the_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes, RomPath = "/roms/a.nes" };
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+		Click(window.FindNamed<Button>("OverlayCheatsButton"));
+		Assert.True(window.FindNamed<Border>("PlayerCheatsSheet").IsOnScreen());
+
+		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes, RomPath = "/roms/b.nes" };
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.False(window.FindNamed<Border>("PlayerCheatsSheet").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//#639, defense in depth: CheatCodes saves to the running game's file. A
+	//sheet opened for one copy refuses to save once another copy runs.
+	[AvaloniaFact]
+	public void A_sheet_opened_for_another_copy_never_writes_the_running_games_cheats()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		string running = CopySha1;
+		model.CheatRomSha1 = () => running;
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+		Click(window.FindNamed<Button>("OverlayCheatsButton"));
+
+		running = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+		Click(window.FindNamed<Button>("CheatsAddCodeButton"));
+		window.FindNamed<TextBox>("CheatsNewCodeBox").Text = "0032:09";
+		Click(window.FindNamed<Button>("CheatsAddCodeConfirm"));
+
+		Assert.False(File.Exists(CheatFile), "the sheet wrote another copy's cheat file");
+		Assert.Empty(CheatCodes.LoadCheatCodes().Cheats);
+	}
+
+	//#641: Esc on the sheet opens the overlay once. With a pack-file notice
+	//waiting, that one open shows the pack-file sheet instead of the overlay;
+	//the two are never on screen together (replace-not-stack).
+	[AvaloniaFact]
+	public void Esc_on_the_sheet_with_a_pack_file_waiting_shows_the_pack_file_sheet_alone()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+		Click(window.FindNamed<Button>("OverlayCheatsButton"));
+		model.SetPendingPackDeps("Contra Remastered", new[] { new CommunityPackDepPrompt("contra-usa", "Contra (USA).nes", "", Path.GetTempPath()) });
+		Dispatcher.UIThread.RunJobs();
+
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.True(window.FindNamed<Panel>("PackDepSheetBackdrop").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(model.IsPlayerOverlayVisible);
 	}
 }

@@ -45,6 +45,11 @@ namespace Mesen.ViewModels
 		public Func<Task<IReadOnlyList<CommunityCheatGame>?>> CommunityCheatsSource { get; set; } = CommunityCheatCatalogFetcher.FetchAsync;
 		public Func<IReadOnlyList<CommunityCheatGame>> CommunityCheatsLastKnown { get; set; } = () => CommunityCheatCatalogFetcher.LastKnown;
 
+		//The cheat hash of the running copy. The core dereferences the running
+		//console for the hash, so with no game loaded there is no copy to match
+		//(the sheet says "not in the list"). Headless tests swap it.
+		public Func<string> CheatRomSha1 { get; set; } = () => EmuApi.IsRunning() ? EmuApi.GetRomHash(HashType.Sha1Cheat) : "";
+
 		//Play is unrestricted (ADR-0245 §3), so recordingArt is false in Play;
 		//it is true in Remaster and while a Remaster recording runs, which
 		//switching to Play does not stop (§13.6): Game Genie rows are disabled
@@ -53,9 +58,7 @@ namespace Mesen.ViewModels
 		{
 			IsPlayerOverlayVisible = false;
 			ConsoleType console = RomInfo.ConsoleType;
-			//The core dereferences the running console for the hash, so with no
-			//game loaded there is no copy to match (the sheet says "not in the list").
-			string cheatSha1 = EmuApi.IsRunning() ? EmuApi.GetRomHash(HashType.Sha1Cheat) : "";
+			string cheatSha1 = CheatRomSha1();
 			CheatsSheet.Open(
 				console,
 				cheatSha1,
@@ -66,7 +69,10 @@ namespace Mesen.ViewModels
 				PlayerCheatsStore.SaveAndApply,
 				gameName: EmuApi.IsRunning() ? EmuApi.GetRomInfo().GetRomName() : "",
 				openUrl: ApplicationHelper.OpenBrowser,
-				community: CommunityCheatsLastKnown()
+				community: CommunityCheatsLastKnown(),
+				//#639: CheatCodes saves to the running game's file; the sheet
+				//checks it is still the copy it opened for.
+				runningCheatSha1: CheatRomSha1
 			);
 			_ = RefreshCommunityCheatsAsync(cheatSha1);
 		}
@@ -86,15 +92,14 @@ namespace Mesen.ViewModels
 			});
 		}
 
-		//Esc while the sheet is up closes it back to the overlay. Returns true
-		//when it handled the press.
-		private bool CloseCheatsSheetOnEsc()
+		//Hides the sheet without raising Closed: the caller decides what shows
+		//next (the Esc router opens the overlay once, #641; a game change or
+		//leaving Player shows nothing, #639/#642).
+		private void HideCheatsSheet()
 		{
-			if(_cheatsSheet?.IsVisible != true) {
-				return false;
+			if(_cheatsSheet != null) {
+				_cheatsSheet.IsVisible = false;
 			}
-			_cheatsSheet.Close();
-			return true;
 		}
 	}
 }

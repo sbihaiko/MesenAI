@@ -164,6 +164,14 @@ namespace Mesen.Logic
 			return (next, "");
 		}
 
+		//#639: the sheet saves through CheatCodes, whose file is the *running*
+		//game's. A sheet opened for one copy writes only while that copy still
+		//runs - never another game's list, never with no game.
+		public static bool SavesTo(string openedForSha1, string runningSha1)
+		{
+			return string.Equals(openedForSha1, runningSha1, StringComparison.OrdinalIgnoreCase);
+		}
+
 		public static int CountOn(IEnumerable<StoredCheat> stored) => stored.Count(c => c.Enabled);
 
 		//The W-P4 row's value: "none", "N on", or "off" when every cheat is

@@ -54,6 +54,13 @@ namespace Mesen.ViewModels
 		private string _gameName = "";
 		private Action<string> _openUrl = _ => { };
 		private IReadOnlyList<CommunityCheat> _community = Array.Empty<CommunityCheat>();
+		//#639: the cheat hash of the copy running now; null = the copy never
+		//changes under the sheet (a caller with no running game, or a test).
+		private Func<string>? _runningCheatSha1;
+
+		//CheatCodes saves to the running game's file: a sheet left over from
+		//another copy must not write that game's list (CheatSheet.SavesTo).
+		private bool CanSave => _runningCheatSha1 == null || CheatSheet.SavesTo(_cheatSha1, _runningCheatSha1());
 
 		public IReadOnlyList<StoredCheat> Stored => _stored;
 
@@ -62,8 +69,9 @@ namespace Mesen.ViewModels
 		//gameName prefills the share form; community is the catalog known when
 		//the sheet opens (CommunityCheatCatalogFetcher.LastKnown).
 		public void Open(ConsoleType console, string cheatSha1, IReadOnlyList<CheatDbGame> db, IReadOnlyList<StoredCheat> stored, bool recordingArt, bool disableAll, Action<IReadOnlyList<StoredCheat>> save,
-			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null)
+			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null, Func<string>? runningCheatSha1 = null)
 		{
+			_runningCheatSha1 = runningCheatSha1;
 			_console = console;
 			_cheatSha1 = cheatSha1;
 			_gameName = gameName;
@@ -121,6 +129,10 @@ namespace Mesen.ViewModels
 
 		public void Toggle(PlayerCheatRow row)
 		{
+			if(!CanSave) {
+				Refresh();
+				return;
+			}
 			IReadOnlyList<StoredCheat> next = CheatSheet.Toggle(_stored, row.Row, _recordingArt);
 			if(!ReferenceEquals(next, _stored)) {
 				_stored = next;
@@ -153,6 +165,10 @@ namespace Mesen.ViewModels
 
 		public void AddCode()
 		{
+			if(!CanSave) {
+				Refresh();
+				return;
+			}
 			(IReadOnlyList<StoredCheat> next, string error) = CheatSheet.AddCode(_stored, _console, NewDescription, NewCode, _recordingArt);
 			AddCodeError = error;
 			if(error.Length == 0) {

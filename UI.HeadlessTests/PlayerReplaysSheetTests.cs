@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Services;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -217,5 +218,47 @@ public class PlayerReplaysSheetTests
 		h.Model.OpenSaveStatesSheet();
 		Dispatcher.UIThread.RunJobs();
 		Click(h.Window.FindNamed<Button>("SaveStatesReplaysButton"));
+	}
+
+	//#641: Esc on the sheet opens the overlay once. With a pack-file notice
+	//waiting, that one open shows the pack-file sheet instead of the overlay;
+	//the two are never on screen together (replace-not-stack).
+	[AvaloniaFact]
+	public void Esc_with_a_pack_file_waiting_shows_the_pack_file_sheet_alone()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = ShowPlayer(ContraSha1, Full);
+		OpenFromSaveStates(h);
+		h.Model.SetPendingPackDeps("Contra Remastered", new[] { new CommunityPackDepPrompt("contra-usa", "Contra (USA).nes", "", System.IO.Path.GetTempPath()) });
+		Dispatcher.UIThread.RunJobs();
+
+		h.Model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.True(h.Window.FindNamed<Panel>("PackDepSheetBackdrop").IsOnScreen());
+		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Model.IsPlayerOverlayVisible);
+	}
+
+	//#642: switching the UI mode to Advanced takes every Player sheet down,
+	//and none of them brings the Player overlay back in Advanced.
+	[AvaloniaFact]
+	public void Switching_to_advanced_closes_the_sheet_without_reopening_the_overlay()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = ShowPlayer(ContraSha1, Full);
+		try {
+			OpenFromSaveStates(h);
+			Assert.True(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
+
+			ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.False(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
+			Assert.False(h.Model.ReplaysSheet.IsVisible);
+			Assert.False(h.Model.IsPlayerOverlayVisible);
+		} finally {
+			ConfigManager.Config.Preferences.UiMode = UiMode.Player;
+		}
 	}
 }

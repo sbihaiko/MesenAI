@@ -98,15 +98,21 @@ namespace Mesen.ViewModels
 			}
 		}
 
+		//Hides the sheet without re-showing anything: the router opens the
+		//overlay itself, once (#641). A sheet's own Done (its Closed event, or
+		//DismissPlayerPackPicker) would open it a second time, which stacked the
+		//overlay with the pack-file sheet that the first open had shown.
 		private void CloseSheet(PlaySheet sheet)
 		{
 			switch(sheet) {
-				case PlaySheet.PackPickerFromOverlay: DismissPlayerPackPicker(); break;
+				case PlaySheet.PackPickerFromOverlay:
+					IsPlayerPackPickerVisible = false;
+					_packPickerFromOverlay = false;
+					break;
 				case PlaySheet.Enhancements: IsEnhancementsPanelVisible = false; break;
 				case PlaySheet.PackDetail: IsPackDetailVisible = false; CancelRestore(); break;
-				//The sheet's own Closed handler re-shows the overlay too.
-				case PlaySheet.Cheats: CloseCheatsSheetOnEsc(); break;
-				case PlaySheet.Replays: CloseReplaysSheetOnEsc(); break;
+				case PlaySheet.Cheats: HideCheatsSheet(); break;
+				case PlaySheet.Replays: HideReplaysSheet(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.SaveStateGrid:
@@ -190,27 +196,45 @@ namespace Mesen.ViewModels
 		//W-P4's Pack row: OpenPackFromOverlay (MainWindowViewModel.PlaySheets.cs,
 		//G.4) opens W-P5 for 2+ packs or W-P6; Esc returns to the overlay.
 
-		//Any path that leaves the game (power off, a load failure, another ROM)
-		//takes the overlay and its sheets down; the home is shown instead
-		//(rule 5 is about screens the user opened, and the game they belong to
-		//is gone).
-		private void ClosePauseSurfacesWithoutGame()
+		//The game the Play surfaces belong to (PlaySurfaceGame): the last
+		//RomInfo seen by OnRomInfoChanged.
+		private bool _surfacesGameLoaded;
+		private string _surfacesRomPath = "";
+
+		//Any path that leaves the game (power off, a load failure) or replaces
+		//it (another ROM opened directly, A → B with no EmulationStopped, #639)
+		//takes the overlay and its sheets down: rule 5 is about screens the
+		//user opened, and the game they belong to is gone. A reload of the same
+		//file keeps them. Its pack's pending file goes with the game.
+		private void ClosePauseSurfacesOnGameChange()
 		{
-			if(IsGameLoaded) {
+			bool loaded = IsGameLoaded;
+			string romPath = RomInfo.RomPath ?? "";
+			bool close = PlaySurfaceGame.ClosesSurfaces(_surfacesGameLoaded, _surfacesRomPath, loaded, romPath);
+			_surfacesGameLoaded = loaded;
+			_surfacesRomPath = romPath;
+			if(!close) {
 				return;
 			}
-			if(_cheatsSheet?.IsVisible == true) {
-				_cheatsSheet.Close();
-			}
-			if(_replaysSheet?.IsVisible == true) {
-				_replaysSheet.Close();
-			}
+			ClosePlaySurfaces();
+			ClearPackDepWithoutGame();
+		}
+
+		//Every Player surface over the game, hidden at once and silently: no
+		//sheet's Closed brings the overlay back (#642 - in Advanced that
+		//re-opened a Player overlay that Esc no longer routes). Used when the
+		//game changes and when the UI mode leaves Player.
+		private void ClosePlaySurfaces()
+		{
+			HideCheatsSheet();
+			HideReplaysSheet();
 			IsSaveStatesSheetVisible = false;
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;
-			ClearPackDepWithoutGame();
-			//Last: closing the Cheats or Replays sheet re-shows the overlay.
+			if(PackDepSheet.IsVisible) {
+				PackDepSheet.CloseOnEsc();
+			}
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;
