@@ -24,7 +24,9 @@ public interface IJobProcessLauncher
 
 public enum RemasterJobKind
 {
-	Kit
+	Kit,
+	//G.8 (W-H3 step 1): `mep_build.py pack`, run by Share.
+	Pack
 }
 
 public enum RemasterJobStatus

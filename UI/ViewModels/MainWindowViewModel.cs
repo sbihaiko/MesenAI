@@ -114,6 +114,7 @@ namespace Mesen.ViewModels
 			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
 				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 			Remaster.ActivityChanged += OnRemasterActivityChanged;
+			InitShare();
 
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
@@ -500,12 +501,12 @@ namespace Mesen.ViewModels
 			bool remaster = Shell.Active == Workspace.Remaster;
 			IsRemasterGameView = remaster && Remaster.IsRecording;
 			IsRemasterProjectScreenVisible = remaster && !Remaster.IsRecording;
-			IsGameViewVisible = IsPlayWorkspace || IsRemasterGameView;
 			if(remaster) {
 				//W-R0b: the feasibility gate is measured once, when Remaster is first shown.
 				Remaster.EnsureFeasibilityMeasured();
 			}
-			UpdateRendererVisibility();
+			//G.8: Share's surfaces, then the game picture's layer and the renderer.
+			UpdateShareSurfaces();
 		}
 
 		private void OnRemasterActivityChanged()
@@ -551,6 +552,7 @@ namespace Mesen.ViewModels
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
 			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
 				gameLoaded ? EmuApi.GetMepSiblingFolder() : "", ConfigManager.EnhancementPackFolder);
+			UpdateShareGame(gameLoaded, gameLoaded ? EmuApi.GetMepSiblingFolder() : "");
 		}
 
 		private void UpdateWindowTitle()

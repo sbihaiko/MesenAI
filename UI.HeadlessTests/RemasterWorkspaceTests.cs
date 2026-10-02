@@ -128,8 +128,8 @@ public class RemasterWorkspaceTests : IDisposable
 		Assert.Equal("Open a ROM to Start", window.FindNamed<Button>("RemasterStartButton").Content);
 		Assert.True(window.FindNamed<Button>("RemasterStartButton").IsEffectivelyEnabled);
 		Assert.True(window.FindNamed<Button>("RemasterChooseFolderButton").IsOnScreen());
-		//G.1's placeholder is Share's alone now; Play's surfaces stay hidden.
-		Assert.False(window.FindNamed<Border>("WorkspacePlaceholder").IsOnScreen());
+		//Neither Share's screens nor Play's surfaces are on screen.
+		Assert.False(window.FindNamed<Panel>("ShareWorkspaceHost").IsOnScreen());
 		Assert.False(window.FindNamed<Panel>("PlayWorkspace").IsOnScreen());
 		Assert.False(window.FindNamed<Panel>("RemasterRecordingStripHost").IsOnScreen());
 		Assert.False(model.IsNativeRendererVisible);

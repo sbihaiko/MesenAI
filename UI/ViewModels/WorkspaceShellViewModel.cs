@@ -33,10 +33,6 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial List<WorkspaceSwitcherRowViewModel> Rows { get; private set; } = new();
 		[ObservableProperty] public partial bool IsBarVisible { get; private set; } = true;
 		[ObservableProperty] public partial string StatusText { get; private set; } = "";
-		[ObservableProperty] public partial string PlaceholderTitle { get; private set; } = "";
-		[ObservableProperty] public partial string PlaceholderBody { get; private set; } = "";
-		//G.3: Remaster has its own screens now; only Share still shows a placeholder.
-		[ObservableProperty] public partial bool HasPlaceholder { get; private set; }
 		//G.3 (§13.6): the profile button's dot while Remaster records or runs a
 		//job and another profile is shown - red for a recording, tint for a job.
 		[ObservableProperty] public partial bool ShowsActivityDot { get; private set; }
@@ -110,9 +106,6 @@ namespace Mesen.ViewModels
 				r.Workspace, WorkspaceGlyph(r.Workspace), WorkspaceName(r.Workspace),
 				ResourceHelper.GetMessage("WorkspaceDescription" + r.Workspace), ShortcutHint(r.Workspace), r.IsActive
 			)).ToList();
-			HasPlaceholder = Active == Workspace.Share;
-			PlaceholderTitle = HasPlaceholder ? ResourceHelper.GetMessage("WorkspacePlaceholderTitle" + Active) : "";
-			PlaceholderBody = HasPlaceholder ? ResourceHelper.GetMessage("WorkspacePlaceholderBody" + Active) : "";
 			RefreshChrome();
 		}
 

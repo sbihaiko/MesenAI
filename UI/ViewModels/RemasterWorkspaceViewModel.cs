@@ -95,6 +95,17 @@ namespace Mesen.ViewModels
 		//dot and status line (§13.6, W-X3).
 		public event Action? ActivityChanged;
 
+		//G.8 (§13.6, rule 11): W-R1's "Share this project — opens Share" link
+		//calls RequestShareProject; the shell switches to Share's W-H3.
+		public event Action<string>? ShareProjectRequested;
+
+		public void RequestShareProject()
+		{
+			if(_project != null) {
+				ShareProjectRequested?.Invoke(_project.Folder);
+			}
+		}
+
 		public RemasterJobSnapshot Job => _jobs.Snapshot;
 		public RemasterFeasibility? Feasibility => _feasibility;
 		public RemasterProjectInfo? Project => _project;

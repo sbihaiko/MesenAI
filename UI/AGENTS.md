@@ -179,6 +179,21 @@ can be exercised by real xunit tests without Avalonia or the native
   `PlayerEnhancementsSheetView` and `PlayerDisplaySettingsView`; their names
   are in the UserControls' scopes, so `MainWindow` finds them through the
   visual tree (`MainWindow.PlaySheets.cs`), not `GetControl`.
+- The Share workspace (G.8, ADR-0241/ADR-0205/ADR-0154, PRD Part B
+  §13.5.4 W-H1–W-H4) holds no credential and uploads nothing: every
+  submission is a pre-filled issue URL opened in the browser.
+  `UI/Logic/PackShare.cs` builds the `community-pack.yml` URL from exactly
+  its three fields (`pack_link`, `rom_target`, `console`; a test parses the
+  real form) and checks the link with `CommunityPackHostAllowlist`;
+  `ShareProjectPackage.cs` reads a project's game/console (`.bootstrap`
+  `rom=`, `mep/pack.json` `targets[0].system`) and builds the
+  `mep_build.py pack` job (`RemasterJobKind.Pack`, run by Share's own
+  `RemasterJobRunner`); `ShareScreen.cs` holds the view enum, the replay
+  start gate (mirror of the core's `ShareRecordingSettings::IsSupported`)
+  and the Esc router. Replays reuse `ShareRecordingSession` through
+  `IReplayRecorder` (`StopAndKeep` stops without the menu's reveal and
+  browser hand-off, which W-H4's after sheet does on click). Remaster
+  reaches W-H3 through `RemasterWorkspaceViewModel.RequestShareProject`.
 - **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
   Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
   `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with
