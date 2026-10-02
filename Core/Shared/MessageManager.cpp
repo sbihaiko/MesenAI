@@ -93,6 +93,7 @@ std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "ScanlineTimingWarning", u8"PPU timing has been changed." },
 	{ "ServerStarted", u8"Server started (Port: %1)" },
 	{ "ServerStopped", u8"Server stopped" },
+	{ "ShaderFrameFailed", u8"Shader %1 failed on a frame, showing it unfiltered: %2" },
 	{ "ShaderLoadFailed", u8"Could not load shader %1: %2" },
 	{ "SoundRecorderStarted", u8"Recording to: %1" },
 	{ "SoundRecorderStopped", u8"Recording saved to: %1" },

@@ -112,6 +112,17 @@ namespace Mesen.Windows
 					Dispatcher.UIThread.Post(() => this.GetControl<CheckBox>("EnhancementsTexturesCheckBox")?.Focus());
 				}
 			};
+			//P.10: the Cheats sheet gets focus on its search box (or Done when the
+			//search cannot work on this console), same D-pad/A/B reason as above.
+			_model.CheatsSheet.PropertyChanged += (s, e) => {
+				if(e.PropertyName == nameof(PlayerCheatsSheetViewModel.IsVisible) && _model.CheatsSheet.IsVisible) {
+					Dispatcher.UIThread.Post(() => {
+						string name = _model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton";
+						Control? target = this.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
+						target?.Focus();
+					});
+				}
+			};
 
 			_shortcutHandler = new ShortcutHandler(this);
 
@@ -308,6 +319,9 @@ namespace Mesen.Windows
 			//same shape as OnOverlayPack replacing it with the picker.
 			_model.OpenEnhancementsPanel();
 		}
+
+		//P.10 (W-P11): replaces the overlay with the Cheats sheet.
+		private void OnOverlayCheats(object? sender, RoutedEventArgs e) => _model.OpenCheatsSheet();
 
 		private void OnToggleTextures(object? sender, RoutedEventArgs e) => _model.ToggleTextures();
 		private void OnToggleAudio(object? sender, RoutedEventArgs e) => _model.ToggleAudio();

@@ -54,6 +54,20 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `checks/verify_replay_form_and_workflow.py`. End-to-end with a ROM:
   `check_replay_recorded.sh` (`headless_record record-share=` /
   `record-stock=` are the action and its negative control).
+- **Community cheats, publish side (ADR-0248 R.3).** `cheat_decoder.py` ports
+  the Core's NES/GB/SMS converters of `Core/Shared/CheatManager.cpp` (every
+  regex, bit table and quirk); `cheat_submission.py` is the section 3 gate of
+  `cheat-submitted.yml` (four form fields only; checks `game-sha1`,
+  `unknown-game`, `console`, `console-mismatch`, `code`, `description`,
+  `duplicate`; a duplicate is the same SHA-1 and the same *decoded* parts,
+  against the bundled list and earlier open `cheat:valid` issues). The known
+  games are the bundled list's SHA-1s plus the repository's No-Intro data
+  (`rom_target.py`, `docs/community-packs.json`). Change the Core's decoders
+  and `test_cheat_decoder_parity.py` fails until the port follows: it builds
+  `cheat_decode_dump.cpp` against the unmodified `CheatManager.cpp` (inert
+  link stubs for the emulator members it never calls) and needs a C++
+  compiler. Tests: `test_cheat_submission.py` (fixtures
+  `tests/fixtures/cheat-submission/`), `checks/verify_cheat_form_and_workflow.py`.
 
 ## Work Guidance
 
@@ -92,8 +106,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     the NSView shape Avalonia's `NativeControlHost` hands over, an unfiltered
     present that is byte-identical to a CPU nearest scale, and the fixture
     shader `tests/fixtures/shaders/scanlines.slangp` (its parameters,
-    clearing it, a broken preset falling back), plus the HUD overlay
-    uploads.
+    clearing it, a broken preset falling back), the GPU-hang drop (#584),
+    a per-frame chain failure reported once per episode (#593, injected
+    through `InjectFrameFailures`), plus the HUD overlay uploads.
   - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
     `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
     It tries the mirror (release `librashader-macos-arm64-01febce6` of this

@@ -199,9 +199,14 @@ namespace Mesen.ViewModels
 				IsPlayerOverlayVisible = true;
 				return;
 			}
+			//P.10: the Cheats sheet (W-P11) closes back to the overlay too.
+			if(CloseCheatsSheetOnEsc()) {
+				return;
+			}
 			if(IsPlayerOverlayVisible) {
 				IsPlayerOverlayVisible = false;
 			} else {
+				RefreshCheatsSummary();
 				IsPlayerOverlayVisible = true;
 				EmuApi.Pause();
 			}
@@ -490,6 +495,7 @@ namespace Mesen.ViewModels
 				if(Config.Preferences.UiMode != UiMode.Player) {
 					IsPlayerOverlayVisible = false;
 					IsEnhancementsPanelVisible = false;
+					CheatsSheet.IsVisible = false;
 				}
 			}));
 

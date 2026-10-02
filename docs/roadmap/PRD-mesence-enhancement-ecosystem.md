@@ -26,7 +26,7 @@ header block, slice table, and ADR map.
 
 ## Part A — Enhancement ecosystem (pack/core)
 
-**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239, leaving **F14.8** as the only live Phase 14 row), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; implemented under a go-ahead 2026-10-02, stop conditions (1)–(2) met headless, (3) needs a person), and **Phase 13** (ADR-0205; R.1 delivered 2026-10-01, R.2 live, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
+**Status:** active (2026-09-23). Live work: **Phase 14** (proof at scale, opened 2026-09-23 with F14.1–F14.3 under a go-ahead, F14.1 and F14.3 delivered the same day, F14.2, F14.4 and F14.5 on 2026-09-24 (§3); ADR-0230 measured by F14.4, accepted and implemented by F14.9 on 2026-09-24; ADR-0229 superseded 2026-09-24; F14.10 measured and not merged, 2026-09-25; F14.11–F14.18 delivered 2026-09-25/26 under ADR-0236, ADR-0238 and ADR-0239; F14.19 delivered 2026-10-02 under ADR-0242, leaving **F14.8** and **F14.20** as the live Phase 14 rows), Phase 12's **F12.11** (stop condition (2) needs a person; (3) met by F14.1), **P.8** (Phase 7, ADR-0237, the only live Core/UI row; implemented under a go-ahead 2026-10-02, stop conditions (1)–(2) met headless, (3) needs a person), and **Phase 13** (ADR-0205; R.1 delivered 2026-10-01, R.2 live, after F14.1–F14.3). Phase 12's F12.1, F12.3–F12.10 and F12.12–F12.19 are delivered (§3; F12.18/F12.19 on 2026-09-24, after the re-run cold read), and F12.2 is closed (evaluator row, 2026-09-19). Chronology lives in §3 and in each ADR's Status line, not here) — pack/core roadmap of this
 fork. Player
 chrome, pack identity (`pack_id`/`content_id`/version) and the in-GUI
 picker live in Part B of this document (Phase 7).
@@ -117,6 +117,7 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **F6.4a–c** — offline recipe interpreter, client download/install and shared discovery fixtures (ADR-0138).
 - **F6.5–F6.8** — rollout, headless smoke, automatic loading and known-missing errata (ADR-0146/0151/0152); native picker and live CI validation remain in §4.
 - **R.1** (2026-10-01/02, ADR-0205 §2–§6, §10; #564, #568) — the *Record and share* action (a save-state-free `.mmo` from power-on, settings restored on stop), `scripts/replay_lint.py` (§3), the `[Replay]` Issue Form and `replay-submitted.yml` (title rewrite, `replay:valid`/`replay:invalid`, triggered by the `[Replay] ` title and creating its own labels). Verified by unit tests and the doc checks; the workflow and the attachment path have **not** run against a real issue.
+- **R.3** (2026-10-02, ADR-0248 §1, §3, §7; user's go-ahead, verbatim: *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"* and *"pode implementar em paralelo tudo que puder"*) — community cheats, publish side: the `[Cheat]` Issue Form `cheat-code.yml` (Game SHA-1 + name, Console, Code, Description) and `cheat-submitted.yml` (title rewrite `[Cheat] <game> — <description>`, `cheat:valid`/`cheat:invalid` plus the `console:*` label, one seeded 👍, `/revalidate`), gated by `scripts/cheat_submission.py` over the four fields only (SHA-1 shape, known game, console, every `+` part decodes, 80-character one-line description with no links, no duplicate of an earlier open `cheat:valid` issue or a bundled entry, compared on the decoded parts); `scripts/cheat_decoder.py` ports the Core's NES/GB/SMS decoders and `scripts/test_cheat_decoder_parity.py` holds it to the unmodified `CheatManager.cpp` (9 829/9 829 bundled entries, plus a 15 960-code sample over the seven types); the ensure-labels script goes from 18 to 21. Verified by unit tests over three hand-made issues (valid, malformed, duplicate: each verdict and the check its comment names) and the doc checks; the workflow has **not** run against a real issue, and the labels exist on GitHub only after `scripts/ensure_community_pack_labels.sh` (or the first run) creates them. Known gap: the repository has no No-Intro data for GB/SMS, so a GB/SMS submission fails `unknown-game` until such data is added.
 - **F6.9** (2026-10-02, ADR-0240 Option 1) — installing a pack whose audio is redeemed by a wired bundled patch, with unresolved `<bgm>`/`<sfx>` refs, finishes as `Installed` with one non-fatal notice ("audio not generated: N of M tracks unresolved; supply the `.ogg` files", M = distinct referenced files) on the outcome, the log and a toast; `UI/Logic/PackAudioNotice.cs`, 10 unit tests and a headless install test on a fixture pack. Nothing is generated; the real Mega Man/Zelda II packs were not run (no matching ROM).
 - **F6.10** (2026-10-02, ADR-0240 A4 spike, measurement only) — on Mega Man (USA) the trigger id the extract-audio tool fires on the unpatched ROM (`JSR $9003`, `A=id`) is the id the patched ROM turns into a `$4105` write, `track = 2*id + 1`, album 0, for 17 of 17 pack `<bgm>` lines; a per-pack name map is derivable from the patched run alone. The full A4 join is **not** derivable yet: `fingerprints.json` carries no trigger id and the recorder's emission order drifts (17 bgm tracks for 20 bgm ids). Castlevania inconclusive (the patch is keyed to SHA1s that are not the library ROM's), Metroid has no validated trigger, Zelda was not run. Report: `docs/validation/f6.10-trigger-id-alignment-2026-10-02.md`; nothing else merged.
 - **H1–H7 / D1–D13** — tests, doc gates, identity/spec reconciliation and ADR reference checks (ADR-0122–0131/0136/0137); explicit residual debts remain in §4.
@@ -936,6 +937,38 @@ or Part B §8. Dates below describe delivery, not a new validation run.
   mid-stage rooms stay §1 rung 3 work, and the sweep drives port 1 only.
   [Log](../validation/f1418-coverage-wave-three-2026-09-26.md).
 
+- **F14.19** (2026-10-02) — RAM maps for golden games without a route,
+  delivered (ADR-0242 Q2). Go-ahead (user, 2026-10-02): *"sim, pode seguir.
+  depois que tudo estiver no main, pode implementar usando paralelismo de tudo
+  que puder"* and *"pode implementar em paralelo tudo que puder"*. All 21
+  golden sets were classified. Contra, Mega Man 3 and Ninja Gaiden already
+  have routes past their stalls, and five puzzle, fight or single-screen games
+  have no x progress. Two games whose only committed route is a blind body
+  that dies at its first stall are mapped:
+  - **Castlevania** (`scripts/stages/castlevania/ram-map.json`): lives `$002A`,
+    HP `$0045`, room `$0028`, camera `$002E/$002F`, abs x `$0040/$0041`. Its
+    progress is `room * 4096 + abs_x`, because abs x restarts at the castle
+    door.
+  - **Mega Man 2** (`scripts/stages/megaman2/ram-map.json`): lives `$00A8`,
+    HP `$06C0`, stage `$002A`, camera `$0020·256+$001F`, abs x
+    `$0440·256+$0460`. `room` stays open because no ladder transition was
+    measured.
+
+  Each field is verified on the pinned dump at two checkpoints at least,
+  with one relation among them. The proof is that each field moves as named:
+  Simon's HP 64 → 56 on a zombie hit, room 0 → 1 at the door, lives 4 → 3;
+  Mega Man's lives 3 → 2 in the first pit, HP 28 → 24 on Wood Man's stage,
+  stage 3 vs 2 across two mints. `scripts/test_ram_maps.py` checks every
+  map's shape. With the ROM present it replays the checkpoints through
+  `step_emu` and `RamMap.read`: 333 ok, exit 0. A wrong-address negative
+  control fails (exit 1), and a missing ROM skips with its reason.
+  `jev_harness.py --no-jev` runs on both maps and stops at their first stalls:
+  Castlevania's courtyard wall at abs x 751, and Mega Man 2's first pit at
+  abs x 325. US$ 0, no model called. The W-R8 button stays disabled: ADR-0242
+  Q3's adoption measurement (ADR-0238 §5, both clauses) on these two games
+  is F14.20's.
+  [Log](../validation/f1419-ram-maps-2026-10-02.md).
+
 - **F12.18** (2026-09-24) — a pose keeps its pixel offsets (ADR-0225; pick
   *"px/py por tile"*, go-ahead *"pode implementar as duas ADRs em
   paralelo"*, PR #395). The recorder writes per-tile `px`/`py` (and `z` on
@@ -1085,7 +1118,7 @@ the native file picker (F6.5).
 |---|---|---|
 | P.8 | **Shaders on macOS (ADR-0237).** A native `MacOSMetalRenderer` presents into a `CAMetalLayer` and runs the librashader Metal filter chain when a shader is set; a `librashader.dylib` for arm64 is bundled and signed in the `.app` (sha256-pinned prebuilt SourMesen CI artifact, mirrored as an asset of this repo's release `librashader-macos-arm64-01febce6`, `scripts/fetch_librashader_macos.sh`; ADR-0237 §3 is amended to say so, 2026-10-02, pending the maintainer's pick, and the mirror resolves only once the maintainer creates that release). Stop conditions: (1) with a shader set, the presented frame differs from the unfiltered one, and with none set it matches the software path; (2) every `headless_record` output is byte-identical with and without a shader configured; (3) a person on a real display sees the Video settings shader group, a CRT preset applied, and no stutter at native resolution. First risk to confirm: the viewer handle can back a `CAMetalLayer`. Progress 2026-10-02: implemented; (1) is asserted by `make metal-presenter-tests` (40 checks, a mutation per path killed) and (2) by `scripts/check_headless_shader_invariance.sh` (Castlevania gameplay, four modes, 199 files, determinism control and negative control); the first risk is confirmed against Avalonia 12.1.1's `NativeControlHost` view shape in that test, not in a live window; (3) is not evaluated. | ADR-0237 |
 | P.9 | **Pack change in place (ADR-0244).** First step, before any GUI change: a headless exactness test on a committed NES state — play N frames, save to memory, swap the pack (none → pack, pack → none, pack A → pack B, audio-only pack on/off), restore, play M frames — against the same M frames from a fresh load of the target pack with the state loaded the ordinary way; pass = CPU/RAM/PPU registers byte-identical and frames pixel-identical, per transition, then GB/SMS through `HdTileVideoFilter`. Only the transitions that pass get the in-place path (`ToggleLayer`/picker: save state → `ReloadRom` → load state, fallback to a fresh load with a notice); a ROM-patch pack, a movie/shared-replay recording or netplay keep the restart with the reason shown. Inputs: one committed state per console, the existing packs under test fixtures; stop rule: any mismatch is recorded and that transition keeps the restart. | ADR-0244 (accepted 2026-10-02); go-ahead to implement not yet given |
-| P.10 | **Cheats in Play, phase 1 (ADR-0245 §1–§3, §5).** W-P11 from the pause overlay (W-P4 › Cheats): the bundled `CheatDb.Nes.json` entries for the loaded ROM (`HashType.Sha1Cheat`) as toggles with a search over descriptions, stored in the same `CheatCodes` the classic cheat list uses; "this copy isn't in the cheat list" with a search by game name and the "made for another copy" mark; *Add a Code…*; Game Genie disabled with its reason in Remaster's game view (RAM codes allowed); GB/SMS manual entry only, with the reason. No network, no model. | ADR-0245 accepted 2026-10-02. Does not wait for ADR-0241: until the redesign exists, the *Cheats* row goes into today's player overlay (§6). Rules in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when a toggle in W-P11 and the classic cheat window show the same state, and a Game Genie entry refuses in Remaster with its reason. |
+| P.10 | **Cheats in Play, phase 1 (ADR-0245 §1–§3, §5).** W-P11 from the pause overlay (W-P4 › Cheats): the bundled `CheatDb.Nes.json` entries for the loaded ROM (`HashType.Sha1Cheat`) as toggles with a search over descriptions, stored in the same `CheatCodes` the classic cheat list uses; "this copy isn't in the cheat list" with a search by game name and the "made for another copy" mark; *Add a Code…*; Game Genie disabled with its reason in Remaster's game view (RAM codes allowed); GB/SMS manual entry only, with the reason. No network, no model. | ADR-0245 accepted 2026-10-02. Does not wait for ADR-0241: until the redesign exists, the *Cheats* row goes into today's player overlay (§6). Rules in `UI/Logic/` tested host-free; wiring in `UI.HeadlessTests` (ADR-0150). Stop when a toggle in W-P11 and the classic cheat window show the same state, and a Game Genie entry refuses in Remaster with its reason. **Implemented 2026-10-02** on the user's go-ahead, verbatim: *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"* and *"pode implementar em paralelo tudo que puder"*. Rules host-free in `UI/Logic/CheatSheet`, `CheatRecordingRule` (RAM code = `NesCustom` with every address below `0x0800`, per ADR-0184 §1, plus GB GameShark / SMS Pro Action Replay) and `CheatConsoleScope` (NES list; GB/SMS manual entry with "No cheat list for this console yet"), tested in `UI.Tests/Cheats/`; the *Cheats · N on* row in today's player overlay and the sheet (`UI/Views/PlayerCheatsSheetView`, `PlayerCheatsSheetViewModel`, `UI/Utilities/PlayerCheatsStore`) tested in `UI.HeadlessTests/PlayerCheatsSheetTests` (the toggle is the state `CheatListWindowViewModel` loads; Esc closes back to the overlay; a Game Genie row is disabled with its reason in the recording-art context). Play passes `recordingArt: false` (§3: Play is unrestricted); the Remaster game view does not exist yet, so wiring `true` is left to the Remaster slice. |
 | P.11 | **Cheats, phase 2 — search by intent (ADR-0245 §4).** An external script (ADR-0247) matches a typed intent against *this game's* database descriptions as a closed Choice (Jev, a tool-free model, or local Ollama); an answer outside the list is discarded. | Accepted only on its own numbers: the share of intents answered with a correct entry on a fixed intent set. Prerequisite: P.10 and principle 5 edited per ADR-0247. |
 | P.12 | **Cheats, phase 3 — checked web lookup (ADR-0245 §4).** An external script proposes codes for a game not in the database from public lists; each is evidence-free (ADR-0188) until a headless check confirms it: `scripts/step_emu.py` on the user's loaded ROM (by path, never uploaded) from a `.mss` minted from the current game, N frames off and N on from the same state, passing when the target address holds the promised value in every "on" frame and the "off" run differs there; a code with no RAM target cannot pass. Only checked codes are offered, labelled "found online, checked on your copy". | Accepted only on its own numbers: the share of web proposals that pass the check. The slice fixes N and records it. Prerequisite: P.11. |
 | P.13 | **The picture's three layers (ADR-0246).** Settings › Look (W-P10): Art / Pixels / Screen in the order they apply; Pixels (`VideoConfig.VideoFilter`) disabled over pack art with "Off while a pack draws the art" — Look never overrides it, Tools ⋯ › Options still can (§3); NTSC labelled "Not applied while a pack draws the art"; the "shows in screenshots" / "only on your display" mark per choice; 2–3 bundled named looks with license, source and sha256 recorded per file; *Hold to Compare*; unavailable shaders shown with their reason; *Hi-res filter* leaves the quick panel and the shader selector leaves Video settings. | ADR-0246 accepted 2026-10-02. Needs G.1's Settings sheet. Before the compare: measure the shader swap and bypass the chain for held frames if it stutters (§5). Rules in `UI/Logic/` tested host-free. Stop when every Look choice shows where its result goes, Pixels reads disabled with its reason over pack art on NES, GB and SMS, and a value set in Options that is not in Look's list shows as the current item without being overwritten. |
@@ -1589,9 +1622,9 @@ cold-read row is logged (principles above).
 
 #### Phase 13 — Shared replays (ADR-0205)
 
-**Shipped** — R.1 (publish), 2026-10-01/02 (#564, #568; ADR-0205 §2–§6 and §10); record in §3. Its three implementation choices (verdict labels, a separate CI allow-list, the interim `<game>` rule) were ratified on 2026-10-02 and are in the ADR's Status. The workflow has never run on a real issue.
+**Shipped** — R.1 (publish), 2026-10-01/02 (#564, #568; ADR-0205 §2–§6 and §10); record in §3. R.3 (community cheats, publish), 2026-10-02 (ADR-0248 §1, §3, §7); record in §3. Its three implementation choices (verdict labels, a separate CI allow-list, the interim `<game>` rule) were ratified on 2026-10-02 and are in the ADR's Status. The workflow has never run on a real issue.
 
-**Status:** ADR-0205 accepted 2026-09-17; R.1 delivered 2026-10-01/02, R.2 not started. Added to this
+**Status:** ADR-0205 accepted 2026-09-17; R.1 delivered 2026-10-01/02, R.2 not started. ADR-0248 accepted 2026-10-02; R.3 delivered 2026-10-02, R.4 not started. Added to this
 roadmap 2026-09-19 — the ADR names the two slices and the PRD had none, which
 is the "accepted and invisible" state the Phase 11 C.2 check was built to
 refuse. Scope, format and trust model are the ADR's; the rows below only
@@ -1600,7 +1633,6 @@ sequence and bound the work.
 | Slice | Deliverable | Decision |
 |---|---|---|
 | R.2 | **Consume.** The recordings catalog generated from accepted replay issues, listed in the client by loaded ROM and ranked by 👍 (§7); the structural gate that validates before listing (§8); removal by the author closing the issue, mirrored by `replay:removed` (§9). | ADR-0205 §7–§9 decided. Prerequisite: R.1 (there is nothing to list before something is published). Catalog script stdlib, client overlay in the UI project. Bounded input: the R.1 replay plus one closed issue. Stop when the client lists the open one for the matching ROM, hides it for any other ROM, and drops it within one catalog regeneration after the issue closes. |
-| R.3 | **Community cheats — publish** (ADR-0248, same pattern as R.1). The `cheat-code.yml` issue form; `cheat-submitted.yml` with the structural gate (§3: decodes for the console's `CheatType`, known SHA-1, 80-character one-line description with no links, no duplicate of a live row or a bundled entry) and `/revalidate`; the title rewrite; the labels `cheat`, `cheat:valid`, `cheat:invalid` (the ensure-labels script goes from 18 to 21, CLAUDE.md in the same change). | ADR-0248 §1, §3, §7 decided (accepted 2026-10-02). Gate: the Python decoder's parity test over the 9 829 bundled codes. Bounded input: three hand-made issues (valid, malformed, duplicate). Stop when each gets its verdict and its comment names the check. |
 | R.4 | **Community cheats — consume.** `scripts/generate_community_cheat_catalog.py` → `docs/community-cheats.json` (by SHA-1, most-👍-first, removal by closing); the client fetch through `UI/Services/`; community rows in W-P11 below the bundled list, exact SHA-1 match only, with the Remaster Game Genie rule; *Share This Cheat ↗* on the user's own codes. | ADR-0248 §2, §4–§6. Prerequisites: R.3, and W-P11 built (P.10; ADR-0248 has no screen of its own). Stop when a valid issue's code shows for the matching ROM, not for another, and leaves within one catalog run after the issue closes. |
 
 #### Phase 14 — Proof at scale
@@ -1639,8 +1671,10 @@ is removed): 100 % of drawn keys reach a sheet on both games, through exact
 folds and variant cells. **F14.10 was measured and not merged** (2026-09-25,
 ADR-0235 superseded by ADR-0236; §3). **F14.11–F14.18 are delivered**
 (2026-09-25/26, §3; ADR-0236 for F14.11, ADR-0238 for F14.12–F14.15, ADR-0239
-for F14.16–F14.18), and their rows are removed. **F14.8 is the only live
-Phase 14 row** and is not started; Phase 7's P.8 (ADR-0237) is the only live
+for F14.16–F14.18), and their rows are removed. **F14.19 is delivered**
+(2026-10-02, §3; ADR-0242 Q2; its row is removed). **F14.8** (not started)
+and **F14.20** (ADR-0242, waiting on F12.20 and the Remaster workspace) are
+the live Phase 14 rows; Phase 7's P.8 (ADR-0237) is the only live
 Core/UI row in this Part.
 Two questions the review raised are already decided in PR #397 (merged 2026-09-24) and are
 not slices here: lint keeps not weighing `<tile>` conditions when it decides
@@ -1679,8 +1713,7 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
 | Slice | Deliverable | Decision |
 |---|---|---|
 | F14.8 | **Human session bundle.** One scripted sitting: F12.11 (2) (GIMP and Krita on the regenerated four- and five-layer files, every layer named, `paint` selected), F12.5's hand-added overflow cell, and a timed attempt at Phase 5's "< 1 h to a publishable pack" on one game. F9.18 stays its own panel. | Needs a person; no agent can close it. Stop when each of the three rows has a person's log in `docs/validation/`. |
-| F14.19 | **RAM maps for games without a route (ADR-0242 Q2).** `scripts/stages/<game>/ram-map.json` (position, camera, room, HP — the progress fields `jev_harness.py` reads) for golden games that have **no committed route** past their first stall, each field verified on the pinned dump against two RAM checkpoints. Inputs: the golden list in `scripts/stages/`; stop rule: at least two games mapped, or every candidate recorded with why its map failed. | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
-| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games; until then it is disabled with its reason. Prerequisites: F14.19, F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
+| F14.20 | **AI recorder in Remaster (ADR-0242).** *Let the AI Play…* (W-R8) runs `jev_harness.py` as a W-R3 job under the user's own OpenRouter key: the key is kept in the OS credential store and passed to the child through its environment only; the job sits behind the W-R0b Python gate; the produced script is replayed by the ordinary recorder into the project (ADR-0243 `auto/rec-NNN/`, `source: ai`). The button is enabled only after the adoption measurement passes ADR-0238 §5 — **both** clauses, including new kit keys — on the F14.19 games (Castlevania and Mega Man 2); until then it is disabled with its reason. Prerequisites: F14.19 (delivered 2026-10-02, §3), F12.20, and the Remaster workspace (ADR-0241, accepted; slice G.1 first). | ADR-0242 (accepted 2026-10-02); go-ahead to implement not yet given |
 
 ### 5. Order of execution
 
@@ -1728,8 +1761,9 @@ re-run cold read of 2026-09-24 read "yes" (`docs/validation/f1219-contra-kit-col
    second pass passed the stall the search could not and the kit still gained
    nothing, and the third pass re-measured that clause on a route 78 px further
    in (+97 cells, +22 keys against the same-length search-alone recording) and
-   still found 0 keys no other pack here has. F14.8 runs whenever a person is
-   available.
+   still found 0 keys no other pack here has. F14.19 (delivered 2026-10-02,
+   §3) gives ADR-0242's recorder its first two games without a route. F14.8
+   runs whenever a person is available.
    **P.8** (Phase 7, shaders on macOS, ADR-0237) is implemented under a
    go-ahead (2026-10-02); stop conditions (1) and (2) are met headless and (3),
    the person on a real display, is not evaluated.
@@ -3661,8 +3695,8 @@ by analogy). Elements: 2. ✔
 - Elements: Start from, Goal, Change…, Spend limit, Cancel, Start = 6. ✔
 - Drawn on the Contra project for continuity with W-R1. Today Contra has
   no `ram-map.json`, so on this project the button would be disabled with
-  "No AI map for this game yet" — only `mm3/` and `ninjagaiden/` have one
-  (ADR-0242 Q2).
+  "No AI map for this game yet" — `mm3/`, `ninjagaiden/`, `castlevania/` and
+  `megaman2/` have one, the last two from F14.19 (ADR-0242 Q2).
 
 ##### 13.5.4 Share
 

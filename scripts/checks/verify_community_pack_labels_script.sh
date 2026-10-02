@@ -6,7 +6,8 @@
 # (ADR-0143 — one issue per game for multi-game submissions), the
 # pack:known-missing errata label (ADR-0152 — set from the artifact hash by
 # the validation run, not by classify), the three shared-replay labels
-# (ADR-0205 R.1 — replay, replay:valid, replay:invalid), and the full 18-entry
+# (ADR-0205 R.1 — replay, replay:valid, replay:invalid), the three community
+# cheat labels (ADR-0248 R.3 — cheat, cheat:valid, cheat:invalid), and the full 21-entry
 # label set is intact. Per ADR-0035, a deliverable enumerating N
 # items needs a count-based check, not one representative grep for the new
 # entry alone.
@@ -20,6 +21,7 @@ EXPECTED_NAMES=(
   patch:ips patch:bps console:nes console:gb console:gbc console:sms
   assets:external pack:needs-review pack:split pack:known-missing
   replay replay:valid replay:invalid
+  cheat cheat:valid cheat:invalid
 )
 # Derived from the name set above so the two cannot drift within this file;
 # the set itself stays an independent expectation (never parsed from the target).

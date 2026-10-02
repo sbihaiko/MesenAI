@@ -43,6 +43,10 @@ python3 scripts/shader_sweep.py ~/src/slang-shaders --glob 'bezel/Mega_Bezel/*' 
 ```
 
 `make shader-sweep-tool` builds only the harness (`scripts/shader_sweep_shot`).
+`MESEN_SWEEP_INJECT_FRAME_FAILURES=<n>` in the environment makes the harness
+fail its first `n` frame calls on purpose, which checks that the sweep still
+reports such frames as FRAME_FAIL. No real preset is known to make that call
+fail on demand.
 
 Options of `scripts/shader_sweep.py`:
 
@@ -117,7 +121,7 @@ Render classes:
 | `IDENTICAL` | the chain ran and the output equals the unfiltered frame. Either a pass-through preset, or one whose effect has not shown up within `--nframes`, so re-run it with more frames before calling it broken |
 | `PARSE_FAIL` | `preset_create_with_options` refused the file |
 | `CHAIN_FAIL` | the preset parsed but `mtl_filter_chain_create` failed (e.g. `UnknownSemantics("EnableHDR")`); the app shows it unfiltered |
-| `FRAME_FAIL` | a frame failed on the GPU: `command buffer did not complete` (a GPU fault or hang the driver gave up on) or `mtl_filter_chain_frame` returned an error. It failed again when re-run alone |
+| `FRAME_FAIL` | a frame failed. Either its command buffer failed on the GPU (a fault or hang the driver gave up on; the presenter drops the chain, #584), or `mtl_filter_chain_frame` returned an error (the harness's `frame=1`, read from `MetalPresenter::TakeFrameError`, #593). The second kind is presented unfiltered while `Present()` still succeeds, so its pixels alone would read as IDENTICAL. The detail is the first error. It failed again when re-run alone |
 | `FRAME_FLAKY` | it was FRAME_FAIL in the parallel pass, but rendered when re-run alone after the sweep. The detail shows both results. A GPU fault in one process can also fail the command buffers of the presets running beside it: in a 30-preset run, plain `interpolation/lanczos16-AR` failed next to a faulting `scanline-classic` preset and rendered fine alone. Some presets also fault only on some runs. `--no-recheck` skips the re-run and leaves them FRAME_FAIL |
 | `CRASH` | the process died (signal or non-zero exit). This is a bug to file |
 | `TIMEOUT` | no result within `--timeout`. Either a real hang, or a preset slower than the budget |

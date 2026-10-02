@@ -52,6 +52,8 @@
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
+#include "Shared/RomHashResolve.h"
+#include "Shared/Video/ShaderFrameFailures.h"
 #include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
@@ -12436,11 +12438,112 @@ void TestAShaderFailureReasonIsTrimmedToOneShortLine()
 	Check(ShaderFailureReason("  \n").empty(), "shader reason: a blank reason stays blank");
 }
 
+//--- #593: a filter chain that fails per frame is reported once per episode --
+
+void TestShaderFrameFailuresAreReportedOncePerEpisode()
+{
+	const uint32_t limit = ShaderFrameFailures::Limit;
+	ShaderFrameFailures f;
+	std::string error;
+	Check(!f.Take(error), "frame failures: nothing to report before any failure");
+
+	Check(!f.Failed("mtl_filter_chain_frame failed: first"), "frame failures: one failure does not drop the chain");
+	for(uint32_t i = 0; i < 10; i++) {
+		f.Failed("mtl_filter_chain_frame failed: later");
+	}
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: first", "frame failures: a persistent failure is reported once, with the episode's first error", error);
+	Check(!f.Take(error), "frame failures: and not again while the episode lasts");
+
+	//A short recovery does not end the episode: a chain that flaps between
+	//failing and rendering must not put a message on screen every other frame.
+	f.Succeeded();
+	f.Failed("mtl_filter_chain_frame failed: flap");
+	Check(!f.Take(error), "frame failures: a flapping chain is not reported again");
+
+	//A recovery that holds for `limit` frames ends the episode; the next failure reports again.
+	for(uint32_t i = 0; i < limit; i++) {
+		f.Succeeded();
+	}
+	f.Failed("mtl_filter_chain_frame failed: again");
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: again", "frame failures: a failure after a lasting recovery is a new episode", error);
+
+	//A new chain is a new episode too.
+	f.ChainChanged();
+	f.Failed("mtl_filter_chain_frame failed: new chain");
+	Check(f.Take(error) && error == "mtl_filter_chain_frame failed: new chain", "frame failures: a reloaded chain reports its own failure", error);
+
+	//`limit` failures in one episode drop the chain, consecutive or not.
+	f.ChainChanged();
+	uint32_t dropAt = 0;
+	for(uint32_t i = 1; i <= limit && !dropAt; i++) {
+		if(f.Failed("x")) {
+			dropAt = i;
+		}
+		f.Succeeded();
+	}
+	Check(dropAt == limit, "frame failures: the chain is dropped at the limit-th failure of an episode", std::to_string(dropAt));
+}
+
+struct FrameErrorPresenter : public FakeShaderPresenter
+{
+	std::string FrameError;
+	bool Dropped = false;
+	bool TakeFrameError(std::string& error)
+	{
+		if(FrameError.empty()) {
+			return false;
+		}
+		error = FrameError;
+		FrameError.clear();
+		return true;
+	}
+	bool TakeShaderDropped()
+	{
+		bool dropped = Dropped;
+		Dropped = false;
+		return dropped;
+	}
+};
+
+void TestAShaderFrameFailureShowsOneMessageNamingThePresetAndTheReason()
+{
+	std::error_code ec;
+	std::filesystem::path home = std::filesystem::temp_directory_path() / "mesence-shader-frame-home";
+	std::filesystem::create_directories(home, ec);
+	FolderUtilities::SetHomeFolder(home.string());
+
+	RecordingMessageManager osd;
+	MessageManager::RegisterMessageManager(&osd);
+	FrameErrorPresenter presenter;
+
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	Check(osd.Shown.empty(), "shader frame failure: a healthy frame shows nothing");
+
+	presenter.FrameError = "mtl_filter_chain_frame failed: FailedToCreateTexture\ndetails";
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	bool one = osd.Shown.size() == 1;
+	std::string msg = one ? osd.Shown[0].second : "";
+	Check(one, "shader frame failure: exactly one on-screen message per reported episode", "got " + std::to_string(osd.Shown.size()));
+	Check(msg.find("crt-geom.slangp") != std::string::npos && msg.find("/shaders/crt/") == std::string::npos, "shader frame failure: the message names the preset file", msg);
+	Check(msg.find("FailedToCreateTexture") != std::string::npos && msg.find("mtl_filter_chain_frame") == std::string::npos && msg.find('\n') == std::string::npos, "shader frame failure: the reason is librashader's, short", msg);
+	Check(MessageManager::Localize("ShaderFrameFailed") != "ShaderFrameFailed" && msg != MessageManager::Localize("ShaderLoadFailed"), "shader frame failure: the text comes from its own localized resource", msg);
+
+	//A drop is logged, not shown again: the episode already put a message on screen.
+	presenter.Dropped = true;
+	ReportShaderFrameProblems(presenter, "/shaders/crt/crt-geom.slangp");
+	Check(osd.Shown.size() == 1 && !presenter.Dropped, "shader frame failure: a drop is consumed and adds no second message");
+
+	MessageManager::UnregisterMessageManager(&osd);
+	std::filesystem::remove_all(home, ec);
+}
+
 //--- Librashader param host logic (PR #581), against a fake instance ---------
 //LibrashaderUtilities::CountShaderParams/ReadShaderParams take the loaded
 //libra_instance_t, so these cases hand them a fake one: function pointers that
 //record their calls, no librashader library and no GPU. The crash fixed in #581
-//was freeing the param list after libra_preset_get_runtime_params had failed.
+//was freeing the param list after libra_preset_get_runtime_params had failed;
+//#589 was the preset_create_with_options error never reaching error_free.
 
 struct FakeLibra
 {
@@ -12574,6 +12677,7 @@ void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
 	uint32_t count = LibrashaderUtilities::CountShaderParams(libra, "missing.slangp");
 	bool countUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
 	Check(count == 0 && countUntouched, "librashader count: a preset that fails to load counts zero and frees nothing");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject), "librashader count: the preset_create_with_options error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
 
 	libra = MakeFakeLibra();
 	gFakeLibra.createError = reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject);
@@ -12581,10 +12685,58 @@ void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
 	vector<ShaderParamDefinition> params = LibrashaderUtilities::ReadShaderParams(libra, "missing.slangp");
 	bool readUntouched = gFakeLibra.getParamsCalls == 0 && gFakeLibra.freeParamsCalls == 0 && gFakeLibra.presetFreeCalls == 0;
 	Check(params.empty() && readUntouched, "librashader params: a preset that fails to load returns nothing and frees nothing");
+	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject), "librashader params: the preset_create_with_options error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
+}
+
+//#599: Emulator::GetHash locked the weak console pointer and called it unchecked, so a hash
+//request with no game loaded killed the process. The resolution now lives in a header-only
+//template, driven here with a stand-in console.
+struct FakeHashConsole
+{
+	string Hash;
+	int Calls = 0;
+	string GetHash(int type)
+	{
+		Calls++;
+		return Hash;
+	}
+};
+
+void TestRomHashResolveSurvivesNoConsole()
+{
+	int fallbackCalls = 0;
+	auto fallback = [&](int type) -> string {
+		fallbackCalls++;
+		return "fallback";
+	};
+
+	shared_ptr<FakeHashConsole> none;
+	string hash = ResolveRomHash(none, 1, fallback);
+	Check(hash.empty(), "rom hash: no console loaded returns an empty string", "got '" + hash + "'");
+	Check(fallbackCalls == 0, "rom hash: no console loaded does not evaluate the fallback");
+
+	auto console = std::make_shared<FakeHashConsole>();
+	console->Hash = "console-hash";
+	hash = ResolveRomHash(console, 1, fallback);
+	Check(hash == "console-hash" && fallbackCalls == 0, "rom hash: the console's own hash wins over the fallback");
+
+	console->Hash = "";
+	hash = ResolveRomHash(console, 1, fallback);
+	Check(hash == "fallback" && fallbackCalls == 1, "rom hash: a console without a hash falls back");
+
+	//The weak pointer of a destroyed console locks to null: the exact shape of the crash
+	std::weak_ptr<FakeHashConsole> expired;
+	{
+		auto gone = std::make_shared<FakeHashConsole>();
+		expired = gone;
+	}
+	hash = ResolveRomHash(expired.lock(), 1, fallback);
+	Check(hash.empty() && fallbackCalls == 1, "rom hash: a console that was unloaded returns an empty string");
 }
 
 int main()
 {
+	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();
 	TestShareRestoreBringsBackTheOriginalSettingsOnEveryExitPath();
@@ -12974,6 +13126,8 @@ int main()
 
 	TestAShaderPresetThatFailsToLoadShowsOneMessageNamingItAndTheReason();
 	TestAShaderFailureReasonIsTrimmedToOneShortLine();
+	TestShaderFrameFailuresAreReportedOncePerEpisode();
+	TestAShaderFrameFailureShowsOneMessageNamingThePresetAndTheReason();
 	TestShaderParamCountIsZeroAndFreesNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();

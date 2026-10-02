@@ -268,6 +268,20 @@ can be exercised by real xunit tests without Avalonia or the native
   with the software renderer, which never runs a shader. Covered by
   `UI.Tests/Config/RendererPolicyTests.cs`; there is no separate "use Metal"
   setting.
+- **Play Cheats sheet (`UI/Logic/CheatSheet`, P.10 / ADR-0245 §1–§3, §5).**
+  The overlay's *Cheats · N on* row opens W-P11
+  (`UI/Views/PlayerCheatsSheetView`); every toggle is written to the same
+  per-game `CheatCodes` file the classic `CheatListWindow` edits, matched by
+  that window's import key (description + codes + type), so the two never
+  disagree. Turning a row off keeps it, disabled. `CheatRecordingRule` is
+  the ADR-0184 §1 test (a NES RAM code is `NesCustom` with every address
+  below `0x0800`); `CheatConsoleScope` gives NES the bundled list and GB/SMS
+  manual entry only, with the reason. `TryParseCodes` is a separate entry
+  point from the parity-frozen `CheatTypeDetector` (ADR-0128). Play passes
+  `recordingArt: false`; the Remaster game view will pass `true`. The core
+  dereferences the running console in `GetRomHash`, so the hash is only read
+  while `EmuApi.IsRunning()`. Rules in `UI.Tests/Cheats/`, wiring in
+  `UI.HeadlessTests/PlayerCheatsSheetTests`.
 - **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
   calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the

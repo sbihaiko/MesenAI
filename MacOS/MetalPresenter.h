@@ -68,6 +68,20 @@ public:
 	//has no log - and the picture keeps being presented unfiltered.
 	bool TakeShaderDropped();
 
+	//Issue #593: true once per failure episode after the filter chain's frame
+	//call returned an error, with that call's full error in `error`. Such a
+	//frame is presented unfiltered and Present() still returns true, so this
+	//is the only sign of it. Episodes, and when a chain that keeps failing is
+	//dropped (then TakeShaderDropped() is true too), follow
+	//Core/Shared/Video/ShaderFrameFailures.h.
+	bool TakeFrameError(std::string& error);
+
+	//Test hook: the next `frames` frame calls with a chain active fail with a
+	//synthetic error instead of running the chain. With this presenter's fixed
+	//formats and librashader's 16384 size clamp the real call only fails when
+	//Metal refuses a texture or an encoder, which no fixture causes on demand.
+	void InjectFrameFailures(uint32_t frames);
+
 	//Uploads the frame (BGRA, width*height) and presents it. With a shader
 	//active the filter chain runs from the frame into the drawable; without
 	//one the frame is scaled into the drawable (nearest, or bilinear when
