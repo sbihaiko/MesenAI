@@ -55,12 +55,28 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   rewrite `[Replay] <game> - <alias> - <subtitle>`, verdict labels
   `replay:valid`/`replay:invalid`), downloading through `fetch_pack.py` with
   `replay_host_allowlist.json` (deliberately not `pack_host_allowlist.json`;
-  that merge is R.2). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
+  R.2 kept the two apart and embeds this one in the client too). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
   `checks/verify_replay_form_and_workflow.py`. End-to-end with a ROM:
   `check_replay_recorded.sh` (`headless_record record-share=` /
   `record-stock=` are the action and its negative control). The title's game
   is looked up by `GameSettings.txt`'s `NoIntroSHA1` first: on NES its `SHA1`
   is the whole-file hash and never matches a No-Intro hash (#624).
+- **Shared replays, consume side (ADR-0205 R.2).** `replay_lint.py` also runs
+  section 8's structural gate (`settings`: MesenVersion/MovieFormatVersion as
+  `MesenMovie::Play` accepts them; `console`: Nes/Gameboy/Sms; `input`:
+  `Input.txt` present, non-empty, one `|`-led frame per line with a constant
+  field count, streamed with a 64 MB bound) and reports the archive's sha256.
+  `replay_submission.py --number` refuses a byte-identical copy of a row the
+  committed `docs/community-replays.json` lists (`duplicate`, naming the
+  earlier issue). `generate_community_replay_catalog.py` writes that file
+  from the open `replay:valid` issues without `replay:removed`, downloading
+  each attachment again (replay allow-list, 8 MB cap) and re-running the gate
+  before listing: grouped by the movie's own ROM SHA-1, one row per issue
+  (stable URL, sha256, size, console, author, subtitle, frames, `cheats[]`,
+  👍), most-👍-first, a later byte-identical copy dropped. A 404/410 drops the
+  row (stale, ADR-0148); any other download failure refuses to write. Tests:
+  `test_generate_community_replay_catalog.py`; `--issues-file`/`--archives-dir`
+  run it offline.
 - **Community cheats, publish side (ADR-0248 R.3).** `cheat_decoder.py` ports
   the Core's NES/GB/SMS converters of `Core/Shared/CheatManager.cpp` (every
   regex, bit table and quirk); `cheat_submission.py` is the section 3 gate of

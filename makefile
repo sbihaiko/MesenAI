@@ -483,6 +483,11 @@ doc-checks-2:
 	#(valid shows, closed leaves, most-voted-first, grouped by SHA-1) and the wiring
 	#of the workflow that commits docs/community-cheats.json through a PR.
 	python3 scripts/test_generate_community_cheat_catalog.py
+	#ADR-0205 R.2: the shared-replay catalog generator over built issues and
+	#archives (valid shows, closed/removed leave, the gate runs before listing,
+	#most-voted-first) and the wiring of the workflow that commits
+	#docs/community-replays.json through a PR.
+	python3 scripts/test_generate_community_replay_catalog.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py

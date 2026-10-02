@@ -436,8 +436,8 @@ what CI actually runs; this doc records why they're split the way they are.
   (classify schema → assembly → gate → apply-verdict → mep-meta upsert);
   F6.3b hardens the `kind` field and the fence on top of it.
 - `workflows/replay-submitted.yml` (ADR-0205 R.1) validates the file attached
-  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the three labels itself; `issues` opened/edited or an exact
-  `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid`
+  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the four labels itself, `replay:removed` included since R.2; `issues` opened/edited or an exact
+  `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid` (R.2: the section 8 gate and a `duplicate` of a listed row also refuse)
   via `scripts/replay_submission.py`. Writes use `GITHUB_TOKEN`
   (`issues: write`), so its edits cannot re-trigger it; issue text reaches the
   shell only through `env:`. Form: `ISSUE_TEMPLATE/replay.yml`.
@@ -459,6 +459,15 @@ what CI actually runs; this doc records why they're split the way they are.
   hand. It lands like `community-pack-catalog.yml`: a
   `chore/community-cheat-catalog` branch, a PR opened with `PROJECT_PAT`, then
   `--auto` merge; no diff closes a stale PR.
+- `workflows/community-replay-catalog.yml` (ADR-0205 R.2) regenerates
+  `docs/community-replays.json` (`scripts/generate_community_replay_catalog.py`)
+  on a `[Replay]` issue closed/reopened/relabelled, after every completed
+  `Replay Submitted` run (`workflow_run`), daily (`59 4 * * *`) and by hand,
+  and lands it like the cheat catalog (branch `chore/community-replay-catalog`,
+  `PROJECT_PAT` PR, `--auto` merge). The generator downloads every listed
+  attachment again through `scripts/replay_host_allowlist.json` and re-runs the
+  gate, so this job reads the network; `replay:removed` (section 9) is created
+  by `replay-submitted.yml` but applied only by a maintainer.
 
 ## Work Guidance
 

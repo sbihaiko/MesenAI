@@ -12,7 +12,7 @@ The fork's planning lives in one consolidated PRD under this folder:
   product acceptance. Phase 12 artist-surface cold-reads are a fresh Opus
   session, ADR-0214, amended 2026-09-19). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
-  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row and the ADR-0205 replay slices (Phase 13). Each Part carries its own header `Status`,
+  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row (Phase 13's ADR-0205 replay slices are delivered). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface. Part B §13 is the **GUI redesign proposal** (Play / Remaster /
   Share workspaces, ADR-0241 accepted): wireframes and simplicity rules

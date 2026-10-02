@@ -153,7 +153,10 @@ public enum PlaySheet
 	//G.4: W-P6, the current pack's detail, opened from W-P4's Pack row.
 	PackDetail,
 	//G.5 W-P16: a pack waits for a file, opened with the overlay.
-	PackDep
+	PackDep,
+	//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet
+	//(W-P4 is at its seven controls, so the list merges into that row).
+	Replays
 }
 
 public enum PlayEscAction
@@ -184,6 +187,7 @@ public static class PlayEsc
 			case PlaySheet.SaveStateGrid:
 			case PlaySheet.PackDetail:
 			case PlaySheet.PackDep:
+			case PlaySheet.Replays:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

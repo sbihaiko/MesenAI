@@ -131,6 +131,24 @@ def main() -> int:
         else:
             fail(f"main() exited {rc} on a drifted temp repo (want 1)")
 
+    # ADR-0205 R.2: the replay list's kinds and both UI embeds.
+    both = ('<EmbeddedResource Include="../scripts/pack_host_allowlist.json" LogicalName="Mesen.pack_host_allowlist.json" />'
+            '<EmbeddedResource Include="../scripts/replay_host_allowlist.json" LogicalName="Mesen.replay_host_allowlist.json" />')
+    if drift.check_replay_list({"direct"}, set(), set(), both) == []:
+        ok("replay list: direct-only kinds and both embeds pass")
+    else:
+        fail("replay list with both embeds must pass")
+    errs = drift.check_replay_list({"direct"}, set(), set(), both.split("<EmbeddedResource Include=\"../scripts/replay")[0])
+    if any("replay_host_allowlist.json" in e for e in errs):
+        ok("replay list: a client without the replay embed fails")
+    else:
+        fail(f"a missing replay embed must fail: {errs}")
+    errs = drift.check_replay_list({"direct", "mega"}, {"mega"}, set(), both)
+    if any("CommunityPackDownloader.cs" in e and "mega" in e for e in errs):
+        ok("replay list: a kind the client cannot dispatch fails")
+    else:
+        fail(f"an undispatched replay kind must fail: {errs}")
+
     return 1 if FAILED else 0
 
 

@@ -24,6 +24,10 @@ Checks:
        touched.
   AC-4 no attachment / a download that fails is `replay:invalid` with a reason,
        never a crash.
+  AC-6 section 7 (R.2): an archive byte-identical to a row the committed
+       catalog lists under another issue is `replay:invalid` as `duplicate`,
+       and the comment names the earlier issue; the row's own issue is not its
+       own duplicate (a re-validation passes).
   AC-6 issue #624: on NES the movie's `SHA1` is the whole-file hash (iNES
        header included), which never equals the catalog's No-Intro hash
        (ADR-0003/ADR-0039); the game resolves through the movie's
@@ -62,7 +66,7 @@ def ok(msg):
 def archive(extra=None, author="alice", description="stage skip run\nlong notes"):
     members = {
         "Input.txt": b"|........\n" * 100,
-        "GameSettings.txt": f"GameFile Contra (USA).nes\nSHA1 {SHA1}\n".encode(),
+        "GameSettings.txt": f"MesenVersion 2.1.0\nMovieFormatVersion 3\nGameFile Contra (USA).nes\nSHA1 {SHA1}\nemu.consoleType Nes\n".encode(),
     }
     if author is not None:
         members["MovieInfo.txt"] = f"Author {author}\nDescription\n{description}".encode()
@@ -228,6 +232,35 @@ def check_hostile_text_and_urls():
     ok("AC-5 title length, mention/ref defanging, control chars and traversing URLs are handled")
 
 
+def check_duplicate_of_a_listed_row():
+    import hashlib
+    import json
+    import tempfile
+    data = archive()
+    sha = hashlib.sha256(data).hexdigest()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "community-replays.json"
+        path.write_text(json.dumps({"format": "mesenai-community-replays", "games": [
+            {"sha1": SHA1, "replays": [{"issue": 7, "sha256": sha.upper()}, {"issue": "x", "sha256": "bad"}]}]}))
+        live = rs.load_live_replays(path)
+    if live != [(7, sha)]:
+        fail(f"AC-6 the live rows are (issue, lower-case sha256) of the committed catalog: {live}")
+        return
+    dup = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: data, number=9, live=live)
+    if dup.verdict != "invalid" or "`duplicate`" not in dup.comment or "#7" not in dup.comment:
+        fail(f"AC-6 a copy of issue 7's archive is a duplicate naming #7: {dup.verdict} {dup.comment!r}")
+        return
+    itself = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: data, number=7, live=live)
+    if itself.verdict != "valid":
+        fail(f"AC-6 re-validating the listed issue itself stays valid: {itself.comment!r}")
+        return
+    other = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: archive(author="carol"), number=9, live=live)
+    if other.verdict != "valid":
+        fail(f"AC-6 a different recording of the same ROM is its own row: {other.comment!r}")
+        return
+    ok("AC-6 a byte-identical copy of a listed replay is a duplicate naming the earlier issue")
+
+
 def _ines_rom():
     """A synthetic iNES file: 16-byte header, 16 KB PRG, 8 KB CHR."""
     header = b"NES\x1a" + bytes([1, 1, 0, 0]) + bytes(8)
@@ -260,6 +293,7 @@ def main():
     check_round_trip()
     check_failures_are_verdicts()
     check_hostile_text_and_urls()
+    check_duplicate_of_a_listed_row()
     check_nes_whole_file_hash()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")

@@ -134,6 +134,16 @@ namespace Mesen.Windows
 					});
 				}
 			};
+			//R.2: the Shared replays sheet focuses its first Watch, else Done.
+			_model.ReplaysSheet.PropertyChanged += (s, e) => {
+				if(e.PropertyName == nameof(PlayerReplaysSheetViewModel.IsVisible) && _model.ReplaysSheet.IsVisible) {
+					Dispatcher.UIThread.Post(() => {
+						List<Control> controls = this.GetVisualDescendants().OfType<Control>().ToList();
+						Control? target = controls.FirstOrDefault(c => c.Name == "ReplaysWatchButton" && c.IsEffectivelyEnabled) ?? controls.FirstOrDefault(c => c.Name == "ReplaysDoneButton");
+						target?.Focus();
+					});
+				}
+			};
 
 			//G.5: the Play edge-flow sheets' focus, reload and controller poll.
 			PlayEdgeFlowsWiring.Attach(this, _model);
@@ -295,6 +305,7 @@ namespace Mesen.Windows
 		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
 		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
 		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
+		private void OnSaveStatesReplays(object? sender, RoutedEventArgs e) => _model.OpenReplaysSheet();
 
 		//Same path the former Save slot / Load slot items took (and the
 		//SaveStateDialog/LoadStateDialog shortcuts use).

@@ -22,6 +22,7 @@
 			<Control ID="lblSaveStatesSheetTitle">Save states</Control>
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
+			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
@@ -197,6 +198,10 @@
 		</Form>
 		<Form ID="ShareRecordingStrip">
 			<Control ID="btnStopReplay">■ Stop</Control>
+		</Form>
+		<Form ID="PlayerReplaysSheetView">
+			<Control ID="lblReplaysTitle">Shared replays</Control>
+			<Control ID="btnReplaysDone">Done</Control>
 		</Form>
 		<Form ID="PlayerCheatsSheetView">
 			<Control ID="lblCheatsTitle">Cheats</Control>
