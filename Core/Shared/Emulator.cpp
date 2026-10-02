@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Shared/Emulator.h"
+#include "Shared/RomHashResolve.h"
 #include "Shared/NotificationManager.h"
 #include "Shared/Audio/SoundMixer.h"
 #include "Shared/Audio/AudioPlayerHud.h"
@@ -670,16 +671,12 @@ void Emulator::SaveBattery()
 
 string Emulator::GetHash(HashType type)
 {
-	shared_ptr<IConsole> console = _console.lock();
-	string hash = console->GetHash(type);
-	if(hash.size()) {
-		return hash;
-	} else if(type == HashType::Sha1) {
-		return _rom.RomFile.GetSha1Hash();
-	} else if(type == HashType::Sha1Cheat) {
-		return _rom.RomFile.GetSha1Hash();
-	}
-	return "";
+	return ResolveRomHash(_console.lock(), type, [this](HashType fallbackType) -> string {
+		if(fallbackType == HashType::Sha1 || fallbackType == HashType::Sha1Cheat) {
+			return _rom.RomFile.GetSha1Hash();
+		}
+		return "";
+	});
 }
 
 uint32_t Emulator::GetCrc32()

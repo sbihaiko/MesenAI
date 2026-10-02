@@ -52,6 +52,7 @@
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/MessageManager.h"
+#include "Shared/RomHashResolve.h"
 #include "Shared/Video/ShaderFrameFailures.h"
 #include "Shared/Video/ShaderPresetApply.h"
 #include "Shared/Video/BorderLayout.h"
@@ -12687,8 +12688,55 @@ void TestShaderParamsTouchNoListWhenThePresetFailsToLoad()
 	Check(gFakeLibra.errorFreeCalls == 1 && gFakeLibra.freedError == reinterpret_cast<libra_error_t>(&gFakeLibraCreateErrorObject), "librashader params: the preset_create_with_options error is freed once", "error_free calls " + std::to_string(gFakeLibra.errorFreeCalls));
 }
 
+//#599: Emulator::GetHash locked the weak console pointer and called it unchecked, so a hash
+//request with no game loaded killed the process. The resolution now lives in a header-only
+//template, driven here with a stand-in console.
+struct FakeHashConsole
+{
+	string Hash;
+	int Calls = 0;
+	string GetHash(int type)
+	{
+		Calls++;
+		return Hash;
+	}
+};
+
+void TestRomHashResolveSurvivesNoConsole()
+{
+	int fallbackCalls = 0;
+	auto fallback = [&](int type) -> string {
+		fallbackCalls++;
+		return "fallback";
+	};
+
+	shared_ptr<FakeHashConsole> none;
+	string hash = ResolveRomHash(none, 1, fallback);
+	Check(hash.empty(), "rom hash: no console loaded returns an empty string", "got '" + hash + "'");
+	Check(fallbackCalls == 0, "rom hash: no console loaded does not evaluate the fallback");
+
+	auto console = std::make_shared<FakeHashConsole>();
+	console->Hash = "console-hash";
+	hash = ResolveRomHash(console, 1, fallback);
+	Check(hash == "console-hash" && fallbackCalls == 0, "rom hash: the console's own hash wins over the fallback");
+
+	console->Hash = "";
+	hash = ResolveRomHash(console, 1, fallback);
+	Check(hash == "fallback" && fallbackCalls == 1, "rom hash: a console without a hash falls back");
+
+	//The weak pointer of a destroyed console locks to null: the exact shape of the crash
+	std::weak_ptr<FakeHashConsole> expired;
+	{
+		auto gone = std::make_shared<FakeHashConsole>();
+		expired = gone;
+	}
+	hash = ResolveRomHash(expired.lock(), 1, fallback);
+	Check(hash.empty() && fallbackCalls == 1, "rom hash: a console that was unloaded returns an empty string");
+}
+
 int main()
 {
+	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();
 	TestShareRestoreBringsBackTheOriginalSettingsOnEveryExitPath();
