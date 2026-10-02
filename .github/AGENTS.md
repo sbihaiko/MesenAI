@@ -441,6 +441,16 @@ what CI actually runs; this doc records why they're split the way they are.
   via `scripts/replay_submission.py`. Writes use `GITHUB_TOKEN`
   (`issues: write`), so its edits cannot re-trigger it; issue text reaches the
   shell only through `env:`. Form: `ISSUE_TEMPLATE/replay.yml`.
+- `workflows/cheat-submitted.yml` (ADR-0248 R.3) is the structural gate for a
+  community cheat code: same trigger shape as the replay flow (title prefix
+  `[Cheat] ` or label `cheat`; `issues` opened/edited or an exact
+  `/revalidate`), creates `cheat`/`cheat:valid`/`cheat:invalid` and the four
+  `console:*` labels itself, seeds one 👍, reads the open `cheat:valid` issues
+  for the duplicate check, and applies `scripts/cheat_submission.py`'s
+  verdict, `[Cheat] <game> — <description>` title and comment. Same
+  `GITHUB_TOKEN` and `env:` rules. Form: `ISSUE_TEMPLATE/cheat-code.yml`,
+  whose field labels and console options are the strings the gate parses
+  (`scripts/checks/verify_cheat_form_and_workflow.py` holds them together).
 
 ## Work Guidance
 

@@ -473,6 +473,12 @@ doc-checks-2:
 	python3 scripts/test_replay_lint.py
 	python3 scripts/test_replay_submission.py
 	python3 scripts/checks/verify_replay_form_and_workflow.py
+	#ADR-0248 R.3: the community-cheat publish side. The structural gate over the
+	#three hand-made issues and the form/workflow/labels wiring. The decoder's
+	#parity with the Core (scripts/test_cheat_decoder_parity.py) compiles C++
+	#and runs in `make python-tests`, not here.
+	python3 scripts/test_cheat_submission.py
+	python3 scripts/checks/verify_cheat_form_and_workflow.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py
