@@ -50,9 +50,12 @@ namespace Mesen.Views
 			FocusPrimary();
 		}
 
+		//#625: Visible too - the home also comes back without a home-kind change
+		//(Quit game with recents already listed, a DisplayMessageHelper message
+		//that hid it), after GameLoaded moved focus to RendererPanel.
 		private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
 		{
-			if(e.PropertyName == nameof(RecentGamesViewModel.ShowFirstRunHome) || e.PropertyName == nameof(RecentGamesViewModel.ShowRecentsHome)) {
+			if(e.PropertyName == nameof(RecentGamesViewModel.ShowFirstRunHome) || e.PropertyName == nameof(RecentGamesViewModel.ShowRecentsHome) || e.PropertyName == nameof(RecentGamesViewModel.Visible)) {
 				FocusPrimary();
 			}
 		}
@@ -77,10 +80,16 @@ namespace Mesen.Views
 
 		//A picker, the pause overlay or a sheet painted over the home already
 		//focused its own first control (MainWindow); the home must not steal it.
-		//Nothing focused, the renderer panel or a StateGrid is fair game.
+		//Nothing focused, the renderer panel or a StateGrid is fair game - in
+		//this window only: keyboard focus is one for the app, so the home coming
+		//back while another window (a debugger, a tool) has it leaves it there.
 		private bool AnotherSurfaceHasFocus()
 		{
-			object? focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+			TopLevel? topLevel = TopLevel.GetTopLevel(this);
+			object? focused = topLevel?.FocusManager?.GetFocusedElement();
+			if(focused is Visual elsewhere && TopLevel.GetTopLevel(elsewhere) != topLevel) {
+				return true;
+			}
 			return focused is Button or CheckBox or TextBox && focused is Visual visual && !this.IsVisualAncestorOf(visual);
 		}
 

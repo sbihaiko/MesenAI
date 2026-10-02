@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -9,7 +11,9 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Controls;
+using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -33,6 +37,11 @@ public class PlayHomeViewTests : IDisposable
 	private readonly bool _audio = ConfigManager.Config.EnhancementPacks.EnableAudio;
 	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
 	private readonly GameSelectionMode _selection = ConfigManager.Config.Preferences.GameSelectionScreenMode;
+	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
+	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
+	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
+	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
+	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 
 	public void Dispose()
 	{
@@ -48,6 +57,11 @@ public class PlayHomeViewTests : IDisposable
 		ConfigManager.Config.EnhancementPacks.EnableAudio = _audio;
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
 		ConfigManager.Config.Preferences.GameSelectionScreenMode = _selection;
+		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = _noticeShown;
+		ConfigManager.Config.Preferences.ShowClassicMenuBar = _showClassicMenuBar;
+		ConfigManager.Config.Preferences.ConfirmExitResetPower = _confirm;
+		ConfigManager.Config.Preferences.PauseWhenInBackground = _pauseInBackground;
+		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = _pauseInMenus;
 	}
 
 	//recentGames are listed newest first.
@@ -55,6 +69,12 @@ public class PlayHomeViewTests : IDisposable
 	{
 		ConfigManager.Config.Preferences.UiMode = uiMode;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
+		//#625: the once-per-upgrade classic-menu notice hides the home for ~3 s
+		//(DisplayMessageHelper) when the window's post-init block shows it. Other
+		//classes restore the flag they found, so settings.json can carry `false`
+		//into this one; pin it, or the home is off screen whenever that block
+		//runs inside a test. The notice path itself is pinned below.
+		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 
 		string folder = ConfigManager.RecentGamesFolder;
 		foreach(string stale in Directory.GetFiles(folder, "*.rgd")) {
@@ -134,6 +154,83 @@ public class PlayHomeViewTests : IDisposable
 
 		Assert.True(window.FindNamed<Button>("PlayHomeContinueButton").IsFocused);
 		Assert.True(window.FindNamed<Button>("PlayHomeOpenRomSecondary").IsOnScreen());
+	}
+
+	//#625: the home also comes back without a home-kind change - after Quit
+	//game with recents already listed (GameLoaded hid it and focused
+	//RendererPanel; EmulationStopped shows it again). Continue has focus again,
+	//so A/Enter acts with no pointer (rule 9). Run after other tests, it also
+	//pins that the earlier tests' MainWindows - still open, and seeing the same
+	//core notifications - do not take the app's one keyboard focus to their own
+	//home (the real-app analogue: a debugger or tool window keeps its focus).
+	[AvaloniaFact]
+	public void Home_that_returns_after_a_game_focuses_continue_again()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Preferences.ConfirmExitResetPower = false;
+		ConfigManager.Config.Preferences.PauseWhenInBackground = false;
+		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = false;
+		(MainWindow window, MainWindowViewModel model) = ShowHome(UiMode.Player, "Contra", "Zelda");
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished its background Init");
+		Assert.True(window.FindNamed<Button>("PlayHomeContinueButton").IsFocused);
+
+		string folder = Path.Combine(Path.GetTempPath(), "mesen-625-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		string rom = Path.Combine(folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		try {
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			WaitFor(() => EmuApi.IsRunning() && !model.RecentGames.Visible, "the game never replaced the home");
+			Assert.IsNotType<Button>(window.FocusManager?.GetFocusedElement());
+
+			LoadRomHelper.PowerOff();
+			WaitFor(() => !EmuApi.IsRunning() && model.RecentGames.Visible, "the home did not come back after Quit game");
+			Assert.True(window.FindNamed<DockPanel>("PlayHomeWithRecents").IsOnScreen());
+			Assert.Same(window.FindNamed<Button>("PlayHomeContinueButton"), window.FocusManager?.GetFocusedElement());
+		} finally {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+			try {
+				Directory.Delete(folder, true);
+			} catch(IOException) {
+			}
+		}
+	}
+
+	//#625: the classic-menu notice (first launch after an upgrade) hides the
+	//home while its message shows, then brings it back: Continue has focus.
+	[AvaloniaFact]
+	public void Home_that_returns_after_the_classic_menu_notice_focuses_continue()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//The default: with it, a message shown with no game hides the home.
+		ConfigManager.Config.Preferences.GameSelectionScreenMode = GameSelectionMode.ResumeState;
+		(MainWindow window, MainWindowViewModel model) = ShowHome(UiMode.Player, "Contra", "Zelda");
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished its background Init");
+		Assert.True(window.FindNamed<Button>("PlayHomeContinueButton").IsFocused);
+		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = false;
+		ConfigManager.Config.Preferences.ShowClassicMenuBar = false;
+
+		//What the window's post-init block does on an upgraded install.
+		Assert.True(model.ConsumeClassicMenuNotice());
+		DisplayMessageHelper.DisplayMessage("ClassicMenuNoticeTitle", "ClassicMenuNoticeText");
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(window.FindNamed<DockPanel>("PlayHomeWithRecents").IsOnScreen());
+
+		WaitFor(() => model.RecentGames.Visible, "the home did not come back after the notice");
+		Assert.True(window.FindNamed<DockPanel>("PlayHomeWithRecents").IsOnScreen());
+		Assert.Same(window.FindNamed<Button>("PlayHomeContinueButton"), window.FocusManager?.GetFocusedElement());
+	}
+
+	private static void WaitFor(Func<bool> condition, string failure)
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(!condition()) {
+			Assert.True(clock.ElapsedMilliseconds < 30000, failure);
+			Dispatcher.UIThread.RunJobs();
+			Thread.Sleep(20);
+		}
+		Dispatcher.UIThread.RunJobs();
 	}
 
 	//Rule 9: from the keyboard alone, focus reaches both buttons and the grid.
