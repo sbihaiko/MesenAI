@@ -77,8 +77,9 @@ namespace Mesen.Utilities
 						MainWindowModel.TogglePlayerOverlay();
 					} else if(MainWindowModel.IsRemasterGameView) {
 						//G.3 (W-R2): in Remaster's recording view Esc stops the
-						//recording and returns to the project screen.
-						MainWindowModel.Remaster.StopRecording();
+						//recording and returns to the project screen; G.6: from
+						//a build shown in the game it just returns.
+						MainWindowModel.Remaster.LeaveGameView();
 					} else if(MainWindowModel.Shell.Active == Workspace.Share) {
 						//G.8 (rule 8, ShareEsc): stops a replay recording, or closes
 						//the topmost sheet or list.

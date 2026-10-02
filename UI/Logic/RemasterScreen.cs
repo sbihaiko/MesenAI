@@ -32,7 +32,8 @@ public enum RemasterReason
 	TasNotInThisBuild,
 	TasLater,
 	AiNotReady,
-	BuildLater
+	//G.6: Build & show needs the kit the recording is painted on.
+	NoKitYet
 }
 
 public sealed record RemasterControl(bool Enabled, RemasterReason Reason)
@@ -52,7 +53,9 @@ public sealed record RemasterInputs(
 	int TexturedRecordings,
 	RemasterFeasibility Feasibility,
 	//headless_record ships in the macOS arm64 zip only (ADR-0243 Decision 6).
-	bool HasHeadlessRecorder
+	bool HasHeadlessRecorder,
+	//G.6: the project holds a kit (kit/ is not empty) to build from.
+	bool HasKit = false
 );
 
 public sealed record RemasterScreenState(
@@ -94,9 +97,14 @@ public static class RemasterScreen
 		//ADR-0242 Q3: the AI recorder (F14.20) stays disabled until its adoption
 		//clauses pass; it is not hidden.
 		RemasterControl ai = Off(RemasterReason.AiNotReady);
-		//W-R1 zone ③: the build/reload loop (mep_build, mep_lint,
-		//RequestMepImageReload) is a later slice; this one runs the kit only.
-		RemasterControl build = Off(RemasterReason.BuildLater);
+		//G.6 (W-R1 zone ③): `mep_project.py build`, then the game shows it.
+		//It needs what the kit needs, plus the kit itself; like the record
+		//buttons it waits while a recording or another job runs (W-R3).
+		RemasterControl build = !prepare.Enabled ? prepare
+			: !i.HasKit ? Off(RemasterReason.NoKitYet)
+			: i.Recording ? Off(RemasterReason.RecordingRunning)
+			: i.JobRunning ? Off(RemasterReason.JobRunning)
+			: RemasterControl.On;
 
 		return new RemasterScreenState(
 			view,

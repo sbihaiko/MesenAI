@@ -499,8 +499,9 @@ namespace Mesen.ViewModels
 		private void UpdateRemasterSurfaces()
 		{
 			bool remaster = Shell.Active == Workspace.Remaster;
-			IsRemasterGameView = remaster && Remaster.IsRecording;
-			IsRemasterProjectScreenVisible = remaster && !Remaster.IsRecording;
+			//G.6: and while a build is shown in the game.
+			IsRemasterGameView = remaster && Remaster.ShowsGame;
+			IsRemasterProjectScreenVisible = remaster && !Remaster.ShowsGame;
 			if(remaster) {
 				//W-R0b: the feasibility gate is measured once, when Remaster is first shown.
 				Remaster.EnsureFeasibilityMeasured();
@@ -511,7 +512,7 @@ namespace Mesen.ViewModels
 
 		private void OnRemasterActivityChanged()
 		{
-			if(IsRemasterGameView != (Shell.Active == Workspace.Remaster && Remaster.IsRecording)) {
+			if(IsRemasterGameView != (Shell.Active == Workspace.Remaster && Remaster.ShowsGame)) {
 				UpdateRemasterSurfaces();
 			}
 			Shell.UpdateRemasterActivity(Remaster.Activity, Remaster.ActivityStatus());

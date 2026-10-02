@@ -196,6 +196,12 @@ namespace Mesen.Windows
 		protected override void OnClosing(WindowClosingEventArgs e)
 		{
 			base.OnClosing(e);
+			//G.6 (W-X3): a recording or a Remaster job asks first, inline. Its
+			//answer is the one confirmation (rule 7), so ConfirmExit is skipped.
+			if(_needCloseValidation && _model != null && !_model.ConfirmQuit(() => { _needCloseValidation = false; Close(); })) {
+				e.Cancel = true;
+				return;
+			}
 			if(_needCloseValidation) {
 				e.Cancel = true;
 				ValidateExit();

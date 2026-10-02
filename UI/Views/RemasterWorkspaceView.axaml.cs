@@ -50,6 +50,8 @@ namespace Mesen.Views
 
 		private void OnPrepare(object? sender, RoutedEventArgs e) => Model?.StartKit();
 
+		private void OnBuild(object? sender, RoutedEventArgs e) => Model?.StartBuild();
+
 		private void OnStopJob(object? sender, RoutedEventArgs e) => Model?.StopJob();
 
 		private void OnDismissJob(object? sender, RoutedEventArgs e) => Model?.DismissJobResult();

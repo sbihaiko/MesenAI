@@ -5,6 +5,7 @@
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:l="using:Mesen.Localization"
+	xmlns:v="using:Mesen.Views"
 	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
 	x:DataType="vm:RemasterWorkspaceViewModel"
 	x:Class="Mesen.Views.RemasterWorkspaceView"
@@ -166,12 +167,17 @@
 							</DockPanel>
 							<ProgressBar Name="RemasterJobProgress" Minimum="0" Maximum="100" Value="{Binding JobPercent}" IsVisible="{Binding IsJobRunning}" />
 						</StackPanel>
-						<DockPanel IsVisible="{Binding !IsJobCardVisible}">
+						<!--G.6 W-R4: a failed build's problems replace the job card.-->
+						<v:RemasterBuildProblemsView Name="RemasterBuildProblemsView" IsVisible="{Binding IsBuildProblemsVisible}" />
+						<DockPanel Name="RemasterBuildAtRest" IsVisible="{Binding IsBuildAtRest}">
 							<StackPanel DockPanel.Dock="Right" Spacing="2" MaxWidth="220" Margin="12 0 0 0">
-								<Button Name="RemasterBuildButton" Content="{l:Translate btnBuildAndShow}" IsEnabled="{Binding BuildAndShow.IsEnabled}" />
+								<Button Name="RemasterBuildButton" Content="{l:Translate btnBuildAndShow}" IsEnabled="{Binding BuildAndShow.IsEnabled}" Click="OnBuild" />
 								<TextBlock Name="RemasterBuildReason" Classes="reason" Text="{Binding BuildAndShow.Reason}" IsVisible="{Binding BuildAndShow.HasReason}" />
 							</StackPanel>
-							<TextBlock Text="{l:Translate lblSeeItHint}" VerticalAlignment="Center" />
+							<StackPanel Spacing="2" VerticalAlignment="Center">
+								<TextBlock Text="{l:Translate lblSeeItHint}" />
+								<TextBlock Name="RemasterBuildFreshness" Text="{Binding BuildFreshness}" Opacity="0.8" IsVisible="{Binding BuildFreshness, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+							</StackPanel>
 						</DockPanel>
 					</Panel>
 				</Border>

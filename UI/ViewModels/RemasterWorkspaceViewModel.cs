@@ -169,6 +169,10 @@ namespace Mesen.ViewModels
 			if(changedGame && IsRecording) {
 				EndRecordingView();
 			}
+			if(changedGame) {
+				//G.6: the build view showed the project's game, not this one.
+				IsShowingBuild = false;
+			}
 			if(changedGame && !_chosenByUser) {
 				_chosenProject = "";
 			}
@@ -224,8 +228,9 @@ namespace Mesen.ViewModels
 		}
 
 		//W-R2 › Stop (or Esc): the recording is closed and kept, W-R1 shows it,
-		//and the kit runs as a job when it can (W-R2 text).
-		public void StopRecording()
+		//and the kit runs as a job when it can (W-R2 text). G.6 (W-X3): quitting
+		//or opening another game stops it without the kit run.
+		public void StopRecording(bool prepareFigures = true)
 		{
 			if(!IsRecording) {
 				return;
@@ -238,7 +243,7 @@ namespace Mesen.ViewModels
 			}
 			EndRecordingView();
 			Refresh();
-			if(RemasterScreen.RunKitAfterRecording(Inputs())) {
+			if(prepareFigures && RemasterScreen.RunKitAfterRecording(Inputs())) {
 				StartKit();
 			}
 		}
@@ -311,12 +316,12 @@ namespace Mesen.ViewModels
 			JobPercent = job.Percent;
 			switch(job.Status) {
 				case RemasterJobStatus.Running:
-					JobTitle = ResourceHelper.GetMessage("RemasterJobKitTitle");
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobKitTitle");
 					JobDetail = ResourceHelper.GetMessage("RemasterJobStep", Math.Min(job.StepsDone + 1, Math.Max(job.TotalSteps, 1)), Math.Max(job.TotalSteps, 1),
 						ResourceHelper.GetMessage("RemasterStep" + RemasterJobs.StepOf(job.CurrentStep)));
 					break;
 				case RemasterJobStatus.Succeeded:
-					JobTitle = ResourceHelper.GetMessage("RemasterJobDone");
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobDone");
 					JobDetail = "";
 					//W-R3: success collapses to one line for 5 s.
 					_jobResultTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, (_, _) => DismissJobResult());
@@ -324,12 +329,12 @@ namespace Mesen.ViewModels
 					_jobResultTimer.Start();
 					break;
 				case RemasterJobStatus.Failed:
-					//W-R4 (inline build problems) is a later slice: a plain line.
-					JobTitle = ResourceHelper.GetMessage("RemasterJobFailed");
-					JobDetail = job.FailureLine;
+					//The kit's failure is a plain line; a build's is W-R4 (G.6).
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobFailed");
+					JobDetail = job.Kind == RemasterJobKind.Build ? "" : job.FailureLine;
 					break;
 				case RemasterJobStatus.Stopped:
-					JobTitle = ResourceHelper.GetMessage("RemasterJobStopped");
+					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage("RemasterJobStopped");
 					JobDetail = "";
 					break;
 				default:
@@ -352,14 +357,17 @@ namespace Mesen.ViewModels
 		private RemasterInputs Inputs()
 		{
 			string shown = _project?.Folder ?? "";
-			string own = GameProjectFolder();
-			//Before the first recording the game's project does not exist yet; a
-			//chosen folder is the game's own when it is where that game records.
-			bool isGames = shown.Length > 0 && (RemasterProjectLocator.SameFolder(shown, own) ||
-				RemasterProjectLocator.SameFolder(shown, _gameProjectSibling) ||
-				RemasterProjectLocator.SameFolder(shown, RemasterProjectLocator.FallbackFolder(_gameProjectSibling, _packsFolder)));
-			return new RemasterInputs(_gameLoaded, _console, IsRecording, _jobs.Snapshot.IsRunning, shown, isGames && _gameLoaded,
-				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder);
+			return new RemasterInputs(_gameLoaded, _console, IsRecording, _jobs.Snapshot.IsRunning, shown, IsGamesProject(shown) && _gameLoaded,
+				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder, _project?.HasKit ?? false);
+		}
+
+		//Before the first recording the game's project does not exist yet; a
+		//chosen folder is the game's own when it is where that game records.
+		private bool IsGamesProject(string folder)
+		{
+			return folder.Length > 0 && (RemasterProjectLocator.SameFolder(folder, GameProjectFolder()) ||
+				RemasterProjectLocator.SameFolder(folder, _gameProjectSibling) ||
+				RemasterProjectLocator.SameFolder(folder, RemasterProjectLocator.FallbackFolder(_gameProjectSibling, _packsFolder)));
 		}
 
 		//Until measured, the gate reads as passed so the banner does not flash.
@@ -412,6 +420,7 @@ namespace Mesen.ViewModels
 			if(IsRecording) {
 				RecordingPill = ResourceHelper.GetMessage("RemasterRecordingPill", RemasterScreen.FormatElapsed(_recordingClock.Elapsed));
 			}
+			RefreshBuild();
 
 			RemasterActivity activity = RemasterActivityIndicator.Of(IsRecording, _jobs.Snapshot.IsRunning);
 			Activity = activity;
@@ -427,7 +436,7 @@ namespace Mesen.ViewModels
 		{
 			return Activity switch {
 				RemasterActivity.Recording => ResourceHelper.GetMessage("ShellStatusRemasterRecording", _gameName),
-				RemasterActivity.Job => ResourceHelper.GetMessage("ShellStatusRemasterJob", _jobs.Snapshot.GameName, _jobs.Snapshot.Percent),
+				RemasterActivity.Job => ResourceHelper.GetMessage(_jobs.Snapshot.Kind == RemasterJobKind.Build ? "ShellStatusRemasterBuild" : "ShellStatusRemasterJob", _jobs.Snapshot.GameName, _jobs.Snapshot.Percent),
 				_ => "",
 			};
 		}
