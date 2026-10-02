@@ -60,6 +60,24 @@ struct ConsoleMemoryInfo
 	uint32_t Size;
 };
 
+//ADR-0244 (P.9): what Emulator::ReloadRomKeepingState did. Mirrored by the UI
+//(EmuApi.InPlaceReloadResult) - the values are part of the export's ABI.
+enum class InPlaceReloadResult : uint8_t
+{
+	//The ROM was reloaded and the state taken just before it was restored.
+	Restored = 0,
+	//The ROM was reloaded but the state did not load back: the game is left
+	//freshly loaded, exactly as a plain ReloadRom leaves it.
+	Restarted = 1,
+	//Nothing was done: no game, a movie is playing or recording, or netplay is
+	//active (the reload would stop the movie, and netplay forbids state loads).
+	Refused = 2,
+	//The ROM was reloaded fresh and no state restored, because the game before
+	//or after the reload carries a pack's ROM patch (ADR-0244 section 2): a
+	//state of one PRG restored into another runs the wrong code.
+	PatchRestarted = 3,
+};
+
 class Emulator
 {
 private:
@@ -117,6 +135,9 @@ private:
 	atomic<bool> _paused;
 	atomic<bool> _pauseOnNextFrame;
 	atomic<bool> _threadPaused;
+	//ADR-0244: whether the loaded game carries a pack's ROM patch (set by each
+	//InternalLoadRom from MepPackManager::ApplyPatches).
+	bool _romPatchedByPack = false;
 
 	atomic<int> _debugRequestCount;
 	atomic<int> _blockDebuggerRequestCount;
@@ -194,6 +215,7 @@ public:
 	void Reset();
 	void ReloadRom(bool forPowerCycle);
 	void PowerCycle();
+	InPlaceReloadResult ReloadRomKeepingState();
 
 	void PauseOnNextFrame();
 

@@ -187,11 +187,24 @@ can be exercised by real xunit tests without Avalonia or the native
   list + ROM sha1 (data-injected from the code-behind), builds the choices
   from the core's `GetPackListText` columns (name/author/version/licence/
   sections/origin already there), and `PickPlayerPack` stores the P.3
-  preference then power-cycles (applied on the reload); `DismissPlayerPackPicker`
+  preference then applies it through `LoadRomHelper.ApplyPackChange` (in
+  place, or the old power cycle; see `PackChangePolicy`); `DismissPlayerPackPicker`
   stores nothing so the next launch asks again. The picker's order is
   community 👍 first (`CommunityPackInstallService.GetVotes(pack_id)`, from
   the last catalog fetch's MEI `votes`), then name — local-only packs (no
   catalog row, votes 0) fall back to name order.
+- `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
+  change — the Enhancements panel's Textures/Audio/Border toggles
+  (`ToggleLayer`) and the picker's Apply: in place
+  (`EmuApi.ReloadRomKeepingState`) on the consoles
+  `scripts/pack_swap_exactness.py` measured exact (NES, SMS, GB), else the
+  pre-ADR-0244 restart, with the HUD reason for a movie or netplay; its
+  `Outcome` maps the core's answer (restored, fallback restart, ROM-patch
+  restart, refused → plain restart) to a `MessageManager` key.
+  `InPlaceReloadResult` mirrors Core's enum value for value (ABI; guarded by
+  `scripts/test_pack_swap_exactness.py`). `LoadRomHelper.ApplyPackChange`
+  is the host-aware caller: it runs the blocking export off the UI thread,
+  one swap at a time. Overclock never goes through it (power cycle).
 - `CommunityCatalogUpdateDecision` (P.6, PRD Part B §3.6) is the
   host-free verdict for the F6.4b reinstall gate, replacing the old
   source.sha256 trigger (ADR-0138 §37) with the §3.6 content_id rule: an

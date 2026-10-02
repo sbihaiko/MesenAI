@@ -146,7 +146,7 @@ class StepEmu:
     """
 
     def __init__(self, rom, state=None, work=None, binary=None, pal=False,
-                 timeout=600.0, cheats=None):
+                 timeout=600.0, cheats=None, flags=None):
         self.rom = str(rom)
         self.timeout = timeout
         #Every line the session prints before "ready", kept rather than
@@ -167,8 +167,12 @@ class StepEmu:
         #Held open for the session's life, not for a block: it is what
         #_error_tail() reads when a request fails, and close() closes it.
         self._error_file = open(self._error_log, "wb")  # noqa: SIM115
-        args = [str(self.binary), self.rom, "0", str(prefix), "session",
-                "mep-off", "hdpack-off"]
+        #`flags` are the launch's pack switches, `mep-off hdpack-off` unless
+        #given: a search reads RAM and wants no pack, while ADR-0244's
+        #exactness harness (pack_swap_exactness.py) launches with the packs it
+        #swaps between.
+        flags = ["mep-off", "hdpack-off"] if flags is None else list(flags)
+        args = [str(self.binary), self.rom, "0", str(prefix), "session", *flags]
         if pal:
             args.append("pal")
         if state:
@@ -393,6 +397,39 @@ class StepEmu:
         self._load_like.add(handle)
         self._standing_after_run = False
         return handle
+
+    # ---- ADR-0244 (P.9): pack switches and the in-place swap ---------------
+
+    def mep(self, name, value):
+        """Sets a pack switch for the next load: `mep("textures", "off")`,
+        `mep("audio", "on")`, `mep("border", ...)`, or turns one installed
+        pack on or off by container: `mep("disable", "pack-a")`."""
+        self._request(f"mep {name} {value}")
+
+    def swap(self):
+        """The in-place pack change (ReloadRomKeepingState): returns
+        `(outcome, frame, ms)`, the outcome `restored`, `restarted` (the state
+        did not load back) or `patch-restarted` (a pack's ROM patch on either
+        side: no state kept, ADR-0244 section 2). Afterwards the session stands
+        one frame past the state it kept, the frame the swap ran, so it counts
+        as standing after a run."""
+        outcome, frame, ms = self._request("swap").split()
+        self._standing_after_run = True
+        return outcome, int(frame), float(ms)
+
+    def capture(self):
+        """The parked frame as the screenshot pipeline sees it:
+        `(frame number, width, height, fnv-1a)`."""
+        number, width, height, checksum = self._request("capture").split()
+        return int(number), int(width), int(height), checksum
+
+    def hd_active(self):
+        """Whether an HD pack replaces pixels on this load (NES)."""
+        return self._request("hd") == "1"
+
+    def write_log(self, path):
+        """Writes the core message log (the `[MEP] ...` lines) to `path`."""
+        self._request(f"logfile {Path(path)}")
 
     def close(self):
         """Asks the session to quit and reaps it. Idempotent."""

@@ -410,6 +410,52 @@ void Emulator::PowerCycle()
 	ReloadRom(true);
 }
 
+//ADR-0244 (P.9): a pack change that keeps the player's place. The pack is only
+//read by the console's LoadRom, so the ROM is reloaded the ordinary way (pack
+//discovery, the PPU choice, the HD audio device and the bootstrap all behave
+//as on a fresh load), with the state taken just before it loaded back into the
+//new console.
+//
+//The emulator lock is held from the save to the restore. The emulation thread
+//started by LoadRom waits on _runLock before its first frame (Run), so the
+//fresh console never runs a frame of its own between the two. If the game was
+//paused it stays paused; like any ReloadRom, the new thread then runs one frame
+//of the restored state before it parks.
+//
+//Refused - nothing done - while a movie plays or records or netplay is
+//connected: InternalLoadRom stops the movie, and SaveStateManager::LoadState
+//refuses a state under netplay. A pack's ROM patch on either side of the
+//reload (ADR-0244 section 2) leaves the fresh load and keeps no state: the
+//patch changes PRG, so the state would run the wrong code. Which pack changes
+//may take this path at all is otherwise the UI's decision, not this function's.
+//
+//With a debugger attached, Lock suspends the old console's debugger and Unlock
+//releases the new one's, which was never suspended. That release is a no-op
+//(Debugger::SuspendDebugger ignores a release at count 0), and the old
+//debugger is destroyed by the reload, so the counts cannot go wrong.
+InPlaceReloadResult Emulator::ReloadRomKeepingState()
+{
+	if(!IsRunning() || _movieManager->Playing() || _movieManager->Recording() || _gameClient->Connected() || _gameServer->Started()) {
+		return InPlaceReloadResult::Refused;
+	}
+
+	Lock();
+	bool patchedBefore = _romPatchedByPack;
+	std::stringstream state;
+	if(!patchedBefore) {
+		_saveStateManager->SaveState(state);
+	}
+	ReloadRom(false);
+	bool patched = patchedBefore || _romPatchedByPack;
+	bool restored = !patched && IsRunning() && _saveStateManager->LoadState(state);
+	Unlock();
+
+	if(patched) {
+		return InPlaceReloadResult::PatchRestarted;
+	}
+	return restored ? InPlaceReloadResult::Restored : InPlaceReloadResult::Restarted;
+}
+
 bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle)
 {
 	bool result = false;
@@ -477,7 +523,7 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 	//console's LoadRom runs: the consoles pull textures/synth/audio paths from
 	//the manager while loading their HD packs (F3 - ADR-0039/0040).
 	_mepPackManager->LoadForRom(romFile);
-	_mepPackManager->ApplyPatches(romFile);
+	_romPatchedByPack = _mepPackManager->ApplyPatches(romFile);
 
 	_soundMixer->StopAudio();
 

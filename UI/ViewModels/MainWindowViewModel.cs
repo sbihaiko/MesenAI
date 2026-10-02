@@ -304,8 +304,10 @@ namespace Mesen.ViewModels
 		}
 
 		//P.5: the picker's "Apply" - stores the per-ROM-sha1 choice (P.3) and
-		//power-cycles so the chosen pack applies on the reload. The next load
-		//sees the stored preference and never re-opens the picker (silent).
+		//reloads so the chosen pack applies; the next load sees the stored
+		//preference and never re-opens the picker (silent). ADR-0244 (P.9): the
+		//reload keeps the player's place where PackChangePolicy allows it, and
+		//falls back to the power cycle it always was everywhere else.
 		public void PickPlayerPack(string container)
 		{
 			PlayerPackChoice? choice = PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
@@ -318,7 +320,7 @@ namespace Mesen.ViewModels
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
 			_packPickerFromOverlay = false;
-			LoadRomHelper.PowerCycle();
+			LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.PowerCycle);
 		}
 
 		//P.5: dismissing stores nothing - the game keeps playing un-enhanced this
@@ -368,8 +370,9 @@ namespace Mesen.ViewModels
 		}
 
 		//Texture/Audio/Border (§6.1, ADR-0149): plain passthrough to the existing MEP layer
-		//switches - applies on the next ROM reload, like the rest of
-		//EnhancementPackConfig.
+		//switches - applies through a ROM reload, like the rest of
+		//EnhancementPackConfig; ADR-0244 (P.9) makes that reload keep the
+		//player's place where PackChangePolicy allows it.
 		public void ToggleTextures()
 		{
 			IsTexturesEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableTextures = v, Config.EnhancementPacks.EnableTextures);
@@ -385,14 +388,15 @@ namespace Mesen.ViewModels
 			IsBorderEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableBorder = v, Config.EnhancementPacks.EnableBorder);
 		}
 
-		//Flips one MEP layer switch, persists it and reloads the ROM; returns the new value.
+		//Flips one MEP layer switch, persists it and applies it (in place where
+		//ADR-0244 allows, else by reloading the ROM); returns the new value.
 		private bool ToggleLayer(Action<bool> setter, bool current)
 		{
 			bool next = !current;
 			setter(next);
 			Config.EnhancementPacks.ApplyConfig();
 			Config.Save();
-			LoadRomHelper.ReloadRom();
+			LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.ReloadRom);
 			return next;
 		}
 
