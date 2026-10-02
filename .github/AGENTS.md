@@ -93,7 +93,12 @@ what CI actually runs; this doc records why they're split the way they are.
       directory (key `ccache-doc-checks-<sha>`, prefix restore-key) so the
       Core/ compile is a cache hit when Core/ did not change. The other
       shards never compile and do not touch it.
-    - `build.yml` does **not** run `make doc-checks` (ADR-0137 amendment 7): the
+    - The build legs' compiler cache (`actions/setup-ccache-action`) is keyed
+  `ccache-v2-<compiler>-<os>-sha-<sha>` with a `-sha-` prefix restore-key. A
+  cache entry is immutable once saved, so a key without the SHA freezes the
+  first run's objects; and the delimiter keeps `ubuntu-22.04` from matching
+  `ubuntu-22.04-arm`. Each macOS and non-AppImage Linux leg prints `ccache -s` after its build.
+- `build.yml` does **not** run `make doc-checks` (ADR-0137 amendment 7): the
   gate is `checks.yml`'s, and a promotion into `prod` carries `main`'s
   statuses. Do not add the step back to a build leg; it repeats the recipe
   and a Core/ recompile for 10-12 minutes per leg.
