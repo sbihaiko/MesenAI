@@ -2,6 +2,7 @@
 
 - Status: accepted (F5.1, 2026-08-25)
 - Date: 2026-08-25
+- Amended by: ADR-0243 (accepted 2026-10-02, slice F12.20, not implemented) — the bootstrap stops running by itself in Play (*Bootstrap enhancement folder for played games* defaults to off for new installs), records into `auto/rec-NNN/`, and may record while the project's own `mep/` dresses the ROM.
 - Phase 5 (docs/roadmap/plano-execucao-F5.md). Supersedes the manifest-heavy
   drafts of ADR-0045/0046/0048 (deleted 2026-08-27; their text lives in git history, the surviving substance is summarised here).
 - Amended by: ADR-0147 (the human layer moves from the pack root to `mep/`), ADR-0160 (`Chr_XX_N.png` leaves the pack root for `textures/chr/`)
