@@ -215,8 +215,10 @@ build of `prod` that passed, unzip and run:
 > the [Releases](#download) link above still resolves to the tagged release, not
 > to a CI build. The channel is **built on demand, not on every push** —
 > `build.yml` runs on a pull request opened against `prod` or a manual dispatch
-> (ADR-0200, ADR-0203), never on a plain push. To refresh the assets after
-> promoting `main` into `prod`:
+> (ADR-0200, ADR-0203), never on a plain push. The assets refresh themselves
+> when a promotion pull request merges into `prod`: its own build is
+> republished when it compiled exactly the merged tree, and `build.yml` is
+> dispatched on `prod` otherwise (ADR-0204 §6). A manual refresh still works:
 > `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod`.
 > A CI build carries what `prod` held when it ran. The current assets are the
 > 2026-10-03 promotion (#714), so they include the Play / Remaster / Share GUI;
