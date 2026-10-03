@@ -78,11 +78,14 @@ namespace Mesen.Services
 				return (false, "an install is already in progress");
 			}
 			try {
-				string romSha1 = EmuApi.GetMepRomSha1();
-				if(string.IsNullOrWhiteSpace(romSha1)) {
+				//#657: the game this Restore is for, captured before the download -
+				//the coordinator writes its folder and registry key from this, and
+				//drops the Restore if another game was opened meanwhile.
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				if(!load.HasRom) {
 					return (false, "no loaded ROM to restore a pack for");
 				}
-				CommunityPackInstallRecord? record = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1);
+				CommunityPackInstallRecord? record = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, load.RomSha1);
 				if(record == null || string.IsNullOrWhiteSpace(record.SourceSha256)) {
 					return (false, "there is no catalog-installed pack to restore for this ROM");
 				}
@@ -98,7 +101,7 @@ namespace Mesen.Services
 				//A throw here would skip RaiseFinished and leave the pill installing.
 				(bool ok, string error) = await Task.Run(() => {
 					try {
-						bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
+						bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, load, out string restoreError);
 						return (restored, restoreError);
 					} catch(Exception ex) {
 						return (false, ex.Message);
@@ -111,7 +114,7 @@ namespace Mesen.Services
 				EmuApi.WriteLogEntry("[CommunityPack] RestoreInstalledPack: restored " + fetched.Entry.PackId + " to mep/");
 				return (true, "");
 			} finally {
-				_installGate.Exit();
+				ExitGate();
 			}
 		}
 
@@ -128,23 +131,37 @@ namespace Mesen.Services
 				EmuApi.WriteLogEntry("[CommunityPack] skipped: isPowerCycle or AutoInstallCommunityPacks off");
 				return;
 			}
-			if(!_installGate.TryEnter()) {
-				EmuApi.WriteLogEntry("[CommunityPack] skipped: a previous load's install is still in flight");
-				return; //a previous load's install is still in flight
+			if(!_installGate.TryEnterOrDefer()) {
+				//#657: deferred, not dropped - the holder's ExitGate runs the
+				//auto-install for the game loaded then (ADR-0146).
+				EmuApi.WriteLogEntry("[CommunityPack] deferred: a previous install or Restore is still in flight");
+				return;
 			}
-			//G.5 W-P16: the open this install belongs to - a later open drops its
-			//pending-file post (MainWindowViewModel.SetPendingPackDeps).
-			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
-			_ = Task.Run(() => RunAsync(openGeneration));
+			//#657 / G.5 W-P16: the load this install belongs to (open generation,
+			//SHA-1, sibling folder, ROM name), captured before the download. The
+			//coordinator installs for it or drops the install if another open
+			//started meanwhile; a later open also drops the pending-file post.
+			CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+			_ = Task.Run(() => RunAsync(load));
 		}
 
-		private static async Task RunAsync(int openGeneration)
+		//Releases the install gate; when a ROM load's auto-install was refused
+		//while it was held (#657), runs it now for the game loaded at this point.
+		private static void ExitGate()
+		{
+			if(_installGate.Exit()) {
+				EmuApi.WriteLogEntry("[CommunityPack] running the auto-install deferred while the gate was held");
+				OnGameLoaded(false);
+			}
+		}
+
+		private static async Task RunAsync(CommunityPackLoadTarget load)
 		{
 			string romSha1 = "";
 			try {
 				//ADR-0146: no first-run consent prompt - AutoInstallCommunityPacks (checked above)
 				//is the single master switch before the catalog is contacted.
-				romSha1 = EmuApi.GetMepRomSha1();
+				romSha1 = load.RomSha1;
 				EmuApi.WriteLogEntry("[CommunityPack] romSha1=" + romSha1);
 				lock(_attemptedRomSha1) {
 					if(string.IsNullOrWhiteSpace(romSha1)) {
@@ -193,7 +210,7 @@ namespace Mesen.Services
 				}
 
 				CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(
-					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths);
+					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths, load);
 				EmuApi.WriteLogEntry("[CommunityPack] Install() outcome: Status=" + outcome.Status +
 					" ContainerName=" + outcome.ContainerName + " Message=" + outcome.Message);
 				//An install that withheld dep-backed ops is incomplete, so it belongs
@@ -201,20 +218,22 @@ namespace Mesen.Services
 				//latches the ROM for the rest of the process and the user can never
 				//complete a user_supplied dep - the power-cycle path is closed by the
 				//isPowerCycle guard in OnGameLoaded, and reloading hits this set (#156).
-				if(outcome.Status == CommunityPackInstallStatus.Failed || outcome.PendingDeps.Count > 0) {
+				//#657: a Stale install (another game opened during the download)
+				//is retried on this game's next load.
+				if(outcome.Status == CommunityPackInstallStatus.Failed || outcome.Status == CommunityPackInstallStatus.Stale || outcome.PendingDeps.Count > 0) {
 					ClearAttempt(romSha1);
 				}
 				if(pillShown) {
-					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable);
+					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable || outcome.Status == CommunityPackInstallStatus.Stale);
 				}
-				Surface(outcome, romSha1, openGeneration);
+				Surface(outcome, romSha1, load.OpenGeneration);
 			} catch(Exception ex) {
 				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
 				EmuApi.WriteLogEntry("[CommunityPack] RunAsync threw: " + ex);
 				Notify("Community pack auto-install failed: " + ex.Message);
 			} finally {
-				_installGate.Exit();
+				ExitGate();
 			}
 		}
 
@@ -256,6 +275,9 @@ namespace Mesen.Services
 
 				case CommunityPackInstallStatus.Skipped:
 					//Routine: up to date, disabled by user - nothing to say.
+				case CommunityPackInstallStatus.Stale:
+					//#657: the player opened another game during the download; the
+					//coordinator logged it and touched nothing. Not that game's news.
 					break;
 			}
 		}

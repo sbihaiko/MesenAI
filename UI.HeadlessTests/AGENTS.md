@@ -65,7 +65,10 @@ synthetic NROM (needs a built core; skips otherwise) and asserts the notice on
 the outcome and in `EmuApi.GetLog()`. It points `ConfigManager._homeFolder` (by
 reflection) at a temp folder so the install registry and cache never touch the
 user's real home. The decision itself is pinned in `UI.Tests`; this checks
-wiring only.
+wiring only. `CommunityPackInstallStaleLoadTests` (#657) swaps
+`CommunityPackInstallCoordinator.ReadCurrentLoad` to open game B while game
+A's Restore/auto-install is in flight and checks B's `mep/` and registry key
+survive (restore the probe in `Dispose`).
 
 ## Test hygiene
 
