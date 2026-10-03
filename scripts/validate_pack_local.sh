@@ -609,13 +609,14 @@ PY
     DEPS_COUNT=$(jq -r '(.sources.deps // []) | length' "$WORK/mep_recipe.json")
     [ "$DEPS_COUNT" != "0" ] && HAS_EXTERNAL_DEPS=1
   fi
-  while IFS= read -r asset; do
-    [ -z "$asset" ] && continue
-    case "$asset" in
-      textures|audio) L="assets:$asset"; gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
-      external) L="assets:external"; gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+  # Bug #677: assets:* follow the latest pass both ways, like patch:* below.
+  ASSET_LABELS=$(python3 scripts/pack_asset_labels.py "$WORK/classify_clean.json" ${HAS_EXTERNAL_DEPS:+--external})
+  for L in assets:textures assets:audio assets:external; do
+    case " $ASSET_LABELS " in
+      *" $L "*) gh issue edit "$ISSUE" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+      *) gh issue edit "$ISSUE" --repo "$REPO" --remove-label "$L" ;;
     esac
-  done < <(jq -r '.assets[]?' "$WORK/classify_clean.json"; [ -n "$HAS_EXTERNAL_DEPS" ] && echo external || true)
+  done
   # Bug #557: patch:ips|bps are decided from the lint (present AND wired),
   # never from classify's `assets`; stale ones are dropped first.
   WIRED_PATCH_LABELS=$(python3 scripts/pack_patch_labels.py "$WORK/mep_lint_output.txt")

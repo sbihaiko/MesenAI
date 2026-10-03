@@ -68,7 +68,12 @@ jobs:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
         run: |
           set -euo pipefail
-          gh project item-list 3 --owner sbihaiko --format json > items.json
+          # Bug #670: gh lists 30 items unless told otherwise. Ask for the
+          # shared limit and stop the job when the listing may be truncated,
+          # rather than reconcile/drift-check only part of the board.
+          LIMIT=$(python3 scripts/gh_project_items.py limit)
+          gh project item-list 3 --owner sbihaiko --limit "$LIMIT" --format json > items.json
+          python3 scripts/gh_project_items.py check items.json
 
       # `pack:valid` and `pack:invalid` are mutually exclusive. Every verdict
       # path in community-pack-validate.yml already enforces that (the three

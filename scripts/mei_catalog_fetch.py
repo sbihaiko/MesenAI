@@ -22,6 +22,7 @@ import re
 import subprocess
 
 import community_pack_markdown as markdown
+import gh_project_items
 from mep_meta_parser import MARKER as MEP_META_MARKER, parse_mep_meta
 
 REPO = "sbihaiko/MesenAI"
@@ -51,8 +52,9 @@ def fetch_accepted_items(accepted_statuses):
     an absent key may mean the datastore never held the value, not that the
     field is genuinely unset.
     """
-    raw = run_gh(["project", "item-list", str(PROJECT_NUMBER), "--owner", OWNER, "--format", "json"])
-    items = json.loads(raw).get("items", [])
+    # Bug #670: an explicit --limit, and a listing that may be truncated is
+    # refused (SystemExit) instead of silently dropping rows past the 30th.
+    items = gh_project_items.list_items(run_gh, PROJECT_NUMBER, OWNER)
     return [it for it in items if item_status(it) in accepted_statuses]
 
 

@@ -118,6 +118,11 @@ jobs:
           ISSUE_URL="https://github.com/${REPO}/issues/${ISSUE_NUMBER}"
           ITEM_ID=$(gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$ISSUE_URL" --format json -q '.id')
           echo "item_id=$ITEM_ID" >> "$GITHUB_OUTPUT"
+          # Bug #671: the Status before this run, restored by the last step
+          # if the run fails or is cancelled while still "Em validação". Read
+          # before any edit; a failed read stops here, with nothing moved.
+          PRIOR_STATUS_ID=$(python3 scripts/pack_board_status.py current "$ITEM_ID")
+          echo "prior_status_id=$PRIOR_STATUS_ID" >> "$GITHUB_OUTPUT"
           if [ "$MODE" = "submit" ]; then
             gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
               --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_NOVO_ENVIO" >/dev/null
@@ -528,14 +533,18 @@ jobs:
           python3 - "$DRIFT_LINES" "$GAME" "$GITHUB_OUTPUT" <<'PYEOF'
           import sys
 
+          sys.path.insert(0, "scripts")
+          from gh_output import append
+
           drift, game, out = sys.argv[1:4]
           text = open(".github/ai/validate-autofix.md", encoding="utf-8").read()
           prompt = text.rsplit("<!-- PROMPT -->", 1)[1].rsplit("<!-- SCHEMA -->", 1)[0].strip()
           schema = text.rsplit("<!-- SCHEMA -->", 1)[1].strip()
           prompt = prompt.replace("{{DRIFT_LINES}}", drift).replace("{{GAME}}", game)
-          with open(out, "a", encoding="utf-8") as f:
-              f.write("autofix_prompt<<__PROMPT_EOF__\n" + prompt + "\n__PROMPT_EOF__\n")
-              f.write("autofix_schema<<__SCHEMA_EOF__\n" + schema + "\n__SCHEMA_EOF__\n")
+          # Random per-write delimiters (#673): a fixed one can be closed early
+          # by a value line equal to it.
+          append(out, "autofix_prompt", prompt)
+          append(out, "autofix_schema", schema)
           PYEOF
       - name: Autofix mep_lint.py drift (Claude Code Action)
         id: autofix
@@ -688,6 +697,9 @@ jobs:
           import subprocess
           import sys
 
+          sys.path.insert(0, "scripts")
+          from gh_output import append
+
           issue, suffix, out = sys.argv[1:4]
           brief = subprocess.check_output(
               [sys.executable, "scripts/classify_pack_brief.py", "pack_download.bin", "mep_lint_output.txt"],
@@ -701,9 +713,13 @@ jobs:
               .replace("{{EXTERNAL_ASSETS_SUFFIX}}", suffix)
               .replace("{{PACK_BRIEF}}", brief)
           )
-          with open(out, "a", encoding="utf-8") as f:
-              f.write("classify_prompt<<__PROMPT_EOF__\n" + prompt + "\n__PROMPT_EOF__\n")
-              f.write("classify_schema<<__SCHEMA_EOF__\n" + schema + "\n__SCHEMA_EOF__\n")
+          # Bug #673: the prompt carries the PACK BRIEF (archive member names,
+          # README/CREDITS text). Under a fixed delimiter a pack line equal to
+          # it closed the block and the lines after it became outputs of their
+          # own (a forged classify_prompt/classify_schema). gh_output picks a
+          # random delimiter per write that never occurs in the value.
+          append(out, "classify_prompt", prompt)
+          append(out, "classify_schema", schema)
           PYEOF
       - name: Classify pack (Gemini)
         id: classify
@@ -730,11 +746,9 @@ jobs:
           # Same output name the replaced step exposed, so the sanitize step
           # below — and every reader behind it (recipe assembly, the verdict,
           # the identity check) — is unchanged.
-          {
-            echo "structured_output<<__STRUCTURED_EOF__"
-            cat "$RUNNER_TEMP/classify_verdict.json"
-            echo "__STRUCTURED_EOF__"
-          } >> "$GITHUB_OUTPUT"
+          # Model output echoes pack text: random delimiter, as above (#673).
+          python3 scripts/gh_output.py structured_output \
+            < "$RUNNER_TEMP/classify_verdict.json" >> "$GITHUB_OUTPUT"
       # Belt-and-braces for the boundary above: classify is an HTTP call and
       # has no filesystem tool, so nothing under scripts/ or .github/ may
       # differ from the checkout afterwards. Any diff means the boundary did
@@ -1044,14 +1058,16 @@ jobs:
           # patch:*) — independent of the accept/reject verdict above, so an
           # invalid pack still shows what kind of content it declared (e.g.
           # "audio" + "ips" even though it was rejected for having no
-          # working textures).
-          while IFS= read -r asset; do
-            [ -z "$asset" ] && continue
-            case "$asset" in
-              textures|audio) L="assets:$asset"; gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
-              external) L="assets:external"; gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+          # working textures). Bug #677: like patch:* below, the labels follow
+          # the latest pass both ways — a revalidated pack that dropped its
+          # audio loses assets:audio.
+          ASSET_LABELS=$(python3 scripts/pack_asset_labels.py "$RUNNER_TEMP/mep_classify_clean.json" ${HAS_EXTERNAL_DEPS:+--external})
+          for L in assets:textures assets:audio assets:external; do
+            case " $ASSET_LABELS " in
+              *" $L "*) gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$L"; APPLIED_LABELS="$APPLIED_LABELS $L" ;;
+              *) gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "$L" ;;
             esac
-          done < <(jq -r '.assets[]?' < "$RUNNER_TEMP/mep_classify_clean.json"; [ -n "$HAS_EXTERNAL_DEPS" ] && echo external || true)
+          done
           # Bug #557: patch:ips|bps are decided from the lint (present AND wired),
           # never from classify's `assets`; stale ones are dropped first.
           WIRED_PATCH_LABELS=$(python3 scripts/pack_patch_labels.py "mep_lint_output.txt")
@@ -1348,9 +1364,26 @@ jobs:
             gh api --method POST "repos/$REPO/issues/$ISSUE_NUMBER/comments" --input "$PAYLOAD_PATH" >/dev/null
           fi
       # Dispatches community-pack-catalog.yml (on: workflow_dispatch) by
-      # name only — never opened/parsed here. AC-6 (validate side).
-      - name: Dispatch catalog regeneration on acceptance
-        if: env.FINAL_STATUS_ID == env.STATUS_ACEITO_PARCIAL || env.FINAL_STATUS_ID == env.STATUS_ACEITO_COMPLETO
+      # name only — never opened/parsed here. AC-6 (validate side). Bug #679:
+      # a final "Inválido" dispatches too, so a revalidation that rejects an
+      # accepted pack de-lists it now instead of at the daily catalog run (a
+      # regeneration with nothing to change commits nothing).
+      - name: Dispatch catalog regeneration on a verdict (accept or de-list)
+        if: env.FINAL_STATUS_ID == env.STATUS_ACEITO_PARCIAL || env.FINAL_STATUS_ID == env.STATUS_ACEITO_COMPLETO || env.FINAL_STATUS_ID == env.STATUS_INVALIDO
         env:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
         run: gh workflow run community-pack-catalog.yml --repo "$REPO" --ref main
+      # Bug #671: a run that fails or is cancelled after the first step moved
+      # the item to "Em validação" (Gemini 429/5xx, the classify timeout, a
+      # transient gh error) must not strand it there — the catalog drops an
+      # accepted pack whose Status is no longer "Aceito". Restores the Status
+      # captured by that first step, only while the item is still "Em
+      # validação" (a verdict this run already wrote stands); see
+      # scripts/pack_board_status.py. Must stay the last step.
+      - name: Restore the prior Status when the run fails or is cancelled
+        if: (failure() || cancelled()) && steps.project-item.outputs.item_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          ITEM_ID: ${{ steps.project-item.outputs.item_id }}
+          PRIOR_STATUS_ID: ${{ steps.project-item.outputs.prior_status_id }}
+        run: python3 scripts/pack_board_status.py restore "$ITEM_ID" "$PRIOR_STATUS_ID"
