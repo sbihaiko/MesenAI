@@ -385,7 +385,7 @@ public class ShareRemasterJobsTests : IDisposable
 		Assert.False(model.ConfirmQuit(() => quits++), "quit went ahead with Share's job running");
 		Dispatcher.UIThread.RunJobs();
 		Assert.True(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
-		Assert.Equal("⚠ Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.False(launcher.Last!.Killed);
 
 		Click(window.FindNamed<Button>("InterruptionGoButton"));

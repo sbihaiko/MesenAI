@@ -30,7 +30,10 @@ namespace Mesen.ViewModels
 		//G.4 (W-P8): the Player strip's position (PlayerSettingsEssentials.Tabs).
 		//-1 outside Player mode, as SelectedTabIndex is -1 inside it, so only one
 		//of the two strips realizes a tab's content.
-		[ObservableProperty] public partial int PlayerTabIndex { get; set; } = -1;
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerLookTab))] public partial int PlayerTabIndex { get; set; } = -1;
+		//ADR-0249 (W-P10): Look's footer is Hold to Compare; the Options hint
+		//shows on the other tabs.
+		public bool IsPlayerLookTab => PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
 
 		//Video and Look edit the same VideoConfig, so they share one snapshot
 		//for Cancel/IsDirty, taken when the first of them opens.

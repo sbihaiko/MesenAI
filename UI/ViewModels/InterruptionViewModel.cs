@@ -12,10 +12,19 @@ namespace Mesen.ViewModels
 	public partial class InterruptionViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
-		[ObservableProperty] public partial InterruptionKind Kind { get; private set; }
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(IsStop), nameof(GoIsNeutral), nameof(IsRemaster), nameof(IsShare))]
+		public partial InterruptionKind Kind { get; private set; }
 		[ObservableProperty] public partial string Text { get; private set; } = "";
 		[ObservableProperty] public partial string KeepText { get; private set; } = "";
 		[ObservableProperty] public partial string GoText { get; private set; } = "";
+
+		//ADR-0249 (W-X3): how the shared banner draws this question - see
+		//UI/Logic/InterruptionBanner.cs.
+		public bool IsStop => InterruptionBanner.KindOf(Kind) == BannerKind.Stop;
+		public bool GoIsNeutral => !InterruptionBanner.GoIsTinted(Kind);
+		public bool IsRemaster => Kind != InterruptionKind.None && InterruptionBanner.WorkspaceOf(Kind) == Workspace.Remaster;
+		public bool IsShare => Kind != InterruptionKind.None && InterruptionBanner.WorkspaceOf(Kind) == Workspace.Share;
 
 		private Action? _go;
 

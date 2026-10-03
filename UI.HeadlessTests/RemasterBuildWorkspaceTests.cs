@@ -280,7 +280,7 @@ public class RemasterBuildWorkspaceTests : IDisposable
 
 		question.Ask(InterruptionKind.OpenWhileClassicBuilder, "Castlevania", 0, false, () => ran++);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.Equal("Cancel", window.FindNamed<Button>("InterruptionKeepButton").Content);
 		Click(window.FindNamed<Button>("InterruptionKeepButton"));
 		Assert.False(question.IsVisible);
@@ -288,7 +288,7 @@ public class RemasterBuildWorkspaceTests : IDisposable
 
 		question.Ask(InterruptionKind.QuitWhileJob, "", 0, true, () => ran++);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("A build is running. Quit anyway? It stops, and nothing you painted is lost.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.Equal("Quit", window.FindNamed<Button>("InterruptionGoButton").Content);
 		Click(window.FindNamed<Button>("InterruptionGoButton"));
 		Assert.Equal(1, ran);
@@ -339,14 +339,14 @@ public class RemasterBuildWorkspaceTests : IDisposable
 			Assert.True(window.IsVisible, "the window closed with a recording running");
 			Assert.True(EmuApi.IsMepBootstrapping(), "closing cut the recording");
 			Assert.True(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
-			Assert.Equal("■ Quit while recording? What you recorded so far is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+			Assert.Equal("Quit while recording? What you recorded so far is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 			Click(window.FindNamed<Button>("InterruptionKeepButton"));
 			Assert.False(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
 			Assert.True(EmuApi.IsMepBootstrapping());
 
 			LoadRomHelper.LoadFile(other);
 			WaitFor(() => model.Interruption.IsVisible, "opening another game never asked");
-			Assert.Equal("■ Open other-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+			Assert.Equal("Open other-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 			Assert.True(EmuApi.IsMepBootstrapping(), "the question stopped the recording before an answer");
 			Click(window.FindNamed<Button>("InterruptionGoButton"));
 			Assert.False(EmuApi.IsMepBootstrapping());

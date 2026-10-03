@@ -168,7 +168,7 @@ public class RemasterReloadAndArchiveTests : IDisposable
 				reload();
 				Dispatcher.UIThread.RunJobs();
 				Assert.True(model.Interruption.IsVisible, "a reload ended the recording without asking");
-				Assert.Equal("■ Reload synthetic-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+				Assert.Equal("Reload synthetic-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 				Assert.Equal("Stop and Reload", window.FindNamed<Button>("InterruptionGoButton").Content);
 				Thread.Sleep(300);
 				Dispatcher.UIThread.RunJobs();

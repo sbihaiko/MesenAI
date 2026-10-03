@@ -534,7 +534,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 - **Scope.** Every style is under the `player` class. `MainWindow` binds
   `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
-  `ShellStatusLine`; nothing else carries it. A component class outside the
+  `ShellStatusLine` (and `InterruptionBarHost`); outside MainWindow only
+  Player-mode Settings (`ConfigWindow`'s `PlayerSettingsRoot`) and the
+  first-run card (`SetupWizardWindow`'s `FirstRunCard`) carry it. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic
@@ -546,7 +548,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   `Player*Brush`; `UI.Tests/Theme/PlayerThemeDriftTests` fails when either
   side moves. Also: type ramp `PlayerFont*` (LargeTitle 28 … Caption 10.5),
   radii `PlayerRadius*` (Control 8, ControlLarge 11, Card 12, Sheet 14,
-  Hero 16, Overlay 18), spacing `PlayerSpacing*` and `PlayerPageMargin`, shadows `PlayerShadow*`,
+  Hero 16, Overlay 18; W-P15's pad: Pad 40, PadKey 3, PadRound 17), spacing `PlayerSpacing*` and `PlayerPageMargin`, shadows `PlayerShadow*`,
   `PlayerFocusRing`. Font: Inter (`Avalonia.Fonts.Inter`, `WithInterFont()`).
   No dark variant.
 - **Tint.** `c:PlayerTheme.Tint` / `TintSoft` / `TintText`
@@ -577,13 +579,32 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
     `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
     (TEXT3), `tint`.
-  - Controls: `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
+  - Settings groups (W-P8, W-P10): `Border.group.inset` (#F8F8FA, radius
+    12) holding `:is(Panel).setting-row` rows (46 high) split by
+    `Separator.row-hairline`; above a group `TextBlock.group-label` (11.5
+    bold TEXT2 caps) and `TextBlock.group-hint` (TEXT3); `TextBlock.reason`
+    is why a control is off (11.5 semibold, dark orange).
+  - In-place banner (W-X1 confirmations, W-X2 errors, W-X3 interruptions):
+    `Border.banner` (pale orange warning) / `.info` (pale blue) / `.stop`
+    (pale red), radius 12, 56 high, plus `remaster`/`share` for the tint;
+    inside a DockPanel `PathIcon.banner-icon` (left: `PlayerIconWarning`,
+    the tinted icon, or `PlayerIconStop`), `StackPanel.banner-actions`
+    (right: `secondary` then `primary` / `primary neutral` (dark) /
+    `destructive`, 30 high) and `TextBlock.banner-text`.
+    `Views/InterruptionBar` is built on it, its look chosen by
+    `Logic/InterruptionBanner`. Ask in place with a banner, never a dialog.
+  - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the
+    renders' 24-high popup button with the tint stepper), `TabControl.segmented`
+    (a TabControl with the segmented strip, 96 px segments),
+    `RadioButton.choice` (tint-filled, 13.5 medium), `ProgressBar.track`
+    (6 high, tint bar), `Border.hud` (the dark pill over the game),
+    `Border.badge.xl` (40, a sheet title's badge), `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
     on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
     Classes="tiles"` (one row of 176 x 132 recent-game tiles).
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
-    `ChevronDown`, `Record`, `More`, `Check`.
+    `ChevronDown`, `Record`, `More`, `Check`, `Warning`, `Stop`, `UpDown`.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
   order (the headless suites find controls by name). Swap local colours and
   sizes for classes; add a render test next to

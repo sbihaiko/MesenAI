@@ -76,7 +76,7 @@
 		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
 
 		<!--G.6 (W-X3): the inline question before work is lost, above any profile.-->
-		<Panel Name="InterruptionBarHost" DockPanel.Dock="Top" IsVisible="{Binding Interruption.IsVisible}">
+		<Panel Name="InterruptionBarHost" DockPanel.Dock="Top" IsVisible="{Binding Interruption.IsVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 			<v:InterruptionBar Name="InterruptionBar" DataContext="{Binding Interruption}" />
 		</Panel>
 

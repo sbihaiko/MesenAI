@@ -4,20 +4,56 @@
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:vm="using:Mesen.ViewModels"
-	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="44"
+	xmlns:v="using:Mesen.Views"
+	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="56"
 	x:DataType="vm:InterruptionViewModel"
 	x:Class="Mesen.Views.InterruptionBar"
 >
 	<!--G.6 (PRD Part B §13.5.5 W-X3, W-X1 shape): one sentence, the safe
 	button, then the one that goes on. Docked above whatever profile is
-	showing, so it is asked where the user is (rule 7).-->
-	<Border Name="InterruptionBarBorder" Background="#3A2F14" Padding="12 6">
+	showing, so it is asked where the user is (rule 7). ADR-0249: drawn as
+	the shared in-place banner (PlayerTheme.axaml "in-place banner") - a lost
+	recording is the pale red stop, anything else the pale orange warning; a
+	quit goes on with the dark button, an open or a reload with the tint of
+	the workspace whose work is lost. Outside the Player scope the classic
+	dark strip stays.-->
+	<UserControl.Styles>
+		<Style Selector="Border#InterruptionBarBorder">
+			<Setter Property="Background" Value="#3A2F14" />
+			<Setter Property="Padding" Value="12 6" />
+		</Style>
+		<Style Selector="PathIcon#InterruptionIcon">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player PathIcon#InterruptionIcon">
+			<Setter Property="IsVisible" Value="True" />
+			<Setter Property="Data" Value="{StaticResource PlayerIconWarning}" />
+		</Style>
+		<Style Selector=".player Border.stop PathIcon#InterruptionIcon">
+			<Setter Property="Data" Value="{StaticResource PlayerIconStop}" />
+		</Style>
+		<!-- In the Player GUI the banner floats on the window's light page. -->
+		<Style Selector=".player v|InterruptionBar">
+			<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
+		</Style>
+		<Style Selector=".player Border#InterruptionBarBorder.banner">
+			<Setter Property="Background" Value="{StaticResource PlayerBannerWarningBrush}" />
+			<Setter Property="Padding" Value="16 10 14 10" />
+			<Setter Property="Margin" Value="16 10 16 6" />
+		</Style>
+		<Style Selector=".player Border#InterruptionBarBorder.banner.stop">
+			<Setter Property="Background" Value="{StaticResource PlayerBannerStopBrush}" />
+		</Style>
+	</UserControl.Styles>
+
+	<Border Name="InterruptionBarBorder" Classes="banner" Classes.stop="{Binding IsStop}" Classes.remaster="{Binding IsRemaster}" Classes.share="{Binding IsShare}">
 		<DockPanel>
-			<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12 0 0 0">
-				<Button Name="InterruptionKeepButton" Content="{Binding KeepText}" Click="OnKeep" />
-				<Button Name="InterruptionGoButton" Content="{Binding GoText}" Click="OnGo" />
+			<PathIcon Name="InterruptionIcon" Classes="banner-icon" DockPanel.Dock="Left" />
+			<StackPanel Classes="banner-actions" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12 0 0 0">
+				<Button Name="InterruptionKeepButton" Classes="secondary medium" Content="{Binding KeepText}" Click="OnKeep" />
+				<Button Name="InterruptionGoButton" Classes="primary medium" Classes.neutral="{Binding GoIsNeutral}" Content="{Binding GoText}" Click="OnGo" />
 			</StackPanel>
-			<TextBlock Name="InterruptionText" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+			<TextBlock Name="InterruptionText" Classes="banner-text" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
 		</DockPanel>
 	</Border>
 </UserControl>
