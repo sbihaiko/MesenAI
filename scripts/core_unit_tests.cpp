@@ -580,6 +580,14 @@ void TestTheDeclineRuleRefusesAForeignPackAndExemptsTheProjectsOwnLayers()
 	Check(own.NeedTextures && own.NeedAudio && !own.Declined(), "F12.20: the project's own layers do not decline a second recording");
 	RemasterProject::RecordingPlan gb = PlanRecording(LayerOwner{}, false, LayerOwner{}, false);
 	Check(gb.NeedTextures && !gb.NeedAudio, "F12.20: audio fingerprints stay NES only");
+	//The legacy Play bootstrap (BootstrapEnhancementFolder kept on, ADR-0243 Q3) is not the Record button: recording
+	//swaps the HD PPU for the builder's, so recording over the project's own mep/ art would play the game without it.
+	RemasterProject::RecordingPlan passiveOverArt = PlanRecording(LayerOwner{ true, true, true }, false, LayerOwner{}, true, false);
+	Check(!passiveOverArt.NeedTextures && passiveOverArt.NeedAudio, "Play's automatic bootstrap never records tiles over the project's own mep/ art");
+	RemasterProject::RecordingPlan passiveOverDraft = PlanRecording(LayerOwner{ true, true, false }, false, LayerOwner{}, true, false);
+	Check(passiveOverDraft.NeedTextures, "Play's automatic bootstrap still records over the project's own earlier recordings");
+	RemasterProject::RecordingPlan recordOverArt = PlanRecording(LayerOwner{ true, true, true }, false, LayerOwner{}, true, true);
+	Check(recordOverArt.NeedTextures, "ADR-0243 Decision 3: the Record button still records over the project's own mep/ art");
 
 	using RemasterProject::IsOwnProjectSection;
 	Check(IsOwnProjectSection(true, true, "mep/textures"), "F12.20: the project's mep/ human layer is its own");

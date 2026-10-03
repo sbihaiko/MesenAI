@@ -285,8 +285,10 @@ public:
 	//in <project>/project.json. source is play/tas/ai/script (anything else
 	//reads as play). Declines - logs why and returns false - when a foreign
 	//pack dresses the ROM (#142); the project's own mep/ and earlier
-	//recordings never decline it. Thread-safe (takes the emulation lock).
-	bool StartRecording(const string& source, const string& note);
+	//recordings never decline it - unless onDemand is false (Play's automatic
+	//bootstrap), where the project's own mep/ art declines the tile half so the
+	//game keeps playing with it. Thread-safe (takes the emulation lock).
+	bool StartRecording(const string& source, const string& note, bool onDemand = true);
 	//Stops the recording in progress: the builder writes its files, the audio
 	//fingerprints are saved, project.json gets the emulated duration. False
 	//when nothing was recording. Thread-safe.
