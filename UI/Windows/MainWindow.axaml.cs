@@ -489,6 +489,8 @@ namespace Mesen.Windows
 		private void OnNotification(NotificationEventArgs e)
 		{
 			DebugWindowManager.ProcessNotification(e);
+			//#734: the Play load card ends with the first picture, a pause or a stop.
+			OnLoadWaitNotification(e.NotificationType);
 
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
@@ -529,7 +531,17 @@ namespace Mesen.Windows
 					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
 					bool loadedPaused = evtParams.IsPaused;
 					Dispatcher.UIThread.Post(() => _model.IsGamePaused = loadedPaused);
+					//#734: in Play the home and its load card stay until the first picture.
+					bool holdsHome = HoldsHomeForPicture(loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
+					//W-P2: the hash the home's pack badge looks up later.
+					RecentPackLookup.RememberLoadedGame(romInfo);
+
+					//#732: a pack patch forced onto another revision of the game
+					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so
+					//in place, with a reload without it.
+					string forcedPatch = EmuApi.GetForcedPackPatch();
+					Dispatcher.UIThread.Post(() => _model.OnForcedPackPatch(forcedPatch));
 
 					//P.5 (PRD Part B §5/§6): Player pack UX - the picker opens
 					//once over the un-enhanced game when 2+ competing pack_ids exist
@@ -537,11 +549,13 @@ namespace Mesen.Windows
 					//(P.3) and power-cycles, and the reload applies silently (no
 					//picker, just the "Applied ..." toast). No toast while the picker
 					//is open - the game is un-enhanced until a pick.
+					//ADR-0251: during the first three starts the toast also says
+					//how to open W-P4 (a game without a pack gets that hint alone).
+					bool isGameStart = !evtParams.IsPowerCycle;
 					Dispatcher.UIThread.Post(() => {
 						bool pickerOpen = _model.EvaluatePlayerPackPicker(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1());
-						if(!pickerOpen && _model.Config.Preferences.UiMode == UiMode.Player && !string.IsNullOrEmpty(_model.CurrentPackName)) {
-							string layers = string.IsNullOrEmpty(_model.CurrentPackLayers) ? "" : " — " + _model.CurrentPackLayers;
-							EmuApi.DisplayMessage("MEP", "MepPackApplied", _model.CurrentPackName + layers);
+						if(!pickerOpen) {
+							_model.ShowPlayEntryToast(isGameStart);
 						}
 					});
 
@@ -569,9 +583,8 @@ namespace Mesen.Windows
 					}
 					if(!evtParams.IsPowerCycle) {
 						Dispatcher.UIThread.Post(() => {
-							_model.RecentGames.Visible = false;
-							if(IsKeyboardFocusWithin || IsActive || ApplicationHelper.GetActiveOrMainWindow() == this) {
-								this.GetControl<Panel>("RendererPanel").Focus();
+							if(!holdsHome) {
+								ShowGamePicture();
 							}
 
 							DispatcherTimer.RunOnce(() => {

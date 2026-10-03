@@ -382,6 +382,37 @@ public class WorkspaceShellTests : IDisposable
 		Assert.False(flyout.IsOpen);
 	}
 
+	//On macOS the native renderer is drawn above every Avalonia control: with
+	//it shown, Esc paused the game and opened W-P4 behind the picture, so the
+	//player saw only the pause icon. Every surface over the game hides it.
+	[AvaloniaFact]
+	public void The_pause_overlay_and_the_sheets_hide_the_native_picture()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		model.RecentGames.Visible = false;
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.IsNativeRendererVisible);
+
+		model.IsPlayerOverlayVisible = true;
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(model.IsNativeRendererVisible);
+
+		model.IsPlayerOverlayVisible = false;
+		model.IsSaveStatesSheetVisible = true;
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(model.IsNativeRendererVisible);
+
+		model.IsSaveStatesSheetVisible = false;
+		model.CheatsSheet.IsVisible = true;
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(model.IsNativeRendererVisible);
+		model.CheatsSheet.IsVisible = false;
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.IsNativeRendererVisible);
+	}
+
 	//G.3 and G.8 replaced G.1's placeholders with each workspace's own
 	//screens (RemasterWorkspaceTests, ShareWorkspaceTests); this pins the
 	//shell's half: Share's home is shown and nothing of Play is.
@@ -473,7 +504,8 @@ public class WorkspaceShellTests : IDisposable
 			EmuApi.Pause();
 			WaitFor(() => model.IsGamePaused, "the pause never reached the shell");
 			Assert.True(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
-			Assert.Contains("paused", model.Shell.StatusText);
+			//W-S1: the line names the game, never "is paused" (the overlay says so).
+			Assert.Equal("synthetic-nrom", model.Shell.StatusText);
 		} finally {
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();

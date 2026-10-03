@@ -69,6 +69,22 @@
 				</DockPanel>
 			</Border>
 
+			<!--#736: an accepted community pack for this game is not the one
+			rendering. Plain words for why, and one button that offers it - never
+			forced: auto-install off and a turned-off pack are the player's choice.-->
+			<Border Name="PackDetailOffer" Classes="banner info" IsVisible="{Binding PackDetailHasOffer}" Margin="0 0 0 16">
+				<DockPanel>
+					<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconPack}" />
+					<StackPanel Classes="banner-actions" DockPanel.Dock="Right">
+						<Button Name="PackDetailUseCommunityButton" Classes="primary regular" Content="{l:Translate btnPackDetailUseCommunity}" Click="OnUseCommunityPack" />
+					</StackPanel>
+					<StackPanel Spacing="2" VerticalAlignment="Center">
+						<TextBlock Name="PackDetailOfferTitle" Classes="banner-text" FontWeight="SemiBold" Text="{l:Translate lblPackDetailOfferTitle}" />
+						<TextBlock Name="PackDetailOfferBody" Classes="banner-text" Text="{Binding PackDetailOfferBody}" />
+					</StackPanel>
+				</DockPanel>
+			</Border>
+
 			<StackPanel Orientation="Horizontal" Spacing="6">
 				<Button Name="PackDetailChangeButton" Classes="secondary regular" Content="{l:Translate btnPackDetailChange}" IsEnabled="{Binding PackDetailCanChange}" Click="OnChange" />
 				<Button Name="PackDetailFolderButton" Classes="secondary regular" IsVisible="{Binding PackDetailHasFolder}" Click="OnShowFolder">

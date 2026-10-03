@@ -717,10 +717,12 @@ def w_p3():
     gx = (x0 + x1) / 2 - gw / 2
     c.scene((gx, y0 + 1, gx + gw, y1 - 1), 0)
     c.lights()
-    tb = (x1 - 330, y1 - 80, x1 - 30, y1 - 36)
+    # ADR-0251: during the first three game starts the toast ends with the
+    # way into W-P4 (the binding of the device that started the game).
+    tb = (x1 - 450, y1 - 80, x1 - 30, y1 - 36)
     c.hud(tb, 12)
     c.icon("check", tb[0] + 22, tb[1] + 22, 14, (52, 199, 89))
-    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures", 13.5, 600, CARD, "lm")
+    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures · Esc for the menu", 13.5, 600, CARD, "lm")
     c.caption("W-P3", "Play — in game, no chrome; one toast for the pack", 0)
     return c
 
@@ -963,7 +965,7 @@ def remaster_start(c, banner=False):
         bb = (x0 + 40, y0 + 20, x1 - 40, y0 + 76)
         c.rrect(bb, 12, fill=(255, 244, 225))
         c.icon("warn", bb[0] + 24, bb[1] + 28, 16, ORANGE)
-        c.text(bb[0] + 44, bb[1] + 19, "Painting needs Python 3, which MesenAI could not find.", 13.5, 650, (150, 85, 0), "lm")
+        c.text(bb[0] + 44, bb[1] + 19, "Painting needs Python 3.10 or newer, which MesenAI could not find.", 13.5, 650, (150, 85, 0), "lm")
         c.text(bb[0] + 44, bb[1] + 38, "You can still record. Your figures are prepared once Python is available.", 12.5, 400, (150, 85, 0), "lm")
         c.button(bb[2] - 16, bb[1] + 14, "How to Install", "plain", (150, 85, 0), anchor="r")
         c.button(bb[2] - 130, bb[1] + 14, "Locate Python…", "secondary", anchor="r")
@@ -1156,10 +1158,10 @@ def w_p16():
     ib = (x0 + 24, y0 + 146, x1 - 24, y0 + 196)
     c.rrect(ib, 10, fill=(248, 248, 250), outline=(232, 232, 236))
     c.text(ib[0] + 14, ib[1] + 17, "Arcade soundtrack (MP3 set, 23 files)", 13.5, 600, TEXT, "lm")
-    c.text(ib[0] + 14, ib[1] + 36, "Licence: not declared", 12, 400, TEXT2, "lm")
-    drop_zone(c, (x0 + 24, y0 + 210, x1 - 24, y0 + 310), "Drop the file here", "It is copied into the pack's download folder")
-    c.button(x1 - 24, y1 - 52, "Choose File…", "primary", TINT["play"], anchor="r", h=32)
-    c.button(x1 - 148, y1 - 52, "Play Without It", "secondary", anchor="r", h=32)
+    c.text(ib[0] + 14, ib[1] + 36, "License: not declared", 12, 400, TEXT2, "lm")
+    drop_zone(c, (x0 + 24, y0 + 210, x1 - 24, y0 + 310), "Drop the file here", "It is checked, then the game restarts with it.")
+    c.button(x1 - 24, y1 - 52, "Add and Restart…", "primary", TINT["play"], anchor="r", h=32)
+    c.button(x1 - 190, y1 - 52, "Play Without It", "secondary", anchor="r", h=32)
     c.button(x0 + 24, y1 - 52, "Show Folder", "plain", TINT["play"], h=32, icon="folder")
     c.caption("W-P16", "Play — a pack waits for a file only you can add", 4)
     return c

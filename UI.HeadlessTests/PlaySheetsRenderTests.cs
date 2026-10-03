@@ -47,6 +47,10 @@ public class PlaySheetsRenderTests : IDisposable
 		"aaa\tContra 80s\t1.2\tTastic\tCC BY-NC 4.0\ttextures,audio\t1\t0\tissue-1\tc1\n" +
 		"bbb\tContra HD Remix\t1.0\t\t\ttextures\t1\t0\tissue-2\tc2\n" +
 		"ccc\tContra Arcade\t2.0\t\t\taudio\t1\t0\tissue-3\tc3\n";
+	//The render's own two packs; W-P5 adds the "No pack" row.
+	private const string TwoPacks =
+		"aaa\tContra 80s\t1.2\tTastic\tCC BY-NC 4.0\ttextures,audio\t1\t0\tissue-1\tc1\n" +
+		"bbb\tContra HD Remix\t1.0\t\t\ttextures\t1\t0\tissue-2\tc2\n";
 	private const string OnePack = "aaa\tContra 80s\t1.2\tTastic\tCC BY-NC 4.0\ttextures,audio\t1\t0\tissue-1\tc1\n";
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
@@ -199,13 +203,13 @@ public class PlaySheetsRenderTests : IDisposable
 	}
 
 	//W-P5: option cards (selected = soft blue + tint outline), Cancel and Use
-	//This Pack; 3 packs + 2 buttons = the render's 5 controls at rest.
+	//This Pack; 2 packs + "No pack" + 2 buttons = the render's 5 controls at rest.
 	[AvaloniaFact]
 	public void Pack_picker_renders_as_W_P5()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = Show();
-		Assert.True(model.OpenPackFromOverlay(ThreePacks, Sha1, _folder, "", installedSourceSha256: null));
+		Assert.True(model.OpenPackFromOverlay(TwoPacks, Sha1, _folder, "", installedSourceSha256: null));
 		Settle(window);
 
 		Border sheet = window.FindNamed<Border>("PlayerPackPicker");

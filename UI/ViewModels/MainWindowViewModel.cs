@@ -88,6 +88,10 @@ namespace Mesen.ViewModels
 		//P.5 (PRD Part B §6): the currently-applied pack's name/layers for
 		//the overlay chip and the "Applied ..." toast.
 		[ObservableProperty] public partial string CurrentPackName { get; private set; } = "";
+		//W-S1: the status line's "pack Contra 80s 1.2"; set before CurrentPackName,
+		//whose change refreshes the line.
+		private string _currentPackVersion = "";
+		private bool _currentPackAutoOnly;
 		[ObservableProperty] public partial string CurrentPackLayers { get; private set; } = "";
 
 		[ObservableProperty] public partial bool IsNativeRendererVisible { get; private set; }
@@ -119,11 +123,13 @@ namespace Mesen.ViewModels
 			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
 				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 			Remaster.ActivityChanged += OnRemasterActivityChanged;
+			Shell.FollowPaintedCells(Remaster);
 			InitShare();
 
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
 			RecentGames = new RecentGamesViewModel();
+			WatchPlaySurfaces();
 			UpdateShellState();
 			UpdateRemasterSurfaces();
 
@@ -183,7 +189,7 @@ namespace Mesen.ViewModels
 		private void UpdateShellState()
 		{
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
-			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName, IsPlayerPackPickerVisible);
+			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName, _currentPackVersion, _currentPackAutoOnly, IsPlayerPackPickerVisible);
 		}
 
 		partial void OnIsGamePausedChanged(bool value) => UpdateShellState();
@@ -228,7 +234,8 @@ namespace Mesen.ViewModels
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
-			bool open = PlayerPackPicker.ShouldOpen(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.PreferredContainer != null);
+			//W-P5's "No pack" is a stored choice too: it applies silently.
+			bool open = PlayerPackPicker.ShouldOpen(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.HasEffectivePreference);
 			IsPlayerPackPickerVisible = open;
 			return open;
 		}
@@ -237,7 +244,9 @@ namespace Mesen.ViewModels
 		//offers to change the current pick, so it opens the picker whenever 2+
 		//distinct pack_ids exist, even with a stored preference. Returns true
 		//when the picker is showing.
-		public bool OpenPlayerPackPickerForChange(string packListText, string romSha1)
+		//#736: hasCommunityOffer keeps W-P4's Pack row on W-P6, which holds the
+		//offer (PackRowRoute.For); W-P6's own Change Pack… passes false.
+		public bool OpenPlayerPackPickerForChange(string packListText, string romSha1, bool hasCommunityOffer = false)
 		{
 			_pickerRomSha1 = romSha1;
 
@@ -248,8 +257,9 @@ namespace Mesen.ViewModels
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
-			int distinct = PlayerPackPicker.DistinctPackIdCount(resolution.Candidates);
-			if(hasSibling || distinct < 2) {
+			//2+ packs, or "No pack" with a pack to go back to (W-P5); an offer
+			//stays on W-P6 (#736).
+			if(hasCommunityOffer || !PlayerPackPicker.CanChangeChoice(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.PrefersNoPack)) {
 				return false;
 			}
 			IsPlayerPackPickerVisible = true;
@@ -262,17 +272,8 @@ namespace Mesen.ViewModels
 		private void BuildPackPickerData(string packListText, string romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling)
 		{
 			MepPackListResult parsed = MepPackListParser.Parse(packListText);
-			List<PackPreferenceResolver.Candidate> candidates = parsed.Packs.Select(e => new PackPreferenceResolver.Candidate {
-				Container = e.Container,
-				Name = e.Name,
-				PackId = e.PackId,
-				ContentId = e.ContentId,
-				Version = e.Version,
-				Enabled = e.Enabled,
-				IsAutoOnly = e.IsAutoOnly
-			}).ToList();
 			//#693: a disabled pack is neither offered nor counted.
-			candidates = PlayerPackPicker.Offered(candidates);
+			List<PackPreferenceResolver.Candidate> candidates = OfferedCandidates(parsed);
 
 			Dictionary<string, MepPackListEntry> entriesByContainer = new(StringComparer.OrdinalIgnoreCase);
 			foreach(MepPackListEntry e in parsed.Packs) {
@@ -295,25 +296,49 @@ namespace Mesen.ViewModels
 				.OrderByDescending(c => c.Votes)
 				.ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
 				.ToList();
-			//G.4 (W-P5): one radio starts selected.
-			SelectInitialPackChoice(resolution.PreferredContainer);
+			//W-P5: "No pack" is the last row, offered whenever a pack is listed.
+			if(PlayerPackPicker.OffersNoPack(PlayerPackChoices.Count)) {
+				PlayerPackChoices = PlayerPackChoices.Append(PlayerPackChoice.NoPackRow(
+					ResourceHelper.GetMessage("PackPickerNoPackTitle"),
+					ResourceHelper.GetMessage(PackPickerRow.NoPackDetailKey(Config.Audio.EnableEnhancedAudio)))).ToList();
+			}
+			//G.4 (W-P5): one radio starts selected - the stored choice, "No pack" included.
+			SelectInitialPackChoice(resolution.PrefersNoPack ? PackPreferenceResolver.NoPack : resolution.PreferredContainer);
+		}
+
+		private static List<PackPreferenceResolver.Candidate> OfferedCandidates(MepPackListResult parsed)
+		{
+			return PlayerPackPicker.Offered(parsed.Packs.Select(e => new PackPreferenceResolver.Candidate {
+				Container = e.Container,
+				Name = e.Name,
+				PackId = e.PackId,
+				ContentId = e.ContentId,
+				Version = e.Version,
+				Enabled = e.Enabled,
+				IsAutoOnly = e.IsAutoOnly,
+				IsSibling = e.Source == PackOrigin.Sibling
+			}));
 		}
 
 		//The current pack (chip/toast): the one the core renders (#703,
 		//PlayerPackPicker.CurrentContainer), not the picker's display order.
 		private PlayerPackChoice? RenderedPackChoice(PackPreferenceResolver.Resolution resolution)
 		{
-			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer);
+			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer, resolution.PrefersNoPack);
 			return container == null ? null : PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
 		}
 
 		private void UpdateCurrentPack(PackPreferenceResolver.Resolution resolution)
 		{
+			_currentPackVersion = "";
+			_currentPackAutoOnly = false;
 			CurrentPackName = "";
 			CurrentPackLayers = "";
 
 			PlayerPackChoice? current = RenderedPackChoice(resolution);
 			if(current != null) {
+				_currentPackVersion = current.Version;
+				_currentPackAutoOnly = current.IsAutoOnly;
 				CurrentPackName = current.Name;
 				CurrentPackLayers = current.Layers;
 			}
@@ -335,9 +360,12 @@ namespace Mesen.ViewModels
 			Config.ApplyConfig();
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
-			//The chosen pack is enabled (#693), so it is what the core renders next.
-			CurrentPackName = choice.Name;
-			CurrentPackLayers = choice.Layers;
+			//The chosen pack is enabled (#693), so it is what the core renders
+			//next; "No pack" renders none (W-P4's Pack row and the status line).
+			_currentPackVersion = choice.IsNoPack ? "" : choice.Version;
+			_currentPackAutoOnly = !choice.IsNoPack && choice.IsAutoOnly;
+			CurrentPackName = choice.IsNoPack ? "" : choice.Name;
+			CurrentPackLayers = choice.IsNoPack ? "" : choice.Layers;
 			//#691: from W-P4, back to W-P4 (in place) or to the game (restart).
 			PackPickReturn back = PackPickClose.After(_packPickerFromOverlay, LayerChangeKeepsPlace);
 			_packPickerFromOverlay = false;
@@ -542,9 +570,11 @@ namespace Mesen.ViewModels
 			//G.1: the native renderer is a native child view drawn above Avalonia
 			//content, so it is hidden explicitly outside Play (the emulator keeps
 			//running; only the picture is not shown). G.3: Remaster's recording
-			//view (W-R2) shows it too.
-			IsNativeRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
+			//view (W-R2) shows it too. The same reason hides it under W-P4 and the
+			//sheets opened over the game (PlayGameLayer).
+			IsNativeRendererVisible = PlayGameLayer.ShowsNativeRenderer(IsGameViewVisible, RecentGames.Visible, SoftwareRenderer.FrameSurface != null, IsPlaySurfaceOverGame);
 			IsSoftwareRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
+			UpdatePausedPicture(IsPlaySurfaceOverGame);
 
 			if(Renderer != null) {
 				Dispatcher.UIThread.Post(() => {
@@ -614,6 +644,8 @@ namespace Mesen.ViewModels
 		public bool HasVotes => Votes > 0;
 		public string Origin { get; } = "";
 		public string ContentId { get; } = "";
+		//The F5 bootstrap's machine-only sibling (ADR-0049), not a human's pack.
+		public bool IsAutoOnly { get; }
 
 		public string Container { get; }
 		public string PackId { get; }
@@ -645,6 +677,7 @@ namespace Mesen.ViewModels
 			Votes = Math.Max(0, votes);
 			Origin = entry?.Source ?? "";
 			ContentId = candidate.ContentId ?? "";
+			IsAutoOnly = candidate.IsAutoOnly;
 
 			//G.4 (W-P5): "by Tastic · 1.2 · textures, audio"; the license moved
 			//to the pack detail (W-P6, rule 3). GetMessage always formats, so the
@@ -663,6 +696,27 @@ namespace Mesen.ViewModels
 			string assets = count == 1 ? "asset" : "assets";
 			return count + " known-missing " + assets + " — declared by " + who + ", not by the author";
 		}
+
+		//W-P5's "No pack" row: its container and pack_id are the sentinel the
+		//preference stores (PackPreferenceResolver.NoPack), so Use This Pack
+		//stores it like any pick.
+		public bool IsNoPack { get; }
+
+		private PlayerPackChoice(string name, string detail)
+		{
+			Container = PackPreferenceResolver.NoPack;
+			PackId = PackPreferenceResolver.NoPack;
+			Name = name;
+			Detail = detail;
+			Author = "";
+			Version = "";
+			License = "";
+			Layers = "";
+			KnownMissingNote = "";
+			IsNoPack = true;
+		}
+
+		public static PlayerPackChoice NoPackRow(string name, string detail) => new(name, detail);
 
 		public override string ToString() => Name;
 	}

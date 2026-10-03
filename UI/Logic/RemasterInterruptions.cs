@@ -25,7 +25,11 @@ public enum InterruptionKind
 	//ADR-0249 (W-X1): Player mode's ConfirmExitResetPower questions, asked in
 	//place instead of a message box - W-P4's Quit game, and closing the window.
 	QuitGame,
-	QuitApp
+	QuitApp,
+	//#732: the load forced a pack's ROM patch made for another revision of the
+	//game (ApplyPatchOnHashMismatch). Not lost work: a warning with a way out
+	//(UI/Logic/PlayForcedPatch.cs).
+	ForcedPatch
 }
 
 public static class Interruptions

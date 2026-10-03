@@ -237,7 +237,7 @@ public class PauseOverlayViewTests : IDisposable
 				model.TogglePlayerOverlay();
 				WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
 				Click(window, row);
-				Assert.False(overlay.IsOnScreen());
+				Assert.False(window.IsPauseCardActive(), $"{row}'s sheet left W-P4 on top");
 				model.TogglePlayerOverlay();
 				Dispatcher.UIThread.RunJobs();
 				Assert.True(overlay.IsOnScreen(), $"Esc from {row}'s sheet did not return to the overlay");

@@ -23,8 +23,11 @@ namespace Mesen.ViewModels
 		private bool _sheetOpen;
 		private string _gameName = "";
 		private string _packName = "";
+		private string _packVersion = "";
+		private bool _packAutoOnly;
 		private RemasterActivity _remasterActivity;
 		private string _remasterStatus = "";
+		private string _remasterPainted = "";
 		private string _packInstallStatus = "";
 		//G.5 (W-P13/W-P16): one clause an edge flow adds to Play's status line.
 		private string _playNotice = "";
@@ -84,6 +87,25 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
+		//W-R1/W-R5: the project's painted-cell sentence (RemasterWorkspaceViewModel.
+		//PaintedCellsText, "" when unknown) ends Remaster's status line at rest.
+		public void UpdateRemasterPainted(string text)
+		{
+			_remasterPainted = text ?? "";
+			RefreshChrome();
+		}
+
+		//Keeps the line's painted-cells clause in step with the Remaster workspace.
+		public void FollowPaintedCells(RemasterWorkspaceViewModel remaster)
+		{
+			remaster.PropertyChanged += (_, e) => {
+				if(e.PropertyName == nameof(RemasterWorkspaceViewModel.PaintedCellsText)) {
+					UpdateRemasterPainted(remaster.PaintedCellsText);
+				}
+			};
+			UpdateRemasterPainted(remaster.PaintedCellsText);
+		}
+
 		//G.4 (W-P9): a pack installing while the game plays; with the overlay
 		//open, the status line carries the pill's sentence. Empty = none.
 		public void UpdatePackInstall(string text)
@@ -92,13 +114,15 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
-		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName, bool sheetOpen = false)
+		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName, string packVersion = "", bool packAutoOnly = false, bool sheetOpen = false)
 		{
 			_gameLoaded = gameLoaded;
 			_paused = paused;
 			_sheetOpen = sheetOpen;
 			_gameName = gameName ?? "";
 			_packName = packName ?? "";
+			_packVersion = packVersion ?? "";
+			_packAutoOnly = packAutoOnly;
 			RefreshChrome();
 		}
 
@@ -125,17 +149,23 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
+		private string PackPart()
+		{
+			return ShellStatusLine.PackKind(_gameName, _packName, _packAutoOnly) switch {
+				ShellPackKind.Named => ResourceHelper.GetMessage("ShellStatusPack", ShellStatusLine.PackLabel(_packName, _packVersion)),
+				ShellPackKind.Project => ResourceHelper.GetMessage("ShellStatusProjectPack"),
+				ShellPackKind.AutoUpscale => ResourceHelper.GetMessage("ShellStatusAutoUpscale"),
+				_ => "",
+			};
+		}
+
 		private void RefreshChrome()
 		{
 			IsBarVisible = WorkspaceShell.IsBarVisible(_state.Active, _gameLoaded, _paused, _sheetOpen);
 			HasGame = _gameLoaded;
-			StatusText = ShellStatusLine.Classify(_gameLoaded, _paused, _packName) switch {
-				ShellStatusKind.Playing => ResourceHelper.GetMessage("ShellStatusPlaying", _gameName),
-				ShellStatusKind.PlayingWithPack => ResourceHelper.GetMessage("ShellStatusPlayingWithPack", _gameName, _packName),
-				ShellStatusKind.Paused => ResourceHelper.GetMessage("ShellStatusPaused", _gameName),
-				ShellStatusKind.PausedWithPack => ResourceHelper.GetMessage("ShellStatusPausedWithPack", _gameName, _packName),
-				_ => ResourceHelper.GetMessage("ShellStatusNoGame"),
-			};
+			StatusText = !_gameLoaded ? ResourceHelper.GetMessage("ShellStatusNoGame")
+				: _state.Active == Workspace.Remaster ? ShellStatusLine.ComposeRemaster(_gameName, PackPart(), _remasterPainted)
+				: ShellStatusLine.Compose(_gameName, PackPart());
 			if(_state.IsPlay) {
 				StatusText = PlayStatusNotice.Compose(StatusText, _playNotice, _gameLoaded);
 			}

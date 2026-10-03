@@ -104,20 +104,19 @@ can be exercised by real xunit tests without Avalonia or the native
   in keyboard games.
 - `WorkspaceShell` (G.1, ADR-0241, PRD Part B §13.2) is the host-free
   shell model: the `Workspace` enum (`Play`, `Remaster`, `Share` — that
-  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'), `WorkspaceState`
-  (one active workspace; an undefined persisted value falls back to `Play`),
-  `IsBarVisible` (the bar hides only while a Play game runs unpaused),
-  `ShellStatusLine` (the one-sentence status kind) and `ClassicMenuNotice`
-  (`ShowClassicMenuBar` defaults to `false` on fresh installs and upgrades,
-  §13.8 Q4; the one-time toast is due only for an upgraded settings file
-  whose bar is off). `PreferencesConfig.Workspace` is separate from
-  `UiMode`, which is not reinterpreted. Switching never pauses or stops the
-  game; outside Play the native renderer and every Play surface are hidden.
-  Tools ⋯ binds the same `MainMenuViewModel` item lists as the classic bar
-  (its menu style templates `ActionIcon.Source`, because one `Image` cannot
-  have two visual parents). Since G.1 `PlayerChrome.IsMenuVisible` takes
-  `ShowClassicMenuBar`, not `UiMode`, and the P.4 Debug-menu gate on
-  `UiMode` is retired so every classic action is reachable from Tools ⋯.
+  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'; ADR-0250 adds
+  `Classic`, ⌘4), `WorkspaceState` (one active workspace; an undefined
+  persisted value falls back to `Play`), `IsBarVisible` (the bar hides
+  while a Play game runs unpaused, and always in Classic) and
+  `ShellStatusLine` (the status line's parts). Classic owns
+  `UiMode.Advanced`: entering it sets Advanced, a task door sets Player.
+  Switching never pauses or stops the game; outside Play the native
+  renderer and every Play surface are hidden. Each task door's Tools ⋯ is
+  its own short menu from `WorkspaceMenu` (ADR-0250), whose guards are an
+  entry no door places and a duplicate within a door. Its menu style
+  templates `ActionIcon.Source`, because one `Image` cannot have two visual
+  parents. The Player row template draws `-` separators itself: a style
+  keyed on Header throws while the items attach.
   `ShellTitleBar` decides the macOS title-bar integration: only macOS
   extends the client area (height hint = the 52 px bar), the bar background
   carries `WindowDecorationProperties.ElementRole="TitleBar"` and its two
@@ -170,7 +169,13 @@ can be exercised by real xunit tests without Avalonia or the native
   open. A recent card stays enabled while its `.rgd` exists. An OS file open
   (`App.OpenFromOs`, macOS open-documents) waits for `MainWindow.Startup`
   through `RunWhenStarted`, so a cold launch never loads before
-  `EmuApi.InitializeEmu` (#681).
+  `EmuApi.InitializeEmu` (#681). A pack ROM patch forced onto another
+  revision by `ApplyPatchOnHashMismatch` (#732) is read back after every
+  `GameLoaded` (`EmuApi.GetForcedPackPatch`, from the core's
+  `ForcedPatchGate`) and `PlayForcedPatch` puts the warning banner
+  (`InterruptionKind.ForcedPatch`, docked above the game) up in Player mode
+  only; *Reload Without Patch* is `EmuApi.SuppressForcedPackPatch` (that
+  ROM, this session, the setting untouched) plus a power cycle.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
@@ -307,7 +312,14 @@ can be exercised by real xunit tests without Avalonia or the native
   mirrors the core's `GetPackForSection` (stored choice, else the first
   enabled human pack in pack-list order, else the first auto-only one, #703).
   Use This Pack opened from W-P4 returns to W-P4 when the swap is in place
-  and to the game when it restarts (`PackPickClose`, #691).
+  and to the game when it restarts (`PackPickClose`, #691). W-P5's last row,
+  *No pack* (`PlayerPackChoice.NoPackRow`, offered whenever a pack is
+  listed), stores `PackPreferenceResolver.NoPack` (`:none`, never an ADR-0140
+  pack_id); `Resolution.PrefersNoPack` makes it an effective choice (silent
+  load), `CurrentContainer` then returns only a sibling-folder pack (the
+  core's `MepPackManager::PreferenceAllowsPack`), `CanChangeChoice` keeps the
+  way back open with one pack, and `CommunityPackAutoInstallGate` skips the
+  auto-install for that ROM (ADR-0146: a user disable overrides).
 - `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
   change — the Enhancements panel's Textures/Audio/Border toggles
   (`ToggleLayer`) and the picker's Apply: in place

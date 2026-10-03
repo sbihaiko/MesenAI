@@ -150,10 +150,49 @@ namespace Mesen.Services
 			//starts releases it here, or every later load would be deferred forever.
 			try {
 				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
-				_ = Task.Run(() => RunAsync(load));
+				_ = Task.Run(() => RunAsync(load, userRequested: false));
 			} catch(Exception ex) {
 				EmuApi.WriteLogEntry("[CommunityPack] skipped: reading the loaded game threw: " + ex);
 				ExitGate();
+			}
+		}
+
+		//#736: Play's community-pack offer (CommunityPackOfferRule) for the
+		//loaded ROM - the catalog row matched like the auto-install matches
+		//(No-Intro SHA-1, then the ADR-0145/0146 same-game fallback), read from
+		//the catalog copy on disk, plus the install registry's container.
+		public static CommunityPackOfferContext ReadOfferContext(string romSha1, string romName)
+		{
+			if(string.IsNullOrWhiteSpace(romSha1)) {
+				return new CommunityPackOfferContext(null, null, InstallInFlight);
+			}
+			CommunityPackCatalog? catalog = CommunityPackCatalogFetcher.ReadCachedCatalog();
+			CommunityPackCatalogEntry? entry = catalog == null ? null : CommunityPackCatalogMatcher.FindMatchingEntry(catalog, romSha1, romName);
+			string? registryContainer = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.Container;
+			return new CommunityPackOfferContext(entry == null ? null : CommunityPackOfferRule.Pick(entry), registryContainer, InstallInFlight);
+		}
+
+		//#736: W-P6's Use Community Pack when the pack is not installed. The
+		//player asked for this pack, for this game: it installs even with
+		//AutoInstallCommunityPacks off (the switch is left as it is) or its
+		//container in DisabledPacks, with the W-P9 pill, and the game restarts
+		//to load it (ApplyInstalledPack). False when an install or Restore is
+		//already running.
+		public static bool InstallOnRequest()
+		{
+			if(!_installGate.TryEnter()) {
+				return false;
+			}
+			try {
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				ClearAttempt(load.RomSha1);
+				EmuApi.WriteLogEntry("[CommunityPack] install requested by the player for " + load.RomSha1);
+				_ = Task.Run(() => RunAsync(load, userRequested: true));
+				return true;
+			} catch(Exception ex) {
+				EmuApi.WriteLogEntry("[CommunityPack] requested install not started: reading the loaded game threw: " + ex);
+				ExitGate();
+				return false;
 			}
 		}
 
@@ -167,7 +206,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static async Task RunAsync(CommunityPackLoadTarget load)
+		private static async Task RunAsync(CommunityPackLoadTarget load, bool userRequested)
 		{
 			string romSha1 = "";
 			try {
@@ -175,6 +214,13 @@ namespace Mesen.Services
 				//is the single master switch before the catalog is contacted.
 				romSha1 = load.RomSha1;
 				EmuApi.WriteLogEntry("[CommunityPack] romSha1=" + romSha1);
+				//ADR-0146: W-P5's "No pack" for this ROM is a user disable - no
+				//download, no pill. Not latched as attempted, so choosing a pack
+				//again lets the next load install.
+				if(CommunityPackAutoInstallGate.SkipReason(true, false, PackPreferenceResolver.IsNoPack(ConfigManager.Config.EnhancementPacks.GetRomPackPreference(romSha1))) is string skip) {
+					EmuApi.WriteLogEntry("[CommunityPack] skipped: " + skip);
+					return;
+				}
 				lock(_attemptedRomSha1) {
 					if(string.IsNullOrWhiteSpace(romSha1)) {
 						EmuApi.WriteLogEntry("[CommunityPack] skipped: no ROM sha1");
@@ -189,7 +235,8 @@ namespace Mesen.Services
 				string installedSha256 = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256 ?? "";
 				bool pillShown = false;
 				CommunityPackFetchResult? fetched = await CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => {
-					if(PackInstallPill.ShowsFor(installedSha256, entry.Sha256)) {
+					//#736: a requested install always says it is running.
+					if(userRequested || PackInstallPill.ShowsFor(installedSha256, entry.Sha256)) {
 						pillShown = true;
 						RaiseStarted(entry.Name);
 					}
@@ -222,7 +269,7 @@ namespace Mesen.Services
 				}
 
 				CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(
-					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths, load);
+					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths, load, userRequested);
 				EmuApi.WriteLogEntry("[CommunityPack] Install() outcome: Status=" + outcome.Status +
 					" ContainerName=" + outcome.ContainerName + " Message=" + outcome.Message);
 				//An install that withheld dep-backed ops is incomplete, so it belongs
@@ -238,6 +285,9 @@ namespace Mesen.Services
 				if(pillShown) {
 					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable || outcome.Status == CommunityPackInstallStatus.Stale);
 				}
+				if(userRequested && outcome.Status == CommunityPackInstallStatus.Installed) {
+					ChooseRequestedPack(fetched.Entry, outcome.ContainerName, load.RomSha1);
+				}
 				Surface(outcome, load);
 			} catch(Exception ex) {
 				RaiseFinished(false, false);
@@ -247,6 +297,22 @@ namespace Mesen.Services
 			} finally {
 				ExitGate();
 			}
+		}
+
+		//#736: the player chose this pack for this game - it is turned on and
+		//stored as the ROM's choice (P.3), so it renders over a local pack once
+		//the game restarts. Posted ahead of ApplyInstalledPack's restart.
+		private static void ChooseRequestedPack(CommunityPackCatalogEntry entry, string containerName, string romSha1)
+		{
+			Dispatcher.UIThread.Post(() => {
+				EnhancementPackConfig config = ConfigManager.Config.EnhancementPacks;
+				config.SetPackEnabled(containerName, true);
+				if(!string.IsNullOrWhiteSpace(entry.PackId) && !string.IsNullOrWhiteSpace(romSha1)) {
+					config.SetRomPackPreference(romSha1, entry.PackId);
+				}
+				config.ApplyConfig();
+				ConfigManager.Config.Save();
+			});
 		}
 
 		private static void ClearAttempt(string romSha1)

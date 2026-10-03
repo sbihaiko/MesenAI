@@ -27,6 +27,8 @@ public enum RemasterProvenanceKind
 	//W-R6: cut from the pack the user imported, not from a recording.
 	FromImportedPack,
 	Painted,
+	//ADR-0252 §3: ✎ Painted: A of B phases (a figure grid with a play order).
+	PaintedPhases,
 	NotPainted,
 	PaintUnknown
 }
@@ -35,7 +37,9 @@ public sealed record RemasterProvenanceLine(RemasterProvenanceKind Kind, int Cou
 
 public static class RemasterProvenance
 {
-	public static IReadOnlyList<RemasterProvenanceLine> Lines(RemasterKitTile tile, RemasterPaintResult paint)
+	//`phases`: RemasterCellPaint.Phases for this tile (null = not measured or
+	//no play order). It refines a "Painted" line only; it never makes one.
+	public static IReadOnlyList<RemasterProvenanceLine> Lines(RemasterKitTile tile, RemasterPaintResult paint, (int Painted, int Of)? phases = null)
 	{
 		List<RemasterProvenanceLine> lines = new();
 		if(tile.Category == RemasterKitCategory.Imported) {
@@ -59,6 +63,7 @@ public static class RemasterProvenance
 		}
 
 		lines.Add(paint.State switch {
+			RemasterPaintState.Painted when phases is { Painted: > 0 } p => new(RemasterProvenanceKind.PaintedPhases, p.Painted, p.Of, RemasterPaintUnknown.None),
 			RemasterPaintState.Painted => new(RemasterProvenanceKind.Painted, 0, 0, RemasterPaintUnknown.None),
 			RemasterPaintState.Untouched => new(RemasterProvenanceKind.NotPainted, 0, 0, RemasterPaintUnknown.None),
 			_ => new(RemasterProvenanceKind.PaintUnknown, 0, 0, paint.Why),

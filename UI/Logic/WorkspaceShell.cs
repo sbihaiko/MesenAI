@@ -131,29 +131,49 @@ public sealed class WorkspaceState
 	}
 }
 
-public enum ShellStatusKind
+//W-S1: the status line reads like the renders, "Contra (USA) · pack Contra 80s
+//1.2". A pack named after the ROM is the player's own project or the automatic
+//upscale, never repeated as if it were a pack's name.
+public enum ShellPackKind
 {
-	NoGame,
-	Playing,
-	PlayingWithPack,
-	Paused,
-	PausedWithPack
+	None,
+	Named,
+	Project,
+	AutoUpscale
 }
 
-//W-S1: the status line is one read-only sentence. The owning ViewModel maps
-//the kind to its localized sentence (game and pack names as arguments).
 public static class ShellStatusLine
 {
-	public static ShellStatusKind Classify(bool gameLoaded, bool paused, string packName)
+	public static ShellPackKind PackKind(string gameName, string packName, bool autoOnly)
 	{
-		if(!gameLoaded) {
-			return ShellStatusKind.NoGame;
+		if(string.IsNullOrWhiteSpace(packName)) {
+			return ShellPackKind.None;
 		}
-		bool hasPack = !string.IsNullOrWhiteSpace(packName);
-		if(paused) {
-			return hasPack ? ShellStatusKind.PausedWithPack : ShellStatusKind.Paused;
+		if(autoOnly) {
+			return ShellPackKind.AutoUpscale;
 		}
-		return hasPack ? ShellStatusKind.PlayingWithPack : ShellStatusKind.Playing;
+		return string.Equals(packName.Trim(), (gameName ?? "").Trim(), StringComparison.OrdinalIgnoreCase) ? ShellPackKind.Project : ShellPackKind.Named;
+	}
+
+	//"Contra 80s 1.2"; a pack.json without a version reads as 0.0.0, never shown.
+	public static string PackLabel(string name, string version)
+	{
+		string v = (version ?? "").Trim();
+		return v.Length == 0 || v == "0.0.0" ? name : name + " " + v;
+	}
+
+	public static string Compose(string gameName, string packPart)
+	{
+		return string.IsNullOrWhiteSpace(packPart) ? gameName : gameName + " · " + packPart;
+	}
+
+	//W-R1/W-R5: in Remaster at rest the line follows the project's progress,
+	//"Contra (USA) · playing your project · 412 cells painted". An unknown
+	//count (ADR-0252: no file can say) adds no words.
+	public static string ComposeRemaster(string gameName, string packPart, string paintedCells)
+	{
+		string line = Compose(gameName, packPart);
+		return string.IsNullOrWhiteSpace(paintedCells) ? line : line + " · " + paintedCells.Trim();
 	}
 }
 

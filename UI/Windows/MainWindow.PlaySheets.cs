@@ -38,6 +38,9 @@ namespace Mesen.Windows
 			PlayerPackDetailSheetView detail = this.GetControl<PlayerPackDetailSheetView>("PlayerPackDetailHost");
 			detail.ChangePackRequested += (_, _) => _model.ChangePackFromDetail(EmuApi.GetMepPackList());
 			detail.RestoreRequested += (_, _) => RestorePackFromDetail();
+			detail.UseCommunityPackRequested += (_, _) => UseCommunityPackFromDetail();
+			//#736: W-P4's Pack row reads the community-pack offer when it opens.
+			_model.ReadPackRowState = ReadPackRowState;
 
 			//W-P9: the auto-install's pill. Static events, so unsubscribe when
 			//the window goes (headless tests open several MainWindows).
@@ -72,7 +75,7 @@ namespace Mesen.Windows
 		private void OnOverlayPack(object? sender, RoutedEventArgs e)
 		{
 			string romSha1 = EmuApi.GetMepRomSha1();
-			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1));
+			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1), CommunityOfferContext(romSha1));
 		}
 
 		//ADR-0249 (W-P10 › W-P6): Settings › Look's Art row - the Settings sheet
@@ -85,8 +88,55 @@ namespace Mesen.Windows
 			Dispatcher.UIThread.Post(() => {
 				_model.ClosePlayerSettings();
 				string romSha1 = EmuApi.GetMepRomSha1();
-				_model.OpenPackDetail(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1));
+				_model.OpenPackDetail(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1), CommunityOfferContext(romSha1));
 			});
+		}
+
+		//#736: the catalog row for the loaded game (the catalog copy on disk,
+		//no network) and the install registry's container for it.
+		private CommunityPackOfferContext CommunityOfferContext(string romSha1)
+		{
+			return CommunityPackInstallService.ReadOfferContext(romSha1, _model.RomInfo.GetRomName());
+		}
+
+		private PackRowState? ReadPackRowState()
+		{
+			if(!EmuApi.IsRunning()) {
+				return null;
+			}
+			string romSha1 = EmuApi.GetMepRomSha1();
+			return new PackRowState(EmuApi.GetMepPackList(), romSha1, CommunityOfferContext(romSha1));
+		}
+
+		//#736: W-P6's Use Community Pack. The player asked for this pack for
+		//this game, so it is turned back on and/or chosen (an installed pack),
+		//or installed even with auto-install off - which stays off.
+		private void UseCommunityPackFromDetail()
+		{
+			CommunityPackOffer offer = _model.CommunityOffer;
+			switch(offer.Action) {
+				case CommunityPackOfferAction.TurnOn:
+					ConfigManager.Config.EnhancementPacks.SetPackEnabled(offer.Container, true);
+					_model.UseOfferedPack(CurrentPackList(), offer.Container);
+					break;
+				case CommunityPackOfferAction.Choose:
+					_model.UseOfferedPack(CurrentPackList(), offer.Container);
+					break;
+				case CommunityPackOfferAction.Install:
+					if(CommunityPackInstallService.InstallOnRequest()) {
+						_model.LeaveDetailForCommunityInstall();
+					} else {
+						EmuApi.WriteLogEntry("[CommunityPack] W-P6 Use Community Pack: an install or Restore is already running");
+					}
+					break;
+			}
+		}
+
+		//Read after a turn-on, so the list carries the pack as enabled. Through
+		//the model's seam, which headless tests replace.
+		private string CurrentPackList()
+		{
+			return _model.ReadPackRowState?.Invoke()?.PackList ?? EmuApi.GetMepPackList();
 		}
 
 		private static string? InstalledSourceSha256(string romSha1)

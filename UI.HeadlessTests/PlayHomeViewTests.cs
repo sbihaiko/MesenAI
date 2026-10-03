@@ -61,7 +61,7 @@ public class PlayHomeViewTests : IDisposable
 	}
 
 	//recentGames are listed newest first.
-	private static (MainWindow Window, MainWindowViewModel Model) ShowHome(UiMode uiMode, params string[] recentGames)
+	internal static (MainWindow Window, MainWindowViewModel Model) ShowHome(UiMode uiMode, params string[] recentGames)
 	{
 		ConfigManager.Config.Preferences.UiMode = uiMode;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;

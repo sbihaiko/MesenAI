@@ -77,7 +77,7 @@ public class PlaySheetsViewTests : IDisposable
 
 		Border detail = window.FindNamed<Border>("PlayerPackDetailSheet");
 		Assert.True(detail.IsOnScreen());
-		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(window.IsPauseCardActive());
 		Assert.Equal("Aaa Pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
 		Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", window.FindNamed<TextBlock>("PackDetailByline").Text);
 		Assert.True(window.FindNamed<StackPanel>("PackDetailChips").IsOnScreen());
@@ -142,9 +142,11 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.StartsWith("Choose a pack for ", window.FindNamed<TextBlock>("PackPickerTitle").Text);
 
 		RadioButton[] radios = window.FindNamed<ItemsControl>("PackPickerList").FindAll<RadioButton>().ToArray();
-		Assert.Equal(2, radios.Length);
+		//Two packs and W-P5's "No pack" row, last.
+		Assert.Equal(3, radios.Length);
 		Assert.True(radios[0].IsChecked);
 		Assert.False(radios[1].IsChecked);
+		Assert.False(radios[2].IsChecked);
 		Assert.True(radios[0].IsFocused);
 		Assert.True(window.FindNamed<Button>("PackPickerUseButton").IsEnabled);
 		//"author unknown", not the catalog's "?" (W-P5).

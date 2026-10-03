@@ -134,6 +134,52 @@
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
+				<!--"Sim, quadro congelado" (2026-10-03): the native picture is hidden
+				under W-P4 and its sheets (PlayGameLayer), so the frame the game
+				stopped on stands in for it, blurred like W-P4's render, in the live
+				picture's box (SoftwareRenderer.Width/Height, centred and unrounded
+				like the native renderer) so nothing jumps.-->
+				<Image
+					Name="PausedGameFrame"
+					Source="{Binding PausedGameFrame}"
+					IsVisible="{Binding IsPausedGameFrameVisible}"
+					Width="{Binding SoftwareRenderer.Width}"
+					Height="{Binding SoftwareRenderer.Height}"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center"
+					Stretch="Fill"
+					UseLayoutRounding="False"
+					IsHitTestVisible="False"
+				>
+					<Image.Effect>
+						<BlurEffect Radius="12" />
+					</Image.Effect>
+				</Image>
+				<!--#734: the load card (W-P9's HUD pill shape) over the dimmed home,
+				from an open to the game's first picture (Logic/PlayLoadWait). The
+				home stays up for all of it, so the native picture is hidden and
+				cannot cover the card. The scrim takes the clicks, so a second open
+				does not queue behind this one; the BIOS sheet asks over it.-->
+				<Panel Name="PlayLoadWaitLayer" Classes="scrim">
+					<Panel.IsVisible>
+						<MultiBinding Converter="{x:Static BoolConverters.And}">
+							<Binding Path="IsLoadWaitActive" />
+							<Binding Path="!BiosSheet.IsVisible" />
+						</MultiBinding>
+					</Panel.IsVisible>
+					<Border Name="PlayLoadWaitCard" Classes="hud" Width="340" Padding="16 14" HorizontalAlignment="Center" VerticalAlignment="Center">
+						<DockPanel>
+							<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0"><PathIcon Data="{StaticResource PlayerIconPlay}" /></Border>
+							<StackPanel VerticalAlignment="Center" Spacing="9">
+								<TextBlock Name="PlayLoadWaitText" Classes="headline" Text="{Binding LoadWaitText}" TextTrimming="CharacterEllipsis" />
+								<!--Indeterminate: neither the Core's load nor the first
+								frames report a percentage.-->
+								<ProgressBar Name="PlayLoadWaitBar" IsIndeterminate="True" />
+							</StackPanel>
+						</DockPanel>
+					</Border>
+				</Panel>
+
 				<!--W-P4: the game stays behind the overlay, dimmed.-->
 				<Border Name="PlayerOverlayScrim" Classes="scrim">
 					<Border.IsVisible>
@@ -165,7 +211,8 @@
 					VerticalAlignment="Center"
 					Margin="0 12"
 					Padding="16 22 16 18"
-					IsVisible="{Binding IsPlayerOverlayVisible}"
+					IsVisible="{Binding IsPauseCardVisible}"
+					IsHitTestVisible="{Binding !IsPauseCardDimmed}"
 				>
 					<!--W-P4's card is ~520 tall; a shorter window scrolls it, so
 					every control stays reachable by arrow keys (focus brings it
@@ -241,6 +288,10 @@
 					</StackPanel>
 					</ScrollViewer>
 				</Border>
+
+				<!--"Seguir o render" (2026-10-03): a sheet opened from W-P4 leaves the
+				card on screen behind it, under one more dim layer (W-P5 … W-P16).-->
+				<Border Name="PlayerSheetScrim" Background="{StaticResource PlayerSheetOverCardScrimBrush}" IsVisible="{Binding IsPauseCardDimmed}" />
 
 				<!--G.2 (W-P4 Save states row): Save and Load merged into one row; this
 				sheet opens today's slot grid in either mode. Esc (or Back) returns

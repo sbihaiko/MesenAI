@@ -567,16 +567,23 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 			romFile.ApplyPatch(patchFile);
 			MessageManager::Log("[HDPack] <patch> applied: '" + result->second + "' (ROM sha1 " + result->first + "; the running ROM's hash is now the patched one)");
 			WarnAboutSilentPatchedMusic();
-		} else if(mepCfg.ApplyPatchOnHashMismatch) {
-			VirtualFile patchFile = _hdData->PatchesByHash.begin()->second;
-			romFile.ApplyPatch(patchFile);
+		} else if(_emu->GetEnhancementPackManager()->AllowsForcedPatch()) {
+			//#732: a patch made for another revision can freeze this one. The
+			//OSD line is Advanced mode's signal; the UI reads the forced patch
+			//back (GetForcedPackPatch) after GameLoaded and offers Player mode a
+			//reload without it.
+			string forcedPath = _hdData->PatchesByHash.begin()->second;
+			VirtualFile patchFile = forcedPath;
+			if(romFile.ApplyPatch(patchFile)) {
+				_emu->GetEnhancementPackManager()->NoteForcedPatch(forcedPath);
+			}
 			MessageManager::DisplayMessage("HDPack", "Applying patch made for another ROM revision (hash override enabled)");
 			WarnAboutSilentPatchedMusic();
-			MessageManager::Log("[HDPack] <patch> hash mismatch - applied '" + _hdData->PatchesByHash.begin()->second + "' anyway (ApplyPatchOnHashMismatch)");
+			MessageManager::Log("[HDPack] <patch> hash mismatch - applied '" + forcedPath + "' anyway (ApplyPatchOnHashMismatch)");
 		} else {
 			MessageManager::Log("[HDPack] <patch> skipped: no entry for this ROM's sha1 " + wholeFileSha1 +
 				(noIntroSha1 != wholeFileSha1 ? (" / no-intro " + noIntroSha1) : "") +
-				" (enable 'apply patches on hash mismatch' to force it)");
+				(mepCfg.ApplyPatchOnHashMismatch ? " (the forced patch is off for this ROM: the player reloaded without it)" : " (enable 'apply patches on hash mismatch' to force it)"));
 		}
 	}
 

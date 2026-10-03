@@ -111,6 +111,8 @@
 		<SolidColorBrush x:Key="PlayerPadKeyBrush" Color="{StaticResource PlayerPadKeyColor}" />
 		<SolidColorBrush x:Key="PlayerPadButtonBrush" Color="{StaticResource PlayerPadButtonColor}" />
 		<SolidColorBrush x:Key="PlayerScrimBrush" Color="#5A000000" />
+		<!-- Between W-P4's card and a sheet opened from it (PauseCard.DimAlpha, measured on W-P5 … W-P16) -->
+		<SolidColorBrush x:Key="PlayerSheetOverCardScrimBrush" Color="#46000000" />
 
 		<!-- Play sheets (W-P5 … W-P16): literals the renderer draws on them -->
 		<!-- inset list fill (W-P7/W-P11 groups, W-P16 file box, drop zones) -->

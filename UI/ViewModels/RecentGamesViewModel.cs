@@ -93,6 +93,8 @@ namespace Mesen.ViewModels
 			if(mode == GameScreenMode.RecentGames) {
 				NeedResume = false;
 				Title = string.Empty;
+				//W-P2: re-read the packs folder and catalog for this home's badges.
+				RecentPackLookup.Invalidate();
 
 				List<string> files = Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd").OrderByDescending((file) => new FileInfo(file).LastWriteTime).ToList();
 				for(int i = 0; i < files.Count && entries.Count < 72; i++) {
@@ -158,6 +160,8 @@ namespace Mesen.ViewModels
 		}
 
 		//Read off the UI thread (the recent file is a zip); a newer home wins.
+		//The pack's name and version (RecentPackLookup, the same lookup as the
+		//tile badges) are read in the same task and join the subtitle when known.
 		private void LoadContinuePreview(string? recentFile)
 		{
 			int generation = ++_previewGeneration;
@@ -165,6 +169,26 @@ namespace Mesen.ViewModels
 			if(recentFile == null) {
 				return;
 			}
+			string recentName = Path.GetFileNameWithoutExtension(recentFile);
+			string lastPlayed = ContinueSubtitle;
+			RecentGameHash? hash = RecentGameHashes.Find(ConfigManager.Config.RecentFiles.GameHashes, recentName);
+			bool namedHdPack = PlayHome.HasHdPack(ConfigManager.HdPackFolder, recentName);
+			bool autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
+			Task.Run(() => {
+				RecentPackInfo pack = default;
+				try {
+					pack = RecentPackLookup.Lookup(recentName, hash, namedHdPack, autoInstall);
+				} catch(Exception ex) {
+					EmuApi.WriteLogEntry("[PlayHome] continue pack lookup failed: " + ex.Message);
+				}
+				if(pack.Name.Length > 0) {
+					Dispatcher.UIThread.Post(() => {
+						if(generation == _previewGeneration) {
+							ContinueSubtitle = PlayHome.ContinueSubtitle(lastPlayed, pack.Name, pack.Version);
+						}
+					});
+				}
+			});
 			Task.Run(() => {
 				byte[]? png = PlayHome.ReadScreenshot(recentFile);
 				if(png == null) {
@@ -195,9 +219,8 @@ namespace Mesen.ViewModels
 			};
 		}
 
-		//W-P2's "last played today". The pack half of the wireframe's subtitle
-		//("· Contra 80s 1.2") needs the recent entry to carry the ROM hash and a
-		//pack lookup (the §13.5.2 data-slice prerequisite) and is not shown.
+		//W-P2's "last played today"; the pack half of the wireframe's subtitle
+		//("· Contra 80s 1.2") is added by LoadContinuePreview once looked up.
 		private static string LastPlayedText(string recentFile)
 		{
 			if(!File.Exists(recentFile)) {
