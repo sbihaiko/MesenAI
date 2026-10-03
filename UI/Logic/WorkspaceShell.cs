@@ -42,10 +42,13 @@ public static class WorkspaceShell
 	//W-S1: the bar (and the status line under the content) is hidden while a
 	//game runs in Play and nothing is paused - the game fills the window. A
 	//pause (Esc opens the Player overlay, which pauses; Advanced's Esc is
-	//Pause) brings it back. In Remaster and Share it is always visible.
-	public static bool IsBarVisible(Workspace workspace, bool gameRunning, bool paused)
+	//Pause) brings it back, and so does a Play sheet on screen over the game
+	//(W-P5's first-start picker does not pause it; the render keeps the bar
+	//and the status line around its scrim). In Remaster and Share it is
+	//always visible.
+	public static bool IsBarVisible(Workspace workspace, bool gameRunning, bool paused, bool sheetOpen = false)
 	{
-		return workspace != Workspace.Play || !gameRunning || paused;
+		return workspace != Workspace.Play || !gameRunning || paused || sheetOpen;
 	}
 }
 

@@ -161,7 +161,8 @@ public class PlayerCheatsSheetTests : IDisposable
 		Assert.False(boxes[0].IsEffectivelyEnabled);
 		Assert.True(boxes[1].IsEffectivelyEnabled);
 		Assert.Contains(CheatRecordingRule.RefusedReason, VisibleTexts(list));
-		Assert.Contains(CheatRecordingRule.AllowedNote, VisibleTexts(list));
+		//W-P11's last row: the source, then the recording note.
+		Assert.Contains(CheatSheet.FromListMark + " · " + CheatRecordingRule.AllowedNote, VisibleTexts(list));
 	}
 
 	//ADR-0245 §5, rule 4: GB has no list - the sheet still opens, the search is

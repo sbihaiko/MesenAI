@@ -111,14 +111,16 @@ namespace Mesen.ViewModels
 					NeedResume = Pause();
 				}
 
-				Title = mode == GameScreenMode.LoadState ? ResourceHelper.GetMessage("LoadStateDialog") : ResourceHelper.GetMessage("SaveStateDialog");
+				//ADR-0249: Player mode speaks the overlay's language (PlaySlotGrid).
+				bool player = ConfigManager.Config.Preferences.UiMode == UiMode.Player;
+				Title = ResourceHelper.GetMessage(PlaySlotGrid.TitleKey(mode == GameScreenMode.LoadState, player));
 
 				string romName = EmuApi.GetRomInfo().GetRomName();
 				for(int i = 0; i < (mode == GameScreenMode.LoadState ? 11 : 10); i++) {
 					entries.Add(new RecentGameInfo() {
 						FileName = Path.Combine(ConfigManager.SaveStateFolder, romName + "_" + (i + 1) + "." + FileDialogHelper.MesenSaveStateExt),
 						StateIndex = i + 1,
-						Name = i == 10 ? ResourceHelper.GetMessage("AutoSave") : ResourceHelper.GetMessage("SlotNumber", i + 1),
+						Name = i == 10 ? ResourceHelper.GetMessage("AutoSave") : ResourceHelper.GetMessage(PlaySlotGrid.SlotKey(player), i + 1),
 						SaveMode = mode == GameScreenMode.SaveState
 					});
 				}

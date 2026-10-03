@@ -175,10 +175,12 @@ namespace Mesen.ViewModels
 		private void UpdateShellState()
 		{
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
-			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName);
+			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName, IsPlayerPackPickerVisible);
 		}
 
 		partial void OnIsGamePausedChanged(bool value) => UpdateShellState();
+		//W-P5's first-start picker sits over the running game: the bar shows.
+		partial void OnIsPlayerPackPickerVisibleChanged(bool value) => UpdateShellState();
 		partial void OnCurrentPackNameChanged(string value) => UpdateShellState();
 
 		//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu

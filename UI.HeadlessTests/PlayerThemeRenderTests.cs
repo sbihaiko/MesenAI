@@ -254,7 +254,12 @@ public class PlayerThemeRenderTests : IDisposable
 		//A loaded game: the overlay's title is its name (the render's "Contra (USA)").
 		model.RomInfo = new RomInfo() { RomPath = "/roms/Contra (USA).nes", ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		model.OpenPauseOverlay();
+		//The overlay pauses the game (EmuApi.Pause -> GamePaused -> IsGamePaused),
+		//and the render keeps the shell bar and the status line above the scrim.
+		model.IsGamePaused = true;
 		Dispatcher.UIThread.RunJobs();
+		Assert.True(window.FindNamed<Mesen.Views.WorkspaceShellBar>("ShellBar").IsOnScreen());
+		Assert.True(window.FindNamed<Border>("ShellStatusLine").IsOnScreen());
 		Assert.Equal("Contra (USA)", window.FindNamed<TextBlock>("OverlayGameTitle").Text);
 		Assert.True(window.FindNamed<TextBlock>("OverlayGameTitle").IsOnScreen());
 
@@ -279,6 +284,9 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(36, quit.Bounds.Height, 0.5);
 		Assert.Equal(Color.Parse("#FFEBEA"), PlayerRender.SolidColor(quit.Background));
 		Assert.Equal(Red, PlayerRender.SolidColor(LabelOf(quit).Foreground));
+		//The render's Title Case (final audit): "Save States", "Quit Game".
+		Assert.Equal("Quit Game", LabelOf(quit).Text);
+		Assert.Contains(window.FindNamed<Button>("OverlaySaveStatesButton").FindAll<TextBlock>(), t => t.Text == "Save States");
 
 		//Text on the card itself (not on a filled button) meets WCAG AA 4.5:1,
 		//the bar PlaySheetsContrastTests holds every Play sheet to (#716); the

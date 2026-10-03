@@ -139,7 +139,7 @@ namespace Mesen.Controls
 					SubTitle = writeTime.ToShortDateString() + " " + writeTime.ToShortTimeString();
 				}
 			} else {
-				SubTitle = ResourceHelper.GetMessage("EmptyState");
+				SubTitle = ResourceHelper.GetMessage(PlaySlotGrid.EmptyKey(ConfigManager.Config.Preferences.UiMode == UiMode.Player));
 			}
 			Enabled = fileExists || game.SaveMode;
 			Image = StateGridEntry.EmptyImage;

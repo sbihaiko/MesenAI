@@ -105,5 +105,15 @@ namespace Mesen.Tests.Shell
 		{
 			Assert.Equal(expected, WorkspaceShell.IsBarVisible(workspace, gameRunning, paused));
 		}
+
+		//W-P5 (final audit): the first-start pack picker opens over the running,
+		//un-enhanced game without pausing it; the render keeps the bar and the
+		//status line around its scrim, so a Play sheet on screen shows them too.
+		[Fact]
+		public void A_play_sheet_over_a_running_game_shows_the_bar()
+		{
+			Assert.True(WorkspaceShell.IsBarVisible(Workspace.Play, gameRunning: true, paused: false, sheetOpen: true));
+			Assert.False(WorkspaceShell.IsBarVisible(Workspace.Play, gameRunning: true, paused: false, sheetOpen: false));
+		}
 	}
 }

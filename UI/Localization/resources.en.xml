@@ -12,14 +12,14 @@
 		<Form ID="MainWindow">
 			<Control ID="btnOverlayResume">▶ Resume</Control>
 			<Control ID="lblOverlayPaused">Paused</Control>
-			<Control ID="btnOverlaySaveStates">Save states</Control>
+			<Control ID="btnOverlaySaveStates">Save States</Control>
 			<Control ID="btnOverlayPack">Pack</Control>
 			<Control ID="btnOverlayEnhancements">Enhancements</Control>
 			<Control ID="btnOverlayCheats">Cheats</Control>
 			<Control ID="btnOverlaySettings">Settings</Control>
-			<Control ID="btnOverlayQuitGame">Quit game</Control>
+			<Control ID="btnOverlayQuitGame">Quit Game</Control>
 			<Control ID="lblOverlayEscHint">Esc to resume</Control>
-			<Control ID="lblSaveStatesSheetTitle">Save states</Control>
+			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
 			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
@@ -2314,6 +2314,10 @@
 		<Message ID="SlotNumber">Slot #{0}</Message>
 		<Message ID="LoadStateDialog">Load State Menu</Message>
 		<Message ID="SaveStateDialog">Save State Menu</Message>
+		<Message ID="PlayerLoadStateTitle">Load a Slot</Message>
+		<Message ID="PlayerSaveStateTitle">Save to a Slot</Message>
+		<Message ID="PlayerSlotNumber">Slot {0}</Message>
+		<Message ID="PlayerEmptySlot">Empty</Message>
 
 		<Message ID="LoadFromFile">Load from file...</Message>
 		<Message ID="SaveToFile">Save to file...</Message>
