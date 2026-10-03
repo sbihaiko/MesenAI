@@ -41,8 +41,12 @@ public class PauseOverlayFrozenFrameTests : IDisposable
 
 	public void Dispose()
 	{
-		EmuApi.Stop();
-		Dispatcher.UIThread.RunJobs();
+		//CI has no native core (ADR-0131): the test skips, and Stop would turn
+		//the skip into a DllNotFoundException failure.
+		if(NativeCore.IsAvailable) {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
