@@ -2030,6 +2030,60 @@ namespace
 		//A cleared mask (no replacement playing, or any stop path) mutes nothing.
 		Check(MutedChannels(0).empty(), "BlocoK: mask 0 mutes no channel at all");
 	}
+
+	//--- Enhanced synth under a pack track (ADR-0052 item 3b: 3b overrides
+	//level 2 only for the tracks that exist) ---------------------------------
+	void TestSynthYieldsToPackTrackOnReplacedChannels()
+	{
+		//No replacement playing (mask 0): the synth plays everything.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0) && !ReplacementMuteMask::SynthSilencesNoise(0),
+			"BlocoK: with no pack track playing the synth voices are not silenced");
+		//Full tonal mute: the pack track owns the music and the drums.
+		Check(ReplacementMuteMask::SynthSilencesMusic(ReplacementMuteMask::FullTonalMute),
+			"BlocoK: a pack track silences the synth's music voices (no double music)");
+		Check(ReplacementMuteMask::SynthSilencesNoise(ReplacementMuteMask::FullTonalMute),
+			"BlocoK: a pack track silences the synth's noise drums");
+		//Square2 flagged SFX (bit 1 clear): music still replaced, SFX slot untouched
+		//(SFX voices are not part of the gate at all).
+		Check(ReplacementMuteMask::SynthSilencesMusic(0x0D), "BlocoK: an SFX channel does not un-silence the other channels' music");
+		//Every melodic channel is SFX: no music slot is left to silence, noise still replaced.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0x08), "BlocoK: with all melodic channels on SFX there is no music to silence");
+		Check(ReplacementMuteMask::SynthSilencesNoise(0x08), "BlocoK: noise stays replaced when only it is masked");
+		//DMC bit alone is not a synth voice.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0x10) && !ReplacementMuteMask::SynthSilencesNoise(0x10), "BlocoK: a DMC-only mask silences no synth voice");
+	}
+
+	void TestSynthPackGainFadesInsteadOfClicking()
+	{
+		//One audio flush is ~5.6 ms; the ramp must take several flushes (ADR-0142
+		//philosophy: no hard cut) and arrive exactly at 0 / 1.
+		const double dt = 0.0056;
+		double gain = 1.0;
+		int steps = 0;
+		double biggestStep = 0;
+		while(gain > 0.0 && steps < 1000) {
+			double next = ReplacementMuteMask::SynthGainStep(gain, true, dt);
+			biggestStep = std::max(biggestStep, gain - next);
+			Check(next <= gain, "BlocoK: the pack gain only falls while silencing");
+			if(next == gain) {
+				break;
+			}
+			gain = next;
+			steps++;
+		}
+		Check(gain == 0.0, "BlocoK: the synth gain reaches exactly 0 while a pack track plays", std::to_string(gain));
+		Check(steps >= 4 && biggestStep < 0.5, "BlocoK: the synth gain fades over several flushes instead of cutting", std::to_string(steps) + " steps, max " + std::to_string(biggestStep));
+		int up = 0;
+		while(gain < 1.0 && up < 1000) {
+			double next = ReplacementMuteMask::SynthGainStep(gain, false, dt);
+			if(next <= gain) {
+				break;
+			}
+			gain = next;
+			up++;
+		}
+		Check(gain == 1.0 && up >= 4, "BlocoK: the synth returns to full gain after the track stops");
+	}
 }
 
 //--- Bloco L: EnhancedSynthEngine rendered PCM golden (F5.4g Bloco B) --------
@@ -13691,6 +13745,8 @@ int main()
 	TestReplacementMuteMaskDefaultsToFullTonalMute();
 	TestReplacementMuteMaskLetsSfxChannelsThrough();
 	TestReplacementMuteMaskNeverTouchesDmcOrExpansion();
+	TestSynthYieldsToPackTrackOnReplacedChannels();
+	TestSynthPackGainFadesInsteadOfClicking();
 
 	TestEnhancedSynthPcmGolden();
 
