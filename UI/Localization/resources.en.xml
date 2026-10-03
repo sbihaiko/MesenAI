@@ -152,6 +152,9 @@
 			<Control ID="btnComposeCancel">Cancel</Control>
 			<Control ID="btnOpenComposer">Open Composer</Control>
 		</Form>
+		<Form ID="RemasterRecentProjectsView">
+			<Control ID="lblRecentProjects">Recent projects</Control>
+		</Form>
 		<Form ID="RemasterBuildProblemsView">
 			<Control ID="btnOpenProblemFile">Open File</Control>
 			<Control ID="btnShowBuildLog">Show Log</Control>
@@ -2156,6 +2159,7 @@
 		<Message ID="RemasterRecordingsNone">No recordings yet. Record while you play to make the first one.</Message>
 		<Message ID="RemasterRecordingsOne">1 recording</Message>
 		<Message ID="RemasterRecordingsMany">{0} recordings</Message>
+		<Message ID="RemasterRecentNoRecordings">No recordings yet</Message>
 		<Message ID="RemasterRecordingTitle">Recording {0}</Message>
 		<Message ID="RemasterRecordingNoTiles">music only</Message>
 		<Message ID="RemasterSourcePlay">played</Message>

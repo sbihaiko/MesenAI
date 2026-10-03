@@ -170,6 +170,8 @@ public class RemasterThemeRenderTests : IDisposable
 	{
 		FakeLauncher launcher = new();
 		RemasterWorkspaceViewModel model = new(new RemasterConfig(), _ => feasibility, launcher, hasHeadlessRecorder: false);
+		//W-R0's Recent projects lists none here (RemasterRecentProjectsRenderTests draws them).
+		model.RecentRomPaths = () => Array.Empty<string>();
 		model.OpenFile = _ => true;
 		model.ShowInGame = _ => true;
 		string root = Path.GetDirectoryName(project)!;
