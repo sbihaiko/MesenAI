@@ -50,7 +50,12 @@ public sealed record RemasterKitTile(
 	bool? Seen,
 	//Pattern pages only (-1 = not given): ROM fill and empty cells.
 	int Fill,
-	int Empty
+	int Empty,
+	//ADR-0252 §2: a figure grid's `playsColumns` (1-based figure columns of
+	//row 0 in phase order, null = a phase this sheet does not draw) and its
+	//`ids` (the poses on the sheet in reading order). Empty when not given.
+	IReadOnlyList<int?>? PlaysColumns = null,
+	IReadOnlyList<string>? Ids = null
 )
 {
 	//W-R5: a page's cells seen in play = every cell that is neither a ROM fill
@@ -62,6 +67,9 @@ public sealed record RemasterKitTile(
 	//picture, so only for them is "differs from the twin" the same as
 	//"painted" (mep_build's `_EditedProbe` reads the same pairs).
 	public bool HasPrePaintTwin => Unit is "grid" or "object" or "element" or "panorama";
+
+	public IReadOnlyList<int?> PlayOrder => PlaysColumns ?? Array.Empty<int?>();
+	public IReadOnlyList<string> PoseIds => Ids ?? Array.Empty<string>();
 }
 
 public sealed record RemasterKit(IReadOnlyList<RemasterKitTile> Tiles, IReadOnlyList<string> Problems)
@@ -190,10 +198,20 @@ public static class RemasterKitReader
 		string figure = Str(f, "figure");
 		string figurePath = figure.Length > 0 && !Path.IsPathRooted(figure) && !figure.Contains("..", StringComparison.Ordinal) ? Path.Combine(kitDir, figure) : "";
 		int phases = 0;
+		List<int?> order = new();
 		if(f.TryGetProperty("playsColumns", out JsonElement plays) && plays.ValueKind == JsonValueKind.Array) {
 			phases = plays.GetArrayLength();
+			foreach(JsonElement c in plays.EnumerateArray()) {
+				order.Add(c.ValueKind == JsonValueKind.Number && c.TryGetInt32(out int col) ? col : null);
+			}
 		} else {
 			phases = Int(f, "phases", 0);
+		}
+		List<string> ids = new();
+		if(f.TryGetProperty("ids", out JsonElement idList) && idList.ValueKind == JsonValueKind.Array) {
+			foreach(JsonElement id in idList.EnumerateArray()) {
+				ids.Add(id.ValueKind == JsonValueKind.String ? id.GetString() ?? "" : "");
+			}
 		}
 		bool? seen = f.TryGetProperty("seen", out JsonElement s) && (s.ValueKind == JsonValueKind.True || s.ValueKind == JsonValueKind.False) ? s.GetBoolean() : null;
 		bool page = category == RemasterKitCategory.PatternPages;
@@ -203,7 +221,8 @@ public static class RemasterKitReader
 			File.Exists(figurePath) ? figurePath : "",
 			File.Exists(figurePath) && File.Exists(TwinOf(figurePath)) ? TwinOf(figurePath) : "",
 			recordingId, Int(f, "cells", 0), Int(f, "rows", 0), Int(f, "columns", 0), phases, seen,
-			page ? Int(f, "fill", -1) : -1, page ? Int(f, "empty", -1) : -1
+			page ? Int(f, "fill", -1) : -1, page ? Int(f, "empty", -1) : -1,
+			order, ids
 		);
 	}
 

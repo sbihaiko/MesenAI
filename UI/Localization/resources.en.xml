@@ -2175,6 +2175,12 @@
 		<Message ID="RemasterRecentNoRecordings">No recordings yet</Message>
 		<Message ID="RemasterRecordingTitle">Recording {0}</Message>
 		<Message ID="RemasterRecordingsLatest">Latest: {0}</Message>
+		<Message ID="RemasterShapesSeenNone">No shapes seen while you played</Message>
+		<Message ID="RemasterShapesSeenOne">1 shape seen while you played</Message>
+		<Message ID="RemasterShapesSeenMany">{0:N0} shapes seen while you played</Message>
+		<Message ID="RemasterCellsPaintedNone">nothing painted yet</Message>
+		<Message ID="RemasterCellsPaintedOne">1 cell painted</Message>
+		<Message ID="RemasterCellsPaintedMany">{0:N0} cells painted</Message>
 		<Message ID="RemasterRecordingNoTiles">music only</Message>
 		<Message ID="RemasterSourcePlay">played</Message>
 		<Message ID="RemasterSourceTas">from a TAS movie</Message>
@@ -2183,8 +2189,8 @@
 		<Message ID="RemasterKitReady">Click a tile to open it in your paint program. Save it as the same PNG and come back.</Message>
 		<Message ID="RemasterKitNotYet">Figures and pattern pages are made from your recordings, after each one.</Message>
 		<Message ID="RemasterRecordingPill">Recording {0}</Message>
-		<Message ID="RemasterRecordingShapesOne">1 new shape</Message>
-		<Message ID="RemasterRecordingShapesMany">{0} new shapes</Message>
+		<Message ID="RemasterRecordingShapesOne">1 shape seen</Message>
+		<Message ID="RemasterRecordingShapesMany">{0} shapes seen</Message>
 		<Message ID="RemasterRecordingScreensOne">1 screen captured</Message>
 		<Message ID="RemasterRecordingScreensMany">{0} screens captured</Message>
 		<Message ID="RemasterJobKitTitle">Preparing your figures…</Message>
@@ -2232,6 +2238,7 @@
 		<Message ID="RemasterProvenanceSeenUnknown">? The kit does not say whether this was seen in the game.</Message>
 		<Message ID="RemasterProvenanceFromImportedPack">From the pack you imported, not from a recording.</Message>
 		<Message ID="RemasterProvenancePainted">Painted</Message>
+		<Message ID="RemasterProvenancePaintedPhases">Painted: {0} of {1} phases</Message>
 		<Message ID="RemasterTileBadgePainted">Painted</Message>
 		<Message ID="RemasterProvenanceNotPainted">Not painted yet</Message>
 		<Message ID="RemasterProvenancePaintChecking">Checking whether it was painted…</Message>

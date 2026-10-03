@@ -187,6 +187,28 @@ public class RemasterRecentProjectsRenderTests : IDisposable
 		PlayerRender.AssertPixel(RemasterTint, frame, (int)badgeCenter.X, (int)badgeCenter.Y);
 	}
 
+	//ADR-0252 §2: a row adds the project's painted cells once they are
+	//measured; a project with no kit to measure keeps its recordings alone.
+	[AvaloniaFact]
+	public void A_row_adds_the_projects_painted_cells_when_its_kit_can_tell()
+	{
+		var fixture = RenderFixture();
+		byte[] red = { 255, 0, 0, 255 };
+		byte[] blue = { 0, 0, 255, 255 };
+		string sheets = Path.Combine(fixture.Castlevania, "kit", "rec-001", "sheets");
+		Directory.CreateDirectory(sheets);
+		File.WriteAllBytes(Path.Combine(sheets, "usr000.orig.png"), RemasterTileBrowserTests.Png(16, 8, _ => red));
+		File.WriteAllBytes(Path.Combine(sheets, "usr000.png"), RemasterTileBrowserTests.Png(32, 16, i => i == 20 ? blue : red));
+		File.WriteAllText(Path.Combine(sheets, "usr000.json"), "{\"gridUnit\": 8, \"cells\": [{\"index\": 0, \"x\": 0, \"y\": 0}, {\"index\": 1, \"x\": 8, \"y\": 0}]}");
+		File.WriteAllText(Path.Combine(fixture.Castlevania, "kit", "rec-001", "kit.json"),
+			"{\"parts\": [{\"part\": \"background\", \"files\": [{\"path\": \"sheets/usr000.png\", \"title\": \"obj000\", \"unit\": \"object\", \"cells\": 2, \"seen\": true}]}]}");
+		RemasterWorkspaceViewModel model = Model(Ready, fixture.Config, fixture.Roms);
+		(Window window, RemasterWorkspaceView view) = Host(model);
+		model.RecentSettled.Wait(10000);
+		WaitFor(() => model.RecentProjects.Count == 2 && model.RecentProjects[0].Detail != "3 recordings", "the row never counted its painted cells");
+		Assert.Equal(new[] { "3 recordings · 1 cell painted", "1 recording" }, Rows(view).Select(r => r.FindAll<TextBlock>().Single(t => t.Classes.Contains("value")).Text).ToArray());
+	}
+
 	//W-R0b: the banner screen keeps the list under the two cards.
 	[AvaloniaFact]
 	public void W_R0b_banner_screen_keeps_the_recent_projects()

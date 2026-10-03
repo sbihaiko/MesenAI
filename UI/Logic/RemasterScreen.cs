@@ -186,6 +186,13 @@ public static class RemasterScreen
 	//builder saw anything: then the pill shows no counters.
 	public static bool ShowsRecordingCounters(uint tilesSeen, uint screensSeen) => tilesSeen > 0 || screensSeen > 0;
 
+	//ADR-0252 §4: the core keeps counting distinct stable screens past the
+	//number it writes (HdPackBuilder::MaxScreensPerPack), so "captured" is the
+	//count up to that cap. Mirror of the core constant: change both together.
+	public const uint MaxScreensPerRecording = 300;
+
+	public static uint ScreensCaptured(uint screensSeen) => Math.Min(screensSeen, MaxScreensPerRecording);
+
 	//W-R2's pill: "Recording 01:42"; hours appear past 59:59.
 	public static string FormatElapsed(TimeSpan elapsed)
 	{
