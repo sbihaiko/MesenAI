@@ -193,6 +193,19 @@ namespace Mesen.ViewModels
 			RecentGames.Init(mode);
 		}
 
+		//#692: the slot grid's own X. Opened from W-P4 it closes back to W-P4,
+		//like Esc (the overlay paused the game, so the grid has nothing to
+		//resume). Returns false for a grid opened any other way.
+		public bool CloseSlotGridToOverlay()
+		{
+			if(CurrentPlaySheet() != PlaySheet.SaveStateGrid) {
+				return false;
+			}
+			CloseSheet(PlaySheet.SaveStateGrid);
+			OpenPauseOverlay();
+			return true;
+		}
+
 		//W-P4's Pack row: OpenPackFromOverlay (MainWindowViewModel.PlaySheets.cs,
 		//G.4) opens W-P5 for 2+ packs or W-P6; Esc returns to the overlay.
 

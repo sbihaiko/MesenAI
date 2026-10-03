@@ -163,6 +163,67 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
+	//#691: Use This Pack from W-P4's Pack row swaps the pack in place (NES,
+	//P.9), so it closes back to W-P4 - not to a paused game with no overlay.
+	[AvaloniaFact]
+	public void Use_this_pack_from_the_overlay_returns_to_the_overlay()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		try {
+			Assert.True(model.OpenPackFromOverlay(TwoPacks, Sha1, "/packs", "", installedSourceSha256: null));
+			Dispatcher.UIThread.RunJobs();
+			Assert.True(model.LayerChangeKeepsPlace);
+
+			Click(window.FindNamed<Button>("PackPickerUseButton"));
+
+			Assert.False(window.FindNamed<Border>("PlayerPackPicker").IsOnScreen());
+			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		} finally {
+			ConfigManager.Config.EnhancementPacks.SetRomPackPreference(Sha1, "");
+		}
+	}
+
+	//#693: a disabled pack is neither offered nor counted - with one enabled
+	//pack left, W-P4's Pack row inspects it instead of opening the picker.
+	[AvaloniaFact]
+	public void Pack_row_ignores_a_disabled_pack()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		const string oneDisabled =
+			"aaa\tAaa Pack\t1.0\t\t\ttextures\t1\t0\tissue-1\tc1\n" +
+			"bbb\tBbb Pack\t1.0\t\t\ttextures\t0\t0\tissue-2\tc2\n";
+
+		Assert.False(model.OpenPackFromOverlay(oneDisabled, Sha1, "/packs", "", installedSourceSha256: null));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.False(model.IsPlayerPackPickerVisible);
+		Assert.True(window.FindNamed<Border>("PlayerPackDetailSheet").IsOnScreen());
+		Assert.Equal("Aaa Pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
+		Assert.Equal("There is no other pack for this game.", window.FindNamed<TextBlock>("PackDetailChangeReason").Text);
+		Assert.DoesNotContain(model.PlayerPackChoices, c => c.Container == "bbb");
+	}
+
+	//#703: the current pack is the one the core renders - the human sibling,
+	//first in the core's order (ADR-0049) - not the first row of the
+	//👍-then-name order the picker displays.
+	[AvaloniaFact]
+	public void Current_pack_is_the_sibling_the_core_renders()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		const string siblingThenFolder =
+			"Contra\tZzz Sibling\t1.0\t\t\ttextures\t1\t2\t\t\t0\n" +
+			"aaa\tAaa Pack\t1.0\t\t\ttextures\t1\t0\tissue-1\tc1\t0\n";
+
+		Assert.False(model.OpenPackFromOverlay(siblingThenFolder, Sha1, "/packs", "/roms/Contra", installedSourceSha256: null));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal("Zzz Sibling", window.FindNamed<TextBlock>("PackDetailTitle").Text);
+		Assert.Equal("Zzz Sibling", model.CurrentPackName);
+	}
+
 	[AvaloniaFact]
 	public void Enhancements_button_names_the_restart_the_draft_causes()
 	{

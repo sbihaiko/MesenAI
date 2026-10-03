@@ -113,5 +113,68 @@ namespace Mesen.Tests.Mep
 			Assert.False(PlayerPackPicker.ShouldOpen(
 				hasSiblingPack: true, distinctPackIdCount: 2, hasEffectivePreference: false));
 		}
+
+		//#693: the core never renders a disabled pack and the resolver never
+		//honours a preference for one, so the picker neither offers nor counts it.
+		[Fact]
+		public void DisabledPack_IsNeitherOfferedNorCounted()
+		{
+			var candidates = new List<PackPreferenceResolver.Candidate> {
+				Candidate("pack-a", packId: "issue-1"),
+				new() { Container = "pack-b", PackId = "issue-2", Enabled = false }
+			};
+			List<PackPreferenceResolver.Candidate> offered = PlayerPackPicker.Offered(candidates);
+			Assert.Equal(new[] { "pack-a" }, offered.ConvertAll(c => c.Container));
+			Assert.Equal(1, PlayerPackPicker.DistinctPackIdCount(PackPreferenceResolver.Resolve(offered, null).Candidates));
+		}
+
+		//#693: a disabled container first in core order must not swallow an
+		//enabled copy of the same content in the §5 merge.
+		[Fact]
+		public void DisabledPack_DoesNotShadowAnEnabledCopyInTheMerge()
+		{
+			var candidates = new List<PackPreferenceResolver.Candidate> {
+				new() { Container = "copy-a", PackId = "issue-1", ContentId = "AAA", Enabled = false },
+				Candidate("copy-b", packId: "issue-1", contentId: "AAA")
+			};
+			var merged = PackPreferenceResolver.Resolve(PlayerPackPicker.Offered(candidates), null).Candidates;
+			Assert.Equal("copy-b", Assert.Single(merged).Container);
+		}
+
+		//#703: with no stored choice the core renders the first enabled pack in
+		//its own order (ADR-0049: the sibling folder first) that has human
+		//content, else the first auto-only one - never the most-voted one.
+		[Fact]
+		public void Current_IsTheHumanSibling_FirstInCoreOrder()
+		{
+			var coreOrder = new List<PackPreferenceResolver.Candidate> {
+				Candidate("Contra"),
+				Candidate("contra-community", packId: "issue-7")
+			};
+			Assert.Equal("Contra", PlayerPackPicker.CurrentContainer(coreOrder, preferredContainer: null));
+		}
+
+		//#703 / CLAUDE.md policy: an accepted community pack wins over a local
+		//bootstrap auto-only sibling (ADR-0049, ADR-0050).
+		[Fact]
+		public void Current_SkipsAnAutoOnlySibling()
+		{
+			var coreOrder = new List<PackPreferenceResolver.Candidate> {
+				new() { Container = "Contra", IsAutoOnly = true },
+				Candidate("contra-community", packId: "issue-7")
+			};
+			Assert.Equal("contra-community", PlayerPackPicker.CurrentContainer(coreOrder, null));
+		}
+
+		[Fact]
+		public void Current_FallsBackToTheAutoOnlyPack_AndFollowsAStoredChoice()
+		{
+			var autoOnly = new List<PackPreferenceResolver.Candidate> { new() { Container = "Contra", IsAutoOnly = true } };
+			Assert.Equal("Contra", PlayerPackPicker.CurrentContainer(autoOnly, null));
+
+			var coreOrder = new List<PackPreferenceResolver.Candidate> { Candidate("a"), Candidate("b") };
+			Assert.Equal("b", PlayerPackPicker.CurrentContainer(coreOrder, "b"));
+			Assert.Null(PlayerPackPicker.CurrentContainer(new List<PackPreferenceResolver.Candidate>(), null));
+		}
 	}
 }

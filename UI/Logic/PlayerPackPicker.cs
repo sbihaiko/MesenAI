@@ -45,5 +45,46 @@ namespace Mesen.Logic
 			}
 			return ids.Count;
 		}
+
+		//#693: the packs the player can choose among - the enabled ones. The
+		//core never renders a disabled pack and the resolver never honours a
+		//preference for one, so offering it stored a choice that reopened the
+		//picker on every load. Filter before Resolve, so a disabled container
+		//cannot swallow an enabled copy in the §5 content_id merge either.
+		public static List<PackPreferenceResolver.Candidate> Offered(IEnumerable<PackPreferenceResolver.Candidate> candidates)
+		{
+			List<PackPreferenceResolver.Candidate> offered = new();
+			foreach(PackPreferenceResolver.Candidate c in candidates) {
+				if(c.Enabled) {
+					offered.Add(c);
+				}
+			}
+			return offered;
+		}
+
+		//#703: the pack the core renders (MepPackManager::GetPackForSection):
+		//the stored choice when it resolves, else the first enabled pack in the
+		//core's own order (ADR-0049: the sibling folder first, then ADR-0040's
+		//lexicographic order) that has human content, else the first auto-only
+		//one - so an accepted community pack wins over a bootstrap auto-only
+		//sibling (ADR-0050). Never the picker's 👍-then-name display order.
+		//coreOrder: the content-merged candidates, in pack-list order.
+		public static string? CurrentContainer(IReadOnlyList<PackPreferenceResolver.Candidate> coreOrder, string? preferredContainer)
+		{
+			if(preferredContainer != null) {
+				return preferredContainer;
+			}
+			string? autoOnlyFallback = null;
+			foreach(PackPreferenceResolver.Candidate c in coreOrder) {
+				if(!c.Enabled) {
+					continue;
+				}
+				if(!c.IsAutoOnly) {
+					return c.Container;
+				}
+				autoOnlyFallback ??= c.Container;
+			}
+			return autoOnlyFallback;
+		}
 	}
 }

@@ -156,6 +156,49 @@ public class PauseOverlayViewTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
+	//#692 (G.2): the slot grid's own X, opened from W-P4 › Save states,
+	//closes back to W-P4 like Esc does - the overlay paused the game, so the
+	//grid has nothing to resume and used to leave a paused game with no overlay.
+	[AvaloniaFact]
+	public void Slot_grid_close_button_returns_to_the_overlay()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+
+		string folder = Path.Combine(Path.GetTempPath(), "mesen-692-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		string rom = Path.Combine(folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		try {
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
+			EmuApi.Resume();
+			WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused && !model.RecentGames.Visible, "the game never ran unpaused");
+
+			model.TogglePlayerOverlay();
+			WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
+			Click(window, "OverlaySaveStatesButton");
+			Click(window, "SaveStatesSaveButton");
+			Assert.True(model.RecentGames.Visible);
+
+			Click(window, "StateGridCloseButton");
+			Assert.False(model.RecentGames.Visible);
+			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+			Assert.True(EmuApi.IsPaused());
+
+			//...and the next Esc resumes from the overlay, not reopens it.
+			model.TogglePlayerOverlay();
+			WaitFor(() => !EmuApi.IsPaused(), "Esc on the overlay did not resume");
+		} finally {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+			try {
+				Directory.Delete(folder, true);
+			} catch(IOException) {
+			}
+		}
+	}
+
 	//The stop rule's Esc order against a running game: game → W-P4 → resume;
 	//every sheet from W-P4 (Save states and its slot grid, Enhancements,
 	//Cheats) closes back to W-P4; Quit game lands on the Play home.

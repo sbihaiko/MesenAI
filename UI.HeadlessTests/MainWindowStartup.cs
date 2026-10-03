@@ -66,6 +66,7 @@ internal static class MainWindowStartup
 				if(window.DataContext is MainWindowViewModel model) {
 					WaitFor(model.Remaster.Measuring, "The Remaster gate measurement");
 					WaitFor(model.ShareGateRefresh, "The Share refresh after the gate measurement");
+					WaitFor(model.PackPickApplied, "The pack swap after Use This Pack");
 				}
 			}
 		} finally {

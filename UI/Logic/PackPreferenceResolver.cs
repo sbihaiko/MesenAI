@@ -31,6 +31,9 @@ namespace Mesen.Logic
 			public string ContentId { get; init; } = "";
 			public string Version { get; init; } = "";
 			public bool Enabled { get; init; } = true;
+			//A sibling pack with only the bootstrap's auto/ layer (pack list
+			//column 11): the core renders it only when no human pack serves.
+			public bool IsAutoOnly { get; init; }
 		}
 
 		public sealed class Resolution

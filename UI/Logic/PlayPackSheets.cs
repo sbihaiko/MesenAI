@@ -67,6 +67,28 @@ public static class PackPickerRow
 	}
 }
 
+//#691: where W-P5's Use This Pack goes once the choice is stored.
+public enum PackPickReturn
+{
+	//The on-load picker: the game it opened over keeps going as it was.
+	Stay,
+	//Opened from W-P4 and swapped in place: the game is still paused - back to W-P4.
+	Overlay,
+	//Opened from W-P4 but the game restarts: back to the game (W-P7's Apply rule).
+	Game
+}
+
+public static class PackPickClose
+{
+	public static PackPickReturn After(bool fromOverlay, bool keepsPlace)
+	{
+		if(!fromOverlay) {
+			return PackPickReturn.Stay;
+		}
+		return keepsPlace ? PackPickReturn.Overlay : PackPickReturn.Game;
+	}
+}
+
 //MepPackListEntry.Source values (MepPackListParser).
 public static class PackOrigin
 {
