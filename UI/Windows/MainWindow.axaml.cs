@@ -363,6 +363,10 @@ namespace Mesen.Windows
 		{
 			//P.7 (§6.1): replaces the overlay with the quick-toggle panel,
 			//same shape as OnOverlayPack replacing it with the picker.
+			//ADR-0253 §4 (W.5): the core's per-game measurement is read as the
+			//sheet opens, so the Widescreen switch already reflects it and the
+			//per-ROM record is written for the next load.
+			_model.SyncWidescreenSupport(EmuApi.GetMepRomSha1(), (WidescreenSupport)EmuApi.GetWidescreenSupportVerdict());
 			_model.OpenEnhancementsPanel();
 		}
 
@@ -538,6 +542,9 @@ namespace Mesen.Windows
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
 					//W-P2: the hash the home's pack badge looks up later.
 					RecentPackLookup.RememberLoadedGame(romInfo);
+					//ADR-0253 §4 (W.5): a load starts the per-game measurement
+					//from scratch; the window's Play poll writes the answer.
+					Dispatcher.UIThread.Post(() => _model.BeginWidescreenMeasurement());
 
 					//#732: a pack patch forced onto another revision of the game
 					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so
@@ -558,6 +565,9 @@ namespace Mesen.Windows
 						bool pickerOpen = _model.EvaluatePlayerPackPicker(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1());
 						if(!pickerOpen) {
 							_model.ShowPlayEntryToast(isGameStart);
+							//ADR-0253 §4 (W.5): a game the core recorded as having
+							//nothing beside the picture says so, once, as it loads.
+							_model.AnnounceWidescreenUnavailable(EmuApi.GetMepRomSha1());
 						}
 					});
 

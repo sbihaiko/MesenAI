@@ -57,6 +57,15 @@ namespace Mesen.Tests.Play
 			Assert.Equal(Off, EnhancementsSheet.Flip(Off, EnhancementToggle.Overclock, overclockSupported: false));
 		}
 
+		//ADR-0253 §4 (W.5): a game with nothing beside the picture shows the
+		//switch disabled with its reason, and it never flips there.
+		[Fact]
+		public void Widescreen_does_not_flip_where_the_game_cannot_use_it()
+		{
+			Assert.Equal(Off, EnhancementsSheet.Flip(Off, EnhancementToggle.Widescreen, overclockSupported: true, widescreenSupported: false));
+			Assert.True(EnhancementsSheet.Flip(Off, EnhancementToggle.Widescreen, overclockSupported: true, widescreenSupported: true).Widescreen);
+		}
+
 		[Fact]
 		public void Flipping_twice_leaves_nothing_pending()
 		{

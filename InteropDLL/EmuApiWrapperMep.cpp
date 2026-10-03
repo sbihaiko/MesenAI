@@ -11,8 +11,8 @@ extern unique_ptr<Emulator>& _emu;
 //F6.4b - client-side MEP-recipe-v1 auto-install (ADR-0138 clarifications
 //4/37/38). Sibling file to EmuApiWrapper.cpp (already at its 200-line
 //per-file guardrail - see project AGENTS.md) rather than a new addition
-//there; this is the only export in the file, so it stays well under the
-//guardrail on its own.
+//there; the file's exports are thin marshaling wrappers, so it stays well
+//under the guardrail on its own.
 //
 //This export is a thin marshaling wrapper around the already-shipped F6.4a
 //offline installer (MepRecipeInstaller::Install, Core/Shared/EnhancementPacks/
@@ -133,6 +133,20 @@ extern "C"
 	DllExport void __stdcall GetForcedPackPatch(char* outBuffer, uint32_t maxLength)
 	{
 		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetForcedPatch(), outBuffer, maxLength);
+	}
+
+	//ADR-0253 §4 (W.5): what the running NES game measured about its side
+	//columns - 0 Undecided (still measuring, or a non-NES console), 1 Supported,
+	//2 Unsupported. The window's Play poll reads it while a game runs and keeps
+	//the per-ROM record as the measurement closes; the rule that turns it into
+	//the switch's state is host-free in UI/Logic/WidescreenSupportRule.cs.
+	DllExport uint8_t __stdcall GetWidescreenSupportVerdict()
+	{
+		auto console = _emu->GetConsole();
+		if(NesConsole* nes = dynamic_cast<NesConsole*>(console.get())) {
+			return (uint8_t)nes->GetWidescreenSupportVerdict();
+		}
+		return 0;
 	}
 
 	//#732: play the running ROM without its forced patch until the app quits;

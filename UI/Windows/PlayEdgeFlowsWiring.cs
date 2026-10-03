@@ -60,6 +60,11 @@ namespace Mesen.Windows
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {
 				model.ControllerSetup.Tick(InputApi.GetPressedKeys());
+				//ADR-0253 §4 (W.5): the per-game widescreen measurement closes
+				//after the first gameplay seconds; the record is written as it
+				//closes, whether or not the player ever opens Enhancements. It
+				//needs frames, so the tick only runs while the game runs.
+				model.TickWidescreenSupport();
 			} else if(wasListening || model.ControllerSetup.IsPillVisible) {
 				model.ControllerSetup.StopListening();
 			}

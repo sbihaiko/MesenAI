@@ -69,6 +69,7 @@
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
+#include "NES/NesWidescreenSupport.h"
 #include "Shared/Video/WidescreenFrameFlow.h"
 //W.6 asserts the two filters' own AcceptsExtendedFrame declaration (below).
 //Only the headers are needed - the trait check is unevaluated, so no filter
@@ -3146,6 +3147,114 @@ namespace
 		const uint16_t* next = frames.Finish(standard.data());
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W253/W.5: the per-game support measurement (ADR-0253 §4, W.5) -----
+//The switch's enabled/disabled state is decided from what the core measured
+//over the first gameplay seconds: a game whose side columns never held real
+//content (NesWidescreenReveal::SideColumnsHaveContent, section 3's "cannot
+//fill") is remembered as unsupported per ROM. The probe below is the whole
+//rule; the emulator feeds it one boolean per gameplay frame.
+namespace
+{
+	using namespace NesWidescreenSupport;
+
+	void TestWidescreenSupportProbeIsUndecidedWhileTheWindowIsOpen()
+	{
+		Probe probe;
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a probe that observed no frame is undecided");
+		Check(probe.FramesObserved() == 0, "W253: a fresh probe has counted no frame", std::to_string(probe.FramesObserved()));
+
+		probe.ObserveFrame(false);
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: nothing found yet keeps the switch enabled while measuring");
+		Check(probe.FramesObserved() == 1, "W253: the probe counts the frames it measured", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeFindsContentOnTheFirstFrameThatHasIt()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames - 1; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a game still in its first seconds is undecided");
+
+		//One frame with real content beside the picture is enough: the game
+		//supports Reveal even if the rest of the window showed nothing.
+		probe.ObserveFrame(true);
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: one frame of real side content settles the game as supported");
+	}
+
+	void TestWidescreenSupportProbeConcludesUnsupportedAfterAFullWindowOfNothing()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames - 1; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: the last measured frame is still inside the window");
+
+		probe.ObserveFrame(false);
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: a whole window with nothing beside the picture is unsupported");
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: the window is MeasurementFrames long", std::to_string(MeasurementFrames));
+
+		//The window is closed: later frames cannot turn a settled "no".
+		probe.ObserveFrame(false);
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: frames after the window are not counted", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeContentAfterTheWindowStillCounts()
+	{
+		//Section 4's re-check: a later run that finds content, such as a level
+		//that scrolls, re-enables the switch. Within a session the SMB3 case is
+		//exactly this - the title measured as unsupported, then the level scrolls.
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: the title screen settled as unsupported");
+
+		probe.ObserveFrame(true);
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: content found after the window clears the unsupported verdict");
+	}
+
+	void TestWidescreenSupportProbeResetStartsTheNextRunOver()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: a full window of nothing is unsupported");
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: the window closed");
+
+		//A new game load starts its own measurement.
+		probe.Reset();
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a reset probe is undecided again");
+		Check(probe.FramesObserved() == 0, "W253: a reset probe has counted no frame", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeReadsTheRevealContentRule()
+	{
+		//The probe is fed SideColumnsHaveContent (section 3): vertical and
+		//four-screen mirroring can fill the sides, single-screen and horizontal
+		//cannot - at any scroll (the SMB3 title included).
+		Probe probe;
+		Check(!NesWidescreenReveal::SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring feeds the probe a 'cannot fill' frame");
+		probe.ObserveFrame(NesWidescreenReveal::SideColumnsHaveContent(MirroringType::Vertical, 0));
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: vertical mirroring settles the game as supported");
+	}
+
+	void TestWidescreenSupportSettledGameIsNotWidenedAtAll()
+	{
+		//Section 4 again: a game the window settled as unsupported "supports no
+		//widescreen mode", so the switch being on does not widen it - otherwise
+		//the player is left with Reveal/black columns and no way to turn them
+		//off (the switch is disabled for this game). The saved preference is
+		//untouched, so the next game that can use it gets it back.
+		Check(Reveals(true, Verdict::Supported), "W253: a supported game is widened while the switch is on");
+		Check(Reveals(true, Verdict::Undecided), "W253: the picture is widened while the game is still being measured");
+		Check(!Reveals(true, Verdict::Unsupported), "W253: a game settled as unsupported is never widened");
+		Check(!Reveals(false, Verdict::Supported), "W253: the switch off widens nothing, even a supported game");
+		Check(!Reveals(false, Verdict::Undecided), "W253: the switch off widens nothing while measuring");
 	}
 }
 
@@ -13968,6 +14077,13 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestWidescreenSupportProbeIsUndecidedWhileTheWindowIsOpen();
+	TestWidescreenSupportProbeFindsContentOnTheFirstFrameThatHasIt();
+	TestWidescreenSupportProbeConcludesUnsupportedAfterAFullWindowOfNothing();
+	TestWidescreenSupportProbeContentAfterTheWindowStillCounts();
+	TestWidescreenSupportProbeResetStartsTheNextRunOver();
+	TestWidescreenSupportProbeReadsTheRevealContentRule();
+	TestWidescreenSupportSettledGameIsNotWidenedAtAll();
 	TestW6BlitGeometryFollowsTheFrameWidth();
 	TestW6BisqwitRowFollowsTheFrameWidth();
 	TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns();

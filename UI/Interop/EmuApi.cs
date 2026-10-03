@@ -123,6 +123,12 @@ namespace Mesen.Interop
 		[DllImport(DllPath, EntryPoint = "GetMepRomSha1")] private static extern void GetMepRomSha1Wrapper(IntPtr outSha1, Int32 maxLength);
 		public static string GetMepRomSha1() { return Utf8Utilities.CallStringApi(GetMepRomSha1Wrapper, 100); }
 
+		//ADR-0253 §4 (W.5): the running game's widescreen support measurement.
+		//0 Undecided (still measuring, or a non-NES console), 1 Supported,
+		//2 Unsupported. The UI keeps the per-ROM record and the host-free rule
+		//(WidescreenSupportRule) turns it into the switch's state.
+		[DllImport(DllPath)] public static extern byte GetWidescreenSupportVerdict();
+
 		//ADR-0211: whole-file SHA-1 (header included) - what an HD pack's
 		//<supportedRom> declares. Not interchangeable with GetMepRomSha1()
 		//above, which is the No-Intro body hash (ADR-0003).

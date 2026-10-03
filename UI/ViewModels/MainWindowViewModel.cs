@@ -83,6 +83,11 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsWideScrnEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockSupported { get; set; }
+		//ADR-0253 §4 (W.5): false when the loaded game has no widescreen mode -
+		//the Enhancements sheet shows the Widescreen switch disabled then, with
+		//EnhWidescreenReason as its one-line reason. True while the core is
+		//still measuring the game.
+		[ObservableProperty] public partial bool IsWidescreenSupported { get; set; } = true;
 
 		//P.5 (PRD Part B §6): the currently-applied pack's name/layers for
 		//the overlay chip and the "Applied ..." toast.
@@ -104,6 +109,16 @@ namespace Mesen.ViewModels
 		//P.5: the ROM sha1 the current picker evaluation ran against (the key of
 		//the stored per-ROM preference, §4 step 1 - before any patches[] apply).
 		private string _pickerRomSha1 = "";
+
+		//ADR-0253 §4 (W.5): the ROM the widescreen-support memory is keyed by,
+		//set when the Enhancements sheet syncs with the core.
+		private string _widescreenRomSha1 = "";
+		//The ROM this session already told about it, so the notice is said once.
+		private string _widescreenAnnouncedFor = "";
+		//The running game's terminal verdict is already written (the Play poll).
+		private bool _widescreenMeasured = true;
+		//The switch's state for the loaded game, from the core's verdict.
+		private WidescreenSwitchState _widescreenSwitch = new(true, "");
 
 		public MainWindowViewModel()
 		{
@@ -414,6 +429,65 @@ namespace Mesen.ViewModels
 			IsEnhancementsPanelVisible = true;
 		}
 
+		//ADR-0253 §4 (W.5): records what the core measured for the running ROM -
+		//the caller (host-aware, with EmuApi) passes the ROM's sha1 (the same
+		//No-Intro hash the per-ROM pack choice uses) and GetWidescreenSupportVerdict.
+		//A measured "unsupported" is remembered so the Widescreen switch comes up
+		//disabled on the next load; a measured "supported" clears an earlier one
+		//(§4's re-check: a later run that finds content, such as a level that
+		//scrolls). Undecided leaves the memory alone.
+		public void SyncWidescreenSupport(string romSha1, WidescreenSupport measured)
+		{
+			_widescreenRomSha1 = romSha1;
+			if(measured == WidescreenSupport.Unsupported) {
+				Config.PlayerEnhancements.SetRomWidescreenSupport(romSha1, supported: false);
+				Config.Save();
+			} else if(measured == WidescreenSupport.Supported) {
+				Config.PlayerEnhancements.SetRomWidescreenSupport(romSha1, supported: true);
+				Config.Save();
+			}
+		}
+
+		//ADR-0253 §4 (W.5): the measurement window closes after the first gameplay
+		//seconds, so the answer is written here - the window's Play poll hands it
+		//every tick while a game runs (PlayEdgeFlowsWiring), which is why the
+		//record does not depend on the player opening the Enhancements sheet. A
+		//new game starts a new measurement (BeginWidescreenMeasurement).
+		public void TickWidescreenSupport()
+		{
+			if(_widescreenMeasured) {
+				return;
+			}
+			WidescreenSupport verdict = (WidescreenSupport)EmuApi.GetWidescreenSupportVerdict();
+			if(!WidescreenSupportRule.ShouldRecord(verdict, alreadyRecorded: false)) {
+				return;
+			}
+			_widescreenMeasured = true;
+			SyncWidescreenSupport(EmuApi.GetMepRomSha1(), verdict);
+		}
+
+		//A load starts measuring: the previous run's answer is spent.
+		public void BeginWidescreenMeasurement() => _widescreenMeasured = false;
+
+		//ADR-0253 §4 (W.5): "the switch then shows disabled from the next load,
+		//and a toast says so once". The notice belongs to a game the memory
+		//already holds as unsupported - the run that measured it shows the
+		//disabled switch instead, so the user reads the reason where it applies.
+		//It stacks with W-P3's entry toast (SystemHud::DrawMessages draws up to
+		//four), so it never costs the pack line or the menu hint.
+		public void AnnounceWidescreenUnavailable(string romSha1)
+		{
+			if(Config.Preferences.UiMode != UiMode.Player) {
+				return;
+			}
+			if(!WidescreenSupportRule.ShouldAnnounceUnavailable(
+				romSha1, Config.PlayerEnhancements.IsRomWidescreenUnsupported(romSha1), _widescreenAnnouncedFor)) {
+				return;
+			}
+			_widescreenAnnouncedFor = romSha1;
+			EmuApi.DisplayMessage("MEP", ResourceHelper.GetMessage(WidescreenSupportRule.UnavailableReasonKey));
+		}
+
 		//Also feeds W-P4's "Enhancements · N on" row (G.2).
 		private void RefreshEnhancementsState()
 		{
@@ -421,6 +495,17 @@ namespace Mesen.ViewModels
 			IsBorderEnabled = Config.EnhancementPacks.EnableBorder;
 			IsWideScrnEnabled = Config.Video.AspectRatio == VideoAspectRatio.Widescreen;
 			IsOverclockSupported = PlayerEnhancementsToggle.SupportsOverclock(RomInfo.ConsoleType);
+
+			//ADR-0253 §4 (W.5): the switch's state is the host-free rule's over
+			//what the core measured for this ROM. Widescreen pack art (§3) does
+			//not exist yet - W.3 brings it, and this call site flips to true.
+			_widescreenSwitch = WidescreenSupportRule.Switch(
+				WidescreenSupportRule.ConsoleHasSideMap(RomInfo.ConsoleType, RomInfo.Format == RomFormat.GameGear),
+				Config.PlayerEnhancements.IsRomWidescreenUnsupported(_widescreenRomSha1) ? WidescreenSupport.Unsupported : WidescreenSupport.Unknown,
+				hasWidescreenPackArt: false);
+			IsWidescreenSupported = _widescreenSwitch.Enabled;
+			EnhWidescreenReason = _widescreenSwitch.Enabled ? "" : ResourceHelper.GetMessage(_widescreenSwitch.ReasonKey);
+
 			IsOverclockEnabled = RomInfo.ConsoleType switch {
 				ConsoleType.Nes => PlayerEnhancementsToggle.IsNesOverclockOn(Config.Nes.PpuExtraScanlinesBeforeNmi, Config.Nes.PpuExtraScanlinesAfterNmi),
 				ConsoleType.Gameboy => PlayerEnhancementsToggle.IsScanlineOverclockOn(Config.Gameboy.OverclockScanlineCount),

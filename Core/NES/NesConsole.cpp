@@ -797,6 +797,17 @@ PpuFrameInfo NesConsole::GetPpuFrame()
 	return frame;
 }
 
+NesWidescreenSupport::Verdict NesConsole::GetWidescreenSupportVerdict()
+{
+	//The measurement lives in DefaultNesPpu (ADR-0253 §4). An HD pack swaps in
+	//HdNesPpu, whose Reveal is W.4's, and NsfPpu draws no picture - both are
+	//"not measured", so the switch keeps its stored value for them.
+	if(DefaultNesPpu* ppu = dynamic_cast<DefaultNesPpu*>(_ppu.get())) {
+		return ppu->GetWidescreenSupportVerdict();
+	}
+	return NesWidescreenSupport::Verdict::Undecided;
+}
+
 ConsoleType NesConsole::GetConsoleType()
 {
 	return ConsoleType::Nes;

@@ -55,14 +55,15 @@ public static class EnhancementsDraftVisit
 
 public static class EnhancementsSheet
 {
-	//A switch the console cannot use (Overclock on SMS) is shown disabled with
-	//its reason (rule 4) and never flips.
-	public static EnhancementsState Flip(EnhancementsState state, EnhancementToggle toggle, bool overclockSupported)
+	//A switch the console cannot use is shown disabled with its reason (rule 4)
+	//and never flips: Overclock on SMS, and Widescreen on a game with nothing
+	//beside the picture (ADR-0253 §4, W.5).
+	public static EnhancementsState Flip(EnhancementsState state, EnhancementToggle toggle, bool overclockSupported, bool widescreenSupported = true)
 	{
 		return toggle switch {
 			EnhancementToggle.ModernInstruments => state with { ModernInstruments = !state.ModernInstruments },
 			EnhancementToggle.Border => state with { Border = !state.Border },
-			EnhancementToggle.Widescreen => state with { Widescreen = !state.Widescreen },
+			EnhancementToggle.Widescreen => widescreenSupported ? state with { Widescreen = !state.Widescreen } : state,
 			EnhancementToggle.Overclock => overclockSupported ? state with { Overclock = !state.Overclock } : state,
 			_ => state
 		};

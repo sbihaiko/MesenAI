@@ -295,6 +295,80 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
+	//ADR-0253 §4 (W.5): a game the core measured with nothing beside the picture
+	//shows the Widescreen switch disabled, with its one-line reason under it.
+	//The rule itself is host-free in UI.Tests (WidescreenSupportRuleTests); this
+	//is only the wiring.
+	[AvaloniaFact]
+	public void Widescreen_switch_is_disabled_with_its_reason_when_the_game_cannot_use_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.False(widescreen.IsEnabled);
+			TextBlock reason = window.FindNamed<TextBlock>("EnhancementsWidescreenReason");
+			Assert.True(reason.IsVisible);
+			Assert.Equal("This game has nothing to show beside the picture", reason.Text);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
+	//ADR-0253 §1/§4 (W.5): a game that cannot use widescreen is shown as off -
+	//not "on but dead" - and turning it off on screen never writes the saved
+	//preference away, so the next game that can use it gets it back.
+	[AvaloniaFact]
+	public void A_game_that_cannot_use_widescreen_shows_the_switch_off_and_keeps_the_saved_preference()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		VideoAspectRatio wasAspect = ConfigManager.Config.Video.AspectRatio;
+
+		try {
+			ConfigManager.Config.Video.AspectRatio = VideoAspectRatio.Widescreen;
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.False(widescreen.IsEnabled);
+			Assert.False(widescreen.IsChecked);
+			Assert.True(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+			//Nothing to apply: the button is Done, and the preference survives.
+			Button apply = window.FindNamed<Button>("EnhancementsApplyButton");
+			Assert.Equal("Done", apply.Content);
+			Click(apply);
+			Assert.Equal(VideoAspectRatio.Widescreen, ConfigManager.Config.Video.AspectRatio);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+			ConfigManager.Config.Video.AspectRatio = wasAspect;
+		}
+	}
+
+	[AvaloniaFact]
+	public void Widescreen_switch_stays_enabled_with_no_reason_for_a_game_that_can_use_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Supported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.False(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
 	[AvaloniaFact]
 	public void Install_pill_sentence_reaches_the_status_line_and_clears()
 	{

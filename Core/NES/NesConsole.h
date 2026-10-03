@@ -4,6 +4,7 @@
 #include "Shared/SettingTypes.h"
 #include "Shared/Interfaces/IConsole.h"
 #include "Debugger/DebugTypes.h"
+#include "NES/NesWidescreenSupport.h"
 #include "Utilities/safe_ptr.h"
 
 class Emulator;
@@ -107,6 +108,11 @@ public:
 	EnhancedSynth* GetEnhancedSynth() { return _enhancedSynth.get(); }
 	void WarnAboutSilentPatchedMusic();
 	BaseNesPpu* GetPpu() { return _ppu.get(); }
+
+	//ADR-0253 §4 (W.5): what this run measured about the side columns, for the
+	//UI's Widescreen switch. Undecided while the window is still open, and for
+	//an HD pack's PPU (HdNesPpu), whose Reveal is W.4's.
+	NesWidescreenSupport::Verdict GetWidescreenSupportVerdict();
 	NesApu* GetApu() { return _apu.get(); }
 	NesMemoryManager* GetMemoryManager() { return _memoryManager.get(); }
 	BaseMapper* GetMapper() { return _mapper.get(); }
