@@ -11,41 +11,51 @@
 	<!--G.5 (PRD Part B §13.5.2 W-P16): a pack waits for a file only you can
 	add, opened over the pause overlay. Rule 2: drop zone, Show Folder, Play
 	Without It, Choose File… (Add and Restart… until P.9) = 4.-->
-	<Panel Name="PackDepSheetBackdrop" Background="#80000000" DragDrop.AllowDrop="True">
-		<Border Name="PackDepSheet" Background="White" CornerRadius="14" Padding="28 24" MaxWidth="580" HorizontalAlignment="Center" VerticalAlignment="Center">
-			<StackPanel Spacing="12" XYFocus.NavigationModes="Enabled">
-				<StackPanel Orientation="Horizontal" Spacing="12">
-					<Border Width="40" Height="40" CornerRadius="8" Background="#34C759">
-						<TextBlock Text="▣" Foreground="White" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+	<!--ADR-0249 (W-P16): the light sheet - share-green pack badge, title and
+	subtitle, body, the file box, the drop zone, the orange wrong-file line,
+	then Show Folder (plain, left), Play Without It and Choose File….-->
+	<Panel Name="PackDepSheetBackdrop" Classes="scrim" DragDrop.AllowDrop="True">
+		<Border Name="PackDepSheet" Classes="sheet" Width="500" HorizontalAlignment="Center" VerticalAlignment="Center">
+			<StackPanel Spacing="0" XYFocus.NavigationModes="Enabled">
+				<DockPanel Margin="0 0 0 16">
+					<Border Classes="badge xlarge share" DockPanel.Dock="Left" Margin="0 0 12 0" VerticalAlignment="Top">
+						<PathIcon Data="{StaticResource PlayerIconPack}" />
 					</Border>
-					<StackPanel VerticalAlignment="Center">
-						<TextBlock Name="PackDepSheetTitle" Text="{Binding Title}" FontSize="19" FontWeight="Bold" Foreground="#1C1C1E" TextWrapping="Wrap" />
-						<TextBlock Text="{l:Translate lblPackDepSheetSubtitle}" Foreground="#6E6E73" />
+					<StackPanel VerticalAlignment="Center" Spacing="2">
+						<TextBlock Name="PackDepSheetTitle" Classes="sheet-heading" Text="{Binding Title}" TextWrapping="Wrap" />
+						<TextBlock Classes="subhead secondary" Text="{l:Translate lblPackDepSheetSubtitle}" TextWrapping="Wrap" />
 					</StackPanel>
-				</StackPanel>
-				<TextBlock Text="{l:Translate lblPackDepSheetBody}" TextWrapping="Wrap" Foreground="#1C1C1E" />
-				<Border Background="#F5F5F7" CornerRadius="10" Padding="14 10">
+				</DockPanel>
+				<TextBlock Classes="paragraph" Text="{l:Translate lblPackDepSheetBody}" TextWrapping="Wrap" Margin="0 0 0 14" />
+				<Border Classes="inset file-box" Margin="0 0 0 10">
 					<StackPanel Spacing="2">
-						<TextBlock Name="PackDepSheetFile" Text="{Binding FileTitle}" FontWeight="Bold" Foreground="#1C1C1E" TextWrapping="Wrap" />
-						<TextBlock Name="PackDepSheetLicense" Text="{Binding LicenseText}" Foreground="#6E6E73" />
+						<TextBlock Name="PackDepSheetFile" Classes="callout strong" Text="{Binding FileTitle}" TextWrapping="Wrap" />
+						<TextBlock Name="PackDepSheetLicense" Classes="subhead secondary" Text="{Binding LicenseText}" />
 					</StackPanel>
 				</Border>
-				<Button Name="PackDepSheetDropZone" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="16 18" Background="#F5F5F7" BorderBrush="#C7C7CC" BorderThickness="1" CornerRadius="10" Click="OnChooseFile" IsEnabled="{Binding !IsBusy}">
+				<Button Name="PackDepSheetDropZone" Classes="drop-zone" Click="OnChooseFile" IsEnabled="{Binding !IsBusy}">
 					<StackPanel Spacing="4" HorizontalAlignment="Center">
-						<TextBlock Text="📁" HorizontalAlignment="Center" />
-						<TextBlock Text="{l:Translate lblPackDepSheetDrop}" FontWeight="Bold" Foreground="#1C1C1E" HorizontalAlignment="Center" />
-						<TextBlock Text="{Binding DropHint}" Foreground="#6E6E73" HorizontalAlignment="Center" TextWrapping="Wrap" />
+						<PathIcon Classes="drop-icon" Margin="0 0 0 6" />
+						<TextBlock Classes="drop-title" Text="{l:Translate lblPackDepSheetDrop}" />
+						<TextBlock Classes="drop-hint" Text="{Binding DropHint}" TextWrapping="Wrap" />
 					</StackPanel>
 				</Button>
 				<!--W-X2: "That is not the file this pack was made with".-->
-				<Border Name="PackDepSheetError" Background="#FFF4E5" CornerRadius="8" Padding="12 8" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-					<TextBlock Text="{Binding ErrorText}" Foreground="#B25000" TextWrapping="Wrap" />
+				<Border Name="PackDepSheetError" Classes="warning notice" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+					<DockPanel>
+						<TextBlock Classes="notice-line" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+					</DockPanel>
 				</Border>
-				<DockPanel Margin="0 8 0 0">
-					<Button Name="PackDepSheetShowFolder" DockPanel.Dock="Left" Content="{l:Translate btnPackDepSheetShowFolder}" Background="Transparent" Foreground="#0A84FF" Click="OnShowFolder" />
-					<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
-						<Button Name="PackDepSheetPlayWithout" Content="{l:Translate btnPackDepSheetPlayWithout}" Padding="16 6" Click="OnPlayWithout" />
-						<Button Name="PackDepSheetChooseFile" Content="{Binding PrimaryLabel}" Padding="16 6" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnChooseFile" IsEnabled="{Binding !IsBusy}" />
+				<DockPanel Margin="0 22 0 0">
+					<Button Name="PackDepSheetShowFolder" Classes="plain regular" DockPanel.Dock="Left" Click="OnShowFolder">
+						<StackPanel Orientation="Horizontal">
+							<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
+							<TextBlock Text="{l:Translate btnPackDepSheetShowFolder}" />
+						</StackPanel>
+					</Button>
+					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+						<Button Name="PackDepSheetPlayWithout" Classes="secondary regular" Content="{l:Translate btnPackDepSheetPlayWithout}" Click="OnPlayWithout" />
+						<Button Name="PackDepSheetChooseFile" Classes="primary regular" Content="{Binding PrimaryLabel}" Click="OnChooseFile" IsEnabled="{Binding !IsBusy}" />
 					</StackPanel>
 				</DockPanel>
 			</StackPanel>

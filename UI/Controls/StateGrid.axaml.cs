@@ -112,6 +112,16 @@ namespace Mesen.Controls
 		{
 			InitializeComponent();
 			Focusable = true;
+			//A bound `tiles` class (the slot sheet) can arrive after the first
+			//layout. Classes also carries the pseudo-classes (:focus-within), so
+			//rebuild only when the slot-tiles look itself flips - a rebuild on
+			//every focus change would drop the focused tile and trap Tab.
+			Classes.CollectionChanged += (_, _) => {
+				if(_slotTiles != IsSlotTiles) {
+					_slotTiles = IsSlotTiles;
+					InitGrid(true);
+				}
+			};
 			_timerInput.Interval = TimeSpan.FromMilliseconds(50);
 			_timerInput.Tick += TimerInput_Tick;
 		}
@@ -170,6 +180,10 @@ namespace Mesen.Controls
 		//home's row of tiles (W-P2) and tags each entry so the theme styles it.
 		private const double TileColumnWidth = 198;
 		private bool IsTiles => Classes.Contains("tiles") && Mode == GameScreenMode.RecentGames;
+		//ADR-0249: the Save/Load state slots in the Player's slot sheet keep the
+		//4 x 3 grid; each entry is a theme tile (`tiles slot`).
+		private bool _slotTiles;
+		private bool IsSlotTiles => Classes.Contains("tiles") && Mode != GameScreenMode.RecentGames;
 
 		private void InitGrid(bool forceUpdate = false)
 		{
@@ -245,6 +259,9 @@ namespace Mesen.Controls
 					StateGridEntry ctrl = new StateGridEntry();
 					if(IsTiles) {
 						ctrl.Classes.Add("tiles");
+					} else if(IsSlotTiles) {
+						ctrl.Classes.Add("tiles");
+						ctrl.Classes.Add("slot");
 					}
 
 					ctrl.SetValue(Grid.ColumnProperty, col);

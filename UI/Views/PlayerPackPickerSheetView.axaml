@@ -15,17 +15,18 @@
 	stores the per-ROM preference (P.3) and applies it; Cancel/Esc plays
 	un-enhanced and asks again next launch. The "No pack" row needs a core
 	"no pack" preference that does not exist yet (W-P5 calls it a slice).-->
+	<!--ADR-0249 (W-P5): a light sheet - option cards (RadioButton.option),
+	the 👍 count at the card's top right, Cancel and Use This Pack.-->
 	<Border
 		Name="PlayerPackPicker"
-		Background="#DD000000"
-		CornerRadius="14"
+		Classes="sheet"
+		Width="500"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Center"
-		Padding="24"
 		IsVisible="{Binding IsPlayerPackPickerVisible}"
 	>
-		<StackPanel Spacing="10" MinWidth="380" MaxWidth="520" XYFocus.NavigationModes="Enabled">
-			<TextBlock Name="PackPickerTitle" Text="{Binding PackPickerTitle}" FontWeight="Bold" FontSize="16" TextWrapping="Wrap" />
+		<StackPanel Spacing="0" XYFocus.NavigationModes="Enabled">
+			<TextBlock Name="PackPickerTitle" Classes="title3" Text="{Binding PackPickerTitle}" TextWrapping="Wrap" Margin="0 4 0 18" />
 			<ItemsControl Name="PackPickerList" ItemsSource="{Binding PlayerPackChoices}" XYFocus.NavigationModes="Enabled">
 				<ItemsControl.ItemsPanel>
 					<ItemsPanelTemplate>
@@ -34,29 +35,36 @@
 				</ItemsControl.ItemsPanel>
 				<ItemsControl.ItemTemplate>
 					<DataTemplate x:DataType="vm:PlayerPackChoice">
-						<RadioButton GroupName="PlayerPackPickerChoices" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+						<RadioButton Classes="option" GroupName="PlayerPackPickerChoices" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
 							IsChecked="{Binding IsSelected, Mode=TwoWay}" Tag="{Binding Container}" Click="OnSelectChoice">
-							<StackPanel Spacing="2">
-								<TextBlock FontWeight="Bold" Text="{Binding Name}" />
-								<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding Detail}" />
-								<!-- ADR-0152: a reviewed known-missing declaration is shown on the
-								     row it belongs to, naming MesenCE validation as its source so the
-								     gap is never read as the author's claim. The ADR's wording is kept
-								     over the wireframe's shorter one. Collapsed when absent. -->
-								<StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasKnownMissing}">
-									<TextBlock FontSize="11" Text="⚠" />
-									<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" MaxWidth="420" Text="{Binding KnownMissingNote}" />
+							<!--The name is the row's first text (tests and screen readers read it
+							first); the votes sit in the right column.-->
+							<Grid ColumnDefinitions="*,Auto">
+								<StackPanel Grid.Column="0" Spacing="3">
+									<TextBlock Classes="option-title" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+									<TextBlock Classes="subhead secondary" TextWrapping="Wrap" Text="{Binding Detail}" />
+									<!-- ADR-0152: a reviewed known-missing declaration is shown on the
+									     row it belongs to, naming MesenCE validation as its source so the
+									     gap is never read as the author's claim. The ADR's wording is kept
+									     over the wireframe's shorter one. Collapsed when absent. -->
+									<DockPanel IsVisible="{Binding HasKnownMissing}" Margin="0 2 0 0">
+										<PathIcon Classes="warning" Width="12" Height="12" VerticalAlignment="Top" Margin="0 1 6 0" />
+										<TextBlock Classes="warning badge-text" TextWrapping="Wrap" Text="{Binding KnownMissingNote}" />
+									</DockPanel>
 								</StackPanel>
-								<TextBlock FontSize="11" Opacity="0.8" IsVisible="{Binding HasVotes}" Text="{Binding VotesText}" />
-							</StackPanel>
+								<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top" Margin="12 1 0 0" IsVisible="{Binding HasVotes}">
+									<PathIcon Classes="votes" />
+									<TextBlock Classes="callout secondary" Text="{Binding Votes}" />
+								</StackPanel>
+							</Grid>
 						</RadioButton>
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
-			<TextBlock Text="{l:Translate lblPackPickerRemembered}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+			<TextBlock Classes="subhead secondary" Text="{l:Translate lblPackPickerRemembered}" TextWrapping="Wrap" Margin="2 14 0 24" />
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-				<Button Name="PackPickerCancelButton" Content="{l:Translate btnPackPickerCancel}" Click="OnCancel" />
-				<Button Name="PackPickerUseButton" Content="{l:Translate btnPackPickerUse}" IsEnabled="{Binding CanUseSelectedPack}" Click="OnUse" />
+				<Button Name="PackPickerCancelButton" Classes="secondary regular" Content="{l:Translate btnPackPickerCancel}" Click="OnCancel" />
+				<Button Name="PackPickerUseButton" Classes="primary regular" Content="{l:Translate btnPackPickerUse}" IsEnabled="{Binding CanUseSelectedPack}" Click="OnUse" />
 			</StackPanel>
 		</StackPanel>
 	</Border>

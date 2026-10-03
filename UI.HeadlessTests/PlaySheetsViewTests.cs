@@ -180,7 +180,10 @@ public class PlaySheetsViewTests : IDisposable
 			Assert.False(window.FindNamed<Border>("PlayerPackPicker").IsOnScreen());
 			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 		} finally {
+			//Use This Pack saved the choice to the test home's settings.json;
+			//save the reset too, or the next run starts with it stored.
 			ConfigManager.Config.EnhancementPacks.SetRomPackPreference(Sha1, "");
+			ConfigManager.Config.Save();
 		}
 	}
 
