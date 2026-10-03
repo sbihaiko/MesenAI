@@ -49,14 +49,15 @@ namespace Mesen.Windows
 		//W-P15 listens only while a game runs in Player mode's Play workspace,
 		//and keeps listening while its own sheet is open (the game is paused).
 		//#660: when listening stops, the pill goes with it - its 8 s only
-		//advance on these ticks. Returns whether it is listening now.
+		//advance on these ticks. A pill raised between two ticks (no tick saw
+		//the game running) goes too. Returns whether it is listening now.
 		private static bool Poll(MainWindowViewModel model, bool wasListening)
 		{
 			bool listening = model.ControllerSetup.IsVisible
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {
 				model.ControllerSetup.Tick(InputApi.GetPressedKeys());
-			} else if(wasListening) {
+			} else if(wasListening || model.ControllerSetup.IsPillVisible) {
 				model.ControllerSetup.StopListening();
 			}
 			return listening;
