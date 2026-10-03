@@ -201,6 +201,11 @@ void GbPpu::ExecCycle()
 			_vramWriteBlocked = false;
 
 			SetMode(PpuMode::HBlank);
+
+			//ADR-0253: the row is complete - draw its extra columns while this
+			//row's scroll, window latches and palettes are still the ones it was
+			//drawn with
+			DrawRevealRow();
 		}
 	} else if(_state.Mode == PpuMode::OamEvaluation) {
 		RunSpriteEvaluation();
@@ -442,10 +447,13 @@ void GbPpu::RunDrawCycle()
 	if(!_wxEnableFlag) {
 		_wxEnableFlag |= _drawnPixels == _state.WindowX - 7;
 
-		bool fetchWindow =
-			_state.WindowEnabled && //"Window enable bit in LCDC is set"
-			_wxEnableFlag && //"the current X coordinate being rendered + 7 was equal to WX"
-			_wyEnableFlag; //"at some point in this frame the value of WY was equal to LY (checked at the start of Mode 2 only)"
+		//The window's own condition, one definition shared with the Reveal
+		//(GbWidescreenReveal::WindowVisible) so the revealed columns can never
+		//show a layer these pixels did not
+		bool fetchWindow = GbWidescreenReveal::WindowVisible(
+			_state.WindowEnabled, //"Window enable bit in LCDC is set"
+			_wxEnableFlag, //"the current X coordinate being rendered + 7 was equal to WX"
+			_wyEnableFlag); //"at some point in this frame the value of WY was equal to LY (checked at the start of Mode 2 only)"
 
 		if(_fetchWindow != fetchWindow) {
 			//Switched between window & background, reset fetcher & pixel FIFO
@@ -545,6 +553,55 @@ void GbPpu::WriteObjPixel(uint8_t colorIndex)
 {
 	uint16_t outOffset = _state.Scanline * GbConstants::ScreenWidth + _drawnPixels;
 	_currentBuffer[outOffset] = LcdReadObjPalette(colorIndex) & 0x7FFF;
+}
+
+//ADR-0253 slice W.2: whether this frame is drawn with the extra columns. The
+//switch is WideScrn, the Widescreen aspect setting.
+bool GbPpu::IsRevealRequested()
+{
+	if(_settings->GetVideoConfig().AspectRatio != VideoAspectRatio::Widescreen) {
+		return false;
+	}
+	//A link-cable pair shown as one picture is two standard frames side by side
+	//(AvMergeUtilities::MergeFrames), so it stays standard.
+	return !(_gameboy->GetLinkedConsole() && _settings->GetGameboyConfig().LocalLinkCableVideoOutput == GbLocalLinkOutputOption::Both);
+}
+
+//ADR-0253 slice W.2: draws the extra columns of the row the PPU has just
+//finished, from the state that row was drawn with. Reads VRAM through
+//LcdReadVram only (GbWidescreenReveal.h): no CPU-visible register, no hook.
+void GbPpu::DrawRevealRow()
+{
+	uint16_t* left = nullptr;
+	uint16_t* right = nullptr;
+	if(!_reveal.RowSides(_state.Scanline, left, right)) {
+		return;
+	}
+
+	GbWidescreenReveal::RowBasis basis;
+	basis.Scanline = _state.Scanline;
+	basis.ScrollX = _state.ScrollX;
+	basis.ScrollY = _state.ScrollY;
+	basis.CgbEnabled = _state.CgbEnabled;
+	basis.BgEnabled = _state.BgEnabled;
+	basis.LayerDisabled = _hdBgDisabled;
+	basis.BgTileSelect = _state.BgTileSelect;
+	basis.BgTilemapSelect = _state.BgTilemapSelect;
+	basis.BgPalette = _state.BgPalette;
+	basis.PaletteBlocked = _stopPaletteBlocked;
+	//The PPU's own latch for the row it has just finished: whether its pixels
+	//came from the window at all. It is what the fetcher decided per cycle
+	//(WindowVisible, the same rule the revealed columns are drawn by), not the
+	//WY and WX latches alone - those two stay set on a row where the game has
+	//cleared LCDC.5, which draws background.
+	basis.WindowOnRow = _fetchWindow;
+	basis.WindowStartX = (int16_t)((int16_t)_state.WindowX - 7);
+	//The window's own line counter, which is what rows its map from; it is -1
+	//until the first window row, and those rows never report the window.
+	basis.WindowLine = (uint8_t)std::max(0, (int)_windowCounter);
+	basis.WindowTilemapSelect = _state.WindowTilemapSelect;
+
+	GbWidescreenReveal::RenderRowSides(basis, *this, _state.CgbBgPalettes, left, right);
 }
 
 void GbPpu::RunSpriteEvaluation()
@@ -1071,6 +1128,18 @@ void GbPpu::SendFrame()
 
 	RenderedFrame frame(_currentBuffer, GbConstants::ScreenWidth, GbConstants::ScreenHeight, 1.0, _state.FrameCount, _gameboy->GetControlManager()->GetPortStates());
 	frame.Data = _currentHdScreenInfo; //HD packs (null unless a pack is active)
+
+	//ADR-0253 slice W.2: the completed frame's extended version replaces the
+	//standard buffer on its way to the decoder only (_currentBuffer itself, the
+	//HD builder and the debugger stay on the 160-px picture), and the switch for
+	//the next frame is latched here, once per frame.
+	const uint16_t* revealed = _reveal.Finish(_currentBuffer);
+	if(revealed) {
+		frame.FrameBuffer = (void*)revealed;
+		frame.Width = GbWidescreenReveal::ExtendedWidth;
+		frame.ExtendedColumns = GbWidescreenReveal::ExtraColumns;
+	}
+	_reveal.BeginFrame(IsRevealRequested());
 	if(_gameboy->GetLinkedConsole()) {
 		SendLinkedFrame(frame);
 		if(_gameboy->IsPrimaryConsole()) {
@@ -1213,6 +1282,10 @@ void GbPpu::Write(uint16_t addr, uint8_t value)
 					_wyEnableFlag = false;
 					_lcdDisabled = true;
 
+					//ADR-0253: the frame being drawn is abandoned - a half-drawn
+					//extended frame is never sent
+					_reveal.BeginFrame(false);
+
 					_lastFrameTime = _gameboy->GetApuCycleCount();
 
 					SetMode(PpuMode::HBlank);
@@ -1224,6 +1297,9 @@ void GbPpu::Write(uint16_t addr, uint8_t value)
 					_state.IdleCycles = 0;
 					_state.IrqMode = PpuMode::NoIrq;
 					ResetRenderer();
+					//ADR-0253: the LCD starts a new frame here, so the switch is
+					//latched now rather than at the end of this partial frame
+					_reveal.BeginFrame(IsRevealRequested());
 					_state.LyCoincidenceFlag = _state.LyCompare == _state.LyForCompare;
 					UpdateStatIrq();
 
