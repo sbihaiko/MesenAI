@@ -8,7 +8,8 @@ namespace Mesen.Logic;
 //Opening another game asks while a recording runs - Remaster's, or the HD
 //Pack Builder (classic) one, which used to stop silently. A job is a separate
 //process and keeps running when another game opens (its result is then not
-//shown, RemasterShow.Decide). Switching profile, opening a sheet or changing
+//shown, RemasterShow.Decide). Reloading the running game asks while a
+//Remaster recording runs (#698). Switching profile, opening a sheet or changing
 //workspace never asks.
 public enum InterruptionKind
 {
@@ -18,7 +19,9 @@ public enum InterruptionKind
 	//#650: Share's pack job (mep_build.py pack) is a job too.
 	QuitWhilePackaging,
 	OpenWhileRecording,
-	OpenWhileClassicBuilder
+	OpenWhileClassicBuilder,
+	//#698: Reload ROM, Power Cycle, a pack switch or pick, while recording.
+	ReloadWhileRecording
 }
 
 public static class Interruptions
@@ -38,6 +41,14 @@ public static class Interruptions
 		return recording ? InterruptionKind.OpenWhileRecording
 			: classicBuilderRecording ? InterruptionKind.OpenWhileClassicBuilder
 			: InterruptionKind.None;
+	}
+
+	//#698: Reload ROM, Power Cycle, a pack switch or a pack pick reload the
+	//running game, and the core ends its recording with the ROM it was
+	//recording - so a reload asks too, like opening another game.
+	public static InterruptionKind ForReload(bool recording)
+	{
+		return recording ? InterruptionKind.ReloadWhileRecording : InterruptionKind.None;
 	}
 
 	public static bool Quits(InterruptionKind kind)

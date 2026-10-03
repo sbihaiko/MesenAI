@@ -227,6 +227,37 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		launcher.Last.OnExit(-9);
 	}
 
+	//#701: a result belongs to the project it ran on (RemasterJobs.ShownFor).
+	//After Switch Project, A's failed build - its card and its problem rows,
+	//which open A's kit files - is not shown on B; back on A it is.
+	[AvaloniaFact]
+	public void A_failed_build_of_one_project_is_not_shown_on_another()
+	{
+		(Window window, RemasterWorkspaceViewModel model, FakeLauncher launcher, string project, _) = ShowBuildableProject();
+		Click(window.FindNamed<Button>("RemasterBuildButton"));
+		launcher.Last!.OnLine("steps: 4", false);
+		launcher.Last.OnLine("recording: rec-001", false);
+		launcher.Last.OnLine("error: usr001-figure.png: 644x128 is not a whole multiple of the 160x32 twin — the canvas was resized; repaint at the size you were given", true);
+		launcher.Last.OnExit(1);
+		WaitFor(() => !model.IsJobRunning, "the failed build never ended");
+		Assert.True(window.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen());
+
+		string other = Path.Combine(TempFolder(), "Metroid (USA)");
+		Directory.CreateDirectory(Path.Combine(other, "auto", "rec-001", "textures"));
+		File.WriteAllText(Path.Combine(other, "auto", "rec-001", "textures", "hires.txt"), "<ver>107\n");
+		Assert.True(model.OpenProjectFolder(other));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(other, model.ProjectFolder);
+		Assert.False(window.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen(), "A's build problems are shown on B");
+		Assert.False(window.FindNamed<StackPanel>("RemasterJobCard").IsOnScreen(), "A's job card is shown on B");
+
+		Assert.True(model.OpenProjectFolder(project));
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(window.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen(), "A's own build problems are gone");
+		Assert.Equal(Path.Combine(project, "kit", "rec-001", "figures", "usr001-figure.png"), model.BuildProblems[0].FilePath);
+	}
+
 	[AvaloniaFact]
 	public void Without_a_kit_build_is_disabled_with_its_reason()
 	{

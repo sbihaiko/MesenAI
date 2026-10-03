@@ -64,7 +64,8 @@ namespace Mesen.ViewModels
 				cheatSha1,
 				PlayerCheatsStore.LoadDatabase(console),
 				PlayerCheatsStore.LoadStored(),
-				recordingArt: CheatRecordingRule.IsRecordingArtContext(Shell.Active == Workspace.Remaster, Remaster.IsRecording),
+				//#690: the legacy automatic recording (any core recording) holds codes back too.
+				recordingArt: CheatRecordingRule.IsRecordingArtContext(Shell.Active == Workspace.Remaster, Remaster.IsRecording || EmuApi.IsMepBootstrapping()),
 				Config.Cheats.DisableAllCheats,
 				PlayerCheatsStore.SaveAndApply,
 				gameName: EmuApi.IsRunning() ? EmuApi.GetRomInfo().GetRomName() : "",

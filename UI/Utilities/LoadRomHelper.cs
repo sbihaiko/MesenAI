@@ -281,6 +281,10 @@ namespace Mesen.Utilities
 		//so a headless test can wait for it before its dispatcher goes away.
 		public static Task ApplyPackChange(ConsoleType console, Action restart)
 		{
+			//#698: a recording ends with the reload; it asks first.
+			if(!MainWindowViewModel.Instance.ConfirmReload(() => ApplyPackChange(console, restart))) {
+				return Task.CompletedTask;
+			}
 			PackChangePlan plan = PlanPackChange(console);
 			if(plan.Route == PackChangeRoute.Restart) {
 				if(plan.NoticeKey != null) {
@@ -318,7 +322,13 @@ namespace Mesen.Utilities
 		}
 
 		public static void Reset() { Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.ExecReset })); }
-		public static void PowerCycle() { RunReloadShortcut(EmulatorShortcut.ExecPowerCycle); }
+		public static void PowerCycle()
+		{
+			//#698: a recording ends with the reload; it asks first.
+			if(MainWindowViewModel.Instance.ConfirmReload(PowerCycle)) {
+				RunReloadShortcut(EmulatorShortcut.ExecPowerCycle);
+			}
+		}
 		public static void PowerOff()
 		{
 			//#658: a load waiting on the BIOS sheet holds the Core's locks, so
@@ -326,6 +336,11 @@ namespace Mesen.Utilities
 			MainWindowViewModel.Instance.BiosSheet.Dismiss();
 			RunReloadShortcut(EmulatorShortcut.ExecPowerOff);
 		}
-		public static void ReloadRom() { RunReloadShortcut(EmulatorShortcut.ExecReloadRom); }
+		public static void ReloadRom()
+		{
+			if(MainWindowViewModel.Instance.ConfirmReload(ReloadRom)) {
+				RunReloadShortcut(EmulatorShortcut.ExecReloadRom);
+			}
+		}
 	}
 }

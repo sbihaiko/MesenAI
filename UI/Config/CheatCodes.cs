@@ -73,11 +73,18 @@ namespace Mesen.Config
 			}
 		}
 
+		//Every code off, the ones held back for a recording too (#706: the
+		//classic window's Disable All left them to come back after it).
+		public static void ClearCheats()
+		{
+			SetHeld(Array.Empty<StoredCheat>());
+			EmuApi.ClearCheats();
+		}
+
 		public static void ApplyCheats()
 		{
 			if(ConfigManager.Config.Cheats.DisableAllCheats) {
-				SetHeld(Array.Empty<StoredCheat>());
-				EmuApi.ClearCheats();
+				ClearCheats();
 			} else {
 				CheatCodes.ApplyCheats(LoadCheatCodes().Cheats);
 			}

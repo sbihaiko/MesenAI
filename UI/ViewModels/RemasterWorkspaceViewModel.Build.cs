@@ -45,6 +45,9 @@ namespace Mesen.ViewModels
 		public Func<PackChangePlan> PlanPackChange { get; set; } = () => LoadRomHelper.PlanPackChange(ConsoleType.Nes);
 
 		private string _buildProject = "";
+		//W-R4's rows were read for the runner's failed build; shown only on
+		//the project that build ran on (#701).
+		private bool _hasBuildProblems;
 		private int _buildSerial;
 		private int _handledBuildSerial;
 
@@ -87,6 +90,7 @@ namespace Mesen.ViewModels
 
 		private void HideBuildProblems()
 		{
+			_hasBuildProblems = false;
 			IsBuildProblemsVisible = false;
 			IsBuildLogVisible = false;
 			BuildLogText = "";
@@ -152,6 +156,7 @@ namespace Mesen.ViewModels
 				: ResourceHelper.GetMessage("RemasterProblemsMoreInLog", read.Untranslated);
 			IsBuildLogVisible = false;
 			BuildLogText = "";
+			_hasBuildProblems = true;
 			IsBuildProblemsVisible = true;
 		}
 
@@ -161,12 +166,15 @@ namespace Mesen.ViewModels
 			//W-R4 lasts while the failed build is the runner's last job: OK on
 			//it, Try Again, or the kit run after a recording replaces it.
 			RemasterJobSnapshot job = _jobs.Snapshot;
-			if(IsBuildProblemsVisible && !(job.Kind == RemasterJobKind.Build && job.Status == RemasterJobStatus.Failed)) {
+			if(_hasBuildProblems && !(job.Kind == RemasterJobKind.Build && job.Status == RemasterJobStatus.Failed)) {
 				HideBuildProblems();
 			}
-			if(IsBuildProblemsVisible) {
-				IsJobCardVisible = false;
-			}
+			//#701 (#648's rule, RemasterJobs.ShownFor): a finished job's card and
+			//W-R4 belong to the project it ran on; after Switch Project another
+			//project shows neither (its rows would open the other kit's files).
+			bool shown = RemasterJobs.ShownFor(job, _project?.Folder ?? "").Status != RemasterJobStatus.Idle;
+			IsBuildProblemsVisible = _hasBuildProblems && shown;
+			IsJobCardVisible = shown && !IsBuildProblemsVisible;
 			IsBuildAtRest = !IsJobCardVisible && !IsBuildProblemsVisible;
 			ShowsGame = IsRecording || IsShowingBuild;
 			int? changed = _project == null ? null : RemasterBuildFreshness.ChangedSinceLastBuild(_project.Folder, LatestTexturedRecording());

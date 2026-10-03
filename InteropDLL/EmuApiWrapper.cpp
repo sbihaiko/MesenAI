@@ -280,6 +280,24 @@ extern "C"
 		StringUtilities::CopyToBuffer(out.str(), outBuffer, maxLength);
 	}
 
+	//#689: writes the file a ROM resource names (an archive's inner ROM, in the
+	//"<archive>\x1<inner>[\x1<index>]" form RomInfo.RomPath uses) to outPath,
+	//so the Remaster jobs get the ROM itself and not the .zip/.7z around it.
+	DllExport bool __stdcall ExtractRomFile(char* resourcePath, char* outPath)
+	{
+		VirtualFile file(resourcePath);
+		vector<uint8_t> data;
+		if(!file.ReadFile(data) || data.empty()) {
+			return false;
+		}
+		ofstream out(outPath, std::ios::out | std::ios::binary | std::ios::trunc);
+		if(!out.good()) {
+			return false;
+		}
+		out.write((const char*)data.data(), data.size());
+		return out.good();
+	}
+
 	DllExport bool __stdcall IsRunning()
 	{
 		return _emu->IsRunning();

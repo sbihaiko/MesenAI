@@ -19,7 +19,7 @@ namespace Mesen.ViewModels
 
 		private Action? _go;
 
-		//game: the game being opened; recording: the recording number kept;
+		//game: the game being opened (or reloaded); recording: the recording number kept;
 		//buildJob: the running job is a build (else the kit).
 		public void Ask(InterruptionKind kind, string game, int recording, bool buildJob, Action go)
 		{
@@ -34,6 +34,7 @@ namespace Mesen.ViewModels
 				InterruptionKind.QuitWhileJob => (ResourceHelper.GetMessage(buildJob ? "InterruptQuitWhileBuild" : "InterruptQuitWhileKit"), "InterruptKeepRunning", "InterruptQuit"),
 				InterruptionKind.QuitWhilePackaging => (ResourceHelper.GetMessage("InterruptQuitWhilePackaging"), "InterruptKeepRunning", "InterruptQuit"),
 				InterruptionKind.OpenWhileRecording => (ResourceHelper.GetMessage("InterruptOpenWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndOpen"),
+				InterruptionKind.ReloadWhileRecording => (ResourceHelper.GetMessage("InterruptReloadWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndReload"),
 				_ => (ResourceHelper.GetMessage("InterruptOpenWhileClassicBuilder", game), "InterruptCancel", "InterruptStopAndOpen"),
 			};
 			Text = text;
