@@ -26,16 +26,73 @@ namespace Mesen.Windows
 
 		public AboutWindow()
 		{
-			Version = EmuApi.GetMesenVersion().ToString();
-			BuildDate = EmuApi.GetMesenBuildDate();
-			RuntimeVersion = ".NET " + Environment.Version;
-			RuntimeVersion += RuntimeFeature.IsDynamicCodeSupported ? " (JIT)" : " (AOT)";
+			AboutInfo info = new();
+			Version = info.Version;
+			BuildDate = info.BuildDate;
+			RuntimeVersion = info.RuntimeVersion;
+			BuildSha = info.BuildSha;
+			BuildShortSha = info.BuildShortSha;
+			LibraryList = AboutInfo.Libraries();
+			AcknowledgeList = AboutInfo.Acknowledgements();
 
+			InitializeComponent();
+
+			this.GetControl<TextBlock>("lblCopyright").Text = info.Copyright;
+		}
+
+		private void InitializeComponent()
+		{
+			AvaloniaXamlLoader.Load(this);
+		}
+
+		private void BtnOk_OnClick(object? sender, RoutedEventArgs e)
+		{
+			Close();
+		}
+
+		private void OnLinkPressed(object? sender, PointerPressedEventArgs e)
+		{
+			if(sender is TextBlock text && text.DataContext is AboutListEntry entry) {
+				ApplicationHelper.OpenBrowser(entry.Url);
+			}
+		}
+
+		private void OnMesenLinkTapped(object? sender, TappedEventArgs e)
+		{
+			ApplicationHelper.OpenBrowser(AboutInfo.WebsiteUrl);
+		}
+
+		private void OnCommitLinkTapped(object? sender, TappedEventArgs e)
+		{
+			ApplicationHelper.OpenBrowser(AboutInfo.CommitUrl(BuildSha));
+		}
+	}
+
+	//What About shows, for the classic window and the Player sheet alike
+	//(ADR-0250: a task door's About is a sheet in the main window).
+	public class AboutInfo
+	{
+		public const string WebsiteUrl = "https://github.com/nesdev-org/MesenCE";
+
+		public static string CommitUrl(string sha) => WebsiteUrl + "/commit/" + sha;
+
+		public string Version { get; } = EmuApi.GetMesenVersion().ToString();
+		public string BuildDate { get; } = EmuApi.GetMesenBuildDate();
+		public string RuntimeVersion { get; } = ".NET " + Environment.Version + (RuntimeFeature.IsDynamicCodeSupported ? " (JIT)" : " (AOT)");
+		public string BuildSha { get; }
+		public string BuildShortSha { get; }
+		public string Copyright { get; } = $"Copyright 2014-2026 Sour, 2026-{DateTime.Now.Year} contributors";
+
+		public AboutInfo()
+		{
 			string? commitHash = UpdateHelper.GetCommitHash();
 			BuildSha = commitHash ?? "";
 			BuildShortSha = commitHash?.Substring(0, 7) ?? "";
+		}
 
-			LibraryList = new List<AboutListEntry>() {
+		public static List<AboutListEntry> Libraries()
+		{
+			List<AboutListEntry> list = new List<AboutListEntry>() {
 				new("Avalonia", "", "MIT", "https://github.com/AvaloniaUI/Avalonia"),
 				new("AvaloniaEdit", "", "MIT", "https://github.com/AvaloniaUI/AvaloniaEdit"),
 				new("ColorPicker", "", "MIT", "https://github.com/wieslawsoltes/ThemeEditor/tree/master/src/ThemeEditor.Controls.ColorPicker"),
@@ -72,9 +129,13 @@ namespace Mesen.Windows
 				new("librashader", "", "MPL-2.0", "https://github.com/SnowflakePowered/librashader/"),
 			};
 
-			LibraryList.Sort((a, b) => a.Name.CompareTo(b.Name));
+			list.Sort((a, b) => a.Name.CompareTo(b.Name));
+			return list;
+		}
 
-			AcknowledgeList = new List<AboutListEntry>() {
+		public static List<AboutListEntry> Acknowledgements()
+		{
+			List<AboutListEntry> list = new List<AboutListEntry>() {
 				new("ares (Near)", "Near", "ISC", "https://github.com/ares-emulator/ares"),
 				new("NesDev Wiki/Forums Contributors", "", "", "https://www.nesdev.org/"),
 				new("SameBoy (LIJI32)", "LIJI32", "MIT", "https://github.com/LIJI32/SameBoy"),
@@ -82,38 +143,8 @@ namespace Mesen.Windows
 				new("FrankenGraphics", "", "Mesen icon", "https://www.patreon.com/frankengraphics"),
 				new("Mighty Mo", "", "Cheat DB", ""),
 			};
-			AcknowledgeList.Sort((a, b) => a.Name.CompareTo(b.Name));
-
-			InitializeComponent();
-
-			this.GetControl<TextBlock>("lblCopyright").Text = $"Copyright 2014-2026 Sour, 2026-{DateTime.Now.Year} contributors";
-		}
-
-		private void InitializeComponent()
-		{
-			AvaloniaXamlLoader.Load(this);
-		}
-
-		private void BtnOk_OnClick(object? sender, RoutedEventArgs e)
-		{
-			Close();
-		}
-
-		private void OnLinkPressed(object? sender, PointerPressedEventArgs e)
-		{
-			if(sender is TextBlock text && text.DataContext is AboutListEntry entry) {
-				ApplicationHelper.OpenBrowser(entry.Url);
-			}
-		}
-
-		private void OnMesenLinkTapped(object? sender, TappedEventArgs e)
-		{
-			ApplicationHelper.OpenBrowser("https://github.com/nesdev-org/MesenCE");
-		}
-
-		private void OnCommitLinkTapped(object? sender, TappedEventArgs e)
-		{
-			ApplicationHelper.OpenBrowser("https://github.com/nesdev-org/MesenCE/commit/" + BuildSha);
+			list.Sort((a, b) => a.Name.CompareTo(b.Name));
+			return list;
 		}
 	}
 

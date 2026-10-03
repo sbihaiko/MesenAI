@@ -395,6 +395,12 @@
 				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
 				<!--ADR-0249 (W-P5 sheet shape): an archive's games, from any workspace's open.-->
 				<v:PlaySelectRomSheetView Name="PlaySelectRomSheetHost" DataContext="{Binding SelectRomSheet}" IsVisible="{Binding IsVisible}" />
+				<!--ADR-0250 Decision 3: a task door's About, Help › Command Line and
+				Check for Updates, Record › Video and Insert Barcode, from any door,
+				in that door's tint.-->
+				<v:PlayerToolSheetView Name="PlayerToolSheetHost" DataContext="{Binding ToolSheet}" IsVisible="{Binding IsVisible}"
+					Classes.remaster="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Remaster}}"
+					Classes.share="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}" />
 			</Panel>
 		</Panel>
 	</DockPanel>

@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:w="using:Mesen.Windows"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlayerToolSheetView"
+	x:DataType="vm:PlayerToolSheetViewModel"
+>
+	<!--ADR-0250 Decision 3 ("No task-door entry opens a classic window"): a
+	task door's About, Help › Command Line, Help › Check for Updates, Record ›
+	Video › Record and Insert Barcode open here, inside the main window, in the
+	W-P5 sheet shape: the heading, the content on inset groups, the safe button
+	first and the one that goes on last on the right. Esc closes it. Classic
+	keeps AboutWindow, CommandLineHelpWindow, VideoRecordWindow and
+	InputBarcodeWindow.-->
+	<UserControl.Styles>
+		<Style Selector="ContentPresenter > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector="ContentPresenter:nth-last-child(1) > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="Button.row">
+			<Setter Property="Height" Value="36" />
+			<Setter Property="Padding" Value="14 0 14 0" />
+		</Style>
+		<Style Selector="TextBlock.fact">
+			<Setter Property="Margin" Value="0 0 0 2" />
+		</Style>
+		<Style Selector="SelectableTextBlock.switches">
+			<Setter Property="FontFamily" Value="Consolas, Menlo, monospace" />
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Margin" Value="14 10" />
+		</Style>
+	</UserControl.Styles>
+
+	<Panel Name="ToolSheetBackdrop" Classes="scrim">
+		<Border Name="ToolSheet" Classes="sheet" Width="500" MaxHeight="600" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 24">
+			<DockPanel>
+				<TextBlock Name="ToolSheetTitle" Classes="sheet-heading" DockPanel.Dock="Top" Text="{Binding Title}" TextWrapping="Wrap" Margin="0 0 0 14" />
+
+				<!--The footer: Done for what only informs; Cancel then the action otherwise.-->
+				<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 18 0 0">
+					<Button Name="ToolSheetDone" Classes="primary regular" IsVisible="{Binding IsDoneOnly}" Content="{l:Translate btnToolSheetDone}" Click="OnClose" />
+					<Button Name="ToolSheetCancel" Classes="secondary regular" IsVisible="{Binding !IsDoneOnly}" Content="{l:Translate btnToolSheetCancel}" Click="OnClose" />
+					<Button Name="ToolSheetOpenReleases" Classes="primary regular" IsVisible="{Binding IsCheckForUpdates}" Content="{l:Translate btnToolSheetOpenReleases}" Click="OnOpenReleases" />
+					<Button Name="ToolSheetRecord" Classes="primary regular" IsVisible="{Binding IsVideoRecord}" Content="{l:Translate btnToolSheetRecord}" Click="OnRecord" />
+					<Button Name="ToolSheetSubmitBarcode" Classes="primary regular" IsVisible="{Binding IsBarcode}" IsEnabled="{Binding CanSubmitBarcode}" Content="{l:Translate btnToolSheetSubmitBarcode}" Click="OnSubmitBarcode" />
+				</StackPanel>
+
+				<Panel>
+					<!--About: the app, its build, and the credits as rows (a click opens the link).-->
+					<DockPanel Name="ToolSheetAbout" IsVisible="{Binding IsAbout}">
+						<DockPanel DockPanel.Dock="Top" Margin="0 0 0 12">
+							<Image DockPanel.Dock="Left" Source="/Assets/Icon.ico" Width="56" Height="56" Margin="0 0 14 0" VerticalAlignment="Top" />
+							<StackPanel VerticalAlignment="Center">
+								<TextBlock Classes="headline fact" Text="{l:Translate lblToolSheetAboutName}" />
+								<TextBlock Name="ToolSheetAboutVersion" Classes="footnote secondary fact" Text="{Binding About.Version, StringFormat='Version {0}', FallbackValue=''}" />
+								<TextBlock Classes="footnote secondary fact" Text="{Binding About.BuildDate, StringFormat='Built {0}', FallbackValue=''}" />
+								<TextBlock Classes="footnote secondary fact" Text="{Binding About.RuntimeVersion, FallbackValue=''}" />
+								<Button Name="ToolSheetAboutCommit" Classes="plain" Padding="0" HorizontalAlignment="Left" IsVisible="{Binding !!About.BuildShortSha.Length, FallbackValue=False}" Content="{Binding About.BuildShortSha, StringFormat='Commit {0}', FallbackValue=''}" Click="OnCommit" />
+								<TextBlock Classes="footnote tertiary fact" Text="{Binding About.Copyright, FallbackValue=''}" />
+								<Button Name="ToolSheetAboutWebsite" Classes="plain" Padding="0" HorizontalAlignment="Left" Content="{l:Translate btnToolSheetAboutWebsite}" Click="OnWebsite" />
+							</StackPanel>
+						</DockPanel>
+						<TextBlock DockPanel.Dock="Top" Classes="group-label" Text="{l:Translate lblToolSheetAboutCredits}" Margin="0 0 0 6" />
+						<Border Name="ToolSheetAboutCredits" Classes="inset">
+							<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+								<StackPanel>
+									<ItemsControl ItemsSource="{Binding Acknowledgements}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="w:AboutListEntry">
+												<Button Classes="row text" Click="OnCredit">
+													<DockPanel>
+														<TextBlock DockPanel.Dock="Right" Classes="value" Text="{Binding Note}" />
+														<TextBlock Classes="title" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+													</DockPanel>
+												</Button>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+									<TextBlock Classes="group-label" Text="{l:Translate lblToolSheetAboutSoftware}" Margin="14 10 0 4" />
+									<ItemsControl Name="ToolSheetAboutLibraries" ItemsSource="{Binding Libraries}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="w:AboutListEntry">
+												<Button Classes="row text" Click="OnCredit">
+													<DockPanel>
+														<TextBlock DockPanel.Dock="Right" Classes="value" Text="{Binding Note}" />
+														<TextBlock Classes="title" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+													</DockPanel>
+												</Button>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</StackPanel>
+							</ScrollViewer>
+						</Border>
+					</DockPanel>
+
+					<!--Command Line: one segment per category, its switches below.-->
+					<DockPanel Name="ToolSheetCommandLine" IsVisible="{Binding IsCommandLine}">
+						<ListBox Name="ToolSheetCommandLineTabs" DockPanel.Dock="Top" Classes="segmented" HorizontalAlignment="Left" Margin="0 0 0 12" ItemsSource="{Binding CommandLineTabs}" SelectedItem="{Binding SelectedCommandLineTab}">
+							<ListBox.ItemsPanel>
+								<ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+							</ListBox.ItemsPanel>
+							<ListBox.ItemTemplate>
+								<DataTemplate x:DataType="w:CommandLineTabEntry">
+									<TextBlock Text="{Binding Name}" />
+								</DataTemplate>
+							</ListBox.ItemTemplate>
+						</ListBox>
+						<Border Classes="inset" Height="320">
+							<ScrollViewer HorizontalScrollBarVisibility="Auto" AllowAutoHide="False">
+								<SelectableTextBlock Name="ToolSheetCommandLineText" Classes="switches" Text="{Binding SelectedCommandLineTab.Content, FallbackValue=''}" />
+							</ScrollViewer>
+						</Border>
+					</DockPanel>
+
+					<!--Check for Updates: the fork has no feed (#672); offer the release page.-->
+					<Border Name="ToolSheetUpdates" Classes="banner info" IsVisible="{Binding IsCheckForUpdates}">
+						<TextBlock Name="ToolSheetUpdatesText" Classes="banner-text" Text="{Binding UpdateMessage}" TextWrapping="Wrap" />
+					</Border>
+
+					<!--Record › Video › Record: the classic window's settings as rows.-->
+					<Border Name="ToolSheetVideo" Classes="group inset" IsVisible="{Binding IsVideoRecord}" VerticalAlignment="Top">
+						<StackPanel>
+							<DockPanel Classes="setting-row">
+								<Button Name="ToolSheetVideoBrowse" DockPanel.Dock="Right" Classes="secondary regular" VerticalAlignment="Center" Margin="12 0 0 0" Content="{l:Translate btnToolSheetBrowse}" Click="OnBrowseVideo" />
+								<StackPanel VerticalAlignment="Center">
+									<TextBlock Classes="callout" Text="{l:Translate lblToolSheetVideoSaveTo}" />
+									<TextBlock Name="ToolSheetVideoPath" Classes="footnote secondary" Text="{Binding VideoRecord.SavePath, FallbackValue=''}" TextTrimming="CharacterEllipsis" />
+								</StackPanel>
+							</DockPanel>
+							<Separator Classes="row-hairline" />
+							<DockPanel Classes="setting-row">
+								<c:EnumComboBox DockPanel.Dock="Right" Name="ToolSheetVideoCodec" Classes="popup" Width="160" SelectedItem="{Binding VideoRecord.Config.Codec, FallbackValue={x:Null}}" VerticalAlignment="Center" />
+								<TextBlock Classes="callout" Text="{l:Translate lblToolSheetVideoCodec}" VerticalAlignment="Center" />
+							</DockPanel>
+							<Separator Classes="row-hairline" IsVisible="{Binding VideoRecord.CompressionAvailable, FallbackValue=False}" />
+							<DockPanel Classes="setting-row" IsVisible="{Binding VideoRecord.CompressionAvailable, FallbackValue=False}">
+								<c:MesenSlider DockPanel.Dock="Right" Width="150" Margin="12,0,0,0" HideValue="True" Minimum="0" Maximum="8" TickFrequency="1" Value="{Binding VideoRecord.Config.CompressionLevel, FallbackValue=0}" VerticalAlignment="Center" />
+								<TextBlock Classes="callout" Text="{l:Translate lblToolSheetVideoCompression}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+							</DockPanel>
+							<Border Classes="switch-row">
+								<CheckBox Name="ToolSheetVideoSystemHud" Classes="switch" Content="{l:Translate chkToolSheetVideoSystemHud}" IsChecked="{Binding VideoRecord.Config.RecordSystemHud, FallbackValue=False}" />
+							</Border>
+							<Border Classes="switch-row">
+								<CheckBox Name="ToolSheetVideoInputHud" Classes="switch" Content="{l:Translate chkToolSheetVideoInputHud}" IsChecked="{Binding VideoRecord.Config.RecordInputHud, FallbackValue=False}" />
+							</Border>
+						</StackPanel>
+					</Border>
+
+					<!--Insert Barcode: digits only, at most 13 (BarcodeEntry).-->
+					<StackPanel Name="ToolSheetBarcodePanel" IsVisible="{Binding IsBarcode}" Spacing="8">
+						<TextBlock Classes="callout" Text="{l:Translate lblToolSheetBarcode}" />
+						<TextBox Name="ToolSheetBarcode" MaxLength="13" Text="{Binding Barcode}" />
+					</StackPanel>
+				</Panel>
+			</DockPanel>
+		</Border>
+	</Panel>
+</UserControl>

@@ -12,6 +12,10 @@ namespace Mesen.ViewModels
 	{
 		public PlaySelectRomSheetViewModel SelectRomSheet { get; } = new();
 
+		//ADR-0250 Decision 3: a task door's About, Command Line, Check for
+		//Updates, video recorder settings and barcode (PlayerToolSheetView).
+		public PlayerToolSheetViewModel ToolSheet { get; } = new();
+
 		//Look's Adjust…: the shader's parameters, previewed live as the classic
 		//window did (ShaderConfigViewModel's allowPreview). Shown over the
 		//Settings sheet, which stays open beneath and comes back on close.
@@ -55,6 +59,10 @@ namespace Mesen.ViewModels
 			}
 			if(IsShaderSheetVisible) {
 				CloseShaderSheet(false);
+				return true;
+			}
+			if(ToolSheet.IsVisible) {
+				ToolSheet.Close();
 				return true;
 			}
 			return false;

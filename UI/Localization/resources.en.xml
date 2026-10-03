@@ -81,6 +81,24 @@
 			<Control ID="txtSelectRomSheetSearch">Search</Control>
 			<Control ID="btnSelectRomSheetCancel">Cancel</Control>
 		</Form>
+		<Form ID="PlayerToolSheetView">
+			<Control ID="btnToolSheetDone">Done</Control>
+			<Control ID="btnToolSheetCancel">Cancel</Control>
+			<Control ID="btnToolSheetOpenReleases">Open Releases Page</Control>
+			<Control ID="btnToolSheetRecord">Record</Control>
+			<Control ID="btnToolSheetSubmitBarcode">Insert</Control>
+			<Control ID="lblToolSheetAboutName">MesenAI</Control>
+			<Control ID="btnToolSheetAboutWebsite">github.com/nesdev-org/MesenCE</Control>
+			<Control ID="lblToolSheetAboutCredits">THANK YOU</Control>
+			<Control ID="lblToolSheetAboutSoftware">OPEN-SOURCE SOFTWARE</Control>
+			<Control ID="btnToolSheetBrowse">Choose…</Control>
+			<Control ID="lblToolSheetVideoSaveTo">Save to</Control>
+			<Control ID="lblToolSheetVideoCodec">Video codec</Control>
+			<Control ID="lblToolSheetVideoCompression">Compression (low = fast, high = slow)</Control>
+			<Control ID="chkToolSheetVideoSystemHud">Record the system HUD (timer, on-screen messages)</Control>
+			<Control ID="chkToolSheetVideoInputHud">Record the input HUD</Control>
+			<Control ID="lblToolSheetBarcode">Type the barcode's digits (8 or 13).</Control>
+		</Form>
 		<Form ID="PlayerShaderSheetView">
 			<Control ID="btnShaderSheetReset">Reset to Defaults</Control>
 			<Control ID="btnShaderSheetCancel">Cancel</Control>
@@ -2154,6 +2172,11 @@
 		<Message ID="WorkspaceDescriptionRemaster">Record a game, paint its art, see it in game.</Message>
 		<Message ID="WorkspaceDescriptionShare">Send a pack or a replay to the community.</Message>
 		<Message ID="WorkspaceDescriptionClassic">Every menu, debugger, Lua, HD Pack Builder.</Message>
+		<Message ID="PlayerToolSheetTitleAbout">About MesenAI</Message>
+		<Message ID="PlayerToolSheetTitleCommandLine">Command-line options</Message>
+		<Message ID="PlayerToolSheetTitleCheckForUpdates">Check for Updates</Message>
+		<Message ID="PlayerToolSheetTitleVideoRecord">Record Video</Message>
+		<Message ID="PlayerToolSheetTitleBarcode">Insert Barcode</Message>
 		<Message ID="DoorMenuPowerCycle">Power Cycle</Message>
 		<Message ID="DoorMenuScreenshot">Screenshot</Message>
 		<Message ID="DoorMenuReloadPackImages">Reload Pack Images</Message>

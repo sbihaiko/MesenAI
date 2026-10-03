@@ -826,9 +826,7 @@ namespace Mesen.ViewModels
 		{
 			return new MainMenuAction() {
 				ActionType = ActionType.EnhancementPacks,
-				OnClick = () => {
-					ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new EnhancementPacksWindow());
-				}
+				OnClick = () => OpenEnhancementPacks(wnd)
 			};
 		}
 
@@ -836,9 +834,7 @@ namespace Mesen.ViewModels
 		{
 			return new MainMenuAction() {
 				ActionType = ActionType.LogWindow,
-				OnClick = () => {
-					ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new LogWindow());
-				}
+				OnClick = () => OpenLogWindow(wnd)
 			};
 		}
 
@@ -850,11 +846,7 @@ namespace Mesen.ViewModels
 					new MainMenuAction() {
 						ActionType = ActionType.Record,
 						IsEnabled = () => IsGameRunning && !RecordApi.AviIsRecording(),
-						OnClick = () => {
-							new VideoRecordWindow() {
-								DataContext = new VideoRecordConfigViewModel()
-							}.ShowCenteredDialog((Control)wnd);
-						}
+						OnClick = () => OpenVideoRecord(wnd)
 					},
 					new MainMenuAction() {
 						ActionType = ActionType.Stop,
@@ -983,9 +975,9 @@ namespace Mesen.ViewModels
 						ActionType = ActionType.Connect,
 						IsEnabled = () => !NetplayApi.IsConnected() && !NetplayApi.IsServerRunning(),
 						OnClick = () => {
-							new NetplayConnectWindow() {
+							PlayerWindowLook.ApplyToForm(new NetplayConnectWindow() {
 								DataContext = ConfigManager.Config.Netplay.Clone()
-							}.ShowCenteredDialog((Control)wnd);
+							}, wnd).ShowCenteredDialog((Control)wnd);
 						}
 					},
 
@@ -1003,9 +995,9 @@ namespace Mesen.ViewModels
 						ActionType = ActionType.StartServer,
 						IsEnabled = () => !NetplayApi.IsConnected() && !NetplayApi.IsServerRunning(),
 						OnClick = () => {
-							new NetplayStartServerWindow() {
+							PlayerWindowLook.ApplyToForm(new NetplayStartServerWindow() {
 								DataContext = ConfigManager.Config.Netplay.Clone()
-							}.ShowCenteredDialog((Control)wnd);
+							}, wnd).ShowCenteredDialog((Control)wnd);
 						}
 					},
 
@@ -1239,7 +1231,7 @@ namespace Mesen.ViewModels
 			HelpMenuItems = new List<object>() {
 				new MainMenuAction() {
 					ActionType = ActionType.CommandLineHelp,
-					OnClick = () => { new CommandLineHelpWindow().ShowCenteredDialog((Control)wnd); }
+					OnClick = () => OpenCommandLineHelp(wnd)
 				},
 				new MainMenuAction() {
 					ActionType = ActionType.CheckForUpdates,
@@ -1263,6 +1255,12 @@ namespace Mesen.ViewModels
 					return;
 
 				case UpdateCheckAction.OfferReleasePage:
+					//ADR-0250: a task door offers the release page on the tool
+					//sheet, inside the window.
+					if(MainWindow.IsPlayerMode) {
+						MainWindow.ToolSheet.OpenCheckForUpdates();
+						return;
+					}
 					Dispatcher.UIThread.Post(async () => {
 						if(await MesenMsgBox.Show(mainWindow, "UpdateCheckNoFeed", MessageBoxButtons.OKCancel, MessageBoxIcon.Info, UpdateChannel.ReleasesPageUrl) == DialogResult.OK) {
 							ApplicationHelper.OpenBrowser(UpdateChannel.ReleasesPageUrl);

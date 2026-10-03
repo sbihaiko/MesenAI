@@ -23,6 +23,7 @@ namespace Mesen.Windows
 			FocusOnOpen(window, model.BiosSheet, nameof(PlayBiosSheetViewModel.IsVisible), () => model.BiosSheet.IsVisible, "BiosSheetChooseFile");
 			FocusOnOpen(window, model.PackDepSheet, nameof(PlayPackDepSheetViewModel.IsVisible), () => model.PackDepSheet.IsVisible, "PackDepSheetChooseFile");
 			FocusOnOpen(window, model.SelectRomSheet, nameof(PlaySelectRomSheetViewModel.IsVisible), () => model.SelectRomSheet.IsVisible, "SelectRomSheetSearch");
+			FocusOnOpen(window, model.ToolSheet, nameof(PlayerToolSheetViewModel.IsBarcode), () => model.ToolSheet.IsBarcode, "ToolSheetBarcode");
 			FocusOnOpen(window, model, nameof(MainWindowViewModel.IsShaderSheetVisible), () => model.IsShaderSheetVisible, "ShaderSheetOk");
 			FocusOnOpen(window, model.ControllerSetup, nameof(PlayControllerSetupViewModel.IsVisible), () => model.ControllerSetup.IsVisible, "ControllerSetupSkip");
 

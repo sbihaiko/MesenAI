@@ -75,8 +75,9 @@ namespace Mesen.Utilities
 					//overlay hidden behind Remaster/Share).
 					//ADR-0249: the BIOS sheet (W-P13) shows in every workspace,
 					//and Esc cancels it there too (TogglePlayerOverlay takes it first);
-					//so does an archive's game list (an open from any workspace).
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible)) {
+					//so does an archive's game list (an open from any workspace),
+					//and ADR-0250's tool sheet (About, Command Line…) from any door.
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible || MainWindowModel.ToolSheet.IsVisible)) {
 						MainWindowModel.TogglePlayerOverlay();
 					} else if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayerSettingsVisible) {
 						//ADR-0250: Settings… opened from Remaster's or Share's
@@ -154,8 +155,15 @@ namespace Mesen.Utilities
 			}
 		}
 
-		private async void InputBarcode()
+		//The InputBarcode shortcut's action, past the Core's "allowed" check (public
+		//so UI.HeadlessTests can reach it without a barcode game loaded).
+		public async void InputBarcode()
 		{
+			//ADR-0250: in Player mode the barcode is asked on the tool sheet.
+			if(MainWindowModel.IsPlayerMode) {
+				MainWindowModel.ToolSheet.OpenBarcode();
+				return;
+			}
 			string? barcode = await new InputBarcodeWindow().ShowCenteredDialog<string?>(_mainWindow);
 			if(barcode != null && UInt64.TryParse(barcode, out UInt64 value)) {
 				EmuApi.InputBarcode(value, (UInt32)(barcode.Length > 8 ? 13 : 8));
