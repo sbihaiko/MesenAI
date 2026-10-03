@@ -46,7 +46,8 @@ same timing, modern instruments. Open a ROM that has a validated community
 HD pack and the pack downloads, installs and loads on its own — zero clicks,
 no config. Fifteen packs ship that way today, and a hand-dropped copy of a
 catalog pack is recognized as that same pack — one entry in the picker, and
-your stored per-ROM choice follows it.
+your stored per-ROM choice follows it. Esc pauses into one overlay: save
+states, pack, enhancements, cheats, settings.
 
 **→ [Download](#download)** · [Community packs](docs/community-packs.md)
 
@@ -59,7 +60,9 @@ Record the game once — scripted, from a save state, or driven by a published
 TAS. Get back **sprite figures with their animation cycles, the stage stitched
 into one panorama, and completed pattern pages**, each cell labeled. Paint the
 PNGs, or export a figure as one PNG, paint that whole, and import it back.
-Build. See it in the game.
+Build. See it in the game. The **Remaster** workspace runs the same tools
+from buttons — *Record While I Play*, *Prepare Figures*, *Build & Show in
+Game* — once Python 3.10+ and the MesenAI tools are found.
 
 **→ [Remastering guide](docs/remastering-a-game.md)**
 
@@ -71,8 +74,11 @@ Build. See it in the game.
 Open one pre-filled Issue with a link. A bot downloads it, lints it against an
 open spec, labels it and lists it in the public catalog with a 👍 vote. Classic
 `hires.txt` packs qualify as-is — years of community work, one ecosystem.
+The **Share** workspace fills that Issue in for you, and packages a Remaster
+project into a `.zip` first. A cheat code or a recorded replay travels the
+same way, one Issue each.
 
-**→ [Submit a pack](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml)**
+**→ [Submit a pack](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml)** · [a cheat](https://github.com/sbihaiko/MesenAI/issues/new?template=cheat-code.yml) · [a replay](https://github.com/sbihaiko/MesenAI/issues/new?template=replay.yml)
 
 </td>
 </tr>
@@ -143,17 +149,31 @@ Names come from the data or from a human — never from a guess.
 
 ## Quick start
 
-1. **[Download](#download)**, unzip, run `Mesen`.
-2. **File → Open** a ROM. Enhanced Audio is already on (Style: *Studio*). With
-   *Bootstrap* on, a starter enhancement pack is written beside the ROM while
-   you play.
-3. Different sound? **Settings → Audio → General → Enhanced audio** — pick
+1. **[Download](#download)**, unzip, run `Mesen`. A fresh install opens in
+   **Player** mode on the **Play** workspace; **Remaster** and **Share** sit
+   beside it in the workspace switcher (⌘1 / ⌘2 / ⌘3, Ctrl elsewhere).
+2. **Open a ROM…** from the Play home, or drop one on the window. Games you
+   played come back as *Continue playing* and a recent-games grid. Enhanced
+   Audio is already on (Style: *Studio*).
+3. **Esc** pauses into the overlay: *Save states* (slot grids, plus *Shared
+   replays…*), *Pack*, *Enhancements*, *Cheats*, *Settings*, *Quit game*.
+   Different sound? **Settings → Audio → General → Enhanced audio** — pick
    Synthwave, Chip Deluxe, Orchestral Lite, Dry or Studio, or point it at your
-   own `.sf2` SoundFont.
+   own `.sf2` SoundFont. **Settings → Look** names the picture's three layers:
+   pack art, pixel filter, screen.
 4. Got a pack? Drop the folder or `.zip` beside the ROM (or into
-   `EnhancementPacks/`) and toggle textures / audio / synth per pack under
-   **Tools → HD Packs → Enhancement Packs (MEP)…**.
-5. Want the soundtrack as MIDI or VGM? **Tools → Record Music (MIDI/VGM)**.
+   `EnhancementPacks/`). The overlay's *Pack* row picks among packs for the
+   game and *Enhancements* switches textures, audio, border, widescreen and
+   overclock; per-pack layer toggles stay under **Tools ⋯ → Tools → HD Packs
+   (NES) → Enhancement Packs (MEP)…**.
+5. Want the soundtrack as MIDI or VGM? **Tools ⋯ → Tools → Record Music (MIDI/VGM)**.
+
+Every classic Mesen menu — File, Game, Settings, Tools, Debug, Help — lives
+under **Tools ⋯** in both modes; *Show classic menu bar* there brings the bar
+back, and **Settings → Preferences → UI mode** switches to **Advanced**, which
+keeps the classic dialogs. A new install records nothing while you play:
+recording starts from Remaster's **Record While I Play** (ADR-0243), and the
+old *Record while I play* setting stays, off, in the Enhancement Packs window.
 
 Want to redraw a game? Start at **[docs/remastering-a-game.md](docs/remastering-a-game.md)** —
 every command, in order. The tools are Python scripts under `scripts/` plus the
@@ -169,7 +189,11 @@ Silicon only**, cut locally from a tagged commit, and its tools zip predates
 what the guide has gained since — `mep_figure.py`, `mep_add_cell.py`,
 `record_library.sh`, the `stage-set.json` route sets that now cover ten
 games, and the route search (`route_search.py`, `jev_harness.py`) with the
-recorder's step-mode session it runs on. Those come from a checkout instead. No installer: unzip and run. macOS
+recorder's step-mode session it runs on. Those come from a checkout instead.
+v0.1.0 also predates the Play / Remaster / Share GUI described in
+[Quick start](#quick-start): it opens in the earlier Player shell (overlay,
+recent games, pack picker), and *Bootstrap* still records a starter pack
+beside each ROM you play. No installer: unzip and run. macOS
 needs SDL2 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
 **System Settings → Privacy & Security → Open Anyway**.
 
@@ -192,7 +216,14 @@ build of `prod` that passed, unzip and run:
 > (ADR-0200, ADR-0203), never on a plain push. To refresh the assets after
 > promoting `main` into `prod`:
 > `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod`.
-> Building from source: [COMPILING.md](COMPILING.md).
+> A CI build carries what `prod` held when it ran. The current assets are the
+> 2026-10-03 promotion (#714), so they include the Play / Remaster / Share GUI;
+> anything merged into `main` since reaches the channel with the next
+> promotion, or build from source: [COMPILING.md](COMPILING.md).
+>
+> **Help → Check for updates** never offers an upstream Mesen build: the fork
+> publishes no update feed, so the startup check does nothing and the menu item
+> offers to open [this repository's releases page](https://github.com/sbihaiko/MesenAI/releases).
 
 ---
 
@@ -244,7 +275,7 @@ promotes, never as evidence ([docs/ai-kit-review.md](docs/ai-kit-review.md)).
 | **Finding packs** | Forum threads | **Validated catalog**, hash-tracked, labeled by content, ranked by 👍 |
 | **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets + a border frame in one hash-keyed pack, folder or `.zip`, per-layer toggles |
 | **Music export** | — | **MIDI / VGM** while you play |
-| **Player mode** | — | Couch shell on a fresh install: overlay, recent games, pack picker |
+| **Player GUI** | — | **Play / Remaster / Share workspaces** on a fresh install: recent games, a pause overlay with pack picker, enhancements, save-state slots, cheats and shared replays; the classic menus under Tools ⋯ |
 | **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist |
 
 Everything in the left column is also in the right one. `Core/NES/HdPacks/`,
@@ -276,6 +307,17 @@ players get one trustworthy list and pack makers get found.
 - **Play:** every accepted pack is auto-installed for the matching ROM. One
   master switch, per-pack disable.
 - **Update:** comment `/revalidate` on the Issue.
+- **Cheats and replays, new and still empty:** the same loop now carries a
+  [cheat code](https://github.com/sbihaiko/MesenAI/issues/new?template=cheat-code.yml)
+  — one Issue per code, checked by structure only (known game, console, every
+  part decodes, no duplicate; ADR-0248) — and a
+  [recorded replay](https://github.com/sbihaiko/MesenAI/issues/new?template=replay.yml)
+  (ADR-0205). Accepted ones land in
+  [docs/community-cheats.json](docs/community-cheats.json) and
+  [docs/community-replays.json](docs/community-replays.json), which Play reads:
+  the Cheats sheet lists the codes for your exact copy, with *Share This Cheat
+  ↗* for your own, and *Save states → Shared replays…* lists the replays. Both
+  catalogs are live and have no entries yet.
 
 Both formats are welcome — a plain **Mesen `hires.txt` pack** or a **full MEP
 `pack.json`**. Making one? [Remastering guide](docs/remastering-a-game.md), then
@@ -308,18 +350,30 @@ A project that measures its own claims should say what is and isn't shipped.
   on its first rung in two decisions; every script it wrote replays without the
   model to the same positions. The adoption verdict is **do not adopt beyond the
   spike** ([the F14.15 log](docs/validation/f1415-jev-adoption-2026-09-26.md)).
+- The Play / Remaster / Share GUI (ADR-0241): the shell and Tools ⋯, the Play
+  home, pause overlay and its sheets, the first-run sheet, the Look tab
+  (ADR-0246), Remaster's recording, kit browser, import and Build & Show in
+  Game (NES), and Share's pack, project-package and replay flows — each
+  surface's rules unit-tested and its wiring tested headless against the real
+  core.
+- Community cheats (ADR-0248) and shared replays (ADR-0205), submit and
+  consume: Issue Forms, structural gates, generated catalogs, Play's sheets.
 - A CI gate on every pull request to `main` and every push to `main`: the
   structural suite, the Python tool suites, a headless boot of the real core,
-  1316 dependency-free C++ unit tests and the C# xUnit suites.
+  about 1 460 dependency-free C++ unit tests, and the C# unit and headless-UI
+  suites.
 
 **Not yet, and named as such**
 - Shaders on macOS are **built but not yet signed off by a person**: RetroArch
   `.slangp` presets run through librashader on a native Metal renderer
   ([ADR-0237](docs/adr/0237-macos-gets-shader-support-through-a-native-metal-renderer.md),
   roadmap slice P.8), with the old software renderer kept behind the
-  `UseSoftwareRenderer` setting. The project ships no shaders: put presets in
-  the `Shaders` folder of the data directory. The headless checks pass; the
-  on-screen check (Retina, vsync, fullscreen) is still a human row.
+  `UseSoftwareRenderer` setting. Two named looks ship with the app, picked in
+  **Settings → Look → Screen**: *CRT TV* (`crt-geom`) and *Handheld LCD*
+  (`zfast-lcd`), each file listed with its license, source and sha256; for
+  anything else, put presets in the `Shaders` folder of the data directory.
+  The headless checks pass; the on-screen check (Retina, vsync, fullscreen)
+  is still a human row.
   Take presets from [libretro/slang-shaders](https://github.com/libretro/slang-shaders)
   (copy the whole repository: most presets reach for its `include/` and
   `stock.slang`; it is not bundled because its shaders carry mixed licenses).
@@ -333,13 +387,22 @@ A project that measures its own claims should say what is and isn't shipped.
   ROM reopened — the in-place reload covers a cell already painted, and a cell's
   first paint re-points its rule, so it wants one reopen of its own (ADR-0231) —
   and the layered `.ora` is write-only, so the flat PNG stays the return path.
-  Otherwise **Phase 12** is delivered, with only human rows left, and the live
-  phases are **14** (proof at scale) and **13** (shared replays, ADR-0205), of
-  the [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
+  Otherwise **Phase 12** is delivered, with only human rows left; **Phase 13**
+  (shared replays and community cheats) and the Play / Remaster / Share GUI
+  (G.1–G.8) are delivered too; and the live work is **Phase 14** (proof at
+  scale) plus Phase 7's open rows (shaders on macOS, in-place pack change,
+  cheat search), of the
+  [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
   [side-by-side with upstream](docs/hd-pack-toolchain-comparison.md) that says
   where a hand author is still better served.
 - A human artist who did not build the tools has not yet run the painting
   workflow end to end. Every acceptance so far is measured, but by proxy.
+- Nobody has opened the new GUI on a real display yet: its look against the
+  wireframes, a real gamepad, drag-and-drop, the browser and Finder hand-offs
+  and a Remaster build shown on a running game are still human rows. Neither
+  the cheat nor the replay workflow has run against a real Issue, and a Game
+  Boy or Master System cheat is refused as an unknown game until the
+  repository carries No-Intro data for those consoles.
 - The Jev stall helper is proven and **not adopted beyond the spike**
   ([ADR-0238](docs/adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
   §5, one clause short, [log](docs/validation/f1415-jev-adoption-2026-09-26.md)):
