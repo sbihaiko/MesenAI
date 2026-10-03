@@ -8,6 +8,7 @@
 			<Control ID="mnuTools">_Tools</Control>
 			<Control ID="mnuDebug">_Debug</Control>
 			<Control ID="mnuHelp">_Help</Control>
+			<Control ID="mnuWorkspace">_Workspace</Control>
 		</Form>
 		<Form ID="MainWindow">
 			<Control ID="btnOverlayResume">Resume</Control>
@@ -101,18 +102,7 @@
 			<Control ID="btnControllerSetupCancel">Cancel</Control>
 		</Form>
 		<Form ID="WorkspaceShellBar">
-			<Control ID="mnuFile">_File</Control>
-			<Control ID="mnuGame">_Game</Control>
-			<Control ID="mnuOptions">_Settings</Control>
-			<Control ID="mnuTools">_Tools</Control>
-			<Control ID="mnuDebug">_Debug</Control>
-			<Control ID="mnuHelp">_Help</Control>
-			<Control ID="lblSwitcherFooter">Switching keeps your game running. Only the chosen profile is shown.</Control>
-			<Control ID="mnuShowClassicMenuBar">Show classic menu bar</Control>
-			<Control ID="lblToolsHint">Debugger, Lua, HD Pack Builder, …</Control>
-			<Control ID="mnuPlayerOptions">_Options</Control>
-			<Control ID="mnuPlayerShowClassicMenuBar">Show Classic Menu Bar</Control>
-			<Control ID="lblPlayerToolsHint">Debugger, Lua, HD Pack Builder, netplay…</Control>
+			<Control ID="lblSwitcherFooter">Switching keeps your game running. Only the chosen door is shown.</Control>
 		</Form>
 		<Form ID="RemasterWorkspaceView">
 			<Control ID="btnLocatePython">Locate Python…</Control>
@@ -2159,9 +2149,26 @@
 		<Message ID="WorkspaceNamePlay">Play</Message>
 		<Message ID="WorkspaceNameRemaster">Remaster</Message>
 		<Message ID="WorkspaceNameShare">Share</Message>
+		<Message ID="WorkspaceNameClassic">Classic</Message>
 		<Message ID="WorkspaceDescriptionPlay">Open a game and play it, enhanced.</Message>
 		<Message ID="WorkspaceDescriptionRemaster">Record a game, paint its art, see it in game.</Message>
 		<Message ID="WorkspaceDescriptionShare">Send a pack or a replay to the community.</Message>
+		<Message ID="WorkspaceDescriptionClassic">Every menu, debugger, Lua, HD Pack Builder.</Message>
+		<Message ID="DoorMenuPowerCycle">Power Cycle</Message>
+		<Message ID="DoorMenuScreenshot">Screenshot</Message>
+		<Message ID="DoorMenuReloadPackImages">Reload Pack Images</Message>
+		<Message ID="DoorMenuEnhancementPacks">Enhancement Packs</Message>
+		<Message ID="DoorMenuLogWindow">Log Window</Message>
+		<Message ID="DoorMenuNetplay">Netplay</Message>
+		<Message ID="DoorMenuCheckForUpdates">Check for Updates</Message>
+		<Message ID="DoorMenuCommandLine">Command Line</Message>
+		<Message ID="DoorMenuRecordMusic">Record Music</Message>
+		<Message ID="DoorMenuPlayReplay">Play a Replay…</Message>
+		<Message ID="DoorMenuRecord">Record</Message>
+		<Message ID="DoorMenuSettings">Settings…</Message>
+		<Message ID="DoorMenuHelp">Help</Message>
+		<Message ID="DoorMenuAbout">About MesenAI</Message>
+		<Message ID="DoorMenuQuit">Quit MesenAI</Message>
 		<Message ID="ShellStatusNoGame">No game loaded</Message>
 		<Message ID="ShellStatusRemasterRecording">● Remaster: recording {0}</Message>
 		<Message ID="ShellStatusRemasterJob">● Remaster: preparing figures for {0} · {1} %</Message>
@@ -2368,8 +2375,6 @@
 		<Message ID="ShellStatusPack">pack {0}</Message>
 		<Message ID="ShellStatusProjectPack">your project's pack</Message>
 		<Message ID="ShellStatusAutoUpscale">automatic upscale</Message>
-		<Message ID="ClassicMenuNoticeTitle">Tools</Message>
-		<Message ID="ClassicMenuNoticeText">Your menus are under Tools ⋯</Message>
 		<Message ID="AutoSave">Auto-save</Message>
 		<Message ID="SlotNumber">Slot #{0}</Message>
 		<Message ID="LoadStateDialog">Load State Menu</Message>
@@ -2448,17 +2453,10 @@ E
 		<Message ID="ConfirmPowerOff">Are you sure you want to power off?</Message>
 		<Message ID="ConfirmExit">Are you sure you want to exit?</Message>
 
-		<Message ID="InstallHdPackWrongRom">The selected HD Pack is not compatible with the currently running game and cannot be installed.</Message>
-		<Message ID="InstallHdPackWrongRomConfirm">The selected HD Pack does not list the currently running game's hash as supported.&#xA;&#xA;This also happens when the game was just patched by an already-loaded pack, or with a different ROM revision.&#xA;&#xA;Install it anyway?</Message>
-		<Message ID="InstallHdPackError">An error occurred while trying to install the HD Pack: &#xA;&#xA;{0}</Message>
-		<Message ID="InstallHdPackInvalidPack">The selected file is not a valid HD Pack.</Message>
-		<Message ID="InstallHdPackInvalidZipFile">The selected file is not a valid ZIP file.</Message>
-		<Message ID="InstallHdPackConfirmOverwrite">The destination folder ({0}) already exists - are you sure you want to overwrite it?</Message>
 		<Message ID="InstallMepPackInvalidPack">The selected file is not a valid enhancement pack (no pack.json at the root of the zip, or unsafe paths).</Message>
 			<Message ID="InstallMepPackInvalidZipFile">The selected file is not a valid ZIP file or could not be copied.</Message>
 			<Message ID="InstallMepPackConfirmReset">The enhancement pack has been installed. Do you want to power cycle the console to apply it now?</Message>
 			<Message ID="EnhancementPacksConfirmReset">Enhancement pack settings apply on the next power cycle. Power cycle now?</Message>
-			<Message ID="InstallHdPackConfirmReset">The HD Pack has been installed successfully. Do you want to reset the game and load the HD Pack now?</Message>
 
 		<Message ID="Player">Player</Message>
 
@@ -2516,6 +2514,8 @@ E
 		<Message ID="PackInstallPillFailed">The pack could not be downloaded. Playing without it.</Message>
 		<Message ID="PlayLoadWaitOpening">Opening {0}…</Message>
 		<Message ID="PlayLoadWaitOpeningGame">Opening the game…</Message>
+		<Message ID="PlayLoadWaitReloading">Reloading {0}…</Message>
+		<Message ID="PlayLoadWaitReloadingGame">Reloading the game…</Message>
 		<!--G.5 (PRD Part B §13.5.2 W-P12–W-P16): the Play edge flows.-->
 		<Message ID="FirstRunCannotWrite">MesenAI cannot write to {0}. Choose the other place, or move the app somewhere you can write to.</Message>
 		<Message ID="BiosSheetBodyFds">Famicom Disk System games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every disk game.</Message>
@@ -4315,7 +4315,6 @@ E
 			<Value ID="Movies">Movies</Value>
 			<Value ID="Play">Play...</Value>
 			<Value ID="Record">Record...</Value>
-			<Value ID="RecordAndShare">Record and share</Value>
 			<Value ID="Stop">Stop</Value>
 			<Value ID="SoundRecorder">Sound Recorder</Value>
 			<Value ID="VideoRecorder">Video Recorder</Value>
@@ -4324,17 +4323,14 @@ E
 			<Value ID="Cheats">Cheats</Value>
 			<Value ID="LogWindow">Log Window</Value>
 			<Value ID="HdPacks">HD Packs (NES)</Value>
-			<Value ID="InstallHdPack">Install HD Pack</Value>
 			<Value ID="HdPackBuilder">HD Pack Builder</Value>
 			<Value ID="EnhancementPacks">Enhancement Packs (MEP)...</Value>
 			<Value ID="ReloadPackImages">Reload Repainted Images</Value>
 			<Value ID="TakeScreenshot">Take Screenshot</Value>
 			<Value ID="SaveSpcFile">Save .SPC File</Value>
 
-			<Value ID="OnlineHelp">Online Help</Value>
 			<Value ID="CommandLineHelp">Command-line options</Value>
 			<Value ID="CheckForUpdates">Check for updates</Value>
-			<Value ID="ReportBug">Report a bug</Value>
 			<Value ID="About">About</Value>
 
 			<Value ID="Speed">Speed</Value>

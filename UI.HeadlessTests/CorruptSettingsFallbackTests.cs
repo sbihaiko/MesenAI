@@ -47,7 +47,6 @@ public class CorruptSettingsFallbackTests : IDisposable
 		Configuration config = Load(contents);
 
 		Assert.Equal(UiMode.Advanced, config.Preferences.UiMode);
-		Assert.False(config.Preferences.ClassicMenuNoticeShown);
 		Assert.True(config.EnhancementPacks.BootstrapEnhancementFolder);
 		//The key mappings and fonts were lost with the file: they still get
 		//their first-run initialization.

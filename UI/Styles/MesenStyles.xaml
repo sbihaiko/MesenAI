@@ -169,13 +169,13 @@
 		<Setter Property="Command" Value="{Binding ClickCommand, DataType={x:Type du:BaseMenuAction}}" />
 	</Style>
 
-	<!--G.1 (ADR-0241, W-S2): Menu#ToolsMenu is the shell's Tools ⋯ dropdown -
-	the same MainMenuAction lists one level deeper (⋯ > File > action). Same
-	setters as above except Icon: BaseMenuAction.ActionIcon is one Image control
-	per action, and a control can only have one visual parent, so the classic
-	bar and Tools ⋯ cannot both host it. The template builds a fresh Image per
-	MenuItem over the same bitmap.-->
-	<Style Selector="Menu#ToolsMenu MenuItem MenuItem MenuItem">
+	<!--G.1 (ADR-0241, W-S2), ADR-0250: Menu#ToolsMenu is the shell's Tools ⋯
+	dropdown - the door's own MainMenuAction list right under ⋯ (⋯ > action).
+	Same setters as above except Icon: BaseMenuAction.ActionIcon is one Image
+	control per action, and a control can only have one visual parent, so an
+	action shared with the classic bar cannot be hosted twice. The template
+	builds a fresh Image per MenuItem over the same bitmap.-->
+	<Style Selector="Menu#ToolsMenu MenuItem MenuItem">
 		<Setter Property="Header" Value="{Binding ActionName, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="Icon">
 			<Template>

@@ -67,7 +67,7 @@ namespace Mesen.ViewModels
 			return _isMacOS ? "⌘" + digit : "Ctrl+" + digit;
 		}
 
-		//Picking a row (or ⌘1/⌘2/⌘3) replaces the window's content and the bar's
+		//Picking a row (or ⌘1-⌘4) replaces the window's content and the bar's
 		//name. Nothing else happens: no pause, no stop, no settings rewrite.
 		public bool Select(Workspace target)
 		{
@@ -188,6 +188,7 @@ namespace Mesen.ViewModels
 			return workspace switch {
 				Workspace.Remaster => "✎",
 				Workspace.Share => "▣",
+				Workspace.Classic => "⚙",
 				_ => "▶",
 			};
 		}

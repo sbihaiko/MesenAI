@@ -31,9 +31,15 @@ public class CommunityPackInstallStaleLoadTests : IDisposable
 	private CommunityPackLoadTarget _gameA = null!;
 	private CommunityPackLoadTarget _gameB = null!;
 	private string _bMep = "";
+	//TestAppBuilder turns auto-install off for the whole test home (#751);
+	//these drive the auto-install path, so they turn it on and put it back.
+	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
+
+	public CommunityPackInstallStaleLoadTests() => ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = true;
 
 	public void Dispose()
 	{
+		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
 		CommunityPackInstallCoordinator.ReadCurrentLoad = _savedProbe;
 		try {
 			Directory.Delete(_root, true);

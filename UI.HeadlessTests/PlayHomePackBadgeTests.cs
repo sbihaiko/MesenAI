@@ -35,7 +35,6 @@ public class PlayHomePackBadgeTests : IDisposable
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly List<RecentGameHash> _hashes = new(ConfigManager.Config.RecentFiles.GameHashes);
 	//Hashes no real ROM has, so the seeded registry file never shadows (or
 	//overwrites) one of the user's own installs.
@@ -62,7 +61,6 @@ public class PlayHomePackBadgeTests : IDisposable
 		}
 		ConfigManager.Config.Preferences.UiMode = _uiMode;
 		ConfigManager.Config.Preferences.Workspace = _workspace;
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = _noticeShown;
 	}
 
 	private static string FakeSha1() => ("FEED" + Guid.NewGuid().ToString("N") + "0000").ToUpperInvariant();

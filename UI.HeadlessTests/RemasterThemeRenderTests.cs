@@ -55,8 +55,6 @@ public partial class RemasterThemeRenderTests : IDisposable
 	private readonly List<string> _folders = new();
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly bool _bootstrap = ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder;
@@ -67,8 +65,6 @@ public partial class RemasterThemeRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder = _bootstrap;
@@ -646,18 +642,17 @@ public partial class RemasterThemeRenderTests : IDisposable
 	}
 
 	//Decision 3, MainWindow side: in Player mode Remaster's hosts are the
-	//theme's scope with the purple tint; Advanced keeps the classic look.
+	//theme's scope with the purple tint. ADR-0250 retired the Advanced case's
+	//classic look: Remaster is a task door, so it is always Player.
 	[AvaloniaTheory]
 	[InlineData(UiMode.Player)]
 	[InlineData(UiMode.Advanced)]
-	public void Remaster_hosts_carry_the_player_scope_in_player_mode_only(UiMode mode)
+	public void Remaster_hosts_carry_the_player_scope_whatever_the_starting_mode(UiMode mode)
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = mode;
 		prefs.Workspace = Workspace.Play;
-		prefs.ClassicMenuNoticeShown = true;
-		prefs.ShowClassicMenuBar = false;
 		//As RemasterWorkspaceTests.ShowShell: no pausing and no packs on load.
 		prefs.PauseWhenInBackground = false;
 		prefs.PauseWhenInMenusAndConfig = false;
@@ -673,16 +668,17 @@ public partial class RemasterThemeRenderTests : IDisposable
 		model.SelectWorkspace(Workspace.Remaster);
 		Dispatcher.UIThread.RunJobs();
 
+		//ADR-0250 Decision 2: a task door is always Player - an Advanced
+		//install that enters Remaster switches to Player and gets its theme.
+		Assert.Equal(UiMode.Player, prefs.UiMode);
 		foreach(string host in new[] { "RemasterWorkspaceHost", "RemasterRecordingStripHost", "RemasterRecordingHintHost" }) {
 			Panel panel = window.FindNamed<Panel>(host);
 			Assert.Contains("remaster", panel.Classes);
-			Assert.Equal(mode == UiMode.Player, panel.Classes.Contains("player"));
+			Assert.Contains("player", panel.Classes);
 		}
+		Assert.Equal(RemasterTint, PlayerRender.SolidColor(window.FindNamed<Button>("RemasterStartButton").Background));
 		if(mode == UiMode.Player) {
-			Assert.Equal(RemasterTint, PlayerRender.SolidColor(window.FindNamed<Button>("RemasterStartButton").Background));
 			PlayerRender.Save(PlayerRender.Capture(window), "W-R0-window");
-		} else {
-			Assert.NotEqual("Inter", LabelOf(window.FindNamed<Button>("RemasterStartButton")).FontFamily.Name);
 		}
 	}
 

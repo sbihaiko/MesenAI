@@ -41,8 +41,6 @@ public class PlayerThemeRenderTests : IDisposable
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 
@@ -51,8 +49,6 @@ public class PlayerThemeRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
@@ -103,8 +99,6 @@ public class PlayerThemeRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = mode;
 		prefs.Workspace = Workspace.Play;
-		prefs.ClassicMenuNoticeShown = true;
-		prefs.ShowClassicMenuBar = false;
 		prefs.ConfirmExitResetPower = false;
 		prefs.PauseWhenInMenusAndConfig = false;
 
@@ -328,16 +322,18 @@ public class PlayerThemeRenderTests : IDisposable
 	}
 
 	//Decision 3, MainWindow side: Advanced mode keeps the classic look - no
-	//`player` scope on the Play host or the chrome.
+	//`player` scope on the Play host or the chrome. ADR-0250: Advanced is the
+	//Classic door, which shows no shell bar at all.
 	[AvaloniaFact]
 	public void Advanced_mode_has_no_player_scope()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = Show(UiMode.Advanced);
+		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Advanced);
 
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
 		Assert.DoesNotContain("player", window.FindNamed<Panel>("PlayWorkspace").Classes);
 		Assert.DoesNotContain("player", window.FindNamed<Views.WorkspaceShellBar>("ShellBar").Classes);
 		Assert.DoesNotContain("player", window.FindNamed<Border>("ShellStatusLine").Classes);
-		Assert.NotEqual("Inter", window.FindNamed<TextBlock>("ProfileButtonName").FontFamily.Name);
+		Assert.False(window.FindNamed<Views.WorkspaceShellBar>("ShellBar").IsOnScreen());
 	}
 }

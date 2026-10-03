@@ -43,6 +43,7 @@ namespace Mesen.Controls
 			string key = value switch {
 				Workspace.Remaster => "PlayerIconRemaster",
 				Workspace.Share => "PlayerIconShare",
+				Workspace.Classic => "PlayerIconSettings",
 				_ => "PlayerIconPlay",
 			};
 			return Application.Current?.FindResource(key);

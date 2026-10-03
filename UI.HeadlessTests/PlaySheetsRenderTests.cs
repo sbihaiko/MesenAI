@@ -55,8 +55,6 @@ public class PlaySheetsRenderTests : IDisposable
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-play-sheets-" + Guid.NewGuid().ToString("N"));
 
 	public PlaySheetsRenderTests()
@@ -69,8 +67,6 @@ public class PlaySheetsRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
@@ -82,8 +78,6 @@ public class PlaySheetsRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
-		prefs.ClassicMenuNoticeShown = true;
-		prefs.ShowClassicMenuBar = false;
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();

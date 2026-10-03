@@ -78,6 +78,10 @@ namespace Mesen.Utilities
 					//so does an archive's game list (an open from any workspace).
 					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible)) {
 						MainWindowModel.TogglePlayerOverlay();
+					} else if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayerSettingsVisible) {
+						//ADR-0250: Settings… opened from Remaster's or Share's
+						//Tools ⋯ closes on Esc, keeping what was changed.
+						MainWindowModel.ClosePlayerSettings();
 					} else if(MainWindowModel.IsRemasterGameView) {
 						//G.3 (W-R2): in Remaster's recording view Esc stops the
 						//recording and returns to the project screen; G.6: from

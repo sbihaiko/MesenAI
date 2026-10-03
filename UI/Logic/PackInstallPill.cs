@@ -7,8 +7,10 @@ namespace Mesen.Logic;
 //never a dialog, never a consent prompt. This is the pill's host-free state:
 //when it shows, what it says, and when it goes away.
 //
-//The bar is indeterminate: CommunityPackInstallService.RunAsync reports no
-//progress, so the pill never shows a number.
+//#734 ("every wait has an animation"): the bar always moves. While the
+//artifact downloads with a known size it fills with the bytes; without a
+//size, and once the bytes are in (hash check, extract, install), it is
+//indeterminate. The pill never shows a number.
 
 public enum PackInstallPillState
 {
@@ -28,6 +30,15 @@ public sealed class PackInstallPill
 
 	public PackInstallPillState State { get; private set; } = PackInstallPillState.Hidden;
 	public string PackName { get; private set; } = "";
+	//The bar's fill, 0..1; null while it is indeterminate.
+	public double? Fraction { get; private set; }
+
+	//W-P9 is a Play render: the pill shows in Player mode's Play while it has
+	//something to say (the status line carries it everywhere else).
+	public static bool ShowsOnScreen(PackInstallPillState state, bool playerMode, bool playWorkspace)
+	{
+		return state != PackInstallPillState.Hidden && playerMode && playWorkspace;
+	}
 
 	//The pill shows only for a download that changes the installed pack: a
 	//catalog row already installed from the same artifact is the routine
@@ -44,6 +55,27 @@ public sealed class PackInstallPill
 	{
 		PackName = packName ?? "";
 		State = PackInstallPillState.Installing;
+		Fraction = null;
+	}
+
+	//A download's bytes so far and its size (null or 0 when the host does
+	//not say). True when the bar changed enough to redraw: a percent, or
+	//between filling and indeterminate.
+	public bool Report(long received, long? total)
+	{
+		if(State != PackInstallPillState.Installing) {
+			return false;
+		}
+		double? next = total is long size && size > 0 && received < size ? Math.Max(0, (double)received / size) : null;
+		double? previous = Fraction;
+		if(next == null && previous == null) {
+			return false;
+		}
+		if(next != null && previous != null && Math.Abs(next.Value - previous.Value) < 0.01) {
+			return false;
+		}
+		Fraction = next;
+		return true;
 	}
 
 	//installed: the pack is in place (the W-P3 "Applied …" toast follows on the

@@ -3,16 +3,18 @@ using System.Collections.Generic;
 
 namespace Mesen.Logic;
 
-//G.1 (PRD Part B §8, ADR-0241, §13.2/§13.5.1): the three task workspaces and
-//the shell's host-free rules. Persisted as PreferencesConfig.Workspace, a key
-//separate from UiMode - the UiMode values are never reinterpreted as
-//workspaces (ADR-0241, "Advanced tools are an escape hatch").
+//G.1 (PRD Part B §8, ADR-0241, §13.2/§13.5.1): the workspaces ("doors") and
+//the shell's host-free rules. Persisted as PreferencesConfig.Workspace.
+//ADR-0250 Decision 2: Classic is the fourth door and the original Mesen GUI;
+//it owns UiMode.Advanced (entering it sets Advanced, leaving it for a task
+//door sets Player), so UiMode is now derived from the door.
 public enum Workspace
 {
 	//Zero value is the default for a settings.json without the key.
 	Play,
 	Remaster,
-	Share
+	Share,
+	Classic
 }
 
 public sealed record WorkspaceSwitcherRow(Workspace Workspace, bool IsActive);
@@ -20,9 +22,44 @@ public sealed record WorkspaceSwitcherRow(Workspace Workspace, bool IsActive);
 public static class WorkspaceShell
 {
 	//W-S3: fixed order 1. Play, 2. Remaster, 3. Share (user's decision,
-	//2026-10-02). It never changes with the active profile, recent use or the
-	//loaded console; ⌘1/⌘2/⌘3 (Ctrl elsewhere) follow the same positions.
-	public static IReadOnlyList<Workspace> Ordered { get; } = new[] { Workspace.Play, Workspace.Remaster, Workspace.Share };
+	//2026-10-02), 4. Classic (ADR-0250). It never changes with the active
+	//profile, recent use or the loaded console; ⌘1-⌘4 (Ctrl elsewhere) follow
+	//the same positions.
+	public static IReadOnlyList<Workspace> Ordered { get; } = new[] { Workspace.Play, Workspace.Remaster, Workspace.Share, Workspace.Classic };
+
+	//ADR-0250 Decision 2: Classic is the Advanced GUI; every task door is Player.
+	public static UiMode UiModeFor(Workspace door)
+	{
+		return door == Workspace.Classic ? UiMode.Advanced : UiMode.Player;
+	}
+
+	//The door the window opens in. Play is the default (a fresh install, a
+	//settings file without the key, an unknown value); an upgraded install
+	//whose UiMode is Advanced opens in Classic, so nobody loses the GUI they
+	//chose.
+	public static Workspace InitialDoor(UiMode uiMode, Workspace persisted)
+	{
+		//UiMode decides between Classic and the task doors (a Player file that
+		//names Classic was edited by hand: it opens in Play, as DoorForUiMode).
+		return DoorForUiMode(uiMode, Enum.IsDefined(persisted) ? persisted : Workspace.Play);
+	}
+
+	//Every place that flips UiMode goes through the door: Advanced is Classic,
+	//and Player leaves Classic for Play (a task door stays where it is).
+	public static Workspace DoorForUiMode(UiMode uiMode, Workspace current)
+	{
+		if(uiMode == UiMode.Advanced) {
+			return Workspace.Classic;
+		}
+		return current == Workspace.Classic ? Workspace.Play : current;
+	}
+
+	//The game's own screen (renderer, Play home or the classic game list,
+	//music player): Play's, and Classic's plain game view.
+	public static bool ShowsGameScreen(Workspace door)
+	{
+		return door == Workspace.Play || door == Workspace.Classic;
+	}
 
 	public static Workspace? FromShortcutDigit(int digit)
 	{
@@ -45,9 +82,13 @@ public static class WorkspaceShell
 	//Pause) brings it back, and so does a Play sheet on screen over the game
 	//(W-P5's first-start picker does not pause it; the render keeps the bar
 	//and the status line around its scrim). In Remaster and Share it is
-	//always visible.
+	//always visible. Classic (ADR-0250) never shows it: the original GUI has
+	//its classic menu bar, whose Workspace menu is the switcher there.
 	public static bool IsBarVisible(Workspace workspace, bool gameRunning, bool paused, bool sheetOpen = false)
 	{
+		if(workspace == Workspace.Classic) {
+			return false;
+		}
 		return workspace != Workspace.Play || !gameRunning || paused || sheetOpen;
 	}
 }
@@ -136,29 +177,6 @@ public static class ShellStatusLine
 	}
 }
 
-//PRD Part B §13.2 and §13.8 Q4 (user's decision, 2026-10-02):
-//ShowClassicMenuBar is false everywhere, upgrades included, and an upgraded
-//install gets a one-time "your menus are under Tools ⋯" toast instead of
-//keeping the bar. This replaces UiMode as §6's "upgrade keeps my menus" rule.
-public static class ClassicMenuNotice
-{
-	public const bool DefaultShowClassicMenuBar = false;
-
-	//The PreferencesConfig.ClassicMenuNoticeShown value while its key is
-	//absent: a fresh install (no settings.json, Configuration.CreateConfig)
-	//never had a menu bar, so there is nothing to tell it; an existing
-	//settings.json without the key is an upgrade and still owes the toast.
-	public static bool ShownForMissingKey(bool settingsFileExists)
-	{
-		return !settingsFileExists;
-	}
-
-	public static bool ShouldShow(bool alreadyShown, bool showClassicMenuBar)
-	{
-		return !alreadyShown && !showClassicMenuBar;
-	}
-}
-
 //G.1 (PRD Part B §13.5.1 W-S1; user's choice 2026-10-02, "Integrar agora"):
 //on macOS the shell bar is drawn in the window's title bar (Avalonia's
 //client-area extension) with the traffic lights at its leading edge. Windows
@@ -177,6 +195,13 @@ public static class ShellTitleBar
 	public static bool ExtendsIntoTitleBar(bool isMacOS)
 	{
 		return isMacOS;
+	}
+
+	//ADR-0250: Classic has no shell bar; it keeps the plain title bar with
+	//its classic menu bar under it, as the original GUI had it.
+	public static bool ExtendsIntoTitleBar(bool isMacOS, Workspace door)
+	{
+		return ExtendsIntoTitleBar(isMacOS) && door != Workspace.Classic;
 	}
 
 	//macOS fullscreen has no traffic lights at rest, so the bar starts at the

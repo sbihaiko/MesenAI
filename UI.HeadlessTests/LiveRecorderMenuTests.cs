@@ -67,10 +67,9 @@ public class LiveRecorderMenuTests
 
 	private static MenuItem RealizedLiveRecorderMenu()
 	{
+		//ADR-0250: an Advanced install opens in the Classic door, whose classic
+		//menu bar is the realized menu under test.
 		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
-		//G.1 (ADR-0241): the classic bar is ShowClassicMenuBar's, not UiMode's;
-		//the realized menu under test is that bar's.
-		ConfigManager.Config.Preferences.ShowClassicMenuBar = true;
 		MainWindow window = new();
 		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
