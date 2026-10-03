@@ -73,6 +73,9 @@ namespace Mesen.ViewModels
 
 		private RestoreStep _restoreStep = RestoreStep.Idle;
 		private EnhancementsState _enhancementsApplied = new(false, false, false, false);
+		//W-P7: how the last visit of the panel ended; decides whether the next
+		//open keeps the draft (only the Pack row's detour does).
+		private EnhancementsDraftExit _enhancementsDraftExit = EnhancementsDraftExit.Closed;
 		private readonly PackInstallPill _pill = new();
 		private DispatcherTimer? _pillTimer;
 
@@ -234,17 +237,36 @@ namespace Mesen.ViewModels
 			PackDetailRestoreRunning = step == RestoreStep.Running;
 		}
 
-		//W-P7: the switches start from what is applied.
-		private void LoadEnhancementsDraft()
+		//W-P7: the switches start from what is applied, or - on the way back from
+		//the Pack row - from the flips made before the detour (see
+		//EnhancementsDraftVisit / EnhancementsSheet.Resume).
+		private void LoadEnhancementsDraft(EnhancementsState? heldDraft = null)
 		{
-			_enhancementsApplied = new EnhancementsState(IsModernInstrumentsEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
-			EnhModernInstruments = IsModernInstrumentsEnabled;
+			EnhancementsState appliedNow = new(IsModernInstrumentsEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
+			EnhancementsState draft = heldDraft == null ? appliedNow : EnhancementsSheet.Resume(_enhancementsApplied, heldDraft, appliedNow);
+			_enhancementsApplied = appliedNow;
+			EnhModernInstruments = draft.ModernInstruments;
+			EnhBorder = draft.Border;
+			EnhWidescreen = draft.Widescreen;
+			EnhOverclock = draft.Overclock;
 			EnhPackRowText = ResourceHelper.GetMessage("EnhancementsPackRow", PackRowName());
-			EnhBorder = IsBorderEnabled;
-			EnhWidescreen = IsWideScrnEnabled;
-			EnhOverclock = IsOverclockEnabled;
 			EnhOverclockReason = IsOverclockSupported ? "" : ResourceHelper.GetMessage("EnhancementsOverclockUnavailable", ResourceHelper.GetEnumText(RomInfo.ConsoleType));
 			UpdateEnhancementsApplyText();
+		}
+
+		//W-P7's Pack row: the row opens W-P5/W-P6 over the panel, which is a look
+		//at the pack, not a decision about the switches - so the draft waits for
+		//the way back (the window calls this before it routes the row).
+		public void HoldEnhancementsDraftForPackRow()
+		{
+			_enhancementsDraftExit = EnhancementsDraftExit.PackRow;
+		}
+
+		//The visit ends (Esc, the button, the game changing): the next open of
+		//the panel reads the switches from what is applied again.
+		private void EndEnhancementsDraftVisit()
+		{
+			_enhancementsDraftExit = EnhancementsDraftExit.Closed;
 		}
 
 		private EnhancementsState EnhancementsDraft => new(EnhModernInstruments, EnhBorder, EnhWidescreen, EnhOverclock && IsOverclockSupported);
@@ -294,6 +316,8 @@ namespace Mesen.ViewModels
 				ToggleBorder();
 			}
 
+			//The button is what applies the draft: the visit is over either way.
+			EndEnhancementsDraftVisit();
 			RefreshEnhancementsState();
 			IsEnhancementsPanelVisible = false;
 			if(kind == EnhancementsApplyKind.Reload || kind == EnhancementsApplyKind.Restart) {

@@ -123,6 +123,8 @@ namespace Mesen.ViewModels
 					break;
 
 				case PlayEscAction.CloseOverlayAndResume:
+					//Back to the game: W-P7's detour (if one was open) ends here.
+					EndEnhancementsDraftVisit();
 					IsPlayerOverlayVisible = false;
 					EmuApi.Resume();
 					break;
@@ -145,7 +147,11 @@ namespace Mesen.ViewModels
 					IsPlayerPackPickerVisible = false;
 					_packPickerFromOverlay = false;
 					break;
-				case PlaySheet.Enhancements: IsEnhancementsPanelVisible = false; break;
+				case PlaySheet.Enhancements:
+					//Esc ends the visit: the next open reads what is applied.
+					EndEnhancementsDraftVisit();
+					IsEnhancementsPanelVisible = false;
+					break;
 				case PlaySheet.PackDetail: IsPackDetailVisible = false; CancelRestore(); break;
 				case PlaySheet.Cheats: HideCheatsSheet(); break;
 				case PlaySheet.Replays: HideReplaysSheet(); break;
@@ -282,6 +288,7 @@ namespace Mesen.ViewModels
 			HideReplaysSheet();
 			ClosePlayerSettings();
 			IsSaveStatesSheetVisible = false;
+			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;

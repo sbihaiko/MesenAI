@@ -203,7 +203,11 @@ can be exercised by real xunit tests without Avalonia or the native
   whose pack roots at `mep/` (pack.json or a convention probe there - the
   core's `HasSiblingMepPack`) is read at `mep/`, a legacy sibling or a
   central `EnhancementPacks/<container>` at its own root. `EnhancementsSheet.Pending`
-  names W-P7's button from the applied state and the draft; the ViewModel
+  names W-P7's button from the applied state and the draft, and
+  `EnhancementsSheet.Resume` (with `EnhancementsDraftVisit.Holds`) is what the
+  draft does across the Pack row's detour into the pack sheets: the flips come
+  back, the switches the player left alone are re-read from what is applied;
+  the ViewModel
   (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
   `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9
   hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip, shown by

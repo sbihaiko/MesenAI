@@ -38,7 +38,12 @@ namespace Mesen.Windows
 			PlayerPackDetailSheetView detail = this.GetControl<PlayerPackDetailSheetView>("PlayerPackDetailHost");
 			detail.ChangePackRequested += (_, _) => _model.ChangePackFromDetail(EmuApi.GetMepPackList());
 			//W-P7's Pack row routes like W-P4's: W-P5 for 2+ packs, else W-P6.
-			this.GetControl<PlayerEnhancementsSheetView>("PlayerEnhancementsSheetHost").PackRequested += (_, _) => OnOverlayPack(null, new RoutedEventArgs());
+			//Leaving by it is a detour, not a decision: the unapplied draft waits
+			//for the way back (ADR-0244 Decision 3, only the button applies it).
+			this.GetControl<PlayerEnhancementsSheetView>("PlayerEnhancementsSheetHost").PackRequested += (_, _) => {
+				_model.HoldEnhancementsDraftForPackRow();
+				OnOverlayPack(null, new RoutedEventArgs());
+			};
 			detail.RestoreRequested += (_, _) => RestorePackFromDetail();
 			detail.UseCommunityPackRequested += (_, _) => UseCommunityPackFromDetail();
 			//#736: W-P4's Pack row reads the community-pack offer when it opens.
