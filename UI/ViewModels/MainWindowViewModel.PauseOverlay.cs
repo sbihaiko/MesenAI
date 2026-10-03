@@ -39,6 +39,9 @@ namespace Mesen.ViewModels
 
 		private PlaySheet CurrentPlaySheet()
 		{
+			if(IsPlayerSettingsVisible) {
+				return PlaySheet.Settings;
+			}
 			if(PackDepSheet.IsVisible) {
 				return PlaySheet.PackDep;
 			}
@@ -115,6 +118,7 @@ namespace Mesen.ViewModels
 				case PlaySheet.Replays: HideReplaysSheet(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
+				case PlaySheet.Settings: ClosePlayerSettings(); break;
 				case PlaySheet.SaveStateGrid:
 					//Init with the grid's own mode hides it (RecentGamesViewModel);
 					//the overlay had already paused, so nothing resumes.
@@ -241,6 +245,7 @@ namespace Mesen.ViewModels
 		{
 			HideCheatsSheet();
 			HideReplaysSheet();
+			ClosePlayerSettings();
 			IsSaveStatesSheetVisible = false;
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;

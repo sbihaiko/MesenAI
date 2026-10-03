@@ -62,7 +62,7 @@ public class PlaySheetsContrastTests : IDisposable
 
 	public static IEnumerable<object[]> Sheets()
 	{
-		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet", "PlayHomeSlotSheet", "PackDepSheet", "BiosSheet", "PlayHomeLoadAlert" };
+		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet", "PlayHomeSlotSheet", "PackDepSheet", "BiosSheet", "PlayHomeLoadAlert", "PlayerSettingsSheet" };
 		foreach(string theme in new[] { "Light", "Dark" }) {
 			foreach(string sheet in sheets) {
 				yield return new object[] { theme, sheet };
@@ -121,6 +121,10 @@ public class PlaySheetsContrastTests : IDisposable
 				break;
 			case "PlayerSaveStatesSheet":
 				model.OpenSaveStatesSheet();
+				break;
+			case "PlayerSettingsSheet":
+				//ADR-0249 (W-P8): W-P4's Settings row, a sheet in this window.
+				window.FindNamed<Button>("OverlaySettingsButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
 				break;
 			case "PlayerPackDetailSheet":
 				model.OpenPackFromOverlay(OnePack, Sha1, "/packs", "", installedSourceSha256: "abc123");

@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:v="using:Mesen.Views"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d"
+	x:Class="Mesen.Views.PlayerSettingsSheetView"
+	x:DataType="vm:ConfigViewModel"
+>
+	<UserControl.DataTemplates>
+		<DataTemplate DataType="{x:Type vm:PlayerDisplaySettingsViewModel}">
+			<v:PlayerDisplaySettingsView />
+		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:LookConfigViewModel}">
+			<v:LookConfigView />
+		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:AudioConfigViewModel}">
+			<v:AudioConfigView />
+		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:InputConfigViewModel}">
+			<v:InputConfigView />
+		</DataTemplate>
+	</UserControl.DataTemplates>
+
+	<!--ADR-0249 (PRD Part B §13.5.2 W-P8, W-P10): Player mode's Settings is a
+	sheet inside the main window, over the dimmed game like the other Play
+	sheets - 480 wide, as high as the tab needs (PlayerSettingsEssentials.
+	SheetHeight), 24 px under the bar. The title, the segmented Display | Look |
+	Audio | Controls strip, the page, and one Done that keeps the changes (Esc
+	does the same, back to W-P4). Advanced keeps the classic ConfigWindow.-->
+	<Border
+		Name="PlayerSettingsSheet"
+		Classes="sheet"
+		Width="480"
+		Height="{Binding PlayerSheetHeight}"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Top"
+		Margin="0 24 0 0"
+		Padding="19 17 19 19"
+	>
+		<Grid RowDefinitions="Auto,*">
+			<Grid.Styles>
+				<!--The page stops above the hint and the Done row; Look's own
+				footer (Hold to Compare, W-P10) shares Done's row, left of it.-->
+				<Style Selector="TabControl#PlayerSettingsTabs">
+					<Setter Property="Margin" Value="0 0 0 62" />
+				</Style>
+				<Style Selector="TabControl#PlayerSettingsTabs.look">
+					<Setter Property="Margin" Value="0" />
+				</Style>
+			</Grid.Styles>
+			<TextBlock Grid.Row="0" Name="lblPlayerSettingsTitle" Classes="title3" Text="{l:Translate lblPlayerSettingsTitle}" Margin="0 0 0 14" />
+			<!--G.4 (W-P8): the strip in PlayerSettingsEssentials.Tabs order -
+			Display (the window) and Look (the pixels) are the two halves of
+			Advanced's Video tab.-->
+			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerLookTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
+				<TabItem Name="tabPlayerDisplay" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
+				<TabItem Name="tabPlayerLook" Header="{l:Translate tabLook}" Content="{Binding Look}" />
+				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding Audio}" />
+				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding Input}" />
+			</TabControl>
+			<!--G.4 (W-P8): rule 10 applied to settings - the Options hint on its
+			own line right under the group, then Done. Look's footer is its Hold
+			to Compare (W-P10), so the hint shows on the other tabs.-->
+			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding !IsPlayerLookTab}" />
+				<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
+			</StackPanel>
+		</Grid>
+	</Border>
+</UserControl>

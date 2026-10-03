@@ -143,6 +143,7 @@
 							<Binding Path="IsPackDetailVisible" />
 							<Binding Path="CheatsSheet.IsVisible" />
 							<Binding Path="ReplaysSheet.IsVisible" />
+							<Binding Path="IsPlayerSettingsVisible" />
 						</MultiBinding>
 					</Border.IsVisible>
 				</Border>
@@ -270,6 +271,11 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+
+				<!--ADR-0249 (W-P8, W-P10): W-P4's Settings, a sheet in this window.-->
+				<Panel IsVisible="{Binding IsPlayerSettingsVisible}">
+					<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
+				</Panel>
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />

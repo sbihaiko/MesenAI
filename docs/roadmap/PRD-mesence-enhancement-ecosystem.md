@@ -3107,7 +3107,7 @@ Rules the tab enforces, each from a measured fact rather than taste:
   because the difference that bites is "my screenshot doesn't look like my
   screen". The footnote changes with the selection: NTSC under Screen shows
   ◉, a shader shows ◌.
-- **Pixels is one popup** — *Sharp (original pixels)*, *Smooth — HQ4×*,
+- **Pixels is one popup** — *Sharp — original pixels*, *Smooth — HQ4×*,
   *Smooth — xBRZ 4×*, then *More in Options…*. A value set in Options that is
   not in the short list is shown as the current item, never overwritten
   (§6.1's restore-not-clobber rule, kept).

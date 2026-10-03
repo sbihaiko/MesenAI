@@ -1,3 +1,4 @@
+using System.Linq;
 using Mesen.Logic;
 using Xunit;
 
@@ -82,14 +83,31 @@ namespace Mesen.Tests.Config
 			Assert.Equal(new[] { 1, 2, 3 }, PlayDisplaySettings.ItemsWithCurrent(new[] { 1, 2, 3 }, 2));
 			Assert.Equal(new[] { 1, 2, 3, 9 }, PlayDisplaySettings.ItemsWithCurrent(new[] { 1, 2, 3 }, 9));
 		}
+
+		//W-P8's Scale popup is never blank: a window smaller than 1× (or no
+		//window yet, scale 0) is not in the list, so the nearest offered scale
+		//shows. An exact or listed value is itself.
+		[Theory]
+		[InlineData(0.5, 1)]
+		[InlineData(0, 1)]
+		[InlineData(0.99, 1)]
+		[InlineData(3, 3)]
+		[InlineData(2.37, 2.37)]
+		[InlineData(7.5, 7.5)]
+		public void The_selected_scale_is_the_current_or_the_nearest_offered(double current, double expected)
+		{
+			double[] items = current >= 1 ? PlayDisplaySettings.ItemsWithCurrent(PlayDisplaySettings.Scales, current).ToArray() : PlayDisplaySettings.Scales;
+			Assert.Equal(expected, PlayDisplaySettings.Nearest(items, current));
+		}
 	
 		//W-P8: Display is the render's 340 px sheet so its "Everything else"
-		//hint sits right under the group; the other tabs keep the 500 px sheet.
+		//hint sits right under the group; Look is W-P10's 480 px sheet, and
+		//Audio and Controls share it.
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 340)]
-		[InlineData(ConfigWindowTab.Look, 500)]
-		[InlineData(ConfigWindowTab.Audio, 500)]
-		[InlineData(ConfigWindowTab.Input, 500)]
+		[InlineData(ConfigWindowTab.Look, 480)]
+		[InlineData(ConfigWindowTab.Audio, 480)]
+		[InlineData(ConfigWindowTab.Input, 480)]
 		public void Each_tab_has_its_sheet_height(ConfigWindowTab tab, double height)
 		{
 			Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(tab));

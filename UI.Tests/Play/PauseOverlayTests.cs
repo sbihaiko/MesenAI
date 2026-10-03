@@ -129,6 +129,8 @@ namespace Mesen.Tests.Play
 		[InlineData(PlaySheet.PackDetail)]
 		//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet.
 		[InlineData(PlaySheet.Replays)]
+		//ADR-0249 (W-P8, W-P10): Settings is an in-window sheet, not a window.
+		[InlineData(PlaySheet.Settings)]
 		public void A_sheet_opened_from_the_overlay_closes_back_to_it(PlaySheet sheet)
 		{
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));

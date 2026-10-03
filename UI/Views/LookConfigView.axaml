@@ -62,7 +62,7 @@
 
 	<DockPanel>
 		<DockPanel DockPanel.Dock="Bottom" Margin="0 4 110 0">
-			<Button DockPanel.Dock="Left" Name="btnLookHoldToCompare" Classes="secondary medium" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
+			<Button DockPanel.Dock="Left" Name="btnLookHoldToCompare" Classes="secondary regular" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
 			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" VerticalAlignment="Center" Margin="10 0 0 0" />
 		</DockPanel>
 

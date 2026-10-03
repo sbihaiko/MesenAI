@@ -61,7 +61,11 @@ namespace Mesen.ViewModels
 			_fileWatcher?.Dispose();
 		}
 
-		private void OpenConfig(MainWindow wnd, ConfigWindowTab tab)
+		//The Options window, one at a time; also where Player's Settings sheet
+		//hands over for "More in Options…" (ADR-0249, W-P10).
+		public ConfigWindow? OptionsWindow => _cfgWindow;
+
+		public ConfigWindow OpenConfig(MainWindow wnd, ConfigWindowTab tab)
 		{
 			if(_cfgWindow == null) {
 				_cfgWindow = new ConfigWindow(tab);
@@ -71,6 +75,7 @@ namespace Mesen.ViewModels
 				(_cfgWindow.DataContext as ConfigViewModel)!.SelectTab(tab);
 				_cfgWindow.BringToFront();
 			}
+			return _cfgWindow;
 		}
 
 		private void CfgWindow_Closed(object? sender, EventArgs e)
