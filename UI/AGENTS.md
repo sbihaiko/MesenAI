@@ -593,15 +593,34 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     (TEXT3), `tint`.
   - Controls: `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
     on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
-    Classes="tiles"` (one row of 176 x 132 recent-game tiles),
+    Classes="tiles"` (one row of 176 x 132 recent-game tiles; add `slots`
+    for the Save states grid: FILL tiles that fill their cell, title + date,
+    17 px bold heading, inside `Border.sheet.slot-sheet`),
     `ComboBox.popup` (24 px macOS pop-up button: white, hairline, blue
     up/down tab).
+  - Play sheets (wave 2: W-P5/6/7/11/13/14/16): `Border.inset` (#F8F8FA
+    list, radius 12; `.file-box` radius 10) holding `Border.switch-row`
+    (46, `.tall` 50, hairline but the last) with a `CheckBox.switch` (label
+    + 38 x 22 switch; `.subtitled` top-aligns it over a
+    `TextBlock.row-subtitle`); `RadioButton.option` (selectable card with a
+    ring); `Button.drop-zone` (bordered inset; `PathIcon.drop-icon`,
+    `TextBlock.drop-title` / `drop-hint`); `Border.warning.notice` (compact
+    shared `warning` banner, `.large`; `notice-title`, `notice-line`), `Border.alert`
+    (W-P14), `Border.chip` (`.on` green; AA-darkened chip tokens);
+    `ToggleButton.disclosure`; `Panel.scrim`; `Button.regular` (32 high
+    footer buttons, `.wide`); `Border.badge.heading` 48 (40: the shared
+    `badge.xlarge`); text `sheet-heading` (19), `option-title`,
+    `replay-note`, `cheat-badge` / `TextBlock.warning.badge-text`,
+    `SelectableTextBlock.ids`; glyphs `PathIcon.votes`, `close-glyph`
+    (and the shared `PathIcon.warning`). A Play sheet is light: never put one under a Dark
+    `ThemeVariantScope` (#716 is closed by these classes);
+    `PlaySheetsContrastTests` lists every sheet surface.
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
     `ChevronDown`, `ChevronLeft`, `Record`, `Replay`, `More`, `Check`,
     `Lock`, `UpDown`, `Warning`, `Stop`, `ArrowUpRight`, `Sparkle` (alias
-    of `Enhancements`).
+    of `Enhancements`), `Thumb`, `Close`.
   - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
     - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
       `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),

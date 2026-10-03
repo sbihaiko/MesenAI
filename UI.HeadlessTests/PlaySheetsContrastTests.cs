@@ -62,7 +62,7 @@ public class PlaySheetsContrastTests : IDisposable
 
 	public static IEnumerable<object[]> Sheets()
 	{
-		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet" };
+		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet", "PlayHomeSlotSheet", "PackDepSheet", "BiosSheet", "PlayHomeLoadAlert" };
 		foreach(string theme in new[] { "Light", "Dark" }) {
 			foreach(string sheet in sheets) {
 				yield return new object[] { theme, sheet };
@@ -108,8 +108,12 @@ public class PlaySheetsContrastTests : IDisposable
 		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
-		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
-		model.OpenPauseOverlay();
+		//ADR-0249 wave 2: the BIOS sheet and the load alert sit on Play's home,
+		//with no game running; every other surface is over a paused game.
+		if(sheet is not ("BiosSheet" or "PlayHomeLoadAlert")) {
+			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+			model.OpenPauseOverlay();
+		}
 		Dispatcher.UIThread.RunJobs();
 
 		switch(sheet) {
@@ -133,6 +137,22 @@ public class PlaySheetsContrastTests : IDisposable
 					new CheatDbCode("Invincibility (star effect)", "00B0:FF"),
 				});
 				model.CheatsSheet.Open(ConsoleType.Nes, Sha1, new[] { contra }, Array.Empty<StoredCheat>(), recordingArt: true, disableAll: false, _ => { });
+				break;
+			case "PlayHomeSlotSheet":
+				model.OpenSaveStatesSheet();
+				Dispatcher.UIThread.RunJobs();
+				window.FindNamed<Button>("SaveStatesLoadButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+				break;
+			case "PackDepSheet":
+				model.PackDepSheet.SetPending("Contra Arcade Music", new[] { new CommunityPackDepPrompt("arcade-soundtrack", "Arcade soundtrack (MP3 set, 23 files)", "", "/packs/drop", "") });
+				model.PackDepSheet.Open();
+				break;
+			case "BiosSheet":
+				_ = model.RequestBios(FirmwareType.FDS, "disksys.rom", 8192, 0, "Zelda no Densetsu");
+				break;
+			case "PlayHomeLoadAlert":
+				model.RecentGames.Init(GameScreenMode.RecentGames);
+				model.RecentGames.ShowLoadFailure(LoadFailureCause.NotAGame, "Contra.txt");
 				break;
 			case "PlayerReplaysSheet":
 				CommunityReplay replay = new(301, "https://github.com/user-attachments/files/301/run.mmo", new string('c', 64), 4096, "nes", "Contra (USA)", "alice", "stage skip", 3600,

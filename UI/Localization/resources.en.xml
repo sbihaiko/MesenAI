@@ -31,27 +31,28 @@
 			<Control ID="btnPackPickerUse">Use This Pack</Control>
 		</Form>
 		<Form ID="PlayerPackDetailSheetView">
-			<Control ID="lblPackDetailTextures">textures</Control>
-			<Control ID="lblPackDetailAudio">audio</Control>
-			<Control ID="lblPackDetailPatch">patch</Control>
+			<Control ID="lblPackDetailTextures">Textures</Control>
+			<Control ID="lblPackDetailAudio">Audio</Control>
+			<Control ID="lblPackDetailPatch">Patch</Control>
 			<Control ID="lblPackDetailMissingMusicTitle">⚠ Some music is missing</Control>
-			<Control ID="btnPackDetailChange">Change pack…</Control>
-			<Control ID="btnPackDetailShowFolder">Show pack folder</Control>
-			<Control ID="btnPackDetailRestore">Restore original files</Control>
+			<Control ID="btnPackDetailChange">Change Pack…</Control>
+			<Control ID="btnPackDetailShowFolder">Show Pack Folder</Control>
+			<Control ID="btnPackDetailRestore">Restore Original Files…</Control>
 			<Control ID="lblPackDetailRestoreConfirm">Download the pack again and replace its files? Your changes to them are lost, and the game restarts.</Control>
 			<Control ID="btnPackDetailRestoreConfirm">Restore</Control>
 			<Control ID="btnPackDetailRestoreKeep">Keep my files</Control>
-			<Control ID="btnPackDetailDetails">Details ▸</Control>
+			<Control ID="btnPackDetailDetails">Details</Control>
+			<Control ID="lblPackDetailDetailsHint">ids and hashes</Control>
 			<Control ID="btnPackDetailDone">Done</Control>
 		</Form>
 		<Form ID="PlayerEnhancementsSheetView">
 			<Control ID="lblEnhancementsPanelTitle">Enhancements</Control>
-			<Control ID="chkEnhancementsTextures">Texture pack</Control>
-			<Control ID="chkEnhancementsAudio">Audio pack</Control>
+			<Control ID="chkEnhancementsTextures">Textures</Control>
+			<Control ID="chkEnhancementsAudio">Audio</Control>
 			<Control ID="chkEnhancementsBorder">Border</Control>
-			<Control ID="chkEnhancementsWideScrn">Widescreen (16:9)</Control>
-			<Control ID="chkEnhancementsOverclock">Reduce slowdown (overclock)</Control>
-			<Control ID="lblEnhancementsAppliesOnReload">applies on reload</Control>
+			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
+			<Control ID="chkEnhancementsOverclock">Overclock</Control>
+			<Control ID="lblEnhancementsAppliesOnReload">Applies on reload</Control>
 			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
 		</Form>
 		<Form ID="PlayHomeView">
@@ -72,8 +73,8 @@
 			<Control ID="btnBiosSheetChooseFile">Choose File…</Control>
 		</Form>
 		<Form ID="PlayPackDepSheetView">
-			<Control ID="lblPackDepSheetSubtitle">One file only you can add</Control>
-			<Control ID="lblPackDepSheetBody">This pack was made with a file MesenAI cannot share. Add your own copy once and the pack uses it from then on.</Control>
+			<Control ID="lblPackDepSheetSubtitle">Everything else is installed.</Control>
+			<Control ID="lblPackDepSheetBody">The pack's author could not share this file, so it is not downloaded. If you have it, add it and the pack completes.</Control>
 			<Control ID="lblPackDepSheetDrop">Drop the file here</Control>
 			<Control ID="btnPackDepSheetShowFolder">Show Folder</Control>
 			<Control ID="btnPackDepSheetPlayWithout">Play Without It</Control>

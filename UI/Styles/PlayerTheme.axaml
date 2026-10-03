@@ -91,6 +91,28 @@
 		<SolidColorBrush x:Key="PlayerGrayBrush" Color="{StaticResource PlayerGrayColor}" />
 		<SolidColorBrush x:Key="PlayerScrimBrush" Color="#5A000000" />
 
+		<!-- Play sheets (W-P5 … W-P16): literals the renderer draws on them -->
+		<!-- inset list fill (W-P7/W-P11 groups, W-P16 file box, drop zones) -->
+		<SolidColorBrush x:Key="PlayerInsetFillBrush" Color="#F8F8FA" />
+		<SolidColorBrush x:Key="PlayerDropZoneBorderBrush" Color="#C8C8CD" />
+		<!-- orange notice (W-P6 music, W-P13/W-P16 wrong file): (255,244,225)
+		     fill, (150,85,0) text - 5.4:1 on the fill, 6.4:1 on white -->
+		<!-- W-P14's alert card: (255,248,236) fill, (245,214,160) outline -->
+		<SolidColorBrush x:Key="PlayerAlertFillBrush" Color="#FFF8EC" />
+		<SolidColorBrush x:Key="PlayerAlertBorderBrush" Color="#F5D6A0" />
+		<!-- W-P6 chips: on = (226,245,231) / (36,138,61) -->
+		<SolidColorBrush x:Key="PlayerChipOnFillBrush" Color="#E2F5E7" />
+		<!-- Chip text and the off chip's fill, darkened/lightened from the render's
+		     #248A3D on #E2F5E7 and TEXT2 on FILL so 12 px chip text meets 4.5:1. -->
+		<SolidColorBrush x:Key="PlayerChipOnTextBrush" Color="#1F7A36" />
+		<SolidColorBrush x:Key="PlayerChipOffFillBrush" Color="#F2F2F4" />
+		<!-- W-P5 option cards: (240,246,255) selected, (225,225,230) outline -->
+		<SolidColorBrush x:Key="PlayerOptionSelectedFillBrush" Color="#F0F6FF" />
+		<SolidColorBrush x:Key="PlayerOptionBorderBrush" Color="#E1E1E6" />
+		<SolidColorBrush x:Key="PlayerToggleOnBrush" Color="{StaticResource PlayerToggleOnColor}" />
+		<SolidColorBrush x:Key="PlayerToggleOffBrush" Color="{StaticResource PlayerToggleOffColor}" />
+		<SolidColorBrush x:Key="PlayerToggleDisabledBrush" Color="#EBEBEE" />
+
 		<!-- Type: Inter (Decision 4), the renders' sizes. Weights: 400 Regular,
 		     500 Medium, 590-650 SemiBold, 700 Bold. -->
 		<FontFamily x:Key="PlayerFontFamily">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
@@ -157,6 +179,8 @@
 		<StreamGeometry x:Key="PlayerIconReplay">M3.9,3.5 h12.2 a2.4,2.4 0 0 1 2.4,2.4 v8.2 a2.4,2.4 0 0 1 -2.4,2.4 h-12.2 a2.4,2.4 0 0 1 -2.4,-2.4 v-8.2 a2.4,2.4 0 0 1 2.4,-2.4 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconLock">M4,10.6 a1.6,1.6 0 0 1 1.6,-1.6 h8.8 a1.6,1.6 0 0 1 1.6,1.6 v5.8 a1.6,1.6 0 0 1 -1.6,1.6 h-8.8 a1.6,1.6 0 0 1 -1.6,-1.6 Z M6,9 V7 a4,4 0 0 1 8,0 V9 H11.6 V7 a1.6,1.6 0 0 0 -3.2,0 V9 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconUpDown">M5.7,7.7 L10,3.4 L14.3,7.7 L12.9,9.1 L10,6.2 L7.1,9.1 Z M5.7,12.3 L7.1,10.9 L10,13.8 L12.9,10.9 L14.3,12.3 L10,16.6 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconClose">M4.2,2.8 L10,8.6 L15.8,2.8 L17.2,4.2 L11.4,10 L17.2,15.8 L15.8,17.2 L10,11.4 L4.2,17.2 L2.8,15.8 L8.6,10 L2.8,4.2 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconThumb">M1,9 h4 v10 h-4 Z M6.5,9 L10,1.5 a2,2 0 0 1 3,1.6 L12.4,7.5 h4.6 a2,2 0 0 1 2,2.3 l-1.3,7.5 a2,2 0 0 1 -2,1.7 h-9.2 Z</StreamGeometry>
 
 		<ControlTemplate x:Key="PlayerButtonTemplate" TargetType="Button">
 			<Border
@@ -175,6 +199,64 @@
 					HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
 					VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
 				/>
+			</Border>
+		</ControlTemplate>
+
+		<!-- CheckBox.switch: the label, then a 38 x 22 switch (the renderer's
+		     toggle()); keeps CheckBox's IsChecked/Click so a restyled check box
+		     keeps its bindings and handlers. -->
+		<ControlTemplate x:Key="PlayerSwitchTemplate" TargetType="CheckBox">
+			<Grid ColumnDefinitions="*,Auto" Background="{TemplateBinding Background}" MinHeight="{TemplateBinding MinHeight}">
+				<ContentPresenter
+					Name="PART_ContentPresenter"
+					Content="{TemplateBinding Content}"
+					ContentTemplate="{TemplateBinding ContentTemplate}"
+					Padding="{TemplateBinding Padding}"
+					Foreground="{TemplateBinding Foreground}"
+					VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+					VerticalAlignment="Stretch"
+				/>
+				<Border Name="PART_Track" Grid.Column="1" Width="38" Height="22" CornerRadius="11" VerticalAlignment="Center" Margin="12 0 0 0">
+					<Border Name="PART_Knob" Width="18" Height="18" CornerRadius="9" Margin="2" HorizontalAlignment="Left" VerticalAlignment="Center" />
+				</Border>
+			</Grid>
+		</ControlTemplate>
+
+		<!-- ToggleButton.disclosure: "Details" and a chevron that turns down
+		     when open (W-P6). -->
+		<ControlTemplate x:Key="PlayerDisclosureTemplate" TargetType="ToggleButton">
+			<Border Name="PART_Background" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+				<StackPanel Orientation="Horizontal" Spacing="10">
+					<ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+					<PathIcon Name="PART_Chevron" Width="8" Height="8" VerticalAlignment="Center" />
+				</StackPanel>
+			</Border>
+		</ControlTemplate>
+
+		<!-- RadioButton.option: W-P5's choice card - a 16 px radio, then the
+		     content; selected = soft blue fill and a 2 px tint outline. -->
+		<ControlTemplate x:Key="PlayerOptionTemplate" TargetType="RadioButton">
+			<Border
+				Name="PART_Card"
+				Background="{TemplateBinding Background}"
+				BorderBrush="{TemplateBinding BorderBrush}"
+				BorderThickness="{TemplateBinding BorderThickness}"
+				CornerRadius="{TemplateBinding CornerRadius}"
+				Padding="{TemplateBinding Padding}"
+			>
+				<DockPanel>
+					<Panel DockPanel.Dock="Left" Width="16" Height="16" VerticalAlignment="Top" Margin="0 2 12 0">
+						<Ellipse Name="PART_Ring" />
+						<Ellipse Name="PART_Dot" Width="6" Height="6" IsVisible="False" />
+					</Panel>
+					<ContentPresenter
+						Name="PART_ContentPresenter"
+						Content="{TemplateBinding Content}"
+						ContentTemplate="{TemplateBinding ContentTemplate}"
+						Foreground="{TemplateBinding Foreground}"
+						HorizontalContentAlignment="Stretch"
+					/>
+				</DockPanel>
 			</Border>
 		</ControlTemplate>
 
@@ -910,6 +992,410 @@
 			<Setter Property="Background" Value="{StaticResource PlayerHudButtonBrush}" />
 		</Style>
 	</Styles>
+
+	<!-- ============================================================ play sheets -->
+	<!-- Shared by the Play sheets W-P5 … W-P16 (and the Save states slot grid).
+	     A sheet is <Border Classes="sheet"> centred over the dimmed game (the
+	     edge-flow sheets put it on a Panel.scrim, which also takes a drop). -->
+	<Style Selector=".player Panel.scrim">
+		<Setter Property="Background" Value="{StaticResource PlayerScrimBrush}" />
+	</Style>
+	<!-- .regular: the sheets' 32 px footer buttons (radius 8, 13 px). -->
+	<Style Selector=".player Button.regular">
+		<Setter Property="Height" Value="32" />
+		<Setter Property="Padding" Value="15 0" />
+	</Style>
+	<!-- A primary/secondary footer button sized to its label, at least 76 wide. -->
+	<Style Selector=".player Button.regular.primary, .player Button.regular.secondary">
+		<Setter Property="MinWidth" Value="76" />
+	</Style>
+
+	<!-- Border.inset: the light list inside a sheet (W-P7, W-P11), W-P16's
+	     file box: (248,248,250) fill, hairline, radius 12. -->
+	<Style Selector=".player Border.inset">
+		<Setter Property="Background" Value="{StaticResource PlayerInsetFillBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="ClipToBounds" Value="True" />
+	</Style>
+	<!-- Border.switch-row: one row of an inset list - 46 high (.tall 50), a
+	     hairline from the label to the right edge, none on the last row. The
+	     row holds a CheckBox.switch (the label) and, under it, optional
+	     TextBlock.row-subtitle lines. -->
+	<Style Selector=".player Border.switch-row">
+		<Setter Property="MinHeight" Value="46" />
+		<Setter Property="Margin" Value="16 0 0 0" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerSeparatorBrush}" />
+		<Setter Property="BorderThickness" Value="0 0 0 1" />
+	</Style>
+	<Style Selector=".player Border.switch-row.tall">
+		<Setter Property="MinHeight" Value="50" />
+	</Style>
+	<Style Selector=".player Border.switch-row:nth-last-child(1), .player ContentPresenter:nth-last-child(1) > Border.switch-row">
+		<Setter Property="BorderThickness" Value="0" />
+	</Style>
+	<Style Selector=".player TextBlock.row-subtitle">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="Margin" Value="0 27 66 0" />
+		<Setter Property="VerticalAlignment" Value="Top" />
+		<Setter Property="IsHitTestVisible" Value="False" />
+	</Style>
+
+	<!-- CheckBox.switch (PlayerSwitchTemplate): label 13.5 medium, switch on
+	     the right, green when on, pale and inert when disabled. A label with a
+	     subtitle under it (.subtitled) sits in the row's upper half. -->
+	<Style Selector=".player CheckBox.switch">
+		<Setter Property="Template" Value="{StaticResource PlayerSwitchTemplate}" />
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="FontWeight" Value="Medium" />
+		<Setter Property="Padding" Value="0" />
+		<Setter Property="MinHeight" Value="45" />
+		<Setter Property="Margin" Value="0 0 16 0" />
+		<Setter Property="HorizontalAlignment" Value="Stretch" />
+		<Setter Property="VerticalAlignment" Value="Top" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Cursor" Value="Hand" />
+	</Style>
+	<Style Selector=".player Border.switch-row.tall CheckBox.switch">
+		<Setter Property="MinHeight" Value="49" />
+	</Style>
+	<!-- The switch sits in the middle of the row whatever the label does. -->
+	<Style Selector=".player CheckBox.switch.subtitled">
+		<Setter Property="VerticalContentAlignment" Value="Top" />
+		<Setter Property="Padding" Value="0 8 0 0" />
+	</Style>
+	<Style Selector=".player CheckBox.switch /template/ Border#PART_Track">
+		<Setter Property="VerticalAlignment" Value="Center" />
+		<Setter Property="Background" Value="{StaticResource PlayerToggleOffBrush}" />
+	</Style>
+	<Style Selector=".player CheckBox.switch:checked /template/ Border#PART_Track">
+		<Setter Property="Background" Value="{StaticResource PlayerToggleOnBrush}" />
+	</Style>
+	<Style Selector=".player CheckBox.switch:disabled /template/ Border#PART_Track">
+		<Setter Property="Background" Value="{StaticResource PlayerToggleDisabledBrush}" />
+	</Style>
+	<Style Selector=".player CheckBox.switch:disabled /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+	</Style>
+	<Style Selector=".player CheckBox.switch /template/ Border#PART_Knob">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="BoxShadow" Value="0 1 2 0 #32000000" />
+	</Style>
+	<Style Selector=".player CheckBox.switch:checked /template/ Border#PART_Knob">
+		<Setter Property="HorizontalAlignment" Value="Right" />
+	</Style>
+	<Style Selector=".player CheckBox.switch:focus-visible /template/ Border#PART_Track">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+
+	<!-- RadioButton.option (PlayerOptionTemplate): W-P5's choice cards. -->
+	<Style Selector=".player RadioButton.option">
+		<Setter Property="Template" Value="{StaticResource PlayerOptionTemplate}" />
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerOptionBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="Padding" Value="14 12 18 12" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="Cursor" Value="Hand" />
+	</Style>
+	<Style Selector=".player RadioButton.option:checked">
+		<Setter Property="Background" Value="{StaticResource PlayerOptionSelectedFillBrush}" />
+		<Setter Property="BorderBrush" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		<Setter Property="BorderThickness" Value="2" />
+		<Setter Property="Padding" Value="13 11 17 11" />
+	</Style>
+	<Style Selector=".player RadioButton.option /template/ Ellipse#PART_Ring">
+		<Setter Property="Fill" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="Stroke" Value="{StaticResource PlayerDropZoneBorderBrush}" />
+		<Setter Property="StrokeThickness" Value="1" />
+	</Style>
+	<Style Selector=".player RadioButton.option:checked /template/ Ellipse#PART_Ring">
+		<Setter Property="Fill" Value="{Binding $parent[RadioButton].(c:PlayerTheme.Tint)}" />
+		<Setter Property="StrokeThickness" Value="0" />
+	</Style>
+	<Style Selector=".player RadioButton.option /template/ Ellipse#PART_Dot">
+		<Setter Property="Fill" Value="{StaticResource PlayerCardBrush}" />
+	</Style>
+	<Style Selector=".player RadioButton.option:checked /template/ Ellipse#PART_Dot">
+		<Setter Property="IsVisible" Value="True" />
+	</Style>
+	<Style Selector=".player RadioButton.option:focus-visible /template/ Border#PART_Card">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+
+	<!-- Button.drop-zone: W-P13/W-P16's dashed-looking drop target - inset
+	     fill, a (200,200,205) outline, radius 12; content: PathIcon.drop-icon,
+	     a 13.5 semibold title and a 12 px TEXT2 hint. -->
+	<Style Selector=".player Button.drop-zone">
+		<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+		<Setter Property="Background" Value="{StaticResource PlayerInsetFillBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerDropZoneBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="Padding" Value="16 18 16 16" />
+		<Setter Property="MinHeight" Value="100" />
+		<Setter Property="HorizontalAlignment" Value="Stretch" />
+		<Setter Property="HorizontalContentAlignment" Value="Center" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Cursor" Value="Hand" />
+	</Style>
+	<Style Selector=".player Button.drop-zone:pointerover /template/ Border#PART_Background">
+		<Setter Property="Background" Value="#F2F2F5" />
+	</Style>
+	<Style Selector=".player Button.drop-zone:focus-visible /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<Style Selector=".player Button.drop-zone PathIcon.drop-icon">
+		<Setter Property="Width" Value="22" />
+		<Setter Property="Height" Value="22" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		<Setter Property="Data" Value="{StaticResource PlayerIconFolder}" />
+	</Style>
+	<Style Selector=".player Button.drop-zone TextBlock.drop-title">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="TextAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player Button.drop-zone TextBlock.drop-hint">
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="TextAlignment" Value="Center" />
+	</Style>
+
+	<!-- Border.warning.notice: the compact form of the shared `warning`
+	     banner for a sheet's one-line notice (W-P6 music, W-P13/W-P16 wrong
+	     file): radius 8 (.large: 10), 12.5 px text. Fill and brown text come
+	     from Border.warning. -->
+	<Style Selector=".player Border.warning.notice">
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		<Setter Property="Padding" Value="16 9" />
+	</Style>
+	<Style Selector=".player Border.warning.notice.large">
+		<Setter Property="CornerRadius" Value="10" />
+		<Setter Property="Padding" Value="16 12" />
+	</Style>
+	<Style Selector=".player Border.warning.notice TextBlock">
+		<Setter Property="Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+	</Style>
+	<!-- Border.alert: W-P14's inline card on the home - warm fill, amber
+	     outline, radius 12, soft shadow. -->
+	<Style Selector=".player Border.alert">
+		<Setter Property="Background" Value="{StaticResource PlayerAlertFillBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerAlertBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="BoxShadow" Value="0 3 8 0 #28000000" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
+
+	<!-- Border.chip: W-P6's layer chips - 24 high, radius 12, FILL + TEXT2;
+	     .on: soft green + green text with a check. -->
+	<Style Selector=".player Border.chip">
+		<Setter Property="Height" Value="24" />
+		<Setter Property="CornerRadius" Value="12" />
+		<Setter Property="Padding" Value="11 0" />
+		<Setter Property="Background" Value="{StaticResource PlayerChipOffFillBrush}" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<Style Selector=".player Border.chip.on">
+		<Setter Property="Background" Value="{StaticResource PlayerChipOnFillBrush}" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerChipOnTextBrush}" />
+	</Style>
+	<Style Selector=".player Border.chip TextBlock">
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player Border.chip.on TextBlock">
+		<Setter Property="Foreground" Value="{StaticResource PlayerChipOnTextBrush}" />
+	</Style>
+	<Style Selector=".player Border.chip PathIcon">
+		<Setter Property="Width" Value="10" />
+		<Setter Property="Height" Value="10" />
+		<Setter Property="Margin" Value="0 0 6 0" />
+		<Setter Property="Data" Value="{StaticResource PlayerIconCheck}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerChipOnTextBrush}" />
+	</Style>
+
+	<!-- The Save states slot grid (<c:StateGrid Classes="tiles slots">): the
+	     slots as W-P2-style tiles that fill their cell, the title and the
+	     date under each picture. -->
+	<Style Selector=".player c|StateGridEntry.tiles.slot">
+		<Setter Property="Width" Value="NaN" />
+		<Setter Property="HorizontalAlignment" Value="Stretch" />
+		<Setter Property="VerticalAlignment" Value="Stretch" />
+		<Setter Property="Margin" Value="8 6 8 10" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton">
+		<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+		<Setter Property="Width" Value="NaN" />
+		<Setter Property="Height" Value="NaN" />
+		<Setter Property="HorizontalAlignment" Value="Stretch" />
+		<Setter Property="VerticalAlignment" Value="Stretch" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot TextBlock.title">
+		<Setter Property="Margin" Value="0 6 0 0" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot TextBlock.subtitle">
+		<Setter Property="IsVisible" Value="True" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="TextWrapping" Value="NoWrap" />
+		<Setter Property="TextTrimming" Value="CharacterEllipsis" />
+	</Style>
+	<!-- An empty slot is a FILL tile, not the classic black picture. -->
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton:disabled">
+		<Setter Property="Opacity" Value="1" />
+	</Style>
+	<!-- Fluent paints PART_ContentPresenter with StateGridEntry's own
+	     ButtonBackgroundDisabled (Black) and pointer-over resources; the tile
+	     keeps its own background instead. -->
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="BorderBrush" Value="Transparent" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton:disabled /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="BorderBrush" Value="Transparent" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="BorderBrush" Value="Transparent" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton:disabled Image">
+		<Setter Property="IsVisible" Value="False" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot TextBlock:disabled">
+		<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+	</Style>
+	<Style Selector=".player c|StateGrid.slots TextBlock#StateGridTitle">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle3}" />
+		<Setter Property="FontWeight" Value="Bold" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="TextAlignment" Value="Left" />
+	</Style>
+	<Style Selector=".player c|StateGrid.slots PathIcon#StateGridCloseIcon">
+		<Setter Property="Data" Value="{StaticResource PlayerIconClose}" />
+		<Setter Property="Width" Value="12" />
+		<Setter Property="Height" Value="12" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<!-- The sheet that holds the slot grid (PlayHomeView's PlayHomeSlotSheet). -->
+	<Style Selector=".player Border.sheet.slot-sheet">
+		<Setter Property="Width" Value="760" />
+		<Setter Property="Height" Value="600" />
+		<Setter Property="HorizontalAlignment" Value="Center" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+		<Setter Property="Padding" Value="16 16 16 8" />
+	</Style>
+	<!-- ============================================================ play sheets: type and glyphs -->
+	<!-- Sheet headings bigger than title3: W-P6's pack name (19), W-P13/W-P16. -->
+	<Style Selector=".player TextBlock.sheet-heading">
+		<Setter Property="FontSize" Value="19" />
+		<Setter Property="FontWeight" Value="Bold" />
+	</Style>
+	<Style Selector=".player TextBlock.callout.strong">
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<!-- W-P5's option name: 14.5 semibold. -->
+	<Style Selector=".player TextBlock.option-title">
+		<Setter Property="FontSize" Value="14.5" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<!-- Warning-brown 12 px text outside a banner: a replay's cheats badge,
+	     and W-P5's known-missing line (`TextBlock.warning.badge-text`). -->
+	<Style Selector=".player TextBlock.cheat-badge, .player TextBlock.warning.badge-text">
+		<Setter Property="Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="FontWeight" Value="Medium" />
+	</Style>
+	<Style Selector=".player Border.warning.notice TextBlock.notice-title">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<Style Selector=".player Border.warning.notice TextBlock.notice-line">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="FontWeight" Value="Medium" />
+	</Style>
+	<!-- W-P11's "recorded in a shared replay" line: the render's TEXT3 12 px,
+	     in TEXT2 so it reads at 4.5:1. -->
+	<Style Selector=".player TextBlock.replay-note">
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<Style Selector=".player SelectableTextBlock.ids">
+		<Setter Property="FontFamily" Value="{StaticResource PlayerFontFamily}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<!-- .wide: W-P6's Done, 90 wide. -->
+	<Style Selector=".player Button.regular.wide">
+		<Setter Property="MinWidth" Value="90" />
+	</Style>
+	<!-- W-P16's file box: an inset, radius 10, padded. -->
+	<Style Selector=".player Border.inset.file-box">
+		<Setter Property="CornerRadius" Value="10" />
+		<Setter Property="Padding" Value="12 10" />
+	</Style>
+
+	<!-- Heading badge: W-P6's 48 px pack badge (W-P13/W-P16's 40 px one is
+	     the shared badge.xlarge). -->
+	<Style Selector=".player Border.badge.heading">
+		<Setter Property="Width" Value="48" />
+		<Setter Property="Height" Value="48" />
+		<Setter Property="CornerRadius" Value="12" />
+	</Style>
+	<Style Selector=".player Border.badge.heading > PathIcon">
+		<Setter Property="Width" Value="26" />
+		<Setter Property="Height" Value="26" />
+	</Style>
+
+	<!-- Glyphs: W-P5's 👍, the ✕ of an inline alert. -->
+	<Style Selector=".player PathIcon.votes">
+		<Setter Property="Data" Value="{StaticResource PlayerIconThumb}" />
+		<Setter Property="Width" Value="13" />
+		<Setter Property="Height" Value="13" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player PathIcon.close-glyph">
+		<Setter Property="Data" Value="{StaticResource PlayerIconClose}" />
+		<Setter Property="Width" Value="10" />
+		<Setter Property="Height" Value="10" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+
+	<!-- ToggleButton.disclosure (PlayerDisclosureTemplate): W-P6's Details. -->
+	<Style Selector=".player ToggleButton.disclosure">
+		<Setter Property="Template" Value="{StaticResource PlayerDisclosureTemplate}" />
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="Padding" Value="0 10" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		<Setter Property="Cursor" Value="Hand" />
+	</Style>
+	<Style Selector=".player ToggleButton.disclosure /template/ PathIcon#PART_Chevron">
+		<Setter Property="Data" Value="{StaticResource PlayerIconChevronRight}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<Style Selector=".player ToggleButton.disclosure:checked /template/ PathIcon#PART_Chevron">
+		<Setter Property="Data" Value="{StaticResource PlayerIconChevronDown}" />
+	</Style>
+	<Style Selector=".player ToggleButton.disclosure:focus-visible /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
 
 	<!-- step.large: W-H3's 28 px step circle with a 13 px number. It follows
 	     the "wave 2: Remaster" block so it beats Border.step (22 px) there. -->

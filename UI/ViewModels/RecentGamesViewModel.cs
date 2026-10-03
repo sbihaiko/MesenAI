@@ -32,6 +32,9 @@ namespace Mesen.ViewModels
 		//The classic grid of every entry: Advanced's game selection and the
 		//Save/Load state screens, exactly as before G.2.
 		[ObservableProperty] public partial bool ShowPlainGrid { get; private set; }
+		//ADR-0249: in Player mode the Save/Load state screens are a light sheet
+		//of slot tiles (StateGrid `tiles slots`), not the classic dark grid.
+		[ObservableProperty] public partial bool ShowSlotTiles { get; private set; }
 		[ObservableProperty] public partial string FirstRunOrientation { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueTitle { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueSubtitle { get; private set; } = "";
@@ -130,6 +133,7 @@ namespace Mesen.ViewModels
 			ShowFirstRunHome = isPlayerHome && kind == PlayHomeKind.FirstRun;
 			ShowRecentsHome = isPlayerHome && kind == PlayHomeKind.WithRecents;
 			ShowPlainGrid = !isPlayerHome;
+			ShowSlotTiles = !isPlayerHome && Mode != GameScreenMode.RecentGames && ConfigManager.Config.Preferences.UiMode == UiMode.Player;
 			HomeGridEntries = ShowRecentsHome ? PlayHome.RecentGrid(entries) : new List<RecentGameInfo>();
 			ShowHomeGrid = HomeGridEntries.Count > 0;
 

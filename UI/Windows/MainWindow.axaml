@@ -137,6 +137,12 @@
 						<MultiBinding Converter="{x:Static BoolConverters.Or}">
 							<Binding Path="IsPlayerOverlayVisible" />
 							<Binding Path="IsSaveStatesSheetVisible" />
+							<!--ADR-0249: the light sheets W-P5 … W-P11 dim the game too.-->
+							<Binding Path="IsEnhancementsPanelVisible" />
+							<Binding Path="IsPlayerPackPickerVisible" />
+							<Binding Path="IsPackDetailVisible" />
+							<Binding Path="CheatsSheet.IsVisible" />
+							<Binding Path="ReplaysSheet.IsVisible" />
 						</MultiBinding>
 					</Border.IsVisible>
 				</Border>
@@ -248,17 +254,10 @@
 					</StackPanel>
 				</Border>
 
-				<!--#716: the sheets the overlay opens are still dark scrims over the
-				game in either app theme, so they render with the Dark theme variant:
-				text, check boxes, radio buttons and text boxes resolve their
-				light-on-dark colors (in the light theme they used to inherit black
-				text - unreadable). ADR-0249: the pause overlay and the Save states
-				sheet above follow W-P4 (a light card) and sit outside this scope;
-				each sheet below leaves it when its workspace slice restyles it.
-				The white edge-flow sheets further down keep the app's theme.
-				PlaySheetsContrastTests checks every text's contrast.-->
-				<ThemeVariantScope RequestedThemeVariant="Dark">
-				<Panel>
+				<!--#716 / ADR-0249: the sheets the overlay opens are light sheets
+				(Border.sheet, W-P5 … W-P11) with their own text colour, so they need
+				no Dark theme scope any more. PlaySheetsContrastTests checks every
+				text's contrast under both app themes.-->
 				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
 				<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
 
@@ -271,8 +270,6 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
-				</Panel>
-				</ThemeVariantScope>
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />

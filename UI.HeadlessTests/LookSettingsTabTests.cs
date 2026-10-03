@@ -264,8 +264,8 @@ public class LookSettingsTabTests : IDisposable
 		Control panel = main.FindNamed<Control>("PlayerEnhancementsPanel");
 		Assert.True(panel.IsOnScreen());
 		string[] boxes = panel.FindAll<CheckBox>().Select(c => c.Content as string ?? "").ToArray();
-		Assert.Contains("Widescreen (16:9)", boxes);
-		Assert.Equal(new[] { "Texture pack", "Audio pack", "Border", "Widescreen (16:9)", "Reduce slowdown (overclock)" }, boxes);
+		Assert.Contains("Widescreen", boxes);
+		Assert.Equal(new[] { "Textures", "Audio", "Border", "Widescreen", "Overclock" }, boxes);
 		//...and the sheet points at the place for the look of the picture (W-P7).
 		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Look");
 	}
