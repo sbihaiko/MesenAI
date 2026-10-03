@@ -2620,6 +2620,9 @@
     <ClInclude Include="GBA\GbaPpu.h">
       <Filter>GBA</Filter>
     </ClInclude>
+    <ClInclude Include="GBA\GbaWidescreenReveal.h">
+      <Filter>GBA</Filter>
+    </ClInclude>
     <ClInclude Include="GBA\Debugger\GbaAssembler.h">
       <Filter>GBA\Debugger</Filter>
     </ClInclude>

@@ -168,6 +168,15 @@ void GbaPpu::ProcessEndOfScanline()
 		if(!_skipRender) {
 			_currentBuffer = _currentBuffer == _outputBuffers[0] ? _outputBuffers[1] : _outputBuffers[0];
 		}
+
+		//ADR-0253 W.7: the switch is latched once per frame, so a switch flipped
+		//mid-frame never yields half a frame. A skipped frame keeps the last
+		//extended one, so the picture never changes width mid-turbo - and a
+		//frame with the switch off is never held, or turning the switch off
+		//during a skip would leave the picture 284 px wide.
+		bool reveal = IsRevealRequested();
+		_reveal.BeginFrame(reveal);
+		_reveal.HoldLastFrame(_skipRender && reveal);
 	}
 
 	if(_state.ScanlineIrqEnabled && _state.Scanline == _state.Lyc) {
@@ -183,6 +192,17 @@ void GbaPpu::SendFrame()
 	_emu->GetNotificationManager()->SendNotification(ConsoleNotificationType::PpuFrameDone);
 
 	RenderedFrame frame(_currentBuffer, GbaConstants::ScreenWidth, GbaConstants::ScreenHeight, 1.0, _state.FrameCount, _console->GetControlManager()->GetPortStates());
+
+	//ADR-0253 W.7: an extended frame replaces the standard one on its way to
+	//the video decoder only; _currentBuffer stays the 240-px picture, so the
+	//debugger, thumbnails and recordings never see the extra columns.
+	const uint16_t* extended = _reveal.Finish(_currentBuffer);
+	if(extended) {
+		frame.FrameBuffer = (void*)extended;
+		frame.Width = GbaWidescreenReveal::ExtendedWidth;
+		frame.ExtendedColumns = GbaWidescreenReveal::ExtraColumns;
+	}
+
 	bool rewinding = _emu->GetRewindManager()->IsRewinding();
 	_emu->GetVideoDecoder()->UpdateFrame(frame, rewinding, rewinding);
 
@@ -230,6 +250,7 @@ void GbaPpu::RenderScanline(bool forceRender)
 	if(_state.ForcedBlank || _state.ForcedBlankDisableTimer) {
 		uint16_t* rowStart = _currentBuffer + (_state.Scanline * GbaConstants::ScreenWidth);
 		std::fill(rowStart, rowStart + GbaConstants::ScreenWidth, 0x7FFF);
+		DrawRevealRowSides();
 		return;
 	}
 
@@ -280,6 +301,77 @@ void GbaPpu::RenderScanline(bool forceRender)
 	}
 
 	_lastRenderCycle = _state.Cycle;
+	DrawRevealRowSides();
+}
+
+bool GbaPpu::IsRevealRequested()
+{
+	//ADR-0253 decision 1: WideScrn (the Widescreen aspect setting) is the only
+	//control. The GBA has no pack art or border layer mode yet, so Reveal is
+	//the only mode it can pick.
+	return _emu->GetSettings()->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen;
+}
+
+void GbaPpu::DrawRevealRowSides()
+{
+	uint16_t* left = nullptr;
+	uint16_t* right = nullptr;
+	if(!_reveal.RowSides((int16_t)_state.Scanline, left, right)) {
+		return;
+	}
+
+	GbaWidescreenReveal::RowBasis basis = {};
+	basis.ScreenY = _state.Scanline;
+	basis.MosaicSizeX = _state.BgMosaicSizeX;
+	basis.MosaicSizeY = _state.BgMosaicSizeY;
+	basis.ForcedBlank = _state.ForcedBlank || _state.ForcedBlankDisableTimer;
+
+	//The columns beside the picture are outside every window: WIN0/WIN1 span
+	//the 240-px window at most, and sprites never reach past it either. So the
+	//region takes the outside-window masks, or the plain ones when no window
+	//is on at all - the same two cases ProcessColorMath uses.
+	uint8_t wnd = (_state.Window0Enabled || _state.Window1Enabled || _state.ObjWindowEnabled) ? OutsideWindow : NoWindow;
+
+	GbaConfig& cfg = _emu->GetSettings()->GetGbaConfig();
+	//Only the BGs this mode draws as text BGs have a map to reveal: mode 1's
+	//BG2 is affine (AffineOverlay covers it) and its BG3 is never drawn, and a
+	//bitmap mode has no text BG at all.
+	basis.BgCount = GbaWidescreenReveal::TextBgCount(_state.BgMode);
+	basis.TextMode = basis.BgCount > 0;
+	basis.AffineOverlay = _state.BgMode == 1 && _state.BgLayers[2].Enabled && _state.WindowActiveLayers[wnd][2] && !cfg.HideBgLayers[2];
+
+	for(uint32_t i = 0; i < basis.BgCount; i++) {
+		GbaBgConfig& layer = _state.BgLayers[i];
+		GbaWidescreenReveal::TextBgRow& bg = basis.Bgs[i];
+		bg.Enabled = layer.Enabled && _state.WindowActiveLayers[wnd][i] && !cfg.HideBgLayers[i];
+		bg.Mosaic = layer.Mosaic;
+		bg.Bpp8 = layer.Bpp8Mode;
+		bg.Priority = layer.Priority;
+		bg.TilemapAddr = layer.TilemapAddr;
+		bg.TilesetAddr = layer.TilesetAddr;
+		bg.ScrollX = layer.ScrollX;
+		bg.ScrollY = layer.ScrollY;
+		bg.MapWidth = layer.DoubleWidth ? 512 : 256;
+		bg.MapHeight = layer.DoubleHeight ? 512 : 256;
+	}
+
+	//The row's color effect, as the region beside the picture sees it: the
+	//same BLDCNT/BLDALPHA/BLDY state ProcessColorMath blends the picture from.
+	basis.Effect.Effect = (uint8_t)_state.BlendEffect;
+	basis.Effect.Enabled = _state.WindowActiveLayers[wnd][EffectLayerIndex];
+	basis.Effect.Brightness = _state.Brightness;
+	basis.Effect.MainCoeff = _state.BlendMainCoefficient;
+	basis.Effect.SubCoeff = _state.BlendSubCoefficient;
+	for(int i = 0; i < 6; i++) {
+		if(_state.BlendMain[i]) {
+			basis.Effect.MainTargets |= (uint8_t)(1 << i);
+		}
+		if(_state.BlendSub[i]) {
+			basis.Effect.SubTargets |= (uint8_t)(1 << i);
+		}
+	}
+
+	GbaWidescreenReveal::RenderRowSides(basis, _vram, _paletteRam, left, right);
 }
 
 template<GbaPpuBlendEffect effect, bool bg0Enabled, bool bg1Enabled, bool bg2Enabled, bool bg3Enabled, bool windowEnabled>

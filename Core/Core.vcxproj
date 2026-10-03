@@ -79,6 +79,7 @@
     <ClInclude Include="GBA\GbaDefaultVideoFilter.h" />
     <ClInclude Include="GBA\GbaDmaController.h" />
     <ClInclude Include="GBA\GbaPpu.h" />
+    <ClInclude Include="GBA\GbaWidescreenReveal.h" />
     <ClInclude Include="GBA\GbaMemoryManager.h" />
     <ClInclude Include="GBA\GbaRomPrefetch.h" />
     <ClInclude Include="GBA\GbaSerial.h" />
