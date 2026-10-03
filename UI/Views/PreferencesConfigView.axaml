@@ -8,6 +8,7 @@
 	xmlns:v="using:Mesen.Views"
 	xmlns:cfg="using:Mesen.Config"
 	xmlns:l="using:Mesen.Localization"
+	xmlns:lg="using:Mesen.Logic"
 	mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
 	VerticalAlignment="Stretch"
 	HorizontalAlignment="Stretch"
@@ -26,7 +27,14 @@
 						<TextBlock Text="{l:Translate lblTheme}" Margin="3 0 5 0" />
 						<c:EnumComboBox SelectedItem="{Binding Config.Theme}" Width="75" />
 					</StackPanel>
-					<CheckBox Content="{l:Translate chkAutomaticallyCheckForUpdates}" IsChecked="{Binding Config.AutomaticallyCheckForUpdates}" />
+					<CheckBox
+						Name="chkAutomaticallyCheckForUpdates"
+						Content="{l:Translate chkAutomaticallyCheckForUpdates}"
+						IsChecked="{Binding Config.AutomaticallyCheckForUpdates}"
+						IsEnabled="{x:Static lg:UpdateChannel.HasFeed}"
+						ToolTip.Tip="{l:Translate lblUpdateCheckUnavailable}"
+						ToolTip.ShowOnDisabled="True"
+					/>
 					<CheckBox Content="{l:Translate chkSingleInstance}" IsChecked="{Binding Config.SingleInstance}" />
 
 					<c:OptionSection Header="{l:Translate lblPauseBackgroundSettings}">

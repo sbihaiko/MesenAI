@@ -1,6 +1,7 @@
 ﻿using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,16 +41,21 @@ namespace Mesen.ViewModels
 
 		public static async Task<UpdatePromptViewModel?> GetUpdateInformation(bool silent)
 		{
+			//#672: never the upstream feed - with no fork feed there is nothing to fetch
+			if(UpdateChannel.FeedUrl is not string feedUrl) {
+				return null;
+			}
+
 			UpdateInfo? updateInfo = null;
 			try {
 				using(var client = new HttpClient()) {
-					string updateData = await client.GetStringAsync("https://raw.githubusercontent.com/nesdev-org/MesenAutoUpdate/refs/heads/main/latestversion.json");
+					string updateData = await client.GetStringAsync(feedUrl);
 					updateInfo = (UpdateInfo?)JsonSerializer.Deserialize(updateData, typeof(UpdateInfo), MesenSerializerContext.Default);
 
 					if(
 						updateInfo == null ||
 						updateInfo.Files == null ||
-						updateInfo.Files.Where(f => f.DownloadUrl == null || (!f.DownloadUrl.StartsWith("https://github.com/nesdev-org/") && !f.DownloadUrl.StartsWith("https://github.com/SourMesen/"))).Count() > 0
+						updateInfo.Files.Any(f => !UpdateChannel.IsAllowedDownloadUrl(f.DownloadUrl))
 					) {
 						return null;
 					}
