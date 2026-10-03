@@ -3377,14 +3377,14 @@ only way out of the case.
                      │  it, add it and the pack completes.          │
                      │  ┌────────────────────────────────────────┐  │
                      │  │ Arcade soundtrack (MP3 set, 23 files)  │  │
-                     │  │ ⟨Licence: not declared⟩                │  │
+                     │  │ ⟨License: not declared⟩                │  │
                      │  └────────────────────────────────────────┘  │
                      │  ┌────────────────────────────────────────┐  │
                      │  │          Drop the file here            │  │
-                     │  │ ⟨it is copied into the pack's download │  │
-                     │  │  folder⟩                               │  │
+                     │  │ ⟨It is checked, then the game         │  │
+                     │  │  restarts with it.⟩                    │  │
                      │  └────────────────────────────────────────┘  │
-                     │  [Show Folder]  [Play Without It] [Choose File…]│
+                     │  [Show Folder] [Play Without It] [Add and Restart…]│
                      └──────────────────────────────────────────────┘
 ```
 
@@ -3406,7 +3406,7 @@ only way out of the case.
   "That is not the file this pack was made with".
 - *Play Without It* closes the sheet. The pack stays partial, as today, and
   the status line says "waiting for one file".
-- Elements: drop zone, Show Folder, Play Without It, Choose File… = 4. ✔
+- Elements: drop zone, Show Folder, Play Without It, Add and Restart… = 4. ✔
 
 ##### 13.5.3 Remaster
 
@@ -3464,7 +3464,7 @@ zones in that order, and the screen never changes shape — zones fill in.
 ![W-R0b](../media/gui-redesign/W-R0b.png)
 
 ```
-│  ⚠ Painting needs Python 3, which MesenAI could not find.                    │
+│  ⚠ Painting needs Python 3.10 or newer, which MesenAI could not find.        │
 │    You can still record. Your figures are prepared once     [Locate Python…] │
 │    Python is available.                                     [How to Install] │
 ```
