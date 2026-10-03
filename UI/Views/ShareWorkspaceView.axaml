@@ -67,7 +67,7 @@
 		<Style Selector="v|ShareWorkspaceView:not(.player) Border.scrim">
 			<Setter Property="Background" Value="#99000000" />
 		</Style>
-		<Style Selector="v|ShareWorkspaceView:not(.player) Border.badge, v|ShareWorkspaceView:not(.player) Border.step, v|ShareWorkspaceView:not(.player) Rectangle.step-line, v|ShareWorkspaceView:not(.player) PathIcon">
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.badge, v|ShareWorkspaceView:not(.player) Border.step, v|ShareWorkspaceView:not(.player) Rectangle.step-line, v|ShareWorkspaceView:not(.player) PathIcon:not(.leading)">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
 		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.step-number">
