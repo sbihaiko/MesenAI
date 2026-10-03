@@ -34,6 +34,9 @@ Checks:
   C-9 fetch_attachment maps 404/410 to a stale row, an over-cap
       Content-Length to a refused row, and follows the user-attachments
       redirect only through the replay allow-list.
+  C-10 an NES movie's row is named from the pack catalog by its
+      `NoIntroSHA1`, as the issue title is (#697), not from the uploader's
+      ROM file name.
 """
 from __future__ import annotations
 
@@ -70,9 +73,11 @@ def check(cond, msg):
 
 
 def mmo(sha1=SHA_A, author="alice", description="stage skip run\nmore", frames=120, cheats=(), console="Nes",
-        extra=None):
-    settings = ["MesenVersion 2.1.0", "MovieFormatVersion 3", "GameFile Contra (USA).nes", f"SHA1 {sha1}",
+        extra=None, game_file="Contra (USA).nes", no_intro=None):
+    settings = ["MesenVersion 2.1.0", "MovieFormatVersion 3", f"GameFile {game_file}", f"SHA1 {sha1}",
                 f"emu.consoleType {console}", "nes.ramPowerOnState AllZeros"]
+    if no_intro:
+        settings.append(f"NoIntroSHA1 {no_intro}")
     settings += [f"Cheat {kind} {code}" for kind, code in cheats]
     members = {
         "GameSettings.txt": ("\n".join(settings) + "\n").encode(),
@@ -303,6 +308,15 @@ def check_fetch_attachment():
           is not None, "C-9 the signed redirect target is allow-listed for the hop, never stored")
 
 
+def check_no_intro_name():
+    no_intro = "B" * 40
+    archives = {1: mmo(game_file="my rom (hack).nes", no_intro=no_intro)}
+    packs = [{"game": "Castlevania (USA)", "rom": {"sha1": no_intro}}]
+    catalog = gen.build_catalog([issue(1)], fetcher(archives), packs)
+    names = [r["game"] for g in catalog["games"] for r in g["replays"]]
+    check(names == ["Castlevania (USA)"], f"C-10 the row is named by NoIntroSHA1 from the pack catalog: {names}")
+
+
 def main():
     check_rows()
     check_order()
@@ -312,6 +326,7 @@ def main():
     check_cli_and_close()
     check_workflow()
     check_fetch_attachment()
+    check_no_intro_name()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

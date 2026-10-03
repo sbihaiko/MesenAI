@@ -226,6 +226,13 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           set -euo pipefail
+          # Bug #702: the Status first, then the comment and labels. A
+          # transient gh failure after this leaves the new Status, which the
+          # #671 restore never touches; written last, it left "Em validação"
+          # next to the new label and the restore put the old Status back.
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
+          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
           # h.get(...), not h['host']: entries keyed only by host_ends_with
           # (the MediaFire CDN, the Dropbox/MEGA CDNs -- ADR-0187 §6) have no
           # 'host' key and used to make this message step KeyError.
@@ -241,9 +248,6 @@ jobs:
           # label, or the issue carries both at once (#159). Removing a label
           # that is not applied is a no-op.
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label pack:invalid --remove-label pack:valid
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
-            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
-          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
       # scripts/fetch_pack.py re-validates the allow-list (and resolved IPs)
       # on every redirect hop, not just this starting URL, and enforces the
       # 300MB cap on the declared Content-Length and mid-stream.
@@ -269,6 +273,13 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           set -euo pipefail
+          # Bug #702: the Status first, then the comment and labels. A
+          # transient gh failure after this leaves the new Status, which the
+          # #671 restore never touches; written last, it left "Em validação"
+          # next to the new label and the restore put the old Status back.
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
+          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
             "Could not download the pack within the 300MB cap (or the download failed)."
           # pack:valid and pack:invalid are mutually exclusive: a revalidation
@@ -276,9 +287,6 @@ jobs:
           # label, or the issue carries both at once (#159). Removing a label
           # that is not applied is a no-op.
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label pack:invalid --remove-label pack:valid
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
-            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
-          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
       # Always writes sha256 to Pack Hash, independent of the eventual
       # lint/classify verdict (gated only on a successful download).
       - name: Compute & record pack hash (always, independent of the verdict)
@@ -406,6 +414,13 @@ jobs:
           PACK_SHA256: ${{ steps.hash.outputs.sha256 }}
         run: |
           set -euo pipefail
+          # Bug #702: the Status first, then the comment and labels. A
+          # transient gh failure after this leaves the new Status, which the
+          # #671 restore never touches; written last, it left "Em validação"
+          # next to the new label and the restore put the old Status back.
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
+          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
           {
             echo "Pack failed \`scripts/mep_lint.py\`."
             echo ""
@@ -426,9 +441,6 @@ jobs:
           # label, or the issue carries both at once (#159). Removing a label
           # that is not applied is a no-op.
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label pack:invalid --remove-label pack:valid
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
-            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$STATUS_INVALIDO" >/dev/null
-          echo "FINAL_STATUS_ID=$STATUS_INVALIDO" >> "$GITHUB_ENV"
       # Builds the real C++ HD/MEP loader (scripts/headless_record, `make
       # capture-tool`) so the next steps can drive it against the actual
       # submitted pack — a second, independent check beyond mep_lint.py's
@@ -1025,6 +1037,19 @@ jobs:
             "$CATEGORY_FULL_MEP") KIND="mep" ;;
             "$CATEGORY_PARTIAL_HD") KIND="hd-legacy" ;;
           esac
+          # Bug #702: the Status (the catalog's source of truth) first, then
+          # the comment and the labels. A transient gh failure after this
+          # leaves the new Status, which the #671 restore never touches;
+          # written last, a failure in the ~7 label edits left "Em validação"
+          # next to the new label, and the restore put the prior Status back
+          # (pack:invalid next to "Aceito parcial (HD Mesen)", still listed).
+          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$FINAL" >/dev/null
+          if [ -n "$CATEGORY" ]; then
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+              --field-id "$CATEGORY_FIELD_ID" --single-select-option-id "$CATEGORY" >/dev/null
+          fi
+          echo "FINAL_STATUS_ID=$FINAL" >> "$GITHUB_ENV"
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file verdict_comment.txt
           # The two verdict labels are mutually exclusive - a revalidation that
           # flips the verdict must drop the previous one (#159).
@@ -1079,9 +1104,7 @@ jobs:
           done
           # Effective verdict (post-downgrade) and the labels actually
           # applied, exposed as step outputs for the mep-meta upsert below
-          # (ADR-0138 §20). Written BEFORE the Project writes so a partial
-          # failure there never feeds empty values into the provenance
-          # comment.
+          # (ADR-0138 §20).
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "labels=$APPLIED_LABELS" >> "$GITHUB_OUTPUT"
           echo "kind=$KIND" >> "$GITHUB_OUTPUT"
@@ -1092,13 +1115,6 @@ jobs:
           # records it, and the catalog generator reads it from there.
           AUTHOR=$(jq -r '.author // "" | gsub("\\s+"; " ")' < "$RUNNER_TEMP/mep_classify_clean.json")
           echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
-          gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
-            --field-id "$STATUS_FIELD_ID" --single-select-option-id "$FINAL" >/dev/null
-          if [ -n "$CATEGORY" ]; then
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
-              --field-id "$CATEGORY_FIELD_ID" --single-select-option-id "$CATEGORY" >/dev/null
-          fi
-          echo "FINAL_STATUS_ID=$FINAL" >> "$GITHUB_ENV"
       # P.2 identity collisions (PRD §3.3, ADR-0140/0141): for an accepted
       # verdict, tell whether this submission is a byte-duplicate of an
       # already-accepted pack (same content_id -> comment "duplicate of #N")
@@ -1378,7 +1394,8 @@ jobs:
       # transient gh error) must not strand it there — the catalog drops an
       # accepted pack whose Status is no longer "Aceito". Restores the Status
       # captured by that first step, only while the item is still "Em
-      # validação" (a verdict this run already wrote stands); see
+      # validação" (a verdict this run already wrote stands; every verdict
+      # step writes the Status before its comment and labels, #702); see
       # scripts/pack_board_status.py. Must stay the last step.
       - name: Restore the prior Status when the run fails or is cancelled
         if: (failure() || cancelled()) && steps.project-item.outputs.item_id != ''

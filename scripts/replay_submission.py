@@ -5,8 +5,12 @@ Given a `[Replay]` submission issue it
   1. reads the attachment URL off the Issue Form body (the author dragged the
      `.mmo` into the form in their own browser, section 6),
   2. downloads it -- allow-listed hosts only, capped at the section 3 size
-     before a byte is inflated -- by reusing scripts/fetch_pack.py with the
-     replay-specific allow-list scripts/replay_host_allowlist.json,
+     before a byte is inflated -- through scripts/fetch_pack.py's per-hop
+     allow-list with the replay-specific scripts/replay_host_allowlist.json.
+     Only a 404/410 (the attachment is gone) or a refusal (off the
+     allow-list, over the cap) is a verdict; any other failure is transient
+     and exits EXIT_TRANSIENT with no verdict, so the workflow fails the step
+     and keeps the labels the issue already carries (#700),
   3. runs the section 3 lint and the section 8 structural gate
      (scripts/replay_lint.py) over it, and refuses a copy of a recording the
      committed catalog already lists (section 7: the row key is the issue
@@ -25,6 +29,9 @@ Usage (the workflow's call):
   python3 scripts/replay_submission.py --body-file B --title T --login L
       [--labels "replay,replay:invalid"] [--number N] [--archive file]   > verdict.json
 
+Exit 0 with the verdict on stdout; EXIT_TRANSIENT (75) with nothing on stdout
+when the attachment could not be fetched for a reason that is not a verdict.
+
 Stdlib only.
 """
 from __future__ import annotations
@@ -32,15 +39,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
-import tempfile
 import unicodedata
+import urllib.error
 from collections import namedtuple
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
+import fetch_pack  # noqa: E402
 import replay_lint  # noqa: E402
 
 ROOT = SCRIPTS.parent
@@ -69,6 +76,26 @@ COMMENT_MARKER = "<!-- replay-verdict -->"
 ATTACHMENT_RE = re.compile(r"https://github\.com/user-attachments/(?:files|assets)/[^\s)\]>\"']+")
 # GitHub's title limit is 256; stay under it.
 TITLE_MAX = 250
+
+# Status codes that mean "the attachment is gone", not "the network failed".
+GONE_STATUSES = (404, 410)
+# sysexits.h EX_TEMPFAIL: the fetch failed transiently; no verdict was reached.
+EXIT_TRANSIENT = 75
+
+
+class AttachmentGone(Exception):
+    """The host says the attachment no longer exists (ADR-0148's stale row)."""
+
+
+class AttachmentRefused(Exception):
+    """The download itself refuses the row (over the cap, off the allow-list):
+    a verdict on this attachment, not a network failure."""
+
+
+class TransientFetchError(Exception):
+    """Any other fetch failure (a reset, a timeout, a 5xx, a DNS blip): no
+    verdict on the attachment, which may well be valid (#700)."""
+
 
 Verdict = namedtuple("Verdict", "verdict title title_changed labels_add labels_remove comment facts")
 
@@ -190,8 +217,10 @@ def _comment(valid, findings, url, title, earlier=0):
 
 
 def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch, number=0, live=()):
-    """Pure verdict for one submission. `fetch(url) -> bytes` raises on any
-    download refusal (allow-list, size cap, network). `live` is the committed
+    """Pure verdict for one submission. `fetch(url) -> bytes` raises
+    AttachmentGone or AttachmentRefused for a verdict on the attachment; any
+    other failure raises TransientFetchError out of here, because a network
+    blip must never de-list a live replay (#700). `live` is the committed
     catalog's (issue, sha256) rows (load_live_replays); `number` is this
     issue's, so a re-validation never finds itself."""
     url = extract_attachment_url(issue_body)
@@ -204,8 +233,12 @@ def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch, numbe
     else:
         try:
             data = fetch(url)
-        except (OSError, ValueError) as exc:
+        except AttachmentGone as exc:
+            findings.append(("download-failed", f"the attachment is gone (deleted by its author?): {exc}"))
+        except AttachmentRefused as exc:
             findings.append(("download-failed", f"the attachment could not be fetched: {exc}"))
+        except (OSError, ValueError) as exc:
+            raise TransientFetchError(f"the attachment could not be fetched ({exc}); no verdict") from exc
     if data is not None:
         result = replay_lint.lint_bytes(data)
         facts = result.facts
@@ -235,20 +268,29 @@ def evaluate(issue_body, issue_title, issue_labels, login, catalog, fetch, numbe
     )
 
 
-def fetch_via_fetch_pack(url):
-    """Download through scripts/fetch_pack.py (per-hop allow-list, public-IP
-    check, size cap) with the replay allow-list. The cap is the section 3 cap,
-    enforced while streaming, so nothing over it is ever written or inflated."""
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "replay.bin"
-        proc = subprocess.run(
-            [sys.executable, str(SCRIPTS / "fetch_pack.py"), url, str(out),
-             "--max-bytes", str(replay_lint.MAX_ARCHIVE_BYTES), "--allowlist", str(ALLOWLIST)],
-            capture_output=True, text=True, check=False,
-        )
-        if proc.returncode != 0:
-            raise OSError((proc.stderr or proc.stdout).strip().splitlines()[-1] if (proc.stderr or proc.stdout).strip() else "download failed")
-        return out.read_bytes()
+def fetch_attachment(url, opener=None):
+    """The attachment's bytes through fetch_pack's per-hop allow-list (the
+    replay allow-list, scripts/replay_host_allowlist.json), public-IP check
+    and the section 3 cap, enforced while streaming. Shared with
+    scripts/generate_community_replay_catalog.py, so the gate and the catalog
+    read one download the same way."""
+    hosts = fetch_pack.load_allowlist(ALLOWLIST)
+    if fetch_pack.match_host(url, hosts) is None:
+        raise AttachmentRefused("host not allow-listed")
+    try:
+        resp, _ = fetch_pack.open_validated(url, hosts, opener=opener)
+    except urllib.error.HTTPError as exc:
+        if exc.code in GONE_STATUSES:
+            raise AttachmentGone(str(exc.code)) from exc
+        raise
+    cap = replay_lint.MAX_ARCHIVE_BYTES
+    declared = resp.headers.get("Content-Length")
+    if declared is not None and declared.isdigit() and int(declared) > cap:
+        raise AttachmentRefused(f"Content-Length {declared} is over the {cap}-byte cap")
+    data = resp.read(cap + 1)
+    if len(data) > cap:
+        raise AttachmentRefused(f"the body is over the {cap}-byte cap")
+    return data
 
 
 def main(argv):
@@ -263,9 +305,13 @@ def main(argv):
 
     body = Path(args.body_file).read_text(encoding="utf-8")
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
-    fetch = (lambda _url: Path(args.archive).read_bytes()) if args.archive else fetch_via_fetch_pack
-    verdict = evaluate(body, args.title, labels, args.login, load_catalog(), fetch,
-                       number=args.number, live=load_live_replays())
+    fetch = (lambda _url: Path(args.archive).read_bytes()) if args.archive else fetch_attachment
+    try:
+        verdict = evaluate(body, args.title, labels, args.login, load_catalog(), fetch,
+                           number=args.number, live=load_live_replays())
+    except TransientFetchError as exc:
+        print(f"replay_submission: {exc}", file=sys.stderr)
+        return EXIT_TRANSIENT
     print(json.dumps(verdict._asdict(), indent=2))
     return 0
 

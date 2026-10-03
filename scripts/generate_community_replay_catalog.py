@@ -66,17 +66,13 @@ VERSION = 1
 OUTPUT_PATH = SCRIPTS.parent / "docs" / "community-replays.json"
 GH_FIELDS = "number,state,title,body,labels,reactionGroups,author"
 LABEL_REMOVED = "replay:removed"
-# Status codes that mean "the attachment is gone", not "the network failed".
-GONE_STATUSES = (404, 410)
 
 
-class AttachmentGone(Exception):
-    """The host says the attachment no longer exists (ADR-0148's stale row)."""
-
-
-class AttachmentRefused(Exception):
-    """The download itself refuses the row (over the cap, off the allow-list):
-    a verdict on this attachment, not a network failure."""
+# The download and its verdict exceptions live in replay_submission, which the
+# submission gate shares (#700); these names are kept for this module's API.
+AttachmentGone = rs.AttachmentGone
+AttachmentRefused = rs.AttachmentRefused
+fetch_attachment = rs.fetch_attachment
 
 
 def _warn(message):
@@ -117,7 +113,10 @@ def _row(issue, url, facts, catalog):
         "sha256": facts["sha256"],
         "size": facts["size"],
         "console": facts["console"],
-        "game": rs._plain(rs.resolve_game(facts["sha1"], catalog, facts.get("game_file"))),
+        # NoIntroSHA1 first, as the issue title is named (#697): on NES the
+        # movie's SHA1 is the whole-file hash and never names a catalog row.
+        "game": rs._plain(rs.resolve_game(facts["sha1"], catalog, facts.get("game_file"),
+                                          facts.get("no_intro_sha1", ""))),
         "author": alias,
         "subtitle": rs._plain(rs.build_subtitle(facts.get("description"))),
         "frames": facts["frames"],
@@ -183,29 +182,6 @@ def fetch_issues():
     if len(issues) >= FETCH_LIMIT:
         raise SystemExit(f"gh returned {len(issues)} issues (the limit); refusing to write a truncated catalog")
     return issues
-
-
-def fetch_attachment(url, opener=None):
-    """The attachment's bytes through fetch_pack's per-hop allow-list (the
-    replay allow-list, scripts/replay_host_allowlist.json), public-IP check
-    and the section 3 cap, enforced while streaming."""
-    hosts = fetch_pack.load_allowlist(rs.ALLOWLIST)
-    if fetch_pack.match_host(url, hosts) is None:
-        raise AttachmentRefused("host not allow-listed")
-    try:
-        resp, _ = fetch_pack.open_validated(url, hosts, opener=opener)
-    except urllib.error.HTTPError as exc:
-        if exc.code in GONE_STATUSES:
-            raise AttachmentGone(str(exc.code)) from exc
-        raise
-    cap = replay_lint.MAX_ARCHIVE_BYTES
-    declared = resp.headers.get("Content-Length")
-    if declared is not None and declared.isdigit() and int(declared) > cap:
-        raise AttachmentRefused(f"Content-Length {declared} is over the {cap}-byte cap")
-    data = resp.read(cap + 1)
-    if len(data) > cap:
-        raise AttachmentRefused(f"the body is over the {cap}-byte cap")
-    return data
 
 
 def main(argv):

@@ -13,6 +13,11 @@ Given a `[Cheat]` submission issue (the Issue Form
                         knows;
       - `console`       one of the form's consoles, and the one the bundled
                         list files the SHA-1 under (`console-mismatch`);
+      - `cheat-hash`    an NES SHA-1 is a key the client can match: the
+                        client keys NES cheats by the SHA-1 of the PRG ROM
+                        alone (`HashType.Sha1Cheat`, NesConsole::GetHash),
+                        which is the bundled list's key, never the No-Intro
+                        PRG+CHR hash (#696);
       - `code`          every `+`-joined part decodes for the console's cheat
                         types (scripts/cheat_decoder.py, the Core's decoders
                         ported and held to them by
@@ -33,7 +38,11 @@ Usage (the workflow's call):
   python3 scripts/cheat_submission.py --body-file B --title T --number N
       [--labels "cheat,cheat:invalid"] [--live-file live.json]   > verdict.json
 
-`live.json` is `gh issue list --label cheat:valid --state open --json number,body`.
+`live.json` is `gh issue list --label cheat:valid --state open --limit
+LIVE_FETCH_LIMIT --json number,body`. A listing that reaches the limit may be
+truncated - the oldest issues, the ones a duplicate names, would be the ones
+dropped - so it is refused with a non-zero exit and no verdict (#704), as the
+catalog generators refuse theirs.
 
 Stdlib only.
 """
@@ -64,6 +73,9 @@ SEPARATOR = " — "
 TITLE_MAX = 250
 DESCRIPTION_MAX = 80
 COMMENT_MARKER = "<!-- cheat-verdict -->"
+# The `--limit` cheat-submitted.yml passes to `gh issue list` for the live rows;
+# a listing that reaches it may be truncated and is refused (#704).
+LIVE_FETCH_LIMIT = 5000
 
 # Issue Form labels (cheat-code.yml) -> field keys. Only these are read.
 FIELD_LABELS = {
@@ -155,6 +167,16 @@ def load_no_intro(catalog_path=CATALOG):
             if sha1:
                 known.setdefault(sha1.upper(), row.get("game", ""))
     return known
+
+
+def cheat_keys_for(sha1, names, no_intro):
+    """The bundled cheat hashes of the game a No-Intro SHA-1 names: every
+    bundled key that the No-Intro data files under the same game. Empty when
+    the repository holds no such mapping."""
+    game = no_intro.get(sha1)
+    if not game:
+        return []
+    return sorted(k for k, g in no_intro.items() if g == game and k != sha1 and k in names)
 
 
 def plain(text):
@@ -300,6 +322,17 @@ def evaluate(issue_body, issue_title, issue_labels, number, live, bundled, no_in
         findings.append(("console-mismatch", f"this SHA-1 is an NES game in the bundled list, "
                          f"not {_console_name(console)}"))
 
+    # NES cheats are matched on the PRG-only hash, so a No-Intro key the
+    # bundled list does not hold can never reach a client (#696). The
+    # duplicate check then runs on the cheat hashes it maps to, if any.
+    dup_keys = [sha1]
+    if sha1_ok and console == "nes" and sha1 not in names and sha1 in no_intro:
+        dup_keys = cheat_keys_for(sha1, names, no_intro)
+        hint = (" For this game the client matches " + ", ".join(f"`{k}`" for k in dup_keys) + "."
+                if dup_keys else "")
+        findings.append(("cheat-hash", "this is the No-Intro SHA-1 of the ROM, which no client matches: NES cheats "
+                         "are keyed by the SHA-1 of the PRG ROM alone, the one *Share This Cheat* fills in." + hint))
+
     decoded = []
     if console is not None:
         decoded, reasons = decode_submission(console, f["code"])
@@ -311,12 +344,11 @@ def evaluate(issue_body, issue_title, issue_labels, number, live, bundled, no_in
 
     if sha1_ok and console is not None and decoded and not any(c == "code" for c, _ in findings):
         normalised = cd.normalise(decoded)
-        if normalised in bundled_codes.get(sha1, set()):
+        earlier = [e for e in (live_duplicate(k, normalised, number, live) for k in dup_keys) if e is not None]
+        if any(normalised in bundled_codes.get(k, set()) for k in dup_keys):
             findings.append(("duplicate", "already in the bundled list for this game"))
-        else:
-            earlier = live_duplicate(sha1, normalised, number, live)
-            if earlier is not None:
-                findings.append(("duplicate", f"the same code for this game was already shared in #{earlier}"))
+        elif earlier:
+            findings.append(("duplicate", f"the same code for this game was already shared in #{min(earlier)}"))
 
     valid = not findings
     typed = f["game"] if len(f["game"]) <= DESCRIPTION_MAX and not has_link(f["game"]) else ""
@@ -351,6 +383,9 @@ def main(argv):
     body = Path(args.body_file).read_text(encoding="utf-8")
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     live = json.loads(Path(args.live_file).read_text(encoding="utf-8")) if args.live_file else []
+    if len(live) >= LIVE_FETCH_LIMIT:
+        raise SystemExit(f"error: gh returned {len(live)} live cheat:valid issues (the limit); refusing to "
+                         "check duplicates against a possibly truncated listing")
     verdict = evaluate(body, args.title, labels, args.number, live, load_bundled(), load_no_intro())
     print(json.dumps(verdict._asdict(), indent=2, ensure_ascii=False))
     return 0

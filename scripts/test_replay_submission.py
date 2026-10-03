@@ -22,8 +22,9 @@ Checks:
        with the section 3 reason in the comment; the opposite verdict label is
        removed on a re-validation, and the form's `replay` label is never
        touched.
-  AC-4 no attachment / a download that fails is `replay:invalid` with a reason,
-       never a crash.
+  AC-4 no attachment, an attachment the host answers 404/410 for, or one the
+       download refuses (off the allow-list, over the cap) is
+       `replay:invalid` with a reason, never a crash.
   AC-6 section 7 (R.2): an archive byte-identical to a row the committed
        catalog lists under another issue is `replay:invalid` as `duplicate`,
        and the comment names the earlier issue; the row's own issue is not its
@@ -33,6 +34,11 @@ Checks:
        (ADR-0003/ADR-0039); the game resolves through the movie's
        `NoIntroSHA1`, and a movie without it falls back to the stem rather
        than guessing a game from a name.
+  AC-7 issue #700: any other fetch failure (a reset, a timeout, a 5xx, a DNS
+       blip) is no verdict: evaluate raises TransientFetchError, the CLI
+       exits EXIT_TRANSIENT without printing a verdict, and
+       replay-submitted.yml fails the step without withdrawing
+       `replay:valid`, so a live row is never de-listed by the network.
 
 Usage: python3 scripts/test_replay_submission.py
 """
@@ -185,11 +191,19 @@ def check_failures_are_verdicts():
         return
 
     def boom(_url):
-        raise OSError("host not allow-listed")
+        raise rs.AttachmentRefused("host not allow-listed")
 
     broken = run(b"", fetch=boom)
     if broken.verdict != "invalid" or "host not allow-listed" not in broken.comment:
-        fail(f"AC-4 a failed download is invalid with its reason: {broken.verdict} {broken.comment!r}")
+        fail(f"AC-4 a refused download is invalid with its reason: {broken.verdict} {broken.comment!r}")
+        return
+
+    def gone(_url):
+        raise rs.AttachmentGone("404")
+
+    deleted = run(b"", fetch=gone)
+    if deleted.verdict != "invalid" or "download-failed" not in deleted.comment:
+        fail(f"AC-4 a deleted (404/410) attachment is invalid: {deleted.verdict} {deleted.comment!r}")
         return
     if none.title_changed or broken.title_changed:
         fail("AC-4 with no readable artifact the typed title is left alone")
@@ -220,7 +234,7 @@ def check_hostile_text_and_urls():
         fail(f"AC-5 a finding message must not forge a bullet or carry control characters: {nl!r}")
         return
     boom = rs.evaluate(body("https://github.com/user-attachments/files/1/a.mmo"), "t", (), "u", [],
-                       lambda _u: (_ for _ in ()).throw(OSError("bad\n- `forged`: x")))
+                       lambda _u: (_ for _ in ()).throw(rs.AttachmentRefused("bad\n- `forged`: x")))
     if "\n- `forged`" in boom.comment:
         fail(f"AC-5 a download error must not forge a bullet: {boom.comment!r}")
         return
@@ -287,6 +301,58 @@ def check_nes_whole_file_hash():
     ok("AC-6 an NES movie resolves its game by NoIntroSHA1, not the whole-file SHA1 (issue #624)")
 
 
+def check_transient_fetch_is_no_verdict():
+    import contextlib
+    import json
+    import tempfile
+    import urllib.error
+    import yaml
+
+    transient = (OSError("connection reset"), urllib.error.URLError("timed out"),
+                 urllib.error.HTTPError(URL, 503, "Service Unavailable", {}, None),
+                 ValueError("could not resolve host 'github.com'"))
+    for exc in transient:
+        def flaky(_url, exc=exc):
+            raise exc
+        try:
+            v = run(b"", fetch=flaky)
+            fail(f"AC-7 a transient fetch failure ({exc!r}) must not be a verdict: {v.verdict} {v.labels_add}")
+            return
+        except getattr(rs, "TransientFetchError", ()) as raised:
+            if "replay:invalid" in str(raised):
+                fail(f"AC-7 the transient error names no verdict: {raised}")
+                return
+
+    original = getattr(rs, "fetch_attachment", None)
+    with tempfile.TemporaryDirectory() as tmp:
+        b = Path(tmp) / "body.txt"
+        b.write_text(body(), encoding="utf-8")
+        rs.fetch_attachment = lambda _url: (_ for _ in ()).throw(OSError("connection reset"))
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                rc = rs.main(["replay_submission.py", "--body-file", str(b), "--title", "t", "--login", "u"])
+        except Exception as exc:  # noqa: BLE001 - the RED state crashes here
+            rc = f"raised {exc!r}"
+        finally:
+            rs.fetch_attachment = original
+    if rc != getattr(rs, "EXIT_TRANSIENT", object()) or out.getvalue().strip():
+        fail(f"AC-7 the CLI exits EXIT_TRANSIENT and prints no verdict on a transient error: rc={rc} out={out.getvalue()[:80]!r}")
+        return
+
+    wf = yaml.safe_load((SCRIPTS.parent / ".github" / "workflows" / "replay-submitted.yml").read_text(encoding="utf-8"))
+    steps = wf["jobs"]["validate"]["steps"]
+    verdict = next(st for st in steps if st.get("id") == "verdict")
+    withdraw = next(st for st in steps if "Withdraw" in st.get("name", ""))
+    if "EXIT_TRANSIENT" not in verdict["run"] and "75" not in verdict["run"]:
+        fail("AC-7 the verdict step recognises the transient exit code")
+        return
+    if "steps.verdict.outputs.transient" not in str(withdraw.get("if", "")):
+        fail(f"AC-7 the withdraw step skips a transient fetch failure: if={withdraw.get('if')!r}")
+        return
+    ok("AC-7 a transient fetch failure is no verdict: the step fails and replay:valid stays (issue #700)")
+
+
 def main():
     check_url_extraction()
     check_title()
@@ -295,6 +361,7 @@ def main():
     check_hostile_text_and_urls()
     check_duplicate_of_a_listed_row()
     check_nes_whole_file_hash()
+    check_transient_fetch_is_no_verdict()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)
