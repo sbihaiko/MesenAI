@@ -5,7 +5,6 @@
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:l="using:Mesen.Localization"
 	xmlns:w="using:Mesen.Windows"
-	xmlns:c="using:Mesen.Controls"
 	mc:Ignorable="d"
 	Width="400"
 	Height="450"
@@ -13,68 +12,7 @@
 	Title="{l:Translate wndTitle}"
 	x:DataType="w:SelectRomViewModel"
 >
-	<Window.Styles>
-		<!--ADR-0249 (W-P5 sheet shape): the archive's games as rows of an inset
-		list - 40 high, a hairline between them, the selected one in the soft
-		tint. Tokens only; outside the Player scope nothing here applies.-->
-		<Style Selector=".player ListBox#PlayerSelectRomList">
-			<Setter Property="Background" Value="Transparent" />
-			<Setter Property="BorderThickness" Value="0" />
-			<Setter Property="Padding" Value="0" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem">
-			<Setter Property="MinHeight" Value="40" />
-			<Setter Property="Padding" Value="16 0" />
-			<Setter Property="VerticalContentAlignment" Value="Center" />
-			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
-			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
-			<Setter Property="BorderBrush" Value="{StaticResource PlayerSeparatorBrush}" />
-			<Setter Property="BorderThickness" Value="0 0 0 1" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem:nth-last-child(1)">
-			<Setter Property="BorderThickness" Value="0" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
-			<Setter Property="Background" Value="Transparent" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-			<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.TintSoft)}" />
-		</Style>
-		<Style Selector=".player ListBox#PlayerSelectRomList ListBoxItem:selected">
-			<Setter Property="FontWeight" Value="SemiBold" />
-		</Style>
-	</Window.Styles>
-
-	<Panel>
-	<!--ADR-0249 (W-P5 sheet shape): Player mode's look, shown instead of the
-	classic dialog below when the owner shows the Player theme
-	(UI/Logic/PlayerDialog): the heading, a search field, the games on an inset
-	list, Cancel and Open. Same view-model, keys and double-click.-->
-	<Border Name="PlayerSelectRomRoot" Background="{StaticResource PlayerCardBrush}" Padding="24 20" IsVisible="False">
-		<DockPanel>
-			<TextBlock Name="PlayerSelectRomTitle" Classes="sheet-heading" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0 0 0 14" />
-			<TextBox Name="PlayerSelectRomSearch" DockPanel.Dock="Top" PlaceholderText="{l:Translate txtPlayerSearch}" Text="{Binding SearchString, Converter={StaticResource NullTextConverter}}" Margin="0 0 0 12" />
-			<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0 16 0 0">
-				<Button Name="PlayerSelectRomCancel" Classes="secondary regular" Content="{l:Translate btnCancel}" Click="OnCancelClick" />
-				<Button Name="PlayerSelectRomOpen" Classes="primary regular" Content="{l:Translate btnPlayerOpen}" Click="OnOkClick" IsEnabled="{Binding SelectedEntry, Converter={x:Static ObjectConverters.IsNotNull}}" />
-			</StackPanel>
-			<Border Name="PlayerSelectRomInset" Classes="inset">
-				<ListBox
-					Name="PlayerSelectRomList"
-					ItemsSource="{Binding FilteredEntries}"
-					SelectedItem="{Binding SelectedEntry}"
-					DoubleTapped="OnDoubleTapped"
-					PointerReleased="OnPointerReleased"
-					ScrollViewer.AllowAutoHide="False"
-				/>
-			</Border>
-		</DockPanel>
-	</Border>
-
-	<DockPanel Name="ClassicSelectRomRoot" HorizontalAlignment="Stretch">
+	<DockPanel HorizontalAlignment="Stretch">
 		<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" DockPanel.Dock="Top">
 			<TextBlock Text="{l:Translate lblSearch}" />
 			<TextBox Grid.Column="1" Text="{Binding SearchString, Converter={StaticResource NullTextConverter}}" Name="Search" />
@@ -107,5 +45,4 @@
 			</ListBox.Styles>
 		</ListBox>
 	</DockPanel>
-	</Panel>
 </Window>

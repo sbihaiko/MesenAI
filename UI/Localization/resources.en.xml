@@ -75,6 +75,15 @@
 			<Control ID="btnBiosSheetCancel">Cancel</Control>
 			<Control ID="btnBiosSheetChooseFile">Choose File…</Control>
 		</Form>
+		<Form ID="PlaySelectRomSheetView">
+			<Control ID="txtSelectRomSheetSearch">Search</Control>
+			<Control ID="btnSelectRomSheetCancel">Cancel</Control>
+		</Form>
+		<Form ID="PlayerShaderSheetView">
+			<Control ID="btnShaderSheetReset">Reset to Defaults</Control>
+			<Control ID="btnShaderSheetCancel">Cancel</Control>
+			<Control ID="btnShaderSheetOk">OK</Control>
+		</Form>
 		<Form ID="PlayPackDepSheetView">
 			<Control ID="lblPackDepSheetSubtitle">Everything else is installed.</Control>
 			<Control ID="lblPackDepSheetBody">The pack's author could not share this file, so it is not downloaded. If you have it, add it and the pack completes.</Control>
@@ -1320,8 +1329,6 @@
 		<Form ID="SelectRomWindow">
 			<Control ID="wndTitle">Select rom...</Control>
 			<Control ID="lblSearch">Search:</Control>
-			<Control ID="txtPlayerSearch">Search</Control>
-			<Control ID="btnPlayerOpen">Open</Control>
 			<Control ID="btnOK">OK</Control>
 			<Control ID="btnCancel">Cancel</Control>
 		</Form>
@@ -2347,7 +2354,7 @@
 		<Message ID="InterruptQuitGameGo">Quit Game</Message>
 		<Message ID="InterruptForcedPatch">This game's HD pack patch, {0}, was made for another version of the game and may break it. If the game freezes or looks wrong, reload it without the patch.</Message>
 		<Message ID="InterruptReloadWithoutPatch">Reload Without Patch</Message>
-		<Message ID="SelectRomPlayerTitle">Choose a game in {0}</Message>
+		<Message ID="SelectRomPlayerTitle">Choose a game from {0}</Message>
 		<Message ID="ShellStatusPack">pack {0}</Message>
 		<Message ID="ShellStatusProjectPack">your project's pack</Message>
 		<Message ID="ShellStatusAutoUpscale">automatic upscale</Message>

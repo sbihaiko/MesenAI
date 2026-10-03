@@ -30,75 +30,18 @@
 		<Style Selector="Panel.Row:pointerover">
 			<Setter Property="Background" Value="{DynamicResource ButtonBackgroundPointerOver}" />
 		</Style>
-		<Style Selector="TextBlock.shaderPlayerOnly, Rectangle.shaderHairline">
-			<Setter Property="IsVisible" Value="False" />
-		</Style>
-		<Style Selector="DockPanel#ShaderConfigFooter">
-			<Setter Property="Margin" Value="3" />
-		</Style>
-		<Style Selector="Panel.Row > Grid">
-			<Setter Property="Margin" Value="5 0 5 0" />
-		</Style>
-
-		<!--ADR-0249: Look's Adjust… in Player mode (W-P10) - the same parameters
-		on the theme's white sheet: the shader's name as the heading, the rows
-		on an inset list (about 46 high: the control plus 10 above and below, a hairline between them, a switch for an
-		on/off parameter), Reset to Defaults on the left and Cancel then OK on
-		the right. Tokens only; outside the scope the classic window stays.-->
-		<Style Selector="Border#ShaderConfigRoot.player">
-			<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
-			<Setter Property="Padding" Value="24 20" />
-		</Style>
-		<Style Selector=".player TextBlock.shaderPlayerOnly">
-			<Setter Property="IsVisible" Value="True" />
-		</Style>
-		<Style Selector=".player Border#ShaderConfigList">
-			<Setter Property="Background" Value="{StaticResource PlayerInsetFillBrush}" />
-			<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBorderBrush}" />
-			<Setter Property="BorderThickness" Value="1" />
-			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
-			<Setter Property="ClipToBounds" Value="True" />
-		</Style>
-		<Style Selector=".player Panel.Row">
-			<Setter Property="Background" Value="Transparent" />
-		</Style>
-		<Style Selector=".player Panel.Row:pointerover">
-			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
-		</Style>
-		<Style Selector=".player Panel.Row > Grid">
-			<Setter Property="Margin" Value="16 10" />
-		</Style>
-		<Style Selector=".player Panel.Row Rectangle.shaderHairline">
-			<Setter Property="IsVisible" Value="True" />
-		</Style>
-		<Style Selector=".player ContentPresenter:nth-last-child(1) Rectangle.shaderHairline">
-			<Setter Property="IsVisible" Value="False" />
-		</Style>
-		<Style Selector=".player Panel.Row TextBlock.shaderParam">
-			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
-			<Setter Property="FontWeight" Value="Medium" />
-		</Style>
-		<Style Selector=".player DockPanel#ShaderConfigFooter">
-			<Setter Property="Margin" Value="0 16 0 0" />
-		</Style>
-		<Style Selector=".player TextBlock#ShaderConfigPlayerTitle">
-			<Setter Property="Margin" Value="0 0 0 14" />
-		</Style>
 	</Window.Styles>
 	
-	<Border Name="ShaderConfigRoot">
 	<DockPanel>
-		<TextBlock Name="ShaderConfigPlayerTitle" Classes="sheet-heading shaderPlayerOnly" DockPanel.Dock="Top" TextTrimming="CharacterEllipsis" />
-		<DockPanel Name="ShaderConfigFooter" DockPanel.Dock="Bottom">
-			<Button Name="ShaderConfigReset" Classes="secondary regular" DockPanel.Dock="Left" MinWidth="70" HorizontalContentAlignment="Center" Click="Reset_OnClick" Content="{l:Translate btnReset}" />
+		<DockPanel DockPanel.Dock="Bottom" Margin="3">
+			<Button DockPanel.Dock="Left" MinWidth="70" HorizontalContentAlignment="Center" Click="Reset_OnClick" Content="{l:Translate btnReset}" />
 
-			<StackPanel Name="ShaderConfigActions" Orientation="Horizontal" HorizontalAlignment="Right">
-				<Button Name="ShaderConfigOk" Classes="primary regular" MinWidth="70" HorizontalContentAlignment="Center" IsDefault="true" Click="Ok_OnClick" Content="{l:Translate btnOk}" />
-				<Button Name="ShaderConfigCancel" Classes="secondary regular" MinWidth="70" HorizontalContentAlignment="Center" IsCancel="True" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+				<Button MinWidth="70" HorizontalContentAlignment="Center" IsDefault="true" Click="Ok_OnClick" Content="{l:Translate btnOk}" />
+				<Button MinWidth="70" HorizontalContentAlignment="Center" IsCancel="True" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
 			</StackPanel>
 		</DockPanel>
 
-		<Border Name="ShaderConfigList">
 		<ScrollViewer>
 			<ItemsControl ItemsSource="{Binding Config.Params}" Margin="0 0 0 5">
 				<ItemsControl.ItemsPanel>
@@ -109,10 +52,9 @@
 				<ItemsControl.ItemTemplate>
 					<DataTemplate>
 						<Panel Classes="Row">
-							<Rectangle Classes="shaderHairline" Height="1" VerticalAlignment="Bottom" Margin="16 0 0 0" Fill="{StaticResource PlayerSeparatorBrush}" />
-							<Grid ColumnDefinitions="1*, Auto" RowDefinitions="Auto">
+							<Grid ColumnDefinitions="1*, Auto" RowDefinitions="Auto" Margin="5 0 5 0">
 								<Panel MinHeight="25">
-									<TextBlock Classes="shaderParam" Text="{Binding Description}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+									<TextBlock Text="{Binding Description}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
 								</Panel>
 								<Panel Grid.Column="1" IsVisible="{Binding !IsLabel}">
 									<c:MesenNumericUpDown
@@ -127,7 +69,6 @@
 										ForceIncrementMultiple="True"
 									/>
 									<CheckBox
-										Classes="switch"
 										IsVisible="{Binding IsBoolean}"
 										IsChecked="{Binding BoolValue}"
 										MinWidth="74"
@@ -141,7 +82,5 @@
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
 		</ScrollViewer>
-		</Border>
 	</DockPanel>
-	</Border>
 </Window>
