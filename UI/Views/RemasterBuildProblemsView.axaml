@@ -14,24 +14,33 @@
 	with the file to open (a row action); a line without a translation is only
 	counted, and the raw log is behind Show Log (rule 3). Show Log and Try Again
 	are the two controls.-->
-	<StackPanel Name="RemasterBuildProblems" Spacing="8">
-		<TextBlock Name="RemasterBuildProblemsTitle" Text="{Binding BuildProblemsTitle}" FontWeight="Bold" />
+	<!--ADR-0249 (W-R4): the title as a card's first line, each problem a
+	subhead sentence with a small secondary Open File, the plain Show Log and
+	the small primary Try Again.-->
+	<StackPanel Name="RemasterBuildProblems" Spacing="10">
+		<TextBlock Name="RemasterBuildProblemsTitle" Classes="emphasis" Text="{Binding BuildProblemsTitle}" />
 		<ItemsControl Name="RemasterBuildProblemList" ItemsSource="{Binding BuildProblems}">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<StackPanel Spacing="8" />
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
 			<ItemsControl.ItemTemplate>
 				<DataTemplate x:DataType="vm:RemasterProblemRow">
-					<DockPanel Margin="0 2">
-						<Button DockPanel.Dock="Right" Margin="12 0 0 0" VerticalAlignment="Top" Content="{l:Translate btnOpenProblemFile}" IsVisible="{Binding CanOpen}" Click="OnOpenFile" />
-						<TextBlock Text="{Binding Text, StringFormat='· {0}'}" TextWrapping="Wrap" VerticalAlignment="Center" />
+					<DockPanel Margin="28 0 0 0">
+						<Button DockPanel.Dock="Right" Classes="secondary small" Margin="16 0 0 0" VerticalAlignment="Center" Content="{l:Translate btnOpenProblemFile}" IsVisible="{Binding CanOpen}" Click="OnOpenFile" />
+						<TextBlock Classes="body" Text="{Binding Text, StringFormat='· {0}'}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</DataTemplate>
 			</ItemsControl.ItemTemplate>
 		</ItemsControl>
-		<TextBlock Name="RemasterBuildProblemsNote" Text="{Binding BuildProblemsNote}" Opacity="0.8" IsVisible="{Binding BuildProblemsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-		<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-			<Button Name="RemasterShowBuildLogButton" Content="{l:Translate btnShowBuildLog}" Click="OnShowLog" />
-			<Button Name="RemasterTryBuildAgainButton" Content="{l:Translate btnTryBuildAgain}" Classes="accent" IsEnabled="{Binding BuildAndShow.IsEnabled}" Click="OnTryAgain" />
+		<TextBlock Name="RemasterBuildProblemsNote" Classes="subhead secondary" Margin="28 0 0 0" Text="{Binding BuildProblemsNote}" IsVisible="{Binding BuildProblemsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+		<StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+			<Button Name="RemasterShowBuildLogButton" Classes="plain small" Content="{l:Translate btnShowBuildLog}" Click="OnShowLog" />
+			<Button Name="RemasterTryBuildAgainButton" Classes="primary small" Content="{l:Translate btnTryBuildAgain}" IsEnabled="{Binding BuildAndShow.IsEnabled}" Click="OnTryAgain" />
 		</StackPanel>
-		<TextBlock Name="RemasterTryBuildAgainReason" Classes="reason" HorizontalAlignment="Right" Text="{Binding BuildAndShow.Reason}" IsVisible="{Binding BuildAndShow.HasReason}" />
-		<TextBox Name="RemasterBuildLog" Text="{Binding BuildLogText}" IsReadOnly="True" TextWrapping="NoWrap" MaxHeight="240" FontFamily="{DynamicResource MesenMonospaceFont}" IsVisible="{Binding IsBuildLogVisible}" />
+		<TextBlock Name="RemasterTryBuildAgainReason" Classes="reason secondary" HorizontalAlignment="Right" Text="{Binding BuildAndShow.Reason}" IsVisible="{Binding BuildAndShow.HasReason}" />
+		<!--Height NaN: the theme's TextBox is a 30 px field; the log grows.-->
+		<TextBox Name="RemasterBuildLog" Text="{Binding BuildLogText}" IsReadOnly="True" TextWrapping="NoWrap" Height="NaN" MaxHeight="240" VerticalContentAlignment="Top" FontFamily="{DynamicResource MesenMonospaceFont}" IsVisible="{Binding IsBuildLogVisible}" />
 	</StackPanel>
 </UserControl>

@@ -13,29 +13,128 @@
 	the rest of the window inside Remaster (no pause overlay, no slots); this
 	strip is the one pill and Stop (1 control, rule 2). It sits above the game,
 	not over it, because the native renderer draws above Avalonia content.-->
-	<Border Name="RemasterRecordingStripBorder" Background="#202020" Padding="12 6">
+	<!--ADR-0249 (W-R2): in Player mode the strip is the game's black and its
+	content the render's HUD pill (radius 12, 48 high): the red dot, the time,
+	the Remaster badge, the hint and the grey Stop. Advanced keeps the classic
+	dark strip.-->
+	<UserControl.Styles>
+		<Style Selector="Border#RemasterRecordingStripBorder">
+			<Setter Property="Background" Value="#202020" />
+			<Setter Property="Padding" Value="12 6" />
+			<Setter Property="TextElement.Foreground" Value="White" />
+		</Style>
+		<Style Selector=".player Border#RemasterRecordingStripBorder">
+			<Setter Property="Background" Value="{StaticResource PlayerGameBackgroundBrush}" />
+			<Setter Property="Padding" Value="110 18 24 8" />
+		</Style>
+		<Style Selector="Border.pill">
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+		<Style Selector=".player Border.pill">
+			<Setter Property="Height" Value="48" />
+			<Setter Property="Padding" Value="16 0 10 0" />
+		</Style>
+		<Style Selector="Ellipse.dot">
+			<Setter Property="Width" Value="10" />
+			<Setter Property="Height" Value="10" />
+			<Setter Property="Fill" Value="#FF3B30" />
+		</Style>
+		<Style Selector=".player Ellipse.dot">
+			<Setter Property="Width" Value="12" />
+			<Setter Property="Height" Value="12" />
+			<Setter Property="Fill" Value="{StaticResource PlayerRedBrush}" />
+		</Style>
+		<Style Selector="TextBlock.tag">
+			<Setter Property="Foreground" Value="#C9A0FF" />
+		</Style>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="Foreground" Value="#CCFFFFFF" />
+		</Style>
+		<Style Selector="TextBlock#RemasterRecordingPill">
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterRecordingPill">
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<!--The view's own classic colours beat the theme's, so the HUD's are restated.-->
+		<Style Selector=".player TextBlock.tag">
+			<Setter Property="Foreground" Value="{StaticResource PlayerHudTintTextBrush}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector=".player TextBlock.hint">
+			<Setter Property="Foreground" Value="{StaticResource PlayerHudText2Brush}" />
+		</Style>
+		<Style Selector="TextBlock.held">
+			<Setter Property="Foreground" Value="#FFB4A0" />
+		</Style>
+		<Style Selector=".player TextBlock.held">
+			<Setter Property="Foreground" Value="{StaticResource PlayerOrangeBrush}" />
+		</Style>
+		<Style Selector="Border.badge">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Border.badge">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<!--Classic (Advanced) keeps small icons and no badges; the theme sizes them in Player mode.-->
+		<Style Selector="PathIcon.leading">
+			<Setter Property="Width" Value="11" />
+			<Setter Property="Height" Value="11" />
+			<Setter Property="Margin" Value="0 0 6 0" />
+		</Style>
+		<Style Selector=".player Button PathIcon.leading">
+			<Setter Property="Width" Value="13" />
+			<Setter Property="Height" Value="13" />
+			<Setter Property="Margin" Value="0 0 7 0" />
+		</Style>
+		<!--The render's stop square is a third smaller than a leading glyph.-->
+		<Style Selector=".player Button PathIcon.leading.stop">
+			<Setter Property="Width" Value="9" />
+			<Setter Property="Height" Value="9" />
+		</Style>
+	</UserControl.Styles>
+	<Border Name="RemasterRecordingStripBorder">
 		<Panel>
-		<DockPanel IsVisible="{Binding IsRecording}">
-			<Button Name="RemasterStopRecordingButton" DockPanel.Dock="Right" Content="{l:Translate btnStopRecording}" Click="OnStop" />
-			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-				<TextBlock Text="●" Foreground="#FF3B30" VerticalAlignment="Center" />
-				<TextBlock Name="RemasterRecordingPill" Text="{Binding RecordingPill}" Foreground="White" FontWeight="Bold" VerticalAlignment="Center" />
-				<TextBlock Text="{l:Translate lblRecordingRemasterTag}" Foreground="#C9A0FF" VerticalAlignment="Center" />
-				<TextBlock Text="{l:Translate lblRecordingHint}" Foreground="#CCFFFFFF" VerticalAlignment="Center" />
-				<!--ADR-0245 §3 / ADR-0184 §1: codes turned on during the recording that are not RAM codes are held back from the core; this says which.-->
-				<TextBlock Name="RemasterHeldCheats" Text="{Binding HeldCheatsText}" Foreground="#FFB4A0" VerticalAlignment="Center" IsVisible="{Binding HeldCheatsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-			</StackPanel>
-		</DockPanel>
+		<Border Name="RemasterRecordingPillBox" Classes="pill hud" IsVisible="{Binding IsRecording}">
+			<DockPanel>
+				<Button Name="RemasterStopRecordingButton" DockPanel.Dock="Right" Classes="primary hud" VerticalAlignment="Center" Click="OnStop">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading stop" Data="{StaticResource PlayerIconStop}" />
+						<TextBlock Text="{l:Translate btnStopRecording}" />
+					</StackPanel>
+				</Button>
+				<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+					<Ellipse Classes="dot" VerticalAlignment="Center" />
+					<TextBlock Name="RemasterRecordingPill" Classes="emphasis" Text="{Binding RecordingPill}" VerticalAlignment="Center" />
+					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+						<Border Name="RemasterRecordingBadge" Classes="badge small">
+							<PathIcon Data="{StaticResource PlayerIconRemaster}" />
+						</Border>
+						<TextBlock Classes="tag subhead tint" Text="{l:Translate lblRecordingRemasterTag}" VerticalAlignment="Center" />
+					</StackPanel>
+					<TextBlock Classes="hint subhead secondary" Text="{l:Translate lblRecordingHint}" VerticalAlignment="Center" />
+					<!--ADR-0245 §3 / ADR-0184 §1: codes turned on during the recording that are not RAM codes are held back from the core; this says which.-->
+					<TextBlock Name="RemasterHeldCheats" Classes="held subhead" Text="{Binding HeldCheatsText}" VerticalAlignment="Center" IsVisible="{Binding HeldCheatsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+				</StackPanel>
+			</DockPanel>
+		</Border>
 		<!--G.6: the same strip shows a build in the game - one pill and Back to
 		Project (Esc does the same).-->
-		<DockPanel Name="RemasterShowingStrip" IsVisible="{Binding IsShowingBuild}">
-			<Button Name="RemasterBackToProjectButton" DockPanel.Dock="Right" Content="{l:Translate btnBackToProject}" Click="OnBack" />
-			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-				<TextBlock Text="{l:Translate lblRecordingRemasterTag}" Foreground="#C9A0FF" FontWeight="Bold" VerticalAlignment="Center" />
-				<TextBlock Name="RemasterShowingPill" Text="{Binding ShowingPill}" Foreground="White" VerticalAlignment="Center" />
-				<TextBlock Text="{l:Translate lblShowingHint}" Foreground="#CCFFFFFF" VerticalAlignment="Center" />
-			</StackPanel>
-		</DockPanel>
+		<Border Classes="pill hud" IsVisible="{Binding IsShowingBuild}">
+			<DockPanel Name="RemasterShowingStrip">
+				<Button Name="RemasterBackToProjectButton" DockPanel.Dock="Right" Classes="primary hud" VerticalAlignment="Center" Content="{l:Translate btnBackToProject}" Click="OnBack" />
+				<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+						<Border Classes="badge small">
+							<PathIcon Data="{StaticResource PlayerIconRemaster}" />
+						</Border>
+						<TextBlock Classes="tag subhead tint" Text="{l:Translate lblRecordingRemasterTag}" VerticalAlignment="Center" />
+					</StackPanel>
+					<TextBlock Name="RemasterShowingPill" Classes="emphasis" Text="{Binding ShowingPill}" VerticalAlignment="Center" />
+					<TextBlock Classes="hint subhead secondary" Text="{l:Translate lblShowingHint}" VerticalAlignment="Center" />
+				</StackPanel>
+			</DockPanel>
+		</Border>
 		</Panel>
 	</Border>
 </UserControl>
