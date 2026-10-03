@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -48,12 +49,14 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	private static readonly Color BannerStop = Color.Parse("#FAF0F0");
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
+	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly VideoFilterType _filter = ConfigManager.Config.Video.VideoFilter;
 	private readonly string _shader = ConfigManager.Config.Video.ShaderFile;
 
 	public void Dispose()
 	{
 		ConfigManager.Config.Preferences.UiMode = _uiMode;
+		ConfigManager.Config.Preferences.Workspace = _workspace;
 		ConfigManager.Config.Video.VideoFilter = _filter;
 		ConfigManager.Config.Video.ShaderFile = _shader;
 	}
@@ -112,24 +115,44 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 	}
 
-	private static ConfigWindow ShowSettings(ConfigWindowTab tab)
+	//W-P8 / W-P10 are a sheet in the main window over W-P4 (the renders' 1100 x
+	//740 window): open the overlay over a game, press its Settings row, pick
+	//the tab. A MainWindow is never closed in a test (closing it shuts the core
+	//down for the rest of the run), so the sheet is closed instead.
+	private static (MainWindow Window, MainWindowViewModel Model, Border Sheet) ShowSettings(ConfigWindowTab tab)
 	{
-		ConfigWindow window = new(tab, playerMode: true);
-		window.Show();
+		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
+		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
+		MainWindow main = new() { Width = 1100, Height = 740 };
+		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
-		return window;
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
+		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		model.OpenPauseOverlay();
+		Dispatcher.UIThread.RunJobs();
+		main.FindNamed<Button>("OverlaySettingsButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+		main.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
+		Dispatcher.UIThread.RunJobs();
+		main.UpdateLayout();
+		Dispatcher.UIThread.RunJobs();
+		return (main, model, main.FindNamed<Border>("PlayerSettingsSheet"));
 	}
 
-	//W-P8 / W-P10's chrome: a white sheet titled Settings, the segmented
-	//Display | Look | Audio | Controls strip (96 px segments on FILL), and Done.
-	private static void AssertSettingsChrome(ConfigWindow window)
+	//W-P8 / W-P10's chrome: a white sheet (radius 14, 480 wide) in the Player
+	//scope titled Settings, the segmented Display | Look | Audio | Controls
+	//strip (96 px segments on FILL), and the 32 px Done, 90 wide.
+	private static void AssertSettingsChrome(Border sheet)
 	{
-		Border root = window.FindNamed<Border>("PlayerSettingsRoot");
-		Assert.Contains("player", root.Classes);
-		Assert.Equal(Card, PlayerRender.SolidColor(root.Background));
-		AssertText(window.FindNamed<TextBlock>("lblPlayerSettingsTitle"), 17, FontWeight.Bold, Text);
+		Assert.True(sheet.IsOnScreen());
+		Assert.Contains("sheet", sheet.Classes);
+		Assert.Contains(sheet.GetSelfAndLogicalAncestors().OfType<Control>(), c => c.Classes.Contains("player"));
+		Assert.Equal(Card, PlayerRender.SolidColor(sheet.Background));
+		Assert.Equal(new CornerRadius(14), sheet.CornerRadius);
+		Assert.Equal(480, sheet.Bounds.Width, 0.5);
+		AssertText(sheet.FindNamed<TextBlock>("lblPlayerSettingsTitle"), 17, FontWeight.Bold, Text);
 
-		TabControl strip = window.FindNamed<TabControl>("PlayerSettingsTabs");
+		TabControl strip = sheet.FindNamed<TabControl>("PlayerSettingsTabs");
 		Assert.Contains("segmented", strip.Classes);
 		Border track = strip.FindAll<Border>().First(b => b.Name == "PART_Track");
 		Assert.Equal(Fill, PlayerRender.SolidColor(track.Background));
@@ -143,46 +166,56 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		TabItem selected = strip.Items.Cast<TabItem>().Single(t => t.IsSelected);
 		Assert.Equal(Card, PlayerRender.SolidColor(selected.FindAll<Border>().First(b => b.Name == "PART_Segment").Background));
 
-		AssertButton(window.FindNamed<Button>("btnPlayerSettingsDone"), 36, 11, 14, PlayTint);
-		Assert.Contains("primary", window.FindNamed<Button>("btnPlayerSettingsDone").Classes);
+		Button done = sheet.FindNamed<Button>("btnPlayerSettingsDone");
+		AssertButton(done, 32, 8, 13, PlayTint);
+		Assert.Contains("primary", done.Classes);
+		Assert.Equal(90, done.Bounds.Width, 0.5);
+	}
+
+	//The frame: the sheet is white inside, over the dimmed game.
+	private static void Render(MainWindow window, Border sheet, string name)
+	{
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, name);
+		Point inside = sheet.TranslatePoint(new Point(sheet.Bounds.Width - 6, sheet.Bounds.Height / 2), window)!.Value;
+		PlayerRender.AssertPixel(Card, frame, (int)inside.X, (int)inside.Y);
 	}
 
 	[AvaloniaFact]
 	public void Settings_display_renders_as_the_W_P8_sheet()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		ShowPlayerGame();
-		ConfigWindow window = ShowSettings(ConfigWindowTab.Display);
+		(MainWindow window, MainWindowViewModel model, Border sheet) = ShowSettings(ConfigWindowTab.Display);
 		try {
-			AssertSettingsChrome(window);
-			AssertInsetGroup(window.FindNamed<Border>("DisplaySettingsGroup"));
-			Assert.IsType<ToggleSwitch>(window.FindNamed<ToggleButton>("chkDisplayFullscreen"));
-			AssertPopup(window.FindNamed<EnumComboBox>("cboDisplayAspectRatio"), 120);
-			AssertPopup(window.FindNamed<ComboBox>("cboDisplayScale"), 120);
-			AssertText(window.FindNamed<TextBlock>("lblDisplayFullscreenRow"), 13.5, FontWeight.Medium, Text);
-			Assert.Equal("Full screen", window.FindNamed<TextBlock>("lblDisplayFullscreenRow").Text);
-			TextBlock hint = window.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse");
+			AssertSettingsChrome(sheet);
+			AssertInsetGroup(sheet.FindNamed<Border>("DisplaySettingsGroup"));
+			Assert.IsType<ToggleSwitch>(sheet.FindNamed<ToggleButton>("chkDisplayFullscreen"));
+			AssertPopup(sheet.FindNamed<EnumComboBox>("cboDisplayAspectRatio"), 120);
+			AssertPopup(sheet.FindNamed<ComboBox>("cboDisplayScale"), 120);
+			//#audit: the Scale popup is never blank (the headless window is under 1×).
+			Assert.NotNull(sheet.FindNamed<ComboBox>("cboDisplayScale").SelectedItem);
+			AssertText(sheet.FindNamed<TextBlock>("lblDisplayFullscreenRow"), 13.5, FontWeight.Medium, Text);
+			Assert.Equal("Full screen", sheet.FindNamed<TextBlock>("lblDisplayFullscreenRow").Text);
+			TextBlock hint = sheet.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse");
 			Assert.True(hint.IsOnScreen());
 			Assert.Equal(12.5, hint.FontSize);
 			Assert.Equal(Text2, PlayerRender.SolidColor(hint.Foreground));
 			//The group fills the sheet's width (the first capture used ~40 %).
-			Border group = window.FindNamed<Border>("DisplaySettingsGroup");
-			Assert.True(group.Bounds.Width >= window.Bounds.Width - 41, $"the group is {group.Bounds.Width} wide in a {window.Bounds.Width} window");
-			Assert.Equal(5, ControlsAtRest(window));
+			Border group = sheet.FindNamed<Border>("DisplaySettingsGroup");
+			Assert.True(group.Bounds.Width >= sheet.Bounds.Width - 41, $"the group is {group.Bounds.Width} wide in a {sheet.Bounds.Width} sheet");
+			Assert.Equal(5, ControlsAtRest(sheet));
 			//W-P8's sheet is 340 high, and the hint sits right under the group,
 			//on its own line above Done (not at the foot of Look's height).
-			Assert.Equal(340, window.Bounds.Height, 0.5);
-			double groupBottom = group.TranslatePoint(new Point(0, group.Bounds.Height), window)!.Value.Y;
-			double hintTop = hint.TranslatePoint(new Point(0, 0), window)!.Value.Y;
-			double doneTop = window.FindNamed<Button>("btnPlayerSettingsDone").TranslatePoint(new Point(0, 0), window)!.Value.Y;
+			Assert.Equal(340, sheet.Bounds.Height, 0.5);
+			double groupBottom = group.TranslatePoint(new Point(0, group.Bounds.Height), sheet)!.Value.Y;
+			double hintTop = hint.TranslatePoint(new Point(0, 0), sheet)!.Value.Y;
+			double doneTop = sheet.FindNamed<Button>("btnPlayerSettingsDone").TranslatePoint(new Point(0, 0), sheet)!.Value.Y;
 			Assert.InRange(hintTop - groupBottom, 8, 26);
 			Assert.True(hintTop + hint.Bounds.Height <= doneTop, $"the hint ({hintTop}) shares Done's row ({doneTop})");
 
-			Bitmap frame = PlayerRender.Capture(window);
-			PlayerRender.Save(frame, "W-P8");
-			PlayerRender.AssertPixel(Card, frame, 4, 4);
+			Render(window, sheet, "W-P8");
 		} finally {
-			window.Close();
+			model.ClosePlayerSettings();
 		}
 	}
 
@@ -190,39 +223,42 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	public void Settings_look_renders_as_the_W_P10_sheet()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		ShowPlayerGame();
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
 		ConfigManager.Config.Video.ShaderFile = "";
-		ConfigWindow window = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, MainWindowViewModel model, Border sheet) = ShowSettings(ConfigWindowTab.Look);
 		try {
-			AssertSettingsChrome(window);
+			AssertSettingsChrome(sheet);
 			foreach(string name in new[] { "LookArtGroup", "LookPixelsGroup", "LookScreenGroup" }) {
-				AssertInsetGroup(window.FindNamed<Border>(name));
+				AssertInsetGroup(sheet.FindNamed<Border>(name));
 			}
-			TextBlock header = window.FindNamed<TextBlock>("lblLookArtHeader");
+			TextBlock header = sheet.FindNamed<TextBlock>("lblLookArtHeader");
 			AssertText(header, 11.5, FontWeight.Bold, Text2);
 			Assert.Equal("ART", header.Text);
-			Assert.Equal("drawn by an artist", window.FindNamed<TextBlock>("lblLookArtHint").Text);
-			Assert.Equal(500, window.Bounds.Height, 0.5);
-			AssertPopup(window.FindNamed<ComboBox>("cboLookPixels"), 200);
-			AssertPopup(window.FindNamed<ComboBox>("cboLookScreen"), 200);
-			AssertButton(window.FindNamed<Button>("btnLookAdjust"), 28, 8, 13, Card);
-			AssertButton(window.FindNamed<Button>("btnLookHoldToCompare"), 36, 11, 14, Card);
-			Assert.Equal(11.5, window.FindNamed<TextBlock>("txtLookPixelsMark").FontSize);
+			Assert.Equal("drawn by an artist", sheet.FindNamed<TextBlock>("lblLookArtHint").Text);
+			//W-P10's sheet is 480 high.
+			Assert.Equal(480, sheet.Bounds.Height, 0.5);
+			AssertPopup(sheet.FindNamed<ComboBox>("cboLookPixels"), 200);
+			AssertPopup(sheet.FindNamed<ComboBox>("cboLookScreen"), 200);
+			Assert.Equal("Sharp — original pixels", Assert.IsType<LookChoice>(sheet.FindNamed<ComboBox>("cboLookPixels").SelectedItem).Label);
+			AssertButton(sheet.FindNamed<Button>("btnLookAdjust"), 28, 8, 13, Card);
+			AssertButton(sheet.FindNamed<Button>("btnLookHoldToCompare"), 32, 8, 13, Card);
+			Assert.Equal(11.5, sheet.FindNamed<TextBlock>("txtLookPixelsMark").FontSize);
+			//Hold to Compare and Done share the footer row.
+			Button compare = sheet.FindNamed<Button>("btnLookHoldToCompare");
+			Button done = sheet.FindNamed<Button>("btnPlayerSettingsDone");
+			Assert.Equal(done.TranslatePoint(new Point(0, 0), sheet)!.Value.Y, compare.TranslatePoint(new Point(0, 0), sheet)!.Value.Y, 1);
 			//On Look the footer is Hold to Compare and Done; the Options hint
 			//belongs to the other tabs (W-P10 has no room for it).
-			Assert.False(window.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").IsOnScreen());
+			Assert.False(sheet.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").IsOnScreen());
 			//W-P10 counts 7 with a pack's Art row; without a pack the row is text,
 			//and with no shader and no running core Adjust and Hold to Compare
 			//are off: the segmented tabs, Smoothing, Effect and Done remain.
-			Assert.False(window.FindNamed<Button>("btnLookAdjust").IsEnabled);
-			Assert.Equal(4, ControlsAtRest(window));
+			Assert.False(sheet.FindNamed<Button>("btnLookAdjust").IsEnabled);
+			Assert.Equal(4, ControlsAtRest(sheet));
 
-			Bitmap frame = PlayerRender.Capture(window);
-			PlayerRender.Save(frame, "W-P10");
-			PlayerRender.AssertPixel(Card, frame, 4, 4);
+			Render(window, sheet, "W-P10");
 		} finally {
-			window.Close();
+			model.ClosePlayerSettings();
 		}
 	}
 
@@ -234,7 +270,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayerGame();
 		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
-		ConfigWindow window = new(ConfigWindowTab.Look, playerMode: false);
+		ConfigWindow window = new(ConfigWindowTab.Look);
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
 		try {

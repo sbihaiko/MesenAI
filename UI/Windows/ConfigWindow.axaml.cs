@@ -23,38 +23,14 @@ namespace Mesen.Windows
 		[Obsolete("For designer only")]
 		public ConfigWindow() : this(ConfigWindowTab.Audio) { }
 
-		public ConfigWindow(ConfigWindowTab tab, bool playerMode = false)
+		//ADR-0249 (W-P8, W-P10): the classic Options window. Player mode's
+		//Settings is a sheet in the main window (PlayerSettingsSheetView).
+		public ConfigWindow(ConfigWindowTab tab)
 		{
 			InitializeComponent();
 
-			_model = new ConfigViewModel(tab, playerMode, CreateDisplaySettings);
+			_model = new ConfigViewModel(tab);
 			DataContext = _model;
-			ApplyModeSize();
-			_model.PropertyChanged += (_, e) => {
-				if(e.PropertyName is nameof(ConfigViewModel.PlayerMode) or nameof(ConfigViewModel.PlayerTabIndex)) {
-					ApplyModeSize();
-				}
-			};
-		}
-
-		//ADR-0249 (W-P8, W-P10): Player mode is the render's 480 px sheet, as
-		//high as the tab needs (PlayerSettingsEssentials.SheetHeight); "More in
-		//Options…" turns the same window into the classic Options.
-		private void ApplyModeSize()
-		{
-			Width = _model.PlayerMode ? 480 : 620;
-			ConfigWindowTab? tab = PlayerSettingsEssentials.TabAt(_model.PlayerTabIndex);
-			Height = _model.PlayerMode && tab != null ? PlayerSettingsEssentials.SheetHeight(tab.Value) : 500;
-		}
-
-		//G.4 (W-P8): Display edits the main window - its full screen and scale.
-		private static PlayerDisplaySettingsViewModel CreateDisplaySettings()
-		{
-			VideoConfig video = ConfigManager.Config.Video;
-			if(ApplicationHelper.GetMainWindow() is MainWindow main) {
-				return new PlayerDisplaySettingsViewModel(video, main.WindowState == WindowState.FullScreen, main.CurrentScale, main.ToggleFullscreen, main.SetScale);
-			}
-			return new PlayerDisplaySettingsViewModel(video, false, 0, () => { }, _ => { });
 		}
 
 		private void InitializeComponent()
@@ -117,13 +93,6 @@ namespace Mesen.Windows
 			base.OnClosing(e);
 			if(Design.IsDesignMode) {
 				return;
-			}
-
-			//W-P8: Esc or the title bar closes a Play sheet back to W-P4 and keeps
-			//what was changed, like Done - there is no Cancel in Player mode.
-			if(_promptToSave && _model.PlayerMode) {
-				_promptToSave = false;
-				_model.SaveConfig();
 			}
 
 			if(_promptToSave && _model.IsDirty()) {

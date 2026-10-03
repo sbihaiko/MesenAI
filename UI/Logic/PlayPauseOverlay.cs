@@ -156,7 +156,9 @@ public enum PlaySheet
 	PackDep,
 	//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet
 	//(W-P4 is at its seven controls, so the list merges into that row).
-	Replays
+	Replays,
+	//ADR-0249 (W-P8, W-P10): Settings, a sheet in the main window.
+	Settings
 }
 
 public enum PlayEscAction
@@ -188,6 +190,7 @@ public static class PlayEsc
 			case PlaySheet.PackDetail:
 			case PlaySheet.PackDep:
 			case PlaySheet.Replays:
+			case PlaySheet.Settings:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

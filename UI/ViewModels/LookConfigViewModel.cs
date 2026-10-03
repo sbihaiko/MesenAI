@@ -115,8 +115,12 @@ public partial class LookConfigViewModel : DisposableViewModel
 			return;
 		}
 		if(value.Pixels.Kind == PixelsItemKind.MoreInOptions) {
-			Refresh();
-			OpenTab?.Invoke(ConfigWindowTab.Video);
+			//After the selection change: Refresh replaces the list the ComboBox
+			//is still committing, which threw in Avalonia's SelectionModel.
+			Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+				Refresh();
+				OpenTab?.Invoke(ConfigWindowTab.Video);
+			});
 			return;
 		}
 		Write(LookLayers.ApplyPixels(_input, value.Pixels));

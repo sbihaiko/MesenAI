@@ -197,7 +197,11 @@ can be exercised by real xunit tests without Avalonia or the native
   names W-P7's button from the applied state and the draft; the ViewModel
   (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
   `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9
-  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip; `ConfigWindowTab.Display`
+  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip, shown by
+  `PlayerSettingsSheetView` in MainWindow (`MainWindowViewModel.PlayerSettings`,
+  `PlaySheet.Settings` for Esc; "More in Options…" hands over to the classic
+  `ConfigWindow` through `MainMenuViewModel.OpenConfig`, which has no Player
+  mode any more); `ConfigWindowTab.Display`
   is Player-only (not in `ConfigWindowTabOrder`) and `ConfigViewModel` keeps
   `SelectedTabIndex`/`PlayerTabIndex` at -1 for the hidden strip, so a tab's
   content is realized once. `PackInstallPill` is W-P9's state;
@@ -538,9 +542,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   `RemasterWorkspaceHost` and `RemasterRecordingStripHost` (which also carry
   `remaster`), and on the Share views themselves (`ShareWorkspace`,
   `ShareRecordingStrip`, whose DataContext is Share, hence a cast binding);
-  outside MainWindow only Player-mode Settings (`ConfigWindow`'s
-  `PlayerSettingsRoot`) and the first-run card (`SetupWizardWindow`'s
-  `FirstRunCard`) carry it. A component class outside the
+  outside MainWindow only the first-run card (`SetupWizardWindow`'s
+  `FirstRunCard`) carries it. Player-mode Settings is a sheet inside
+  `PlayWorkspace` (`PlayerSettingsSheetView`, W-P8/W-P10), not a window. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic

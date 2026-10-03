@@ -946,6 +946,15 @@
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
 		</Form>
+		<Form ID="PlayerSettingsSheetView">
+			<Control ID="lblPlayerSettingsTitle">Settings</Control>
+			<Control ID="tabDisplay">Display</Control>
+			<Control ID="tabLook">Look</Control>
+			<Control ID="tabAudio">Audio</Control>
+			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
+			<Control ID="btnPlayerSettingsDone">Done</Control>
+		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>
 
@@ -954,11 +963,6 @@
 			<Control ID="tabInput">Input</Control>
 			<Control ID="tabVideo">Video</Control>
 			<Control ID="tabLook">Look</Control>
-			<Control ID="tabDisplay">Display</Control>
-			<Control ID="tabPlayerControls">Controls</Control>
-			<Control ID="lblPlayerSettingsTitle">Settings</Control>
-			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
-			<Control ID="btnPlayerSettingsDone">Done</Control>
 			<Control ID="tabNes">NES</Control>
 			<Control ID="tabSnes">SNES</Control>
 			<Control ID="tabGameboy">Game Boy</Control>
@@ -2094,7 +2098,7 @@
 	<Messages>
 		<Message ID="LookArtNone">The game's own art (no pack)</Message>
 		<Message ID="LookArtUnnamedPack">A pack draws the art</Message>
-		<Message ID="LookPixelsSharp">Sharp (original pixels)</Message>
+		<Message ID="LookPixelsSharp">Sharp — original pixels</Message>
 		<Message ID="LookPixelsHq4x">Smooth — HQ4x</Message>
 		<Message ID="LookPixelsXbrz4x">Smooth — xBRZ 4x</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>

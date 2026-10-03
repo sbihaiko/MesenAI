@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -33,6 +34,7 @@ namespace Mesen.Windows
 
 		private void InitPlaySheets()
 		{
+			this.GetControl<PlayerSettingsSheetView>("PlayerSettingsSheetHost").DoneRequested += (_, _) => _model.ClosePlayerSettingsToOverlay();
 			PlayerPackDetailSheetView detail = this.GetControl<PlayerPackDetailSheetView>("PlayerPackDetailHost");
 			detail.ChangePackRequested += (_, _) => _model.ChangePackFromDetail(EmuApi.GetMepPackList());
 			detail.RestoreRequested += (_, _) => RestorePackFromDetail();
@@ -74,20 +76,50 @@ namespace Mesen.Windows
 			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), installed);
 		}
 
-		//W-P8: Player mode's Settings is the essentials strip (Display, Look,
-		//Audio, Controls), opened on Display; closing it returns to W-P4 while a
-		//game is loaded (every sheet from W-P4 closes back to it).
+		//W-P8 (ADR-0249): Player mode's Settings is a sheet in this window - the
+		//essentials strip (Display, Look, Audio, Controls), opened on Display;
+		//Done and Esc keep the changes and return to W-P4 while a game is loaded.
 		private void OnOverlaySettings(object? sender, RoutedEventArgs e)
 		{
-			_model.IsPlayerOverlayVisible = false;
-			ConfigWindow wnd = ApplicationHelper.GetOrCreateUniqueWindow(this, () => new ConfigWindow(ConfigWindowTab.Display, playerMode: true));
-			wnd.Closed += OnPlaySettingsClosed;
+			ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true, CreateDisplaySettings);
+			settings.PropertyChanged += OnPlayerSettingsChanged;
+			_model.OpenPlayerSettings(settings);
+			//Keyboard and gamepad start on the strip (rule: everything reachable).
+			Dispatcher.UIThread.Post(() => (FindNamedDescendant("tabPlayerDisplay") as TabItem)?.Focus());
 		}
 
-		private void OnPlaySettingsClosed(object? sender, EventArgs e)
+		//G.4 (W-P8): Display edits this window - its full screen and scale.
+		private PlayerDisplaySettingsViewModel CreateDisplaySettings()
+		{
+			return new PlayerDisplaySettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale);
+		}
+
+		//Look's "More in Options…" leaves the essentials (ConfigViewModel turns
+		//PlayerMode off): the sheet closes, keeping what was changed, and the
+		//classic Options window opens on Video - Advanced territory. Closing it
+		//returns to W-P4 while the game runs, as the sheet would.
+		private void OnPlayerSettingsChanged(object? sender, PropertyChangedEventArgs e)
+		{
+			if(e.PropertyName != nameof(ConfigViewModel.PlayerMode) || sender is not ConfigViewModel { PlayerMode: false } settings) {
+				return;
+			}
+			settings.PropertyChanged -= OnPlayerSettingsChanged;
+			//After SelectTab finishes: it is still running on this view-model.
+			Dispatcher.UIThread.Post(() => {
+				if(_model.PlayerSettings != settings) {
+					return;
+				}
+				_model.ClosePlayerSettings();
+				ConfigWindow options = _model.MainMenu.OpenConfig(this, ConfigWindowTab.Video);
+				options.Closed -= OnOptionsFromSettingsClosed;
+				options.Closed += OnOptionsFromSettingsClosed;
+			});
+		}
+
+		private void OnOptionsFromSettingsClosed(object? sender, EventArgs e)
 		{
 			if(sender is ConfigWindow wnd) {
-				wnd.Closed -= OnPlaySettingsClosed;
+				wnd.Closed -= OnOptionsFromSettingsClosed;
 			}
 			if(ConfigManager.Config.Preferences.UiMode == UiMode.Player && EmuApi.IsRunning()) {
 				_model.OpenPauseOverlay();

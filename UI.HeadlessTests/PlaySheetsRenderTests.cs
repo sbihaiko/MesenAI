@@ -395,7 +395,8 @@ public class PlaySheetsRenderTests : IDisposable
 		AssertTitle(title, 17);
 		TextBlock slotTitle = slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("title"));
 		Assert.Equal("Inter", slotTitle.FontFamily.Name);
-		Assert.True(window.FindNamed<Button>("StateGridCloseButton").IsOnScreen());
+		//The grid's own close button: the window holds more than one StateGrid.
+		Assert.True(grid.FindNamed<Button>("StateGridCloseButton").IsOnScreen());
 
 		Bitmap frame = Render(window, "slot-grid", sheet);
 		//An empty slot is a FILL tile, not the classic black picture.
