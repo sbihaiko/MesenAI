@@ -1158,6 +1158,9 @@
     <ClInclude Include="Shared\Video\BaseVideoFilter.h">
       <Filter>Shared\Video</Filter>
     </ClInclude>
+    <ClInclude Include="Shared\Video\WidescreenFrameFlow.h">
+      <Filter>Shared\Video</Filter>
+    </ClInclude>
     <ClCompile Include="Shared\Video\DebugHud.cpp">
       <Filter>Shared\Video</Filter>
     </ClCompile>

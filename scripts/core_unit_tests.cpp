@@ -69,6 +69,12 @@
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
+#include "Shared/Video/WidescreenFrameFlow.h"
+//W.6 asserts the two filters' own AcceptsExtendedFrame declaration (below).
+//Only the headers are needed - the trait check is unevaluated, so no filter
+//object file has to be linked, which is what makes it possible here at all.
+#include "NES/NesNtscFilter.h"
+#include "NES/BisqwitNtscFilter.h"
 #include "Shared/MemoryOperationType.h"
 #include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
@@ -3140,6 +3146,193 @@ namespace
 		const uint16_t* next = frames.Finish(standard.data());
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W6: widescreen through the NTSC filters, the recorder and the
+//capture tools (ADR-0253, slice W.6) ----------------------------------------
+//W.1 put the extra columns into the frame behind a contract and left every
+//filter that assumes 256 px on the decoder's standard-centre crop
+//(BaseVideoFilter::AcceptsExtendedFrame). W.6 widens the two NES NTSC filters,
+//which are the display tools that were still hardcoded: the blargg filter
+//sized its blit plane for 256 px and reported its HUD scale from 256, and the
+//Bisqwit filter walked its input with a 256-px row stride and advanced the
+//colour phase by the 256 px it assumed it had drawn.
+//
+//The recorder and the capture tools are asserted here too - the width the
+//recorder is opened at (the filter's own visible width) and the canvas it lays
+//its HUD out on - and so is the declaration that lets a Reveal frame reach a
+//filter at all. The arithmetic all of them share lives in
+//Shared/Video/WidescreenFrameFlow.h and is host-free, so a test and the
+//shipping path cannot disagree about a stride, a buffer size or a phase.
+//
+//What is deliberately NOT covered here, and is a known gap: the .cpp call
+//sites themselves. The CUTOBJ set links no filter and no renderer - they pull
+//in the PPU, the console and an Emulator - so EnsureNtscBuffer's reallocation,
+//Bisqwit's `rowNumber * width + x` stride and the width argument passed to
+//ApplyPalBorder are one-line pass-throughs of the functions above that only
+//`make doc-checks` (which does compile them) would catch being rewired. The
+//arithmetic they pass through is asserted; the passing-through is not.
+namespace
+{
+	void TestW6BlitGeometryFollowsTheFrameWidth()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		const uint32_t standard = NesWidescreenReveal::StandardWidth;
+		const uint32_t extended = NesWidescreenReveal::ExtendedWidth;
+		const uint32_t height = NesWidescreenReveal::Height;
+
+		Check(BlitOutputWidth(standard) == 602, "W6: nes_ntsc's blitter writes 602 px for a standard NES frame", std::to_string(BlitOutputWidth(standard)));
+		Check(BlitOutputWidth(extended) == 896, "W6: nes_ntsc's blitter writes 896 px for a Reveal frame", std::to_string(BlitOutputWidth(extended)));
+		Check(BlitOutputWidth(extended) - BlitOutputWidth(standard) == 294, "W6: the 128 extra columns widen the blit by 294 output px (7 per 3)", std::to_string(BlitOutputWidth(extended) - BlitOutputWidth(standard)));
+
+		//The plane the filter owns. The fixed NES_NTSC_OUT_WIDTH(256) * 240 of
+		//the old code is short by exactly the extra columns' own rows, i.e.
+		//the blit would have written past the end of its buffer.
+		Check(BlitPlanePixels(extended, height) == 896ull * 240, "W6: a Reveal frame's blit plane is 896x240", std::to_string(BlitPlanePixels(extended, height)));
+		Check(BlitPlanePixels(extended, height) - BlitPlanePixels(standard, height) == (896ull - 602ull) * 240,
+			"W6: the plane sized for a 256-px frame cannot hold a Reveal frame's blit",
+			std::to_string(BlitPlanePixels(extended, height) - BlitPlanePixels(standard, height)));
+		Check(BlitPlanePixels(0, height) == 0, "W6: with no frame yet there is no plane (the width is read before the first one arrives)");
+
+		//ADR-0162: with the switch off the frame is 256 px, and every number
+		//above has to be the constant the filter hardcoded - the plane it
+		//allocated in its constructor, the ratio it reported for the HUD, the
+		//row it decoded, the phase it advanced by. A widescreen change that
+		//moved the standard path would fail here as well as in the accuracy
+		//suite.
+		Check(BlitPlanePixels(standard, height) == 602ull * 240, "W6: a standard frame's plane is the 602x240 the filter used to allocate", std::to_string(BlitPlanePixels(standard, height)));
+
+		Check(NearlyEqual(BlitHudScaleX(standard), 602.0 / 256.0), "W6: the blargg HUD scale for a standard frame is 602/256", std::to_string(BlitHudScaleX(standard)));
+		Check(NearlyEqual(BlitHudScaleX(extended), 896.0 / 384.0), "W6: the blargg HUD scale follows the frame's width, not 256", std::to_string(BlitHudScaleX(extended)));
+		Check(!NearlyEqual(BlitHudScaleX(standard), BlitHudScaleX(extended)), "W6: the two frame widths do not share a HUD scale");
+		Check(NearlyEqual(BlitHudScaleX(0), 1.0), "W6: with no frame yet the HUD is unscaled");
+	}
+
+	void TestW6BisqwitRowFollowsTheFrameWidth()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		Check(SignalsPerPixel == 8, "W6: the Bisqwit decoder carries 8 NTSC samples per frame pixel");
+		Check(SignalSamples(256) == 2048, "W6: a standard row's signal is 256 * 8 samples", std::to_string(SignalSamples(256)));
+		Check(SignalSamples(384) == 3072, "W6: a Reveal row's signal is 384 * 8 samples", std::to_string(SignalSamples(384)));
+		Check(SignalSamples(384) > 2048, "W6: the fixed 256 * 8 row buffer cannot hold a Reveal row", std::to_string(SignalSamples(384)));
+	}
+
+	void TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		//The PPU's scanline is 341 cycles whatever part of it the picture
+		//shows, so a row must advance the colour phase by the whole scanline
+		//no matter how many pixels the frame carries. Advancing by the drawn
+		//pixels instead - the constant the 256-px path used - drifts 128
+		//subcarrier samples per row on a Reveal frame: a colour crawl.
+		const int32_t scanline = ScanlineCycles * SignalsPerPixel;
+		Check(scanline == 2728, "W6: a scanline is 341 * 8 subcarrier samples", std::to_string(scanline));
+		for(uint32_t width : { 256u, 384u }) {
+			int32_t advance = (int32_t)(width * SignalsPerPixel) + PhaseAdvanceAfterRow(width);
+			Check(advance == scanline, "W6: a " + std::to_string(width) + "-px row advances the phase by the whole scanline", std::to_string(advance));
+		}
+		Check(PhaseAdvanceAfterRow(256) == 85 * 8, "W6: the standard frame's correction is the 85 cycles it does not draw", std::to_string(PhaseAdvanceAfterRow(256)));
+		Check(PhaseAdvanceAfterRow(384) == -43 * 8, "W6: a Reveal frame draws past the scanline, so the correction is negative", std::to_string(PhaseAdvanceAfterRow(384)));
+		Check(PhaseAdvanceAfterRow(384) != (ScanlineCycles - 256) * SignalsPerPixel,
+			"W6: the correction is not the 256-px constant, which would desync a Reveal frame's colour");
+	}
+
+	void TestW6CaptureMeasuresAnExtendedFrameOnItsCentre()
+	{
+		using namespace WidescreenFrameFlow;
+		Centre centre = StandardCentre(384, 256);
+		Check(centre.Offset == 64 && centre.Width == 256, "W6: the standard picture of a Reveal frame is its centre 256 columns", std::to_string(centre.Offset) + " " + std::to_string(centre.Width));
+		Check(StandardCentre(768, 512).Offset == 128 && StandardCentre(768, 512).Width == 512, "W6: a scaled Reveal frame's centre scales with it");
+		//The refusals: a standard frame has no centre *in itself* to measure
+		//against, and neither does a frame narrower than the standard picture
+		//nor one whose extra columns would split a pixel in half.
+		Check(!StandardCentre(256, 256).IsValid(), "W6: a standard frame has no centre to measure - the whole frame is the picture");
+		Check(!StandardCentre(128, 256).IsValid(), "W6: a frame narrower than the standard picture has no centre");
+		Check(!StandardCentre(385, 256).IsValid(), "W6: extra columns that do not split evenly leave no centre");
+		Check(!StandardCentre(384, 0).IsValid(), "W6: with no standard picture there is no centre");
+
+		//Two rows, each pixel carrying its own column number so a wrong row
+		//stride or a wrong offset is visible rather than plausible.
+		std::vector<uint32_t> frame((size_t)384 * 2);
+		for(uint32_t y = 0; y < 2; y++) {
+			for(uint32_t x = 0; x < 384; x++) {
+				frame[(size_t)y * 384 + x] = y * 1000 + x;
+			}
+		}
+		std::vector<uint32_t> out;
+		Check(ExtractCentre(frame.data(), 384, 2, 256, out), "W6: a Reveal capture yields its centre");
+		Check(out.size() == 512, "W6: the extracted centre is 256x2 pixels", std::to_string(out.size()));
+		Check(out.size() == 512 && out[0] == 64 && out[255] == 319, "W6: the first row's centre is columns 64-319", out.size() == 512 ? std::to_string(out[0]) + " " + std::to_string(out[255]) : "");
+		Check(out.size() == 512 && out[256] == 1064 && out[511] == 1319, "W6: the second row's centre is read from the second row", out.size() == 512 ? std::to_string(out[256]) + " " + std::to_string(out[511]) : "");
+
+		//A standard capture: 256 wide, i.e. the whole frame is the picture and
+		//there is nothing in it to measure a Reveal frame against.
+		std::vector<uint32_t> standardFrame((size_t)256 * 2, 0xDEADBEEF);
+		out.assign(4, 0xDEADBEEF);
+		Check(!ExtractCentre(standardFrame.data(), 256, 2, 256, out) && out.empty(), "W6: a standard capture is refused rather than read as an extended one");
+		Check(!ExtractCentre(frame.data(), 384, 2, 255, out) && out.empty(), "W6: a standard picture that does not split the frame evenly is refused");
+		Check(!ExtractCentre(nullptr, 384, 2, 256, out) && out.empty(), "W6: with no pixels there is no centre to extract");
+	}
+
+	void TestW6TheRecordedFrameFollowsTheFilteredFramesWidth()
+	{
+		using namespace WidescreenFrameFlow;
+		using namespace WidescreenFrameFlow::Ntsc;
+		//VideoRenderer::ProcessAviRecording opens the AVI/GIF recorder with the
+		//first frame it is handed and never with a constant, so the recorder
+		//itself needed no W.6 change. What it is handed is the filter's output,
+		//and the width of that is NesNtscFilter::GetFrameInfo's - the blitted
+		//plane less the overscan. That is the number asserted here, through the
+		//same function the filter calls, so a filter left reporting the 256 px
+		//constant fails this and not just an implementation detail.
+		Check(BlitVisibleWidth(256, 0, 0) == 602, "W6: with the switch off the recorder is opened at 602 px", std::to_string(BlitVisibleWidth(256, 0, 0)));
+		Check(BlitVisibleWidth(384, 0, 0) == 896, "W6: with the switch on the recorder is opened at 896 px, not 602", std::to_string(BlitVisibleWidth(384, 0, 0)));
+		Check(BlitVisibleWidth(384, 10, 12) == 874 && BlitVisibleWidth(256, 10, 12) == 580,
+			"W6: the overscan comes off the frame's own blitted width",
+			std::to_string(BlitVisibleWidth(384, 10, 12)) + " " + std::to_string(BlitVisibleWidth(256, 10, 12)));
+		//A 256-px constant could never end up smaller than the overscan; a width
+		//that follows the frame can, so the subtraction refuses instead of
+		//wrapping into a four-billion-pixel recording.
+		Check(BlitVisibleWidth(0, 0, 0) == 0 && BlitVisibleWidth(256, 400, 400) == 0,
+			"W6: a frame with nothing left after the overscan measures zero, it does not wrap",
+			std::to_string(BlitVisibleWidth(256, 400, 400)));
+
+		//The canvas ProcessAviRecording lays the input/system HUD out on before
+		//drawing that HUD onto the recording at a uniform scale. Both sides of it
+		//are the frame's own numbers, so a Reveal recording gets a Reveal-sized
+		//canvas - the standard one is where the extra columns would have been
+		//crowded, or the picture clipped.
+		HudCanvas standard = RecorderHudCanvas(602, 480, 240);
+		HudCanvas reveal = RecorderHudCanvas(896, 480, 240);
+		Check(standard.Width == 301 && standard.Height == 240, "W6: a standard recording's HUD canvas is 301x240", std::to_string(standard.Width) + " " + std::to_string(standard.Height));
+		Check(reveal.Width == 448 && reveal.Height == 240, "W6: a Reveal recording's HUD canvas is the frame's own 448x240", std::to_string(reveal.Width) + " " + std::to_string(reveal.Height));
+		Check(reveal.Width != standard.Width, "W6: a Reveal recording's HUD is not laid out on a standard canvas");
+		Check(RecorderHudCanvas(896, 480, 0).Width == 0 && RecorderHudCanvas(896, 0, 240).Width == 0,
+			"W6: with no base frame there is no canvas to lay the HUD out on");
+	}
+
+	void TestW6TheFiltersAcceptTheExtendedFrame()
+	{
+		//The override is the whole wiring. VideoDecoder::KeepStandardCentre
+		//crops an extended frame back to its standard centre unless the filter
+		//answers yes, so a filter that only *uses* whatever width it is handed
+		//still never sees a Reveal column: the header could be perfect and the
+		//picture would still arrive as 256 px. The CUTOBJ set does not link the
+		//filters - they need the PPU, the console and an Emulator - so this is
+		//asserted by type instead of by value: &Derived::f has type
+		//bool (Base::*)() unless Derived declares the override itself, which
+		//makes the declaration, not a returned value, the thing under test.
+		Check(std::is_same<decltype(&NesNtscFilter::AcceptsExtendedFrame), bool (NesNtscFilter::*)()>::value,
+			"W6: the blargg filter declares AcceptsExtendedFrame, so a Reveal frame is not cropped before it");
+		Check(std::is_same<decltype(&BisqwitNtscFilter::AcceptsExtendedFrame), bool (BisqwitNtscFilter::*)()>::value,
+			"W6: the Bisqwit filter declares AcceptsExtendedFrame, so a Reveal frame is not cropped before it");
+		//The control for the two above: the base class's own declaration is the
+		//one the decoder reads as "crop me", and neither filter may still be
+		//carrying it.
+		Check(!std::is_same<decltype(&NesNtscFilter::AcceptsExtendedFrame), decltype(&BaseVideoFilter::AcceptsExtendedFrame)>::value
+			&& !std::is_same<decltype(&BisqwitNtscFilter::AcceptsExtendedFrame), decltype(&BaseVideoFilter::AcceptsExtendedFrame)>::value,
+			"W6: both filters answer for themselves, not with the base class's default");
 	}
 }
 
@@ -13775,6 +13968,12 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestW6BlitGeometryFollowsTheFrameWidth();
+	TestW6BisqwitRowFollowsTheFrameWidth();
+	TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns();
+	TestW6CaptureMeasuresAnExtendedFrameOnItsCentre();
+	TestW6TheRecordedFrameFollowsTheFilteredFramesWidth();
+TestW6TheFiltersAcceptTheExtendedFrame();
 	TestStretchedSizePerSetting();
 
 	TestToggleOverlayStaysReachableInAKeyboardGame();

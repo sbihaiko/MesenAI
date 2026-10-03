@@ -14,6 +14,7 @@
 #include "Shared/Interfaces/INotificationListener.h"
 #include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/Video/FrameCapture.h"
+#include "Shared/Video/WidescreenFrameFlow.h"
 #include "Utilities/Video/IVideoRecorder.h"
 #include "Utilities/Video/AviRecorder.h"
 #include "Utilities/Video/GifRecorder.h"
@@ -439,7 +440,13 @@ void VideoRenderer::ProcessAviRecording(RenderedFrame& frame)
 			//Calculate the scale needed for the HUD elements
 			FrameInfo originalSize = _emu->GetVideoDecoder()->GetBaseFrameInfo(true);
 			double scale = (double)frame.Height / originalSize.Height;
-			FrameInfo scaledFrameSize = { (uint32_t)(frame.Width / scale), (uint32_t)(frame.Height / scale) };
+			//ADR-0253 W.6: the canvas the HUD is laid out on is the frame's own,
+			//so a Reveal recording gets a Reveal-sized one - 448x240 over an
+			//896x480 frame, against the 301x240 a standard 602x480 recording
+			//gets. Laying the Reveal HUD out on the standard canvas is what
+			//would crowd it or clip it.
+			WidescreenFrameFlow::HudCanvas hudCanvas = WidescreenFrameFlow::RecorderHudCanvas(frame.Width, frame.Height, originalSize.Height);
+			FrameInfo scaledFrameSize = { hudCanvas.Width, hudCanvas.Height };
 
 			//Update the surface to match the frame's size
 			_aviRecorderSurface.UpdateSize(frame.Width, frame.Height);

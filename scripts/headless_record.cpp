@@ -151,6 +151,9 @@
 //a NesPpuState. NesTypes.h keeps the ABI the exact one the core was built with.
 #include "NES/NesTypes.h"
 #include "NES/NesWidescreenReveal.h"
+//ADR-0253 W.6: the standard centre of an extended frame is measured by the same
+//function the unit tests assert, not by a second copy of the arithmetic here.
+#include "Shared/Video/WidescreenFrameFlow.h"
 //ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate's rules
 //live in Core/Shared/MovieSyncGate.{h,cpp} - host-free, no Emulator, no
 //filesystem - so this file only samples the trace and reports the verdict.
@@ -2212,16 +2215,20 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 				//columns. Its checksum is what scripts/accuracy_compare.py's
 				//"widescreen" arm compares against the vanilla arm's whole
 				//frame - the extra columns must leave it bit-identical.
+				//The shape test is the gate, and it has to be explicit: a
+				//capture run through an NTSC filter is also wider than 256 but
+				//is not a Reveal frame - the blit's standard picture is not the
+				//arithmetic centre of its output - so "wider than the standard
+				//picture" alone would read a filtered frame as an extended one.
+				//The columns are then taken out by the same function the W.6
+				//unit tests assert (ADR-0253).
 				uint32_t scale = height / NesWidescreenReveal::Height;
-				if(widescreen && scale > 0 && height == scale * NesWidescreenReveal::Height && width == scale * NesWidescreenReveal::ExtendedWidth) {
-					uint32_t centreWidth = scale * NesWidescreenReveal::StandardWidth;
-					uint32_t offset = scale * NesWidescreenReveal::ExtraColumns;
-					std::vector<uint32_t> centre((size_t)centreWidth * height);
-					for(uint32_t y = 0; y < height; y++) {
-						memcpy(centre.data() + (size_t)y * centreWidth, pixels.data() + (size_t)y * width + offset, centreWidth * sizeof(uint32_t));
-					}
-					printf("capture centre: %ux%u checksum=0x%08X\n", centreWidth, height,
-						FrameCaptureMath::Checksum(centre.data(), (uint32_t)centre.size()));
+				uint32_t standardWidth = scale * NesWidescreenReveal::StandardWidth;
+				std::vector<uint32_t> centrePixels;
+				if(widescreen && scale > 0 && height == scale * NesWidescreenReveal::Height && width == scale * NesWidescreenReveal::ExtendedWidth
+					&& WidescreenFrameFlow::ExtractCentre(pixels.data(), width, height, standardWidth, centrePixels)) {
+					printf("capture centre: %ux%u checksum=0x%08X\n", standardWidth, height,
+						FrameCaptureMath::Checksum(centrePixels.data(), (uint32_t)centrePixels.size()));
 				}
 
 				//ADR-0167: same canvas size as the frame capture above (the
