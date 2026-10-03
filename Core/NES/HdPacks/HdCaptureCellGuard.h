@@ -419,6 +419,14 @@ struct HdCellGuard
 
 	bool Allows(uint32_t x, uint32_t y) const
 	{
+		//ADR-0253 W.4: the Reveal's side columns reach this with x = -64 and
+		//x = 256+, and `Mask[y >> 3] >> (x >> 3)` on a wrapped x is both an
+		//out-of-range shift and an answer about an unrelated cell. The mask only
+		//speaks for the picture, so a pixel outside it is refused - the same
+		//"draw nothing here" a clear bit means.
+		if(x >= HdCellKeyRecord::Cols * 8 || y >= HdCellKeyRecord::Rows * 8) {
+			return false;
+		}
 		return ((Mask[y >> 3] >> (x >> 3)) & 1u) != 0;
 	}
 

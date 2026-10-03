@@ -49,3 +49,46 @@ void* HdNesPpu::OnBeforeSendFrame()
 
 	return info;
 }
+
+void HdNesPpu::OnRowBasisCaptured(int16_t row)
+{
+	if(row == 0 && _cycle == 257) {
+		//Pre-render line: the switch is latched once per frame, at the same point
+		//DefaultNesPpu latches its own.
+		_reveal.BeginFrame(IsRevealRequested());
+	}
+
+	uint16_t* left = nullptr;
+	uint16_t* right = nullptr;
+	uint8_t* fill = nullptr;
+	if(!_reveal.RowSides(row, left, right, fill)) {
+		return;
+	}
+
+	NesWidescreenReveal::RowBasis basis;
+	basis.VideoRamAddr = _videoRamAddr;
+	basis.FineX = _xScroll;
+	basis.BgPatternAddr = _control.BackgroundPatternAddr;
+	basis.BgEnabled = _mask.BackgroundEnabled && _emulatorBgEnabled;
+	basis.PaletteMask = _mask.Grayscale ? 0x30 : 0x3F;
+	basis.EmphasisBits = (_mask.IntensifyRed ? 0x40 : 0x00) | (_mask.IntensifyGreen ? 0x80 : 0x00) | (_mask.IntensifyBlue ? 0x100 : 0x00);
+
+	MirroringType mirroring = NesWidescreenReveal::ClassifyMirroring(
+		_mapper->GetNametableSlotPage(0), _mapper->GetNametableSlotPage(1), _mapper->GetNametableSlotPage(2), _mapper->GetNametableSlotPage(3));
+
+	//ADR-0253 §3 (W.3): the sides this row filled from the console's own map,
+	//same rule as NesWidescreenReveal::RenderRowSides.
+	if(fill) {
+		*fill = NesWidescreenReveal::SideColumnsHaveContent(mirroring, NesWidescreenReveal::RowOriginX(basis))
+			? (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit) : 0;
+	}
+
+	HdSideTile* sideRow = _info->EnsureSideTiles() + (size_t)row * HdSideTilesPerRow;
+	HdWidescreenColumns::BuildSideTiles(basis, mirroring, *_mapper, _paletteRam, _isChrRam, _version, sideRow);
+
+	//The frame's own extra columns come from the very tiles the HD renderer draws,
+	//so the two never disagree about what is beside the picture, and no VRAM read
+	//is made twice. See HdWidescreenColumns::SideTilesToLowResRow.
+	HdWidescreenColumns::SideTilesToLowResRow(sideRow, basis.FineX, basis.PaletteMask, basis.EmphasisBits, left);
+	HdWidescreenColumns::SideTilesToLowResRow(sideRow + HdSideTilesPerSide, basis.FineX, basis.PaletteMask, basis.EmphasisBits, right);
+}

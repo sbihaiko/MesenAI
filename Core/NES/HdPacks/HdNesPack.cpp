@@ -4,6 +4,7 @@
 #include "NES/HdPacks/HdNesPack.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/HdPackLoader.h"
+#include "NES/HdPacks/HdWidescreenColumns.h"
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
 #include "NES/NesDefaultVideoFilter.h"
@@ -134,8 +135,12 @@ void HdNesPack<scale>::DrawColor(uint32_t color, uint32_t* outputBuffer, uint32_
 
 template<uint32_t scale>
 template<HdPackBlendMode blendMode>
-void HdNesPack<scale>::DrawCustomBackground(HdBackgroundInfo& bgInfo, uint32_t* outputBuffer, uint32_t x, uint32_t y, uint32_t screenWidth)
+void HdNesPack<scale>::DrawCustomBackground(HdBackgroundInfo& bgInfo, uint32_t* outputBuffer, int32_t x, int32_t y, uint32_t screenWidth)
 {
+	//`x`/`y` are signed because a pixel the pack is asked about can be one of the
+	//Reveal's side columns (ADR-0253 W.4). Only the picture's own reach here:
+	//DrawBackgroundLayer refuses a non-picture pixel before calling, so the two
+	//additions below never see a negative.
 	uint32_t width = bgInfo.Data->Width;
 	uint32_t* pngData = bgInfo.data() + ((bgInfo.Top + y) * scale * width) + ((bgInfo.Left + x) * scale);
 
@@ -525,8 +530,14 @@ void HdNesPack<scale>::InsertAdditionalSprite(int32_t sourceX, int32_t sourceY, 
 }
 
 template<uint32_t scale>
-HdPackTileInfo* HdNesPack<scale>::GetCachedMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile)
+HdPackTileInfo* HdNesPack<scale>::GetCachedMatchingTile(int32_t x, int32_t y, HdPpuTileInfo* tile)
 {
+	//`x` is signed as of ADR-0253 W.4 and this is why: the Reveal's left columns
+	//are x = -64..-1, and the boundary this looks for is the picture's own eight-
+	//pixel grid. Arithmetic on a wrapped uint32_t would land on the same residue
+	//(2^32 is a multiple of 8) but says so by accident; here it says so by
+	//construction, for the centre (x = 0..255, unchanged either way) and the sides
+	//alike.
 	if(((_scrollX + x) & 0x07) == 0) {
 		_useCachedTile = false;
 	}
@@ -549,7 +560,7 @@ HdPackTileInfo* HdNesPack<scale>::GetCachedMatchingTile(uint32_t x, uint32_t y, 
 }
 
 template<uint32_t scale>
-HdPackTileInfo* HdNesPack<scale>::GetMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile, bool* disableCache)
+HdPackTileInfo* HdNesPack<scale>::GetMatchingTile(int32_t x, int32_t y, HdPpuTileInfo* tile, bool* disableCache)
 {
 	auto hdTile = _hdData->TileByKey.find(*tile);
 	if(hdTile == _hdData->TileByKey.end()) {
@@ -590,8 +601,19 @@ HdPackTileInfo* HdNesPack<scale>::GetMatchingTile(uint32_t x, uint32_t y, HdPpuT
 }
 
 template<uint32_t scale>
-HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth)
+HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, int32_t x, int32_t y, uint32_t* outputBuffer, uint32_t screenWidth)
 {
+	if(!HdWidescreenColumns::IsPicturePixel(x, y)) {
+		//ADR-0253 W.4: a `<background>` is written against the 256x240 picture
+		//(ADR-0050/ADR-0236), and a side pixel is not one of its pixels. Without
+		//this, `bgInfo.Left + x` below would index the PNG with a negative
+		//coordinate promoted to a huge unsigned one, and paint unrelated art over
+		//the Reveal's columns. Nothing here, and the `<tile>` rules (or the ROM's
+		//own tiles) keep the pixel: no improvement rather than a wrong answer.
+		//W.3 is where pack art for the sides lands.
+		return nullptr;
+	}
+
 	//A reference, not a copy: the guard beside the config is what makes this
 	//function's per-pixel cost one bit test, and copying it per pixel to keep
 	//the old by-value form would be 30 words of memcpy for every pixel of every
@@ -619,7 +641,7 @@ HdBackgroundInfo* HdNesPack<scale>::DrawBackgroundLayer(uint8_t priority, uint32
 }
 
 template<uint32_t scale>
-void HdNesPack<scale>::DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite)
+void HdNesPack<scale>::DrawBehindBgSprites(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite)
 {
 	for(int k = pixelInfo.SpriteCount - 1; k >= 0; k--) {
 		if(pixelInfo.Sprite[k].BackgroundPriority) {
@@ -638,7 +660,7 @@ void HdNesPack<scale>::DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInf
 }
 
 template<uint32_t scale>
-void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth)
+void HdNesPack<scale>::GetPixels(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth)
 {
 	HdPackTileInfo* hdPackTileInfo = nullptr;
 	HdPackTileInfo* hdPackSpriteInfo = nullptr;
@@ -744,23 +766,92 @@ void HdNesPack<scale>::GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelIn
 	}
 }
 
+//ADR-0253 W.4: one row's extra columns. Every pixel here goes through GetPixels
+//with the HdSideTile HdNesPpu captured for it, so the pack's `<tile>` rules,
+//fallback tiles, brightness and CHR-RAM keys all apply exactly as they do in the
+//centre, and at the pack's own scale rather than as a stretched low-res tile. A
+//column the console has no content for is drawn black and never looked up
+//(ADR-0253 §3) - the pack is not asked a question with no answer.
+//
+//The background layers are not widened here: DrawBackgroundLayer refuses a
+//non-picture pixel, so what a side pixel gets is the pack's `<tile>` rules or the
+//ROM's own tiles, and W.3's `<widescreen>` art is what fills the rest.
 template<uint32_t scale>
-void HdNesPack<scale>::Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan)
+void HdNesPack<scale>::DrawWidescreenColumns(int32_t y, HdSideTile* sideTiles, uint32_t* rowStart, uint32_t screenWidth)
+{
+	for(int side = 0; side < 2; side++) {
+		bool right = side == 1;
+		HdSideTile* sideRow = sideTiles + (size_t)side * HdSideTilesPerSide;
+		//The row's loopy x, the same for all eighteen side tiles: it is what maps
+		//an output column to the tile and pixel it draws from
+		//(HdWidescreenColumns::SideColumnToTile).
+		uint8_t xScroll = sideRow[0].XScroll;
+
+		uint32_t* dest = rowStart + (right ? screenWidth - HdWidescreenColumns::ExtraColumns * scale : 0);
+		_useCachedTile = false; //the cache holds a centre tile, or nothing at all
+		for(uint32_t m = 0; m < HdWidescreenColumns::ExtraColumns; m++) {
+			uint32_t tile = 0;
+			uint32_t pixel = 0;
+			HdWidescreenColumns::SideColumnToTile(xScroll, m, tile, pixel);
+			HdSideTile& sideTile = sideRow[tile];
+
+			if(!sideTile.HasContent) {
+				DrawColor(_palette[NesWidescreenReveal::BlackColor], dest, screenWidth);
+			} else {
+				//One pixel's worth of what HdNesPpu::DrawPixel fills for a centred
+				//pixel: the tile key, the ROM colour behind a tile the pack has no
+				//rule for, and which column of the art this output column samples
+				//(HdWidescreenColumns::BuildSidePixelInfo).
+				HdPpuPixelInfo pixelInfo;
+				HdWidescreenColumns::BuildSidePixelInfo(sideTile, pixel, pixelInfo);
+				GetPixels(HdWidescreenColumns::ExtraColumnX(right, m), y, pixelInfo, dest, screenWidth);
+			}
+			dest += scale;
+		}
+	}
+}
+
+template<uint32_t scale>
+void HdNesPack<scale>::Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan, bool extended)
 {
 	_hdScreenInfo = hdScreenInfo;
 	uint32_t hdScale = GetScale();
-	uint32_t screenWidth = (NesConstants::ScreenWidth - overscan.Left - overscan.Right) * hdScale;
+	//ADR-0253 W.4: with `extended` false this is today's arithmetic element for
+	//element - no sides, no offset, the same width and row stride - which is what
+	//keeps the standard frame's output bit-identical (ADR-0162).
+	HdWidescreenColumns::HdFrameGeometry geometry = HdWidescreenColumns::ComputeHdFrameGeometry(extended, hdScale, overscan.Left, overscan.Right);
+	uint32_t screenWidth = geometry.ScreenWidth;
 
 	OnBeforeApplyFilter();
-	for(uint32_t i = overscan.Top, iMax = 240 - overscan.Bottom; i < iMax; i++) {
-		OnLineStart(hdScreenInfo->ScreenTiles[i << 8], i);
-		uint32_t bufferIndex = (i - overscan.Top) * screenWidth * hdScale;
-		uint32_t lineStartIndex = bufferIndex;
-		for(uint32_t j = overscan.Left, jMax = 256 - overscan.Right; j < jMax; j++) {
+	//`i` and `j` are signed (ADR-0253 W.4): they are the pixel coordinate the pack
+	//is asked about, and a side column's is negative - x = -64 is the picture's
+	//first left neighbour, not a wrapped 0xFFFFFFC0 that only *happens* to land on
+	//the right eight-pixel tile boundary in `(_scrollX + x) & 0x07`. In the centre
+	//they are 0..255 either way, so the standard frame is unchanged (ADR-0162).
+	for(int32_t i = (int32_t)overscan.Top, iMax = 240 - (int32_t)overscan.Bottom; i < iMax; i++) {
+		OnLineStart(hdScreenInfo->ScreenTiles[i << 8], (uint8_t)i);
+		uint32_t lineStartIndex = (uint32_t)(i - (int32_t)overscan.Top) * geometry.RowStride;
+		uint32_t bufferIndex = lineStartIndex + geometry.CentreOffset;
+		if(geometry.ExtraColumns > 0 && hdScreenInfo->SideTiles) {
+			//The left side replaces the cropped overscan columns on the row's left
+			//edge and the right side the ones on its right, so the picture keeps
+			//its own x coordinates and only the seam the overscan always cut is
+			//new - which is what a `<widescreen>` pack image is for (W.3).
+			//
+			//SideTiles is null when no row of this frame captured a basis - a save
+			//state loaded mid-frame, or a frame the Reveal never ran for. The pixels
+			//are then whatever the row was cleared to, never a read through a null.
+			DrawWidescreenColumns(i, hdScreenInfo->SideTiles + (size_t)i * HdSideTilesPerRow, outputBuffer + lineStartIndex, screenWidth);
+		}
+
+		_useCachedTile = false; //the centre's first drawn pixel is mid-tile when overscan.Left is not a multiple of 8
+		for(int32_t j = (int32_t)overscan.Left, jMax = 256 - (int32_t)overscan.Right; j < jMax; j++) {
 			GetPixels(j, i, hdScreenInfo->ScreenTiles[i * 256 + j], outputBuffer + bufferIndex, screenWidth);
 			bufferIndex += hdScale;
 		}
 
+		//The whole row, both sides included: the low-res Reveal applies the same
+		//grayscale and emphasis to its extra columns, and black stays black.
 		ProcessGrayscaleAndEmphasis(hdScreenInfo->ScreenTiles[i * 256], outputBuffer + lineStartIndex, screenWidth);
 	}
 

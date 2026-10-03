@@ -445,6 +445,8 @@
     <ClInclude Include="NES\HdPacks\HdPackErrorDedupe.h" />
     <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h" />
     <ClInclude Include="NES\HdPacks\HdCaptureCellGuard.h" />
+    <ClInclude Include="NES\HdPacks\HdWidescreenColumns.h" />
+    <ClInclude Include="NES\HdPacks\HdWidescreenGeometry.h" />
     <ClInclude Include="NES\HdPacks\OamFetchLatch.h" />
     <ClInclude Include="NES\HdPacks\SpriteFetchLog.h" />
     <ClInclude Include="NES\HdPacks\HdPackLoader.h" />

@@ -834,6 +834,12 @@
     <ClInclude Include="NES\HdPacks\HdCaptureCellGuard.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdWidescreenColumns.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdWidescreenGeometry.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
     <ClInclude Include="NES\HdPacks\SpriteFetchLog.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>

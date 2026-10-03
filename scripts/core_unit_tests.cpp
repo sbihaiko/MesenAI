@@ -89,6 +89,8 @@
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/HdCaptureCellGuard.h"
 #include "NES/HdPacks/HdPackConditions.h"
+#include "NES/HdPacks/HdWidescreenGeometry.h"
+#include "NES/HdPacks/HdWidescreenColumns.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -3153,6 +3155,596 @@ namespace
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
 	}
+}
+
+//--- Bloco W253-W4: the Reveal's extra columns through the HD pack path -----
+//ADR-0253 slice W.4. The extra columns are the picture's own neighbours, so the
+//pack has to be asked about them the way it is asked about a centred pixel: the
+//same tile key (index + palette, plus CHR RAM's own bytes), the same ROM colour
+//behind a tile the pack has no rule for, and the whole thing at the pack's own
+//scale - never a raw low-res tile stretched to fit.
+//
+//The picture keeps its own coordinates while the sides sit outside them
+//(-64..-1 and 256..319). That is what keeps the centre bit-identical and every
+//rule a pack already ships meaning what it meant; the price is that a rule
+//which reads a position has to be told "this pixel is not in the picture"
+//instead of wrapping onto an unrelated one - the guard the last cases pin, and
+//the reason the pack's failure mode here is "no improvement", never a hole.
+//
+//The fake mapper grows W.1's RevealFakeMapper by the two calls the pack key
+//needs - GetPpuAbsoluteAddress (the mapper's CHR banking) and CopyChrTile (CHR
+//RAM) - and still counts every side-effecting read.
+namespace
+{
+	struct HdSideFakeAddress
+	{
+		int32_t Address;
+	};
+
+	struct HdSideFakeMapper : public RevealFakeMapper
+	{
+		int AbsoluteCalls = 0;
+		int CopyChrCalls = 0;
+
+		HdSideFakeAddress GetPpuAbsoluteAddress(uint32_t relativeAddr)
+		{
+			AbsoluteCalls++;
+			return { (int32_t)(relativeAddr & 0x1FFF) };
+		}
+
+		void CopyChrTile(uint32_t addr, uint8_t* output)
+		{
+			CopyChrCalls++;
+			memcpy(output, Chr + (addr & 0x1FFF), 16);
+		}
+	};
+
+	//W.1's RevealBasis leaves the vertical half of loopy v at 0. The side tiles
+	//read the nametable row and the fine Y too, so the cases about them set
+	//those bits here.
+	NesWidescreenReveal::RowBasis HdSideBasis(uint8_t coarseX, uint8_t fineX, uint8_t coarseY = 0, uint8_t fineY = 0, bool secondNametableRow = false)
+	{
+		NesWidescreenReveal::RowBasis basis = RevealBasis(coarseX, fineX);
+		basis.VideoRamAddr |= (uint16_t)((coarseY & 0x1F) << 5) | (uint16_t)((fineY & 0x07) << 12) | (uint16_t)(secondNametableRow ? 0x0800 : 0);
+		return basis;
+	}
+
+	bool AllEqualBytes(const uint8_t* px, uint32_t count, uint8_t value)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(px[i] != value) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	//Every side tile's whole story, so a failure names what it saw.
+	bool AllSideTilesEmpty(const HdSideTile* tiles, uint32_t count)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(tiles[i].HasContent || tiles[i].Tile.TileIndex != HdPpuTileInfo::NoTile) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void BuildHdSideTiles(HdSideFakeMapper& m, const NesWidescreenReveal::RowBasis& basis, MirroringType mirroring, const uint8_t* pal, bool isChrRam, uint32_t version, HdSideTile* tiles)
+	{
+		HdWidescreenColumns::BuildSideTiles(basis, mirroring, m, pal, isChrRam, version, tiles);
+	}
+
+	//Where a side sits in the HD output row, as the renderer walks it: the same
+	//arithmetic HdNesPack::DrawWidescreenColumns uses.
+	uint32_t HdSideColumnOffset(bool right, uint32_t column, uint32_t hdScale, uint32_t screenWidth)
+	{
+		uint32_t base = right ? screenWidth - HdWidescreenColumns::ExtraColumns * hdScale : 0;
+		return base + column * hdScale;
+	}
+}
+
+//The picture is not renumbered: a pack's `<tile>`, `<background>` and condition
+//coordinates still mean the same pixel, and the sides live outside them.
+void TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates()
+{
+	using namespace HdWidescreenColumns;
+	Check(ExtraColumns == 64, "W4: the extra columns are W.1's 64 a side", std::to_string(ExtraColumns));
+	Check(PictureWidth == 256 && PictureHeight == 240, "W4: the picture keeps its own 256x240 coordinates");
+	Check(TilesPerSide == 9, "W4: a side spans 8 whole tiles plus the one the row's fine X starts inside", std::to_string(TilesPerSide));
+	Check(TilesPerRow == 18, "W4: one row carries both sides", std::to_string(TilesPerRow));
+
+	Check(ExtraColumnX(false, 0) == -64 && ExtraColumnX(false, 63) == -1, "W4: the left columns are x = -64..-1",
+		std::to_string(ExtraColumnX(false, 0)) + ".." + std::to_string(ExtraColumnX(false, 63)));
+	Check(ExtraColumnX(true, 0) == 256 && ExtraColumnX(true, 63) == 319, "W4: the right columns are x = 256..319",
+		std::to_string(ExtraColumnX(true, 0)) + ".." + std::to_string(ExtraColumnX(true, 63)));
+
+	Check(!IsPicturePixel(-1, 0) && !IsPicturePixel(0, -1) && !IsPicturePixel(256, 0) && !IsPicturePixel(0, 240),
+		"W4: a side pixel is not a pixel of the picture");
+	Check(IsPicturePixel(0, 0) && IsPicturePixel(255, 0) && IsPicturePixel(0, 239) && IsPicturePixel(255, 239),
+		"W4: all four corners of the 256x240 picture are picture pixels");
+
+	Check(RevealRequested(true, false), "W4: WideScrn on a normal console asks for the Reveal");
+	Check(!RevealRequested(false, false), "W4: with the switch off nothing is revealed");
+	Check(!RevealRequested(true, true), "W4: a Vs. DualSystem merges two standard frames, so it stays standard");
+
+	//A side's output column m is tile (fineX + m) / 8, pixel (fineX + m) % 8 -
+	//the sides start inside their first tile when the row's fine X is not 0.
+	uint32_t tile = 99, pixel = 99;
+	SideColumnToTile(0, 0, tile, pixel);
+	Check(tile == 0 && pixel == 0, "W4: with fine X 0 a side starts on a tile boundary",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	SideColumnToTile(3, 0, tile, pixel);
+	Check(tile == 0 && pixel == 3, "W4: with fine X 3 it starts three pixels into the first tile",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	SideColumnToTile(3, 63, tile, pixel);
+	Check(tile == 8 && pixel == 2, "W4: and ends two pixels into a ninth tile",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	for(uint32_t m = 0; m < ExtraColumns; m++) {
+		SideColumnToTile(7, m, tile, pixel);
+		if(tile >= TilesPerSide) {
+			Check(false, "W4: no column of a side reaches a tenth tile", std::to_string(m) + "->" + std::to_string(tile));
+			break;
+		}
+	}
+}
+
+//The tile each side column is drawn from, in the plane the mirroring puts
+//beside the picture - the same tiles W.1's low-res Reveal reads there.
+void TestW4SideTilesComeFromTheNeighbouringNametable()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00); //tile 1 = colour 1, palette 0 -> 0x11
+	m.FillNametable(1, 2, 0x55); //tile 2 = colour 2, palette 1 -> 0x22
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	//Unscrolled with vertical mirroring: both sides are the other nametable
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].HasContent && tiles[TilesPerSide].HasContent, "W4: vertical mirroring gives the sides content");
+	Check(tiles[0].Tile.TileIndex == 2 && tiles[TilesPerSide].Tile.TileIndex == 2,
+		"W4: both sides are drawn from the neighbouring nametable's tile",
+		std::to_string(tiles[0].Tile.TileIndex) + " " + std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+	Check(tiles[0].BgColorIndex[0] == 2 && tiles[0].BgColor[0] == 0x22,
+		"W4: and carry the ROM's own colour for the pixel", Hex16(tiles[0].BgColor[0]) + " idx=" + std::to_string(tiles[0].BgColorIndex[0]));
+	Check(tiles[0].Tile.PpuBackgroundColor == 0x0D, "W4: the backdrop travels with the tile", Hex16(tiles[0].Tile.PpuBackgroundColor));
+	Check(tiles[0].Tile.OffsetY == 0 && tiles[0].Tile.PaletteOffset == 0,
+		"W4: a side tile is handed to the pack with the offsets a centred one has");
+
+	//Scrolled by 128 px: the left side is the current nametable, the right one
+	//the next - exactly W.1's RenderRowSides split
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].Tile.TileIndex == 1 && tiles[0].BgColorIndex[0] == 1 && tiles[0].BgColor[0] == 0x11,
+		"W4: scrolled 128 px, the left tiles are the current nametable's", Hex16(tiles[0].BgColor[0]));
+	Check(tiles[TilesPerSide].Tile.TileIndex == 2, "W4: scrolled 128 px, the right tiles are the next nametable's",
+		std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+}
+
+//Fine X, fine Y and the nametable row: the three bits that decide *which*
+//neighbour pixel a side column shows.
+void TestW4SideTilesFollowTheRowsScrollState()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	//Scrolled by 16 tiles with vertical mirroring, the left side is the current
+	//nametable and the right one the neighbour. Tile 4 lights only its own first
+	//pixel column, so it says both things at once: the tile is handed over
+	//whole - its eight pixels are the ROM's, unshifted - and fine X only moves
+	//which of them the side's output columns start on.
+	m.FillNametable(0, 4, 0x00);
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].BgColorIndex[0] == 1 && AllEqualBytes(tiles[0].BgColorIndex + 1, 7, 0),
+		"W4: a side tile carries the ROM tile's own eight pixels",
+		std::to_string(tiles[0].BgColorIndex[0]) + " " + std::to_string(tiles[0].BgColorIndex[1]));
+
+	BuildHdSideTiles(m, HdSideBasis(16, 3), MirroringType::Vertical, pal, false, 109, tiles);
+	uint32_t fineTile = 99, finePixel = 99;
+	SideColumnToTile(3, 5, fineTile, finePixel);
+	Check(fineTile == 1 && finePixel == 0 && tiles[1].BgColorIndex[finePixel] == 1 && tiles[0].BgColorIndex[3] == 0,
+		"W4: fine X moves which pixel of the side's first tile the side starts on",
+		std::to_string(fineTile) + " " + std::to_string(finePixel) + " " + std::to_string(tiles[0].BgColorIndex[3]));
+
+	//Fine Y selects the tile row; tile 5 lights only fine row 2
+	m.FillNametable(1, 5, 0x00);
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 2), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[7] == 1 && tiles[TilesPerSide].BgColor[7] == 0x11,
+		"W4: fine Y picks the tile row the sides read", Hex16(tiles[TilesPerSide].BgColor[7]));
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 1), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[7] == 0 && tiles[TilesPerSide].BgColor[7] == 0x0D,
+		"W4: a transparent tile row shows the backdrop", Hex16(tiles[TilesPerSide].BgColor[7]));
+
+	//The attribute quadrant picks the palette, as it does for a centred pixel.
+	//NT1's attribute 0xE4 gives its tiles at coarse X 48-49 palette 0 and those
+	//at 50-51 palette 1, so two adjacent right-side tiles holding the *same* ROM
+	//tile come out in different palettes.
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 1, 0xE4);
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[0] == 1 && tiles[TilesPerSide].BgColor[0] == 0x11,
+		"W4: the attribute quadrant picks the palette of each side tile", Hex16(tiles[TilesPerSide].BgColor[0]));
+	Check(tiles[TilesPerSide + 2].BgColor[0] == 0x21,
+		"W4: and the next quadrant picks the next palette", Hex16(tiles[TilesPerSide + 2].BgColor[0]));
+
+	//The nametable row is loopy v's bit 11, and it picks the *pair*: four
+	//distinct nametables are what makes that visible, since vertical mirroring
+	//maps both rows of the pair onto the same two.
+	m.NametableMap[0] = 0; m.NametableMap[1] = 1; m.NametableMap[2] = 2; m.NametableMap[3] = 3;
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(2, 1, 0x00);
+	m.FillNametable(3, 4, 0x55);
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 0, true), MirroringType::FourScreens, pal, false, 109, tiles);
+	Check(tiles[0].Tile.TileIndex == 1 && tiles[TilesPerSide].Tile.TileIndex == 4,
+		"W4: loopy v's nametable row bit moves the sides to the next pair of nametables",
+		std::to_string(tiles[0].Tile.TileIndex) + " " + std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+}
+
+//The black fallback and the background-off row, carried into the pack's own
+//vocabulary: no content is a black tile the pack is never asked about, and a
+//background-off row is a no-tile pixel, which the pack paints as the backdrop.
+void TestW4SideTilesGoEmptyWhereTheRevealDrawsBlack()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	BuildHdSideTiles(m, HdSideBasis(4, 0), MirroringType::ScreenAOnly, pal, false, 109, tiles);
+	Check(AllSideTilesEmpty(tiles, TilesPerRow), "W4: single-screen leaves every side tile empty (the black fallback)");
+	Check(AllEqualBytes(tiles[0].BgColor, 8, (uint8_t)NesWidescreenReveal::BlackColor), "W4: an empty side tile is black", Hex16(tiles[0].BgColor[0]));
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Horizontal, pal, false, 109, tiles);
+	Check(AllSideTilesEmpty(tiles, TilesPerRow), "W4: horizontal mirroring leaves every side tile empty (SMB3 title)");
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(!AllSideTilesEmpty(tiles, TilesPerRow), "W4: vertical mirroring fills them again");
+
+	//Background off for the row: the low-res Reveal shows the backdrop, so the
+	//pack is handed a pixel with no tile and paints the same backdrop.
+	NesWidescreenReveal::RowBasis off = HdSideBasis(0, 0);
+	off.BgEnabled = false;
+	BuildHdSideTiles(m, off, MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].HasContent && tiles[0].Tile.TileIndex == HdPpuTileInfo::NoTile,
+		"W4: with the background off the pack is handed a pixel with no tile",
+		std::to_string(tiles[0].Tile.TileIndex));
+	Check(tiles[0].BgColorIndex[0] == 0 && tiles[0].BgColor[0] == 0x0D && tiles[0].Tile.PpuBackgroundColor == 0x0D,
+		"W4: and that pixel's colour is the backdrop, as W.1 draws it", Hex16(tiles[0].BgColor[0]));
+	Check(m.SideEffectReads == 0, "W4: even the background-off row uses no rendering read");
+}
+
+//The strongest statement of the slice: the pixels the pack is handed for a side
+//are the pixels W.1's low-res Reveal draws there, so widening the path to HD can
+//never move a side pixel.
+void TestW4SideTilePixelsAreTheLowResRevealPixels()
+{
+	using namespace NesWidescreenReveal;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(2, 4, 0xE4);
+	m.FillNametable(3, 5, 0xAA);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+
+	bool same = true;
+	bool sameLowRes = true;
+	std::string firstBad;
+	std::string firstBadLowRes;
+	for(uint8_t fineX = 0; fineX < 8 && same; fineX++) {
+		for(uint8_t fineY = 0; fineY < 8 && same; fineY++) {
+			RowBasis basis = HdSideBasis(5, fineX, 3, fineY, (fineY & 1) != 0);
+			uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+			RenderRowSides(basis, MirroringType::Vertical, m, pal, left, right);
+
+			HdSideTile tiles[HdWidescreenColumns::TilesPerRow];
+			HdWidescreenColumns::BuildSideTiles(basis, MirroringType::Vertical, m, pal, false, 109, tiles);
+
+			//The frame HdNesPpu emits is built from these same tiles. If it ever
+			//stopped matching W.1's own renderer, the widened RenderedFrame a
+			//non-HD consumer sees (the border layer's centre) would be the only
+			//place the two could disagree.
+			uint16_t lowLeft[ExtraColumns] = {}, lowRight[ExtraColumns] = {};
+			HdWidescreenColumns::SideTilesToLowResRow(tiles, fineX, basis.PaletteMask, basis.EmphasisBits, lowLeft);
+			HdWidescreenColumns::SideTilesToLowResRow(tiles + HdWidescreenColumns::TilesPerSide, fineX, basis.PaletteMask, basis.EmphasisBits, lowRight);
+
+			for(uint32_t side = 0; side < 2; side++) {
+				for(uint32_t column = 0; column < ExtraColumns; column++) {
+					uint32_t tile = 0, pixel = 0;
+					HdWidescreenColumns::SideColumnToTile(fineX, column, tile, pixel);
+					const HdSideTile& sideTile = tiles[side * HdWidescreenColumns::TilesPerSide + tile];
+					uint8_t index = sideTile.BgColorIndex[pixel];
+					uint16_t drawn = index == 0 ? sideTile.Tile.PpuBackgroundColor : sideTile.BgColor[pixel];
+					uint16_t expected = side == 0 ? left[column] : right[column];
+					uint16_t lowRes = side == 0 ? lowLeft[column] : lowRight[column];
+					if(same && drawn != expected) {
+						same = false;
+						firstBad = "fineX=" + std::to_string(fineX) + " fineY=" + std::to_string(fineY) +
+							" side=" + std::to_string(side) + " col=" + std::to_string(column) +
+							" tile=" + std::to_string(tile) + " px=" + std::to_string(pixel) +
+							" got=" + Hex16(drawn) + " want=" + Hex16(expected);
+					}
+					if(sameLowRes && lowRes != expected) {
+						sameLowRes = false;
+						firstBadLowRes = "fineX=" + std::to_string(fineX) + " fineY=" + std::to_string(fineY) +
+							" side=" + std::to_string(side) + " col=" + std::to_string(column) +
+							" got=" + Hex16(lowRes) + " want=" + Hex16(expected);
+					}
+				}
+			}
+		}
+	}
+	Check(same, "W4: every side tile pixel is the colour W.1's low-res Reveal draws there", firstBad);
+	Check(sameLowRes, "W4: the widened frame's own side pixels are W.1's, built from those same tiles", firstBadLowRes);
+}
+
+//What the HD renderer is handed for a side pixel. The low-res frame above is
+//built from the tile's own colours, so it cannot see this: `OffsetX` is which
+//column of the pack's *art* the pixel samples, and `DrawTile` indexes the bitmap
+//with it. Left at the struct's default of 0, every column of a side row draws
+//column 0 of the tile - a smear the low-res comparison above is blind to.
+void TestW4SidePixelInfoSamplesEachColumnsOwnPixel()
+{
+	using namespace HdWidescreenColumns;
+	using namespace NesWidescreenReveal;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(3, 3, 0x99);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+
+	bool offsetMatchesColumn = true;
+	bool recordMatchesTile = true;
+	bool offsetEverMoves = false;
+	std::string firstBadOffset;
+	std::string firstBadRecord;
+
+	for(int side = 0; side < 2; side++) {
+		for(uint8_t fineX = 0; fineX < 8; fineX++) {
+			RowBasis basis = HdSideBasis(5, fineX);
+			HdSideTile tiles[TilesPerRow];
+			BuildHdSideTiles(m, basis, MirroringType::Vertical, pal, false, 109, tiles);
+			const HdSideTile* sideRow = tiles + side * TilesPerSide;
+
+			for(uint32_t column = 0; column < HdWidescreenColumns::ExtraColumns; column++) {
+				uint32_t tile = 0, pixel = 0;
+				SideColumnToTile(fineX, column, tile, pixel);
+				const HdSideTile& sideTile = sideRow[tile];
+				if(!sideTile.HasContent) {
+					continue;
+				}
+
+				HdPpuPixelInfo info;
+				BuildSidePixelInfo(sideTile, pixel, info);
+
+				//The one field that is not the tile's own: the column of the art.
+				if(info.Tile.OffsetX != pixel) {
+					if(offsetMatchesColumn) {
+						firstBadOffset = "side=" + std::to_string(side) + " fineX=" + std::to_string(fineX) +
+							" col=" + std::to_string(column) + " tile=" + std::to_string(tile) +
+							" px=" + std::to_string(pixel) + " OffsetX=" + std::to_string(info.Tile.OffsetX);
+					}
+					offsetMatchesColumn = false;
+				}
+				if(pixel != 0) {
+					offsetEverMoves = true;
+				}
+
+				//Everything else is exactly the side tile's, so the pack's lookup
+				//key and the ROM colour behind a tile it has no rule for are the
+				//ones HdNesPpu captured - not a re-derivation.
+				bool ok = info.Tile.TileIndex == sideTile.Tile.TileIndex &&
+					info.Tile.PaletteColors == sideTile.Tile.PaletteColors &&
+					info.Tile.OffsetY == sideTile.Tile.OffsetY &&
+					info.Tile.IsChrRamTile == sideTile.Tile.IsChrRamTile &&
+					info.Tile.PpuBackgroundColor == sideTile.Tile.PpuBackgroundColor &&
+					info.Tile.BgColorIndex == sideTile.BgColorIndex[pixel] &&
+					info.Tile.BgColor == sideTile.BgColor[pixel] &&
+					info.SpriteCount == 0 && !info.Tile.HorizontalMirroring;
+				//A side pixel has no sprite of its own: sprites do not exist past
+				//the picture's edge, and a stale SpriteCount would draw the centre's.
+				if(!ok && recordMatchesTile) {
+					firstBadRecord = "side=" + std::to_string(side) + " fineX=" + std::to_string(fineX) +
+						" col=" + std::to_string(column) + " tile=" + std::to_string(tile) + " px=" + std::to_string(pixel);
+				}
+				recordMatchesTile = recordMatchesTile && ok;
+			}
+		}
+	}
+
+	Check(offsetMatchesColumn, "W4: a side pixel samples its own column of the pack's art", firstBadOffset);
+	Check(offsetEverMoves, "W4: and the sweep really reaches a column whose pixel is not 0");
+	Check(recordMatchesTile, "W4: the rest of the record is the side tile's own", firstBadRecord);
+}
+
+//The pack's key: a side tile is looked up by the same fields a centred one is,
+//and the pack version still decides whether the palette carries its alpha byte.
+void TestW4SideTileKeyMatchesTheKeyOfACentredTile()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	uint32_t expected109 = (uint32_t)pal[7] | ((uint32_t)pal[6] << 8) | ((uint32_t)pal[5] << 16) | ((uint32_t)pal[0] << 24);
+	Check(tiles[0].Tile.PaletteColors == expected109, "W4: a v100+ pack reads the palette with its alpha byte",
+		"0x" + std::to_string(tiles[0].Tile.PaletteColors) + " vs 0x" + std::to_string(expected109));
+	Check(!tiles[0].Tile.IsChrRamTile, "W4: a CHR ROM game's side tile is an index, not bytes");
+	Check(m.AbsoluteCalls == TilesPerRow, "W4: every side tile resolves its absolute CHR address once",
+		std::to_string(m.AbsoluteCalls));
+	Check(m.CopyChrCalls == 0, "W4: a CHR ROM game copies no tile bytes", std::to_string(m.CopyChrCalls));
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 99, tiles);
+	uint32_t expected99 = (uint32_t)pal[7] | ((uint32_t)pal[6] << 8) | ((uint32_t)pal[5] << 16);
+	Check(tiles[0].Tile.PaletteColors == expected99, "W4: a pre-100 pack reads it without the alpha byte",
+		"0x" + std::to_string(tiles[0].Tile.PaletteColors) + " vs 0x" + std::to_string(expected99));
+
+	//CHR RAM: the tile carries its own bytes, hashed by them, exactly as a
+	//centred tile does (HdTileKey's own rule).
+	uint8_t chrLo[8] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
+	uint8_t chrHi[8] = {};
+	m.SetTile(2, chrLo, chrHi);
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, true, 109, tiles);
+	Check(tiles[0].Tile.IsChrRamTile, "W4: a CHR RAM game's side tile is keyed by its bytes");
+	Check(m.CopyChrCalls == TilesPerRow, "W4: and every side tile copies its own bytes", std::to_string(m.CopyChrCalls));
+	Check(tiles[0].Tile.TileData[0] == 0xAA && tiles[0].Tile.TileData[8] == 0x00,
+		"W4: the bytes it copies are the tile's own planes",
+		Hex16(tiles[0].Tile.TileData[0]) + " " + Hex16(tiles[0].Tile.TileData[8]));
+	Check(m.SideEffectReads == 0 && m.VramHookCalls == 0,
+		"W4: the sides never use the mapper's rendering VRAM read nor its address hook",
+		std::to_string(m.SideEffectReads) + " " + std::to_string(m.VramHookCalls));
+}
+
+//The HD frame the pack has to fill, and the invariant that makes the centre
+//trustworthy: widening the row never moves a centre pixel.
+void TestW4HdFrameAddsTheSidesAroundTheCentre()
+{
+	using namespace HdWidescreenColumns;
+
+	HdFrameGeometry standard = ComputeHdFrameGeometry(false, 3, 8, 8);
+	Check(standard.ExtraColumns == 0 && standard.CentreOffset == 0,
+		"W4: a standard frame has no sides and starts at the picture's own left edge");
+	Check(standard.ScreenWidth == (256 - 16) * 3, "W4: a standard frame is today's HD width", std::to_string(standard.ScreenWidth));
+	Check(standard.RowStride == standard.ScreenWidth * 3, "W4: and today's HD row stride", std::to_string(standard.RowStride));
+
+	HdFrameGeometry wide = ComputeHdFrameGeometry(true, 3, 8, 8);
+	Check(wide.ExtraColumns == 64, "W4: an extended frame carries the Reveal's 64 columns a side", std::to_string(wide.ExtraColumns));
+	Check(wide.ScreenWidth == (384 - 16) * 3, "W4: the HD row is the extended picture minus the overscan", std::to_string(wide.ScreenWidth));
+	Check(wide.RowStride == wide.ScreenWidth * 3, "W4: the HD row stride follows the wider row", std::to_string(wide.RowStride));
+	Check(wide.CentreOffset == 64 * 3, "W4: the centre starts after the left side", std::to_string(wide.CentreOffset));
+	Check(wide.ScreenWidth - 2 * 64 * 3 == standard.ScreenWidth,
+		"W4: the sides widen the row by exactly 2 x 64 x scale, so the centre keeps its width");
+
+	//The common case: scale 1, no overscan
+	HdFrameGeometry plain = ComputeHdFrameGeometry(true, 1, 0, 0);
+	Check(plain.ScreenWidth == 384 && plain.RowStride == 384 && plain.CentreOffset == 64,
+		"W4: at scale 1 with no overscan the row is the 384-px picture, centre at 64",
+		std::to_string(plain.ScreenWidth) + " " + std::to_string(plain.CentreOffset));
+
+	//Where the sides land in that row
+	Check(HdSideColumnOffset(false, 0, 3, wide.ScreenWidth) == 0 &&
+		HdSideColumnOffset(false, 63, 3, wide.ScreenWidth) == 63 * 3,
+		"W4: the left side fills the row from its first HD pixel");
+	Check(HdSideColumnOffset(true, 0, 3, wide.ScreenWidth) == wide.ScreenWidth - 64 * 3 &&
+		HdSideColumnOffset(true, 63, 3, wide.ScreenWidth) == wide.ScreenWidth - 3,
+		"W4: the right side ends at the row's last HD pixel");
+}
+
+//The guard that keeps a position-reading rule from wrapping: a side pixel is not
+//a pixel of the picture, so the rule has nothing to say about it and the pixel
+//falls through to the ROM's own tile.
+void TestW4PositionRulesRefuseAPixelOutsideThePicture()
+{
+	HdScreenInfo info(false);
+	HdScreenInfo* screenInfo = &info;
+
+	HdPackPositionCheckXCondition atLeastZero;
+	atLeastZero.Name = "w4posx";
+	atLeastZero.Initialize(HdPackConditionOperator::GreaterThanOrEqual, 0);
+	static_cast<HdPackCondition&>(atLeastZero).Initialize(screenInfo, nullptr);
+	Check(atLeastZero.CheckCondition(0, 0, nullptr), "W4: a position rule still matches inside the picture");
+	Check(atLeastZero.CheckCondition(255, 0, nullptr), "W4: ... up to its last column");
+	Check(!atLeastZero.CheckCondition(HdWidescreenColumns::ExtraColumnX(false, 0), 0, nullptr),
+		"W4: but not the first left side column, which is not a column of the picture");
+	Check(!atLeastZero.CheckCondition(HdWidescreenColumns::ExtraColumnX(true, 0), 0, nullptr),
+		"W4: and not the first right side column either");
+
+	HdPackPositionCheckYCondition atLeastZeroY;
+	atLeastZeroY.Name = "w4posy";
+	atLeastZeroY.Initialize(HdPackConditionOperator::GreaterThanOrEqual, 0);
+	static_cast<HdPackCondition&>(atLeastZeroY).Initialize(screenInfo, nullptr);
+	Check(atLeastZeroY.CheckCondition(0, 239, nullptr), "W4: a row rule still matches the picture's last row");
+	Check(!atLeastZeroY.CheckCondition(0, 240, nullptr), "W4: and refuses a row below it");
+
+	//A rule that names a column the picture does not have: the sides are not it
+	HdPackPositionCheckXCondition named256;
+	named256.Name = "w4posx256";
+	named256.Initialize(HdPackConditionOperator::Equal, 256);
+	static_cast<HdPackCondition&>(named256).Initialize(screenInfo, nullptr);
+	Check(!named256.CheckCondition(256, 0, nullptr),
+		"W4: a rule naming column 256 was written against a 256-px picture, not against the new column");
+}
+
+void TestW4NearbyRulesRefuseAPixelOutsideThePicture()
+{
+	HdScreenInfo info(false);
+
+	//tileNearby: PixelOffset + y*256 + x - with the side coordinates this lands
+	//on a real but unrelated centre pixel unless the pixel is refused first.
+	HdPackTileNearbyCondition nearby;
+	nearby.Name = "w4near";
+	nearby.Initialize(1, 0, 0, 0x42, "", false);
+	static_cast<HdPackCondition&>(nearby).Initialize(&info, nullptr);
+	info.ScreenTiles[1].Tile.TileIndex = 0x42;
+	info.ScreenTiles[256].Tile.TileIndex = 0x42;
+	Check(nearby.CheckCondition(0, 0, nullptr), "W4: tileNearby still reads the pixel it names inside the picture");
+	Check(!nearby.CheckCondition(-1, 1, nullptr),
+		"W4: tileNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+
+	HdPackSpriteNearbyCondition sprite;
+	sprite.Name = "w4snear";
+	sprite.Initialize(0, 0, 0, 0x42, "", false);
+	static_cast<HdPackCondition&>(sprite).Initialize(&info, nullptr);
+	info.ScreenTiles[0].SpriteCount = 1;
+	info.ScreenTiles[0].Sprite[0].TileIndex = 0x42;
+	info.ScreenTiles[255].SpriteCount = 1;
+	info.ScreenTiles[255].Sprite[0].TileIndex = 0x42;
+	Check(sprite.CheckCondition(0, 0, nullptr), "W4: spriteNearby still reads the pixel it names inside the picture");
+	Check(!sprite.CheckCondition(-1, 1, nullptr),
+		"W4: spriteNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+}
+
+void TestW4CellGuardRefusesAPixelOutsideThePicture()
+{
+	//Every cell allowed, so the only thing the case can be about is where the
+	//coordinate points - the record machinery has its own block.
+	HdCellGuard guard;
+	for(int i = 0; i < HdCellKeyRecord::Rows; i++) {
+		guard.Mask[i] = 0xFFFFFFFFu;
+	}
+
+	Check(guard.Allows(0, 0) && guard.Allows(255, 239), "W4: the cell guard still decides every picture pixel");
+	Check(!guard.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 0), 0),
+		"W4: the cell guard refuses the first left side column instead of reading past its mask");
+	Check(!guard.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(true, 63), 0),
+		"W4: and the last right side column");
+	Check(!guard.Allows(0, 240), "W4: and a row below the picture");
+
+	//A layer with no record is inert by its Record, not by its mask - that is
+	//the caller's test (ADR-0236 §3). Allows itself only ever answers about the
+	//picture, and answers safely even with no record at all. Every bit of the
+	//cleared mask is set first, so a wrapped coordinate that reached the shift
+	//would have to come back *true*: false here can only be the bounds check.
+	HdCellGuard inert;
+	for(int i = 0; i < HdCellKeyRecord::Rows; i++) {
+		inert.Mask[i] = 0xFFFFFFFFu;
+	}
+	Check(inert.Record == nullptr, "W4: a guard with no record is inert by its Record");
+	Check(inert.Allows(255, 239), "W4: an all-ones mask still allows the picture's last pixel");
+	Check(!inert.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 0), 0),
+		"W4: Allows never reads its mask for a pixel outside the picture, record or no record");
+	Check(!inert.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 63), 239),
+		"W4: and never for the last left column, wide-open mask and all");
+	Check(!inert.Allows(0, 240), "W4: nor for a row below the picture");
 }
 
 //--- Bloco W253C: the widescreen fallback chain (ADR-0253 §3, slice W.3) -----
@@ -13238,7 +13830,7 @@ void TestABackgroundWithoutARecordDrawsEveryCell()
 struct CaptureCellGuardPack : public BaseHdNesPack
 {
 	uint32_t GetScale() override { return 1; }
-	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&) override {}
+	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&, bool) override {}
 	void SetFallback(int32_t from, int32_t to) { _fallbackTiles[from] = to; }
 };
 
@@ -14497,6 +15089,17 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates();
+	TestW4SideTilesComeFromTheNeighbouringNametable();
+	TestW4SideTilesFollowTheRowsScrollState();
+	TestW4SideTilesGoEmptyWhereTheRevealDrawsBlack();
+	TestW4SideTilePixelsAreTheLowResRevealPixels();
+	TestW4SidePixelInfoSamplesEachColumnsOwnPixel();
+	TestW4SideTileKeyMatchesTheKeyOfACentredTile();
+	TestW4HdFrameAddsTheSidesAroundTheCentre();
+	TestW4PositionRulesRefuseAPixelOutsideThePicture();
+	TestW4NearbyRulesRefuseAPixelOutsideThePicture();
+	TestW4CellGuardRefusesAPixelOutsideThePicture();
 	TestW253FallbackPrefersTheMostSpecificSource();
 	TestW253FallbackSupportNeverComesFromBorderOrBlack();
 	TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty();
