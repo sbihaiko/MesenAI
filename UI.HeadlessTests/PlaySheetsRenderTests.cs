@@ -327,12 +327,12 @@ public class PlaySheetsRenderTests : IDisposable
 		Border inset = sheet.FindAll<Border>().First(b => b.Classes.Contains("inset"));
 		Assert.Equal(InsetFill, PlayerRender.SolidColor(inset.Background));
 		Assert.Equal(new CornerRadius(12), inset.CornerRadius);
-		CheckBox textures = window.FindNamed<CheckBox>("EnhancementsModernCheckBox");
-		AssertSwitch(textures, on: true);
+		CheckBox modern = window.FindNamed<CheckBox>("EnhancementsModernCheckBox");
+		AssertSwitch(modern, on: true);
 		Assert.NotNull(window.FindNamed<Button>("EnhancementsPackButton"));
 		AssertSwitch(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox"), on: false);
-		Assert.Equal(13.5, textures.FontSize);
-		Assert.Equal(46, textures.FindAncestorOfType<Border>()!.Bounds.Height, 1);
+		Assert.Equal(13.5, modern.FontSize);
+		Assert.Equal(46, modern.FindAncestorOfType<Border>()!.Bounds.Height, 1);
 		AssertFooterButton(window.FindNamed<Button>("EnhancementsApplyButton"), PlayTint);
 		Assert.Equal(6, ControlsOnScreen(sheet));
 
