@@ -2,6 +2,7 @@
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/Video/VideoDecoder.h"
+#include "Core/Shared/Interfaces/IConsole.h"
 #include "Core/Shared/Video/VideoRenderer.h"
 #include "Core/Shared/SystemActionManager.h"
 #include "Core/Shared/MessageManager.h"
@@ -41,9 +42,18 @@
 #include "Shared/Video/SoftwareRenderer.h"
 #include "Shared/Video/RendererSelection.h"
 
-unique_ptr<IKeyManager> _keyManager;
-unique_ptr<IMouseManager> _mouseManager;
-unique_ptr<Emulator> _emu(new Emulator());
+//Issue #621: the process-global core is torn down only by Release(), never by
+//the C++ static destructors that exit() runs. A host that exits without
+//Release() (the headless UI test process, a ctypes script) still has managed
+//thread-pool work in flight - an update-check continuation calling
+//GetMesenVersion, a timer calling IsPaused - and ~unique_ptr<Emulator> nulled
+//and deleted the emulator under those threads: SIGSEGV after every test had
+//passed. Each holder is heap-allocated and never destroyed, so the objects
+//outlive every caller until the OS reclaims the process; Release() still
+//resets them explicitly, exactly as before.
+unique_ptr<IKeyManager>& _keyManager = *new unique_ptr<IKeyManager>();
+unique_ptr<IMouseManager>& _mouseManager = *new unique_ptr<IMouseManager>();
+unique_ptr<Emulator>& _emu = *new unique_ptr<Emulator>(new Emulator());
 bool _softwareRenderer = false;
 
 static void* _windowHandle = nullptr;
@@ -223,6 +233,30 @@ extern "C"
 		}
 	}
 
+	//ADR-0246 (P.13): does a loaded pack draw this game's picture? The same
+	//decision GetVideoFilter makes (IConsole::IsDrawingPackArt) - Settings >
+	//Look disables Pixels and labels NTSC as not applied while it is true.
+	DllExport bool __stdcall IsDrawingPackArt()
+	{
+		shared_ptr<IConsole> console = _emu->GetConsole();
+		return console ? console->IsDrawingPackArt() : false;
+	}
+
+	//ADR-0246 §5: Hold to Compare. On: the decoder skips Pixels and NTSC and
+	//the renderer bypasses the shader chain (kept loaded); off restores both.
+	//A paused game is redrawn so the change shows at once.
+	DllExport void __stdcall SetLookCompare(bool enabled)
+	{
+		_emu->GetSettings()->SetLookCompare(enabled);
+		_emu->GetVideoDecoder()->RedrawPausedFrame();
+	}
+
+	//ADR-0246: a Look change made while paused shows without resuming.
+	DllExport void __stdcall RedrawPausedFrame()
+	{
+		_emu->GetVideoDecoder()->RedrawPausedFrame();
+	}
+
 	DllExport void __stdcall TakeScreenshot()
 	{
 		_emu->GetVideoDecoder()->TakeScreenshot();
@@ -244,6 +278,24 @@ extern "C"
 		}
 
 		StringUtilities::CopyToBuffer(out.str(), outBuffer, maxLength);
+	}
+
+	//#689: writes the file a ROM resource names (an archive's inner ROM, in the
+	//"<archive>\x1<inner>[\x1<index>]" form RomInfo.RomPath uses) to outPath,
+	//so the Remaster jobs get the ROM itself and not the .zip/.7z around it.
+	DllExport bool __stdcall ExtractRomFile(char* resourcePath, char* outPath)
+	{
+		VirtualFile file(resourcePath);
+		vector<uint8_t> data;
+		if(!file.ReadFile(data) || data.empty()) {
+			return false;
+		}
+		ofstream out(outPath, std::ios::out | std::ios::binary | std::ios::trunc);
+		if(!out.good()) {
+			return false;
+		}
+		out.write((const char*)data.data(), data.size());
+		return out.good();
 	}
 
 	DllExport bool __stdcall IsRunning()
@@ -340,6 +392,31 @@ extern "C"
 	DllExport bool __stdcall IsMepBootstrapping()
 	{
 		return _emu->GetEnhancementPackManager()->IsBootstrapping();
+	}
+
+	//ADR-0243 (F12.20): Remaster's Record / Stop. The bootstrap recorder writes
+	//the next <project>/auto/rec-NNN/ and lists it in project.json; source is
+	//play/tas/ai/script. False when it declined (a foreign pack dresses the
+	//ROM, #142 - the reason is in the log) or nothing is loaded.
+	DllExport bool __stdcall StartMepRecording(const char* source, const char* note)
+	{
+		return _emu->GetEnhancementPackManager()->StartRecording(source ? source : "play", note ? note : "");
+	}
+
+	DllExport bool __stdcall StopMepRecording()
+	{
+		return _emu->GetEnhancementPackManager()->StopRecording();
+	}
+
+	//Source/note the next on-load bootstrap records with (BootstrapEnhancementFolder)
+	DllExport void __stdcall SetMepNextRecordingSource(const char* source, const char* note)
+	{
+		_emu->GetEnhancementPackManager()->SetNextRecordingSource(source ? source : "play", note ? note : "");
+	}
+
+	DllExport void __stdcall GetMepRecordingFolder(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetRecordingFolder(), outBuffer, maxLength);
 	}
 
 	DllExport void __stdcall SetMepPackEnabled(const char* containerName, bool enabled)

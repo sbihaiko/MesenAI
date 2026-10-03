@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:lg="using:Mesen.Logic"
+	mc:Ignorable="d"
+	x:Class="Mesen.Views.PlayerCheatsSheetView"
+	x:DataType="vm:PlayerCheatsSheetViewModel"
+>
+	<!--P.10 (ADR-0245 §1-§3, §5; PRD Part B §13 W-P11): the Play Cheats sheet,
+	opened from the pause overlay's Cheats row. Interactive elements at rest:
+	search, Add a Code…, Done (+ list rows). The toggles write the same
+	CheatCodes list the classic cheat window edits. Every rule (rows, search,
+	not-in-list fallback, recording-art refusal, console scope) is in the
+	host-free UI/Logic/CheatSheet; this view only binds it.-->
+	<Border
+		Name="PlayerCheatsSheet"
+		Background="#DD000000"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center"
+		Padding="24"
+		IsVisible="{Binding IsVisible}"
+	>
+		<StackPanel Spacing="8" MinWidth="340" MaxWidth="520">
+			<TextBlock Text="{l:Translate lblCheatsTitle}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
+			<TextBox Name="CheatsSearchBox" Text="{Binding SearchText}" PlaceholderText="{Binding SearchPlaceholder}" IsEnabled="{Binding IsSearchEnabled}" />
+
+			<!--Not in the list: games by name; picking one borrows its codes.-->
+			<ItemsControl Name="CheatsGameResults" ItemsSource="{Binding GameResults}" IsVisible="{Binding IsGameSearch}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="4" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="lg:CheatDbGame">
+						<Button HorizontalAlignment="Stretch" Content="{Binding Name}" Click="OnPickGame" />
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+
+			<ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
+				<ItemsControl Name="CheatsList" ItemsSource="{Binding Rows}" XYFocus.NavigationModes="Enabled">
+					<ItemsControl.ItemsPanel>
+						<ItemsPanelTemplate>
+							<StackPanel Spacing="4" />
+						</ItemsPanelTemplate>
+					</ItemsControl.ItemsPanel>
+					<ItemsControl.ItemTemplate>
+						<DataTemplate x:DataType="vm:PlayerCheatRow">
+							<StackPanel Spacing="0">
+								<CheckBox Content="{Binding Description}" IsChecked="{Binding IsOn, Mode=OneWay}" IsEnabled="{Binding CanToggle}" Click="OnToggleCheat" />
+								<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="28 0 0 0" Text="{Binding Note}" IsVisible="{Binding HasNote}" />
+								<!--R.4 (ADR-0248 §5): a community row, "from the community · 👍 N";
+								the count opens the submission issue to vote there (↗).-->
+								<StackPanel Name="CheatsCommunityMark" Orientation="Horizontal" Spacing="4" Margin="28 0 0 0" IsVisible="{Binding IsCommunity}">
+									<TextBlock FontSize="11" Opacity="0.7" VerticalAlignment="Center" Text="{Binding CommunityMark}" />
+									<Button Name="CheatsVotesButton" FontSize="11" Padding="4 0" Content="{Binding VotesLabel}" Click="OnOpenIssue" />
+								</StackPanel>
+								<!--ADR-0248 §2: the user's own codes only; bundled and community codes are already shared.-->
+								<Button Name="CheatsShareButton" FontSize="11" Margin="28 2 0 0" Padding="4 0" Content="{l:Translate btnCheatsShare}" IsVisible="{Binding CanShare}" Click="OnShareCheat" />
+							</StackPanel>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+			</ScrollViewer>
+
+			<TextBlock Name="CheatsStatusLine" Text="{Binding StatusLine}" TextWrapping="Wrap" />
+			<Button Name="CheatsChangeGameButton" Content="{l:Translate btnCheatsChangeGame}" IsVisible="{Binding IsBorrowingGame}" Click="OnChangeGame" />
+			<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding AllOffNote}" IsVisible="{Binding IsAllOff}" />
+			<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding ReplayNote}" />
+
+			<!--*Add a Code…*: a code typed by hand; the full editor stays in Tools ⋯.-->
+			<StackPanel Name="CheatsAddCodePanel" Spacing="4" IsVisible="{Binding IsAddCodeOpen}">
+				<TextBox Name="CheatsNewCodeBox" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
+				<TextBox Text="{Binding NewDescription}" PlaceholderText="{l:Translate lblCheatsDescriptionPlaceholder}" />
+				<TextBlock Name="CheatsAddCodeError" Foreground="#FF8080" TextWrapping="Wrap" Text="{Binding AddCodeError}" />
+				<Button Name="CheatsAddCodeConfirm" Content="{l:Translate btnCheatsAdd}" HorizontalAlignment="Right" Click="OnConfirmAddCode" />
+			</StackPanel>
+
+			<DockPanel>
+				<Button Name="CheatsDoneButton" DockPanel.Dock="Right" Content="{l:Translate btnCheatsDone}" Click="OnDone" />
+				<Button Name="CheatsAddCodeButton" Content="{l:Translate btnCheatsAddCode}" Click="OnAddCode" />
+			</DockPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

@@ -1,0 +1,72 @@
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
+using Mesen.Config;
+using Mesen.Interop;
+using Mesen.Utilities;
+using Mesen.ViewModels;
+using Mesen.Windows;
+using System.IO;
+
+namespace Mesen.Views
+{
+	public class LookConfigView : UserControl
+	{
+		public LookConfigView()
+		{
+			InitializeComponent();
+
+			//Hold to Compare: pressed/released, not clicked. Button marks the
+			//pointer events handled, so listen to handled ones too.
+			Button compare = this.GetControl<Button>("btnLookHoldToCompare");
+			compare.AddHandler(PointerPressedEvent, (s, e) => SetCompare(true), RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+			compare.AddHandler(PointerReleasedEvent, (s, e) => SetCompare(false), RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+			compare.AddHandler(PointerCaptureLostEvent, (s, e) => SetCompare(false), RoutingStrategies.Direct | RoutingStrategies.Bubble, handledEventsToo: true);
+			compare.AddHandler(KeyDownEvent, (s, e) => { if(e.Key == Key.Space) { SetCompare(true); } }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+			compare.AddHandler(KeyUpEvent, (s, e) => { if(e.Key == Key.Space) { SetCompare(false); } }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+			compare.LostFocus += (s, e) => SetCompare(false);
+		}
+
+		private void InitializeComponent()
+		{
+			AvaloniaXamlLoader.Load(this);
+		}
+
+		protected override void OnDataContextChanged(System.EventArgs e)
+		{
+			base.OnDataContextChanged(e);
+			if(DataContext is LookConfigViewModel model) {
+				model.PickShaderFile = () => FileDialogHelper.OpenFile(ConfigManager.ShaderFolder, TopLevel.GetTopLevel(this) as Window, FileDialogHelper.ShaderExt);
+			}
+		}
+
+		protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+		{
+			SetCompare(false);
+			base.OnDetachedFromVisualTree(e);
+		}
+
+		private void SetCompare(bool compare)
+		{
+			(DataContext as LookConfigViewModel)?.SetCompare(compare);
+		}
+
+		private void OnPackDetails(object? sender, RoutedEventArgs e)
+		{
+			ApplicationHelper.GetOrCreateUniqueWindow(this, () => new EnhancementPacksWindow());
+		}
+
+		//The shader's own parameters (the classic ShaderConfigWindow).
+		private void OnAdjust(object? sender, RoutedEventArgs e)
+		{
+			string shader = ConfigManager.Config.Video.ShaderFile;
+			if(!File.Exists(shader)) {
+				return;
+			}
+			new ShaderConfigWindow() {
+				DataContext = new ShaderConfigViewModel(true, shader)
+			}.ShowCenteredDialog((Control)this);
+		}
+	}
+}

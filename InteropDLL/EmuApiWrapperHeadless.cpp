@@ -22,7 +22,7 @@
 //marshaling over HeadlessInputProvider; the capture and OSD exports marshal
 //over VideoRenderer/MessageManager directly - no scheduling logic lives here.
 
-extern unique_ptr<Emulator> _emu;
+extern unique_ptr<Emulator>& _emu;
 
 //Kept alive for the process' lifetime: NotificationManager holds listeners by
 //weak_ptr, so dropping this would silently unsubscribe the provider from
@@ -123,6 +123,17 @@ extern "C"
 		if(outFrameNumber) { *outFrameNumber = _headlessCaptureInfo.FrameNumber; }
 		if(outPixelCount) { *outPixelCount = (uint32_t)_headlessCapture.size(); }
 		return !_headlessCaptureInfo.IsEmpty();
+	}
+
+	//ADR-0244 (P.9): returns once the video decoder has finished the last frame
+	//the console handed it. With the emulator parked (HeadlessLockEmulator),
+	//that is the frame it parked on, so a HeadlessCaptureFrame after this reads
+	//that frame and never the one before it - which a check on the decoded
+	//frame number alone cannot rule out on every console (the SMS stamps a
+	//frame with the counter after its increment, the NES before it).
+	DllExport void __stdcall HeadlessWaitForFrameDecode()
+	{
+		_emu->GetVideoDecoder()->WaitForAsyncFrameDecode();
 	}
 
 	//Copy the pixels of the last HeadlessCaptureFrame into the caller's

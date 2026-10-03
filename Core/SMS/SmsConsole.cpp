@@ -273,13 +273,19 @@ double SmsConsole::GetFps()
 	return (_model != SmsModel::GameGear && _region == ConsoleRegion::Pal) ? 49.701460 : 59.9227434;
 }
 
+bool SmsConsole::IsDrawingPackArt()
+{
+	//The condition GetVideoFilter below uses to pick SmsHdTileVideoFilter (ADR-0246).
+	return _hdPack && !_hdPackBuilder;
+}
+
 BaseVideoFilter* SmsConsole::GetVideoFilter(bool getDefaultFilter)
 {
 	if(getDefaultFilter) {
 		return new SmsDefaultVideoFilter(_emu, this);
 	}
 
-	if(_hdPack && !_hdPackBuilder) {
+	if(IsDrawingPackArt()) {
 		return new SmsHdTileVideoFilter(_emu, this, _hdPack.get());
 	}
 

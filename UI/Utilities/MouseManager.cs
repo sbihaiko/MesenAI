@@ -154,12 +154,14 @@ namespace Mesen.Utilities
 
 		private void UpdateMainMenuVisibility()
 		{
-			//P.4 (PRD Part B §6): Player hides the menu bar entirely - the
-			//AutoHideMenu mouse-hover re-show below is ignored in Player (there is
-			//no menu bar to show). The rule itself lives in PlayerChrome so this
-			//site and the MainWindowViewModel initializer cannot drift.
-			if(ConfigManager.Config.Preferences.UiMode == UiMode.Player) {
-				MainWindowViewModel.Instance.IsMenuVisible = PlayerChrome.IsMenuVisible(UiMode.Player, false, false, false, false);
+			//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu
+			//bar is hidden entirely - the AutoHideMenu mouse-hover re-show below is
+			//ignored (the menus are under Tools ⋯). The rule itself lives in
+			//PlayerChrome so this site and the MainWindowViewModel initializer
+			//cannot drift.
+			bool showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
+			if(!showClassicMenuBar) {
+				MainWindowViewModel.Instance.IsMenuVisible = PlayerChrome.IsMenuVisible(false, false, false, false, false);
 				return;
 			}
 
@@ -179,7 +181,7 @@ namespace Mesen.Utilities
 				cursorInBand = PlayerChrome.IsCursorInMenuBand(mousePos.X, mousePos.Y, wndTopLeft.X, wndTopLeft.Y, _wnd.Bounds.Width, _mainMenu.Bounds.Height, scale);
 			}
 
-			MainWindowViewModel.Instance.IsMenuVisible = PlayerChrome.IsMenuVisible(ConfigManager.Config.Preferences.UiMode, inExclusiveFullscreen, autoHideMenu, menuOpen, cursorInBand);
+			MainWindowViewModel.Instance.IsMenuVisible = PlayerChrome.IsMenuVisible(showClassicMenuBar, inExclusiveFullscreen, autoHideMenu, menuOpen, cursorInBand);
 		}
 
 		private static void SetMouseOffScreen()

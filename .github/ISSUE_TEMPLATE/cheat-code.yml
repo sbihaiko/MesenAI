@@ -1,0 +1,76 @@
+name: "Share a Cheat Code"
+description: >-
+  Share one cheat code you found for a game. A bot checks that it is well
+  formed and new, then lists it for other players.
+title: "[Cheat] "
+labels:
+  - cheat
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **One code, one issue.** 🎮
+
+        Fill in the four fields below. The moment you hit *Create*, a bot
+        checks the submission and **posts the result right here as a comment**:
+        the code must decode for the console, the SHA-1 must name a known game,
+        the description must be one line of at most 80 characters with no
+        links, and the code must not already be in the emulator's cheat list or
+        in an earlier submission. It also rewrites the title to
+        `[Cheat] <game> — <description>`, so there is nothing to type there.
+        Fixed something? Edit the issue, or comment `/revalidate`.
+
+        The bot cannot run the game, so it checks the code's form, not its
+        effect. Other players vote with 👍 on the codes that work; close the
+        issue to withdraw your code.
+  - type: input
+    id: game_sha1
+    attributes:
+      label: "Game SHA-1"
+      description: >-
+        The SHA-1 the emulator's cheat list uses for this game (NES: of the PRG
+        ROM; Game Boy and Master System: of the whole ROM file). If the
+        emulator opened this form, it is already filled in.
+      placeholder: "40 hexadecimal digits"
+    validations:
+      required: true
+  - type: input
+    id: game_name
+    attributes:
+      label: "Game name"
+      description: "The game's name. The bot replaces it with the name its own lists use when it knows the SHA-1."
+    validations:
+      required: true
+  - type: dropdown
+    id: console
+    attributes:
+      label: "Console"
+      options:
+        - "NES"
+        - "Game Boy"
+        - "Game Boy Color"
+        - "Master System / Game Gear"
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: "Code"
+      description: >-
+        One effect, written as the emulator's cheat list writes it: a single
+        code, or several joined with `+` when the effect needs them. NES: Game
+        Genie (`SXIOPO`), Pro Action Rocky (8 hex digits) or `XXXX:YY[:ZZ]`;
+        Game Boy: Game Genie (`XXX-XXX[-XXX]`) or GameShark (8 hex digits);
+        Master System: Pro Action Replay (8 hex digits) or Game Genie
+        (`XXX-XXX[-XXX]`).
+      placeholder: "SXIOPO"
+    validations:
+      required: true
+  - type: input
+    id: description
+    attributes:
+      label: "Description"
+      description: "What the code does, in one line of at most 80 characters. No links."
+      placeholder: "Infinite lives"
+    validations:
+      required: true

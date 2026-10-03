@@ -36,6 +36,10 @@ private:
 
 	atomic<uint32_t> _flags;
 	atomic<uint64_t> _debuggerFlags;
+	//ADR-0246 §5 (P.13): Settings > Look's Hold to Compare. Display state, never
+	//saved: while true the decoder skips the scale filter and the NTSC console
+	//filter, and the renderer bypasses the shader chain without unloading it.
+	atomic<bool> _lookCompare = false;
 
 	string _audioDevice;
 	string _soundFontPath;
@@ -70,6 +74,9 @@ public:
 	void SetShaderConfig(InteropShaderConfig& config);
 	ShaderConfig GetShaderConfig();
 	bool NeedsShaderUpdate(uint32_t version);
+
+	void SetLookCompare(bool enabled) { _lookCompare = enabled; }
+	bool IsLookCompare() { return _lookCompare; }
 
 	void SetAudioConfig(AudioConfig& config);
 	AudioConfig& GetAudioConfig();

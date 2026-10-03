@@ -5,33 +5,35 @@ namespace Mesen.Tests.Config
 {
 	//P.7 (PRD Part B §6): the menu-bar visibility rule shared by the
 	//MainWindowViewModel initializer and MouseManager.UpdateMainMenuVisibility().
+	//G.1 (ADR-0241, §13.2): the classic bar is keyed on ShowClassicMenuBar,
+	//not on UiMode - Tools ⋯ carries the same menus when the bar is off.
 	public class PlayerChromeTests
 	{
 		[Theory]
-		//Player ignores every other input - the menu bar does not exist there.
+		//Bar off ignores every other input - the menus live under Tools ⋯.
 		[InlineData(false, false, false, false)]
 		[InlineData(true, true, true, true)]
 		[InlineData(false, true, false, true)]
 		[InlineData(true, false, true, false)]
-		public void Player_AlwaysHidesMenu(bool exclusiveFullscreen, bool autoHide, bool menuOpen, bool cursorInBand)
+		public void ClassicBarOff_AlwaysHidesMenu(bool exclusiveFullscreen, bool autoHide, bool menuOpen, bool cursorInBand)
 		{
-			Assert.False(PlayerChrome.IsMenuVisible(UiMode.Player, exclusiveFullscreen, autoHide, menuOpen, cursorInBand));
+			Assert.False(PlayerChrome.IsMenuVisible(false, exclusiveFullscreen, autoHide, menuOpen, cursorInBand));
 		}
 
 		[Fact]
-		public void Advanced_ExclusiveFullscreen_HidesMenuEvenWhenOpenOrHovered()
+		public void ClassicBarOn_ExclusiveFullscreen_HidesMenuEvenWhenOpenOrHovered()
 		{
-			Assert.False(PlayerChrome.IsMenuVisible(UiMode.Advanced, true, false, false, false));
-			Assert.False(PlayerChrome.IsMenuVisible(UiMode.Advanced, true, true, true, true));
-			Assert.False(PlayerChrome.IsMenuVisible(UiMode.Advanced, true, false, true, true));
+			Assert.False(PlayerChrome.IsMenuVisible(true, true, false, false, false));
+			Assert.False(PlayerChrome.IsMenuVisible(true, true, true, true, true));
+			Assert.False(PlayerChrome.IsMenuVisible(true, true, false, true, true));
 		}
 
 		[Fact]
-		public void Advanced_WithoutAutoHide_AlwaysShowsMenu()
+		public void ClassicBarOn_WithoutAutoHide_AlwaysShowsMenu()
 		{
-			Assert.True(PlayerChrome.IsMenuVisible(UiMode.Advanced, false, false, false, false));
-			Assert.True(PlayerChrome.IsMenuVisible(UiMode.Advanced, false, false, true, false));
-			Assert.True(PlayerChrome.IsMenuVisible(UiMode.Advanced, false, false, false, true));
+			Assert.True(PlayerChrome.IsMenuVisible(true, false, false, false, false));
+			Assert.True(PlayerChrome.IsMenuVisible(true, false, false, true, false));
+			Assert.True(PlayerChrome.IsMenuVisible(true, false, false, false, true));
 		}
 
 		[Theory]
@@ -41,20 +43,20 @@ namespace Mesen.Tests.Config
 		[InlineData(true, false, true)]
 		[InlineData(false, true, true)]
 		[InlineData(true, true, true)]
-		public void Advanced_WithAutoHide_FollowsMenuOpenOrHover(bool menuOpen, bool cursorInBand, bool expected)
+		public void ClassicBarOn_WithAutoHide_FollowsMenuOpenOrHover(bool menuOpen, bool cursorInBand, bool expected)
 		{
-			Assert.Equal(expected, PlayerChrome.IsMenuVisible(UiMode.Advanced, false, true, menuOpen, cursorInBand));
+			Assert.Equal(expected, PlayerChrome.IsMenuVisible(true, false, true, menuOpen, cursorInBand));
 		}
 
 		[Fact]
 		public void InitializerInputs_MatchHistoricalRule()
 		{
 			//MainWindowViewModel's initializer passes false for the window/cursor
-			//state, which must reduce to "UiMode != Player && !AutoHideMenu".
-			foreach(UiMode mode in new[] { UiMode.Advanced, UiMode.Player }) {
+			//state, which must reduce to "ShowClassicMenuBar && !AutoHideMenu".
+			foreach(bool showBar in new[] { true, false }) {
 				foreach(bool autoHide in new[] { false, true }) {
-					bool expected = mode != UiMode.Player && !autoHide;
-					Assert.Equal(expected, PlayerChrome.IsMenuVisible(mode, false, autoHide, false, false));
+					bool expected = showBar && !autoHide;
+					Assert.Equal(expected, PlayerChrome.IsMenuVisible(showBar, false, autoHide, false, false));
 				}
 			}
 		}

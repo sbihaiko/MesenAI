@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Shared/Emulator.h"
+#include "Shared/RomHashResolve.h"
 #include "Shared/NotificationManager.h"
 #include "Shared/Audio/SoundMixer.h"
 #include "Shared/Audio/AudioPlayerHud.h"
@@ -150,7 +151,9 @@ void Emulator::Run()
 		}
 	}
 
-	_stopFlag = false;
+	//_stopFlag is cleared by LoadRom before this thread is spawned; clearing it
+	//here again would erase a Stop() issued since then and its join() would
+	//never return (#636). A pending stop skips the loop below.
 	_isRunAheadFrame = false;
 
 	PlatformUtilities::EnableHighResolutionTimer();
@@ -348,6 +351,10 @@ void Emulator::Stop(bool sendNotification, bool preventRecentGameSave, bool save
 	_videoDecoder->StopThread();
 	_rewindManager->Reset();
 
+	//ADR-0243: a recording nobody stopped is closed here, while the frame
+	//count still belongs to it; the builder writes its files with the console
+	_mepPackManager->FinishRecordingEntry();
+
 	if(_console) {
 		_console.reset();
 	}
@@ -403,6 +410,52 @@ void Emulator::ReloadRom(bool forPowerCycle)
 void Emulator::PowerCycle()
 {
 	ReloadRom(true);
+}
+
+//ADR-0244 (P.9): a pack change that keeps the player's place. The pack is only
+//read by the console's LoadRom, so the ROM is reloaded the ordinary way (pack
+//discovery, the PPU choice, the HD audio device and the bootstrap all behave
+//as on a fresh load), with the state taken just before it loaded back into the
+//new console.
+//
+//The emulator lock is held from the save to the restore. The emulation thread
+//started by LoadRom waits on _runLock before its first frame (Run), so the
+//fresh console never runs a frame of its own between the two. If the game was
+//paused it stays paused; like any ReloadRom, the new thread then runs one frame
+//of the restored state before it parks.
+//
+//Refused - nothing done - while a movie plays or records or netplay is
+//connected: InternalLoadRom stops the movie, and SaveStateManager::LoadState
+//refuses a state under netplay. A pack's ROM patch on either side of the
+//reload (ADR-0244 section 2) leaves the fresh load and keeps no state: the
+//patch changes PRG, so the state would run the wrong code. Which pack changes
+//may take this path at all is otherwise the UI's decision, not this function's.
+//
+//With a debugger attached, Lock suspends the old console's debugger and Unlock
+//releases the new one's, which was never suspended. That release is a no-op
+//(Debugger::SuspendDebugger ignores a release at count 0), and the old
+//debugger is destroyed by the reload, so the counts cannot go wrong.
+InPlaceReloadResult Emulator::ReloadRomKeepingState()
+{
+	if(!IsRunning() || _movieManager->Playing() || _movieManager->Recording() || _gameClient->Connected() || _gameServer->Started()) {
+		return InPlaceReloadResult::Refused;
+	}
+
+	Lock();
+	bool patchedBefore = _romPatchedByPack;
+	std::stringstream state;
+	if(!patchedBefore) {
+		_saveStateManager->SaveState(state);
+	}
+	ReloadRom(false);
+	bool patched = patchedBefore || _romPatchedByPack;
+	bool restored = !patched && IsRunning() && _saveStateManager->LoadState(state);
+	Unlock();
+
+	if(patched) {
+		return InPlaceReloadResult::PatchRestarted;
+	}
+	return restored ? InPlaceReloadResult::Restored : InPlaceReloadResult::Restarted;
 }
 
 bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle)
@@ -471,8 +524,12 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 	//Resolve the MEP enhancement packs for this (patched) ROM before the
 	//console's LoadRom runs: the consoles pull textures/synth/audio paths from
 	//the manager while loading their HD packs (F3 - ADR-0039/0040).
+	//#694: the running game's resolution is kept so a ROM that fails to load
+	//leaves the manager (sha1, sibling, packs, patch flag) describing it.
+	MepPackManager::RomState previousMepState = _mepPackManager->SaveRomState();
+	bool previousRomPatchedByPack = _romPatchedByPack;
 	_mepPackManager->LoadForRom(romFile);
-	_mepPackManager->ApplyPatches(romFile);
+	_romPatchedByPack = _mepPackManager->ApplyPatches(romFile);
 
 	_soundMixer->StopAudio();
 
@@ -498,6 +555,8 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 
 	if(result != LoadRomResult::Success) {
 		MessageManager::DisplayMessage("Error", "CouldNotLoadFile", romFile.GetFileName());
+		_mepPackManager->RestoreRomState(std::move(previousMepState));
+		_romPatchedByPack = previousRomPatchedByPack;
 		if(debugger) {
 			_debugger.reset(debugger);
 			_internalDebugger = _debugger.get();
@@ -512,6 +571,11 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 		debugger->Release();
 		debugger.reset();
 	}
+
+	//ADR-0243 / #694: the previous game's recording ends now that another ROM
+	//has loaded, while the frame count still belongs to it (a power cycle never
+	//reaches Stop, which closes it otherwise)
+	_mepPackManager->FinishRecordingEntry();
 
 	if(stopRom) {
 		//Only update the recent game entry if the game that was loaded is a different game
@@ -670,16 +734,12 @@ void Emulator::SaveBattery()
 
 string Emulator::GetHash(HashType type)
 {
-	shared_ptr<IConsole> console = _console.lock();
-	string hash = console->GetHash(type);
-	if(hash.size()) {
-		return hash;
-	} else if(type == HashType::Sha1) {
-		return _rom.RomFile.GetSha1Hash();
-	} else if(type == HashType::Sha1Cheat) {
-		return _rom.RomFile.GetSha1Hash();
-	}
-	return "";
+	return ResolveRomHash(_console.lock(), type, [this](HashType fallbackType) -> string {
+		if(fallbackType == HashType::Sha1 || fallbackType == HashType::Sha1Cheat) {
+			return _rom.RomFile.GetSha1Hash();
+		}
+		return "";
+	});
 }
 
 uint32_t Emulator::GetCrc32()
@@ -1040,9 +1100,16 @@ DeserializeResult Emulator::Deserialize(istream& in, uint32_t fileFormatVersion,
 		SV(_settings);
 	}
 
+	uint32_t frameBefore = _console->GetFrameCount();
 	s.Stream(_console, "");
 	if(s.HasError()) {
 		return DeserializeResult::SpecificError;
+	}
+	//#612: the state brought its own frame counter; a recording in progress
+	//must not count the state's age as its own length. Run-ahead's rollback
+	//is not a load: it undoes frames the recording never counted.
+	if(!_isRunAheadFrame) {
+		_mepPackManager->OnFrameCounterRestored(frameBefore, _console->GetFrameCount());
 	}
 
 	if(sendNotification) {

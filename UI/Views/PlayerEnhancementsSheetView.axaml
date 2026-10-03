@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d"
+	x:Class="Mesen.Views.PlayerEnhancementsSheetView"
+	x:DataType="vm:MainWindowViewModel"
+>
+	<!--G.4 (PRD Part B §13.5.2 W-P7; P.7 §6.1 minus Hi-res filter): the five
+	switches edit a draft (EnhTextures…EnhOverclock) that starts from what is
+	applied; the one button applies it through the existing ToggleLayer /
+	ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
+	causes (EnhancementsSheet.Pending, ADR-0244 Decision 3). Overclock is shown
+	disabled with its reason where the console has no overclock knob (rule 4).
+	Hi-res filter lives once, as Settings › Look › Pixels (ADR-0246).-->
+	<Border
+		Name="PlayerEnhancementsPanel"
+		Background="#DD000000"
+		CornerRadius="14"
+		HorizontalAlignment="Center"
+		VerticalAlignment="Center"
+		Padding="24"
+		IsVisible="{Binding IsEnhancementsPanelVisible}"
+	>
+		<StackPanel Spacing="6" MinWidth="320" XYFocus.NavigationModes="Enabled">
+			<TextBlock Text="{l:Translate lblEnhancementsPanelTitle}" FontWeight="Bold" FontSize="16" />
+			<DockPanel>
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<CheckBox Name="EnhancementsTexturesCheckBox" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding EnhTextures, Mode=TwoWay}" />
+			</DockPanel>
+			<DockPanel>
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<CheckBox Name="EnhancementsAudioCheckBox" Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding EnhAudio, Mode=TwoWay}" />
+			</DockPanel>
+			<DockPanel>
+				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+				<CheckBox Name="EnhancementsBorderCheckBox" Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding EnhBorder, Mode=TwoWay}" />
+			</DockPanel>
+			<CheckBox Name="EnhancementsWidescreenCheckBox" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" />
+			<DockPanel>
+				<TextBlock Name="EnhancementsOverclockReason" DockPanel.Dock="Right" Text="{Binding EnhOverclockReason}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" IsVisible="{Binding !IsOverclockSupported}" />
+				<CheckBox Name="EnhancementsOverclockCheckBox" Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding EnhOverclock, Mode=TwoWay}" IsEnabled="{Binding IsOverclockSupported}" />
+			</DockPanel>
+			<TextBlock Text="{l:Translate lblEnhancementsLookHint}" FontSize="11" Opacity="0.7" Margin="0 6 0 0" />
+			<Button Name="EnhancementsApplyButton" Content="{Binding EnhancementsApplyText}" HorizontalAlignment="Right" Click="OnApply" Margin="0 6 0 0" />
+		</StackPanel>
+	</Border>
+</UserControl>

@@ -58,6 +58,17 @@ namespace Mesen.Tests.CommunityPacks
 			Assert.Equal("CC-BY-4.0", pending.License);
 		}
 
+		//G.5 (W-P16): the prompt carries the declared hash, so the sheet can
+		//refuse a wrong file before copying it.
+		[Fact]
+		public void DependencyAbsent_PromptCarriesTheDeclaredHash()
+		{
+			CommunityPackDepPlanResult plan = CommunityPackDepPlan.Build(
+				new[] { Dep("bios", ShaA) }, System.Array.Empty<string>(), None(), None());
+
+			Assert.Equal(ShaA, Assert.Single(plan.Pending).Sha256);
+		}
+
 		[Fact]
 		public void DependencyAbsentWithNoDeclaredLicense_PromptsWithNotDeclared()
 		{

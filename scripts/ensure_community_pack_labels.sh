@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Idempotently ensures the labels used by the "Community HD/MEP Packs"
 # triage flow (CLAUDE.md, "Community HD/MEP Pack triage" section) and by the
-# shared-replay flow (ADR-0205, replay-submitted.yml) exist.
+# shared-replay flow (ADR-0205, replay-submitted.yml) and by the community
+# cheat flow (ADR-0248, cheat-submitted.yml) exist.
 # Run once when setting up the repository, or again at any time — labels
 # that already exist are skipped.
 #
@@ -33,6 +34,10 @@ LABELS=(
   "replay|1D76DB|Community-submitted gameplay replay (ADR-0205)"
   "replay:valid|0E8A16|Accepted — a Record and share .mmo that passes the ADR-0205 section 3 lint"
   "replay:invalid|D93F0B|Rejected — the attachment fails the ADR-0205 section 3 lint (reason in the bot comment)"
+  "replay:removed|5319E7|De-listed by a maintainer whatever the issue state (ADR-0205 section 9); never applied by a workflow"
+  "cheat|1D76DB|Community-submitted cheat code (ADR-0248)"
+  "cheat:valid|0E8A16|Accepted — passes the ADR-0248 section 3 structural gate (form, not effect)"
+  "cheat:invalid|D93F0B|Rejected — fails the ADR-0248 section 3 structural gate (check named in the bot comment)"
 )
 
 for entry in "${LABELS[@]}"; do

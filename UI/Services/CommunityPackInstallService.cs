@@ -1,7 +1,9 @@
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
+using Mesen.Localization;
 using Mesen.Utilities;
+using Mesen.ViewModels;
 using Mesen.Windows;
 using System;
 using System.Collections.Concurrent;
@@ -26,6 +28,11 @@ namespace Mesen.Services
 		//CommunityPackInstallGate, UI.Tests). At most one holder at a time; a
 		//refused caller backs off without releasing the holder's token.
 		private static readonly CommunityPackInstallGate _installGate = new();
+
+		//True while an auto-install or Restore holds the gate. Read-only; lets
+		//UI.HeadlessTests/CommunityPackApplyTests wait out an install a game load
+		//in an earlier test started, before it drives the gate itself.
+		public static bool InstallInFlight => _installGate.IsHeld;
 		//§51 per-session idempotency key: one successful-or-in-flight attempt
 		//per ROM sha1 per process, decided before any network call. A failed
 		//fetch/install or a thrown extract is removed so the next load retries.
@@ -41,6 +48,17 @@ namespace Mesen.Services
 		//by pack_id. Display-only, like the votes above - a `miss` changes nothing
 		//in the installed tree, it only makes a reviewed gap legible in the picker.
 		private static readonly ConcurrentDictionary<string, CommunityPackErrata> _catalogErrataByPackId = new(StringComparer.OrdinalIgnoreCase);
+
+		//G.4 (W-P9): the HUD pill of an auto-install. Started(name) when a
+		//catalog row matches and its artifact is not the one already installed
+		//(PackInstallPill.ShowsFor); Finished(installed, silent) when the run
+		//ends. Raised on the UI thread. Restore raises them too (rule 6: a job
+		//is a pill, never a window).
+		public static event Action<string>? InstallStarted;
+		public static event Action<bool, bool>? InstallFinished;
+
+		private static void RaiseStarted(string name) => Dispatcher.UIThread.Post(() => InstallStarted?.Invoke(name));
+		private static void RaiseFinished(bool installed, bool silent) => Dispatcher.UIThread.Post(() => InstallFinished?.Invoke(installed, silent));
 
 		public static int GetVotes(string packId)
 		{
@@ -65,33 +83,43 @@ namespace Mesen.Services
 				return (false, "an install is already in progress");
 			}
 			try {
-				string romSha1 = EmuApi.GetMepRomSha1();
-				if(string.IsNullOrWhiteSpace(romSha1)) {
+				//#657: the game this Restore is for, captured before the download -
+				//the coordinator writes its folder and registry key from this, and
+				//drops the Restore if another game was opened meanwhile.
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				if(!load.HasRom) {
 					return (false, "no loaded ROM to restore a pack for");
 				}
-				CommunityPackInstallRecord? record = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1);
+				CommunityPackInstallRecord? record = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, load.RomSha1);
 				if(record == null || string.IsNullOrWhiteSpace(record.SourceSha256)) {
 					return (false, "there is no catalog-installed pack to restore for this ROM");
 				}
 				//The catalog fetch re-verifies an up-to-300MB artifact (SHA-256); start it
 				//on the thread pool so that CPU work and its continuations stay off the UI
 				//thread (this Restore is user-triggered from the Enhancement Packs window).
-				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync());
+				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => RaiseStarted(entry.Name)));
 				if(fetched == null) {
+					RaiseFinished(false, false);
 					return (false, "the pack is no longer in the catalog (nothing to restore from)");
 				}
 				//Restore() is synchronous file/interop work - keep it off the UI thread.
+				//A throw here would skip RaiseFinished and leave the pill installing.
 				(bool ok, string error) = await Task.Run(() => {
-					bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, out string restoreError);
-					return (restored, restoreError);
+					try {
+						bool restored = CommunityPackInstallCoordinator.Restore(fetched.Entry, fetched.PrimaryPackPath, load, out string restoreError);
+						return (restored, restoreError);
+					} catch(Exception ex) {
+						return (false, ex.Message);
+					}
 				});
+				RaiseFinished(ok, false);
 				if(!ok) {
 					return (false, error);
 				}
 				EmuApi.WriteLogEntry("[CommunityPack] RestoreInstalledPack: restored " + fetched.Entry.PackId + " to mep/");
 				return (true, "");
 			} finally {
-				_installGate.Exit();
+				ExitGate();
 			}
 		}
 
@@ -108,20 +136,44 @@ namespace Mesen.Services
 				EmuApi.WriteLogEntry("[CommunityPack] skipped: isPowerCycle or AutoInstallCommunityPacks off");
 				return;
 			}
-			if(!_installGate.TryEnter()) {
-				EmuApi.WriteLogEntry("[CommunityPack] skipped: a previous load's install is still in flight");
-				return; //a previous load's install is still in flight
+			if(!_installGate.TryEnterOrDefer()) {
+				//#657: deferred, not dropped - the holder's ExitGate runs the
+				//auto-install for the game loaded then (ADR-0146).
+				EmuApi.WriteLogEntry("[CommunityPack] deferred: a previous install or Restore is still in flight");
+				return;
 			}
-			_ = Task.Run(RunAsync);
+			//#657 / G.5 W-P16: the load this install belongs to (open generation,
+			//SHA-1, sibling folder, ROM name), captured before the download. The
+			//coordinator installs for it or drops the install if another open
+			//started meanwhile; a later open also drops the pending-file post.
+			//#681: RunAsync's finally releases the gate; a throw before RunAsync
+			//starts releases it here, or every later load would be deferred forever.
+			try {
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				_ = Task.Run(() => RunAsync(load));
+			} catch(Exception ex) {
+				EmuApi.WriteLogEntry("[CommunityPack] skipped: reading the loaded game threw: " + ex);
+				ExitGate();
+			}
 		}
 
-		private static async Task RunAsync()
+		//Releases the install gate; when a ROM load's auto-install was refused
+		//while it was held (#657), runs it now for the game loaded at this point.
+		private static void ExitGate()
+		{
+			if(_installGate.Exit()) {
+				EmuApi.WriteLogEntry("[CommunityPack] running the auto-install deferred while the gate was held");
+				OnGameLoaded(false);
+			}
+		}
+
+		private static async Task RunAsync(CommunityPackLoadTarget load)
 		{
 			string romSha1 = "";
 			try {
 				//ADR-0146: no first-run consent prompt - AutoInstallCommunityPacks (checked above)
 				//is the single master switch before the catalog is contacted.
-				romSha1 = EmuApi.GetMepRomSha1();
+				romSha1 = load.RomSha1;
 				EmuApi.WriteLogEntry("[CommunityPack] romSha1=" + romSha1);
 				lock(_attemptedRomSha1) {
 					if(string.IsNullOrWhiteSpace(romSha1)) {
@@ -134,8 +186,19 @@ namespace Mesen.Services
 					}
 				}
 
-				CommunityPackFetchResult? fetched = await CommunityPackCatalogFetcher.FetchMatchingPackAsync();
+				string installedSha256 = CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256 ?? "";
+				bool pillShown = false;
+				CommunityPackFetchResult? fetched = await CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => {
+					if(PackInstallPill.ShowsFor(installedSha256, entry.Sha256)) {
+						pillShown = true;
+						RaiseStarted(entry.Name);
+					}
+				});
 				if(fetched == null) {
+					if(pillShown) {
+						//W-P9: a matched pack whose download failed.
+						RaiseFinished(false, false);
+					}
 					//No catalog row for this dump (or a failed download): allow a
 					//later load this session to retry, so a catalog update is
 					//picked up without restarting the process.
@@ -159,7 +222,7 @@ namespace Mesen.Services
 				}
 
 				CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(
-					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths);
+					fetched.Entry, fetched.PrimaryPackPath, fetched.ResolvedDepPaths, load);
 				EmuApi.WriteLogEntry("[CommunityPack] Install() outcome: Status=" + outcome.Status +
 					" ContainerName=" + outcome.ContainerName + " Message=" + outcome.Message);
 				//An install that withheld dep-backed ops is incomplete, so it belongs
@@ -167,16 +230,22 @@ namespace Mesen.Services
 				//latches the ROM for the rest of the process and the user can never
 				//complete a user_supplied dep - the power-cycle path is closed by the
 				//isPowerCycle guard in OnGameLoaded, and reloading hits this set (#156).
-				if(outcome.Status == CommunityPackInstallStatus.Failed || outcome.PendingDeps.Count > 0) {
+				//#657: a Stale install (another game opened during the download)
+				//is retried on this game's next load.
+				if(outcome.Status == CommunityPackInstallStatus.Failed || outcome.Status == CommunityPackInstallStatus.Stale || outcome.PendingDeps.Count > 0) {
 					ClearAttempt(romSha1);
 				}
-				Surface(outcome, romSha1);
+				if(pillShown) {
+					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable || outcome.Status == CommunityPackInstallStatus.Stale);
+				}
+				Surface(outcome, load);
 			} catch(Exception ex) {
+				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
 				EmuApi.WriteLogEntry("[CommunityPack] RunAsync threw: " + ex);
 				Notify("Community pack auto-install failed: " + ex.Message);
 			} finally {
-				_installGate.Exit();
+				ExitGate();
 			}
 		}
 
@@ -190,7 +259,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static void Surface(CommunityPackInstallOutcome outcome, string installedRomSha1)
+		private static void Surface(CommunityPackInstallOutcome outcome, CommunityPackLoadTarget load)
 		{
 			switch(outcome.Status) {
 				case CommunityPackInstallStatus.Installed:
@@ -202,8 +271,8 @@ namespace Mesen.Services
 					foreach(string notice in outcome.Notices) {
 						Notify(notice);
 					}
-					NotifyPendingDeps(outcome.PendingDeps);
-					ApplyInstalledPack(installedRomSha1);
+					NotifyPendingDeps(outcome.ContainerName, outcome.PendingDeps, load.RomSha1, load.OpenGeneration);
+					ApplyInstalledPack(load);
 					break;
 
 				case CommunityPackInstallStatus.Failed:
@@ -218,34 +287,59 @@ namespace Mesen.Services
 
 				case CommunityPackInstallStatus.Skipped:
 					//Routine: up to date, disabled by user - nothing to say.
+				case CommunityPackInstallStatus.Stale:
+					//#657: the player opened another game during the download; the
+					//coordinator logged it and touched nothing. Not that game's news.
 					break;
 			}
 		}
 
+		//Test seam (UI.HeadlessTests/CommunityPackApplyTests): what applies a
+		//freshly installed pack to the running game.
+		public static Action PowerCycleGame { get; set; } = LoadRomHelper.PowerCycle;
+
 		//HD/MEP packs are applied at console init, not live. After a background
 		//auto-install, power-cycle the same ROM so the new HdPacks/<rom>/ (or MEP
 		//container) is picked up without a second manual load. OnGameLoaded skips
-		//power cycles, so this does not re-fetch. If the user switched games while
-		//the download was in flight, leave the newly loaded ROM alone.
-		private static void ApplyInstalledPack(string installedRomSha1)
+		//power cycles, so this does not re-fetch. #675: only while the load the
+		//install was for is still the one running (the W-P16 rule, open
+		//generation + SHA-1) - a game the player switched to, or reopened (e.g.
+		//Continue to resume a save), is left alone.
+		//Public for UI.HeadlessTests/CommunityPackApplyTests; the production
+		//caller is Surface, after an Installed outcome.
+		public static void ApplyInstalledPack(CommunityPackLoadTarget installedFor)
 		{
 			Dispatcher.UIThread.Post(() => {
-				string currentSha1 = EmuApi.GetMepRomSha1();
-				if(!string.Equals(currentSha1, installedRomSha1, StringComparison.OrdinalIgnoreCase)) {
-					EmuApi.WriteLogEntry("[CommunityPack] not power-cycling: ROM changed since install started (was " +
-						installedRomSha1 + ", now " + currentSha1 + ")");
+				CommunityPackLoadTarget current = CommunityPackInstallCoordinator.ReadCurrentLoad();
+				if(!installedFor.IsStillLoaded(current)) {
+					EmuApi.WriteLogEntry("[CommunityPack] not power-cycling: the game was opened again or changed since the install started (was " +
+						installedFor.RomSha1 + " open #" + installedFor.OpenGeneration + ", now " + current.RomSha1 + " open #" + current.OpenGeneration + ")");
 					Notify("Community pack installed - reload the game to apply");
 					return;
 				}
 				EmuApi.WriteLogEntry("[CommunityPack] power-cycling to apply newly installed pack");
-				LoadRomHelper.PowerCycle();
+				PowerCycleGame();
 			});
 		}
 
 		//MEI-v1.md §2.3 user_supplied deps: tell the user what to drop where, with the
 		//declared licence (or "not declared") so they can judge the source themselves.
-		private static void NotifyPendingDeps(IReadOnlyList<CommunityPackDepPrompt> pending)
+		private static void NotifyPendingDeps(string packName, IReadOnlyList<CommunityPackDepPrompt> pending, string installedRomSha1, int openGeneration)
 		{
+			//G.5 W-P16: Player mode gets the sheet (with the pause overlay) and a
+			//status sentence instead of one OSD line per file - unless another
+			//open started since the install began (the post belongs to that game).
+			if(ConfigManager.Config.Preferences.UiMode == UiMode.Player) {
+				Dispatcher.UIThread.Post(() => {
+					bool applied = MainWindowViewModel.Instance.SetPendingPackDeps(packName, pending, openGeneration, installedRomSha1, EmuApi.GetMepRomSha1());
+					if(!applied) {
+						EmuApi.WriteLogEntry("[CommunityPack] pending files not shown: another game was opened since the install started");
+					} else if(pending.Count > 0) {
+						DisplayMessageHelper.DisplayMessage(MessageTitle, ResourceHelper.GetMessage("PackDepPill", packName));
+					}
+				});
+				return;
+			}
 			foreach(CommunityPackDepPrompt dep in pending) {
 				string license = string.IsNullOrWhiteSpace(dep.License) ? "not declared" : dep.License;
 				string hints = string.IsNullOrWhiteSpace(dep.Hints) ? dep.DepId : dep.Hints;

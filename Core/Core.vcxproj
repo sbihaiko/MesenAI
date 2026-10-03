@@ -517,6 +517,7 @@
     <ClInclude Include="Shared\EnhancementPacks\MepRecipeInstaller.h" />
     <ClInclude Include="Shared\EnhancementPacks\MepRecipeOps.h" />
     <ClInclude Include="Shared\EnhancementPacks\MepLocalIdentityCache.h" />
+    <ClInclude Include="Shared\EnhancementPacks\RemasterProject.h" />
     <ClInclude Include="Shared\BaseControlManager.h" />
     <ClInclude Include="Shared\BaseState.h" />
     <ClInclude Include="Gameboy\GbControlManager.h" />

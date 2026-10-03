@@ -17,9 +17,13 @@ public partial class PlayerEnhancementsConfig : BaseConfig<PlayerEnhancementsCon
 	//VideoConfig.VideoFilter == HQ4x). Read/written by
 	//UI/Logic/PlayerEnhancementsToggle.cs's pure toggle functions.
 	[ObservableProperty] public partial VideoAspectRatio WideScrnPriorAspectRatio { get; set; } = VideoAspectRatio.NoStretching;
+	//No longer written: Hi-res filter left the quick panel (ADR-0246). Kept so
+	//existing settings files still load.
 	[ObservableProperty] public partial VideoFilterType HiResPriorFilter { get; set; } = VideoFilterType.None;
 
-	//The Welcome card (§6.2) shows once, on the very first Player-mode
-	//boot, and never again once dismissed.
+	//The Welcome card (§6.2) showed once, on the very first Player-mode
+	//boot. G.2 replaced it with the W-P1 first-run home, which shows whenever
+	//there is no recent game, so nothing reads this key any more; it is kept
+	//so an existing settings.json still round-trips it unchanged.
 	[ObservableProperty] public partial bool WelcomeCardDismissed { get; set; } = false;
 }

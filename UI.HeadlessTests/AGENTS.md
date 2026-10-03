@@ -65,7 +65,10 @@ synthetic NROM (needs a built core; skips otherwise) and asserts the notice on
 the outcome and in `EmuApi.GetLog()`. It points `ConfigManager._homeFolder` (by
 reflection) at a temp folder so the install registry and cache never touch the
 user's real home. The decision itself is pinned in `UI.Tests`; this checks
-wiring only.
+wiring only. `CommunityPackInstallStaleLoadTests` (#657) swaps
+`CommunityPackInstallCoordinator.ReadCurrentLoad` to open game B while game
+A's Restore/auto-install is in flight and checks B's `mep/` and registry key
+survive (restore the probe in `Dispose`).
 
 ## Test hygiene
 
@@ -79,6 +82,19 @@ wiring only.
   When the only path the walk finds is an app-code branch the test's
   arguments never take, mark the class `[NativeCoreFree("<why>")]` instead;
   CI runs this project with no core, so a wrong claim fails there.
+
+- **Open a `MainWindow` with `window.ShowStarted()`, never bare `Show()`**
+  (#619). Its startup, recent-game previews and Remaster/Share gate
+  measurement post to `Dispatcher.UIThread` from the thread pool. Avalonia
+  resets the UI dispatcher between tests and re-creates it on whichever
+  thread reads it first, so a post that outlives its test hands the
+  dispatcher to a pool thread and the next test's setup throws "The calling
+  thread cannot access this object". `ShowStarted` waits for the startup;
+  the assembly-level `SettleMainWindows` attribute waits for the rest after
+  each test (`MainWindowStartup.cs`). New background work a test triggers
+  that posts back needs the same wait. A test that observes the startup
+  itself uses `ShowUnstarted` and waits for `Startup` on its own; the
+  settle step waits for it too.
 
 - A headless test must detect the defect it targets. If it would pass
   without the XAML under test, it is a property-getter assertion in

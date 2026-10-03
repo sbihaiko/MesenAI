@@ -1,101 +1,101 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Config;
+using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.Utilities;
-using Mesen.Windows;
 using System;
 using System.Diagnostics;
 using System.IO;
 
 namespace Mesen.ViewModels
 {
+	//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P12): the first-run sheet. Same
+	//choices as the setup wizard it replaces, fewer words: where saves and
+	//settings live, and one keyboard popup. Both gamepad presets are always
+	//applied (UI/Logic/PlayFirstRun). Esc and the close button keep what is
+	//selected and continue - there is no Cancel.
 	public partial class SetupWizardViewModel : ViewModelBase
 	{
-		[ObservableProperty] public partial bool StoreInUserProfile { get; set; } = true;
+		[ObservableProperty] public partial bool StoreInUserProfile { get; set; } = PlayFirstRun.Defaults.StoreInUserProfile;
+		//0 = Arrow keys + S / A, 1 = WASD + K / J (FirstRunKeyboard order).
+		[ObservableProperty] public partial int KeyboardIndex { get; set; } = (int)PlayFirstRun.Defaults.Keyboard;
 
-		[ObservableProperty] public partial bool EnableXboxMappings { get; set; } = true;
-		[ObservableProperty] public partial bool EnablePsMappings { get; set; }
-		[ObservableProperty] public partial bool EnableWasdMappings { get; set; }
-		[ObservableProperty] public partial bool EnableArrowMappings { get; set; } = true;
-
-		[ObservableProperty] public partial string InstallLocation { get; set; }
-
-		[ObservableProperty] public partial bool CreateShortcut { get; set; } = true;
-		[ObservableProperty] public partial bool CheckForUpdates { get; set; } = true;
-		[ObservableProperty] public partial bool IsOsx { get; set; } = OperatingSystem.IsMacOS();
+		[ObservableProperty] public partial string UserFolder { get; set; }
+		[ObservableProperty] public partial bool CreateShortcut { get; set; } = PlayFirstRun.Defaults.CreateShortcut;
+		[ObservableProperty] public partial bool CheckForUpdates { get; set; } = PlayFirstRun.Defaults.CheckForUpdates;
+		[ObservableProperty] public partial bool ShowsDesktopOptions { get; set; } = PlayFirstRun.ShowsDesktopOptions(OperatingSystem.IsMacOS());
+		//W-X2: a folder that cannot be written is a sentence in the sheet, not a dialog.
+		[ObservableProperty] public partial string ErrorText { get; protected set; } = "";
 
 		public SetupWizardViewModel()
 		{
-			InstallLocation = ConfigManager.DefaultDocumentsFolder;
+			UserFolder = ConfigManager.DefaultDocumentsFolder;
 		}
 
-		partial void OnEnableWasdMappingsChanged(bool value)
-		{
-			if(value) {
-				EnableArrowMappings = false;
-			}
-		}
+		public FirstRunChoice Choice => new(StoreInUserProfile, (FirstRunKeyboard)KeyboardIndex, CheckForUpdates, CreateShortcut);
 
-		partial void OnEnableArrowMappingsChanged(bool value)
+		public virtual bool Confirm()
 		{
-			if(value) {
-				EnableWasdMappings = false;
-			}
-		}
-
-		partial void OnStoreInUserProfileChanged(bool value)
-		{
-			InstallLocation = StoreInUserProfile ? ConfigManager.DefaultDocumentsFolder : ConfigManager.DefaultPortableFolder;
-		}
-
-		public bool Confirm(Window parent)
-		{
-			string targetFolder = StoreInUserProfile ? ConfigManager.DefaultDocumentsFolder : ConfigManager.DefaultPortableFolder;
-			string testFile = Path.Combine(targetFolder, "test.txt");
+			FirstRunChoice choice = Choice;
+			string targetFolder = choice.StoreInUserProfile ? ConfigManager.DefaultDocumentsFolder : ConfigManager.DefaultPortableFolder;
 			try {
-				if(!Directory.Exists(targetFolder)) {
-					Directory.CreateDirectory(targetFolder);
-				}
-				File.WriteAllText(testFile, "test");
-				File.Delete(testFile);
-				InitializeConfig();
-				if(CreateShortcut) {
-					CreateShortcutFile();
-				}
-				return true;
-			} catch(Exception ex) {
-				MesenMsgBox.Show(parent, "CannotWriteToFolder", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
+				WriteSettings(targetFolder, choice);
+			} catch(Exception) {
+				ErrorText = ResourceHelper.GetMessage("FirstRunCannotWrite", targetFolder);
+				return false;
 			}
-
-			return false;
+			ErrorText = "";
+			//Best effort: the settings are written, so a Desktop that is missing
+			//or redirected must not keep the sheet open as an unwritable folder.
+			if(choice.CreateShortcut && ShowsDesktopOptions) {
+				try {
+					CreateShortcutFile();
+				} catch(Exception ex) {
+					Debug.WriteLine("First run: desktop shortcut not created: " + ex.Message);
+				}
+			}
+			return true;
 		}
 
-		private void InitializeConfig()
+		//The folder probe and the settings file: a throw here is an unwritable folder.
+		protected virtual void WriteSettings(string targetFolder, FirstRunChoice choice)
 		{
-			ConfigManager.CreateConfig(!StoreInUserProfile);
+			string testFile = Path.Combine(targetFolder, "test.txt");
+			if(!Directory.Exists(targetFolder)) {
+				Directory.CreateDirectory(targetFolder);
+			}
+			File.WriteAllText(testFile, "test");
+			File.Delete(testFile);
+			InitializeConfig(choice);
+		}
+
+		private static void InitializeConfig(FirstRunChoice choice)
+		{
+			ConfigManager.CreateConfig(!choice.StoreInUserProfile);
+			FirstRunMappings m = PlayFirstRun.Mappings(choice.Keyboard);
 			DefaultKeyMappingType mappingType = DefaultKeyMappingType.None;
-			if(EnableXboxMappings) {
+			if(m.Xbox) {
 				mappingType |= DefaultKeyMappingType.Xbox;
 			}
-			if(EnablePsMappings) {
+			if(m.PlayStation) {
 				mappingType |= DefaultKeyMappingType.Ps4;
 			}
-			if(EnableWasdMappings) {
+			if(m.Wasd) {
 				mappingType |= DefaultKeyMappingType.WasdKeys;
 			}
-			if(EnableArrowMappings) {
+			if(m.Arrows) {
 				mappingType |= DefaultKeyMappingType.ArrowKeys;
 			}
 
 			ConfigManager.Config.DefaultKeyMappings = mappingType;
-			ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = CheckForUpdates;
+			ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = choice.CheckForUpdates;
 			ConfigManager.Config.Save();
 		}
 
-		private void CreateShortcutFile()
+		protected virtual void CreateShortcutFile()
 		{
 			if(OperatingSystem.IsMacOS()) {
-				//TODO OSX
 				return;
 			}
 

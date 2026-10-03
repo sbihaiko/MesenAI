@@ -102,6 +102,184 @@ can be exercised by real xunit tests without Avalonia or the native
   crosses the interop boundary by value; the core also exempts it from the
   keyboard-block in `ShortcutKeyHandler::IsKeyPressed` so it stays reachable
   in keyboard games.
+- `WorkspaceShell` (G.1, ADR-0241, PRD Part B §13.2) is the host-free
+  shell model: the `Workspace` enum (`Play`, `Remaster`, `Share` — that
+  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'), `WorkspaceState`
+  (one active workspace; an undefined persisted value falls back to `Play`),
+  `IsBarVisible` (the bar hides only while a Play game runs unpaused),
+  `ShellStatusLine` (the one-sentence status kind) and `ClassicMenuNotice`
+  (`ShowClassicMenuBar` defaults to `false` on fresh installs and upgrades,
+  §13.8 Q4; the one-time toast is due only for an upgraded settings file
+  whose bar is off). `PreferencesConfig.Workspace` is separate from
+  `UiMode`, which is not reinterpreted. Switching never pauses or stops the
+  game; outside Play the native renderer and every Play surface are hidden.
+  Tools ⋯ binds the same `MainMenuViewModel` item lists as the classic bar
+  (its menu style templates `ActionIcon.Source`, because one `Image` cannot
+  have two visual parents). Since G.1 `PlayerChrome.IsMenuVisible` takes
+  `ShowClassicMenuBar`, not `UiMode`, and the P.4 Debug-menu gate on
+  `UiMode` is retired so every classic action is reachable from Tools ⋯.
+  `ShellTitleBar` decides the macOS title-bar integration: only macOS
+  extends the client area (height hint = the 52 px bar), the bar background
+  carries `WindowDecorationProperties.ElementRole="TitleBar"` and its two
+  controls `User`, the leading inset clears the traffic lights except in
+  fullscreen, and `MainWindow.InitShellTitleBar` moves the bar to the top
+  row so the optional classic bar sits under it.
+- `PlayHome` and `PlayPauseOverlay` (G.2, ADR-0241, PRD Part B §13.5.2) are
+  the host-free Play rules. `PlayHome.Classify` picks W-P1 (no recents; it
+  replaced the P.7 Welcome card, so `PlayerEnhancementsConfig.WelcomeCardDismissed`
+  is no longer read) or W-P2, whose Recent grid is `RecentGrid` (every entry
+  but the Continue game); `LastPlayed` counts calendar days; `Orientation`
+  only states what `EnableAudio`/`AutoInstallCommunityPacks` make true. The
+  Player home lives in `UI/Views/PlayHomeView.axaml` (the
+  `RecentGamesViewModel` DataTemplate); Advanced's game selection and the
+  Save/Load slot screens keep the plain `StateGrid` there. `PauseOverlay.Controls`
+  is W-P4's seven controls (rule 2: a new pause item replaces or merges one)
+  and `WhereNow` maps every P.4/P.7/P.10 overlay action to its row or Tools ⋯
+  path. `PlayEsc.Next` is the one Esc router `MainWindowViewModel.TogglePlayerOverlay`
+  (`MainWindowViewModel.PauseOverlay.cs`) follows: game → W-P4 → resume, a
+  sheet opened from W-P4 (Save states and its slot grid, Enhancements,
+  Cheats, a picker from the Pack row) closes back to W-P4, the first-start
+  picker is dismissed, and Esc on the home does nothing. *Quit game* powers
+  the game off (`LoadRomHelper.PowerOff`, after the existing
+  `ConfirmExitResetPower` prompt) and never closes the app.
+- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P12–W-P16) are
+  host-free in `UI/Logic/PlayFirstRun.cs`, `PlayBiosPrompt.cs`,
+  `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and `PlayControllerSetup.cs`.
+  W-P12 is `SetupWizardWindow` redrawn: it still runs before `MainWindow`
+  (the storage choice decides `HomeFolder`), always applies both gamepad
+  presets, and its close/Esc applies the choice (no Cancel). W-P13, W-P14,
+  W-P15 and W-P16 are Player-mode only, in Play; Advanced keeps the
+  `FirmwareNotFound` dialog loop, the OSD load error with the home hidden,
+  and the OSD pending-dep line. `PlaySheet.PackDep` closes back to W-P4; the
+  BIOS and controller sheets take Esc first (`HandleEdgeFlowEsc`, as Cancel).
+  The W-P15 poll lives in `UI/Windows/PlayEdgeFlowsWiring.cs` and writes only
+  a free port-1 mapping slot, never over a binding; when it stops listening
+  the pill goes too (#660, its 8 s only advance on ticks). The Core's load
+  thread blocks on `MissingFirmware` holding its load locks, so every wait
+  goes through `CoreRequestWaits` (`UI/Logic`): `CloseEmu` dismisses the BIOS
+  sheet and closes the waits before `EmuApi.Stop`, and another open or a
+  power off dismisses the sheet (#658). The first-run sheet never cancels an
+  application/OS shutdown close and writes nothing then (#661). Every open
+  starts with no BIOS cancel (`PlayBiosSheetViewModel.ClearCancelled`, #674),
+  and a failure is reported only for the latest open
+  (`PlayLoadFailure.IsCurrentOpen`), so a cancel never outlives its open. The
+  recent-game path (Continue, a recent card) reports W-P14 too (#676): the
+  core's `LoadRecentGame` answers nothing, so no game running afterwards is a
+  failure, and `PlayRecentGameFailure` reads the `.rgd`'s `RomInfo.txt` to
+  say `Missing` (the `.rgd` or its ROM is gone) or classify the ROM like any
+  open. A recent card stays enabled while its `.rgd` exists. An OS file open
+  (`App.OpenFromOs`, macOS open-documents) waits for `MainWindow.Startup`
+  through `RunWhenStarted`, so a cold launch never loads before
+  `EmuApi.InitializeEmu` (#681).
+- The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
+  W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
+  `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
+  `scripts/mep_project.py` does (a bare `auto/textures` is rec-001);
+  `PythonLocator` needs Python 3.10+ (3.9 fails on PEP 604 in
+  `artist_chr_kit.py`) and never probes the macOS `/usr/bin` stub;
+  `RemasterToolsLocator` finds `mep_project.py` because the app bundle ships
+  no `scripts/`; `RemasterJobRunner` runs `mep_project.py kit` behind
+  `IJobProcessLauncher` (real processes in `UI/Services/RemasterProcesses.cs`,
+  argv through `ArgumentList`, never a joined command line) and counts
+  steps from its `==`/`ok`/`FAIL` lines; `RemasterScreen.Evaluate` gives
+  every control its enabled state and reason. Recording goes through
+  `EmuApi.StartMepRecording("play", "")`/`StopMepRecording`; switching
+  workspace never stops it (the profile button's dot and the status line
+  say so). During W-R2 the renderer is shown under Remaster with one strip
+  docked above it (the native renderer draws over Avalonia, so nothing is
+  overlaid on the game), and Esc (`ToggleOverlay`) stops the recording.
+- The Play sheets (G.4, ADR-0241, PRD Part B §13.5.2 W-P5–W-P9) keep their
+  rules host-free: `PackRowRoute.For` picks W-P5 (2+ distinct `pack_id`s, no
+  sibling) or W-P6; `PackPickerRow`/`PackDetail` build a row, the chips, the
+  folder and the Restore visibility (catalog installs only, ADR-0147);
+  `RestoreFlow` is the one in-place confirm; `PackAudioNotice.Scan` is the
+  counted ADR-0240 check W-P6 re-reads when it opens. `EnhancementsSheet.Pending`
+  names W-P7's button from the applied state and the draft; the ViewModel
+  (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
+  `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9
+  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip; `ConfigWindowTab.Display`
+  is Player-only (not in `ConfigWindowTabOrder`) and `ConfigViewModel` keeps
+  `SelectedTabIndex`/`PlayerTabIndex` at -1 for the hidden strip, so a tab's
+  content is realized once. `PackInstallPill` is W-P9's state;
+  `CommunityPackInstallService.InstallStarted`/`InstallFinished` feed it on the
+  UI thread and the sentence goes to the core HUD (`EmuApi.DisplayMessage`,
+  the native renderer draws over Avalonia) and the status line. The sheets
+  are `UI/Views/PlayerPackPickerSheetView`, `PlayerPackDetailSheetView`,
+  `PlayerEnhancementsSheetView` and `PlayerDisplaySettingsView`; their names
+  are in the UserControls' scopes, so `MainWindow` finds them through the
+  visual tree (`MainWindow.PlaySheets.cs`), not `GetControl`.
+- The Share workspace (G.8, ADR-0241/ADR-0205/ADR-0154, PRD Part B
+  §13.5.4 W-H1–W-H4) holds no credential and uploads nothing: every
+  submission is a pre-filled issue URL opened in the browser.
+  `UI/Logic/PackShare.cs` builds the `community-pack.yml` URL from exactly
+  its three fields (`pack_link`, `rom_target`, `console`; a test parses the
+  real form) and checks the link with `CommunityPackHostAllowlist`;
+  `ShareProjectPackage.cs` reads a project's game/console (`.bootstrap`
+  `rom=`, `mep/pack.json` `targets[0].system`) and builds the
+  `mep_build.py pack` job (`RemasterJobKind.Pack`, run by Share's own
+  `RemasterJobRunner`). The two runners are linked by
+  `WorkspaceJobs.Link` (#647): a job snapshot carries its `ProjectFolder`,
+  each workspace's job gate refuses, with its reason, while the other runs a
+  job on the same project (`RemasterJobs.RunsOn`), and a finished job is a
+  result only on the project it ran on (`RemasterJobs.ShownFor`, #648);
+  `ShareScreen.cs` holds the view enum, the replay
+  start gate (mirror of the core's `ShareRecordingSettings::IsSupported`)
+  and the Esc router. Replays reuse `ShareRecordingSession` through
+  `IReplayRecorder` (`StopAndKeep` stops without the menu's reveal and
+  browser hand-off, which W-H4's after sheet does on click). Remaster
+  reaches W-H3 through `RemasterWorkspaceViewModel.RequestShareProject`.
+- G.6 (PRD Part B §13.5.3 W-R3/W-R4, §13.5.5 W-X3) adds Build & show:
+  `RemasterBuilds.Spec` runs `mep_project.py build`; its `show:` line and
+  `RemasterShow.Decide` pick `EmuApi.RequestMepImageReload` (images only) or
+  `LoadRomHelper.ApplyPackChange` (manifest changed), only on the project's
+  own running NES game, and the pack reload only when ADR-0244's plan is in
+  place (`RemasterShow.PackReload`, #649: never a restart during a movie,
+  shared replay or netplay - the build then plays next time). `RemasterBuildProblemReader` turns the runner's
+  `Log` into W-R4 rows by caption (`RemasterKitIndex`, from `kit.json`);
+  an untranslated line is only counted. The Build half of the VM is
+  `RemasterWorkspaceViewModel.Build.cs`. W-X3's question is
+  `InterruptionViewModel` on `MainWindowViewModel.Interruption`
+  (`MainWindowViewModel.Interruptions.cs`), asked from
+  `MainWindow.OnClosing` and from `LoadRomHelper` before any ROM opens; it
+  replaces `ConfirmExit` when it asks, so quitting confirms once. Quitting
+  asks about, and stops, Share's pack job too (#650); a stopped import
+  removes the `<pack> (editable)` folder only when that import created it
+  (`RemasterHandOff.PartialImportToRemove`).
+- Remaster's tile browser and hand-offs (G.7, PRD Part B §13.5.3 W-R1 zone
+  ②, W-R5–W-R7) read only what the scripts write: `RemasterKitReader` reads
+  `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never
+  `kit-proposals.json`, ADR-0188); `RemasterPaintProbe` calls a surface
+  painted only when it differs from its `*.orig.png` twin upscaled
+  nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
+  units whose twin is a pre-paint copy (grid, object, element, panorama) -
+  pattern pages, scene captures and imported sheets say "cannot tell".
+  A tile opens with the OS default through `UI/Services/RemasterFileOpener.cs`
+  (ADR-0209's first user-configured launch). `RemasterHandOff` builds the
+  `mep_import.py import` job and the `compose_editor.py <recording>` child;
+  both tools are in `scripts/tools-zip-manifest.txt`, and a tools folder
+  without them disables the control with its reason. New files only: the
+  `RemasterWorkspaceViewModel.Tiles/.Import/.Compose.cs` partials and the
+  `RemasterTileBrowserView`, `RemasterImportSheet`, `RemasterComposeSheet`
+  views.
+- **BYOK key custody** (F14.20, ADR-0242 Q1/Decision 4, ADR-0247
+  Decision 3) is `IByokKeyStore` in `UI/Logic/ByokKeyStore.cs`, one entry per
+  `ByokVendor` (`OpenRouter` → `OPENROUTER_API_KEY`), with
+  `MacKeychainByokKeyStore` (Security framework SecItem API via P/Invoke -
+  never the `security` CLI, which would put the key on a command line),
+  `WindowsCredentialByokKeyStore` (advapi32 CredRead/CredWrite/CredDelete),
+  Linux `UnsupportedByokKeyStore` with its reason, and the test double
+  `InMemoryByokKeyStore`. `ByokJobLauncher.Start` reads the key when a job
+  starts, passes it to the child through its environment only (refused on
+  argv), drops it from the `ProcessStartInfo` after the start and redacts it
+  from every output line; no custody type keeps it in a field. A key is
+  stored and used trimmed (`ByokKey.Normalize`, in every `Write` and in
+  `Start`), the bare key `scripts/jev_client.py` strips to, so redaction
+  matches what the child prints (#681). Guarded by
+  `UI.Tests/Byok/*` (argv, output, start-failure text as
+  `MesenMsgBox.ShowException` prints it, no fields; the live Keychain
+  round-trip is opt-in, `MESENAI_BYOK_LIVE=1`) and
+  `UI.HeadlessTests/ByokSettingsSerializationTests` (settings.json). Any later
+  BYOK feature uses this interface; none may add a second key store.
 - `PlayerPackPicker` (P.5, §5) is the host-free decision for the Player pack
   picker: it opens only when 2+ distinct pack_ids exist (after the §5
   content_id merge — feed it `PackPreferenceResolver.Resolve`'s `Candidates`,
@@ -114,11 +292,32 @@ can be exercised by real xunit tests without Avalonia or the native
   list + ROM sha1 (data-injected from the code-behind), builds the choices
   from the core's `GetPackListText` columns (name/author/version/licence/
   sections/origin already there), and `PickPlayerPack` stores the P.3
-  preference then power-cycles (applied on the reload); `DismissPlayerPackPicker`
+  preference then applies it through `LoadRomHelper.ApplyPackChange` (in
+  place, or the old power cycle; see `PackChangePolicy`); `DismissPlayerPackPicker`
   stores nothing so the next launch asks again. The picker's order is
   community 👍 first (`CommunityPackInstallService.GetVotes(pack_id)`, from
   the last catalog fetch's MEI `votes`), then name — local-only packs (no
-  catalog row, votes 0) fall back to name order.
+  catalog row, votes 0) fall back to name order. Only enabled packs are offered or
+  counted (`PlayerPackPicker.Offered`, before `Resolve`, #693). That display
+  order is never the "current pack": `PlayerPackPicker.CurrentContainer`
+  mirrors the core's `GetPackForSection` (stored choice, else the first
+  enabled human pack in pack-list order, else the first auto-only one, #703).
+  Use This Pack opened from W-P4 returns to W-P4 when the swap is in place
+  and to the game when it restarts (`PackPickClose`, #691).
+- `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
+  change — the Enhancements panel's Textures/Audio/Border toggles
+  (`ToggleLayer`) and the picker's Apply: in place
+  (`EmuApi.ReloadRomKeepingState`) on the consoles
+  `scripts/pack_swap_exactness.py` measured exact (NES, SMS, GB), else the
+  pre-ADR-0244 restart, with the HUD reason for a movie or netplay; its
+  `Outcome` maps the core's answer (restored, fallback restart, ROM-patch
+  restart, refused → plain restart) to a `MessageManager` key.
+  `InPlaceReloadResult` mirrors Core's enum value for value (ABI; guarded by
+  `scripts/test_pack_swap_exactness.py`). `LoadRomHelper.ApplyPackChange`
+  is the host-aware caller: it runs the blocking export off the UI thread,
+  one swap at a time; a refusal's fallback restart runs only while the
+  load it was for is still loaded (`PackChangePolicy.RestartsLoadedGame`,
+  #655). Overclock never goes through it (power cycle).
 - `CommunityCatalogUpdateDecision` (P.6, PRD Part B §3.6) is the
   host-free verdict for the F6.4b reinstall gate, replacing the old
   source.sha256 trigger (ADR-0138 §37) with the §3.6 content_id rule: an
@@ -201,9 +400,23 @@ can be exercised by real xunit tests without Avalonia or the native
   `ZipArchiveEntry.Open`. After a successful auto-install
   (`CommunityPackInstallStatus.Installed`),
   `CommunityPackInstallService` power-cycles (`LoadRomHelper.PowerCycle`)
-  when the same ROM is still loaded, so `HdPacks/<rom>/` applies without a
-  second manual load; `OnGameLoaded` already skips power cycles, so this
-  does not re-fetch. A ROM switch during the download does not power-cycle.
+  when the load it captured is still loaded (`CommunityPackLoadTarget.
+  IsStillLoaded`, the W-P16 rule: open generation + SHA-1, #675), so
+  `HdPacks/<rom>/` applies without a second manual load; `OnGameLoaded`
+  already skips power cycles, so this does not re-fetch. A ROM switch, or
+  the same game reopened (Continue), during the install does not
+  power-cycle. A throw between the gate's `TryEnterOrDefer` and `RunAsync`
+  releases the gate (#681).
+  #657: the auto-install and Restore capture the load
+  (`CommunityPackInstallCoordinator.CaptureLoad` → host-free
+  `CommunityPackLoadTarget`: SHA-1, whole-file SHA-1, sibling folder, ROM
+  name, open generation) before the download, and the coordinator takes the
+  out folder, ROM name and registry key from it, never from the game loaded
+  afterwards. If another open started meanwhile (`IsStillLoaded`, the W-P16
+  rule) it drops with `CommunityPackInstallStatus.Stale` before the first
+  destructive step (silent, logged, retried on that game's next load). A load
+  refused by the install gate is deferred (`CommunityPackInstallGate.
+  TryEnterOrDefer`), and the holder's `Exit` runs it for the game loaded then.
   A failed or thrown auto-install clears the per-session ROM sha1 attempt
   so the next load retries.
   ADR-0240 / F6.9: after a successful install (MEP-recipe or hd-legacy),
@@ -246,6 +459,67 @@ can be exercised by real xunit tests without Avalonia or the native
   with the software renderer, which never runs a shader. Covered by
   `UI.Tests/Config/RendererPolicyTests.cs`; there is no separate "use Metal"
   setting.
+- **Play Cheats sheet (`UI/Logic/CheatSheet`, P.10 / ADR-0245 §1–§3, §5).**
+  The overlay's *Cheats · N on* row opens W-P11
+  (`UI/Views/PlayerCheatsSheetView`); every toggle is written to the same
+  per-game `CheatCodes` file the classic `CheatListWindow` edits, matched by
+  that window's import key (description + codes + type), so the two never
+  disagree. Turning a row off keeps it, disabled. `CheatRecordingRule` is
+  the ADR-0184 §1 test (a NES RAM code is `NesCustom` with every address
+  below `0x0800`); `CheatConsoleScope` gives NES the bundled list and GB/SMS
+  manual entry only, with the reason. `TryParseCodes` is a separate entry
+  point from the parity-frozen `CheatTypeDetector` (ADR-0128). Play passes
+  `recordingArt: false`; `CheatRecordingRule.IsRecordingArtContext` makes it
+  `true` in Remaster or while a Remaster recording runs (W-R2 has no overlay;
+  switching to Play keeps the recording). `RemasterWorkspaceViewModel.Cheats.cs`
+  refuses *Record While I Play* while a non-RAM code is on, naming it
+  (ADR-0184 §1), and `CheatCodes.RecordingArt` makes `ApplyCheats` - every
+  path to the core, the classic window included - hold back non-RAM codes
+  until Stop (`HeldForRecording`, named on the W-R2 strip). The core
+  dereferences the running console in `GetRomHash`, so the hash is only read
+  while `EmuApi.IsRunning()`. Rules in `UI.Tests/Cheats/`, wiring in
+  `UI.HeadlessTests/PlayerCheatsSheetTests` and `RemasterCheatsTests`.
+  **Community rows (R.4, ADR-0248 §2, §5).** `UI/Services/CommunityCheatCatalogFetcher`
+  fetches `docs/community-cheats.json` with the pack catalog's allow-list,
+  downloader and ETag cache rule (no confirmation, the GET only); the sheet
+  opens on the last known catalog and `SetCommunityCatalog` adds the fetched
+  one when it returns. `CommunityCheatCatalog.ForCopy` matches the exact
+  cheat SHA-1 and the console, never a name; `CheatSheet.BuildRows` puts the
+  rows (`CheatRowSource.Community`) between the bundled list and the user's
+  own codes under the same recording rule. The 👍 count and *Share This
+  Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
+  injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
+  are swapped in headless tests so none reaches the network.
+- **Shared replays sheet (`UI/Logic/CommunityReplayCatalog`, `ReplayWatch`,
+  R.2 / ADR-0205 §7–§9).** W-P4 › Save states › *Shared replays…* opens
+  `UI/Views/PlayerReplaysSheetView` (W-P4 is at its seven controls, so it is
+  not an overlay row). `UI/Services/CommunityReplayCatalogFetcher` fetches
+  `docs/community-replays.json` like the cheat catalog (pack allow-list, ETag
+  cache rule, no confirmation, the GET only) and downloads a row through the
+  embedded `scripts/replay_host_allowlist.json` (resource
+  `Mesen.replay_host_allowlist.json`, drift-checked) under the 8 MB cap,
+  then checks size and sha256 before it writes `downloads/<sha256>.mmo`.
+  `ForRom` matches the movie's own ROM SHA-1 (`GetRomHash(HashType.Sha1)`,
+  the ROM as loaded, before a patch) and the console, never a title. Watch
+  asks once in place ("Restart & watch") because `MesenMovie::Play`
+  power-cycles; it is off, with the reason, with no game, during a movie or
+  in netplay. `MainWindowViewModel.CommunityReplaysSource`/`LastKnown`,
+  `ReplayRomSha1`, `ReplayOpenUrl`, `ReplayDownload`, `ReplayPlay` and
+  `ReplayWatchReasonSource` are swapped in `UI.HeadlessTests/PlayerReplaysSheetTests`
+  so none reaches the network or the core's movie player. Rules in
+  `UI.Tests/Share/CommunityReplayCatalogTests` and `ReplayWatchTests`.
+- **Settings › Look (`UI/Logic/LookLayers`, `NamedLookManifest`, P.13 /
+  ADR-0246).** Art / Pixels / Screen in `LookConfigView`, a ConfigWindow tab
+  after Video. Every rule (items, selection, enable, reason, ◉/◌ mark, what a
+  pick writes) is `LookLayers`; the VM only reads inputs and writes what
+  `Apply*` returns. Pack art is the core's `EmuApi.IsDrawingPackArt()`, the
+  same condition each console's `GetVideoFilter` uses. A value Look does not
+  list shows as the current item and is never rewritten. The ConfigWindow
+  TabControl binds a position through `ConfigWindowTabOrder`, never the
+  `ConfigWindowTab` id (ids have holes). Bundled looks are listed in
+  `UI/Dependencies/Shaders/Looks/looks.json`; every file there needs its
+  license, pinned source and sha256 (`UI.Tests/Look/NamedLookManifestTests`).
+  Rules in `UI.Tests/Look/`, wiring in `UI.HeadlessTests/LookSettingsTabTests`.
 - **Tools > Movies > Record and share** (ADR-0205 sec. 2/6): `ShareRecordingSession`
   calls `RecordApi.MovieRecordAndShare` (no dialog, no mode), writes under
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the

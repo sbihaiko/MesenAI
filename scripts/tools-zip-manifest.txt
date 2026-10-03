@@ -28,7 +28,10 @@ artist_kit_assemble.py
 artist_map.py
 audio_cleanup_suggest.py
 cdl_tool.py
+compose_editor.py
+compose_editor_layout.py
 compose_engine.py
+compose_viewmodel.py
 fm2_to_bk2.py
 jev_client.py
 jev_harness.py
@@ -45,7 +48,12 @@ mep_conditions.py
 mep_content_id.py
 mep_errata.py
 mep_figure.py
+mep_import.py
 mep_lint.py
+mep_patch.py
+mep_project.py
+mep_project_build.py
+mep_project_kit.py
 mep_recipe_common.py
 mep_recorded.py
 mep_render_audio.py

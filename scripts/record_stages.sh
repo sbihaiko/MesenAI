@@ -16,7 +16,7 @@
 # beside them are skipped - the first mints a state, the second is a
 # transition for replay_chain.sh, neither is a stage. Each stage runs
 #   headless_record <out>/<stage>/<rom name> <seconds> <out>/<stage>/rec bootstrap hdpack-off state=<stage>.mss input=<stage>.txt
-# so the bootstrap builder writes <out>/<stage>/<rom stem>/auto/ - one pack per
+# so the bootstrap builder writes <out>/<stage>/<rom stem>/auto/rec-001/ (ADR-0243) - one pack per
 # stage, nothing merged. The ROM is hard-linked (or copied) into each stage
 # folder because the builder writes beside the ROM.
 #

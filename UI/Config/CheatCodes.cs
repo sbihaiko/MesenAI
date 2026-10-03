@@ -1,10 +1,12 @@
 ﻿using Mesen.Interop;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -48,10 +50,41 @@ namespace Mesen.Config
 			}
 		}
 
+		//ADR-0184 §1 / ADR-0245 §3: while a Remaster recording runs, only RAM
+		//codes reach the core, whichever window turned a code on (the classic
+		//cheat window included); the others are held back and come back when the
+		//recording ends. HeldForRecording lists them, for the recording strip.
+		public static bool RecordingArt { get; private set; }
+		public static IReadOnlyList<StoredCheat> HeldForRecording { get; private set; } = Array.Empty<StoredCheat>();
+		public static event Action? HeldForRecordingChanged;
+
+		public static void SetRecordingArt(bool recordingArt)
+		{
+			RecordingArt = recordingArt;
+			ApplyCheats();
+		}
+
+		private static void SetHeld(IReadOnlyList<StoredCheat> held)
+		{
+			bool changed = !held.SequenceEqual(HeldForRecording);
+			HeldForRecording = held;
+			if(changed) {
+				HeldForRecordingChanged?.Invoke();
+			}
+		}
+
+		//Every code off, the ones held back for a recording too (#706: the
+		//classic window's Disable All left them to come back after it).
+		public static void ClearCheats()
+		{
+			SetHeld(Array.Empty<StoredCheat>());
+			EmuApi.ClearCheats();
+		}
+
 		public static void ApplyCheats()
 		{
 			if(ConfigManager.Config.Cheats.DisableAllCheats) {
-				EmuApi.ClearCheats();
+				ClearCheats();
 			} else {
 				CheatCodes.ApplyCheats(LoadCheatCodes().Cheats);
 			}
@@ -60,11 +93,18 @@ namespace Mesen.Config
 		public static void ApplyCheats(IEnumerable<CheatCode> cheats)
 		{
 			List<InteropCheatCode> encodedCheats = new List<InteropCheatCode>();
+			List<StoredCheat> held = new();
 			foreach(CheatCode cheat in cheats) {
-				if(cheat.Enabled) {
-					encodedCheats.AddRange(cheat.ToInteropCheats());
+				if(!cheat.Enabled) {
+					continue;
 				}
+				if(RecordingArt && !CheatRecordingRule.IsRamCode(cheat.Type, cheat.Codes)) {
+					held.Add(new StoredCheat(cheat.Description, cheat.Type, cheat.Codes, true));
+					continue;
+				}
+				encodedCheats.AddRange(cheat.ToInteropCheats());
 			}
+			SetHeld(held);
 
 			EmuApi.SetCheats(encodedCheats.ToArray(), (UInt32)encodedCheats.Count);
 		}

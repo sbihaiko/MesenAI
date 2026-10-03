@@ -126,17 +126,7 @@
 						</StackPanel>
 					</c:GroupBox>
 
-					<c:GroupBox Grid.Column="0" Grid.Row="1" Header="{l:Translate lblShaderSettings}" Margin="0 0 1 0" IsVisible="{Binding ShowShaderConfig}">
-						<DockPanel>
-							<TextBlock Text="Shader: " DockPanel.Dock="Left" VerticalAlignment="Center" />
-							<c:ShaderSelector
-								Grid.Row="1"
-								Grid.Column="1"
-								ShaderFile="{Binding Config.ShaderFile}"
-								HorizontalAlignment="Stretch"
-							/>
-						</DockPanel>
-					</c:GroupBox>
+					<!-- ADR-0246 (P.13): the shader selector moved to Settings › Look. -->
 
 					<StackPanel Orientation="Horizontal" Grid.Column="0" Grid.Row="2" VerticalAlignment="Top">
 						<Button Content="{l:Translate btnSelectPreset}" Click="BtnPreset_OnClick">

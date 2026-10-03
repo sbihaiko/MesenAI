@@ -22,13 +22,29 @@ Checks:
        with the section 3 reason in the comment; the opposite verdict label is
        removed on a re-validation, and the form's `replay` label is never
        touched.
-  AC-4 no attachment / a download that fails is `replay:invalid` with a reason,
-       never a crash.
+  AC-4 no attachment, an attachment the host answers 404/410 for, or one the
+       download refuses (off the allow-list, over the cap) is
+       `replay:invalid` with a reason, never a crash.
+  AC-6 section 7 (R.2): an archive byte-identical to a row the committed
+       catalog lists under another issue is `replay:invalid` as `duplicate`,
+       and the comment names the earlier issue; the row's own issue is not its
+       own duplicate (a re-validation passes).
+  AC-6 issue #624: on NES the movie's `SHA1` is the whole-file hash (iNES
+       header included), which never equals the catalog's No-Intro hash
+       (ADR-0003/ADR-0039); the game resolves through the movie's
+       `NoIntroSHA1`, and a movie without it falls back to the stem rather
+       than guessing a game from a name.
+  AC-7 issue #700: any other fetch failure (a reset, a timeout, a 5xx, a DNS
+       blip) is no verdict: evaluate raises TransientFetchError, the CLI
+       exits EXIT_TRANSIENT without printing a verdict, and
+       replay-submitted.yml fails the step without withdrawing
+       `replay:valid`, so a live row is never de-listed by the network.
 
 Usage: python3 scripts/test_replay_submission.py
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import sys
 import zipfile
@@ -56,7 +72,7 @@ def ok(msg):
 def archive(extra=None, author="alice", description="stage skip run\nlong notes"):
     members = {
         "Input.txt": b"|........\n" * 100,
-        "GameSettings.txt": f"GameFile Contra (USA).nes\nSHA1 {SHA1}\n".encode(),
+        "GameSettings.txt": f"MesenVersion 2.1.0\nMovieFormatVersion 3\nGameFile Contra (USA).nes\nSHA1 {SHA1}\nemu.consoleType Nes\n".encode(),
     }
     if author is not None:
         members["MovieInfo.txt"] = f"Author {author}\nDescription\n{description}".encode()
@@ -175,11 +191,19 @@ def check_failures_are_verdicts():
         return
 
     def boom(_url):
-        raise OSError("host not allow-listed")
+        raise rs.AttachmentRefused("host not allow-listed")
 
     broken = run(b"", fetch=boom)
     if broken.verdict != "invalid" or "host not allow-listed" not in broken.comment:
-        fail(f"AC-4 a failed download is invalid with its reason: {broken.verdict} {broken.comment!r}")
+        fail(f"AC-4 a refused download is invalid with its reason: {broken.verdict} {broken.comment!r}")
+        return
+
+    def gone(_url):
+        raise rs.AttachmentGone("404")
+
+    deleted = run(b"", fetch=gone)
+    if deleted.verdict != "invalid" or "download-failed" not in deleted.comment:
+        fail(f"AC-4 a deleted (404/410) attachment is invalid: {deleted.verdict} {deleted.comment!r}")
         return
     if none.title_changed or broken.title_changed:
         fail("AC-4 with no readable artifact the typed title is left alone")
@@ -210,7 +234,7 @@ def check_hostile_text_and_urls():
         fail(f"AC-5 a finding message must not forge a bullet or carry control characters: {nl!r}")
         return
     boom = rs.evaluate(body("https://github.com/user-attachments/files/1/a.mmo"), "t", (), "u", [],
-                       lambda _u: (_ for _ in ()).throw(OSError("bad\n- `forged`: x")))
+                       lambda _u: (_ for _ in ()).throw(rs.AttachmentRefused("bad\n- `forged`: x")))
     if "\n- `forged`" in boom.comment:
         fail(f"AC-5 a download error must not forge a bullet: {boom.comment!r}")
         return
@@ -222,12 +246,122 @@ def check_hostile_text_and_urls():
     ok("AC-5 title length, mention/ref defanging, control chars and traversing URLs are handled")
 
 
+def check_duplicate_of_a_listed_row():
+    import hashlib
+    import json
+    import tempfile
+    data = archive()
+    sha = hashlib.sha256(data).hexdigest()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "community-replays.json"
+        path.write_text(json.dumps({"format": "mesenai-community-replays", "games": [
+            {"sha1": SHA1, "replays": [{"issue": 7, "sha256": sha.upper()}, {"issue": "x", "sha256": "bad"}]}]}))
+        live = rs.load_live_replays(path)
+    if live != [(7, sha)]:
+        fail(f"AC-6 the live rows are (issue, lower-case sha256) of the committed catalog: {live}")
+        return
+    dup = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: data, number=9, live=live)
+    if dup.verdict != "invalid" or "`duplicate`" not in dup.comment or "#7" not in dup.comment:
+        fail(f"AC-6 a copy of issue 7's archive is a duplicate naming #7: {dup.verdict} {dup.comment!r}")
+        return
+    itself = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: data, number=7, live=live)
+    if itself.verdict != "valid":
+        fail(f"AC-6 re-validating the listed issue itself stays valid: {itself.comment!r}")
+        return
+    other = rs.evaluate(body(), "[Replay] ", ["replay"], "bob", CATALOG, lambda _u: archive(author="carol"), number=9, live=live)
+    if other.verdict != "valid":
+        fail(f"AC-6 a different recording of the same ROM is its own row: {other.comment!r}")
+        return
+    ok("AC-6 a byte-identical copy of a listed replay is a duplicate naming the earlier issue")
+
+
+def _ines_rom():
+    """A synthetic iNES file: 16-byte header, 16 KB PRG, 8 KB CHR."""
+    header = b"NES\x1a" + bytes([1, 1, 0, 0]) + bytes(8)
+    payload = bytes((i * 7 + 3) & 0xFF for i in range(0x4000 + 0x2000))
+    return header + payload
+
+
+def check_nes_whole_file_hash():
+    rom = _ines_rom()
+    whole = hashlib.sha1(rom).hexdigest().upper()
+    no_intro = hashlib.sha1(rom[16:]).hexdigest().upper()  # ADR-0039: header skipped
+    catalog = [{"game": "Castlevania (USA)", "rom": {"sha1": no_intro}}]
+    settings = f"GameFile my dump.nes\nSHA1 {whole}\nNoIntroSHA1 {no_intro}\n".encode()
+    movie = archive({"GameSettings.txt": settings})
+    verdict = rs.evaluate(body(), "[Replay] typed", ["replay"], "octocat", catalog, lambda _u: movie)
+    if not verdict.title.startswith("[Replay] Castlevania (USA) —"):
+        fail(f"AC-6 an NES movie (whole-file SHA1) must resolve the catalog game by its No-Intro hash: {verdict.title!r}")
+        return
+    legacy = archive({"GameSettings.txt": f"GameFile my dump.nes\nSHA1 {whole}\n".encode()})
+    old = rs.evaluate(body(), "[Replay] typed", ["replay"], "octocat", catalog, lambda _u: legacy)
+    if not old.title.startswith("[Replay] my dump —"):
+        fail(f"AC-6 a movie without NoIntroSHA1 falls back to the ROM file stem: {old.title!r}")
+        return
+    ok("AC-6 an NES movie resolves its game by NoIntroSHA1, not the whole-file SHA1 (issue #624)")
+
+
+def check_transient_fetch_is_no_verdict():
+    import contextlib
+    import json
+    import tempfile
+    import urllib.error
+    import yaml
+
+    transient = (OSError("connection reset"), urllib.error.URLError("timed out"),
+                 urllib.error.HTTPError(URL, 503, "Service Unavailable", {}, None),
+                 ValueError("could not resolve host 'github.com'"))
+    for exc in transient:
+        def flaky(_url, exc=exc):
+            raise exc
+        try:
+            v = run(b"", fetch=flaky)
+            fail(f"AC-7 a transient fetch failure ({exc!r}) must not be a verdict: {v.verdict} {v.labels_add}")
+            return
+        except getattr(rs, "TransientFetchError", ()) as raised:
+            if "replay:invalid" in str(raised):
+                fail(f"AC-7 the transient error names no verdict: {raised}")
+                return
+
+    original = getattr(rs, "fetch_attachment", None)
+    with tempfile.TemporaryDirectory() as tmp:
+        b = Path(tmp) / "body.txt"
+        b.write_text(body(), encoding="utf-8")
+        rs.fetch_attachment = lambda _url: (_ for _ in ()).throw(OSError("connection reset"))
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                rc = rs.main(["replay_submission.py", "--body-file", str(b), "--title", "t", "--login", "u"])
+        except Exception as exc:  # noqa: BLE001 - the RED state crashes here
+            rc = f"raised {exc!r}"
+        finally:
+            rs.fetch_attachment = original
+    if rc != getattr(rs, "EXIT_TRANSIENT", object()) or out.getvalue().strip():
+        fail(f"AC-7 the CLI exits EXIT_TRANSIENT and prints no verdict on a transient error: rc={rc} out={out.getvalue()[:80]!r}")
+        return
+
+    wf = yaml.safe_load((SCRIPTS.parent / ".github" / "workflows" / "replay-submitted.yml").read_text(encoding="utf-8"))
+    steps = wf["jobs"]["validate"]["steps"]
+    verdict = next(st for st in steps if st.get("id") == "verdict")
+    withdraw = next(st for st in steps if "Withdraw" in st.get("name", ""))
+    if "EXIT_TRANSIENT" not in verdict["run"] and "75" not in verdict["run"]:
+        fail("AC-7 the verdict step recognises the transient exit code")
+        return
+    if "steps.verdict.outputs.transient" not in str(withdraw.get("if", "")):
+        fail(f"AC-7 the withdraw step skips a transient fetch failure: if={withdraw.get('if')!r}")
+        return
+    ok("AC-7 a transient fetch failure is no verdict: the step fails and replay:valid stays (issue #700)")
+
+
 def main():
     check_url_extraction()
     check_title()
     check_round_trip()
     check_failures_are_verdicts()
     check_hostile_text_and_urls()
+    check_duplicate_of_a_listed_row()
+    check_nes_whole_file_hash()
+    check_transient_fetch_is_no_verdict()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

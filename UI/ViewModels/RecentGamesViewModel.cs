@@ -22,14 +22,21 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial GameScreenMode Mode { get; private set; }
 		[ObservableProperty] public partial List<RecentGameInfo> GameEntries { get; private set; } = new List<RecentGameInfo>();
 
-		//P.7 (PRD Part B §6.2): Welcome/Continue cards, Player-home only (never
-		//shown on the Advanced game-selection screen, nor on the Save/Load
-		//state screens that reuse this same ViewModel/DataTemplate - both are
-		//gated on Mode == RecentGames below). Welcome is not gated on having
-		//any entries - recents are necessarily empty the first time it shows.
-		[ObservableProperty] public partial bool ShowWelcomeCard { get; private set; }
-		[ObservableProperty] public partial bool ShowContinueCard { get; private set; }
-		[ObservableProperty] public partial string ContinueLabel { get; private set; } = "";
+		//G.2 (PRD Part B §13.5.2): the Play home, Player mode only - never the
+		//Advanced game-selection screen, nor the Save/Load state screens that
+		//reuse this same ViewModel (both gated on Mode == RecentGames below).
+		//W-P1 (no recents) replaces the P.7 Welcome card; W-P2 is Continue
+		//playing + Open a ROM… + the other recent games (PlayHome).
+		[ObservableProperty] public partial bool ShowFirstRunHome { get; private set; }
+		[ObservableProperty] public partial bool ShowRecentsHome { get; private set; }
+		//The classic grid of every entry: Advanced's game selection and the
+		//Save/Load state screens, exactly as before G.2.
+		[ObservableProperty] public partial bool ShowPlainGrid { get; private set; }
+		[ObservableProperty] public partial string FirstRunOrientation { get; private set; } = "";
+		[ObservableProperty] public partial string ContinueTitle { get; private set; } = "";
+		[ObservableProperty] public partial string ContinueSubtitle { get; private set; } = "";
+		[ObservableProperty] public partial List<RecentGameInfo> HomeGridEntries { get; private set; } = new List<RecentGameInfo>();
+		[ObservableProperty] public partial bool ShowHomeGrid { get; private set; }
 
 		public RecentGamesViewModel()
 		{
@@ -44,8 +51,7 @@ namespace Mesen.ViewModels
 			if(mode == GameScreenMode.RecentGames && ConfigManager.Config.Preferences.UiMode != UiMode.Player && ConfigManager.Config.Preferences.GameSelectionScreenMode == GameSelectionMode.Disabled) {
 				Visible = false;
 				GameEntries = new List<RecentGameInfo>();
-				ShowWelcomeCard = false;
-				ShowContinueCard = false;
+				SetPlayHome(false, entries: new List<RecentGameInfo>());
 				return;
 			} else if(mode != GameScreenMode.RecentGames && Mode == mode && Visible) {
 				Visible = false;
@@ -65,14 +71,13 @@ namespace Mesen.ViewModels
 
 			List<RecentGameInfo> entries = new();
 
-			//#153: the two Player-home cards live in the same DataTemplate as the
-			//recent-games grid and share its host ContentControl's IsVisible. On a
-			//genuine first boot the recents list is empty and `Visible = entries.Count > 0`
-			//below was collapsing the whole template - taking the Welcome card down
-			//with it, for exactly the user it exists for. The Player home (constructor:
-			//"the grid is always shown when no ROM runs") must stay up with zero entries
-			//so the cards render above an empty grid; Save/Load/game-selection keep the
-			//old empty->hidden behaviour.
+			//#153: the Play home lives in the same DataTemplate as the recent-games
+			//grid and shares its host ContentControl's IsVisible. On a genuine first
+			//boot the recents list is empty and `Visible = entries.Count > 0` below
+			//would collapse the whole template - taking W-P1 (formerly the Welcome
+			//card) down with it, for exactly the user it exists for. The Player home
+			//must stay up with zero entries; Save/Load/game-selection keep the old
+			//empty->hidden behaviour.
 			bool keepPlayerHomeHostVisible = false;
 
 			if(mode == GameScreenMode.RecentGames) {
@@ -84,17 +89,14 @@ namespace Mesen.ViewModels
 					entries.Add(new RecentGameInfo() { FileName = files[i], Name = Path.GetFileNameWithoutExtension(files[i]) });
 				}
 
-				//P.7 (§6.2): Player-home only - Advanced's own game-selection
-				//screen (GameSelectionScreenMode) reuses this same ViewModel/mode
-				//but is not the "Player home" these cards belong to.
+				//G.2: Player-home only - Advanced's own game-selection screen
+				//(GameSelectionScreenMode) reuses this same ViewModel/mode but is
+				//not the Play home.
 				bool isPlayerHome = ConfigManager.Config.Preferences.UiMode == UiMode.Player;
 				keepPlayerHomeHostVisible = isPlayerHome;
-				ShowWelcomeCard = isPlayerHome && PlayerEnhancementsToggle.ShouldShowWelcomeCard(ConfigManager.Config.PlayerEnhancements.WelcomeCardDismissed);
-				ShowContinueCard = isPlayerHome && PlayerEnhancementsToggle.ShouldShowContinueCard(entries.Count > 0);
-				ContinueLabel = entries.Count > 0 ? ResourceHelper.GetMessage("ContinueCardLabel", entries[0].Name) : "";
+				SetPlayHome(isPlayerHome, entries);
 			} else {
-				ShowWelcomeCard = false;
-				ShowContinueCard = false;
+				SetPlayHome(false, entries);
 				if(!Visible) {
 					NeedResume = Pause();
 				}
@@ -120,6 +122,54 @@ namespace Mesen.ViewModels
 
 			Visible = keepPlayerHomeHostVisible || entries.Count > 0;
 			GameEntries = entries;
+		}
+
+		private void SetPlayHome(bool isPlayerHome, List<RecentGameInfo> entries)
+		{
+			PlayHomeKind kind = PlayHome.Classify(entries.Count);
+			ShowFirstRunHome = isPlayerHome && kind == PlayHomeKind.FirstRun;
+			ShowRecentsHome = isPlayerHome && kind == PlayHomeKind.WithRecents;
+			ShowPlainGrid = !isPlayerHome;
+			HomeGridEntries = ShowRecentsHome ? PlayHome.RecentGrid(entries) : new List<RecentGameInfo>();
+			ShowHomeGrid = HomeGridEntries.Count > 0;
+
+			FirstRunOrientation = ShowFirstRunHome ? OrientationText() : "";
+			if(ShowRecentsHome) {
+				ContinueTitle = entries[0].Name;
+				ContinueSubtitle = LastPlayedText(entries[0].FileName);
+			} else {
+				ContinueTitle = "";
+				ContinueSubtitle = "";
+			}
+		}
+
+		private static string OrientationText()
+		{
+			EnhancementPackConfig packs = ConfigManager.Config.EnhancementPacks;
+			return PlayHome.Orientation(packs.EnableAudio, packs.AutoInstallCommunityPacks) switch {
+				PlayHomeOrientation.AudioAndPacks => ResourceHelper.GetMessage("PlayHomeOrientationAudioAndPacks"),
+				PlayHomeOrientation.AudioOnly => ResourceHelper.GetMessage("PlayHomeOrientationAudioOnly"),
+				PlayHomeOrientation.PacksOnly => ResourceHelper.GetMessage("PlayHomeOrientationPacksOnly"),
+				_ => ""
+			};
+		}
+
+		//W-P2's "last played today". The pack half of the wireframe's subtitle
+		//("· Contra 80s 1.2") needs the recent entry to carry the ROM hash and a
+		//pack lookup (the §13.5.2 data-slice prerequisite) and is not shown.
+		private static string LastPlayedText(string recentFile)
+		{
+			if(!File.Exists(recentFile)) {
+				return "";
+			}
+			DateTime played = new FileInfo(recentFile).LastWriteTime;
+			(LastPlayedKind kind, int days) = PlayHome.LastPlayed(played, DateTime.Now);
+			return kind switch {
+				LastPlayedKind.Today => ResourceHelper.GetMessage("PlayHomeLastPlayedToday"),
+				LastPlayedKind.Yesterday => ResourceHelper.GetMessage("PlayHomeLastPlayedYesterday"),
+				LastPlayedKind.DaysAgo => ResourceHelper.GetMessage("PlayHomeLastPlayedDaysAgo", days),
+				_ => ResourceHelper.GetMessage("PlayHomeLastPlayedOn", played.ToShortDateString())
+			};
 		}
 
 		private bool Pause()

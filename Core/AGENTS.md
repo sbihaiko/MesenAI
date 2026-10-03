@@ -279,6 +279,19 @@ needs no local rules beyond the root DOX.
   fields are restored in `MovieManager::Stop()` *after* the recorder is reset,
   because `GameSettings.txt` serializes the settings at write time. Host-free
   and unit tested in `scripts/core_unit_tests.cpp` (`TestShare*`).
+
+- **A pack change in place (ADR-0244, slice P.9).** `Emulator::
+  ReloadRomKeepingState` (export `ReloadRomKeepingState`) saves the state to
+  memory, runs the ordinary `ReloadRom(false)` and loads the state back, all
+  under `Lock()`: the emulation thread `LoadRom` starts waits on `_runLock`
+  before its first frame, so the fresh console never runs a frame of its own.
+  A paused game stays paused but runs one frame of the restored state before
+  it parks. It refuses (does nothing) during a movie or netplay, and keeps no
+  state when a pack's ROM patch applies before or after the reload
+  (`_romPatchedByPack`, from `MepPackManager::ApplyPatches`): it answers
+  `PatchRestarted`. The result enum is ABI, mirrored in
+  `UI/Logic/PackChangePolicy.cs`; `scripts/test_pack_swap_exactness.py`
+  checks both the values and the measured exactness.
 ## Child DOX Index
 
 - (none) — sub-trees follow this file and the root DOX.

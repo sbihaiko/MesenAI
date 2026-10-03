@@ -22,6 +22,11 @@ public static class TestAppBuilder
 	public static AppBuilder BuildAvaloniaApp()
 	{
 		UsePortableHomeFolder();
+		//#619: every MainWindow's startup checks for updates on a thread-pool
+		//thread and posts its answer to Dispatcher.UIThread whenever the network
+		//replies - after its test ended, possibly while Avalonia is resetting the
+		//dispatcher for the next one. A test never needs the network.
+		Mesen.Config.ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = false;
 		return AppBuilder.Configure<Mesen.App>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
 	}
 
@@ -29,7 +34,7 @@ public static class TestAppBuilder
 	//soon as a settings.json sits next to the binary ("portable" mode), and only
 	//falls back to the user's Documents/AppData folder otherwise. Seeding an
 	//empty config in the test output folder therefore keeps every config read
-	//AND WRITE (the Welcome card's CTA calls Configuration.Save()) inside
+	//AND WRITE (e.g. a workspace switch calls Configuration.Save()) inside
 	//bin/, instead of mutating the developer's real MesenCE settings.
 	//Runs from a module initializer as well as from BuildAvaloniaApp, so it
 	//cannot lose the race against the first ConfigManager.HomeFolder read.

@@ -6,6 +6,7 @@
 #include "Utilities/Video/librashader_ld.h"
 
 #include "MacOS/MetalPresenter.h"
+#include "Core/Shared/Video/ShaderFrameFailures.h"
 
 #include <atomic>
 #include <cstring>
@@ -118,8 +119,13 @@ struct MetalPresenter::Impl
 	libra_instance_t Libra = {};
 	libra_mtl_filter_chain_t Chain = nullptr;
 	bool ShaderOn = false;
+	//ADR-0246 §5: Hold to Compare - present unfiltered, keep the chain.
+	bool Bypass = false;
 	bool ShaderDropped = false;
 	std::string Error;
+	//Issue #593: failures of the frame call itself (not of the GPU work).
+	ShaderFrameFailures FrameFailures;
+	uint32_t InjectedFrameFailures = 0;
 	std::shared_ptr<GpuFaultState> Fault = std::make_shared<GpuFaultState>();
 
 	uint64_t OverlayUploads = 0;
@@ -147,6 +153,36 @@ struct MetalPresenter::Impl
 		}
 		Chain = nullptr;
 		ShaderOn = false;
+		FrameFailures.ChainChanged();
+	}
+
+	//Runs the filter chain from this frame's texture into the drawable. False
+	//when the call failed; Error then holds the reason.
+	bool RunChain(id<MTLCommandBuffer> cmd, id<CAMetalDrawable> drawable, uint32_t frameNumber)
+	{
+		if(InjectedFrameFailures > 0) {
+			InjectedFrameFailures--;
+			Error = "mtl_filter_chain_frame failed: injected by InjectFrameFailures (test hook)";
+			return false;
+		}
+		libra_viewport_t viewport = { 0.0f, 0.0f, OutW, OutH };
+		libra_error_t error = Libra.mtl_filter_chain_frame(&Chain, cmd, frameNumber, Frame.Tex[Ring], drawable.texture, &viewport, nullptr, nullptr);
+		if(error) {
+			SetLibraError("mtl_filter_chain_frame failed: ", error);
+			return false;
+		}
+		return true;
+	}
+
+	//#593: the chain failed on too many frames of one episode. Called after
+	//this frame's commit; waits out the frames in flight before freeing it.
+	void DropFailingChain()
+	{
+		std::string first = FrameFailures.Error;
+		Drain();
+		FreeChain();
+		ShaderDropped = true;
+		Error = "the shader was disabled after " + std::to_string(ShaderFrameFailures::Limit) + " failed frames (" + first + "); presenting unfiltered";
 	}
 
 	//Issue #584. Measured on Apple Silicon (macOS 26): after two command
@@ -458,6 +494,11 @@ void MetalPresenter::ClearShader()
 	_impl->FreeChain();
 }
 
+void MetalPresenter::SetShaderBypass(bool bypass)
+{
+	_impl->Bypass = bypass;
+}
+
 bool MetalPresenter::ShaderActive() const
 {
 	return _impl->ShaderOn;
@@ -473,6 +514,16 @@ bool MetalPresenter::TakeShaderDropped()
 	bool dropped = _impl->ShaderDropped;
 	_impl->ShaderDropped = false;
 	return dropped;
+}
+
+bool MetalPresenter::TakeFrameError(std::string& error)
+{
+	return _impl->FrameFailures.Take(error);
+}
+
+void MetalPresenter::InjectFrameFailures(uint32_t frames)
+{
+	_impl->InjectedFrameFailures = frames;
 }
 
 void MetalPresenter::SetReadbackEnabled(bool enabled)
@@ -541,14 +592,15 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 
 		id<MTLCommandBuffer> cmd = [m.Queue commandBuffer];
 		bool filtered = false;
+		bool dropChain = false;
 
-		if(m.ShaderOn && m.Chain) {
-			libra_viewport_t viewport = { 0.0f, 0.0f, m.OutW, m.OutH };
-			libra_error_t error = m.Libra.mtl_filter_chain_frame(&m.Chain, cmd, frameNumber, m.Frame.Tex[m.Ring], drawable.texture, &viewport, nullptr, nullptr);
-			if(error) {
-				m.SetLibraError("mtl_filter_chain_frame failed: ", error);
+		if(m.ShaderOn && m.Chain && !m.Bypass) {
+			filtered = m.RunChain(cmd, drawable, frameNumber);
+			if(filtered) {
+				m.FrameFailures.Succeeded();
 			} else {
-				filtered = true;
+				//#593: this frame goes out unfiltered; TakeFrameError() reports it.
+				dropChain = m.FrameFailures.Failed(m.Error);
 			}
 		}
 
@@ -588,6 +640,9 @@ bool MetalPresenter::Present(const uint32_t* frame, uint32_t width, uint32_t hei
 		}];
 		[cmd presentDrawable:drawable];
 		[cmd commit];
+		if(dropChain) {
+			m.DropFailingChain();
+		}
 
 		if(m.Readback) {
 			[cmd waitUntilCompleted];

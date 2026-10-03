@@ -232,7 +232,17 @@ what CI actually runs; this doc records why they're split the way they are.
   `timeout-minutes: 15` (F6.0) so a hung request cannot hold
   the runner for the job's 6-hour default. Dispatches
   `workflows/community-pack-catalog.yml` by name (never opens it) when the
-  final Status is one of the two "Aceito" states. Requires the caller to
+  final Status is one of the two "Aceito" states or "Inválido" (#679: a
+  revalidation that rejects an accepted pack de-lists it at once, not at the
+  daily catalog run). The first step records the Status the item had before
+  the run (`prior_status_id`, via `scripts/pack_board_status.py current`)
+  and the last step, `if: (failure() || cancelled())`, restores it while the
+  item is still "Em validação" (#671), so a run that dies mid-way never
+  strands an accepted pack there. Multi-line step outputs (the classify and
+  autofix prompts/schemas, the classify `structured_output`) go through
+  `scripts/gh_output.py`, which uses a random per-write delimiter that never
+  occurs in the value (#673: a fixed `__PROMPT_EOF__` let a pack's README
+  line close the block and forge outputs). Requires the caller to
   supply a `PROJECT_PAT` PAT (`repo` + `project` + `read:org` scopes —
   `read:org` is required by `gh project` commands to resolve a
   personal-account owner, confirmed via a live "unknown owner type"
@@ -263,6 +273,11 @@ what CI actually runs; this doc records why they're split the way they are.
 - `workflows/community-pack-drift-check.yml` — daily (`'17 4 * * *'`) hash
   drift check over the board's accepted items, calling the reusable validate
   workflow with `mode: revalidate` only for items whose content hash moved.
+  Its board listing passes `--limit` (`scripts/gh_project_items.py limit`)
+  and `scripts/gh_project_items.py check` stops the job when the listing may
+  be truncated (#670: gh's default is 30 items); the catalog generator
+  (`scripts/mei_catalog_fetch.py`) and `scripts/mep_identity_check.py` read
+  the board through the same module.
   `disabled_manually` by the user's decision (2026-09-14): Pack Hash, label
   reconciliation and catalog updates currently happen only via `/revalidate`
   or a manual `gh workflow run community-pack-drift-check.yml`; re-enabling
@@ -389,6 +404,14 @@ what CI actually runs; this doc records why they're split the way they are.
   Checked by `check_apply_verdict_patch_labels_from_lint` (the old
   `ips|bps) L="patch:$asset"` arm must not return and the helper must be
   used) and by `scripts/test_pack_patch_labels.py`.
+  **`assets:textures`/`assets:audio`/`assets:external` follow the latest pass
+  both ways (bug #677).** `scripts/pack_asset_labels.py` names the ones this
+  pass justifies (textures/audio from classify's `assets`, external only
+  from the assembled recipe's `sources.deps`, passed as `--external`); the
+  workflow and `scripts/validate_pack_local.sh` add those and remove the
+  rest, mirroring the patch:* loop. Checked by
+  `check_apply_verdict_external_label_branch` and
+  `scripts/test_pack_asset_labels.py`.
   **"Upsert mep-meta comment" (`id: upsert-mep-meta`, F6.2b complete;
   fence fix + `kind` field F6.3b).** Runs right after `apply-verdict`, on
   EVERY successful classify pass (`if: steps.classify.outcome ==
@@ -436,11 +459,38 @@ what CI actually runs; this doc records why they're split the way they are.
   (classify schema → assembly → gate → apply-verdict → mep-meta upsert);
   F6.3b hardens the `kind` field and the fence on top of it.
 - `workflows/replay-submitted.yml` (ADR-0205 R.1) validates the file attached
-  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the three labels itself; `issues` opened/edited or an exact
-  `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid`
+  to a `[Replay]` issue (title prefix `[Replay] ` or label `replay`, because GitHub skips a form label that does not exist yet; the workflow creates the four labels itself, `replay:removed` included since R.2; `issues` opened/edited or an exact
+  `/revalidate`), rewrites the title and sets `replay:valid`/`replay:invalid` (R.2: the section 8 gate and a `duplicate` of a listed row also refuse)
   via `scripts/replay_submission.py`. Writes use `GITHUB_TOKEN`
   (`issues: write`), so its edits cannot re-trigger it; issue text reaches the
   shell only through `env:`. Form: `ISSUE_TEMPLATE/replay.yml`.
+- `workflows/cheat-submitted.yml` (ADR-0248 R.3) is the structural gate for a
+  community cheat code: same trigger shape as the replay flow (title prefix
+  `[Cheat] ` or label `cheat`; `issues` opened/edited or an exact
+  `/revalidate`), creates `cheat`/`cheat:valid`/`cheat:invalid` and the four
+  `console:*` labels itself, seeds one 👍, reads the open `cheat:valid` issues
+  for the duplicate check, and applies `scripts/cheat_submission.py`'s
+  verdict, `[Cheat] <game> — <description>` title and comment. Same
+  `GITHUB_TOKEN` and `env:` rules. Form: `ISSUE_TEMPLATE/cheat-code.yml`,
+  whose field labels and console options are the strings the gate parses
+  (`scripts/checks/verify_cheat_form_and_workflow.py` holds them together).
+- `workflows/community-cheat-catalog.yml` (ADR-0248 R.4) regenerates
+  `docs/community-cheats.json` (`scripts/generate_community_cheat_catalog.py`)
+  on a `[Cheat]` issue closed/reopened/relabelled, after every completed
+  `Cheat Submitted` run (`workflow_run`, because that workflow's
+  `GITHUB_TOKEN` label edits start no workflow), daily (`53 4 * * *`) and by
+  hand. It lands like `community-pack-catalog.yml`: a
+  `chore/community-cheat-catalog` branch, a PR opened with `PROJECT_PAT`, then
+  `--auto` merge; no diff closes a stale PR.
+- `workflows/community-replay-catalog.yml` (ADR-0205 R.2) regenerates
+  `docs/community-replays.json` (`scripts/generate_community_replay_catalog.py`)
+  on a `[Replay]` issue closed/reopened/relabelled, after every completed
+  `Replay Submitted` run (`workflow_run`), daily (`59 4 * * *`) and by hand,
+  and lands it like the cheat catalog (branch `chore/community-replay-catalog`,
+  `PROJECT_PAT` PR, `--auto` merge). The generator downloads every listed
+  attachment again through `scripts/replay_host_allowlist.json` and re-runs the
+  gate, so this job reads the network; `replay:removed` (section 9) is created
+  by `replay-submitted.yml` but applied only by a maintainer.
 
 ## Work Guidance
 

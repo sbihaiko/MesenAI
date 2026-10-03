@@ -920,8 +920,8 @@ namespace Mesen.ViewModels
 		{
 			//Shaped like the Sound/Video/Music recorders above it (Record/Stop),
 			//with no dialog and no user-typed fields: the recorder publishes to
-			//the LiveRecordingFolder convention slot (ADR-0169), which feeds the
-			//artist kit. The ROM, the interval and the path are never typed -
+			//the LiveRecordingFolder convention slot (ADR-0169), which feeds
+			//record_viewer.py, not the artist kit (ADR-0243 Decision 4). The ROM, the interval and the path are never typed -
 			//LiveRecordingSession keeps the recorder pointed at whatever ROM is
 			//open (its OnGameLoaded / OnEmulationStopped are wired in MainWindow's
 			//notification handler).
@@ -1213,30 +1213,13 @@ namespace Mesen.ViewModels
 				}
 			};
 
-			ApplyPlayerDebugGate(DebugMenuItems);
+			//G.1 (ADR-0241, PRD Part B §13.2): the P.4 Player-mode gate that
+			//disabled every Debug action ("reachable only after switching to
+			//Advanced") is retired. Tools ⋯ renders this same tree in every UiMode
+			//and is where the debugger stays reachable, so each Debug action keeps
+			//only its own condition - for the menu item and the registered shortcut
+			//alike.
 			DebugShortcutManager.RegisterActions(wnd, DebugMenuItems);
-		}
-
-		//P.4 (PRD Part B §6): "reachable only after switching to Advanced". The
-		//rule itself is the host-free PlayerDebugAccess (UI/Logic, unit-tested);
-		//this composes it over each Debug action's own IsEnabled before the
-		//actions are registered, so a Player-mode press of a debugger shortcut is
-		//ignored the same way the hidden menu item is unclickable
-		//(DebugShortcutManager only fires an action whose IsEnabled is true).
-		//In Advanced the composition is a no-op: the mode gate is always true and
-		//the original condition decides, exactly as before.
-		private static void ApplyPlayerDebugGate(List<object> menuItems)
-		{
-			foreach(object item in menuItems) {
-				if(item is BaseMenuAction action) {
-					Func<bool>? baseEnabled = action.IsEnabled;
-					action.IsEnabled = () => PlayerDebugAccess.IsDebugEntryEnabled(
-						ConfigManager.Config.Preferences.UiMode, baseEnabled?.Invoke());
-					if(action.SubActions != null) {
-						ApplyPlayerDebugGate(action.SubActions);
-					}
-				}
-			}
 		}
 
 		private void InitHelpMenu(Window wnd)
@@ -1272,6 +1255,22 @@ namespace Mesen.ViewModels
 
 		public void CheckForUpdate(Window mainWindow, bool silent)
 		{
+			//#672: the fork has no update feed (ADR-0204 publishes no version
+			//file), so the startup check does nothing and the menu item offers
+			//the fork's release page instead of reaching the upstream feed.
+			switch(UpdateChannel.Decide(silent)) {
+				case UpdateCheckAction.Skip:
+					return;
+
+				case UpdateCheckAction.OfferReleasePage:
+					Dispatcher.UIThread.Post(async () => {
+						if(await MesenMsgBox.Show(mainWindow, "UpdateCheckNoFeed", MessageBoxButtons.OKCancel, MessageBoxIcon.Info, UpdateChannel.ReleasesPageUrl) == DialogResult.OK) {
+							ApplicationHelper.OpenBrowser(UpdateChannel.ReleasesPageUrl);
+						}
+					});
+					return;
+			}
+
 			Task.Run(async () => {
 				UpdatePromptViewModel? updateInfo = await UpdatePromptViewModel.GetUpdateInformation(silent);
 				if(updateInfo == null) {

@@ -195,7 +195,11 @@ void LinuxOglRenderer::LogShaderError(const char* msg, libra_error_t error)
 void LinuxOglRenderer::UpdateShaderParams()
 {
 	for(ShaderParam& param : _shaderCfg.Params) {
-		_libra.gl_filter_chain_set_param(&_filterChain, param.Name, param.Value);
+		libra_error_t error = _libra.gl_filter_chain_set_param(&_filterChain, param.Name, param.Value);
+		if(error) {
+			//An unknown parameter name is not fatal for the preset; release the error (#589)
+			_libra.error_free(&error);
+		}
 	}
 }
 

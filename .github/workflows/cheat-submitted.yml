@@ -1,0 +1,151 @@
+name: Cheat Submitted
+
+# ADR-0248 sections 1, 3 and 7, slice R.3: the structural gate for a community
+# cheat code. A `[Cheat]` issue (Issue Form .github/ISSUE_TEMPLATE/cheat-code.yml)
+# is checked for form - the code decodes for the console, the SHA-1 names a
+# known game, the description is one line of at most 80 characters with no
+# links, and no earlier live row or bundled entry has the same code - then
+# retitled `[Cheat] <game> — <description>` and labelled `cheat:valid` or
+# `cheat:invalid`. The shape is replay-submitted.yml's (ADR-0205): an Issue
+# Form submission/edit, or an exact `/revalidate` comment, on an issue that
+# carries the form's title prefix or label.
+#
+# All logic lives in scripts/cheat_submission.py (unit tested without a
+# network, scripts/test_cheat_submission.py; its decoder is held to the Core by
+# scripts/test_cheat_decoder_parity.py); this file only reads the issue and the
+# live `cheat:valid` rows, calls it and applies its JSON with `gh`. Writes use
+# GITHUB_TOKEN, whose edits do not re-trigger workflows, so the title rewrite
+# and the label changes below cannot loop.
+#
+# Untrusted text (issue body, title) reaches the shell only through files and
+# `env:`, never interpolated into a `run:` script. The verdict reads only the
+# form's four fields; nothing else the submitter wrote reaches it.
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: cheat-submitted-${{ github.event.issue.number }}
+  cancel-in-progress: ${{ github.event_name == 'issues' }}
+
+jobs:
+  validate:
+    if: >
+      (github.event_name == 'issues' &&
+       (startsWith(github.event.issue.title, '[Cheat] ') ||
+        contains(github.event.issue.labels.*.name, 'cheat'))) ||
+      (github.event_name == 'issue_comment' &&
+       !github.event.issue.pull_request &&
+       github.event.comment.body == '/revalidate' &&
+       (startsWith(github.event.issue.title, '[Cheat] ') ||
+        contains(github.event.issue.labels.*.name, 'cheat')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # GitHub applies an Issue Form's `labels:` only when the label already
+      # exists, so on a fresh repo the form's `cheat` label is skipped and a
+      # label-only trigger would never fire. The title prefix is the trigger;
+      # the labels are created here, idempotently (--force updates in place).
+      # scripts/ensure_community_pack_labels.sh declares the same set.
+      - name: Ensure the cheat labels exist
+        run: |
+          set -euo pipefail
+          gh label create cheat --repo "$REPO" --color 1D76DB --description "Community-submitted cheat code (ADR-0248)" --force
+          gh label create cheat:valid --repo "$REPO" --color 0E8A16 --description "Accepted: passes the ADR-0248 section 3 structural gate (form, not effect)" --force
+          gh label create cheat:invalid --repo "$REPO" --color D93F0B --description "Rejected: fails the ADR-0248 section 3 structural gate (check named in the bot comment)" --force
+          gh label create console:nes --repo "$REPO" --color 5319E7 --description "Pack targets the NES console" --force
+          gh label create console:gb --repo "$REPO" --color 5319E7 --description "Pack targets the GB/GBC console" --force
+          gh label create console:gbc --repo "$REPO" --color 5319E7 --description "Pack targets the GB/GBC console" --force
+          gh label create console:sms --repo "$REPO" --color 5319E7 --description "Pack targets the SMS/GG/SG-1000 console" --force
+
+      # Section 1: submitting a code is itself an endorsement, so every row
+      # starts at one 👍 (the pack flow's rule). The reactions API is
+      # idempotent, so `/revalidate` never double-counts. Never fatal.
+      - name: Seed the submission's 👍 reaction
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${REPO}/issues/${ISSUE_NUMBER}/reactions" -f content='+1' --silent
+
+      - name: Check the submission (section 3 gate, section 1 title)
+        run: |
+          set -euo pipefail
+          # Re-read the issue: a fast edit may have landed since the event was queued.
+          gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json body,title,labels > issue.json
+          # The live rows a submission must not duplicate (section 3). Open
+          # issues only: closing one removes it (section 6). The limit is
+          # LIVE_FETCH_LIMIT in scripts/cheat_submission.py, which refuses a
+          # listing that reaches it as possibly truncated (#704).
+          gh issue list --repo "$REPO" --label cheat:valid --state open --limit 5000 --json number,body > live.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("issue.json"))
+          open("body.txt", "w", encoding="utf-8").write(d["body"] or "")
+          open("title.txt", "w", encoding="utf-8").write(d["title"] or "")
+          open("labels.txt", "w", encoding="utf-8").write(",".join(l["name"] for l in d["labels"]))
+          PY
+          python3 scripts/cheat_submission.py \
+            --body-file body.txt \
+            "--title=$(cat title.txt)" \
+            --number "$ISSUE_NUMBER" \
+            --labels "$(cat labels.txt)" \
+            --live-file live.json > verdict.json
+          python3 - <<'PY'
+          import json
+          v = json.load(open("verdict.json"))
+          open("comment.md", "w", encoding="utf-8").write(v["comment"])
+          open("new_title.txt", "w", encoding="utf-8").write(v["title"])
+          print("verdict:", v["verdict"])
+          PY
+
+      - name: Apply title, labels and verdict comment
+        run: |
+          set -euo pipefail
+          # Section 1: the whole title is rewritten, idempotently, so
+          # `/revalidate` is a no-op once it matches.
+          NEW_TITLE="$(cat new_title.txt)"
+          CURRENT_TITLE="$(cat title.txt)"
+          if [ "$NEW_TITLE" != "$CURRENT_TITLE" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --title "$NEW_TITLE"
+          fi
+          python3 - <<'PY' > label_args.txt
+          import json
+          v = json.load(open("verdict.json"))
+          have = set(open("labels.txt", encoding="utf-8").read().split(","))
+          # The form's own label, when GitHub skipped it (see "Ensure the cheat labels exist").
+          if "cheat" not in have:
+              print("--add-label=cheat")
+          for l in v["labels_add"]:
+              if l not in have:
+                  print("--add-label=" + l)
+          for l in v["labels_remove"]:
+              if l in have:
+                  print("--remove-label=" + l)
+          PY
+          if [ -s label_args.txt ]; then
+            mapfile -t ARGS < label_args.txt
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" "${ARGS[@]}"
+          fi
+          # One verdict comment, edited in place on a re-validation.
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file comment.md --edit-last --create-if-none
+
+      # A crash in the gate must not leave an earlier "valid" standing: the
+      # code could have been edited into one that cannot be checked.
+      - name: Withdraw cheat:valid when the check itself failed
+        if: failure()
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "cheat:valid" || true

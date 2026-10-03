@@ -70,8 +70,20 @@ namespace Mesen.Utilities
 				//Pause there because UiModeShortcutPrecedence only suppresses the
 				//Pause binding in Player).
 				case EmulatorShortcut.ToggleOverlay:
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player) {
+					//G.1 (rule 8): the overlay is a Play surface - outside Play the
+					//press does nothing (it must not pause the game or open an
+					//overlay hidden behind Remaster/Share).
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayWorkspace) {
 						MainWindowModel.TogglePlayerOverlay();
+					} else if(MainWindowModel.IsRemasterGameView) {
+						//G.3 (W-R2): in Remaster's recording view Esc stops the
+						//recording and returns to the project screen; G.6: from
+						//a build shown in the game it just returns.
+						MainWindowModel.Remaster.LeaveGameView();
+					} else if(MainWindowModel.Shell.Active == Workspace.Share) {
+						//G.8 (rule 8, ShareEsc): stops a replay recording, or closes
+						//the topmost sheet or list.
+						MainWindowModel.Share.HandleEsc();
 					}
 					break;
 

@@ -103,6 +103,8 @@ public:
 			libra.preset_free(&preset);
 			return paramCount;
 		}
+		//No message is read on this path, so the error is only released (#589)
+		libra.error_free(&error);
 		return 0;
 	}
 
@@ -138,6 +140,8 @@ public:
 
 			libra.preset_free_runtime_params(paramList);
 			libra.preset_free(&preset);
+		} else {
+			libra.error_free(&error);
 		}
 
 		return result;

@@ -26,41 +26,61 @@
 			<v:AudioPlayerView />
 		</DataTemplate>
 		<DataTemplate DataType="{x:Type vm:RecentGamesViewModel}">
-			<DockPanel>
-				<!--P.7 (PRD Part B §6.2): Welcome card - shown once, on the very
-				first Player-mode boot (recents necessarily empty); its one CTA
-				("Load ROM") is also what dismisses it for good.-->
-				<Border Name="PlayerWelcomeCard" DockPanel.Dock="Top" Background="#22FFFFFF" Padding="16" Margin="0 0 0 8" IsVisible="{Binding ShowWelcomeCard}">
-					<StackPanel Spacing="8" HorizontalAlignment="Center">
-						<TextBlock Text="{l:Translate lblWelcomeCardTitle}" FontWeight="Bold" FontSize="18" HorizontalAlignment="Center" />
-						<TextBlock Text="{l:Translate lblWelcomeCardBody}" TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Center" />
-						<Button Content="{l:Translate btnWelcomeCardLoadRom}" HorizontalAlignment="Center" Click="OnWelcomeCardLoadRom" />
-					</StackPanel>
-				</Border>
-				<!--P.7 (§6.2): Continue card - not first-run gated, simply shown
-				whenever there is a most-recent game to resume; sits alongside the
-				recent-games grid, same as any other home entry.-->
-				<Border Name="PlayerContinueCard" DockPanel.Dock="Top" Background="#22FFFFFF" Padding="12" Margin="0 0 0 8" IsVisible="{Binding ShowContinueCard}">
-					<Button HorizontalAlignment="Stretch" Click="OnContinueCard" Content="{Binding ContinueLabel}" />
-				</Border>
-				<c:StateGrid IsVisible="{Binding Visible}" Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
-			</DockPanel>
+			<!--G.2 (PRD Part B §13.5.2): the Play home (W-P1 first run, W-P2 with
+			recents) and, unchanged, the classic grid for Advanced's game selection
+			and the Save/Load state screens.-->
+			<v:PlayHomeView />
 		</DataTemplate>
 	</Window.DataTemplates>
 	
 	<DockPanel>
+		<!--G.1 (PRD Part B §13.2): the optional classic menu bar sits above the
+		shell bar and is exactly today's MainMenuView; ShowClassicMenuBar (Tools ⋯
+		checkbox) decides it, through PlayerChrome. On macOS the shell bar is the
+		title bar, so MainWindow.InitShellTitleBar moves it first and the classic
+		bar ends up right under it.-->
 		<Panel DockPanel.Dock="Top" IsVisible="{Binding IsMenuVisible}">
 			<Panel DataContext="{Binding MainMenu}">
 				<v:MainMenuView Name="MainMenu" />
 			</Panel>
 		</Panel>
-		
-		<ContentControl Name="AudioPlayer" DockPanel.Dock="Bottom" Content="{Binding AudioPlayer}" />
+
+		<!--G.1 (W-S1): the shell bar - active profile + Tools ⋯. Hidden while a
+		game runs unpaused in Play (WorkspaceShell.IsBarVisible).-->
+		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" />
+
+		<!--G.6 (W-X3): the inline question before work is lost, above any profile.-->
+		<Panel Name="InterruptionBarHost" DockPanel.Dock="Top" IsVisible="{Binding Interruption.IsVisible}">
+			<v:InterruptionBar Name="InterruptionBar" DataContext="{Binding Interruption}" />
+		</Panel>
+
+		<!--G.3 (W-R2): Remaster's recording strip - one pill and Stop - above the
+		game, which fills the rest of the window inside Remaster.-->
+		<Panel Name="RemasterRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsRemasterGameView}">
+			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
+		</Panel>
+
+		<!--G.8 (W-H4): the replay pill and Stop above the game, inside Share.-->
+		<Panel Name="ShareRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsShareGameView}">
+			<v:ShareRecordingStrip Name="ShareRecordingStrip" DataContext="{Binding Share}" />
+		</Panel>
+
+		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
+		with the bar.-->
+		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" Background="{DynamicResource MesenMenuBackground}" IsVisible="{Binding Shell.IsBarVisible}">
+			<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+				<TextBlock Text="●" FontSize="10" Opacity="0.5" VerticalAlignment="Center" />
+				<TextBlock Name="ShellStatusText" Text="{Binding Shell.StatusText}" VerticalAlignment="Center" />
+			</StackPanel>
+		</Border>
+
+		<ContentControl Name="AudioPlayer" DockPanel.Dock="Bottom" Content="{Binding AudioPlayer}" IsVisible="{Binding IsPlayWorkspace}" />
 
 		<Panel Name="RendererPanel" Background="Black" Focusable="True">
-			<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
-
-			<Canvas>
+			<!--G.3: the game picture is its own layer, shown in Play and in
+			Remaster's recording view (IsGameViewVisible); Play's own surfaces
+			stay in PlayWorkspace above it.-->
+			<Canvas IsVisible="{Binding IsGameViewVisible}">
 				<ContentControl
 					Name="RendererContainer"
 					UseLayoutRounding="False"
@@ -76,109 +96,134 @@
 			  />
 			</Panel>
 
-			<!--P.4 (PRD Part B §6): the thin Player-mode overlay. Painted on
-			top of the game; D-pad/A/B navigation comes from Avalonia focus
-			(normal buttons, no pointer required). "Save/Load slot" is two buttons
-			here (Save slot / Load slot) for clarity; the Pack item opens the pack
-			window for now - the pack picker that replaces it is P.5.-->
-			<Border
-				Name="PlayerOverlay"
-				Background="#CC000000"
-				HorizontalAlignment="Center"
-				VerticalAlignment="Center"
-				Padding="24"
-				IsVisible="{Binding IsPlayerOverlayVisible}"
-			>
-				<StackPanel Spacing="10" MinWidth="220">
-					<Button Name="OverlayResumeButton" Content="{l:Translate btnOverlayResume}" HorizontalAlignment="Stretch" Click="OnOverlayResume" />
-					<Button Content="{l:Translate btnOverlaySaveSlot}" HorizontalAlignment="Stretch" Click="OnOverlaySave" />
-					<Button Content="{l:Translate btnOverlayLoadSlot}" HorizontalAlignment="Stretch" Click="OnOverlayLoad" />
-					<!--P.5 (§5): the current pack chip - shows the applied pack and
-					opens the picker (2+ choices) or the pack window (single).-->
-					<Button HorizontalAlignment="Stretch" Click="OnOverlayPack">
-						<StackPanel Orientation="Horizontal" Spacing="6">
-							<TextBlock Text="{l:Translate btnOverlayPack}" />
-							<TextBlock Text="{Binding CurrentPackName}" FontWeight="Bold" />
-						</StackPanel>
-					</Button>
-					<!--P.7 (§6.1): the quick-toggle panel for Texture/Audio/WideScrn/
-					HiRes/Overclock.-->
-					<Button Content="{l:Translate btnOverlayEnhancements}" HorizontalAlignment="Stretch" Click="OnOverlayEnhancements" />
-					<Button Content="{l:Translate btnOverlaySettings}" HorizontalAlignment="Stretch" Click="OnOverlaySettings" />
-					<Button Content="{l:Translate btnOverlayAdvancedGui}" HorizontalAlignment="Stretch" Click="OnOverlayAdvanced" />
-					<Button Content="{l:Translate btnOverlayQuit}" HorizontalAlignment="Stretch" Click="OnOverlayQuit" />
-				</StackPanel>
-			</Border>
+			<!--G.1: every Play surface lives in PlayWorkspace. Outside Play it is
+			hidden as a whole (never closed or reset), so nothing of Play is on
+			screen under Remaster/Share and switching back shows it as it was.
+			The native renderer is hidden with it (UpdateRendererVisibility).-->
+			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}">
+				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
-			<!--P.7 (PRD Part B §6.1): the Enhancements quick-toggle panel - a
-			checkbox grid over config that already exists elsewhere
-			(EnhancementPackConfig.EnableTextures/EnableAudio, VideoConfig.
-			AspectRatio/VideoFilter, the per-console overclock field). On/off is
-			derived from that config, not a second stored flag; Click (not
-			IsCheckedChanged) drives the toggle so the checkbox's visual state
-			always reflects what the ViewModel just confirmed was applied.
-			Overclock is disabled (not hidden, so the grid layout never shifts
-			per console) where the loaded console has no overclock knob (SMS).-->
-			<Border
-				Name="PlayerEnhancementsPanel"
-				Background="#DD000000"
-				HorizontalAlignment="Center"
-				VerticalAlignment="Center"
-				Padding="24"
-				IsVisible="{Binding IsEnhancementsPanelVisible}"
-			>
-				<StackPanel Spacing="10" MinWidth="260">
-					<TextBlock Text="{l:Translate lblEnhancementsPanelTitle}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
-					<CheckBox Name="EnhancementsTexturesCheckBox" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding IsTexturesEnabled, Mode=OneWay}" Click="OnToggleTextures" />
-					<CheckBox Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding IsAudioEnabled, Mode=OneWay}" Click="OnToggleAudio" />
-					<CheckBox Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding IsBorderEnabled, Mode=OneWay}" Click="OnToggleBorder" />
-					<CheckBox Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding IsWideScrnEnabled, Mode=OneWay}" Click="OnToggleWideScrn" />
-					<CheckBox Content="{l:Translate chkEnhancementsHiRes}" IsChecked="{Binding IsHiResEnabled, Mode=OneWay}" Click="OnToggleHiRes" />
-					<CheckBox Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding IsOverclockEnabled, Mode=OneWay}" IsEnabled="{Binding IsOverclockSupported}" Click="OnToggleOverclock" />
-					<Button Content="{l:Translate btnEnhancementsClose}" HorizontalAlignment="Stretch" Click="OnCloseEnhancementsPanel" />
-				</StackPanel>
-			</Border>
+				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
+				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
+				states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
+				and quitting the app moved to Tools ⋯ in the bar the overlay reveals.
+				D-pad/A/B and arrows move through the rows (XY focus); Resume has
+				focus on open. Esc resumes (rule 8).-->
+				<Border
+					Name="PlayerOverlay"
+					Background="#E6202022"
+					CornerRadius="14"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center"
+					Padding="24 20"
+					IsVisible="{Binding IsPlayerOverlayVisible}"
+				>
+					<StackPanel Name="OverlayControls" Spacing="6" MinWidth="340" XYFocus.NavigationModes="Enabled">
+						<TextBlock Name="OverlayGameTitle" Text="{Binding OverlayGameTitle}" FontWeight="Bold" FontSize="20" Foreground="White" TextTrimming="CharacterEllipsis" />
+						<TextBlock Text="{l:Translate lblOverlayPaused}" Foreground="#AAFFFFFF" Margin="0 0 0 8" />
+						<Button Name="OverlayResumeButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="10 8" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnOverlayResume" Margin="0 0 0 10">
+							<TextBlock Text="{l:Translate btnOverlayResume}" />
+						</Button>
+						<Button Name="OverlaySaveStatesButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySaveStates">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlaySaveStates}" />
+							</DockPanel>
+						</Button>
+						<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
+						<Button Name="OverlayPackButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayPack">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlayPack}" />
+							</DockPanel>
+						</Button>
+						<!--P.7 (§6.1): the quick-toggle panel.-->
+						<Button Name="OverlayEnhancementsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayEnhancements">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlayEnhancements}" />
+							</DockPanel>
+						</Button>
+						<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
+						<Button Name="OverlayCheatsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayCheats">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" Opacity="0.7" />
+								<TextBlock Text="{l:Translate btnOverlayCheats}" />
+							</DockPanel>
+						</Button>
+						<Button Name="OverlaySettingsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySettings">
+							<DockPanel>
+								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
+								<TextBlock Text="{l:Translate btnOverlaySettings}" />
+							</DockPanel>
+						</Button>
+						<!--W-P4: powers the game off and lands on the Play home; it no
+						longer closes the app (Tools ⋯ › File › Exit, ⌘Q / Alt+F4).-->
+						<Button Name="OverlayQuitGameButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Foreground="#FF6B6B" Click="OnOverlayQuitGame" Margin="0 12 0 0">
+							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
+						</Button>
+						<TextBlock Text="{l:Translate lblOverlayEscHint}" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" Margin="0 6 0 0" />
+					</StackPanel>
+				</Border>
 
-			<!--P.5 (PRD Part B §5): the pack picker - opens once over the
-			un-enhanced game when 2+ competing pack_ids exist and no stored choice
-			applies. Picking stores the per-ROM preference (P.3) and power-cycles;
-			dismissing plays un-enhanced and asks again next launch. D-pad/A/B via
-			Avalonia focus (first choice auto-focused on open).-->
-			<Border
-				Name="PlayerPackPicker"
-				Background="#DD000000"
-				HorizontalAlignment="Center"
-				VerticalAlignment="Center"
-				Padding="24"
-				IsVisible="{Binding IsPlayerPackPickerVisible}"
-			>
-				<StackPanel Spacing="10" MinWidth="340" MaxWidth="520">
-					<TextBlock Text="{l:Translate lblChoosePackForThisGame}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
-					<ItemsControl Name="PackPickerList" ItemsSource="{Binding PlayerPackChoices}" XYFocus.NavigationModes="Enabled">
-						<ItemsControl.ItemsPanel>
-							<ItemsPanelTemplate>
-								<StackPanel Spacing="8" />
-							</ItemsPanelTemplate>
-						</ItemsControl.ItemsPanel>
-						<ItemsControl.ItemTemplate>
-							<DataTemplate>
-								<Button HorizontalAlignment="Stretch" Tag="{Binding Container}" Click="OnPickPlayerPack">
-									<StackPanel Spacing="2">
-										<TextBlock FontWeight="Bold" Text="{Binding Name}" />
-										<TextBlock FontSize="11" Opacity="0.7" Text="{Binding Detail}" />
-										<!-- ADR-0152: a reviewed known-missing declaration is shown on the
-										     row it belongs to, naming MesenCE validation as its source so the
-										     gap is never read as the author's claim. Collapsed when absent. -->
-										<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap"
-											IsVisible="{Binding HasKnownMissing}" Text="{Binding KnownMissingNote}" />
-									</StackPanel>
-								</Button>
-							</DataTemplate>
-						</ItemsControl.ItemTemplate>
-					</ItemsControl>
-					<Button Content="{l:Translate btnPlayWithoutPack}" HorizontalAlignment="Stretch" Click="OnDismissPlayerPackPicker" />
-				</StackPanel>
-			</Border>
+				<!--G.2 (W-P4 Save states row): Save and Load merged into one row; this
+				sheet opens today's slot grid in either mode. Esc (or Back) returns
+				to the overlay.-->
+				<Border
+					Name="PlayerSaveStatesSheet"
+					Background="#E6202022"
+					CornerRadius="14"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center"
+					Padding="24 20"
+					IsVisible="{Binding IsSaveStatesSheetVisible}"
+				>
+					<StackPanel Spacing="10" MinWidth="300" XYFocus.NavigationModes="Enabled">
+						<TextBlock Text="{l:Translate lblSaveStatesSheetTitle}" FontWeight="Bold" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
+						<TextBlock Text="{Binding SaveStatesRowValue}" Opacity="0.7" HorizontalAlignment="Center" />
+						<Button Name="SaveStatesSaveButton" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesSave" />
+						<Button Name="SaveStatesLoadButton" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesLoad" />
+						<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
+						replays for this copy open from here.-->
+						<Button Name="SaveStatesReplaysButton" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesReplays" />
+						<Button Name="SaveStatesBackButton" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesBack" />
+					</StackPanel>
+				</Border>
+
+				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
+				<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
+
+				<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
+				<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
+
+				<!--R.2 (ADR-0205 §7): Save states › Shared replays.-->
+				<v:PlayerReplaysSheetView Name="PlayerReplaysSheetHost" DataContext="{Binding ReplaysSheet}" IsVisible="{Binding IsVisible}" />
+
+				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
+				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
+				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+
+				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
+				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
+				<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
+				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
+			</Panel>
+
+			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
+			W-R1, the W-R3 card); the game keeps running behind them.-->
+			<Panel Name="RemasterWorkspaceHost" IsVisible="{Binding IsRemasterProjectScreenVisible}">
+				<v:RemasterWorkspaceView Name="RemasterWorkspace" DataContext="{Binding Remaster}" />
+			</Panel>
+
+			<!--G.8 (PRD Part B §13.5.4): Share's screens (W-H1-W-H3, W-H4's
+			sheets); the game keeps running behind them.-->
+			<Panel Name="ShareWorkspaceHost" IsVisible="{Binding IsShareScreenVisible}">
+				<v:ShareWorkspaceView Name="ShareWorkspace" DataContext="{Binding Share}" />
+			</Panel>
 		</Panel>
 	</DockPanel>
 </Window>

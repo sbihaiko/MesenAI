@@ -16,6 +16,10 @@
 //    dropped, the command queue is replaced (two hangs make macOS ignore every
 //    later submission on a queue), and the unfiltered picture keeps coming.
 //    tests/fixtures/shaders/gpu-hang.slangp really hangs the GPU, briefly.
+//  - Issue #593: a frame the chain's frame call fails on is presented
+//    unfiltered and reported once per failure episode (TakeFrameError); a
+//    chain that keeps failing is dropped. The failure is injected
+//    (InjectFrameFailures): no fixture makes the real call fail on demand.
 //  - Not proven: anything visible on a real display (stop condition 3).
 //
 //Run from the repo root with librashader.dylib in the working directory or
@@ -31,6 +35,7 @@
 #include <vector>
 
 #include "Core/Shared/Video/RendererSelection.h"
+#include "Core/Shared/Video/ShaderFrameFailures.h"
 #include "Core/Shared/Video/ShaderPresetApply.h"
 #include "MacOS/MetalPresenter.h"
 
@@ -212,6 +217,73 @@ static double Now()
 	return [NSDate timeIntervalSinceReferenceDate];
 }
 
+//ADR-0246 §5 (Hold to Compare): the bypass presents the unfiltered picture
+//while keeping the chain built, and lifting it brings the filtered picture
+//back without reloading the preset.
+static void TestShaderBypass(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("Hold to Compare: the bypass shows the unfiltered frame and keeps the chain\n");
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}) && p.ShaderActive(), "the fixture preset loads");
+	std::vector<uint32_t> filtered;
+	CHECK(Present(p, frame, filtered) && memcmp(filtered.data(), ref.data(), ref.size() * 4) != 0, "filtered before the hold");
+
+	p.SetShaderBypass(true);
+	std::vector<uint32_t> held;
+	CHECK(Present(p, frame, held) && memcmp(held.data(), ref.data(), ref.size() * 4) == 0, "while held the drawable is byte-identical to the unfiltered scale");
+	CHECK(p.ShaderActive(), "the chain stays loaded while held");
+
+	p.SetShaderBypass(false);
+	std::vector<uint32_t> released;
+	CHECK(Present(p, frame, released) && released == filtered, "after the hold the filtered frame is back, byte-identical, without SetShader");
+	p.ClearShader();
+}
+
+//ADR-0246 §5: "measure the shader swap first". Prints, for every bundled
+//named look, what a swap would cost (ClearShader + SetShader, i.e. a chain
+//rebuild) against what the bypass costs (one frame each way). Notes, not
+//checks: the numbers depend on the machine's GPU. The checks are that every
+//bundled look loads and renders through the real Metal chain.
+static void MeasureLookSwap(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("bundled named looks load, and the cost of a swap against the bypass\n");
+	const char* looks[] = { "UI/Dependencies/Shaders/Looks/crt/crt-geom.slangp", "UI/Dependencies/Shaders/Looks/handheld/zfast-lcd.slangp" };
+	for(const char* look : looks) {
+		const int runs = 5;
+		double setMs = 0, clearMs = 0, bypassMs = 0, plainMs = 0;
+		bool allLoaded = true;
+		bool applied = true;
+		std::vector<uint32_t> out;
+		for(int i = 0; i < runs; i++) {
+			double t0 = Now();
+			allLoaded &= p.SetShader(look, {});
+			double t1 = Now();
+			applied &= Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) != 0;
+			double t2 = Now();
+			p.SetShaderBypass(true);
+			Present(p, frame, out);
+			double t3 = Now();
+			p.SetShaderBypass(false);
+			p.ClearShader();
+			double t4 = Now();
+			Present(p, frame, out);
+			double t5 = Now();
+			setMs += (t1 - t0) * 1000;
+			bypassMs += (t3 - t2) * 1000;
+			clearMs += (t4 - t3) * 1000;
+			plainMs += (t5 - t4) * 1000;
+		}
+		if(!allLoaded) {
+			printf("  note: %s: %s\n", look, p.LastError().c_str());
+		}
+		std::string loads = std::string("the bundled look loads: ") + look;
+		std::string changes = std::string("the bundled look changes the picture: ") + look;
+		CHECK(allLoaded, loads.c_str());
+		CHECK(applied, changes.c_str());
+		printf("  note: %s (avg of %d): SetShader %.1f ms, ClearShader %.1f ms, bypassed frame %.1f ms, unfiltered frame %.1f ms\n",
+			look, runs, setMs / runs, clearMs / runs, bypassMs / runs, plainMs / runs);
+	}
+}
+
 //Issue #584: some presets (bezel/scanline-classic's slot-mask chains) make
 //macOS kill the command buffer with "Caused GPU Hang Error". The fixture
 //reproduces that with a long vertex-stage loop. The chain must be dropped and
@@ -282,6 +354,65 @@ static void TestGpuHangWithoutReadback(MetalPresenter& p, const std::vector<uint
 	p.SetReadbackEnabled(true);
 	std::vector<uint32_t> out;
 	CHECK(Present(p, frame, out) && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "the picture keeps coming, unfiltered");
+}
+
+//Issue #593: a frame whose mtl_filter_chain_frame call fails is presented
+//unfiltered and Present() returns true, so without TakeFrameError() nobody
+//sees it. With the presenter's fixed formats and librashader's 16384 size
+//clamp, the call only fails when Metal refuses an allocation, which no
+//fixture triggers on demand; InjectFrameFailures() stands in for that.
+static bool Same(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b)
+{
+	return a.size() == b.size() && memcmp(a.data(), b.data(), a.size() * 4) == 0;
+}
+
+static void TestFrameErrors(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
+{
+	printf("a frame the filter chain fails on is reported once per episode (#593)\n");
+	const uint32_t limit = ShaderFrameFailures::Limit;
+	std::string error;
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}) && p.ShaderActive(), "the fixture preset loads");
+	std::vector<uint32_t> out;
+	CHECK(Present(p, frame, out) && !Same(out, ref) && !p.TakeFrameError(error), "a healthy frame is filtered and reports no frame error");
+
+	p.InjectFrameFailures(5);
+	bool allUnfiltered = true;
+	for(int i = 0; i < 5; i++) {
+		allUnfiltered &= Present(p, frame, out) && Same(out, ref);
+	}
+	CHECK(allUnfiltered, "each failed frame is still presented, unfiltered");
+	CHECK(p.TakeFrameError(error) && error.find("mtl_filter_chain_frame") != std::string::npos, "the failure is reported, with the full error");
+	printf("  note: frame error: %s\n", error.c_str());
+	CHECK(!p.TakeFrameError(error), "five failing frames are one report, not five");
+	CHECK(p.ShaderActive() && !p.TakeShaderDropped(), "a short failure keeps the chain");
+	CHECK(Present(p, frame, out) && !Same(out, ref), "the next good frame is filtered again");
+
+	bool held = true;
+	for(uint32_t i = 0; i < limit; i++) {
+		held &= Present(p, frame, out);
+	}
+	p.InjectFrameFailures(1);
+	CHECK(held && Present(p, frame, out) && p.TakeFrameError(error), "after a lasting recovery a new failure is reported again");
+
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}), "the preset reloads");
+	p.InjectFrameFailures(1);
+	CHECK(Present(p, frame, out) && p.TakeFrameError(error), "a reloaded chain reports its own failure");
+
+	printf("a chain that keeps failing is dropped, like a GPU fault (#586)\n");
+	CHECK(p.SetShader("tests/fixtures/shaders/scanlines.slangp", {}), "the preset reloads (a fresh episode)");
+	p.InjectFrameFailures(limit + 10);
+	uint32_t frames = 0;
+	while(p.ShaderActive() && frames < limit + 10) {
+		Present(p, frame, out);
+		frames++;
+	}
+	printf("  note: dropped after %u failing frames\n", frames);
+	CHECK(!p.ShaderActive() && frames == limit, "the chain is dropped at the limit-th failed frame");
+	CHECK(p.TakeShaderDropped() && p.LastError().find("disabled") != std::string::npos, "the drop is reported with its reason");
+	CHECK(p.TakeFrameError(error) && !p.TakeFrameError(error), "the episode itself was reported exactly once");
+	p.InjectFrameFailures(0);
+	CHECK(Present(p, frame, out) && Same(out, ref), "the picture keeps coming, unfiltered");
+	p.ClearShader();
 }
 
 static void TestOverlay(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)
@@ -397,9 +528,12 @@ int main()
 
 		TestUnfilteredMatchesSoftwareScale(p, frame, ref);
 		TestShader(p, frame, ref);
+		TestShaderBypass(p, frame, ref);
+		MeasureLookSwap(p, frame, ref);
 		TestBrokenShaderFallsBack(p, frame, ref);
 		TestGpuHangWithReadback(p, frame, ref);
 		TestGpuHangWithoutReadback(p, frame, ref);
+		TestFrameErrors(p, frame, ref);
 		TestOverlay(p, frame, ref);
 		TestOverlayUploadsOnlyWhenDirty(p, frame);
 		TestDrawableSizeIsEnforced(p, view, frame);

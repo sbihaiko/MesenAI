@@ -100,6 +100,7 @@ void MacOSMetalRenderer::Render(RenderSurfaceInfo& emuHud, RenderSurfaceInfo& sc
 		_presenter.SetVsync(_vsync);
 	}
 	UpdateShader();
+	_presenter.SetShaderBypass(_emu->GetSettings()->IsLookCompare());
 
 	MetalOverlay emu = { emuHud.Buffer, emuHud.Width, emuHud.Height, emuHud.IsDirty };
 	MetalOverlay script = { scriptHud.Buffer, scriptHud.Width, scriptHud.Height, scriptHud.IsDirty };
@@ -122,8 +123,7 @@ void MacOSMetalRenderer::Render(RenderSurfaceInfo& emuHud, RenderSurfaceInfo& sc
 
 	//Issue #584: a preset that hangs the GPU is dropped by the presenter. It is
 	//not reloaded until the configured shader changes (_shaderCfg keeps the
-	//file), so it cannot hang the GPU again on the next frame.
-	if(_presenter.TakeShaderDropped()) {
-		MessageManager::Log("[librashader] " + _presenter.LastError());
-	}
+	//file), so it cannot hang the GPU again on the next frame. Issue #593: a
+	//frame the chain failed on is reported once per failure episode.
+	ReportShaderFrameProblems(_presenter, _shaderCfg.ShaderFile);
 }

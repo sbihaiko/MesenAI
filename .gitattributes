@@ -61,3 +61,10 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# ADR-0246 (P.13): the bundled named looks are pinned by sha256 in
+# UI/Dependencies/Shaders/Looks/looks.json, so their bytes must never be
+# rewritten by line-ending normalization on checkout.
+###############################################################################
+UI/Dependencies/Shaders/Looks/** -text

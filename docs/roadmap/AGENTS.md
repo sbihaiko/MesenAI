@@ -12,12 +12,17 @@ The fork's planning lives in one consolidated PRD under this folder:
   product acceptance. Phase 12 artist-surface cold-reads are a fresh Opus
   session, ADR-0214, amended 2026-09-19). Part B is the default-GUI roadmap (player chrome,
   Advanced GUI, `pack_id`/`content_id`/version, duplicates, picker,
-  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row and the ADR-0205 replay slices (Phase 13). Each Part carries its own header `Status`,
+  quick-enhancements panel; P.1-local identity integration shipped 2026-09-17, ADR-0206). Part A's live work is Phase 14 (proof at scale), Phase 12's open F12.11 row (Phase 13's ADR-0205 replay slices are delivered). Each Part carries its own header `Status`,
   slice table, and ADR map, which are the source of truth for that
   surface. Part B §13 is the **GUI redesign proposal** (Play / Remaster /
-  Share workspaces, ADR-0241 accepted): wireframes and simplicity rules
-  for review, not shipped behavior. ADR-0241 was accepted 2026-10-02; §13 stays
-  as the design reference and the work is cut into §8 slices (G.1 first).
+  Share workspaces, ADR-0241 accepted 2026-10-02): wireframes and
+  simplicity rules. All eight §8 slices shipped 2026-10-02 — G.1 (the
+  shell), G.2 (the Play home and pause overlay), G.3 (the Remaster project
+  screen and recording), G.4 (the Play sheets), G.5 (the Play edge flows),
+  G.6 (Remaster build & show, build problems, interruptions), G.7 (the
+  Remaster tile browser and hand-offs) and G.8 (the Share workspace).
+  §13 stays as the design reference; W-R8's button is drawn but disabled
+  until ADR-0242 Q3's adoption is decided.
 
 This is the 2026-08-30 unification of the former two PRDs
 (`PRD-mesence-enhancement-ecosystem.md` and `PRD-player-shell.md`) into a

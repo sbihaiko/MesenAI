@@ -66,5 +66,45 @@ namespace Mesen.Tests.CommunityPacks
 			Assert.True(gate.TryEnter()); // a later Restore/load proceeds
 			gate.Exit();
 		}
+
+		//#657: a game opened while another game's install (or a Restore) holds
+		//the gate used to lose its own auto-install for the session (ADR-0146:
+		//auto-load whenever possible). The refused load is remembered, and the
+		//holder's Exit hands it back exactly once so the service can run it.
+		[Fact]
+		public void TryEnterOrDefer_WhileHeld_IsRefusedAndTheHolderExitHandsTheLoadBackOnce()
+		{
+			CommunityPackInstallGate gate = new();
+			Assert.True(gate.TryEnter());
+
+			Assert.False(gate.TryEnterOrDefer());
+			Assert.True(gate.IsHeld);
+
+			Assert.True(gate.Exit());
+			Assert.False(gate.IsHeld);
+			Assert.True(gate.TryEnter());
+			Assert.False(gate.Exit());
+		}
+
+		[Fact]
+		public void TryEnterOrDefer_WhenFree_AcquiresWithoutLeavingADeferredLoad()
+		{
+			CommunityPackInstallGate gate = new();
+
+			Assert.True(gate.TryEnterOrDefer());
+			Assert.False(gate.Exit());
+		}
+
+		[Fact]
+		public void A_refused_Restore_is_not_deferred()
+		{
+			//The user's Restore reports "an install is already in progress" and is
+			//never replayed behind the user's back.
+			CommunityPackInstallGate gate = new();
+			Assert.True(gate.TryEnter());
+			Assert.False(gate.TryEnter());
+
+			Assert.False(gate.Exit());
+		}
 	}
 }

@@ -1,0 +1,37 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="200"
+	x:DataType="vm:RemasterWorkspaceViewModel"
+	x:Class="Mesen.Views.RemasterBuildProblemsView"
+>
+	<!--G.6 (PRD Part B §13.5.3 W-R4): build problems, inline, in place of the
+	job card. Each problem is a sentence about the surface the artist painted,
+	with the file to open (a row action); a line without a translation is only
+	counted, and the raw log is behind Show Log (rule 3). Show Log and Try Again
+	are the two controls.-->
+	<StackPanel Name="RemasterBuildProblems" Spacing="8">
+		<TextBlock Name="RemasterBuildProblemsTitle" Text="{Binding BuildProblemsTitle}" FontWeight="Bold" />
+		<ItemsControl Name="RemasterBuildProblemList" ItemsSource="{Binding BuildProblems}">
+			<ItemsControl.ItemTemplate>
+				<DataTemplate x:DataType="vm:RemasterProblemRow">
+					<DockPanel Margin="0 2">
+						<Button DockPanel.Dock="Right" Margin="12 0 0 0" VerticalAlignment="Top" Content="{l:Translate btnOpenProblemFile}" IsVisible="{Binding CanOpen}" Click="OnOpenFile" />
+						<TextBlock Text="{Binding Text, StringFormat='· {0}'}" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</DockPanel>
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+		<TextBlock Name="RemasterBuildProblemsNote" Text="{Binding BuildProblemsNote}" Opacity="0.8" IsVisible="{Binding BuildProblemsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+		<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+			<Button Name="RemasterShowBuildLogButton" Content="{l:Translate btnShowBuildLog}" Click="OnShowLog" />
+			<Button Name="RemasterTryBuildAgainButton" Content="{l:Translate btnTryBuildAgain}" Classes="accent" IsEnabled="{Binding BuildAndShow.IsEnabled}" Click="OnTryAgain" />
+		</StackPanel>
+		<TextBlock Name="RemasterTryBuildAgainReason" Classes="reason" HorizontalAlignment="Right" Text="{Binding BuildAndShow.Reason}" IsVisible="{Binding BuildAndShow.HasReason}" />
+		<TextBox Name="RemasterBuildLog" Text="{Binding BuildLogText}" IsReadOnly="True" TextWrapping="NoWrap" MaxHeight="240" FontFamily="{DynamicResource MesenMonospaceFont}" IsVisible="{Binding IsBuildLogVisible}" />
+	</StackPanel>
+</UserControl>

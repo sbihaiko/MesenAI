@@ -15,6 +15,7 @@
 #include "Shared/RewindData.h"
 #include "Shared/Movies/MovieTypes.h"
 #include "Shared/Movies/MovieRecorder.h"
+#include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/BatteryManager.h"
 #include "Shared/CheatManager.h"
 #include "Utilities/Serializer.h"
@@ -90,6 +91,7 @@ void MovieRecorder::GetGameSettings(stringstream& out)
 	VirtualFile romFile = _emu->GetRomInfo().RomFile;
 	WriteString(out, MovieKeys::GameFile, romFile.GetFileName());
 	WriteString(out, MovieKeys::Sha1, _emu->GetHash(HashType::Sha1));
+	WriteString(out, MovieKeys::NoIntroSha1, MepPackManager::ComputeNoIntroSha1(romFile));
 
 	VirtualFile patchFile = _emu->GetRomInfo().PatchFile;
 	if(patchFile.IsValid()) {

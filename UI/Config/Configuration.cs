@@ -45,6 +45,7 @@ namespace Mesen.Config
 		[ObservableProperty] public partial NetplayConfig Netplay { get; set; } = new();
 		[ObservableProperty] public partial HistoryViewerConfig HistoryViewer { get; set; } = new();
 		[ObservableProperty] public partial MainWindowConfig MainWindow { get; set; } = new();
+		[ObservableProperty] public partial RemasterConfig Remaster { get; set; } = new();
 
 		public DefaultKeyMappingType DefaultKeyMappings { get; set; } = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
 
@@ -55,14 +56,27 @@ namespace Mesen.Config
 
 		public static Configuration CreateConfig()
 		{
+			return CreateConfig(settingsFileExists: false);
+		}
+
+		//settingsFileExists: a settings.json was there but could not be read
+		//(#678). The key mappings and fonts were lost with it, so ConfigUpgrade
+		//stays FirstRun either way; only the keys below differ.
+		public static Configuration CreateConfig(bool settingsFileExists)
+		{
 			Configuration cfg = new();
 			cfg.ConfigUpgrade = (int)ConfigUpgradeHint.FirstRun;
-			//P.4 (PRD Part B §6): CreateConfig only runs when no
-			//settings.json exists (fresh unzip, or the Setup Wizard's first
-			//Config.Save before the main window runs) - the default rule says
-			//that is Player mode. An existing file without the UiMode key keeps
-			//the property's Advanced initializer (upgrade path).
-			cfg.Preferences.UiMode = UiModeDefaultRule.ForMissingKey(settingsFileExists: false);
+			MissingKeyDefaults defaults = SettingsLoadDefaults.For(settingsFileExists);
+			//P.4 (PRD Part B §6): with no settings.json (fresh unzip, or the
+			//Setup Wizard's first Config.Save before the main window runs) the
+			//default rule says Player mode. An existing file - readable but
+			//without the UiMode key, or unreadable - is the upgrade path (Advanced).
+			cfg.Preferences.UiMode = defaults.UiMode;
+			//G.1 (PRD Part B §13.2): a fresh install never had the classic menu
+			//bar, so the one-time "your menus are under Tools ⋯" toast is not owed.
+			cfg.Preferences.ClassicMenuNoticeShown = defaults.ClassicMenuNoticeShown;
+			//ADR-0243 Q3: a new install records only on Remaster's Record
+			cfg.EnhancementPacks.BootstrapEnhancementFolder = defaults.BootstrapEnhancementFolder;
 			return cfg;
 		}
 
@@ -127,6 +141,12 @@ namespace Mesen.Config
 				if(OperatingSystem.IsWindows()) {
 					Audio.AudioLatency = 30;
 				}
+			}
+
+			//ADR-0243 Q3: an upgrade that kept "record while I play" on says so once
+			if(BootstrapRecordingDefault.UpgradeNoticeDue(ConfigUpgrade < (int)ConfigUpgradeHint.RecordingOnDemand, EnhancementPacks.BootstrapEnhancementFolder)) {
+				EmuApi.WriteLogEntry("[MEP] ADR-0243: BootstrapEnhancementFolder stays on for this install; new installs record only on Remaster's Record");
+				EmuApi.DisplayMessage("MEP", "MepBootstrapNowOnDemand");
 			}
 
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
@@ -253,7 +273,12 @@ namespace Mesen.Config
 
 			try {
 				string fileData = File.ReadAllText(configFile);
-				config = (Configuration?)JsonSerializer.Deserialize(fileData, typeof(Configuration), MesenSerializerContext.Default) ?? Configuration.CreateConfig();
+				Configuration? loaded = (Configuration?)JsonSerializer.Deserialize(fileData, typeof(Configuration), MesenSerializerContext.Default);
+				if(loaded == null) {
+					//#678: a `null` document is as unreadable as a truncated one
+					throw new JsonException("settings.json holds no configuration");
+				}
+				config = loaded;
 				config._fileData = fileData;
 			} catch {
 				try {
@@ -261,7 +286,8 @@ namespace Mesen.Config
 					BackupSettings(configFile);
 				} catch { }
 
-				config = Configuration.CreateConfig();
+				//#678: the file existed, so this is an existing install - upgrade-path defaults
+				config = Configuration.CreateConfig(settingsFileExists: true);
 			}
 
 			return config;
@@ -319,6 +345,7 @@ namespace Mesen.Config
 		CvInput,
 		WsInput,
 		WindowsAudioLatency,
+		RecordingOnDemand,
 		NextValue,
 	}
 }

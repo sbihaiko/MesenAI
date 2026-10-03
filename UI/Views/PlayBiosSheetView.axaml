@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlayBiosSheetView"
+	x:DataType="vm:PlayBiosSheetViewModel"
+>
+	<!--G.5 (PRD Part B §13.5.2 W-P13): a game needs a BIOS file. Rule 2: drop
+	zone, Cancel, Choose File… = 3. The whole dimmed area takes a drop, so a
+	file dropped anywhere while the sheet is up lands here, never as a ROM.-->
+	<Panel Name="BiosSheetBackdrop" Background="#80000000" DragDrop.AllowDrop="True">
+		<Border Name="BiosSheet" Background="White" CornerRadius="14" Padding="28 24" MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center">
+			<StackPanel Spacing="12" XYFocus.NavigationModes="Enabled">
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<Border Width="40" Height="40" CornerRadius="8" Background="#8E8E93">
+						<TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+					</Border>
+					<TextBlock Text="{l:Translate lblBiosSheetTitle}" FontSize="20" FontWeight="Bold" Foreground="#1C1C1E" VerticalAlignment="Center" />
+				</StackPanel>
+				<TextBlock Name="BiosSheetBody" Text="{Binding Body}" TextWrapping="Wrap" Foreground="#1C1C1E" />
+				<Button Name="BiosSheetDropZone" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="16 18" Background="#F5F5F7" BorderBrush="#C7C7CC" BorderThickness="1" CornerRadius="10" Click="OnChooseFile">
+					<StackPanel Spacing="4" HorizontalAlignment="Center">
+						<TextBlock Text="📁" HorizontalAlignment="Center" />
+						<TextBlock Name="BiosSheetDropTitle" Text="{Binding DropTitle}" FontWeight="Bold" Foreground="#1C1C1E" HorizontalAlignment="Center" />
+						<TextBlock Text="{Binding DropHint}" Foreground="#6E6E73" HorizontalAlignment="Center" />
+					</StackPanel>
+				</Button>
+				<!--W-X2: only after a wrong file.-->
+				<Border Name="BiosSheetError" Background="#FFF4E5" CornerRadius="8" Padding="12 8" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+					<TextBlock Text="{Binding ErrorText}" Foreground="#B25000" TextWrapping="Wrap" />
+				</Border>
+				<!--W-X1: an unknown dump confirms once, in place.-->
+				<Border Name="BiosSheetConfirm" Background="#FFF4E5" CornerRadius="8" Padding="12 8" IsVisible="{Binding IsConfirmingUnknown}">
+					<DockPanel>
+						<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+							<Button Name="BiosSheetChooseAnother" Content="{l:Translate btnBiosSheetChooseAnother}" Click="OnRejectUnknown" />
+							<Button Name="BiosSheetUseIt" Content="{l:Translate btnBiosSheetUseIt}" Click="OnAcceptUnknown" />
+						</StackPanel>
+						<TextBlock Text="{l:Translate lblBiosSheetUnknown}" Foreground="#B25000" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</DockPanel>
+				</Border>
+				<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0 8 0 0">
+					<Button Name="BiosSheetCancel" Content="{l:Translate btnBiosSheetCancel}" Padding="16 6" Click="OnCancel" />
+					<Button Name="BiosSheetChooseFile" Content="{l:Translate btnBiosSheetChooseFile}" Padding="16 6" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnChooseFile" />
+				</StackPanel>
+			</StackPanel>
+		</Border>
+	</Panel>
+</UserControl>

@@ -26,6 +26,49 @@
   `docs/community-packs.json`, so most ROMs get the stem, which the author
   controls. The hash-resolved name stays the goal and needs a data source this
   repository does not have.
+  **Amended 2026-10-02 (#624).** On NES `GameSettings.txt`'s `SHA1` is the
+  whole-file hash (iNES header included), so it never matched the catalog's
+  No-Intro hashes; the recorder now also writes `NoIntroSHA1` (ADR-0039 range,
+  ROM as loaded before any patch), which §5's lookup tries first. A movie
+  without the key keeps the `SHA1` lookup and the stem fallback.
+  **Amended 2026-10-02 (R.2 implemented).** The consume half (§7–§9) is
+  implemented under the user's go-ahead, verbatim: *"pode implementar em
+  paralelo tudo que puder"* and *"acabe a implementação da nova GUI, garanta
+  que tudo está na main, teste tudo que for possível"* (both 2026-10-02).
+  `scripts/generate_community_replay_catalog.py` writes
+  `docs/community-replays.json` (committed empty) from the open `replay:valid`
+  issues, `replay:removed` checked first (§9), and
+  `.github/workflows/community-replay-catalog.yml` regenerates it on
+  close/reopen/label changes, after every `replay-submitted.yml` run, daily
+  and by hand, through a `PROJECT_PAT` PR. `scripts/replay_lint.py` gains the
+  §8 structural gate, and `replay-submitted.yml` refuses an archive whose
+  sha256 is already a live row of another issue (§7 dedupe). The client
+  (`UI/Logic/CommunityReplayCatalog.cs`, `UI/Logic/ReplayWatch.cs`,
+  `UI/Services/CommunityReplayCatalogFetcher.cs`, the Shared replays sheet)
+  lists the rows for the loaded ROM most-👍-first with a cheats badge and a
+  "👍 N ↗" button that opens the issue, and plays a picked row after a size
+  and sha256 check. Implementation choices, open to the user's review: (1) the
+  list opens from W-P4 › Save states › *Shared replays…*, because W-P4 is at
+  its seven controls; (2) the client embeds the same
+  `scripts/replay_host_allowlist.json` the CI reads, guarded by
+  `verify_pack_host_allowlist_drift.py`, rather than adding the attachment
+  hosts to `pack_host_allowlist.json` as §6 says, which would also open
+  `pack_link` to them, the thing R.1's ratification kept refused; (3) the
+  match key is the SHA-1 the movie carries (`Emulator::GetHash(Sha1)`, read
+  back with `EmuApi.GetRomHash(HashType.Sha1)`): on NES this is the hash of
+  the whole ROM file before a patch, not the No-Intro body hash §7 names, so
+  both sides use the same function and stay exact, but a catalog row cannot
+  be joined to `docs/community-packs.json`'s No-Intro keys; (4) the §8 gate
+  reads `Input.txt` streamed and bounded at 64 MB, requires every line to
+  start with `|` with a constant `|` count, and accepts the consoles `Nes`,
+  `Gameboy` and `Sms`; (5) the generator re-downloads and re-gates every row
+  on every run, drops a row whose attachment answers 404/410, and aborts
+  without writing on any other fetch failure, so a network blip cannot empty
+  the catalog; (6) the dedupe compares against the committed catalog, so two
+  identical submissions inside one regeneration window are both accepted and
+  the generator keeps the earlier issue; (7) Watch confirms once in place
+  ("Restart & watch") instead of a dialog, because `MesenMovie::Play`
+  power-cycles the game. Neither workflow has run against a real issue.
 - Date: 2026-09-17
 - Related: ADR-0184 (a recording may use a RAM-only cheat — **this ADR does not
   amend it**, see §4), ADR-0185 (a published movie may drive a recording; its

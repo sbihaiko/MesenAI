@@ -21,6 +21,10 @@ Checks:
   AC-5 an embedded PatchData.dat is permitted (ADR-0144), and a renamed
        `.zip` is the same artifact as the `.mmo` (the extension is cosmetic).
   AC-6 not a Mesen movie at all (not a zip, no GameSettings.txt) is refused.
+  AC-10 section 8's structural gate (R.2): GameSettings.txt must carry the
+       MesenVersion/MovieFormatVersion MesenMovie::Play accepts and a console
+       the pipeline supports; Input.txt must be present, non-empty and
+       frame-aligned; the facts carry the archive's sha256, size and frames.
 
 Usage: python3 scripts/test_replay_lint.py
 """
@@ -223,6 +227,62 @@ def check_last_identity_key_wins():
     ok("AC-9 duplicate identity keys: the last one wins, as in the Core")
 
 
+def check_structural_gate():
+    import hashlib
+    data = build(clean_members())
+    result = replay_lint.lint_bytes(data)
+    if not result.ok or result.facts.get("sha256") != hashlib.sha256(data).hexdigest() \
+            or result.facts.get("frames") != 600 or result.facts.get("console") != "nes" \
+            or result.facts.get("size") != len(data):
+        fail(f"AC-10 the clean archive's facts carry sha256/size/frames/console: {codes(result)} {result.facts}")
+        return
+    for console, key in (("Gameboy", "gb"), ("Sms", "sms")):
+        text = game_settings().decode().replace("emu.consoleType Nes", f"emu.consoleType {console}")
+        r = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+        if not r.ok or r.facts.get("console") != key:
+            fail(f"AC-10 {console} is a supported console: {codes(r)} {r.facts.get('console')}")
+            return
+    cases = {
+        "settings": [game_settings().decode().replace("MesenVersion 2.1.0", "MesenVersion 1.4.0"),
+                     game_settings().decode().replace("MovieFormatVersion 3", "MovieFormatVersion 1"),
+                     game_settings().decode().replace("MovieFormatVersion 3\n", "")],
+        "console": [game_settings().decode().replace("emu.consoleType Nes", "emu.consoleType Snes"),
+                    game_settings().decode().replace("emu.consoleType Nes\n", "")],
+    }
+    for code, texts in cases.items():
+        for text in texts:
+            r = replay_lint.lint_bytes(build(clean_members(**{"GameSettings.txt": text.encode()})))
+            if r.ok or code not in codes(r):
+                fail(f"AC-10 GameSettings.txt must be refused as {code}: {codes(r)}")
+                return
+    inputs = {
+        "missing": None,
+        "empty": b"",
+        "not a frame": b"|........\nhello\n",
+        "misaligned": b"|........|........\n|........\n",
+        "truncated": b"|........\n|....",
+    }
+    for what, member in inputs.items():
+        r = replay_lint.lint_bytes(build(clean_members(**{"Input.txt": member})))
+        if r.ok or "input" not in codes(r):
+            fail(f"AC-10 an Input.txt that is {what} must be refused as input: {codes(r)}")
+            return
+    old = replay_lint.MAX_INPUT_BYTES
+    replay_lint.MAX_INPUT_BYTES = 1000
+    try:
+        r = replay_lint.lint_bytes(build(clean_members(**{"Input.txt": b"|........\n" * 101})))
+    finally:
+        replay_lint.MAX_INPUT_BYTES = old
+    if r.ok or "input" not in codes(r):
+        fail(f"AC-10 an Input.txt inflating past the bound is refused: {codes(r)}")
+        return
+    two_pads = replay_lint.lint_bytes(build(clean_members(**{"Input.txt": b"|........|........\r\n" * 3})))
+    if not two_pads.ok or two_pads.facts.get("frames") != 3:
+        fail(f"AC-10 two devices per frame (and CRLF) are one aligned frame per line: {codes(two_pads)}")
+        return
+    ok("AC-10 section 8: playable settings, a supported console and a frame-aligned Input.txt are required")
+
+
 def check_malformed_members_are_refused():
     # AC-7: a hostile archive must be a verdict, never a traceback (a crash
     # leaves a stale replay:valid label on the issue).
@@ -360,6 +420,7 @@ def main():
     check_malformed_members_are_refused()
     check_power_on_state_is_deterministic()
     check_hostile_text_cannot_forge_report_lines()
+    check_structural_gate()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)

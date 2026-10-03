@@ -4,6 +4,7 @@
 #include "Shared/EnhancementPacks/MepZipExtract.h"
 #include "Shared/EnhancementPacks/MepContentId.h"
 #include "Shared/EnhancementPacks/MepFileIo.h"
+#include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
@@ -175,6 +176,7 @@ string MepPackManager::ComputeNoIntroSha1(VirtualFile& romFile)
 
 string MepPackManager::GetSiblingFolder() const
 {
+	auto lock = _stateLock.AcquireSafe();
 	if(_romFolder.empty() || _romName.empty()) {
 		return "";
 	}
@@ -183,32 +185,86 @@ string MepPackManager::GetSiblingFolder() const
 
 void MepPackManager::StartBootstrapIfNeeded()
 {
-	_bootstrapping = false;
-	EnhancementPackConfig& cfg = _emu->GetSettings()->GetEnhancementPackConfig();
-	if(!cfg.EnableMepPacks || !cfg.BootstrapEnhancementFolder || _romName.empty()) {
-		return;
+	//ADR-0243 Q3: Play no longer records by itself. The setting stays (off for
+	//new installs, kept for an install that had it on); headless_record's
+	//"bootstrap" flag turns it on for one run. Recording on demand is
+	//StartRecording, which the Remaster profile's Record button calls.
+	string source;
+	string note;
+	{
+		auto lock = _stateLock.AcquireSafe();
+		_bootstrapping = false;
+		EnhancementPackConfig& cfg = _emu->GetSettings()->GetEnhancementPackConfig();
+		if(!cfg.EnableMepPacks || !cfg.BootstrapEnhancementFolder || _romName.empty()) {
+			return;
+		}
+		source = _nextRecordingSource;
+		note = _nextRecordingNote;
 	}
+	StartRecording(source, note);
+}
 
+void MepPackManager::SetNextRecordingSource(const string& source, const string& note)
+{
+	auto lock = _stateLock.AcquireSafe();
+	_nextRecordingSource = RemasterProject::IsKnownSource(source) ? source : "play";
+	_nextRecordingNote = note;
+}
+
+string MepPackManager::GetProjectFallbackRoot() const
+{
+	return FolderUtilities::CombinePath(GetPacksFolder(), _romName);
+}
+
+bool MepPackManager::IsOwnProjectLayer(const MepPack* pack, MepSectionType type) const
+{
+	if(!pack) {
+		return false;
+	}
+	//The project is the sibling, or EnhancementPacks/<Game>/ when the ROM
+	//folder was read-only (matched by name, recorded by an earlier bootstrap)
+	std::error_code ec;
+	bool isProject = pack->Origin == MepPackOrigin::Sibling ||
+		(pack->Origin == MepPackOrigin::Folder && StringUtilities::ToLower(pack->ContainerName) == StringUtilities::ToLower(_romName) &&
+			fs::exists(fs::u8path(FolderUtilities::CombinePath(pack->RootFolder, ".bootstrap")), ec));
+	const MepSection& section = pack->Sections[(int)type];
+	return RemasterProject::IsOwnProjectSection(isProject, section.HasHuman, section.Path);
+}
+
+bool MepPackManager::StartRecording(const string& source, const string& note)
+{
+	auto lock = _emu->AcquireLock();
+	if(_bootstrapping) {
+		Log("record: a recording is already in progress ('" + _recordingFolder + "') - stop it first");
+		return false;
+	}
+	if(_romName.empty()) {
+		Log("record: no ROM loaded - nothing to record");
+		return false;
+	}
 	shared_ptr<IConsole> console = _emu->GetConsole();
 	if(!console) {
-		return;
+		return false;
 	}
 	ConsoleType type = console->GetConsoleType();
 	if(type != ConsoleType::Nes && type != ConsoleType::Gameboy && type != ConsoleType::Sms) {
-		return; //no HD pack builder for this system
+		Log("record: this system has no HD pack builder - nothing to record");
+		return false;
 	}
 
-	//Something already dresses this ROM: the bootstrap is only a first draft
+	//ADR-0243 Decision 3 / #142: a foreign pack still declines its section;
+	//the project's own mep/ and earlier recordings do not.
 	const MepPack* texturesPack = GetPackForSection(MepSectionType::Textures);
-	bool needTextures = texturesPack == nullptr;
+	const MepPack* audioPack = GetPackForSection(MepSectionType::Audio);
 	std::error_code ec;
 	string existingManifest = FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::GetHdPackFolder(), _romName), "hires.txt");
-	if(fs::exists(fs::u8path(existingManifest), ec)) {
-		needTextures = false;
-	}
-	//Audio fingerprints (ADR-0047) are NES-only for now (ADR-0041 scope)
-	bool needAudio = type == ConsoleType::Nes && !GetPackForSection(MepSectionType::Audio);
-	if(!needTextures && !needAudio) {
+	bool loosePack = fs::exists(fs::u8path(existingManifest), ec);
+	RemasterProject::RecordingPlan plan = RemasterProject::PlanRecording(
+		{ texturesPack != nullptr, IsOwnProjectLayer(texturesPack, MepSectionType::Textures) }, loosePack,
+		{ audioPack != nullptr, IsOwnProjectLayer(audioPack, MepSectionType::Audio) },
+		type == ConsoleType::Nes); //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
+	string foreignTextures = loosePack ? existingManifest : (texturesPack ? texturesPack->ContainerName : "");
+	if(plan.Declined()) {
 		//Declining is the point: this is a first draft, not an override of a pack
 		//someone already has. Declining *silently* was not the point. The run
 		//exits 0, writes no tile and leaves the pack's mtime alone, so a second
@@ -216,31 +272,38 @@ void MepPackManager::StartBootstrapIfNeeded()
 		//worked - and it was caught the expensive way, by a probe run whose
 		//numbers were the previous run's (#229). A quiet wrong answer is the
 		//failure mode this whole pipeline exists to remove; say it out loud.
-		Log("bootstrap: nothing was recorded - '" + (texturesPack ? texturesPack->ContainerName : existingManifest) +
+		Log("bootstrap: nothing was recorded - '" + foreignTextures +
 			"' already dresses this ROM, so the bootstrap kept it as it was. The pack is unchanged and this run still exits 0.");
-		Log("bootstrap: to record a fresh one, delete that pack (and the sibling .bootstrap stamp) or record into an empty "
-			"directory - scripts/record_stages.sh gives every stage its own directory and does exactly that.");
-		return;
+		Log("bootstrap: to record a fresh one, delete that pack or record into an empty directory - the ROM's own "
+			"project folder (its mep/ and earlier auto/rec-NNN/ recordings) never blocks a recording (ADR-0243).");
+		return false;
 	}
 
-	//Sibling folder, or the central folder when the ROM's directory is read-only
-	//Only the sections that will be generated get a folder (an empty auto/textures
-	//next to an artist's pack would just confuse)
+	//Project root: the sibling folder, or the central folder when the ROM's
+	//directory is read-only. Only the sections that will be generated get a
+	//folder (an empty textures/ next to an artist's pack would just confuse).
 	string root = GetSiblingFolder();
 	string autoRoot = FolderUtilities::CombinePath(root, MepPack::AutoFolderName);
-	string autoTextures = FolderUtilities::CombinePath(autoRoot, MepPack::GetConventionPath(MepSectionType::Textures));
 	fs::create_directories(fs::u8path(autoRoot), ec);
 	if(ec || !fs::is_directory(fs::u8path(autoRoot), ec)) {
-		root = FolderUtilities::CombinePath(GetPacksFolder(), _romName);
+		root = GetProjectFallbackRoot();
 		autoRoot = FolderUtilities::CombinePath(root, MepPack::AutoFolderName);
-		autoTextures = FolderUtilities::CombinePath(autoRoot, MepPack::GetConventionPath(MepSectionType::Textures));
 		ec.clear();
 		fs::create_directories(fs::u8path(autoRoot), ec);
 		if(ec) {
 			Log("bootstrap: cannot create '" + autoRoot + "' - skipped");
-			return;
+			return false;
 		}
 		Log("bootstrap: ROM folder is not writable - using '" + root + "' instead (matched by name on the next load)");
+	}
+
+	//ADR-0243 Q1: one complete output per recording, auto/rec-NNN/
+	string recordingId = RemasterProject::NextRecordingId(RemasterProject::ListChildFolders(autoRoot));
+	string recordingFolder = FolderUtilities::CombinePath(autoRoot, recordingId);
+	fs::create_directories(fs::u8path(recordingFolder), ec);
+	if(ec) {
+		Log("bootstrap: cannot create '" + recordingFolder + "' - skipped");
+		return false;
 	}
 
 	//Stamp: generator version + ROM identity (never touches anything outside auto/)
@@ -249,29 +312,44 @@ void MepPackManager::StartBootstrapIfNeeded()
 		stamp << "generator=mesence-bootstrap/1\nsha1=" << _romSha1 << "\nrom=" << _romName << "\nfilter=xBRZ\nscale=4\n";
 	}
 
-	if(needAudio) {
-		string autoAudio = FolderUtilities::CombinePath(FolderUtilities::CombinePath(root, MepPack::AutoFolderName), MepPack::GetConventionPath(MepSectionType::Audio));
+	{
+		//#699: the UI reads the recording folder; the console calls below wait
+		//for the decoder, so the lock covers these writes only
+		auto stateLock = _stateLock.AcquireSafe();
+		_recordingProjectRoot = root;
+		_recordingFolder = recordingFolder;
+		_recordingRomName = _romName;
+		_recordingEntry = RemasterProject::Recording{ recordingId, RemasterProject::FormatUtcTimestamp(std::time(nullptr)),
+			RemasterProject::IsKnownSource(source) ? source : "play", 0, note };
+		_recordingClock.Start(_emu->GetFrameCount());
+		WriteRecordingEntry();
+	}
+
+	if(plan.NeedAudio) {
+		string autoAudio = FolderUtilities::CombinePath(recordingFolder, MepPack::GetConventionPath(MepSectionType::Audio));
 		fs::create_directories(fs::u8path(autoAudio), ec);
 		if(NesConsole* nes = dynamic_cast<NesConsole*>(console.get())) {
 			nes->StartAudioBootstrap(autoAudio);
+			auto stateLock = _stateLock.AcquireSafe();
 			_bootstrapping = true;
 			Log("bootstrap: recording music fingerprints + MIDI into '" + autoAudio + "'");
 		}
 	}
-	if(!needTextures) {
+	if(!plan.NeedTextures) {
 		//Reached when the audio section was still missing and got recorded above.
 		//The tile half is skipped for the same reason as the early return, and a
 		//bootstrap that comes back with audio and no tiles has to say which half
 		//it did - otherwise "the run finished" reads as "the recording is there".
-		Log("bootstrap: no tiles were recorded - '" + (texturesPack ? texturesPack->ContainerName : existingManifest) +
+		Log("bootstrap: no tiles were recorded - '" + foreignTextures +
 			"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
-		return;
+		return _bootstrapping;
 	}
 
+	string autoTextures = FolderUtilities::CombinePath(recordingFolder, MepPack::GetConventionPath(MepSectionType::Textures));
 	fs::create_directories(fs::u8path(autoTextures), ec);
 	if(ec) {
 		Log("bootstrap: cannot create '" + autoTextures + "' - skipped");
-		return;
+		return _bootstrapping;
 	}
 	_bootstrapSaveFolder = autoTextures;
 	HdPackBuilderOptions options = {};
@@ -294,13 +372,72 @@ void MepPackManager::StartBootstrapIfNeeded()
 		//Static screens as whole-frame <background> PNGs with tileAtPosition anchors (F5.4)
 		nes->EnableBootstrapScreenCapture();
 	}
-	_bootstrapping = true;
-	Log("bootstrap: recording played tiles (xBRZ 4x) into '" + autoTextures + "' - the next load of this ROM plays with the auto layer");
+	{
+		auto stateLock = _stateLock.AcquireSafe();
+		_bootstrapping = true;
+	}
+	Log("bootstrap: recording played tiles (xBRZ 4x) into '" + autoTextures + "' (" + recordingId + ") - the next load of this ROM plays with it");
+	return true;
+}
+
+bool MepPackManager::StopRecording()
+{
+	auto lock = _emu->AcquireLock();
+	if(!IsBootstrapping()) {
+		return false;
+	}
+	if(shared_ptr<IConsole> console = _emu->GetConsole()) {
+		//The builder writes hires.txt and its pages when it is released
+		ExecuteShortcutParams stopParams = { EmulatorShortcut::StopRecordHdPack, 0, nullptr };
+		console->ProcessNotification(ConsoleNotificationType::ExecuteShortcut, &stopParams);
+		if(NesConsole* nes = dynamic_cast<NesConsole*>(console.get())) {
+			nes->StopAudioBootstrap();
+		}
+	}
+	FinishRecordingEntry();
+	return true;
+}
+
+void MepPackManager::FinishRecordingEntry()
+{
+	auto lock = _stateLock.AcquireSafe();
+	if(!_bootstrapping || _recordingEntry.Id.empty()) {
+		_bootstrapping = false;
+		return;
+	}
+	_recordingEntry.DurationSeconds = RemasterProject::DurationSecondsFor(_recordingClock.ElapsedFrames(_emu->GetFrameCount()), _emu->GetFps());
+	WriteRecordingEntry();
+	Log("bootstrap: " + _recordingEntry.Id + " finished (" + RemasterProject::FormatNumber(_recordingEntry.DurationSeconds) + " s emulated)");
+	_bootstrapping = false;
+	_recordingEntry = {};
+}
+
+void MepPackManager::WriteRecordingEntry()
+{
+	//ADR-0243 Q2: machine-written, read-modify-write so entries of recordings
+	//this run did not make (and their notes) are kept as they were
+	string path = FolderUtilities::CombinePath(_recordingProjectRoot, RemasterProject::ManifestFileName);
+	RemasterProject::Manifest manifest;
+	string text;
+	if(ReadTextFile(path, text) && !RemasterProject::ParseManifest(text, manifest)) {
+		Log("record: '" + path + "' is not valid JSON - left as it was, this recording is not listed in it");
+		return;
+	}
+	if(manifest.Name.empty()) {
+		manifest.Name = _recordingRomName;
+	}
+	RemasterProject::UpsertRecording(manifest, _recordingEntry);
+	ofstream out(path, std::ios::out | std::ios::binary | std::ios::trunc);
+	out << RemasterProject::FormatManifest(manifest);
 }
 
 void MepPackManager::Clear()
 {
-	_bootstrapping = false;
+	//#694: a recording in progress is not closed here. A recording the user
+	//never stopped ends with the ROM it was recording, and Emulator closes it
+	//(FinishRecordingEntry) once the next ROM has actually loaded or the
+	//emulator stops - a load that fails leaves it running with its game.
+	auto lock = _stateLock.AcquireSafe();
 	_romSha1.clear();
 	_romFileSha1.clear();
 	_romExtension.clear();
@@ -312,6 +449,29 @@ void MepPackManager::Clear()
 	_optimisticContainers.clear();
 	_texturesContainer.clear();
 	_texturesIsOptimistic = false;
+}
+
+MepPackManager::RomState MepPackManager::SaveRomState() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return RomState{ _romSha1, _romFileSha1, _romExtension, _romName, _romFolder, _packs, _rejected,
+		_packIdentityByContainer, _optimisticContainers, _texturesContainer, _texturesIsOptimistic };
+}
+
+void MepPackManager::RestoreRomState(RomState state)
+{
+	auto lock = _stateLock.AcquireSafe();
+	_romSha1 = std::move(state.RomSha1);
+	_romFileSha1 = std::move(state.RomFileSha1);
+	_romExtension = std::move(state.RomExtension);
+	_romName = std::move(state.RomName);
+	_romFolder = std::move(state.RomFolder);
+	_packs = std::move(state.Packs);
+	_rejected = std::move(state.Rejected);
+	_packIdentityByContainer = std::move(state.PackIdentityByContainer);
+	_optimisticContainers = std::move(state.OptimisticContainers);
+	_texturesContainer = std::move(state.TexturesContainer);
+	_texturesIsOptimistic = state.TexturesIsOptimistic;
 }
 
 string MepPackManager::GetSiblingFolder(VirtualFile& romFile)
@@ -473,6 +633,9 @@ void MepPackManager::ScanSiblingFolder()
 
 void MepPackManager::LoadForRom(VirtualFile& romFile)
 {
+	//#699: the scan rewrites what the UI and decode threads read. Nothing here
+	//waits for another thread, so holding the lock for the whole scan is safe.
+	auto lock = _stateLock.AcquireSafe();
 	Clear();
 	if(!romFile.IsValid()) {
 		return;
@@ -672,8 +835,13 @@ void MepPackManager::ScanAndMatch()
 				//rootFolder's own last segment - not the zip's file name in
 				//"name" - is the one guaranteed to match the ROM, so the gate
 				//has to look there for the recovery to ever be reachable.
+				//#695: the fallback folder is a Remaster project like the sibling
+				//(ADR-0147), so its human layer may live under mep/ - probed the
+				//same way ScanSiblingFolder does, or Build's output never plays.
 				string rootLeaf = FolderUtilities::GetFilename(rootFolder, true);
-				if(StringUtilities::ToLower(rootLeaf) == StringUtilities::ToLower(_romName) && LoadConventionPack(rootFolder, name, fromZip ? MepPackOrigin::Zip : MepPackOrigin::Folder, "", pack)) {
+				bool nameMatches = StringUtilities::ToLower(rootLeaf) == StringUtilities::ToLower(_romName);
+				string humanPrefix = nameMatches && HasSiblingMepPack(rootFolder) ? "mep" : "";
+				if(nameMatches && LoadConventionPack(rootFolder, name, fromZip ? MepPackOrigin::Zip : MepPackOrigin::Folder, humanPrefix, pack)) {
 					//ADR-0145: a name-matched convention pack is a definite
 					//match (its target *is* the current ROM), never optimistic
 					candidates.push_back({ StringUtilities::ToLower(name), std::move(pack), true });
@@ -721,7 +889,7 @@ void MepPackManager::ScanAndMatch()
 void MepPackManager::SetPackEnabled(const string& containerName, bool enabled)
 {
 	string key = StringUtilities::ToLower(containerName);
-	auto lock = _disabledLock.AcquireSafe();
+	auto lock = _stateLock.AcquireSafe();
 	if(enabled) {
 		_disabledContainers.erase(key);
 	} else {
@@ -732,7 +900,7 @@ void MepPackManager::SetPackEnabled(const string& containerName, bool enabled)
 bool MepPackManager::IsPackEnabled(const string& containerName) const
 {
 	string key = StringUtilities::ToLower(containerName);
-	auto lock = _disabledLock.AcquireSafe();
+	auto lock = _stateLock.AcquireSafe();
 	return _disabledContainers.find(key) == _disabledContainers.end();
 }
 
@@ -763,12 +931,17 @@ void MepPackManager::HandleLowTextureMatchRate()
 	//not touch _packs/_optimisticContainers (those are written on the
 	//emulation thread by LoadForRom). The snapshot already reflects the winning
 	//textures pack as resolved enabled at load time.
-	if(_texturesContainer.empty() || !_texturesIsOptimistic) {
-		return;
+	string container;
+	{
+		auto lock = _stateLock.AcquireSafe();
+		if(_texturesContainer.empty() || !_texturesIsOptimistic) {
+			return;
+		}
+		container = _texturesContainer;
 	}
-	SetPackEnabled(_texturesContainer, false);
+	SetPackEnabled(container, false);
 	MessageManager::DisplayMessage("MEP", "Textures auto-disabled: the pack does not match this game's tiles (applied without an exact SHA1 match)");
-	Log("textures pack '" + _texturesContainer + "' auto-disabled: bg-tile match rate stayed low (optimistic SHA1-mismatch apply, ADR-0145) - re-enable from the pack list if this is a false positive");
+	Log("textures pack '" + container + "' auto-disabled: bg-tile match rate stayed low (optimistic SHA1-mismatch apply, ADR-0145) - re-enable from the pack list if this is a false positive");
 }
 
 void MepPackManager::SetPreferredMepPack(const string& romSha1, const string& packId)
@@ -782,6 +955,7 @@ void MepPackManager::SetPreferredMepPack(const string& romSha1, const string& pa
 	if(sha1.empty()) {
 		return;
 	}
+	auto lock = _stateLock.AcquireSafe();
 	if(id.empty()) {
 		_preferredPackIdByRomSha1.erase(sha1);
 	} else {
@@ -791,6 +965,7 @@ void MepPackManager::SetPreferredMepPack(const string& romSha1, const string& pa
 
 void MepPackManager::ClearPreferredMepPacks()
 {
+	auto lock = _stateLock.AcquireSafe();
 	_preferredPackIdByRomSha1.clear();
 }
 
@@ -825,6 +1000,7 @@ const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 	if(!sectionEnabled) {
 		return nullptr;
 	}
+	auto lock = _stateLock.AcquireSafe();
 	//P.3: the per-ROM preference overrides the ADR-0040 lexicographic order;
 	//the default stays "first enabled pack in precedence order" when there is
 	//no stored preference or the preferred pack_id does not match a candidate.
@@ -855,6 +1031,7 @@ const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 
 string MepPackManager::GetPackListText() const
 {
+	auto lock = _stateLock.AcquireSafe();
 	string out;
 	for(const MepPack& pack : _packs) {
 		string sections = JoinPresentSections(pack);
@@ -886,18 +1063,21 @@ string MepPackManager::GetPackListText() const
 
 string MepPackManager::GetSectionPath(MepSectionType type) const
 {
+	auto lock = _stateLock.AcquireSafe();
 	const MepPack* pack = GetPackForSection(type);
 	return pack ? pack->GetSectionPath(type) : "";
 }
 
 string MepPackManager::GetSectionAutoPath(MepSectionType type) const
 {
+	auto lock = _stateLock.AcquireSafe();
 	const MepPack* pack = GetPackForSection(type);
 	return pack ? pack->GetSectionAutoPath(type) : "";
 }
 
 vector<string> MepPackManager::GetSynthPresetPaths() const
 {
+	auto lock = _stateLock.AcquireSafe(); //both layers from one resolution (#699)
 	vector<string> paths;
 	string autoPath = GetSectionAutoPath(MepSectionType::Synth);
 	string humanPath = GetSectionPath(MepSectionType::Synth);
@@ -912,6 +1092,7 @@ vector<string> MepPackManager::GetSynthPresetPaths() const
 
 bool MepPackManager::IsSectionFromSibling(MepSectionType type) const
 {
+	auto lock = _stateLock.AcquireSafe();
 	const MepPack* pack = GetPackForSection(type);
 	return pack && pack->Origin == MepPackOrigin::Sibling;
 }
@@ -922,6 +1103,7 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 	if(!cfg.EnableMepPacks || !cfg.EnablePatches) {
 		return false;
 	}
+	auto lock = _stateLock.AcquireSafe();
 	for(const MepPack& pack : _packs) {
 		if(pack.Patches.empty() || !IsPackEnabled(pack.ContainerName)) {
 			continue;

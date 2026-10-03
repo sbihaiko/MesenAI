@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -32,10 +33,34 @@ namespace Mesen.ViewModels
 
 		[ObservableProperty] public partial bool IsMenuVisible { get; set; }
 
-		//P.4 (PRD Part B §6): the thin Player-mode overlay panel (Resume,
-		//Save/Load slot, Pack, Settings, Advanced GUI, Quit), shown on top of the
-		//game while UiMode == Player. Opening it pauses the game so the couch
-		//user can navigate; closing never auto-resumes - Resume is an overlay item.
+		//G.1 (PRD Part B §8, ADR-0241): the shell around the active workspace
+		//(profile button + switcher, Tools ⋯, status line). IsPlayWorkspace
+		//gates every Play surface (renderer, home, overlays, music player): under
+		//Remaster/Share none of them is on screen, but none is closed or reset -
+		//switching back shows them as they were, and the game keeps running.
+		public WorkspaceShellViewModel Shell { get; }
+		[ObservableProperty] public partial bool IsPlayWorkspace { get; private set; } = true;
+
+		//G.3 (PRD Part B §13.5.3, ADR-0243): the Remaster workspace. Its project
+		//screen (W-R0/W-R1) covers the content area; while it records (W-R2) the
+		//game is shown inside Remaster with the recording strip above it, and
+		//nothing of Play is on screen (rule 11). Switching profile never stops a
+		//recording or a job (§13.6).
+		public RemasterWorkspaceViewModel Remaster { get; }
+		[ObservableProperty] public partial bool IsRemasterProjectScreenVisible { get; private set; }
+		[ObservableProperty] public partial bool IsRemasterGameView { get; private set; }
+		//The game picture's layer: Play, or Remaster while recording.
+		[ObservableProperty] public partial bool IsGameViewVisible { get; private set; } = true;
+
+		//G.1: tracked from the core's GamePaused/GameResumed notifications
+		//(MainWindow.OnNotification), for the bar-visibility rule and status line.
+		[ObservableProperty] public partial bool IsGamePaused { get; set; }
+
+		//P.4/G.2 (PRD Part B §6, §13.5.2 W-P4): the Player-mode pause overlay
+		//(Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game),
+		//shown on top of the game while UiMode == Player. Opening it pauses the
+		//game so the couch user can navigate; Esc or Resume closes it and resumes
+		//(rule 8: game → W-P4 → resume).
 		[ObservableProperty] public partial bool IsPlayerOverlayVisible { get; set; }
 
 		//P.5 (PRD Part B §5): the Player-mode pack picker. Opens once over
@@ -57,7 +82,6 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsAudioEnabled { get; set; }
 		[ObservableProperty] public partial bool IsBorderEnabled { get; set; }
 		[ObservableProperty] public partial bool IsWideScrnEnabled { get; set; }
-		[ObservableProperty] public partial bool IsHiResEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockSupported { get; set; }
 
@@ -83,65 +107,99 @@ namespace Mesen.ViewModels
 			Instance = this;
 
 			Config = ConfigManager.Config;
+			//Before RomInfo: OnRomInfoChanged feeds the shell's status line.
+			Shell = new WorkspaceShellViewModel(Config.Preferences.Workspace, OperatingSystem.IsMacOS());
+			Shell.WorkspaceChanged += OnWorkspaceChanged;
+			IsPlayWorkspace = Shell.IsPlay;
+			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
+				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
+			Remaster.ActivityChanged += OnRemasterActivityChanged;
+			InitShare();
+
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
 			RecentGames = new RecentGamesViewModel();
+			UpdateShellState();
+			UpdateRemasterSurfaces();
 
 			UpdateMenuVisibility();
 		}
 
-		//P.4 (PRD Part B §6): Player hides the menu bar entirely (AutoHideMenu
-		//is ignored in Player - there is no menu bar); Advanced keeps the classic
-		//AutoHideMenu rule. Re-evaluated whenever UiMode changes (the Advanced GUI
-		//overlay item / the Preferences combo flip it, instant and persisted).
+		//G.1 (W-S3): the switcher rows and ⌘1/⌘2/⌘3 land here. Switching only
+		//changes what the window shows (§13.2): it never pauses, stops or resets
+		//the emulator, never picks a pack and rewrites no other setting - the one
+		//write is the persisted Workspace key itself.
+		public bool SelectWorkspace(Workspace target)
+		{
+			return Shell.Select(target);
+		}
+
+		private void OnWorkspaceChanged(Workspace workspace)
+		{
+			IsPlayWorkspace = Shell.IsPlay;
+			UpdateRemasterSurfaces();
+			Config.Preferences.Workspace = workspace;
+			Config.Save();
+		}
+
+		//G.1 (§13.6, rule 11): the one silent switch - a ROM opened from the
+		//operating system lands in Play.
+		public void LandInPlayForOsOpen()
+		{
+			SelectWorkspace(Workspace.Play);
+		}
+
+		//G.1 (W-S2): the Tools ⋯ "Show classic menu bar" checkbox, the only home
+		//of ShowClassicMenuBar (rule 12). The checkbox binds one-way; this is the
+		//single writer, then re-applies the chrome and persists the value.
+		public void ToggleClassicMenuBar()
+		{
+			Config.Preferences.ShowClassicMenuBar = !Config.Preferences.ShowClassicMenuBar;
+			UpdateMenuVisibility();
+			Config.Save();
+		}
+
+		//G.1 (§13.2, §13.8 Q4): an upgraded install gets "your menus are under
+		//Tools ⋯" once, then never again. Returns true when the toast was due
+		//(the caller displays it); the flag is persisted before returning.
+		public bool ConsumeClassicMenuNotice()
+		{
+			if(!ClassicMenuNotice.ShouldShow(Config.Preferences.ClassicMenuNoticeShown, Config.Preferences.ShowClassicMenuBar)) {
+				return false;
+			}
+			Config.Preferences.ClassicMenuNoticeShown = true;
+			Config.Save();
+			return true;
+		}
+
+		private void UpdateShellState()
+		{
+			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
+			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName);
+		}
+
+		partial void OnIsGamePausedChanged(bool value) => UpdateShellState();
+		partial void OnCurrentPackNameChanged(string value) => UpdateShellState();
+
+		//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu
+		//bar is hidden entirely (AutoHideMenu is ignored - the menus are under
+		//Tools ⋯); with it on, the classic AutoHideMenu rule applies. Re-evaluated
+		//whenever ShowClassicMenuBar changes (Tools ⋯ checkbox).
 		//The rule itself lives in PlayerChrome, shared with
 		//MouseManager.UpdateMainMenuVisibility() so the two cannot drift. At
 		//construction there is no window or cursor state yet, so the fullscreen /
 		//menu-open / hover-band inputs are all false, which reduces to the
-		//historical "UiMode != Player && !AutoHideMenu".
+		//"ShowClassicMenuBar && !AutoHideMenu".
 		private void UpdateMenuVisibility()
 		{
-			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.UiMode, false, Config.Preferences.AutoHideMenu, false, false);
+			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.ShowClassicMenuBar, false, Config.Preferences.AutoHideMenu, false, false);
 		}
 
-		//P.4 (PRD Part B §6): the overlay shortcut toggles the thin Player
-		//overlay. Opening pauses the game (so the couch user can navigate with
-		//D-pad/A/B); closing never auto-resumes - Resume is an overlay item. The
-		//overlay only exists in Player mode; in Advanced the press is ignored
-		//(ShortcutHandler checks the mode before acting).
-		public void TogglePlayerOverlay()
-		{
-			//P.5: while the pack picker is up, Esc dismisses it (un-enhanced this
-			//session) instead of toggling the overlay.
-			if(IsPlayerPackPickerVisible) {
-				IsPlayerPackPickerVisible = false;
-				return;
-			}
-			//P.7: same precedence for the Enhancements panel - Esc closes it and
-			//returns to the overlay underneath (which OpenEnhancementsPanel hid),
-			//instead of closing the overlay too.
-			if(IsEnhancementsPanelVisible) {
-				IsEnhancementsPanelVisible = false;
-				IsPlayerOverlayVisible = true;
-				return;
-			}
-			if(IsPlayerOverlayVisible) {
-				IsPlayerOverlayVisible = false;
-			} else {
-				IsPlayerOverlayVisible = true;
-				EmuApi.Pause();
-			}
-		}
-
-		//P.4: "Advanced GUI" overlay item - switches to Advanced mode, instant and
-		//persisted. The chrome re-applies via the UiMode observer (menu bar back,
-		//overlay hidden).
-		public void SwitchToAdvancedMode()
-		{
-			Config.Preferences.UiMode = UiMode.Advanced;
-			Config.ApplyConfig();
-			Config.Save();
-		}
+		//P.4/G.2: the overlay shortcut lands in TogglePlayerOverlay
+		//(MainWindowViewModel.PauseOverlay.cs), which routes Esc through the
+		//host-free PlayEsc order: game → W-P4 → resume. P.4's "Advanced GUI"
+		//overlay item is gone (W-P4): the UiMode choice is reached from Tools ⋯ ›
+		//Settings › Preferences, in the bar the overlay reveals.
 
 		//P.5 (PRD Part B §5): decides whether the Player picker opens for
 		//the loaded ROM and, when it does, fills the competing choices. Data is
@@ -201,8 +259,11 @@ namespace Mesen.ViewModels
 				PackId = e.PackId,
 				ContentId = e.ContentId,
 				Version = e.Version,
-				Enabled = e.Enabled
+				Enabled = e.Enabled,
+				IsAutoOnly = e.IsAutoOnly
 			}).ToList();
+			//#693: a disabled pack is neither offered nor counted.
+			candidates = PlayerPackPicker.Offered(candidates);
 
 			Dictionary<string, MepPackListEntry> entriesByContainer = new(StringComparer.OrdinalIgnoreCase);
 			foreach(MepPackListEntry e in parsed.Packs) {
@@ -214,7 +275,7 @@ namespace Mesen.ViewModels
 			//sibling pack; an auto/-only sibling (the F5 bootstrap's machine layer) is
 			//not a user choice and must not suppress the picker (same human-vs-auto
 			//distinction already applied in core via the isAutoOnly column).
-			hasSibling = parsed.Packs.Any(e => e.Source == "sibling" && !e.IsAutoOnly);
+			hasSibling = parsed.Packs.Any(e => e.Source == "sibling" && !e.IsAutoOnly && e.Enabled);
 
 			//P.6 §5: the picker sorts by community 👍 (catalog MEI votes) first,
 			//then by name - local-only packs (votes 0) fall back to name order.
@@ -225,21 +286,24 @@ namespace Mesen.ViewModels
 				.OrderByDescending(c => c.Votes)
 				.ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
 				.ToList();
+			//G.4 (W-P5): one radio starts selected.
+			SelectInitialPackChoice(resolution.PreferredContainer);
 		}
 
-		//The current pack (chip/toast): the preferred container, else the
-		//lexicographic default (the first content-merged candidate).
+		//The current pack (chip/toast): the one the core renders (#703,
+		//PlayerPackPicker.CurrentContainer), not the picker's display order.
+		private PlayerPackChoice? RenderedPackChoice(PackPreferenceResolver.Resolution resolution)
+		{
+			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer);
+			return container == null ? null : PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
+		}
+
 		private void UpdateCurrentPack(PackPreferenceResolver.Resolution resolution)
 		{
 			CurrentPackName = "";
 			CurrentPackLayers = "";
 
-			PlayerPackChoice? current = null;
-			if(resolution.PreferredContainer != null) {
-				current = PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(resolution.PreferredContainer, StringComparison.OrdinalIgnoreCase));
-			} else if(PlayerPackChoices.Count > 0) {
-				current = PlayerPackChoices[0];
-			}
+			PlayerPackChoice? current = RenderedPackChoice(resolution);
 			if(current != null) {
 				CurrentPackName = current.Name;
 				CurrentPackLayers = current.Layers;
@@ -247,8 +311,10 @@ namespace Mesen.ViewModels
 		}
 
 		//P.5: the picker's "Apply" - stores the per-ROM-sha1 choice (P.3) and
-		//power-cycles so the chosen pack applies on the reload. The next load
-		//sees the stored preference and never re-opens the picker (silent).
+		//reloads so the chosen pack applies; the next load sees the stored
+		//preference and never re-opens the picker (silent). ADR-0244 (P.9): the
+		//reload keeps the player's place where PackChangePolicy allows it, and
+		//falls back to the power cycle it always was everywhere else.
 		public void PickPlayerPack(string container)
 		{
 			PlayerPackChoice? choice = PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
@@ -260,14 +326,35 @@ namespace Mesen.ViewModels
 			Config.ApplyConfig();
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
-			LoadRomHelper.PowerCycle();
+			//The chosen pack is enabled (#693), so it is what the core renders next.
+			CurrentPackName = choice.Name;
+			CurrentPackLayers = choice.Layers;
+			//#691: from W-P4, back to W-P4 (in place) or to the game (restart).
+			PackPickReturn back = PackPickClose.After(_packPickerFromOverlay, LayerChangeKeepsPlace);
+			_packPickerFromOverlay = false;
+			PackPickApplied = LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.PowerCycle);
+			if(back == PackPickReturn.Overlay) {
+				OpenPauseOverlay();
+			} else if(back == PackPickReturn.Game) {
+				IsPlayerOverlayVisible = false;
+				EmuApi.Resume();
+			}
 		}
+
+		//The last pick's in-place swap (LoadRomHelper.ApplyPackChange): the
+		//headless tests wait for it, like ShareGateRefresh.
+		public Task PackPickApplied { get; private set; } = Task.CompletedTask;
 
 		//P.5: dismissing stores nothing - the game keeps playing un-enhanced this
 		//session and, with no preference on disk, the picker asks again next launch.
 		public void DismissPlayerPackPicker()
 		{
 			IsPlayerPackPickerVisible = false;
+			//G.2 (rule 8): opened from W-P4's Pack row, it closes back to W-P4.
+			if(_packPickerFromOverlay) {
+				_packPickerFromOverlay = false;
+				OpenPauseOverlay();
+			}
 		}
 
 		//P.7 (PRD Part B §6.1): the overlay's "Enhancements" item - refreshes
@@ -278,11 +365,19 @@ namespace Mesen.ViewModels
 		public void OpenEnhancementsPanel()
 		{
 			IsPlayerOverlayVisible = false;
+			RefreshEnhancementsState();
+			//G.4 (W-P7): the switches edit a draft that the Apply button applies.
+			LoadEnhancementsDraft();
+			IsEnhancementsPanelVisible = true;
+		}
+
+		//Also feeds W-P4's "Enhancements · N on" row (G.2).
+		private void RefreshEnhancementsState()
+		{
 			IsTexturesEnabled = Config.EnhancementPacks.EnableTextures;
 			IsAudioEnabled = Config.EnhancementPacks.EnableAudio;
 			IsBorderEnabled = Config.EnhancementPacks.EnableBorder;
 			IsWideScrnEnabled = Config.Video.AspectRatio == VideoAspectRatio.Widescreen;
-			IsHiResEnabled = Config.Video.VideoFilter == VideoFilterType.HQ4x;
 			IsOverclockSupported = PlayerEnhancementsToggle.SupportsOverclock(RomInfo.ConsoleType);
 			IsOverclockEnabled = RomInfo.ConsoleType switch {
 				ConsoleType.Nes => PlayerEnhancementsToggle.IsNesOverclockOn(Config.Nes.PpuExtraScanlinesBeforeNmi, Config.Nes.PpuExtraScanlinesAfterNmi),
@@ -290,18 +385,18 @@ namespace Mesen.ViewModels
 				ConsoleType.Gba => PlayerEnhancementsToggle.IsScanlineOverclockOn(Config.Gba.OverclockScanlineCount),
 				_ => false
 			};
-			IsEnhancementsPanelVisible = true;
 		}
 
 		public void CloseEnhancementsPanel()
 		{
 			IsEnhancementsPanelVisible = false;
-			IsPlayerOverlayVisible = true;
+			OpenPauseOverlay();
 		}
 
 		//Texture/Audio/Border (§6.1, ADR-0149): plain passthrough to the existing MEP layer
-		//switches - applies on the next ROM reload, like the rest of
-		//EnhancementPackConfig.
+		//switches - applies through a ROM reload, like the rest of
+		//EnhancementPackConfig; ADR-0244 (P.9) makes that reload keep the
+		//player's place where PackChangePolicy allows it.
 		public void ToggleTextures()
 		{
 			IsTexturesEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableTextures = v, Config.EnhancementPacks.EnableTextures);
@@ -317,18 +412,19 @@ namespace Mesen.ViewModels
 			IsBorderEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableBorder = v, Config.EnhancementPacks.EnableBorder);
 		}
 
-		//Flips one MEP layer switch, persists it and reloads the ROM; returns the new value.
+		//Flips one MEP layer switch, persists it and applies it (in place where
+		//ADR-0244 allows, else by reloading the ROM); returns the new value.
 		private bool ToggleLayer(Action<bool> setter, bool current)
 		{
 			bool next = !current;
 			setter(next);
 			Config.EnhancementPacks.ApplyConfig();
 			Config.Save();
-			LoadRomHelper.ReloadRom();
+			LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.ReloadRom);
 			return next;
 		}
 
-		//WideScrn/HiRes (§6.1): restore-not-clobber via the host-free
+		//WideScrn (§6.1; Hi-res filter moved to Settings › Look, ADR-0246): restore-not-clobber via the host-free
 		//PlayerEnhancementsToggle.ToggleEnumPreset - turning on stashes whatever
 		//Advanced had configured (unless it's already the preset), turning off
 		//restores exactly that. Applies immediately (renderer-only, no reload).
@@ -341,17 +437,6 @@ namespace Mesen.ViewModels
 			Config.Video.ApplyConfig();
 			Config.Save();
 			IsWideScrnEnabled = newCurrent == VideoAspectRatio.Widescreen;
-		}
-
-		public void ToggleHiRes()
-		{
-			(VideoFilterType newCurrent, VideoFilterType newPrior) = PlayerEnhancementsToggle.ToggleEnumPreset(
-				Config.Video.VideoFilter, Config.PlayerEnhancements.HiResPriorFilter, VideoFilterType.HQ4x, !IsHiResEnabled);
-			Config.Video.VideoFilter = newCurrent;
-			Config.PlayerEnhancements.HiResPriorFilter = newPrior;
-			Config.Video.ApplyConfig();
-			Config.Save();
-			IsHiResEnabled = newCurrent == VideoFilterType.HQ4x;
 		}
 
 		//Overclock (§6.1): plain 0/preset toggle (no restore-not-clobber - see
@@ -396,6 +481,10 @@ namespace Mesen.ViewModels
 			RecentGames.Init(GameScreenMode.RecentGames);
 
 			AddDisposable(RecentGames.ObserveProp(nameof(RecentGamesViewModel.Visible), () => {
+				if(!RecentGames.Visible) {
+					//G.2: a slot grid opened from W-P4 is gone (slot picked or closed).
+					_stateGridFromOverlay = false;
+				}
 				UpdateRendererVisibility();
 			}));
 
@@ -408,24 +497,50 @@ namespace Mesen.ViewModels
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.AspectRatio))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.VideoFilter))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Preferences)), (() => Config.Preferences, nameof(PreferencesConfig.ShowTitleBarInfo))], UpdateWindowTitle));
-			//P.4: UiMode switches (overlay "Advanced GUI" item or the Preferences
-			//combo) re-evaluate the chrome immediately - menu bar on/off, and the
-			//overlay hides when leaving Player.
+			//P.4: UiMode switches (the Preferences combo, under Tools ⋯ › Settings
+			//since G.2 removed the overlay's "Advanced GUI" item) re-evaluate the chrome immediately - the overlay hides when
+			//leaving Player. G.1: the menu bar follows ShowClassicMenuBar instead.
+			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.ShowClassicMenuBar))], UpdateMenuVisibility));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], () => {
-				UpdateMenuVisibility();
 				if(Config.Preferences.UiMode != UiMode.Player) {
-					IsPlayerOverlayVisible = false;
-					IsEnhancementsPanelVisible = false;
+					ClosePlaySurfaces();
 				}
 			}));
 
 			UpdateWindowTitle();
 		}
 
+		//G.3: which Remaster surface is on screen, then the game picture.
+		private void UpdateRemasterSurfaces()
+		{
+			bool remaster = Shell.Active == Workspace.Remaster;
+			//G.6: and while a build is shown in the game.
+			IsRemasterGameView = remaster && Remaster.ShowsGame;
+			IsRemasterProjectScreenVisible = remaster && !Remaster.ShowsGame;
+			if(remaster) {
+				//W-R0b: the feasibility gate is measured once, when Remaster is first shown.
+				Remaster.EnsureFeasibilityMeasured();
+			}
+			//G.8: Share's surfaces, then the game picture's layer and the renderer.
+			UpdateShareSurfaces();
+		}
+
+		private void OnRemasterActivityChanged()
+		{
+			if(IsRemasterGameView != (Shell.Active == Workspace.Remaster && Remaster.ShowsGame)) {
+				UpdateRemasterSurfaces();
+			}
+			Shell.UpdateRemasterActivity(Remaster.Activity, Remaster.ActivityStatus());
+		}
+
 		private void UpdateRendererVisibility()
 		{
-			IsNativeRendererVisible = !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
-			IsSoftwareRendererVisible = !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
+			//G.1: the native renderer is a native child view drawn above Avalonia
+			//content, so it is hidden explicitly outside Play (the emulator keeps
+			//running; only the picture is not shown). G.3: Remaster's recording
+			//view (W-R2) shows it too.
+			IsNativeRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
+			IsSoftwareRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
 
 			if(Renderer != null) {
 				Dispatcher.UIThread.Post(() => {
@@ -447,6 +562,16 @@ namespace Mesen.ViewModels
 			}
 
 			UpdateWindowTitle();
+			UpdateShellState();
+			ClosePauseSurfacesOnGameChange();
+
+			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
+			//#689: the jobs get an archive's inner ROM, written out (RemasterRomFile).
+			ResourcePath rom = RomInfo.RomPath;
+			string romForJobs = gameLoaded ? RemasterRomFile.ForJobs(rom.Path, rom.InnerFile, rom, System.IO.Path.GetTempPath(), EmuApi.ExtractRomFile) : rom.Path;
+			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), romForJobs,
+				gameLoaded ? EmuApi.GetMepSiblingFolder() : "", ConfigManager.EnhancementPackFolder);
+			UpdateShareGame(gameLoaded, gameLoaded ? EmuApi.GetMepSiblingFolder() : "");
 		}
 
 		private void UpdateWindowTitle()
@@ -473,8 +598,17 @@ namespace Mesen.ViewModels
 	//content-merged competing pack. Name/author/version/license/layers come
 	//from the core's GetPackListText columns; PackId is the effective pack_id
 	//(ADR-0140 id, else the local:<container> rule-4 fallback) that P.3 stores.
-	public sealed class PlayerPackChoice
+	//G.4 (W-P5): one radio row of the picker. IsSelected is the radio; the
+	//rows of one picker are exclusive (the sheet's GroupName).
+	public sealed partial class PlayerPackChoice : ObservableObject
 	{
+		[ObservableProperty] public partial bool IsSelected { get; set; }
+		//"👍 41"; empty for a local-only pack (no catalog row, votes 0).
+		public string VotesText => Votes > 0 ? "👍 " + Votes : "";
+		public bool HasVotes => Votes > 0;
+		public string Origin { get; } = "";
+		public string ContentId { get; } = "";
+
 		public string Container { get; }
 		public string PackId { get; }
 		public string Name { get; }
@@ -485,7 +619,7 @@ namespace Mesen.ViewModels
 		//P.6 §5: community 👍 count (catalog MEI `votes`); 0 for local-only packs,
 		//which sort by name. Not a download ranking - it only orders the picker.
 		public int Votes { get; }
-		//One-line metadata row for the picker: "v1.0 · Author · textures, audio · MIT"
+		//One-line metadata row for the picker: "by Author · 1.0 · textures, audio"
 		public string Detail { get; }
 		//ADR-0152: the picker's known-missing line, e.g. "1 known-missing asset —
 		//declared by MesenCE validation, not by the author". Empty when the row's
@@ -503,21 +637,13 @@ namespace Mesen.ViewModels
 			License = entry?.License ?? "";
 			Layers = string.IsNullOrEmpty(entry?.Sections) ? "" : entry.Sections.Replace(",", ", ");
 			Votes = Math.Max(0, votes);
+			Origin = entry?.Source ?? "";
+			ContentId = candidate.ContentId ?? "";
 
-			List<string> detail = new();
-			if(!string.IsNullOrEmpty(Version)) {
-				detail.Add("v" + Version);
-			}
-			if(!string.IsNullOrEmpty(Author)) {
-				detail.Add(Author);
-			}
-			if(!string.IsNullOrEmpty(Layers)) {
-				detail.Add(Layers);
-			}
-			if(!string.IsNullOrEmpty(License)) {
-				detail.Add(License);
-			}
-			Detail = string.Join(" · ", detail);
+			//G.4 (W-P5): "by Tastic · 1.2 · textures, audio"; the license moved
+			//to the pack detail (W-P6, rule 3). GetMessage always formats, so the
+			//"by {0}" pattern is read back by formatting it with its own "{0}".
+			Detail = PackPickerRow.Detail(Author, Version, Layers, ResourceHelper.GetMessage("PackByAuthor", "{0}"), ResourceHelper.GetMessage("PackAuthorUnknown"));
 			KnownMissingNote = BuildKnownMissingNote(errata);
 		}
 

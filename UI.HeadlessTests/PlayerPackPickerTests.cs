@@ -41,7 +41,7 @@ public class PlayerPackPickerTests
 
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 
 		Assert.True(model.EvaluatePlayerPackPicker(TwoPacks, "0000000000000000000000000000000000000000"));
@@ -78,7 +78,7 @@ public class PlayerPackPickerTests
 
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		MainWindow window = new();
-		window.Show();
+		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 
 		CommunityPackErrata errata = new() {

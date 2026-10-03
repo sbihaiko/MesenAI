@@ -52,6 +52,14 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void Resume();
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsPaused();
 
+		//ADR-0246 (P.13): true while the loaded game's pack draws the art (the HD
+		//filter is the console filter), so Settings › Look disables Pixels.
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDrawingPackArt();
+		//Hold to Compare: drops Pixels and Screen from the frames while held
+		//(Art stays) and redraws the paused frame so the change shows at once.
+		[DllImport(DllPath)] public static extern void SetLookCompare([MarshalAs(UnmanagedType.I1)] bool compare);
+		[DllImport(DllPath)] public static extern void RedrawPausedFrame();
+
 		[DllImport(DllPath)] public static extern void TakeScreenshot();
 
 		[DllImport(DllPath)] public static extern void ProcessAudioPlayerAction(AudioPlayerActionParams p);
@@ -104,6 +112,14 @@ namespace Mesen.Interop
 		public static string GetMepPackList() { return Utf8Utilities.CallStringApi(GetMepPackListWrapper, 100000); }
 		[DllImport(DllPath, EntryPoint = "GetMepSiblingFolder")] private static extern void GetMepSiblingFolderWrapper(IntPtr outBuffer, Int32 maxLength);
 		public static string GetMepSiblingFolder() { return Utf8Utilities.CallStringApi(GetMepSiblingFolderWrapper, 4096); }
+		//ADR-0243 (F12.20): Remaster's Record / Stop - the bootstrap recorder into
+		//the next <project>/auto/rec-NNN/ (source: play, tas, ai or script). Start
+		//returns false when it declined (a foreign pack dresses the ROM, #142).
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool StartMepRecording([MarshalAs(UnmanagedType.LPUTF8Str)] string source, [MarshalAs(UnmanagedType.LPUTF8Str)] string note);
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool StopMepRecording();
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool IsMepBootstrapping();
+		[DllImport(DllPath, EntryPoint = "GetMepRecordingFolder")] private static extern void GetMepRecordingFolderWrapper(IntPtr outBuffer, Int32 maxLength);
+		public static string GetMepRecordingFolder() { return Utf8Utilities.CallStringApi(GetMepRecordingFolderWrapper, 4096); }
 		[DllImport(DllPath, EntryPoint = "GetMepRomSha1")] private static extern void GetMepRomSha1Wrapper(IntPtr outSha1, Int32 maxLength);
 		public static string GetMepRomSha1() { return Utf8Utilities.CallStringApi(GetMepRomSha1Wrapper, 100); }
 
@@ -182,6 +198,13 @@ namespace Mesen.Interop
 			return RequestMepImageReloadWrapper();
 		}
 
+		//ADR-0244 (P.9): applies a pack change in place - saves the state to
+		//memory, reloads the ROM with the current pack switches, loads the state
+		//back. Blocking (it waits for the reload, like ExecReloadRom), so call
+		//it off the UI thread. Returns a Mesen.Logic.InPlaceReloadResult value;
+		//LoadRomHelper.ApplyPackChange decides when to call it at all.
+		[DllImport(DllPath)] public static extern byte ReloadRomKeepingState();
+
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);
 
@@ -192,6 +215,9 @@ namespace Mesen.Interop
 				GetRomHashWrapper(hashType, outLog, maxLength);
 			}, 1000000);
 		}
+
+		//#689: writes the file a ROM resource names (an archive's inner ROM) to outPath.
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool ExtractRomFile([MarshalAs(UnmanagedType.LPUTF8Str)] string resourcePath, [MarshalAs(UnmanagedType.LPUTF8Str)] string outPath);
 
 		[DllImport(DllPath)] public static extern IntPtr GetArchiveRomList([MarshalAs(UnmanagedType.LPUTF8Str)] string filename, IntPtr outFileList, Int32 maxLength);
 

@@ -7,7 +7,7 @@ power-cycles with RamPowerOnState = AllZeros and ignores battery data, so the
 lint is defence in depth over that, and it exists because a submission's bytes
 are not the action's output -- anyone can attach anything.
 
-What it checks (and only this -- section 8's structural gate is slice R.2):
+What it checks -- section 3's lint, then section 8's structural gate (R.2):
   * the archive is within the 8 MB cap (compressed), checked on the size alone
     before the archive is opened, so a deflate bomb is never inflated;
   * it is a Mesen movie: a zip whose members include `GameSettings.txt`
@@ -17,10 +17,20 @@ What it checks (and only this -- section 8's structural gate is slice R.2):
     RAM title, the game's tiles) and no `Battery*` member (battery data);
   * the ROM identity is present: a well-formed SHA-1 and the ROM *file name*,
     never a path. An embedded `PatchData.dat` and any cheat are permitted
-    (sections 3 and 4).
+    (sections 3 and 4);
+  * section 8: `GameSettings.txt` parses as `MesenMovie::Play` reads it (a
+    `MesenVersion` of 2 or later and a `MovieFormatVersion` of 2 or later --
+    the two refusals the Core makes before playing) and names a console the
+    pipeline supports (`emu.consoleType` Nes, Gameboy or Sms); `Input.txt` is
+    present, non-empty and frame-aligned (every line one frame: `|`-led, the
+    same number of `|` fields on every line, the file ending on a newline).
+    The gate decides "is this a Mesen movie of this ROM", never "is this a
+    good run" -- votes rank (section 8).
 
-Only `GameSettings.txt` and `MovieInfo.txt` are ever inflated, with a bounded
-read; `Input.txt` and the other members are listed, never read.
+`GameSettings.txt` and `MovieInfo.txt` are inflated with a bounded read;
+`Input.txt` is streamed line by line, bounded at MAX_INPUT_BYTES of inflated
+text, and never held whole. Other members are listed, never read. The facts
+also carry the archive's sha256 (section 7's dedupe key and the client's pin).
 
 Usage:
   python3 scripts/replay_lint.py <file.mmo|file.zip> [--json]
@@ -30,6 +40,7 @@ usage error. Stdlib only.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import re
@@ -46,6 +57,14 @@ MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 # (Author <= 250 B, Description <= 10 KB, settings a few KB); the bound keeps
 # a hostile member from being inflated whole.
 MAX_TEXT_MEMBER_BYTES = 1024 * 1024
+# Section 8: Input.txt is one text line per frame (`|` + each device's state).
+# A 4.6-hour run at 1,000,000 frames with two NES pads is about 20 MB of text;
+# the bound refuses a deflate bomb that the 8 MB compressed cap still admits.
+MAX_INPUT_BYTES = 64 * 1024 * 1024
+INPUT_MEMBER = "Input.txt"
+# The consoles the pipeline supports (the product consoles; GBC runs on the
+# Game Boy core). Mirrored by UI/Logic/CommunityReplayCatalog.ConsoleKey.
+CONSOLES = {"Nes": "nes", "Gameboy": "gb", "Sms": "sms"}
 
 SETTINGS_MEMBER = "GameSettings.txt"
 INFO_MEMBER = "MovieInfo.txt"
@@ -115,7 +134,7 @@ def parse_game_settings(text):
     """The keys the lint and the title rule need. `GameSettings.txt` is
     `<Key> <value>` lines (MovieRecorder::GetGameSettings), then the
     serialized settings, then one `Cheat <Type> <Code>` line per active cheat."""
-    facts = {"sha1": "", "game_file": "", "cheats": []}
+    facts = {"sha1": "", "no_intro_sha1": "", "game_file": "", "cheats": [], "mesen_version": "", "movie_format": "", "console_type": ""}
     for raw in text.splitlines():
         line = raw.rstrip("\r")
         key, _, value = line.partition(" ")
@@ -123,8 +142,16 @@ def parse_game_settings(text):
         # must read the identity the Core would play back, not a decoy line.
         if key == "SHA1":
             facts["sha1"] = value.strip()
+        elif key == "NoIntroSHA1":
+            facts["no_intro_sha1"] = value.strip()
         elif key == "GameFile":
             facts["game_file"] = value.strip()
+        elif key == "MesenVersion":
+            facts["mesen_version"] = value.strip()
+        elif key == "MovieFormatVersion":
+            facts["movie_format"] = value.strip()
+        elif key == "emu.consoleType":
+            facts["console_type"] = value.strip()
         elif key == "Cheat":
             kind, _, code = value.partition(" ")
             if kind and code:
@@ -173,6 +200,7 @@ def lint_bytes(data):
     if over is not None:
         result.findings.append(over)
         return result
+    sha256 = hashlib.sha256(data).hexdigest()
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
@@ -223,6 +251,8 @@ def lint_bytes(data):
         if info_text is not None:
             info = parse_movie_info(info_text)
         facts.update(info)
+        facts["sha256"] = sha256
+        facts["size"] = len(data)
         result.facts = facts
 
         if not SHA1_RE.match(facts["sha1"]):
@@ -247,7 +277,75 @@ def lint_bytes(data):
                 "GameSettings.txt must carry the ROM file name only, never a path (ADR-0205 section 3); "
                 f"found {plain_text(game_file)!r}.",
             )
+        _structural_gate(result, zf, names, facts)
     return result
+
+
+def _version_at_least_2(text):
+    """MesenMovie::Play refuses a MesenVersion of 0.x/1.x (or shorter than two
+    characters) and a MovieFormatVersion below 2."""
+    return len(text) >= 2 and not text.startswith(("0.", "1."))
+
+
+def input_frames(zf, names):
+    """(frames, problem): the number of frame lines of Input.txt, streamed with
+    a bound, or the reason it is not one frame per line. `problem` is None
+    when the member is frame-aligned."""
+    if INPUT_MEMBER not in names:
+        return 0, f"the archive has no {INPUT_MEMBER}, so there is nothing to replay"
+    frames = 0
+    fields = None
+    read = 0
+    last = b"\n"
+    with zf.open(INPUT_MEMBER) as member:
+        for line in member:
+            read += len(line)
+            if read > MAX_INPUT_BYTES:
+                return frames, f"{INPUT_MEMBER} inflates past {MAX_INPUT_BYTES} bytes, more than any real run"
+            last = line
+            text = line.rstrip(b"\r\n")
+            if not text.startswith(b"|"):
+                return frames, f"line {frames + 1} of {INPUT_MEMBER} is not a frame (a frame line starts with `|`)"
+            count = text.count(b"|")
+            if fields is None:
+                fields = count
+            elif count != fields:
+                return frames, (f"line {frames + 1} of {INPUT_MEMBER} has {count} input fields where every earlier "
+                                f"frame has {fields}: the frames are not aligned")
+            frames += 1
+    if frames == 0:
+        return 0, f"{INPUT_MEMBER} is empty: the movie holds no frame"
+    if not last.endswith(b"\n"):
+        return frames, f"{INPUT_MEMBER} ends in the middle of a frame (no final newline)"
+    return frames, None
+
+
+def _structural_gate(result, zf, names, facts):
+    """Section 8: is this a Mesen movie of this ROM (never: is it a good run)."""
+    if not _version_at_least_2(facts["mesen_version"]) or not facts["movie_format"].isdigit() \
+            or int(facts["movie_format"]) < 2:
+        result.add(
+            "settings",
+            "GameSettings.txt does not parse as a playable Mesen movie: it needs a MesenVersion of 2 or later "
+            "and a MovieFormatVersion of 2 or later, the two checks MesenMovie::Play makes before playing "
+            f"(found {plain_text(facts['mesen_version'])!r} and {plain_text(facts['movie_format'])!r}; "
+            "ADR-0205 section 8).",
+        )
+    console = CONSOLES.get(facts["console_type"])
+    facts["console"] = console or ""
+    if console is None:
+        result.add(
+            "console",
+            f"GameSettings.txt names the console {plain_text(facts['console_type'])!r}; the pipeline lists replays "
+            "for NES, Game Boy / Game Boy Color and Master System only (ADR-0205 section 8).",
+        )
+    try:
+        frames, problem = input_frames(zf, names)
+    except Exception as exc:  # corrupt CRC, unsupported method...
+        frames, problem = 0, f"{INPUT_MEMBER} cannot be read ({type(exc).__name__})"
+    facts["frames"] = frames
+    if problem is not None:
+        result.add("input", f"{problem} (ADR-0205 section 8).")
 
 
 def lint_file(path):

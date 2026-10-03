@@ -850,10 +850,12 @@ struct EnhancementPackConfig
 	//ADR-0044: apply a pack's patch even when no patches[]/<patch> hash matches
 	//the ROM (opt-in; wrong revisions may break the game)
 	bool ApplyPatchOnHashMismatch = false;
-	//F5.2 (ADR-0049): when no textures pack applies to the loaded ROM, record
-	//the played tiles (xBRZ 4x) into <rom dir>/<Game>/auto/textures/ so the
-	//next load already plays with the auto layer
-	bool BootstrapEnhancementFolder = true;
+	//F5.2 (ADR-0049), amended by ADR-0243 Q3: when on, every ROM load starts a
+	//recording (xBRZ 4x tiles, NES music fingerprints) into the next
+	//<rom dir>/<Game>/auto/rec-NNN/ unless a foreign pack dresses the ROM.
+	//Off by default: recording is Remaster's explicit Record
+	//(MepPackManager::StartRecording). The UI keeps an install's stored value.
+	bool BootstrapEnhancementFolder = false;
 	//ADR-0138 (F6.4): auto-install a matching community pack found via the
 	//MEP recipe catalog. Stored only here - consumed by F6.4b's catalog
 	//fetch/prompt flow, no host logic in F6.4a.

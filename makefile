@@ -473,6 +473,21 @@ doc-checks-2:
 	python3 scripts/test_replay_lint.py
 	python3 scripts/test_replay_submission.py
 	python3 scripts/checks/verify_replay_form_and_workflow.py
+	#ADR-0248 R.3: the community-cheat publish side. The structural gate over the
+	#three hand-made issues and the form/workflow/labels wiring. The decoder's
+	#parity with the Core (scripts/test_cheat_decoder_parity.py) compiles C++
+	#and runs in `make python-tests`, not here.
+	python3 scripts/test_cheat_submission.py
+	python3 scripts/checks/verify_cheat_form_and_workflow.py
+	#ADR-0248 R.4: the community-cheat catalog generator over fixture issues
+	#(valid shows, closed leaves, most-voted-first, grouped by SHA-1) and the wiring
+	#of the workflow that commits docs/community-cheats.json through a PR.
+	python3 scripts/test_generate_community_cheat_catalog.py
+	#ADR-0205 R.2: the shared-replay catalog generator over built issues and
+	#archives (valid shows, closed/removed leave, the gate runs before listing,
+	#most-voted-first) and the wiring of the workflow that commits
+	#docs/community-replays.json through a PR.
+	python3 scripts/test_generate_community_replay_catalog.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py
@@ -500,6 +515,8 @@ doc-checks-2:
 	#on abs x alive across the hops a wall climb takes. No ROM, no session.
 	python3 scripts/test_route_search.py
 	python3 scripts/test_mep_build.py
+	#ADR-0243 (F12.20): auto/rec-NNN/ recordings, project.json, the project kit.
+	python3 scripts/test_mep_project.py
 	#ADR-0231 (#447): an untouched sheet cell keeps the recorded rule and pixels.
 	python3 scripts/test_mep_build_recorded.py
 	#464: a blank sprite key never claims paint through a crop it shares.
@@ -610,7 +627,9 @@ doc-checks-4:
 ui: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 	mkdir -p $(OUTFOLDER)/Dependencies
 	rm -fr $(OUTFOLDER)/Dependencies/*
-	cp InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) $(OUTFOLDER)/$(SHAREDLIB)
+	#Issue #628: a new inode, never an in-place cp - a later process loading a signed
+	#Mach-O rewritten in place is SIGKILLed when the old image was still mapped.
+	./scripts/replace_file_atomic.sh InteropDLL/$(OBJFOLDER)/$(SHAREDLIB) $(OUTFOLDER)/$(SHAREDLIB)
 	#Called twice because the first call copies native libraries to the bin folder which need to be included in Dependencies.zip
 	#Don't run with AOT flags the first time to reduce build duration
 	cd UI && dotnet publish -c $(BUILD_TYPE) $(OPTIMIZEUI) -r $(MESENPLATFORM)
@@ -697,7 +716,7 @@ core-unit-tests: scripts/core_unit_tests
 #the shader cases (scripts/fetch_librashader_macos.sh). Separate from
 #core-unit-tests on purpose: that suite is host-free and runs on Linux CI.
 ifeq ($(UNAME_S),Darwin)
-scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
+scripts/metal_presenter_tests: scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/ShaderFrameFailures.h Core/Shared/Video/RendererSelection.h Core/Shared/Video/ShaderPresetApply.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/metal_presenter_tests.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -o $@
 
 metal-presenter-tests: scripts/metal_presenter_tests
@@ -708,7 +727,7 @@ metal-presenter-tests: scripts/metal_presenter_tests
 #GetShaderParams, one process per preset. A maintainer tool on a Metal Mac -
 #deliberately NOT part of doc-checks or any CI workflow: GPU results depend on
 #the machine. Extra flags: SWEEP_ARGS="--sample 30 --nframes 300 ...".
-scripts/shader_sweep_shot: scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h
+scripts/shader_sweep_shot: scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm MacOS/MetalPresenter.h Core/Shared/Video/ShaderFrameFailures.h
 	$(CXX) -std=c++17 -O2 -Wall -Werror -fobjc-arc -I . -I Core -I Utilities scripts/shader_sweep_shot.mm MacOS/MetalPresenter.mm -framework Foundation -framework AppKit -framework Metal -framework QuartzCore -framework ImageIO -o $@
 
 shader-sweep-tool: scripts/shader_sweep_shot
@@ -768,7 +787,7 @@ InteropDLL/$(OBJFOLDER)/$(SHAREDLIB): $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(CORE
 	mkdir -p bin
 	mkdir -p InteropDLL/$(OBJFOLDER)
 	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) -shared -o $(SHAREDLIB) $(DLLOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(LINUXOBJ) $(MACOSOBJ) $(LIBEVDEVOBJ) $(UTILOBJ) $(SDLOBJ) $(COREOBJ) -pthread $(FSLIB) $(LIBEVDEVLIB)
-	cp $(SHAREDLIB) bin/pgohelperlib.so
+	./scripts/replace_file_atomic.sh $(SHAREDLIB) bin/pgohelperlib.so
 	mv $(SHAREDLIB) InteropDLL/$(OBJFOLDER)
 
 pgo:

@@ -504,6 +504,29 @@ beside its routes:
   `screen_width`, so "the start of the current screen" is a boundary the rewind
   ladder can hold. `--ram-map`, `--progress-field` and `--screen-field` override
   the file and its defaults.
+
+  Four games ship one. `mm3/` and `ninjagaiden/` (F14.14/F14.15) have
+  committed routes. `castlevania/` and `megaman2/` (F14.19, ADR-0242 Q2) are
+  maps for games whose only committed route is a blind body that dies at its
+  first stall. A map written for such a game carries a **`verification`**
+  block, the experiment that verified it. The block holds
+  `checkpoints`, each with:
+
+  - an `id`;
+  - an `input` of `<n>f <buttons>` lines played from the previous checkpoint
+    (or from the state a `mint` names; the first checkpoint names its mint
+    or takes the block's);
+  - an `expect` per field: an exact `equals`, or a `gt`/`lt`/`eq`/`ne`
+    relation to an earlier checkpoint's reading.
+
+  Every field has to be expected at two checkpoints at least, one of them a
+  relation, so no field rests on a single read.
+  `scripts/test_ram_maps.py` checks that shape for every map. When the ROM is
+  in the library and `headless_record` is built, it also mints the state,
+  replays the checkpoints through one `step_emu` session and reads them
+  through `RamMap.read`, the harness's own read. A map's `progress` must stay
+  monotone across a room change: Castlevania's `abs_x` restarts at the castle
+  door, so its progress is `room * 4096 + abs_x`.
 - `jev-tips.json` — optional, and the schema above.
 
 `--no-jev` (F14.15, ADR-0238 §5) is the **search-alone arm**: no client is

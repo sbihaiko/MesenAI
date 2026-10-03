@@ -1,0 +1,86 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="240"
+	x:DataType="vm:RemasterWorkspaceViewModel"
+	x:Class="Mesen.Views.RemasterTileBrowserView"
+>
+	<!--G.7 (PRD Part B §13.5.3 W-R1 zone ②, W-R5): the kit's tiles in reading
+	order, one strip of categories over them. A click opens the PNG with the
+	OS default; hover or ▸ shows where its pixels came from (the honesty
+	surface). ✎ = painted, ⚠ = some of it was not seen in play.-->
+	<UserControl.Styles>
+		<Style Selector="Button.tile">
+			<Setter Property="Padding" Value="6" />
+			<Setter Property="Width" Value="120" />
+			<Setter Property="Background" Value="#303030" />
+		</Style>
+		<Style Selector="ToggleButton.chip">
+			<Setter Property="Padding" Value="10 3" />
+		</Style>
+	</UserControl.Styles>
+
+	<StackPanel Spacing="8" IsVisible="{Binding HasTiles}">
+		<!--W-R5 / ADR-0198 §3: a project imported against a patched ROM.-->
+		<Border Name="RemasterPatchedBanner" Background="#3A2F14" CornerRadius="6" Padding="10 6" IsVisible="{Binding IsPatchedProject}">
+			<TextBlock Text="{l:Translate lblPatchedProject}" />
+		</Border>
+		<TextBlock Name="RemasterKitProblems" Classes="reason" Text="{Binding KitProblemText}" IsVisible="{Binding KitProblemText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+		<ItemsControl Name="RemasterTileCategories" ItemsSource="{Binding TileCategories}">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<StackPanel Orientation="Horizontal" Spacing="6" />
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
+			<ItemsControl.ItemTemplate>
+				<DataTemplate x:DataType="vm:RemasterCategoryChip">
+					<ToggleButton Classes="chip" Content="{Binding Text}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnCategory" />
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+
+		<ItemsControl Name="RemasterTileList" ItemsSource="{Binding Tiles}">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
+			<ItemsControl.ItemTemplate>
+				<DataTemplate x:DataType="vm:RemasterTileRow">
+					<Panel>
+						<Button Classes="tile" Click="OnOpenTile" ToolTip.Tip="{Binding ToolTipText}">
+							<StackPanel Spacing="2">
+								<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+								<TextBlock Text="{Binding Caption}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" FontWeight="Bold" />
+								<TextBlock Text="{Binding CountText}" Classes="reason" TextWrapping="NoWrap" />
+								<TextBlock Classes="badges" Text="{Binding Badges}" TextWrapping="NoWrap" />
+							</StackPanel>
+						</Button>
+						<Button Classes="details" Content="▸" Padding="4 0" HorizontalAlignment="Right" VerticalAlignment="Top" Background="Transparent">
+							<Button.Flyout>
+								<Flyout Placement="BottomEdgeAlignedLeft">
+									<StackPanel Spacing="6" MaxWidth="320">
+										<TextBlock Classes="header" Text="{Binding Header}" FontWeight="Bold" />
+										<ItemsControl ItemsSource="{Binding Lines}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="x:String">
+													<TextBlock Classes="line" Text="{Binding}" />
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+										<Button Classes="open" Content="{l:Translate btnOpenTile}" HorizontalAlignment="Left" Click="OnOpenTile" />
+									</StackPanel>
+								</Flyout>
+							</Button.Flyout>
+						</Button>
+					</Panel>
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+	</StackPanel>
+</UserControl>

@@ -21,6 +21,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   exact `host` and/or `host_ends_with`. `kind: mediafire` fetches the
   `/file/` share page then the `downloadN.mediafire.com` CDN hop, which is
   re-checked against the same list.
+- Community-pack board items (`gh project item-list 3`) are read only
+  through `pack_board_fields.py` (`item_*` accessors, `normalize`, and its
+  `normalize <items.json>` CLI for workflows). gh keys a field by its name
+  with the first letter lowercased (`pack URL`, `pack Hash`); a private key
+  list drifted and blinded the identity and drift checks (#685). Guarded by
+  `test_pack_board_fields.py`.
 - `verify_community_install_from_zero.py` mirrors
   `CommunityPackCatalogMatcher`: exact `rom.sha1`/`rom.sha1s` first, then
   same-game identity (ROM filename vs catalog `game`) only for entries that
@@ -32,6 +38,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   no `core` prerequisite) must compile those `.cpp` files standalone -
   verify their `#include` list has no further undeclared link dependency
   before adding a makefile target for it.
+- A native library dropped onto an existing path (`MesenCore.dylib`/`.so`,
+  `librashader.dylib`) goes through `replace_file_atomic.sh` (temp file +
+  `mv`, a new inode), never a bare `cp`: on macOS a signed Mach-O rewritten
+  in place is SIGKILLed on the next load when the old image was still mapped
+  (#628). Guarded by `test_native_lib_atomic_replace.py`.
 - Compiled binaries (`core_unit_tests`, `roles_probe`, `headless_record`,
   `spike_sound_driver`, `metal_presenter_tests`) are build output, not source -
   never `git add` them. `.gitignore` at the repo root lists all five by name, so none of them show
@@ -50,10 +61,60 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   rewrite `[Replay] <game> - <alias> - <subtitle>`, verdict labels
   `replay:valid`/`replay:invalid`), downloading through `fetch_pack.py` with
   `replay_host_allowlist.json` (deliberately not `pack_host_allowlist.json`;
-  that merge is R.2). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
+  R.2 kept the two apart and embeds this one in the client too). Tests: `test_replay_lint.py`, `test_replay_submission.py`,
   `checks/verify_replay_form_and_workflow.py`. End-to-end with a ROM:
   `check_replay_recorded.sh` (`headless_record record-share=` /
-  `record-stock=` are the action and its negative control).
+  `record-stock=` are the action and its negative control). The title's game
+  is looked up by `GameSettings.txt`'s `NoIntroSHA1` first: on NES its `SHA1`
+  is the whole-file hash and never matches a No-Intro hash (#624).
+- **Shared replays, consume side (ADR-0205 R.2).** `replay_lint.py` also runs
+  section 8's structural gate (`settings`: MesenVersion/MovieFormatVersion as
+  `MesenMovie::Play` accepts them; `console`: Nes/Gameboy/Sms; `input`:
+  `Input.txt` present, non-empty, one `|`-led frame per line with a constant
+  field count, streamed with a 64 MB bound) and reports the archive's sha256.
+  `replay_submission.py --number` refuses a byte-identical copy of a row the
+  committed `docs/community-replays.json` lists (`duplicate`, naming the
+  earlier issue). `generate_community_replay_catalog.py` writes that file
+  from the open `replay:valid` issues without `replay:removed`, downloading
+  each attachment again (replay allow-list, 8 MB cap) and re-running the gate
+  before listing: grouped by the movie's own ROM SHA-1, one row per issue
+  (stable URL, sha256, size, console, author, subtitle, frames, `cheats[]`,
+  👍), most-👍-first, a later byte-identical copy dropped. A 404/410 drops the
+  row (stale, ADR-0148); any other download failure refuses to write. Tests:
+  `test_generate_community_replay_catalog.py`; `--issues-file`/`--archives-dir`
+  run it offline.
+- **Community cheats, publish side (ADR-0248 R.3).** `cheat_decoder.py` ports
+  the Core's NES/GB/SMS converters of `Core/Shared/CheatManager.cpp` (every
+  regex, bit table and quirk); `cheat_submission.py` is the section 3 gate of
+  `cheat-submitted.yml` (four form fields only; checks `game-sha1`,
+  `unknown-game`, `console`, `console-mismatch`, `code`, `description`,
+  `duplicate`; a duplicate is the same SHA-1 and the same *decoded* parts,
+  against the bundled list and earlier open `cheat:valid` issues). The known
+  games are the bundled list's SHA-1s plus the repository's No-Intro data
+  (`rom_target.py`, `docs/community-packs.json`). Change the Core's decoders
+  and `test_cheat_decoder_parity.py` fails until the port follows: it builds
+  `cheat_decode_dump.cpp` against the unmodified `CheatManager.cpp` (inert
+  link stubs for the emulator members it never calls) and needs a C++
+  compiler. Tests: `test_cheat_submission.py` (fixtures
+  `tests/fixtures/cheat-submission/`), `checks/verify_cheat_form_and_workflow.py`.
+- **Community cheats, consume side (ADR-0248 R.4).**
+  `generate_community_cheat_catalog.py` writes `docs/community-cheats.json`
+  from the open `cheat:valid` issues: grouped by SHA-1, one row per issue
+  (issue, console, code, description, 👍), most-👍-first. Each row is
+  re-checked with `cheat_submission.evaluate` against the other open rows and
+  the bundled list, so a hand-set label or a later duplicate stays out. The
+  file has no date (an idle run diffs nothing). `--issues-file` runs it
+  offline. Tests: `test_generate_community_cheat_catalog.py` (fixtures
+  `tests/fixtures/community-cheat-catalog/issues.json`).
+- **Cheat search by intent (ADR-0245 §4, ADR-0247; P.11, measured, not
+  adopted).** `cheat_intent.py` offers *one game's* `CheatDb.Nes.json`
+  entries as a closed Choice (`E<index>` plus `NONE`) to local Ollama
+  (loopback only, JSON-schema enum, no tools) or Jev (`jev_client.py`); the
+  only thing that passes is an exact offered name, and the output's
+  description and code are copied from the list, never from the model.
+  `cheat_intent_eval.py` scores the fixed set
+  `tests/fixtures/cheat-intent/intents.json`. Tests: `test_cheat_intent.py`
+  (fake backends; the key never in argv, body, stdout, stderr or the log).
 
 ## Work Guidance
 
@@ -92,8 +153,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
     the NSView shape Avalonia's `NativeControlHost` hands over, an unfiltered
     present that is byte-identical to a CPU nearest scale, and the fixture
     shader `tests/fixtures/shaders/scanlines.slangp` (its parameters,
-    clearing it, a broken preset falling back), plus the HUD overlay
-    uploads.
+    clearing it, a broken preset falling back), the GPU-hang drop (#584),
+    a per-frame chain failure reported once per episode (#593, injected
+    through `InjectFrameFailures`), plus the HUD overlay uploads.
   - `fetch_librashader_macos.sh` puts the sha256-pinned arm64 dylib in
     `UI/Dependencies/`; CI's macOS leg and `release_macos.sh` depend on it.
     It tries the mirror (release `librashader-macos-arm64-01febce6` of this
@@ -131,6 +193,20 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_headless_record_cwd.py` runs the built binary from a temp cwd and
   the repo root and asserts both load the same non-empty DB (it skips when
   the binary is not built).
+- The process-global core in `InteropDLL/EmuApiWrapper.cpp` (`_emu`,
+  `_keyManager`, `_mouseManager`) is destroyed only by `Release()`, never by
+  the static destructors `exit()` runs (issue #621: the headless test host
+  exits without `Release()` while thread-pool work still calls the core).
+  `test_core_exit_race.py` loads the built MesenCore through ctypes, keeps a
+  thread calling an export and calls C `exit()`; the child must exit 0 (it
+  skips when the core is not built; `MESEN_CORE_LIB=<path>` picks a build).
+- `test_core_mep_load_state.py` drives the same ctypes harness over pack
+  state the unit suite cannot link (the manager needs an Emulator): a failed
+  load keeps the running game's MEP state and recording (#694), the
+  `EnhancementPacks/<Game>/mep/` human layer is found (#695), and `<bgm>`/
+  `<sfx>` keep the on-disk spelling (#705). That last case needs a
+  case-sensitive folder - on macOS it mounts a throwaway case-sensitive APFS
+  image with `hdiutil` - and says SKIP when it cannot get one.
 - **Navigation sweep (ADR-0184, amended 2026-09-14; ADR-0239 §2/§4/§5)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
@@ -317,6 +393,29 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `PoseInput` — ADR-0181 §2's `held`/`never`, None when the block is
   absent) tolerates every optional field being missing; the producer
   contract is in `Core/AGENTS.md`.
+- **Pack-change exactness (P.9, ADR-0244)** — `pack_swap_exactness.py
+  [--console nes|sms|gb]` measures the in-place pack change
+  (`ReloadRomKeepingState`: save state to memory, reload, load it back)
+  against a fresh process launched with the target switches that loads the
+  same state from a file: every one of M frames pixel-identical (`capture`),
+  per-frame NES RAM, and the final `cpu.*`/video (`ppu.*` or `vdp.*`)/RAM
+  state fields byte-identical. It copies the ROM into its scratch folder
+  first — in the library the ROM's sibling-folder pack outranks every
+  installed one, and the swaps change nothing on screen (the first run
+  "passed" that way). Fixtures are minted per run, never committed. A
+  negative control (swap to B, reference A) must FAIL, and the two ROM-patch
+  transitions must answer `patch-restarted`. `test_pack_swap_exactness.py`
+  holds those verdicts and two static guards (the UI/Core
+  `InPlaceReloadResult` values, and the toggles/picker going through
+  `LoadRomHelper.ApplyPackChange`). Session verbs it drives
+  (`headless_record session`, `step_emu.py`): `mep <textures|audio|border>
+  <on|off>`, `mep <enable|disable> <container>`, `swap` (`ok
+  <restored|restarted|patch-restarted> <frame> <ms>`), `capture` (parks, waits
+  for the decoder — `HeadlessWaitForFrameDecode` — then `ok <frame> <w> <h>
+  <fnv-1a>`), `hd`, `logfile <path>`; launch flags `mep-noaudio`,
+  `mep-noborder`, and `mep-disable=` is repeatable. ⚠️ Without the decoder
+  wait a capture could return the previous frame on SMS (it stamps a frame
+  with the counter after its increment), which read as a one-frame mismatch.
 - `headless_record.cpp` counts a run in **emulated frames**, never in host
   seconds (ADR-0157/F9.14). Its `<seconds>` argument keeps its meaning and is
   converted to a frame count at startup; an `input=<script>` line is
@@ -1534,6 +1633,16 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   failing loudly (naming the offending language) when a constant is missing
   or unparseable in any of the three, and separately asserts the literal
   values 4/2000 and three-way cross-language equality.
+
+**Kit-key comparison (F14.20, ADR-0238 §5 clause 2):**
+`kit_new_keys.py --candidate LABEL=PATH --baseline LABEL=PATH...` counts
+`hires.txt` keys `(tileData, palette)` per pack and the candidate's keys no
+baseline has; a project folder unions its `auto/rec-NNN/` recordings. It is
+F14.15's unversioned `runs/f1415/cells.py`, versioned; `test_kit_new_keys.py`
+covers conditions, the decimal-below-`<ver>103` index rule and the union.
+`headless_record recording-source=<play|tas|ai|script>` (with
+`recording-note=`) overrides what ADR-0243's `project.json` says drove a
+recording; a `jev_harness.py` script replayed by the recorder is `ai`.
 
 ## Verification
 

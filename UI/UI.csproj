@@ -612,6 +612,10 @@
          this exact LogicalName, never a repo-relative filesystem path (a published
          app has no scripts/ tree). -->
     <EmbeddedResource Include="../scripts/pack_host_allowlist.json" LogicalName="Mesen.pack_host_allowlist.json" />
+    <!-- ADR-0205 R.2: the replay attachment hosts (github.com/user-attachments and
+         its objects.githubusercontent.com redirect), the same file R.1's CI fetch
+         reads; CommunityReplayCatalogFetcher loads it by this LogicalName. -->
+    <EmbeddedResource Include="../scripts/replay_host_allowlist.json" LogicalName="Mesen.replay_host_allowlist.json" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaXaml Update="Controls\FirmwareSelect.axaml">

@@ -12,6 +12,13 @@ Usage:
   python3 scripts/checks/verify_pack_host_allowlist_drift.py
   python3 scripts/checks/verify_pack_host_allowlist_drift.py --repo <root>
 
+ADR-0205 R.2 adds a second list on the same two readers:
+`scripts/replay_host_allowlist.json` (issue attachments), read by
+`fetch_pack.py --allowlist` in CI and embedded in the client for
+`CommunityReplayCatalogFetcher`. Its kinds must be dispatched on both sides
+too, and `UI/UI.csproj` must embed both files by their LogicalName (the client
+reads the manifest, never the filesystem).
+
 Exit 0 when the three sides agree; exit 1 with one error line per drift.
 """
 from __future__ import annotations
@@ -94,6 +101,26 @@ def check_texts(
     return errors
 
 
+EMBEDDED = {
+    "pack_host_allowlist.json": "Mesen.pack_host_allowlist.json",
+    "replay_host_allowlist.json": "Mesen.replay_host_allowlist.json",
+}
+
+
+def check_replay_list(replay_kinds: set[str], py_kinds: set[str], cs_kinds: set[str], csproj_text: str) -> list[str]:
+    """ADR-0205 R.2: the replay list's kinds and both embeds."""
+    errors = []
+    special = replay_kinds - {"direct"}
+    for side, kinds in (("fetch_pack.py", py_kinds), ("CommunityPackDownloader.cs", cs_kinds)):
+        missing = sorted(special - kinds)
+        if missing:
+            errors.append(f"replay_host_allowlist.json has kind(s) {side} does not dispatch: {missing}")
+    for name, logical in EMBEDDED.items():
+        if f'Include="../scripts/{name}" LogicalName="{logical}"' not in csproj_text:
+            errors.append(f"UI/UI.csproj must embed scripts/{name} as {logical}")
+    return errors
+
+
 def check_repo(repo: Path) -> list[str]:
     allowlist = repo / "scripts" / "pack_host_allowlist.json"
     fetch_pack = repo / "scripts" / "fetch_pack.py"
@@ -102,12 +129,14 @@ def check_repo(repo: Path) -> list[str]:
     for path in (allowlist, fetch_pack, downloader, validate):
         if not path.is_file():
             return [f"missing required file: {path.relative_to(repo)}"]
-    return check_texts(
-        json_kinds(allowlist),
-        py_special_kinds(fetch_pack.read_text(encoding="utf-8")),
-        cs_special_kinds(downloader.read_text(encoding="utf-8")),
-        validate.read_text(encoding="utf-8"),
-    )
+    py_kinds = py_special_kinds(fetch_pack.read_text(encoding="utf-8"))
+    cs_kinds = cs_special_kinds(downloader.read_text(encoding="utf-8"))
+    errors = check_texts(json_kinds(allowlist), py_kinds, cs_kinds, validate.read_text(encoding="utf-8"))
+    replay = repo / "scripts" / "replay_host_allowlist.json"
+    csproj = repo / "UI" / "UI.csproj"
+    if replay.is_file() and csproj.is_file():
+        errors += check_replay_list(json_kinds(replay), py_kinds, cs_kinds, csproj.read_text(encoding="utf-8"))
+    return errors
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,8 +154,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: {err}", file=sys.stderr)
         return 1
     print(
-        "PASS: pack host allow-list kinds agree across fetch_pack.py, "
-        "CommunityPackDownloader.cs, and community-pack-validate.yml"
+        "PASS: pack and replay host allow-list kinds agree across fetch_pack.py, "
+        "CommunityPackDownloader.cs, community-pack-validate.yml and the UI embeds"
     )
     return 0
 

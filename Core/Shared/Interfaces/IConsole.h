@@ -88,6 +88,12 @@ public:
 	}
 
 	virtual BaseVideoFilter* GetVideoFilter(bool getDefaultFilter) = 0;
+	//ADR-0246 (P.13): true when GetVideoFilter(false) returns the pack-art
+	//filter (HdVideoFilter on NES, HdTileVideoFilter/SmsHdTileVideoFilter on
+	//GB/SMS), i.e. a loaded pack draws the picture. Settings > Look disables
+	//its scale-filter choice and labels NTSC as not applied while it is true.
+	//Consoles with no pack-art filter keep the default.
+	virtual bool IsDrawingPackArt() { return false; }
 	virtual void GetScreenRotationOverride(uint32_t& rotation) {}
 
 	virtual uint32_t GetFrameCount() = 0;

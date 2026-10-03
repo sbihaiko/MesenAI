@@ -67,8 +67,9 @@ namespace Mesen.Config.Shortcuts
 		SetScale9x,
 		SetScale10x,
 		ToggleFullscreen,
-		//P.4 (PRD Part B §6): opens/closes the thin Player-mode overlay
-		//(Resume, Save/Load slot, Pack, Settings, Advanced GUI, Quit). Default
+		//P.4/G.2 (PRD Part B §6, §13.5.2 W-P4): opens/closes the Player-mode
+		//pause overlay (Resume, Save states, Pack, Enhancements, Cheats,
+		//Settings, Quit game); Esc order is game → overlay → resume. Default
 		//Esc on keyboard; a controller binding is a config choice. Only acted
 		//on while UiMode == Player (Advanced ignores the press), and in Player
 		//it owns its key(s): UiModeShortcutPrecedence suppresses any Pause

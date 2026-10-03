@@ -32,7 +32,7 @@ using System.Threading.Tasks;
 
 namespace Mesen.Windows
 {
-	public class MainWindow : MesenWindow
+	public partial class MainWindow : MesenWindow
 	{
 		private DispatcherTimer _timerBackgroundFlag = new DispatcherTimer();
 		private MainWindowViewModel _model = null!;
@@ -43,6 +43,7 @@ namespace Mesen.Windows
 		private MouseManager? _mouseManager = null;
 		private ContentControl _audioPlayer;
 		private MainMenuView _mainMenu;
+		private WorkspaceShellBar _shellBar;
 		private CommandLineHelper? _cmdLine;
 
 		private bool _testModeEnabled;
@@ -51,11 +52,35 @@ namespace Mesen.Windows
 
 		private bool _preventFullscreenToggle = false;
 
+		//The headless tests close a window and keep the process-global core for
+		//the next test: EmuApi.Release cannot be undone in one process. Null is
+		//EmuApi.Release (not an initializer, so the constructor never names it).
+		public Action? ReleaseCore { get; set; }
+
+		//#658: the Core's load thread waits here for the UI's answer (W-P13's
+		//BIOS sheet, the classic firmware dialog) while it holds its load locks.
+		private readonly CoreRequestWaits _coreRequests = new();
+
 		private Panel _rendererPanel;
 		private NativeRenderer _renderer;
 		private SoftwareRendererView _softwareRenderer;
 		private Size _rendererSize;
 		private bool _usesSoftwareRenderer;
+
+		//#619: the startup work OnOpened runs on a thread-pool thread (the core
+		//init, then Dispatcher.UIThread.Post). Headless tests wait on it, so it
+		//never outlives the test that opened the window.
+		public Task Startup { get; private set; } = Task.CompletedTask;
+
+		//#681: completes once Startup has finished (the core is initialized and
+		//the command-line files' post is queued). On a cold launch the OS's
+		//open-documents event can arrive before that; RunWhenStarted holds it.
+		private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public void RunWhenStarted(Action action)
+		{
+			_started.Task.ContinueWith(_ => Dispatcher.UIThread.Post(action), TaskScheduler.Default);
+		}
 
 		private FrameInfo _prevScreenSize;
 
@@ -106,11 +131,41 @@ namespace Mesen.Windows
 				if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerOverlayVisible) && _model.IsPlayerOverlayVisible) {
 					Dispatcher.UIThread.Post(() => this.GetControl<Button>("OverlayResumeButton")?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerPackPickerVisible) && _model.IsPlayerPackPickerVisible) {
-					Dispatcher.UIThread.Post(() => this.GetControl<ItemsControl>("PackPickerList")?.GetVisualDescendants().OfType<Button>().FirstOrDefault()?.Focus());
+					Dispatcher.UIThread.Post(FocusPackPickerChoice);
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
-					Dispatcher.UIThread.Post(() => this.GetControl<CheckBox>("EnhancementsTexturesCheckBox")?.Focus());
+					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsTexturesCheckBox")?.Focus());
+				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPackDetailVisible) && _model.IsPackDetailVisible) {
+					//G.4 (W-P6): Change pack… when it can act, else Done.
+					Dispatcher.UIThread.Post(() => FindNamedDescendant(_model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton")?.Focus());
+				} else if(e.PropertyName == nameof(MainWindowViewModel.IsSaveStatesSheetVisible) && _model.IsSaveStatesSheetVisible) {
+					//G.2: the W-P4 Save states sheet, same D-pad/A/B reason.
+					Dispatcher.UIThread.Post(() => this.GetControl<Button>("SaveStatesSaveButton")?.Focus());
 				}
 			};
+			//P.10: the Cheats sheet gets focus on its search box (or Done when the
+			//search cannot work on this console), same D-pad/A/B reason as above.
+			_model.CheatsSheet.PropertyChanged += (s, e) => {
+				if(e.PropertyName == nameof(PlayerCheatsSheetViewModel.IsVisible) && _model.CheatsSheet.IsVisible) {
+					Dispatcher.UIThread.Post(() => {
+						string name = _model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton";
+						Control? target = this.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
+						target?.Focus();
+					});
+				}
+			};
+			//R.2: the Shared replays sheet focuses its first Watch, else Done.
+			_model.ReplaysSheet.PropertyChanged += (s, e) => {
+				if(e.PropertyName == nameof(PlayerReplaysSheetViewModel.IsVisible) && _model.ReplaysSheet.IsVisible) {
+					Dispatcher.UIThread.Post(() => {
+						List<Control> controls = this.GetVisualDescendants().OfType<Control>().ToList();
+						Control? target = controls.FirstOrDefault(c => c.Name == "ReplaysWatchButton" && c.IsEffectivelyEnabled) ?? controls.FirstOrDefault(c => c.Name == "ReplaysDoneButton");
+						target?.Focus();
+					});
+				}
+			};
+
+			//G.5: the Play edge-flow sheets' focus, reload and controller poll.
+			PlayEdgeFlowsWiring.Attach(this, _model);
 
 			_shortcutHandler = new ShortcutHandler(this);
 
@@ -129,6 +184,10 @@ namespace Mesen.Windows
 			_audioPlayer = this.GetControl<ContentControl>("AudioPlayer");
 			_mainMenu = this.GetControl<MainMenuView>("MainMenu");
 			_mainMenu.MainMenu.Opened += MainMenu_Opened;
+			_shellBar = this.GetControl<WorkspaceShellBar>("ShellBar");
+			_shellBar.ToolsMenu.Opened += MainMenu_Opened;
+			InitShellTitleBar();
+			InitPlaySheets();
 			ConfigManager.Config.MainWindow.LoadWindowSettings(this);
 
 			Console.CancelKeyPress += Console_CancelKeyPress;
@@ -174,6 +233,12 @@ namespace Mesen.Windows
 		protected override void OnClosing(WindowClosingEventArgs e)
 		{
 			base.OnClosing(e);
+			//G.6 (W-X3): a recording or a Remaster job asks first, inline. Its
+			//answer is the one confirmation (rule 7), so ConfirmExit is skipped.
+			if(_needCloseValidation && _model != null && !_model.ConfirmQuit(() => { _needCloseValidation = false; Close(); })) {
+				e.Cancel = true;
+				return;
+			}
 			if(_needCloseValidation) {
 				e.Cancel = true;
 				ValidateExit();
@@ -199,9 +264,18 @@ namespace Mesen.Windows
 			}
 
 			_timerBackgroundFlag.Stop();
+			//#658: a load waiting on the BIOS sheet (or the classic firmware
+			//dialog) holds the Core's load locks that Stop takes on this thread,
+			//where the answer would run: answer every request first.
+			_model?.BiosSheet.Dismiss();
+			_coreRequests.Close();
 			EmuApi.Stop();
 			_listener?.Dispose();
-			EmuApi.Release();
+			if(ReleaseCore != null) {
+				ReleaseCore();
+			} else {
+				EmuApi.Release();
+			}
 			ConfigManager.Config.MainWindow.SaveWindowSettings(this);
 			ConfigManager.Config.Save();
 			_isClosing = true;
@@ -244,12 +318,10 @@ namespace Mesen.Windows
 			}
 		}
 
-		//P.4 (PRD Part B §6): Player-mode overlay items. The overlay is the
-		//couch surface - Resume/Quit pause-safe, Save/Load route to the existing
-		//slot grid (the same path the SaveStateDialog/LoadStateDialog shortcuts
-		//use), Pack opens the pack window (the pack picker is P.5), Settings
-		//opens the Preferences tab, and Advanced GUI switches modes (instant and
-		//persisted, chrome re-applies via the UiMode observer).
+		//P.4/G.2 (PRD Part B §6, §13.5.2 W-P4): the pause overlay's rows. Each
+		//one routes at a surface that already exists - the slot grids, the pack
+		//picker/window, the Enhancements panel, the Cheats sheet, the reduced
+		//Settings page - and a sheet opened here closes back to the overlay.
 
 		private void OnOverlayResume(object? sender, RoutedEventArgs e)
 		{
@@ -257,45 +329,20 @@ namespace Mesen.Windows
 			EmuApi.Resume();
 		}
 
-		private void OnOverlaySave(object? sender, RoutedEventArgs e)
+		private void OnOverlaySaveStates(object? sender, RoutedEventArgs e) => _model.OpenSaveStatesSheet();
+		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
+		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
+		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
+		private void OnSaveStatesReplays(object? sender, RoutedEventArgs e) => _model.OpenReplaysSheet();
+
+		//Same path the former Save slot / Load slot items took (and the
+		//SaveStateDialog/LoadStateDialog shortcuts use).
+		private void OpenSlotGrid(GameScreenMode mode)
 		{
-			_model.IsPlayerOverlayVisible = false;
 			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
 				ToggleFullscreen();
 			}
-			_model.RecentGames.Init(GameScreenMode.SaveState);
-		}
-
-		private void OnOverlayLoad(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
-				ToggleFullscreen();
-			}
-			_model.RecentGames.Init(GameScreenMode.LoadState);
-		}
-
-		private void OnOverlayPack(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			//P.5 §5: the current-pack chip opens the picker when 2+ distinct
-			//pack_ids exist (even with a stored choice - "changing the choice
-			//later"); otherwise the pack window inspects the single pack.
-			if(!_model.OpenPlayerPackPickerForChange(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1())) {
-				ApplicationHelper.GetOrCreateUniqueWindow(this, () => new EnhancementPacksWindow());
-			}
-		}
-
-		private void OnPickPlayerPack(object? sender, RoutedEventArgs e)
-		{
-			if(sender is Button button && button.Tag is string container) {
-				_model.PickPlayerPack(container);
-			}
-		}
-
-		private void OnDismissPlayerPackPicker(object? sender, RoutedEventArgs e)
-		{
-			_model.DismissPlayerPackPicker();
+			_model.OpenSlotGrid(mode);
 		}
 
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
@@ -305,56 +352,20 @@ namespace Mesen.Windows
 			_model.OpenEnhancementsPanel();
 		}
 
-		private void OnToggleTextures(object? sender, RoutedEventArgs e) => _model.ToggleTextures();
-		private void OnToggleAudio(object? sender, RoutedEventArgs e) => _model.ToggleAudio();
-		private void OnToggleBorder(object? sender, RoutedEventArgs e) => _model.ToggleBorder();
-		private void OnToggleWideScrn(object? sender, RoutedEventArgs e) => _model.ToggleWideScrn();
-		private void OnToggleHiRes(object? sender, RoutedEventArgs e) => _model.ToggleHiRes();
-		private void OnToggleOverclock(object? sender, RoutedEventArgs e) => _model.ToggleOverclock();
+		//P.10 (W-P11): replaces the overlay with the Cheats sheet.
+		private void OnOverlayCheats(object? sender, RoutedEventArgs e) => _model.OpenCheatsSheet();
 
-		private void OnCloseEnhancementsPanel(object? sender, RoutedEventArgs e)
+		//W-P4's Quit game powers the game off and lands on the Play home
+		//(§13.6); the emulator and the window stay open. The existing
+		//ConfirmExitResetPower preference still asks first, in place over the
+		//overlay, which stays up when the answer is no.
+		private async void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
 		{
-			_model.CloseEnhancementsPanel();
-		}
-
-		private void OnOverlaySettings(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			//PRD Part B §6: Player mode's Settings is the reduced essentials
-			//page (video / audio / input), not the full Preferences tab.
-			ApplicationHelper.GetOrCreateUniqueWindow(this, () => new ConfigWindow(ConfigWindowTab.Audio, playerMode: true));
-		}
-
-		private void OnOverlayAdvanced(object? sender, RoutedEventArgs e)
-		{
-			//SwitchToAdvancedMode closes the overlay through the UiMode observer.
-			_model.SwitchToAdvancedMode();
-		}
-
-		private void OnOverlayQuit(object? sender, RoutedEventArgs e)
-		{
-			_model.IsPlayerOverlayVisible = false;
-			Close();
-		}
-
-		//P.7 (§6.2): the Welcome card's one CTA doubles as its own dismissal -
-		//it never reappears once clicked, whether or not a ROM is actually
-		//chosen from the dialog. Reuses the existing Open-ROM shortcut/dialog
-		//(ShortcutHandler.OpenFile), not a new file-picker path.
-		private void OnWelcomeCardLoadRom(object? sender, RoutedEventArgs e)
-		{
-			ConfigManager.Config.PlayerEnhancements.WelcomeCardDismissed = true;
-			ConfigManager.Config.Save();
-			EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.OpenFile });
-		}
-
-		//P.7 (§6.2): resumes the most recent game, same action as clicking its
-		//tile in the recent-games grid.
-		private void OnContinueCard(object? sender, RoutedEventArgs e)
-		{
-			if(_model.RecentGames.GameEntries.Count > 0) {
-				_model.RecentGames.GameEntries[0].Load();
+			if(ConfigManager.Config.Preferences.ConfirmExitResetPower && await MesenMsgBox.Show(this, "ConfirmPowerOff", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
+				return;
 			}
+			_model.IsPlayerOverlayVisible = false;
+			LoadRomHelper.PowerOff();
 		}
 
 		protected override void OnOpened(EventArgs e)
@@ -382,7 +393,7 @@ namespace Mesen.Windows
 			//This also enables keyboard/gamepad navigation on the selection screen without having to click it first
 			this.FindDescendantOfType<StateGrid>()?.Focus();
 
-			Task.Run(() => {
+			Startup = Task.Run(() => {
 				CommandLineHelper cmdLine = new CommandLineHelper(Program.CommandLineArgs, true);
 				_cmdLine = cmdLine;
 
@@ -420,8 +431,21 @@ namespace Mesen.Windows
 				SingleInstance.Instance.ArgumentsReceived += Instance_ArgumentsReceived;
 
 				Dispatcher.UIThread.Post(() => {
+					if(cmdLine.FilesToLoad.Count > 0) {
+						//G.1 (PRD Part B §13.6, rule 11): a ROM opened from the OS
+						//lands in Play.
+						_model.LandInPlayForOsOpen();
+					}
 					cmdLine.LoadFiles();
 					cmdLine.OnAfterInit(this);
+
+					//G.1 (§13.2, §13.8 Q4): an upgraded install learns once that its
+					//menus moved under Tools ⋯. The text is the UI's own localized
+					//string (the core shows an unknown key verbatim);
+					//DisplayMessageHelper makes it visible with no game loaded.
+					if(_model.ConsumeClassicMenuNotice()) {
+						DisplayMessageHelper.DisplayMessage(ResourceHelper.GetMessage("ClassicMenuNoticeTitle"), ResourceHelper.GetMessage("ClassicMenuNoticeText"));
+					}
 
 					if(ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates) {
 						_model.MainMenu.CheckForUpdate(this, true);
@@ -430,6 +454,7 @@ namespace Mesen.Windows
 
 				ConfigApi.CheckShaderSupport();
 			});
+			Startup.ContinueWith(_ => _started.TrySetResult(), TaskScheduler.Default);
 		}
 
 		private void Instance_ArgumentsReceived(object? sender, ArgumentsReceivedEventArgs e)
@@ -441,6 +466,9 @@ namespace Mesen.Windows
 				_cmdLine = cmdLine;
 
 				ConfigManager.Config.ApplyConfig();
+				if(cmdLine.FilesToLoad.Count > 0) {
+					_model.LandInPlayForOsOpen();
+				}
 				cmdLine.LoadFiles();
 			});
 		}
@@ -451,7 +479,10 @@ namespace Mesen.Windows
 
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
-					CheatCodes.ApplyCheats();
+					//#690 (ADR-0184 §1): the legacy "Record while I play" setting
+					//(ADR-0243 Q3) starts a recording with the load; it holds back
+					//every code that is not a RAM code, as Remaster's does.
+					CheatCodes.SetRecordingArt(EmuApi.IsMepBootstrapping());
 					RomInfo romInfo = EmuApi.GetRomInfo();
 
 					Dispatcher.UIThread.Post(() => {
@@ -483,6 +514,8 @@ namespace Mesen.Windows
 					LiveRecordingSession.OnGameLoaded(romInfo);
 
 					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
+					bool loadedPaused = evtParams.IsPaused;
+					Dispatcher.UIThread.Post(() => _model.IsGamePaused = loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
 
 					//P.5 (PRD Part B §5/§6): Player pack UX - the picker opens
@@ -555,9 +588,16 @@ namespace Mesen.Windows
 					LoadRomHelper.ResetReloadCounter();
 					break;
 
+				//G.1 (W-S1): the shell bar shows while the game is paused.
+				case ConsoleNotificationType.GamePaused:
+				case ConsoleNotificationType.CodeBreak:
+					Dispatcher.UIThread.Post(() => _model.IsGamePaused = true);
+					break;
+
 				case ConsoleNotificationType.DebuggerResumed:
 				case ConsoleNotificationType.GameResumed:
 					Dispatcher.UIThread.Post(() => {
+						_model.IsGamePaused = false;
 						_model.RecentGames.Visible = false;
 						if(IsKeyboardFocusWithin) {
 							this.GetControl<Panel>("RendererPanel").Focus();
@@ -574,6 +614,7 @@ namespace Mesen.Windows
 				case ConsoleNotificationType.EmulationStopped:
 					LiveRecordingSession.OnEmulationStopped();
 					Dispatcher.UIThread.Post(() => {
+						_model.IsGamePaused = false;
 						_model.RomInfo = new RomInfo();
 						_model.RecentGames.Init(GameScreenMode.RecentGames);
 					});
@@ -594,30 +635,56 @@ namespace Mesen.Windows
 
 				case ConsoleNotificationType.MissingFirmware: {
 					MissingFirmwareMessage msg = Marshal.PtrToStructure<MissingFirmwareMessage>(e.Parameter);
-					TaskCompletionSource tcs = new TaskCompletionSource();
+					//#658: answered by the UI below, or by CloseEmu before it stops
+					//the Core; already answered when the app is quitting.
+					TaskCompletionSource wait = _coreRequests.Begin();
+					if(wait.Task.IsCompleted) {
+						break;
+					}
 					Dispatcher.UIThread.Post(async () => {
-						await FirmwareHelper.RequestFirmwareFile(msg);
-						tcs.SetResult();
+						try {
+							if(_coreRequests.IsClosed) {
+								return;
+							}
+							//G.5 W-P13: Player mode's Play gets the in-place sheet;
+							//Advanced (and Remaster/Share) keep the classic dialog loop.
+							if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
+								string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
+								await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
+							} else {
+								await FirmwareHelper.RequestFirmwareFile(msg);
+							}
+						} finally {
+							_coreRequests.End(wait);
+						}
 					});
-					tcs.Task.Wait();
+					wait.Task.Wait();
 					break;
 				}
 
 				case ConsoleNotificationType.SufamiTurboFilePrompt: {
 					SufamiTurboFilePromptMessage msg = Marshal.PtrToStructure<SufamiTurboFilePromptMessage>(e.Parameter);
-					TaskCompletionSource tcs = new TaskCompletionSource();
+					//#658: the same wait as MissingFirmware's.
+					TaskCompletionSource wait = _coreRequests.Begin();
+					if(wait.Task.IsCompleted) {
+						break;
+					}
 					Dispatcher.UIThread.Post(async () => {
-						if(await MesenMsgBox.Show(this, "PromptLoadSufamiTurbo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
-							string? selectedFile = await FileDialogHelper.OpenFile(null, this, FileDialogHelper.SufamiTurboExt);
-							if(selectedFile != null) {
-								byte[] file = Encoding.UTF8.GetBytes(selectedFile);
-								Array.Copy(file, msg.Filename, file.Length);
-								Marshal.StructureToPtr<SufamiTurboFilePromptMessage>(msg, e.Parameter, false);
+						try {
+							if(!_coreRequests.IsClosed && await MesenMsgBox.Show(this, "PromptLoadSufamiTurbo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
+								string? selectedFile = await FileDialogHelper.OpenFile(null, this, FileDialogHelper.SufamiTurboExt);
+								//Once answered by closing, the Core no longer reads the message.
+								if(selectedFile != null && !wait.Task.IsCompleted) {
+									byte[] file = Encoding.UTF8.GetBytes(selectedFile);
+									Array.Copy(file, msg.Filename, file.Length);
+									Marshal.StructureToPtr<SufamiTurboFilePromptMessage>(msg, e.Parameter, false);
+								}
 							}
+						} finally {
+							_coreRequests.End(wait);
 						}
-						tcs.SetResult();
 					});
-					tcs.Task.Wait();
+					wait.Task.Wait();
 					break;
 				}
 
@@ -657,7 +724,7 @@ namespace Mesen.Windows
 			double dpiScale = LayoutHelper.GetLayoutScale(this);
 			FrameInfo baseScreenSize = EmuApi.GetBaseScreenSize();
 			if(WindowState == WindowState.Normal) {
-				double menuHeight = ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height;
+				double menuHeight = (ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height) + ShellChromeHeight;
 				double height = ClientSize.Height - menuHeight - _audioPlayer.Bounds.Height;
 				if(baseScreenSize.Width == _prevScreenSize.Height && baseScreenSize.Height == _prevScreenSize.Width) {
 					//Rotation, swap sizes without changing scale
@@ -703,7 +770,7 @@ namespace Mesen.Windows
 				_rendererSize = new Size();
 
 				//When menu is set to auto-hide, don't count its height when calculating the window's final size
-				double menuHeight = ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height;
+				double menuHeight = (ConfigManager.Config.Preferences.AutoHideMenu ? 0 : _mainMenu.Bounds.Height) + ShellChromeHeight;
 
 				double width = Math.Max(MinWidth, Math.Round(screenSize.Height * aspectRatio * scale) / dpiScale);
 				double height = Math.Max(MinHeight, screenSize.Height * scale / dpiScale);
@@ -715,6 +782,10 @@ namespace Mesen.Windows
 				ResizeRenderer();
 			}
 		}
+
+		//G.1 (W-S1): the shell bar and status line, while on screen, take room
+		//from the game like the classic menu bar does.
+		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : 0;
 
 		private void ResizeRenderer()
 		{
@@ -779,6 +850,33 @@ namespace Mesen.Windows
 		{
 			_rendererSize = new Size();
 			ResizeRenderer();
+			UpdateShellTitleBarInset();
+		}
+
+		//G.1 (W-S1; user's choice 2026-10-02, "Integrar agora"): on macOS the
+		//shell bar is drawn in the title bar. It becomes the topmost row, so the
+		//optional classic bar sits right under it instead of above it (above
+		//would put the classic menus under the traffic lights). When the bar
+		//hides (a Play game running unpaused) the game fills the whole window
+		//and the traffic lights stay over its top-left corner; Esc/pause brings
+		//the bar back. Windows/Linux keep the in-window strip (ShellTitleBar).
+		private void InitShellTitleBar()
+		{
+			if(!ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS())) {
+				return;
+			}
+			ExtendClientAreaToDecorationsHint = true;
+			ExtendClientAreaTitleBarHeightHint = ShellTitleBar.Height;
+			if(_shellBar.Parent is DockPanel dock) {
+				dock.Children.Remove(_shellBar);
+				dock.Children.Insert(0, _shellBar);
+			}
+			UpdateShellTitleBarInset();
+		}
+
+		private void UpdateShellTitleBarInset()
+		{
+			_shellBar?.SetLeadingInset(ShellTitleBar.LeadingInset(ExtendClientAreaToDecorationsHint, WindowState == WindowState.FullScreen));
 		}
 
 		private void SetFullscreenMode(FullscreenMode mode, IntPtr windowHandle)
@@ -890,9 +988,37 @@ namespace Mesen.Windows
 			return false;
 		}
 
+		//G.1 (W-S3): ⌘1/⌘2/⌘3 (Ctrl+1/2/3 off macOS) switch to Play/Remaster/Share
+		//directly, in the switcher's fixed order. Handled before the key reaches
+		//the core, so it never doubles as an emulator input.
+		private bool ProcessWorkspaceShortcut(KeyEventArgs e)
+		{
+			KeyModifiers modifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+			if(e.KeyModifiers != modifier) {
+				return false;
+			}
+			int digit = e.Key switch {
+				Key.D1 or Key.NumPad1 => 1,
+				Key.D2 or Key.NumPad2 => 2,
+				Key.D3 or Key.NumPad3 => 3,
+				_ => 0
+			};
+			Workspace? target = WorkspaceShell.FromShortcutDigit(digit);
+			if(target == null) {
+				return false;
+			}
+			_model.SelectWorkspace(target.Value);
+			e.Handled = true;
+			return true;
+		}
+
 		private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
 		{
 			if(_testModeEnabled && e.KeyModifiers == KeyModifiers.Alt && ProcessTestModeShortcuts(e.Key)) {
+				return;
+			}
+
+			if(ProcessWorkspaceShortcut(e)) {
 				return;
 			}
 
@@ -975,7 +1101,7 @@ namespace Mesen.Windows
 
 		private void TimerUpdateBackgroundFlag(object? sender, EventArgs e)
 		{
-			bool focusInMenu = MenuHelper.IsFocusInMenu(_mainMenu.MainMenu);
+			bool focusInMenu = MenuHelper.IsFocusInMenu(_mainMenu.MainMenu) || MenuHelper.IsFocusInMenu(_shellBar.ToolsMenu);
 			if(focusInMenu && !_focusInMenu) {
 				InputApi.ResetKeyState();
 			}
@@ -992,7 +1118,7 @@ namespace Mesen.Windows
 			bool needPause = activeWindow == null && cfg.PauseWhenInBackground;
 			if(activeWindow != null) {
 				bool isConfigWindow = (activeWindow != this) && !DebugWindowManager.IsDebugWindow(activeWindow);
-				needPause |= cfg.PauseWhenInMenusAndConfig && !isConfigWindow && _mainMenu.MainMenu.IsOpen; //in main menu
+				needPause |= cfg.PauseWhenInMenusAndConfig && !isConfigWindow && (_mainMenu.MainMenu.IsOpen || _shellBar.ToolsMenu.IsOpen); //in main menu or Tools ⋯
 				needPause |= cfg.PauseWhenInMenusAndConfig && isConfigWindow; //in a window that's neither the main window nor a debug tool
 			}
 

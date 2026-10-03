@@ -147,6 +147,7 @@ public:
 	uint32_t GetMasterClockRate() override;
 
 	BaseVideoFilter* GetVideoFilter(bool getDefaultFilter) override;
+	bool IsDrawingPackArt() override;
 
 	RomFormat GetRomFormat() override;
 	AudioTrackInfo GetAudioTrackInfo() override;

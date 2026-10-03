@@ -131,6 +131,8 @@ public:
 	//F5.3: start recording the played music into <audioFolder> (fingerprints +
 	//MIDI, written when the console is destroyed or the bootstrap stops)
 	void StartAudioBootstrap(const string& audioFolder);
+	//ADR-0243: an explicit Stop saves fingerprints.json + midi/ now, not at console teardown
+	void StopAudioBootstrap();
 	void EnableBootstrapScreenCapture();
 
 	//F5.4d: coverage report for the HD Pack Builder window (read from any thread;
@@ -185,6 +187,7 @@ public:
 	ShortcutState IsShortcutAllowed(EmulatorShortcut shortcut, uint32_t shortcutParam) override;
 
 	BaseVideoFilter* GetVideoFilter(bool getDefaultFilter) override;
+	bool IsDrawingPackArt() override;
 
 	string GetHash(HashType hashType) override;
 	RomFormat GetRomFormat() override;

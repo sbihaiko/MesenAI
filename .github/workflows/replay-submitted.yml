@@ -64,8 +64,10 @@ jobs:
           gh label create replay --repo "$REPO" --color 1D76DB --description "Community-submitted gameplay replay (ADR-0205)" --force
           gh label create replay:valid --repo "$REPO" --color 0E8A16 --description "Accepted: a Record and share .mmo that passes the ADR-0205 section 3 lint" --force
           gh label create replay:invalid --repo "$REPO" --color D93F0B --description "Rejected: the attachment fails the ADR-0205 section 3 lint" --force
+          # Section 9's maintainer lever (R.2): never applied by this workflow.
+          gh label create replay:removed --repo "$REPO" --color 5319E7 --description "De-listed by a maintainer whatever the issue state (ADR-0205 section 9)" --force
 
-      - name: Validate the attachment (section 3 lint, section 5 title)
+      - name: Validate the attachment (section 3 lint, section 8 gate, section 7 duplicate, section 5 title)
         id: verdict
         run: |
           set -euo pipefail
@@ -79,11 +81,27 @@ jobs:
           open("title.txt", "w", encoding="utf-8").write(d["title"] or "")
           open("labels.txt", "w", encoding="utf-8").write(",".join(l["name"] for l in d["labels"]))
           PY
+          # Exit 75 (EXIT_TRANSIENT in replay_submission.py) means the
+          # attachment could not be fetched for a reason that is no verdict (a
+          # reset, a timeout, a 5xx): the step fails and the issue keeps the
+          # labels it has, so a network blip never de-lists a live replay
+          # (#700). Only a 404/410 or a refusal (allow-list, size cap) is a
+          # verdict, and that arrives as an ordinary verdict.json.
+          rc=0
           python3 scripts/replay_submission.py \
             --body-file body.txt \
             "--title=$(cat title.txt)" \
             --login "$ISSUE_LOGIN" \
-            --labels "$(cat labels.txt)" > verdict.json
+            --number "$ISSUE_NUMBER" \
+            --labels "$(cat labels.txt)" > verdict.json || rc=$?
+          if [ "$rc" -eq 75 ]; then
+            echo "transient=true" >> "$GITHUB_OUTPUT"
+            echo "::error::The attachment could not be fetched (transient); labels left as they are. Comment /revalidate to retry."
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
           python3 - <<'PY'
           import json
           v = json.load(open("verdict.json"))
@@ -125,7 +143,9 @@ jobs:
 
       # A crash in the lint step must not leave an earlier "valid" standing:
       # the artifact could have been swapped for one that cannot be checked.
+      # A transient fetch failure is not such a crash (#700): the labels stay,
+      # and the catalog generator re-downloads and re-gates every row anyway.
       - name: Withdraw replay:valid when the check itself failed
-        if: failure()
+        if: failure() && steps.verdict.outputs.transient != 'true'
         run: |
           gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "replay:valid" || true

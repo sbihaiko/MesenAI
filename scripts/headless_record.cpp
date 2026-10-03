@@ -5,7 +5,7 @@
 //corrupting memory at run time.
 //
 //Build:   make capture-tool
-//Usage:   scripts/headless_record <rom> <seconds> <output_prefix> [pal] [hdpack] [screenshot] [log] [hdpack-off|mep-off|mep-notextures|mep-nosynth|mep-disable=<container>] [romtiles] [filter=<name>] [live=<ms>]
+//Usage:   scripts/headless_record <rom> <seconds> <output_prefix> [pal] [hdpack] [screenshot] [log] [hdpack-off|mep-off|mep-notextures|mep-nosynth|mep-noaudio|mep-noborder|mep-disable=<container> (repeatable)] [romtiles] [filter=<name>] [live=<ms>]
 //         [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [movie=<file.bk2|file.mmo>] [cheat=AAAA:VV[:CC]]
 //         [record-share=<out.mmo>] [record-stock=<out.mmo>[@current|@save-data]]
 //
@@ -269,6 +269,8 @@ extern "C"
 	void SetShaderConfig(InteropShaderConfig config);
 	void SetEmulationConfig(EmulationConfig config);
 	void SetMepPackEnabled(const char* containerName, bool enabled);
+	//ADR-0243 (F12.20) - InteropDLL/EmuApiWrapper.cpp
+	void SetMepNextRecordingSource(const char* source, const char* note);
 	//F9.14 (ADR-0157) - InteropDLL/EmuApiWrapperHeadless.cpp
 	bool HeadlessLoadInputScript(const char* scriptText, double frameRate, char* outError, uint32_t maxErrorLength);
 	void HeadlessSetPauseFrame(uint32_t frame);
@@ -310,8 +312,15 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//F12.3 (ADR-0212) - ask the loaded NES pack to re-decode its repainted
 	//images. Declared in InteropDLL/EmuApiWrapperMep.cpp.
 	bool RequestMepImageReload();
+	//ADR-0244 (P.9) - the in-place pack change: save state to memory, reload
+	//the ROM, load the state back. Returns an InPlaceReloadResult (Emulator.h).
+	//Declared in EmuApiWrapperMep.cpp; driven by the session's "swap" request.
+	uint8_t ReloadRomKeepingState();
 	//F9.15 - in-memory frame capture (same wrapper file)
 	bool HeadlessCaptureFrame(uint32_t* outWidth, uint32_t* outHeight, uint32_t* outFrameNumber, uint32_t* outPixelCount);
+	//ADR-0244 (P.9) - wait for the decoder to finish the last frame it was
+	//handed; the session's "capture" calls it while parked (EmuApiWrapperHeadless.cpp).
+	void HeadlessWaitForFrameDecode();
 	uint32_t HeadlessReadCapturedPixels(uint32_t* outPixels, uint32_t maxPixels);
 	//ADR-0167 - HUD-only capture (same wrapper file); DisplayMessage already
 	//existed for the GUI (InteropDLL/EmuApiWrapper.cpp) and HeadlessSetOsdEnabled
@@ -653,6 +662,27 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 //  loadfile <path>           read a .mss, keep it and start from it.
 //                            reply: ok <id>
 //  frame                     reply: ok <frame>
+//  mep <switch> <on|off>     ADR-0244 (P.9): set one of the player's pack
+//                            switches - textures, audio or border - for the
+//                            next load, the way the Enhancements panel does
+//                            (SetEnhancementPackConfig). reply: ok
+//  mep <enable|disable> <container>
+//                            turn one installed pack on or off by container
+//                            name (SetMepPackEnabled). reply: ok
+//  swap                      ADR-0244: the in-place pack change itself
+//                            (ReloadRomKeepingState): save to memory, reload
+//                            the ROM with the switches above, load the state
+//                            back. The reload resumes the emulation thread for
+//                            one frame of the restored state before it parks
+//                            again, so the session then stands where a `run`
+//                            from the state would: see the comment at the verb.
+//                            reply: ok <restored|restarted|patch-restarted>
+//                            <frame> <ms>
+//  capture                   the frame the session is parked on, as the
+//                            screenshot pipeline sees it (HD art included).
+//                            reply: ok <frame number> <w> <h> <fnv-1a>
+//  hd                        reply: ok <1|0> - HD pack video live (NES only)
+//  logfile <path>            write the core message log to a file. reply: ok
 //  quit                      reply: ok, then exit 0
 //
 //`run` and `frame` answer with the same number: the frame the session is on,
@@ -668,7 +698,7 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 //as in a normal headless run. A malformed request is answered with "err" and
 //the session continues - one bad command among thousands should not throw away
 //a loaded ROM and every state held for it.
-static int RunStepSession(const std::string& rom, double fps)
+static int RunStepSession(const std::string& rom, double fps, EnhancementPackConfig& mep)
 {
 	//A state the session keeps in memory, with where the session stood when it
 	//was taken. Both frames, because they are not always one apart - they are
@@ -992,6 +1022,119 @@ static int RunStepSession(const std::string& rom, double fps)
 			send("ok " + std::to_string(nextStateId++));
 		} else if(verb == "frame") {
 			send("ok " + std::to_string(runFrame));
+		} else if(verb == "mep") {
+			size_t at = argument.find(' ');
+			std::string name = argument.substr(0, at);
+			std::string value = at == std::string::npos ? std::string() : argument.substr(at + 1);
+			bool on = value == "on";
+			if(name == "enable" || name == "disable") {
+				if(value.empty()) {
+					err("mep: " + name + " needs a container name");
+					continue;
+				}
+				SetMepPackEnabled(value.c_str(), name == "enable");
+			} else if(value != "on" && value != "off") {
+				err("mep: <switch> must be followed by on or off (" + argument + ")");
+				continue;
+			} else if(name == "textures") {
+				mep.EnableTextures = on;
+			} else if(name == "audio") {
+				mep.EnableAudio = on;
+			} else if(name == "border") {
+				mep.EnableBorder = on;
+			} else {
+				err("mep: unknown switch " + name + " (textures, audio, border, enable, disable)");
+				continue;
+			}
+			SetEnhancementPackConfig(mep);
+			send("ok");
+		} else if(verb == "swap") {
+			//The emulator is paused, so the new emulation thread runs exactly one
+			//frame of the restored state and parks. The session holds the lock
+			//across the call (SimpleLock is reentrant), so that thread cannot
+			//start before the restored counter has been read: the wait below then
+			//keys on the core's own value, never on the session's bookkeeping,
+			//whose `parkedFrame` is not the core's counter on every console (the
+			//GB and the SMS count a frame at a different point than the NES), and
+			//which raced the first frame when it was. Afterwards the session
+			//stands after that frame (`runFrame` the frame that just ran). How
+			//many frames a `run` then covers still differs by console, which is
+			//why scripts/pack_swap_exactness.py lines frames up by number.
+			//A failed restore leaves a fresh console, which starts from 0.
+			HeadlessLockEmulator();
+			auto started = std::chrono::steady_clock::now();
+			uint8_t result = ReloadRomKeepingState();
+			double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+			uint32_t from = HeadlessGetFrameCount();
+			HeadlessUnlockEmulator();
+			if(result == 2) {
+				err("swap: refused (no game, a movie, or netplay)");
+				continue;
+			}
+			auto waitStart = std::chrono::steady_clock::now();
+			while(HeadlessGetFrameCount() == from) {
+				if(std::chrono::duration<double>(std::chrono::steady_clock::now() - waitStart).count() > 30.0) {
+					err("swap: the emulation thread did not run its first frame");
+					fflush(stdout);
+					std::_Exit(1);
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			//Lock() returns once the thread has finished that frame and parked.
+			HeadlessLockEmulator();
+			parkedFrame = HeadlessGetFrameCount();
+			HeadlessUnlockEmulator();
+			runFrame = parkedFrame - 1;
+			char timing[32];
+			snprintf(timing, sizeof(timing), "%.1f", ms);
+			//3 = PatchRestarted: a pack's ROM patch on either side kept no state.
+			const char* outcome = result == 0 ? "restored " : result == 3 ? "patch-restarted " : "restarted ";
+			send(std::string("ok ") + outcome + std::to_string(parkedFrame) + " " + timing);
+		} else if(verb == "capture") {
+			//`run` returns with the thread asked to pause, not parked, and the
+			//video decoder runs on a thread of its own: park first, then wait for
+			//the decoder to hand over the frame that just finished.
+			//Parked, the frame the decoder last received is the one the session
+			//stands after; waiting for its decode makes the capture that frame
+			//and not the previous one, still on screen while it decodes.
+			HeadlessLockEmulator();
+			uint32_t want = HeadlessGetFrameCount();
+			HeadlessWaitForFrameDecode();
+			HeadlessUnlockEmulator();
+			uint32_t width = 0, height = 0, frameNumber = 0, pixelCount = 0;
+			bool captured = false;
+			auto waitStart = std::chrono::steady_clock::now();
+			while(std::chrono::duration<double>(std::chrono::steady_clock::now() - waitStart).count() < 5.0) {
+				captured = HeadlessCaptureFrame(&width, &height, &frameNumber, &pixelCount);
+				if(captured && frameNumber + 1 >= want) {
+					break;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			std::vector<uint32_t> pixels(pixelCount);
+			if(!captured || HeadlessReadCapturedPixels(pixels.data(), pixelCount) != pixelCount) {
+				err("capture: no decoded frame");
+				continue;
+			}
+			char reply[96];
+			snprintf(reply, sizeof(reply), "ok %u %u %u %08x", frameNumber, width, height, FrameCaptureMath::Checksum(pixels.data(), pixelCount));
+			send(reply);
+		} else if(verb == "hd") {
+			send(HeadlessIsNesHdPackVideoActive() ? "ok 1" : "ok 0");
+		} else if(verb == "logfile") {
+			std::string log(1 << 20, '\0');
+			GetLog(log.data(), (uint32_t)log.size());
+			log.resize(strlen(log.c_str()));
+			FILE* file = argument.empty() ? nullptr : fopen(argument.c_str(), "wb");
+			bool wrote = file && fwrite(log.data(), 1, log.size(), file) == log.size();
+			if(file) {
+				fclose(file);
+			}
+			if(wrote) {
+				send("ok");
+			} else {
+				err("logfile: cannot write " + argument);
+			}
 		} else if(verb == "quit") {
 			send("ok");
 			break;
@@ -1040,7 +1183,7 @@ int main(int argc, char** argv)
 		fprintf(stderr, "usage: %s <rom> <seconds> <output-prefix> [pal] [hdpack] [romtiles]\n"
 			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [shader=<preset.slangp>] [mep-off]\n"
 "       [reload-at-frame=<n>] [replace=<destination>=<source>]...\n"
-			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-forcepatch] [mep-disable=<pack>]\n"
+			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-noaudio] [mep-noborder] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
 			"       [movie=<file.bk2|file.mmo>] (excludes input= and state=)\n"
 			"       [record-share=<out.mmo>] (ADR-0205: the Record-and-share action; excludes movie= and state=)\n"
@@ -1049,6 +1192,8 @@ int main(int argc, char** argv)
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n"
+			"       [recording-source=<play|tas|ai|script>] [recording-note=<text>] (ADR-0243 Q2: what\n"
+			"                  project.json records as having driven this recording)\n"
 			"       [session] (F14.12: serve run/ram/state requests on stdin until quit,\n"
 			"                  instead of running <seconds> once - see RunStepSession)\n", argv[0]);
 		return 1;
@@ -1085,7 +1230,8 @@ int main(int argc, char** argv)
 	VideoFilterType videoFilter = VideoFilterType::None;
 	EnhancementPackConfig mep = {};
 	mep.BootstrapEnhancementFolder = false; //opt-in headless ("bootstrap" flag) - it writes beside the ROM
-	std::string mepDisable;
+	//Repeatable: ADR-0244's exactness harness launches with every pack but one off.
+	std::vector<std::string> mepDisable;
 	std::string stateFile;
 	std::string cdlPath; //"cdl=" - see the Code/Data Logger block below
 	//F9.22: written when the run reaches its frame target, so a stage reached
@@ -1103,6 +1249,11 @@ int main(int argc, char** argv)
 	//the top of this file for the two containers the Core accepts and for what a
 	//.mmo does to the settings pushed below.
 	std::string moviePath;
+	//"recording-source=" / "recording-note=" (ADR-0243 Q2, F14.20): override what
+	//project.json says drove the recording. An AI-produced script replayed here
+	//is "ai" (ADR-0242 Decision 3), not "script"; empty means the default below.
+	std::string recordingSource;
+	std::string recordingNote;
 //"record-share=": record the run with the Record-and-share action (ADR-0205
 //section 2) into this .mmo - the way slice R.1 produces its bounded input, and
 //the proof the scripts/replay_lint.py accepts the action's own output.
@@ -1213,6 +1364,10 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 			mep.EnableTextures = false;
 		} else if(strcmp(argv[i], "mep-nosynth") == 0) {
 			mep.EnableSynth = false;
+		} else if(strcmp(argv[i], "mep-noaudio") == 0) {
+			mep.EnableAudio = false; //the player's Audio switch (ADR-0149), off from the first load
+		} else if(strcmp(argv[i], "mep-noborder") == 0) {
+			mep.EnableBorder = false; //the player's Border switch (ADR-0149), likewise
 		} else if(strcmp(argv[i], "bootstrap") == 0) {
 			mep.BootstrapEnhancementFolder = true;
 		} else if(strcmp(argv[i], "mep-forcepatch") == 0) {
@@ -1244,6 +1399,17 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 				inputScriptText.append(buffer, read);
 			}
 			fclose(f);
+		} else if(strncmp(argv[i], "recording-source=", 17) == 0) {
+			recordingSource = argv[i] + 17;
+			//The same four names RemasterProject::IsKnownSource accepts (not
+			//included here: that header pulls in JsonReader, which this tool
+			//does not link)
+			if(recordingSource != "play" && recordingSource != "tas" && recordingSource != "ai" && recordingSource != "script") {
+				fprintf(stderr, "recording-source must be one of play, tas, ai, script: %s\n", recordingSource.c_str());
+				return 1;
+			}
+		} else if(strncmp(argv[i], "recording-note=", 15) == 0) {
+			recordingNote = argv[i] + 15;
 		} else if(strncmp(argv[i], "movie=", 6) == 0) {
 			moviePath = argv[i] + 6;
 		} else if(strncmp(argv[i], "record-share=", 13) == 0) {
@@ -1291,7 +1457,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 		} else if(strcmp(argv[i], "realtime") == 0) {
 			realtime = true;
 		} else if(strncmp(argv[i], "mep-disable=", 12) == 0) {
-			mepDisable = argv[i] + 12;
+			mepDisable.push_back(argv[i] + 12);
 		} else if(strncmp(argv[i], "hud-message=", 12) == 0) {
 			std::string spec = argv[i] + 12;
 			size_t sep = spec.find('|');
@@ -1511,8 +1677,8 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	SetEmulationConfig(emulation);
 
 	SetEnhancementPackConfig(mep);
-	if(!mepDisable.empty()) {
-		SetMepPackEnabled(mepDisable.c_str(), false);
+	for(const std::string& container : mepDisable) {
+		SetMepPackEnabled(container.c_str(), false);
 	}
 
 	//The script's own unit is the frame; 's' steps and the <seconds> argument
@@ -1543,6 +1709,14 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//HeadlessSetOsdEnabled(true) is turned on for the one instant a capture run
 	//queues its own test toast (see the capture block below).
 	HeadlessSetOsdEnabled(false);
+
+	//ADR-0243 Q2: project.json says what drove the recording - a movie is
+	//"tas", an input script "script", a run with neither the attract demo
+	//("play", the only thing a headless run plays by itself)
+	//("play", the only thing a headless run plays by itself); recording-source=
+	//overrides it, e.g. "ai" for a script jev_harness.py produced (F14.20)
+	std::string defaultSource = !moviePath.empty() ? "tas" : !inputScriptPath.empty() ? "script" : "play";
+	SetMepNextRecordingSource(recordingSource.empty() ? defaultSource.c_str() : recordingSource.c_str(), recordingNote.c_str());
 
 	if(!LoadRom((char*)rom.c_str(), (char*)"")) {
 		fprintf(stderr, "failed to load ROM: %s\n", rom.c_str());
@@ -1639,7 +1813,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//a driver reads what the launch accepted.
 	if(sessionMode) {
 		applyCheats();
-		return RunStepSession(rom, frameRate);
+		return RunStepSession(rom, frameRate, mep);
 	}
 
 	if(!moviePath.empty()) {

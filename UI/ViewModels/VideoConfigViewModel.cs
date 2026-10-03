@@ -14,7 +14,6 @@ namespace Mesen.ViewModels
 		public bool IsWindows { get; }
 		public bool IsWindows10 { get; }
 		public bool IsMacOs { get; }
-		public bool ShowShaderConfig { get; }
 
 		public IRelayCommand PresetCompositeCommand { get; }
 		public IRelayCommand PresetSVideoCommand { get; }
@@ -58,8 +57,6 @@ namespace Mesen.ViewModels
 			//ADR-0237: macOS runs the native Metal renderer unless the software
 			//renderer is picked, so the renderer options apply there as well.
 			IsMacOs = OperatingSystem.IsMacOS();
-
-			ShowShaderConfig = ConfigApi.CheckShaderSupport();
 
 			if(Design.IsDesignMode) {
 				return;
