@@ -119,6 +119,7 @@ namespace Mesen.ViewModels
 			MainMenu = new MainMenuViewModel(this);
 			RomInfo = new RomInfo();
 			RecentGames = new RecentGamesViewModel();
+			WatchPlaySurfaces();
 			UpdateShellState();
 			UpdateRemasterSurfaces();
 
@@ -540,8 +541,9 @@ namespace Mesen.ViewModels
 			//G.1: the native renderer is a native child view drawn above Avalonia
 			//content, so it is hidden explicitly outside Play (the emulator keeps
 			//running; only the picture is not shown). G.3: Remaster's recording
-			//view (W-R2) shows it too.
-			IsNativeRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface == null;
+			//view (W-R2) shows it too. The same reason hides it under W-P4 and the
+			//sheets opened over the game (PlayGameLayer).
+			IsNativeRendererVisible = PlayGameLayer.ShowsNativeRenderer(IsGameViewVisible, RecentGames.Visible, SoftwareRenderer.FrameSurface != null, IsPlaySurfaceOverGame);
 			IsSoftwareRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
 
 			if(Renderer != null) {

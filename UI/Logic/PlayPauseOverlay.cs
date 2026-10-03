@@ -213,3 +213,15 @@ public static class PlaySurfaceGame
 		return !wasLoaded || !isLoaded || !string.Equals(wasRomPath, isRomPath, StringComparison.Ordinal);
 	}
 }
+
+//The native renderer is a NativeControlHost: on macOS it is a native child
+//view drawn above every Avalonia control, so the pause overlay and the sheets
+//opened over the game were behind the picture, invisible (Esc only seemed to
+//pause). The picture is hidden while one of them is up.
+public static class PlayGameLayer
+{
+	public static bool ShowsNativeRenderer(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame)
+	{
+		return gameViewVisible && !recentsVisible && !softwareFrame && !surfaceOverGame;
+	}
+}
