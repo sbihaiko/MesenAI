@@ -60,6 +60,41 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
+		public void A_disabled_pack_has_no_badge()
+		{
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts(Sha1, LocalPack: true, PackDisabled: true)).Visible);
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts(Sha1, CommunityInstalled: true, PackDisabled: true)).Visible);
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: true, PackDisabled: true)).Visible);
+			Assert.True(RecentPackBadge.IsDisabled(new[] { "Other", "contra 80s" }, "Contra 80s"));
+			Assert.False(RecentPackBadge.IsDisabled(new[] { "Other" }, "Contra 80s"));
+			Assert.False(RecentPackBadge.IsDisabled(null, "Contra 80s"));
+			Assert.False(RecentPackBadge.IsDisabled(new[] { "" }, ""));
+		}
+
+		[Fact]
+		public void A_rom_that_prefers_no_pack_has_no_badge()
+		{
+			Assert.True(PackPreferenceResolver.IsNoPack(PackPreferenceResolver.NoPack));
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts(Sha1, LocalPack: true, PrefersNoPack: true)).Visible);
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts(Sha1, CatalogMatch: true, AutoInstallCommunityPacks: true, PrefersNoPack: true)).Visible);
+			Assert.False(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: true, PrefersNoPack: true)).Visible);
+		}
+
+		[Fact]
+		public void The_index_reads_the_pack_name_and_version_with_its_container()
+		{
+			using TempTree tree = new();
+			File.WriteAllText(Path.Combine(tree.Dir("packs/Contra 80s"), "pack.json"),
+				"{ \"name\": \"Contra 80s\", \"version\": \"1.2\", \"targets\": [ { \"sha1\": \"" + Sha1 + "\" } ] }");
+			File.WriteAllText(Path.Combine(tree.Dir("roms/Metroid (USA)/mep"), "pack.json"), "{ \"name\": \"Sibling\", \"version\": \"0.0.0\" }");
+
+			RecentPackIndex index = RecentPackIndex.Scan(tree.Path("packs"));
+			Assert.Equal(new LocalPackInfo("Contra 80s", "Contra 80s", "1.2"), index.FindLocalPack(Sha1.ToLowerInvariant(), "Contra (USA)", ""));
+			Assert.Equal(new LocalPackInfo("Metroid (USA)", "Sibling", "0.0.0"), index.FindLocalPack(OtherSha1, "Metroid (USA)", Path.Combine(tree.Path("roms"), "Metroid (USA).nes")));
+			Assert.Null(index.FindLocalPack(OtherSha1, "Zelda", ""));
+		}
+
+		[Fact]
 		public void Remembering_a_hash_puts_it_first_and_replaces_the_same_game()
 		{
 			List<RecentGameHash> list = new();

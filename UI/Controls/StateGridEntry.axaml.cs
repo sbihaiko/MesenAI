@@ -150,7 +150,7 @@ namespace Mesen.Controls
 			bool namedHdPack = isRecentGame && PlayHome.HasHdPack(ConfigManager.HdPackFolder, recentName);
 			RecentGameHash? recentHash = isRecentGame ? RecentGameHashes.Find(ConfigManager.Config.RecentFiles.GameHashes, recentName) : null;
 			bool autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
-			ApplyPackBadge(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: namedHdPack)));
+			ApplyPackBadge(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: namedHdPack, PackDisabled: namedHdPack && RecentPackLookup.Suppressed(recentName, recentHash))));
 
 			bool fileExists = File.Exists(game.FileName);
 			if(fileExists) {
@@ -172,9 +172,9 @@ namespace Mesen.Controls
 					Bitmap? img = null;
 					double aspectRatio = 0;
 					RecentPackBadgeState? badge = null;
-					if(isRecentGame && !namedHdPack && recentHash != null) {
+					if(isRecentGame && (!namedHdPack || recentHash != null)) {
 						try {
-							badge = RecentPackLookup.Badge(recentName, recentHash, namedHdPack, autoInstall);
+							badge = RecentPackLookup.Lookup(recentName, recentHash, namedHdPack, autoInstall).Badge;
 						} catch(Exception ex) {
 							EmuApi.WriteLogEntry("[PlayHome] pack badge lookup failed: " + ex.Message);
 						}

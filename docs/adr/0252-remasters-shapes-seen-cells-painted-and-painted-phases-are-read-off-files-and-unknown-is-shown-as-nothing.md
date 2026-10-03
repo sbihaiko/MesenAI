@@ -186,12 +186,11 @@ shown as 0. A known 0 has its own words. The rules are host-free in
 - The first W-R1 refresh after a kit job decodes every measurable tile's
   PNGs off the UI thread (26 ms for a real Contra kit of 33 tiles, measured
   2026-10-03). Afterwards only changed files are read again.
-- **Not wired:** the shell status line ("Contra (USA) · playing your project
-  · 412 cells painted"). The count is ready as
-  `RemasterWorkspaceViewModel.PaintedCellsText`. The status line itself
-  belongs to the shell (`WorkspaceShellViewModel`), which today shows
-  Remaster's text only while a job or recording runs in another workspace.
-  Wiring "at rest" text is a shell change, left to the slice that owns it.
+- The shell status line carries the count in Remaster at rest ("Contra (USA)
+  · playing your project · 412 cells painted"): `WorkspaceShellViewModel`
+  follows `RemasterWorkspaceViewModel.PaintedCellsText`
+  (`FollowPaintedCells`), composed by `ShellStatusLine.ComposeRemaster`. An
+  unknown count adds no words, and Play and Share keep the game's own line.
 - **Trap:** `RemasterScreen.MaxScreensPerRecording` mirrors a core constant.
   Change both together.
 - **Trap:** a kit written before ADR-0225 has no version-2 figure sidecar, so

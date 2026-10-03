@@ -27,6 +27,7 @@ namespace Mesen.ViewModels
 		private bool _packAutoOnly;
 		private RemasterActivity _remasterActivity;
 		private string _remasterStatus = "";
+		private string _remasterPainted = "";
 		private string _packInstallStatus = "";
 		//G.5 (W-P13/W-P16): one clause an edge flow adds to Play's status line.
 		private string _playNotice = "";
@@ -86,6 +87,25 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
+		//W-R1/W-R5: the project's painted-cell sentence (RemasterWorkspaceViewModel.
+		//PaintedCellsText, "" when unknown) ends Remaster's status line at rest.
+		public void UpdateRemasterPainted(string text)
+		{
+			_remasterPainted = text ?? "";
+			RefreshChrome();
+		}
+
+		//Keeps the line's painted-cells clause in step with the Remaster workspace.
+		public void FollowPaintedCells(RemasterWorkspaceViewModel remaster)
+		{
+			remaster.PropertyChanged += (_, e) => {
+				if(e.PropertyName == nameof(RemasterWorkspaceViewModel.PaintedCellsText)) {
+					UpdateRemasterPainted(remaster.PaintedCellsText);
+				}
+			};
+			UpdateRemasterPainted(remaster.PaintedCellsText);
+		}
+
 		//G.4 (W-P9): a pack installing while the game plays; with the overlay
 		//open, the status line carries the pill's sentence. Empty = none.
 		public void UpdatePackInstall(string text)
@@ -143,7 +163,9 @@ namespace Mesen.ViewModels
 		{
 			IsBarVisible = WorkspaceShell.IsBarVisible(_state.Active, _gameLoaded, _paused, _sheetOpen);
 			HasGame = _gameLoaded;
-			StatusText = _gameLoaded ? ShellStatusLine.Compose(_gameName, PackPart()) : ResourceHelper.GetMessage("ShellStatusNoGame");
+			StatusText = !_gameLoaded ? ResourceHelper.GetMessage("ShellStatusNoGame")
+				: _state.Active == Workspace.Remaster ? ShellStatusLine.ComposeRemaster(_gameName, PackPart(), _remasterPainted)
+				: ShellStatusLine.Compose(_gameName, PackPart());
 			if(_state.IsPlay) {
 				StatusText = PlayStatusNotice.Compose(StatusText, _playNotice, _gameLoaded);
 			}

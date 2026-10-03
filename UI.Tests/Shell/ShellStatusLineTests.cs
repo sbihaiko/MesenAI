@@ -23,6 +23,17 @@ namespace Mesen.Tests.Shell
 			Assert.Equal("Contra (USA) · pack Contra 80s 1.2", ShellStatusLine.Compose("Contra (USA)", "pack " + ShellStatusLine.PackLabel("Contra 80s", "1.2")));
 		}
 
+		//W-R1/W-R5: Remaster at rest ends the line with the painted count; an
+		//unknown count (ADR-0252) adds no words.
+		[Fact]
+		public void Remaster_at_rest_ends_with_the_painted_cells_when_known()
+		{
+			Assert.Equal("Contra (USA) · 412 cells painted", ShellStatusLine.ComposeRemaster("Contra (USA)", "", "412 cells painted"));
+			Assert.Equal("Contra (USA) · playing your project · 412 cells painted", ShellStatusLine.ComposeRemaster("Contra (USA)", "playing your project", "412 cells painted"));
+			Assert.Equal("Contra (USA) · pack Contra 80s 1.2", ShellStatusLine.ComposeRemaster("Contra (USA)", "pack Contra 80s 1.2", ""));
+			Assert.Equal("Contra (USA)", ShellStatusLine.ComposeRemaster("Contra (USA)", "", "  "));
+		}
+
 		[Theory]
 		[InlineData("Contra 80s", "", "Contra 80s")]
 		[InlineData("Contra 80s", "0.0.0", "Contra 80s")]

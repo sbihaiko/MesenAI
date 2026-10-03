@@ -118,6 +118,7 @@ namespace Mesen.ViewModels
 			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
 				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 			Remaster.ActivityChanged += OnRemasterActivityChanged;
+			Shell.FollowPaintedCells(Remaster);
 			InitShare();
 
 			MainMenu = new MainMenuViewModel(this);
