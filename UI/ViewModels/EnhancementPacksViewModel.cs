@@ -106,8 +106,12 @@ namespace Mesen.ViewModels
 					Display = candidate.Name + " (" + candidate.Container + ")"
 				});
 			}
+			//W-P5's "No pack" (PackPreferenceResolver.NoPack): shown as itself
+			//here, never read back as "(default)".
+			choices.Add(new PreferredChoice { PackId = PackPreferenceResolver.NoPack, Display = "(no pack)" });
 			PreferredChoices = choices;
-			SelectedPreferredChoice = choices.FirstOrDefault(c => c.PackId == (preference ?? "")) ?? choices[0];
+			string selectedId = resolution.PrefersNoPack ? PackPreferenceResolver.NoPack : (preference ?? "");
+			SelectedPreferredChoice = choices.FirstOrDefault(c => c.PackId == selectedId) ?? choices[0];
 		}
 
 		partial void OnSelectedPreferredChoiceChanged(PreferredChoice? value)

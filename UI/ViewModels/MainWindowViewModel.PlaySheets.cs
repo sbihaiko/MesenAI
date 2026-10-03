@@ -115,8 +115,13 @@ namespace Mesen.ViewModels
 		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			IsPlayerOverlayVisible = false;
+			//PackRowRoute: W-P5 for 2+ packs, else W-P6 - also under "No pack"
+			//with one pack, where W-P6 shows the choice and Change Pack… leads back.
+			//#736: with a community-pack offer the row opens W-P6, which holds it.
 			bool offer = DecideCommunityOffer(packListText, romSha1, community).IsShown;
-			_packPickerFromOverlay = OpenPlayerPackPickerForChange(packListText, romSha1, offer);
+			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
+			bool picker = PackRowRoute.For(PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, offer) == PackRowTarget.Picker;
+			_packPickerFromOverlay = picker && OpenPlayerPackPickerForChange(packListText, romSha1, offer);
 			if(!_packPickerFromOverlay) {
 				OpenPackDetail(packListText, romSha1, packsFolder, siblingFolder, installedSourceSha256, community);
 			}
@@ -137,11 +142,13 @@ namespace Mesen.ViewModels
 			string folder = current == null ? "" : PackDetail.FolderFor(current.Origin, current.Container, packsFolder, siblingFolder);
 			PackAudioScan? scan = current != null && folder.Length > 0 && PackDetail.CanScan(current.Origin) ? PackAudioNotice.Scan(folder) : null;
 			PackDetailModel model = PackDetail.Build(current != null, entry?.Sections ?? "", scan,
-				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder);
+				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder, resolution.PrefersNoPack);
 
 			PackDetailHasPack = model.HasPack;
 			PackDetailTitle = current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
-			PackDetailByline = current == null ? ResourceHelper.GetMessage("PackDetailNoPackBody") : BuildPackByline(current);
+			//W-P5's "No pack" is a choice, not a missing pack: say so.
+			PackDetailByline = current != null ? BuildPackByline(current)
+				: ResourceHelper.GetMessage(resolution.PrefersNoPack ? "PackDetailNoPackChosenBody" : "PackDetailNoPackBody");
 			PackDetailTextures = model.Chips.Textures;
 			PackDetailAudio = model.Chips.Audio;
 			PackDetailPatch = model.Chips.Patch;

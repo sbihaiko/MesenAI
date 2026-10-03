@@ -142,9 +142,11 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.StartsWith("Choose a pack for ", window.FindNamed<TextBlock>("PackPickerTitle").Text);
 
 		RadioButton[] radios = window.FindNamed<ItemsControl>("PackPickerList").FindAll<RadioButton>().ToArray();
-		Assert.Equal(2, radios.Length);
+		//Two packs and W-P5's "No pack" row, last.
+		Assert.Equal(3, radios.Length);
 		Assert.True(radios[0].IsChecked);
 		Assert.False(radios[1].IsChecked);
+		Assert.False(radios[2].IsChecked);
 		Assert.True(radios[0].IsFocused);
 		Assert.True(window.FindNamed<Button>("PackPickerUseButton").IsEnabled);
 		//"author unknown", not the catalog's "?" (W-P5).

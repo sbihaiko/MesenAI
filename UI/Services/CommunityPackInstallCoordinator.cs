@@ -307,12 +307,14 @@ namespace Mesen.Services
 		private static (CommunityPackInstallOutcome? Gate, string OutFolder) EvaluateGates(
 			EnhancementPackConfig config, CommunityPackCatalogEntry entry, string containerName, CommunityPackLoadTarget startedFor, bool userRequested)
 		{
-			//ADR-0146: no consent dialog - the master switch alone decides.
-			if(!userRequested && !config.AutoInstallCommunityPacks) {
-				return (CommunityPackInstallOutcome.Skipped("AutoInstallCommunityPacks is off"), "");
-			}
-			if(!userRequested && config.DisabledPacks.Contains(containerName, StringComparer.OrdinalIgnoreCase)) {
-				return (CommunityPackInstallOutcome.Skipped("pack disabled by user"), "");
+			//ADR-0146: no consent dialog - the master switch decides, and a user
+			//disable (this pack, or W-P5's "No pack" for this ROM) overrides it.
+			//#736: an install the player asked for skips both.
+			string? skip = userRequested ? null : CommunityPackAutoInstallGate.SkipReason(config.AutoInstallCommunityPacks,
+				config.DisabledPacks.Contains(containerName, StringComparer.OrdinalIgnoreCase),
+				PackPreferenceResolver.IsNoPack(config.GetRomPackPreference(startedFor.RomSha1)));
+			if(skip != null) {
+				return (CommunityPackInstallOutcome.Skipped(skip), "");
 			}
 
 			string outFolder = ResolveOutFolder(containerName, startedFor);

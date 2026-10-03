@@ -226,7 +226,8 @@ namespace Mesen.ViewModels
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
-			bool open = PlayerPackPicker.ShouldOpen(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.PreferredContainer != null);
+			//W-P5's "No pack" is a stored choice too: it applies silently.
+			bool open = PlayerPackPicker.ShouldOpen(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.HasEffectivePreference);
 			IsPlayerPackPickerVisible = open;
 			return open;
 		}
@@ -248,8 +249,9 @@ namespace Mesen.ViewModels
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
-			int distinct = PlayerPackPicker.DistinctPackIdCount(resolution.Candidates);
-			if(PackRowRoute.For(distinct, hasSibling, hasCommunityOffer) == PackRowTarget.Detail) {
+			//2+ packs, or "No pack" with a pack to go back to (W-P5); an offer
+			//stays on W-P6 (#736).
+			if(hasCommunityOffer || !PlayerPackPicker.CanChangeChoice(hasSibling, PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), resolution.PrefersNoPack)) {
 				return false;
 			}
 			IsPlayerPackPickerVisible = true;
@@ -286,8 +288,14 @@ namespace Mesen.ViewModels
 				.OrderByDescending(c => c.Votes)
 				.ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
 				.ToList();
-			//G.4 (W-P5): one radio starts selected.
-			SelectInitialPackChoice(resolution.PreferredContainer);
+			//W-P5: "No pack" is the last row, offered whenever a pack is listed.
+			if(PlayerPackPicker.OffersNoPack(PlayerPackChoices.Count)) {
+				PlayerPackChoices = PlayerPackChoices.Append(PlayerPackChoice.NoPackRow(
+					ResourceHelper.GetMessage("PackPickerNoPackTitle"),
+					ResourceHelper.GetMessage(PackPickerRow.NoPackDetailKey(Config.Audio.EnableEnhancedAudio)))).ToList();
+			}
+			//G.4 (W-P5): one radio starts selected - the stored choice, "No pack" included.
+			SelectInitialPackChoice(resolution.PrefersNoPack ? PackPreferenceResolver.NoPack : resolution.PreferredContainer);
 		}
 
 		private static List<PackPreferenceResolver.Candidate> OfferedCandidates(MepPackListResult parsed)
@@ -299,7 +307,8 @@ namespace Mesen.ViewModels
 				ContentId = e.ContentId,
 				Version = e.Version,
 				Enabled = e.Enabled,
-				IsAutoOnly = e.IsAutoOnly
+				IsAutoOnly = e.IsAutoOnly,
+				IsSibling = e.Source == PackOrigin.Sibling
 			}));
 		}
 
@@ -307,7 +316,7 @@ namespace Mesen.ViewModels
 		//PlayerPackPicker.CurrentContainer), not the picker's display order.
 		private PlayerPackChoice? RenderedPackChoice(PackPreferenceResolver.Resolution resolution)
 		{
-			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer);
+			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer, resolution.PrefersNoPack);
 			return container == null ? null : PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
 		}
 
@@ -343,11 +352,12 @@ namespace Mesen.ViewModels
 			Config.ApplyConfig();
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
-			//The chosen pack is enabled (#693), so it is what the core renders next.
-			_currentPackVersion = choice.Version;
-			_currentPackAutoOnly = choice.IsAutoOnly;
-			CurrentPackName = choice.Name;
-			CurrentPackLayers = choice.Layers;
+			//The chosen pack is enabled (#693), so it is what the core renders
+			//next; "No pack" renders none (W-P4's Pack row and the status line).
+			_currentPackVersion = choice.IsNoPack ? "" : choice.Version;
+			_currentPackAutoOnly = !choice.IsNoPack && choice.IsAutoOnly;
+			CurrentPackName = choice.IsNoPack ? "" : choice.Name;
+			CurrentPackLayers = choice.IsNoPack ? "" : choice.Layers;
 			//#691: from W-P4, back to W-P4 (in place) or to the game (restart).
 			PackPickReturn back = PackPickClose.After(_packPickerFromOverlay, LayerChangeKeepsPlace);
 			_packPickerFromOverlay = false;
@@ -680,6 +690,27 @@ namespace Mesen.ViewModels
 			string assets = count == 1 ? "asset" : "assets";
 			return count + " known-missing " + assets + " — declared by " + who + ", not by the author";
 		}
+
+		//W-P5's "No pack" row: its container and pack_id are the sentinel the
+		//preference stores (PackPreferenceResolver.NoPack), so Use This Pack
+		//stores it like any pick.
+		public bool IsNoPack { get; }
+
+		private PlayerPackChoice(string name, string detail)
+		{
+			Container = PackPreferenceResolver.NoPack;
+			PackId = PackPreferenceResolver.NoPack;
+			Name = name;
+			Detail = detail;
+			Author = "";
+			Version = "";
+			License = "";
+			Layers = "";
+			KnownMissingNote = "";
+			IsNoPack = true;
+		}
+
+		public static PlayerPackChoice NoPackRow(string name, string detail) => new(name, detail);
 
 		public override string ToString() => Name;
 	}

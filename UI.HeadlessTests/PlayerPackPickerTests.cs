@@ -51,7 +51,8 @@ public class PlayerPackPickerTests
 		Assert.True(picker.IsOnScreen());
 
 		Button[] choices = window.FindNamed<ItemsControl>("PackPickerList").FindAll<Button>().ToArray();
-		Assert.Equal(2, choices.Length);
+		//Two packs and W-P5's "No pack" row.
+		Assert.Equal(3, choices.Length);
 		Assert.Equal("Aaa Pack", choices[0].FindAll<TextBlock>().First().Text);
 
 		//Opening the picker focuses the first choice (posted, so RunJobs above
