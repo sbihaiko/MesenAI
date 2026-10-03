@@ -428,6 +428,7 @@
     <ClInclude Include="Gameboy\Input\GbController.h" />
     <ClInclude Include="NES\BaseNesPpu.h" />
     <ClInclude Include="NES\NesScanlineTraceValidity.h" />
+    <ClInclude Include="NES\NesWidescreenPpu.h" />
     <ClInclude Include="NES\NesWidescreenReveal.h" />
     <ClInclude Include="Gameboy\GbWidescreenReveal.h" />
     <ClInclude Include="SMS\SmsWidescreenReveal.h" />

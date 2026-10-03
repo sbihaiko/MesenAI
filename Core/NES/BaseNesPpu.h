@@ -4,6 +4,7 @@
 #include "Utilities/ISerializable.h"
 #include "NES/NesTypes.h"
 #include "NES/NesScanlineTraceValidity.h"
+#include "NES/NesWidescreenSupport.h"
 
 enum class ConsoleRegion;
 
@@ -195,6 +196,14 @@ public:
 	//HD-builder and NSF PPUs keep a standard 256-px frame.
 	__forceinline void OnRowBasisCaptured(int16_t row) {}
 	__forceinline void OnFrameBuilt(RenderedFrame& frame) {}
+
+	//ADR-0253 §4 (W.5): what the core measured for the running game - whether
+	//its side columns ever held real content beside the picture. Only the two
+	//PPUs that draw a picture measure (they share NesWidescreenPpu::State);
+	//this default is for the ones that do not, NsfPpu and the HD Pack
+	//recorder's, so the Widescreen switch keeps its stored value for them. Not
+	//a per-row call, so unlike the two hooks above it is a plain virtual.
+	virtual NesWidescreenSupport::Verdict GetWidescreenSupportVerdict() const { return NesWidescreenSupport::Verdict::Undecided; }
 
 	uint32_t GetFrameCount() { return _frameCount; }
 	uint32_t GetCurrentCycle() { return _cycle; }

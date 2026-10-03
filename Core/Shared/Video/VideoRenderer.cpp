@@ -352,10 +352,11 @@ void VideoRenderer::UpdatePackArtAssets()
 }
 
 //ADR-0253 §3: decodes the `<widescreen>` section's side art. Sizes are NOT
-//checked here: the console decides how many extra columns it has, and
-//WidescreenFallback::FillSideFromArt refuses an image whose size is not exactly
-//that run - a wrong-sized image falls to the next source in the chain instead
-//of being stretched or tiled across the side.
+//checked here: the frame being drawn decides, and
+//WidescreenFallback::FillSideFromArtForFrame refuses an image that is neither
+//that run nor a whole-number multiple of it (MEP-v1 §5.5's canvas scaled up for
+//an HD frame) - a wrong-sized image falls to the next source in the chain
+//instead of being stretched or tiled across the side.
 void VideoRenderer::LoadWidescreenArt(const string& folder)
 {
 	MepWidescreen art;
@@ -424,14 +425,19 @@ void VideoRenderer::ApplyWidescreenFallback(RenderedFrame& frame)
 	}
 	memcpy(_sideFillScratch.data(), frame.ExtendedSideFill, frame.Height);
 
+	//The art's canvas is fixed per console (MEP-v1 §5.5) and the frame's side run
+	//is that canvas times the pack's scale on the HD path, so the two are
+	//reconciled here, in the renderer that knows the frame it is drawing on. A
+	//frame already at the art's own size - every non-HD frame - is copied as it
+	//is, and one the art does not divide evenly is refused exactly as before.
 	uint32_t* pixels = (uint32_t*)frame.FrameBuffer;
 	if(!_widescreenLeft.empty()) {
-		WidescreenFallback::FillSideFromArt(pixels, frame.Width, frame.Height, frame.ExtendedColumns, true,
-			_widescreenLeft.data(), _widescreenLeftSize.Width, _widescreenLeftSize.Height, _sideFillScratch.data());
+		WidescreenFallback::FillSideFromArtForFrame(pixels, frame.Width, frame.Height, frame.ExtendedColumns, true,
+			_widescreenLeft.data(), _widescreenLeftSize.Width, _widescreenLeftSize.Height, _sideFillScratch.data(), _widescreenScaled);
 	}
 	if(!_widescreenRight.empty()) {
-		WidescreenFallback::FillSideFromArt(pixels, frame.Width, frame.Height, frame.ExtendedColumns, false,
-			_widescreenRight.data(), _widescreenRightSize.Width, _widescreenRightSize.Height, _sideFillScratch.data());
+		WidescreenFallback::FillSideFromArtForFrame(pixels, frame.Width, frame.Height, frame.ExtendedColumns, false,
+			_widescreenRight.data(), _widescreenRightSize.Width, _widescreenRightSize.Height, _sideFillScratch.data(), _widescreenScaled);
 	}
 	frame.ExtendedSideFill = _sideFillScratch.data();
 }

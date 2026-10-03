@@ -167,6 +167,14 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 	videoFilter->SetBaseFrameInfo(_baseFrameSize);
 	FrameInfo frameSize = videoFilter->SendFrame((uint16_t*)_frame.FrameBuffer, _frame.FrameNumber, _frame.VideoPhase, _frame.Data, true, _frame);
 
+	//ADR-0253 §3 (W.3): the frame-width contract and the per-row side fill map,
+	//as the filter itself reports them - in the coordinates of the frame it just
+	//produced. The HD pack filter draws an extended frame at the pack's scale, so
+	//the console's own numbers would point the renderer's fallback chain at the
+	//wrong columns; a filter that rescaled the picture reports nothing.
+	BaseVideoFilter::FrameExtension extension = videoFilter->GetOutputFrameExtension();
+	FrameInfo filterFrameSize = frameSize;
+
 	uint32_t* outputBuffer = videoFilter->GetOutputBuffer();
 
 	OverscanDimensions overscan = videoFilter->GetOverscan();
@@ -195,15 +203,16 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 
 	RenderedFrame convertedFrame((void*)outputBuffer, frameSize.Width, frameSize.Height, _frame.Scale, _frame.FrameNumber, _frame.InputData);
 
-	//ADR-0253 §3 (W.3): the frame-width contract and the per-row side fill map
-	//travel to the renderer with the picture, so the fallback chain (pack art,
-	//then the border layer) can fill the side columns the console could not.
-	//Only when no filter rescaled the picture: the map's rows are the console's
-	//rows, and a scale/rotate filter would invalidate that correspondence.
-	if(frameSize.Width == _frame.Width && frameSize.Height == _frame.Height) {
-		convertedFrame.ExtendedColumns = _frame.ExtendedColumns;
-		convertedFrame.ExtendedSideFill = _frame.ExtendedSideFill;
+	//ADR-0253 §3 (W.3): the contract travels to the renderer with the picture, so
+	//the fallback chain (pack art, then the border layer) can fill the side
+	//columns the console could not. A scale/rotate filter below the video filter
+	//rescales the picture, though, and the map's rows are the filter's rows - so
+	//that alone drops it.
+	if(frameSize.Width != filterFrameSize.Width || frameSize.Height != filterFrameSize.Height) {
+		extension = {};
 	}
+	convertedFrame.ExtendedColumns = extension.Columns;
+	convertedFrame.ExtendedSideFill = extension.SideFill;
 
 	double aspectRatio = _emu->GetSettings()->GetAspectRatio(_emu->GetRegion(), _baseFrameSize);
 	if(frameSize.Height != _lastFrameSize.Height || frameSize.Width != _lastFrameSize.Width || aspectRatio != _lastAspectRatio) {

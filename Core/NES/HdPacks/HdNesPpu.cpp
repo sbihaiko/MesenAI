@@ -5,6 +5,8 @@
 #include "NES/NesMemoryManager.h"
 #include "NES/BaseMapper.h"
 #include "NES/HdPacks/HdData.h"
+#include "Shared/Emulator.h"
+#include "Shared/EnhancementPacks/MepPackManager.h"
 
 HdNesPpu::HdNesPpu(NesConsole* console, HdPackData* hdData) : NesPpu(console)
 {
@@ -50,21 +52,30 @@ void* HdNesPpu::OnBeforeSendFrame()
 	return info;
 }
 
+bool HdNesPpu::PackHasWidescreenArt()
+{
+	Emulator* emu = _console->GetEmulator();
+	MepPackManager* mgr = emu ? emu->GetEnhancementPackManager() : nullptr;
+	return mgr && mgr->HasWidescreenSection();
+}
+
 void HdNesPpu::OnRowBasisCaptured(int16_t row)
 {
 	if(row == 0 && _cycle == 257) {
-		//Pre-render line: the switch is latched once per frame, at the same point
-		//DefaultNesPpu latches its own.
-		_reveal.BeginFrame(IsRevealRequested());
+		//Pre-render line: the frame that just ended is the support probe's sample
+		//and the switch is latched once per frame, at the same point
+		//DefaultNesPpu latches its own (NesWidescreenPpu::State).
+		_widescreen.BeginFrame(_settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen,
+			_console->GetVsMainConsole() || _console->GetVsSubConsole(), _mapper != nullptr, PackHasWidescreenArt());
 	}
 
-	uint16_t* left = nullptr;
-	uint16_t* right = nullptr;
-	uint8_t* fill = nullptr;
-	if(!_reveal.RowSides(row, left, right, fill)) {
+	if(!_mapper) {
 		return;
 	}
 
+	//The basis and the mirroring are read whether or not the Reveal is on: they
+	//are also the per-game support measurement's sample (ADR-0253 §4), which is
+	//what tells the switch whether this game can use the Reveal at all.
 	NesWidescreenReveal::RowBasis basis;
 	basis.VideoRamAddr = _videoRamAddr;
 	basis.FineX = _xScroll;
@@ -75,6 +86,15 @@ void HdNesPpu::OnRowBasisCaptured(int16_t row)
 
 	MirroringType mirroring = NesWidescreenReveal::ClassifyMirroring(
 		_mapper->GetNametableSlotPage(0), _mapper->GetNametableSlotPage(1), _mapper->GetNametableSlotPage(2), _mapper->GetNametableSlotPage(3));
+
+	_widescreen.ObserveRow(basis, mirroring);
+
+	uint16_t* left = nullptr;
+	uint16_t* right = nullptr;
+	uint8_t* fill = nullptr;
+	if(!_widescreen.Reveal().RowSides(row, left, right, fill)) {
+		return;
+	}
 
 	//ADR-0253 §3 (W.3): the sides this row filled from the console's own map,
 	//same rule as NesWidescreenReveal::RenderRowSides.

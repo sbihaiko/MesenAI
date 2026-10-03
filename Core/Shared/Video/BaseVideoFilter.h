@@ -69,6 +69,25 @@ public:
 	//(the NES NTSC filters) gets the standard centre instead - VideoDecoder
 	//crops it. W.6 widens those filters.
 	virtual bool AcceptsExtendedFrame() { return false; }
+
+	//ADR-0253 §3 (W.3): the side-column contract of the frame this filter has
+	//just produced, in the filter's *own* output coordinates - how many columns
+	//on each side of the output are the Reveal's, and the per-row map of which of
+	//them the console filled (RenderedFrame::ExtendedColumns/ExtendedSideFill).
+	//
+	//The default is the identity: a filter that hands the frame over in its own
+	//geometry returns the console's contract unchanged, and one that rescaled the
+	//picture returns nothing at all - the map's rows are the console's 240, and a
+	//rescaled picture breaks that correspondence. A filter that draws an extended
+	//frame at a scale of its own (the HD pack filter) restates the contract in its
+	//own coordinates instead.
+	struct FrameExtension
+	{
+		uint32_t Columns = 0;
+		const uint8_t* SideFill = nullptr;
+	};
+	virtual FrameExtension GetOutputFrameExtension();
+
 	virtual OverscanDimensions GetOverscan();
 	void SetOverscan(OverscanDimensions dimensions);
 	FrameInfo GetFrameInfo(uint16_t* ppuOutputBuffer, bool enableOverscan);

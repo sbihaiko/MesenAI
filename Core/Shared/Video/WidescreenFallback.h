@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 //ADR-0253 §3 (PRD slice W.3): the content-aware fallback chain. While
 //widescreen is active, a side column the console cannot fill with real content
@@ -128,5 +129,64 @@ namespace WidescreenFallback
 			memcpy(frame + (size_t)y * frameWidth + x0, art + (size_t)y * artWidth, (size_t)artWidth * sizeof(uint32_t));
 			sideFill[y] |= bit;
 		}
+	}
+
+	//The art's canvas is fixed per console (MEP-v1 §5.5: 64 x 240 on the NES - the
+	//Reveal's own extra columns by the frame height) because that is the picture a
+	//pack author draws beside. An HD pack draws that same Reveal frame at the
+	//pack's own scale, so its frame's side runs are the art's canvas times a whole
+	//number, and the 1:1 copy above - which refuses any other size - would leave
+	//the sides to the border on a pack that conforms everywhere else.
+	//
+	//This is where that is reconciled, and only here: the art is scaled up to the
+	//frame's own side run, nearest-neighbour by the integer factor the two have in
+	//common (the pack's scale). The copy that follows is still 1:1 against the
+	//scaled art - no stretching, no cropping, no interpolation - and a frame that
+	//is not a whole-number multiple of the art on *both* axes is not this art's
+	//frame: nothing is scaled and the 1:1 rule refuses it as before.
+	//
+	//False, with `out` untouched, whenever the two canvases do not relate that way.
+	inline bool ScaleSideArt(const uint32_t* art, uint32_t artWidth, uint32_t artHeight,
+		uint32_t targetWidth, uint32_t targetHeight, std::vector<uint32_t>& out)
+	{
+		if(!art || artWidth == 0 || artHeight == 0 || targetWidth == 0 || targetHeight == 0) {
+			return false;
+		}
+		if(targetWidth % artWidth != 0 || targetHeight % artHeight != 0) {
+			return false;
+		}
+		uint32_t scale = targetWidth / artWidth;
+		if(targetHeight / artHeight != scale) {
+			return false;
+		}
+		out.resize((size_t)targetWidth * targetHeight);
+		for(uint32_t y = 0; y < targetHeight; y++) {
+			const uint32_t* src = art + (size_t)(y / scale) * artWidth;
+			uint32_t* dst = out.data() + (size_t)y * targetWidth;
+			for(uint32_t x = 0; x < targetWidth; x++) {
+				dst[x] = src[x / scale];
+			}
+		}
+		return true;
+	}
+
+	//The art link of §3's chain for one side of one frame: exactly
+	//FillSideFromArt, plus the one thing an HD frame needs - the pack's art scaled
+	//to that frame first (ScaleSideArt). Art already on the frame's own canvas is
+	//handed over as it is, which is every non-HD frame and costs nothing there.
+	//
+	//`scratch` holds the scaled copy and is the caller's: one buffer is enough for
+	//both sides, since each call copies out of it before returning, and owning it
+	//here would mean allocating per frame.
+	inline void FillSideFromArtForFrame(uint32_t* frame, uint32_t frameWidth, uint32_t frameHeight, uint32_t extendedColumns,
+		bool left, const uint32_t* art, uint32_t artWidth, uint32_t artHeight, uint8_t* sideFill, std::vector<uint32_t>& scratch)
+	{
+		if(art && (artWidth != extendedColumns || artHeight != frameHeight)
+			&& ScaleSideArt(art, artWidth, artHeight, extendedColumns, frameHeight, scratch)) {
+			art = scratch.data();
+			artWidth = extendedColumns;
+			artHeight = frameHeight;
+		}
+		FillSideFromArt(frame, frameWidth, frameHeight, extendedColumns, left, art, artWidth, artHeight, sideFill);
 	}
 }
