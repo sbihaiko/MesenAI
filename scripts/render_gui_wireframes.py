@@ -607,7 +607,7 @@ def w_s1():
     play_home_recents(c)
     x0, y0, x1, y1 = WIN
     marks = [(x0 + 175, y0 + 26, "1", "Current profile only — click to switch"),
-             (x1 - 30, y0 + 26, "2", "Classic tools (⋯)"),
+             (x1 - 30, y0 + 26, "2", "The door's tools menu"),
              (x0 + 560, y0 + 190, "3", "One profile's content"),
              (x0 + 300, y1 - 13, "4", "Status, read-only")]
     for mx, my, n, label in marks:
@@ -627,23 +627,35 @@ def w_s2():
     play_home_recents(c)
     c.titlebar("play", tools_open=True)
     x1, y0 = WIN[2], WIN[1]
-    mb = (x1 - 250, y0 + 44, x1 - 14, y0 + 44 + 270)
+    # ADR-0250: Play's own Tools ⋯ — one place per action; the pause overlay
+    # already holds Pause, Save states, Pack, Enhancements, Cheats, Settings, Quit game.
+    # The Play home holds Open a ROM… and the recents, so they are not repeated here.
+    # No game is loaded in this frame: the game items show disabled.
+    rows = [("Reset", "-"), ("Power Cycle", "-"), None,
+            ("Screenshot", "-"), ("Fullscreen", "⌃⌘F"), None,
+            ("Help", ">")]
+    h = 20 + sum(12 if r is None else 30 for r in rows) + 44
+    mb = (x1 - 270, y0 + 44, x1 - 14, y0 + 44 + h)
     c.shadow(mb, 10, blur=14, dy=6, alpha=80)
     c.rrect(mb, 10, fill=(250, 250, 252), outline=(215, 215, 220))
-    items = ["File", "Game", "Options", "Tools", "Debug", "Help"]
-    for i, it in enumerate(items):
-        yy = mb[1] + 10 + i * 30
-        if i == 3:
+    yy = mb[1] + 10
+    for r in rows:
+        if r is None:
+            c.line([(mb[0] + 12, yy + 6), (mb[2] - 12, yy + 6)], SEP)
+            yy += 12
+            continue
+        label, key = r
+        if label == "Fullscreen":
             c.rrect((mb[0] + 6, yy, mb[2] - 6, yy + 26), 6, fill=TINT["play"])
-        col = CARD if i == 3 else TEXT
-        c.text(mb[0] + 18, yy + 13, it, 13.5, 500, col, "lm")
-        c.icon("chev_right", mb[2] - 22, yy + 13, 11, col)
-    yy = mb[1] + 10 + 6 * 30 + 6
-    c.line([(mb[0] + 12, yy), (mb[2] - 12, yy)], SEP)
-    c.icon("check", mb[0] + 20, yy + 22, 11, TEXT)
-    c.text(mb[0] + 34, yy + 22, "Show Classic Menu Bar", 13.5, 500, TEXT, "lm")
-    c.text(mb[0] + 18, yy + 50, "Debugger, Lua, HD Pack Builder, netplay…", 11.5, 400, TEXT2, "lm")
-    c.caption("W-S2", "Classic tools menu (⋯) — unchanged contents")
+        col = CARD if label == "Fullscreen" else (TEXT3 if key == "-" else TEXT)
+        c.text(mb[0] + 18, yy + 13, label, 13.5, 500, col, "lm")
+        if key == ">":
+            c.icon("chev_right", mb[2] - 22, yy + 13, 11, col)
+        elif key and key != "-":
+            c.text(mb[2] - 16, yy + 13, key, 12.5, 400, CARD if col == CARD else TEXT3, "rm")
+        yy += 30
+    c.para(mb[0] + 18, yy + 6, "Disk, coin and tape items appear when the game uses them.", 220, 11.5, 400, TEXT2)
+    c.caption("W-S2", "Play's Tools menu — only what the home and the pause overlay don't hold")
     return c
 
 
@@ -652,25 +664,27 @@ def w_s3():
     play_home_recents(c)
     c.titlebar("play", open_switcher=True)
     x0, y0 = WIN[0], WIN[1]
-    pb = (x0 + 80, y0 + 46, x0 + 440, y0 + 46 + 262)
+    pb = (x0 + 80, y0 + 46, x0 + 440, y0 + 46 + 326)
     c.shadow(pb, 14, blur=18, dy=8, alpha=90)
     c.rrect(pb, 14, fill=(252, 252, 253), outline=(215, 215, 220))
     rows = [("play", "Play", "Open a game and play it, enhanced."),
             ("remaster", "Remaster", "Record a game, paint its art, see it in game."),
-            ("share", "Share", "Send a pack or a replay to the community.")]
+            ("share", "Share", "Send a pack or a replay to the community."),
+            ("classic", "Classic", "Every menu, debugger, Lua, HD Pack Builder.")]
+    tint = dict(TINT, classic=(142, 142, 147))
     for i, (p, n, d) in enumerate(rows):
         yy = pb[1] + 12 + i * 64
         if i == 0:
             c.rrect((pb[0] + 8, yy, pb[2] - 8, yy + 58), 10, fill=(235, 243, 255))
-        c.badge({"play": "play", "remaster": "brush", "share": "box"}[p], pb[0] + 20, yy + 13, 32, TINT[p])
+        c.badge({"play": "play", "remaster": "brush", "share": "box", "classic": "gear"}[p], pb[0] + 20, yy + 13, 32, tint[p])
         c.text(pb[0] + 64, yy + 21, n, 14.5, 650)
         c.text(pb[0] + 64, yy + 40, d, 12, 400, TEXT2)
         c.text(pb[2] - 46, yy + 29, f"⌘{i + 1}", 12.5, 500, TEXT3, "rm")
         if i == 0:
             c.icon("check", pb[2] - 26, yy + 29, 14, TINT["play"])
     c.line([(pb[0] + 16, pb[3] - 54), (pb[2] - 16, pb[3] - 54)], SEP)
-    c.para(pb[0] + 20, pb[3] - 40, "Switching keeps your game running. Only the chosen profile is shown.", 320, 12, 400, TEXT2)
-    c.caption("W-S3", "Profile switcher — the other profiles live only here", 3)
+    c.para(pb[0] + 20, pb[3] - 40, "Switching keeps your game running. Only the chosen door is shown.", 320, 12, 400, TEXT2)
+    c.caption("W-S3", "Door switcher — Play is the default; Classic is the original GUI", 4)
     return c
 
 
