@@ -21,6 +21,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   exact `host` and/or `host_ends_with`. `kind: mediafire` fetches the
   `/file/` share page then the `downloadN.mediafire.com` CDN hop, which is
   re-checked against the same list.
+- Community-pack board items (`gh project item-list 3`) are read only
+  through `pack_board_fields.py` (`item_*` accessors, `normalize`, and its
+  `normalize <items.json>` CLI for workflows). gh keys a field by its name
+  with the first letter lowercased (`pack URL`, `pack Hash`); a private key
+  list drifted and blinded the identity and drift checks (#685). Guarded by
+  `test_pack_board_fields.py`.
 - `verify_community_install_from_zero.py` mirrors
   `CommunityPackCatalogMatcher`: exact `rom.sha1`/`rom.sha1s` first, then
   same-game identity (ROM filename vs catalog `game`) only for entries that
