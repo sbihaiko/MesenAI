@@ -50,4 +50,37 @@ namespace ReplacementMuteMask
 		}
 		return mask;
 	}
+
+	//ADR-0052 item 3b: a pack track overrides level 2 only for the tracks that
+	//exist. While a replacement plays (mask != 0) the Enhanced synth - which
+	//reads the APU registers directly and so ignores the chip mute - must not
+	//re-voice the music the OGG replaces. A set bit on any melodic channel means
+	//that channel carries music being replaced (Compute() clears the bit of an
+	//SFX channel, and SFX voices are routed to the synth's dry Sfx slots, which
+	//this gate never touches), so the Lead/Harmony/Bass slots go quiet. Noise
+	//has its own bit. No pack track (mask 0), or a mask with only DMC, silences
+	//nothing: the synth is the fallback.
+	inline bool SynthSilencesMusic(uint8_t mask)
+	{
+		return (mask & ((1 << MelodicChannelCount) - 1)) != 0;
+	}
+
+	inline bool SynthSilencesNoise(uint8_t mask)
+	{
+		return IsMuted(mask, MelodicChannelCount);
+	}
+
+	//Crossfade (ADR-0142 philosophy): the gain moves toward 0 (silence) or 1 in
+	//kSynthFadeSeconds so the hand-over to the OGG neither clicks nor leaves a
+	//hole. Called once per audio flush with that flush's duration.
+	static constexpr double kSynthFadeSeconds = 0.040;
+
+	inline double SynthGainStep(double gain, bool silence, double dtSeconds)
+	{
+		double step = dtSeconds / kSynthFadeSeconds;
+		if(silence) {
+			return gain - step > 0.0 ? gain - step : 0.0;
+		}
+		return gain + step < 1.0 ? gain + step : 1.0;
+	}
 }

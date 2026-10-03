@@ -21,6 +21,8 @@ public:
 	//owns nothing but the mask; the policy (which channels stay muted) is
 	//NesAudioReplacer's, computed from the ChannelRoleClassifier.
 	void SetReplacementMuteMask(uint8_t mask) { _replacementMuteMask = mask; }
+	//Read by EnhancedSynth so it yields to a playing pack track (ADR-0052 3b)
+	uint8_t GetReplacementMuteMask() const { return _replacementMuteMask; }
 	static constexpr uint32_t CycleLength = 10000;
 	static constexpr uint32_t BitsPerSample = 16;
 
