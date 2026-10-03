@@ -534,15 +534,21 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 - **Scope.** Every style is under the `player` class. `MainWindow` binds
   `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
-  `ShellStatusLine`, and on Remaster's `RemasterWorkspaceHost` and
-  `RemasterRecordingStripHost` (which also carry `remaster`); nothing else
-  carries it. A component class outside the
+  `ShellStatusLine`, on Remaster's `RemasterWorkspaceHost` and
+  `RemasterRecordingStripHost` (which also carry `remaster`), and on the
+  Share views themselves (`ShareWorkspace`, `ShareRecordingStrip`, whose
+  DataContext is Share, hence a cast binding); nothing else carries it. A
+  component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic
   value in the view's own `Styles` and the `.player` override after it
   (`WorkspaceShellBar.axaml`, the status line in `MainWindow.axaml`,
-  `StateGridEntry.axaml`).
+  `StateGridEntry.axaml`). A view that carries the class itself can key its
+  classic styles off `v|View:not(.player)` (`ShareWorkspaceView.axaml`). A
+  Fluent `accent` class paints over `PlayerButtonTemplate`'s fill; clear its
+  `PART_ContentPresenter` background in Player if a button keeps `accent`
+  for Advanced.
 - **Tokens.** The script's palette (TEXT, TEXT2, TEXT3, SEP, WINBG, CARD,
   FILL, RED, ORANGE, TINT, TINT_TEXT) is transcribed as `Player*Color` /
   `Player*Brush`; `UI.Tests/Theme/PlayerThemeDriftTests` fails when either
@@ -567,26 +573,35 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     `Border.badge` (background = a badge colour) + `PathIcon`,
     `PathIcon.chevron` docked right, `TextBlock.value` docked right,
     `TextBlock.title`. `Button.row.text` is a row without a badge.
-  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.large` 80) with
-    a white `PathIcon`; tint by default.
+  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.xlarge` 40
+    below, `.hero` 56, `.large` 80) with a white `PathIcon`; tint by default.
+  - Steps: `Border.step` (below; `.step.large` is W-H3's 28 px circle with a
+    13 px number, declared after the wave 2 block) and `Rectangle.step-line`
+    (2 px SEP connector) - W-H3.
   - Surfaces: `Border.card` (`.hero` radius 16), `Border.sheet`,
-    `Border.overlay-card`, `Border.scrim`, `Border.page` (WINBG),
+    `Border.overlay-card`, `Border.scrim`, `Border.page` (WINBG), tokens
+    `PlayerPopoverBrush`/`PlayerPopoverBorderBrush` (below) and shadows
+    `PlayerShadowPopover`/`PlayerShadowMenu` for popovers and menus,
     `Separator.hairline`. Card, sheet and overlay-card set
     `TextElement.Foreground` to TEXT themselves (#716), so text on them is
     readable whatever its parent sets; build a new sheet on `Border.sheet`
     rather than a local dark background.
-  - Text: `TextBlock.large-title`, `title1`, `title2`, `title3`,
+  - Text: `TextBlock.large-title`, `title1`, `title2`, `title3` (for 26
+    bold and 16 semibold use `display` and `card-title`, below),
     `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
     `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
     (TEXT3), `tint`.
   - Controls: `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
     on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
-    Classes="tiles"` (one row of 176 x 132 recent-game tiles).
+    Classes="tiles"` (one row of 176 x 132 recent-game tiles),
+    `ComboBox.popup` (24 px macOS pop-up button: white, hairline, blue
+    up/down tab).
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
-    `ChevronDown`, `Record`, `More`, `Check`, `Warning`, `Stop`,
-    `ArrowUpRight`, `Sparkle` (alias of `Enhancements`).
+    `ChevronDown`, `ChevronLeft`, `Record`, `Replay`, `More`, `Check`,
+    `Lock`, `UpDown`, `Warning`, `Stop`, `ArrowUpRight`, `Sparkle` (alias
+    of `Enhancements`).
   - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
     - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
       `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),
