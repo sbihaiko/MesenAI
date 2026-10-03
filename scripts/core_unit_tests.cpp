@@ -72,6 +72,7 @@
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
+#include "GBA/GbaWidescreenReveal.h"
 #include "NES/NesWidescreenSupport.h"
 #include "Shared/Video/WidescreenFrameFlow.h"
 //W.6 asserts the two filters' own AcceptsExtendedFrame declaration (below).
@@ -3154,6 +3155,574 @@ namespace
 		const uint16_t* next = frames.Finish(standard.data());
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W253 (GBA): GBA text-BG widescreen Reveal (ADR-0253, slice W.7) --
+//The pure half of the GBA Reveal: which text-BG map columns sit beside the
+//240-px picture and hold content the picture does not already show (the black
+//fallback), the tilemap and tile fetch, the priority composite and the
+//frame-width contract (N = 22 extra columns per side, 284x160). VRAM and the
+//palette are plain arrays here and the module only ever reads them through
+//const pointers, so an extra column cannot move the debugger's memory-access
+//log or fire a bus hook.
+namespace
+{
+	uint16_t GbaColor(uint16_t r, uint16_t g, uint16_t b)
+	{
+		return (uint16_t)(r | (g << 5) | (b << 10));
+	}
+
+	//A GBA VRAM + palette pair, with the writers the tests need. The tilemap
+	//writer places entries the way the hardware lays the map out: a 512-wide
+	//map puts its second column page at +0x800, a 512-tall one its second row
+	//page at +0x1000.
+	struct GbaRevealVram
+	{
+		std::vector<uint8_t> Bytes = std::vector<uint8_t>(0x20000, 0);
+		std::vector<uint16_t> Palette = std::vector<uint16_t>(0x200, 0);
+
+		const uint8_t* Vram() const { return Bytes.data(); }
+		const uint16_t* PaletteData() const { return Palette.data(); }
+
+		void WriteTile4bpp(uint32_t charBase, uint16_t index, const uint8_t colors[8][8])
+		{
+			for(uint32_t y = 0; y < 8; y++) {
+				for(uint32_t x = 0; x < 8; x += 2) {
+					Bytes[charBase + index * 32 + y * 4 + (x >> 1)] = (uint8_t)((colors[y][x] & 0x0F) | ((colors[y][x + 1] & 0x0F) << 4));
+				}
+			}
+		}
+
+		void WriteTile8bpp(uint32_t charBase, uint16_t index, const uint8_t colors[8][8])
+		{
+			for(uint32_t y = 0; y < 8; y++) {
+				for(uint32_t x = 0; x < 8; x++) {
+					Bytes[charBase + index * 64 + y * 8 + x] = colors[y][x];
+				}
+			}
+		}
+
+		void WriteEntry(uint32_t tilemapAddr, uint16_t mapX, uint16_t mapY, uint16_t entry, uint16_t mapWidth = 256)
+		{
+			uint32_t addr = tilemapAddr
+				+ (uint32_t)(mapY >> 8) * (mapWidth == 512 ? 0x1000 : 0x800)
+				+ (uint32_t)(mapX >> 8) * 0x800
+				+ (uint32_t)((mapY & 0xFF) >> 3) * 64
+				+ (uint32_t)((mapX & 0xFF) >> 3) * 2;
+			Bytes[addr] = (uint8_t)(entry & 0xFF);
+			Bytes[addr + 1] = (uint8_t)(entry >> 8);
+		}
+
+		//Fills a whole map with one entry - the page layout is contiguous, so
+		//a flat write is what the hardware sees.
+		void FillTilemap(uint32_t tilemapAddr, uint32_t bytes, uint16_t entry)
+		{
+			for(uint32_t i = 0; i < bytes; i += 2) {
+				Bytes[tilemapAddr + i] = (uint8_t)(entry & 0xFF);
+				Bytes[tilemapAddr + i + 1] = (uint8_t)(entry >> 8);
+			}
+		}
+
+		void FillSolidTile(uint32_t charBase, uint16_t index, uint8_t color)
+		{
+			uint8_t colors[8][8];
+			for(int y = 0; y < 8; y++) {
+				for(int x = 0; x < 8; x++) {
+					colors[y][x] = color;
+				}
+			}
+			WriteTile4bpp(charBase, index, colors);
+		}
+	};
+
+	//Character data lives well past the maps (which start at 0x0000 and
+	//0x2000), so writing a tile never lands on a map entry.
+	constexpr uint32_t GbaRevealCharBase = 0x8000;
+
+	GbaWidescreenReveal::TextBgRow GbaRevealBg(uint16_t mapWidth, uint8_t priority, bool enabled = true)
+	{
+		GbaWidescreenReveal::TextBgRow bg;
+		bg.Enabled = enabled;
+		bg.Priority = priority;
+		bg.MapWidth = mapWidth;
+		bg.TilesetAddr = GbaRevealCharBase;
+		return bg;
+	}
+
+	uint16_t GbaRevealSide(const GbaWidescreenReveal::RowBasis& basis, int32_t screenX, const GbaRevealVram& v)
+	{
+		return GbaWidescreenReveal::CompositePixel(basis, screenX, v.Vram(), v.PaletteData());
+	}
+
+	void TestGbaRevealWidthContractIsTwentyTwoColumnsPerSide()
+	{
+		using namespace GbaWidescreenReveal;
+		Check(ExtraColumns == 22, "W253: the GBA Reveal adds 22 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 284, "W253: an extended GBA frame is 284 px wide", std::to_string(ExtendedWidth));
+
+		//The GBA's pixels are square, so the extended frame is shown at its
+		//own 284:160, which is 16:9 to within 0.2 %
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.SquarePixelInAuto = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, 284.0 / 160.0), "W253: an extended GBA frame is shown at its own square-pixel aspect", std::to_string(ratio));
+		Check(std::fabs(ratio / (16.0 / 9.0) - 1.0) < 0.03, "W253: the extended GBA frame is within 3 % of 16:9", std::to_string(ratio));
+
+		//A frame without extra columns keeps today's 16:9 (no Reveal to show)
+		AspectRatioMath::Inputs standard = in;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253: Widescreen on a standard GBA frame is unchanged");
+	}
+
+	void TestGbaRevealContentRuleFollowsTheMapWidth()
+	{
+		using namespace GbaWidescreenReveal;
+		TextBgRow wide = GbaRevealBg(512, 0);
+		TextBgRow narrow = GbaRevealBg(256, 0);
+
+		Check(ColumnHasContent(wide, -1) && ColumnHasContent(wide, -22), "W253: a 512-wide GBA map has content on the whole left side");
+		Check(ColumnHasContent(wide, 240) && ColumnHasContent(wide, 261), "W253: a 512-wide GBA map has content on the whole right side");
+		Check(ColumnHasContent(narrow, -1) && ColumnHasContent(narrow, -16), "W253: a 256-wide map has the 16 columns the picture does not show");
+		Check(!ColumnHasContent(narrow, -17) && !ColumnHasContent(narrow, -22), "W253: a 256-wide map wraps: the far left columns are the picture's own edge");
+		Check(ColumnHasContent(narrow, 255) && !ColumnHasContent(narrow, 256) && !ColumnHasContent(narrow, 261), "W253: a 256-wide map wraps at the right edge too");
+	}
+
+	void TestGbaRevealSamplesTextBgTiles()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+
+		//Tile 3: color 1 at its first pixel, color 2 at its last one
+		uint8_t tile3[8][8] = {};
+		tile3[0][0] = 1;
+		tile3[7][7] = 2;
+		v.WriteTile4bpp(GbaRevealCharBase, 3, tile3);
+		v.Palette[5 * 16 + 1] = GbaColor(31, 0, 0);
+		v.Palette[5 * 16 + 2] = GbaColor(0, 31, 0);
+		//Palette bank 5, so the tile's colors land in the second half of the palette
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12)), 512);
+
+		TextBgRow bg = GbaRevealBg(512, 0);
+		Check(SampleBgPixel(bg, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: the extra columns read the text BG's tilemap entry, tile and palette bank",
+			Hex16(SampleBgPixel(bg, 240, 0, v.Vram(), v.PaletteData())));
+		Check(SampleBgPixel(bg, 241, 0, v.Vram(), v.PaletteData()) == 0, "W253: a transparent tile pixel reads as transparent");
+		Check(SampleBgPixel(bg, 247, 7, v.Vram(), v.PaletteData()) == GbaColor(0, 31, 0), "W253: the tile's own row and column are addressed");
+
+		//H-flip moves the first pixel to the tile's last column, V-flip to its last row
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12) | 0x400), 512);
+		Check(SampleBgPixel(bg, 247, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: a horizontally flipped tile is sampled mirrored");
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12) | 0x800), 512);
+		Check(SampleBgPixel(bg, 240, 7, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: a vertically flipped tile is sampled mirrored");
+
+		//8bpp: one byte per pixel, straight into the 256-color palette
+		uint8_t tile4[8][8] = {};
+		tile4[0][0] = 0x2A;
+		v.WriteTile8bpp(GbaRevealCharBase, 4, tile4);
+		v.Palette[0x2A] = 0xFFFF;
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)4, 512);
+		TextBgRow bpp8 = bg;
+		bpp8.Bpp8 = true;
+		Check(SampleBgPixel(bpp8, 240, 0, v.Vram(), v.PaletteData()) == 0x7FFF, "W253: an 8bpp text BG uses the whole palette, masked to 15 bits",
+			Hex16(SampleBgPixel(bpp8, 240, 0, v.Vram(), v.PaletteData())));
+
+		//The map's vertical scroll moves the row the side column is taken from
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12)), 512);
+		TextBgRow scrolled = bg;
+		scrolled.ScrollY = 7;
+		Check(SampleBgPixel(scrolled, 247, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 31, 0), "W253: the vertical scroll moves the extra column's tile row");
+		scrolled.ScrollY = 255;
+		Check(SampleBgPixel(scrolled, 240, 1, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: the map wraps vertically at its own height, not at the picture's");
+
+		//The horizontal scroll picks *which* map column lands beside the
+		//window: at scroll 8 the column just right of the picture is map
+		//column 248, and 248 itself is then eight pixels further along
+		uint8_t tile6[8][8] = {};
+		tile6[0][0] = 3;
+		v.WriteTile4bpp(GbaRevealCharBase, 6, tile6);
+		v.Palette[6 * 16 + 3] = GbaColor(0, 0, 31);
+		v.WriteEntry(0x0000, 248, 0, (uint16_t)(6 | (6 << 12)), 512);
+		TextBgRow hscrolled = bg;
+		Check(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: with no horizontal scroll map column 240 is the one beside the window");
+		Check(SampleBgPixel(hscrolled, 248, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 0, 31), "W253: with no horizontal scroll map column 248 is eight pixels further right");
+		hscrolled.ScrollX = 8;
+		Check(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 0, 31), "W253: the horizontal scroll moves map column 248 to the column beside the window",
+			Hex16(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData())));
+	}
+
+	void TestGbaRevealCompositesTextBgsByPriority()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1); //BG0: tile 1 everywhere
+		v.FillTilemap(0x2000, 0x2000, 2); //BG1: tile 2 everywhere
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.FillSolidTile(GbaRevealCharBase, 2, 2);
+		v.Palette[0] = GbaColor(0, 0, 31);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		v.Palette[2] = GbaColor(0, 31, 0);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 2;
+		basis.Bgs[0] = GbaRevealBg(512, 1);
+		basis.Bgs[1] = GbaRevealBg(512, 0);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 31, 0), "W253: the text BG with the lowest priority number wins the side column",
+			Hex16(GbaRevealSide(basis, 245, v)));
+		basis.Bgs[0].Priority = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: BG0 keeps the column when two text BGs share a priority");
+
+		//A transparent pixel in the top BG lets the one below it show
+		v.FillSolidTile(GbaRevealCharBase, 1, 0);
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 31, 0), "W253: a transparent pixel lets the text BG below it show");
+
+		//With nothing left to draw the column shows the backdrop, like the picture
+		basis.Bgs[1].Enabled = false;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 0, 31), "W253: with every text BG transparent the extra column shows the backdrop");
+
+		//A 256-wide map wraps: it steps aside for a BG that has content, and
+		//leaves the column black when none does
+		basis.Bgs[0] = GbaRevealBg(256, 0);
+		basis.Bgs[1] = GbaRevealBg(512, 1);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+		Check(GbaRevealSide(basis, 258, v) == GbaColor(0, 31, 0), "W253: a wrapped 256-wide map steps aside for a text BG that has content there");
+		basis.Bgs[1].MapWidth = 256;
+		Check(GbaRevealSide(basis, 258, v) == BlackColor, "W253: two wrapped 256-wide maps leave the extra column black");
+	}
+
+	void TestGbaRevealDrawsBlackWhereItCannotFill()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.Palette[3] = GbaColor(31, 31, 31);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a text-mode row with a map to read is revealed");
+
+		//A bitmap mode (3, 4, 5) has no text BG at all
+		basis.TextMode = false;
+		Check(GbaRevealSide(basis, 245, v) == BlackColor, "W253: a bitmap mode draws the extra columns black");
+		basis.TextMode = true;
+
+		//Mode 1's BG2 is affine: a layer this slice does not reveal and one
+		//that may cover any pixel beside the picture
+		basis.AffineOverlay = true;
+		Check(GbaRevealSide(basis, 245, v) == BlackColor, "W253: an enabled affine BG on the row draws the extra columns black");
+		basis.AffineOverlay = false;
+
+		//Forced blank: the picture row is white, so the sides match it
+		basis.ForcedBlank = true;
+		Check(GbaRevealSide(basis, 245, v) == WhiteColor, "W253: a forced-blank row keeps its extra columns white, like the picture");
+		basis.ForcedBlank = false;
+
+		//The whole row at once, through the frame's own entry point
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(AllEqual(left, ExtraColumns, GbaColor(31, 0, 0)) && AllEqual(right, ExtraColumns, GbaColor(31, 0, 0)),
+			"W253: both sides of a revealed GBA row are drawn", Hex16(left[0]) + " " + Hex16(right[0]));
+
+		basis.TextMode = false;
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor),
+			"W253: both sides of an unrevealable GBA row are black");
+	}
+
+	void TestGbaRevealDrawsTheMapColumnsRightBesideTheWindow()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillSolidTile(GbaRevealCharBase, 5, 3);
+		v.FillSolidTile(GbaRevealCharBase, 6, 4);
+		v.Palette[3] = GbaColor(31, 0, 0);
+		v.Palette[4] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x0000, 511, 0, 5, 512); //map column 511 (one left of the picture)
+		v.WriteEntry(0x0000, 240, 0, 6, 512); //map column 240 (one right of it)
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(left[ExtraColumns - 1] == GbaColor(31, 0, 0), "W253: the last extra column left of the picture is the map column just before it",
+			Hex16(left[ExtraColumns - 1]));
+		Check(right[0] == GbaColor(0, 31, 0), "W253: the first extra column right of the picture is the map column just after it",
+			Hex16(right[0]));
+		//Map column 241 shares a tile with 240, so the entry drawn on it stands
+		//until the next tile column at 248
+		Check(AllEqual(right + 8, ExtraColumns - 8, BlackColor), "W253: a map tile column with no entry shows the backdrop, black here");
+	}
+
+	void TestGbaRevealFollowsMosaicBlocks()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillSolidTile(GbaRevealCharBase, 7, 1);
+		v.FillSolidTile(GbaRevealCharBase, 8, 2);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		v.Palette[2] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x0000, 240, 0, 7, 512); //the first tile column right of the window
+		v.WriteEntry(0x0000, 248, 0, 8, 512); //the next one
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		Check(GbaRevealSide(basis, 248, v) == GbaColor(0, 31, 0), "W253: without mosaic an extra column reads its own map column");
+
+		//A 16-px mosaic block spans two tile columns, so the block decides
+		basis.Bgs[0].Mosaic = true;
+		basis.MosaicSizeX = 15;
+		Check(GbaRevealSide(basis, 248, v) == GbaColor(31, 0, 0), "W253: a mosaic text BG takes the extra column from its block's first column");
+		Check(GbaRevealSide(basis, 255, v) == GbaColor(31, 0, 0), "W253: the block's last column reads the same pixel");
+
+		//Left of the window the block grid keeps running, so -1 is in the block
+		//that starts at -16 even though nothing there is the picture's own edge
+		v.WriteEntry(0x0000, 511, 0, 7, 512);
+		v.WriteEntry(0x0000, 496, 0, 8, 512);
+		Check(GbaRevealSide(basis, -1, v) == GbaColor(0, 31, 0), "W253: a mosaic block left of the window samples the block's own first column");
+		Check(GbaRevealSide(basis, -16, v) == GbaColor(0, 31, 0), "W253: the block's first column itself reads the same pixel");
+	}
+
+	void TestGbaRevealAppliesTheRowsColorEffect()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillTilemap(0x2000, 0x2000, 2);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.FillSolidTile(GbaRevealCharBase, 2, 2);
+		v.Palette[1] = GbaColor(31, 0, 0); //BG0: pure red
+		v.Palette[2] = GbaColor(0, 31, 0); //BG1: pure green
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 2;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		basis.Bgs[1] = GbaRevealBg(512, 1);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with no color effect the extra column shows the BG's own color");
+
+		//Increase brightness: the GBA's fade to white, at half strength
+		basis.Effect.Effect = 2;
+		basis.Effect.Enabled = true;
+		basis.Effect.Brightness = 8;
+		basis.Effect.MainTargets = 0x01;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 15, 15), "W253: a brightness fade applies to the extra columns",
+			Hex16(GbaRevealSide(basis, 245, v)));
+
+		//A layer the effect does not target, or an effect the region has off, stays put
+		basis.Effect.MainTargets = 0x02;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a layer outside the effect's target mask is not faded");
+		basis.Effect.MainTargets = 0x01;
+		basis.Effect.Enabled = false;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with the effect off for the region beside the picture nothing is faded");
+		basis.Effect.Enabled = true;
+		basis.Effect.Brightness = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a zero brightness leaves the extra column alone");
+
+		//Alpha blend: BG0 over BG1 at half strength each
+		basis.Effect.Effect = 1;
+		basis.Effect.Brightness = 8;
+		basis.Effect.MainCoeff = 8;
+		basis.Effect.SubCoeff = 8;
+		basis.Effect.SubTargets = 0x02;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(15, 15, 0), "W253: an alpha blend mixes the two text BGs in the extra columns",
+			Hex16(GbaRevealSide(basis, 245, v)));
+		basis.Effect.SubTargets = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with no sub-layer target the extra column keeps the top BG's color");
+	}
+
+	void TestGbaRevealOnlyReadsVramAndThePalette()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.Palette[1] = GbaColor(31, 0, 0);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+
+		std::vector<uint8_t> vramBefore = v.Bytes;
+		std::vector<uint16_t> paletteBefore = v.Palette;
+
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		uint16_t leftAgain[ExtraColumns] = {};
+		uint16_t rightAgain[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), leftAgain, rightAgain);
+
+		Check(!AllEqual(left, ExtraColumns, BlackColor), "W253: the side columns were really drawn", Hex16(left[0]));
+		Check(memcmp(left, leftAgain, sizeof(left)) == 0 && memcmp(right, rightAgain, sizeof(right)) == 0,
+			"W253: the extra columns are a pure function of the row's state, VRAM and the palette");
+		Check(v.Bytes == vramBefore && v.Palette == paletteBefore, "W253: the extra columns only read VRAM and the palette");
+	}
+
+	void TestGbaRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 7 + i / 240) & 0x7FFF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		Check(!frames.RowSides(0, left, right), "W253: with the switch off there are no extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off the frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253: the switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right) && left && right, "W253: a row's side columns are writable while active");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = GbaColor(31, 0, 0);
+				right[i] = GbaColor(0, 31, 0);
+			}
+		}
+		Check(!frames.RowSides(160, left, right) && !frames.RowSides(-1, left, right), "W253: rows outside 0-159 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253: an active frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253: the centre 240 columns of every row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, GbaColor(31, 0, 0)) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, GbaColor(0, 31, 0)),
+			"W253: a drawn row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253: a row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+
+		//Frame skipping: the PPU does not redraw the picture, so the extended
+		//frame of the last drawn one is held instead of flipping the aspect
+		frames.BeginFrame(true);
+		frames.RowSides(0, left, right);
+		const uint16_t* drawn = frames.Finish(standard.data());
+		frames.HoldLastFrame(true);
+		Check(!frames.IsActive(), "W253: a held GBA frame draws no side columns");
+		Check(frames.Finish(standard.data()) == drawn, "W253: a skipped GBA frame keeps the last extended frame");
+		frames.HoldLastFrame(false);
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off a skipped frame stays standard");
+	}
+
+	void TestGbaRevealHoldsAnExtendedFrameOnlyWhileTheRevealIsOn()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0x1234);
+		FrameBuffers frames;
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+
+		//The PPU's own order: latch the frame, decide about skipping, then build
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(false);
+		Check(frames.RowSides(0, left, right), "W253: a drawn frame hands out its side columns");
+		const uint16_t* drawn = frames.Finish(standard.data());
+		Check(drawn != nullptr, "W253: a drawn frame with the Reveal on is extended");
+
+		//The switch is turned off while the frame is being skipped: the frame
+		//must go back to the standard width, not keep the last extended one.
+		//This is the order the PPU uses, and the one where the mistake bites:
+		//BeginFrame already knows this frame is standard, so nothing is held.
+		frames.BeginFrame(false);
+		frames.HoldLastFrame(true);
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a skipped frame with the Reveal off stays standard");
+
+		//Skipping again with the Reveal back on keeps the last extended frame
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(true);
+		Check(frames.Finish(standard.data()) == drawn, "W253: a skipped frame with the Reveal on keeps the last extended frame");
+
+		//A frame the PPU does draw while the Reveal is on is never held
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(false);
+		Check(frames.Finish(standard.data()) != nullptr && frames.IsActive(), "W253: a drawn frame while the Reveal is on is extended, not held");
+	}
+
+	void TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0x1234);
+		FrameBuffers fresh;
+
+		//The switch goes on while the PPU is already skipping frames, so no
+		//extended frame exists to hold. Sending a standard one would flip the
+		//picture's width mid-turbo, which is what the hold exists to avoid:
+		//the frame is built with the black fallback on its sides instead.
+		fresh.BeginFrame(true);
+		fresh.HoldLastFrame(true);
+		const uint16_t* first = fresh.Finish(standard.data());
+		Check(first != nullptr, "W253: a skipped frame with the Reveal on is extended even before one was drawn");
+		if(first) {
+			Check(AllEqual(first, ExtraColumns, BlackColor) && AllEqual(first + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+				"W253: that frame falls back to black on both sides");
+			Check(memcmp(first + ExtraColumns, standard.data(), StandardWidth * sizeof(uint16_t)) == 0,
+				"W253: that frame's first row is the standard picture, bit for bit");
+		}
+	}
+
+	void TestGbaRevealOnlyRevealsTheModesTextBgs()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		uint8_t tile[8][8] = {};
+		tile[0][0] = 1;
+		v.WriteTile4bpp(GbaRevealCharBase, 7, tile);
+		v.Palette[1] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x4000, 240, 0, 7, 512); //BG3's own map, with an entry beside the window
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.ScreenY = 0;
+		basis.Bgs[3] = GbaRevealBg(512, 0);
+		basis.Bgs[3].TilemapAddr = 0x4000;
+
+		//BG mode 0 draws BG0-BG3 as text BGs; mode 1 draws BG0/BG1 as text and
+		//BG2 as affine, and never draws BG3 at all - so a BG3 whose enable bit
+		//is set in the registers must not appear beside the picture.
+		basis.BgCount = TextBgCount(0);
+		Check(GbaRevealSide(basis, 240, v) == GbaColor(0, 31, 0), "W253: BG mode 0 reveals BG3's map beside the picture");
+
+		basis.BgCount = TextBgCount(1);
+		Check(GbaRevealSide(basis, 240, v) == BlackColor, "W253: BG mode 1 does not reveal BG3, the PPU never draws it");
+
+		//And a bitmap mode has no text BG to read at all
+		Check(TextBgCount(2) == 0 && TextBgCount(3) == 0 && TextBgCount(4) == 0 && TextBgCount(5) == 0,
+			"W253: a bitmap BG mode has no text BG to reveal");
 	}
 }
 
@@ -15089,6 +15658,21 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+
+	TestGbaRevealWidthContractIsTwentyTwoColumnsPerSide();
+	TestGbaRevealContentRuleFollowsTheMapWidth();
+	TestGbaRevealSamplesTextBgTiles();
+	TestGbaRevealCompositesTextBgsByPriority();
+	TestGbaRevealDrawsBlackWhereItCannotFill();
+	TestGbaRevealDrawsTheMapColumnsRightBesideTheWindow();
+	TestGbaRevealFollowsMosaicBlocks();
+	TestGbaRevealAppliesTheRowsColorEffect();
+	TestGbaRevealOnlyReadsVramAndThePalette();
+	TestGbaRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestGbaRevealHoldsAnExtendedFrameOnlyWhileTheRevealIsOn();
+	TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn();
+	TestGbaRevealOnlyRevealsTheModesTextBgs();
+
 	TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates();
 	TestW4SideTilesComeFromTheNeighbouringNametable();
 	TestW4SideTilesFollowTheRowsScrollState();

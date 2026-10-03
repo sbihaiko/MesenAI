@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "GBA/GbaTypes.h"
+#include "GBA/GbaWidescreenReveal.h"
 #include "Shared/Emulator.h"
 #include "Shared/EventType.h"
 #include "Utilities/Timer.h"
@@ -133,6 +134,9 @@ private:
 	Timer _frameSkipTimer;
 	bool _skipRender = false;
 
+	//ADR-0253 slice W.7: the GBA widescreen Reveal's extended frames
+	GbaWidescreenReveal::FrameBuffers _reveal;
+
 	bool _triggerSpecialDma = false;
 
 	int16_t _lastWindowCycle = -1;
@@ -229,6 +233,15 @@ private:
 	uint16_t GetCurrentScanline();
 	bool IsScanlineMatch();
 
+	//ADR-0253 W.7: whether this frame's rows are drawn ExtraColumns wider.
+	//WideScrn is the existing Widescreen aspect setting, and it is the only
+	//control (decision 1): there is no per-game switch on the GBA yet.
+	bool IsRevealRequested();
+
+	//Draws the extra columns of the row RenderScanline has just finished, from
+	//the text BGs' own tilemaps. Only ever reads VRAM and the palette.
+	void DrawRevealRowSides();
+
 	template<int i> void UpdateLayerTransform();
 
 public:
@@ -261,6 +274,8 @@ public:
 			if(_state.Scanline == 160) {
 				//Show white screen while in sleep mode
 				std::fill(_currentBuffer, _currentBuffer + GbaConstants::PixelCount, 0x7FFF);
+				//ADR-0253 W.7: sleep draws no rows to reveal from
+				_reveal.BeginFrame(false);
 				SendFrame();
 			} else if(_state.Scanline > 227) {
 				_state.Scanline = 0;
