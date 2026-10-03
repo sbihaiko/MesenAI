@@ -116,7 +116,7 @@ public class PlayerCheatsSheetTests : IDisposable
 		Click(window.FindNamed<Button>("OverlayCheatsButton"));
 
 		Assert.True(window.FindNamed<Border>("PlayerCheatsSheet").IsOnScreen());
-		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(window.IsPauseCardActive());
 		Assert.Equal(CheatSheet.NotInListLine, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
 
 		//Search by game name, pick the game: its codes are listed, marked.
@@ -412,7 +412,7 @@ public class PlayerCheatsSheetTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 
 		Assert.True(window.FindNamed<Panel>("PackDepSheetBackdrop").IsOnScreen());
-		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(window.IsPauseCardActive());
 		Assert.False(model.IsPlayerOverlayVisible);
 	}
 }

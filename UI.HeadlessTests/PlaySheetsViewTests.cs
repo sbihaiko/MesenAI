@@ -77,7 +77,7 @@ public class PlaySheetsViewTests : IDisposable
 
 		Border detail = window.FindNamed<Border>("PlayerPackDetailSheet");
 		Assert.True(detail.IsOnScreen());
-		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(window.IsPauseCardActive());
 		Assert.Equal("Aaa Pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
 		Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", window.FindNamed<TextBlock>("PackDetailByline").Text);
 		Assert.True(window.FindNamed<StackPanel>("PackDetailChips").IsOnScreen());
