@@ -35,6 +35,8 @@ namespace Mesen.ViewModels
 		//and "More in Options…" decide what comes next).
 		public void ClosePlayerSettings()
 		{
+			//Look's Adjust… goes with the sheet it was opened from, unsaved.
+			CloseShaderSheet(false);
 			ConfigViewModel? settings = PlayerSettings;
 			if(settings == null) {
 				return;

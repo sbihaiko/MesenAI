@@ -28,13 +28,13 @@ namespace Mesen.HeadlessTests;
 
 //ADR-0249 final audit, group "no classic": nothing reached from a Player flow
 //opens a classic Mesen window. Quit game and closing the window ask in place
-//with the shared stop banner (W-X1); a message box, an archive's game list and
-//a shader's parameters take the Player look (W-X1/W-X2, the W-P5 sheet shape);
-//Settings › Look's Art row opens W-P6 in the main window; the BIOS sheet
+//with the shared stop banner (W-X1); a message box takes the Player look
+//(W-X1/W-X2); an archive's game list and a shader's parameters are sheets in
+//the main window (PlayerNoClassicDialogTests.Sheets.cs); Settings › Look's Art row opens W-P6 in the main window; the BIOS sheet
 //(W-P13) asks in every workspace. Advanced keeps every classic window. Each
 //test saves a PNG of what it asserts (PlayerRender.OutputFolder).
 [Collection(NativeCoreCollection.Name)]
-public class PlayerNoClassicDialogTests : IDisposable
+public partial class PlayerNoClassicDialogTests : IDisposable
 {
 	private static readonly Color Text = Color.Parse("#1D1D1F");
 	private static readonly Color Card = Colors.White;
@@ -301,48 +301,6 @@ public class PlayerNoClassicDialogTests : IDisposable
 		classic.Close();
 	}
 
-	//The W-P5 sheet shape for a zip holding two games: the heading names the
-	//archive, the games are rows of an inset list, Cancel then Open.
-	[AvaloniaFact]
-	public void An_archive_with_two_games_opens_the_player_sheet()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = Show(UiMode.Player);
-		UseAsMainWindow(window);
-		string zip = Path.Combine(Scratch(), "Contra Collection.zip");
-		using(ZipArchive archive = ZipFile.Open(zip, ZipArchiveMode.Create)) {
-			foreach(string name in new[] { "Contra (USA).nes", "Super C (USA).nes" }) {
-				using Stream entry = archive.CreateEntry(name).Open();
-				entry.Write(SyntheticNrom.Build());
-			}
-		}
-
-		Task<ResourcePath?> pick = SelectRomWindow.Show(zip);
-		SelectRomWindow dialog = OwnedDialog<SelectRomWindow>(window);
-		Border root = dialog.FindNamed<Border>("PlayerSelectRomRoot");
-		Assert.True(root.IsOnScreen(), "the archive list kept the classic look over the Player window");
-		Assert.Contains("player", root.Classes);
-		Assert.Equal(Card, PlayerRender.SolidColor(root.Background));
-		TextBlock title = dialog.FindNamed<TextBlock>("PlayerSelectRomTitle");
-		Assert.Equal("Choose a game in Contra Collection.zip", title.Text);
-		Assert.Equal("Inter", title.FontFamily.Name);
-		Assert.Equal(19, title.FontSize);
-		Border inset = dialog.FindNamed<Border>("PlayerSelectRomInset");
-		Assert.Equal(Color.Parse("#F8F8FA"), PlayerRender.SolidColor(inset.Background));
-		Assert.Equal(new CornerRadius(12), inset.CornerRadius);
-		ListBoxItem[] rows = dialog.FindAll<ListBoxItem>().Where(i => i.IsOnScreen()).ToArray();
-		Assert.Equal(2, rows.Length);
-		Assert.All(rows, r => Assert.Equal(40, r.Bounds.Height, 0.5));
-		AssertPlayerButton(dialog.FindNamed<Button>("PlayerSelectRomCancel"), Card);
-		AssertPlayerButton(dialog.FindNamed<Button>("PlayerSelectRomOpen"), PlayTint);
-		Assert.Equal("Open", LabelOf(dialog.FindNamed<Button>("PlayerSelectRomOpen")).Text);
-		SaveRender(dialog, "W-P5-select-rom");
-
-		Click(dialog.FindNamed<Button>("PlayerSelectRomCancel"));
-		WaitFor(() => pick.IsCompleted, "Cancel did not close the archive list");
-		Assert.Null(pick.Result);
-	}
-
 	//ADR-0249 (W-P8, W-P10): Player's Settings is a sheet in the main window,
 	//opened from W-P4's Settings row; then Look is picked (LookSettingsTabTests).
 	private static LookConfigView ShowLookSettings(MainWindow window, MainWindowViewModel model)
@@ -382,88 +340,5 @@ public class PlayerNoClassicDialogTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerPackDetailSheet").IsOnScreen());
 		Assert.Empty(window.OwnedWindows);
 		SaveRender(window, "W-P6-from-look");
-	}
-
-	//W-P10's Adjust… in Player mode: the shader's parameters on the theme's
-	//white sheet - its name as the heading, the rows on an inset list, Reset
-	//on the left, Cancel then OK on the right.
-	[AvaloniaFact]
-	public void Looks_adjust_opens_the_shader_parameters_in_the_player_look()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player);
-		string folder = Scratch();
-		File.WriteAllText(Path.Combine(folder, "nocl-test.slang"),
-			"#version 450\n" +
-			"#pragma parameter NOCL_BRIGHT \"Brightness\" 1.0 0.0 2.0 0.05\n" +
-			"#pragma parameter NOCL_GLOW \"Glow\" 0.0 0.0 1.0 1.0\n" +
-			"#pragma stage vertex\nvoid main() {}\n#pragma stage fragment\nvoid main() {}\n");
-		string preset = Path.Combine(folder, "nocl-test.slangp");
-		File.WriteAllText(preset, "shaders = 1\nshader0 = nocl-test.slang\n");
-		ConfigManager.Config.Video.ShaderFile = preset;
-		LookConfigView look = ShowLookSettings(window, model);
-
-		Invoke(look, "OnAdjust");
-		ShaderConfigWindow adjust = OwnedDialog<ShaderConfigWindow>(window);
-		Border root = adjust.FindNamed<Border>("ShaderConfigRoot");
-		Assert.Contains("player", root.Classes);
-		Assert.Equal(Card, PlayerRender.SolidColor(root.Background));
-		TextBlock title = adjust.FindNamed<TextBlock>("ShaderConfigPlayerTitle");
-		Assert.True(title.IsOnScreen());
-		Assert.Equal("nocl-test.slangp", title.Text);
-		Assert.Equal("Inter", title.FontFamily.Name);
-		Border list = adjust.FindNamed<Border>("ShaderConfigList");
-		Assert.Equal(Color.Parse("#F8F8FA"), PlayerRender.SolidColor(list.Background));
-		Assert.Equal(new CornerRadius(12), list.CornerRadius);
-		Button[] actions = adjust.FindNamed<StackPanel>("ShaderConfigActions").Children.OfType<Button>().ToArray();
-		Assert.Equal(new[] { "ShaderConfigCancel", "ShaderConfigOk" }, actions.Select(b => b.Name).ToArray());
-		AssertPlayerButton(actions[0], Card);
-		AssertPlayerButton(actions[1], PlayTint);
-		AssertPlayerButton(adjust.FindNamed<Button>("ShaderConfigReset"), Card);
-		adjust.Close();
-		model.ClosePlayerSettings();
-
-		//The rows themselves, from parameters given directly (librashader does
-		//not parse a synthetic preset in every environment): a slider, a
-		//switch and a label line, on the inset list in Inter.
-		ShaderConfigWindow rows = new(playerLook: true) {
-			DataContext = new ShaderConfigViewModel(false, "") {
-				Config = new ShaderConfig {
-					ShaderFile = preset,
-					Params = new() {
-						new ShaderParam { Name = "NOCL_BRIGHT", Description = "Brightness", Min = 0, Max = 2, Step = 0.05m, Initial = 1, Value = 1 },
-						new ShaderParam { Name = "NOCL_GLOW", Description = "Glow", Min = 0, Max = 1, Step = 1, Initial = 0, Value = 1 },
-						new ShaderParam { Name = "NOCL_MASK", Description = "Mask strength", Min = 0, Max = 1, Step = 0.1m, Initial = 0.3m, Value = 0.3m },
-					},
-				},
-			},
-		};
-		rows.Show();
-		Dispatcher.UIThread.RunJobs();
-		TextBlock[] names = rows.FindAll<TextBlock>().Where(t => t.Classes.Contains("shaderParam") && t.IsOnScreen()).ToArray();
-		Assert.Equal(new[] { "Brightness", "Glow", "Mask strength" }, names.Select(t => t.Text).ToArray());
-		Assert.All(names, t => Assert.Equal("Inter", t.FontFamily.Name));
-		Assert.Single(rows.FindAll<CheckBox>(), c => c.IsOnScreen() && c.Classes.Contains("switch"));
-		SaveRender(rows, "W-P10-adjust");
-		rows.Close();
-	}
-
-	//The classic entry point (the Video menu's shader parameters,
-	//ShaderMenuHelper) keeps the classic window: no Player class, no heading,
-	//OK before Cancel.
-	[AvaloniaFact]
-	public void The_classic_shader_window_stays_classic()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		ShaderConfigWindow classic = new() {
-			DataContext = new ShaderConfigViewModel(false, "") { Config = new ShaderConfig { ShaderFile = "nocl-classic.slangp" } },
-		};
-		classic.Show();
-		Dispatcher.UIThread.RunJobs();
-		Assert.DoesNotContain("player", classic.FindNamed<Border>("ShaderConfigRoot").Classes);
-		Assert.False(classic.FindNamed<TextBlock>("ShaderConfigPlayerTitle").IsOnScreen());
-		Button[] actions = classic.FindNamed<StackPanel>("ShaderConfigActions").Children.OfType<Button>().ToArray();
-		Assert.Equal(new[] { "ShaderConfigOk", "ShaderConfigCancel" }, actions.Select(b => b.Name).ToArray());
-		classic.Close();
 	}
 }

@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.GUI.Utilities;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using System;
@@ -23,24 +24,11 @@ namespace Mesen.Windows
 		private ListBox _listBox;
 		private TextBox _searchBox;
 
-		public SelectRomWindow() : this(false)
-		{
-		}
-
-		//playerLook (ADR-0249, UI/Logic/PlayerDialog): the W-P5 sheet shape
-		//instead of the classic dialog - same view-model, keys and double-click.
-		public SelectRomWindow(bool playerLook)
+		public SelectRomWindow()
 		{
 			InitializeComponent();
-
-			if(playerLook) {
-				Border root = this.GetControl<Border>("PlayerSelectRomRoot");
-				root.Classes.Add("player");
-				root.IsVisible = true;
-				this.GetControl<DockPanel>("ClassicSelectRomRoot").IsVisible = false;
-			}
-			_searchBox = this.GetControl<TextBox>(playerLook ? "PlayerSelectRomSearch" : "Search");
-			_listBox = this.GetControl<ListBox>(playerLook ? "PlayerSelectRomList" : "ListBox");
+			_searchBox = this.GetControl<TextBox>("Search");
+			_listBox = this.GetControl<ListBox>("ListBox");
 		}
 
 		private void InitializeComponent()
@@ -82,39 +70,43 @@ namespace Mesen.Windows
 			base.OnKeyDown(e);
 		}
 
+		//The archive's game to open. ADR-0249 (user decision 2026-10-03): in
+		//Player mode the list is a sheet inside the main window
+		//(PlaySelectRomSheetViewModel); Advanced keeps this window.
 		public static async Task<ResourcePath?> Show(string file)
 		{
 			List<ArchiveRomEntry> entries = ArchiveHelper.GetArchiveRomList(file);
-			if(entries.Count == 0) {
-				return file;
-			} else if(entries.Count == 1) {
-				return new ResourcePath() { Path = file, InnerFile = entries[0].Filename, InnerFileIndex = entries[0].IsUtf8 ? 0 : 1 };
+			switch(ArchiveRomPick.Route(entries.Count)) {
+				case ArchiveRomRoute.WholeFile: return file;
+				case ArchiveRomRoute.OnlyGame: return InnerFile(file, entries[0], 0);
 			}
 
-			SelectRomViewModel model = new(entries) { SelectedEntry = entries[0] };
 			Window? parent = ApplicationHelper.GetMainWindow();
 			if(parent == null) {
 				return null;
 			}
-			bool playerLook = PlayerDialogScope.UsesPlayerLook(parent);
-			SelectRomWindow wnd = new SelectRomWindow(playerLook) { DataContext = model };
-			if(playerLook) {
-				wnd.GetControl<TextBlock>("PlayerSelectRomTitle").Text = ResourceHelper.GetMessage("SelectRomPlayerTitle", System.IO.Path.GetFileName(file));
+			if(ArchiveRomPick.UsesSheet(PlayerDialogScope.PlayerMode, parent is MainWindow) && parent.DataContext is MainWindowViewModel main) {
+				PlaySelectRomRow? row = await main.SelectRomSheet.Request(System.IO.Path.GetFileName(file), entries);
+				if(row == null) {
+					return null;
+				}
+				return InnerFile(file, row.Entry, row.Position);
 			}
 
+			SelectRomViewModel model = new(entries) { SelectedEntry = entries[0] };
+			SelectRomWindow wnd = new SelectRomWindow() { DataContext = model };
 			wnd.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 			await wnd.ShowDialog(parent);
 
 			if(model.Cancelled || model.SelectedEntry == null) {
 				return null;
 			}
+			return InnerFile(file, model.SelectedEntry, entries.IndexOf(model.SelectedEntry));
+		}
 
-			int innerFileIndex = 0;
-			if(!model.SelectedEntry.IsUtf8) {
-				innerFileIndex = entries.IndexOf(model.SelectedEntry) + 1;
-			}
-
-			return new ResourcePath() { Path = file, InnerFile = model.SelectedEntry.Filename, InnerFileIndex = innerFileIndex };
+		private static ResourcePath InnerFile(string file, ArchiveRomEntry entry, int position)
+		{
+			return new ResourcePath() { Path = file, InnerFile = entry.Filename, InnerFileIndex = ArchiveRomPick.InnerFileIndex(entry.IsUtf8, position) };
 		}
 
 		private void OnOkClick(object sender, RoutedEventArgs e)
@@ -171,11 +163,7 @@ namespace Mesen.Windows
 
 		partial void OnSearchStringChanged(string value)
 		{
-			if(string.IsNullOrWhiteSpace(value)) {
-				FilteredEntries = _entries;
-			} else {
-				FilteredEntries = _entries.Where(e => e.Filename.Contains(value, StringComparison.OrdinalIgnoreCase));
-			}
+			FilteredEntries = _entries.Where(e => ArchiveRomPick.Matches(e.Filename, value));
 
 			SelectedEntry = FilteredEntries.FirstOrDefault();
 		}

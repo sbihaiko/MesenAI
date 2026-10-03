@@ -698,13 +698,18 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   game on W-P4 asks with `Views/OverlayConfirmBanner` (`banner stop` on the
   overlay card, `QuitGameConfirm`; Esc answers Keep Playing) and closing the
   window with the `InterruptionBar` (`InterruptionKind.QuitApp`), never
-  `MesenMsgBox`. A dialog the Player GUI still raises - `MessageBox`,
-  `SelectRomWindow` (a multi-ROM archive), `ShaderConfigWindow` (Look's
-  Adjust…) - takes the Player look (`PlayerMsgRoot`, `PlayerSelectRomRoot`,
-  `ShaderConfigRoot.player`: a white sheet, the shared banner, an
-  `inset` list, `regular` footer buttons, the safe one first) when
+  `MesenMsgBox`. A `MessageBox` the Player GUI still raises takes the
+  Player look (`PlayerMsgRoot`: a white sheet, the shared banner,
+  `regular` footer buttons, the safe one first) when
   `Utilities/PlayerDialogScope.UsesPlayerLook` holds: Player mode **and**
-  an owner that shows the `player` class (`Logic/PlayerDialog`). Under a
+  an owner that shows the `player` class (`Logic/PlayerDialog`). A
+  multi-ROM archive and Look's Adjust… are sheets inside the main window
+  in Player mode (user decision 2026-10-03): `Views/PlaySelectRomSheetView`
+  (`SelectRomSheet`, in `BiosSheetLayer`, routed by
+  `Logic/ArchiveRomPick`) and `Views/PlayerShaderSheetView`
+  (`ShaderSheet`, over the Settings sheet); Esc closes either
+  (`HandleInWindowSheetEsc`). `SelectRomWindow` and `ShaderConfigWindow`
+  are classic-only. Under a
   classic window, the debugger or Advanced the classic tree stays. Look's
   Art row opens W-P6 in the main window
   (`MainWindow.OpenPackDetailFromSettings`). The BIOS sheet sits in the

@@ -336,9 +336,11 @@
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
 
 				<!--ADR-0249 (W-P8, W-P10): W-P4's Settings, a sheet in this window.-->
-				<Panel IsVisible="{Binding IsPlayerSettingsVisible}">
+				<Panel IsVisible="{Binding IsPlayerSettingsVisible}" IsEnabled="{Binding !IsShaderSheetVisible}">
 					<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
 				</Panel>
+				<!--ADR-0249 (W-P10 › Adjust…): the shader's parameters, over Settings.-->
+				<v:PlayerShaderSheetView Name="PlayerShaderSheetHost" IsVisible="{Binding IsShaderSheetVisible}" />
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
@@ -364,6 +366,8 @@
 			sits above every workspace with its own Player scope (Play's tint).-->
 			<Panel Name="BiosSheetLayer" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
+				<!--ADR-0249 (W-P5 sheet shape): an archive's games, from any workspace's open.-->
+				<v:PlaySelectRomSheetView Name="PlaySelectRomSheetHost" DataContext="{Binding SelectRomSheet}" IsVisible="{Binding IsVisible}" />
 			</Panel>
 		</Panel>
 	</DockPanel>
