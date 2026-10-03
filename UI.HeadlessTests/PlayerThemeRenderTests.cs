@@ -58,6 +58,7 @@ public class PlayerThemeRenderTests : IDisposable
 		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
 			File.Delete(stale);
 		}
+		//Only a folder this test created is removed; a real pack is never touched.
 		if(_seededPack != null && Directory.Exists(_seededPack)) {
 			Directory.Delete(_seededPack, true);
 		}
@@ -201,12 +202,17 @@ public class PlayerThemeRenderTests : IDisposable
 		//The Continue card shows the recent entry's own screenshot, and a tile
 		//whose game has an HD pack in HdPacks/<game> carries the pack badge.
 		Color shot = Color.Parse("#C83228");
-		_seededPack = Path.Combine(ConfigManager.HdPackFolder, "Castlevania (USA)");
+		//A game name no real library uses, so the seeded HdPacks folder can
+		//never be (or overwrite) a pack the user has.
+		const string packedGame = "MesenAI Theme Test Game (Seeded Pack)";
+		string seeded = Path.Combine(ConfigManager.HdPackFolder, packedGame);
+		Assert.False(Directory.Exists(seeded), "a folder named like the test fixture already exists: " + seeded);
+		_seededPack = seeded;
 		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player, () => {
 			WriteRecentWithScreenshot("Contra (USA)", shot);
-			Directory.CreateDirectory(_seededPack);
-			File.WriteAllText(Path.Combine(_seededPack, "hires.txt"), "<ver>106\n");
-		}, new[] { "Contra (USA)", "Castlevania (USA)", "Metroid (USA)", "Mega Man (USA)" });
+			Directory.CreateDirectory(seeded);
+			File.WriteAllText(Path.Combine(seeded, "hires.txt"), "<ver>106\n");
+		}, new[] { "Contra (USA)", packedGame, "Metroid (USA)", "Mega Man (USA)" });
 
 		Border card = window.FindNamed<Border>("PlayHomeContinueCard");
 		Assert.Equal(Card, PlayerRender.SolidColor(card.Background));
@@ -221,7 +227,7 @@ public class PlayerThemeRenderTests : IDisposable
 		Image preview = window.FindNamed<Image>("PlayHomeContinuePreview");
 		Assert.True(preview.IsOnScreen());
 		StateGridEntry[] tiles = window.FindAll<StateGridEntry>().Where(t => t.IsOnScreen()).ToArray();
-		StateGridEntry withPack = tiles.Single(t => t.Title == "Castlevania (USA)");
+		StateGridEntry withPack = tiles.Single(t => t.Title == packedGame);
 		Border badge = withPack.FindAll<Border>().Single(b => b.Name == "TilePackBadge");
 		Assert.True(badge.IsOnScreen());
 		Assert.Equal(22, badge.Bounds.Width, 0.5);

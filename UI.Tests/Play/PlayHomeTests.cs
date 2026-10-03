@@ -93,6 +93,14 @@ namespace Mesen.Tests.Play
 				Assert.Null(PlayHome.ReadScreenshot(withoutShot));
 				Assert.Null(PlayHome.ReadScreenshot(notAZip));
 				Assert.Null(PlayHome.ReadScreenshot(Path.Combine(folder, "missing.rgd")));
+
+				//An entry that decompresses past the cap keeps the placeholder.
+				string huge = Path.Combine(folder, "Huge (USA).rgd");
+				using(ZipArchive zip = ZipFile.Open(huge, ZipArchiveMode.Create)) {
+					using Stream s = zip.CreateEntry("Screenshot.png").Open();
+					s.Write(new byte[PlayHome.MaxScreenshotBytes + 1], 0, PlayHome.MaxScreenshotBytes + 1);
+				}
+				Assert.Null(PlayHome.ReadScreenshot(huge));
 			} finally {
 				Directory.Delete(folder, true);
 			}

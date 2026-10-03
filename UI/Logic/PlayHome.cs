@@ -52,6 +52,9 @@ public static class PlayHome
 	//W-P2's Continue picture: the Screenshot.png the Core keeps inside a
 	//recent-game file (a zip). Null when the file, the entry or the zip is
 	//missing or unreadable - the card keeps its placeholder.
+	//A Core screenshot is a few hundred KB at most; anything past this is not one.
+	public const int MaxScreenshotBytes = 8 * 1024 * 1024;
+
 	public static byte[]? ReadScreenshot(string recentGameFile)
 	{
 		try {
@@ -64,9 +67,18 @@ public static class PlayHome
 			if(entry == null) {
 				return null;
 			}
+			//A user-placed file can claim any size: read at most MaxScreenshotBytes
+			//decompressed, whatever the entry declares, and keep the placeholder past it.
 			using Stream stream = entry.Open();
 			using MemoryStream copy = new();
-			stream.CopyTo(copy);
+			byte[] buffer = new byte[81920];
+			int read;
+			while((read = stream.Read(buffer, 0, buffer.Length)) > 0) {
+				if(copy.Length + read > MaxScreenshotBytes) {
+					return null;
+				}
+				copy.Write(buffer, 0, read);
+			}
 			return copy.ToArray();
 		} catch(IOException) {
 			return null;
