@@ -19,11 +19,31 @@
 		<Color x:Key="ButtonBackgroundPressed">Transparent</Color>
 	</UserControl.Resources>
 	
+	<UserControl.Styles>
+		<!--The classic look; a `slots` grid (ADR-0249, the Player's Save states
+		slot sheet) takes its title and close glyph from UI/Styles/PlayerTheme.axaml.-->
+		<Style Selector="c|StateGrid:not(.slots) TextBlock#StateGridTitle">
+			<Setter Property="FontSize" Value="15" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Foreground" Value="White" />
+			<Setter Property="TextAlignment" Value="Center" />
+		</Style>
+		<Style Selector="c|StateGrid.slots Image#StateGridCloseImage">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="c|StateGrid:not(.slots) PathIcon#StateGridCloseIcon">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+	</UserControl.Styles>
+
 	<DockPanel DataContext="{Binding ElementName=root}">
 		<Panel DockPanel.Dock="Top" Margin="5" IsVisible="{Binding Title.Length}">
-			<TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Medium" Foreground="White" TextAlignment="Center" />
+			<TextBlock Name="StateGridTitle" Text="{Binding Title}" />
 			<Button Name="StateGridCloseButton" IsVisible="{Binding ShowClose}" Click="OnCloseClick" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Padding="0" Margin="0 -2 0 -2" MinWidth="0">
-				<Image Source="/Assets/CloseWhite.png" Width="16" Height="16" />
+				<Panel>
+					<Image Name="StateGridCloseImage" Source="/Assets/CloseWhite.png" Width="16" Height="16" />
+					<PathIcon Name="StateGridCloseIcon" />
+				</Panel>
 			</Button>
 		</Panel>
 		<Button DockPanel.Dock="Left" IsVisible="{Binding ShowArrows}" Background="Transparent" BorderThickness="0" Click="OnPrevPageClick" VerticalAlignment="Stretch" Height="NaN" MinWidth="0" Margin="0">

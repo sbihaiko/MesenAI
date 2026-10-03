@@ -78,13 +78,22 @@
 		<!--G.5 (W-P14): a file that does not open - one inline alert under the
 		home's content (W-X2: a sentence and the next step, never a code). W-P2's
 		2 controls + Open Another… = 3; the ✕ only closes it.-->
-		<Border Name="PlayHomeLoadAlert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Background="#FFF4E5" CornerRadius="10" Padding="16 12" IsVisible="{Binding IsLoadAlertVisible}">
+		<!--ADR-0249 (W-P14): Border.alert - warm card, amber outline; the title
+		in TEXT, the body in TEXT2, Open Another… (secondary, folder glyph).-->
+		<Border Name="PlayHomeLoadAlert" Classes="alert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Padding="18 12 12 14" IsVisible="{Binding IsLoadAlertVisible}">
 			<DockPanel>
-				<Button Name="PlayHomeLoadAlertClose" DockPanel.Dock="Right" Content="✕" Background="Transparent" Foreground="#B25000" VerticalAlignment="Top" Margin="8 0 0 0" Click="OnDismissLoadAlert" />
-				<Button Name="PlayHomeOpenAnother" DockPanel.Dock="Right" Content="{l:Translate btnPlayHomeOpenAnother}" VerticalAlignment="Top" Click="OnOpenAnother" />
-				<StackPanel Spacing="2">
-					<TextBlock Name="PlayHomeLoadAlertTitle" Text="{Binding LoadAlertTitle}" FontWeight="Bold" Foreground="#B25000" TextWrapping="Wrap" />
-					<TextBlock Name="PlayHomeLoadAlertBody" Text="{Binding LoadAlertBody}" Foreground="#7A3E00" TextWrapping="Wrap" />
+				<Button Name="PlayHomeLoadAlertClose" Classes="plain small" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="4 0 0 0" Click="OnDismissLoadAlert">
+					<PathIcon Classes="close-glyph" />
+				</Button>
+				<Button Name="PlayHomeOpenAnother" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenAnother">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
+						<TextBlock Text="{l:Translate btnPlayHomeOpenAnother}" />
+					</StackPanel>
+				</Button>
+				<StackPanel Spacing="3" Margin="0 4 12 0">
+					<TextBlock Name="PlayHomeLoadAlertTitle" Classes="callout strong" Text="{Binding LoadAlertTitle}" TextWrapping="Wrap" />
+					<TextBlock Name="PlayHomeLoadAlertBody" Classes="subhead secondary" Text="{Binding LoadAlertBody}" TextWrapping="Wrap" />
 				</StackPanel>
 			</DockPanel>
 		</Border>
@@ -92,7 +101,13 @@
 		<!--Advanced's game selection and the Save/Load state screens: the
 		classic grid of every entry, unchanged by G.2.-->
 		<Panel Name="PlayHomePlainGrid" IsVisible="{Binding ShowPlainGrid}">
-			<c:StateGrid Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
+			<!--ADR-0249: in Player mode the Save/Load state slots are a light
+			sheet of tiles over the dimmed game (ShowSlotTiles); Advanced keeps
+			the classic grid - no class, no background, the grid fills.-->
+			<Border Classes.scrim="{Binding ShowSlotTiles}" />
+			<Border Name="PlayHomeSlotSheet" Classes.sheet="{Binding ShowSlotTiles}" Classes.slot-sheet="{Binding ShowSlotTiles}">
+				<c:StateGrid Classes.tiles="{Binding ShowSlotTiles}" Classes.slots="{Binding ShowSlotTiles}" Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
+			</Border>
 		</Panel>
 	</Panel>
 </UserControl>
