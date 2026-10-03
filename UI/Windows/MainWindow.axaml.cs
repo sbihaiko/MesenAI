@@ -542,6 +542,8 @@ namespace Mesen.Windows
 					//#734: in Play the home and its load card stay until the first picture.
 					bool holdsHome = HoldsHomeForPicture(loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
+					//W-P2: the hash the home's pack badge looks up later.
+					RecentPackLookup.RememberLoadedGame(romInfo);
 
 					//#732: a pack patch forced onto another revision of the game
 					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so

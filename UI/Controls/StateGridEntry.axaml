@@ -80,10 +80,11 @@
 					StretchDirection="Both"
 					VerticalAlignment="Center"
 				/>
-				<!--W-P2: the pack badge on a Player home tile whose game has an HD
-				pack (HasPack); the layer is shown only for `tiles:not(.slot)`.-->
+				<!--W-P2: the pack badge on a Player home tile whose game has a pack
+				(HasPack, RecentPackBadge); the layer is shown only for
+				`tiles:not(.slot)`. Its tooltip says which kind (PackBadgeText).-->
 				<Panel Name="TileBadgeLayer">
-					<Border Name="TilePackBadge" IsVisible="{Binding HasPack, ElementName=root}">
+					<Border Name="TilePackBadge" IsVisible="{Binding HasPack, ElementName=root}" ToolTip.Tip="{Binding PackBadgeText, ElementName=root}" AutomationProperties.Name="{Binding PackBadgeText, ElementName=root}">
 						<PathIcon Data="{StaticResource PlayerIconPack}" />
 					</Border>
 				</Panel>

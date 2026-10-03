@@ -1,4 +1,5 @@
-﻿using Mesen.Utilities;
+﻿using Mesen.Logic;
+using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -14,6 +15,9 @@ namespace Mesen.Config
 		private const int MaxRecentFiles = 10;
 		public List<RecentItem> Items { get; set; } = new List<RecentItem>();
 		public List<string> Shaders { get; set; } = new List<string>();
+		//W-P2's pack badge: the No-Intro SHA-1 of each recently loaded game, by
+		//recent-game file name (RecentPackLookup.RememberLoadedGame).
+		public List<RecentGameHash> GameHashes { get; set; } = new List<RecentGameHash>();
 
 		public void AddRecentFile(ResourcePath romFile, ResourcePath? patchFile)
 		{
