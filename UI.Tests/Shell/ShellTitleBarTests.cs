@@ -15,6 +15,17 @@ namespace Mesen.Tests.Shell
 			Assert.False(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: false));
 		}
 
+		//ADR-0250: Classic has no shell bar, so it keeps the plain title bar.
+		[Fact]
+		public void Classic_keeps_the_plain_title_bar()
+		{
+			Assert.False(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: true, Workspace.Classic));
+			Assert.True(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: true, Workspace.Play));
+			Assert.True(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: true, Workspace.Remaster));
+			Assert.True(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: true, Workspace.Share));
+			Assert.False(ShellTitleBar.ExtendsIntoTitleBar(isMacOS: false, Workspace.Play));
+		}
+
 		[Fact]
 		public void Title_bar_height_is_the_W_S1_bar_height()
 		{

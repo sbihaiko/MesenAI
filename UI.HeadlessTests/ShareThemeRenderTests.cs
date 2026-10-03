@@ -43,14 +43,13 @@ public class ShareThemeRenderTests : IDisposable
 	private static readonly Color ShareTint = Color.Parse("#34C759");
 	private static readonly Color ShareTintText = Color.Parse("#248A3D");
 	private static readonly Color PlayTint = Color.Parse("#007AFF");
+	private static readonly Color ClassicTint = Color.Parse("#8E8E93");
 	private static readonly Color RemasterTint = Color.Parse("#AF52DE");
 	private static readonly Color Indigo = Color.Parse("#5856D6");
 	private static readonly Color Red = Color.Parse("#FF3B30");
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly List<string> _paths = new();
 
@@ -59,8 +58,6 @@ public class ShareThemeRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		foreach(string path in _paths) {
 			try {
@@ -76,8 +73,6 @@ public class ShareThemeRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = mode;
 		prefs.Workspace = Workspace.Play;
-		prefs.ClassicMenuNoticeShown = true;
-		prefs.ShowClassicMenuBar = false;
 		prefs.PauseWhenInMenusAndConfig = false;
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
@@ -463,9 +458,10 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(Color.Parse("#FCFCFD"), PlayerRender.SolidColor(presenter.Background));
 		Assert.Equal(new CornerRadius(14), presenter.CornerRadius);
 		Button[] rows = panel.FindNamed<ItemsControl>("SwitcherRows").GetRealizedContainers().SelectMany(c => c.FindAll<Button>()).ToArray();
-		Assert.Equal(3, rows.Length);
-		Color[] tints = { PlayTint, RemasterTint, ShareTint };
-		for(int i = 0; i < 3; i++) {
+		//ADR-0250 Decision 2: Classic is a fourth door, badged in gray.
+		Assert.Equal(4, rows.Length);
+		Color[] tints = { PlayTint, RemasterTint, ShareTint, ClassicTint };
+		for(int i = 0; i < 4; i++) {
 			Border badge = rows[i].FindAll<Border>().First(b => b.Classes.Contains("badge"));
 			Assert.True(badge.IsOnScreen());
 			Assert.Equal(32, badge.Bounds.Width, 0.5);
@@ -482,7 +478,6 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.DoesNotContain(panel.FindAll<TextBlock>(), t => t.IsOnScreen() && (t.Text == "✔" || t.Text == "▶"));
 		AssertText(panel.FindNamed<TextBlock>("SwitcherFooter"), 12, Text2);
 		Assert.Equal(Color.Parse("#E8E8EC"), PlayerRender.SolidColor(profile.FindAll<Border>().First(b => b.Name == "PART_Background").Background));
-		Assert.Equal(3, rows.Length);
 		//The render's pill is 150 px wide; the popover floats on a drop shadow.
 		Assert.Equal(150, profile.Bounds.Width, 0.5);
 		Assert.Contains(presenter.GetSelfAndVisualDescendants().OfType<Border>(), b => b.BoxShadow.Count > 0);
@@ -490,9 +485,10 @@ public class ShareThemeRenderTests : IDisposable
 		SaveWithPopup(window, presenter, "W-S3");
 	}
 
-	//W-S2: the Tools ⋯ menu keeps its contents; in Player mode its popup is a
-	//light rounded panel (radius 10) with 26 px Inter rows, no icon gutter, a
-	//right chevron, the highlighted row filled with the tint.
+	//W-S2 (ADR-0250): Play's own Tools ⋯ - Reset, Power Cycle, Screenshot,
+	//Fullscreen, then the tail. In Player mode its popup is a light rounded
+	//panel (radius 10) with 26 px Inter rows, no icon gutter, a right chevron
+	//on a submenu, the highlighted row filled with the tint.
 	[AvaloniaFact]
 	public void W_S2_tools_menu_chrome_renders_with_the_player_theme()
 	{
@@ -501,65 +497,61 @@ public class ShareThemeRenderTests : IDisposable
 		MenuItem tools = window.FindNamed<MenuItem>("ToolsMenuButton");
 		tools.IsSubMenuOpen = true;
 		Dispatcher.UIThread.RunJobs();
-		MenuItem toolsItem = tools.Items.OfType<MenuItem>().Single(m => m.Name == "ToolsMenuTools");
-		toolsItem.IsSelected = true;
+		MenuItem[] items = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.FindAll<TextBlock>().Any(t => !string.IsNullOrEmpty(t.Text) && t.Text != "-")).ToArray();
+		MenuItem fullscreen = items.Single(m => LabelOf(m).Text == "Fullscreen");
+		fullscreen.IsSelected = true;
 		Dispatcher.UIThread.RunJobs();
 
-		Border panel = toolsItem.GetVisualAncestors().OfType<Border>().First(b => b.Name == "PlayerMenuPanel");
+		Border panel = fullscreen.GetVisualAncestors().OfType<Border>().First(b => b.Name == "PlayerMenuPanel");
 		Assert.Equal(Color.Parse("#FAFAFC"), PlayerRender.SolidColor(panel.Background));
 		Assert.Equal(new CornerRadius(10), panel.CornerRadius);
-		MenuItem[] items = tools.Items.OfType<MenuItem>().ToArray();
-		Assert.Equal(8, items.Length);
-		foreach(MenuItem item in items.Take(6)) {
+		string[] tail = OperatingSystem.IsMacOS() ? new[] { "Help" } : new[] { "Settings…", "Help", "About MesenAI", "Quit MesenAI" };
+		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(tail).ToArray(), items.Select(i => LabelOf(i).Text!.Replace("_", "")).ToArray());
+		foreach(MenuItem item in items) {
 			Assert.Equal(26, item.Bounds.Height, 0.5);
 			TextBlock label = LabelOf(item);
 			Assert.Equal("Inter", label.FontFamily.Name);
 			Assert.Equal(13.5, label.FontSize);
-			Assert.True(item.FindAll<PathIcon>().Any(p => p.Classes.Contains("chevron") && p.IsOnScreen()), $"{label.Text} has no chevron");
+			bool submenu = label.Text == "Help";
+			Assert.Equal(submenu, item.FindAll<PathIcon>().Any(p => p.Classes.Contains("chevron") && p.IsOnScreen()));
 		}
 		//The open ⋯ shows the grey pressed pill, not Fluent's accent selection.
 		Assert.Equal(Color.Parse("#E8E8EC"), PlayerRender.SolidColor(tools.FindAll<Border>().First(b => b.Name == "PART_LayoutRoot").Background));
-		Border highlight = toolsItem.FindAll<Border>().First(b => b.Name == "PART_LayoutRoot");
+		Border highlight = fullscreen.FindAll<Border>().First(b => b.Name == "PART_LayoutRoot");
 		Assert.Equal(PlayTint, PlayerRender.SolidColor(highlight.Background));
-		Assert.Equal(Colors.White, PlayerRender.SolidColor(LabelOf(toolsItem).Foreground));
-		TextBlock hint = LabelOf(window.FindNamed<MenuItem>("ToolsMenuHint"));
-		Assert.Equal(11.5, hint.FontSize);
-		//The render's labels (Player-only keys; the classic menu bar keeps its own).
-		Assert.Equal(new[] { "File", "Game", "Options", "Tools", "Debug", "Help" }, items.Take(6).Select(i => LabelOf(i).Text!.Replace("_", "")).ToArray());
-		Assert.Equal("Show Classic Menu Bar", LabelOf(window.FindNamed<MenuItem>("ShowClassicMenuBarItem")).Text);
-		Assert.Equal("Debugger, Lua, HD Pack Builder, netplay…", hint.Text);
+		Assert.Equal(Colors.White, PlayerRender.SolidColor(LabelOf(fullscreen).Foreground));
 		Assert.True(panel.BoxShadow.Count > 0, "the menu panel has no drop shadow");
-		Assert.Equal(Text2, PlayerRender.SolidColor(hint.Foreground));
+		//The groups are split by a thin line, not a "-" row.
+		MenuItem[] separators = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.Header as string == "-").ToArray();
+		Assert.NotEmpty(separators);
+		foreach(MenuItem separator in separators) {
+			Assert.Equal(9, separator.Bounds.Height, 0.5);
+			Assert.True(separator.FindNamed<Border>("PlayerSeparatorLine").IsOnScreen());
+			Assert.False(separator.FindNamed<Border>("PART_LayoutRoot").IsOnScreen());
+		}
 
 		SaveWithPopup(window, panel, "W-S2");
+		tools.Close();
+		Dispatcher.UIThread.RunJobs();
 	}
 
-	//Decision 3: in Advanced mode the switcher and the Tools ⋯ menu keep the
-	//classic look.
+	//ADR-0250 Decision 2: Classic is the original GUI - its menu bar keeps
+	//the classic look (no Player panel, no Inter rows).
 	[AvaloniaFact]
-	public void Advanced_mode_keeps_the_classic_switcher_and_tools_menu()
+	public void Classic_keeps_the_classic_menu_bar_look()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = ShowWindow(UiMode.Advanced, Workspace.Play);
-		Button profile = window.FindNamed<Button>("ProfileButton");
-		profile.Flyout!.ShowAt(profile);
-		Dispatcher.UIThread.RunJobs();
-		StackPanel panel = Assert.IsType<StackPanel>(Assert.IsType<Flyout>(profile.Flyout).Content);
-		FlyoutPresenter presenter = panel.GetVisualAncestors().OfType<FlyoutPresenter>().First();
-		Assert.NotEqual(new CornerRadius(14), presenter.CornerRadius);
-		Assert.DoesNotContain(panel.FindAll<Border>(), b => b.Classes.Contains("badge") && b.IsOnScreen());
-		profile.Flyout.Hide();
+		(MainWindow window, _) = ShowWindow(UiMode.Advanced, Workspace.Classic);
+		Assert.False(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
 
-		MenuItem tools = window.FindNamed<MenuItem>("ToolsMenuButton");
-		tools.IsSubMenuOpen = true;
+		MenuItem fileMenu = window.FindNamed<Menu>("ActionMenu").GetRealizedContainers().OfType<MenuItem>().First();
+		fileMenu.IsSubMenuOpen = true;
 		Dispatcher.UIThread.RunJobs();
-		MenuItem file = tools.Items.OfType<MenuItem>().First();
-		Assert.DoesNotContain(file.GetVisualAncestors().OfType<Border>(), b => b.Name == "PlayerMenuPanel");
-		Assert.NotEqual("Inter", LabelOf(file).FontFamily.Name);
-		//W-S2's Player labels do not leak into Advanced.
-		Assert.Equal("Settings", LabelOf(window.FindNamed<MenuItem>("ToolsMenuOptions")).Text!.Replace("_", ""));
-		Assert.Equal("Show classic menu bar", LabelOf(window.FindNamed<MenuItem>("ShowClassicMenuBarItem")).Text);
-		Assert.Equal("Debugger, Lua, HD Pack Builder, …", LabelOf(window.FindNamed<MenuItem>("ToolsMenuHint")).Text);
+		MenuItem open = fileMenu.GetRealizedContainers().OfType<MenuItem>().First();
+		Assert.DoesNotContain(open.GetVisualAncestors().OfType<Border>(), b => b.Name == "PlayerMenuPanel");
+		Assert.NotEqual("Inter", LabelOf(open).FontFamily.Name);
+		fileMenu.IsSubMenuOpen = false;
+		Dispatcher.UIThread.RunJobs();
 	}
 
 	//A popup is its own top level in the headless platform: draw its frame

@@ -54,10 +54,10 @@ public static class PauseOverlay
 	};
 
 	//W-P4's "Differences from today's overlay": Save and Load merged into one
-	//Save states row; Advanced GUI is gone because Tools ⋯ sits in the bar the
-	//overlay reveals (the UiMode choice is in Settings › Preferences there);
-	//Quit no longer closes the app - that is Tools ⋯ › File › Exit (and the OS's
-	//own ⌘Q / Alt+F4), while the row powers the game off.
+	//Save states row; Advanced GUI is gone - since ADR-0250 it is the Classic
+	//door, in the switcher the overlay reveals with the bar; Quit no longer
+	//closes the app - that is the shared tail's Quit MesenAI (the app menu on
+	//macOS, and the OS's own ⌘Q / Alt+F4), while the row powers the game off.
 	public static PauseOverlayDestination WhereNow(FormerOverlayAction action)
 	{
 		return action switch {
@@ -68,8 +68,8 @@ public static class PauseOverlay
 			FormerOverlayAction.Enhancements => new(PauseOverlayControl.Enhancements, ""),
 			FormerOverlayAction.Cheats => new(PauseOverlayControl.Cheats, ""),
 			FormerOverlayAction.Settings => new(PauseOverlayControl.Settings, ""),
-			FormerOverlayAction.AdvancedGui => new(null, "Tools ⋯ › Settings › Preferences"),
-			FormerOverlayAction.QuitApp => new(null, "Tools ⋯ › File › Exit"),
+			FormerOverlayAction.AdvancedGui => new(null, "Switcher › Classic"),
+			FormerOverlayAction.QuitApp => new(null, "Tools ⋯ › Quit MesenAI"),
 			_ => throw new ArgumentOutOfRangeException(nameof(action))
 		};
 	}

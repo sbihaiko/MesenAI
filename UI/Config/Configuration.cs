@@ -72,9 +72,6 @@ namespace Mesen.Config
 			//default rule says Player mode. An existing file - readable but
 			//without the UiMode key, or unreadable - is the upgrade path (Advanced).
 			cfg.Preferences.UiMode = defaults.UiMode;
-			//G.1 (PRD Part B §13.2): a fresh install never had the classic menu
-			//bar, so the one-time "your menus are under Tools ⋯" toast is not owed.
-			cfg.Preferences.ClassicMenuNoticeShown = defaults.ClassicMenuNoticeShown;
 			//ADR-0243 Q3: a new install records only on Remaster's Record
 			cfg.EnhancementPacks.BootstrapEnhancementFolder = defaults.BootstrapEnhancementFolder;
 			return cfg;

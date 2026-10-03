@@ -55,7 +55,13 @@
 		submenu itself keeps the classic chrome (unchanged contents).-->
 		<ControlTemplate x:Key="PlayerToolsMenuRowTemplate" TargetType="MenuItem">
 			<Panel>
-				<Border Name="PART_LayoutRoot" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PlayerRadiusSmall}" Padding="{TemplateBinding Padding}">
+				<!--ADR-0250: a "-" action is the thin line between the door's groups.
+				Chosen here from Header rather than by a [Header=-] style: a style
+				keyed on Header threw while the ⋯ items were attached.-->
+				<Border Name="PlayerSeparatorLine" Height="1" Margin="6 4" VerticalAlignment="Center" Background="{StaticResource PlayerSeparatorBrush}"
+					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=-}" />
+				<Border Name="PART_LayoutRoot" Height="26" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PlayerRadiusSmall}" Padding="{TemplateBinding Padding}"
+					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.NotEqual}, ConverterParameter=-}">
 					<Grid ColumnDefinitions="Auto,*,Auto">
 						<PathIcon Name="PlayerCheck" Data="{StaticResource PlayerIconCheck}" Width="11" Height="11" Margin="2 0 5 0" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
 						<ContentPresenter Name="PlayerHeader" Grid.Column="1" Content="{TemplateBinding Header}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center">
@@ -147,26 +153,6 @@
 			<Setter Property="Width" Value="150" />
 			<Setter Property="HorizontalContentAlignment" Value="Left" />
 		</Style>
-		<!--W-S2: the Tools ⋯ labels. Player follows the render; Advanced keeps
-		the classic wording (separate keys, so neither leaks into the other).-->
-		<Style Selector="MenuItem#ToolsMenuOptions">
-			<Setter Property="Header" Value="{l:Translate mnuOptions}" />
-		</Style>
-		<Style Selector="MenuItem#ShowClassicMenuBarItem">
-			<Setter Property="Header" Value="{l:Translate mnuShowClassicMenuBar}" />
-		</Style>
-		<Style Selector="MenuItem#ToolsMenuHint">
-			<Setter Property="Header" Value="{l:Translate lblToolsHint}" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuOptions">
-			<Setter Property="Header" Value="{l:Translate mnuPlayerOptions}" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ShowClassicMenuBarItem">
-			<Setter Property="Header" Value="{l:Translate mnuPlayerShowClassicMenuBar}" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuHint">
-			<Setter Property="Header" Value="{l:Translate lblPlayerToolsHint}" />
-		</Style>
 		<Style Selector=":is(UserControl).player Button#ProfileButton:pointerover /template/ Border#PART_Background, :is(UserControl).player Button#ProfileButton:pressed /template/ Border#PART_Background">
 			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
 		</Style>
@@ -187,9 +173,6 @@
 		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > AccessText, :is(UserControl).player MenuItem#ToolsMenuButton AccessText">
 			<Setter Property="FontSize" Value="18" />
 			<Setter Property="FontWeight" Value="Bold" />
-		</Style>
-		<Style Selector="MenuItem#ToolsMenuHint">
-			<Setter Property="FontSize" Value="11" />
 		</Style>
 
 		<!--W-S2 (Player): the Tools ⋯ popup's chrome. Classic everywhere else.-->
@@ -221,7 +204,9 @@
 			<Setter Property="FontWeight" Value="Medium" />
 			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
 			<Setter Property="Background" Value="Transparent" />
-			<Setter Property="Height" Value="26" />
+			<!--Rows are 26 px from the template (a separator is thinner), so
+			the menus' fixed item height is lifted.-->
+			<Setter Property="Height" Value="NaN" />
 			<Setter Property="Margin" Value="6 2" />
 			<Setter Property="Padding" Value="12 0 10 0" />
 		</Style>
@@ -247,19 +232,6 @@
 		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem AccessText">
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
 			<Setter Property="FontWeight" Value="Medium" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem#ToolsMenuHint AccessText">
-			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
-			<Setter Property="FontWeight" Value="Normal" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem#ShowClassicMenuBarItem">
-			<Setter Property="Padding" Value="12 0 10 0" />
-		</Style>
-		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem#ToolsMenuHint, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem#ToolsMenuHint:disabled">
-			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
-			<Setter Property="FontWeight" Value="Normal" />
-			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
-			<Setter Property="Height" Value="22" />
 		</Style>
 		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > Separator">
 			<Setter Property="Margin" Value="12 4" />
@@ -330,6 +302,10 @@
 		<Style Selector=":is(UserControl).player TextBlock.switcher-glyph, :is(UserControl).player TextBlock.switcher-checkmark">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
+		<!--ADR-0250 (W-S3): Classic's badge is grey with the gear.-->
+		<Style Selector=":is(UserControl).player Border.switcher-badge.classic">
+			<Setter Property="Background" Value="{StaticResource PlayerGrayBrush}" />
+		</Style>
 		<Style Selector=":is(UserControl).player PathIcon.switcher-check">
 			<Setter Property="IsVisible" Value="True" />
 		</Style>
@@ -369,17 +345,9 @@
 	<DockPanel Name="TitleBarArea" Height="52" chrome:WindowDecorationProperties.ElementRole="TitleBar">
 		<Border Name="TitleBarHairline" DockPanel.Dock="Bottom" Height="1" Background="Transparent" />
 		<c:MesenMenu Name="ToolsMenu" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0 0 8 0" chrome:WindowDecorationProperties.ElementRole="User">
-			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32">
-				<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding MainMenu.FileMenuItems}" />
-				<MenuItem Header="{l:Translate mnuGame}" ItemsSource="{Binding MainMenu.GameMenuItems}" />
-				<MenuItem Name="ToolsMenuOptions" ItemsSource="{Binding MainMenu.OptionsMenuItems}" />
-				<MenuItem Name="ToolsMenuTools" Header="{l:Translate mnuTools}" ItemsSource="{Binding MainMenu.ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
-				<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding MainMenu.DebugMenuItems}" />
-				<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding MainMenu.HelpMenuItems}" />
-				<Separator />
-				<MenuItem Name="ShowClassicMenuBarItem" ToggleType="CheckBox" IsChecked="{Binding Config.Preferences.ShowClassicMenuBar, Mode=OneWay}" Click="OnToggleClassicMenuBar" />
-				<MenuItem Name="ToolsMenuHint" IsEnabled="False" />
-			</MenuItem>
+			<!--ADR-0250 (W-S2): the active door's own short menu, from the
+			host-free WorkspaceMenu rule (MainMenuViewModel.DoorMenuItems).-->
+			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32" ItemsSource="{Binding MainMenu.DoorMenuItems}" SubmenuOpened="MnuTools_Opened" />
 		</c:MesenMenu>
 
 		<Button Name="ProfileButton" DockPanel.Dock="Left" Margin="12 0 0 0" VerticalAlignment="Center" Padding="10 4" chrome:WindowDecorationProperties.ElementRole="User">
@@ -402,7 +370,8 @@
 			<Button.Flyout>
 				<!--W-S3: a popover anchored to the profile button; Esc or a click
 				outside closes it with nothing changed (light dismiss). Fixed order
-				Play, Remaster, Share; the check mark moves, the rows do not.-->
+				Play, Remaster, Share, Classic (ADR-0250); the check mark moves, the
+				rows do not.-->
 				<Flyout Placement="BottomEdgeAlignedLeft">
 					<StackPanel Name="SwitcherPanel" Spacing="4" MinWidth="360">
 						<ItemsControl Name="SwitcherRows" ItemsSource="{Binding Shell.Rows}">
@@ -418,7 +387,8 @@
 											<!--Player: the profile's tinted badge; classic: the text glyph.-->
 											<Border DockPanel.Dock="Left" Classes="badge medium switcher-badge"
 												Classes.remaster="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Remaster}}"
-												Classes.share="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}">
+												Classes.share="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}"
+												Classes.classic="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Classic}}">
 												<PathIcon Data="{Binding Workspace, Converter={StaticResource WorkspaceIcon}}" />
 											</Border>
 											<TextBlock DockPanel.Dock="Left" Classes="switcher-glyph" Text="{Binding Glyph}" FontSize="18" Width="28" VerticalAlignment="Center" />

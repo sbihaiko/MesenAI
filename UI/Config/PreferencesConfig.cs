@@ -59,26 +59,16 @@ namespace Mesen.Config
 		//no UiMode key yet (the key is always written on first save, so this
 		//initializer only ever matters once). A fresh unzip (no settings.json)
 		//starts in Player, set explicitly in Configuration.CreateConfig.
-		//AutoHideMenu is ignored while ShowClassicMenuBar is off (G.1: there is
-		//no menu bar).
+		//ADR-0250: the Classic door owns UiMode.Advanced and a task door
+		//UiMode.Player (MainWindowViewModel.OnWorkspaceChanged is the writer).
+		//AutoHideMenu applies only in Classic, the one door with a menu bar.
 		[ObservableProperty] public partial UiMode UiMode { get; set; } = UiMode.Advanced;
 
-		//G.1 (ADR-0241, PRD Part B §13.2): the active task workspace (Play,
-		//Remaster, Share), shown one at a time by the shell. Separate from
-		//UiMode, which keeps its own meaning; a missing key is Play.
+		//G.1 (ADR-0241, PRD Part B §13.2), ADR-0250: the active door (Play,
+		//Remaster, Share, Classic), shown one at a time. A missing or unknown
+		//key is Play, except that an Advanced install opens in Classic
+		//(WorkspaceShell.InitialDoor).
 		[ObservableProperty] public partial Workspace Workspace { get; set; } = Workspace.Play;
-
-		//G.1 (§13.2, §13.8 Q4): the classic File/Game/Options/Tools/Debug/Help
-		//bar above the shell. Off everywhere, upgrades included (user's
-		//decision, 2026-10-02) - the same menus are under Tools ⋯, where its
-		//only toggle lives (rule 12). Replaces UiMode as the menu-bar rule.
-		[ObservableProperty] public partial bool ShowClassicMenuBar { get; set; } = ClassicMenuNotice.DefaultShowClassicMenuBar;
-
-		//G.1: the one-time "your menus are under Tools ⋯" toast. The
-		//initializer is the upgrade value (an existing settings.json without
-		//the key still owes it); Configuration.CreateConfig marks a fresh
-		//install as done, since it never had a menu bar to lose.
-		[ObservableProperty] public partial bool ClassicMenuNoticeShown { get; set; } = ClassicMenuNotice.ShownForMissingKey(settingsFileExists: true);
 
 		[ObservableProperty] public partial bool ShowFps { get; set; } = false;
 		[ObservableProperty] public partial bool ShowFrameCounter { get; set; } = false;

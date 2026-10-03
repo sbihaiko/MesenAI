@@ -10,8 +10,8 @@ namespace Mesen.Views
 {
 	//G.1 (PRD Part B §13.5.1, W-S1-W-S3): code-behind of the shell bar. The
 	//workspace rules are host-free (UI/Logic/WorkspaceShell.cs); this only
-	//routes clicks to MainWindowViewModel.SelectWorkspace and keeps the Tools ⋯
-	//dropdown behaving like the classic bar (netplay submenu refresh).
+	//routes clicks to MainWindowViewModel.SelectWorkspace and keeps the door's
+	//Tools ⋯ current when it opens.
 	public class WorkspaceShellBar : UserControl
 	{
 		public Menu ToolsMenu { get; }
@@ -43,18 +43,16 @@ namespace Mesen.Views
 			this.GetControl<Button>("ProfileButton").Flyout?.Hide();
 		}
 
-		private void OnToggleClassicMenuBar(object? sender, RoutedEventArgs e)
-		{
-			if(DataContext is MainWindowViewModel model) {
-				model.ToggleClassicMenuBar();
-			}
-		}
-
-		//Same refresh MainMenuView.MnuTools_Opened does for the classic bar: the
-		//netplay "Select controller" submenu is rebuilt when Tools opens.
+		//When Tools ⋯ opens: Play's console items follow the loaded game
+		//(ADR-0250), and Share's netplay "Select controller" submenu is rebuilt,
+		//as MainMenuView.MnuTools_Opened does for the classic bar.
 		private void MnuTools_Opened(object? sender, RoutedEventArgs e)
 		{
-			if(DataContext is MainWindowViewModel model && model.MainMenu.UpdateNetplayMenu() && e.Source is MenuItem item) {
+			if(DataContext is not MainWindowViewModel model || e.Source is not MenuItem item || item.Name != "ToolsMenuButton") {
+				return;
+			}
+			bool rebuilt = model.MainMenu.RefreshDoorMenu();
+			if(model.MainMenu.UpdateNetplayMenu() && !rebuilt) {
 				IEnumerable? items = item.ItemsSource;
 				item.ItemsSource = null;
 				item.ItemsSource = items;

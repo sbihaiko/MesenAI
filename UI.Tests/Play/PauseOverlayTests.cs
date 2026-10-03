@@ -27,7 +27,7 @@ namespace Mesen.Tests.Play
 		{
 			foreach(FormerOverlayAction action in Enum.GetValues<FormerOverlayAction>()) {
 				PauseOverlayDestination where = PauseOverlay.WhereNow(action);
-				Assert.True(where.Control.HasValue || where.ToolsPath.StartsWith("Tools ⋯ › "), action.ToString());
+				Assert.True(where.Control.HasValue || where.ToolsPath.StartsWith("Tools ⋯ › ") || where.ToolsPath.StartsWith("Switcher › "), action.ToString());
 				if(where.Control.HasValue) {
 					Assert.Contains(where.Control.Value, PauseOverlay.Controls);
 				}
@@ -42,12 +42,13 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void Advanced_gui_and_quitting_the_app_move_under_tools()
+		public void Advanced_gui_moves_to_the_classic_door_and_quitting_the_app_under_tools()
 		{
 			Assert.Null(PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).Control);
-			Assert.Equal("Tools ⋯ › Settings › Preferences", PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).ToolsPath);
+			Assert.Equal("Switcher › Classic", PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).ToolsPath);
 			Assert.Null(PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).Control);
-			Assert.Equal("Tools ⋯ › File › Exit", PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).ToolsPath);
+			//ADR-0250: the shared tail's Quit (the app menu on macOS).
+			Assert.Equal("Tools ⋯ › Quit MesenAI", PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).ToolsPath);
 		}
 
 		[Fact]

@@ -31,8 +31,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly bool _confirmExit = ConfigManager.Config.Preferences.ConfirmExitResetPower;
@@ -45,8 +43,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		prefs.ConfirmExitResetPower = _confirmExit;
@@ -98,8 +94,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
-		prefs.ShowClassicMenuBar = false;
-		prefs.ClassicMenuNoticeShown = true;
 		prefs.PauseWhenInBackground = false;
 		prefs.PauseWhenInMenusAndConfig = false;
 		prefs.ConfirmExitResetPower = false;

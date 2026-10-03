@@ -24,6 +24,8 @@
 			<MenuItem Header="{l:Translate mnuTools}" ItemsSource="{Binding ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
 			<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding DebugMenuItems}" />
 			<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding HelpMenuItems}" />
+			<!--ADR-0250: Classic has no shell bar; the switcher is this menu.-->
+			<MenuItem Name="WorkspaceMenu" Header="{l:Translate mnuWorkspace}" ItemsSource="{Binding WorkspaceMenuItems}" />
 		</c:MesenMenu>
 		<Panel Name="MenuPanel" />
 	</DockPanel>

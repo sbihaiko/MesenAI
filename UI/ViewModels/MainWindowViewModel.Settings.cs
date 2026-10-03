@@ -22,11 +22,12 @@ namespace Mesen.ViewModels
 			PlayerSettings = settings;
 		}
 
-		//Done: back to W-P4 while a game is loaded.
+		//Done: back to W-P4 while a game is loaded in Play. Opened from another
+		//door's Tools ⋯ or app menu (ADR-0250), Done just closes it.
 		public void ClosePlayerSettingsToOverlay()
 		{
 			ClosePlayerSettings();
-			if(IsGameLoaded) {
+			if(IsGameLoaded && Shell.IsPlay) {
 				OpenPauseOverlay();
 			}
 		}

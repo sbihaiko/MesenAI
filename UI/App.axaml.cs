@@ -87,9 +87,39 @@ namespace Mesen
 					if(OperatingSystem.IsMacOS() && this.TryGetFeature<IActivatableLifetime>() is { } activatable) {
 						activatable.Activated += OnActivated;
 					}
+					if(OperatingSystem.IsMacOS()) {
+						InitAppMenu();
+					}
 				}
 			}
 			base.OnFrameworkInitializationCompleted();
+		}
+
+		//ADR-0250 (Decisions 3 and 4): on macOS the shared tail's About MesenAI
+		//and Settings… ⌘, live in the system app menu, in every door (Classic's
+		//About, Preferences and Exit moved there too). Quit MesenAI ⌘Q is
+		//Avalonia's default app-menu item, which closes the main window through
+		//the same path as File › Exit.
+		private void InitAppMenu()
+		{
+			NativeMenu menu = NativeMenu.GetMenu(this) ?? new NativeMenu();
+			NativeMenuItem about = new(ResourceHelper.GetMessage("DoorMenuAbout"));
+			about.Click += (s, e) => WithMainWindow((wnd, model) => model.MainMenu.OpenAbout(wnd));
+			NativeMenuItem settings = new(ResourceHelper.GetMessage("DoorMenuSettings")) {
+				Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.OemComma, Avalonia.Input.KeyModifiers.Meta)
+			};
+			settings.Click += (s, e) => WithMainWindow((wnd, model) => model.MainMenu.OpenSettings(wnd));
+			menu.Items.Add(about);
+			menu.Items.Add(new NativeMenuItemSeparator());
+			menu.Items.Add(settings);
+			NativeMenu.SetMenu(this, menu);
+		}
+
+		private static void WithMainWindow(Action<MainWindow, MainWindowViewModel> action)
+		{
+			if(ApplicationHelper.GetMainWindow() is MainWindow wnd && wnd.DataContext is MainWindowViewModel model) {
+				action(wnd, model);
+			}
 		}
 
 		//Issue #149: handles Apple 'open documents' events (Finder / `open -a`)

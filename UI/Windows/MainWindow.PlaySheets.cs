@@ -97,7 +97,11 @@ namespace Mesen.Windows
 		//W-P8 (ADR-0249): Player mode's Settings is a sheet in this window - the
 		//essentials strip (Display, Look, Audio, Controls), opened on Display;
 		//Done and Esc keep the changes and return to W-P4 while a game is loaded.
-		private void OnOverlaySettings(object? sender, RoutedEventArgs e)
+		private void OnOverlaySettings(object? sender, RoutedEventArgs e) => OpenPlayerSettingsSheet();
+
+		//ADR-0250: also the shared tail's Settings… in every task door (Tools ⋯,
+		//or the macOS app menu).
+		public void OpenPlayerSettingsSheet()
 		{
 			ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true, CreateDisplaySettings);
 			settings.PropertyChanged += OnPlayerSettingsChanged;

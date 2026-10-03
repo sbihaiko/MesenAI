@@ -460,14 +460,6 @@ namespace Mesen.Windows
 					cmdLine.LoadFiles();
 					cmdLine.OnAfterInit(this);
 
-					//G.1 (§13.2, §13.8 Q4): an upgraded install learns once that its
-					//menus moved under Tools ⋯. The text is the UI's own localized
-					//string (the core shows an unknown key verbatim);
-					//DisplayMessageHelper makes it visible with no game loaded.
-					if(_model.ConsumeClassicMenuNotice()) {
-						DisplayMessageHelper.DisplayMessage(ResourceHelper.GetMessage("ClassicMenuNoticeTitle"), ResourceHelper.GetMessage("ClassicMenuNoticeText"));
-					}
-
 					if(ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates) {
 						_model.MainMenu.CheckForUpdate(this, true);
 					}
@@ -881,17 +873,26 @@ namespace Mesen.Windows
 		//hides (a Play game running unpaused) the game fills the whole window
 		//and the traffic lights stay over its top-left corner; Esc/pause brings
 		//the bar back. Windows/Linux keep the in-window strip (ShellTitleBar).
+		//ADR-0250: Classic has no shell bar and keeps the plain title bar, so
+		//the extension follows the door.
 		private void InitShellTitleBar()
 		{
 			if(!ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS())) {
 				return;
 			}
-			ExtendClientAreaToDecorationsHint = true;
-			ExtendClientAreaTitleBarHeightHint = ShellTitleBar.Height;
 			if(_shellBar.Parent is DockPanel dock) {
 				dock.Children.Remove(_shellBar);
 				dock.Children.Insert(0, _shellBar);
 			}
+			_model.Shell.WorkspaceChanged += _ => ApplyShellTitleBar();
+			ApplyShellTitleBar();
+		}
+
+		private void ApplyShellTitleBar()
+		{
+			bool extend = ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS(), _model.Shell.Active);
+			ExtendClientAreaToDecorationsHint = extend;
+			ExtendClientAreaTitleBarHeightHint = extend ? ShellTitleBar.Height : -1;
 			UpdateShellTitleBarInset();
 		}
 
@@ -1009,8 +1010,8 @@ namespace Mesen.Windows
 			return false;
 		}
 
-		//G.1 (W-S3): ⌘1/⌘2/⌘3 (Ctrl+1/2/3 off macOS) switch to Play/Remaster/Share
-		//directly, in the switcher's fixed order. Handled before the key reaches
+		//G.1 (W-S3), ADR-0250: ⌘1-⌘4 (Ctrl+1-4 off macOS) switch to
+		//Play/Remaster/Share/Classic directly, in the switcher's fixed order. Handled before the key reaches
 		//the core, so it never doubles as an emulator input.
 		private bool ProcessWorkspaceShortcut(KeyEventArgs e)
 		{
@@ -1022,6 +1023,7 @@ namespace Mesen.Windows
 				Key.D1 or Key.NumPad1 => 1,
 				Key.D2 or Key.NumPad2 => 2,
 				Key.D3 or Key.NumPad3 => 3,
+				Key.D4 or Key.NumPad4 => 4,
 				_ => 0
 			};
 			Workspace? target = WorkspaceShell.FromShortcutDigit(digit);

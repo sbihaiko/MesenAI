@@ -41,7 +41,7 @@ namespace Mesen.Windows
 			try {
 				_model.ApplyChanges();
 				//Toggles apply on the next load (same rule as EnableHdPacks) - offer
-				//the power cycle right away, like InstallHdPack does
+				//the power cycle right away, as the retired Install HD Pack did (ADR-0250)
 				if(await MesenMsgBox.Show(this, "EnhancementPacksConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
 					LoadRomHelper.PowerCycle();
 				}

@@ -13,9 +13,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Mesen.Config;
+using Mesen.Config.Shortcuts;
 using Mesen.Debugger.Utilities;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Views;
 using Mesen.Windows;
@@ -25,31 +27,24 @@ using Xunit.Sdk;
 namespace Mesen.HeadlessTests;
 
 //G.1 (PRD Part B §8, ADR-0241, §13.5.1 W-S1-W-S3): the shell's XAML wiring.
-//The rules themselves (fixed order, ⌘ digits, bar visibility, the once-only
-//notice, the status sentence) are pinned host-free in UI.Tests/Shell; this
-//checks the crossing into MainWindow.axaml: that Tools ⋯ realizes the classic
-//MainMenuAction tree, that only the active profile is on screen, that the
-//placeholders name the next slice, and - with the real core - that switching
-//leaves the running game running.
+//The rules themselves (fixed order, ⌘ digits, bar visibility, the doors'
+//menus - ADR-0250's WorkspaceMenu - and the status sentence) are pinned
+//host-free in UI.Tests/Shell; this checks the crossing into MainWindow.axaml:
+//that each door's Tools ⋯ and Classic's menu bar realize what the rule says,
+//that the door owns UiMode, that only the active door is on screen, and -
+//with the real core - that switching leaves the running game running.
 //
 //Needs a MainWindow (EmuApi.InitDll in its constructor), so it self-skips on
 //the core-less CI runner like the other MainWindow tests.
 [Collection(NativeCoreCollection.Name)]
 public class WorkspaceShellTests : IDisposable
 {
-	private static readonly string[] TopLevelMenus = { "File", "Game", "Settings", "Tools", "Debug", "Help" };
-	//W-S2: in Player mode Tools ⋯ follows the render ("Options"); the classic
-	//bar and Advanced's Tools ⋯ keep "Settings".
-	private static readonly string[] PlayerToolsMenus = { "File", "Game", "Options", "Tools", "Debug", "Help" };
-
 	//ConfigManager.Config is process-global: every setting a test here touches
 	//is restored afterwards, so the next class in the collection (e.g.
 	//PackAudioNoticeInstallTests, gated on AutoInstallCommunityPacks) sees the
 	//values it would have seen without this class.
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 
@@ -58,11 +53,9 @@ public class WorkspaceShellTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
-		//Workspace switches and the classic-bar toggle call Config.Save(); write
+		//Workspace switches call Config.Save(); write
 		//the restored values back so settings.json matches memory again.
 		ConfigManager.Config.Save();
 	}
@@ -73,8 +66,6 @@ public class WorkspaceShellTests : IDisposable
 	{
 		ConfigManager.Config.Preferences.UiMode = uiMode;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
-		ConfigManager.Config.Preferences.ShowClassicMenuBar = false;
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 		ConfigManager.Config.Preferences.PauseWhenInBackground = false;
 		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = false;
 
@@ -124,50 +115,58 @@ public class WorkspaceShellTests : IDisposable
 		return labels;
 	}
 
-	[AvaloniaFact]
-	public void Tools_dropdown_holds_the_six_classic_menus_and_the_classic_bar_toggle()
+	//ADR-0250 Decision 3: the shared tail - Help ▸ only on macOS, where About,
+	//Settings… and Quit are in the app menu; the four entries elsewhere.
+	private static string[] Tail => OperatingSystem.IsMacOS()
+		? new[] { "Help" }
+		: new[] { "Settings…", "Help", "About MesenAI", "Quit MesenAI" };
+
+	private static string[] DoorToolsLabels(MainWindow window)
 	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = ShowShell();
-
 		MenuItem dots = OpenToolsDropdown(window);
-		string[] labels = dots.GetRealizedContainers().OfType<MenuItem>().Select(Label).ToArray();
-
-		Assert.Equal(PlayerToolsMenus, labels.Take(6).ToArray());
-		Assert.Contains("Show Classic Menu Bar", labels);
+		string[] labels = dots.GetRealizedContainers().OfType<MenuItem>().Select(Label).Where(l => l != "-" && l.Length > 0).ToArray();
+		dots.Close();
+		Dispatcher.UIThread.RunJobs();
+		return labels;
 	}
 
-	//The stop rule's "every classic menu action is still reachable from Tools
-	//⋯": each of the six submenus is bound to the very list the classic bar
-	//renders, and realizes the same entries in the same order.
+	//ADR-0250 Decision 3, as realized: each task door's Tools ⋯ is its own
+	//short menu, then the tail. No game is loaded, so Play shows no console
+	//item (disk, coin, barcode, tape).
 	[AvaloniaFact]
-	public void Every_classic_menu_action_is_reachable_from_tools()
+	public void Each_task_door_tools_menu_follows_the_table()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();
 
-		IEnumerable[] classicLists = {
-			model.MainMenu.FileMenuItems, model.MainMenu.GameMenuItems, model.MainMenu.OptionsMenuItems,
-			model.MainMenu.ToolsMenuItems, model.MainMenu.DebugMenuItems, model.MainMenu.HelpMenuItems
-		};
-		//The comparison needs the classic bar realized, so turn it on.
-		model.ToggleClassicMenuBar();
-		Dispatcher.UIThread.RunJobs();
-		Menu classicBar = window.FindNamed<Menu>("ActionMenu");
-		MenuItem dots = OpenToolsDropdown(window);
+		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(Tail).ToArray(), DoorToolsLabels(window));
 
-		for(int i = 0; i < TopLevelMenus.Length; i++) {
-			MenuItem fromTools = Child(dots, PlayerToolsMenus[i]);
-			Assert.Same(classicLists[i], fromTools.ItemsSource);
-			string[] toolsLabels = RealizedLabels(fromTools);
-			Assert.NotEmpty(toolsLabels);
-			Assert.Equal(RealizedLabels(Child(classicBar, TopLevelMenus[i])), toolsLabels);
-		}
+		model.SelectWorkspace(Workspace.Remaster);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(new[] { "Reload Pack Images", "Record Music", "Enhancement Packs", "Log Window" }.Concat(Tail).ToArray(), DoorToolsLabels(window));
+
+		model.SelectWorkspace(Workspace.Share);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(new[] { "Play a Replay…", "Record", "Netplay", "Screenshot" }.Concat(Tail).ToArray(), DoorToolsLabels(window));
 	}
 
-	//The P.4 gate that disabled every Debug action in Player is retired: Tools ⋯
-	//is where the debugger is reached, in either UiMode, so a Player-mode
-	//Debug entry is enabled exactly when the same entry is in Advanced.
+	//Nothing of the classic menus is in a task door's Tools ⋯ any more
+	//(Decision 3), and the Show classic menu bar toggle is gone.
+	[AvaloniaFact]
+	public void Task_door_tools_menu_has_no_classic_menus_and_no_toggle()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = ShowShell();
+
+		string[] labels = DoorToolsLabels(window);
+		foreach(string classic in new[] { "File", "Game", "Options", "Tools", "Debug", "Show Classic Menu Bar" }) {
+			Assert.DoesNotContain(classic, labels);
+		}
+		Assert.False(window.FindNamed<MainMenuView>("MainMenu").IsOnScreen());
+	}
+
+	//The P.4 gate that disabled every Debug action in Player is retired: a
+	//Debug entry is enabled exactly as it would be in Advanced.
 	[AvaloniaFact]
 	public void Debug_entries_are_not_disabled_by_player_mode()
 	{
@@ -184,24 +183,120 @@ public class WorkspaceShellTests : IDisposable
 		Assert.Contains(true, inPlayer);
 	}
 
+	//ADR-0250 Decision 2: an Advanced install opens in Classic - the original
+	//GUI: its menu bar (with Workspace ▸), no shell bar, no status line.
 	[AvaloniaFact]
-	public void Classic_bar_is_hidden_by_default_and_the_tools_checkbox_brings_it_back()
+	public void An_advanced_install_opens_in_classic_with_the_classic_menu_bar_and_no_shell()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell(UiMode.Advanced);
 
-		Assert.False(window.FindNamed<MainMenuView>("MainMenu").IsOnScreen());
-
-		MenuItem dots = OpenToolsDropdown(window);
-		MenuItem toggle = Child(dots, "Show classic menu bar");
-		Assert.False(toggle.IsChecked);
-		toggle.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-		Dispatcher.UIThread.RunJobs();
-
-		Assert.True(ConfigManager.Config.Preferences.ShowClassicMenuBar);
-		Assert.True(toggle.IsChecked);
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
+		Assert.Equal(Workspace.Classic, ConfigManager.Config.Preferences.Workspace);
 		Assert.True(model.IsMenuVisible);
 		Assert.True(window.FindNamed<MainMenuView>("MainMenu").IsOnScreen());
+		Assert.False(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("ShellStatusLine").IsOnScreen());
+		//The plain game screen (and the classic home) is Classic's.
+		Assert.True(window.FindNamed<Panel>("PlayWorkspace").IsOnScreen());
+		Assert.DoesNotContain("player", window.FindNamed<Panel>("PlayWorkspace").Classes);
+
+		Menu classicBar = window.FindNamed<Menu>("ActionMenu");
+		string[] menus = classicBar.GetRealizedContainers().OfType<MenuItem>().Select(Label).ToArray();
+		Assert.Equal(new[] { "File", "Game", "Settings", "Tools", "Debug", "Help", "Workspace" }, menus);
+		Assert.Equal(new[] { "Play", "Remaster", "Share" }, RealizedLabels(Child(classicBar, "Workspace")).Where(l => l != "-").ToArray());
+	}
+
+	//ADR-0250 Decision 4: Classic loses its duplicates and nothing else.
+	[AvaloniaFact]
+	public void Classic_menu_bar_has_no_duplicates()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = ShowShell(UiMode.Advanced);
+		Menu classicBar = window.FindNamed<Menu>("ActionMenu");
+
+		//One Pause/Resume entry, whatever the state.
+		string[] game = RealizedLabels(Child(classicBar, "Game"));
+		Assert.Single(game, l => l == "Pause" || l == "Resume");
+
+		MenuItem tools = Child(classicBar, "Tools");
+		tools.Open();
+		Dispatcher.UIThread.RunJobs();
+		string[] movies = RealizedLabels(Child(tools, "Movies"));
+		Assert.Contains("Record...", movies);
+		Assert.DoesNotContain(movies, l => l.StartsWith("Record and"));
+		tools.Close();
+		Dispatcher.UIThread.RunJobs();
+
+		string[] help = RealizedLabels(Child(classicBar, "Help"));
+		Assert.DoesNotContain("Online Help", help);
+		Assert.DoesNotContain("Report a bug", help);
+		Assert.Contains("Check for updates", help);
+
+		string[] file = RealizedLabels(Child(classicBar, "File"));
+		string[] options = RealizedLabels(Child(classicBar, "Settings"));
+		//On macOS About, Preferences and Exit are in the system app menu.
+		Assert.Equal(!OperatingSystem.IsMacOS(), file.Contains("Exit"));
+		Assert.Equal(!OperatingSystem.IsMacOS(), options.Contains("Preferences"));
+		Assert.Equal(!OperatingSystem.IsMacOS(), help.Contains("About"));
+	}
+
+	//ADR-0250 Decision 2: the door owns UiMode - entering Classic sets
+	//Advanced and brings the classic bar; Workspace ▸ › Play goes back to
+	//Player, with the shell bar and without the classic bar.
+	[AvaloniaFact]
+	public void Ui_mode_follows_the_door()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		RawInputModifiers modifier = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
+		window.KeyPress(Key.D4, modifier, PhysicalKey.Digit4, "4");
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
+		Assert.Equal(UiMode.Advanced, ConfigManager.Config.Preferences.UiMode);
+		Assert.True(window.FindNamed<MainMenuView>("MainMenu").IsOnScreen());
+		Assert.False(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
+
+		MenuItem workspace = Child(window.FindNamed<Menu>("ActionMenu"), "Workspace");
+		workspace.Open();
+		Dispatcher.UIThread.RunJobs();
+		Child(workspace, "Play").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(Workspace.Play, model.Shell.Active);
+		Assert.Equal(UiMode.Player, ConfigManager.Config.Preferences.UiMode);
+		Assert.False(window.FindNamed<MainMenuView>("MainMenu").IsOnScreen());
+		Assert.True(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
+
+		//The Preferences combo still sets UiMode: it moves to the owning door.
+		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
+	}
+
+	//The shared tail's Settings… opens the W-P8 sheet in the door it was
+	//picked from; Esc closes it there (Decision 3).
+	[AvaloniaFact]
+	public void Settings_from_a_task_door_opens_the_sheet_there_and_esc_closes_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		model.SelectWorkspace(Workspace.Remaster);
+		Dispatcher.UIThread.RunJobs();
+
+		model.MainMenu.OpenSettings(window);
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.IsPlayerSettingsVisible);
+		Assert.True(window.FindNamed<PlayerSettingsSheetView>("PlayerSettingsSheetHost").IsOnScreen());
+		Assert.Equal(Workspace.Remaster, model.Shell.Active);
+
+		//Esc is the ToggleOverlay shortcut; the Core's key manager delivers
+		//it, which headless cannot drive - run the handler as it would.
+		new ShortcutHandler(window).ExecuteShortcut(EmulatorShortcut.ToggleOverlay);
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(model.IsPlayerSettingsVisible);
+		Assert.False(model.IsPlayerOverlayVisible);
 	}
 
 	//User's choice 2026-10-02 ("Integrar agora"): on macOS the shell bar is the
@@ -232,13 +327,13 @@ public class WorkspaceShellTests : IDisposable
 		Assert.Equal(WindowDecorationsElementRole.User, WindowDecorationProperties.GetElementRole(bar.ToolsMenu));
 		Assert.Equal(12 + ShellTitleBar.MacTrafficLightInset, profile.Margin.Left);
 
-		//The classic bar, when turned on, sits right under the title-bar row.
-		model.ToggleClassicMenuBar();
+		//ADR-0250: Classic has no shell bar and keeps the plain title bar.
+		model.SelectWorkspace(Workspace.Classic);
 		Dispatcher.UIThread.RunJobs();
-		MainMenuView classic = window.FindNamed<MainMenuView>("MainMenu");
-		Assert.True(classic.IsOnScreen());
-		Assert.Equal(0, bar.TranslatePoint(new Point(0, 0), window)!.Value.Y);
-		Assert.True(classic.TranslatePoint(new Point(0, 0), window)!.Value.Y >= bar.Bounds.Height);
+		Assert.False(window.ExtendClientAreaToDecorationsHint);
+		model.SelectWorkspace(Workspace.Play);
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(window.ExtendClientAreaToDecorationsHint);
 
 		//Fullscreen has no traffic lights at rest: the inset goes away and comes back.
 		window.WindowState = WindowState.FullScreen;
@@ -257,14 +352,14 @@ public class WorkspaceShellTests : IDisposable
 
 		Assert.Equal("Play", window.FindNamed<TextBlock>("ProfileButtonName").Text);
 		Assert.True(window.FindNamed<Button>("ProfileButton").IsOnScreen());
-		//The other two profiles exist only inside the closed popover.
-		Assert.DoesNotContain(window.FindAll<TextBlock>(), t => t.IsOnScreen() && (t.Text == "Remaster" || t.Text == "Share"));
+		//The other doors exist only inside the closed popover.
+		Assert.DoesNotContain(window.FindAll<TextBlock>(), t => t.IsOnScreen() && (t.Text == "Remaster" || t.Text == "Share" || t.Text == "Classic"));
 		Assert.Equal("No game loaded", window.FindNamed<TextBlock>("ShellStatusText").Text);
 		Assert.True(window.FindNamed<Border>("ShellStatusLine").IsOnScreen());
 	}
 
 	[AvaloniaFact]
-	public void Switcher_popover_lists_play_remaster_share_in_order_and_picking_switches()
+	public void Switcher_popover_lists_the_four_doors_in_order_and_picking_switches()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();
@@ -276,7 +371,7 @@ public class WorkspaceShellTests : IDisposable
 		StackPanel panel = Assert.IsType<StackPanel>(flyout.Content);
 		ItemsControl rows = panel.FindNamed<ItemsControl>("SwitcherRows");
 		Button[] buttons = rows.GetRealizedContainers().SelectMany(c => c.FindAll<Button>()).ToArray();
-		Assert.Equal(new object?[] { Workspace.Play, Workspace.Remaster, Workspace.Share }, buttons.Select(b => b.Tag).ToArray());
+		Assert.Equal(new object?[] { Workspace.Play, Workspace.Remaster, Workspace.Share, Workspace.Classic }, buttons.Select(b => b.Tag).ToArray());
 
 		buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
@@ -327,6 +422,10 @@ public class WorkspaceShellTests : IDisposable
 		window.KeyPress(Key.D2, modifier, PhysicalKey.Digit2, "2");
 		Dispatcher.UIThread.RunJobs();
 		Assert.Equal(Workspace.Remaster, model.Shell.Active);
+
+		window.KeyPress(Key.D4, modifier, PhysicalKey.Digit4, "4");
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
 
 		window.KeyPress(Key.D1, modifier, PhysicalKey.Digit1, "1");
 		Dispatcher.UIThread.RunJobs();

@@ -31,7 +31,6 @@ public class ShareRemasterJobsTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly List<string> _folders = new();
 
 	public void Dispose()
@@ -39,7 +38,6 @@ public class ShareRemasterJobsTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		ConfigManager.Config.Save();
 		foreach(string folder in _folders) {
 			try {
@@ -367,7 +365,6 @@ public class ShareRemasterJobsTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ConfigManager.Config.Preferences.Workspace = Workspace.Share;
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 		MainWindow window = new();
 		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);

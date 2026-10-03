@@ -108,9 +108,14 @@ namespace Mesen.ViewModels
 
 			Config = ConfigManager.Config;
 			//Before RomInfo: OnRomInfoChanged feeds the shell's status line.
-			Shell = new WorkspaceShellViewModel(Config.Preferences.Workspace, OperatingSystem.IsMacOS());
+			//ADR-0250 Decision 2: an Advanced install opens in Classic; the door
+			//then owns UiMode (Classic = Advanced, a task door = Player).
+			Workspace door = WorkspaceShell.InitialDoor(Config.Preferences.UiMode, Config.Preferences.Workspace);
+			Config.Preferences.Workspace = door;
+			Config.Preferences.UiMode = WorkspaceShell.UiModeFor(door);
+			Shell = new WorkspaceShellViewModel(door, OperatingSystem.IsMacOS());
 			Shell.WorkspaceChanged += OnWorkspaceChanged;
-			IsPlayWorkspace = Shell.IsPlay;
+			IsPlayWorkspace = WorkspaceShell.ShowsGameScreen(door);
 			Remaster = new RemasterWorkspaceViewModel(Config.Remaster, cfg => RemasterFeasibilityProbe.Measure(cfg.PythonPath, cfg.ToolsFolder),
 				new JobProcessLauncher(), OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 			Remaster.ActivityChanged += OnRemasterActivityChanged;
@@ -125,7 +130,8 @@ namespace Mesen.ViewModels
 			UpdateMenuVisibility();
 		}
 
-		//G.1 (W-S3): the switcher rows and ⌘1/⌘2/⌘3 land here. Switching only
+		//G.1 (W-S3): the switcher rows, ⌘1-⌘4 and Classic's Workspace ▸ menu
+		//land here (ADR-0250). Switching only
 		//changes what the window shows (§13.2): it never pauses, stops or resets
 		//the emulator, never picks a pack and rewrites no other setting - the one
 		//write is the persisted Workspace key itself.
@@ -134,42 +140,44 @@ namespace Mesen.ViewModels
 			return Shell.Select(target);
 		}
 
+		//ADR-0250 Decision 2: entering Classic sets UiMode.Advanced, leaving
+		//it for a task door sets UiMode.Player - the door is the one writer.
+		//Classic shows the game screen with the classic look and menu bar.
 		private void OnWorkspaceChanged(Workspace workspace)
 		{
-			IsPlayWorkspace = Shell.IsPlay;
+			IsPlayWorkspace = WorkspaceShell.ShowsGameScreen(workspace);
 			UpdateRemasterSurfaces();
 			Config.Preferences.Workspace = workspace;
+			UiMode mode = WorkspaceShell.UiModeFor(workspace);
+			if(Config.Preferences.UiMode != mode) {
+				Config.Preferences.UiMode = mode;
+			}
+			UpdateMenuVisibility();
+			MainMenu.RefreshDoorMenu();
 			Config.Save();
+		}
+
+		//The Preferences combo still offers UiMode: a change there moves to the
+		//door that owns the new mode (Advanced → Classic, Player → Play).
+		private void OnUiModeChanged()
+		{
+			Workspace door = WorkspaceShell.DoorForUiMode(Config.Preferences.UiMode, Shell.Active);
+			if(door != Shell.Active) {
+				SelectWorkspace(door);
+			}
+			if(Config.Preferences.UiMode != UiMode.Player) {
+				ClosePlaySurfaces();
+			}
 		}
 
 		//G.1 (§13.6, rule 11): the one silent switch - a ROM opened from the
-		//operating system lands in Play.
+		//operating system lands in Play. Classic already shows the game screen
+		//and owns UiMode.Advanced (ADR-0250), so it stays.
 		public void LandInPlayForOsOpen()
 		{
-			SelectWorkspace(Workspace.Play);
-		}
-
-		//G.1 (W-S2): the Tools ⋯ "Show classic menu bar" checkbox, the only home
-		//of ShowClassicMenuBar (rule 12). The checkbox binds one-way; this is the
-		//single writer, then re-applies the chrome and persists the value.
-		public void ToggleClassicMenuBar()
-		{
-			Config.Preferences.ShowClassicMenuBar = !Config.Preferences.ShowClassicMenuBar;
-			UpdateMenuVisibility();
-			Config.Save();
-		}
-
-		//G.1 (§13.2, §13.8 Q4): an upgraded install gets "your menus are under
-		//Tools ⋯" once, then never again. Returns true when the toast was due
-		//(the caller displays it); the flag is persisted before returning.
-		public bool ConsumeClassicMenuNotice()
-		{
-			if(!ClassicMenuNotice.ShouldShow(Config.Preferences.ClassicMenuNoticeShown, Config.Preferences.ShowClassicMenuBar)) {
-				return false;
+			if(Shell.Active != Workspace.Classic) {
+				SelectWorkspace(Workspace.Play);
 			}
-			Config.Preferences.ClassicMenuNoticeShown = true;
-			Config.Save();
-			return true;
 		}
 
 		private void UpdateShellState()
@@ -183,18 +191,17 @@ namespace Mesen.ViewModels
 		partial void OnIsPlayerPackPickerVisibleChanged(bool value) => UpdateShellState();
 		partial void OnCurrentPackNameChanged(string value) => UpdateShellState();
 
-		//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu
-		//bar is hidden entirely (AutoHideMenu is ignored - the menus are under
-		//Tools ⋯); with it on, the classic AutoHideMenu rule applies. Re-evaluated
-		//whenever ShowClassicMenuBar changes (Tools ⋯ checkbox).
+		//P.4/G.1, ADR-0250: the classic menu bar is Classic's - hidden entirely
+		//in a task door (AutoHideMenu is ignored there), the classic
+		//AutoHideMenu rule in Classic. Re-evaluated on every door change.
 		//The rule itself lives in PlayerChrome, shared with
 		//MouseManager.UpdateMainMenuVisibility() so the two cannot drift. At
 		//construction there is no window or cursor state yet, so the fullscreen /
 		//menu-open / hover-band inputs are all false, which reduces to the
-		//"ShowClassicMenuBar && !AutoHideMenu".
+		//"Classic && !AutoHideMenu".
 		private void UpdateMenuVisibility()
 		{
-			IsMenuVisible = PlayerChrome.IsMenuVisible(Config.Preferences.ShowClassicMenuBar, false, Config.Preferences.AutoHideMenu, false, false);
+			IsMenuVisible = PlayerChrome.IsMenuVisible(Shell.Active == Workspace.Classic, false, Config.Preferences.AutoHideMenu, false, false);
 		}
 
 		//P.4/G.2: the overlay shortcut lands in TogglePlayerOverlay
@@ -499,15 +506,10 @@ namespace Mesen.ViewModels
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.AspectRatio))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Video)), (() => Config.Video, nameof(VideoConfig.VideoFilter))], UpdateWindowTitle));
 			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config, nameof(Configuration.Preferences)), (() => Config.Preferences, nameof(PreferencesConfig.ShowTitleBarInfo))], UpdateWindowTitle));
-			//P.4: UiMode switches (the Preferences combo, under Tools ⋯ › Settings
-			//since G.2 removed the overlay's "Advanced GUI" item) re-evaluate the chrome immediately - the overlay hides when
-			//leaving Player. G.1: the menu bar follows ShowClassicMenuBar instead.
-			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.ShowClassicMenuBar))], UpdateMenuVisibility));
-			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], () => {
-				if(Config.Preferences.UiMode != UiMode.Player) {
-					ClosePlaySurfaces();
-				}
-			}));
+			//P.4, ADR-0250: a UiMode switch from the Preferences combo goes
+			//through the door that owns it; the Play surfaces close when leaving
+			//Player.
+			AddDisposable(ReactiveHelper.RegisterForeignObserver([(() => Config.Preferences, nameof(PreferencesConfig.UiMode))], OnUiModeChanged));
 
 			UpdateWindowTitle();
 		}
@@ -566,6 +568,8 @@ namespace Mesen.ViewModels
 			UpdateWindowTitle();
 			UpdateShellState();
 			ClosePauseSurfacesOnGameChange();
+			//ADR-0250: Play's console items follow the loaded game.
+			MainMenu?.RefreshDoorMenu();
 
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
 			//#689: the jobs get an archive's inner ROM, written out (RemasterRomFile).

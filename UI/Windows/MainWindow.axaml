@@ -60,11 +60,9 @@
 	</Window.Styles>
 
 	<DockPanel>
-		<!--G.1 (PRD Part B §13.2): the optional classic menu bar sits above the
-		shell bar and is exactly today's MainMenuView; ShowClassicMenuBar (Tools ⋯
-		checkbox) decides it, through PlayerChrome. On macOS the shell bar is the
-		title bar, so MainWindow.InitShellTitleBar moves it first and the classic
-		bar ends up right under it.-->
+		<!--G.1, ADR-0250: the classic menu bar is the Classic door's (MainMenuView
+		without its duplicates, plus Workspace ▸); the task doors hide it, through
+		PlayerChrome. Classic has no shell bar and keeps the plain title bar.-->
 		<Panel DockPanel.Dock="Top" IsVisible="{Binding IsMenuVisible}">
 			<Panel DataContext="{Binding MainMenu}">
 				<v:MainMenuView Name="MainMenu" />
@@ -284,11 +282,6 @@
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
 
-				<!--ADR-0249 (W-P8, W-P10): W-P4's Settings, a sheet in this window.-->
-				<Panel IsVisible="{Binding IsPlayerSettingsVisible}">
-					<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
-				</Panel>
-
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
 				<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
@@ -306,6 +299,13 @@
 			`:not(.player)`); its DataContext is Share, hence the cast.-->
 			<Panel Name="ShareWorkspaceHost" IsVisible="{Binding IsShareScreenVisible}">
 				<v:ShareWorkspaceView Name="ShareWorkspace" DataContext="{Binding Share}" Classes="share" Classes.player="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
+			</Panel>
+
+			<!--ADR-0249 (W-P8, W-P10): W-P4's Settings, a sheet in this window.
+			ADR-0250: also every task door's Settings… (Tools ⋯ or the macOS app
+			menu), so it sits above the workspaces with its own Player scope.-->
+			<Panel Name="PlayerSettingsLayer" IsVisible="{Binding IsPlayerSettingsVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
+				<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
 			</Panel>
 
 			<!--G.5 (W-P13), ADR-0249: the BIOS sheet asks in whichever workspace

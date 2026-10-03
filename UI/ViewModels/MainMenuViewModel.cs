@@ -15,10 +15,8 @@ using Mesen.Windows;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
@@ -44,7 +42,8 @@ namespace Mesen.ViewModels
 		public bool AutoPaused { get; set; } = false;
 
 		private ConfigWindow? _cfgWindow = null;
-		private MainMenuAction _selectControllerAction = new();
+		//One per Netplay ▸ menu: Classic's Tools and Share's Tools ⋯.
+		private readonly List<MainMenuAction> _selectControllerActions = new();
 		private FileSystemWatcher? _fileWatcher;
 
 		[Obsolete("For designer only")]
@@ -90,12 +89,16 @@ namespace Mesen.ViewModels
 
 		public void Initialize(MainWindow wnd)
 		{
+			_window = wnd;
 			InitFileMenu(wnd);
 			InitGameMenu(wnd);
 			InitOptionsMenu(wnd);
 			InitToolMenu(wnd);
 			InitDebugMenu(wnd);
 			InitHelpMenu(wnd);
+			InitWorkspaceMenu();
+			ApplyClassicPlacement();
+			RefreshDoorMenu();
 		}
 
 		private void InitFileMenu(MainWindow wnd)
@@ -165,7 +168,7 @@ namespace Mesen.ViewModels
 					}
 				},
 				new ContextMenuSeparator(),
-				new MainMenuAction(EmulatorShortcut.Exit) { ActionType = ActionType.Exit },
+				Tag(new MainMenuAction(EmulatorShortcut.Exit) { ActionType = ActionType.Exit }, MenuEntry.Exit),
 			};
 		}
 
@@ -223,18 +226,7 @@ namespace Mesen.ViewModels
 		private void InitGameMenu(MainWindow wnd)
 		{
 			GameMenuItems = new List<object>() {
-				new MainMenuAction(EmulatorShortcut.Pause) { ActionType = ActionType.Pause, IsVisible = () => !EmuApi.IsPaused() && !ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig },
-				new MainMenuAction(EmulatorShortcut.Pause) { ActionType = ActionType.Resume, IsVisible = () => EmuApi.IsPaused() && !ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig },
-				new MainMenuAction(EmulatorShortcut.Pause) {
-					ActionType = ActionType.Resume,
-					IsVisible = () => ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig && !AutoPaused,
-					OnClick = () => AutoPaused = true
-				},
-				new MainMenuAction(EmulatorShortcut.Pause) {
-					ActionType = ActionType.Pause,
-					IsVisible = () => ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig && AutoPaused,
-					OnClick = () => AutoPaused = false
-				},
+				GetPauseMenuItem(),
 				new ContextMenuSeparator(),
 				new MainMenuAction(EmulatorShortcut.Reset) { ActionType = ActionType.Reset },
 				new MainMenuAction(EmulatorShortcut.PowerCycle) { ActionType = ActionType.PowerCycle },
@@ -288,22 +280,27 @@ namespace Mesen.ViewModels
 					IsVisible = () => EmuApi.IsShortcutAllowed(EmulatorShortcut.InputBarcode)
 				},
 
-				new MainMenuAction() {
-					ActionType = ActionType.TapeRecorder,
-					IsVisible = () => EmuApi.IsShortcutAllowed(EmulatorShortcut.RecordTape) || EmuApi.IsShortcutAllowed(EmulatorShortcut.StopRecordTape),
-					SubActions = new() {
-						new MainMenuAction(EmulatorShortcut.LoadTape) {
-							ActionType = ActionType.Play,
-						},
-						new ContextMenuSeparator(),
-						new MainMenuAction(EmulatorShortcut.RecordTape) {
-							ActionType = ActionType.Record,
-						},
-						new MainMenuAction(EmulatorShortcut.StopRecordTape) {
-							ActionType = ActionType.Stop,
-						},
-					}
-				},
+				GetTapeRecorderMenu(),
+			};
+		}
+
+		private MainMenuAction GetTapeRecorderMenu()
+		{
+			return new MainMenuAction() {
+				ActionType = ActionType.TapeRecorder,
+				IsVisible = () => EmuApi.IsShortcutAllowed(EmulatorShortcut.RecordTape) || EmuApi.IsShortcutAllowed(EmulatorShortcut.StopRecordTape),
+				SubActions = new() {
+					new MainMenuAction(EmulatorShortcut.LoadTape) {
+						ActionType = ActionType.Play,
+					},
+					new ContextMenuSeparator(),
+					new MainMenuAction(EmulatorShortcut.RecordTape) {
+						ActionType = ActionType.Record,
+					},
+					new MainMenuAction(EmulatorShortcut.StopRecordTape) {
+						ActionType = ActionType.Stop,
+					},
+				}
 			};
 		}
 
@@ -546,10 +543,10 @@ namespace Mesen.ViewModels
 				},
 				new ContextMenuSeparator(),
 
-				new MainMenuAction() {
+				Tag(new MainMenuAction() {
 					ActionType = ActionType.Preferences,
 					OnClick = () => OpenConfig(wnd, ConfigWindowTab.Preferences)
-				}
+				}, MenuEntry.Preferences)
 			};
 
 			MainMenuAction? shaderMenu = InitShaderMenu(wnd);
@@ -704,21 +701,26 @@ namespace Mesen.ViewModels
 			return item;
 		}
 
+		private MainMenuAction GetMoviePlayItem(MainWindow wnd)
+		{
+			return new MainMenuAction() {
+				ActionType = ActionType.Play,
+				IsEnabled = () => IsGameRunning && !RecordApi.MovieRecording() && !RecordApi.MoviePlaying(),
+				OnClick = async () => {
+					string? filename = await FileDialogHelper.OpenFile(ConfigManager.MovieFolder, wnd, FileDialogHelper.MovieFileExt);
+					if(filename != null) {
+						RecordApi.MoviePlay(filename);
+					}
+				}
+			};
+		}
+
 		private MainMenuAction GetMoviesMenu(MainWindow wnd)
 		{
 			return new MainMenuAction() {
 				ActionType = ActionType.Movies,
 				SubActions = new List<object> {
-					new MainMenuAction() {
-						ActionType = ActionType.Play,
-						IsEnabled = () => IsGameRunning && !RecordApi.MovieRecording() && !RecordApi.MoviePlaying(),
-						OnClick = async () => {
-							string? filename = await FileDialogHelper.OpenFile(ConfigManager.MovieFolder, wnd, FileDialogHelper.MovieFileExt);
-							if(filename != null) {
-								RecordApi.MoviePlay(filename);
-							}
-						}
-					},
+					GetMoviePlayItem(wnd),
 					new MainMenuAction() {
 						ActionType = ActionType.Record,
 						IsEnabled = () => IsGameRunning && !RecordApi.MovieRecording() && !RecordApi.MoviePlaying(),
@@ -729,19 +731,12 @@ namespace Mesen.ViewModels
 						}
 					},
 					new MainMenuAction() {
-						//ADR-0205 section 2: the one action that yields a publishable
-						//replay. Starts from power-on with the console's power-on state
-						//made deterministic; nothing is asked of the user.
-						ActionType = ActionType.RecordAndShare,
-						IsEnabled = () => IsGameRunning && !RecordApi.MovieRecording() && !RecordApi.MoviePlaying() && !NetplayApi.IsConnected(),
-						OnClick = () => ShareRecordingSession.Start()
-					},
-					new MainMenuAction() {
 						ActionType = ActionType.Stop,
 						IsEnabled = () => IsGameRunning && (RecordApi.MovieRecording() || RecordApi.MoviePlaying()),
 						OnClick = () => {
-							//Finishes a Record and share session too (reveals the file and
-							//opens the issue form); a plain recording or playback just stops.
+							//Finishes a Record and Share session too (started from the
+							//Share door, ADR-0250) - reveals the file and opens the issue
+							//form; a plain recording or playback just stops.
 							ShareRecordingSession.Stop();
 						}
 					}
@@ -790,10 +785,6 @@ namespace Mesen.ViewModels
 					IsVisible = () => IsHdPackMenuVisible(),
 					SubActions = new List<object> {
 						new MainMenuAction() {
-							ActionType = ActionType.InstallHdPack,
-							OnClick = () => InstallHdPack(wnd)
-						},
-						new MainMenuAction() {
 							ActionType = ActionType.HdPackBuilder,
 							OnClick = () => {
 								ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new HdPackBuilderWindow());
@@ -803,34 +794,51 @@ namespace Mesen.ViewModels
 						//program and asks for the pixels back here - no ROM
 						//reopen, no state lost. Only images whose file changed
 						//are re-decoded, at the next frame boundary.
-						new MainMenuAction() {
-							ActionType = ActionType.ReloadPackImages,
-							IsEnabled = () => EmuApi.IsRunning(),
-							OnClick = () => EmuApi.RequestMepImageReload()
-						},
+						GetReloadPackImagesItem(),
 						new ContextMenuSeparator(),
-						new MainMenuAction() {
-							ActionType = ActionType.EnhancementPacks,
-							OnClick = () => {
-								ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new EnhancementPacksWindow());
-							}
-						}
+						//ADR-0250: Install HD Pack merged into Enhancement Packs,
+						//whose window installs a legacy hires.txt zip too.
+						GetEnhancementPacksItem(wnd)
 					}
 				},
 
 				new ContextMenuSeparator(),
 
-				new MainMenuAction() {
-					ActionType = ActionType.LogWindow,
-					OnClick = () => {
-						ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new LogWindow());
-					}
-				},
+				GetLogWindowItem(wnd),
 
 				new MainMenuAction(EmulatorShortcut.TakeScreenshot) {
 					ActionType = ActionType.TakeScreenshot,
 				},
 
+			};
+		}
+
+		private MainMenuAction GetReloadPackImagesItem()
+		{
+			return new MainMenuAction() {
+				ActionType = ActionType.ReloadPackImages,
+				IsEnabled = () => EmuApi.IsRunning(),
+				OnClick = () => EmuApi.RequestMepImageReload()
+			};
+		}
+
+		private MainMenuAction GetEnhancementPacksItem(MainWindow wnd)
+		{
+			return new MainMenuAction() {
+				ActionType = ActionType.EnhancementPacks,
+				OnClick = () => {
+					ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new EnhancementPacksWindow());
+				}
+			};
+		}
+
+		private MainMenuAction GetLogWindowItem(MainWindow wnd)
+		{
+			return new MainMenuAction() {
+				ActionType = ActionType.LogWindow,
+				OnClick = () => {
+					ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new LogWindow());
+				}
 			};
 		}
 
@@ -961,11 +969,12 @@ namespace Mesen.ViewModels
 
 		private MainMenuAction GetNetPlayMenu(MainWindow wnd)
 		{
-			_selectControllerAction = new MainMenuAction() {
+			MainMenuAction selectControllerAction = new MainMenuAction() {
 				ActionType = ActionType.SelectController,
 				IsEnabled = () => NetplayApi.IsConnected() || NetplayApi.IsServerRunning(),
 				SubActions = new()
 			};
+			_selectControllerActions.Add(selectControllerAction);
 
 			return new MainMenuAction() {
 				ActionType = ActionType.NetPlay,
@@ -1010,7 +1019,7 @@ namespace Mesen.ViewModels
 
 					new ContextMenuSeparator(),
 
-					_selectControllerAction
+					selectControllerAction
 				}
 			};
 		}
@@ -1159,28 +1168,28 @@ namespace Mesen.ViewModels
 				new ContextMenuSeparator() { IsVisible = isSuperGameBoy },
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenTilemapViewer,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => DebugWindowManager.OpenDebugWindow(() => new TilemapViewerWindow(CpuType.Gameboy))
 				},
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenTileViewer,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => DebugWindowManager.OpenDebugWindow(() => new TileViewerWindow(CpuType.Gameboy))
 				},
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenSpriteViewer,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => DebugWindowManager.OpenDebugWindow(() => new SpriteViewerWindow(CpuType.Gameboy))
 				},
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenPaletteViewer,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => DebugWindowManager.OpenDebugWindow(() => new PaletteViewerWindow(CpuType.Gameboy))
@@ -1189,14 +1198,14 @@ namespace Mesen.ViewModels
 				new ContextMenuSeparator() { IsVisible = isSuperGameBoy },
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenEventViewer,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => EventViewerWindow.GetOrOpenWindow(CpuType.Gameboy)
 				},
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenAssembler,
-					HintText = () => "GB",
+					HintText = () => WorkspaceMenu.SuperGameBoyViewerHint,
 					IsVisible = isSuperGameBoy,
 					IsEnabled = () => IsGameRunning,
 					OnClick = () => DebugWindowManager.OpenDebugWindow(() => new AssemblerWindow(new AssemblerWindowViewModel(CpuType.Gameboy)))
@@ -1219,22 +1228,15 @@ namespace Mesen.ViewModels
 			};
 
 			//G.1 (ADR-0241, PRD Part B §13.2): the P.4 Player-mode gate that
-			//disabled every Debug action ("reachable only after switching to
-			//Advanced") is retired. Tools ⋯ renders this same tree in every UiMode
-			//and is where the debugger stays reachable, so each Debug action keeps
-			//only its own condition - for the menu item and the registered shortcut
-			//alike.
+			//disabled every Debug action is retired; each Debug action keeps only
+			//its own condition - for the menu item and the registered shortcut
+			//alike. The debugger lives in the Classic door's menu bar (ADR-0250).
 			DebugShortcutManager.RegisterActions(wnd, DebugMenuItems);
 		}
 
 		private void InitHelpMenu(Window wnd)
 		{
 			HelpMenuItems = new List<object>() {
-				new MainMenuAction() {
-					ActionType = ActionType.OnlineHelp,
-					IsVisible = () => false,
-					OnClick = () => ApplicationHelper.OpenBrowser("https://www.mesen.ca/documentation/")
-				},
 				new MainMenuAction() {
 					ActionType = ActionType.CommandLineHelp,
 					OnClick = () => { new CommandLineHelpWindow().ShowCenteredDialog((Control)wnd); }
@@ -1243,18 +1245,11 @@ namespace Mesen.ViewModels
 					ActionType = ActionType.CheckForUpdates,
 					OnClick = () => CheckForUpdate(wnd, false)
 				},
-				new MainMenuAction() {
-					ActionType = ActionType.ReportBug,
-					IsVisible = () => false,
-					OnClick = () => ApplicationHelper.OpenBrowser("https://www.mesen.ca/reportbug/")
-				},
 				new ContextMenuSeparator(),
-				new MainMenuAction() {
+				Tag(new MainMenuAction() {
 					ActionType = ActionType.About,
-					OnClick = () => {
-						new AboutWindow().ShowCenteredDialog((Control)wnd);
-					}
-				},
+					OnClick = () => OpenAbout(wnd)
+				}, MenuEntry.About),
 			};
 		}
 
@@ -1313,127 +1308,6 @@ namespace Mesen.ViewModels
 			};
 		}
 
-		private async void InstallHdPack(Window wnd)
-		{
-			string? filename = await FileDialogHelper.OpenFile(null, wnd, FileDialogHelper.ZipExt);
-			if(filename == null) {
-				return;
-			}
-
-			try {
-				using(FileStream? stream = FileHelper.OpenRead(filename)) {
-					if(stream == null) {
-						return;
-					}
-
-					ZipArchive zip = new ZipArchive(stream);
-
-					//Find the hires.txt file
-					ZipArchiveEntry? hiresEntry = null;
-
-					//Find the most top-level hires.txt file in the zip
-					int minDepth = int.MaxValue;
-					foreach(ZipArchiveEntry entry in zip.Entries) {
-						if(entry.Name == "hires.txt") {
-							string? folder = Path.GetDirectoryName(entry.FullName);
-							int depth = 0;
-							if(folder != null) {
-								do {
-									depth++;
-								} while((folder = Path.GetDirectoryName(folder)) != null);
-							}
-							if(depth < minDepth) {
-								minDepth = depth;
-								hiresEntry = entry;
-								if(depth == 0) {
-									break;
-								}
-							}
-						}
-					}
-
-					if(hiresEntry == null) {
-						await MesenMsgBox.Show(wnd, "InstallHdPackInvalidPack", MessageBoxButtons.OK, MessageBoxIcon.Error);
-						return;
-					}
-
-					using Stream entryStream = hiresEntry.Open();
-					using StreamReader reader = new StreamReader(entryStream);
-					string hiresData = reader.ReadToEnd();
-					RomInfo romInfo = EmuApi.GetRomInfo();
-
-					//If there's a "supportedRom" tag, check if it matches the current ROM
-					Regex supportedRomRegex = new Regex("<supportedRom>([^\\n]*)");
-					Match match = supportedRomRegex.Match(hiresData);
-					if(match.Success) {
-						if(!match.Groups[1].Value.ToUpper().Contains(EmuApi.GetRomHash(HashType.Sha1).ToUpper())) {
-							//Not a hard stop (ADR-0044): the hash also differs when the ROM was just patched by an
-							//already-loaded pack (<patch>), or for a clean dump of another revision
-							if(await MesenMsgBox.Show(wnd, "InstallHdPackWrongRomConfirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
-								return;
-							}
-						}
-					}
-
-					//Extract HD pack
-					try {
-						string targetFolder = Path.Combine(ConfigManager.HdPackFolder, romInfo.GetRomName());
-						if(Directory.Exists(targetFolder)) {
-							//Warn if the folder already exists
-							if(await MesenMsgBox.Show(wnd, "InstallHdPackConfirmOverwrite", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, targetFolder) != DialogResult.OK) {
-								return;
-							}
-						} else {
-							Directory.CreateDirectory(targetFolder);
-						}
-
-						string? hiresNormPath = LegacyHdPackInstall.NormalizeZipPath(hiresEntry.FullName);
-						if(hiresNormPath == null) {
-							//hires.txt reachable only via ".."/a rooted path is not a pack to install
-							await MesenMsgBox.Show(wnd, "InstallHdPackInvalidPack", MessageBoxButtons.OK, MessageBoxIcon.Error);
-							return;
-						}
-						string hiresFileFolder = hiresNormPath.Substring(0, hiresNormPath.Length - "hires.txt".Length);
-						foreach(ZipArchiveEntry entry in zip.Entries) {
-							//Extract only the files in the same subfolder as the hires.txt file (and only if they have a name & size > 0)
-							if(string.IsNullOrWhiteSpace(entry.Name) || entry.Length <= 0) {
-								continue;
-							}
-							//Route every entry path through the zip-slip sanitizer (same as the legacy
-							//install path) so a rooted/".." entry cannot escape targetFolder
-							string? normPath = LegacyHdPackInstall.NormalizeZipPath(entry.FullName);
-							if(normPath == null || !normPath.StartsWith(hiresFileFolder, StringComparison.Ordinal)) {
-								continue;
-							}
-							string filePath = Path.Combine(targetFolder, normPath.Substring(hiresFileFolder.Length).Replace('/', Path.DirectorySeparatorChar));
-							string? fileFolder = Path.GetDirectoryName(filePath);
-							if(fileFolder != null) {
-								Directory.CreateDirectory(fileFolder);
-							}
-							entry.ExtractToFile(filePath, true);
-						}
-					} catch(Exception ex) {
-						await MesenMsgBox.Show(wnd, "InstallHdPackError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
-						return;
-					}
-
-					//Turn on HD Pack support automatically after installation succeeds
-					if(!ConfigManager.Config.Nes.EnableHdPacks) {
-						ConfigManager.Config.Nes.EnableHdPacks = true;
-						ConfigManager.Config.Nes.ApplyConfig();
-					}
-
-					if(await MesenMsgBox.Show(wnd, "InstallHdPackConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
-						//Power cycle game if the user agrees
-						LoadRomHelper.PowerCycle();
-					}
-				}
-			} catch {
-				//Invalid file (file missing, not a zip file, etc.)
-				await MesenMsgBox.Show(wnd, "InstallHdPackInvalidZipFile", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			}
-		}
-
 		public bool UpdateNetplayMenu()
 		{
 			if(!NetplayApi.IsServerRunning() && !NetplayApi.IsConnected()) {
@@ -1475,7 +1349,9 @@ namespace Mesen.ViewModels
 				OnClick = () => NetplayApi.NetPlaySelectController(new NetplayControllerInfo() { Port = 0xFF })
 			});
 
-			_selectControllerAction.SubActions = controllerActions;
+			foreach(MainMenuAction selectControllerAction in _selectControllerActions) {
+				selectControllerAction.SubActions = controllerActions;
+			}
 
 			return true;
 		}
