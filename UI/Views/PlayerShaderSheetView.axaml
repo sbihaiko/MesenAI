@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:cfg="using:Mesen.Config"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlayerShaderSheetView"
+	x:DataType="vm:MainWindowViewModel"
+>
+	<!--ADR-0249 (W-P10 › Adjust…, user decision 2026-10-03): the shader's
+	parameters as a sheet over the Settings sheet, in this window - the
+	shader's file as the heading, one row per parameter on an inset list
+	(about 46 high, a hairline between rows, a switch for an on/off parameter,
+	a stepper for a number), Reset to Defaults on the left and Cancel then OK
+	on the right. Changes preview live; OK saves them to the shader, Cancel and
+	Esc drop them and return to Settings. Advanced keeps ShaderConfigWindow.-->
+	<UserControl.Styles>
+		<Style Selector="Border.shaderRow">
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerSeparatorBrush}" />
+			<Setter Property="BorderThickness" Value="0 0 0 1" />
+			<Setter Property="Padding" Value="16 10" />
+		</Style>
+		<Style Selector="ContentPresenter:nth-last-child(1) > Border.shaderRow">
+			<Setter Property="BorderThickness" Value="0" />
+		</Style>
+		<Style Selector="Border.shaderRow:pointerover">
+			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+		</Style>
+		<Style Selector="TextBlock.shaderParam">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+			<Setter Property="FontWeight" Value="Medium" />
+		</Style>
+	</UserControl.Styles>
+
+	<!--The scrim takes the pointer, so the Settings sheet under it waits.-->
+	<Panel Name="ShaderSheetBackdrop" Classes="scrim">
+		<Border Name="ShaderSheet" Classes="sheet" Width="420" MaxHeight="560" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 24">
+			<DockPanel>
+				<TextBlock Name="ShaderSheetTitle" Classes="sheet-heading" DockPanel.Dock="Top" Text="{Binding ShaderSheetTitle}" TextTrimming="CharacterEllipsis" Margin="0 0 0 14" />
+				<DockPanel DockPanel.Dock="Bottom" Margin="0 16 0 0">
+					<Button Name="ShaderSheetReset" Classes="secondary regular" DockPanel.Dock="Left" Content="{l:Translate btnShaderSheetReset}" Click="OnReset" />
+					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+						<Button Name="ShaderSheetCancel" Classes="secondary regular" Content="{l:Translate btnShaderSheetCancel}" Click="OnCancel" />
+						<Button Name="ShaderSheetOk" Classes="primary regular" Content="{l:Translate btnShaderSheetOk}" Click="OnOk" />
+					</StackPanel>
+				</DockPanel>
+				<Border Name="ShaderSheetList" Classes="inset">
+					<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+						<ItemsControl Name="ShaderSheetParams" ItemsSource="{Binding ShaderSheet.Config.Params, FallbackValue={x:Null}}" XYFocus.NavigationModes="Enabled">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="cfg:ShaderParam">
+									<Border Classes="shaderRow">
+										<Grid ColumnDefinitions="*,Auto" MinHeight="26">
+											<TextBlock Classes="shaderParam" Text="{Binding Description}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+											<Panel Grid.Column="1" IsVisible="{Binding !IsLabel}" Margin="12 0 0 0">
+												<c:MesenNumericUpDown
+													MinWidth="90"
+													IsVisible="{Binding !IsBoolean}"
+													FormatString="{Binding FormatString}"
+													Maximum="{Binding Max}"
+													Minimum="{Binding Min}"
+													Increment="{Binding Step}"
+													Value="{Binding Value}"
+													VerticalAlignment="Center"
+													ForceIncrementMultiple="True"
+												/>
+												<CheckBox Classes="switch" IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" VerticalAlignment="Center" />
+											</Panel>
+										</Grid>
+									</Border>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
+				</Border>
+			</DockPanel>
+		</Border>
+	</Panel>
+</UserControl>

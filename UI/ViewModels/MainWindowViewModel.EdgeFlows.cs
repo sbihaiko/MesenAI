@@ -35,6 +35,8 @@ namespace Mesen.ViewModels
 			//so its own failure shows the W-P14 alert even when the earlier load
 			//never reported (a recent game, Remaster's workspace).
 			BiosSheet.ClearCancelled();
+			//An archive's game list still up belongs to the previous open.
+			SelectRomSheet.Cancel();
 			RecentGames.OnOpenStarted();
 			Shell.SetPlayNotice("");
 			PackDepSheet.Clear();
@@ -141,6 +143,9 @@ namespace Mesen.ViewModels
 		//resumes. True when Esc was taken.
 		private bool HandleEdgeFlowEsc()
 		{
+			if(HandleInWindowSheetEsc()) {
+				return true;
+			}
 			if(BiosSheet.IsVisible) {
 				BiosSheet.Cancel();
 				return true;

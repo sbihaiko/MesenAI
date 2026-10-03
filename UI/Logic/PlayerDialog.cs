@@ -10,8 +10,9 @@ public enum DialogTone
 	Info
 }
 
-//ADR-0249 (W-X1, W-X2): a dialog the Player GUI still raises - a message box,
-//an archive's game list, a shader's parameters - takes the Player look when
+//ADR-0249 (W-X1, W-X2): a dialog the Player GUI still raises - a message box
+//(an archive's game list and a shader's parameters are sheets in the main
+//window since 2026-10-03, ArchiveRomPick) - takes the Player look when
 //its owner shows the Player theme (MainWindow, or Player-mode Settings), and
 //keeps the classic look under a classic window, the debugger or Advanced mode.
 //The look is the shared banner (an error the stop, a warning or a question the

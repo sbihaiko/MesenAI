@@ -74,8 +74,9 @@ namespace Mesen.Utilities
 					//press does nothing (it must not pause the game or open an
 					//overlay hidden behind Remaster/Share).
 					//ADR-0249: the BIOS sheet (W-P13) shows in every workspace,
-					//and Esc cancels it there too (TogglePlayerOverlay takes it first).
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible)) {
+					//and Esc cancels it there too (TogglePlayerOverlay takes it first);
+					//so does an archive's game list (an open from any workspace).
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible)) {
 						MainWindowModel.TogglePlayerOverlay();
 					} else if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayerSettingsVisible) {
 						//ADR-0250: Settings… opened from Remaster's or Share's

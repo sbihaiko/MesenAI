@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlaySelectRomSheetView"
+	x:DataType="vm:PlaySelectRomSheetViewModel"
+>
+	<!--ADR-0249 (W-P5 sheet shape, user decision 2026-10-03): an archive with
+	two or more games asks here, inside the main window, in whichever workspace
+	opened it - the heading names the archive, a search field narrows the list,
+	each game is a row on an inset list (a click or Enter opens it), and Cancel
+	or Esc opens nothing. Advanced keeps SelectRomWindow.-->
+	<UserControl.Styles>
+		<!--Each row sits in its own item container, so the theme's "no hairline
+		on the last row" is decided per container here.-->
+		<Style Selector=".player ContentPresenter > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player ContentPresenter:nth-last-child(1) > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Button.row">
+			<Setter Property="Height" Value="44" />
+			<Setter Property="Padding" Value="16 0 14 0" />
+		</Style>
+	</UserControl.Styles>
+
+	<Panel Name="SelectRomSheetBackdrop" Classes="scrim">
+		<Border Name="SelectRomSheet" Classes="sheet" Width="480" MaxHeight="560" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 24">
+			<DockPanel>
+				<TextBlock Name="SelectRomSheetTitle" Classes="sheet-heading" DockPanel.Dock="Top" Text="{Binding Title}" TextWrapping="Wrap" Margin="0 0 0 14" />
+				<TextBox Name="SelectRomSheetSearch" DockPanel.Dock="Top" PlaceholderText="{l:Translate txtSelectRomSheetSearch}" Text="{Binding SearchString}" Margin="0 0 0 12" />
+				<Button Name="SelectRomSheetCancel" DockPanel.Dock="Bottom" Classes="secondary regular" HorizontalAlignment="Right" Margin="0 18 0 0" Content="{l:Translate btnSelectRomSheetCancel}" Click="OnCancel" />
+				<Border Name="SelectRomSheetInset" Classes="inset">
+					<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+						<ItemsControl Name="SelectRomSheetList" ItemsSource="{Binding Rows}" XYFocus.NavigationModes="Enabled">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:PlaySelectRomRow">
+									<Button Classes="row text" Click="OnChoose">
+										<TextBlock Classes="title" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+									</Button>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
+				</Border>
+			</DockPanel>
+		</Border>
+	</Panel>
+</UserControl>

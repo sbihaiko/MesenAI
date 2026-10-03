@@ -356,7 +356,11 @@
 			ADR-0250: also every task door's Settings… (Tools ⋯ or the macOS app
 			menu), so it sits above the workspaces with its own Player scope.-->
 			<Panel Name="PlayerSettingsLayer" IsVisible="{Binding IsPlayerSettingsVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
-				<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
+				<Panel IsEnabled="{Binding !IsShaderSheetVisible}">
+					<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
+				</Panel>
+				<!--ADR-0249 (W-P10 › Adjust…): the shader's parameters, over Settings.-->
+				<v:PlayerShaderSheetView Name="PlayerShaderSheetHost" IsVisible="{Binding IsShaderSheetVisible}" />
 			</Panel>
 
 			<!--G.5 (W-P13), ADR-0249: the BIOS sheet asks in whichever workspace
@@ -364,6 +368,8 @@
 			sits above every workspace with its own Player scope (Play's tint).-->
 			<Panel Name="BiosSheetLayer" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
+				<!--ADR-0249 (W-P5 sheet shape): an archive's games, from any workspace's open.-->
+				<v:PlaySelectRomSheetView Name="PlaySelectRomSheetHost" DataContext="{Binding SelectRomSheet}" IsVisible="{Binding IsVisible}" />
 			</Panel>
 		</Panel>
 	</DockPanel>
