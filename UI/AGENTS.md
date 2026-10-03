@@ -534,7 +534,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 - **Scope.** Every style is under the `player` class. `MainWindow` binds
   `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
-  `ShellStatusLine`; nothing else carries it. A component class outside the
+  `ShellStatusLine`, and on Remaster's `RemasterWorkspaceHost` and
+  `RemasterRecordingStripHost` (which also carry `remaster`); nothing else
+  carries it. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic
@@ -583,7 +585,28 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
-    `ChevronDown`, `Record`, `More`, `Check`.
+    `ChevronDown`, `Record`, `More`, `Check`, `Warning`, `Stop`,
+    `ArrowUpRight`, `Sparkle` (alias of `Enhancements`).
+  - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
+    - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
+      `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),
+      `paragraph` (13.5); tokens `PlayerFontDisplay`, `SheetTitle`,
+      `CardTitle`, `Lead`.
+    - Warning: `Border.warning` (soft orange `PlayerWarningFill`, radius 12,
+      brown `PlayerWarningText` foreground), `TextBlock.warning`,
+      `Button.plain.warning`, `PathIcon.warning` (orange 16).
+    - `Border.badge.xlarge` (40, radius 10); `Border.step` (22 tint circle
+      with a white 12.5 bold number: the "1 RECORD" step marker).
+    - `Button.chip` (FILL chip, radius 8, 32 high: the project menu).
+    - `ProgressBar` (6 high, FILL track, tint bar).
+    - `Border.popover` / `FlyoutPresenter.popover` (`PlayerPopover` fill,
+      hairline, radius 12, shadow `PlayerShadowPopover`); use
+      `FlyoutPresenterClasses="popover"` on a `Flyout`.
+    - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
+      white text; `secondary` / `tint` text inside it read
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      Stop); `PlayerGameBackgroundBrush` (black behind the game).
+    - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
   order (the headless suites find controls by name). Swap local colours and
   sizes for classes; add a render test next to
