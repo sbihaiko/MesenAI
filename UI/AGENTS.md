@@ -534,9 +534,11 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 - **Scope.** Every style is under the `player` class. `MainWindow` binds
   `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
-  `ShellStatusLine` (and `InterruptionBarHost`); outside MainWindow only
-  Player-mode Settings (`ConfigWindow`'s `PlayerSettingsRoot`) and the
-  first-run card (`SetupWizardWindow`'s `FirstRunCard`) carry it. A component class outside the
+  `ShellStatusLine` (and `InterruptionBarHost`), and on Remaster's
+  `RemasterWorkspaceHost` and `RemasterRecordingStripHost` (which also carry
+  `remaster`); outside MainWindow only Player-mode Settings (`ConfigWindow`'s
+  `PlayerSettingsRoot`) and the first-run card (`SetupWizardWindow`'s
+  `FirstRunCard`) carry it. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic
@@ -593,18 +595,44 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     `destructive`, 30 high) and `TextBlock.banner-text`.
     `Views/InterruptionBar` is built on it, its look chosen by
     `Logic/InterruptionBanner`. Ask in place with a banner, never a dialog.
+    The block sits after the wave 2: Remaster block so `banner warning`
+    beats Remaster's `Border.warning`.
   - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the
     renders' 24-high popup button with the tint stepper), `TabControl.segmented`
     (a TabControl with the segmented strip, 96 px segments),
-    `RadioButton.choice` (tint-filled, 13.5 medium), `ProgressBar.track`
-    (6 high, tint bar), `Border.hud` (the dark pill over the game),
-    `Border.badge.xl` (40, a sheet title's badge), `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
+    `RadioButton.choice` (tint-filled, 13.5 medium), `Border.hud.compact`
+    (W-P9/W-P15's smaller HUD pill: radius 10, 40 high, 13 semibold text,
+    14 px icon; after the wave 2 block so it beats `Border.hud`), a sheet
+    title's 40 px badge is `Border.badge.xlarge` and a progress bar is the
+    plain `ProgressBar` (both below; `ControllerSetupProgress` keeps a
+    `track` marker class with no style of its own), `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
     on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
     Classes="tiles"` (one row of 176 x 132 recent-game tiles).
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
-    `ChevronDown`, `Record`, `More`, `Check`, `Warning`, `Stop`, `UpDown`.
+    `ChevronDown`, `Record`, `More`, `Check`, `UpDown`, `Warning`, `Stop`,
+    `ArrowUpRight`, `Sparkle` (alias of `Enhancements`).
+  - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
+    - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
+      `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),
+      `paragraph` (13.5); tokens `PlayerFontDisplay`, `SheetTitle`,
+      `CardTitle`, `Lead`.
+    - Warning: `Border.warning` (soft orange `PlayerWarningFill`, radius 12,
+      brown `PlayerWarningText` foreground), `TextBlock.warning`,
+      `Button.plain.warning`, `PathIcon.warning` (orange 16).
+    - `Border.badge.xlarge` (40, radius 10); `Border.step` (22 tint circle
+      with a white 12.5 bold number: the "1 RECORD" step marker).
+    - `Button.chip` (FILL chip, radius 8, 32 high: the project menu).
+    - `ProgressBar` (6 high, FILL track, tint bar).
+    - `Border.popover` / `FlyoutPresenter.popover` (`PlayerPopover` fill,
+      hairline, radius 12, shadow `PlayerShadowPopover`); use
+      `FlyoutPresenterClasses="popover"` on a `Flyout`.
+    - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
+      white text; `secondary` / `tint` text inside it read
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      Stop); `PlayerGameBackgroundBrush` (black behind the game).
+    - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
   order (the headless suites find controls by name). Swap local colours and
   sizes for classes; add a render test next to

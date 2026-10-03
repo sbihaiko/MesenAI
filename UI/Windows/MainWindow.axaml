@@ -82,7 +82,7 @@
 
 		<!--G.3 (W-R2): Remaster's recording strip - one pill and Stop - above the
 		game, which fills the rest of the window inside Remaster.-->
-		<Panel Name="RemasterRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsRemasterGameView}">
+		<Panel Name="RemasterRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsRemasterGameView}" Classes="remaster" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
 		</Panel>
 
@@ -282,7 +282,7 @@
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
 			W-R1, the W-R3 card); the game keeps running behind them.-->
-			<Panel Name="RemasterWorkspaceHost" IsVisible="{Binding IsRemasterProjectScreenVisible}">
+			<Panel Name="RemasterWorkspaceHost" IsVisible="{Binding IsRemasterProjectScreenVisible}" Classes="remaster" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<v:RemasterWorkspaceView Name="RemasterWorkspace" DataContext="{Binding Remaster}" />
 			</Panel>
 

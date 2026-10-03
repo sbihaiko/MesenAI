@@ -57,6 +57,11 @@ internal static class PlayerRender
 		} finally {
 			pin.Free();
 		}
+		//The headless Skia frame may be RGBA rather than BGRA (a saturated
+		//orange read back as blue gave it away); honour the bitmap's format.
+		if(frame.Format == Avalonia.Platform.PixelFormat.Rgba8888) {
+			return Color.FromArgb(bgra[3], bgra[0], bgra[1], bgra[2]);
+		}
 		return Color.FromArgb(bgra[3], bgra[2], bgra[1], bgra[0]);
 	}
 

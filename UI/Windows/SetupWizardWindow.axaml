@@ -50,7 +50,7 @@
 	<Border Name="FirstRunCard" Classes="player" Background="{StaticResource PlayerCardBrush}" Padding="24 22 24 22">
 		<StackPanel XYFocus.NavigationModes="Enabled">
 			<StackPanel Orientation="Horizontal" Spacing="14">
-				<Border Name="FirstRunBadge" Classes="badge xl" Background="{StaticResource PlayerTintPlayBrush}">
+				<Border Name="FirstRunBadge" Classes="badge xlarge" Background="{StaticResource PlayerTintPlayBrush}">
 					<PathIcon Data="{StaticResource PlayerIconPlay}" />
 				</Border>
 				<TextBlock Name="FirstRunTitle" Classes="title2" Text="{l:Translate lblFirstRunTitle}" VerticalAlignment="Center" />
