@@ -353,6 +353,13 @@ public partial class RemasterThemeRenderTests : IDisposable
 	{
 		(RemasterWorkspaceViewModel model, _) = Model(Ready, ContraProject(), projectOpen: true);
 		(Window window, RemasterWorkspaceView view) = Host(new RemasterWorkspaceView(), model);
+		//The shapes count is read off the UI thread; wait for it to land.
+		for(int i = 0; i < 500 && !model.ShapesSettled.IsCompleted; i++) {
+			Dispatcher.UIThread.RunJobs();
+			System.Threading.Thread.Sleep(20);
+		}
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.ShapesSettled.IsCompleted, "the shapes count never settled");
 		Assert.True(view.FindNamed<StackPanel>("RemasterProjectScreen").IsOnScreen());
 
 		AssertText(view.FindNamed<TextBlock>("RemasterProjectName"), 22, FontWeight.Bold, Text);

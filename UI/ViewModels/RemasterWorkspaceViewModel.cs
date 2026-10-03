@@ -478,13 +478,7 @@ namespace Mesen.ViewModels
 				RecordSummary += " · " + _project.Problem;
 			}
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
-			RemasterRecordingRow? latest = Recordings.FirstOrDefault();
-			//ADR-0252 §1: the shapes the recordings drew; the newest recording
-			//stands in only while no recording's hires.txt can say.
-			int? shapes = _project == null ? null : _shapeCache.Count(_project.Recordings);
-			ShapesSeenText = shapes is int n ? ResourceHelper.GetMessage(n == 0 ? "RemasterShapesSeenNone" : n == 1 ? "RemasterShapesSeenOne" : "RemasterShapesSeenMany", n) : "";
-			RecordDetail = ShapesSeenText.Length > 0 ? ShapesSeenText
-				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
+			RefreshShapesSeen();
 
 			Record = Control(s.Record);
 			RecordFromTas = Control(s.RecordFromTas);
@@ -505,6 +499,50 @@ namespace Mesen.ViewModels
 			RemasterActivity activity = RemasterActivityIndicator.Of(IsRecording, _jobs.Snapshot.IsRunning);
 			Activity = activity;
 			ActivityChanged?.Invoke();
+		}
+
+		//ADR-0252 §1: the shapes the recordings drew. The count parses every
+		//recording's hires.txt, so it runs off the UI thread; a result for an
+		//older refresh is dropped. The newest recording stands in while the
+		//count is unknown or pending.
+		private int _shapesGeneration;
+		private string _shapesFolder = "";
+
+		//Completes when the shapes count the last refresh asked for is in.
+		public Task ShapesSettled { get; private set; } = Task.CompletedTask;
+
+		private void RefreshShapesSeen()
+		{
+			int generation = ++_shapesGeneration;
+			var project = _project;
+			string folder = project?.Folder ?? "";
+			if(folder != _shapesFolder) {
+				_shapesFolder = folder;
+				ShapesSeenText = "";
+			}
+			UpdateRecordDetail();
+			if(project == null) {
+				ShapesSettled = Task.CompletedTask;
+				return;
+			}
+			List<RemasterRecording> snapshot = project.Recordings.ToList();
+			TaskCompletionSource settled = new();
+			ShapesSettled = settled.Task;
+			Task.Run(() => _shapeCache.Count(snapshot)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				if(generation == _shapesGeneration) {
+					int? shapes = t.IsCompletedSuccessfully ? t.Result : null;
+					ShapesSeenText = shapes is int n ? ResourceHelper.GetMessage(n == 0 ? "RemasterShapesSeenNone" : n == 1 ? "RemasterShapesSeenOne" : "RemasterShapesSeenMany", n) : "";
+					UpdateRecordDetail();
+				}
+				settled.TrySetResult();
+			}), TaskScheduler.Default);
+		}
+
+		private void UpdateRecordDetail()
+		{
+			RemasterRecordingRow? latest = Recordings.FirstOrDefault();
+			RecordDetail = ShapesSeenText.Length > 0 ? ShapesSeenText
+				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 		}
 
 		private static RemasterControlViewModel Control(RemasterControl c) => new(c.Enabled, c.Enabled ? "" : Reason(c.Reason));
