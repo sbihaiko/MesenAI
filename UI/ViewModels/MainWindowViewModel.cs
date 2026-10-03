@@ -235,7 +235,9 @@ namespace Mesen.ViewModels
 		//offers to change the current pick, so it opens the picker whenever 2+
 		//distinct pack_ids exist, even with a stored preference. Returns true
 		//when the picker is showing.
-		public bool OpenPlayerPackPickerForChange(string packListText, string romSha1)
+		//#736: hasCommunityOffer keeps W-P4's Pack row on W-P6, which holds the
+		//offer (PackRowRoute.For); W-P6's own Change Pack… passes false.
+		public bool OpenPlayerPackPickerForChange(string packListText, string romSha1, bool hasCommunityOffer = false)
 		{
 			_pickerRomSha1 = romSha1;
 
@@ -247,7 +249,7 @@ namespace Mesen.ViewModels
 			UpdateCurrentPack(resolution);
 
 			int distinct = PlayerPackPicker.DistinctPackIdCount(resolution.Candidates);
-			if(hasSibling || distinct < 2) {
+			if(PackRowRoute.For(distinct, hasSibling, hasCommunityOffer) == PackRowTarget.Detail) {
 				return false;
 			}
 			IsPlayerPackPickerVisible = true;
@@ -260,17 +262,8 @@ namespace Mesen.ViewModels
 		private void BuildPackPickerData(string packListText, string romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling)
 		{
 			MepPackListResult parsed = MepPackListParser.Parse(packListText);
-			List<PackPreferenceResolver.Candidate> candidates = parsed.Packs.Select(e => new PackPreferenceResolver.Candidate {
-				Container = e.Container,
-				Name = e.Name,
-				PackId = e.PackId,
-				ContentId = e.ContentId,
-				Version = e.Version,
-				Enabled = e.Enabled,
-				IsAutoOnly = e.IsAutoOnly
-			}).ToList();
 			//#693: a disabled pack is neither offered nor counted.
-			candidates = PlayerPackPicker.Offered(candidates);
+			List<PackPreferenceResolver.Candidate> candidates = OfferedCandidates(parsed);
 
 			Dictionary<string, MepPackListEntry> entriesByContainer = new(StringComparer.OrdinalIgnoreCase);
 			foreach(MepPackListEntry e in parsed.Packs) {
@@ -295,6 +288,19 @@ namespace Mesen.ViewModels
 				.ToList();
 			//G.4 (W-P5): one radio starts selected.
 			SelectInitialPackChoice(resolution.PreferredContainer);
+		}
+
+		private static List<PackPreferenceResolver.Candidate> OfferedCandidates(MepPackListResult parsed)
+		{
+			return PlayerPackPicker.Offered(parsed.Packs.Select(e => new PackPreferenceResolver.Candidate {
+				Container = e.Container,
+				Name = e.Name,
+				PackId = e.PackId,
+				ContentId = e.ContentId,
+				Version = e.Version,
+				Enabled = e.Enabled,
+				IsAutoOnly = e.IsAutoOnly
+			}));
 		}
 
 		//The current pack (chip/toast): the one the core renders (#703,

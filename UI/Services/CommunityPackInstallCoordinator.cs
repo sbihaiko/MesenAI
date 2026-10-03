@@ -56,7 +56,7 @@ namespace Mesen.Services
 
 		public static CommunityPackInstallOutcome Install(
 			CommunityPackCatalogEntry entry, string primaryPackPath, IReadOnlyDictionary<string, string> resolvedDepPaths,
-			CommunityPackLoadTarget startedFor)
+			CommunityPackLoadTarget startedFor, bool userRequested = false)
 		{
 			EnhancementPackConfig config = ConfigManager.Config.EnhancementPacks;
 			string containerName = GetContainerName(entry);
@@ -64,7 +64,7 @@ namespace Mesen.Services
 			if(!IsStillLoaded(startedFor, "the update gates")) {
 				return CommunityPackInstallOutcome.Stale(StaleMessage);
 			}
-			(CommunityPackInstallOutcome? gate, string outFolder) = EvaluateGates(config, entry, containerName, startedFor);
+			(CommunityPackInstallOutcome? gate, string outFolder) = EvaluateGates(config, entry, containerName, startedFor, userRequested);
 			if(gate != null) {
 				EmuApi.WriteLogEntry("[CommunityPackInstall] gated: Status=" + gate.Status + " Message=" + gate.Message);
 				return gate;
@@ -302,14 +302,16 @@ namespace Mesen.Services
 
 		//AutoInstallCommunityPacks master switch (ADR-0146) + 43(c) DisabledPacks gate, then the 43(a)/(b)
 		//reinstall verdict: Reinstall means our own prior install, safe to clear.
+		//#736: both switches govern the *automatic* install; an install the
+		//player asked for (W-P6's Use Community Pack) passes them.
 		private static (CommunityPackInstallOutcome? Gate, string OutFolder) EvaluateGates(
-			EnhancementPackConfig config, CommunityPackCatalogEntry entry, string containerName, CommunityPackLoadTarget startedFor)
+			EnhancementPackConfig config, CommunityPackCatalogEntry entry, string containerName, CommunityPackLoadTarget startedFor, bool userRequested)
 		{
 			//ADR-0146: no consent dialog - the master switch alone decides.
-			if(!config.AutoInstallCommunityPacks) {
+			if(!userRequested && !config.AutoInstallCommunityPacks) {
 				return (CommunityPackInstallOutcome.Skipped("AutoInstallCommunityPacks is off"), "");
 			}
-			if(config.DisabledPacks.Contains(containerName, StringComparer.OrdinalIgnoreCase)) {
+			if(!userRequested && config.DisabledPacks.Contains(containerName, StringComparer.OrdinalIgnoreCase)) {
 				return (CommunityPackInstallOutcome.Skipped("pack disabled by user"), "");
 			}
 

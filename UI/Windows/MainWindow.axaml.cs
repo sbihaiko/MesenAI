@@ -542,6 +542,8 @@ namespace Mesen.Windows
 					//#734: in Play the home and its load card stay until the first picture.
 					bool holdsHome = HoldsHomeForPicture(loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
+					//W-P2: the hash the home's pack badge looks up later.
+					RecentPackLookup.RememberLoadedGame(romInfo);
 
 					//#732: a pack patch forced onto another revision of the game
 					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so
@@ -555,11 +557,13 @@ namespace Mesen.Windows
 					//(P.3) and power-cycles, and the reload applies silently (no
 					//picker, just the "Applied ..." toast). No toast while the picker
 					//is open - the game is un-enhanced until a pick.
+					//ADR-0251: during the first three starts the toast also says
+					//how to open W-P4 (a game without a pack gets that hint alone).
+					bool isGameStart = !evtParams.IsPowerCycle;
 					Dispatcher.UIThread.Post(() => {
 						bool pickerOpen = _model.EvaluatePlayerPackPicker(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1());
-						if(!pickerOpen && _model.Config.Preferences.UiMode == UiMode.Player && !string.IsNullOrEmpty(_model.CurrentPackName)) {
-							string layers = string.IsNullOrEmpty(_model.CurrentPackLayers) ? "" : " — " + _model.CurrentPackLayers;
-							EmuApi.DisplayMessage("MEP", "MepPackApplied", _model.CurrentPackName + layers);
+						if(!pickerOpen) {
+							_model.ShowPlayEntryToast(isGameStart);
 						}
 					});
 

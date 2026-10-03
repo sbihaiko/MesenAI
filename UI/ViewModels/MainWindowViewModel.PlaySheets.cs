@@ -110,19 +110,23 @@ namespace Mesen.ViewModels
 		//W-P4's Pack row: W-P5 for 2+ packs, else W-P6 (PackRowRoute). Returns
 		//true when the picker opened. packsFolder/siblingFolder locate the pack
 		//on disk; installedSourceSha256 is the install registry's (ADR-0147).
-		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256)
+		//community: the #736 offer context (null = none to offer); with an
+		//offer the row opens W-P6, which holds it.
+		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			IsPlayerOverlayVisible = false;
-			_packPickerFromOverlay = OpenPlayerPackPickerForChange(packListText, romSha1);
+			bool offer = DecideCommunityOffer(packListText, romSha1, community).IsShown;
+			_packPickerFromOverlay = OpenPlayerPackPickerForChange(packListText, romSha1, offer);
 			if(!_packPickerFromOverlay) {
-				OpenPackDetail(packListText, romSha1, packsFolder, siblingFolder, installedSourceSha256);
+				OpenPackDetail(packListText, romSha1, packsFolder, siblingFolder, installedSourceSha256, community);
 			}
 			return _packPickerFromOverlay;
 		}
 
-		public void OpenPackDetail(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256)
+		public void OpenPackDetail(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			_pickerRomSha1 = romSha1;
+			ShowCommunityOffer(DecideCommunityOffer(packListText, romSha1, community), packListText);
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 

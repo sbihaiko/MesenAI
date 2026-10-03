@@ -40,7 +40,7 @@ public static class PlayHome
 	//W-P2's pack badge on a tile: the game has an HD pack where the Core looks
 	//for it, HdPacks/<ROM file name>/hires.txt (HdPackLoader). The recent-game
 	//file is named after the ROM, so its name is the folder's. Packs found by
-	//ROM hash (MEP, community packs) need the hash the entry does not carry.
+	//ROM hash (MEP, community packs) go through RecentPackBadge.
 	public static bool HasHdPack(string hdPackFolder, string romName)
 	{
 		if(string.IsNullOrEmpty(hdPackFolder) || string.IsNullOrEmpty(romName)) {

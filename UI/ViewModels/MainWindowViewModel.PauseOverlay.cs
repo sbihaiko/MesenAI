@@ -172,7 +172,8 @@ namespace Mesen.ViewModels
 		{
 			OverlayGameTitle = RomInfo.GetRomName();
 			RefreshCheatsSummary();
-			PackSummary = string.IsNullOrWhiteSpace(CurrentPackName) ? ResourceHelper.GetMessage("OverlayRowNone") : CurrentPackName;
+			//#736: "Community pack available" when one is not the pack rendering.
+			PackSummary = BuildPackSummary();
 
 			RefreshEnhancementsState();
 			int on = PauseOverlay.EnhancementsOn(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled, IsOverclockSupported);

@@ -80,6 +80,11 @@ namespace Mesen.Config
 		//install as done, since it never had a menu bar to lose.
 		[ObservableProperty] public partial bool ClassicMenuNoticeShown { get; set; } = ClassicMenuNotice.ShownForMissingKey(settingsFileExists: true);
 
+		//ADR-0251: how many game starts have shown "· Esc for the menu" in the
+		//W-P3 entry toast (PlayMenuHint). A missing key is 0 for an install and
+		//an upgrade alike, and nothing resets it.
+		[ObservableProperty] public partial int PlayMenuHintsShown { get; set; } = 0;
+
 		[ObservableProperty] public partial bool ShowFps { get; set; } = false;
 		[ObservableProperty] public partial bool ShowFrameCounter { get; set; } = false;
 		[ObservableProperty] public partial bool ShowGameTimer { get; set; } = false;
@@ -152,7 +157,9 @@ namespace Mesen.Config
 			//on apply), so Esc opens the overlay instead of pausing. Binding it
 			//to a controller button is a config choice - then Esc keeps meaning
 			//Pause.
-			AddShortcut(new ShortcutKeyInfo { Shortcut = EmulatorShortcut.ToggleOverlay, KeyCombination = new KeyCombination() { Key1 = InputApi.GetKeyCode("Esc") } });
+			//ADR-0251: the second slot is the controller's way into W-P4 -
+			//Home/Guide where the platform reports one, else Select+Start.
+			AddShortcut(new ShortcutKeyInfo { Shortcut = EmulatorShortcut.ToggleOverlay, KeyCombination = new KeyCombination() { Key1 = InputApi.GetKeyCode("Esc") }, KeyCombination2 = DefaultOverlayControllerCombination() });
 			AddShortcut(new ShortcutKeyInfo { Shortcut = EmulatorShortcut.RunSingleFrame, KeyCombination = new KeyCombination() { Key1 = InputApi.GetKeyCode("`") } });
 
 			AddShortcut(new ShortcutKeyInfo { Shortcut = EmulatorShortcut.SetScale1x, KeyCombination = new KeyCombination() { Key1 = alt, Key2 = InputApi.GetKeyCode("1") } });
@@ -192,6 +199,51 @@ namespace Mesen.Config
 					AddShortcut(new ShortcutKeyInfo { Shortcut = value });
 				}
 			}
+		}
+
+		//ADR-0251: ToggleOverlay's default controller binding (PlayMenuHint).
+		//keyCode defaults to the platform's key manager (InputApi.GetKeyCode).
+		private static KeyCombination DefaultOverlayControllerCombination(Func<string, UInt16>? keyCode = null)
+		{
+			Func<string, UInt16> code = keyCode ?? InputApi.GetKeyCode;
+			IReadOnlyList<string> keys = PlayMenuHint.DefaultControllerKeys(name => code(name) != 0);
+			return new KeyCombination(keys.Select(code).ToList());
+		}
+
+		//ADR-0251, on upgrade: an existing settings.json already has its
+		//ToggleOverlay entry, so AddShortcut keeps it as it was. The controller
+		//binding goes into its second slot only when that slot is empty and no
+		//other shortcut uses the combination.
+		public void SeedOverlayControllerBinding(Func<string, UInt16>? keyCode = null)
+		{
+			ShortcutKeyInfo? overlay = ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+			if(overlay == null) {
+				return;
+			}
+			Func<string, UInt16> code = keyCode ?? InputApi.GetKeyCode;
+			IReadOnlyList<string> keys = PlayMenuHint.DefaultControllerKeys(name => code(name) != 0);
+			KeyCombination combo = DefaultOverlayControllerCombination(code);
+			string signature = ShortcutSignature(combo);
+			bool taken = ShortcutKeys.Any(sk => ShortcutSignature(sk.KeyCombination) == signature || ShortcutSignature(sk.KeyCombination2) == signature);
+			if(PlayMenuHint.SeedsControllerBinding(overlay.KeyCombination2.IsEmpty, taken, keys)) {
+				overlay.KeyCombination2 = combo;
+			}
+		}
+
+		//ADR-0251: the ToggleOverlay slots as key names, for the entry toast.
+		public (List<string> First, List<string> Second) OverlayBindingKeyNames()
+		{
+			ShortcutKeyInfo? overlay = ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+			return (KeyNames(overlay?.KeyCombination), KeyNames(overlay?.KeyCombination2));
+		}
+
+		private static List<string> KeyNames(KeyCombination? combo)
+		{
+			if(combo == null) {
+				return new List<string>();
+			}
+			return new[] { combo.Key1, combo.Key2, combo.Key3 }.Where(code => code != 0)
+				.Select(code => InputApi.GetKeyName(code)).Where(name => !string.IsNullOrWhiteSpace(name)).ToList();
 		}
 
 		public void UpdateFileAssociations()

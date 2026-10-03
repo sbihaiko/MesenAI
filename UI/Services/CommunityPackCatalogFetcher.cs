@@ -37,7 +37,7 @@ namespace Mesen.Services
 		//§46: <EnhancementPackFolder>/.cache/downloads/ (ADR-0040 scratch space, safe to delete).
 		private static string CacheFolder => CommunityPackPaths.CacheRoot;
 		private static string DownloadsFolder => CommunityPackPaths.DownloadsFolder;
-		private static string CatalogCachePath => Path.Combine(CacheFolder, "community-packs.json");
+		private static string CatalogCachePath => CommunityPackPaths.CatalogCachePath;
 		private static string CatalogEtagPath => Path.Combine(CacheFolder, "community-packs.etag");
 
 		//onMatched (G.4, W-P9): called once a catalog row matches, before its
@@ -156,6 +156,18 @@ namespace Mesen.Services
 			}
 			string? body = response.Body == null ? null : System.Text.Encoding.UTF8.GetString(response.Body);
 			return new CommunityCatalogFetchOutcome(response.StatusCode, response.ETag, body);
+		}
+
+		//#736: the catalog copy on disk (the last fetch's), read without the
+		//network - Play's community-pack offer must not contact a host when the
+		//player turned auto-install off. Null when there is no usable copy.
+		public static CommunityPackCatalog? ReadCachedCatalog()
+		{
+			try {
+				return File.Exists(CatalogCachePath) ? TryParseCatalog(File.ReadAllText(CatalogCachePath)) : null;
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				return null;
+			}
 		}
 
 		//A catalog is real only when it parses AND carries a `packs` array - an
