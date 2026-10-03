@@ -3,6 +3,7 @@
 #include "Shared/EmuSettings.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/Video/AspectRatioMath.h"
+#include "Shared/Video/VideoDecoder.h"
 #include "Shared/KeyManager.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Emulator.h"
@@ -550,7 +551,10 @@ double EmuSettings::GetAspectRatio(ConsoleRegion region, FrameInfo baseFrameSize
 	in.BaseHeight = baseFrameSize.Height;
 	in.Region = region;
 	in.CustomRatio = _video.CustomAspectRatio;
-	if(in.Setting == VideoAspectRatio::Auto) {
+	//ADR-0253: a widescreen Reveal frame is shown at its own width and the
+	//console's pixel aspect, which needs the same console inputs as Auto
+	in.ExtendedFrame = in.Setting == VideoAspectRatio::Widescreen && _emu->GetVideoDecoder() && _emu->GetVideoDecoder()->IsFrameExtended();
+	if(in.Setting == VideoAspectRatio::Auto || in.ExtendedFrame) {
 		//Only Auto looks at the console/ROM, and GetRomInfo() is not free -
 		//keep the query on the path that needs it, as before the extraction
 		ConsoleType consoleType = _emu->GetConsoleType();

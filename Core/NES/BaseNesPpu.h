@@ -12,6 +12,7 @@ class BaseMapper;
 class SnesControlManager;
 class NesConsole;
 class EmuSettings;
+struct RenderedFrame;
 
 class BaseNesPpu : public INesMemoryHandler, public ISerializable
 {
@@ -185,6 +186,15 @@ public:
 	//(HdBuilderPpu overrides it), so the emulation path pays nothing for it:
 	//the CRTP call is an empty inline and the return below is untouched.
 	__forceinline void NoteSpritePixel(uint8_t spriteColor, uint8_t backgroundColor, bool backgroundPriority) {}
+
+	//ADR-0253 (NES widescreen Reveal), same pattern: empty CRTP defaults that
+	//only DefaultNesPpu overrides. NesPpu calls OnRowBasisCaptured(row) right
+	//after it captures the scroll basis a visible row renders from (cycle 257,
+	//and again at cycle 304 of the pre-render line for row 0), and
+	//OnFrameBuilt(frame) on the RenderedFrame it is about to send. The HD,
+	//HD-builder and NSF PPUs keep a standard 256-px frame.
+	__forceinline void OnRowBasisCaptured(int16_t row) {}
+	__forceinline void OnFrameBuilt(RenderedFrame& frame) {}
 
 	uint32_t GetFrameCount() { return _frameCount; }
 	uint32_t GetCurrentCycle() { return _cycle; }

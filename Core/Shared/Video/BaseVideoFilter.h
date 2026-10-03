@@ -62,6 +62,13 @@ public:
 	ScreenshotCapture CopyOutputBuffer(vector<uint32_t>& out);
 
 	virtual HudScaleFactors GetScaleFactor() { return { 1.0, 1.0 }; }
+
+	//ADR-0253: whether this filter decodes a frame of any width, so a
+	//widescreen Reveal frame (RenderedFrame::ExtendedColumns > 0) can be
+	//handed to it whole. A filter that assumes the console's standard width
+	//(the NES NTSC filters) gets the standard centre instead - VideoDecoder
+	//crops it. W.6 widens those filters.
+	virtual bool AcceptsExtendedFrame() { return false; }
 	virtual OverscanDimensions GetOverscan();
 	void SetOverscan(OverscanDimensions dimensions);
 	FrameInfo GetFrameInfo(uint16_t* ppuOutputBuffer, bool enableOverscan);
