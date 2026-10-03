@@ -266,6 +266,15 @@ bool MepPackManager::StartRecording(const string& source, const string& note, bo
 		type == ConsoleType::Nes, //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
 		onDemand);
 	string foreignTextures = loosePack ? existingManifest : (texturesPack ? texturesPack->ContainerName : "");
+	//Play's automatic bootstrap kept the project's own mep/ art: not a foreign
+	//pack, so "delete that pack" would be the wrong advice.
+	bool keptOwnArt = !onDemand && !loosePack && texturesPack && IsOwnProjectLayer(texturesPack, MepSectionType::Textures) &&
+		texturesPack->Sections[(int)MepSectionType::Textures].HasHuman;
+	if(plan.Declined() && keptOwnArt) {
+		Log("bootstrap: nothing was recorded - the automatic bootstrap keeps this project's own mep/ textures as they are "
+			"(and another pack dresses its audio). Use Remaster's Record button to record on demand.");
+		return false;
+	}
 	if(plan.Declined()) {
 		//Declining is the point: this is a first draft, not an override of a pack
 		//someone already has. Declining *silently* was not the point. The run
@@ -342,8 +351,13 @@ bool MepPackManager::StartRecording(const string& source, const string& note, bo
 		//The tile half is skipped for the same reason as the early return, and a
 		//bootstrap that comes back with audio and no tiles has to say which half
 		//it did - otherwise "the run finished" reads as "the recording is there".
-		Log("bootstrap: no tiles were recorded - '" + foreignTextures +
-			"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
+		if(keptOwnArt) {
+			Log("bootstrap: no tiles were recorded - the automatic bootstrap keeps this project's own mep/ textures as they are. "
+				"Only the audio section was written by this run; use Remaster's Record button to record tiles on demand.");
+		} else {
+			Log("bootstrap: no tiles were recorded - '" + foreignTextures +
+				"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
+		}
 		return _bootstrapping;
 	}
 
