@@ -811,7 +811,7 @@ namespace Mesen.Windows
 
 		//G.1 (W-S1): the shell bar and status line, while on screen, take room
 		//from the game like the classic menu bar does.
-		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : 0;
+		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : this.GetControl<Border>("ShellDragStrip").Bounds.Height;
 
 		private void ResizeRenderer()
 		{
@@ -877,6 +877,7 @@ namespace Mesen.Windows
 			_rendererSize = new Size();
 			ResizeRenderer();
 			UpdateShellTitleBarInset();
+			UpdateShellDragStrip();
 		}
 
 		//G.1 (W-S1; user's choice 2026-10-02, "Integrar agora"): on macOS the
@@ -896,8 +897,22 @@ namespace Mesen.Windows
 			if(_shellBar.Parent is DockPanel dock) {
 				dock.Children.Remove(_shellBar);
 				dock.Children.Insert(0, _shellBar);
+				Border strip = this.GetControl<Border>("ShellDragStrip");
+				dock.Children.Remove(strip);
+				dock.Children.Insert(1, strip);
 			}
+			Border dragStrip = this.GetControl<Border>("ShellDragStrip");
+			dragStrip.PointerPressed += (_, e) => {
+				if(e.GetCurrentPoint(dragStrip).Properties.IsLeftButtonPressed) {
+					BeginMoveDrag(e);
+				}
+			};
 			_model.Shell.WorkspaceChanged += _ => ApplyShellTitleBar();
+			_model.Shell.PropertyChanged += (_, e) => {
+				if(e.PropertyName == nameof(WorkspaceShellViewModel.IsBarVisible)) {
+					UpdateShellDragStrip();
+				}
+			};
 			ApplyShellTitleBar();
 		}
 
@@ -907,6 +922,18 @@ namespace Mesen.Windows
 			ExtendClientAreaToDecorationsHint = extend;
 			ExtendClientAreaTitleBarHeightHint = extend ? ShellTitleBar.Height : -1;
 			UpdateShellTitleBarInset();
+			UpdateShellDragStrip();
+		}
+
+		//The strip shows only while the bar is hidden, so the window can still
+		//be dragged by its top edge; the game's own mouse input is untouched
+		//(the strip is outside the renderer panel).
+		private void UpdateShellDragStrip()
+		{
+			Border strip = this.GetControl<Border>("ShellDragStrip");
+			double height = ShellTitleBar.DragStripHeight(ExtendClientAreaToDecorationsHint, WindowState == WindowState.FullScreen, _model.Shell.IsBarVisible);
+			strip.Height = height;
+			strip.IsVisible = height > 0;
 		}
 
 		private void UpdateShellTitleBarInset()
