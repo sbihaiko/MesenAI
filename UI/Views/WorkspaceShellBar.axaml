@@ -7,6 +7,7 @@
 	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
 	xmlns:chrome="using:Avalonia.Controls.Chrome"
+	xmlns:lg="using:Mesen.Logic"
 	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="52"
 	x:DataType="vm:MainWindowViewModel"
 	x:Class="Mesen.Views.WorkspaceShellBar"
@@ -19,7 +20,84 @@
 	drags the window (ElementRole TitleBar), the two controls keep their input
 	(ElementRole User), and MainWindow pads the leading edge for the traffic
 	lights. The roles have no effect when the client area is not extended.-->
-	<DockPanel Name="TitleBarArea" Height="52" Background="{DynamicResource MesenMenuBackground}" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+	<!--ADR-0249: in Player mode MainWindow gives this bar the `player` class,
+	and the bar follows W-S1's render: light chrome with a hairline, a tinted
+	badge, the 15 px semibold name and a grey ⋯. The classic look stays the
+	default here (these styles sit closer than PlayerTheme.axaml, so both live
+	in this file).-->
+	<UserControl.Resources>
+		<c:WorkspaceIconConverter x:Key="WorkspaceIcon" />
+	</UserControl.Resources>
+	<UserControl.Styles>
+		<Style Selector="DockPanel#TitleBarArea">
+			<Setter Property="Background" Value="{DynamicResource MesenMenuBackground}" />
+		</Style>
+		<Style Selector="TextBlock#ProfileButtonName">
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="FontSize" Value="16" />
+		</Style>
+		<Style Selector="Border#ProfileBadge">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player DockPanel#TitleBarArea">
+			<Setter Property="Background" Value="{StaticResource PlayerBarBackgroundBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border#TitleBarHairline">
+			<Setter Property="Background" Value="{StaticResource PlayerBarSeparatorBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border#ProfileBadge">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileGlyph">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileButtonName">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileChevron">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="PathIcon#ProfileChevronIcon">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player PathIcon#ProfileChevronIcon">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+			<Setter Property="Padding" Value="6 3 10 3" />
+			<Setter Property="Height" Value="28" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton:pointerover /template/ Border#PART_Background, :is(UserControl).player Button#ProfileButton:pressed /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Menu#ToolsMenu">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Margin" Value="0 0 10 0" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton">
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+			<Setter Property="Width" Value="32" />
+			<Setter Property="Height" Value="28" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > AccessText, :is(UserControl).player MenuItem#ToolsMenuButton AccessText">
+			<Setter Property="FontSize" Value="18" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+	</UserControl.Styles>
+
+	<DockPanel Name="TitleBarArea" Height="52" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+		<Border Name="TitleBarHairline" DockPanel.Dock="Bottom" Height="1" Background="Transparent" />
 		<c:MesenMenu Name="ToolsMenu" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0 0 8 0" chrome:WindowDecorationProperties.ElementRole="User">
 			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32">
 				<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding MainMenu.FileMenuItems}" />
@@ -36,9 +114,16 @@
 
 		<Button Name="ProfileButton" DockPanel.Dock="Left" Margin="12 0 0 0" VerticalAlignment="Center" Padding="10 4" chrome:WindowDecorationProperties.ElementRole="User">
 			<StackPanel Orientation="Horizontal" Spacing="8">
-				<TextBlock Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
-				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
-				<TextBlock Text="⌄" VerticalAlignment="Center" />
+				<!--W-S1: the workspace's badge in its tint (Player); the text glyph is the classic look.-->
+				<Border Name="ProfileBadge" Classes="badge small"
+					Classes.remaster="{Binding Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Remaster}}"
+					Classes.share="{Binding Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}">
+					<PathIcon Data="{Binding Shell.Active, Converter={StaticResource WorkspaceIcon}}" />
+				</Border>
+				<TextBlock Name="ProfileGlyph" Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
+				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" VerticalAlignment="Center" />
+				<TextBlock Name="ProfileChevron" Text="⌄" VerticalAlignment="Center" />
+				<PathIcon Name="ProfileChevronIcon" Data="{StaticResource PlayerIconChevronDown}" Width="10" Height="10" Margin="-2 2 0 0" Foreground="{StaticResource PlayerText2Brush}" VerticalAlignment="Center" />
 				<!--G.3 (§13.6): red = Remaster is recording, tint = a Remaster job
 				runs, while another profile is shown.-->
 				<TextBlock Name="ProfileRecordingDot" Text="●" FontSize="10" VerticalAlignment="Center" Foreground="#FF3B30" IsVisible="{Binding Shell.ShowsRecordingDot}" />

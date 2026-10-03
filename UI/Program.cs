@@ -143,6 +143,8 @@ namespace Mesen
 		public static AppBuilder BuildAvaloniaApp()
 			 => AppBuilder.Configure<App>()
 					.UsePlatformDetect()
+					//ADR-0249: Inter, the Player theme's font, bundled.
+					.WithInterFont()
 					.With(new Win32PlatformOptions { })
 					.With(new X11PlatformOptions {
 						EnableInputFocusProxy = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") == "gamescope",

@@ -1,0 +1,662 @@
+<Styles
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:c="using:Mesen.Controls"
+>
+	<!--ADR-0249: the Player GUI follows its rendered wireframes
+	(docs/media/gui-redesign/W-*.png), not classic Mesen. Every token below is
+	transcribed from scripts/render_gui_wireframes.py; the palette block is
+	pinned by UI.Tests/Theme/PlayerThemeDriftTests (change both together).
+
+	SCOPE (Decision 3): every style here starts with `.player`, the class the
+	Player workspace host and the Player chrome (shell bar, status line) carry
+	in Player mode only. Classic windows, dialogs, the debugger and Advanced
+	mode never match, and keep UI/Styles/MesenStyles.xaml exactly as it is
+	(UI.HeadlessTests/PlayerThemeScopeTests). The component catalogue and
+	usage is in UI/AGENTS.md ("Player theme").-->
+
+	<Styles.Resources>
+		<!-- Palette (render_gui_wireframes.py "# Palette"; drift-tested) -->
+		<Color x:Key="PlayerTextColor">#1D1D1F</Color>
+		<Color x:Key="PlayerText2Color">#6E6E73</Color>
+		<Color x:Key="PlayerText3Color">#A1A1A6</Color>
+		<Color x:Key="PlayerSeparatorColor">#E5E5EA</Color>
+		<Color x:Key="PlayerWindowBackgroundColor">#F5F5F7</Color>
+		<Color x:Key="PlayerCardColor">#FFFFFF</Color>
+		<Color x:Key="PlayerFillColor">#E9E9EC</Color>
+		<Color x:Key="PlayerRedColor">#FF3B30</Color>
+		<Color x:Key="PlayerOrangeColor">#FF9F0A</Color>
+		<Color x:Key="PlayerTintPlayColor">#007AFF</Color>
+		<Color x:Key="PlayerTintRemasterColor">#AF52DE</Color>
+		<Color x:Key="PlayerTintShareColor">#34C759</Color>
+		<Color x:Key="PlayerTintTextPlayColor">#0066DC</Color>
+		<Color x:Key="PlayerTintTextRemasterColor">#963CC8</Color>
+		<Color x:Key="PlayerTintTextShareColor">#248A3D</Color>
+
+		<!-- Colours the renderer draws as literals -->
+		<Color x:Key="PlayerBarBackgroundColor">#FAFAFB</Color>
+		<Color x:Key="PlayerBarSeparatorColor">#DEDEE2</Color>
+		<Color x:Key="PlayerStatusSeparatorColor">#E2E2E6</Color>
+		<Color x:Key="PlayerControlBorderColor">#D6D6DB</Color>
+		<Color x:Key="PlayerCardBorderColor">#E8E8EC</Color>
+		<Color x:Key="PlayerSheetBorderColor">#DCDCE1</Color>
+		<Color x:Key="PlayerFieldBorderColor">#CECED4</Color>
+		<Color x:Key="PlayerFocusRingColor">#BEDAFF</Color>
+		<Color x:Key="PlayerOverlayCardColor">#FAFAFC</Color>
+		<Color x:Key="PlayerDestructiveFillColor">#FFEBEA</Color>
+		<Color x:Key="PlayerPressedFillColor">#E8E8EC</Color>
+		<Color x:Key="PlayerSelectedRowColor">#EBF3FF</Color>
+		<Color x:Key="PlayerToggleOnColor">#34C759</Color>
+		<Color x:Key="PlayerToggleOffColor">#DCDCE1</Color>
+		<!-- Badge tints of W-P4's rows besides the workspace tints -->
+		<Color x:Key="PlayerIndigoColor">#5856D6</Color>
+		<Color x:Key="PlayerPinkColor">#FF2D55</Color>
+		<Color x:Key="PlayerGrayColor">#8E8E93</Color>
+		<!-- TINT x 0.14 over white: the `tinted` button fill -->
+		<Color x:Key="PlayerTintSoftPlayColor">#DBECFF</Color>
+		<Color x:Key="PlayerTintSoftRemasterColor">#F4E7FA</Color>
+		<Color x:Key="PlayerTintSoftShareColor">#E3F7E8</Color>
+
+		<SolidColorBrush x:Key="PlayerTextBrush" Color="{StaticResource PlayerTextColor}" />
+		<SolidColorBrush x:Key="PlayerText2Brush" Color="{StaticResource PlayerText2Color}" />
+		<SolidColorBrush x:Key="PlayerText3Brush" Color="{StaticResource PlayerText3Color}" />
+		<SolidColorBrush x:Key="PlayerSeparatorBrush" Color="{StaticResource PlayerSeparatorColor}" />
+		<SolidColorBrush x:Key="PlayerWindowBackgroundBrush" Color="{StaticResource PlayerWindowBackgroundColor}" />
+		<SolidColorBrush x:Key="PlayerCardBrush" Color="{StaticResource PlayerCardColor}" />
+		<SolidColorBrush x:Key="PlayerFillBrush" Color="{StaticResource PlayerFillColor}" />
+		<SolidColorBrush x:Key="PlayerRedBrush" Color="{StaticResource PlayerRedColor}" />
+		<SolidColorBrush x:Key="PlayerOrangeBrush" Color="{StaticResource PlayerOrangeColor}" />
+		<SolidColorBrush x:Key="PlayerTintPlayBrush" Color="{StaticResource PlayerTintPlayColor}" />
+		<SolidColorBrush x:Key="PlayerTintRemasterBrush" Color="{StaticResource PlayerTintRemasterColor}" />
+		<SolidColorBrush x:Key="PlayerTintShareBrush" Color="{StaticResource PlayerTintShareColor}" />
+		<SolidColorBrush x:Key="PlayerTintTextPlayBrush" Color="{StaticResource PlayerTintTextPlayColor}" />
+		<SolidColorBrush x:Key="PlayerTintTextRemasterBrush" Color="{StaticResource PlayerTintTextRemasterColor}" />
+		<SolidColorBrush x:Key="PlayerTintTextShareBrush" Color="{StaticResource PlayerTintTextShareColor}" />
+		<SolidColorBrush x:Key="PlayerTintSoftPlayBrush" Color="{StaticResource PlayerTintSoftPlayColor}" />
+		<SolidColorBrush x:Key="PlayerTintSoftRemasterBrush" Color="{StaticResource PlayerTintSoftRemasterColor}" />
+		<SolidColorBrush x:Key="PlayerTintSoftShareBrush" Color="{StaticResource PlayerTintSoftShareColor}" />
+		<SolidColorBrush x:Key="PlayerBarBackgroundBrush" Color="{StaticResource PlayerBarBackgroundColor}" />
+		<SolidColorBrush x:Key="PlayerBarSeparatorBrush" Color="{StaticResource PlayerBarSeparatorColor}" />
+		<SolidColorBrush x:Key="PlayerStatusSeparatorBrush" Color="{StaticResource PlayerStatusSeparatorColor}" />
+		<SolidColorBrush x:Key="PlayerControlBorderBrush" Color="{StaticResource PlayerControlBorderColor}" />
+		<SolidColorBrush x:Key="PlayerCardBorderBrush" Color="{StaticResource PlayerCardBorderColor}" />
+		<SolidColorBrush x:Key="PlayerSheetBorderBrush" Color="{StaticResource PlayerSheetBorderColor}" />
+		<SolidColorBrush x:Key="PlayerFieldBorderBrush" Color="{StaticResource PlayerFieldBorderColor}" />
+		<SolidColorBrush x:Key="PlayerOverlayCardBrush" Color="{StaticResource PlayerOverlayCardColor}" />
+		<SolidColorBrush x:Key="PlayerDestructiveFillBrush" Color="{StaticResource PlayerDestructiveFillColor}" />
+		<SolidColorBrush x:Key="PlayerPressedFillBrush" Color="{StaticResource PlayerPressedFillColor}" />
+		<SolidColorBrush x:Key="PlayerSelectedRowBrush" Color="{StaticResource PlayerSelectedRowColor}" />
+		<SolidColorBrush x:Key="PlayerIndigoBrush" Color="{StaticResource PlayerIndigoColor}" />
+		<SolidColorBrush x:Key="PlayerPinkBrush" Color="{StaticResource PlayerPinkColor}" />
+		<SolidColorBrush x:Key="PlayerGrayBrush" Color="{StaticResource PlayerGrayColor}" />
+		<SolidColorBrush x:Key="PlayerScrimBrush" Color="#5A000000" />
+
+		<!-- Type: Inter (Decision 4), the renders' sizes. Weights: 400 Regular,
+		     500 Medium, 590-650 SemiBold, 700 Bold. -->
+		<FontFamily x:Key="PlayerFontFamily">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+		<x:Double x:Key="PlayerFontLargeTitle">28</x:Double>
+		<x:Double x:Key="PlayerFontTitle1">22</x:Double>
+		<x:Double x:Key="PlayerFontTitle2">20</x:Double>
+		<x:Double x:Key="PlayerFontTitle3">17</x:Double>
+		<x:Double x:Key="PlayerFontHeadline">15</x:Double>
+		<x:Double x:Key="PlayerFontCallout">13.5</x:Double>
+		<x:Double x:Key="PlayerFontBody">13</x:Double>
+		<x:Double x:Key="PlayerFontSubhead">12.5</x:Double>
+		<x:Double x:Key="PlayerFontFootnote">11.5</x:Double>
+		<x:Double x:Key="PlayerFontCaption">10.5</x:Double>
+
+		<!-- Radii -->
+		<CornerRadius x:Key="PlayerRadiusSmall">6</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusControl">8</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusField">7</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusTile">10</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusControlLarge">11</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusCard">12</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusSheet">14</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusHero">16</CornerRadius>
+		<CornerRadius x:Key="PlayerRadiusOverlay">18</CornerRadius>
+
+		<!-- Spacing (the renders' 4-px grid) -->
+		<x:Double x:Key="PlayerSpacingXS">4</x:Double>
+		<x:Double x:Key="PlayerSpacingS">8</x:Double>
+		<x:Double x:Key="PlayerSpacingM">12</x:Double>
+		<x:Double x:Key="PlayerSpacingL">16</x:Double>
+		<x:Double x:Key="PlayerSpacingXL">24</x:Double>
+		<x:Double x:Key="PlayerSpacingXXL">40</x:Double>
+		<Thickness x:Key="PlayerPageMargin">40 28 40 24</Thickness>
+
+		<!-- Shadows (the renderer's blur/dy/alpha) -->
+		<BoxShadows x:Key="PlayerShadowButton">0 1 3 0 #28000000</BoxShadows>
+		<BoxShadows x:Key="PlayerShadowSecondary">0 1 2 0 #1C000000</BoxShadows>
+		<BoxShadows x:Key="PlayerShadowCard">0 2 6 0 #16000000</BoxShadows>
+		<BoxShadows x:Key="PlayerShadowTile">0 2 5 0 #28000000</BoxShadows>
+		<BoxShadows x:Key="PlayerShadowSheet">0 10 22 0 #5A000000</BoxShadows>
+		<BoxShadows x:Key="PlayerShadowOverlay">0 12 26 0 #6E000000</BoxShadows>
+		<BoxShadows x:Key="PlayerFocusRing">0 0 0 3 #BEDAFF</BoxShadows>
+
+		<!-- Icons: filled glyphs in a 20 x 20 box, drawn like the renderer's
+		     Canvas.icon(); use with PathIcon (Foreground = colour). -->
+		<StreamGeometry x:Key="PlayerIconPlay">M4.5,2 L4.5,18 L18,10 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconRemaster">M4.27,18.27 L1.73,15.73 L12.73,4.73 L15.27,7.27 Z M13.5,1.5 L18.5,6.5 L16.5,8.5 L11.5,3.5 Z M0.6,17.4 a2.2,2.2 0 1 1 4.4,0 a2.2,2.2 0 1 1 -4.4,0 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconPencil">M3.2,18.6 L1.4,16.8 L13.6,4.6 L15.4,6.4 Z M14.6,3.6 L16.2,2 L18,3.8 L16.4,5.4 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconShare">M10,1 L18.5,5.5 L10,10 L1.5,5.5 Z M1.5,7 L9.2,11.2 L9.2,19.5 L1.5,15 Z M18.5,7 L10.8,11.2 L10.8,19.5 L18.5,15 Z</StreamGeometry>
+		<StaticResource x:Key="PlayerIconPack" ResourceKey="PlayerIconShare" />
+		<StreamGeometry x:Key="PlayerIconSaveStates">F0 M3.4,3.5 h13.2 a1.9,1.9 0 0 1 1.9,1.9 v9.2 a1.9,1.9 0 0 1 -1.9,1.9 h-13.2 a1.9,1.9 0 0 1 -1.9,-1.9 v-9.2 a1.9,1.9 0 0 1 1.9,-1.9 Z M3.4,4.6 h1.2 v1.6 h-1.2 Z M3.4,13.8 h1.2 v1.6 h-1.2 Z M7.4,4.6 h1.2 v1.6 h-1.2 Z M7.4,13.8 h1.2 v1.6 h-1.2 Z M11.4,4.6 h1.2 v1.6 h-1.2 Z M11.4,13.8 h1.2 v1.6 h-1.2 Z M15.4,4.6 h1.2 v1.6 h-1.2 Z M15.4,13.8 h1.2 v1.6 h-1.2 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconEnhancements">M10,0 L12.2,7.8 L20,10 L12.2,12.2 L10,20 L7.8,12.2 L0,10 L7.8,7.8 Z</StreamGeometry>
+		<StaticResource x:Key="PlayerIconCheats" ResourceKey="PlayerIconEnhancements" />
+		<StreamGeometry x:Key="PlayerIconSettings">F1 M2.40,10.00 a7.60,7.60 0 1 1 15.20,0 a7.60,7.60 0 1 1 -15.20,0 Z M5.40,10.00 a4.60,4.60 0 1 0 9.20,0 a4.60,4.60 0 1 0 -9.20,0 Z M16.55,10.00 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M14.12,15.87 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M8.25,18.30 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M2.38,15.87 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M-0.05,10.00 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M2.38,4.13 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M8.25,1.70 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M14.12,4.13 a1.75,1.75 0 1 1 3.50,0 a1.75,1.75 0 1 1 -3.50,0 Z M7.80,10.00 a2.20,2.20 0 1 1 4.40,0 a2.20,2.20 0 1 1 -4.40,0 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconFolder">M1.5,5 a1.5,1.5 0 0 1 1.5,-1.5 h4.6 l2,2 h7.4 a1.5,1.5 0 0 1 1.5,1.5 v8.5 a1.5,1.5 0 0 1 -1.5,1.5 h-14 a1.5,1.5 0 0 1 -1.5,-1.5 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconChevronRight">M5.0,4.0 L6.6,2.4 L14.2,10 L6.6,17.6 L5.0,16.0 L11.0,10 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconChevronDown">M4.0,5.0 L2.4,6.6 L10,14.2 L17.6,6.6 L16.0,5.0 L10,11.0 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconRecord">M3.00,10.00 a7.00,7.00 0 1 1 14.00,0 a7.00,7.00 0 1 1 -14.00,0 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconMore">M3.10,10.00 a1.70,1.70 0 1 1 3.40,0 a1.70,1.70 0 1 1 -3.40,0 Z M8.30,10.00 a1.70,1.70 0 1 1 3.40,0 a1.70,1.70 0 1 1 -3.40,0 Z M13.50,10.00 a1.70,1.70 0 1 1 3.40,0 a1.70,1.70 0 1 1 -3.40,0 Z</StreamGeometry>
+		<StreamGeometry x:Key="PlayerIconCheck">M3.5,10.5 L5.1,8.9 L8.2,12 L14.9,5.3 L16.5,6.9 L8.2,15.2 Z</StreamGeometry>
+
+		<ControlTemplate x:Key="PlayerButtonTemplate" TargetType="Button">
+			<Border
+				Name="PART_Background"
+				Background="{TemplateBinding Background}"
+				BorderBrush="{TemplateBinding BorderBrush}"
+				BorderThickness="{TemplateBinding BorderThickness}"
+				CornerRadius="{TemplateBinding CornerRadius}"
+			>
+				<ContentPresenter
+					Name="PART_ContentPresenter"
+					Content="{TemplateBinding Content}"
+					ContentTemplate="{TemplateBinding ContentTemplate}"
+					Padding="{TemplateBinding Padding}"
+					Foreground="{TemplateBinding Foreground}"
+					HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+					VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+				/>
+			</Border>
+		</ControlTemplate>
+
+		<!-- A grouped-list row: content, then a hairline from the title to the
+		     right edge (hidden on the group's last row). -->
+		<ControlTemplate x:Key="PlayerRowTemplate" TargetType="Button">
+			<Panel Name="PART_Background" Background="{TemplateBinding Background}">
+				<ContentPresenter
+					Name="PART_ContentPresenter"
+					Content="{TemplateBinding Content}"
+					ContentTemplate="{TemplateBinding ContentTemplate}"
+					Padding="{TemplateBinding Padding}"
+					Foreground="{TemplateBinding Foreground}"
+					HorizontalContentAlignment="Stretch"
+					VerticalContentAlignment="Center"
+				/>
+				<Rectangle Name="PART_Separator" Height="1" VerticalAlignment="Bottom" Margin="48 0 0 0" Fill="{StaticResource PlayerSeparatorBrush}" />
+			</Panel>
+		</ControlTemplate>
+	</Styles.Resources>
+
+	<!-- ============================================================ scope -->
+	<!-- The scope sets the text defaults and the Play tint; a workspace class
+	     (.remaster, .share) on the scope or inside it swaps the tint. -->
+	<Style Selector=":is(Control).player">
+		<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
+		<Setter Property="TextElement.FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="c:PlayerTheme.Tint" Value="{StaticResource PlayerTintPlayBrush}" />
+		<Setter Property="c:PlayerTheme.TintSoft" Value="{StaticResource PlayerTintSoftPlayBrush}" />
+		<Setter Property="c:PlayerTheme.TintText" Value="{StaticResource PlayerTintTextPlayBrush}" />
+	</Style>
+	<Style Selector=":is(Control).player.remaster, .player :is(Control).remaster">
+		<Setter Property="c:PlayerTheme.Tint" Value="{StaticResource PlayerTintRemasterBrush}" />
+		<Setter Property="c:PlayerTheme.TintSoft" Value="{StaticResource PlayerTintSoftRemasterBrush}" />
+		<Setter Property="c:PlayerTheme.TintText" Value="{StaticResource PlayerTintTextRemasterBrush}" />
+	</Style>
+	<Style Selector=":is(Control).player.share, .player :is(Control).share">
+		<Setter Property="c:PlayerTheme.Tint" Value="{StaticResource PlayerTintShareBrush}" />
+		<Setter Property="c:PlayerTheme.TintSoft" Value="{StaticResource PlayerTintSoftShareBrush}" />
+		<Setter Property="c:PlayerTheme.TintText" Value="{StaticResource PlayerTintTextShareBrush}" />
+	</Style>
+
+	<!-- MesenStyles gives every TextBlock MesenFont/MesenFontSize as a style
+	     value, which cuts inheritance. Inside the scope a TextBlock takes its
+	     parent's inherited font again, so a Button's FontSize reaches its label. -->
+	<Style Selector=".player TextBlock, .player AccessText">
+		<Setter Property="FontFamily" Value="{Binding $parent[Visual].(TextElement.FontFamily)}" />
+		<Setter Property="FontSize" Value="{Binding $parent[Visual].(TextElement.FontSize)}" />
+	</Style>
+
+	<!-- ============================================================ type ramp -->
+	<Style Selector=".player TextBlock.large-title">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontLargeTitle}" />
+		<Setter Property="FontWeight" Value="Bold" />
+	</Style>
+	<Style Selector=".player TextBlock.title1">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle1}" />
+		<Setter Property="FontWeight" Value="Bold" />
+	</Style>
+	<Style Selector=".player TextBlock.title2">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle2}" />
+		<Setter Property="FontWeight" Value="Bold" />
+	</Style>
+	<Style Selector=".player TextBlock.title3">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle3}" />
+		<Setter Property="FontWeight" Value="Bold" />
+	</Style>
+	<Style Selector=".player TextBlock.headline">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<Style Selector=".player TextBlock.callout">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="FontWeight" Value="Medium" />
+	</Style>
+	<Style Selector=".player TextBlock.body">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+	</Style>
+	<Style Selector=".player TextBlock.subhead">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+	</Style>
+	<Style Selector=".player TextBlock.footnote">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+	</Style>
+	<Style Selector=".player TextBlock.caption">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCaption}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<!-- Section header: the renderer's 13 px bold TEXT2 caps label ("RECORD") -->
+	<Style Selector=".player TextBlock.section-header">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="FontWeight" Value="Bold" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<Style Selector=".player TextBlock.secondary">
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+	</Style>
+	<Style Selector=".player TextBlock.tertiary">
+		<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+	</Style>
+	<Style Selector=".player TextBlock.tint">
+		<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.TintText)}" />
+	</Style>
+
+	<!-- ============================================================ buttons -->
+	<!-- Kinds: primary (tint fill), secondary (white, hairline), tinted (soft
+	     tint), destructive (soft red), plain (tint text only). Sizes: default
+	     28 px, .small 24, .medium 36, .large 44 (renderer: radius 8 up to 32 px
+	     tall, 11 above). -->
+	<Style Selector=".player Button.primary, .player Button.secondary, .player Button.tinted, .player Button.destructive, .player Button.plain">
+		<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+		<Setter Property="Height" Value="28" />
+		<Setter Property="MinWidth" Value="0" />
+		<Setter Property="Margin" Value="0" />
+		<Setter Property="Padding" Value="13 0" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		<Setter Property="BorderThickness" Value="0" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="FontWeight" Value="Medium" />
+		<Setter Property="HorizontalContentAlignment" Value="Center" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Cursor" Value="Hand" />
+	</Style>
+	<Style Selector=".player Button.small">
+		<Setter Property="Height" Value="24" />
+		<Setter Property="Padding" Value="11 0" />
+		<Setter Property="FontSize" Value="12" />
+	</Style>
+	<Style Selector=".player Button.medium">
+		<Setter Property="Height" Value="36" />
+		<Setter Property="Padding" Value="17 0" />
+		<Setter Property="FontSize" Value="14" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControlLarge}" />
+	</Style>
+	<Style Selector=".player Button.large">
+		<Setter Property="Height" Value="44" />
+		<Setter Property="Padding" Value="21 0" />
+		<Setter Property="FontSize" Value="16" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControlLarge}" />
+	</Style>
+
+	<Style Selector=".player Button.primary">
+		<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<Style Selector=".player Button.primary /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowButton}" />
+	</Style>
+	<Style Selector=".player Button.secondary">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerControlBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+	</Style>
+	<Style Selector=".player Button.secondary /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowSecondary}" />
+	</Style>
+	<Style Selector=".player Button.tinted">
+		<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.TintSoft)}" />
+		<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+	</Style>
+	<Style Selector=".player Button.destructive">
+		<Setter Property="Background" Value="{StaticResource PlayerDestructiveFillBrush}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerRedBrush}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+	</Style>
+	<!-- plain: tint text on the light surface, so TINT_TEXT (5.6:1 on white)
+	     rather than the fill tint (4.0:1). -->
+	<Style Selector=".player Button.plain">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.TintText)}" />
+	</Style>
+
+	<!-- States: one look for mouse, keyboard and gamepad (rule 9 needs a
+	     visible focus). -->
+	<Style Selector=".player Button.primary:pointerover /template/ Border#PART_Background, .player Button.tinted:pointerover /template/ Border#PART_Background, .player Button.destructive:pointerover /template/ Border#PART_Background">
+		<Setter Property="Opacity" Value="0.88" />
+	</Style>
+	<Style Selector=".player Button.primary:pressed /template/ Border#PART_Background, .player Button.tinted:pressed /template/ Border#PART_Background, .player Button.destructive:pressed /template/ Border#PART_Background">
+		<Setter Property="Opacity" Value="0.75" />
+	</Style>
+	<Style Selector=".player Button.secondary:pointerover /template/ Border#PART_Background">
+		<Setter Property="Background" Value="#F7F7F9" />
+	</Style>
+	<Style Selector=".player Button.secondary:pressed /template/ Border#PART_Background, .player Button.plain:pressed /template/ Border#PART_Background">
+		<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+	</Style>
+	<Style Selector=".player Button.primary:focus-visible /template/ Border#PART_Background, .player Button.secondary:focus-visible /template/ Border#PART_Background, .player Button.tinted:focus-visible /template/ Border#PART_Background, .player Button.destructive:focus-visible /template/ Border#PART_Background, .player Button.plain:focus-visible /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<Style Selector=".player Button:disabled">
+		<Setter Property="Opacity" Value="0.4" />
+	</Style>
+	<!-- A leading icon inside a button: <PathIcon Classes="leading" Data=… /> -->
+	<Style Selector=".player Button PathIcon.leading">
+		<Setter Property="Width" Value="13" />
+		<Setter Property="Height" Value="13" />
+		<Setter Property="Margin" Value="0 0 7 0" />
+		<Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+	</Style>
+
+	<!-- ============================================================ grouped list -->
+	<!-- <Border Classes="group"><StackPanel> Button.row … </StackPanel></Border>;
+	     a row's content is a DockPanel: Border.badge (left), PathIcon.chevron
+	     (right), TextBlock.value (right), TextBlock.title (fill). -->
+	<Style Selector=".player Border.group">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="ClipToBounds" Value="True" />
+	</Style>
+	<Style Selector=".player Button.row">
+		<Setter Property="Template" Value="{StaticResource PlayerRowTemplate}" />
+		<Setter Property="Height" Value="50" />
+		<Setter Property="MinWidth" Value="0" />
+		<Setter Property="Margin" Value="0" />
+		<Setter Property="Padding" Value="12 0 14 0" />
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="HorizontalAlignment" Value="Stretch" />
+		<Setter Property="CornerRadius" Value="0" />
+	</Style>
+	<Style Selector=".player Button.row.text /template/ Rectangle#PART_Separator">
+		<Setter Property="Margin" Value="14 0 0 0" />
+	</Style>
+	<Style Selector=".player Button.row:nth-last-child(1) /template/ Rectangle#PART_Separator">
+		<Setter Property="IsVisible" Value="False" />
+	</Style>
+	<Style Selector=".player Button.row:pointerover /template/ Panel#PART_Background">
+		<Setter Property="Background" Value="#F5F5F7" />
+	</Style>
+	<Style Selector=".player Button.row:pressed /template/ Panel#PART_Background">
+		<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+	</Style>
+	<Style Selector=".player Button.row:focus-visible /template/ Panel#PART_Background">
+		<Setter Property="Background" Value="{StaticResource PlayerSelectedRowBrush}" />
+	</Style>
+	<Style Selector=".player Button.row TextBlock.title">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		<Setter Property="FontWeight" Value="Medium" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player Button.row TextBlock.value">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		<Setter Property="Margin" Value="12 0 10 0" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player Button.row Border.badge">
+		<Setter Property="Margin" Value="0 0 10 0" />
+	</Style>
+	<Style Selector=".player PathIcon.chevron">
+		<Setter Property="Width" Value="8" />
+		<Setter Property="Height" Value="12" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		<Setter Property="Data" Value="{StaticResource PlayerIconChevronRight}" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+
+	<!-- ============================================================ badges -->
+	<!-- <Border Classes="badge"><PathIcon Data="{StaticResource PlayerIconPlay}" /></Border>:
+	     a rounded square (radius = 26 % of the side) in the tint, or a local
+	     Background, with a white glyph at 58 % of the side. Sizes: .small 22,
+	     default 26, .medium 32, .large 80. -->
+	<Style Selector=".player Border.badge">
+		<Setter Property="Width" Value="26" />
+		<Setter Property="Height" Value="26" />
+		<Setter Property="CornerRadius" Value="7" />
+		<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		<Setter Property="VerticalAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player Border.badge > PathIcon">
+		<Setter Property="Width" Value="15" />
+		<Setter Property="Height" Value="15" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+	</Style>
+	<Style Selector=".player Border.badge.small">
+		<Setter Property="Width" Value="22" />
+		<Setter Property="Height" Value="22" />
+		<Setter Property="CornerRadius" Value="6" />
+	</Style>
+	<Style Selector=".player Border.badge.small > PathIcon">
+		<Setter Property="Width" Value="12.5" />
+		<Setter Property="Height" Value="12.5" />
+	</Style>
+	<Style Selector=".player Border.badge.medium">
+		<Setter Property="Width" Value="32" />
+		<Setter Property="Height" Value="32" />
+		<Setter Property="CornerRadius" Value="8" />
+	</Style>
+	<Style Selector=".player Border.badge.medium > PathIcon">
+		<Setter Property="Width" Value="18.5" />
+		<Setter Property="Height" Value="18.5" />
+	</Style>
+	<Style Selector=".player Border.badge.large">
+		<Setter Property="Width" Value="80" />
+		<Setter Property="Height" Value="80" />
+		<Setter Property="CornerRadius" Value="21" />
+	</Style>
+	<Style Selector=".player Border.badge.large > PathIcon">
+		<Setter Property="Width" Value="46" />
+		<Setter Property="Height" Value="46" />
+	</Style>
+
+	<!-- ============================================================ surfaces -->
+	<!-- card: white, hairline, soft shadow, radius 12 (.hero: 16). sheet: the
+	     modal surface over a dimmed workspace, radius 14. overlay-card: W-P4's
+	     pause panel, radius 18. Each sets its own text colour (#716): TEXT on a
+	     light surface, whatever the app theme. -->
+	<Style Selector=".player Border.card">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowCard}" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
+	<Style Selector=".player Border.card.hero">
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusHero}" />
+	</Style>
+	<Style Selector=".player Border.sheet">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="BorderBrush" Value="{StaticResource PlayerSheetBorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSheet}" />
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowSheet}" />
+		<Setter Property="Padding" Value="24 20" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
+	<Style Selector=".player Border.overlay-card">
+		<Setter Property="Background" Value="{StaticResource PlayerOverlayCardBrush}" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusOverlay}" />
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowOverlay}" />
+		<Setter Property="Padding" Value="24 22 24 18" />
+		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
+	<!-- The dim layer behind a sheet or the overlay card. -->
+	<Style Selector=".player Border.scrim">
+		<Setter Property="Background" Value="{StaticResource PlayerScrimBrush}" />
+	</Style>
+	<!-- A light page behind a workspace screen (the renders' WINBG). -->
+	<Style Selector=".player Border.page">
+		<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
+	</Style>
+	<Style Selector=".player Separator.hairline">
+		<Setter Property="Background" Value="{StaticResource PlayerSeparatorBrush}" />
+		<Setter Property="Height" Value="1" />
+		<Setter Property="Margin" Value="0" />
+	</Style>
+
+	<!-- ============================================================ recent tiles -->
+	<!-- <c:StateGrid Classes="tiles"> (W-P2): 176 x 132 pictures, radius 10,
+	     a soft shadow, the title left-aligned below in 13 semibold. -->
+	<Style Selector=".player c|StateGridEntry.tiles">
+		<Setter Property="HorizontalAlignment" Value="Left" />
+		<Setter Property="VerticalAlignment" Value="Top" />
+		<Setter Property="Width" Value="176" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton">
+		<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+		<Setter Property="Width" Value="176" />
+		<Setter Property="Height" Value="132" />
+		<Setter Property="HorizontalAlignment" Value="Left" />
+		<Setter Property="Background" Value="Black" />
+		<Setter Property="BorderThickness" Value="0" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+		<Setter Property="ClipToBounds" Value="True" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowTile}" />
+		<Setter Property="ClipToBounds" Value="True" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:focus-visible /template/ Border#PART_Background">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:pointerover">
+		<Setter Property="Opacity" Value="0.9" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles TextBlock.title">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="TextAlignment" Value="Left" />
+		<Setter Property="Margin" Value="0 8 0 0" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles TextBlock.subtitle">
+		<Setter Property="IsVisible" Value="False" />
+	</Style>
+
+	<!-- ============================================================ segmented tabs -->
+	<!-- <ListBox Classes="segmented" SelectedIndex=…> with ListBoxItems: a FILL
+	     track (radius 8) and a white selected segment (radius 6). -->
+	<Style Selector=".player ListBox.segmented">
+		<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		<Setter Property="Padding" Value="2" />
+		<Setter Property="BorderThickness" Value="0" />
+		<Setter Property="HorizontalAlignment" Value="Left" />
+		<Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+		<Setter Property="ItemsPanel">
+			<ItemsPanelTemplate>
+				<StackPanel Orientation="Horizontal" />
+			</ItemsPanelTemplate>
+		</Setter>
+	</Style>
+	<Style Selector=".player ListBox.segmented ListBoxItem">
+		<Setter Property="Height" Value="22" />
+		<Setter Property="MinHeight" Value="22" />
+		<Setter Property="Padding" Value="13 0" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+		<Setter Property="FontWeight" Value="Medium" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player ListBox.segmented ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+	</Style>
+	<Style Selector=".player ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="#F0F0F2" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
+	<Style Selector=".player ListBox.segmented ListBoxItem:selected">
+		<Setter Property="FontWeight" Value="SemiBold" />
+	</Style>
+	<Style Selector=".player ListBox.segmented ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		<Setter Property="BoxShadow" Value="0 1 2 0 #23000000" />
+	</Style>
+
+	<!-- ============================================================ toggle switch -->
+	<!-- 38 x 22, green when on (the renderer's toggle()). -->
+	<Style Selector=".player ToggleSwitch">
+		<Style.Resources>
+			<SolidColorBrush x:Key="ToggleSwitchFillOn" Color="{StaticResource PlayerToggleOnColor}" />
+			<SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#30B350" />
+			<SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#2CA84B" />
+			<SolidColorBrush x:Key="ToggleSwitchFillOff" Color="{StaticResource PlayerToggleOffColor}" />
+			<SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#D2D2D7" />
+			<SolidColorBrush x:Key="ToggleSwitchFillOffPressed" Color="#C8C8CD" />
+			<SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="Transparent" />
+			<SolidColorBrush x:Key="ToggleSwitchStrokeOffPointerOver" Color="Transparent" />
+			<SolidColorBrush x:Key="ToggleSwitchStrokeOffPressed" Color="Transparent" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="White" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="White" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOffPressed" Color="White" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="White" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="White" />
+			<SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="White" />
+		</Style.Resources>
+		<Setter Property="OnContent" Value="" />
+		<Setter Property="OffContent" Value="" />
+		<Setter Property="MinWidth" Value="0" />
+	</Style>
+
+	<!-- ============================================================ text field -->
+	<!-- 30 px, radius 7, hairline; focus = tint border + the light ring. -->
+	<Style Selector=".player TextBox">
+		<Style.Resources>
+			<SolidColorBrush x:Key="TextControlBackground" Color="White" />
+			<SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="White" />
+			<SolidColorBrush x:Key="TextControlBackgroundFocused" Color="White" />
+			<SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource PlayerTextColor}" />
+			<SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="{StaticResource PlayerTextColor}" />
+			<SolidColorBrush x:Key="TextControlForegroundFocused" Color="{StaticResource PlayerTextColor}" />
+			<SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource PlayerFieldBorderColor}" />
+			<SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#B8B8BF" />
+			<SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{StaticResource PlayerTintPlayColor}" />
+			<SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{StaticResource PlayerText3Color}" />
+			<SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="{StaticResource PlayerText3Color}" />
+			<SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="{StaticResource PlayerText3Color}" />
+		</Style.Resources>
+		<Setter Property="Height" Value="30" />
+		<Setter Property="MinHeight" Value="30" />
+		<Setter Property="Margin" Value="0" />
+		<Setter Property="Padding" Value="10 0" />
+		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusField}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="FontFamily" Value="{StaticResource PlayerFontFamily}" />
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+	</Style>
+	<Style Selector=".player TextBox:focus /template/ Border#PART_BorderElement">
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+</Styles>

@@ -27,7 +27,14 @@ public static class TestAppBuilder
 		//replies - after its test ended, possibly while Avalonia is resetting the
 		//dispatcher for the next one. A test never needs the network.
 		Mesen.Config.ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = false;
-		return AppBuilder.Configure<Mesen.App>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
+		//ADR-0249 Decision 5: Skia renders real frames (UseHeadlessDrawing =
+		//false), so the render gate can write PNGs of the Player screens and
+		//read their pixels back. WithInterFont registers the bundled Inter the
+		//Player theme uses, exactly as Program.BuildAvaloniaApp does.
+		return AppBuilder.Configure<Mesen.App>()
+			.UseSkia()
+			.WithInterFont()
+			.UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 	}
 
 	//Mesen resolves ConfigManager.HomeFolder to the executable's own folder as

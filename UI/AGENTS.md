@@ -526,6 +526,70 @@ can be exercised by real xunit tests without Avalonia or the native
   pre-filled `[Replay]` issue form from the host-free `ReplayShare`
   (`UI.Tests/Recording/ReplayShareTests.cs`). No upload, no credential.
 
+## Player theme (ADR-0249)
+
+The Player GUI follows its rendered wireframes (`docs/media/gui-redesign/W-*.png`,
+drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
+`UI/Styles/PlayerTheme.axaml`, included by `App.axaml` after `MesenStyles`.
+
+- **Scope.** Every style is under the `player` class. `MainWindow` binds
+  `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
+  `ShellStatusLine`; nothing else carries it. A component class outside the
+  scope does nothing, so classic windows, dialogs, the debugger and Advanced
+  mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
+  `FontSize` or `Foreground` on a control beats every style: put the classic
+  value in the view's own `Styles` and the `.player` override after it
+  (`WorkspaceShellBar.axaml`, the status line in `MainWindow.axaml`,
+  `StateGridEntry.axaml`).
+- **Tokens.** The script's palette (TEXT, TEXT2, TEXT3, SEP, WINBG, CARD,
+  FILL, RED, ORANGE, TINT, TINT_TEXT) is transcribed as `Player*Color` /
+  `Player*Brush`; `UI.Tests/Theme/PlayerThemeDriftTests` fails when either
+  side moves. Also: type ramp `PlayerFont*` (LargeTitle 28 … Caption 10.5),
+  radii `PlayerRadius*` (Control 8, ControlLarge 11, Card 12, Sheet 14,
+  Hero 16, Overlay 18), spacing `PlayerSpacing*` and `PlayerPageMargin`, shadows `PlayerShadow*`,
+  `PlayerFocusRing`. Font: Inter (`Avalonia.Fonts.Inter`, `WithInterFont()`).
+  No dark variant.
+- **Tint.** `c:PlayerTheme.Tint` / `TintSoft` / `TintText`
+  (`UI/Controls/PlayerTheme.cs`) are inherited attached brushes: the scope
+  sets Play's blue; a `remaster` or `share` class on any element inside it
+  switches to purple / green below that element. Tinted components bind to
+  them, so never hard-code a workspace colour.
+- **Components** (classes, inside the scope):
+  - Buttons: `Button.primary` (tint fill, white semibold), `.secondary`
+    (white, hairline, shadow), `.tinted` (TintSoft fill, TintText label),
+    `.destructive` (pale red fill, RED label), `.plain` (text only, TintText).
+    Sizes: default 28 high, `.small` 24, `.medium` 36, `.large` 44 (radius 8
+    up to 32 high, 11 above). A leading icon is `PathIcon Classes="leading"`.
+  - Grouped list: `Border.group` holding `Button.row` items (50 high, the
+    last row has no hairline). Row content: a DockPanel with
+    `Border.badge` (background = a badge colour) + `PathIcon`,
+    `PathIcon.chevron` docked right, `TextBlock.value` docked right,
+    `TextBlock.title`. `Button.row.text` is a row without a badge.
+  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.large` 80) with
+    a white `PathIcon`; tint by default.
+  - Surfaces: `Border.card` (`.hero` radius 16), `Border.sheet`,
+    `Border.overlay-card`, `Border.scrim`, `Border.page` (WINBG),
+    `Separator.hairline`. Card, sheet and overlay-card set
+    `TextElement.Foreground` to TEXT themselves (#716), so text on them is
+    readable whatever its parent sets; build a new sheet on `Border.sheet`
+    rather than a local dark background.
+  - Text: `TextBlock.large-title`, `title1`, `title2`, `title3`,
+    `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
+    `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
+    (TEXT3), `tint`.
+  - Controls: `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
+    on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
+    Classes="tiles"` (one row of 176 x 132 recent-game tiles).
+  - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
+    `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
+    `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
+    `ChevronDown`, `Record`, `More`, `Check`.
+- **Restyling a screen.** Keep every `Name`, binding, handler and focus
+  order (the headless suites find controls by name). Swap local colours and
+  sizes for classes; add a render test next to
+  `UI.HeadlessTests/PlayerThemeRenderTests` that saves the PNG and asserts
+  font, size, radius, tint and background of the named controls.
+
 ## Work Guidance
 
 - New host-free helpers extracted from ViewModels go under `UI/Logic/`,

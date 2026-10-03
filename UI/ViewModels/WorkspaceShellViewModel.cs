@@ -35,6 +35,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial List<WorkspaceSwitcherRowViewModel> Rows { get; private set; } = new();
 		[ObservableProperty] public partial bool IsBarVisible { get; private set; } = true;
 		[ObservableProperty] public partial string StatusText { get; private set; } = "";
+		//ADR-0249 (W-S1): the status line's dot is green while a game is loaded.
+		[ObservableProperty] public partial bool HasGame { get; private set; }
 		//G.3 (§13.6): the profile button's dot while Remaster records or runs a
 		//job and another profile is shown - red for a recording, tint for a job.
 		[ObservableProperty] public partial bool ShowsActivityDot { get; private set; }
@@ -124,6 +126,7 @@ namespace Mesen.ViewModels
 		private void RefreshChrome()
 		{
 			IsBarVisible = WorkspaceShell.IsBarVisible(_state.Active, _gameLoaded, _paused);
+			HasGame = _gameLoaded;
 			StatusText = ShellStatusLine.Classify(_gameLoaded, _paused, _packName) switch {
 				ShellStatusKind.Playing => ResourceHelper.GetMessage("ShellStatusPlaying", _gameName),
 				ShellStatusKind.PlayingWithPack => ResourceHelper.GetMessage("ShellStatusPlayingWithPack", _gameName, _packName),

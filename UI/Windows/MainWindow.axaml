@@ -7,6 +7,7 @@
 	xmlns:l="using:Mesen.Localization"
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:lg="using:Mesen.Logic"
 	mc:Ignorable="d" d:DesignWidth="512" d:DesignHeight="505"
 	x:Class="Mesen.Windows.MainWindow"
 	Width="512" Height="505"
@@ -33,6 +34,31 @@
 		</DataTemplate>
 	</Window.DataTemplates>
 	
+	<Window.Styles>
+		<!--ADR-0249: the status line's classic look; PlayerStatusLine below is
+		its Player look (W-S1: WINBG, a hairline, a 7 px dot, 11.5 px TEXT2).-->
+		<Style Selector="Border#ShellStatusLine">
+			<Setter Property="Background" Value="{DynamicResource MesenMenuBackground}" />
+		</Style>
+		<Style Selector="Border#ShellStatusLine.player">
+			<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerStatusSeparatorBrush}" />
+			<Setter Property="BorderThickness" Value="0 1 0 0" />
+		</Style>
+		<Style Selector="Border#ShellStatusLine.player TextBlock#ShellStatusText">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector="Border#ShellStatusLine.player TextBlock#ShellStatusDot">
+			<Setter Property="FontSize" Value="9" />
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		</Style>
+		<Style Selector="Border#ShellStatusLine.player TextBlock#ShellStatusDot.live">
+			<Setter Property="Foreground" Value="{StaticResource PlayerTintShareBrush}" />
+		</Style>
+	</Window.Styles>
+
 	<DockPanel>
 		<!--G.1 (PRD Part B §13.2): the optional classic menu bar sits above the
 		shell bar and is exactly today's MainMenuView; ShowClassicMenuBar (Tools ⋯
@@ -47,7 +73,7 @@
 
 		<!--G.1 (W-S1): the shell bar - active profile + Tools ⋯. Hidden while a
 		game runs unpaused in Play (WorkspaceShell.IsBarVisible).-->
-		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" />
+		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
 
 		<!--G.6 (W-X3): the inline question before work is lost, above any profile.-->
 		<Panel Name="InterruptionBarHost" DockPanel.Dock="Top" IsVisible="{Binding Interruption.IsVisible}">
@@ -67,9 +93,9 @@
 
 		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
 		with the bar.-->
-		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" Background="{DynamicResource MesenMenuBackground}" IsVisible="{Binding Shell.IsBarVisible}">
+		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" IsVisible="{Binding Shell.IsBarVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 			<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-				<TextBlock Text="●" FontSize="10" Opacity="0.5" VerticalAlignment="Center" />
+				<TextBlock Name="ShellStatusDot" Text="●" FontSize="10" Opacity="0.5" VerticalAlignment="Center" Classes.live="{Binding Shell.HasGame}" />
 				<TextBlock Name="ShellStatusText" Text="{Binding Shell.StatusText}" VerticalAlignment="Center" />
 			</StackPanel>
 		</Border>
@@ -100,17 +126,20 @@
 			hidden as a whole (never closed or reset), so nothing of Play is on
 			screen under Remaster/Share and switching back shows it as it was.
 			The native renderer is hidden with it (UpdateRendererVisibility).-->
-			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}">
+			<!--ADR-0249: in Player mode PlayWorkspace is the theme's scope (`player`,
+			Play's tint); Advanced keeps the classic look.-->
+			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
-				<!--#716: the pause overlay and the sheets it opens are dark scrims
-				over the game in either app theme, so they render with the Dark theme
-				variant: text, check boxes, radio buttons and text boxes resolve their
-				light-on-dark colors (in the light theme they used to inherit black
-				text - unreadable). The white edge-flow sheets below keep the app's
-				theme. PlaySheetsContrastTests checks every text's contrast.-->
-				<ThemeVariantScope RequestedThemeVariant="Dark">
-				<Panel>
+				<!--W-P4: the game stays behind the overlay, dimmed.-->
+				<Border Name="PlayerOverlayScrim" Classes="scrim">
+					<Border.IsVisible>
+						<MultiBinding Converter="{x:Static BoolConverters.Or}">
+							<Binding Path="IsPlayerOverlayVisible" />
+							<Binding Path="IsSaveStatesSheetVisible" />
+						</MultiBinding>
+					</Border.IsVisible>
+				</Border>
 
 				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
 				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
@@ -120,63 +149,80 @@
 				focus on open. Esc resumes (rule 8).-->
 				<Border
 					Name="PlayerOverlay"
-					Background="#E6202022"
-					CornerRadius="14"
+					Classes="overlay-card"
+					Width="380"
 					HorizontalAlignment="Center"
 					VerticalAlignment="Center"
-					Padding="24 20"
+					Margin="0 12"
+					Padding="16 22 16 18"
 					IsVisible="{Binding IsPlayerOverlayVisible}"
 				>
-					<StackPanel Name="OverlayControls" Spacing="6" MinWidth="340" XYFocus.NavigationModes="Enabled">
-						<TextBlock Name="OverlayGameTitle" Text="{Binding OverlayGameTitle}" FontWeight="Bold" FontSize="20" Foreground="White" TextTrimming="CharacterEllipsis" />
-						<TextBlock Text="{l:Translate lblOverlayPaused}" Foreground="#AAFFFFFF" Margin="0 0 0 8" />
-						<Button Name="OverlayResumeButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="10 8" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnOverlayResume" Margin="0 0 0 10">
-							<TextBlock Text="{l:Translate btnOverlayResume}" />
-						</Button>
-						<Button Name="OverlaySaveStatesButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySaveStates">
-							<DockPanel>
-								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
-								<TextBlock DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" Opacity="0.7" />
-								<TextBlock Text="{l:Translate btnOverlaySaveStates}" />
-							</DockPanel>
-						</Button>
-						<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
-						<Button Name="OverlayPackButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayPack">
-							<DockPanel>
-								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
-								<TextBlock DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" Opacity="0.7" />
-								<TextBlock Text="{l:Translate btnOverlayPack}" />
-							</DockPanel>
-						</Button>
-						<!--P.7 (§6.1): the quick-toggle panel.-->
-						<Button Name="OverlayEnhancementsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayEnhancements">
-							<DockPanel>
-								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
-								<TextBlock DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" Opacity="0.7" />
-								<TextBlock Text="{l:Translate btnOverlayEnhancements}" />
-							</DockPanel>
-						</Button>
-						<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
-						<Button Name="OverlayCheatsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlayCheats">
-							<DockPanel>
-								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
-								<TextBlock DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" Opacity="0.7" />
-								<TextBlock Text="{l:Translate btnOverlayCheats}" />
-							</DockPanel>
-						</Button>
-						<Button Name="OverlaySettingsButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOverlaySettings">
-							<DockPanel>
-								<TextBlock DockPanel.Dock="Right" Text="▸" Margin="8 0 0 0" />
-								<TextBlock Text="{l:Translate btnOverlaySettings}" />
-							</DockPanel>
-						</Button>
+					<!--W-P4's card is ~520 tall; a shorter window scrolls it, so
+					every control stays reachable by arrow keys (focus brings it
+					into view). The card's side padding moves inside the scroller (Margin
+					8) so the grouped list's -8 outset is not clipped.-->
+					<ScrollViewer VerticalScrollBarVisibility="Hidden">
+					<StackPanel Name="OverlayControls" Margin="8 0" XYFocus.NavigationModes="Enabled">
+						<TextBlock Name="OverlayGameTitle" Classes="title2" Text="{Binding OverlayGameTitle}" TextTrimming="CharacterEllipsis" />
+						<TextBlock Classes="secondary" Text="{l:Translate lblOverlayPaused}" Margin="0 4 0 16" />
+						<!--The label carries its own ▶ (btnOverlayResume), so no leading icon.-->
+						<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Content="{l:Translate btnOverlayResume}" Click="OnOverlayResume" Margin="0 0 0 20" />
+						<Border Classes="group" Margin="-8 0">
+							<StackPanel>
+								<Button Name="OverlaySaveStatesButton" Classes="row" Click="OnOverlaySaveStates">
+									<DockPanel>
+										<Border Classes="badge" Background="{StaticResource PlayerIndigoBrush}"><PathIcon Data="{StaticResource PlayerIconSaveStates}" /></Border>
+										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" />
+										<TextBlock Classes="title" Text="{l:Translate btnOverlaySaveStates}" />
+									</DockPanel>
+								</Button>
+								<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
+								<Button Name="OverlayPackButton" Classes="row" Click="OnOverlayPack">
+									<DockPanel>
+										<Border Classes="badge" Background="{StaticResource PlayerTintShareBrush}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
+										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" />
+										<TextBlock Classes="title" Text="{l:Translate btnOverlayPack}" />
+									</DockPanel>
+								</Button>
+								<!--P.7 (§6.1): the quick-toggle panel.-->
+								<Button Name="OverlayEnhancementsButton" Classes="row" Click="OnOverlayEnhancements">
+									<DockPanel>
+										<Border Classes="badge" Background="{StaticResource PlayerOrangeBrush}"><PathIcon Data="{StaticResource PlayerIconEnhancements}" /></Border>
+										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" />
+										<TextBlock Classes="title" Text="{l:Translate btnOverlayEnhancements}" />
+									</DockPanel>
+								</Button>
+								<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
+								<Button Name="OverlayCheatsButton" Classes="row" Click="OnOverlayCheats">
+									<DockPanel>
+										<Border Classes="badge" Background="{StaticResource PlayerPinkBrush}"><PathIcon Data="{StaticResource PlayerIconCheats}" /></Border>
+										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" />
+										<TextBlock Classes="title" Text="{l:Translate btnOverlayCheats}" />
+									</DockPanel>
+								</Button>
+								<Button Name="OverlaySettingsButton" Classes="row" Click="OnOverlaySettings">
+									<DockPanel>
+										<Border Classes="badge" Background="{StaticResource PlayerGrayBrush}"><PathIcon Data="{StaticResource PlayerIconSettings}" /></Border>
+										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+										<TextBlock Classes="title" Text="{l:Translate btnOverlaySettings}" />
+									</DockPanel>
+								</Button>
+							</StackPanel>
+						</Border>
 						<!--W-P4: powers the game off and lands on the Play home; it no
 						longer closes the app (Tools ⋯ › File › Exit, ⌘Q / Alt+F4).-->
-						<Button Name="OverlayQuitGameButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Foreground="#FF6B6B" Click="OnOverlayQuitGame" Margin="0 12 0 0">
+						<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0">
 							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
 						</Button>
-						<TextBlock Text="{l:Translate lblOverlayEscHint}" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" Margin="0 6 0 0" />
+						<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
+						PlaySheetsContrastTests' 4.5:1.-->
+						<TextBlock Classes="footnote secondary" Text="{l:Translate lblOverlayEscHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
 					</StackPanel>
+					</ScrollViewer>
 				</Border>
 
 				<!--G.2 (W-P4 Save states row): Save and Load merged into one row; this
@@ -184,25 +230,35 @@
 				to the overlay.-->
 				<Border
 					Name="PlayerSaveStatesSheet"
-					Background="#E6202022"
-					CornerRadius="14"
+					Classes="sheet"
+					Width="340"
 					HorizontalAlignment="Center"
 					VerticalAlignment="Center"
-					Padding="24 20"
 					IsVisible="{Binding IsSaveStatesSheetVisible}"
 				>
-					<StackPanel Spacing="10" MinWidth="300" XYFocus.NavigationModes="Enabled">
-						<TextBlock Text="{l:Translate lblSaveStatesSheetTitle}" FontWeight="Bold" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
-						<TextBlock Text="{Binding SaveStatesRowValue}" Opacity="0.7" HorizontalAlignment="Center" />
-						<Button Name="SaveStatesSaveButton" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesSave" />
-						<Button Name="SaveStatesLoadButton" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesLoad" />
+					<StackPanel Spacing="10" XYFocus.NavigationModes="Enabled">
+						<TextBlock Classes="title3" Text="{l:Translate lblSaveStatesSheetTitle}" />
+						<TextBlock Classes="secondary" Text="{Binding SaveStatesRowValue}" Margin="0 0 0 6" />
+						<Button Name="SaveStatesSaveButton" Classes="primary medium" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" Click="OnSaveStatesSave" />
+						<Button Name="SaveStatesLoadButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" Click="OnSaveStatesLoad" />
 						<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
 						replays for this copy open from here.-->
-						<Button Name="SaveStatesReplaysButton" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesReplays" />
-						<Button Name="SaveStatesBackButton" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSaveStatesBack" />
+						<Button Name="SaveStatesReplaysButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" Click="OnSaveStatesReplays" />
+						<Button Name="SaveStatesBackButton" Classes="plain medium" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" Click="OnSaveStatesBack" />
 					</StackPanel>
 				</Border>
 
+				<!--#716: the sheets the overlay opens are still dark scrims over the
+				game in either app theme, so they render with the Dark theme variant:
+				text, check boxes, radio buttons and text boxes resolve their
+				light-on-dark colors (in the light theme they used to inherit black
+				text - unreadable). ADR-0249: the pause overlay and the Save states
+				sheet above follow W-P4 (a light card) and sit outside this scope;
+				each sheet below leaves it when its workspace slice restyles it.
+				The white edge-flow sheets further down keep the app's theme.
+				PlaySheetsContrastTests checks every text's contrast.-->
+				<ThemeVariantScope RequestedThemeVariant="Dark">
+				<Panel>
 				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
 				<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
 
