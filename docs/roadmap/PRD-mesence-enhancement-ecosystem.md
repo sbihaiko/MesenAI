@@ -2537,9 +2537,13 @@ exists to remove.
   element, a stage map or a pattern page (ADR-0183) — never a tile key.
 - **Share**: a link or a built pack, three fields, the browser form. Also the
   existing *Record and share* for replays (ADR-0205), as a separate card.
-- **Tools ⋯** (top right, always present, never a profile): the classic
-  Mesen menus, debugger, Lua, netplay, HD Pack Builder, cheats. This is where
-  today's Advanced mode goes. It opens a menu, not a mode switch.
+- **Classic** (the fourth door, ADR-0250): the original Mesen GUI — the
+  in-window classic menu bar, the classic styles, debugger, Lua, netplay,
+  HD Pack Builder. This is where today's Advanced mode goes: entering Classic
+  sets `UiMode.Advanced`.
+- **Tools ⋯** (top right of the three task doors, never a profile): a short
+  menu of what the door's own screens don't hold (W-S2). Every action has one
+  place per door (ADR-0250 Decision 1).
 
 Switching workspaces changes what the window shows; it never stops the game,
 rewrites settings, picks a pack, deletes a file or publishes anything. Each
@@ -2550,14 +2554,14 @@ What this is **not**: not three executables, not a first-launch "who are
 you?" question, not a permission model. A player who starts painting is the
 same person at the same ROM.
 
-**Relation to `UiMode`.** `Player`/`Advanced` is not reinterpreted. Proposed:
-a new persisted `Workspace` key (`Play` default) plus a `ShowClassicMenuBar`
-boolean that replaces `UiMode` as the "upgrade keeps my menus" rule of §6
-(default `false` everywhere, user's decision 2026-10-02: an upgraded install
-shows a one-time toast "your menus are under Tools ⋯" instead of keeping the
-bar).
-The classic menu bar, when shown, sits above the switcher and is exactly
-today's `MainMenuView`. ADR-0241 owns this; the migration is a slice.
+**Relation to `UiMode`** (amended by ADR-0250, 2026-10-03). A new persisted
+`Workspace` key (`Play` default; `Classic` is a value of it). `UiMode.Advanced`
+belongs to the Classic door: entering Classic sets it, leaving Classic for a
+task door sets `UiMode.Player`, and an upgraded install whose `UiMode` is
+Advanced opens in Classic. The `ShowClassicMenuBar` toggle and its
+"your menus are under Tools ⋯" toast are withdrawn: Classic's menu bar is
+exactly today's `MainMenuView`, without its duplicates (ADR-0250 Decision 4).
+The migration is a slice.
 
 #### 13.3 Simplicity rules (acceptance, not taste)
 
@@ -2668,38 +2672,46 @@ says *Show file*/*Show folder* — the platform's own term is used on each OS
 - The status line is one sentence, never a control. It is the one place
   that always names the current pack while the bar is visible; W-P2's
   Continue card and W-P4's Pack row repeat it where the user acts on it.
-- Tools ⋯ opens the classic menus as a dropdown tree (File, Game, Options,
-  Tools, Debug, Help) — the same `MainMenuAction` data, rendered as one menu.
-  Optional `ShowClassicMenuBar` puts them back as a bar above (§13.2).
+- Tools ⋯ opens the door's short menu (W-S2, ADR-0250): only what the
+  door's own screens don't hold, from the same `MainMenuAction` data. The
+  classic menus live in the Classic door (§13.2).
 - The left of the bar is the **active profile only** — tinted glyph, name,
   chevron. It is a button that opens W-S3; it is not a tab strip.
 - Elements at rest: 2 (profile switcher + Tools). ✔
 
-**W-S2 — Tools ⋯ dropdown**
+**W-S2 — Tools ⋯ dropdown (Play's; ADR-0250)**
 
 ![W-S2](../media/gui-redesign/W-S2.png)
 
 ```
                                                        ┌──────────────────────┐
-                                                       │ File              ▸  │
-                                                       │ Game              ▸  │
-                                                       │ Options           ▸  │
-                                                       │ Tools             ▸  │
-                                                       │ Debug             ▸  │
-                                                       │ Help              ▸  │
+                                                       │ Reset                │
+                                                       │ Power Cycle          │
+                                                       │ ⟨FDS / VS / barcode /│
+                                                       │  tape, if the game   │
+                                                       │  uses them⟩          │
                                                        ├──────────────────────┤
-                                                       │ [x] Show classic     │
-                                                       │     menu bar         │
-                                                       │ ⟨Debugger, Lua, HD   │
-                                                       │  Pack Builder, …⟩    │
+                                                       │ Screenshot           │
+                                                       │ Fullscreen      ⌃⌘F  │
+                                                       ├──────────────────────┤
+                                                       │ Help              ▸  │
                                                        └──────────────────────┘
 ```
 
-Unchanged content; one new checkbox. This is where `HdPackBuilderWindow`,
-`EnhancementPacksWindow`, debugger, Lua, netplay, cheats and *Record Music*
-stay reachable. Nothing is removed from them in this proposal.
+**One place per door** (ADR-0250 Decision 1). The menu holds only what the
+door's own screens don't: in Play, *Open a ROM…* and the recents live on the
+home (W-P1/W-P2), and Pause, Save states, Pack, Enhancements, Cheats,
+Settings and Quit game on the pause overlay (W-P4). Shortcuts work in every
+door. On macOS *About*, *Settings…* ⌘, and *Quit* ⌘Q are in the system app
+menu; elsewhere they end the menu. Classic is a door: it appears only in
+the switcher (W-S3), never in a menu. Remaster's ⋯ is *Reload pack images*,
+*Record Music*, Enhancement Packs and the log window (the project chip holds
+the project items); Share's is *Play a Replay…*, *Record ▸*, Netplay and
+Screenshot (the home holds *Record and share* and *Share a pack*).
+`HdPackBuilderWindow`, the debugger, Lua and the rest of the classic menus
+are in the Classic door. No task-door entry opens a classic window.
 
-**W-S3 — Profile switcher (the only place the other profiles appear)**
+**W-S3 — Door switcher (the only place the other doors appear)**
 
 ![W-S3](../media/gui-redesign/W-S3.png)
 
@@ -2712,9 +2724,11 @@ stay reachable. Nothing is removed from them in this proposal.
    │ Record a game, paint its art, see it in game.│
    │ ▣  Share                               ⌘3   │
    │    Send a pack or a replay to the community. │
+   │ ⚙  Classic                             ⌘4   │
+   │    Every menu, debugger, Lua, HD Pack Builder.│
    ├──────────────────────────────────────────────┤
    │ Switching keeps your game running. Only the  │
-   │ chosen profile is shown.                     │
+   │ chosen door is shown.                        │
    └──────────────────────────────────────────────┘
 ```
 
@@ -2723,13 +2737,16 @@ stay reachable. Nothing is removed from them in this proposal.
   outside closes it with nothing changed.
 - Each row's one-line description is the README door in the app's words, so
   the switcher teaches the model once and needs no onboarding screen.
-- **Fixed order: 1. Play, 2. Remaster, 3. Share** — the README's door order
-  and the order a person usually meets them (plays, then repaints, then
-  shares). The order never changes with the current profile, recent use or
+- **Fixed order: 1. Play, 2. Remaster, 3. Share, 4. Classic** — the README's
+  door order and the order a person usually meets them (plays, then repaints,
+  then shares), with the full emulator last (ADR-0250). Play is the default
+  door. The order never changes with the current profile, recent use or
   the loaded console; the check mark moves, the rows do not.
-- Shortcuts ⌘1/⌘2/⌘3 switch directly, in that order; they are printed grey
-  on the rows as in a macOS menu (a hint, not a control — rule 2).
-- Elements: 3 rows. ✔
+- Shortcuts ⌘1–⌘4 switch directly, in that order; they are printed grey
+  on the rows as in a macOS menu (a hint, not a control — rule 2). Inside
+  Classic, which has no shell bar, the switcher is a *Workspace* ▸ menu in
+  the classic menu bar.
+- Elements: 4 rows. ✔
 
 ##### 13.5.2 Play
 
@@ -4048,8 +4065,9 @@ switcher (W-S3) or a link that names its destination (rule 11).
 3. ~~`.ora` in zone ②~~ — no; only in Tools ⋯ while ADR-0220 stop
    condition 2 is open (2026-10-02).
 4. ~~`ShowClassicMenuBar` on upgrade~~ — `false`, with a one-time toast
-   "your menus are under Tools ⋯" (2026-10-02). This replaces today's §6
-   promise of a visible bar.
+   "your menus are under Tools ⋯" (2026-10-02). Superseded by ADR-0250
+   (2026-10-03): the toggle and the toast go; an upgraded Advanced install
+   opens in the Classic door, which has the classic menu bar.
 5. ~~Remaster gamepad~~ — no; mouse/trackpad (rule 9 stands, 2026-10-02).
 6. ~~Remaster consoles~~ — answered by ADR-0243 Decision 5: NES first. On
    GB/SMS *Record* is enabled and the paint zone is disabled with its reason;
