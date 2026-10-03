@@ -12,6 +12,10 @@ namespace Mesen.Logic;
 //tab strip in Player mode, bound through this order, and the initial tab is
 //clamped here so a non-essentials selection (e.g. Preferences from the
 //Advanced GUI path) cannot land on a hidden tab.
+public enum PlayerSettingsRowKind { Switch, Slider, Picker, Status }
+
+public sealed record PlayerSettingsRow(string Id, PlayerSettingsRowKind Kind);
+
 public static class PlayerSettingsEssentials
 {
 	public static readonly ConfigWindowTab[] Tabs = {
@@ -31,10 +35,54 @@ public static class PlayerSettingsEssentials
 
 	public static int IndexOf(ConfigWindowTab tab) => Array.IndexOf(Tabs, tab);
 
-	//W-P8 is a 340 px sheet - its three rows, then the "Everything else" hint
-	//right under the group and Done; Look is W-P10's 480 px sheet, which Audio
-	//and Controls share (ADR-0249: a sheet in the main window, not a window).
-	public static double SheetHeight(ConfigWindowTab tab) => tab == ConfigWindowTab.Display ? 340 : 480;
+	//W-P8 is a 340 px sheet - three rows, then the "Everything else" hint (or,
+	//on Audio and Controls, the "More in Options..." link in the hint's place)
+	//right under the group, and Done; only Look is W-P10's taller 480 px sheet
+	//(ADR-0249: a sheet in the main window, not a window).
+	public static double SheetHeight(ConfigWindowTab tab) => tab == ConfigWindowTab.Look ? 480 : 340;
+
+	//PRD rule 2: an inset list of at most three rows per essentials tab.
+	public const int MaxRows = 3;
+
+	private static readonly PlayerSettingsRow[] DisplayRows = {
+		new("Fullscreen", PlayerSettingsRowKind.Switch),
+		new("AspectRatio", PlayerSettingsRowKind.Picker),
+		new("Scale", PlayerSettingsRowKind.Picker)
+	};
+	private static readonly PlayerSettingsRow[] AudioRows = {
+		new("Sound", PlayerSettingsRowKind.Switch),
+		new("Volume", PlayerSettingsRowKind.Slider),
+		new("OutputDevice", PlayerSettingsRowKind.Picker)
+	};
+	//Per-player controller types live in each console's own config, so the
+	//essentials are what is console-independent: which pads are connected,
+	//rumble strength and stick deadzone (InputConfig).
+	private static readonly PlayerSettingsRow[] ControlsRows = {
+		new("Controllers", PlayerSettingsRowKind.Status),
+		new("Rumble", PlayerSettingsRowKind.Slider),
+		new("Deadzone", PlayerSettingsRowKind.Slider)
+	};
+
+	//The rows of a tab's inset list; Look has its own W-P10 page (empty here).
+	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => tab switch {
+		ConfigWindowTab.Display => DisplayRows,
+		ConfigWindowTab.Audio => AudioRows,
+		ConfigWindowTab.Input => ControlsRows,
+		_ => Array.Empty<PlayerSettingsRow>()
+	};
+
+	//No essentials tab embeds a classic option page any more (the bug:
+	//Audio and Controls did - sub-tabs, a per-console button row, scrollbars).
+	public static bool EmbedsClassicPage(ConfigWindowTab tab) => false;
+
+	//The classic Options page "More in Options..." expands to; null when the tab
+	//has no such link (Display keeps the hint).
+	public static ConfigWindowTab? OptionsTabFor(ConfigWindowTab tab) => tab switch {
+		ConfigWindowTab.Audio => ConfigWindowTab.Audio,
+		ConfigWindowTab.Input => ConfigWindowTab.Input,
+		ConfigWindowTab.Look => ConfigWindowTab.Video,
+		_ => null
+	};
 
 	public static ConfigWindowTab? TabAt(int index) => index >= 0 && index < Tabs.Length ? Tabs[index] : null;
 }
@@ -71,5 +119,24 @@ public static class PlayDisplaySettings
 			items.Add(current);
 		}
 		return items;
+	}
+}
+
+//W-P8's sliders edit the classic pages' unsigned config values.
+public static class PlayerSliders
+{
+	public static uint ToConfig(double value, uint max)
+	{
+		return (uint)Math.Min(max, Math.Max(0, Math.Round(value)));
+	}
+}
+
+//W-P8's Audio rows. The device picker lists what is enumerated plus a device set
+//in Options that is not enumerated now, as the current item, never replaced.
+public static class PlayerAudioSettings
+{
+	public static List<string> Devices(IReadOnlyList<string> enumerated, string current)
+	{
+		return current == "" ? new List<string>(enumerated) : PlayDisplaySettings.ItemsWithCurrent(enumerated, current);
 	}
 }

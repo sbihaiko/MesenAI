@@ -16,11 +16,11 @@
 		<DataTemplate DataType="{x:Type vm:LookConfigViewModel}">
 			<v:LookConfigView />
 		</DataTemplate>
-		<DataTemplate DataType="{x:Type vm:AudioConfigViewModel}">
-			<v:AudioConfigView />
+		<DataTemplate DataType="{x:Type vm:PlayerAudioSettingsViewModel}">
+			<v:PlayerAudioSettingsView />
 		</DataTemplate>
-		<DataTemplate DataType="{x:Type vm:InputConfigViewModel}">
-			<v:InputConfigView />
+		<DataTemplate DataType="{x:Type vm:PlayerControlsSettingsViewModel}">
+			<v:PlayerControlsSettingsView />
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
@@ -58,14 +58,16 @@
 			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerLookTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
 				<TabItem Name="tabPlayerDisplay" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
 				<TabItem Name="tabPlayerLook" Header="{l:Translate tabLook}" Content="{Binding Look}" />
-				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding Audio}" />
-				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding Input}" />
+				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding PlayerAudio}" />
+				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding PlayerControls}" />
 			</TabControl>
-			<!--G.4 (W-P8): rule 10 applied to settings - the Options hint on its
-			own line right under the group, then Done. Look's footer is its Hold
-			to Compare (W-P10), so the hint shows on the other tabs.-->
+			<!--G.4 (W-P8): rule 10 applied to settings - one line right under the
+			group, then Done. Display shows the Options hint; Audio and Controls
+			put "More in Options…" there (it expands to that tab's classic page,
+			as Look's does). Look's footer is its Hold to Compare (W-P10).-->
 			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
-				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding !IsPlayerLookTab}" />
+				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding IsPlayerHintTab}" />
+				<Button Name="btnPlayerSettingsMoreInOptions" Classes="plain small" HorizontalAlignment="Left" Margin="-9 -6 0 6" Click="OnMoreInOptions" IsVisible="{Binding IsPlayerMoreTab}" Content="{l:Translate btnPlayerSettingsMoreInOptions}" />
 				<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
 			</StackPanel>
 		</Grid>

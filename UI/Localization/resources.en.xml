@@ -976,12 +976,23 @@
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
 		</Form>
+		<Form ID="PlayerAudioSettingsView">
+			<Control ID="lblAudioSound">Sound</Control>
+			<Control ID="lblAudioVolume">Volume</Control>
+			<Control ID="lblAudioOutput">Output device</Control>
+		</Form>
+		<Form ID="PlayerControlsSettingsView">
+			<Control ID="lblControlsControllers">Controllers</Control>
+			<Control ID="lblControlsRumble">Rumble</Control>
+			<Control ID="lblControlsDeadzone">Stick deadzone</Control>
+		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
 			<Control ID="tabDisplay">Display</Control>
 			<Control ID="tabLook">Look</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
 		</Form>
@@ -2131,6 +2142,10 @@
 		<Message ID="LookPixelsSharp">Sharp — original pixels</Message>
 		<Message ID="LookPixelsHq4x">Smooth — HQ4x</Message>
 		<Message ID="LookPixelsXbrz4x">Smooth — xBRZ 4x</Message>
+		<Message ID="PlayerControllersNone">No controller connected</Message>
+		<Message ID="PlayerControllersOne">1 controller connected</Message>
+		<Message ID="PlayerControllersMany">{0} controllers connected</Message>
+		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>
 		<Message ID="LookScreenNone">None</Message>

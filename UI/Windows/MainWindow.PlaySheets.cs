@@ -171,7 +171,8 @@ namespace Mesen.Windows
 
 		//Look's "More in Options…" leaves the essentials (ConfigViewModel turns
 		//PlayerMode off): the sheet closes, keeping what was changed, and the
-		//classic Options window opens on Video - Advanced territory. Closing it
+		//classic Options window opens on the tab it was asked for (Video from
+		//Look, Audio or Input from their own tab) - Advanced territory. Closing it
 		//returns to W-P4 while the game runs, as the sheet would.
 		private void OnPlayerSettingsChanged(object? sender, PropertyChangedEventArgs e)
 		{
@@ -185,7 +186,7 @@ namespace Mesen.Windows
 					return;
 				}
 				_model.ClosePlayerSettings();
-				ConfigWindow options = _model.MainMenu.OpenConfig(this, ConfigWindowTab.Video);
+				ConfigWindow options = _model.MainMenu.OpenConfig(this, settings.SelectedIndex);
 				options.Closed -= OnOptionsFromSettingsClosed;
 				options.Closed += OnOptionsFromSettingsClosed;
 			});

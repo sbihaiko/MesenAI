@@ -253,14 +253,14 @@ public class RemasterCheatsTests : IDisposable
 		}
 	}
 
-	//#690: an install that kept the legacy "Record while I play" setting on
-	//(ADR-0243 Q3) records every load by itself. That recording holds back
-	//every code that is not a RAM code like Remaster's (ADR-0184 §1), and
-	//Record While I Play takes over from it - the automatic recording is
-	//closed and kept, and Remaster's own starts as the next rec-NNN - instead
-	//of refusing with a message about another pack.
+	//#690 + user decision 2026-10-03 ("Liberar e pausar gravação (Recomendado)"):
+	//an install that kept the legacy "Record while I play" setting (ADR-0243 Q3)
+	//records every load by itself. That passive recording never locks a cheat:
+	//a code that changes the game stops it (what was saved stays), and Record
+	//While I Play, the user's own recording, still holds such codes back and
+	//starts as the next rec-NNN.
 	[AvaloniaFact]
-	public void Remaster_takes_over_the_automatic_recording_and_both_hold_back_non_ram_codes()
+	public void A_non_ram_code_stops_the_automatic_recording_and_remaster_still_holds_it_back()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();
@@ -271,25 +271,29 @@ public class RemasterCheatsTests : IDisposable
 
 			Assert.True(EmuApi.IsMepBootstrapping(), "the legacy setting did not record the load");
 			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, true), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
-			Assert.True(CheatCodes.RecordingArt, "the automatic recording let a Game Genie code reach the core");
-			Assert.Equal(Genie.Codes, Assert.Single(CheatCodes.HeldForRecording).Codes);
+			Assert.False(EmuApi.IsMepBootstrapping(), "the Game Genie code left the automatic recording running");
+			Assert.False(CheatCodes.RecordingArt);
+			Assert.Empty(CheatCodes.HeldForRecording);
 
 			model.SelectWorkspace(Workspace.Remaster);
 			Dispatcher.UIThread.RunJobs();
 			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, false), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
-			//The automatic recording already made the project: W-R1's button.
 			Click(window.FindNamed<Button>("RemasterRecordButton"));
 			//The core starts it off the UI thread.
 			WaitFor(() => model.Remaster.Transition == RecordingTransition.None, "the recording never started");
 
-			Assert.True(model.Remaster.IsRecording, "Remaster refused to record over the automatic recording: " + window.FindNamed<TextBlock>("RemasterNotice").Text);
-			Assert.False(window.FindNamed<TextBlock>("RemasterNotice").IsOnScreen());
+			Assert.True(model.Remaster.IsRecording, "Remaster refused to record after the automatic recording stopped: " + window.FindNamed<TextBlock>("RemasterNotice").Text);
 			Assert.True(EmuApi.IsMepBootstrapping());
 			Assert.EndsWith("rec-002", EmuApi.GetMepRecordingFolder().TrimEnd('/', '\\'));
 			Assert.True(CheatCodes.RecordingArt);
 			string manifest = File.ReadAllText(Path.Combine(project, "project.json"));
 			Assert.Contains("\"id\": \"rec-001\"", manifest);
 			Assert.Contains("\"id\": \"rec-002\"", manifest);
+
+			//The user's own recording holds the code back instead of stopping.
+			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, true), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
+			Assert.True(EmuApi.IsMepBootstrapping());
+			Assert.Equal(Genie.Codes, Assert.Single(CheatCodes.HeldForRecording).Codes);
 
 			Task stopped = model.Remaster.StopRecording(prepareFigures: false);
 			WaitFor(() => stopped.IsCompleted, "the recording never stopped");
@@ -301,6 +305,63 @@ public class RemasterCheatsTests : IDisposable
 			}
 			if(CheatCodes.RecordingArt) {
 				CheatCodes.SetRecordingArt(false);
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//User decision 2026-10-03: a non-RAM cheat already on at load keeps the
+	//automatic recording from running at all.
+	[AvaloniaFact]
+	public void A_non_ram_cheat_already_on_at_load_leaves_no_automatic_recording()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		try {
+			ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder = true;
+			ConfigManager.Config.EnhancementPacks.ApplyConfig();
+			SaveCheats(Genie, Lives);
+			LoadSyntheticRom(model);
+
+			WaitFor(() => !EmuApi.IsMepBootstrapping(), "the automatic recording ran with a Game Genie code on");
+			Assert.False(CheatCodes.RecordingArt);
+			Assert.Empty(CheatCodes.HeldForRecording);
+		} finally {
+			if(EmuApi.IsMepBootstrapping()) {
+				EmuApi.StopMepRecording();
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//User decision 2026-10-03: in Play, over the passive automatic recording,
+	//W-P11 switches every cheat; a code that changes the game stops it.
+	[AvaloniaFact]
+	public void In_play_over_the_automatic_recording_the_sheet_accepts_a_game_genie_code_and_stops_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		try {
+			ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder = true;
+			ConfigManager.Config.EnhancementPacks.ApplyConfig();
+			LoadSyntheticRom(model);
+			Assert.True(EmuApi.IsMepBootstrapping(), "the legacy setting did not record the load");
+
+			model.TogglePlayerOverlay();
+			Dispatcher.UIThread.RunJobs();
+			Click(window.FindNamed<Button>("OverlayCheatsButton"));
+			Assert.DoesNotContain(CheatRecordingRule.RefusedReason, VisibleTexts(window.FindNamed<ItemsControl>("CheatsList")));
+			Assert.Equal("", AddCodeInSheet(window, "SXIOPO"));
+
+			Assert.Contains(PlayerCheatsStore.LoadStored(), c => c.Codes == "SXIOPO" && c.Enabled);
+			Assert.False(EmuApi.IsMepBootstrapping(), "the code left the automatic recording running");
+			Assert.False(CheatCodes.RecordingArt);
+			Assert.Empty(CheatCodes.HeldForRecording);
+		} finally {
+			if(EmuApi.IsMepBootstrapping()) {
+				EmuApi.StopMepRecording();
 			}
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();
