@@ -691,6 +691,22 @@
 	<Style Selector=".player c|StateGridEntry.tiles TextBlock.subtitle">
 		<Setter Property="IsVisible" Value="False" />
 	</Style>
+	<!-- W-P2's pack badge: a white 22 px square (radius 6), 8 px in from the
+	     tile's top-right corner, holding the share-green 13 px pack icon. -->
+	<Style Selector=".player c|StateGridEntry.tiles Border#TilePackBadge">
+		<Setter Property="Width" Value="22" />
+		<Setter Property="Height" Value="22" />
+		<Setter Property="CornerRadius" Value="6" />
+		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+		<Setter Property="HorizontalAlignment" Value="Right" />
+		<Setter Property="VerticalAlignment" Value="Top" />
+		<Setter Property="Margin" Value="0 8 8 0" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles Border#TilePackBadge > PathIcon">
+		<Setter Property="Width" Value="13" />
+		<Setter Property="Height" Value="13" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTintShareBrush}" />
+	</Style>
 
 	<!-- ============================================================ segmented tabs -->
 	<!-- <ListBox Classes="segmented" SelectedIndex=…> with ListBoxItems: a FILL
@@ -1096,6 +1112,12 @@
 			<Setter Property="Foreground" Value="{StaticResource PlayerOrangeBrush}" />
 			<Setter Property="Width" Value="16" />
 			<Setter Property="Height" Value="16" />
+		</Style>
+		<!-- done: the green check before a finished result (W-H3's build, W-R7's
+		     layout line) - the share-green text tint, so it reads on a card. The
+		     view sets Data and the 12 px size, so Advanced draws it too. -->
+		<Style Selector=".player PathIcon.done">
+			<Setter Property="Foreground" Value="{StaticResource PlayerTintTextShareBrush}" />
 		</Style>
 
 		<!-- badge.xlarge: remaster_start's 40 px card badges -->

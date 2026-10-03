@@ -52,6 +52,10 @@ namespace Mesen.ViewModels
 
 		//Injectable for the headless tests; the Core's names by default.
 		public Func<ushort, string> KeyName { get; set; } = InputApi.GetKeyName;
+		//W-P15: the controller's own name for a key-code device index. macOS and
+		//Linux number GetGamepadInfo like the key codes; Windows numbers XInput
+		//and DirectInput pads apart from them, so there the key prefix is used.
+		public Func<int, string> DeviceName { get; set; } = DefaultDeviceName;
 		public Func<ConsoleType> CurrentConsole { get; set; } = () => EmuApi.GetRomInfo().ConsoleType;
 		public Action Pause { get; set; } = EmuApi.Pause;
 		public Action Resume { get; set; } = EmuApi.Resume;
@@ -98,7 +102,7 @@ namespace Mesen.ViewModels
 			}
 			_console = console;
 			ushort any = pressed.FirstOrDefault(k => ControllerDevices.DeviceOf(k) == device);
-			_label = ControllerDevices.Label(KeyName(any));
+			_label = ControllerDevices.DisplayName(DeviceName(device), KeyName(any));
 			if(string.IsNullOrEmpty(_label)) {
 				_label = ResourceHelper.GetMessage("ControllerSetupUnnamed");
 			}
@@ -239,6 +243,14 @@ namespace Mesen.ViewModels
 				return button == SetupButton.A ? "1" : "2";
 			}
 			return button.ToString();
+		}
+
+		private static string DefaultDeviceName(int device)
+		{
+			if(OperatingSystem.IsWindows() || device < 0) {
+				return "";
+			}
+			return InputApi.GetGamepadInfo((uint)device, out GamepadInfo info) ? info.Name ?? "" : "";
 		}
 	}
 }

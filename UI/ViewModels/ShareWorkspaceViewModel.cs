@@ -72,6 +72,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string BuildResult { get; private set; } = "";
 		[ObservableProperty] public partial string BuildFailure { get; private set; } = "";
 		[ObservableProperty] public partial bool IsZipReady { get; private set; }
+		//W-H3: the result line is a finished build (the green check shows).
+		[ObservableProperty] public partial bool IsBuildDone { get; private set; }
 		[ObservableProperty] public partial string ProjectLink { get; set; } = "";
 		[ObservableProperty] public partial string ProjectHostError { get; private set; } = "";
 		[ObservableProperty] public partial bool IsProjectContinueEnabled { get; private set; }
@@ -83,6 +85,7 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsSavedSheetOpen { get; private set; }
 		[ObservableProperty] public partial bool IsRecording { get; private set; }
 		[ObservableProperty] public partial string StartSheetTitle { get; private set; } = "";
+		[ObservableProperty] public partial string StartSheetBody { get; private set; } = "";
 		[ObservableProperty] public partial bool IsStartEnabled { get; private set; }
 		[ObservableProperty] public partial string StartReason { get; private set; } = "";
 		[ObservableProperty] public partial string RecordingPill { get; private set; } = "";
@@ -316,6 +319,7 @@ namespace Mesen.ViewModels
 				RemasterJobStatus.Failed => ResourceHelper.GetMessage("ShareBuildFailed"),
 				_ => IsZipReady ? ResourceHelper.GetMessage("ShareBuildDone", Path.GetFileName(_project.ZipPath), ShareProjectPackage.FormatSize(new FileInfo(_project.ZipPath).Length)) : "",
 			};
+			IsBuildDone = IsZipReady && job.Status is not (RemasterJobStatus.Running or RemasterJobStatus.Stopped or RemasterJobStatus.Failed);
 			if(job.Status == RemasterJobStatus.Failed) {
 				//W-R4 (inline build problems) is Remaster's slice: a plain line here.
 				BuildFailure = job.FailureLine;
@@ -446,7 +450,9 @@ namespace Mesen.ViewModels
 			IsStartSheetOpen = Sheet == ReplaySheet.Start;
 			IsSavedSheetOpen = Sheet == ReplaySheet.Saved;
 			IsRecording = Sheet == ReplaySheet.Recording;
-			StartSheetTitle = _gameLoaded ? ResourceHelper.GetMessage("ShareReplaySheetTitle", _gameName) : ResourceHelper.GetMessage("ShareReplaySheetTitleNoGame");
+			//W-H4: the title is the action; the body names the game that restarts.
+			StartSheetTitle = ResourceHelper.GetMessage("ShareReplaySheetTitle");
+			StartSheetBody = _gameLoaded ? ResourceHelper.GetMessage("ShareReplaySheetBody", _gameName) : ResourceHelper.GetMessage("ShareReplaySheetBodyNoGame");
 			//A movie or netplay session can start from Tools ⋯ at any time: asked each refresh.
 			(bool movieBusy, bool netplay) = Sheet == ReplaySheet.Start ? _sessions() : (false, false);
 			ReplayStartReason reason = ShareReplay.StartReason(_gameLoaded, _console, movieBusy, netplay);

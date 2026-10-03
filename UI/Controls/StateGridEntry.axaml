@@ -39,6 +39,12 @@
 			<Setter Property="BorderBrush" Value="#0088E7" />
 			<Setter Property="Background" Value="#FF3A3A3A" />
 		</Style>
+		<Style Selector="c|StateGridEntry Panel#TileBadgeLayer">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="c|StateGridEntry.tiles:not(.slot) Panel#TileBadgeLayer">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
 	</UserControl.Styles>
 	
 	<DockPanel>
@@ -65,14 +71,23 @@
 			VerticalAlignment="Stretch"
 			Padding="0"
 		>
-			<c:ImageAspectRatio
-				Source="{Binding Image, ElementName=root}"
-				AspectRatio="{Binding AspectRatio, ElementName=root}"
-				RenderOptions.BitmapInterpolationMode="LowQuality"
-				Stretch="Fill"
-				StretchDirection="Both"
-				VerticalAlignment="Center"
-			/>
+			<Panel>
+				<c:ImageAspectRatio
+					Source="{Binding Image, ElementName=root}"
+					AspectRatio="{Binding AspectRatio, ElementName=root}"
+					RenderOptions.BitmapInterpolationMode="LowQuality"
+					Stretch="Fill"
+					StretchDirection="Both"
+					VerticalAlignment="Center"
+				/>
+				<!--W-P2: the pack badge on a Player home tile whose game has an HD
+				pack (HasPack); the layer is shown only for `tiles:not(.slot)`.-->
+				<Panel Name="TileBadgeLayer">
+					<Border Name="TilePackBadge" IsVisible="{Binding HasPack, ElementName=root}">
+						<PathIcon Data="{StaticResource PlayerIconPack}" />
+					</Border>
+				</Panel>
+			</Panel>
 		</Button>
 	</DockPanel>
 </UserControl>

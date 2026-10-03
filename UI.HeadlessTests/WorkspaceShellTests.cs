@@ -38,6 +38,9 @@ namespace Mesen.HeadlessTests;
 public class WorkspaceShellTests : IDisposable
 {
 	private static readonly string[] TopLevelMenus = { "File", "Game", "Settings", "Tools", "Debug", "Help" };
+	//W-S2: in Player mode Tools ⋯ follows the render ("Options"); the classic
+	//bar and Advanced's Tools ⋯ keep "Settings".
+	private static readonly string[] PlayerToolsMenus = { "File", "Game", "Options", "Tools", "Debug", "Help" };
 
 	//ConfigManager.Config is process-global: every setting a test here touches
 	//is restored afterwards, so the next class in the collection (e.g.
@@ -130,8 +133,8 @@ public class WorkspaceShellTests : IDisposable
 		MenuItem dots = OpenToolsDropdown(window);
 		string[] labels = dots.GetRealizedContainers().OfType<MenuItem>().Select(Label).ToArray();
 
-		Assert.Equal(TopLevelMenus, labels.Take(6).ToArray());
-		Assert.Contains("Show classic menu bar", labels);
+		Assert.Equal(PlayerToolsMenus, labels.Take(6).ToArray());
+		Assert.Contains("Show Classic Menu Bar", labels);
 	}
 
 	//The stop rule's "every classic menu action is still reachable from Tools
@@ -154,7 +157,7 @@ public class WorkspaceShellTests : IDisposable
 		MenuItem dots = OpenToolsDropdown(window);
 
 		for(int i = 0; i < TopLevelMenus.Length; i++) {
-			MenuItem fromTools = Child(dots, TopLevelMenus[i]);
+			MenuItem fromTools = Child(dots, PlayerToolsMenus[i]);
 			Assert.Same(classicLists[i], fromTools.ItemsSource);
 			string[] toolsLabels = RealizedLabels(fromTools);
 			Assert.NotEmpty(toolsLabels);

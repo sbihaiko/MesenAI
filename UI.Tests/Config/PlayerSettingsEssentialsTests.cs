@@ -82,5 +82,17 @@ namespace Mesen.Tests.Config
 			Assert.Equal(new[] { 1, 2, 3 }, PlayDisplaySettings.ItemsWithCurrent(new[] { 1, 2, 3 }, 2));
 			Assert.Equal(new[] { 1, 2, 3, 9 }, PlayDisplaySettings.ItemsWithCurrent(new[] { 1, 2, 3 }, 9));
 		}
-	}
+	
+		//W-P8: Display is the render's 340 px sheet so its "Everything else"
+		//hint sits right under the group; the other tabs keep the 500 px sheet.
+		[Theory]
+		[InlineData(ConfigWindowTab.Display, 340)]
+		[InlineData(ConfigWindowTab.Look, 500)]
+		[InlineData(ConfigWindowTab.Audio, 500)]
+		[InlineData(ConfigWindowTab.Input, 500)]
+		public void Each_tab_has_its_sheet_height(ConfigWindowTab tab, double height)
+		{
+			Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(tab));
+		}
+}
 }

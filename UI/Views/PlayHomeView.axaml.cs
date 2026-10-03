@@ -105,8 +105,6 @@ namespace Mesen.Views
 			OnOpenRom(sender, e);
 		}
 
-		private void OnDismissLoadAlert(object? sender, RoutedEventArgs e) => Model?.DismissLoadAlert();
-
 		private void OnContinue(object? sender, RoutedEventArgs e)
 		{
 			if(Model?.GameEntries.Count > 0) {

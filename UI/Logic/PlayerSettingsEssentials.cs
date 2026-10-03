@@ -30,6 +30,11 @@ public static class PlayerSettingsEssentials
 
 	public static int IndexOf(ConfigWindowTab tab) => Array.IndexOf(Tabs, tab);
 
+	//W-P8 is a 340 px sheet - its three rows, then the "Everything else" hint
+	//right under the group and Done; Look (W-P10), Audio and Controls keep the
+	//500 px sheet their pages need.
+	public static double SheetHeight(ConfigWindowTab tab) => tab == ConfigWindowTab.Display ? 340 : 500;
+
 	public static ConfigWindowTab? TabAt(int index) => index >= 0 && index < Tabs.Length ? Tabs[index] : null;
 }
 

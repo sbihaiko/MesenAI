@@ -244,8 +244,30 @@ public class PlaySheetsRenderTests : IDisposable
 		AssertFooterButton(window.FindNamed<Button>("PackDetailDoneButton"), PlayTint);
 		Assert.Equal(90, window.FindNamed<Button>("PackDetailDoneButton").Bounds.Width, 0.5);
 		Assert.Equal(5, sheet.FindAll<Button>().Count(b => b.IsOnScreen()));
+		//The render's orange warning icon leads the notice title (no glyph).
+		Assert.Equal("Some music is missing", window.FindNamed<TextBlock>("PackDetailNoticeTitle").Text);
+		Assert.True(notice.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning")).IsOnScreen());
+		//"Show Pack in Finder" on macOS (the render), "Show Pack Folder" elsewhere.
+		Assert.Equal(OperatingSystem.IsMacOS() ? "Show Pack in Finder" : "Show Pack Folder",
+			LabelOf(window.FindNamed<Button>("PackDetailFolderButton")).Text);
 
 		Render(window, "W-P6", sheet);
+
+		//W-X1: Restore asks in place with the shared warning banner.
+		window.FindNamed<Button>("PackDetailRestoreButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+		Settle(window);
+		Border confirm = window.FindNamed<Border>("PackDetailRestoreConfirm");
+		Assert.True(confirm.IsOnScreen());
+		Assert.Contains("banner", confirm.Classes);
+		Assert.Contains("warning", confirm.Classes);
+		Assert.Equal(Color.Parse("#FFF8EC"), PlayerRender.SolidColor(confirm.Background));
+		Assert.True(confirm.FindAll<PathIcon>().Single(p => p.Classes.Contains("banner-icon")).IsOnScreen());
+		Assert.Equal("Restore original files? Your edits to this pack will be lost.", confirm.FindAll<TextBlock>().First(t => t.Classes.Contains("banner-text")).Text);
+		Button[] answers = confirm.FindAll<Button>().Where(b => b.IsOnScreen()).ToArray();
+		Assert.Equal(new[] { "Keep Edits", "Restore" }, answers.Select(b => LabelOf(b).Text).ToArray());
+		Assert.Contains("secondary", answers[0].Classes);
+		Assert.Contains("destructive", answers[1].Classes);
+		Render(window, "W-X1-restore", sheet);
 	}
 
 	//W-P7: the five switches in an inset list, Apply & Reload; 6 controls.
@@ -406,12 +428,29 @@ public class PlaySheetsRenderTests : IDisposable
 		Assert.Equal(13.5, window.FindNamed<TextBlock>("BiosSheetDropTitle").FontSize);
 		Border error = window.FindNamed<Border>("BiosSheetError");
 		Assert.True(error.IsOnScreen());
-		Assert.Equal(NoticeFill, PlayerRender.SolidColor(error.Background));
+		//W-X2: the wrong file is the shared warning banner, its mark the drawn icon.
+		Assert.Contains("banner", error.Classes);
+		Assert.Contains("warning", error.Classes);
+		Assert.Equal(Color.Parse("#FFF8EC"), PlayerRender.SolidColor(error.Background));
+		Assert.True(error.FindAll<PathIcon>().Single(p => p.Classes.Contains("banner-icon")).IsOnScreen());
+		Assert.StartsWith("That file is 16 KB", error.FindAll<TextBlock>().First(t => t.Classes.Contains("banner-text")).Text);
 		AssertFooterButton(window.FindNamed<Button>("BiosSheetCancel"), Card);
 		AssertFooterButton(window.FindNamed<Button>("BiosSheetChooseFile"), PlayTint);
 		Assert.Equal(3, ControlsOnScreen(sheet));
 
 		Render(window, "W-P13", sheet);
+
+		//W-X1: an unknown dump of the right size asks in place, same banner.
+		string unknown = Path.Combine(_folder, "unknown.rom");
+		File.WriteAllBytes(unknown, new byte[8192]);
+		model.BiosSheet.TryFile(unknown);
+		Settle(window);
+		Border confirm = window.FindNamed<Border>("BiosSheetConfirm");
+		Assert.True(confirm.IsOnScreen());
+		Assert.Contains("banner", confirm.Classes);
+		Assert.True(confirm.FindAll<PathIcon>().Single(p => p.Classes.Contains("banner-icon")).IsOnScreen());
+		Assert.Equal("This is not a copy MesenAI knows. Use it anyway?", confirm.FindAll<TextBlock>().First(t => t.Classes.Contains("banner-text")).Text);
+		Render(window, "W-P13-confirm", sheet);
 	}
 
 	//W-P16: share badge, the file box, the drop zone, Show Folder (plain),
@@ -427,6 +466,8 @@ public class PlaySheetsRenderTests : IDisposable
 
 		Border sheet = window.FindNamed<Border>("PackDepSheet");
 		AssertSheet(sheet, 500);
+		//W-P16's wording.
+		Assert.Equal("Contra Arcade Music needs one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
 		Border badge = sheet.FindAll<Border>().First(b => b.Classes.Contains("badge"));
 		Assert.Equal(40, badge.Bounds.Width, 0.5);
 		Assert.Equal(ShareTint, PlayerRender.SolidColor(badge.Background));
@@ -465,6 +506,11 @@ public class PlaySheetsRenderTests : IDisposable
 		Button another = window.FindNamed<Button>("PlayHomeOpenAnother");
 		Assert.Contains("secondary", another.Classes);
 		Assert.Equal(Card, PlayerRender.SolidColor(another.Background));
+		//The render: the orange warning icon (not a glyph), the curly-quoted file
+		//name, and Open Another… as the alert's one control (any open clears it).
+		Assert.Equal("\u201cContra.txt\u201d is not a game MesenAI can open.", title.Text);
+		Assert.True(alert.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning")).IsOnScreen());
+		Assert.Equal(new[] { another }, alert.FindAll<Button>().Where(b => b.IsOnScreen()).ToArray());
 
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, "W-P14");

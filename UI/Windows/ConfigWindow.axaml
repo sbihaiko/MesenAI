@@ -62,10 +62,10 @@
 	<Border Name="PlayerSettingsRoot" Classes="player" Background="{StaticResource PlayerCardBrush}" Padding="20 18 20 20" IsVisible="{Binding PlayerMode}">
 		<Grid RowDefinitions="Auto,*">
 			<Grid.Styles>
-				<!--The page stops above the Done row; Look's own footer (Hold to
-				Compare, W-P10) shares that row, left of Done.-->
+				<!--The page stops above the hint and the Done row; Look's own
+				footer (Hold to Compare, W-P10) shares Done's row, left of it.-->
 				<Style Selector="TabControl#PlayerSettingsTabs">
-					<Setter Property="Margin" Value="0 0 0 50" />
+					<Setter Property="Margin" Value="0 0 0 70" />
 				</Style>
 				<Style Selector="TabControl#PlayerSettingsTabs.look">
 					<Setter Property="Margin" Value="0" />
@@ -82,12 +82,14 @@
 				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding Input}" />
 			</TabControl>
 			<!--G.4 (W-P8): rule 10 applied to settings, and one Done that keeps
-			the changes (Esc does the same in Player mode). Look's footer is its
-			Hold to Compare (W-P10), so the Options hint shows on the other tabs.-->
-			<Grid Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Bottom">
-				<TextBlock Grid.Column="0" Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" VerticalAlignment="Center" IsVisible="{Binding !IsPlayerLookTab}" />
-				<Button Grid.Column="1" Name="btnPlayerSettingsDone" Classes="primary medium" Width="90" Click="Ok_OnClick" Content="{l:Translate btnPlayerSettingsDone}" />
-			</Grid>
+			the changes (Esc does the same in Player mode). The Options hint is
+			its own line above Done - on Display (a 340 px sheet) right under the
+			group, as the render. Look's footer is its Hold to Compare (W-P10),
+			so the hint shows on the other tabs.-->
+			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding !IsPlayerLookTab}" />
+				<Button Name="btnPlayerSettingsDone" Classes="primary medium" Width="90" HorizontalAlignment="Right" Click="Ok_OnClick" Content="{l:Translate btnPlayerSettingsDone}" />
+			</StackPanel>
 		</Grid>
 	</Border>
 

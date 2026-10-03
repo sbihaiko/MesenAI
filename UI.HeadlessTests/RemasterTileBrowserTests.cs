@@ -295,7 +295,7 @@ public class RemasterTileBrowserTests : IDisposable
 		Write(project, "auto/rec-001/textures/sheets/adjacency.json", "{}");
 		compose.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
-		Assert.StartsWith("✔ This project has the layout data", window.FindNamed<TextBlock>("RemasterComposeHint").Text);
+		Assert.StartsWith("This project has the layout data", window.FindNamed<TextBlock>("RemasterComposeHint").Text);
 		Click(window.FindNamed<Button>("RemasterOpenComposerButton"));
 
 		Assert.Equal(new[] { RemasterHandOff.ComposeScript, Path.Combine(project, "auto", "rec-001"), "--rom" },

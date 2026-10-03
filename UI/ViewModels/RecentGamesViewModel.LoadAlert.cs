@@ -32,11 +32,5 @@ namespace Mesen.ViewModels
 			_loadAlert.OnOpenStarted();
 			IsLoadAlertVisible = false;
 		}
-
-		public void DismissLoadAlert()
-		{
-			_loadAlert.Dismiss();
-			IsLoadAlertVisible = false;
-		}
 	}
 }

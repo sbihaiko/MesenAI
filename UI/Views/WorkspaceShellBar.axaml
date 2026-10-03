@@ -143,6 +143,29 @@
 			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
 			<Setter Property="Padding" Value="6 3 10 3" />
 			<Setter Property="Height" Value="28" />
+			<!--W-S1/W-S3: the render's pill is 150 wide whatever the name.-->
+			<Setter Property="Width" Value="150" />
+			<Setter Property="HorizontalContentAlignment" Value="Left" />
+		</Style>
+		<!--W-S2: the Tools ⋯ labels. Player follows the render; Advanced keeps
+		the classic wording (separate keys, so neither leaks into the other).-->
+		<Style Selector="MenuItem#ToolsMenuOptions">
+			<Setter Property="Header" Value="{l:Translate mnuOptions}" />
+		</Style>
+		<Style Selector="MenuItem#ShowClassicMenuBarItem">
+			<Setter Property="Header" Value="{l:Translate mnuShowClassicMenuBar}" />
+		</Style>
+		<Style Selector="MenuItem#ToolsMenuHint">
+			<Setter Property="Header" Value="{l:Translate lblToolsHint}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuOptions">
+			<Setter Property="Header" Value="{l:Translate mnuPlayerOptions}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ShowClassicMenuBarItem">
+			<Setter Property="Header" Value="{l:Translate mnuPlayerShowClassicMenuBar}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuHint">
+			<Setter Property="Header" Value="{l:Translate lblPlayerToolsHint}" />
 		</Style>
 		<Style Selector=":is(UserControl).player Button#ProfileButton:pointerover /template/ Border#PART_Background, :is(UserControl).player Button#ProfileButton:pressed /template/ Border#PART_Background">
 			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
@@ -266,10 +289,16 @@
 			<Setter Property="BorderThickness" Value="1" />
 			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSheet}" />
 			<Setter Property="Padding" Value="8 12 8 12" />
-			<Setter Property="Margin" Value="0 7 0 0" />
+			<!--Room in the popup for the drop shadow (right and below; the left
+			edge stays aligned with the profile pill).-->
+			<Setter Property="Margin" Value="0 7 14 22" />
 			<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
 			<Setter Property="TextElement.FontSize" Value="{StaticResource PlayerFontBody}" />
 			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<!--W-S3: the popover floats on the menu shadow, as W-S2's panel.-->
+		<Style Selector=":is(UserControl).player FlyoutPresenter /template/ Border#LayoutRoot">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowMenu}" />
 		</Style>
 		<Style Selector=":is(UserControl).player StackPanel#SwitcherPanel">
 			<Setter Property="Width" Value="342" />
@@ -343,13 +372,13 @@
 			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32">
 				<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding MainMenu.FileMenuItems}" />
 				<MenuItem Header="{l:Translate mnuGame}" ItemsSource="{Binding MainMenu.GameMenuItems}" />
-				<MenuItem Header="{l:Translate mnuOptions}" ItemsSource="{Binding MainMenu.OptionsMenuItems}" />
+				<MenuItem Name="ToolsMenuOptions" ItemsSource="{Binding MainMenu.OptionsMenuItems}" />
 				<MenuItem Name="ToolsMenuTools" Header="{l:Translate mnuTools}" ItemsSource="{Binding MainMenu.ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
 				<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding MainMenu.DebugMenuItems}" />
 				<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding MainMenu.HelpMenuItems}" />
 				<Separator />
-				<MenuItem Name="ShowClassicMenuBarItem" Header="{l:Translate mnuShowClassicMenuBar}" ToggleType="CheckBox" IsChecked="{Binding Config.Preferences.ShowClassicMenuBar, Mode=OneWay}" Click="OnToggleClassicMenuBar" />
-				<MenuItem Name="ToolsMenuHint" Header="{l:Translate lblToolsHint}" IsEnabled="False" />
+				<MenuItem Name="ShowClassicMenuBarItem" ToggleType="CheckBox" IsChecked="{Binding Config.Preferences.ShowClassicMenuBar, Mode=OneWay}" Click="OnToggleClassicMenuBar" />
+				<MenuItem Name="ToolsMenuHint" IsEnabled="False" />
 			</MenuItem>
 		</c:MesenMenu>
 

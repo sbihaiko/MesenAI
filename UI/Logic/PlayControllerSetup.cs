@@ -31,9 +31,8 @@ public static class ControllerDevices
 		return true;
 	}
 
-	//"Pad2 But3" → "Pad2": the key manager's device prefix, the only device
-	//name the Core exposes today (the controller's own name is the W-P15
-	//prerequisite slice).
+	//"Pad2 But3" → "Pad2": the key manager's device prefix - the fallback when
+	//the platform does not name the controller (DisplayName).
 	public static string Label(string keyName)
 	{
 		if(string.IsNullOrEmpty(keyName)) {
@@ -41,6 +40,14 @@ public static class ControllerDevices
 		}
 		int space = keyName.IndexOf(' ');
 		return space < 0 ? keyName : keyName.Substring(0, space);
+	}
+
+	//W-P15's title: the controller's own name ("8BitDo SN30") when the
+	//platform reports it for that device, else the key-name prefix.
+	public static string DisplayName(string? deviceName, string keyName)
+	{
+		string name = (deviceName ?? "").Trim();
+		return name.Length > 0 ? name : Label(keyName);
 	}
 
 	//The pad's own Start button, when its key name says so.

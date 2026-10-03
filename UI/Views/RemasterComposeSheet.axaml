@@ -81,7 +81,11 @@
 		<StackPanel Spacing="14">
 			<TextBlock Name="RemasterComposeTitle" Classes="sheet-title" Text="{l:Translate lblComposeTitle}" />
 			<TextBlock Classes="paragraph" Text="{l:Translate lblComposeBody}" />
-			<TextBlock Name="RemasterComposeHint" Text="{Binding ComposeHint}" />
+			<!--W-R7: a drawn green check before the line when the layout data is there.-->
+			<StackPanel Orientation="Horizontal" Spacing="6">
+				<PathIcon Name="RemasterComposeHintIcon" Classes="done" Data="{StaticResource PlayerIconCheck}" Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding HasLayoutData}" />
+				<TextBlock Name="RemasterComposeHint" Text="{Binding ComposeHint}" VerticalAlignment="Center" />
+			</StackPanel>
 			<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0 40 0 0">
 				<Button Name="RemasterComposeCancelButton" Classes="secondary" VerticalAlignment="Top" Content="{l:Translate btnComposeCancel}" Click="OnCancel" />
 				<StackPanel Spacing="2" MaxWidth="240">

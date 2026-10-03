@@ -100,6 +100,8 @@
 							<Button Name="LocateToolsButton" Classes="secondary" Content="{l:Translate btnLocateTools}" IsVisible="{Binding IsToolsMissing}" Click="OnLocateTools" />
 							<Button Name="HowToGetToolsButton" Classes="plain warning" Content="{l:Translate btnHowToGetTools}" IsVisible="{Binding IsToolsMissing}" Click="OnHowToGetTools" />
 						</StackPanel>
+						<!--W-R0b: the render's orange warning icon leads the sentence.-->
+						<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" Margin="0 0 10 0" VerticalAlignment="Center" />
 						<TextBlock Name="RemasterFeasibilityText" Classes="paragraph warning" Text="{Binding BannerText}" VerticalAlignment="Center" />
 					</DockPanel>
 					<DockPanel IsVisible="{Binding PendingBrowserUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">

@@ -4,6 +4,8 @@ using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.ViewModels;
 
 namespace Mesen.Views
@@ -19,6 +21,9 @@ namespace Mesen.Views
 		public PlayerPackDetailSheetView()
 		{
 			InitializeComponent();
+			//W-P6: "Show Pack in Finder" on macOS (the render), a folder elsewhere.
+			this.FindControl<TextBlock>("PackDetailFolderLabel")!.Text =
+				ResourceHelper.GetViewLabel(nameof(PlayerPackDetailSheetView), PackDetail.ShowFolderLabelKey(OperatingSystem.IsMacOS()));
 		}
 
 		private void InitializeComponent()

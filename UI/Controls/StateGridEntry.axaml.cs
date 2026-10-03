@@ -4,8 +4,10 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using System;
@@ -28,6 +30,15 @@ namespace Mesen.Controls
 		public static readonly StyledProperty<bool> EnabledProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(Enabled));
 		public static readonly StyledProperty<bool> IsActiveEntryProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(IsActiveEntry));
 		public static readonly StyledProperty<double> AspectRatioProperty = AvaloniaProperty.Register<StateGridEntry, double>(nameof(AspectRatio));
+		//W-P2: the game has an HD pack (PlayHome.HasHdPack); the Player tiles
+		//show the pack badge, the classic grid and the slot tiles do not.
+		public static readonly StyledProperty<bool> HasPackProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(HasPack));
+
+		public bool HasPack
+		{
+			get { return GetValue(HasPackProperty); }
+			set { SetValue(HasPackProperty, value); }
+		}
 
 		public RecentGameInfo Entry
 		{
@@ -116,6 +127,8 @@ namespace Mesen.Controls
 			}
 
 			Title = game.Name;
+			HasPack = !game.SaveMode && Path.GetExtension(game.FileName) == ".rgd"
+				&& PlayHome.HasHdPack(ConfigManager.HdPackFolder, Path.GetFileNameWithoutExtension(game.FileName));
 
 			bool fileExists = File.Exists(game.FileName);
 			if(fileExists) {

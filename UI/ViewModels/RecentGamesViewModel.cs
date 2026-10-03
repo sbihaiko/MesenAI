@@ -11,6 +11,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 
 namespace Mesen.ViewModels
 {
@@ -38,6 +40,11 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string FirstRunOrientation { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueTitle { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueSubtitle { get; private set; } = "";
+		//W-P2: the Continue card's picture, the recent entry's own screenshot
+		//(null keeps the placeholder art).
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(HasContinuePreview))] public partial Bitmap? ContinuePreview { get; private set; }
+		public bool HasContinuePreview => ContinuePreview != null;
+		private int _previewGeneration;
 		[ObservableProperty] public partial List<RecentGameInfo> HomeGridEntries { get; private set; } = new List<RecentGameInfo>();
 		[ObservableProperty] public partial bool ShowHomeGrid { get; private set; }
 
@@ -145,6 +152,34 @@ namespace Mesen.ViewModels
 				ContinueTitle = "";
 				ContinueSubtitle = "";
 			}
+			LoadContinuePreview(ShowRecentsHome ? entries[0].FileName : null);
+		}
+
+		//Read off the UI thread (the recent file is a zip); a newer home wins.
+		private void LoadContinuePreview(string? recentFile)
+		{
+			int generation = ++_previewGeneration;
+			ContinuePreview = null;
+			if(recentFile == null) {
+				return;
+			}
+			Task.Run(() => {
+				byte[]? png = PlayHome.ReadScreenshot(recentFile);
+				if(png == null) {
+					return;
+				}
+				Dispatcher.UIThread.Post(() => {
+					if(generation != _previewGeneration) {
+						return;
+					}
+					try {
+						using MemoryStream stream = new(png);
+						ContinuePreview = new Bitmap(stream);
+					} catch(Exception) {
+						ContinuePreview = null;
+					}
+				});
+			});
 		}
 
 		private static string OrientationText()

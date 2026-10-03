@@ -351,6 +351,13 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(36, go.Bounds.Height, 0.5);
 		Assert.Equal(ShareTint, PlayerRender.SolidColor(go.Background));
 		Assert.Equal(6, ControlsAtRest(h.Window.FindNamed<StackPanel>("ShareProjectPage")));
+		//The render draws the green check before the result: an icon, not a glyph.
+		TextBlock result = h.Window.FindNamed<TextBlock>("ShareBuildResult");
+		Assert.StartsWith("contra-usa-mep.zip", result.Text);
+		PathIcon done = h.Window.FindNamed<PathIcon>("ShareBuildDoneIcon");
+		Assert.True(done.IsOnScreen());
+		Assert.Contains("done", done.Classes);
+		Assert.Equal(ShareTintText, PlayerRender.SolidColor(done.Foreground));
 
 		Bitmap frame = PlayerRender.Capture(h.Window);
 		PlayerRender.Save(frame, "W-H3");
@@ -381,6 +388,9 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(Indigo, PlayerRender.SolidColor(h.Window.FindNamed<Border>("ShareReplayStartBadge").Background));
 		Assert.Equal(40, h.Window.FindNamed<Border>("ShareReplayStartBadge").Bounds.Width, 0.5);
 		AssertText(h.Window.FindNamed<TextBlock>("ShareReplaySheetTitle"), 17, Text, FontWeight.Bold);
+		//The render's copy: the title is the action, the body names the game.
+		Assert.Equal("Record and share", h.Window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
+		Assert.StartsWith("Contra (USA) restarts from power-on and records until you stop.", h.Window.FindNamed<TextBlock>("ShareReplaySheetBody").Text);
 		AssertButton(h.Window.FindNamed<Button>("ShareReplayCancelButton"), 32, 8, 13, Card);
 		AssertButton(h.Window.FindNamed<Button>("ShareReplayStartButton"), 32, 8, 13, Red);
 		Assert.Equal(2, ControlsAtRest(before));
@@ -473,6 +483,9 @@ public class ShareThemeRenderTests : IDisposable
 		AssertText(panel.FindNamed<TextBlock>("SwitcherFooter"), 12, Text2);
 		Assert.Equal(Color.Parse("#E8E8EC"), PlayerRender.SolidColor(profile.FindAll<Border>().First(b => b.Name == "PART_Background").Background));
 		Assert.Equal(3, rows.Length);
+		//The render's pill is 150 px wide; the popover floats on a drop shadow.
+		Assert.Equal(150, profile.Bounds.Width, 0.5);
+		Assert.Contains(presenter.GetSelfAndVisualDescendants().OfType<Border>(), b => b.BoxShadow.Count > 0);
 
 		SaveWithPopup(window, presenter, "W-S3");
 	}
@@ -511,6 +524,11 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(Colors.White, PlayerRender.SolidColor(LabelOf(toolsItem).Foreground));
 		TextBlock hint = LabelOf(window.FindNamed<MenuItem>("ToolsMenuHint"));
 		Assert.Equal(11.5, hint.FontSize);
+		//The render's labels (Player-only keys; the classic menu bar keeps its own).
+		Assert.Equal(new[] { "File", "Game", "Options", "Tools", "Debug", "Help" }, items.Take(6).Select(i => LabelOf(i).Text!.Replace("_", "")).ToArray());
+		Assert.Equal("Show Classic Menu Bar", LabelOf(window.FindNamed<MenuItem>("ShowClassicMenuBarItem")).Text);
+		Assert.Equal("Debugger, Lua, HD Pack Builder, netplay…", hint.Text);
+		Assert.True(panel.BoxShadow.Count > 0, "the menu panel has no drop shadow");
 		Assert.Equal(Text2, PlayerRender.SolidColor(hint.Foreground));
 
 		SaveWithPopup(window, panel, "W-S2");
@@ -538,6 +556,10 @@ public class ShareThemeRenderTests : IDisposable
 		MenuItem file = tools.Items.OfType<MenuItem>().First();
 		Assert.DoesNotContain(file.GetVisualAncestors().OfType<Border>(), b => b.Name == "PlayerMenuPanel");
 		Assert.NotEqual("Inter", LabelOf(file).FontFamily.Name);
+		//W-S2's Player labels do not leak into Advanced.
+		Assert.Equal("Settings", LabelOf(window.FindNamed<MenuItem>("ToolsMenuOptions")).Text!.Replace("_", ""));
+		Assert.Equal("Show classic menu bar", LabelOf(window.FindNamed<MenuItem>("ShowClassicMenuBarItem")).Text);
+		Assert.Equal("Debugger, Lua, HD Pack Builder, …", LabelOf(window.FindNamed<MenuItem>("ToolsMenuHint")).Text);
 	}
 
 	//A popup is its own top level in the headless platform: draw its frame

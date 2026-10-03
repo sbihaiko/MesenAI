@@ -314,7 +314,7 @@ public class ShareWorkspaceTests : IDisposable
 		h.Launcher.Last!.OnLine("OK: contra-usa-mep.zip lints clean", false);
 		h.Launcher.Last.OnExit(0);
 		WaitFor(() => !h.Model.IsBuildRunning, "the job never ended");
-		Assert.Equal("✔ contra-usa-mep.zip · 4 KB · no problems", h.Window.FindNamed<TextBlock>("ShareBuildResult").Text);
+		Assert.Equal("contra-usa-mep.zip · 4 KB · no problems", h.Window.FindNamed<TextBlock>("ShareBuildResult").Text);
 		Click(h.Window.FindNamed<Button>("ShareShowZipButton"));
 		Assert.Equal(new[] { Path.Combine(project, "contra-usa-mep.zip") }, h.Revealed);
 
@@ -372,7 +372,8 @@ public class ShareWorkspaceTests : IDisposable
 
 		h.Model.UpdateGame(true, ConsoleType.Nes, "Contra (USA)", "/roms/Contra (USA).nes", "");
 		Click(h.Window.FindNamed<Button>("RecordAndShareButton"));
-		Assert.Equal("Record and share — Contra (USA)", h.Window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
+		Assert.Equal("Record and share", h.Window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
+		Assert.StartsWith("Contra (USA) restarts from power-on", h.Window.FindNamed<TextBlock>("ShareReplaySheetBody").Text);
 		Click(h.Window.FindNamed<Button>("ShareReplayStartButton"));
 		Assert.Equal(1, h.Recorder.Starts);
 		Assert.True(h.Model.IsRecording);
@@ -429,7 +430,8 @@ public class ShareWorkspaceTests : IDisposable
 			Assert.False(model.IsNativeRendererVisible);
 
 			Click(window.FindNamed<Button>("RecordAndShareButton"));
-			Assert.Equal("Record and share — synthetic-nrom", window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
+			Assert.Equal("Record and share", window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
+			Assert.StartsWith("synthetic-nrom restarts from power-on", window.FindNamed<TextBlock>("ShareReplaySheetBody").Text);
 			Click(window.FindNamed<Button>("ShareReplayStartButton"));
 
 			Assert.True(new CoreReplayRecorder().IsSharing, "the core is not recording a shared replay");

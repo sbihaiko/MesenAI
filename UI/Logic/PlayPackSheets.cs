@@ -131,6 +131,10 @@ public static class PackDetail
 		return new PackLayerChips(present.Contains("textures"), present.Contains("audio"), scan?.HasWiredPatch == true);
 	}
 
+	//W-P6's folder button: the render's "Show Pack in Finder" names macOS's
+	//file browser; on Windows and Linux it is "Show Pack Folder".
+	public static string ShowFolderLabelKey(bool isMacOS) => isMacOS ? "btnPackDetailShowInFinder" : "btnPackDetailShowFolder";
+
 	//Where "Show pack folder" goes: a folder pack is EnhancementPacks/<container>,
 	//a zip pack lives in EnhancementPacks itself, a sibling pack is the folder
 	//next to the ROM. Empty when there is nothing to show.
