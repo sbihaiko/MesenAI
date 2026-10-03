@@ -2328,7 +2328,7 @@ the overlay's existing Save/Load slot row already covers that.
 |---|---|---|---|
 | Texture | `EnhancementPackConfig.EnableTextures` | all | needs ROM reload |
 | Audio | `EnhancementPackConfig.EnableAudio` | all | needs ROM reload |
-| WideScrn | `VideoConfig.AspectRatio` toggled between `Widescreen` (16:9 stretch, `Core/Shared/EmuSettings.cpp:521`) and the value it had before the toggle was turned on (restored, not hardcoded to `NoStretching`/`Auto`, so an Advanced-configured custom ratio survives) | all | immediate (renderer-only) |
+| WideScrn | `VideoConfig.AspectRatio`'s existing on/off switch; with it on, the core picks the mode automatically — Reveal (the console draws extra side columns from its own background map), else the pack's widescreen art; when the game supports neither, the switch is disabled with a reason. No stretch (ADR-0253, supersedes the 16:9 stretch) | all | immediate (renderer-only) |
 | HiRes | `VideoConfig.VideoFilterType` toggled between one curated hi-res preset (candidate `HQ4x`) and the value it had before — same restore-not-clobber rule as WideScrn, so a filter already chosen in Advanced is never silently discarded | all | immediate (renderer-only) |
 | Overclock | NES: `NesConfig.PpuExtraScanlinesBeforeNmi`/`PpuExtraScanlinesAfterNmi` (extra vblank scanlines, `Core/NES/NesPpu.cpp:188-190`); GB/GBA: `GameboyConfig`/`GbaConfig.OverclockScanlineCount`; all three toggled between `0` and one curated preset value. **SMS has no overclock knob today** — the toggle stays visible but disabled on SMS so the panel layout doesn't shift per console | NES, GB, GBA (not SMS) | needs reset |
 
@@ -2380,16 +2380,14 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 - Re-associating a recipe *output* folder copied without its
   `.mep-install.json` with its catalog row (§5).
 - SNES / PCE / WonderSwan / ColecoVision chrome.
-- A widescreen mode that reveals more of the playfield (extra per-console
-  PPU/VDP decode) — the WideScrn toggle only stretches the existing 4:3
-  frame to 16:9 (§6.1); "see more of the game" would be its own
-  per-console engine ADR.
 - The welcome card reappearing on every boot, or blocking the recent-
   games grid underneath it.
 
 ### 8. Slices
 
 P.8 (ADR-0237), P.9 (ADR-0244), P.11–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7; P.10 (ADR-0245 phase 1) shipped 2026-10-02 (Part A §3). The GUI redesign (ADR-0241, §13) is cut here, one slice at a time. G.1 (the shell), G.2 (the Play home W-P1–W-P3 and the W-P4 pause overlay) and G.3 (the Remaster project screen and recording, W-R0–W-R3) shipped 2026-10-02 (Part A §3).
+
+**W.1–W.7 — widescreen that reveals the playfield (ADR-0253).** Go-ahead: *"sim, aceito a ADR. começa pela fatia 1"* (user, 2026-10-03). W.1: the frame-width contract (a console may emit a `RenderedFrame` 2N px wider, standard output bit-identical, ADR-0162) plus NES Reveal with the black fallback. W.2: GB/GBC/GG Reveal. W.3: the fallback chain (border layer, then MEP `<widescreen>` pack art, spec bump). W.4: the NES HD pack path in the extra columns. W.5: per-game support measurement and memory, and the switch's disabled state with its reason. W.6: NTSC filters, recorder and capture tools. W.7: GBA text BGs. Stop rule for W.1: with WideScrn on, a vertically mirrored horizontal scroller shows real nametable content beside the 256-px picture, standard frames are unchanged in the accuracy suite, and the extra columns never trigger mapper VRAM hooks — all in tests.
 
 **G.4 — Play sheets (W-P5–W-P9).** Go-ahead: *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). Deliverable: the pack picker as radios with *Use This Pack* (W-P5), the current-pack detail the Pack row opens when there is no choice to make (W-P6), the Enhancements draft with one button that names the restart (W-P7, ADR-0244 Decision 3), the Display | Look | Audio | Controls Settings strip (W-P8) and the install HUD pill (W-P9), built on the P.5 picker, P.7 panel, P.13 Look and `PlayerSettingsEssentials`. Stop rule: the Pack row opens W-P5 for 2+ packs and W-P6 otherwise, each sheet closes back to W-P4 on Esc, W-P7's label follows the draft, W-P8 shows five elements, and the pill text reaches the status line, all in tests. Shipped 2026-10-02 (Part A §3).
 
