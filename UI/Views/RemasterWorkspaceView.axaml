@@ -170,6 +170,11 @@
 				<ProgressBar IsIndeterminate="True" Width="240" HorizontalAlignment="Left" />
 			</StackPanel>
 
+			<StackPanel Name="RemasterScanWait" Classes="wait" Margin="40 16 40 0" Spacing="8" IsVisible="{Binding IsScanWaitVisible}">
+				<TextBlock Name="RemasterScanWaitText" Classes="paragraph" Text="{Binding ScanWaitText}" />
+				<ProgressBar IsIndeterminate="True" Width="240" HorizontalAlignment="Left" />
+			</StackPanel>
+
 			<TextBlock Name="RemasterNotice" Classes="paragraph" Margin="40 16 40 0" Text="{Binding NoticeText}" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
 			<!--W-R0: Remaster, no project yet. Two elements + rows (rule 2).-->

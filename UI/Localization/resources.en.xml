@@ -2207,6 +2207,8 @@
 		<Message ID="RemasterKitNotYet">Figures and pattern pages are made from your recordings, after each one.</Message>
 		<Message ID="RemasterRecordingPill">Recording {0}</Message>
 		<Message ID="RemasterRecordingStarting">Starting the recording…</Message>
+		<Message ID="RemasterScanningProject">Reading the project's files…</Message>
+		<Message ID="RemasterScanningProjects">Reading your projects…</Message>
 		<Message ID="RemasterRecordingStopping">Stopping the recording…</Message>
 		<Message ID="RemasterRecordingShapesOne">1 shape seen</Message>
 		<Message ID="RemasterRecordingShapesMany">{0} shapes seen</Message>

@@ -75,6 +75,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsToolsMissing { get; private set; }
 		//The Python/tools probe is running (a moving line until it answers).
 		[ObservableProperty] public partial bool IsFeasibilityChecking { get; private set; }
+		//A project scan (recordings, shapes, painted cells) is in flight: a sentence over a moving bar.
+		[ObservableProperty] public partial bool IsScanWaitVisible { get; private set; }
+		[ObservableProperty] public partial string ScanWaitText { get; private set; } = "";
 		[ObservableProperty] public partial string PendingBrowserUrl { get; private set; } = "";
 		[ObservableProperty] public partial string BrowserConfirmText { get; private set; } = "";
 
@@ -143,6 +146,7 @@ namespace Mesen.ViewModels
 		public RemasterWorkspaceViewModel(RemasterConfig config, Func<RemasterConfig, RemasterFeasibility> measure, IJobProcessLauncher launcher, bool hasHeadlessRecorder)
 		{
 			_config = config;
+			CountShapes = _shapeCache.Count;
 			_measure = measure;
 			_hasHeadlessRecorder = hasHeadlessRecorder;
 			_launcher = launcher;
@@ -442,6 +446,10 @@ namespace Mesen.ViewModels
 		//recording's hires.txt, so it runs off the UI thread; a result for an
 		//older refresh is dropped. The newest recording stands in while the
 		//count is unknown or pending.
+		//The recordings' shapes count; a test swaps it to hold the read open.
+		public Func<IReadOnlyList<RemasterRecording>, int?> CountShapes { get; set; }
+
+		private readonly RemasterScanWait _scans = new();
 		private int _shapesGeneration;
 		private string _shapesFolder = "";
 
@@ -459,13 +467,19 @@ namespace Mesen.ViewModels
 			}
 			UpdateRecordDetail();
 			if(project == null) {
+				_scans.Cancel(RemasterScanKind.Shapes);
+				UpdateScanWait();
 				ShapesSettled = Task.CompletedTask;
 				return;
 			}
 			List<RemasterRecording> snapshot = project.Recordings.ToList();
+			int scan = _scans.Begin(RemasterScanKind.Shapes);
+			UpdateScanWait();
 			TaskCompletionSource settled = new();
 			ShapesSettled = settled.Task;
-			Task.Run(() => _shapeCache.Count(snapshot)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+			Task.Run(() => CountShapes(snapshot)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				_scans.End(RemasterScanKind.Shapes, scan);
+				UpdateScanWait();
 				if(generation == _shapesGeneration) {
 					int? shapes = t.IsCompletedSuccessfully ? t.Result : null;
 					ShapesSeenText = shapes is int n ? ResourceHelper.GetMessage(n == 0 ? "RemasterShapesSeenNone" : n == 1 ? "RemasterShapesSeenOne" : "RemasterShapesSeenMany", n) : "";
@@ -473,6 +487,13 @@ namespace Mesen.ViewModels
 				}
 				settled.TrySetResult();
 			}), TaskScheduler.Default);
+		}
+
+		private void UpdateScanWait()
+		{
+			IsScanWaitVisible = _scans.IsWaiting;
+			ScanWaitText = !IsScanWaitVisible ? ""
+				: ResourceHelper.GetMessage(_scans.IsWaitingForProject ? "RemasterScanningProject" : "RemasterScanningProjects");
 		}
 
 		private void UpdateRecordDetail()
