@@ -216,7 +216,7 @@ namespace Mesen.ViewModels
 						new MainMenuAction() {
 							ActionType = ActionType.CommandLineHelp,
 							DynamicText = Label("DoorMenuCommandLine"),
-							OnClick = () => new CommandLineHelpWindow().ShowCenteredDialog((Control)wnd)
+							OnClick = () => OpenCommandLineHelp(wnd)
 						}
 					}
 				},
@@ -239,9 +239,47 @@ namespace Mesen.ViewModels
 			return action;
 		}
 
+		//ADR-0250 Decision 3: what a task door's entries open in Player mode -
+		//the tool sheet in the main window (PlayerToolSheetView) for the small
+		//dialogs, the Player look (PlayerWindowLook) for the big tool windows.
+		//Classic (Advanced mode) keeps every classic window.
 		public void OpenAbout(Window wnd)
 		{
-			new AboutWindow().ShowCenteredDialog((Control)wnd);
+			if(MainWindow.IsPlayerMode) {
+				MainWindow.ToolSheet.OpenAbout();
+			} else {
+				new AboutWindow().ShowCenteredDialog((Control)wnd);
+			}
+		}
+
+		public void OpenCommandLineHelp(Window wnd)
+		{
+			if(MainWindow.IsPlayerMode) {
+				MainWindow.ToolSheet.OpenCommandLine();
+			} else {
+				new CommandLineHelpWindow().ShowCenteredDialog((Control)wnd);
+			}
+		}
+
+		public void OpenVideoRecord(Window wnd)
+		{
+			if(MainWindow.IsPlayerMode) {
+				MainWindow.ToolSheet.OpenVideoRecord();
+			} else {
+				new VideoRecordWindow() {
+					DataContext = new VideoRecordConfigViewModel()
+				}.ShowCenteredDialog((Control)wnd);
+			}
+		}
+
+		public static EnhancementPacksWindow OpenEnhancementPacks(Control opener)
+		{
+			return PlayerWindowLook.Apply(ApplicationHelper.GetOrCreateUniqueWindow(opener, () => PlayerWindowLook.Apply(new EnhancementPacksWindow(), opener)), opener);
+		}
+
+		public static LogWindow OpenLogWindow(Control opener)
+		{
+			return PlayerWindowLook.Apply(ApplicationHelper.GetOrCreateUniqueWindow(opener, () => PlayerWindowLook.Apply(new LogWindow(), opener)), opener);
 		}
 
 		//The shared tail's Settings…: a task door's is the W-P8 sheet; Classic's

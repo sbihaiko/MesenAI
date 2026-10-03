@@ -1227,6 +1227,13 @@
 	<Style Selector=".player Panel.scrim">
 		<Setter Property="Background" Value="{StaticResource PlayerScrimBrush}" />
 	</Style>
+	<!-- ADR-0250: a tool window opened from a task door (Enhancement Packs,
+	     the log window, Netplay's forms) carries the scope itself
+	     (Utilities/PlayerWindowLook): the renders' window background. -->
+	<Style Selector="Window.player">
+		<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
+		<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+	</Style>
 	<!-- .regular: the sheets' 32 px footer buttons (radius 8, 13 px). -->
 	<Style Selector=".player Button.regular">
 		<Setter Property="Height" Value="32" />

@@ -83,7 +83,13 @@ namespace Mesen.Windows
 		private async void Restore_OnClick(object sender, RoutedEventArgs e)
 		{
 			try {
-				(bool ok, string error) = await CommunityPackInstallService.RestoreInstalledPack();
+				(bool ok, string error) = (false, "");
+				_model.IsBusy = true;
+				try {
+					(ok, error) = await CommunityPackInstallService.RestoreInstalledPack();
+				} finally {
+					_model.IsBusy = false;
+				}
 				if(!ok) {
 					await MesenMsgBox.Show(this, error, MessageBoxButtons.OK, MessageBoxIcon.Error);
 					return;

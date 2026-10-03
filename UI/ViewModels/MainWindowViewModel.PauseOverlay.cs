@@ -41,7 +41,7 @@ namespace Mesen.ViewModels
 		//PlayGameLayer: a Play surface is up over the game, so the native picture,
 		//drawn above every Avalonia control, has to step aside for it.
 		private bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
-			|| SelectRomSheet.IsVisible || IsShaderSheetVisible;
+			|| SelectRomSheet.IsVisible || IsShaderSheetVisible || ToolSheet.IsVisible;
 
 		private static readonly HashSet<string> PlaySurfaceProperties = new() {
 			nameof(IsPlayerOverlayVisible), nameof(IsSaveStatesSheetVisible), nameof(IsEnhancementsPanelVisible),
@@ -56,7 +56,7 @@ namespace Mesen.ViewModels
 					UpdateRendererVisibility();
 				}
 			};
-			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet }) {
+			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet }) {
 				sheet.PropertyChanged += (s, e) => {
 					if(e.PropertyName == "IsVisible") {
 						UpdateRendererVisibility();
@@ -291,6 +291,7 @@ namespace Mesen.ViewModels
 			if(SelectRomSheet.IsVisible) {
 				SelectRomSheet.Cancel();
 			}
+			ToolSheet.Close();
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;
