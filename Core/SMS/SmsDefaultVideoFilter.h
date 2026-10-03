@@ -63,6 +63,11 @@ public:
 		InitLookupTable();
 	}
 
+	//ADR-0253 slice W.2: the filter reads its input at _baseFrameInfo.Width and
+	//crops with the overscan the settings report, so a Reveal frame (a Game Gear
+	//frame with its side crop dropped) goes through unchanged.
+	bool AcceptsExtendedFrame() override { return true; }
+
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override
 	{
 		uint16_t* in = ppuOutputBuffer;

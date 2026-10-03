@@ -72,6 +72,9 @@
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
+#include "Gameboy/GbConstants.h"
+#include "Gameboy/GbWidescreenReveal.h"
+#include "SMS/SmsWidescreenReveal.h"
 #include "GBA/GbaWidescreenReveal.h"
 #include "NES/NesWidescreenSupport.h"
 #include "Shared/Video/WidescreenFrameFlow.h"
@@ -3155,6 +3158,521 @@ namespace
 		const uint16_t* next = frames.Finish(standard.data());
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W253b: GB/GBC and Game Gear Reveal (ADR-0253, slice W.2) ---------
+//The GB half of the Reveal: the extra columns are the BG map that wraps around
+//the 160-px picture (and the window layer, which runs to the right edge once it
+//starts on a row), read through the PPU's side-effect-free GbPpu::LcdReadVram
+//only. The fake VRAM below counts both read paths, so "the Reveal never goes
+//through the renderer's own read" is asserted, not assumed.
+//
+//The Game Gear half has no pixels of its own to draw: its picture already IS
+//the VDP's 256-px line with 48 px cropped on each side (SmsConfig's
+//GameGearOverscan), so the slice is the frame-width contract plus the rule
+//that the horizontal crop is dropped while revealing.
+namespace
+{
+	struct RevealFakeGbVram
+	{
+		//The PPU's VRAM as it is addressed: 0x4000 bytes, the CGB bank bit
+		//(0x2000) part of the address, exactly like GbPpu::_vram.
+		uint8_t Data[0x4000] = {};
+		int HookedReads = 0;
+		int LcdReads = 0;
+
+		//GbPpu::ReadVram - the CPU-visible read, counted to prove the Reveal
+		//never goes through it (it fires the debugger's hook, and returns 0xFF
+		//while the LCD is drawing)
+		uint8_t ReadVram(uint16_t addr) { HookedReads++; return Data[addr]; }
+		//GbPpu::LcdReadVram - the renderer's own side-effect-free read, the one
+		//the Reveal is supposed to use
+		uint8_t LcdReadVram(uint16_t addr) { LcdReads++; return Data[addr]; }
+	};
+
+	//A tile's 16 bytes, at the tile's own VRAM address (bank bit included).
+	//The GB interleaves them: two bytes per row (low plane, high plane), the
+	//same layout GbPpu::ClockTileFetcher reads with its Addr / Addr + 1 pair.
+	void GbSetTileAt(RevealFakeGbVram& vram, uint16_t addr, const uint8_t lo[8], const uint8_t hi[8])
+	{
+		for(int i = 0; i < 8; i++) {
+			vram.Data[addr + i * 2] = lo[i];
+			vram.Data[addr + i * 2 + 1] = hi[i];
+		}
+	}
+
+	//One map entry: the tile index in bank 0, the CGB attributes in bank 1
+	void GbSetMapEntry(RevealFakeGbVram& vram, uint16_t mapBase, int col, int row, uint8_t tile, uint8_t attributes = 0)
+	{
+		uint16_t addr = (uint16_t)(mapBase + row * 32 + col);
+		vram.Data[addr] = tile;
+		vram.Data[addr | 0x2000] = attributes;
+	}
+
+	void GbFillMap(RevealFakeGbVram& vram, uint16_t mapBase, uint8_t tile)
+	{
+		for(int row = 0; row < 32; row++) {
+			for(int col = 0; col < 32; col++) {
+				GbSetMapEntry(vram, mapBase, col, row, tile);
+			}
+		}
+	}
+
+	//CGB palette index i reads 0x100 + i, so every colour under test is a
+	//distinct value (the PPU masks the palette entry with 0x7FFF)
+	void GbSetUpRevealPalette(uint16_t pal[32])
+	{
+		for(int i = 0; i < 32; i++) {
+			pal[i] = (uint16_t)(0x100 + i);
+		}
+	}
+
+	GbWidescreenReveal::RowBasis GbRevealBasis(uint16_t scanline = 0, uint8_t scrollX = 0, uint8_t scrollY = 0)
+	{
+		GbWidescreenReveal::RowBasis basis;
+		basis.Scanline = scanline;
+		basis.ScrollX = scrollX;
+		basis.ScrollY = scrollY;
+		basis.CgbEnabled = true;
+		basis.BgEnabled = true;
+		basis.BgTileSelect = true; //tile data at 0x0000
+		basis.BgPalette = 0xE4; //colour c -> shade c
+		return basis;
+	}
+
+	void GbSetUpTiles(RevealFakeGbVram& vram)
+	{
+		uint8_t zero[8] = {};
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		uint8_t col0[8] = { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+		uint8_t row0[8] = { 0xFF, 0, 0, 0, 0, 0, 0, 0 };
+		GbSetTileAt(vram, 1 * 16, ff, zero); //tile 1: colour 1
+		GbSetTileAt(vram, 2 * 16, zero, ff); //tile 2: colour 2
+		GbSetTileAt(vram, 3 * 16, ff, ff); //tile 3: colour 3
+		GbSetTileAt(vram, 4 * 16, col0, zero); //tile 4: colour 1 on fine X 0 only
+		GbSetTileAt(vram, 5 * 16, zero, ff); //tile 5: colour 2
+		GbSetTileAt(vram, 6 * 16, col0, zero); //tile 6: colour 1 on fine X 0 only
+		GbSetTileAt(vram, 7 * 16, row0, zero); //tile 7: colour 1 on fine Y 0 only
+		GbSetTileAt(vram, (1 * 16) | 0x2000, zero, ff); //bank 1's tile 1: colour 2
+	}
+
+	void TestGbRevealWidthContractIsFortyEightColumnsPerSide()
+	{
+		using namespace GbWidescreenReveal;
+		Check(ExtraColumns == 48, "W253b: the GB Reveal adds 48 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 256, "W253b: an extended GB frame is 256 px wide", std::to_string(ExtendedWidth));
+		Check(ExtendedWidth == BgMapWidth, "W253b: the extended GB picture is exactly the 256-px BG map line");
+		Check(ExtraColumns % 8 == 0, "W253b: the GB extra columns are whole 8-px tiles");
+		Check(StandardWidth == GbConstants::ScreenWidth && Height == GbConstants::ScreenHeight, "W253b: the standard GB picture is the console's own 160x144");
+
+		//A GB frame is square-pixel, so 256x144 is exactly 16:9 - not a stretch
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.SquarePixelInAuto = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, 16.0 / 9.0), "W253b: an extended GB frame is exactly 16:9 at square pixels", std::to_string(ratio));
+
+		//A frame without extra columns keeps today's 16:9 stretch
+		AspectRatioMath::Inputs standard = in;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253b: WideScrn on a standard GB frame is unchanged");
+	}
+
+	void TestGbRevealDrawsTheBgMapThatWrapsInBesideThePicture()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		//Map column 26 is the one that wraps in at the picture's left edge
+		//(x = -48 is map x 208), map column 20 the one after x = 159
+		GbSetMapEntry(vram, 0x1800, 26, 0, 2);
+		GbSetMapEntry(vram, 0x1800, 20, 0, 3);
+
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+
+		Check(left[0] == 0x102, "W253b: the leftmost column is the map column that wraps in before the picture", Hex16(left[0]));
+		Check(AllEqual(left + 8, ExtraColumns - 8, 0x101), "W253b: the rest of the left columns are the map's own tiles", Hex16(left[8]));
+		Check(right[0] == 0x103, "W253b: the first column past the picture is the map column after it", Hex16(right[0]));
+		Check(AllEqual(right + 8, ExtraColumns - 8, 0x101), "W253b: the rest of the right columns are the map's own tiles", Hex16(right[8]));
+	}
+
+	void TestGbRevealFollowsScrollAndTheMapRow()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 4);
+		for(int col = 0; col < 32; col++) {
+			GbSetMapEntry(vram, 0x1800, col, 1, 5);
+		}
+
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+		const int32_t sideXs[2] = { -(int32_t)ExtraColumns, (int32_t)StandardWidth };
+
+		//SCX = 5: tile 4 lights its first pixel column, so the revealed columns
+		//light where (SCX + x) & 7 == 0
+		RenderRowSides(GbRevealBasis(0, 5), vram, pal, left, right);
+		bool scrollOk = true;
+		for(int side = 0; side < 2; side++) {
+			const uint16_t* out = side ? right : left;
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				bool lit = out[i] == 0x101;
+				scrollOk &= (lit == (((5 + sideXs[side] + (int32_t)i) & 7) == 0));
+			}
+		}
+		Check(scrollOk, "W253b: fine X shifts the revealed columns with the picture", Hex16(left[0]) + " " + Hex16(left[6]));
+
+		//SCY + the row being drawn pick the map row
+		RenderRowSides(GbRevealBasis(0, 0, 10), vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x102) && AllEqual(right, ExtraColumns, 0x102), "W253b: SCY picks the map row the revealed columns come from", Hex16(left[0]));
+		RenderRowSides(GbRevealBasis(8, 0, 2), vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x102) && AllEqual(right, ExtraColumns, 0x102), "W253b: the row being drawn is added to SCY", Hex16(left[0]));
+
+		//Back in map row 0 the tile boundary falls on x = 0 mod 8
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x101 && left[7] == 0x100 && left[8] == 0x101, "W253b: the revealed columns keep the map's 8-px tile boundaries",
+			Hex16(left[7]) + " " + Hex16(left[8]));
+	}
+
+	void TestGbRevealHonoursTheCgbTileAttributes()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//X flip (attribute bit 5): tile 6 lights fine X 0, so it must move to 7
+		GbSetMapEntry(vram, 0x1800, 26, 0, 6, 0x20);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[7] == 0x101 && left[0] == 0x100, "W253b: the CGB X-flip attribute flips the revealed tile", Hex16(left[0]) + " " + Hex16(left[7]));
+
+		//Y flip (bit 6): tile 7 lights fine Y 0, so SCY 7 must reach it
+		GbSetMapEntry(vram, 0x1800, 26, 0, 7, 0x40);
+		RenderRowSides(GbRevealBasis(0, 0, 7), vram, pal, left, right);
+		Check(left[0] == 0x101, "W253b: the CGB Y-flip attribute flips the revealed tile row", Hex16(left[0]));
+		GbSetMapEntry(vram, 0x1800, 26, 0, 7, 0x00);
+		RenderRowSides(GbRevealBasis(0, 0, 7), vram, pal, left, right);
+		Check(left[0] == 0x100, "W253b: the same tile without the Y flip is transparent at fine Y 7", Hex16(left[0]));
+
+		//Palette bits 0-2: colour 1 in palette 3 is CGB palette entry 13
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x03);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x10D, "W253b: the CGB palette attribute picks the revealed tile's palette", Hex16(left[0]));
+
+		//VRAM bank (bit 3): tile data from bank 1
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x08);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x102, "W253b: the CGB VRAM-bank attribute reads the revealed tile from bank 1", Hex16(left[0]));
+
+		//A DMG frame ignores the whole attribute byte (including the bank bit)
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x2B);
+		RowBasis dmg = GbRevealBasis();
+		dmg.CgbEnabled = false;
+		RenderRowSides(dmg, vram, pal, left, right);
+		Check(left[0] == 0x101, "W253b: a DMG frame ignores the map's attribute byte", Hex16(left[0]));
+	}
+
+	void TestGbRevealUsesTheDmgPaletteShades()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		GbSetTileAt(vram, 0x0800, ff, ff); //tile 0x80 in the 0x1000 + signed area: colour 3
+		GbFillMap(vram, 0x1800, 2);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//BGP 0x1B maps colour c to shade 3 - c, so colour 2 reads pal[1]
+		RowBasis basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgPalette = 0x1B;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: the DMG BGP maps the revealed tile's colour to a shade", Hex16(left[0]));
+
+		//A frozen palette reads colour 0, like the PPU's own reads
+		basis.PaletteBlocked = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0) && AllEqual(right, ExtraColumns, 0), "W253b: a blocked palette reads colour 0, like the PPU", Hex16(left[0]));
+
+		//LCDC.4 clear: tile data at 0x1000 + a signed tile index
+		basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgTileSelect = false;
+		GbFillMap(vram, 0x1800, 0x80);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103), "W253b: LCDC.4 clear addresses the revealed tile as 0x1000 + a signed index", Hex16(left[0]));
+	}
+
+	void TestGbRevealContinuesTheWindowPastThePicturesEdges()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		GbFillMap(vram, 0x1C00, 2);
+		for(int col = 0; col < 32; col++) {
+			GbSetMapEntry(vram, 0x1C00, col, 1, 3);
+		}
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//WX = 166 starts the window on the picture's last pixel (x = 159); the
+		//window runs to the right edge, so every right column is the window's
+		RowBasis basis = GbRevealBasis();
+		basis.WindowOnRow = true;
+		basis.WindowStartX = 166 - 7;
+		basis.WindowTilemapSelect = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x102), "W253b: the window continues past the picture's right edge", Hex16(right[0]));
+		Check(AllEqual(left, ExtraColumns, 0x101), "W253b: a window that starts inside the picture leaves the left columns to the BG", Hex16(left[0]));
+
+		//The window's own row counter picks its map row
+		basis.WindowLine = 9;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x103), "W253b: the window's row counter picks its map row", Hex16(right[0]));
+
+		//WX = 4 starts the window at x = -3: it covers the left columns too
+		basis.WindowLine = 0;
+		basis.WindowStartX = 4 - 7;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, 45, 0x101) && left[45] == 0x102 && left[47] == 0x102,
+			"W253b: a window that starts before the picture covers the left columns too", Hex16(left[44]) + " " + Hex16(left[45]));
+
+		//No window on this row: the BG is what sits beside the picture
+		basis.WindowOnRow = false;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: a row without the window shows the BG on both sides", Hex16(left[0]));
+	}
+
+	void TestGbRevealWindowNeedsTheEnableBitNotJustTheLatches()
+	{
+		using namespace GbWidescreenReveal;
+
+		//Whether the window layer is drawn at all on a row is the PPU's own
+		//condition (GbPpu::ExecCycle): the LCDC.5 enable bit, the WX hit, and
+		//the WY match that holds for the rest of the frame. The two latches
+		//alone are not the window: a game that opens the window on WY and then
+		//clears LCDC.5 for a later row (the usual way to keep a HUD off one
+		//line) leaves both latches set and draws background there. Only the
+		//enable bit tells those rows apart, so the Reveal asks for all three -
+		//taking the PPU's own latch, so the revealed columns can never show a
+		//layer the PPU did not draw.
+		Check(WindowVisible(true, true, true), "W253b: the window is drawn when LCDC.5 is set and WY and WX both hit");
+		Check(!WindowVisible(false, true, true),
+			"W253b: WY matched and WX hit with LCDC.5 cleared is background on that row, not the window");
+		Check(!WindowVisible(true, false, true), "W253b: the window waits for its WX hit");
+		Check(!WindowVisible(true, true, false), "W253b: the window waits for its WY match");
+
+		//The pixels follow the same rule: that row's revealed columns are the
+		//BG, not the window map the two latches alone would point at.
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		GbFillMap(vram, 0x1C00, 2);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		RowBasis basis = GbRevealBasis();
+		basis.WindowStartX = 40 - 7; //the window starts inside the picture
+		basis.WindowTilemapSelect = true; //its own map, so the two layers differ
+		basis.WindowOnRow = WindowVisible(false, true, true);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101),
+			"W253b: a row whose window was switched off beside a WY match shows the BG on the sides", Hex16(right[0]));
+
+		basis.WindowOnRow = WindowVisible(true, true, true);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x102),
+			"W253b: the same row with LCDC.5 set shows the window's own map on the sides", Hex16(right[0]));
+	}
+
+	void TestGbRevealShowsTheBlankColorWhenTheBgLayerIsOff()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//DMG with LCDC.0 cleared: the hardware outputs colour 0 through BGP for
+		//the whole line, so the revealed columns show the same blank colour
+		RowBasis basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgEnabled = false;
+		basis.BgPalette = 0x1B; //colour 0 -> shade 3
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103),
+			"W253b: with the DMG background off the revealed columns show the picture's blank colour", Hex16(left[0]));
+
+		//On CGB, LCDC.0 is the BG priority bit - the map is still drawn
+		basis.CgbEnabled = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101),
+			"W253b: on CGB the map is drawn with LCDC.0 clear (it is the priority bit there)", Hex16(left[0]));
+
+		//The emulator's own layer toggle flattens the line on the CGB too
+		basis.LayerDisabled = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103),
+			"W253b: the emulator's background toggle flattens the revealed columns on the CGB too", Hex16(left[0]));
+	}
+
+	void TestGbRevealNeverUsesTheCpuVisibleVramRead()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		for(uint8_t scrollX = 0; scrollX < 8; scrollX++) {
+			for(uint8_t scrollY = 0; scrollY < 8; scrollY++) {
+				RowBasis basis = GbRevealBasis((uint16_t)(scrollX * 3), scrollX, scrollY);
+				RenderRowSides(basis, vram, pal, left, right);
+
+				basis.WindowOnRow = true;
+				basis.WindowStartX = (int16_t)(scrollX * 20 - 7);
+				basis.WindowLine = scrollY;
+				basis.WindowTilemapSelect = (scrollY & 1) != 0;
+				RenderRowSides(basis, vram, pal, left, right);
+			}
+		}
+
+		Check(vram.HookedReads == 0, "W253b: the revealed columns never use the CPU-visible VRAM read", std::to_string(vram.HookedReads));
+		//6 tiles per side at 4 reads each (map, attribute, two tile planes)
+		Check(vram.LcdReads >= 128 * 40, "W253b: the revealed columns are fetched through the renderer's side-effect-free read", std::to_string(vram.LcdReads));
+	}
+
+	void TestGbRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace GbWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 13 + i / 160) & 0x7FFF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253b: a GB frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		Check(!frames.RowSides(0, left, right), "W253b: with the switch off there are no GB extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253b: with the switch off the GB frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253b: the GB switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right) && left && right, "W253b: a GB row's side columns are writable while active");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = 0x101;
+				right[i] = 0x102;
+			}
+		}
+		Check(!frames.RowSides(144, left, right) && !frames.RowSides(-1, left, right), "W253b: GB rows outside 0-143 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253b: an active GB frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253b: the centre 160 columns of every GB row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, 0x101) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x102), "W253b: a drawn GB row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253b: a GB row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253b: consecutive extended GB frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253b: a GB row drawn last frame is not reused this frame");
+	}
+
+	void TestGameGearRevealShowsTheLineTheViewportCrops()
+	{
+		using namespace SmsWidescreenReveal;
+		Check(ExtraColumns == 48, "W253b: the Game Gear Reveal is the 48 px the viewport crops on each side", std::to_string(ExtraColumns));
+		Check(LineWidth == 256, "W253b: the VDP's line is 256 px and the Game Gear's picture is its centre 160", std::to_string(LineWidth));
+		Check(StandardPictureWidth + 2 * ExtraColumns == LineWidth, "W253b: the frame-width contract holds - Width - 2N is the standard picture");
+		Check(Height == 144, "W253b: the Game Gear's picture is 144 lines tall", std::to_string(Height));
+
+		//The Reveal drops the side crop, so what it reveals is exactly what the
+		//crop was hiding. The shipped "Game Gear" preset is 48 on both sides.
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 48, 48) == 48,
+			"W253b: the revealed Game Gear columns are the ones the configured crop hides");
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 40, 40) == 40,
+			"W253b: a narrower configured crop reveals exactly what it hides", std::to_string(RevealedColumns(true, VideoAspectRatio::Widescreen, 40, 40)));
+		//"Full Frame" (0/0) already shows the whole line - there is nothing hidden
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 0, 0) == 0,
+			"W253b: a Game Gear already showing the whole VDP line has nothing to reveal");
+		//ExtendedColumns is one number for both sides, so a crop that differs per
+		//side is not a Reveal the contract can describe - and that preset ("Full
+		//Frame First Column", 8 left) already shows all but those 8 px.
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 8, 0) == 0,
+			"W253b: a crop that differs per side is not a Reveal the frame contract can describe");
+		Check(RevealedColumns(true, VideoAspectRatio::Auto, 48, 48) == 0, "W253b: the Game Gear's picture is untouched without WideScrn");
+		Check(RevealedColumns(false, VideoAspectRatio::Widescreen, 48, 48) == 0, "W253b: the Master System does not reveal (its screen is the whole VDP line)");
+
+		//The side crop is what hides the extra columns
+		Check(HorizontalOverscan(48, true) == 0, "W253b: a revealing Game Gear frame applies no horizontal overscan");
+		Check(HorizontalOverscan(48, false) == 48, "W253b: a standard Game Gear frame keeps the configured 48-px crop");
+		Check(HorizontalOverscan(0, false) == 0, "W253b: a frame with no configured crop is untouched");
+
+		//What the frame is shown with, from the crop and the switch alone. The
+		//rule never asks the VideoDecoder which frame it is holding: a filter or
+		//the border layer that cannot take the wide frame makes the decoder keep
+		//the standard 160-px centre, which is what the crop itself produces, and
+		//a crop applied on top of that centre would cut into the picture and
+		//read past the end of the row. Dropping the crop and reporting the
+		//extended columns are the same decision, so a filter that takes the wide
+		//frame and one that takes the centre both end up with no crop.
+		OverscanDimensions ggCrop = { 48, 48, 24, 24 };
+		OverscanDimensions revealed = GameGearOverscan(ggCrop, VideoAspectRatio::Widescreen);
+		Check(revealed.Left == 0 && revealed.Right == 0,
+			"W253b: a Game Gear frame with the Reveal on has no horizontal crop, whether the wide frame or the standard centre is the one shown");
+		Check(revealed.Top == 24 && revealed.Bottom == 24, "W253b: the Reveal is horizontal - the vertical overscan is left alone");
+		OverscanDimensions plain = GameGearOverscan(ggCrop, VideoAspectRatio::Auto);
+		Check(plain.Left == 48 && plain.Right == 48, "W253b: with WideScrn off the configured crop is applied untouched");
+		OverscanDimensions lopsided = { 8, 0, 0, 0 };
+		OverscanDimensions lopsidedShown = GameGearOverscan(lopsided, VideoAspectRatio::Widescreen);
+		Check(lopsidedShown.Left == 8 && lopsidedShown.Right == 0,
+			"W253b: a crop that differs per side is not a Reveal - the sides keep their own crop", std::to_string(lopsidedShown.Left) + "/" + std::to_string(lopsidedShown.Right));
+
+		//The whole 256-px line at the Game Gear's 6:5 pixel aspect
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = LineWidth;
+		in.BaseHeight = Height;
+		in.GameGearPar = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, (256.0 / 144.0) * 6.0 / 5.0), "W253b: a revealed Game Gear frame is shown at the 6:5 pixel aspect, not stretched", std::to_string(ratio));
+		Check(ratio > 16.0 / 9.0, "W253b: the revealed Game Gear picture is wider than the 16:9 stretch it replaces", std::to_string(ratio));
 	}
 }
 
@@ -15721,6 +16239,19 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+
+	TestGbRevealWidthContractIsFortyEightColumnsPerSide();
+	TestGbRevealDrawsTheBgMapThatWrapsInBesideThePicture();
+	TestGbRevealFollowsScrollAndTheMapRow();
+	TestGbRevealHonoursTheCgbTileAttributes();
+	TestGbRevealUsesTheDmgPaletteShades();
+	TestGbRevealContinuesTheWindowPastThePicturesEdges();
+	TestGbRevealWindowNeedsTheEnableBitNotJustTheLatches();
+	TestGbRevealShowsTheBlankColorWhenTheBgLayerIsOff();
+	TestGbRevealNeverUsesTheCpuVisibleVramRead();
+	TestGbRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestGameGearRevealShowsTheLineTheViewportCrops();
+
 
 	TestGbaRevealWidthContractIsTwentyTwoColumnsPerSide();
 	TestGbaRevealContentRuleFollowsTheMapWidth();

@@ -429,6 +429,8 @@
     <ClInclude Include="NES\BaseNesPpu.h" />
     <ClInclude Include="NES\NesScanlineTraceValidity.h" />
     <ClInclude Include="NES\NesWidescreenReveal.h" />
+    <ClInclude Include="Gameboy\GbWidescreenReveal.h" />
+    <ClInclude Include="SMS\SmsWidescreenReveal.h" />
     <ClInclude Include="NES\NesWidescreenSupport.h" />
     <ClInclude Include="NES\BisqwitNtscFilter.h" />
     <ClInclude Include="NES\Debugger\DummyNesCpu.h" />

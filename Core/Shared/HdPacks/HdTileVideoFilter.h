@@ -28,6 +28,12 @@ protected:
 public:
 	HdTileVideoFilter(Emulator* emu, HdTilePack* hdPack);
 
+	//ADR-0253: the GB provenance array (_frame.Data) is one entry per pixel of
+	//the 160x144 picture, so a Reveal frame would index it at the wrong stride.
+	//The GB pack path keeps the standard centre; the SMS subclass, whose
+	//provenance is 256 wide, accepts the frame instead.
+	bool AcceptsExtendedFrame() override { return false; }
+
 	FrameInfo GetFrameInfo() override;
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override;
 };

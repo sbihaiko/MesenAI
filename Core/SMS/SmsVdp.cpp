@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SMS/SmsVdp.h"
 #include "SMS/SmsConsole.h"
+#include "SMS/SmsWidescreenReveal.h"
 #include "SMS/SmsCpu.h"
 #include "SMS/SmsControlManager.h"
 #include "SMS/SmsMemoryManager.h"
@@ -703,6 +704,18 @@ void SmsVdp::ProcessEndOfScanline()
 
 		RenderedFrame frame(_currentOutputBuffer, 256, 240, 1.0, _state.FrameCount, _console->GetControlManager()->GetPortStates());
 		frame.Data = _currentHdScreenInfo;
+		//ADR-0253 slice W.2: on a Game Gear with the Reveal on, the columns the
+		//console's 160-px viewport crops on each side are part of this frame -
+		//they are already drawn here, so the frame reports them instead of being
+		//widened (SmsWidescreenReveal.h). The count is the configured crop:
+		//EmuSettings::GetOverscan drops the same crop, both driven by this.
+		OverscanDimensions ggOverscan = _emu->GetSettings()->GetSmsConfig().GameGearOverscan;
+		uint32_t revealed = SmsWidescreenReveal::RevealedColumns(
+			_console->GetModel() == SmsModel::GameGear, _emu->GetSettings()->GetVideoConfig().AspectRatio,
+			ggOverscan.Left, ggOverscan.Right);
+		if(revealed) {
+			frame.ExtendedColumns = revealed;
+		}
 		bool rewinding = _emu->GetRewindManager()->IsRewinding();
 		_emu->GetVideoDecoder()->UpdateFrame(frame, rewinding, rewinding);
 

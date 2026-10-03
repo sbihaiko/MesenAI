@@ -251,6 +251,12 @@
     <ClInclude Include="NES\NesWidescreenReveal.h">
       <Filter>NES</Filter>
     </ClInclude>
+    <ClInclude Include="Gameboy\GbWidescreenReveal.h">
+      <Filter>Gameboy</Filter>
+    </ClInclude>
+    <ClInclude Include="SMS\SmsWidescreenReveal.h">
+      <Filter>SMS</Filter>
+    </ClInclude>
     <ClInclude Include="NES\NesWidescreenSupport.h">
       <Filter>NES</Filter>
     </ClInclude>
