@@ -159,7 +159,18 @@ can be exercised by real xunit tests without Avalonia or the native
   goes through `CoreRequestWaits` (`UI/Logic`): `CloseEmu` dismisses the BIOS
   sheet and closes the waits before `EmuApi.Stop`, and another open or a
   power off dismisses the sheet (#658). The first-run sheet never cancels an
-  application/OS shutdown close and writes nothing then (#661).
+  application/OS shutdown close and writes nothing then (#661). Every open
+  starts with no BIOS cancel (`PlayBiosSheetViewModel.ClearCancelled`, #674),
+  and a failure is reported only for the latest open
+  (`PlayLoadFailure.IsCurrentOpen`), so a cancel never outlives its open. The
+  recent-game path (Continue, a recent card) reports W-P14 too (#676): the
+  core's `LoadRecentGame` answers nothing, so no game running afterwards is a
+  failure, and `PlayRecentGameFailure` reads the `.rgd`'s `RomInfo.txt` to
+  say `Missing` (the `.rgd` or its ROM is gone) or classify the ROM like any
+  open. A recent card stays enabled while its `.rgd` exists. An OS file open
+  (`App.OpenFromOs`, macOS open-documents) waits for `MainWindow.Startup`
+  through `RunWhenStarted`, so a cold launch never loads before
+  `EmuApi.InitializeEmu` (#681).
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
@@ -260,7 +271,10 @@ can be exercised by real xunit tests without Avalonia or the native
   `InMemoryByokKeyStore`. `ByokJobLauncher.Start` reads the key when a job
   starts, passes it to the child through its environment only (refused on
   argv), drops it from the `ProcessStartInfo` after the start and redacts it
-  from every output line; no custody type keeps it in a field. Guarded by
+  from every output line; no custody type keeps it in a field. A key is
+  stored and used trimmed (`ByokKey.Normalize`, in every `Write` and in
+  `Start`), the bare key `scripts/jev_client.py` strips to, so redaction
+  matches what the child prints (#681). Guarded by
   `UI.Tests/Byok/*` (argv, output, start-failure text as
   `MesenMsgBox.ShowException` prints it, no fields; the live Keychain
   round-trip is opt-in, `MESENAI_BYOK_LIVE=1`) and
@@ -380,9 +394,13 @@ can be exercised by real xunit tests without Avalonia or the native
   `ZipArchiveEntry.Open`. After a successful auto-install
   (`CommunityPackInstallStatus.Installed`),
   `CommunityPackInstallService` power-cycles (`LoadRomHelper.PowerCycle`)
-  when the same ROM is still loaded, so `HdPacks/<rom>/` applies without a
-  second manual load; `OnGameLoaded` already skips power cycles, so this
-  does not re-fetch. A ROM switch during the download does not power-cycle.
+  when the load it captured is still loaded (`CommunityPackLoadTarget.
+  IsStillLoaded`, the W-P16 rule: open generation + SHA-1, #675), so
+  `HdPacks/<rom>/` applies without a second manual load; `OnGameLoaded`
+  already skips power cycles, so this does not re-fetch. A ROM switch, or
+  the same game reopened (Continue), during the install does not
+  power-cycle. A throw between the gate's `TryEnterOrDefer` and `RunAsync`
+  releases the gate (#681).
   #657: the auto-install and Restore capture the load
   (`CommunityPackInstallCoordinator.CaptureLoad` → host-free
   `CommunityPackLoadTarget`: SHA-1, whole-file SHA-1, sibling folder, ROM

@@ -101,7 +101,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		return root.FindAll<Control>().Count(c => c.IsOnScreen() && c is Button or RadioButton or ComboBox or CheckBox && c.Focusable);
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) ShowPlay()
+	private static void PrepareShowPlay()
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
@@ -109,7 +109,11 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		prefs.ConfirmExitResetPower = false;
 		prefs.PauseWhenInBackground = false;
 		prefs.PauseWhenInMenusAndConfig = false;
+	}
 
+	private static (MainWindow Window, MainWindowViewModel Model) ShowPlay()
+	{
+		PrepareShowPlay();
 		MainWindow window = new();
 		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);

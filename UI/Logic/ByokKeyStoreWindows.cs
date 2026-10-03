@@ -49,7 +49,7 @@ public sealed class WindowsCredentialByokKeyStore : IByokKeyStore
 
 	public void Write(ByokVendor vendor, string key)
 	{
-		ArgumentException.ThrowIfNullOrEmpty(key);
+		key = ByokKey.Normalize(key);
 		byte[] bytes = Encoding.UTF8.GetBytes(key);
 		IntPtr blob = Marshal.AllocHGlobal(bytes.Length);
 		IntPtr target = Marshal.StringToHGlobalUni(vendor.ServiceName);

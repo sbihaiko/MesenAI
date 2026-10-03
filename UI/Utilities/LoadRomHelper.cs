@@ -10,6 +10,7 @@ using Mesen.Windows;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -72,6 +73,7 @@ namespace Mesen.Utilities
 				return;
 			}
 			bool keepsHome = BeginLoad(Path.GetFileNameWithoutExtension(string.IsNullOrEmpty(romPath.InnerFile) ? romPath.FileName : romPath.InnerFile));
+			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
 
 			Task.Run(() => {
 				//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side
@@ -79,23 +81,32 @@ namespace Mesen.Utilities
 					ConfigManager.Config.RecentFiles.AddRecentFile(romPath, patchPath);
 					ConfigManager.Config.Save();
 				} else if(keepsHome) {
-					ReportLoadFailure(romPath);
+					ReportLoadFailure(romPath, openGeneration);
 					return;
 				}
 				ShowSelectionOnScreenAfterError();
 			});
 		}
 
-		//W-P14: one sentence per cause. A load the user stopped by cancelling the
-		//BIOS sheet is not a broken file, and a failure while another game keeps
-		//running stays today's on-screen message (the home is not on screen).
-		private static void ReportLoadFailure(ResourcePath romPath)
+		private static void ReportLoadFailure(ResourcePath romPath, int openGeneration)
 		{
 			bool isArchive = FolderHelper.IsArchiveFile(romPath.Path);
 			string shownName = isArchive && !string.IsNullOrEmpty(romPath.InnerFile) ? Path.GetFileName(romPath.InnerFile) : Path.GetFileName(romPath.Path);
 			LoadFailureCause cause = PlayLoadFailure.Classify(shownName, FolderHelper.IsRomFile(romPath.Path), isArchive, !string.IsNullOrEmpty(romPath.InnerFile));
+			ReportLoadFailure(cause, shownName, openGeneration);
+		}
+
+		//W-P14: one sentence per cause. A load the user stopped by cancelling the
+		//BIOS sheet is not a broken file, and a failure while another game keeps
+		//running stays today's on-screen message (the home is not on screen).
+		//#674: an open that another open has replaced reports nothing.
+		private static void ReportLoadFailure(LoadFailureCause cause, string shownName, int openGeneration)
+		{
 			Dispatcher.UIThread.Post(() => {
 				MainWindowViewModel model = MainWindowViewModel.Instance;
+				if(!PlayLoadFailure.IsCurrentOpen(openGeneration, model.OpenGeneration)) {
+					return;
+				}
 				bool cancelled = model.BiosSheet.ConsumeCancelled();
 				if(EmuApi.IsRunning() || !PlayLoadFailure.ShowsAlert(cancelled)) {
 					return;
@@ -110,15 +121,48 @@ namespace Mesen.Utilities
 			if(!MainWindowViewModel.Instance.ConfirmOpen(filename, () => LoadRecentGame(filename, forceLoadState))) {
 				return;
 			}
-			BeginLoad(Path.GetFileNameWithoutExtension(filename));
+			bool keepsHome = BeginLoad(Path.GetFileNameWithoutExtension(filename));
+			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
 
 			Task.Run(() => {
 				//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side
-				if(File.Exists(filename)) {
+				bool recentFileExists = File.Exists(filename);
+				if(recentFileExists) {
 					EmuApi.LoadRecentGame(filename, !forceLoadState && ConfigManager.Config.Preferences.GameSelectionScreenMode == GameSelectionMode.PowerOn);
+				}
+				//#676: the core's LoadRecentGame answers nothing - no game running
+				//now means the recent game did not open (W-P14, like any open).
+				if(keepsHome && !EmuApi.IsRunning()) {
+					ReportRecentGameFailure(filename, recentFileExists, openGeneration);
+					return;
 				}
 				ShowSelectionOnScreenAfterError();
 			});
+		}
+
+		private static void ReportRecentGameFailure(string recentFile, bool recentFileExists, int openGeneration)
+		{
+			RecentGameRom? rom = recentFileExists ? ReadRecentGameRom(recentFile) : null;
+			bool romFileExists = rom != null && File.Exists(rom.Path);
+			(LoadFailureCause cause, string shownName) = PlayRecentGameFailure.Classify(recentFile, recentFileExists, rom,
+				romFileExists, rom != null && FolderHelper.IsRomFile(rom.Path), rom != null && FolderHelper.IsArchiveFile(rom.Path));
+			ReportLoadFailure(cause, shownName, openGeneration);
+		}
+
+		//The ROM a .rgd names (RomInfo.txt), or null when it cannot be read.
+		private static RecentGameRom? ReadRecentGameRom(string recentFile)
+		{
+			try {
+				using ZipArchive zip = ZipFile.OpenRead(recentFile);
+				ZipArchiveEntry? entry = zip.GetEntry("RomInfo.txt");
+				if(entry == null) {
+					return null;
+				}
+				using StreamReader reader = new(entry.Open());
+				return PlayRecentGameFailure.ParseRomInfo(reader.ReadToEnd());
+			} catch(Exception ex) when(ex is IOException || ex is InvalidDataException || ex is UnauthorizedAccessException) {
+				return null;
+			}
 		}
 
 		private static void ShowSelectionOnScreenAfterError()

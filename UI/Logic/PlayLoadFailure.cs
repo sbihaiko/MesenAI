@@ -11,7 +11,9 @@ public enum LoadFailureCause
 	//A zip/7z with no game in it.
 	ZipWithoutGame,
 	//A known console, but the loader failed: damaged or cut short.
-	Damaged
+	Damaged,
+	//#676: a recent game whose file was moved, renamed or deleted.
+	Missing
 }
 
 public static class PlayLoadFailure
@@ -31,6 +33,12 @@ public static class PlayLoadFailure
 	//A load that stopped because the user cancelled W-P13 is not a broken file:
 	//the status line already says which BIOS the game needs.
 	public static bool ShowsAlert(bool biosPromptCancelled) => !biosPromptCancelled;
+
+	//#674: a failure is reported for the open that started it. Once another
+	//open has started, the home, the alert and a BIOS-sheet cancel belong to
+	//that one, so the earlier load's failure is dropped (and must not consume
+	//the newer open's cancel).
+	public static bool IsCurrentOpen(int loadOpenGeneration, int currentOpenGeneration) => loadOpenGeneration == currentOpenGeneration;
 
 	//The home stays through a load (and carries the alert) only where it is on
 	//screen: Player mode's Play workspace. Under Remaster or Share, or in

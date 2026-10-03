@@ -102,14 +102,29 @@ namespace Mesen
 			if(e is not FileActivatedEventArgs fileArgs) {
 				return;
 			}
+			MainWindow? window = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainWindow;
 			foreach(IStorageItem file in fileArgs.Files) {
 				if(file.TryGetLocalPath() is string localPath) {
-					Dispatcher.UIThread.Post(() => {
-						//G.1 (PRD Part B §13.6, rule 11): a ROM opened from the OS lands in Play.
-						MainWindowViewModel.Instance?.LandInPlayForOsOpen();
-						LoadRomHelper.LoadFile(localPath);
-					});
+					OpenFromOs(window, localPath);
 				}
+			}
+		}
+
+		//#681: on a cold launch the event can arrive before MainWindow.Startup
+		//has initialized the core, so the open waits for it (the window's own
+		//command-line files open first). Public for
+		//UI.HeadlessTests/PlayEdgeFlowsLoadPathsTests; the production caller is OnActivated.
+		public static void OpenFromOs(MainWindow? window, string localPath)
+		{
+			Action open = () => {
+				//G.1 (PRD Part B §13.6, rule 11): a ROM opened from the OS lands in Play.
+				MainWindowViewModel.Instance?.LandInPlayForOsOpen();
+				LoadRomHelper.LoadFile(localPath);
+			};
+			if(window != null) {
+				window.RunWhenStarted(open);
+			} else {
+				Dispatcher.UIThread.Post(open);
 			}
 		}
 	}

@@ -88,6 +88,9 @@ namespace Mesen.Tests.Byok
 				Assert.Equal("first-value", store.Read(vendor));
 				store.Write(vendor, "second-value-é");
 				Assert.Equal("second-value-é", store.Read(vendor));
+				//#681: stored as the bare key the child uses.
+				store.Write(vendor, " third-value\n");
+				Assert.Equal("third-value", store.Read(vendor));
 				Assert.True(store.Remove(vendor));
 				Assert.Null(store.Read(vendor));
 				Assert.False(store.Remove(vendor));

@@ -43,6 +43,14 @@ internal static class MainWindowStartup
 		WaitFor(window.Startup, "MainWindow startup");
 	}
 
+	//#681: for a test that observes the startup itself. The test waits for
+	//the startup; SettleShownWindows waits for it too, in case the test failed first.
+	public static void ShowUnstarted(this MainWindow window)
+	{
+		Shown.Add(window);
+		window.Show();
+	}
+
 	//Runs on the test's UI thread, before Avalonia tears its application down.
 	internal static void SettleShownWindows()
 	{
@@ -54,6 +62,7 @@ internal static class MainWindowStartup
 		try {
 			WaitUntil(() => !StateGridEntry.ThumbnailsInFlight, "The recent-game previews");
 			foreach(MainWindow window in Shown) {
+				WaitFor(window.Startup, "MainWindow startup");
 				if(window.DataContext is MainWindowViewModel model) {
 					WaitFor(model.Remaster.Measuring, "The Remaster gate measurement");
 					WaitFor(model.ShareGateRefresh, "The Share refresh after the gate measurement");

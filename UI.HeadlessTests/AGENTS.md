@@ -92,7 +92,9 @@ survive (restore the probe in `Dispose`).
   thread cannot access this object". `ShowStarted` waits for the startup;
   the assembly-level `SettleMainWindows` attribute waits for the rest after
   each test (`MainWindowStartup.cs`). New background work a test triggers
-  that posts back needs the same wait.
+  that posts back needs the same wait. A test that observes the startup
+  itself uses `ShowUnstarted` and waits for `Startup` on its own; the
+  settle step waits for it too.
 
 - A headless test must detect the defect it targets. If it would pass
   without the XAML under test, it is a property-getter assertion in

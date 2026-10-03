@@ -30,8 +30,9 @@ namespace Mesen.ViewModels
 		private string _pendingUnknown = "";
 		private TaskCompletionSource<bool>? _request;
 
-		//Set when the last request ended with Cancel - the load that follows
-		//fails, and that is not a broken file (PlayLoadFailure.ShowsAlert).
+		//Set when the last request ended with Cancel or Dismiss - the load that
+		//follows fails, and that is not a broken file (PlayLoadFailure.ShowsAlert).
+		//Cleared by the next open, so it never outlives the open it ended (#674).
 		public bool LastRequestCancelled { get; private set; }
 
 		//The status-line clause a Cancel leaves: "Zelda needs the FDS BIOS".
@@ -152,5 +153,8 @@ namespace Mesen.ViewModels
 			LastRequestCancelled = false;
 			return cancelled;
 		}
+
+		//#674: every open starts with no cancel (MainWindowViewModel.OnOpenStarted).
+		public void ClearCancelled() => LastRequestCancelled = false;
 	}
 }
