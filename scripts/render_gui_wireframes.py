@@ -717,10 +717,12 @@ def w_p3():
     gx = (x0 + x1) / 2 - gw / 2
     c.scene((gx, y0 + 1, gx + gw, y1 - 1), 0)
     c.lights()
-    tb = (x1 - 330, y1 - 80, x1 - 30, y1 - 36)
+    # ADR-0251: during the first three game starts the toast ends with the
+    # way into W-P4 (the binding of the device that started the game).
+    tb = (x1 - 450, y1 - 80, x1 - 30, y1 - 36)
     c.hud(tb, 12)
     c.icon("check", tb[0] + 22, tb[1] + 22, 14, (52, 199, 89))
-    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures", 13.5, 600, CARD, "lm")
+    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures · Esc for the menu", 13.5, 600, CARD, "lm")
     c.caption("W-P3", "Play — in game, no chrome; one toast for the pack", 0)
     return c
 
