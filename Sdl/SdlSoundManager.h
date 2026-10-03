@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Sdl/include/Sdl2.h"
 #include "Core/Shared/Audio/BaseSoundManager.h"
+#include "Core/Shared/Audio/AsyncAudioDeviceOpen.h"
 
 class Emulator;
 
@@ -23,7 +24,7 @@ public:
 
 private:
 	vector<string> GetAvailableDeviceInfo();
-	bool InitializeAudio(uint32_t sampleRate, bool isStereo);
+	bool InitializeAudio(uint32_t sampleRate, bool isStereo, bool openInBackground);
 	void Release();
 
 	static void FillAudioBuffer(void* userData, uint8_t* stream, int len);
@@ -33,7 +34,8 @@ private:
 
 private:
 	Emulator* _emu;
-	SDL_AudioDeviceID _audioDeviceID;
+	SDL_AudioDeviceID _audioDeviceID = 0;
+	AsyncAudioDeviceOpen _deviceOpen;
 	string _deviceName;
 	bool _needReset = false;
 

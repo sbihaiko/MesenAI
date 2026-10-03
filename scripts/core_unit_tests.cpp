@@ -88,6 +88,7 @@
 #include "NES/HdPacks/OggLoopStream.h"
 #include "NES/HdPacks/OggMixer.h"
 #include "Shared/Audio/ReplacementMuteMask.h"
+#include "Shared/Audio/AsyncAudioDeviceOpen.h"
 #include "Utilities/Base64.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/JsonReader.h"
@@ -96,11 +97,15 @@
 #include "Utilities/sha256.h"
 #include "Utilities/Video/LibrashaderUtilities.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -12900,8 +12905,102 @@ void TestRomHashResolveSurvivesNoConsole()
 	Check(hash.empty() && fallbackCalls == 1, "rom hash: a console that was unloaded returns an empty string");
 }
 
+//#733: a device that takes seconds to answer must not hold the caller - the
+//emulation thread - for those seconds. The fake device below sleeps the way
+//the CoreAudio open of a sleeping monitor did (~10 s in the report, 600 ms
+//here), then fails, so the default device is the one that ends up open.
+namespace
+{
+	constexpr int SlowDeviceMs = 600;
+
+	long long ElapsedMs(std::chrono::steady_clock::time_point since)
+	{
+		return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - since).count();
+	}
+
+	AsyncAudioDeviceOpen::OpenFn SlowNamedDeviceThenFastDefault(std::shared_ptr<std::vector<std::string>> calls)
+	{
+		return [calls](const std::string& name) -> uint32_t {
+			calls->push_back(name);
+			if(!name.empty()) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(SlowDeviceMs));
+				return 0;
+			}
+			return 7;
+		};
+	}
+}
+
+void TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice()
+{
+	std::vector<std::string> calls;
+	std::vector<std::string> logs;
+	auto open = [&](const std::string& name) -> uint32_t { calls.push_back(name); return name.empty() ? 5 : 0; };
+	auto log = [&](const std::string& message) { logs.push_back(message); };
+
+	uint32_t id = AsyncAudioDeviceOpen::OpenWithFallback("LC34G55T", open, log);
+	Check(id == 5 && calls.size() == 2 && calls[0] == "LC34G55T" && calls[1].empty(), "audio open: a named device that fails falls back to the default device");
+	Check(logs.size() == 1 && logs[0].find("'LC34G55T'") != std::string::npos, "audio open: the fallback is logged once, naming the device");
+
+	calls.clear();
+	logs.clear();
+	auto openNamed = [&](const std::string& name) -> uint32_t { calls.push_back(name); return 3; };
+	id = AsyncAudioDeviceOpen::OpenWithFallback("Speakers", openNamed, log);
+	Check(id == 3 && calls.size() == 1 && logs.empty(), "audio open: a named device that opens is the only one tried");
+
+	calls.clear();
+	auto openNone = [&](const std::string& name) -> uint32_t { calls.push_back(name); return 0; };
+	id = AsyncAudioDeviceOpen::OpenWithFallback("", openNone, log);
+	Check(id == 0 && calls.size() == 1 && logs.empty(), "audio open: the default device is tried once, with no fallback message");
+}
+
+void TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice()
+{
+	auto calls = std::make_shared<std::vector<std::string>>();
+	AsyncAudioDeviceOpen opener;
+
+	auto start = std::chrono::steady_clock::now();
+	opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [](const std::string&) {});
+	long long startMs = ElapsedMs(start);
+	printf("      Start() returned after %lld ms (fake device answers after %d ms)\n", startMs, SlowDeviceMs);
+	Check(startMs < 100, "audio open: Start() returns before a slow device answers", std::to_string(startMs) + " ms");
+
+	uint32_t id = 99;
+	Check(opener.IsPending() && !opener.TryTake(id) && id == 99, "audio open: TryTake() reports nothing while the device is still opening");
+
+	while(!opener.TryTake(id) && ElapsedMs(start) < 5000) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	}
+	Check(id == 7 && !opener.IsPending(), "audio open: TryTake() hands over the fallback device once the open finished", "id " + std::to_string(id));
+	Check(calls->size() == 2, "audio open: the background open tried the named device, then the default");
+}
+
+void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
+{
+	auto calls = std::make_shared<std::vector<std::string>>();
+	std::atomic<bool> logged(false);
+	{
+		AsyncAudioDeviceOpen opener;
+		opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [&](const std::string&) { logged = true; });
+		opener.Wait();
+		uint32_t id = 0;
+		Check(opener.TryTake(id) && id == 7, "audio open: Wait() blocks until the open finished, then TryTake() has the device");
+	}
+	{
+		//Destroyed mid-open: the destructor joins instead of leaving a thread
+		//that writes into freed memory.
+		AsyncAudioDeviceOpen opener;
+		opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [](const std::string&) {});
+	}
+	Check(logged && calls->size() == 4, "audio open: an opener destroyed mid-open finishes the open first");
+}
+
 int main()
 {
+	TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice();
+	TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice();
+	TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway();
+
 	TestMepPackManagerGettersReturnCopies();
 	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
