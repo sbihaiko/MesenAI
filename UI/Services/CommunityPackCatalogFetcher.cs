@@ -158,6 +158,18 @@ namespace Mesen.Services
 			return new CommunityCatalogFetchOutcome(response.StatusCode, response.ETag, body);
 		}
 
+		//#736: the catalog copy on disk (the last fetch's), read without the
+		//network - Play's community-pack offer must not contact a host when the
+		//player turned auto-install off. Null when there is no usable copy.
+		public static CommunityPackCatalog? ReadCachedCatalog()
+		{
+			try {
+				return File.Exists(CatalogCachePath) ? TryParseCatalog(File.ReadAllText(CatalogCachePath)) : null;
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				return null;
+			}
+		}
+
 		//A catalog is real only when it parses AND carries a `packs` array - an
 		//explicit JSON "packs": null is as unusable as a non-JSON body.
 		private static CommunityPackCatalog? TryParseCatalog(string? body)
