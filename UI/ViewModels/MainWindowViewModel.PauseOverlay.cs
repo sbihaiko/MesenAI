@@ -288,6 +288,9 @@ namespace Mesen.ViewModels
 			if(PackDepSheet.IsVisible) {
 				PackDepSheet.CloseOnEsc();
 			}
+			if(SelectRomSheet.IsVisible) {
+				SelectRomSheet.Cancel();
+			}
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;

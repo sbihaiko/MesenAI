@@ -113,6 +113,25 @@ public partial class PlayerNoClassicDialogTests
 		Assert.Empty(window.OwnedWindows);
 	}
 
+	//CodeRabbit on #752: leaving Player with the sheet up cancels it, as every
+	//other Player surface closes - Esc no longer reaches it in Advanced.
+	[AvaloniaFact]
+	public void Leaving_player_mode_cancels_the_archive_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player);
+		UseAsMainWindow(window);
+		Task<ResourcePath?> open = SelectRomWindow.Show(ArchiveWithTwoGames());
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.SelectRomSheet.IsVisible);
+
+		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+		Dispatcher.UIThread.RunJobs();
+		WaitFor(() => open.IsCompleted, "leaving Player left the archive open pending");
+		Assert.Null(open.Result);
+		Assert.False(model.SelectRomSheet.IsVisible);
+	}
+
 	//Advanced keeps the classic window.
 	[AvaloniaFact]
 	public void An_archive_in_advanced_mode_keeps_the_classic_window()
