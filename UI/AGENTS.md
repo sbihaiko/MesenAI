@@ -534,9 +534,11 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 - **Scope.** Every style is under the `player` class. `MainWindow` binds
   `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
-  `ShellStatusLine`, plus the Share views themselves (`ShareWorkspace`,
-  `ShareRecordingStrip`, whose DataContext is Share, hence a cast binding);
-  nothing else carries it. A component class outside the
+  `ShellStatusLine`, on Remaster's `RemasterWorkspaceHost` and
+  `RemasterRecordingStripHost` (which also carry `remaster`), and on the
+  Share views themselves (`ShareWorkspace`, `ShareRecordingStrip`, whose
+  DataContext is Share, hence a cast binding); nothing else carries it. A
+  component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
   `FontSize` or `Foreground` on a control beats every style: put the classic
@@ -571,22 +573,21 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     `Border.badge` (background = a badge colour) + `PathIcon`,
     `PathIcon.chevron` docked right, `TextBlock.value` docked right,
     `TextBlock.title`. `Button.row.text` is a row without a badge.
-  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.title` 40,
-    `.hero` 56, `.large` 80) with a white `PathIcon`; tint by default.
-  - Steps: `Border.step` (28 px tint circle, its `TextBlock` the white
-    number) and `Rectangle.step-line` (2 px SEP connector) - W-H3.
-  - HUD: `Border.hud` (dark strip, white text, `TextBlock.secondary` in
-    HUD grey) and `Button.hud` (28 px grey, white semibold) - W-R2, W-H4.
+  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.xlarge` 40
+    below, `.hero` 56, `.large` 80) with a white `PathIcon`; tint by default.
+  - Steps: `Border.step` (below; `.step.large` is W-H3's 28 px circle with a
+    13 px number, declared after the wave 2 block) and `Rectangle.step-line`
+    (2 px SEP connector) - W-H3.
   - Surfaces: `Border.card` (`.hero` radius 16), `Border.sheet`,
     `Border.overlay-card`, `Border.scrim`, `Border.page` (WINBG), tokens
-    `PlayerPopoverBrush`/`PlayerPopoverBorderBrush` and shadows
+    `PlayerPopoverBrush`/`PlayerPopoverBorderBrush` (below) and shadows
     `PlayerShadowPopover`/`PlayerShadowMenu` for popovers and menus,
     `Separator.hairline`. Card, sheet and overlay-card set
     `TextElement.Foreground` to TEXT themselves (#716), so text on them is
     readable whatever its parent sets; build a new sheet on `Border.sheet`
     rather than a local dark background.
-  - Text: `TextBlock.large-title`, `page-title` (26 bold), `title1`,
-    `title2`, `title3`, `title4` (16 semibold),
+  - Text: `TextBlock.large-title`, `title1`, `title2`, `title3` (for 26
+    bold and 16 semibold use `display` and `card-title`, below),
     `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
     `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
     (TEXT3), `tint`.
@@ -598,8 +599,29 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
-    `ChevronDown`, `ChevronLeft`, `Record`, `Replay`, `Stop`, `More`,
-    `Check`, `ArrowUpRight`, `Lock`, `UpDown`.
+    `ChevronDown`, `ChevronLeft`, `Record`, `Replay`, `More`, `Check`,
+    `Lock`, `UpDown`, `Warning`, `Stop`, `ArrowUpRight`, `Sparkle` (alias
+    of `Enhancements`).
+  - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
+    - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
+      `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),
+      `paragraph` (13.5); tokens `PlayerFontDisplay`, `SheetTitle`,
+      `CardTitle`, `Lead`.
+    - Warning: `Border.warning` (soft orange `PlayerWarningFill`, radius 12,
+      brown `PlayerWarningText` foreground), `TextBlock.warning`,
+      `Button.plain.warning`, `PathIcon.warning` (orange 16).
+    - `Border.badge.xlarge` (40, radius 10); `Border.step` (22 tint circle
+      with a white 12.5 bold number: the "1 RECORD" step marker).
+    - `Button.chip` (FILL chip, radius 8, 32 high: the project menu).
+    - `ProgressBar` (6 high, FILL track, tint bar).
+    - `Border.popover` / `FlyoutPresenter.popover` (`PlayerPopover` fill,
+      hairline, radius 12, shadow `PlayerShadowPopover`); use
+      `FlyoutPresenterClasses="popover"` on a `Flyout`.
+    - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
+      white text; `secondary` / `tint` text inside it read
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      Stop); `PlayerGameBackgroundBrush` (black behind the game).
+    - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
   order (the headless suites find controls by name). Swap local colours and
   sizes for classes; add a render test next to

@@ -56,12 +56,6 @@
 		<Color x:Key="PlayerTintSoftPlayColor">#DBECFF</Color>
 		<Color x:Key="PlayerTintSoftRemasterColor">#F4E7FA</Color>
 		<Color x:Key="PlayerTintSoftShareColor">#E3F7E8</Color>
-		<!-- Popovers and menus (W-S2, W-S3) and the recording HUD (W-R2, W-H4) -->
-		<Color x:Key="PlayerPopoverColor">#FCFCFD</Color>
-		<Color x:Key="PlayerPopoverBorderColor">#D7D7DC</Color>
-		<Color x:Key="PlayerHudColor">#1E1E20</Color>
-		<Color x:Key="PlayerHudButtonColor">#5A5A5F</Color>
-		<Color x:Key="PlayerHudText2Color">#C8C8CD</Color>
 
 		<SolidColorBrush x:Key="PlayerTextBrush" Color="{StaticResource PlayerTextColor}" />
 		<SolidColorBrush x:Key="PlayerText2Brush" Color="{StaticResource PlayerText2Color}" />
@@ -96,21 +90,14 @@
 		<SolidColorBrush x:Key="PlayerPinkBrush" Color="{StaticResource PlayerPinkColor}" />
 		<SolidColorBrush x:Key="PlayerGrayBrush" Color="{StaticResource PlayerGrayColor}" />
 		<SolidColorBrush x:Key="PlayerScrimBrush" Color="#5A000000" />
-		<SolidColorBrush x:Key="PlayerPopoverBrush" Color="{StaticResource PlayerPopoverColor}" />
-		<SolidColorBrush x:Key="PlayerPopoverBorderBrush" Color="{StaticResource PlayerPopoverBorderColor}" />
-		<SolidColorBrush x:Key="PlayerHudBrush" Color="{StaticResource PlayerHudColor}" />
-		<SolidColorBrush x:Key="PlayerHudButtonBrush" Color="{StaticResource PlayerHudButtonColor}" />
-		<SolidColorBrush x:Key="PlayerHudText2Brush" Color="{StaticResource PlayerHudText2Color}" />
 
 		<!-- Type: Inter (Decision 4), the renders' sizes. Weights: 400 Regular,
 		     500 Medium, 590-650 SemiBold, 700 Bold. -->
 		<FontFamily x:Key="PlayerFontFamily">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
 		<x:Double x:Key="PlayerFontLargeTitle">28</x:Double>
-		<x:Double x:Key="PlayerFontPageTitle">26</x:Double>
 		<x:Double x:Key="PlayerFontTitle1">22</x:Double>
 		<x:Double x:Key="PlayerFontTitle2">20</x:Double>
 		<x:Double x:Key="PlayerFontTitle3">17</x:Double>
-		<x:Double x:Key="PlayerFontTitle4">16</x:Double>
 		<x:Double x:Key="PlayerFontHeadline">15</x:Double>
 		<x:Double x:Key="PlayerFontCallout">13.5</x:Double>
 		<x:Double x:Key="PlayerFontBody">13</x:Double>
@@ -145,7 +132,6 @@
 		<BoxShadows x:Key="PlayerShadowTile">0 2 5 0 #28000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowSheet">0 10 22 0 #5A000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowOverlay">0 12 26 0 #6E000000</BoxShadows>
-		<BoxShadows x:Key="PlayerShadowPopover">0 8 18 0 #5A000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowMenu">0 6 14 0 #50000000</BoxShadows>
 		<BoxShadows x:Key="PlayerFocusRing">0 0 0 3 #BEDAFF</BoxShadows>
 
@@ -169,10 +155,7 @@
 		<StreamGeometry x:Key="PlayerIconChevronLeft">M15.0,4.0 L13.4,2.4 L5.8,10 L13.4,17.6 L15.0,16.0 L9.0,10 Z</StreamGeometry>
 		<!-- A replay: the renderer's "film" (its sprocket holes vanish in a white glyph) -->
 		<StreamGeometry x:Key="PlayerIconReplay">M3.9,3.5 h12.2 a2.4,2.4 0 0 1 2.4,2.4 v8.2 a2.4,2.4 0 0 1 -2.4,2.4 h-12.2 a2.4,2.4 0 0 1 -2.4,-2.4 v-8.2 a2.4,2.4 0 0 1 2.4,-2.4 Z</StreamGeometry>
-		<!-- ↗ opens the browser (rule 7: the glyph is the confirmation) -->
-		<StreamGeometry x:Key="PlayerIconArrowUpRight">M8.7,3.7 H16.3 V11.3 H13.7 V8.14 L5.92,15.92 L4.08,14.08 L11.86,6.3 H8.7 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconLock">M4,10.6 a1.6,1.6 0 0 1 1.6,-1.6 h8.8 a1.6,1.6 0 0 1 1.6,1.6 v5.8 a1.6,1.6 0 0 1 -1.6,1.6 h-8.8 a1.6,1.6 0 0 1 -1.6,-1.6 Z M6,9 V7 a4,4 0 0 1 8,0 V9 H11.6 V7 a1.6,1.6 0 0 0 -3.2,0 V9 Z</StreamGeometry>
-		<StreamGeometry x:Key="PlayerIconStop">M6.1,4.5 h7.8 a1.6,1.6 0 0 1 1.6,1.6 v7.8 a1.6,1.6 0 0 1 -1.6,1.6 h-7.8 a1.6,1.6 0 0 1 -1.6,-1.6 v-7.8 a1.6,1.6 0 0 1 1.6,-1.6 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconUpDown">M5.7,7.7 L10,3.4 L14.3,7.7 L12.9,9.1 L10,6.2 L7.1,9.1 Z M5.7,12.3 L7.1,10.9 L10,13.8 L12.9,10.9 L14.3,12.3 L10,16.6 Z</StreamGeometry>
 
 		<ControlTemplate x:Key="PlayerButtonTemplate" TargetType="Button">
@@ -248,11 +231,6 @@
 		<Setter Property="FontSize" Value="{StaticResource PlayerFontLargeTitle}" />
 		<Setter Property="FontWeight" Value="Bold" />
 	</Style>
-	<!-- A workspace page's title (W-H1-W-H3, W-R0: 26 px bold) -->
-	<Style Selector=".player TextBlock.page-title">
-		<Setter Property="FontSize" Value="{StaticResource PlayerFontPageTitle}" />
-		<Setter Property="FontWeight" Value="Bold" />
-	</Style>
 	<Style Selector=".player TextBlock.title1">
 		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle1}" />
 		<Setter Property="FontWeight" Value="Bold" />
@@ -264,10 +242,6 @@
 	<Style Selector=".player TextBlock.title3">
 		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle3}" />
 		<Setter Property="FontWeight" Value="Bold" />
-	</Style>
-	<Style Selector=".player TextBlock.title4">
-		<Setter Property="FontSize" Value="{StaticResource PlayerFontTitle4}" />
-		<Setter Property="FontWeight" Value="SemiBold" />
 	</Style>
 	<Style Selector=".player TextBlock.headline">
 		<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
@@ -507,16 +481,8 @@
 		<Setter Property="Width" Value="46" />
 		<Setter Property="Height" Value="46" />
 	</Style>
-	<!-- .title 40 (a sheet's title badge, W-H4), .hero 56 (a hero card, W-H1) -->
-	<Style Selector=".player Border.badge.title">
-		<Setter Property="Width" Value="40" />
-		<Setter Property="Height" Value="40" />
-		<Setter Property="CornerRadius" Value="10" />
-	</Style>
-	<Style Selector=".player Border.badge.title > PathIcon">
-		<Setter Property="Width" Value="23" />
-		<Setter Property="Height" Value="23" />
-	</Style>
+	<!-- .hero 56 (a hero card, W-H1); the 40 px sheet badge (W-H4) is
+	     badge.xlarge, in the "wave 2: Remaster" block. -->
 	<Style Selector=".player Border.badge.hero">
 		<Setter Property="Width" Value="56" />
 		<Setter Property="Height" Value="56" />
@@ -527,59 +493,11 @@
 		<Setter Property="Height" Value="32.5" />
 	</Style>
 
-	<!-- ============================================================ steps -->
-	<!-- <Border Classes="step"><TextBlock Text="1" /></Border>: a numbered step
-	     (W-H3), a 28 px circle in the tint with a 13 px bold white number. -->
-	<Style Selector=".player Border.step">
-		<Setter Property="Width" Value="28" />
-		<Setter Property="Height" Value="28" />
-		<Setter Property="CornerRadius" Value="14" />
-		<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
-		<Setter Property="VerticalAlignment" Value="Center" />
-	</Style>
-	<Style Selector=".player Border.step > TextBlock">
-		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
-		<Setter Property="FontWeight" Value="Bold" />
-		<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
-		<Setter Property="HorizontalAlignment" Value="Center" />
-		<Setter Property="VerticalAlignment" Value="Center" />
-	</Style>
-	<!-- The line from one step's circle down to the next: <Rectangle Classes="step-line" /> -->
+	<!-- The line from one step's circle down to the next (W-H3): <Rectangle Classes="step-line" /> -->
 	<Style Selector=".player Rectangle.step-line">
 		<Setter Property="Width" Value="2" />
 		<Setter Property="Fill" Value="{StaticResource PlayerSeparatorBrush}" />
 		<Setter Property="HorizontalAlignment" Value="Center" />
-	</Style>
-
-	<!-- ============================================================ HUD -->
-	<!-- Over or above a running game (W-R2, W-H4 recording): a dark bar with
-	     white text, Border.hud, and its grey Button.hud (Stop). -->
-	<Style Selector=".player Border.hud">
-		<Setter Property="Background" Value="{StaticResource PlayerHudBrush}" />
-		<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerCardBrush}" />
-		<Setter Property="Padding" Value="16 10" />
-	</Style>
-	<Style Selector=".player Border.hud TextBlock.secondary">
-		<Setter Property="Foreground" Value="{StaticResource PlayerHudText2Brush}" />
-	</Style>
-	<Style Selector=".player Button.hud">
-		<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
-		<Setter Property="Height" Value="28" />
-		<Setter Property="MinWidth" Value="0" />
-		<Setter Property="Padding" Value="13 0" />
-		<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
-		<Setter Property="BorderThickness" Value="0" />
-		<Setter Property="Background" Value="{StaticResource PlayerHudButtonBrush}" />
-		<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
-		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
-		<Setter Property="FontWeight" Value="SemiBold" />
-		<Setter Property="VerticalContentAlignment" Value="Center" />
-	</Style>
-	<Style Selector=".player Button.hud:pointerover /template/ Border#PART_Background">
-		<Setter Property="Opacity" Value="0.88" />
-	</Style>
-	<Style Selector=".player Button.hud:focus-visible /template/ Border#PART_Background">
-		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
 	</Style>
 
 	<!-- ============================================================ surfaces -->
@@ -799,5 +717,208 @@
 		<Setter Property="Height" Value="11" />
 		<Setter Property="Margin" Value="0 0 6 0" />
 		<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+	</Style>
+
+	<!-- ============================================================ wave 2: Remaster -->
+	<!-- Components the Remaster screens (W-R0 ... W-R7) brought in; reusable by any
+	     Player screen. Their tokens are literals render_gui_wireframes.py draws
+	     with (remaster_start, remaster_project, w_r2, popover, w_r6). -->
+	<Styles>
+		<Styles.Resources>
+			<!-- remaster_start's banner and W-R6's warning box: (255,244,225) / (150,85,0) -->
+			<Color x:Key="PlayerWarningFillColor">#FFF4E1</Color>
+			<Color x:Key="PlayerWarningTextColor">#965500</Color>
+			<!-- W-R1's project chip, figure tiles, W-R5's popovers -->
+			<Color x:Key="PlayerChipFillColor">#EAEAEE</Color>
+			<Color x:Key="PlayerTileFillColor">#F6F6F8</Color>
+			<Color x:Key="PlayerTileBorderColor">#E6E6EB</Color>
+			<Color x:Key="PlayerPopoverColor">#FCFCFD</Color>
+			<Color x:Key="PlayerPopoverBorderColor">#D7D7DC</Color>
+			<!-- Canvas.hud(): (30,30,32,225) over the game, and the text on it -->
+			<Color x:Key="PlayerHudColor">#E11E1E20</Color>
+			<Color x:Key="PlayerHudText2Color">#C8C8CD</Color>
+			<Color x:Key="PlayerHudTintTextColor">#D6AAF5</Color>
+			<Color x:Key="PlayerHudButtonColor">#5A5A5F</Color>
+			<SolidColorBrush x:Key="PlayerWarningFillBrush" Color="{StaticResource PlayerWarningFillColor}" />
+			<SolidColorBrush x:Key="PlayerWarningTextBrush" Color="{StaticResource PlayerWarningTextColor}" />
+			<SolidColorBrush x:Key="PlayerChipFillBrush" Color="{StaticResource PlayerChipFillColor}" />
+			<SolidColorBrush x:Key="PlayerTileFillBrush" Color="{StaticResource PlayerTileFillColor}" />
+			<SolidColorBrush x:Key="PlayerTileBorderBrush" Color="{StaticResource PlayerTileBorderColor}" />
+			<SolidColorBrush x:Key="PlayerPopoverBrush" Color="{StaticResource PlayerPopoverColor}" />
+			<SolidColorBrush x:Key="PlayerPopoverBorderBrush" Color="{StaticResource PlayerPopoverBorderColor}" />
+			<SolidColorBrush x:Key="PlayerHudBrush" Color="{StaticResource PlayerHudColor}" />
+			<SolidColorBrush x:Key="PlayerHudText2Brush" Color="{StaticResource PlayerHudText2Color}" />
+			<SolidColorBrush x:Key="PlayerHudTintTextBrush" Color="{StaticResource PlayerHudTintTextColor}" />
+			<SolidColorBrush x:Key="PlayerHudButtonBrush" Color="{StaticResource PlayerHudButtonColor}" />
+			<!-- The game's letterbox behind a strip over it (w_r2's window) -->
+			<SolidColorBrush x:Key="PlayerGameBackgroundBrush" Color="#000000" />
+			<!-- Sizes the renders draw between the ramp's steps -->
+			<x:Double x:Key="PlayerFontDisplay">26</x:Double>
+			<x:Double x:Key="PlayerFontSheetTitle">18</x:Double>
+			<x:Double x:Key="PlayerFontCardTitle">16</x:Double>
+			<x:Double x:Key="PlayerFontLead">14</x:Double>
+			<BoxShadows x:Key="PlayerShadowPopover">0 6 14 0 #50000000</BoxShadows>
+			<BoxShadows x:Key="PlayerShadowHud">0 4 12 0 #50000000</BoxShadows>
+			<StreamGeometry x:Key="PlayerIconWarning">F1 M10,1.5 L19,18 L1,18 Z M9,7 L11,7 L10.7,13 L9.3,13 Z M9,14.5 L11,14.5 L11,16.5 L9,16.5 Z</StreamGeometry>
+			<StreamGeometry x:Key="PlayerIconStop">M4,4 L16,4 L16,16 L4,16 Z</StreamGeometry>
+			<StreamGeometry x:Key="PlayerIconArrowUpRight">M5.4,16 L4,14.6 L12.6,6 L7,6 L7,4 L16,4 L16,13 L14,13 L14,7.4 Z</StreamGeometry>
+			<StaticResource x:Key="PlayerIconSparkle" ResourceKey="PlayerIconEnhancements" />
+		</Styles.Resources>
+
+		<!-- More of the type ramp: display 26 bold (a workspace's empty-state
+		     title), sheet-title 18 bold, card-title 16 semibold, emphasis 14
+		     semibold (a card's first line), lead 14 (an intro paragraph),
+		     paragraph 13.5 (sheet and banner prose). -->
+		<Style Selector=".player TextBlock.display">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontDisplay}" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player TextBlock.sheet-title">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSheetTitle}" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player TextBlock.card-title">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCardTitle}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector=".player TextBlock.emphasis">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontLead}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector=".player TextBlock.lead">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontLead}" />
+		</Style>
+		<Style Selector=".player TextBlock.paragraph">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+		</Style>
+
+		<!-- warning: the soft-orange inline banner (W-R0b, W-R6), never a dialog.
+		     Its text is the warning brown; a `plain warning` button too. -->
+		<Style Selector=".player Border.warning">
+			<Setter Property="Background" Value="{StaticResource PlayerWarningFillBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+			<Setter Property="Padding" Value="16 12" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+		</Style>
+		<Style Selector=".player TextBlock.warning">
+			<Setter Property="Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+		</Style>
+		<Style Selector=".player Button.plain.warning">
+			<Setter Property="Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+		</Style>
+		<Style Selector=".player PathIcon.warning">
+			<Setter Property="Data" Value="{StaticResource PlayerIconWarning}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerOrangeBrush}" />
+			<Setter Property="Width" Value="16" />
+			<Setter Property="Height" Value="16" />
+		</Style>
+
+		<!-- badge.xlarge: remaster_start's 40 px card badges -->
+		<Style Selector=".player Border.badge.xlarge">
+			<Setter Property="Width" Value="40" />
+			<Setter Property="Height" Value="40" />
+			<Setter Property="CornerRadius" Value="10" />
+		</Style>
+		<Style Selector=".player Border.badge.xlarge > PathIcon">
+			<Setter Property="Width" Value="23" />
+			<Setter Property="Height" Value="23" />
+		</Style>
+
+		<!-- step: W-R1's numbered tint circle (22 px, 12.5 bold white) -->
+		<Style Selector=".player Border.step">
+			<Setter Property="Width" Value="22" />
+			<Setter Property="Height" Value="22" />
+			<Setter Property="CornerRadius" Value="11" />
+			<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+		<Style Selector=".player Border.step > TextBlock">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+
+		<!-- chip: W-R1's project-name menu button (FILL-ish, radius 8) -->
+		<Style Selector=".player Button.chip">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Background" Value="{StaticResource PlayerChipFillBrush}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Height" Value="32" />
+			<Setter Property="Padding" Value="8 0 10 0" />
+			<Setter Property="Cursor" Value="Hand" />
+		</Style>
+		<Style Selector=".player Button.chip:pointerover /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=".player Button.chip:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+
+		<!-- progress: 6 px, FILL track, tint bar (Canvas.progress) -->
+		<Style Selector=".player ProgressBar">
+			<Setter Property="Height" Value="6" />
+			<Setter Property="MinHeight" Value="6" />
+			<Setter Property="CornerRadius" Value="3" />
+			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+			<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+			<Setter Property="BorderThickness" Value="0" />
+		</Style>
+
+		<!-- popover: W-R5's light bubble, radius 12 (a Border, or a Flyout with
+		     FlyoutPresenterClasses="popover"). -->
+		<Style Selector=".player Border.popover">
+			<Setter Property="Background" Value="{StaticResource PlayerPopoverBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerPopoverBorderBrush}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+			<Setter Property="Padding" Value="16 12 16 16" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
+		</Style>
+		<Style Selector=".player FlyoutPresenter.popover">
+			<Setter Property="Background" Value="{StaticResource PlayerPopoverBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerPopoverBorderBrush}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+			<Setter Property="Padding" Value="16 12 16 16" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
+		</Style>
+		<Style Selector=".player Border.popover">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowPopover}" />
+		</Style>
+
+		<!-- hud: the dark pill over the game (W-R2), radius 12, white text. A
+		     `primary hud` button is the grey Stop. -->
+		<Style Selector=".player Border.hud">
+			<Setter Property="Background" Value="{StaticResource PlayerHudBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowHud}" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=".player Border.hud TextBlock.secondary">
+			<Setter Property="Foreground" Value="{StaticResource PlayerHudText2Brush}" />
+		</Style>
+		<Style Selector=".player Border.hud TextBlock.tint">
+			<Setter Property="Foreground" Value="{StaticResource PlayerHudTintTextBrush}" />
+		</Style>
+		<Style Selector=".player Button.primary.hud">
+			<Setter Property="Background" Value="{StaticResource PlayerHudButtonBrush}" />
+		</Style>
+	</Styles>
+
+	<!-- step.large: W-H3's 28 px step circle with a 13 px number. It follows
+	     the "wave 2: Remaster" block so it beats Border.step (22 px) there. -->
+	<Style Selector=".player Border.step.large">
+		<Setter Property="Width" Value="28" />
+		<Setter Property="Height" Value="28" />
+		<Setter Property="CornerRadius" Value="14" />
+	</Style>
+	<Style Selector=".player Border.step.large > TextBlock">
+		<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
 	</Style>
 </Styles>
