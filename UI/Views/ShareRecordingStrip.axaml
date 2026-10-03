@@ -4,6 +4,7 @@
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:v="using:Mesen.Views"
 	xmlns:l="using:Mesen.Localization"
 	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="44"
 	x:DataType="vm:ShareWorkspaceViewModel"
@@ -13,12 +14,40 @@
 	rest of the window inside Share (as W-R2); this strip is the one pill, plus
 	the same Stop as W-R2 for a mouse. It sits above the game, not over it,
 	because the native renderer draws above Avalonia content.-->
-	<Border Name="ShareRecordingStripBorder" Background="#202020" Padding="12 6">
+	<!--ADR-0249: in Player mode the strip is W-R2's HUD (Border.hud, red dot,
+	white semibold pill, grey Button.hud Stop); Advanced keeps the classic one.-->
+	<UserControl.Styles>
+		<Style Selector="v|ShareRecordingStrip:not(.player) Border#ShareRecordingStripBorder">
+			<Setter Property="Background" Value="#202020" />
+			<Setter Property="Padding" Value="12 6" />
+		</Style>
+		<Style Selector="v|ShareRecordingStrip:not(.player) TextBlock#ShareRecordingPill">
+			<Setter Property="Foreground" Value="White" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="v|ShareRecordingStrip:not(.player) Ellipse#ShareRecordingDot">
+			<Setter Property="Fill" Value="#FF3B30" />
+		</Style>
+		<Style Selector="v|ShareRecordingStrip:not(.player) PathIcon">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="v|ShareRecordingStrip.player Ellipse#ShareRecordingDot">
+			<Setter Property="Fill" Value="{StaticResource PlayerRedBrush}" />
+		</Style>
+		<Style Selector="v|ShareRecordingStrip.player TextBlock#ShareRecordingPill">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+	</UserControl.Styles>
+	<Border Name="ShareRecordingStripBorder" Classes="hud">
 		<DockPanel>
-			<Button Name="ShareStopRecordingButton" DockPanel.Dock="Right" Content="{l:Translate btnStopReplay}" Click="OnStop" />
-			<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-				<TextBlock Text="●" Foreground="#FF3B30" VerticalAlignment="Center" />
-				<TextBlock Name="ShareRecordingPill" Text="{Binding RecordingPill}" Foreground="White" FontWeight="Bold" VerticalAlignment="Center" />
+			<Button Name="ShareStopRecordingButton" DockPanel.Dock="Right" Classes="hud" Click="OnStop">
+				<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconStop}" /><TextBlock Text="{l:Translate btnStopReplay}" /></StackPanel>
+			</Button>
+			<StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+				<Ellipse Name="ShareRecordingDot" Width="10" Height="10" VerticalAlignment="Center" />
+				<TextBlock Name="ShareRecordingPill" Text="{Binding RecordingPill}" VerticalAlignment="Center" />
 			</StackPanel>
 		</DockPanel>
 	</Border>

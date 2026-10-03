@@ -50,14 +50,18 @@ internal static class PlayerRender
 	//One pixel of the frame, in device pixels (the headless scale is 1).
 	public static Color Pixel(Bitmap frame, int x, int y)
 	{
-		byte[] bgra = new byte[4];
-		GCHandle pin = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+		byte[] raw = new byte[4];
+		GCHandle pin = GCHandle.Alloc(raw, GCHandleType.Pinned);
 		try {
 			frame.CopyPixels(new PixelRect(x, y, 1, 1), pin.AddrOfPinnedObject(), 4, 4);
 		} finally {
 			pin.Free();
 		}
-		return Color.FromArgb(bgra[3], bgra[2], bgra[1], bgra[0]);
+		//Skia's native order differs per platform (RGBA on macOS arm64,
+		//BGRA elsewhere); a grey pixel reads the same either way, a tint does not.
+		return frame.Format == Avalonia.Platform.PixelFormat.Rgba8888
+			? Color.FromArgb(raw[3], raw[0], raw[1], raw[2])
+			: Color.FromArgb(raw[3], raw[2], raw[1], raw[0]);
 	}
 
 	public static void AssertPixel(Color expected, Bitmap frame, int x, int y, int tolerance = 3)
