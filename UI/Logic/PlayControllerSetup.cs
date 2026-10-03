@@ -226,7 +226,8 @@ public sealed class ControllerSetupSession
 	public IReadOnlyList<SetupButton> Steps => _steps;
 	public IReadOnlyDictionary<SetupButton, ushort> Bindings => _bindings;
 	public SetupButton? CurrentStep => StepIndex < _steps.Count ? _steps[StepIndex] : null;
-	public double Progress => _steps.Count == 0 ? 1 : (double)StepIndex / _steps.Count;
+	//W-P15: the bar counts the step on screen ("Step 1 of 8" = 1/8 full).
+	public double Progress => _steps.Count == 0 ? 1 : (double)Math.Min(StepIndex + 1, _steps.Count) / _steps.Count;
 
 	public ControllerSetupSession(int device, IReadOnlyList<SetupButton> steps, TimeSpan now)
 	{

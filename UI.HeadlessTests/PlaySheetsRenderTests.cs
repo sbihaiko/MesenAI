@@ -18,6 +18,7 @@ using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.Services;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Mesen.Windows;
 using Xunit;
 
@@ -89,9 +90,12 @@ public class PlaySheetsRenderTests : IDisposable
 			System.Threading.Thread.Sleep(20);
 		}
 		//A game is running behind the overlay's sheets; W-P13/W-P14 sit on the home.
+		//The overlay pauses it: in the app EmuApi.Pause() comes back as the
+		//GamePaused notification, which sets IsGamePaused (the shell bar's input).
 		if(overlay) {
-			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+			model.RomInfo = new RomInfo() { RomPath = "/roms/Contra (USA).nes", ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 			model.OpenPauseOverlay();
+			model.IsGamePaused = true;
 		}
 		Settle(window);
 		return (window, model);
@@ -162,11 +166,42 @@ public class PlaySheetsRenderTests : IDisposable
 
 	private static Bitmap Render(Window window, string name, Border sheet)
 	{
+		//The renders keep the shell bar and the status line around the scrim.
+		AssertShellChrome(window);
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, name);
 		Point inside = sheet.TranslatePoint(new Point(sheet.Bounds.Width - 6, sheet.Bounds.Height / 2), window)!.Value;
 		AssertPixel(Card, frame, inside);
 		return frame;
+	}
+
+	private static void AssertShellChrome(Window window)
+	{
+		Assert.True(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen(), "the shell bar is hidden behind the sheet");
+		Assert.True(window.FindNamed<Border>("ShellStatusLine").IsOnScreen(), "the status line is hidden behind the sheet");
+	}
+
+	//W-P5 on first start (final audit): the picker opens by itself over the
+	//running, un-enhanced game - nothing pauses it - and the render still
+	//draws the shell bar and the status line around its scrim.
+	[AvaloniaFact]
+	public void First_start_pack_picker_keeps_the_shell_bar()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(overlay: false);
+		model.RomInfo = new RomInfo() { RomPath = "/roms/Contra (USA).nes", ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		Settle(window);
+		Assert.False(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
+
+		Assert.True(model.EvaluatePlayerPackPicker(ThreePacks, Sha1));
+		Settle(window);
+		Assert.True(window.FindNamed<Border>("PlayerPackPicker").IsOnScreen());
+		Assert.False(model.IsGamePaused);
+		AssertShellChrome(window);
+
+		model.DismissPlayerPackPicker();
+		Settle(window);
+		Assert.False(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
 	}
 
 	//W-P5: option cards (selected = soft blue + tint outline), Cancel and Use
@@ -397,6 +432,11 @@ public class PlaySheetsRenderTests : IDisposable
 		Assert.Equal("Inter", slotTitle.FontFamily.Name);
 		//The grid's own close button: the window holds more than one StateGrid.
 		Assert.True(grid.FindNamed<Button>("StateGridCloseButton").IsOnScreen());
+		//Player copy (final audit): not Mesen's "Load State Menu" / "Slot #1" / "<empty>".
+		Assert.Equal("Load a Slot", title.Text);
+		Assert.Equal("Slot 1", slotTitle.Text);
+		Assert.Equal("Empty", slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("subtitle")).Text);
+		Assert.Equal("Auto-save", slots[10].FindAll<TextBlock>().First(t => t.Classes.Contains("title")).Text);
 
 		Bitmap frame = Render(window, "slot-grid", sheet);
 		//An empty slot is a FILL tile, not the classic black picture.

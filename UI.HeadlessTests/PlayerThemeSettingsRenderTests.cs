@@ -389,6 +389,8 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Assert.NotEqual(PlayTint, PlayerRender.SolidColor(keys[1].Background));
 			ProgressBar progress = window.FindNamed<ProgressBar>("ControllerSetupProgress");
 			Assert.Contains("track", progress.Classes);
+			//"Step 1 of 8" over a bar one eighth full (final audit: it was empty).
+			Assert.Equal(1.0 / 8, progress.Value, 3);
 			Assert.Equal(PlayTint, PlayerRender.SolidColor(progress.Foreground));
 			AssertButton(window.FindNamed<Button>("ControllerSetupSkip"), 36, 11, 14, Card);
 			AssertButton(window.FindNamed<Button>("ControllerSetupCancel"), 36, 11, 14, Card);

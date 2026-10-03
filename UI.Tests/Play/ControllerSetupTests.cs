@@ -139,6 +139,22 @@ namespace Mesen.Tests.Play
 
 		private static ControllerSetupSession NewSession() => new(1, ControllerSetupSteps.For(SetupConsole.Nes), TimeSpan.Zero);
 
+		//W-P15 draws "Step 1 of 8" over a bar one eighth full: the bar counts
+		//the step on screen, so it is never empty while a step is asked for.
+		[Fact]
+		public void The_progress_bar_counts_the_step_on_screen()
+		{
+			ControllerSetupSession s = NewSession();
+			Assert.Equal(1.0 / 8, s.Progress, 6);
+			s.Skip(TimeSpan.FromSeconds(1));
+			Assert.Equal(2.0 / 8, s.Progress, 6);
+			for(int i = 0; i < 7; i++) {
+				s.Skip(TimeSpan.FromSeconds(2 + i));
+			}
+			Assert.Equal(SetupState.Done, s.State);
+			Assert.Equal(1.0, s.Progress, 6);
+		}
+
 		[Fact]
 		public void The_button_that_opened_the_sheet_must_be_released_first()
 		{

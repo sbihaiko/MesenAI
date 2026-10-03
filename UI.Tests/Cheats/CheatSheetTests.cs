@@ -133,6 +133,26 @@ namespace Mesen.Tests.Cheats
 			Assert.Empty(CheatSheet.SearchGamesByName(Db, " "));
 		}
 
+		//W-P11: a bundled row of the loaded copy says where it comes from, and
+		//a recording note is added after it; a refused row shows only its reason.
+		[Fact]
+		public void Bundled_rows_say_they_come_from_the_cheat_list()
+		{
+			CheatSheetRow row = Rows(Array.Empty<StoredCheat>()).First(r => r.Source == CheatRowSource.ThisCopy);
+			Assert.Equal("From the cheat list", CheatSheet.FromListMark);
+			Assert.Equal(CheatSheet.FromListMark, row.Note);
+
+			CheatDbGame ramGame = new("RAM (USA)", "00", new[] { new CheatDbCode("Lives", "0436:09") });
+			CheatSheetRow allowed = Assert.Single(CheatSheet.BuildRows(ConsoleType.Nes, ramGame, false, Array.Empty<StoredCheat>(), true, ""));
+			Assert.Equal("From the cheat list · allowed while recording art", allowed.Note);
+		}
+
+		[Fact]
+		public void The_replay_footnote_is_a_sentence()
+		{
+			Assert.Equal("Cheats you have on are recorded in a shared replay.", CheatSheet.ReplayNote);
+		}
+
 		[Fact]
 		public void Entries_picked_by_name_are_marked_as_made_for_another_copy()
 		{

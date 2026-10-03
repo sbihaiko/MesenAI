@@ -20,6 +20,7 @@ namespace Mesen.ViewModels
 		private readonly bool _isMacOS;
 		private bool _gameLoaded;
 		private bool _paused;
+		private bool _sheetOpen;
 		private string _gameName = "";
 		private string _packName = "";
 		private RemasterActivity _remasterActivity;
@@ -91,10 +92,11 @@ namespace Mesen.ViewModels
 			RefreshChrome();
 		}
 
-		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName)
+		public void UpdateGameState(bool gameLoaded, bool paused, string gameName, string packName, bool sheetOpen = false)
 		{
 			_gameLoaded = gameLoaded;
 			_paused = paused;
+			_sheetOpen = sheetOpen;
 			_gameName = gameName ?? "";
 			_packName = packName ?? "";
 			RefreshChrome();
@@ -125,7 +127,7 @@ namespace Mesen.ViewModels
 
 		private void RefreshChrome()
 		{
-			IsBarVisible = WorkspaceShell.IsBarVisible(_state.Active, _gameLoaded, _paused);
+			IsBarVisible = WorkspaceShell.IsBarVisible(_state.Active, _gameLoaded, _paused, _sheetOpen);
 			HasGame = _gameLoaded;
 			StatusText = ShellStatusLine.Classify(_gameLoaded, _paused, _packName) switch {
 				ShellStatusKind.Playing => ResourceHelper.GetMessage("ShellStatusPlaying", _gameName),
