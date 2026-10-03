@@ -115,6 +115,18 @@ namespace Mesen.Tests.Remaster
 			Assert.Equal(expected, RemasterScreen.FormatElapsed(TimeSpan.FromSeconds(seconds)));
 		}
 
+		//W-R2's "318 new shapes · 2 screens captured": hidden while the core's
+		//coverage report is all zero (off NES, or nothing drawn yet).
+		[Theory]
+		[InlineData(0u, 0u, false)]
+		[InlineData(318u, 2u, true)]
+		[InlineData(5u, 0u, true)]
+		[InlineData(0u, 1u, true)]
+		public void The_pill_shows_its_counters_once_the_core_reports_any(uint tilesSeen, uint screensSeen, bool shown)
+		{
+			Assert.Equal(shown, RemasterScreen.ShowsRecordingCounters(tilesSeen, screensSeen));
+		}
+
 		[Theory]
 		[InlineData(Workspace.Play, RemasterActivity.Recording, true)]
 		[InlineData(Workspace.Share, RemasterActivity.Job, true)]

@@ -204,8 +204,10 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		Assert.Empty(shown);
 		Assert.False(window.FindNamed<StackPanel>("RemasterJobCard").IsOnScreen());
 		Assert.True(window.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen());
-		Assert.Equal("⚠ 3 problems stopped the build.", window.FindNamed<TextBlock>("RemasterBuildProblemsTitle").Text);
-		string[] rows = window.FindNamed<ItemsControl>("RemasterBuildProblemList").FindAll<TextBlock>().Select(t => t.Text ?? "").ToArray();
+		//This host is Advanced's (no `player` scope): the original ⚠ title and caption-led rows.
+		Assert.Equal("⚠ 3 problems stopped the build.", window.FindNamed<TextBlock>("RemasterBuildProblemsClassicTitle").Text);
+		Assert.True(window.FindNamed<TextBlock>("RemasterBuildProblemsClassicTitle").IsOnScreen());
+		string[] rows = window.FindNamed<ItemsControl>("RemasterBuildProblemList").FindAll<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Contains("· \"run\" — the canvas was resized (was 640×128). Undo the resize and save again.", rows);
 		Assert.Contains(rows, r => r.StartsWith("· \"stage 1 map\" — a pink marker is still on the image."));
 		Assert.DoesNotContain(rows, r => r.Contains("something the reader"));

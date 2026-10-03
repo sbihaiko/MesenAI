@@ -67,7 +67,7 @@
 		<Style Selector="v|ShareWorkspaceView:not(.player) Border.scrim">
 			<Setter Property="Background" Value="#99000000" />
 		</Style>
-		<Style Selector="v|ShareWorkspaceView:not(.player) Border.badge, v|ShareWorkspaceView:not(.player) Border.step, v|ShareWorkspaceView:not(.player) Rectangle.step-line, v|ShareWorkspaceView:not(.player) PathIcon:not(.leading)">
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.badge, v|ShareWorkspaceView:not(.player) Border.step, v|ShareWorkspaceView:not(.player) Rectangle.step-line, v|ShareWorkspaceView:not(.player) PathIcon:not(.leading):not(.host-error)">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
 		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.step-number">
@@ -82,6 +82,17 @@
 		class must not paint over PlayerButtonTemplate's tint fill.-->
 		<Style Selector="v|ShareWorkspaceView.player Button.accent.primary /template/ ContentPresenter#PART_ContentPresenter">
 			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<!--The host error's mark is drawn, not a ⚠ in its copy (both looks).-->
+		<Style Selector="PathIcon.host-error">
+			<Setter Property="Width" Value="13" />
+			<Setter Property="Height" Value="13" />
+			<Setter Property="Margin" Value="0 1 6 0" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player PathIcon.host-error">
+			<Setter Property="Width" Value="14" />
+			<Setter Property="Height" Value="14" />
 		</Style>
 		<Style Selector="v|ShareWorkspaceView.player TextBlock.error">
 			<Setter Property="Foreground" Value="{StaticResource PlayerRedBrush}" />
@@ -172,7 +183,10 @@
 						<TextBlock Text="{l:Translate lblPackLink}" Classes="label" Margin="0 28 0 0" />
 						<TextBox Name="SharePackLink" Text="{Binding PackLink}" PlaceholderText="https://github.com/you/your-pack/releases/download/…" Margin="0 0 0 0" />
 						<TextBlock Text="{l:Translate lblPackLinkHosts}" Classes="hint" TextWrapping="Wrap" Margin="0 13 0 0" />
-						<TextBlock Name="SharePackHostError" Text="{Binding HostError}" Classes="error" TextWrapping="Wrap" Margin="0 4 0 0" IsVisible="{Binding HostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<DockPanel Margin="0 4 0 0" IsVisible="{Binding HostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+							<PathIcon Name="SharePackHostErrorIcon" Classes="warning host-error" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" />
+							<TextBlock Name="SharePackHostError" Text="{Binding HostError}" Classes="error" TextWrapping="Wrap" />
+						</DockPanel>
 						<Grid ColumnDefinitions="420,20,160" RowDefinitions="Auto,30" Margin="0 26 0 0">
 							<TextBlock Grid.Column="0" Text="{l:Translate lblPackGame}" Classes="label" />
 							<TextBlock Grid.Column="2" Text="{l:Translate lblPackConsole}" Classes="label" />
@@ -278,7 +292,10 @@
 							</StackPanel>
 							<StackPanel Grid.Row="1" Grid.Column="2" Spacing="4" Margin="0 6 0 0">
 								<TextBox Name="ShareProjectLink" Text="{Binding ProjectLink}" PlaceholderText="https://" />
-								<TextBlock Name="ShareProjectHostError" Text="{Binding ProjectHostError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding ProjectHostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+								<DockPanel IsVisible="{Binding ProjectHostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+									<PathIcon Name="ShareProjectHostErrorIcon" Classes="warning host-error" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" />
+									<TextBlock Name="ShareProjectHostError" Text="{Binding ProjectHostError}" Classes="error" TextWrapping="Wrap" />
+								</DockPanel>
 							</StackPanel>
 						</Grid>
 						<StackPanel HorizontalAlignment="Right" Spacing="4" Margin="0 26 0 0">

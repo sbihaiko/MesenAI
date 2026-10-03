@@ -114,6 +114,29 @@ namespace Mesen.ViewModels
 		}
 	}
 
+	public enum RemasterTileLineIcon
+	{
+		None,
+		Seen,
+		Warning,
+		Painted
+	}
+
+	//One W-R5 popover line: its drawn mark and its sentence (Player), or the
+	//sentence led by its old glyph (Advanced).
+	public sealed record RemasterTileLine(RemasterTileLineIcon Icon, string Text)
+	{
+		public string ClassicText => Icon switch {
+			RemasterTileLineIcon.Seen => "\u2714 ",
+			RemasterTileLineIcon.Warning => "\u26A0 ",
+			RemasterTileLineIcon.Painted => "\u270E ",
+			_ => "",
+		} + Text;
+		public bool IsSeen => Icon == RemasterTileLineIcon.Seen;
+		public bool IsWarning => Icon == RemasterTileLineIcon.Warning;
+		public bool IsPainted => Icon == RemasterTileLineIcon.Painted;
+	}
+
 	public sealed record RemasterCategoryChip(RemasterKitCategory Category, string Text, bool IsSelected);
 
 	//One tile of zone ② and its W-R5 popover.
@@ -125,13 +148,21 @@ namespace Mesen.ViewModels
 		public required RemasterKitTile Tile { get; init; }
 		public required string Caption { get; init; }
 		public required string CountText { get; init; }
-		//✎ painted, ⚠ not all of it was seen in play.
+		//The badge pill: "Painted" in words, and a drawn warning when not all of
+		//it was seen in play (Warns).
 		public required string Badges { get; init; }
+		public bool HasBadge => Badges.Length > 0 || Warns;
+		//Advanced's badge: ✎ painted, ⚠ not all of it seen.
+		public string ClassicBadges => (IsPainted ? "\u270E" : "") + (Warns ? "\u26A0" : "");
 		public required bool IsPainted { get; init; }
 		public required bool Warns { get; init; }
 		public required string Header { get; init; }
-		public required List<string> Lines { get; init; }
+		//W-R5's header: the bold name, then "6 phases · from recording 2".
+		public required string HeaderName { get; init; }
+		public required string HeaderDetail { get; init; }
+		public required List<RemasterTileLine> Lines { get; init; }
 		public required string ToolTipText { get; init; }
+		public required string ClassicToolTipText { get; init; }
 		public required string OpenPath { get; init; }
 		public required string Stamp { get; init; }
 		public required RemasterPaintResult? Paint { get; init; }
@@ -165,7 +196,9 @@ namespace Mesen.ViewModels
 				_ => "",
 			};
 			IReadOnlyList<RemasterProvenanceLine> facts = RemasterProvenance.Lines(tile, paint ?? RemasterPaintResult.Unknown(RemasterPaintUnknown.None));
-			List<string> lines = facts.Select(l => paint == null && IsPaintLine(l.Kind) ? ResourceHelper.GetMessage("RemasterProvenancePaintChecking") : Sentence(l)).ToList();
+			List<RemasterTileLine> lines = facts.Select(l => paint == null && IsPaintLine(l.Kind)
+				? new RemasterTileLine(RemasterTileLineIcon.None, ResourceHelper.GetMessage("RemasterProvenancePaintChecking"))
+				: new RemasterTileLine(IconOf(l.Kind), Sentence(l))).ToList();
 			bool painted = paint?.State == RemasterPaintState.Painted;
 			bool warns = RemasterTileFacts.Warns(facts);
 
@@ -175,20 +208,36 @@ namespace Mesen.ViewModels
 				RemasterTileSource.ImportedPack => ResourceHelper.GetMessage("RemasterTileFromImport"),
 				_ => ResourceHelper.GetMessage("RemasterTileFromEveryRecording"),
 			};
-			string header = string.Join(" · ", new[] { "\"" + tile.Caption + "\"", count, from }.Where(p => p.Length > 0));
+			string detail = string.Join(" · ", new[] { count, from }.Where(p => p.Length > 0));
+			string header = string.Join(" · ", new[] { "\"" + tile.Caption + "\"", detail }.Where(p => p.Length > 0));
 			return new RemasterTileRow {
 				Tile = tile,
 				Caption = tile.Caption,
 				CountText = count,
-				Badges = (painted ? "✎" : "") + (warns ? "⚠" : ""),
+				Badges = painted ? ResourceHelper.GetMessage("RemasterTileBadgePainted") : "",
 				IsPainted = painted,
 				Warns = warns,
 				Header = header,
+				HeaderName = tile.Caption,
+				HeaderDetail = detail,
 				Lines = lines,
-				ToolTipText = string.Join(Environment.NewLine, new[] { header, tile.Title }.Concat(lines).Distinct()),
+				ToolTipText = string.Join(Environment.NewLine, new[] { header, tile.Title }.Concat(lines.Select(l => l.Text)).Distinct()),
+				ClassicToolTipText = string.Join(Environment.NewLine, new[] { header, tile.Title }.Concat(lines.Select(l => l.ClassicText)).Distinct()),
 				OpenPath = RemasterTileFacts.OpenPath(tile),
 				Stamp = stamp,
 				Paint = paint,
+			};
+		}
+
+		//The drawn mark before a popover line (the render: green check, orange
+		//warning, tinted pencil); a "cannot tell" or "not painted" line has none.
+		private static RemasterTileLineIcon IconOf(RemasterProvenanceKind kind)
+		{
+			return kind switch {
+				RemasterProvenanceKind.Seen or RemasterProvenanceKind.CellsSeen => RemasterTileLineIcon.Seen,
+				RemasterProvenanceKind.CellsFilled or RemasterProvenanceKind.NotSeen => RemasterTileLineIcon.Warning,
+				RemasterProvenanceKind.Painted => RemasterTileLineIcon.Painted,
+				_ => RemasterTileLineIcon.None,
 			};
 		}
 

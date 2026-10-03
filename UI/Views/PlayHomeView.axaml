@@ -65,8 +65,13 @@
 					<StackPanel Margin="28 0 24 0" VerticalAlignment="Center">
 						<TextBlock Name="PlayHomeContinueTitle" Classes="title2" Text="{Binding ContinueTitle}" TextTrimming="CharacterEllipsis" />
 						<TextBlock Name="PlayHomeContinueSubtitle" Classes="secondary" Text="{Binding ContinueSubtitle}" IsVisible="{Binding ContinueSubtitle.Length}" Margin="0 6 0 0" />
-						<!--The label carries its own ▶ (btnPlayHomeContinue), so no leading icon.-->
-						<Button Name="PlayHomeContinueButton" Classes="primary medium" Content="{l:Translate btnPlayHomeContinue}" HorizontalAlignment="Left" Margin="0 18 0 0" Click="OnContinue" />
+						<!--W-P2: a drawn play icon leads the label (no ▶ glyph in the string).-->
+						<Button Name="PlayHomeContinueButton" Classes="primary medium" HorizontalAlignment="Left" Margin="0 18 0 0" Click="OnContinue">
+							<StackPanel Orientation="Horizontal">
+								<PathIcon Classes="leading" Data="{StaticResource PlayerIconPlay}" />
+								<TextBlock Text="{l:Translate btnPlayHomeContinue}" />
+							</StackPanel>
+						</Button>
 					</StackPanel>
 				</DockPanel>
 			</Border>

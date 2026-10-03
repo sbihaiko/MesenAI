@@ -143,6 +143,15 @@ public class PlayerThemeRenderTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 	}
 
+	//The render's ▶ is a drawn play icon before the label, not a glyph in the copy.
+	private static void AssertPlayIcon(Button button, string label)
+	{
+		Assert.Equal(label, LabelOf(button).Text);
+		PathIcon icon = button.FindAll<PathIcon>().Single(p => p.Classes.Contains("leading"));
+		Assert.True(icon.IsOnScreen());
+		Assert.Same(Application.Current!.FindResource("PlayerIconPlay"), icon.Data);
+	}
+
 	private static TextBlock LabelOf(Control control) => control.FindAll<TextBlock>().First(t => !string.IsNullOrEmpty(t.Text));
 
 	private static void AssertButton(Button button, double height, double radius, double fontSize, Color background)
@@ -218,6 +227,7 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(Card, PlayerRender.SolidColor(card.Background));
 		Assert.Equal(new CornerRadius(16), card.CornerRadius);
 		AssertButton(window.FindNamed<Button>("PlayHomeContinueButton"), 36, 11, 14, PlayTint);
+		AssertPlayIcon(window.FindNamed<Button>("PlayHomeContinueButton"), "Continue");
 		AssertButton(window.FindNamed<Button>("PlayHomeOpenRomSecondary"), 28, 8, 13, Card);
 		TextBlock continueTitle = window.FindNamed<TextBlock>("PlayHomeContinueTitle");
 		Assert.Equal(20, continueTitle.FontSize);
@@ -272,6 +282,7 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(20, title.FontSize);
 		Assert.Equal(Text, PlayerRender.SolidColor(title.Foreground));
 		AssertButton(window.FindNamed<Button>("OverlayResumeButton"), 44, 11, 16, PlayTint);
+		AssertPlayIcon(window.FindNamed<Button>("OverlayResumeButton"), "Resume");
 
 		Button pack = window.FindNamed<Button>("OverlayPackButton");
 		Assert.Equal(50, pack.Bounds.Height, 0.5);

@@ -181,6 +181,11 @@ public static class RemasterScreen
 		return PrepareControl(afterStop).Enabled && !afterStop.JobRunning && !afterStop.ShareJobOnProject;
 	}
 
+	//W-R2's pill counters ("318 new shapes · 2 screens captured") come from
+	//the core's coverage report, which is all zero off NES or before the
+	//builder saw anything: then the pill shows no counters.
+	public static bool ShowsRecordingCounters(uint tilesSeen, uint screensSeen) => tilesSeen > 0 || screensSeen > 0;
+
 	//W-R2's pill: "Recording 01:42"; hours appear past 59:59.
 	public static string FormatElapsed(TimeSpan elapsed)
 	{

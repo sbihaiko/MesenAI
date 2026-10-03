@@ -281,7 +281,9 @@ public class PlaySheetsViewTests : IDisposable
 
 		model.OnPackInstallFinished(installed: false, silent: false);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ The pack could not be downloaded. Playing without it.", model.PackInstallPillText);
+		//A core HUD/status line text: no ⚠ glyph, the words only.
+		Assert.Equal("The pack could not be downloaded. Playing without it.", model.PackInstallPillText);
+		Assert.Equal("The pack could not be downloaded. Playing without it.", window.FindNamed<TextBlock>("ShellStatusText").Text);
 
 		model.OnPackInstallStarted("Contra 80s");
 		model.OnPackInstallFinished(installed: true, silent: false);

@@ -66,6 +66,10 @@ namespace Mesen.ViewModels
 		//W-R0b
 		[ObservableProperty] public partial bool IsBannerVisible { get; private set; }
 		[ObservableProperty] public partial string BannerText { get; private set; } = "";
+		//The banner's second, regular-weight line (the render: what still works).
+		[ObservableProperty] public partial string BannerDetail { get; private set; } = "";
+		//Advanced's one-line banner: both sentences, as before the W-R0b split.
+		[ObservableProperty] public partial string BannerLine { get; private set; } = "";
 		[ObservableProperty] public partial bool IsPythonMissing { get; private set; }
 		[ObservableProperty] public partial bool IsToolsMissing { get; private set; }
 		[ObservableProperty] public partial string PendingBrowserUrl { get; private set; } = "";
@@ -76,6 +80,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string ProjectFolder { get; private set; } = "";
 		[ObservableProperty] public partial string RecordSummary { get; private set; } = "";
 		[ObservableProperty] public partial List<RemasterRecordingRow> Recordings { get; private set; } = new();
+		//W-R1's second line under the summary: the newest recording (Player mode
+		//shows it instead of the list).
+		[ObservableProperty] public partial string RecordDetail { get; private set; } = "";
 		[ObservableProperty] public partial RemasterControlViewModel Record { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel RecordFromTas { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel LetTheAiPlay { get; private set; } = RemasterControlViewModel.Hidden;
@@ -85,6 +92,8 @@ namespace Mesen.ViewModels
 
 		//W-R2
 		[ObservableProperty] public partial string RecordingPill { get; private set; } = "";
+		//W-R2's counters: the core's live coverage of this recording ("" until it reports any).
+		[ObservableProperty] public partial string RecordingCounters { get; private set; } = "";
 
 		//W-R3
 		[ObservableProperty] public partial bool IsJobCardVisible { get; private set; }
@@ -289,6 +298,7 @@ namespace Mesen.ViewModels
 		{
 			EndRecordingArtCheats();
 			IsRecording = false;
+			RecordingCounters = "";
 			_recordingClock.Reset();
 			_recordingTimer?.Stop();
 		}
@@ -305,6 +315,16 @@ namespace Mesen.ViewModels
 				return;
 			}
 			RecordingPill = ResourceHelper.GetMessage("RemasterRecordingPill", RemasterScreen.FormatElapsed(_recordingClock.Elapsed));
+			//F5.4d's coverage report: zero-filled off NES or before the builder saw anything.
+			InteropHdPackCoverageReport coverage = EmuApi.GetHdPackCoverageReport();
+			UpdateRecordingCounters(coverage.TilesSeen, coverage.ScreensSeen);
+		}
+
+		private void UpdateRecordingCounters(uint tilesSeen, uint screensSeen)
+		{
+			RecordingCounters = !RemasterScreen.ShowsRecordingCounters(tilesSeen, screensSeen) ? ""
+				: ResourceHelper.GetMessage(tilesSeen == 1 ? "RemasterRecordingShapesOne" : "RemasterRecordingShapesMany", tilesSeen)
+					+ " · " + ResourceHelper.GetMessage(screensSeen == 1 ? "RemasterRecordingScreensOne" : "RemasterRecordingScreensMany", screensSeen);
 		}
 
 		//Zone ② Prepare Figures, and the run after Stop: mep_project.py kit.
@@ -436,9 +456,12 @@ namespace Mesen.ViewModels
 			IsBannerVisible = s.ShowFeasibilityBanner;
 			IsPythonMissing = f.Python != PythonGate.Found;
 			IsToolsMissing = !IsPythonMissing && f.Tools != ToolsGate.Found;
-			BannerText = f.Python == PythonGate.TooOld ? ResourceHelper.GetMessage("RemasterPythonTooOld", f.PythonVersion)
-				: f.Python == PythonGate.Missing ? ResourceHelper.GetMessage("RemasterNeedsPython")
-				: ResourceHelper.GetMessage("RemasterNeedsTools");
+			string banner = f.Python == PythonGate.TooOld ? "RemasterPythonTooOld"
+				: f.Python == PythonGate.Missing ? "RemasterNeedsPython"
+				: "RemasterNeedsTools";
+			BannerText = ResourceHelper.GetMessage(banner, f.PythonVersion);
+			BannerDetail = ResourceHelper.GetMessage(banner + "Detail");
+			BannerLine = BannerText + " " + BannerDetail;
 
 			ProjectName = _project?.Name ?? "";
 			ProjectFolder = _project?.Folder ?? "";
@@ -450,6 +473,8 @@ namespace Mesen.ViewModels
 				RecordSummary += " · " + _project.Problem;
 			}
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
+			RemasterRecordingRow? latest = Recordings.FirstOrDefault();
+			RecordDetail = latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 
 			Record = Control(s.Record);
 			RecordFromTas = Control(s.RecordFromTas);
