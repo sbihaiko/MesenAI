@@ -81,7 +81,7 @@ public class PackAudioNoticeInstallTests
 			//this install wrote: everything after a per-run marker.
 			string marker = "[PackAudioNoticeInstallTests] " + Guid.NewGuid().ToString("N");
 			EmuApi.WriteLogEntry(marker);
-			CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(entry, zipPath, new System.Collections.Generic.Dictionary<string, string>());
+			CommunityPackInstallOutcome outcome = CommunityPackInstallCoordinator.Install(entry, zipPath, new System.Collections.Generic.Dictionary<string, string>(), CommunityPackInstallCoordinator.CaptureLoad());
 			string log = EmuApi.GetLog();
 			int start = log.LastIndexOf(marker, StringComparison.Ordinal);
 			return (outcome, start < 0 ? log : log.Substring(start + marker.Length), folder);

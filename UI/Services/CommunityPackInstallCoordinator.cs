@@ -1,6 +1,7 @@
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -22,13 +23,48 @@ namespace Mesen.Services
 	//client-side, clarification 45) to EmuApi.InstallMepRecipe.
 	public static class CommunityPackInstallCoordinator
 	{
+		//#657 seam: the load the emulator has right now. Production reads the
+		//core and the open generation; UI.HeadlessTests swaps it to change the
+		//loaded game while an install is in flight.
+		public static Func<CommunityPackLoadTarget> ReadCurrentLoad { get; set; } = ReadEmulatorLoad;
+
+		private static CommunityPackLoadTarget ReadEmulatorLoad() => new(
+			EmuApi.GetMepRomSha1(), EmuApi.GetMepRomFileSha1(), EmuApi.GetMepSiblingFolder(),
+			EmuApi.GetRomInfo().GetRomName(), MainWindowViewModel.Instance?.OpenGeneration ?? 0);
+
+		//Captured by the caller before the artifact download starts; Install and
+		//Restore take every ROM-specific value (out folder, ROM name, registry
+		//key, supportedRom hashes) from it, never from the game loaded later.
+		public static CommunityPackLoadTarget CaptureLoad() => ReadCurrentLoad();
+
+		//#657: false (and logged) once another game was opened - or this one
+		//reopened or quit - since the capture. Checked before the first
+		//destructive step; once the captured folder is being rewritten the
+		//install finishes there, since every path it writes is the captured game's.
+		private static bool IsStillLoaded(CommunityPackLoadTarget startedFor, string step)
+		{
+			CommunityPackLoadTarget current = ReadCurrentLoad();
+			if(startedFor.IsStillLoaded(current)) {
+				return true;
+			}
+			EmuApi.WriteLogEntry("[CommunityPackInstall] dropped before " + step + ": the game changed since the download started (was " +
+				startedFor.RomSha1 + " open #" + startedFor.OpenGeneration + ", now " + current.RomSha1 + " open #" + current.OpenGeneration + ")");
+			return false;
+		}
+
+		private const string StaleMessage = "the game changed since the download started";
+
 		public static CommunityPackInstallOutcome Install(
-			CommunityPackCatalogEntry entry, string primaryPackPath, IReadOnlyDictionary<string, string> resolvedDepPaths)
+			CommunityPackCatalogEntry entry, string primaryPackPath, IReadOnlyDictionary<string, string> resolvedDepPaths,
+			CommunityPackLoadTarget startedFor)
 		{
 			EnhancementPackConfig config = ConfigManager.Config.EnhancementPacks;
 			string containerName = GetContainerName(entry);
 			EmuApi.WriteLogEntry("[CommunityPackInstall] containerName=" + containerName);
-			(CommunityPackInstallOutcome? gate, string outFolder) = EvaluateGates(config, entry, containerName);
+			if(!IsStillLoaded(startedFor, "the update gates")) {
+				return CommunityPackInstallOutcome.Stale(StaleMessage);
+			}
+			(CommunityPackInstallOutcome? gate, string outFolder) = EvaluateGates(config, entry, containerName, startedFor);
 			if(gate != null) {
 				EmuApi.WriteLogEntry("[CommunityPackInstall] gated: Status=" + gate.Status + " Message=" + gate.Message);
 				return gate;
@@ -47,11 +83,11 @@ namespace Mesen.Services
 				//classic loose pack location (ADR-0040 §5 - a loose HD pack
 				//wins over MEP textures).
 				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy entry - installing as a loose HD pack");
-				CommunityPackInstallOutcome outcome = InstallHdLegacy(entry, primaryPackPath, outFolder, containerName);
+				CommunityPackInstallOutcome outcome = InstallHdLegacy(entry, primaryPackPath, outFolder, containerName, startedFor);
 				//A legacy install has no recipe deps, but unresolved user_supplied
 				//prompts still get surfaced so the user knows what to drop where.
 				if(outcome.Status == CommunityPackInstallStatus.Installed) {
-					RecordInstall(entry, containerName, outFolder);
+					RecordInstall(entry, containerName, outFolder, startedFor);
 					outcome = WithAudioNotice(outcome, outFolder);
 				}
 				return pending.Count == 0 || outcome.Status != CommunityPackInstallStatus.Installed
@@ -63,10 +99,10 @@ namespace Mesen.Services
 				" primaryPackPath=" + primaryPackPath + " depPaths=" + depPaths.Count + " pendingDeps=" + pending.Count);
 			bool success = EmuApi.InstallMepRecipe(
 				entry.Recipe?.GetRawText() ?? "", primaryPackPath, BuildDepPathsBlob(depPaths),
-				EmuApi.GetRomInfo().GetRomName(), outFolder, out string resultText);
+				startedFor.RomName, outFolder, out string resultText);
 			EmuApi.WriteLogEntry("[CommunityPackInstall] InstallMepRecipe returned success=" + success + " resultText=" + resultText.Replace("\n", "\\n"));
 			if(success) {
-				RecordInstall(entry, containerName, outFolder);
+				RecordInstall(entry, containerName, outFolder, startedFor);
 				return WithAudioNotice(CommunityPackInstallOutcome.Installed(containerName, ParseWithheld(resultText), pending), outFolder);
 			}
 			return CommunityPackInstallOutcome.Failed(ParseError(resultText));
@@ -92,9 +128,9 @@ namespace Mesen.Services
 		//hires.txt) flattened to the loaded ROM's file name, and stamp the MEP
 		//container so the P.6 update decision sees the install on the next load.
 		private static CommunityPackInstallOutcome InstallHdLegacy(
-			CommunityPackCatalogEntry entry, string primaryPackPath, string outFolder, string containerName)
+			CommunityPackCatalogEntry entry, string primaryPackPath, string outFolder, string containerName, CommunityPackLoadTarget startedFor)
 		{
-			string romName = EmuApi.GetRomInfo().GetRomName();
+			string romName = startedFor.RomName;
 			if(string.IsNullOrWhiteSpace(romName)) {
 				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy install failed: no loaded ROM name");
 				return CommunityPackInstallOutcome.Failed("no loaded ROM name for legacy HD pack install");
@@ -115,6 +151,9 @@ namespace Mesen.Services
 			//this only acts on it.
 			switch(LegacyHdPackInstall.DecideOutputFolderHandling(File.Exists(stampPath), folderExists, folderNonEmpty)) {
 				case LegacyHdPackInstall.HdLegacyOutputFolderVerdict.ClearForReinstall:
+					if(!IsStillLoaded(startedFor, "clearing " + outFolder)) {
+						return CommunityPackInstallOutcome.Stale(StaleMessage);
+					}
 					EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy reinstall - clearing " + outFolder);
 					ClearFolderForReinstall(outFolder);
 					break;
@@ -137,8 +176,8 @@ namespace Mesen.Services
 			//days, because the stamp replaced the only record of the
 			//disagreement). Absent or unparseable declarations still install,
 			//unchanged: ADR-0145's optimism is about the *absence* of evidence.
-			string loadedNoIntroSha1 = EmuApi.GetMepRomSha1();
-			string loadedWholeFileSha1 = EmuApi.GetMepRomFileSha1();
+			string loadedNoIntroSha1 = startedFor.RomSha1;
+			string loadedWholeFileSha1 = startedFor.RomFileSha1;
 			LegacyHdPackInstall.SupportedRomDeclaration declaration = ReadSupportedRomDeclaration(texturesFolder);
 			string stampedSha1 = loadedNoIntroSha1;
 			switch(LegacyHdPackInstall.DecideSupportedRom(declaration, loadedNoIntroSha1, loadedWholeFileSha1)) {
@@ -264,7 +303,7 @@ namespace Mesen.Services
 		//AutoInstallCommunityPacks master switch (ADR-0146) + 43(c) DisabledPacks gate, then the 43(a)/(b)
 		//reinstall verdict: Reinstall means our own prior install, safe to clear.
 		private static (CommunityPackInstallOutcome? Gate, string OutFolder) EvaluateGates(
-			EnhancementPackConfig config, CommunityPackCatalogEntry entry, string containerName)
+			EnhancementPackConfig config, CommunityPackCatalogEntry entry, string containerName, CommunityPackLoadTarget startedFor)
 		{
 			//ADR-0146: no consent dialog - the master switch alone decides.
 			if(!config.AutoInstallCommunityPacks) {
@@ -274,7 +313,7 @@ namespace Mesen.Services
 				return (CommunityPackInstallOutcome.Skipped("pack disabled by user"), "");
 			}
 
-			string outFolder = ResolveOutFolder(containerName);
+			string outFolder = ResolveOutFolder(containerName, startedFor);
 			//P.6 (PRD Part B §3.6, amends ADR-0138 §37): the update trigger
 			//is the installed content_id vs the slot's, not source.sha256 - a
 			//different content_id reinstalls (unless the installed semver is
@@ -298,8 +337,11 @@ namespace Mesen.Services
 				case CommunityCatalogUpdateVerdict.Updated:
 					//ADR-0147: never silently clobber a locally-edited mep/ - offer
 					//Restore instead so the user's customization survives an update.
-					if(IsPackEdited(EmuApi.GetMepRomSha1(), outFolder)) {
+					if(IsPackEdited(startedFor.RomSha1, outFolder)) {
 						return (CommunityPackInstallOutcome.UpdateAvailable("The catalog pack was updated - use Restore pack to apply it."), "");
+					}
+					if(!IsStillLoaded(startedFor, "clearing " + outFolder)) {
+						return (CommunityPackInstallOutcome.Stale(StaleMessage), "");
 					}
 					ClearFolderForReinstall(outFolder);
 					return (null, outFolder);
@@ -376,9 +418,10 @@ namespace Mesen.Services
 		//ADR-0147: after a successful install, record the ROM -> pack mapping in
 		//the central cache (outside mep/) so Restore can recover the original
 		//even when the user has edited or removed the editable mep/ folder.
-		private static void RecordInstall(CommunityPackCatalogEntry entry, string containerName, string outFolder)
+		//#657: keyed by the captured game's SHA-1 - the pack was written to its folder.
+		private static void RecordInstall(CommunityPackCatalogEntry entry, string containerName, string outFolder, CommunityPackLoadTarget startedFor)
 		{
-			CommunityPackInstallRegistry.Write(CommunityPackPaths.CacheRoot, EmuApi.GetMepRomSha1(), new CommunityPackInstallRecord {
+			CommunityPackInstallRegistry.Write(CommunityPackPaths.CacheRoot, startedFor.RomSha1, new CommunityPackInstallRecord {
 				PackId = entry.PackId ?? "",
 				ContentId = entry.ContentId ?? "",
 				SourceSha256 = entry.Sha256,
@@ -408,13 +451,19 @@ namespace Mesen.Services
 		//not an update check) and always rewrites the pack from the supplied
 		//artifact. The install registry is refreshed so the next Restore/update
 		//still knows the pack and its source sha256.
-		public static bool Restore(CommunityPackCatalogEntry entry, string primaryPackPath, out string error)
+		public static bool Restore(CommunityPackCatalogEntry entry, string primaryPackPath, CommunityPackLoadTarget startedFor, out string error)
 		{
 			string containerName = GetContainerName(entry);
-			string outFolder = ResolveOutFolder(containerName);
+			//#657: the Restore was for the game captured before the download; if
+			//another game was opened meanwhile, drop it before touching any folder.
+			if(!IsStillLoaded(startedFor, "restoring")) {
+				error = StaleMessage;
+				return false;
+			}
+			string outFolder = ResolveOutFolder(containerName, startedFor);
 			if(entry.IsHdLegacy) {
 				//InstallHdLegacy clears a prior install (stamp exists) and rewrites it
-				CommunityPackInstallOutcome outcome = InstallHdLegacy(entry, primaryPackPath, outFolder, containerName);
+				CommunityPackInstallOutcome outcome = InstallHdLegacy(entry, primaryPackPath, outFolder, containerName, startedFor);
 				if(outcome.Status != CommunityPackInstallStatus.Installed) {
 					error = outcome.Message;
 					return false;
@@ -426,12 +475,12 @@ namespace Mesen.Services
 				}
 				if(!EmuApi.InstallMepRecipe(
 					entry.Recipe?.GetRawText() ?? "", primaryPackPath, "",
-					EmuApi.GetRomInfo().GetRomName(), outFolder, out string resultText)) {
+					startedFor.RomName, outFolder, out string resultText)) {
 					error = ParseError(resultText);
 					return false;
 				}
 			}
-			RecordInstall(entry, containerName, outFolder);
+			RecordInstall(entry, containerName, outFolder, startedFor);
 			error = "";
 			return true;
 		}
@@ -468,7 +517,7 @@ namespace Mesen.Services
 			CommunityPackContainerName.Sanitize(entry.Name, entry.Game);
 
 		//Defense in depth on GetContainerName's sanitization: asserts the folder is still rooted under EnhancementPackFolder.
-		private static string ResolveOutFolder(string containerName)
+		private static string ResolveOutFolder(string containerName, CommunityPackLoadTarget startedFor)
 		{
 			//ADR-0147: the installed pack lives at the ROM's sibling mep/ so it stays
 			//visible and editable beside the game (auto/ = recorder, mep/ = pack).
@@ -477,7 +526,7 @@ namespace Mesen.Services
 			//Pure path resolution - nothing is created here; Install()/Restore()
 			//call TryCreateOutFolder once every gate has passed, so a Skipped or
 			//UpdateAvailable verdict never leaves an empty mep/ beside the ROM.
-			string sibling = EmuApi.GetMepSiblingFolder();
+			string sibling = startedFor.SiblingFolder;
 			if(!string.IsNullOrWhiteSpace(sibling) && IsWritableFolder(sibling)) {
 				return Path.GetFullPath(Path.Combine(sibling, "mep"));
 			}
@@ -519,7 +568,7 @@ namespace Mesen.Services
 		}
 	}
 
-	public enum CommunityPackInstallStatus { Skipped, Installed, Failed, UpdateAvailable }
+	public enum CommunityPackInstallStatus { Skipped, Installed, Failed, UpdateAvailable, Stale }
 
 	//Verdict-carrying result of Install(); the caller decides how to surface each case.
 	public sealed record CommunityPackInstallOutcome(
@@ -530,6 +579,8 @@ namespace Mesen.Services
 		public IReadOnlyList<string> Notices { get; init; } = Array.Empty<string>();
 		public static CommunityPackInstallOutcome Skipped(string reason) => new(CommunityPackInstallStatus.Skipped, "", reason, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		public static CommunityPackInstallOutcome Failed(string error) => new(CommunityPackInstallStatus.Failed, "", error, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
+		//#657: another game was opened during the download - nothing was touched.
+		public static CommunityPackInstallOutcome Stale(string message) => new(CommunityPackInstallStatus.Stale, "", message, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		public static CommunityPackInstallOutcome UpdateAvailable(string message) => new(CommunityPackInstallStatus.UpdateAvailable, "", message, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		public static CommunityPackInstallOutcome Installed(string containerName, IReadOnlyList<string> withheld, IReadOnlyList<CommunityPackDepPrompt> pendingDeps) =>
 			new(CommunityPackInstallStatus.Installed, containerName, "", withheld, pendingDeps);

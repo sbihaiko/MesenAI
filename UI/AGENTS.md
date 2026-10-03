@@ -377,6 +377,16 @@ can be exercised by real xunit tests without Avalonia or the native
   when the same ROM is still loaded, so `HdPacks/<rom>/` applies without a
   second manual load; `OnGameLoaded` already skips power cycles, so this
   does not re-fetch. A ROM switch during the download does not power-cycle.
+  #657: the auto-install and Restore capture the load
+  (`CommunityPackInstallCoordinator.CaptureLoad` → host-free
+  `CommunityPackLoadTarget`: SHA-1, whole-file SHA-1, sibling folder, ROM
+  name, open generation) before the download, and the coordinator takes the
+  out folder, ROM name and registry key from it, never from the game loaded
+  afterwards. If another open started meanwhile (`IsStillLoaded`, the W-P16
+  rule) it drops with `CommunityPackInstallStatus.Stale` before the first
+  destructive step (silent, logged, retried on that game's next load). A load
+  refused by the install gate is deferred (`CommunityPackInstallGate.
+  TryEnterOrDefer`), and the holder's `Exit` runs it for the game loaded then.
   A failed or thrown auto-install clears the per-session ROM sha1 attempt
   so the next load retries.
   ADR-0240 / F6.9: after a successful install (MEP-recipe or hd-legacy),
