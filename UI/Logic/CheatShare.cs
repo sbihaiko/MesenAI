@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using Mesen.Interop;
 
@@ -19,12 +20,14 @@ namespace Mesen.Logic
 		public const int MaxUrlLength = 4000;
 
 		//The form's dropdown option for a core, or null when the form has none.
-		//The Game Boy core runs GBC games too; the user picks GBC in the form.
-		public static string? ConsoleOption(ConsoleType console)
+		//romFile is the running game's file name: the Game Boy core runs GBC
+		//games too and the extension tells them apart, as in
+		//PackShare.ConsoleOption (#662).
+		public static string? ConsoleOption(ConsoleType console, string romFile)
 		{
 			return console switch {
 				ConsoleType.Nes => "NES",
-				ConsoleType.Gameboy => "Game Boy",
+				ConsoleType.Gameboy => string.Equals(Path.GetExtension(romFile ?? ""), ".gbc", StringComparison.OrdinalIgnoreCase) ? "Game Boy Color" : "Game Boy",
 				ConsoleType.Sms => "Master System / Game Gear",
 				_ => null
 			};
@@ -35,14 +38,14 @@ namespace Mesen.Logic
 		public static bool CanShare(CheatSheetRow row, ConsoleType console, string cheatSha1)
 		{
 			return row.Source == CheatRowSource.Yours
-				&& ConsoleOption(console) != null
+				&& ConsoleOption(console, "") != null
 				&& CommunityCheatCatalog.IsSha1((cheatSha1 ?? "").Trim().ToUpperInvariant());
 		}
 
 		//The title carries only the prefix: the workflow rewrites it whole
 		//(ADR-0248 §1). The description goes last and is the part cut when the
 		//URL would grow past MaxUrlLength; the gate bounds it at 80 characters.
-		public static string BuildIssueUrl(string cheatSha1, string gameName, ConsoleType console, string codes, string description)
+		public static string BuildIssueUrl(string cheatSha1, string gameName, ConsoleType console, string romFile, string codes, string description)
 		{
 			string head = "https://github.com/" + ReplayShare.Repository + "/issues/new"
 				+ "?template=" + Uri.EscapeDataString(FormTemplate)
@@ -50,7 +53,7 @@ namespace Mesen.Logic
 				+ "&labels=" + Uri.EscapeDataString(FormLabel)
 				+ "&game_sha1=" + Uri.EscapeDataString((cheatSha1 ?? "").Trim().ToUpperInvariant())
 				+ "&game_name=" + Uri.EscapeDataString(gameName ?? "")
-				+ "&console=" + Uri.EscapeDataString(ConsoleOption(console) ?? "")
+				+ "&console=" + Uri.EscapeDataString(ConsoleOption(console, romFile) ?? "")
 				+ "&code=" + Uri.EscapeDataString(string.Join("+", CheatConsoleScope.SplitCodes(codes ?? "")))
 				+ "&description=";
 

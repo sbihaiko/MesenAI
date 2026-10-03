@@ -320,7 +320,7 @@ public class PlayerCheatsSheetTests : IDisposable
 		List<string> opened = new();
 		StoredCheat mine = new("Start with 30 lives", CheatType.NesCustom, "0032:1D", true);
 		model.CheatsSheet.Open(ConsoleType.Nes, CopySha1, new[] { BundledContra }, new[] { mine }, false, false, _ => { },
-			gameName: "Contra (USA)", openUrl: opened.Add, community: CommunityCatalog);
+			gameName: "Contra (USA)", openUrl: opened.Add, community: CommunityCatalog, romFile: "Contra (USA).nes");
 		Dispatcher.UIThread.RunJobs();
 
 		Button share = Assert.Single(window.FindNamed<ItemsControl>("CheatsList").FindAll<Button>(), b => b.Name == "CheatsShareButton" && b.IsOnScreen());
@@ -328,8 +328,26 @@ public class PlayerCheatsSheetTests : IDisposable
 		Assert.Equal("Start with 30 lives", (share.DataContext as PlayerCheatRow)?.Description);
 		Click(share);
 
-		Assert.Equal(new[] { CheatShare.BuildIssueUrl(CopySha1, "Contra (USA)", ConsoleType.Nes, "0032:1D", "Start with 30 lives") }, opened);
+		Assert.Equal(new[] { CheatShare.BuildIssueUrl(CopySha1, "Contra (USA)", ConsoleType.Nes, "Contra (USA).nes", "0032:1D", "Start with 30 lives") }, opened);
 		Assert.Contains("template=cheat-code.yml", opened[0]);
+	}
+
+	//#662: the sheet hands the running game's file name to the share form, so
+	//a GBC game on the Game Boy core pre-fills "Game Boy Color".
+	[AvaloniaFact]
+	public void Share_this_cheat_prefills_game_boy_color_for_a_gbc_game()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Gameboy);
+		List<string> opened = new();
+		StoredCheat mine = new("Max lines", CheatType.GbGameShark, "01FF34C1", true);
+		model.CheatsSheet.Open(ConsoleType.Gameboy, GbSha1, Array.Empty<CheatDbGame>(), new[] { mine }, false, false, _ => { },
+			gameName: "Tetris DX (World)", openUrl: opened.Add, romFile: "Tetris DX (World).gbc");
+		Dispatcher.UIThread.RunJobs();
+
+		Click(Assert.Single(window.FindNamed<ItemsControl>("CheatsList").FindAll<Button>(), b => b.Name == "CheatsShareButton" && b.IsOnScreen()));
+
+		Assert.Contains("&console=Game%20Boy%20Color&", Assert.Single(opened));
 	}
 
 	//#639: opening another ROM directly (A → B, no EmulationStopped) changes

@@ -11,6 +11,7 @@ using Mesen.Config;
 using Mesen.Controls;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -184,6 +185,34 @@ public class LookSettingsTabTests : IDisposable
 		window.MouseUp(center, MouseButton.Left);
 		Dispatcher.UIThread.RunJobs();
 		Assert.False(model.Look?.IsComparing);
+		window.Close();
+	}
+
+	//#663: a Remaster recording (or the HD Pack Builder) stops the pack's art
+	//and its Stop brings it back, with the same game and pack name; the Pixels
+	//lock follows the switch while the tab stays open.
+	[AvaloniaFact]
+	public void Pixels_follow_a_runtime_pack_art_switch_while_the_tab_is_open()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
+		(ConfigWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
+		LookConfigViewModel look = Assert.IsType<LookConfigViewModel>(model.Look);
+		bool drawing = true;
+		look.DrawingPackArt = () => drawing;
+		look.Refresh();
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(window.FindNamed<ComboBox>("cboLookPixels").IsEnabled);
+
+		drawing = false;
+		PackArtSwitch.Raise();
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(window.FindNamed<ComboBox>("cboLookPixels").IsEnabled);
+
+		drawing = true;
+		PackArtSwitch.Raise();
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(window.FindNamed<ComboBox>("cboLookPixels").IsEnabled);
 		window.Close();
 	}
 

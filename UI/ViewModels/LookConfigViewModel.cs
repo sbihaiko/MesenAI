@@ -51,6 +51,8 @@ public partial class LookConfigViewModel : DisposableViewModel
 	public Action<ConfigWindowTab>? OpenTab { get; set; }
 	//Set by the view: the file dialog behind "Choose a shader file…".
 	public Func<System.Threading.Tasks.Task<string?>>? PickShaderFile { get; set; }
+	//Whether the core draws a pack's art now (ADR-0246 §3); headless tests swap it.
+	public Func<bool> DrawingPackArt { get; set; } = EmuApi.IsDrawingPackArt;
 
 	private LookInput _input;
 	private bool _refreshing;
@@ -69,6 +71,9 @@ public partial class LookConfigViewModel : DisposableViewModel
 		AddDisposable(Config.ObserveProp(nameof(VideoConfig.ShaderFile), Refresh));
 		AddDisposable(MainWindowViewModel.Instance.ObserveProp(nameof(MainWindowViewModel.RomInfo), Refresh));
 		AddDisposable(MainWindowViewModel.Instance.ObserveProp(nameof(MainWindowViewModel.CurrentPackName), Refresh));
+		//#663: a recording stops and restarts the pack's art with the same game and pack.
+		PackArtSwitch.Switched += Refresh;
+		AddDisposable(new DisposableObserver(() => PackArtSwitch.Switched -= Refresh));
 	}
 
 	public void Refresh()
@@ -185,7 +190,7 @@ public partial class LookConfigViewModel : DisposableViewModel
 	{
 		RomInfo rom = MainWindowViewModel.Instance.RomInfo;
 		bool gameLoaded = rom.Format != RomFormat.Unknown;
-		bool packArt = gameLoaded && !Avalonia.Controls.Design.IsDesignMode && EmuApi.IsDrawingPackArt();
+		bool packArt = gameLoaded && !Avalonia.Controls.Design.IsDesignMode && DrawingPackArt();
 		ShaderAvailability shaders = Avalonia.Controls.Design.IsDesignMode ? ShaderAvailability.Available : ConfigApi.GetShaderAvailability();
 		return new LookInput(
 			VideoFilter: Config.VideoFilter.ToString(),

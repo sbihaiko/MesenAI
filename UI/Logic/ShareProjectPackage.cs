@@ -68,6 +68,8 @@ namespace Mesen.Logic
 			bool built = File.Exists(Path.Combine(mep, "textures", "hires.txt")) ||
 				File.Exists(Path.Combine(mep, "audio", "hires.txt")) ||
 				File.Exists(Path.Combine(mep, "synth", "preset.cfg"));
+			//#659: a first build stopped mid-sync left a half-written mep/.
+			built = built && !RemasterBuildFreshness.IsClaimOnly(Path.Combine(mep, RemasterBuildFreshness.StampFile));
 			string system = FirstTargetSystem(Path.Combine(mep, "pack.json"), out bool hasTargets);
 			string game = StampValue(Path.Combine(projectFolder, RemasterProjectReader.StampFile), "rom");
 			return new ShareProjectIdentity(projectFolder, info.Name, game.Length > 0 ? game : info.Name,

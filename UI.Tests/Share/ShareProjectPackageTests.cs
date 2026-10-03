@@ -97,6 +97,19 @@ namespace Mesen.Tests.Share
 			Assert.Equal(ShareBuildReason.None, ShareProjectPackage.BuildReason(targeted, false, Ready, false));
 		}
 
+		[Theory]
+		[InlineData("{\"complete\": false}", false)]
+		[InlineData("{\"complete\": true}", true)]
+		[InlineData("{\"recording\": \"rec-001\"}", true)]
+		public void A_first_build_stopped_mid_sync_is_not_a_built_layer(string buildStamp, bool hasBuiltLayer)
+		{
+			//#659: a half-written mep/ carries the `complete: false` claim of
+			//mep_project_build; packing it would share a broken pack.
+			string folder = Project("d");
+			File.WriteAllText(Path.Combine(folder, "mep", RemasterBuildFreshness.StampFile), buildStamp);
+			Assert.Equal(hasBuiltLayer, ShareProjectPackage.Read(folder).HasBuiltLayer);
+		}
+
 		[Fact]
 		public void The_job_is_mep_build_pack_of_mep_into_the_project_root()
 		{
