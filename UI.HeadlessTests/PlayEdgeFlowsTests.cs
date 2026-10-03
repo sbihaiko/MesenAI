@@ -34,7 +34,7 @@ namespace Mesen.HeadlessTests;
 //The W-P13–W-P16 tests need a MainWindow (EmuApi.InitDll in its constructor),
 //so they self-skip on the core-less CI runner like the other MainWindow tests.
 [Collection(NativeCoreCollection.Name)]
-public class PlayEdgeFlowsTests : IDisposable
+public partial class PlayEdgeFlowsTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;

@@ -41,4 +41,10 @@ public static class PlayFirstRun
 	//Esc and the close button keep what is selected and continue: there is no
 	//Cancel, because the app cannot run without a storage choice.
 	public static FirstRunChoice OnDismiss(FirstRunChoice current) => current;
+
+	//#661: quitting the app or shutting the OS down while the sheet is up
+	//closes it without applying the choice - nothing is written, so it shows
+	//again next launch - and never blocks the shutdown, even when the folder
+	//cannot be written. Every other close applies the choice (OnDismiss).
+	public static bool ConfirmsOnClose(bool shuttingDown) => !shuttingDown;
 }

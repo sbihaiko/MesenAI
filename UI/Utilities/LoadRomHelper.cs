@@ -273,7 +273,13 @@ namespace Mesen.Utilities
 
 		public static void Reset() { Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.ExecReset })); }
 		public static void PowerCycle() { RunReloadShortcut(EmulatorShortcut.ExecPowerCycle); }
-		public static void PowerOff() { RunReloadShortcut(EmulatorShortcut.ExecPowerOff); }
+		public static void PowerOff()
+		{
+			//#658: a load waiting on the BIOS sheet holds the Core's locks, so
+			//the power off would wait behind the sheet; the request is dropped.
+			MainWindowViewModel.Instance.BiosSheet.Dismiss();
+			RunReloadShortcut(EmulatorShortcut.ExecPowerOff);
+		}
 		public static void ReloadRom() { RunReloadShortcut(EmulatorShortcut.ExecReloadRom); }
 	}
 }

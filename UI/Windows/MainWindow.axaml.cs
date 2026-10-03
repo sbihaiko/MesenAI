@@ -52,6 +52,15 @@ namespace Mesen.Windows
 
 		private bool _preventFullscreenToggle = false;
 
+		//The headless tests close a window and keep the process-global core for
+		//the next test: EmuApi.Release cannot be undone in one process. Null is
+		//EmuApi.Release (not an initializer, so the constructor never names it).
+		public Action? ReleaseCore { get; set; }
+
+		//#658: the Core's load thread waits here for the UI's answer (W-P13's
+		//BIOS sheet, the classic firmware dialog) while it holds its load locks.
+		private readonly CoreRequestWaits _coreRequests = new();
+
 		private Panel _rendererPanel;
 		private NativeRenderer _renderer;
 		private SoftwareRendererView _softwareRenderer;
@@ -245,9 +254,18 @@ namespace Mesen.Windows
 			}
 
 			_timerBackgroundFlag.Stop();
+			//#658: a load waiting on the BIOS sheet (or the classic firmware
+			//dialog) holds the Core's load locks that Stop takes on this thread,
+			//where the answer would run: answer every request first.
+			_model?.BiosSheet.Dismiss();
+			_coreRequests.Close();
 			EmuApi.Stop();
 			_listener?.Dispose();
-			EmuApi.Release();
+			if(ReleaseCore != null) {
+				ReleaseCore();
+			} else {
+				EmuApi.Release();
+			}
 			ConfigManager.Config.MainWindow.SaveWindowSettings(this);
 			ConfigManager.Config.Save();
 			_isClosing = true;
@@ -603,37 +621,56 @@ namespace Mesen.Windows
 
 				case ConsoleNotificationType.MissingFirmware: {
 					MissingFirmwareMessage msg = Marshal.PtrToStructure<MissingFirmwareMessage>(e.Parameter);
-					TaskCompletionSource tcs = new TaskCompletionSource();
+					//#658: answered by the UI below, or by CloseEmu before it stops
+					//the Core; already answered when the app is quitting.
+					TaskCompletionSource wait = _coreRequests.Begin();
+					if(wait.Task.IsCompleted) {
+						break;
+					}
 					Dispatcher.UIThread.Post(async () => {
-						//G.5 W-P13: Player mode's Play gets the in-place sheet;
-						//Advanced (and Remaster/Share) keep the classic dialog loop.
-						if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
-							string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
-							await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
-						} else {
-							await FirmwareHelper.RequestFirmwareFile(msg);
+						try {
+							if(_coreRequests.IsClosed) {
+								return;
+							}
+							//G.5 W-P13: Player mode's Play gets the in-place sheet;
+							//Advanced (and Remaster/Share) keep the classic dialog loop.
+							if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
+								string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
+								await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
+							} else {
+								await FirmwareHelper.RequestFirmwareFile(msg);
+							}
+						} finally {
+							_coreRequests.End(wait);
 						}
-						tcs.SetResult();
 					});
-					tcs.Task.Wait();
+					wait.Task.Wait();
 					break;
 				}
 
 				case ConsoleNotificationType.SufamiTurboFilePrompt: {
 					SufamiTurboFilePromptMessage msg = Marshal.PtrToStructure<SufamiTurboFilePromptMessage>(e.Parameter);
-					TaskCompletionSource tcs = new TaskCompletionSource();
+					//#658: the same wait as MissingFirmware's.
+					TaskCompletionSource wait = _coreRequests.Begin();
+					if(wait.Task.IsCompleted) {
+						break;
+					}
 					Dispatcher.UIThread.Post(async () => {
-						if(await MesenMsgBox.Show(this, "PromptLoadSufamiTurbo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
-							string? selectedFile = await FileDialogHelper.OpenFile(null, this, FileDialogHelper.SufamiTurboExt);
-							if(selectedFile != null) {
-								byte[] file = Encoding.UTF8.GetBytes(selectedFile);
-								Array.Copy(file, msg.Filename, file.Length);
-								Marshal.StructureToPtr<SufamiTurboFilePromptMessage>(msg, e.Parameter, false);
+						try {
+							if(!_coreRequests.IsClosed && await MesenMsgBox.Show(this, "PromptLoadSufamiTurbo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
+								string? selectedFile = await FileDialogHelper.OpenFile(null, this, FileDialogHelper.SufamiTurboExt);
+								//Once answered by closing, the Core no longer reads the message.
+								if(selectedFile != null && !wait.Task.IsCompleted) {
+									byte[] file = Encoding.UTF8.GetBytes(selectedFile);
+									Array.Copy(file, msg.Filename, file.Length);
+									Marshal.StructureToPtr<SufamiTurboFilePromptMessage>(msg, e.Parameter, false);
+								}
 							}
+						} finally {
+							_coreRequests.End(wait);
 						}
-						tcs.SetResult();
 					});
-					tcs.Task.Wait();
+					wait.Task.Wait();
 					break;
 				}
 

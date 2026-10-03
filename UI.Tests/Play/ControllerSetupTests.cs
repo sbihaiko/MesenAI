@@ -93,6 +93,33 @@ namespace Mesen.Tests.Play
 			Assert.Equal(DetectorEvent.DismissPill, d.OnPressed(new[] { Pad2Button3 }, Mapped, NoStart, TimeSpan.FromSeconds(8)));
 		}
 
+		//#660: the 8 s only advance on ticks, and ticks stop with the game
+		//(paused, quit): the pill goes when listening stops, and the device
+		//keeps its one ask per session.
+		[Fact]
+		public void The_pill_goes_away_when_listening_stops()
+		{
+			UnknownControllerDetector d = new();
+			d.OnPressed(new[] { Pad2Button3 }, Mapped, StartIs9, TimeSpan.Zero);
+
+			Assert.Equal(DetectorEvent.DismissPill, d.StopListening());
+			Assert.False(d.IsPillShown);
+			Assert.Equal(DetectorEvent.None, d.StopListening());
+
+			//Listening again: Start on that pad no longer opens the sheet, and
+			//the device is not asked a second time.
+			d.OnPressed(Array.Empty<ushort>(), Mapped, StartIs9, TimeSpan.FromSeconds(1));
+			Assert.Equal(DetectorEvent.None, d.OnPressed(new[] { Pad2Button9 }, Mapped, StartIs9, TimeSpan.FromSeconds(2)));
+		}
+
+		[Fact]
+		public void Stopping_with_no_pill_is_a_no_op()
+		{
+			UnknownControllerDetector d = new();
+			Assert.Equal(DetectorEvent.None, d.StopListening());
+			Assert.Equal(DetectorEvent.ShowPill, d.OnPressed(new[] { Pad2Button3 }, Mapped, NoStart, TimeSpan.Zero));
+		}
+
 		[Theory]
 		[InlineData(SetupConsole.Nes, 8)]
 		[InlineData(SetupConsole.GameBoy, 8)]

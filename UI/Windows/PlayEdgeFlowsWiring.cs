@@ -40,20 +40,26 @@ namespace Mesen.Windows
 				}
 			};
 
-			DispatcherTimer timer = new DispatcherTimer(PollInterval, DispatcherPriority.Background, (s, e) => Poll(model));
+			bool listening = false;
+			DispatcherTimer timer = new DispatcherTimer(PollInterval, DispatcherPriority.Background, (s, e) => listening = Poll(model, listening));
 			timer.Start();
 			return timer;
 		}
 
 		//W-P15 listens only while a game runs in Player mode's Play workspace,
 		//and keeps listening while its own sheet is open (the game is paused).
-		private static void Poll(MainWindowViewModel model)
+		//#660: when listening stops, the pill goes with it - its 8 s only
+		//advance on these ticks. Returns whether it is listening now.
+		private static bool Poll(MainWindowViewModel model, bool wasListening)
 		{
 			bool listening = model.ControllerSetup.IsVisible
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {
 				model.ControllerSetup.Tick(InputApi.GetPressedKeys());
+			} else if(wasListening) {
+				model.ControllerSetup.StopListening();
 			}
+			return listening;
 		}
 
 		private static void FocusOnOpen(Window window, System.ComponentModel.INotifyPropertyChanged source, string property, Func<bool> isOpen, string controlName)

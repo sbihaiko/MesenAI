@@ -47,6 +47,17 @@ namespace Mesen.Tests.Play
 			FirstRunChoice picked = PlayFirstRun.Defaults with { StoreInUserProfile = false, Keyboard = FirstRunKeyboard.Wasd };
 			Assert.Equal(picked, PlayFirstRun.OnDismiss(picked));
 		}
+
+		//#661: the close button and Esc apply the choice (and an unwritable
+		//folder keeps the sheet); quitting the app or shutting the OS down
+		//writes nothing and never blocks - the sheet shows again next launch.
+		[Theory]
+		[InlineData(false, true)]
+		[InlineData(true, false)]
+		public void Closing_applies_the_choice_unless_the_app_or_the_OS_shuts_down(bool shuttingDown, bool confirms)
+		{
+			Assert.Equal(confirms, PlayFirstRun.ConfirmsOnClose(shuttingDown));
+		}
 	}
 
 	public class BiosPromptTests
