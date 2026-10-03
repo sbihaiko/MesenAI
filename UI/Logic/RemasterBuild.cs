@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 
 namespace Mesen.Logic;
 
@@ -99,7 +100,8 @@ public static class RemasterShow
 //W-R1 zone ③: "2 files changed since the last build." A file counts when the
 //artist could have painted it - a PNG of the recording's kit or of the pattern
 //pages, not an `.orig.png` reference twin - and it is newer than the stamp the
-//last clean build wrote into mep/. Null = never built.
+//last clean build wrote into mep/. Null = never built, or a first build that
+//stopped mid-sync (#659).
 public static class RemasterBuildFreshness
 {
 	public const string StampFile = ".remaster-build.json";
@@ -110,7 +112,7 @@ public static class RemasterBuildFreshness
 			return null;
 		}
 		string stamp = Path.Combine(projectFolder, "mep", StampFile);
-		if(!File.Exists(stamp)) {
+		if(!File.Exists(stamp) || IsClaimOnly(stamp)) {
 			return null;
 		}
 		DateTime built = File.GetLastWriteTimeUtc(stamp);
@@ -137,5 +139,21 @@ public static class RemasterBuildFreshness
 			}
 		}
 		return changed;
+	}
+
+	//#659: mep_project_build stamps a first build `complete: false` before it
+	//syncs into mep/ and `complete: true` after (#646). Only that explicit
+	//false is a claim; a stamp from before #653 has no `complete` key and an
+	//unreadable one keeps meaning what any stamp meant then - a clean build.
+	public static bool IsClaimOnly(string stampPath)
+	{
+		try {
+			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(stampPath));
+			return doc.RootElement.ValueKind == JsonValueKind.Object
+				&& doc.RootElement.TryGetProperty("complete", out JsonElement complete)
+				&& complete.ValueKind == JsonValueKind.False;
+		} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is JsonException) {
+			return false;
+		}
 	}
 }

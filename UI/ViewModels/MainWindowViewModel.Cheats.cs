@@ -68,6 +68,8 @@ namespace Mesen.ViewModels
 				Config.Cheats.DisableAllCheats,
 				PlayerCheatsStore.SaveAndApply,
 				gameName: EmuApi.IsRunning() ? EmuApi.GetRomInfo().GetRomName() : "",
+				//#662: the file name tells a GBC game from a GB one (an archive's inner file).
+				romFile: ((ResourcePath)RomInfo.RomPath).FileName,
 				openUrl: ApplicationHelper.OpenBrowser,
 				community: CommunityCheatsLastKnown(),
 				//#639: CheatCodes saves to the running game's file; the sheet

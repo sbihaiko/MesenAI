@@ -29,7 +29,7 @@ namespace Mesen.Tests.Cheats
 		[Fact]
 		public void The_url_opens_the_cheat_form_with_its_label_and_title_prefix()
 		{
-			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1, "1942", ConsoleType.Nes, "0436:09", "Start with 9 rolls"));
+			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1, "1942", ConsoleType.Nes, "1942.nes", "0436:09", "Start with 9 rolls"));
 			Assert.Equal("cheat-code.yml", q["template"]);
 			Assert.Equal("cheat", q["labels"]);
 			Assert.Equal("[Cheat] ", q["title"]);
@@ -40,7 +40,7 @@ namespace Mesen.Tests.Cheats
 		[Fact]
 		public void Every_form_field_is_prefilled_by_its_id()
 		{
-			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1.ToLowerInvariant(), "1942", ConsoleType.Nes, "0437:05" + Environment.NewLine + "0438:01", "Start on stage 5"));
+			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1.ToLowerInvariant(), "1942", ConsoleType.Nes, "1942.nes", "0437:05" + Environment.NewLine + "0438:01", "Start on stage 5"));
 			Assert.Equal(Sha1, q["game_sha1"]);
 			Assert.Equal("1942", q["game_name"]);
 			Assert.Equal("NES", q["console"]);
@@ -50,18 +50,32 @@ namespace Mesen.Tests.Cheats
 		}
 
 		[Theory]
-		[InlineData(ConsoleType.Nes, "NES")]
-		[InlineData(ConsoleType.Gameboy, "Game Boy")]
-		[InlineData(ConsoleType.Sms, "Master System / Game Gear")]
-		public void The_console_is_the_forms_option(ConsoleType console, string option)
+		[InlineData(ConsoleType.Nes, "Contra (USA).nes", "NES")]
+		[InlineData(ConsoleType.Gameboy, "Tetris (World).gb", "Game Boy")]
+		[InlineData(ConsoleType.Sms, "Sonic (World).sms", "Master System / Game Gear")]
+		public void The_console_is_the_forms_option(ConsoleType console, string romFile, string option)
 		{
-			Assert.Equal(option, CheatShare.ConsoleOption(console));
+			Assert.Equal(option, CheatShare.ConsoleOption(console, romFile));
+		}
+
+		//#662: the Game Boy core runs GBC games too; the form offers "Game Boy
+		//Color" and the workflow labels it console:gbc. The extension tells them
+		//apart, as in PackShare.ConsoleOption.
+		[Theory]
+		[InlineData("Tetris DX (World).gbc", "Game Boy Color")]
+		[InlineData("POKEMON CRYSTAL.GBC", "Game Boy Color")]
+		[InlineData("Tetris (World).gb", "Game Boy")]
+		[InlineData("", "Game Boy")]
+		public void A_game_boy_color_game_prefills_game_boy_color(string romFile, string option)
+		{
+			Assert.Equal(option, CheatShare.ConsoleOption(ConsoleType.Gameboy, romFile));
+			Assert.Equal(option, Query(CheatShare.BuildIssueUrl(Sha1, "Tetris", ConsoleType.Gameboy, romFile, "01FF34C1", "Max lines"))["console"]);
 		}
 
 		[Fact]
 		public void Text_is_escaped_so_it_cannot_add_a_parameter()
 		{
-			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1, "Tom & Jerry", ConsoleType.Nes, "SXIOPO", "a&b=c #1"));
+			Dictionary<string, string> q = Query(CheatShare.BuildIssueUrl(Sha1, "Tom & Jerry", ConsoleType.Nes, "Tom & Jerry.nes", "SXIOPO", "a&b=c #1"));
 			Assert.Equal("Tom & Jerry", q["game_name"]);
 			Assert.Equal("a&b=c #1", q["description"]);
 			Assert.False(q.ContainsKey("b"));
@@ -84,7 +98,7 @@ namespace Mesen.Tests.Cheats
 		[Fact]
 		public void A_very_long_description_is_cut_so_the_url_stays_bounded()
 		{
-			string url = CheatShare.BuildIssueUrl(Sha1, "1942", ConsoleType.Nes, "SXIOPO", new string('é', 5000));
+			string url = CheatShare.BuildIssueUrl(Sha1, "1942", ConsoleType.Nes, "1942.nes", "SXIOPO", new string('é', 5000));
 			Assert.True(url.Length <= CheatShare.MaxUrlLength);
 			Assert.StartsWith(new string('é', 10), Query(url)["description"]);
 		}

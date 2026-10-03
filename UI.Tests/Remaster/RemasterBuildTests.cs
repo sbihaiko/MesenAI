@@ -175,5 +175,34 @@ namespace Mesen.Tests.Remaster
 				Directory.Delete(project, true);
 			}
 		}
+
+		[Theory]
+		[InlineData("{\"recording\": \"rec-001\", \"complete\": false}", null)]
+		[InlineData("{\"recording\": \"rec-001\", \"complete\": true}", 1)]
+		[InlineData("{\"recording\": \"rec-001\"}", 1)]
+		[InlineData("{}", 1)]
+		public void A_stamp_claimed_before_the_sync_is_not_a_clean_build(string stamp, int? changed)
+		{
+			//#659: mep_project_build writes `complete: false` before the first
+			//sync and rewrites it `complete: true` after (#646, #653); a build
+			//stopped in between left a half-written mep/ that read "up to date".
+			//A stamp from before #653 has no `complete` key and stays a clean build.
+			string project = Path.Combine(Path.GetTempPath(), "g6-claim-" + Guid.NewGuid().ToString("N"));
+			try {
+				string path = Path.Combine(project, "mep", RemasterBuildFreshness.StampFile);
+				Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+				File.WriteAllText(path, stamp);
+				DateTime built = DateTime.UtcNow.AddMinutes(-5);
+				File.SetLastWriteTimeUtc(path, built);
+				string sheet = Path.Combine(project, "kit", "rec-001", "sheets", "usr000.png");
+				Directory.CreateDirectory(Path.GetDirectoryName(sheet)!);
+				File.WriteAllText(sheet, "x");
+				File.SetLastWriteTimeUtc(sheet, built.AddMinutes(1));
+
+				Assert.Equal(changed, RemasterBuildFreshness.ChangedSinceLastBuild(project, "rec-001"));
+			} finally {
+				Directory.Delete(project, true);
+			}
+		}
 	}
 }

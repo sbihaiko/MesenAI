@@ -52,6 +52,7 @@ namespace Mesen.ViewModels
 		private Action<IReadOnlyList<StoredCheat>> _save = _ => { };
 		private string _cheatSha1 = "";
 		private string _gameName = "";
+		private string _romFile = "";
 		private Action<string> _openUrl = _ => { };
 		private IReadOnlyList<CommunityCheat> _community = Array.Empty<CommunityCheat>();
 		//#639: the cheat hash of the copy running now; null = the copy never
@@ -66,15 +67,17 @@ namespace Mesen.ViewModels
 
 		//recordingArt is the Remaster game view's context flag (ADR-0245 §3):
 		//Play passes false, so every code is available there.
-		//gameName prefills the share form; community is the catalog known when
-		//the sheet opens (CommunityCheatCatalogFetcher.LastKnown).
+		//gameName and romFile (its file name: GB or GBC, #662) prefill the share
+		//form; community is the catalog known when the sheet opens
+		//(CommunityCheatCatalogFetcher.LastKnown).
 		public void Open(ConsoleType console, string cheatSha1, IReadOnlyList<CheatDbGame> db, IReadOnlyList<StoredCheat> stored, bool recordingArt, bool disableAll, Action<IReadOnlyList<StoredCheat>> save,
-			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null, Func<string>? runningCheatSha1 = null)
+			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null, Func<string>? runningCheatSha1 = null, string romFile = "")
 		{
 			_runningCheatSha1 = runningCheatSha1;
 			_console = console;
 			_cheatSha1 = cheatSha1;
 			_gameName = gameName;
+			_romFile = romFile ?? "";
 			_openUrl = openUrl ?? (_ => { });
 			_community = CommunityCheatCatalog.ForCopy(community ?? Array.Empty<CommunityCheatGame>(), _cheatSha1, console);
 			_db = db;
@@ -117,7 +120,7 @@ namespace Mesen.ViewModels
 		public void Share(PlayerCheatRow row)
 		{
 			if(CheatShare.CanShare(row.Row, _console, _cheatSha1)) {
-				_openUrl(CheatShare.BuildIssueUrl(_cheatSha1, _gameName, _console, row.Row.Codes, row.Row.Description));
+				_openUrl(CheatShare.BuildIssueUrl(_cheatSha1, _gameName, _console, _romFile, row.Row.Codes, row.Row.Description));
 			}
 		}
 

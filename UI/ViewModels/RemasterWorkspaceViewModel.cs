@@ -4,6 +4,7 @@ using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Localization;
 using Mesen.Logic;
+using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -241,6 +242,8 @@ namespace Mesen.ViewModels
 				Refresh();
 				return false;
 			}
+			//#663: the builder stops the project's own pack art, if it was drawing.
+			PackArtSwitch.Raise();
 			NoticeText = "";
 			_chosenProject = RemasterProjectLocator.FromRecordingFolder(EmuApi.GetMepRecordingFolder());
 			_chosenByUser = false;
@@ -262,6 +265,7 @@ namespace Mesen.ViewModels
 			}
 			string folder = EmuApi.GetMepRecordingFolder();
 			EmuApi.StopMepRecording();
+			PackArtSwitch.Raise();
 			string project = RemasterProjectLocator.FromRecordingFolder(folder);
 			if(project.Length > 0) {
 				_chosenProject = project;

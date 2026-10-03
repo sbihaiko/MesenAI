@@ -125,6 +125,8 @@ namespace Mesen.ViewModels
 				}
 
 				ExecuteWithOptions(options, EmulatorShortcut.StartRecordHdPack);
+				//#663: the builder stops a loaded pack's art.
+				Dispatcher.UIThread.Post(PackArtSwitch.Raise);
 			});
 		}
 
@@ -201,6 +203,7 @@ namespace Mesen.ViewModels
 				EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.StopRecordHdPack });
 
 				Dispatcher.UIThread.Post(() => {
+					PackArtSwitch.Raise();
 					IsOpenFolderEnabled = true;
 					UpdateFilterDropdown();
 					_coverageTimer?.Stop();
