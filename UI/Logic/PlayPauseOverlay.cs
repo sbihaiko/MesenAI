@@ -220,6 +220,14 @@ public static class PlaySurfaceGame
 //pause). The picture is hidden while one of them is up.
 public static class PlayGameLayer
 {
+	//A Play surface over the game: W-P4, a sheet opened over it, the BIOS
+	//sheet, controller setup, or the load card (#734: an open from a game on
+	//screen, or a reload, would spin under the picture otherwise).
+	public static bool SurfaceOverGame(bool overlay, bool sheet, bool biosSheet, bool controllerSetup, bool loadWait)
+	{
+		return overlay || sheet || biosSheet || controllerSetup || loadWait;
+	}
+
 	public static bool ShowsNativeRenderer(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame)
 	{
 		return gameViewVisible && !recentsVisible && !softwareFrame && !surfaceOverGame;

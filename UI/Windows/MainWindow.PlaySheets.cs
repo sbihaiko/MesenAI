@@ -46,11 +46,14 @@ namespace Mesen.Windows
 			//the window goes (headless tests open several MainWindows).
 			Action<string> started = name => _model.OnPackInstallStarted(name);
 			Action<bool, bool> finished = (installed, silent) => _model.OnPackInstallFinished(installed, silent);
+			Action<long, long?> progress = (received, total) => _model.OnPackInstallProgress(received, total);
 			CommunityPackInstallService.InstallStarted += started;
 			CommunityPackInstallService.InstallFinished += finished;
+			CommunityPackInstallService.InstallProgress += progress;
 			Closed += (_, _) => {
 				CommunityPackInstallService.InstallStarted -= started;
 				CommunityPackInstallService.InstallFinished -= finished;
+				CommunityPackInstallService.InstallProgress -= progress;
 			};
 		}
 

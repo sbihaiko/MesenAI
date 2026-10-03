@@ -56,9 +56,13 @@ namespace Mesen.Services
 		//is a pill, never a window).
 		public static event Action<string>? InstallStarted;
 		public static event Action<bool, bool>? InstallFinished;
+		//#734: the artifact download's bytes so far and its size (null when
+		//the host does not say), for the pill's bar. Raised on the UI thread.
+		public static event Action<long, long?>? InstallProgress;
 
 		private static void RaiseStarted(string name) => Dispatcher.UIThread.Post(() => InstallStarted?.Invoke(name));
 		private static void RaiseFinished(bool installed, bool silent) => Dispatcher.UIThread.Post(() => InstallFinished?.Invoke(installed, silent));
+		private static void RaiseProgress(long received, long? total) => Dispatcher.UIThread.Post(() => InstallProgress?.Invoke(received, total));
 
 		public static int GetVotes(string packId)
 		{
@@ -97,7 +101,7 @@ namespace Mesen.Services
 				//The catalog fetch re-verifies an up-to-300MB artifact (SHA-256); start it
 				//on the thread pool so that CPU work and its continuations stay off the UI
 				//thread (this Restore is user-triggered from the Enhancement Packs window).
-				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => RaiseStarted(entry.Name)));
+				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => RaiseStarted(entry.Name), RaiseProgress));
 				if(fetched == null) {
 					RaiseFinished(false, false);
 					return (false, "the pack is no longer in the catalog (nothing to restore from)");
@@ -239,6 +243,10 @@ namespace Mesen.Services
 					if(userRequested || PackInstallPill.ShowsFor(installedSha256, entry.Sha256)) {
 						pillShown = true;
 						RaiseStarted(entry.Name);
+					}
+				}, (received, total) => {
+					if(pillShown) {
+						RaiseProgress(received, total);
 					}
 				});
 				if(fetched == null) {

@@ -274,7 +274,17 @@ namespace Mesen.Utilities
 			//Block power cycle/power off/reload rom operations until the previous operation is done
 			//This helps prevent a lot of edge cases that could happen in the UI when e.g spamming reload rom
 			if(Interlocked.Increment(ref _reloadRequestCounter) == 1) {
-				Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = shortcut }));
+				//#734: a power cycle or a reload is a wait like an open (the
+				//pack decode is inside it): the load card shows until the
+				//picture after it. The power cycle runs on the emulation thread
+				//(GameLoaded or GameLoadFailed ends it); Reload blocks here.
+				int waitTicket = shortcut == EmulatorShortcut.ExecPowerOff ? 0 : MainWindowViewModel.Instance.BeginReloadWait();
+				Task.Run(() => {
+					EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = shortcut });
+					if(shortcut == EmulatorShortcut.ExecReloadRom) {
+						MainWindowViewModel.Instance.OnReloadReturned(waitTicket);
+					}
+				});
 			}
 		}
 
@@ -313,6 +323,9 @@ namespace Mesen.Utilities
 			//another game opened is dropped (PackChangePolicy.RestartsLoadedGame).
 			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
 			string romSha1 = EmuApi.GetMepRomSha1();
+			//#734: the swap reloads the ROM and its pack - the load card shows
+			//until the picture after it (W-P7, the picker, Build & Show).
+			int waitTicket = MainWindowViewModel.Instance.BeginReloadWait();
 			return Task.Run(() => {
 				//One swap at a time. Each reloads with the switches as they are
 				//when it runs, so a second toggle flipped during the first one is
@@ -321,6 +334,7 @@ namespace Mesen.Utilities
 				lock(_packChangeLock) {
 					outcome = PackChangePolicy.Outcome((InPlaceReloadResult)EmuApi.ReloadRomKeepingState());
 				}
+				MainWindowViewModel.Instance.OnReloadReturned(waitTicket);
 				if(outcome.NoticeKey != null) {
 					EmuApi.DisplayMessage("MEP", outcome.NoticeKey);
 				}

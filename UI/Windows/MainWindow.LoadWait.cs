@@ -16,7 +16,8 @@ namespace Mesen.Windows
 		//card, above a hidden native picture) stays until the first picture.
 		private bool HoldsHomeForPicture(bool loadedPaused)
 		{
-			bool holds = _model.LoadWait.OnGameLoaded(loadedPaused);
+			//A reload keeps the Core's pause: a paused game draws nothing after it.
+			bool holds = _model.LoadWait.OnGameLoaded(loadedPaused, EmuApi.IsPaused());
 			int openGeneration = _model.LoadWait.OpenGeneration;
 			Dispatcher.UIThread.Post(() => {
 				_model.RefreshLoadWait();
@@ -70,6 +71,13 @@ namespace Mesen.Windows
 				case ConsoleNotificationType.CodeBreak:
 					if(_model.LoadWait.EndPictureWait()) {
 						Dispatcher.UIThread.Post(ShowGamePicture);
+					}
+					break;
+
+				case ConsoleNotificationType.GameLoadFailed:
+					//A reload that failed (a power cycle of a file that is gone).
+					if(_model.LoadWait.OnLoadFailed()) {
+						Dispatcher.UIThread.Post(EndLoadWaitOnScreen);
 					}
 					break;
 

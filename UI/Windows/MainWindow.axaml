@@ -155,30 +155,24 @@
 						<BlurEffect Radius="12" />
 					</Image.Effect>
 				</Image>
-				<!--#734: the load card (W-P9's HUD pill shape) over the dimmed home,
-				from an open to the game's first picture (Logic/PlayLoadWait). The
-				home stays up for all of it, so the native picture is hidden and
-				cannot cover the card. The scrim takes the clicks, so a second open
-				does not queue behind this one; the BIOS sheet asks over it.-->
-				<Panel Name="PlayLoadWaitLayer" Classes="scrim">
-					<Panel.IsVisible>
-						<MultiBinding Converter="{x:Static BoolConverters.And}">
-							<Binding Path="IsLoadWaitActive" />
-							<Binding Path="!BiosSheet.IsVisible" />
-						</MultiBinding>
-					</Panel.IsVisible>
-					<Border Name="PlayLoadWaitCard" Classes="hud" Width="340" Padding="16 14" HorizontalAlignment="Center" VerticalAlignment="Center">
+				<!--W-P9 (#734): a pack installing while the game plays. A popup is its
+				own window, so on macOS it floats above the native game picture,
+				which stays shown; the bar fills with the download when its size is
+				known and moves indeterminately otherwise. Never takes a click or
+				the keyboard.-->
+				<Popup Name="PackInstallPillPopup" IsOpen="{Binding IsPackInstallPillShown}" IsLightDismissEnabled="False" WindowManagerAddShadowHint="False" ShouldUseOverlayLayer="False" TakesFocusFromNativeControl="False"
+					Placement="AnchorAndGravity" PlacementAnchor="TopRight" PlacementGravity="BottomLeft" HorizontalOffset="-4" VerticalOffset="4">
+					<Border Name="PackInstallPill" Classes="hud" Classes.compact="{Binding IsPackInstallPillFailed}" Padding="16 14" Margin="12 12 12 20" MaxWidth="440" IsHitTestVisible="False">
 						<DockPanel>
-							<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0"><PathIcon Data="{StaticResource PlayerIconPlay}" /></Border>
+							<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0" Background="{StaticResource PlayerTintShareBrush}" IsVisible="{Binding IsPackInstallPillInstalling}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
+							<PathIcon DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Foreground="{StaticResource PlayerOrangeBrush}" IsVisible="{Binding IsPackInstallPillFailed}" />
 							<StackPanel VerticalAlignment="Center" Spacing="9">
-								<TextBlock Name="PlayLoadWaitText" Classes="headline" Text="{Binding LoadWaitText}" TextTrimming="CharacterEllipsis" />
-								<!--Indeterminate: neither the Core's load nor the first
-								frames report a percentage.-->
-								<ProgressBar Name="PlayLoadWaitBar" IsIndeterminate="True" />
+								<TextBlock Name="PackInstallPillText" Classes="headline" Text="{Binding PackInstallPillText}" TextTrimming="CharacterEllipsis" />
+								<ProgressBar Name="PackInstallPillBar" Width="300" Minimum="0" Maximum="100" IsVisible="{Binding IsPackInstallPillInstalling}" IsIndeterminate="{Binding IsPackInstallPillIndeterminate}" Value="{Binding PackInstallPillPercent}" />
 							</StackPanel>
 						</DockPanel>
 					</Border>
-				</Panel>
+				</Popup>
 
 				<!--W-P4: the game stays behind the overlay, dimmed.-->
 				<Border Name="PlayerOverlayScrim" Classes="scrim">
@@ -361,6 +355,37 @@
 				</Panel>
 				<!--ADR-0249 (W-P10 › Adjust…): the shader's parameters, over Settings.-->
 				<v:PlayerShaderSheetView Name="PlayerShaderSheetHost" IsVisible="{Binding IsShaderSheetVisible}" />
+			</Panel>
+
+			<!--#734: the load card's layer sits above every workspace: an open
+			shows it in Play, a reload wherever the game is on screen (Play,
+			Remaster's and Share's game views), in that workspace's tint.-->
+			<Panel Name="LoadWaitHost" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" Classes.remaster="{Binding IsRemasterGameView}" Classes.share="{Binding IsShareGameView}">
+				<!--#734: the load card (W-P9's HUD pill shape), from an open or a
+				reload to the game's first picture (Logic/PlayLoadWait). It is a
+				surface over the game (PlayGameLayer): the native picture is hidden
+				while it shows, so it cannot cover the card. The scrim takes the
+				clicks, so a second open does not queue behind this one; the BIOS
+				sheet asks over it.-->
+				<Panel Name="PlayLoadWaitLayer" Classes="scrim">
+					<Panel.IsVisible>
+						<MultiBinding Converter="{x:Static BoolConverters.And}">
+							<Binding Path="IsLoadWaitActive" />
+							<Binding Path="!BiosSheet.IsVisible" />
+						</MultiBinding>
+					</Panel.IsVisible>
+					<Border Name="PlayLoadWaitCard" Classes="hud" Width="340" Padding="16 14" HorizontalAlignment="Center" VerticalAlignment="Center">
+						<DockPanel>
+							<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0"><PathIcon Data="{StaticResource PlayerIconPlay}" /></Border>
+							<StackPanel VerticalAlignment="Center" Spacing="9">
+								<TextBlock Name="PlayLoadWaitText" Classes="headline" Text="{Binding LoadWaitText}" TextTrimming="CharacterEllipsis" />
+								<!--Indeterminate: neither the Core's load nor the first
+								frames report a percentage.-->
+								<ProgressBar Name="PlayLoadWaitBar" IsIndeterminate="True" />
+							</StackPanel>
+						</DockPanel>
+					</Border>
+				</Panel>
 			</Panel>
 
 			<!--G.5 (W-P13), ADR-0249: the BIOS sheet asks in whichever workspace
