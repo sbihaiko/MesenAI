@@ -36,6 +36,7 @@ import json
 import subprocess
 import sys
 
+import gh_project_items
 from mep_meta_parser import parse_mep_meta
 import pack_id_rules
 
@@ -150,8 +151,8 @@ def main(argv):
     my_pack_id, _ = pack_id_rules.resolve_pack_id(args.pack_url, {"recipe": {"pack": {"id": my_recipe_id}}}, args.issue_number)
 
     items = []
-    raw = run_gh(["project", "item-list", str(PROJECT_NUMBER), "--owner", OWNER, "--format", "json"])
-    for it in json.loads(raw).get("items", []):
+    # Bug #670: the whole board or nothing (a truncated listing exits non-zero).
+    for it in gh_project_items.list_items(run_gh, PROJECT_NUMBER, OWNER):
         content = it.get("content") or {}
         items.append({
             "status": it.get("status") or it.get("Status") or "",

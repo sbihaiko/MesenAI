@@ -64,15 +64,19 @@ def check_apply_verdict_downgrade_expression(text):
 def check_apply_verdict_external_label_branch(text):
     # T5 (ADR-0138 §6/§13): `assets:external` is derived from the
     # assembled recipe having a non-empty `sources.deps` (never from
-    # classify's own `assets` enum, which has no "external" member) and
-    # applied through an `external` arm added to the existing case/label
-    # loop, only when recipe_status == 'present' (the only status for
-    # which mep_recipe.json was actually written by the assembly step).
+    # classify's own `assets` enum, which has no "external" member), only
+    # when recipe_status == 'present' (the only status for which
+    # mep_recipe.json was actually written by the assembly step). Since
+    # bug #677 that flag reaches scripts/pack_asset_labels.py as
+    # `--external`, and the label loop adds the justified assets:* labels
+    # and removes the rest.
     block = _apply_verdict_block(text)
     if block is None:
         return
-    if 'external) L="assets:external"' not in block:
-        fail("apply-verdict step has no case-loop arm applying the assets:external label")
+    if "${HAS_EXTERNAL_DEPS:+--external}" not in block or "pack_asset_labels.py" not in block:
+        fail("apply-verdict step does not pass the recipe's external-deps flag to scripts/pack_asset_labels.py")
+    if "for L in assets:textures assets:audio assets:external; do" not in block:
+        fail("apply-verdict step has no add/remove loop over assets:textures|audio|external (bug #677)")
     if 'RECIPE_STATUS" = "present"' not in block:
         fail("apply-verdict step does not condition assets:external on recipe_status == 'present'")
     if "sources.deps" not in block:

@@ -232,7 +232,17 @@ what CI actually runs; this doc records why they're split the way they are.
   `timeout-minutes: 15` (F6.0) so a hung request cannot hold
   the runner for the job's 6-hour default. Dispatches
   `workflows/community-pack-catalog.yml` by name (never opens it) when the
-  final Status is one of the two "Aceito" states. Requires the caller to
+  final Status is one of the two "Aceito" states or "Inválido" (#679: a
+  revalidation that rejects an accepted pack de-lists it at once, not at the
+  daily catalog run). The first step records the Status the item had before
+  the run (`prior_status_id`, via `scripts/pack_board_status.py current`)
+  and the last step, `if: (failure() || cancelled())`, restores it while the
+  item is still "Em validação" (#671), so a run that dies mid-way never
+  strands an accepted pack there. Multi-line step outputs (the classify and
+  autofix prompts/schemas, the classify `structured_output`) go through
+  `scripts/gh_output.py`, which uses a random per-write delimiter that never
+  occurs in the value (#673: a fixed `__PROMPT_EOF__` let a pack's README
+  line close the block and forge outputs). Requires the caller to
   supply a `PROJECT_PAT` PAT (`repo` + `project` + `read:org` scopes —
   `read:org` is required by `gh project` commands to resolve a
   personal-account owner, confirmed via a live "unknown owner type"
@@ -263,6 +273,11 @@ what CI actually runs; this doc records why they're split the way they are.
 - `workflows/community-pack-drift-check.yml` — daily (`'17 4 * * *'`) hash
   drift check over the board's accepted items, calling the reusable validate
   workflow with `mode: revalidate` only for items whose content hash moved.
+  Its board listing passes `--limit` (`scripts/gh_project_items.py limit`)
+  and `scripts/gh_project_items.py check` stops the job when the listing may
+  be truncated (#670: gh's default is 30 items); the catalog generator
+  (`scripts/mei_catalog_fetch.py`) and `scripts/mep_identity_check.py` read
+  the board through the same module.
   `disabled_manually` by the user's decision (2026-09-14): Pack Hash, label
   reconciliation and catalog updates currently happen only via `/revalidate`
   or a manual `gh workflow run community-pack-drift-check.yml`; re-enabling
@@ -389,6 +404,14 @@ what CI actually runs; this doc records why they're split the way they are.
   Checked by `check_apply_verdict_patch_labels_from_lint` (the old
   `ips|bps) L="patch:$asset"` arm must not return and the helper must be
   used) and by `scripts/test_pack_patch_labels.py`.
+  **`assets:textures`/`assets:audio`/`assets:external` follow the latest pass
+  both ways (bug #677).** `scripts/pack_asset_labels.py` names the ones this
+  pass justifies (textures/audio from classify's `assets`, external only
+  from the assembled recipe's `sources.deps`, passed as `--external`); the
+  workflow and `scripts/validate_pack_local.sh` add those and remove the
+  rest, mirroring the patch:* loop. Checked by
+  `check_apply_verdict_external_label_branch` and
+  `scripts/test_pack_asset_labels.py`.
   **"Upsert mep-meta comment" (`id: upsert-mep-meta`, F6.2b complete;
   fence fix + `kind` field F6.3b).** Runs right after `apply-verdict`, on
   EVERY successful classify pass (`if: steps.classify.outcome ==
