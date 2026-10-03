@@ -2133,6 +2133,8 @@
 		<Message ID="PlayHomeLastPlayedYesterday">Last played yesterday</Message>
 		<Message ID="PlayHomeLastPlayedDaysAgo">Last played {0} days ago</Message>
 		<Message ID="PlayHomeLastPlayedOn">Last played {0}</Message>
+		<Message ID="PlayHomePackBadgeInstalled">Enhancement pack installed</Message>
+		<Message ID="PlayHomePackBadgeCommunity">Community pack available — installs when you play</Message>
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>
 		<Message ID="SaveStatesRowEmpty">empty</Message>

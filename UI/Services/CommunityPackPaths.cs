@@ -12,5 +12,8 @@ namespace Mesen.Services
 	{
 		public static string CacheRoot => Path.Combine(ConfigManager.EnhancementPackFolder, ".cache");
 		public static string DownloadsFolder => Path.Combine(CacheRoot, "downloads");
+		//The last fetched catalog body (CommunityPackCatalogFetcher writes it;
+		//the Play home's pack badge reads it, RecentPackLookup).
+		public static string CatalogCachePath => Path.Combine(CacheRoot, "community-packs.json");
 	}
 }

@@ -93,6 +93,8 @@ namespace Mesen.ViewModels
 			if(mode == GameScreenMode.RecentGames) {
 				NeedResume = false;
 				Title = string.Empty;
+				//W-P2: re-read the packs folder and catalog for this home's badges.
+				RecentPackLookup.Invalidate();
 
 				List<string> files = Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd").OrderByDescending((file) => new FileInfo(file).LastWriteTime).ToList();
 				for(int i = 0; i < files.Count && entries.Count < 72; i++) {
@@ -196,8 +198,8 @@ namespace Mesen.ViewModels
 		}
 
 		//W-P2's "last played today". The pack half of the wireframe's subtitle
-		//("· Contra 80s 1.2") needs the recent entry to carry the ROM hash and a
-		//pack lookup (the §13.5.2 data-slice prerequisite) and is not shown.
+		//("· Contra 80s 1.2") needs the pack's name and version, which the
+		//badge lookup (RecentPackLookup) does not read, and is not shown.
 		private static string LastPlayedText(string recentFile)
 		{
 			if(!File.Exists(recentFile)) {
