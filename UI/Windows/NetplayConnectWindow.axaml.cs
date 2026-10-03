@@ -23,16 +23,21 @@ namespace Mesen.Windows
 			AvaloniaXamlLoader.Load(this);
 		}
 
-		private void Ok_OnClick(object sender, RoutedEventArgs e)
+		private async void Ok_OnClick(object sender, RoutedEventArgs e)
 		{
-			NetplayConfig cfg = (NetplayConfig)DataContext!;
-			ConfigManager.Config.Netplay = cfg.Clone();
+			NetplayConnectViewModel model = (NetplayConnectViewModel)DataContext!;
+			ConfigManager.Config.Netplay = model.Config.Clone();
 
-			Close(true);
-
-			Task.Run(() => {
-				NetplayApi.Connect(cfg.Host, cfg.Port, cfg.Password, false);
+			//The window stays up, with its moving indicator, while the socket
+			//connects; it closes on success and stays for a retry on failure
+			//(the core's own message says why).
+			bool connected = await model.ConnectAsync((host, port, password) => {
+				NetplayApi.Connect(host, port, password, false);
+				return NetplayApi.IsConnected();
 			});
+			if(connected) {
+				Close(true);
+			}
 		}
 
 		private void Cancel_OnClick(object sender, RoutedEventArgs e)
