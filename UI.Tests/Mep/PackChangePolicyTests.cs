@@ -67,6 +67,41 @@ namespace Mesen.Tests.Mep
 		}
 
 		[Fact]
+		public void Refused_RestartsTheGameTheChangeWasFor()
+		{
+			PackChangeOutcome refused = PackChangePolicy.Outcome(InPlaceReloadResult.Refused);
+			Assert.True(PackChangePolicy.RestartsLoadedGame(refused, changeOpenGeneration: 3, currentOpenGeneration: 3, changeRomSha1: "AB12", currentRomSha1: "ab12"));
+		}
+
+		[Fact]
+		public void Refused_AfterAnotherGameWasOpened_DoesNotRestartIt()
+		{
+			// #655: the core answers Refused at once (Emulator::ReloadRomKeepingState reads
+			// IsRunning before it takes the lock), also while another game's load has the
+			// old console torn down; the posted restart would then reload the new game.
+			PackChangeOutcome refused = PackChangePolicy.Outcome(InPlaceReloadResult.Refused);
+			Assert.False(PackChangePolicy.RestartsLoadedGame(refused, changeOpenGeneration: 3, currentOpenGeneration: 4, changeRomSha1: "AB12", currentRomSha1: "AB12"));
+			Assert.False(PackChangePolicy.RestartsLoadedGame(refused, 3, 3, "AB12", currentRomSha1: "CD34"));
+		}
+
+		[Fact]
+		public void Refused_WithNoGameLoaded_RestartsNothing()
+		{
+			PackChangeOutcome refused = PackChangePolicy.Outcome(InPlaceReloadResult.Refused);
+			Assert.False(PackChangePolicy.RestartsLoadedGame(refused, 3, 3, "AB12", currentRomSha1: ""));
+			Assert.False(PackChangePolicy.RestartsLoadedGame(refused, 3, 3, changeRomSha1: "", currentRomSha1: ""));
+		}
+
+		[Theory]
+		[InlineData(InPlaceReloadResult.Restored)]
+		[InlineData(InPlaceReloadResult.Restarted)]
+		[InlineData(InPlaceReloadResult.PatchRestarted)]
+		public void AnsweredInPlace_NeverRestartsAgain(InPlaceReloadResult result)
+		{
+			Assert.False(PackChangePolicy.RestartsLoadedGame(PackChangePolicy.Outcome(result), 3, 3, "AB12", "AB12"));
+		}
+
+		[Fact]
 		public void ResultValues_MatchCoresInPlaceReloadResult()
 		{
 			// The export's ABI (Core/Shared/Emulator.h): the byte values are fixed.

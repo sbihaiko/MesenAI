@@ -289,7 +289,9 @@ can be exercised by real xunit tests without Avalonia or the native
   `InPlaceReloadResult` mirrors Core's enum value for value (ABI; guarded by
   `scripts/test_pack_swap_exactness.py`). `LoadRomHelper.ApplyPackChange`
   is the host-aware caller: it runs the blocking export off the UI thread,
-  one swap at a time. Overclock never goes through it (power cycle).
+  one swap at a time; a refusal's fallback restart runs only while the
+  load it was for is still loaded (`PackChangePolicy.RestartsLoadedGame`,
+  #655). Overclock never goes through it (power cycle).
 - `CommunityCatalogUpdateDecision` (P.6, PRD Part B §3.6) is the
   host-free verdict for the F6.4b reinstall gate, replacing the old
   source.sha256 trigger (ADR-0138 §37) with the §3.6 content_id rule: an

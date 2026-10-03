@@ -244,6 +244,10 @@ namespace Mesen.Utilities
 				return;
 			}
 
+			//#655: the load this change is for - a fallback restart posted after
+			//another game opened is dropped (PackChangePolicy.RestartsLoadedGame).
+			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
+			string romSha1 = EmuApi.GetMepRomSha1();
 			Task.Run(() => {
 				//One swap at a time. Each reloads with the switches as they are
 				//when it runs, so a second toggle flipped during the first one is
@@ -256,7 +260,13 @@ namespace Mesen.Utilities
 					EmuApi.DisplayMessage("MEP", outcome.NoticeKey);
 				}
 				if(outcome.RestartNeeded) {
-					Dispatcher.UIThread.Post(restart);
+					Dispatcher.UIThread.Post(() => {
+						if(PackChangePolicy.RestartsLoadedGame(outcome, openGeneration, MainWindowViewModel.Instance.OpenGeneration, romSha1, EmuApi.GetMepRomSha1())) {
+							restart();
+						} else {
+							EmuApi.WriteLogEntry("[MEP] Pack change refused after the game changed; the loaded game is not restarted");
+						}
+					});
 				}
 			});
 		}
