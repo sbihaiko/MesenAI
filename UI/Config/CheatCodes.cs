@@ -92,6 +92,14 @@ namespace Mesen.Config
 
 		public static void ApplyCheats(IEnumerable<CheatCode> cheats)
 		{
+			cheats = cheats.ToList();
+			//Play's passive automatic recording yields to a code that changes the
+			//game (ADR-0245 amendment 2026-10-03); a user-started Remaster recording
+			//(RecordingArt) holds it back below instead.
+			if(!RecordingArt && EmuApi.IsMepBootstrapping() &&
+				CheatRecordingRule.PausesPassiveBootstrap(cheats.Select(c => new StoredCheat(c.Description, c.Type, c.Codes, c.Enabled)), RecordingArt, true)) {
+				EmuApi.StopMepRecording();
+			}
 			List<InteropCheatCode> encodedCheats = new List<InteropCheatCode>();
 			List<StoredCheat> held = new();
 			foreach(CheatCode cheat in cheats) {

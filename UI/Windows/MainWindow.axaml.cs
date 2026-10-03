@@ -494,10 +494,12 @@ namespace Mesen.Windows
 
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
-					//#690 (ADR-0184 §1): the legacy "Record while I play" setting
-					//(ADR-0243 Q3) starts a recording with the load; it holds back
-					//every code that is not a RAM code, as Remaster's does.
-					CheatCodes.SetRecordingArt(EmuApi.IsMepBootstrapping());
+					//A recording the user started never survives a load, so none holds
+					//codes back here. The legacy "Record while I play" setting
+					//(ADR-0243 Q3) starts a passive one with the load: it yields to a
+					//code that changes the game, which ApplyCheats stops it for
+					//(ADR-0245 amendment 2026-10-03).
+					CheatCodes.SetRecordingArt(false);
 					RomInfo romInfo = EmuApi.GetRomInfo();
 
 					Dispatcher.UIThread.Post(() => {
