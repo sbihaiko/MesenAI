@@ -94,7 +94,9 @@ private:
 	void ProcessOptionTag(vector<string>& tokens);
 
 	//Audio
-	int ProcessSoundTrack(string albumString, string trackString, string filename);
+	//#705: "filename" comes back as the spelling found in the pack (the check
+	//is case-insensitive), which is the one a case-sensitive file system opens
+	int ProcessSoundTrack(string albumString, string trackString, string& filename);
 	void ProcessBgmTag(vector<string>& tokens);
 	void ProcessSfxTag(vector<string>& tokens);
 

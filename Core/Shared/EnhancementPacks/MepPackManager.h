@@ -26,8 +26,34 @@ struct MepPackIdentity
 
 class MepPackManager
 {
+public:
+	//#694: everything LoadForRom resolves for one ROM. Emulator takes it before
+	//resolving the next ROM and puts it back when that ROM fails to load, so a
+	//failed load leaves the manager describing the game that is still running.
+	struct RomState
+	{
+		string RomSha1;
+		string RomFileSha1;
+		string RomExtension;
+		string RomName;
+		string RomFolder;
+		vector<MepPack> Packs;
+		vector<string> Rejected;
+		unordered_map<string, MepPackIdentity> PackIdentityByContainer;
+		unordered_set<string> OptimisticContainers;
+		string TexturesContainer;
+		bool TexturesIsOptimistic = false;
+	};
+
 private:
 	Emulator* _emu;
+	//#699: one lock for every member another thread can reach. The UI thread
+	//(pack list, sha1, preferences, toggles) and the decode thread (border
+	//lookup, HandleLowTextureMatchRate) read while the emulation thread rewrites
+	//the per-ROM state in LoadForRom, so every public reader takes it and
+	//returns copies. Recursive (SimpleLock), never held across a call that waits
+	//for another thread (the console's HD pack builder waits for the decoder).
+	mutable SimpleLock _stateLock;
 	string _romSha1;
 	//ADR-0211: the whole-file SHA-1, header included - the form an HD pack's
 	//<supportedRom> line carries (HdPackBuilder writes RomFile.GetSha1Hash()).
@@ -38,9 +64,8 @@ private:
 	//Containers disabled by the user (UI/config), lower-cased; independent of
 	//the current scan so it can be pushed at any time. Written from the UI
 	//thread (SetPackEnabled) and the decode thread (HandleLowTextureMatchRate)
-	//while the emulation thread reads it - every access goes through _lock.
+	//while the emulation thread reads it - every access goes through _stateLock.
 	unordered_set<string> _disabledContainers;
-	mutable SimpleLock _disabledLock;
 	//ADR-0145: containers whose pack.json targets did not match the loaded
 	//ROM's No-Intro SHA1 (lower-cased). They stay in _packs as *optimistic*
 	//candidates: textures apply (HdNesPack falls through per-tile, no
@@ -78,6 +103,9 @@ private:
 	//frames it has played (durationSeconds; a state load rebases it, #612)
 	string _recordingProjectRoot;
 	string _recordingFolder;
+	//#694: the ROM the recording belongs to (project.json's name), kept apart
+	//from _romName, which already names the next ROM when the entry is closed
+	string _recordingRomName;
 	RemasterProject::Recording _recordingEntry;
 	RemasterProject::RecordingClock _recordingClock;
 	//Source/note the next on-load bootstrap records with (headless_record
@@ -122,6 +150,17 @@ private:
 	//.mep-install.json pack_id when present, else the ADR-0140 rule-4
 	//`local:<container>` fallback (lower-cased)
 	string EffectivePackId(const MepPack& pack) const;
+	//Winning pack for a section: first *enabled* pack in precedence order
+	//that has it, honouring EnhancementPackConfig section toggles; nullptr
+	//when nothing applies. P.3: a pack whose effective pack_id equals the
+	//preferred one for the loaded ROM's sha1 wins even when lexicographically
+	//later (PRD §5 - the preference overrides the ADR-0040 default order).
+	//ADR-0145: Textures may come from an optimistic (SHA1-mismatched) pack -
+	//the renderer falls through per-tile and a low match-rate health signal
+	//auto-disables it; Audio/Synth still require an exact match (out of scope).
+	//#699: private - the pointer is into _packs, so the caller must hold
+	//_stateLock (or the emulation lock, which every writer of _packs holds).
+	const MepPack* GetPackForSection(MepSectionType type) const;
 	//The enabled, section-having pack whose effective pack_id equals the
 	//preferred one for the loaded ROM, or nullptr when there is no preference
 	//or no matching pack
@@ -192,9 +231,15 @@ public:
 		return adopted;
 	}
 
-	//Rescans the packs folder and keeps only the packs matching this ROM
+	//Rescans the packs folder and keeps only the packs matching this ROM.
+	//#694: leaves a recording in progress alone - the caller closes it with
+	//FinishRecordingEntry once the new ROM has actually loaded.
 	void LoadForRom(VirtualFile& romFile);
 	void Clear();
+
+	//#694: the current ROM's resolution, and putting one back (see RomState)
+	RomState SaveRomState() const;
+	void RestoreRomState(RomState state);
 
 	//P.1-local (ADR-0206 §3/§6): the background half of the local-identity
 	//cache. Walks the packs folder - the same surface ScanAndMatch uses, so it
@@ -248,17 +293,43 @@ public:
 		}
 	}
 	void SetNextRecordingSource(const string& source, const string& note);
-	bool IsBootstrapping() const { return _bootstrapping; }
+	//#699: the getters below are read from the UI thread while the emulation
+	//thread loads a ROM - each takes _stateLock and returns a copy
+	bool IsBootstrapping() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return _bootstrapping;
+	}
 	//Absolute auto/rec-NNN/ folder of the recording in progress (or of the
 	//last one started this session); "" before any
-	const string& GetRecordingFolder() const { return _recordingFolder; }
-	const string& GetRomName() const { return _romName; }
+	string GetRecordingFolder() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return _recordingFolder;
+	}
+	string GetRomName() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return _romName;
+	}
 
-	const string& GetRomSha1() const { return _romSha1; }
+	string GetRomSha1() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return _romSha1;
+	}
 	//ADR-0211: whole-file SHA-1 (see _romFileSha1) - the community-pack
 	//installer compares a declared <supportedRom> against this form.
-	const string& GetRomFileSha1() const { return _romFileSha1; }
-	bool HasPacks() const { return !_packs.empty(); }
+	string GetRomFileSha1() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return _romFileSha1;
+	}
+	bool HasPacks() const
+	{
+		auto lock = _stateLock.AcquireSafe();
+		return !_packs.empty();
+	}
 
 	//Per-pack toggle (persisted by the UI); takes effect on the next load
 	void SetPackEnabled(const string& containerName, bool enabled);
@@ -272,16 +343,6 @@ public:
 	//(the UI resets then re-pushes the full current map - a removed choice is
 	//never left stale in the core).
 	void ClearPreferredMepPacks();
-
-	//Winning pack for a section: first *enabled* pack in precedence order
-	//that has it, honouring EnhancementPackConfig section toggles; nullptr
-	//when nothing applies. P.3: a pack whose effective pack_id equals the
-	//preferred one for the loaded ROM's sha1 wins even when lexicographically
-	//later (PRD §5 - the preference overrides the ADR-0040 default order).
-	//ADR-0145: Textures may come from an optimistic (SHA1-mismatched) pack -
-	//the renderer falls through per-tile and a low match-rate health signal
-	//auto-disables it; Audio/Synth still require an exact match (out of scope).
-	const MepPack* GetPackForSection(MepSectionType type) const;
 
 	//ADR-0145: runtime health signal from the HD renderer. When the bg-tile
 	//match rate stays low on an *optimistic* textures pack (applied without an

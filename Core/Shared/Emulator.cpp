@@ -524,6 +524,10 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 	//Resolve the MEP enhancement packs for this (patched) ROM before the
 	//console's LoadRom runs: the consoles pull textures/synth/audio paths from
 	//the manager while loading their HD packs (F3 - ADR-0039/0040).
+	//#694: the running game's resolution is kept so a ROM that fails to load
+	//leaves the manager (sha1, sibling, packs, patch flag) describing it.
+	MepPackManager::RomState previousMepState = _mepPackManager->SaveRomState();
+	bool previousRomPatchedByPack = _romPatchedByPack;
 	_mepPackManager->LoadForRom(romFile);
 	_romPatchedByPack = _mepPackManager->ApplyPatches(romFile);
 
@@ -551,6 +555,8 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 
 	if(result != LoadRomResult::Success) {
 		MessageManager::DisplayMessage("Error", "CouldNotLoadFile", romFile.GetFileName());
+		_mepPackManager->RestoreRomState(std::move(previousMepState));
+		_romPatchedByPack = previousRomPatchedByPack;
 		if(debugger) {
 			_debugger.reset(debugger);
 			_internalDebugger = _debugger.get();
@@ -565,6 +571,11 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 		debugger->Release();
 		debugger.reset();
 	}
+
+	//ADR-0243 / #694: the previous game's recording ends now that another ROM
+	//has loaded, while the frame count still belongs to it (a power cycle never
+	//reaches Stop, which closes it otherwise)
+	_mepPackManager->FinishRecordingEntry();
 
 	if(stopRom) {
 		//Only update the recent game entry if the game that was loaded is a different game

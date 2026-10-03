@@ -1002,7 +1002,7 @@ static string JoinAudioFilename(const vector<string>& tokens, size_t from, size_
 	return StringUtilities::Trim(name);
 }
 
-int HdPackLoader::ProcessSoundTrack(string albumString, string trackString, string filename)
+int HdPackLoader::ProcessSoundTrack(string albumString, string trackString, string& filename)
 {
 	int album = std::stoi(albumString);
 	if(album < 0 || album > 255) {
@@ -1016,11 +1016,13 @@ int HdPackLoader::ProcessSoundTrack(string albumString, string trackString, stri
 		return -1;
 	}
 
-	if(!CheckFile(filename)) {
+	string resolved = ResolvePackRelativePath(filename);
+	if(!CheckFileExact(resolved)) {
 		logError("OGG file not found: " + filename);
 		return -1;
 	}
 
+	filename = resolved;
 	return album * 256 + track;
 }
 

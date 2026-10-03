@@ -104,6 +104,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -1249,6 +1250,28 @@ void TestDetectConventionLayoutBorderSection()
 		Check(identities["catalog"].PackId == "tastic/contra80s:contra", "BlocoG: adoption never overwrites the stamped pack_id");
 
 		std::filesystem::remove_all(dir, ec);
+	}
+}
+
+//#699: the manager's per-ROM strings are rewritten by LoadForRom on the
+//emulation thread while the UI and the decode thread read them, so a getter
+//may only hand out a copy taken under the manager's lock. A `const string&`
+//outlives the lock and reads freed memory the moment another load reassigns
+//the member. The concurrency itself cannot be exercised here (the manager
+//needs an Emulator and does not link into this suite); the contract that
+//makes it safe - every getter returns by value - can.
+namespace
+{
+	template<typename T>
+	constexpr bool IsStringByValue = std::is_same_v<T, std::string>;
+
+	void TestMepPackManagerGettersReturnCopies()
+	{
+		using M = const MepPackManager&;
+		Check(IsStringByValue<decltype(std::declval<M>().GetRomSha1())>, "#699: GetRomSha1 returns a copy, not a reference into the manager");
+		Check(IsStringByValue<decltype(std::declval<M>().GetRomFileSha1())>, "#699: GetRomFileSha1 returns a copy, not a reference into the manager");
+		Check(IsStringByValue<decltype(std::declval<M>().GetRomName())>, "#699: GetRomName returns a copy, not a reference into the manager");
+		Check(IsStringByValue<decltype(std::declval<M>().GetRecordingFolder())>, "#699: GetRecordingFolder returns a copy, not a reference into the manager");
 	}
 }
 
@@ -12879,6 +12902,7 @@ void TestRomHashResolveSurvivesNoConsole()
 
 int main()
 {
+	TestMepPackManagerGettersReturnCopies();
 	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();

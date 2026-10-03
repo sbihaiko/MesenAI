@@ -200,6 +200,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_core_exit_race.py` loads the built MesenCore through ctypes, keeps a
   thread calling an export and calls C `exit()`; the child must exit 0 (it
   skips when the core is not built; `MESEN_CORE_LIB=<path>` picks a build).
+- `test_core_mep_load_state.py` drives the same ctypes harness over pack
+  state the unit suite cannot link (the manager needs an Emulator): a failed
+  load keeps the running game's MEP state and recording (#694), the
+  `EnhancementPacks/<Game>/mep/` human layer is found (#695), and `<bgm>`/
+  `<sfx>` keep the on-disk spelling (#705). That last case needs a
+  case-sensitive folder - on macOS it mounts a throwaway case-sensitive APFS
+  image with `hdiutil` - and says SKIP when it cannot get one.
 - **Navigation sweep (ADR-0184, amended 2026-09-14; ADR-0239 §2/§4/§5)** —
   `record_navigation_sweep.py --profile stages/<game>/navigation.json --rom R
   --out D [--states S] [--seconds 300] [--jobs 4] [--only a,b] [--dry-run]
