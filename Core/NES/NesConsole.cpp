@@ -799,13 +799,11 @@ PpuFrameInfo NesConsole::GetPpuFrame()
 
 NesWidescreenSupport::Verdict NesConsole::GetWidescreenSupportVerdict()
 {
-	//The measurement lives in DefaultNesPpu (ADR-0253 §4). An HD pack swaps in
-	//HdNesPpu, whose Reveal is W.4's, and NsfPpu draws no picture - both are
-	//"not measured", so the switch keeps its stored value for them.
-	if(DefaultNesPpu* ppu = dynamic_cast<DefaultNesPpu*>(_ppu.get())) {
-		return ppu->GetWidescreenSupportVerdict();
-	}
-	return NesWidescreenSupport::Verdict::Undecided;
+	//ADR-0253 §4 (W.5): the measurement lives in whichever PPU draws the
+	//picture - DefaultNesPpu and HdNesPpu share NesWidescreenPpu::State, so an
+	//HD pack measures the same game the same way. A PPU that draws no picture
+	//(NsfPpu) answers Undecided, so the switch keeps its stored value for it.
+	return _ppu->GetWidescreenSupportVerdict();
 }
 
 ConsoleType NesConsole::GetConsoleType()

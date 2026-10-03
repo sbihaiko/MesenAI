@@ -1,8 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "NES/NesPpu.h"
-#include "NES/NesWidescreenReveal.h"
-#include "NES/NesWidescreenSupport.h"
+#include "NES/NesWidescreenPpu.h"
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
 #include "Shared/EmuSettings.h"
@@ -13,15 +12,10 @@
 class DefaultNesPpu final : public NesPpu<DefaultNesPpu>
 {
 private:
-	//ADR-0253 slice W.1: the NES widescreen Reveal's extended frames
-	NesWidescreenReveal::FrameBuffers _reveal;
-	//ADR-0253 slice W.5: the per-game support measurement (section 4). It runs
-	//whether or not the switch is on - it is how the switch learns this game
-	//can use it. `_frameHadRendering` keeps a forced-blank or power-on frame
-	//from advancing the window, so a boot screen is not "gameplay".
-	NesWidescreenSupport::Probe _revealProbe;
-	bool _frameHadRendering = false;
-	bool _frameHadSideContent = false;
+	//ADR-0253 slices W.1/W.3/W.5: the Reveal's extended frames, the per-game
+	//support measurement and the frame publication, shared with the HD pack
+	//path's PPU (NesWidescreenPpu.h).
+	NesWidescreenPpu::State _widescreen;
 
 	//ADR-0253 §3 (W.3): whether the pack loaded for this ROM ships the
 	//`widescreen` section. Asked once per frame, on the emulation thread, the
@@ -32,23 +26,6 @@ private:
 		Emulator* emu = _console->GetEmulator();
 		MepPackManager* mgr = emu ? emu->GetEnhancementPackManager() : nullptr;
 		return mgr && mgr->HasWidescreenSection();
-	}
-
-	bool IsRevealRequested()
-	{
-		//WideScrn is the Widescreen aspect setting. A Vs. DualSystem merges two
-		//standard frames side by side, so it stays standard.
-		//ADR-0253 §4 (W.5): and a game the measurement settled as unsupported is
-		//not widened either, whatever the setting says - the switch is disabled
-		//for it, so Reveal/black columns nobody can turn off must not appear.
-		//ADR-0253 §3 (W.3) is the one exception: a pack with widescreen art gives
-		//that game a mode of its own, and the frame has to be extended for the
-		//art to have a side to land on.
-		return NesWidescreenSupport::Reveals(
-			_mapper && _settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen &&
-				!_console->GetVsMainConsole() && !_console->GetVsSubConsole(),
-			_revealProbe.GetVerdict(),
-			PackHasWidescreenArt());
 	}
 
 public:
@@ -71,12 +48,8 @@ public:
 		if(row == 0 && _cycle == 257) {
 			//Pre-render line: the frame that just ended is the support probe's
 			//sample, and the switch is latched once per frame
-			if(_frameHadRendering) {
-				_revealProbe.ObserveFrame(_frameHadSideContent);
-			}
-			_frameHadRendering = false;
-			_frameHadSideContent = false;
-			_reveal.BeginFrame(IsRevealRequested());
+			_widescreen.BeginFrame(_settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen,
+				_console->GetVsMainConsole() || _console->GetVsSubConsole(), _mapper != nullptr, PackHasWidescreenArt());
 		}
 
 		if(!_mapper) {
@@ -95,18 +68,12 @@ public:
 			_mapper->GetNametableSlotPage(0), _mapper->GetNametableSlotPage(1), _mapper->GetNametableSlotPage(2), _mapper->GetNametableSlotPage(3));
 
 		//ADR-0253 §4: the measurement runs whether or not the switch is on.
-		//Only a row the game really drew can carry side content (§3).
-		if(basis.BgEnabled) {
-			_frameHadRendering = true;
-			if(NesWidescreenReveal::SideColumnsHaveContent(mirroring, NesWidescreenReveal::RowOriginX(basis))) {
-				_frameHadSideContent = true;
-			}
-		}
+		_widescreen.ObserveRow(basis, mirroring);
 
 		uint16_t* left = nullptr;
 		uint16_t* right = nullptr;
 		uint8_t* fill = nullptr;
-		if(!_reveal.RowSides(row, left, right, fill)) {
+		if(!_widescreen.Reveal().RowSides(row, left, right, fill)) {
 			return;
 		}
 		uint8_t filled = 0;
@@ -117,7 +84,7 @@ public:
 	}
 
 	//ADR-0253 §4 (W.5): what the core measured for the running game.
-	NesWidescreenSupport::Verdict GetWidescreenSupportVerdict() const { return _revealProbe.GetVerdict(); }
+	NesWidescreenSupport::Verdict GetWidescreenSupportVerdict() const override { return _widescreen.GetVerdict(); }
 
 	//ADR-0253: an extended frame replaces the standard one on its way to the
 	//video decoder only; _currentOutputBuffer stays the 256-px picture. The
@@ -125,13 +92,7 @@ public:
 	//which side columns still need the fallback chain.
 	void OnFrameBuilt(RenderedFrame& frame)
 	{
-		const uint16_t* extended = _reveal.Finish(_currentOutputBuffer);
-		if(extended) {
-			frame.FrameBuffer = (void*)extended;
-			frame.Width = NesWidescreenReveal::ExtendedWidth;
-			frame.ExtendedColumns = NesWidescreenReveal::ExtraColumns;
-			frame.ExtendedSideFill = _reveal.LastFill();
-		}
+		_widescreen.PublishFrame(frame, _currentOutputBuffer);
 	}
 
 	__forceinline void ProcessScanline()

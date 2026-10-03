@@ -32,15 +32,6 @@ namespace HdWidescreenColumns
 	constexpr uint32_t TilesPerSide = ExtraColumns / 8 + 1;
 	constexpr uint32_t TilesPerRow = TilesPerSide * 2;
 
-	//The same decision DefaultNesPpu::IsRevealRequested makes, in one place:
-	//WideScrn is the Widescreen aspect setting, and a Vs. DualSystem merges two
-	//standard frames side by side, so it stays standard. (W.5, the slice that
-	//owns the switch's per-game state, is where the two copies converge.)
-	inline bool RevealRequested(bool widescreenAspect, bool vsDualSystem)
-	{
-		return widescreenAspect && !vsDualSystem;
-	}
-
 	//Whether (x, y) is a pixel of the 256x240 picture - the only pixels a pack's
 	//own rules were written for. A rule that reads a position at a side pixel
 	//gets `false` rather than a wrap-around read of some unrelated centre pixel:
@@ -110,5 +101,35 @@ namespace HdWidescreenColumns
 		geometry.RowStride = geometry.ScreenWidth * scale;
 		geometry.CentreOffset = geometry.ExtraColumns * scale;
 		return geometry;
+	}
+
+	//ADR-0253 §3 (W.3) through the HD path (W.4): the HD frame's own per-row
+	//side-fill map, from the console frame's.
+	//
+	//The rows are the console's own 240, each drawn `scale` times and with the
+	//overscan's top rows cropped off (HdNesPack::Process walks the console rows
+	//overscan.Top .. 240 - overscan.Bottom and expands each to `scale` output
+	//rows), so HD row r is console row overscanTop + r / scale. Nothing is
+	//interpolated: one fill byte per row is what the fallback chain reads, and a
+	//row the game could not fill stays that row's answer at every scale.
+	//
+	//False - and `out` untouched - when the map cannot describe the frame: a
+	//missing console map, a scale of 0, or an `outRows` that reaches past the
+	//console frame. The caller then hands the renderer no extension at all,
+	//which is the safe answer (the chain does not run) rather than a lie about
+	//which rows are filled.
+	inline bool ScaleSideFill(const uint8_t* consoleFill, uint32_t consoleRows, uint32_t overscanTop,
+		uint32_t scale, uint8_t* out, uint32_t outRows)
+	{
+		if(!consoleFill || !out || scale == 0 || outRows == 0 || overscanTop >= consoleRows) {
+			return false;
+		}
+		if(outRows > (consoleRows - overscanTop) * scale) {
+			return false;
+		}
+		for(uint32_t r = 0; r < outRows; r++) {
+			out[r] = consoleFill[overscanTop + r / scale];
+		}
+		return true;
 	}
 }

@@ -77,6 +77,7 @@
 #include "SMS/SmsWidescreenReveal.h"
 #include "GBA/GbaWidescreenReveal.h"
 #include "NES/NesWidescreenSupport.h"
+#include "NES/NesWidescreenPpu.h"
 #include "Shared/Video/WidescreenFrameFlow.h"
 //W.6 asserts the two filters' own AcceptsExtendedFrame declaration (below).
 //Only the headers are needed - the trait check is unevaluated, so no filter
@@ -95,6 +96,7 @@
 #include "NES/HdPacks/HdPackConditions.h"
 #include "NES/HdPacks/HdWidescreenGeometry.h"
 #include "NES/HdPacks/HdWidescreenColumns.h"
+#include "NES/HdPacks/HdVideoFilter.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -4414,9 +4416,16 @@ void TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates()
 	Check(IsPicturePixel(0, 0) && IsPicturePixel(255, 0) && IsPicturePixel(0, 239) && IsPicturePixel(255, 239),
 		"W4: all four corners of the 256x240 picture are picture pixels");
 
-	Check(RevealRequested(true, false), "W4: WideScrn on a normal console asks for the Reveal");
-	Check(!RevealRequested(false, false), "W4: with the switch off nothing is revealed");
-	Check(!RevealRequested(true, true), "W4: a Vs. DualSystem merges two standard frames, so it stays standard");
+	//ADR-0253 §4 (W.5): the rule the HD path latches with is the shared one -
+	//NesWidescreenPpu::RevealRequested, which also answers to the per-game
+	//measurement. HdWidescreenColumns' own copy of the switch half of it is gone;
+	//the W253 cases below drive the whole rule.
+	Check(NesWidescreenPpu::RevealRequested(true, false, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: WideScrn on a normal console asks for the Reveal");
+	Check(!NesWidescreenPpu::RevealRequested(false, false, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: with the switch off nothing is revealed");
+	Check(!NesWidescreenPpu::RevealRequested(true, true, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: a Vs. DualSystem merges two standard frames, so it stays standard");
 
 	//A side's output column m is tile (fineX + m) / 8, pixel (fineX + m) % 8 -
 	//the sides start inside their first tile when the row's fine X is not 0.
@@ -4799,6 +4808,62 @@ void TestW4HdFrameAddsTheSidesAroundTheCentre()
 		"W4: the right side ends at the row's last HD pixel");
 }
 
+//ADR-0253 §3 through the HD path (W.4). The extended frame's per-row side-fill
+//map (WidescreenFallback.h) is what tells the renderer which rows still need the
+//fallback chain - without it VideoRenderer::UpdateFrame skips both links, so an
+//HD pack with widescreen art draws none of it. The HD frame's rows are the
+//console's own 240, each repeated `scale` times under the overscan's crop, so
+//the map the chain reads is the console's map at the pack's scale.
+void TestW4HdSideFillMapFollowsTheFramesScale()
+{
+	using namespace HdWidescreenColumns;
+
+	uint8_t consoleFill[NesWidescreenReveal::Height] = {};
+	consoleFill[0] = WidescreenFallback::LeftBit;
+	consoleFill[8] = WidescreenFallback::LeftBit;
+	consoleFill[10] = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
+	consoleFill[239] = WidescreenFallback::RightBit;
+
+	uint8_t scaled[480] = {};
+	Check(ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 2, scaled, 480),
+		"W4: a 2x HD frame's side-fill map comes from the console frame's own");
+	for(uint32_t r = 0; r < 480; r++) {
+		if(scaled[r] != consoleFill[r / 2]) {
+			Check(false, "W4: every HD row carries the fill byte of the console row it draws", std::to_string(r));
+			break;
+		}
+	}
+	Check(scaled[0] == WidescreenFallback::LeftBit && scaled[1] == WidescreenFallback::LeftBit,
+		"W4: a row the game filled is filled on both of its HD rows");
+	Check(scaled[20] == consoleFill[10] && scaled[21] == consoleFill[10],
+		"W4: the tenth console row is at the HD frame's twentieth");
+	Check(scaled[479] == WidescreenFallback::RightBit, "W4: the last HD row is the last console row");
+
+	//The overscan crops the console frame's top rows off the HD frame, so the
+	//map's first byte is the first *visible* console row's.
+	uint8_t cropped[448] = {};
+	Check(ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 8, 2, cropped, 448),
+		"W4: an HD frame under the overscan gets the cropped console map");
+	Check(cropped[0] == consoleFill[8] && cropped[447] == consoleFill[231],
+		"W4: which starts at the first visible console row and ends at the last",
+		std::to_string(cropped[0]) + " " + std::to_string(cropped[447]));
+
+	//A map that cannot describe the frame is refused rather than guessed at: the
+	//filter then hands the renderer no extension at all, which is the safe
+	//answer (no chain, no fills) rather than a row-to-row lie.
+	uint8_t out[480] = {};
+	Check(!ScaleSideFill(nullptr, NesWidescreenReveal::Height, 0, 2, out, 480),
+		"W4: without the console's own map there is nothing to scale");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 0, out, 480),
+		"W4: a frame with no scale has no rows to describe");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 2, out, 481),
+		"W4: a map that reaches past the console frame is refused");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 8, 2, out, 465),
+		"W4: and one that reaches past the cropped frame under the overscan");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, NesWidescreenReveal::Height, 2, out, 2),
+		"W4: an overscan that crops the whole frame leaves no row to describe");
+}
+
 //The guard that keeps a position-reading rule from wrapping: a side pixel is not
 //a pixel of the picture, so the rule has nothing to say about it and the pixel
 //falls through to the ROM's own tile.
@@ -4989,6 +5054,71 @@ namespace
 		Check(untouched[0] == 0xFF000000u && full[0] == 0, "W253C: a side image of the wrong height is refused");
 		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, 0, true, art, extra, height, full);
 		Check(untouched[0] == 0xFF000000u, "W253C: a standard frame has no side run to fill");
+	}
+
+	void TestW253FallbackScalesThePackArtToAnHdFrame()
+	{
+		//ADR-0253 §3 (W.3) on the HD pack path: MEP-v1 §5.5 fixes the art's canvas
+		//per console - 64 x 240 on the NES, the frame the pack was authored beside -
+		//and an HD pack draws that same Reveal frame at its own scale, so the
+		//frame's side runs are that canvas times the pack's scale. The 1:1 copy
+		//below refuses art of any other size, so without the scaling a pack that is
+		//conforming everywhere else fills nothing on the HD path and the sides fall
+		//to the border.
+		const uint32_t artWidth = 2, artHeight = 2, scale = 3;
+		const uint32_t width = 16, height = 6, extra = artWidth * scale;
+		uint32_t art[artWidth * artHeight] = { 0x11, 0x12, 0x21, 0x22 };
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint8_t fill[height] = {};
+		std::vector<uint32_t> scratch;
+
+		//Row 1 was filled by the game on the left, so the art must skip it
+		fill[1] = WidescreenFallback::LeftBit;
+
+		WidescreenFallback::FillSideFromArtForFrame(frame.data(), width, height, extra, true, art, artWidth, artHeight, fill, scratch);
+
+		Check(frame[0] == 0x11 && frame[2] == 0x11 && frame[3] == 0x12 && frame[5] == 0x12,
+			"W253C: an HD frame's left side takes the pack's art, each pixel at the pack's scale",
+			std::to_string(frame[0]) + " " + std::to_string(frame[3]));
+		Check(frame[3 * width] == 0x21 && frame[3 * width + 5] == 0x22,
+			"W253C: every HD row takes the art row it draws", std::to_string(frame[3 * width]));
+		Check(fill[0] == WidescreenFallback::LeftBit && fill[5] == WidescreenFallback::LeftBit && fill[1] == WidescreenFallback::LeftBit,
+			"W253C: the scaled art marks the rows it filled, and only those");
+		Check(frame[width] == 0xFF000000u, "W253C: the row the game filled keeps the game's own side pixels");
+
+		WidescreenFallback::FillSideFromArtForFrame(frame.data(), width, height, extra, false, art, artWidth, artHeight, fill, scratch);
+		Check(frame[width - 6] == 0x11 && frame[width - 1] == 0x12 && frame[5 * width + width - 1] == 0x22,
+			"W253C: the right side takes the same scaled art");
+
+		//Art already on the frame's own canvas is copied 1:1, as §5.5 requires and
+		//as every non-HD frame does - not routed through the scratch buffer at all.
+		std::vector<uint32_t> canvasArt((size_t)extra * height);
+		for(uint32_t i = 0; i < extra * height; i++) {
+			canvasArt[i] = 0x100 + i;
+		}
+		std::vector<uint32_t> plain(width * height, 0xFF000000u);
+		uint8_t plainFill[height] = {};
+		std::vector<uint32_t> untouchedScratch(4, 0xDEADBEEFu);
+		WidescreenFallback::FillSideFromArtForFrame(plain.data(), width, height, extra, true, canvasArt.data(), extra, height, plainFill, untouchedScratch);
+		Check(plain[0] == 0x100 && plain[extra - 1] == 0x100 + extra - 1 && plain[width] == 0x100 + extra,
+			"W253C: art on the frame's own canvas is copied 1:1, not rescaled",
+			std::to_string(plain[0]) + " " + std::to_string(plain[width]));
+		Check(untouchedScratch.size() == 4 && untouchedScratch[0] == 0xDEADBEEFu, "W253C: and the scratch is left untouched");
+
+		//What is not this art's frame stays refused: no scaling is invented for a
+		//canvas that is not a whole-number multiple of the art's on both axes.
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra + 1, height, scratch),
+			"W253C: a side run the art does not divide evenly is not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra, height + 1, scratch),
+			"W253C: a frame height the art does not divide evenly is not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra * 2, height, scratch),
+			"W253C: two canvases that disagree about the factor are not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(nullptr, extra, height, extra, height, scratch) &&
+			!WidescreenFallback::ScaleSideArt(canvasArt.data(), 0, height, extra, height, scratch),
+			"W253C: a missing or empty art has nothing to scale");
+		std::vector<uint32_t> refused(width * height, 0xFF000000u);
+		WidescreenFallback::FillSideFromArtForFrame(refused.data(), width, height, extra, true, art, artWidth, artHeight + 1, plainFill, scratch);
+		Check(refused[0] == 0xFF000000u, "W253C: an image that is neither the frame's canvas nor a multiple of it is still refused");
 	}
 
 	void TestW253MepWidescreenParsesTheDefaultPairAndScreens()
@@ -5430,6 +5560,119 @@ namespace
 		Check(!Reveals(false, Verdict::Unsupported, true), "W253C: the switch off widens nothing, pack art or not");
 		Check(Reveals(true, Verdict::Supported, false), "W253C: a supported game is widened without any pack art");
 		Check(Reveals(true, Verdict::Undecided, false), "W253C: measuring is still widened without any pack art");
+	}
+
+	//ADR-0253 §1/§4, the two PPUs' half of W.5: NesWidescreenPpu::State is what
+	//DefaultNesPpu and HdNesPpu both drive, so the switch, the measurement and
+	//the extended frame answer the same on either path. The HD path used to latch
+	//on the switch alone and to measure nothing, which is exactly the state §4
+	//exists to prevent: a game the window settles as unsupported came up widened
+	//there with its switch already disabled.
+	void TestW253PpuRevealLatchIsTheSharedSupportRule()
+	{
+		using namespace NesWidescreenPpu;
+		Check(RevealRequested(true, false, true, Verdict::Undecided, false), "W253: WideScrn on a normal console asks for the Reveal");
+		Check(RevealRequested(true, false, true, Verdict::Supported, false), "W253: a measured-supported game keeps the Reveal");
+		Check(!RevealRequested(false, false, true, Verdict::Undecided, false), "W253: with the switch off nothing is revealed");
+		Check(!RevealRequested(true, true, true, Verdict::Supported, false), "W253: a Vs. DualSystem merges two standard frames, so it stays standard");
+		Check(!RevealRequested(true, false, false, Verdict::Supported, false), "W253: with no mapper there is no nametable to read a side from");
+		Check(!RevealRequested(true, false, true, Verdict::Unsupported, false), "W253: a game measured with nothing beside the picture is not widened");
+		Check(RevealRequested(true, false, true, Verdict::Unsupported, true), "W253: pack widescreen art widens a settled game on either PPU (ADR-0253 §3)");
+		Check(!RevealRequested(false, false, true, Verdict::Unsupported, true), "W253: pack art never widens with the switch off");
+	}
+
+	void TestW253PpuStateMeasuresWhetherOrNotTheSwitchIsOn()
+	{
+		NesWidescreenPpu::State state;
+		NesWidescreenReveal::RowBasis basis;
+		basis.BgEnabled = true;
+
+		Check(state.GetVerdict() == Verdict::Undecided, "W253: a PPU that has run no frame is undecided");
+		Check(!state.Reveal().IsActive(), "W253: and widens nothing before its first frame boundary");
+
+		//A game whose sides never hold anything, measured with the switch OFF:
+		//the window closes anyway - that is how the switch learns the game
+		//cannot use it.
+		for(uint32_t i = 0; i < MeasurementFrames + 1; i++) {
+			state.ObserveRow(basis, MirroringType::Horizontal);
+			state.BeginFrame(false, false, true, false);
+		}
+		Check(state.GetVerdict() == Verdict::Unsupported, "W253: a full window of nothing settles the game even with the switch off");
+
+		//And now the switch on: the latch answers to the measurement, not to the
+		//switch alone.
+		state.BeginFrame(true, false, true, false);
+		Check(!state.Reveal().IsActive(), "W253: a game measured as unsupported is not widened by this PPU either");
+
+		//One row with something beside the picture flips it back (§4's
+		//re-check), and the frame after that measurement is widened.
+		state.ObserveRow(basis, MirroringType::Vertical);
+		state.BeginFrame(true, false, true, false);
+		Check(state.GetVerdict() == Verdict::Supported, "W253: a row with content beside the picture settles the game as supported");
+		Check(state.Reveal().IsActive(), "W253: and the frame after it is the widened one");
+	}
+
+	void TestW253PpuStatePublishesTheFrameAndItsSideFillMap()
+	{
+		//ADR-0253 §2/§3: the frame the decoder is handed carries the extended
+		//picture *and* the per-row map the fallback chain reads - the two fields
+		//describe each other and travel together. This is the one publication
+		//call both PPUs make, so the chain runs with an HD pack loaded.
+		std::vector<uint16_t> standard(NesWidescreenReveal::StandardWidth * NesWidescreenReveal::Height, 0x11);
+
+		NesWidescreenPpu::State state;
+		state.BeginFrame(true, false, true, false);
+
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		uint8_t* fill = nullptr;
+		Check(state.Reveal().RowSides(10, left, right, fill), "W253: an extended frame has a side run and a fill byte for every row");
+		Check(left != nullptr && right != nullptr && left != right, "W253: the two sides are two runs of the same row");
+		*fill = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
+		state.Reveal().RowSides(11, left, right, fill);
+		*fill = WidescreenFallback::LeftBit;
+
+		RenderedFrame frame;
+		state.PublishFrame(frame, standard.data());
+		Check(frame.Width == NesWidescreenReveal::ExtendedWidth,
+			"W253: an extended frame is published at the Reveal's own width", std::to_string(frame.Width));
+		Check(frame.ExtendedColumns == NesWidescreenReveal::ExtraColumns,
+			"W253: and says how many of its columns a side are extra", std::to_string(frame.ExtendedColumns));
+		Check(frame.FrameBuffer != nullptr && frame.FrameBuffer != (void*)standard.data(),
+			"W253: and carries the extended pixels rather than the standard picture");
+		Check(frame.ExtendedSideFill != nullptr, "W253: with the map the chain reads, not a null it would skip");
+		Check(frame.ExtendedSideFill[10] == (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit) &&
+			frame.ExtendedSideFill[11] == WidescreenFallback::LeftBit && frame.ExtendedSideFill[0] == 0,
+			"W253: which is the fill byte of each row the PPU drew, and no other");
+
+		//With the switch off, the frame stays the standard 256-px picture: no
+		//extension, no map.
+		NesWidescreenPpu::State off;
+		off.BeginFrame(false, false, true, false);
+		RenderedFrame plain;
+		off.PublishFrame(plain, standard.data());
+		Check(plain.Width == NesWidescreenReveal::StandardWidth && plain.ExtendedColumns == 0 && plain.ExtendedSideFill == nullptr,
+			"W253: a standard frame is published with no extension at all");
+	}
+
+	//ADR-0253 §3 (W.3) through the HD path: the map reaches the renderer only if
+	//the filter that produced the frame restates the contract in its own
+	//coordinates - BaseVideoFilter's default returns nothing once the filter's
+	//output is not the console frame's own size, which is every HD frame (a pack
+	//scales it), so the default is exactly the bug this slice fixes. The CUTOBJ
+	//set does not link the filters (they need the PPU, the console and an
+	//Emulator), so as in W.6 the wiring is asserted by type rather than by value:
+	//&Derived::f has the base class's pointer-to-member type unless Derived
+	//declares the override itself, so the *declaration* is the thing under test.
+	void TestW253HdVideoFilterRestatesTheFrameContractInItsOwnCoordinates()
+	{
+		using Extension = BaseVideoFilter::FrameExtension;
+		Check(std::is_same<decltype(&HdVideoFilter::GetOutputFrameExtension), Extension (HdVideoFilter::*)()>::value,
+			"W253: the HD pack filter declares GetOutputFrameExtension, so an HD frame's side-fill map reaches the renderer");
+		//The control: the base class's own declaration is the one that drops the
+		//map on a rescaled frame, and the HD filter must not still be carrying it.
+		Check(!std::is_same<decltype(&HdVideoFilter::GetOutputFrameExtension), decltype(&BaseVideoFilter::GetOutputFrameExtension)>::value,
+			"W253: the HD pack filter answers for itself, not with the base class's default");
 	}
 }
 
@@ -16290,12 +16533,14 @@ int main()
 	TestW4SidePixelInfoSamplesEachColumnsOwnPixel();
 	TestW4SideTileKeyMatchesTheKeyOfACentredTile();
 	TestW4HdFrameAddsTheSidesAroundTheCentre();
+	TestW4HdSideFillMapFollowsTheFramesScale();
 	TestW4PositionRulesRefuseAPixelOutsideThePicture();
 	TestW4NearbyRulesRefuseAPixelOutsideThePicture();
 	TestW4CellGuardRefusesAPixelOutsideThePicture();
 	TestW253FallbackPrefersTheMostSpecificSource();
 	TestW253FallbackSupportNeverComesFromBorderOrBlack();
 	TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty();
+	TestW253FallbackScalesThePackArtToAnHdFrame();
 	TestW253MepWidescreenParsesTheDefaultPairAndScreens();
 	TestW253MepWidescreenRejectsBadManifests();
 	TestW253DetectConventionLayoutFindsTheWidescreenSection();
@@ -16312,6 +16557,10 @@ int main()
 	TestWidescreenSupportProbeResetStartsTheNextRunOver();
 	TestWidescreenSupportProbeReadsTheRevealContentRule();
 	TestWidescreenSupportSettledGameIsNotWidenedAtAll();
+	TestW253PpuRevealLatchIsTheSharedSupportRule();
+	TestW253PpuStateMeasuresWhetherOrNotTheSwitchIsOn();
+	TestW253PpuStatePublishesTheFrameAndItsSideFillMap();
+	TestW253HdVideoFilterRestatesTheFrameContractInItsOwnCoordinates();
 	TestWidescreenSupportPackArtReenablesASettledGame();
 	TestW6BlitGeometryFollowsTheFrameWidth();
 	TestW6BisqwitRowFollowsTheFrameWidth();

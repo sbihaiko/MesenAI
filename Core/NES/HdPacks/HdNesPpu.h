@@ -1,7 +1,9 @@
 #pragma once
+#include <type_traits>
 #include "pch.h"
 #include "NES/NesPpu.h"
 #include "NES/NesConsole.h"
+#include "NES/NesWidescreenPpu.h"
 #include "NES/BaseMapper.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdWidescreenColumns.h"
@@ -39,21 +41,13 @@ class HdNesPpu final : public NesPpu<HdNesPpu>
 	NesTileInfoEx _currentTileEx = {};
 	NesTileInfoEx _nextTileEx = {};
 
-	//ADR-0253 slice W.4: the widened frame itself, latched once on the pre-render
-	//line the way DefaultNesPpu latches its own, so a switch flipped mid-frame
-	//never yields half a frame. The HD renderer draws the sides at the pack's
-	//scale from HdScreenInfo::SideTiles; this buffer is what every other consumer
-	//of the frame sees (and what the border layer crops the centre out of).
-	NesWidescreenReveal::FrameBuffers _reveal;
-
-	bool IsRevealRequested()
-	{
-		//WideScrn is the Widescreen aspect setting; a Vs. DualSystem merges two
-		//standard frames side by side, so it stays standard.
-		return HdWidescreenColumns::RevealRequested(
-			_settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen,
-			_console->GetVsMainConsole() || _console->GetVsSubConsole());
-	}
+	//ADR-0253 slices W.1/W.3/W.4/W.5: the widened frame itself, the per-game
+	//support measurement and the frame publication - the same state the default
+	//PPU keeps (NesWidescreenPpu.h), latched at the same point, so both paths
+	//answer alike. The HD renderer draws the sides at the pack's scale from
+	//HdScreenInfo::SideTiles; this buffer is what every other consumer of the
+	//frame sees (and what the border layer crops the centre out of).
+	NesWidescreenPpu::State _widescreen;
 
 public:
 	HdNesPpu(NesConsole* console, HdPackData* hdData);
@@ -71,16 +65,23 @@ public:
 
 	//ADR-0253: an extended frame replaces the standard one on its way to the video
 	//decoder; _currentOutputBuffer stays the 256-px picture, and the pack's
-	//ScreenTiles keep the picture's own coordinates.
+	//ScreenTiles keep the picture's own coordinates. The per-row fill map travels
+	//with it (NesWidescreenPpu::State::PublishFrame, §3/W.3), so the renderer's
+	//fallback chain knows which side columns still need the pack's art, the
+	//border layer or black - without it the chain never runs with a pack loaded.
 	void OnFrameBuilt(RenderedFrame& frame)
 	{
-		const uint16_t* extended = _reveal.Finish(_currentOutputBuffer);
-		if(extended) {
-			frame.FrameBuffer = (void*)extended;
-			frame.Width = NesWidescreenReveal::ExtendedWidth;
-			frame.ExtendedColumns = NesWidescreenReveal::ExtraColumns;
-		}
+		_widescreen.PublishFrame(frame, _currentOutputBuffer);
 	}
+
+	//ADR-0253 §4 (W.5): what the core measured for the running game - the HD
+	//path measures it exactly as the default path does.
+	NesWidescreenSupport::Verdict GetWidescreenSupportVerdict() const override { return _widescreen.GetVerdict(); }
+
+	//ADR-0253 §3: whether the pack loaded for this ROM ships widescreen art -
+	//the same question DefaultNesPpu asks, so a game the measurement settled as
+	//unsupported is widened on this path too when the art exists.
+	bool PackHasWidescreenArt();
 
 	__forceinline bool RemoveSpriteLimit() { return _forceRemoveSpriteLimit || _console->GetNesConfig().RemoveSpriteLimit; }
 	__forceinline bool UseAdaptiveSpriteLimit() { return _forceRemoveSpriteLimit || _console->GetNesConfig().AdaptiveSpriteLimit; }
@@ -224,3 +225,23 @@ public:
 		}
 	}
 };
+
+//ADR-0253, W.3/W.5 wiring guards. Both hooks and the verdict reader are
+//non-virtual CRTP defaults in BaseNesPpu (except the verdict, a plain virtual
+//that defaults to Undecided), so a declaration dropped from this class does
+//NOT fail to compile - the call silently lands on the base and the HD path
+//quietly stops publishing an extended frame or measuring the game, which is
+//exactly the W.3/W.5 half-port this guards against. Each assert pins the
+//member to HdNesPpu itself by its exact type, so an inherited member resolves
+//to BaseNesPpu's type and the build stops here.
+//
+//The host-free suite cannot carry this: including this header drags in
+//NesPpu.h, whose __forceinline members (GetNameTableAddr, ProcessScanlineImpl,
+//GetPixelColor) are defined in NesPpu.cpp and trip -Wundefined-inline under
+//-Werror. `make core` compiles this header everywhere, CI included.
+static_assert(std::is_same<decltype(&HdNesPpu::GetWidescreenSupportVerdict), NesWidescreenSupport::Verdict (HdNesPpu::*)() const>::value,
+	"ADR-0253 W.5: HdNesPpu must answer the support verdict itself - inherited, the HD path always reads Undecided");
+static_assert(std::is_same<decltype(&HdNesPpu::OnFrameBuilt), void (HdNesPpu::*)(RenderedFrame&)>::value,
+	"ADR-0253 W.3: HdNesPpu must publish the built frame itself - inherited, the frame never carries its side-fill map");
+static_assert(std::is_same<decltype(&HdNesPpu::OnRowBasisCaptured), void (HdNesPpu::*)(int16_t)>::value,
+	"ADR-0253 W.3/W.4: HdNesPpu must capture the row basis itself - inherited, the side tiles are never captured");

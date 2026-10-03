@@ -88,6 +88,11 @@ private:
 	//The frame's own per-row fill map, copied out of the console's buffer
 	//before the pack art is drawn into it (the console owns that memory).
 	vector<uint8_t> _sideFillScratch;
+	//ADR-0253 §3 (slice W.3) on an HD frame: the pack's side art scaled to that
+	//frame's own side run (WidescreenFallback::ScaleSideArt). One buffer serves
+	//both sides - each FillSideFromArtForFrame call copies out of it before
+	//returning - and it lives here so a frame does not allocate.
+	vector<uint32_t> _widescreenScaled;
 
 	void UpdatePackArtAssets();
 	void ResetBorderAsset();
