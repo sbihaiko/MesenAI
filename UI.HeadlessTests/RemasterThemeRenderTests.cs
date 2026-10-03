@@ -321,6 +321,11 @@ public class RemasterThemeRenderTests : IDisposable
 		Assert.Equal(WarningText, PlayerRender.SolidColor(LabelOf(howTo).Foreground));
 		Assert.Equal(4, ControlsAtRest(view));
 		AssertReadable(banner);
+		//The render's leading mark is the drawn orange warning icon, not a glyph.
+		Assert.StartsWith("Painting needs Python", view.FindNamed<TextBlock>("RemasterFeasibilityText").Text);
+		PathIcon warn = banner.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning"));
+		Assert.True(warn.IsOnScreen());
+		Assert.Equal(16, warn.Bounds.Width, 0.5);
 
 		Bitmap frame = Save(window, "W-R0b");
 		PlayerRender.AssertPixel(WarningFill, frame, 60, (int)banner.TranslatePoint(new Point(0, 4), window)!.Value.Y + 2);
@@ -514,6 +519,11 @@ public class RemasterThemeRenderTests : IDisposable
 		AssertSecondary(view.FindNamed<Button>("RemasterComposeCancelButton"), 32);
 		AssertButton(view.FindNamed<Button>("RemasterOpenComposerButton"), 32, 8, 13, RemasterTint);
 		Assert.True(view.FindNamed<Button>("RemasterOpenComposerButton").IsEffectivelyEnabled);
+		//The render's check line: a drawn green check, then the sentence.
+		Assert.StartsWith("This project has the layout data", view.FindNamed<TextBlock>("RemasterComposeHint").Text);
+		PathIcon check = view.FindNamed<PathIcon>("RemasterComposeHintIcon");
+		Assert.True(check.IsOnScreen());
+		Assert.Contains("done", check.Classes);
 		Assert.Equal(2, sheet.FindAll<Button>().Count(b => b.IsOnScreen()));
 		AssertReadable(sheet);
 		if(theme == "Light") {

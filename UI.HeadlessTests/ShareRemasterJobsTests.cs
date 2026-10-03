@@ -270,7 +270,7 @@ public class ShareRemasterJobsTests : IDisposable
 
 		Assert.True(s.Model.OpenProject(a));
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("✔ contra-usa-mep.zip · 4 KB · no problems", result.Text);
+		Assert.Equal("contra-usa-mep.zip · 4 KB · no problems", result.Text);
 	}
 
 	//#649: a build whose manifest changed asks for a pack reload. During a

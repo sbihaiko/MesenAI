@@ -43,6 +43,14 @@
 		<Style Selector=".player TextBlock.lookClassicOnly">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
+		<!-- W-P10's caps labels and their hints are the Player sheet's; Advanced
+		     keeps the classic "Art" / "Pixels" / "Screen" headers. -->
+		<Style Selector="TextBlock.lookPlayerOnly">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player TextBlock.lookPlayerOnly">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
 		<!-- The Art row's text sits after the pack badge when a pack draws the art. -->
 		<Style Selector="TextBlock#txtLookArt">
 			<Setter Property="Margin" Value="16 0" />
@@ -61,8 +69,9 @@
 		<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">
 			<StackPanel>
 				<StackPanel Classes="lookGroupLabel">
-					<TextBlock Name="lblLookArtHeader" Classes="group-label" Text="{l:Translate lblLookArt}" />
-					<TextBlock Name="lblLookArtHint" Classes="group-hint" Text="{l:Translate lblLookArtHint}" />
+					<TextBlock Classes="group-label lookClassicOnly" Text="{l:Translate lblLookArt}" />
+					<TextBlock Name="lblLookArtHeader" Classes="group-label lookPlayerOnly" Text="{l:Translate lblPlayerLookArt}" />
+					<TextBlock Name="lblLookArtHint" Classes="group-hint lookPlayerOnly" Text="{l:Translate lblLookArtHint}" />
 				</StackPanel>
 				<Border Name="LookArtGroup" Classes="group inset lookGroup">
 					<Panel MinHeight="46">
@@ -79,8 +88,9 @@
 				</Border>
 
 				<StackPanel Classes="lookGroupLabel">
-					<TextBlock Classes="group-label" Text="{l:Translate lblLookPixels}" />
-					<TextBlock Classes="group-hint" Text="{l:Translate lblLookPixelsHint}" />
+					<TextBlock Classes="group-label lookClassicOnly" Text="{l:Translate lblLookPixels}" />
+					<TextBlock Classes="group-label lookPlayerOnly" Text="{l:Translate lblPlayerLookPixels}" />
+					<TextBlock Classes="group-hint lookPlayerOnly" Text="{l:Translate lblLookPixelsHint}" />
 				</StackPanel>
 				<Border Name="LookPixelsGroup" Classes="group inset lookGroup">
 					<StackPanel Classes="lookGroupBody">
@@ -108,8 +118,9 @@
 				</Border>
 
 				<StackPanel Classes="lookGroupLabel">
-					<TextBlock Classes="group-label" Text="{l:Translate lblLookScreen}" />
-					<TextBlock Classes="group-hint" Text="{l:Translate lblLookScreenHint}" />
+					<TextBlock Classes="group-label lookClassicOnly" Text="{l:Translate lblLookScreen}" />
+					<TextBlock Classes="group-label lookPlayerOnly" Text="{l:Translate lblPlayerLookScreen}" />
+					<TextBlock Classes="group-hint lookPlayerOnly" Text="{l:Translate lblLookScreenHint}" />
 				</StackPanel>
 				<Border Name="LookScreenGroup" Classes="group inset lookGroup">
 					<StackPanel Classes="lookGroupBody">

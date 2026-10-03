@@ -258,5 +258,18 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal(isStart, ControllerDevices.NamesStart(keyName));
 		}
-	}
+	
+		//W-P15: the title names the controller itself when the platform knows
+		//it; otherwise the key manager's device prefix.
+		[Theory]
+		[InlineData("8BitDo SN30", "Pad8 Start", "8BitDo SN30")]
+		[InlineData("  Xbox Wireless Controller ", "Pad1 A", "Xbox Wireless Controller")]
+		[InlineData("", "Pad2 But3", "Pad2")]
+		[InlineData(null, "Pad2 But3", "Pad2")]
+		[InlineData("   ", "", "")]
+		public void Device_display_name_prefers_the_controllers_own_name(string? deviceName, string keyName, string expected)
+		{
+			Assert.Equal(expected, ControllerDevices.DisplayName(deviceName, keyName));
+		}
+}
 }

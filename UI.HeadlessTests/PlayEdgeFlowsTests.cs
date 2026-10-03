@@ -315,7 +315,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 	}
 
 	//W-P14: a file that is not a game leaves the home on screen with one
-	//inline alert (3 controls with W-P2's 2); ✕ closes it.
+	//inline alert (3 controls with W-P2's 2); the next open clears it.
 	[AvaloniaFact]
 	public void A_file_that_is_not_a_game_shows_an_inline_alert_on_the_home()
 	{
@@ -332,11 +332,13 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		Assert.True(model.RecentGames.Visible);
 		Border alert = window.FindNamed<Border>("PlayHomeLoadAlert");
 		Assert.True(alert.IsOnScreen());
-		Assert.Equal("⚠ \"Contra.txt\" is not a game MesenAI can open.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
+		Assert.Equal("\u201cContra.txt\u201d is not a game MesenAI can open.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
 		Assert.Contains("or a zip holding one", window.FindNamed<TextBlock>("PlayHomeLoadAlertBody").Text);
 		Assert.True(window.FindNamed<Button>("PlayHomeOpenAnother").IsOnScreen());
 
-		Click(window, "PlayHomeLoadAlertClose");
+		//W-P14 has no close box: any open (Open Another…, a tile, a drop) clears it.
+		model.OnOpenStarted();
+		Dispatcher.UIThread.RunJobs();
 		Assert.False(alert.IsOnScreen());
 		Assert.True(model.RecentGames.Visible);
 	}
@@ -362,7 +364,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.True(sheet.IsOnScreen());
 			Assert.False(model.IsPlayerOverlayVisible);
 			Assert.Equal(PlayPackDepPrompt.ControlCount, ControlsOnScreen(sheet));
-			Assert.Equal("Contra Remastered waits for one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
+			Assert.Equal("Contra Remastered needs one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
 			Assert.Equal("License: not declared", window.FindNamed<TextBlock>("PackDepSheetLicense").Text);
 			Assert.Equal("Add and Restart…", window.FindNamed<Button>("PackDepSheetChooseFile").Content);
 			Assert.True(window.FindNamed<Button>("PackDepSheetChooseFile").IsFocused);
@@ -506,7 +508,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.True(setup.IsVisible);
 			Assert.False(setup.IsPillVisible);
 			Assert.Equal(1, paused);
-			Assert.Equal("Set up \"Pad8\"", setup.Title);
+			Assert.Equal("Set up \u201cPad8\u201d", setup.Title);
 			Assert.Equal("Press the button you want as A", setup.Prompt);
 			Assert.StartsWith("Step 1 of 8", setup.StepText);
 			Dispatcher.UIThread.RunJobs();

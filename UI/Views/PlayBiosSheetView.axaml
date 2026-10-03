@@ -31,20 +31,22 @@
 						<TextBlock Classes="drop-hint" Text="{Binding DropHint}" />
 					</StackPanel>
 				</Button>
-				<!--W-X2: only after a wrong file.-->
-				<Border Name="BiosSheetError" Classes="warning notice" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+				<!--W-X2: only after a wrong file - the shared in-place banner.-->
+				<Border Name="BiosSheetError" Classes="banner warning" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
 					<DockPanel>
-						<TextBlock Classes="notice-line" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<TextBlock Classes="banner-text" Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</Border>
-				<!--W-X1: an unknown dump confirms once, in place.-->
-				<Border Name="BiosSheetConfirm" Classes="warning notice" Margin="0 12 0 0" IsVisible="{Binding IsConfirmingUnknown}">
+				<!--W-X1: an unknown dump confirms once, in place (the shared banner).-->
+				<Border Name="BiosSheetConfirm" Classes="banner warning" Margin="0 12 0 0" IsVisible="{Binding IsConfirmingUnknown}">
 					<DockPanel>
-						<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="10 0 0 0">
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<StackPanel Classes="banner-actions" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 							<Button Name="BiosSheetChooseAnother" Classes="secondary" Content="{l:Translate btnBiosSheetChooseAnother}" Click="OnRejectUnknown" />
 							<Button Name="BiosSheetUseIt" Classes="primary" Content="{l:Translate btnBiosSheetUseIt}" Click="OnAcceptUnknown" />
 						</StackPanel>
-						<TextBlock Classes="notice-line" Text="{l:Translate lblBiosSheetUnknown}" TextWrapping="Wrap" VerticalAlignment="Center" />
+						<TextBlock Classes="banner-text" Text="{l:Translate lblBiosSheetUnknown}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</Border>
 				<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 34 0 0">

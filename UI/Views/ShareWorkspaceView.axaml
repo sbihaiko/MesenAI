@@ -240,7 +240,11 @@
 										<Button Name="ShareBuildZipButton" Content="{l:Translate btnBuildPackZip}" Classes="secondary" IsEnabled="{Binding IsBuildEnabled}" IsVisible="{Binding !IsBuildRunning}" Click="OnBuildZip" />
 										<Button Name="ShareBuildStopButton" Content="{l:Translate btnShareBuildStop}" Classes="secondary" IsVisible="{Binding IsBuildRunning}" Click="OnStopBuild" />
 										<ProgressBar Name="ShareBuildProgress" IsIndeterminate="True" Width="120" VerticalAlignment="Center" IsVisible="{Binding IsBuildRunning}" />
-										<TextBlock Name="ShareBuildResult" Text="{Binding BuildResult}" Classes="subhead" FontWeight="Medium" VerticalAlignment="Center" />
+										<!--W-H3: the render's green check before a finished build's result.-->
+										<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+											<PathIcon Name="ShareBuildDoneIcon" Classes="done" Data="{StaticResource PlayerIconCheck}" Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding IsBuildDone}" />
+											<TextBlock Name="ShareBuildResult" Text="{Binding BuildResult}" Classes="subhead" FontWeight="Medium" VerticalAlignment="Center" />
+										</StackPanel>
 									</StackPanel>
 								</DockPanel>
 								<TextBlock Name="ShareBuildReason" Text="{Binding BuildReason}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding BuildReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
@@ -305,7 +309,7 @@
 							<Border Name="ShareReplayStartBadge" Classes="badge xlarge"><PathIcon Data="{StaticResource PlayerIconReplay}" /></Border>
 							<TextBlock Name="ShareReplaySheetTitle" Text="{Binding StartSheetTitle}" Classes="title3" TextWrapping="Wrap" VerticalAlignment="Center" />
 						</StackPanel>
-						<TextBlock Text="{l:Translate lblShareReplaySheetBody}" Classes="callout" TextWrapping="Wrap" LineHeight="19" Margin="0 6 0 0" />
+						<TextBlock Name="ShareReplaySheetBody" Text="{Binding StartSheetBody}" Classes="callout" TextWrapping="Wrap" LineHeight="19" Margin="0 6 0 0" />
 						<TextBlock Name="ShareReplayStartReason" Text="{Binding StartReason}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding StartReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 					</StackPanel>
 				</DockPanel>

@@ -607,6 +607,16 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     `destructive`, 30 high) and `TextBlock.banner-text`.
     `Views/InterruptionBar` is built on it, its look chosen by
     `Logic/InterruptionBanner`. Ask in place with a banner, never a dialog.
+    The pack-detail restore confirmation (`PackDetailRestoreConfirm`), the
+    BIOS sheet's wrong-file error and "use it anyway?" confirm and the pack
+    dependency sheet's error are all `banner warning`.
+  - Status glyphs are drawn, never text characters (no ⚠ or ✔ in copy):
+    `PathIcon.warning` beside a warning, `PathIcon.done` (`PlayerIconCheck`,
+    Share green) beside a finished result (W-H3 build, W-R7 layout hint).
+  - Recent-game tile pack badge (W-P2): `Border#TilePackBadge` in
+    `c:StateGrid Classes="tiles"` (22 card square, radius 6, top-right, 13 px
+    `PlayerIconPack` in Share green), shown when an `HdPacks/<rom>` folder
+    exists (`PlayHome.HasHdPack`); never on Save-state slots.
     The block sits after the wave 2: Remaster block so `banner warning`
     beats Remaster's `Border.warning`.
   - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the

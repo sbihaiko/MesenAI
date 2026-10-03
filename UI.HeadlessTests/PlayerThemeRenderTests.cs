@@ -12,6 +12,8 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Controls;
+using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.ViewModels;
 using Mesen.Windows;
@@ -56,9 +58,46 @@ public class PlayerThemeRenderTests : IDisposable
 		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
 			File.Delete(stale);
 		}
+		if(_seededPack != null && Directory.Exists(_seededPack)) {
+			Directory.Delete(_seededPack, true);
+		}
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) Show(UiMode mode, params string[] recentGames)
+	private string? _seededPack;
+
+	//A recent-game file as the Core writes it: a zip holding the screenshot.
+	private static void WriteRecentWithScreenshot(string game, Color color)
+	{
+		string file = Path.Combine(ConfigManager.RecentGamesFolder, game + ".rgd");
+		WriteableBitmap shot = new(new PixelSize(256, 240), new Vector(96, 96), Avalonia.Platform.PixelFormat.Rgba8888, Avalonia.Platform.AlphaFormat.Opaque);
+		using(Avalonia.Platform.ILockedFramebuffer buffer = shot.Lock()) {
+			byte[] row = new byte[buffer.RowBytes];
+			for(int x = 0; x < 256; x++) {
+				row[x * 4] = color.R;
+				row[x * 4 + 1] = color.G;
+				row[x * 4 + 2] = color.B;
+				row[x * 4 + 3] = 255;
+			}
+			for(int y = 0; y < 240; y++) {
+				System.Runtime.InteropServices.Marshal.Copy(row, 0, buffer.Address + y * buffer.RowBytes, row.Length);
+			}
+		}
+		DateTime written = File.GetLastWriteTime(file);
+		using MemoryStream encoded = new();
+		shot.Save(encoded);
+		using(FileStream fs = File.Create(file))
+		using(System.IO.Compression.ZipArchive zip = new(fs, System.IO.Compression.ZipArchiveMode.Create)) {
+			using Stream png = zip.CreateEntry("Screenshot.png").Open();
+			png.Write(encoded.ToArray());
+		}
+		Assert.NotNull(PlayHome.ReadScreenshot(file));
+		File.SetLastWriteTime(file, written);
+	}
+
+	private static (MainWindow Window, MainWindowViewModel Model) Show(UiMode mode, params string[] recentGames) => Show(mode, null, recentGames);
+
+	//seed runs after the recent-game files are written, before the home reads them.
+	private static (MainWindow Window, MainWindowViewModel Model) Show(UiMode mode, Action? seed, string[] recentGames)
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = mode;
@@ -79,6 +118,7 @@ public class PlayerThemeRenderTests : IDisposable
 			File.SetLastWriteTime(file, written);
 			written = written.AddMinutes(-1);
 		}
+		seed?.Invoke();
 
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
@@ -158,7 +198,15 @@ public class PlayerThemeRenderTests : IDisposable
 	public void Home_with_recents_renders_with_the_player_theme()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = Show(UiMode.Player, "Contra (USA)", "Castlevania (USA)", "Metroid (USA)", "Mega Man (USA)");
+		//The Continue card shows the recent entry's own screenshot, and a tile
+		//whose game has an HD pack in HdPacks/<game> carries the pack badge.
+		Color shot = Color.Parse("#C83228");
+		_seededPack = Path.Combine(ConfigManager.HdPackFolder, "Castlevania (USA)");
+		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player, () => {
+			WriteRecentWithScreenshot("Contra (USA)", shot);
+			Directory.CreateDirectory(_seededPack);
+			File.WriteAllText(Path.Combine(_seededPack, "hires.txt"), "<ver>106\n");
+		}, new[] { "Contra (USA)", "Castlevania (USA)", "Metroid (USA)", "Mega Man (USA)" });
 
 		Border card = window.FindNamed<Border>("PlayHomeContinueCard");
 		Assert.Equal(Card, PlayerRender.SolidColor(card.Background));
@@ -169,10 +217,23 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(20, continueTitle.FontSize);
 		Assert.Equal(Text, PlayerRender.SolidColor(continueTitle.Foreground));
 		Assert.Equal(Text2, PlayerRender.SolidColor(window.FindNamed<TextBlock>("PlayHomeContinueSubtitle").Foreground));
+		WaitFor(() => model.RecentGames.ContinuePreview != null && !StateGridEntry.ThumbnailsInFlight, "the Continue preview never loaded");
+		Image preview = window.FindNamed<Image>("PlayHomeContinuePreview");
+		Assert.True(preview.IsOnScreen());
+		StateGridEntry[] tiles = window.FindAll<StateGridEntry>().Where(t => t.IsOnScreen()).ToArray();
+		StateGridEntry withPack = tiles.Single(t => t.Title == "Castlevania (USA)");
+		Border badge = withPack.FindAll<Border>().Single(b => b.Name == "TilePackBadge");
+		Assert.True(badge.IsOnScreen());
+		Assert.Equal(22, badge.Bounds.Width, 0.5);
+		Assert.Equal(Card, PlayerRender.SolidColor(badge.Background));
+		Assert.Equal(new CornerRadius(6), badge.CornerRadius);
+		Assert.All(tiles.Where(t => t != withPack), t => Assert.False(t.FindAll<Border>().Single(b => b.Name == "TilePackBadge").IsOnScreen()));
 
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, "W-P2");
 		PlayerRender.AssertPixel(WindowBackground, frame, 12, 300);
+		Point art = preview.TranslatePoint(new Point(preview.Bounds.Width / 2, preview.Bounds.Height / 2), window)!.Value;
+		PlayerRender.AssertPixel(shot, frame, (int)art.X, (int)art.Y, 6);
 	}
 
 	//W-P4: the light overlay card (radius 18) with the 44 px tinted Resume,
@@ -184,8 +245,12 @@ public class PlayerThemeRenderTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player);
+		//A loaded game: the overlay's title is its name (the render's "Contra (USA)").
+		model.RomInfo = new RomInfo() { RomPath = "/roms/Contra (USA).nes", ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		model.OpenPauseOverlay();
 		Dispatcher.UIThread.RunJobs();
+		Assert.Equal("Contra (USA)", window.FindNamed<TextBlock>("OverlayGameTitle").Text);
+		Assert.True(window.FindNamed<TextBlock>("OverlayGameTitle").IsOnScreen());
 
 		Border overlay = window.FindNamed<Border>("PlayerOverlay");
 		Color overlayBackground = PlayerRender.SolidColor(overlay.Background);

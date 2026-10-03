@@ -113,14 +113,14 @@ public class PlaySheetsViewTests : IDisposable
 
 		Button restore = window.FindNamed<Button>("PackDetailRestoreButton");
 		Assert.True(restore.IsOnScreen());
-		Assert.False(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 
 		Click(restore);
-		Assert.True(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.True(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 		Assert.False(restore.IsOnScreen());
 
 		Click(window.FindNamed<Button>("PackDetailRestoreKeepButton"));
-		Assert.False(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 		Assert.True(restore.IsOnScreen());
 
 		Click(window.FindNamed<Button>("PackDetailDoneButton"));

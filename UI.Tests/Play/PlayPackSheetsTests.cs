@@ -135,5 +135,23 @@ namespace Mesen.Tests.Play
 			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, "AB12", currentRomSha1: ""));
 			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, restoreRomSha1: "", currentRomSha1: ""));
 		}
-	}
+	
+		//W-P6: macOS names the Finder (the render); elsewhere a folder.
+		[Theory]
+		[InlineData(true, "btnPackDetailShowInFinder")]
+		[InlineData(false, "btnPackDetailShowFolder")]
+		public void The_folder_button_names_the_platforms_file_browser(bool isMacOS, string key)
+		{
+			Assert.Equal(key, PackDetail.ShowFolderLabelKey(isMacOS));
+		}
+
+		//The Patch chip is lit by a patch alone, with or without missing music.
+		[Fact]
+		public void The_patch_chip_follows_the_patch_not_the_music_notice()
+		{
+			Assert.True(PackDetail.Chips("audio", new PackAudioScan(0, 4, true)).Patch);
+			Assert.False(PackDetail.Chips("audio", new PackAudioScan(3, 17, false)).Patch);
+			Assert.False(PackDetail.Build(true, "audio", new PackAudioScan(3, 17, false), 1, false, true, "/f").Chips.Patch);
+		}
+}
 }

@@ -40,10 +40,12 @@
 						<TextBlock Classes="drop-hint" Text="{Binding DropHint}" TextWrapping="Wrap" />
 					</StackPanel>
 				</Button>
-				<!--W-X2: "That is not the file this pack was made with".-->
-				<Border Name="PackDepSheetError" Classes="warning notice" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+				<!--W-X2: "That is not the file this pack was made with" - the shared
+				in-place banner, as the BIOS sheet's.-->
+				<Border Name="PackDepSheetError" Classes="banner warning" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
 					<DockPanel>
-						<TextBlock Classes="notice-line" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<TextBlock Classes="banner-text" Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</Border>
 				<DockPanel Margin="0 22 0 0">

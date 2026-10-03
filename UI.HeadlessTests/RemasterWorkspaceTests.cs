@@ -273,7 +273,7 @@ public class RemasterWorkspaceTests : IDisposable
 		(Window window, _, _, _) = ShowProjectView(Ready with { Python = PythonGate.Missing, PythonExecutable = "" });
 
 		Assert.True(window.FindNamed<Border>("RemasterFeasibilityBanner").IsOnScreen());
-		Assert.StartsWith("⚠ Painting needs Python 3.10 or newer", window.FindNamed<TextBlock>("RemasterFeasibilityText").Text);
+		Assert.StartsWith("Painting needs Python 3.10 or newer", window.FindNamed<TextBlock>("RemasterFeasibilityText").Text);
 		Assert.True(window.FindNamed<Button>("LocatePythonButton").IsOnScreen());
 		Assert.True(window.FindNamed<Button>("RemasterRecordButton").IsEffectivelyEnabled);
 		Assert.False(window.FindNamed<Button>("RemasterPrepareButton").IsEffectivelyEnabled);

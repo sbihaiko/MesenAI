@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 
 namespace Mesen.Logic;
@@ -35,6 +37,46 @@ public enum LastPlayedKind
 
 public static class PlayHome
 {
+	//W-P2's pack badge on a tile: the game has an HD pack where the Core looks
+	//for it, HdPacks/<ROM file name>/hires.txt (HdPackLoader). The recent-game
+	//file is named after the ROM, so its name is the folder's. Packs found by
+	//ROM hash (MEP, community packs) need the hash the entry does not carry.
+	public static bool HasHdPack(string hdPackFolder, string romName)
+	{
+		if(string.IsNullOrEmpty(hdPackFolder) || string.IsNullOrEmpty(romName)) {
+			return false;
+		}
+		return File.Exists(Path.Combine(hdPackFolder, romName, "hires.txt"));
+	}
+
+	//W-P2's Continue picture: the Screenshot.png the Core keeps inside a
+	//recent-game file (a zip). Null when the file, the entry or the zip is
+	//missing or unreadable - the card keeps its placeholder.
+	public static byte[]? ReadScreenshot(string recentGameFile)
+	{
+		try {
+			if(!File.Exists(recentGameFile)) {
+				return null;
+			}
+			using FileStream fs = new(recentGameFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			using ZipArchive zip = new(fs, ZipArchiveMode.Read);
+			ZipArchiveEntry? entry = zip.GetEntry("Screenshot.png");
+			if(entry == null) {
+				return null;
+			}
+			using Stream stream = entry.Open();
+			using MemoryStream copy = new();
+			stream.CopyTo(copy);
+			return copy.ToArray();
+		} catch(IOException) {
+			return null;
+		} catch(InvalidDataException) {
+			return null;
+		} catch(UnauthorizedAccessException) {
+			return null;
+		}
+	}
+
 	//Beyond this many days the subtitle names the date instead of a count.
 	public const int MaxDaysAgo = 6;
 

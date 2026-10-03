@@ -31,18 +31,20 @@ namespace Mesen.Windows
 			DataContext = _model;
 			ApplyModeSize();
 			_model.PropertyChanged += (_, e) => {
-				if(e.PropertyName == nameof(ConfigViewModel.PlayerMode)) {
+				if(e.PropertyName is nameof(ConfigViewModel.PlayerMode) or nameof(ConfigViewModel.PlayerTabIndex)) {
 					ApplyModeSize();
 				}
 			};
 		}
 
-		//ADR-0249 (W-P8, W-P10): Player mode is the render's 480 px sheet;
-		//"More in Options…" turns the same window into the classic Options.
+		//ADR-0249 (W-P8, W-P10): Player mode is the render's 480 px sheet, as
+		//high as the tab needs (PlayerSettingsEssentials.SheetHeight); "More in
+		//Options…" turns the same window into the classic Options.
 		private void ApplyModeSize()
 		{
 			Width = _model.PlayerMode ? 480 : 620;
-			Height = 500;
+			ConfigWindowTab? tab = PlayerSettingsEssentials.TabAt(_model.PlayerTabIndex);
+			Height = _model.PlayerMode && tab != null ? PlayerSettingsEssentials.SheetHeight(tab.Value) : 500;
 		}
 
 		//G.4 (W-P8): Display edits the main window - its full screen and scale.

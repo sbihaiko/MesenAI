@@ -169,6 +169,14 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Border group = window.FindNamed<Border>("DisplaySettingsGroup");
 			Assert.True(group.Bounds.Width >= window.Bounds.Width - 41, $"the group is {group.Bounds.Width} wide in a {window.Bounds.Width} window");
 			Assert.Equal(5, ControlsAtRest(window));
+			//W-P8's sheet is 340 high, and the hint sits right under the group,
+			//on its own line above Done (not at the foot of Look's height).
+			Assert.Equal(340, window.Bounds.Height, 0.5);
+			double groupBottom = group.TranslatePoint(new Point(0, group.Bounds.Height), window)!.Value.Y;
+			double hintTop = hint.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+			double doneTop = window.FindNamed<Button>("btnPlayerSettingsDone").TranslatePoint(new Point(0, 0), window)!.Value.Y;
+			Assert.InRange(hintTop - groupBottom, 8, 26);
+			Assert.True(hintTop + hint.Bounds.Height <= doneTop, $"the hint ({hintTop}) shares Done's row ({doneTop})");
 
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P8");
@@ -195,6 +203,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			AssertText(header, 11.5, FontWeight.Bold, Text2);
 			Assert.Equal("ART", header.Text);
 			Assert.Equal("drawn by an artist", window.FindNamed<TextBlock>("lblLookArtHint").Text);
+			Assert.Equal(500, window.Bounds.Height, 0.5);
 			AssertPopup(window.FindNamed<ComboBox>("cboLookPixels"), 200);
 			AssertPopup(window.FindNamed<ComboBox>("cboLookScreen"), 200);
 			AssertButton(window.FindNamed<Button>("btnLookAdjust"), 28, 8, 13, Card);
@@ -212,6 +221,31 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P10");
 			PlayerRender.AssertPixel(Card, frame, 4, 4);
+		} finally {
+			window.Close();
+		}
+	}
+
+	//The Player sheet's caps labels and hints are Player-only: Advanced's Look
+	//tab keeps the classic "Art" / "Pixels" / "Screen" headers.
+	[AvaloniaFact]
+	public void Advanced_look_keeps_the_classic_group_labels()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ShowPlayerGame();
+		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+		ConfigWindow window = new(ConfigWindowTab.Look, playerMode: false);
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		try {
+			LookConfigView look = window.FindAll<LookConfigView>().Single(v => v.IsOnScreen());
+			string[] shown = look.FindAll<TextBlock>().Where(t => t.IsOnScreen() && !string.IsNullOrEmpty(t.Text)).Select(t => t.Text!).ToArray();
+			Assert.Contains("Art", shown);
+			Assert.Contains("Pixels", shown);
+			Assert.Contains("Screen", shown);
+			Assert.DoesNotContain("ART", shown);
+			Assert.DoesNotContain("PIXELS", shown);
+			Assert.DoesNotContain("drawn by an artist", shown);
 		} finally {
 			window.Close();
 		}
@@ -270,7 +304,9 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		ushort Key(int button) => (ushort)(ControllerDevices.BaseGamepadIndex + device * 0x100 + button);
 		PlayControllerSetupViewModel setup = new() {
 			//The device label is the key name's first word (ControllerDevices.Label).
-			KeyName = k => k == Key(9) ? "8BitDo Start" : "8BitDo But" + (k & 0xFF),
+			KeyName = k => k == Key(9) ? "Pad8 Start" : "Pad8 But" + (k & 0xFF),
+			//W-P15's title names the controller itself, not the key prefix.
+			DeviceName = d => d == device ? "8BitDo SN30" : "",
 			CurrentConsole = () => ConsoleType.Nes,
 			IsPaused = () => false,
 			Pause = () => { },
@@ -304,6 +340,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Assert.Equal(new CornerRadius(18), sheet.CornerRadius);
 			Assert.Equal(460, sheet.Bounds.Width, 0.5);
 			AssertText(window.FindNamed<TextBlock>("ControllerSetupTitle"), 20, FontWeight.Bold, Text);
+			Assert.Equal("Set up \u201c8BitDo SN30\u201d", window.FindNamed<TextBlock>("ControllerSetupTitle").Text);
 			AssertText(window.FindNamed<TextBlock>("ControllerSetupPrompt"), 15, FontWeight.SemiBold, Text);
 			Border pad = window.FindNamed<Border>("ControllerSetupPad");
 			Assert.Equal(new CornerRadius(40), pad.CornerRadius);

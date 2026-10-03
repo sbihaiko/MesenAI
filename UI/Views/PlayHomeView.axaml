@@ -45,8 +45,8 @@
 				<TextBlock Classes="title1" Text="{l:Translate lblPlayHomeContinueHeader}" VerticalAlignment="Bottom" />
 			</DockPanel>
 			<!--W-P2's hero: a game-picture panel and the Continue block. The
-			picture is a placeholder until the recent entry carries its preview
-			(listed as a gap in ADR-0249's pilot).-->
+			picture is the recent entry's screenshot (the .rgd's Screenshot.png),
+			a placeholder gradient when it has none.-->
 			<Border Name="PlayHomeContinueCard" Classes="card hero" DockPanel.Dock="Top" Height="160" ClipToBounds="True" Margin="0 0 0 34">
 				<DockPanel>
 					<Border Name="PlayHomeContinueArt" DockPanel.Dock="Left" Width="260" CornerRadius="16 0 0 16">
@@ -56,7 +56,11 @@
 								<GradientStop Offset="1" Color="#3C6EAA" />
 							</LinearGradientBrush>
 						</Border.Background>
-						<PathIcon Data="{StaticResource PlayerIconPlay}" Width="34" Height="34" Foreground="#B3FFFFFF" />
+						<Panel>
+							<PathIcon Data="{StaticResource PlayerIconPlay}" Width="34" Height="34" Foreground="#B3FFFFFF" IsVisible="{Binding !HasContinuePreview}" />
+							<!--W-P2: the recent entry's own screenshot fills the panel.-->
+							<Image Name="PlayHomeContinuePreview" Source="{Binding ContinuePreview}" Stretch="UniformToFill" IsVisible="{Binding HasContinuePreview}" RenderOptions.BitmapInterpolationMode="LowQuality" />
+						</Panel>
 					</Border>
 					<StackPanel Margin="28 0 24 0" VerticalAlignment="Center">
 						<TextBlock Name="PlayHomeContinueTitle" Classes="title2" Text="{Binding ContinueTitle}" TextTrimming="CharacterEllipsis" />
@@ -78,19 +82,19 @@
 		<!--G.5 (W-P14): a file that does not open - one inline alert under the
 		home's content (W-X2: a sentence and the next step, never a code). W-P2's
 		2 controls + Open Another… = 3; the ✕ only closes it.-->
-		<!--ADR-0249 (W-P14): Border.alert - warm card, amber outline; the title
-		in TEXT, the body in TEXT2, Open Another… (secondary, folder glyph).-->
+		<!--ADR-0249 (W-P14): Border.alert - warm card, amber outline; the orange
+		warning icon, the title in TEXT, the body in TEXT2, Open Another…
+		(secondary, folder glyph) as its one control: opening anything (this
+		button, a tile, Continue, a drop) clears the alert, so no close box.-->
 		<Border Name="PlayHomeLoadAlert" Classes="alert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Padding="18 12 12 14" IsVisible="{Binding IsLoadAlertVisible}">
 			<DockPanel>
-				<Button Name="PlayHomeLoadAlertClose" Classes="plain small" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="4 0 0 0" Click="OnDismissLoadAlert">
-					<PathIcon Classes="close-glyph" />
-				</Button>
 				<Button Name="PlayHomeOpenAnother" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenAnother">
 					<StackPanel Orientation="Horizontal">
 						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
 						<TextBlock Text="{l:Translate btnPlayHomeOpenAnother}" />
 					</StackPanel>
 				</Button>
+				<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="15" Height="15" VerticalAlignment="Top" Margin="0 6 10 0" />
 				<StackPanel Spacing="3" Margin="0 4 12 0">
 					<TextBlock Name="PlayHomeLoadAlertTitle" Classes="callout strong" Text="{Binding LoadAlertTitle}" TextWrapping="Wrap" />
 					<TextBlock Name="PlayHomeLoadAlertBody" Classes="subhead secondary" Text="{Binding LoadAlertBody}" TextWrapping="Wrap" />
