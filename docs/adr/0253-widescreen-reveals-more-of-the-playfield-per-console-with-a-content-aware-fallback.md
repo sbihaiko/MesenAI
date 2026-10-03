@@ -1,6 +1,6 @@
 # ADR-0253: Widescreen reveals more of the playfield, per console, with a content-aware fallback
 
-- Status: proposed (2026-10-03). The user found that the WideScrn toggle only stretches the picture (*"sobre a feature widescreen, está apenas distorcendo, eu quero completar as bordas, na linha do que o https://www.zsnes.com/#features faz"*), and added that it must work across more than one kind of game (*"lembre que o widescreen vai funcionar para mais de um tipo de jogo"*). Nothing is implemented. On acceptance, each Decision item below becomes a slice in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`.
+- Status: proposed (2026-10-03). The user found that the WideScrn toggle only stretches the picture (*"sobre a feature widescreen, está apenas distorcendo, eu quero completar as bordas, na linha do que o https://www.zsnes.com/#features faz"*), and added that it must work across more than one kind of game (*"lembre que o widescreen vai funcionar para mais de um tipo de jogo"*). They then settled the UI: *"o modo deve ser automático. a opção liga/desliga do widescreen já existe no Enhacements. quando o jogo não suporta nenhum modo a chave fica disabled."* — decisions 1 and 4 below. Nothing is implemented. On acceptance, each Decision item below becomes a slice in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md`.
 - Date: 2026-10-03
 - Related: PRD Part B §6.1 (WideScrn row) and §7 (Non-goals); ADR-0149 (the enhancement pack border layer); ADR-0162 (the accuracy suite: standard frames stay identical); ADR-0163 (fork–upstream coexistence: `NesPpu`, the GB PPU and the SMS VDP are upstream-owned); ADR-0236 (recorded captures are keyed to 256-wide cell positions); ADR-0246 (Art, Pixels and Screen picture layers).
 - Supersedes / amends: amends PRD Part B §7, whose non-goal *"A widescreen mode that reveals more of the playfield … would be its own per-console engine ADR"* this ADR is. Amends §6.1's WideScrn row, which today is defined as a 16:9 stretch.
@@ -39,12 +39,12 @@ The kind of game matters as much as the console:
 
 ## Decision
 
-1. **Two modes, one toggle row.** WideScrn becomes a choice instead of a checkbox:
-   - **Off:** the aspect ratio chosen before. The restore rule of §6.1 is unchanged.
-   - **Stretch:** today's behaviour, kept for games where revealing makes no sense.
-   - **Reveal:** new. The console draws N extra columns on each side, from the hardware's own background map, so the picture is 16:9 at the original pixel aspect.
+1. **One switch, automatic mode.** The existing WideScrn on/off switch in Enhancements stays the only control; there is no mode picker. When it is on, the core picks the mode by itself, in this order:
+   - **Reveal**: the console draws N extra columns on each side from the hardware's own background map, so the picture is 16:9 at the original pixel aspect;
+   - **Pack art**: when the game has no real side content but its pack ships widescreen art (decision 3);
+   - otherwise the game supports **no** widescreen mode, and the switch is **disabled** for it, with a one-line reason (for example "This game has nothing to show beside the picture"). The switch keeps its saved value, so the next game that supports it gets it back.
 
-   The default for Reveal is per game. This is decision 4.
+   The stretch to 16:9 is dropped: it is the distortion this ADR exists to remove. The §6.1 restore rule for the aspect ratio still holds when the switch is turned off.
 2. **Reveal is produced where the pixels are made, per console, behind one contract.**
    - **The contract:** a console that supports Reveal emits a `RenderedFrame` that is `2N` pixels wider and says which columns are extended. In the standard mode its output is bit-identical to today, so ADR-0162's accuracy suite compares the standard frames unchanged and adds Reveal cases on top.
    - **No side effects:** extra columns are fetched with side-effect-free VRAM reads, the path the debugger viewers already use. A mapper or bus hook never fires twice.
@@ -56,19 +56,25 @@ The kind of game matters as much as the console:
      - GB/GBC/GG: the BG map and window, wrapped.
      - GBA: text BGs only in the first slice.
      - SMS/SG-1000: Reveal is offered but has no map columns to show, so it always uses the fallback (decision 3).
-3. **Content-aware fallback.** A column the console cannot fill with real content is drawn by the first source that applies:
+3. **Content-aware fallback.** While widescreen is active, a column the console cannot fill with real content on a given frame is drawn by the first source that applies:
    1. **Pack art.** An HD pack may ship wider `<background>` art or a per-screen side image. A `<widescreen>` section is added to the MEP spec, with a version bump in `docs/specs/`.
    2. **The pack's border layer** (ADR-0149).
    3. **Black.**
 
+   The border and black are per-frame fill-ins for a game that does support a mode. On their own they never make a game "supported", so they never keep the switch enabled.
+
    "Cannot fill" is decided per console. On NES it means single-screen or horizontal mirroring with horizontal scroll. A half-built column, the one the game is rewriting this frame, is cut back to the last fully written column so construction never shows.
-4. **Per game, remembered.** The first time Reveal runs on a game, the core measures which side columns stayed stable over the first gameplay seconds. If neither side ever had real content, the game defaults to Stretch and a toast says so once. The player can override it, and the choice is saved per ROM the same way the W-P5 per-ROM pack choice is.
+4. **Support is decided per game, and remembered.**
+   - **Consoles with no side map:** SMS/SG-1000 without pack art are known unsupported before the game runs, so the switch is disabled at once.
+   - **Everything else:** the first time a game runs, the core measures over the first gameplay seconds whether the side columns ever held real, stable content. During that time the switch stays enabled.
+   - **No content found:** the game is recorded as unsupported per ROM, the same way the W-P5 per-ROM pack choice is stored. The switch then shows disabled from the next load, and a toast says so once.
+   - **Re-checking:** installing a pack with widescreen art re-enables the switch, and so does a later run that finds content, such as a level that scrolls.
 5. **Slices, in order:**
    1. The frame-width contract, plus the NES Reveal with the black fallback and its accuracy and unit tests.
    2. GB/GBC/GG Reveal.
    3. The fallback chain: the border layer, then the MEP `<widescreen>` pack art, as a spec bump.
    4. The HD pack path on NES (extra columns drawn with the pack's tiles).
-   5. The per-game measurement and memory, and the Player UI's three-way choice.
+   5. The per-game support measurement and memory, and the switch's enabled/disabled state with its reason.
    6. The NTSC filters, recorder and capture tools.
    7. GBA text BGs.
 
@@ -77,4 +83,4 @@ The kind of game matters as much as the console:
 - **Upstream-owned files change.** `NesPpu`, the GB PPU and the SMS VDP are edited (ADR-0163), so upstream merges get harder. The edits stay behind the frame-width contract, and the standard path stays the code that is there now.
 - **More widths to support.** Tools that key on the screen position (the HD Pack Builder, recorded captures under ADR-0236, the composition editor) keep working on the original 256/160 px. The extra columns are presentation and are never recorded as tiles.
 - **The fallback adds work for pack authors.** It is optional: without pack art, Reveal still works, with black or the border.
-- **The PRD changes on acceptance:** §6.1's WideScrn row becomes the three-way choice, the §7 non-goal is deleted, and the slices are added.
+- **The PRD changes on acceptance:** §6.1's WideScrn row becomes the automatic switch (Reveal, then pack art, otherwise disabled; no stretch), the §7 non-goal is deleted, and the slices are added.
