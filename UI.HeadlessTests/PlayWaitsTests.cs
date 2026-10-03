@@ -48,7 +48,9 @@ public class PlayWaitsTests : IDisposable
 
 	public void Dispose()
 	{
-		if(EmuApi.IsRunning()) {
+		//CI has no native core (ADR-0131): the tests skip, and an EmuApi call
+		//here would turn the skip into a DllNotFoundException failure.
+		if(NativeCore.IsAvailable && EmuApi.IsRunning()) {
 			EmuApi.Stop();
 		}
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
