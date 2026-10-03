@@ -4,6 +4,9 @@
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/HdPacks/HdWidescreenColumns.h"
+#include "Shared/EmuSettings.h"
+#include "Shared/RenderedFrame.h"
 
 struct NesSpriteInfoEx
 {
@@ -36,11 +39,48 @@ class HdNesPpu final : public NesPpu<HdNesPpu>
 	NesTileInfoEx _currentTileEx = {};
 	NesTileInfoEx _nextTileEx = {};
 
+	//ADR-0253 slice W.4: the widened frame itself, latched once on the pre-render
+	//line the way DefaultNesPpu latches its own, so a switch flipped mid-frame
+	//never yields half a frame. The HD renderer draws the sides at the pack's
+	//scale from HdScreenInfo::SideTiles; this buffer is what every other consumer
+	//of the frame sees (and what the border layer crops the centre out of).
+	NesWidescreenReveal::FrameBuffers _reveal;
+
+	bool IsRevealRequested()
+	{
+		//WideScrn is the Widescreen aspect setting; a Vs. DualSystem merges two
+		//standard frames side by side, so it stays standard.
+		return HdWidescreenColumns::RevealRequested(
+			_settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen,
+			_console->GetVsMainConsole() || _console->GetVsSubConsole());
+	}
+
 public:
 	HdNesPpu(NesConsole* console, HdPackData* hdData);
 	virtual ~HdNesPpu();
 
 	void* OnBeforeSendFrame();
+
+	//ADR-0253: the extra columns of `row`, read from the basis NesPpu has just
+	//captured for it and stored as HdSideTile's for the HD renderer, which draws
+	//them through the pack's own per-pixel pipeline at the pack's scale. Same
+	//capture point as DefaultNesPpu::OnRowBasisCaptured, same side-effect-free
+	//reads, and nothing at all when the Reveal is off - the standard frame and
+	//its ScreenTiles are untouched either way.
+	void OnRowBasisCaptured(int16_t row);
+
+	//ADR-0253: an extended frame replaces the standard one on its way to the video
+	//decoder; _currentOutputBuffer stays the 256-px picture, and the pack's
+	//ScreenTiles keep the picture's own coordinates.
+	void OnFrameBuilt(RenderedFrame& frame)
+	{
+		const uint16_t* extended = _reveal.Finish(_currentOutputBuffer);
+		if(extended) {
+			frame.FrameBuffer = (void*)extended;
+			frame.Width = NesWidescreenReveal::ExtendedWidth;
+			frame.ExtendedColumns = NesWidescreenReveal::ExtraColumns;
+		}
+	}
 
 	__forceinline bool RemoveSpriteLimit() { return _forceRemoveSpriteLimit || _console->GetNesConfig().RemoveSpriteLimit; }
 	__forceinline bool UseAdaptiveSpriteLimit() { return _forceRemoveSpriteLimit || _console->GetNesConfig().AdaptiveSpriteLimit; }

@@ -25,12 +25,19 @@ HdVideoFilter::HdVideoFilter(NesConsole* console, Emulator* emu, HdPackData* hdD
 
 FrameInfo HdVideoFilter::GetFrameInfo()
 {
+	//ADR-0253 W.4: the width comes from the frame, not from a constant - the
+	//decoder hands over the console's own base frame size, which is 384x240 when
+	//the Reveal is on (it only lets an extended frame through to a filter that
+	//accepts one) and 256x240 otherwise. The fallback covers a filter asked
+	//before any frame has been decoded.
+	uint32_t width = _baseFrameInfo.Width != 0 ? _baseFrameInfo.Width : NesConstants::ScreenWidth;
+	uint32_t height = _baseFrameInfo.Height != 0 ? _baseFrameInfo.Height : NesConstants::ScreenHeight;
 	OverscanDimensions overscan = GetOverscan();
 	uint32_t hdScale = _hdNesPack->GetScale();
 
 	return {
-		(NesConstants::ScreenWidth - overscan.Left - overscan.Right) * hdScale,
-		(NesConstants::ScreenHeight - overscan.Top - overscan.Bottom) * hdScale
+		(width - overscan.Left - overscan.Right) * hdScale,
+		(height - overscan.Top - overscan.Bottom) * hdScale
 	};
 }
 
@@ -51,5 +58,8 @@ void HdVideoFilter::ApplyFilter(uint16_t* ppuOutputBuffer)
 	}
 
 	OverscanDimensions overscan = GetOverscan();
-	_hdNesPack->Process((HdScreenInfo*)_frameData, GetOutputBuffer(), overscan);
+	//ADR-0253 W.4: the decoder ran KeepStandardCentre when the border layer is
+	//composited, and that clears ExtendedColumns - so a bordered frame is drawn at
+	//the standard width and the border covers the sides, which is what §2 asks for.
+	_hdNesPack->Process((HdScreenInfo*)_frameData, GetOutputBuffer(), overscan, _frame.ExtendedColumns > 0);
 }
