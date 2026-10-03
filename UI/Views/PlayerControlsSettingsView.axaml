@@ -1,0 +1,35 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="160"
+	x:DataType="vm:PlayerControlsSettingsViewModel"
+	x:Class="Mesen.Views.PlayerControlsSettingsView"
+>
+	<!--G.4 (W-P8): Settings › Controls - three rows in Display's pattern: which
+	pads are connected, Rumble and the stick deadzone. Per-console controller
+	types and the button mapping are "More in Options…".-->
+	<Border Name="ControlsSettingsGroup" Classes="group inset" VerticalAlignment="Top">
+		<StackPanel XYFocus.NavigationModes="Enabled">
+			<DockPanel Classes="setting-row">
+				<TextBlock DockPanel.Dock="Right" Name="txtControlsPads" Classes="callout secondary" Text="{Binding ControllersText}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblControlsControllers}" VerticalAlignment="Center" />
+			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<DockPanel Classes="setting-row">
+				<TextBlock DockPanel.Dock="Right" Name="txtControlsRumble" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding RumbleText}" VerticalAlignment="Center" />
+				<Slider DockPanel.Dock="Right" Name="sldControlsRumble" Width="150" Minimum="0" Maximum="10" Value="{Binding Rumble}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblControlsRumble}" VerticalAlignment="Center" />
+			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<DockPanel Classes="setting-row">
+				<TextBlock DockPanel.Dock="Right" Name="txtControlsDeadzone" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Deadzone, StringFormat={}{0:0}}" VerticalAlignment="Center" />
+				<Slider DockPanel.Dock="Right" Name="sldControlsDeadzone" Width="150" Minimum="0" Maximum="4" Value="{Binding Deadzone}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblControlsDeadzone}" VerticalAlignment="Center" />
+			</DockPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

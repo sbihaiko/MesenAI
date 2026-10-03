@@ -100,17 +100,91 @@ namespace Mesen.Tests.Config
 			Assert.Equal(expected, PlayDisplaySettings.Nearest(items, current));
 		}
 	
-		//W-P8: Display is the render's 340 px sheet so its "Everything else"
-		//hint sits right under the group; Look is W-P10's 480 px sheet, and
-		//Audio and Controls share it.
+		//W-P8: Display, Audio and Controls are the same 340 px sheet (three rows,
+		//then the hint or the "More in Options..." link, then Done); only Look is
+		//W-P10's taller 480 px sheet.
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 340)]
 		[InlineData(ConfigWindowTab.Look, 480)]
-		[InlineData(ConfigWindowTab.Audio, 480)]
-		[InlineData(ConfigWindowTab.Input, 480)]
+		[InlineData(ConfigWindowTab.Audio, 340)]
+		[InlineData(ConfigWindowTab.Input, 340)]
 		public void Each_tab_has_its_sheet_height(ConfigWindowTab tab, double height)
 		{
 			Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(tab));
 		}
-}
+
+		//The bug: Audio and Controls embedded the whole classic option pages
+		//(sub-tabs, per-console button row, scrollbars). Now each essentials tab
+		//is a short inset list in the Display pattern: at most 3 rows (PRD rule
+		//2 leaves room for the link), and no classic page.
+		[Theory]
+		[InlineData(ConfigWindowTab.Display, 3)]
+		[InlineData(ConfigWindowTab.Audio, 3)]
+		[InlineData(ConfigWindowTab.Input, 3)]
+		public void Each_list_tab_has_three_rows_and_no_classic_page(ConfigWindowTab tab, int rows)
+		{
+			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(tab));
+			Assert.Equal(rows, PlayerSettingsEssentials.Rows(tab).Count);
+			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRows);
+		}
+
+		[Fact]
+		public void Look_keeps_its_own_page_and_no_classic_one()
+		{
+			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(ConfigWindowTab.Look));
+			Assert.Empty(PlayerSettingsEssentials.Rows(ConfigWindowTab.Look));
+		}
+
+		[Fact]
+		public void Audio_rows_are_sound_volume_and_output_device()
+		{
+			Assert.Equal(new[] { "Sound", "Volume", "OutputDevice" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+			Assert.Equal(new[] { PlayerSettingsRowKind.Switch, PlayerSettingsRowKind.Slider, PlayerSettingsRowKind.Picker }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Kind));
+		}
+
+		[Fact]
+		public void Controls_rows_are_controllers_rumble_and_deadzone()
+		{
+			Assert.Equal(new[] { "Controllers", "Rumble", "Deadzone" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Select(r => r.Id));
+		}
+
+		//"More in Options..." expands to the classic page of the same tab (Look's
+		//opens Video); Display has no link - the hint stays.
+		[Theory]
+		[InlineData(ConfigWindowTab.Audio, ConfigWindowTab.Audio)]
+		[InlineData(ConfigWindowTab.Input, ConfigWindowTab.Input)]
+		[InlineData(ConfigWindowTab.Look, ConfigWindowTab.Video)]
+		public void More_in_Options_opens_the_classic_page(ConfigWindowTab tab, ConfigWindowTab expected)
+		{
+			Assert.Equal(expected, PlayerSettingsEssentials.OptionsTabFor(tab));
+		}
+
+		[Fact]
+		public void Display_has_no_options_link()
+		{
+			Assert.Null(PlayerSettingsEssentials.OptionsTabFor(ConfigWindowTab.Display));
+		}
+
+		//The sliders write the config's integer scale: rounded and clamped.
+		[Theory]
+		[InlineData(42.4, 100, 42)]
+		[InlineData(42.6, 100, 43)]
+		[InlineData(-3, 100, 0)]
+		[InlineData(250, 100, 100)]
+		[InlineData(4.2, 4, 4)]
+		public void A_slider_value_rounds_and_clamps_to_the_config_range(double value, uint max, uint expected)
+		{
+			Assert.Equal(expected, PlayerSliders.ToConfig(value, max));
+		}
+
+		//Restore-not-clobber: an output device chosen in Options that is not
+		//enumerated now is listed as the current item, never replaced.
+		[Fact]
+		public void An_output_device_set_in_Options_stays_the_current_item()
+		{
+			Assert.Equal(new[] { "Speakers", "Headset" }, PlayerAudioSettings.Devices(new[] { "Speakers" }, "Headset"));
+			Assert.Equal(new[] { "Speakers", "Headset" }, PlayerAudioSettings.Devices(new[] { "Speakers", "Headset" }, "Headset"));
+			Assert.Equal(new[] { "Speakers" }, PlayerAudioSettings.Devices(new[] { "Speakers" }, ""));
+		}
+	}
 }
