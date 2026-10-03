@@ -19,13 +19,13 @@ namespace Mesen.HeadlessTests;
 //Settings sheet (PlayerSettingsSheetView, ADR-0249) shows its own strip
 //(Display | Look | Audio | Controls) with the hint and Done and no Advanced tab
 //list, and that Advanced's ConfigWindow still shows every tab and no strip.
-[NativeCoreFree("Opens the Settings sheet and ConfigWindow on the Input tab; only the Audio/Video/Display/Look tab view-models reach ConfigApi/EmuApi on construction.")]
+[NativeCoreFree("Opens the Settings sheet (with injected device and pad sources) and ConfigWindow on the Input tab; only the classic Audio/Video/Display/Look tab view-models reach ConfigApi/EmuApi on construction.")]
 public class PlayerSettingsTabsTests
 {
-	//Input is the one essentials tab whose view-model does not reach the
-	//native core on construction (Audio enumerates devices through ConfigApi,
-	//Display and Look read the core), so it is the tab a host-free run can
-	//open. The tab bars under test are the same either way.
+	//Input is the tab a host-free run opens: its classic view-model does not
+	//reach the native core on construction (Audio enumerates devices through
+	//ConfigApi, Display and Look read the core). The tab bars under test are
+	//the same either way.
 	private static ConfigWindow ShowAdvancedSettings()
 	{
 		ConfigWindow window = new(ConfigWindowTab.Input);
@@ -38,7 +38,7 @@ public class PlayerSettingsTabsTests
 	//scope; here the same view in a bare Player-scoped window, core-free.
 	private static Window ShowPlayerSheet()
 	{
-		PlayerSettingsSheetView sheet = new() { DataContext = new ConfigViewModel(ConfigWindowTab.Input, playerMode: true) };
+		PlayerSettingsSheetView sheet = new() { DataContext = new ConfigViewModel(ConfigWindowTab.Input, playerMode: true, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0) };
 		Window window = new() { Width = 1100, Height = 740, Content = new Panel { Classes = { "player" }, Children = { sheet } } };
 		window.Show();
 		Dispatcher.UIThread.RunJobs();

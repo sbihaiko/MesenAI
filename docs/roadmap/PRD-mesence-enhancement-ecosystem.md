@@ -3079,6 +3079,36 @@ what the pixels look like. The shader selector moves out of here into Look,
 next to the filter it is usually confused with. The last line is rule 10
 applied to settings. Elements: tab strip, 3 rows, Done = 5. ✔
 
+**W-P8b / W-P8c — Settings › Audio and Controls (the same list, never the
+classic pages)**
+
+![W-P8b](../media/gui-redesign/W-P8b.png)
+![W-P8c](../media/gui-redesign/W-P8c.png)
+
+```
+ Audio                                  Controls
+ │  Sound            [x]            │   │  Controllers   2 controllers connected │
+ │  Volume     ──────●──── 100      │   │  Rumble        ───●─────────  5        │
+ │  Output device [Speakers   ▾]    │   │  Stick deadzone ──●────────  2         │
+ │  More in Options…                │   │  More in Options…                      │
+```
+
+Audio and Controls follow Display's pattern exactly: one inset list of three
+46 px rows in the same 340 px sheet, no scrollbars, no sub-tabs. They used to
+embed the whole classic option pages (General/Equalizer/Advanced and
+General/Display/Test sub-tabs, a per-console button row, two scrollbars),
+which broke rule 2. **Audio** is Sound (the Enable Audio switch), Volume
+(0–100) and Output device; equalizer, reverb, crossfeed, latency and sample
+rate stay in Options. **Controls** is what is console-independent: which pads
+are connected, Rumble strength (0 is off) and Stick deadzone; per-console
+controller types and button mapping stay in Options. Every row is bound to the
+same config the classic page edits, so a value set in Options (an output
+device that is not enumerated now, a volume) shows as the current item and
+opening the tab never rewrites it. The hint's line carries **More in
+Options…**, which expands to that tab's classic page exactly as Look's
+*More in Options…* does (Display keeps the hint, as it has nothing to expand
+to). Elements: tab strip, 3 rows, More in Options…, Done = 6. ✔
+
 **W-P9 — A pack installs while the game starts (a HUD pill, not a dialog)**
 
 ![W-P9](../media/gui-redesign/W-P9.png)

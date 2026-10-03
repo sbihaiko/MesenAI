@@ -888,6 +888,54 @@ def w_p8():
     return c
 
 
+def slider(c, x, y, w, frac):
+    c.rrect((x, y - 2, x + w, y + 2), 2, fill=(205, 205, 210))
+    c.rrect((x, y - 2, x + w * frac, y + 2), 2, fill=TINT["play"])
+    c.circle(x + w * frac, y, 8, fill=(255, 255, 255), outline=(200, 200, 205))
+
+
+def essentials_sheet(c, tab, rows):
+    """W-P8's Audio and Controls: Display's pattern - three rows in one inset
+    list, "More in Options…" where Display has its hint (it expands to that tab's
+    classic page, as Look's Pixels item does), then Done."""
+    b = settings_sheet(c, tab, 340)
+    x0, y0, x1, y1 = b
+    g = (x0 + 20, y0 + 96, x1 - 20, y0 + 96 + 3 * 46)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    for i, (name, kind, value) in enumerate(rows):
+        yy = g[1] + i * 46
+        c.text(g[0] + 16, yy + 23, name, 13.5, 500, TEXT, "lm")
+        if kind == "switch":
+            c.toggle(g[2] - 54, yy + 12, True)
+        elif kind == "slider":
+            slider(c, g[2] - 190, yy + 23, 150, value[0])
+            c.text(g[2] - 16, yy + 23, value[1], 13.5, 400, TEXT, "rm")
+        elif kind == "popup":
+            c.popup(g[2] - 216, yy + 11, 200, value)
+        else:
+            c.text(g[2] - 16, yy + 23, value, 13.5, 400, TEXT2, "rm")
+        if i < 2:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.text(x0 + 22, g[3] + 26, "More in Options…", 12.5, 500, TINT_TEXT["play"], "lm")
+    c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
+
+
+def w_p8b():
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    essentials_sheet(c, 2, [("Sound", "switch", None), ("Volume", "slider", (1.0, "100")), ("Output device", "popup", "Speakers")])
+    c.caption("W-P8b", "Play — settings › Audio (equalizer, latency… stay in Options)", 5)
+    return c
+
+
+def w_p8c():
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    essentials_sheet(c, 3, [("Controllers", "text", "2 controllers connected"), ("Rumble", "slider", (0.5, "5")), ("Stick deadzone", "slider", (0.5, "2"))])
+    c.caption("W-P8c", "Play — settings › Controls (button mapping stays in Options)", 5)
+    return c
+
+
 def look_group(c, x0, x1, y, label, hint, h):
     c.text(x0 + 2, y, label, 11.5, 700, TEXT2, "lm")
     c.text(x0 + 4 + c.tw(label, 11.5, 700) + 6, y, hint, 11.5, 400, TEXT3, "lm")
@@ -1536,7 +1584,7 @@ def w_x3():
 SCREENS = [
     ("W-S1", w_s1), ("W-S2", w_s2), ("W-S3", w_s3),
     ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
-    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
+    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P8b", w_p8b), ("W-P8c", w_p8c), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
     ("W-P12", w_p12), ("W-P13", w_p13), ("W-P14", w_p14), ("W-P15", w_p15), ("W-P16", w_p16),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),
     ("W-R5", w_r5), ("W-R6", w_r6), ("W-R7", w_r7), ("W-R8", w_r8),

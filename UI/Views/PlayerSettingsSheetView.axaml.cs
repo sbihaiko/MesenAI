@@ -2,6 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Mesen.Logic;
 
 namespace Mesen.Views
 {
@@ -19,6 +20,14 @@ namespace Mesen.Views
 		private void InitializeComponent()
 		{
 			AvaloniaXamlLoader.Load(this);
+		}
+
+		//Audio's and Controls' link: the classic page of the tab, in the Options window.
+		private void OnMoreInOptions(object? sender, RoutedEventArgs e)
+		{
+			if(DataContext is ViewModels.ConfigViewModel { PlayerMode: true } model && PlayerSettingsEssentials.TabAt(model.PlayerTabIndex) is ConfigWindowTab tab) {
+				model.OpenInOptions(tab);
+			}
 		}
 
 		private void OnDone(object? sender, RoutedEventArgs e) => DoneRequested?.Invoke(this, EventArgs.Empty);
