@@ -125,6 +125,15 @@ public static class ShellStatusLine
 	{
 		return string.IsNullOrWhiteSpace(packPart) ? gameName : gameName + " · " + packPart;
 	}
+
+	//W-R1/W-R5: in Remaster at rest the line follows the project's progress,
+	//"Contra (USA) · playing your project · 412 cells painted". An unknown
+	//count (ADR-0252: no file can say) adds no words.
+	public static string ComposeRemaster(string gameName, string packPart, string paintedCells)
+	{
+		string line = Compose(gameName, packPart);
+		return string.IsNullOrWhiteSpace(paintedCells) ? line : line + " · " + paintedCells.Trim();
+	}
 }
 
 //PRD Part B §13.2 and §13.8 Q4 (user's decision, 2026-10-02):

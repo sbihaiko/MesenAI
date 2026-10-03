@@ -199,6 +199,39 @@ public class RemasterTileBrowserTests : IDisposable
 	//ADR-0252 §2/§3: a six-phase run whose figure view the artist painted in
 	//two phases' cells - the popover says "Painted: 2 of 6 phases" and the
 	//project counts two build cells.
+	//W-R1/W-R5: Remaster at rest ends the shell's status line with the project's
+	//painted count; Play's line stays the game's; an unknown count adds no words.
+	[AvaloniaFact]
+	public void The_shell_status_line_follows_the_painted_count_in_remaster_only()
+	{
+		string project = Path.Combine(TempFolder(), "Contra (USA)");
+		Write(project, "auto/rec-001/textures/hires.txt", "<ver>107\n");
+		WritePair(project, "kit/rec-001/sheets/usr000.png", 48, 8, 2);
+		WritePair(project, "kit/rec-001/figures/usr000-figure.png", 48, 8, 2);
+		string sheetCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"index\": {i}, \"x\": {i * 8}, \"y\": 0}}"));
+		string figureCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"x\": {i * 8}, \"y\": 0, \"sheet\": \"usr000.json\", \"index\": {i}, \"pose\": \"pose{i}\"}}"));
+		Write(project, "kit/rec-001/sheets/usr000.json", "{\"version\": 1, \"gridUnit\": 8, \"cells\": [" + sheetCells + "]}");
+		Write(project, "kit/rec-001/figures/usr000-figure.json", "{\"version\": 2, \"kind\": \"figure\", \"unit\": 8, \"cells\": [" + figureCells + "]}");
+		Write(project, "kit/rec-001/kit.json", "{\"parts\": [{\"part\": \"sprites\", \"files\": [{\"path\": \"sheets/usr000.png\", \"title\": \"run\", " +
+			"\"unit\": \"grid\", \"rows\": 1, \"columns\": 6, \"cells\": 6, \"ids\": [\"pose0\", \"pose1\", \"pose2\", \"pose3\", \"pose4\", \"pose5\"], " +
+			"\"seen\": true, \"playsColumns\": [1, 2, 3, 4, 5, 6], \"figure\": \"figures/usr000-figure.png\"}]}]}");
+		File.WriteAllBytes(Path.Combine(project, "kit/rec-001/figures/usr000-figure.png"), Png(96, 16, i => i == 0 || i == 2 * 16 + 1 ? Blue : Red));
+		(_, RemasterWorkspaceViewModel model, _, _) = Show(Ready(), project, gameLoaded: true);
+
+		WorkspaceShellViewModel shell = new(Workspace.Remaster, isMacOS: false);
+		shell.UpdateGameState(true, false, "Contra (USA)", "");
+		shell.FollowPaintedCells(model);
+		WaitFor(() => model.PaintedCells == 2, "the project never counted its two painted cells");
+		Assert.Equal("Contra (USA) · 2 cells painted", shell.StatusText);
+
+		shell.Select(Workspace.Play);
+		Assert.Equal("Contra (USA)", shell.StatusText);
+
+		shell.Select(Workspace.Remaster);
+		shell.UpdateRemasterPainted("");
+		Assert.Equal("Contra (USA)", shell.StatusText);
+	}
+
 	[AvaloniaFact]
 	public void The_popover_counts_painted_phases_and_the_project_its_painted_cells()
 	{

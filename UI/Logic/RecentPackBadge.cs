@@ -58,7 +58,18 @@ public static class RecentGameHashes
 //found by name alone. LocalPack: RecentPackIndex.HasLocalPack.
 //CommunityInstalled: the ADR-0147 install registry has the hash. CatalogMatch:
 //an accepted catalog row matches (CommunityPackCatalogMatcher).
-public readonly record struct RecentPackFacts(string Sha1, bool NamedHdPack = false, bool LocalPack = false, bool CommunityInstalled = false, bool CatalogMatch = false, bool AutoInstallCommunityPacks = false);
+//PackDisabled: the player turned the matching pack off (DisabledPacks).
+//PrefersNoPack: the ROM's per-ROM preference is "No pack" (PackPreferenceResolver.NoPack).
+//Either one means the game will not load with a pack, so no badge.
+public readonly record struct RecentPackFacts(string Sha1, bool NamedHdPack = false, bool LocalPack = false, bool CommunityInstalled = false, bool CatalogMatch = false, bool AutoInstallCommunityPacks = false, bool PackDisabled = false, bool PrefersNoPack = false);
+
+//What the home learns about one recent game's pack: the badge, and the pack's
+//name and version when an installed pack is known (Continue's subtitle).
+public readonly record struct RecentPackInfo(RecentPackBadgeState Badge, string Name, string Version);
+
+//An installed pack as the index knows it: its container (the DisabledPacks
+//key), and the name/version its pack.json declares ("" when absent).
+public readonly record struct LocalPackInfo(string Container, string Name, string Version);
 
 //TextKey: the message the badge's tooltip shows ("" when hidden).
 public readonly record struct RecentPackBadgeState(bool Visible, string TextKey);
@@ -70,8 +81,25 @@ public static class RecentPackBadge
 
 	private static readonly RecentPackBadgeState Hidden = new(false, "");
 
+	//DisabledPacks entries are matched like the list keeps them: case-insensitive.
+	public static bool IsDisabled(IEnumerable<string>? disabledPacks, string container)
+	{
+		if(disabledPacks == null || string.IsNullOrWhiteSpace(container)) {
+			return false;
+		}
+		foreach(string entry in disabledPacks) {
+			if(string.Equals(entry?.Trim(), container.Trim(), StringComparison.OrdinalIgnoreCase)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public static RecentPackBadgeState Decide(RecentPackFacts facts)
 	{
+		if(facts.PackDisabled || facts.PrefersNoPack) {
+			return Hidden;
+		}
 		if(facts.NamedHdPack) {
 			return new(true, InstalledKey);
 		}
@@ -115,8 +143,8 @@ public sealed class RecentPackIndex
 	//A pack.json is a few KB; past this it is not one worth parsing here.
 	private const long MaxPackJsonBytes = 1024 * 1024;
 
-	private readonly HashSet<string> _targetSha1 = new(StringComparer.OrdinalIgnoreCase);
-	private readonly HashSet<string> _containerNames = new(StringComparer.OrdinalIgnoreCase);
+	private readonly Dictionary<string, LocalPackInfo> _targetSha1 = new(StringComparer.OrdinalIgnoreCase);
+	private readonly Dictionary<string, LocalPackInfo> _containerNames = new(StringComparer.OrdinalIgnoreCase);
 
 	public static RecentPackIndex Scan(string packsFolder)
 	{
@@ -131,11 +159,12 @@ public sealed class RecentPackIndex
 					continue;
 				}
 				string packJson = Path.Combine(dir, "pack.json");
+				LocalPackInfo info = new(name, "", "");
 				if(File.Exists(packJson)) {
-					index.AddTargets(ReadSmallText(packJson));
+					info = index.AddTargets(ReadSmallText(packJson), name);
 				}
 				if(IsHumanPackFolder(dir)) {
-					index._containerNames.Add(name);
+					index._containerNames[name] = info;
 				}
 			}
 			foreach(string zip in Directory.EnumerateFiles(packsFolder, "*.zip")) {
@@ -143,8 +172,7 @@ public sealed class RecentPackIndex
 				if(name.Length == 0 || name[0] == '.') {
 					continue;
 				}
-				index._containerNames.Add(name);
-				index.AddTargets(ReadZipPackJson(zip));
+				index._containerNames[name] = index.AddTargets(ReadZipPackJson(zip), name);
 			}
 		} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException) {
 			//A packs folder that cannot be listed has no pack to show.
@@ -154,14 +182,62 @@ public sealed class RecentPackIndex
 
 	public bool HasLocalPack(string sha1, string romName, string romPath)
 	{
+		return FindLocalPack(sha1, romName, romPath) != null;
+	}
+
+	//The pack the game would load as a definite match, with its container and
+	//pack.json name/version; null when none.
+	public LocalPackInfo? FindLocalPack(string sha1, string romName, string romPath)
+	{
 		if(string.IsNullOrWhiteSpace(sha1)) {
-			return false;
+			return null;
 		}
-		if(_targetSha1.Contains(sha1.Trim()) || (!string.IsNullOrEmpty(romName) && _containerNames.Contains(romName))) {
-			return true;
+		if(_targetSha1.TryGetValue(sha1.Trim(), out LocalPackInfo byHash)) {
+			return byHash;
+		}
+		if(!string.IsNullOrEmpty(romName) && _containerNames.TryGetValue(romName, out LocalPackInfo byName)) {
+			return byName;
 		}
 		string sibling = RemasterRecentProjects.SiblingOf(romPath);
-		return sibling.Length > 0 && IsHumanPackFolder(sibling);
+		if(sibling.Length > 0 && IsHumanPackFolder(sibling)) {
+			return ReadFolderInfo(sibling);
+		}
+		return null;
+	}
+
+	//Name/version off a pack folder's pack.json (root, else mep/); the container
+	//is the folder's own name. Unreadable or absent: name and version are "".
+	public static LocalPackInfo ReadFolderInfo(string folder)
+	{
+		string container = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+		foreach(string layer in new[] { "", "mep" }) {
+			string packJson = Path.Combine(folder, layer, "pack.json");
+			if(File.Exists(packJson)) {
+				return ParseInfo(ReadSmallText(packJson), container);
+			}
+		}
+		return new LocalPackInfo(container, "", "");
+	}
+
+	private static LocalPackInfo ParseInfo(string? packJson, string container)
+	{
+		if(string.IsNullOrWhiteSpace(packJson)) {
+			return new LocalPackInfo(container, "", "");
+		}
+		try {
+			using JsonDocument doc = JsonDocument.Parse(packJson);
+			if(doc.RootElement.ValueKind != JsonValueKind.Object) {
+				return new LocalPackInfo(container, "", "");
+			}
+			return new LocalPackInfo(container, StringProperty(doc.RootElement, "name"), StringProperty(doc.RootElement, "version"));
+		} catch(JsonException) {
+			return new LocalPackInfo(container, "", "");
+		}
+	}
+
+	private static string StringProperty(JsonElement obj, string name)
+	{
+		return obj.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? (value.GetString() ?? "").Trim() : "";
 	}
 
 	public static bool HasInstalledCommunityPack(string cacheRoot, string sha1)
@@ -194,27 +270,29 @@ public sealed class RecentPackIndex
 		return false;
 	}
 
-	private void AddTargets(string? packJson)
+	private LocalPackInfo AddTargets(string? packJson, string container)
 	{
+		LocalPackInfo info = ParseInfo(packJson, container);
 		if(string.IsNullOrWhiteSpace(packJson)) {
-			return;
+			return info;
 		}
 		try {
 			using JsonDocument doc = JsonDocument.Parse(packJson);
 			if(doc.RootElement.ValueKind != JsonValueKind.Object || !doc.RootElement.TryGetProperty("targets", out JsonElement targets) || targets.ValueKind != JsonValueKind.Array) {
-				return;
+				return info;
 			}
 			foreach(JsonElement target in targets.EnumerateArray()) {
 				if(target.ValueKind == JsonValueKind.Object && target.TryGetProperty("sha1", out JsonElement sha1) && sha1.ValueKind == JsonValueKind.String) {
 					string? value = sha1.GetString();
 					if(!string.IsNullOrWhiteSpace(value)) {
-						_targetSha1.Add(value.Trim());
+						_targetSha1.TryAdd(value.Trim(), info);
 					}
 				}
 			}
 		} catch(JsonException) {
 			//An unreadable pack.json targets nothing; the Core rejects it too.
 		}
+		return info;
 	}
 
 	private static string? ReadSmallText(string path)

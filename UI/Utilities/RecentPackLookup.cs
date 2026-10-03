@@ -45,13 +45,39 @@ namespace Mesen.Utilities
 			}
 		}
 
-		//Off the UI thread. hash: the entry's remembered hash (null for an
-		//entry recorded before hashes were kept).
-		public static RecentPackBadgeState Badge(string recentName, RecentGameHash? hash, bool namedHdPack, bool autoInstallCommunityPacks)
+		//The config-only half of the badge (no disk), for a pack named like the
+		//game: a pack the player turned off or a ROM whose preference is "No pack" never lights it. Cheap, so
+		//the tile can apply it on the UI thread before the lookup runs.
+		public static bool Suppressed(string recentName, RecentGameHash? hash)
 		{
+			EnhancementPackConfig packs = ConfigManager.Config.EnhancementPacks;
+			return RecentPackBadge.IsDisabled(packs.DisabledPacks, recentName) || PrefersNoPack(packs, hash);
+		}
+
+		private static bool PrefersNoPack(EnhancementPackConfig packs, RecentGameHash? hash)
+		{
+			if(hash == null || string.IsNullOrWhiteSpace(hash.Sha1)) {
+				return false;
+			}
+			foreach(var entry in packs.RomPackPreference) {
+				if(string.Equals(entry.Key.Trim(), hash.Sha1.Trim(), StringComparison.OrdinalIgnoreCase)) {
+					return PackPreferenceResolver.IsNoPack(entry.Value);
+				}
+			}
+			return false;
+		}
+
+		//Off the UI thread. hash: the entry's remembered hash (null for an
+		//entry recorded before hashes were kept). Name/Version: the installed
+		//pack's pack.json, read here with the badge ("" when not known).
+		public static RecentPackInfo Lookup(string recentName, RecentGameHash? hash, bool namedHdPack, bool autoInstallCommunityPacks)
+		{
+			EnhancementPackConfig packs = ConfigManager.Config.EnhancementPacks;
 			string sha1 = hash?.Sha1 ?? "";
+			bool noPack = PrefersNoPack(packs, hash);
 			if(namedHdPack || sha1.Length == 0) {
-				return RecentPackBadge.Decide(new RecentPackFacts(sha1, NamedHdPack: namedHdPack));
+				bool disabled = namedHdPack && RecentPackBadge.IsDisabled(packs.DisabledPacks, recentName);
+				return new RecentPackInfo(RecentPackBadge.Decide(new RecentPackFacts(sha1, NamedHdPack: namedHdPack, PackDisabled: disabled, PrefersNoPack: noPack)), "", "");
 			}
 			RecentPackIndex index;
 			CommunityPackCatalog? catalog;
@@ -61,10 +87,19 @@ namespace Mesen.Utilities
 				index = _index;
 				catalog = _catalog;
 			}
-			bool local = index.HasLocalPack(sha1, recentName, hash!.RomPath);
-			bool installed = !local && RecentPackIndex.HasInstalledCommunityPack(CommunityPackPaths.CacheRoot, sha1);
-			bool listed = !local && !installed && catalog != null && CommunityPackCatalogMatcher.FindMatchingEntry(catalog, sha1, recentName) != null;
-			return RecentPackBadge.Decide(new RecentPackFacts(sha1, false, local, installed, listed, autoInstallCommunityPacks));
+			LocalPackInfo? local = index.FindLocalPack(sha1, recentName, hash!.RomPath);
+			CommunityPackInstallRecord? record = local == null ? CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, sha1) : null;
+			LocalPackInfo? installed = null;
+			if(record != null) {
+				string folder = Path.Combine(ConfigManager.EnhancementPackFolder, record.Container);
+				installed = record.Container.Length > 0 && Directory.Exists(folder) ? RecentPackIndex.ReadFolderInfo(folder) : new LocalPackInfo(record.Container, "", "");
+			}
+			LocalPackInfo? found = local ?? installed;
+			bool listed = found == null && catalog != null && CommunityPackCatalogMatcher.FindMatchingEntry(catalog, sha1, recentName) != null;
+			bool disabledPack = found != null && RecentPackBadge.IsDisabled(packs.DisabledPacks, found.Value.Container);
+			RecentPackBadgeState badge = RecentPackBadge.Decide(new RecentPackFacts(sha1, false, local != null, installed != null, listed, autoInstallCommunityPacks, disabledPack, noPack));
+			bool known = found != null && badge.Visible;
+			return new RecentPackInfo(badge, known ? found!.Value.Name : "", known ? found!.Value.Version : "");
 		}
 
 		//The catalog copy the last fetch left on disk (never the network here);

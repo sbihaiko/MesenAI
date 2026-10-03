@@ -12,6 +12,17 @@ namespace Mesen.Tests.Play
 	public class PlayHomeTests
 	{
 		[Fact]
+		public void Continue_subtitle_names_the_pack_only_when_known()
+		{
+			Assert.Equal("Last played today · Contra 80s 1.2", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", "1.2"));
+			Assert.Equal("Last played today · Contra 80s", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", "0.0.0"));
+			Assert.Equal("Last played today · Contra 80s", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", ""));
+			Assert.Equal("Last played today", PlayHome.ContinueSubtitle("Last played today", "", "1.2"));
+			Assert.Equal("Last played today", PlayHome.ContinueSubtitle("Last played today", null, null));
+			Assert.Equal("Contra 80s 1.2", PlayHome.ContinueSubtitle("", "Contra 80s", "1.2"));
+		}
+
+		[Fact]
 		public void No_recents_is_the_first_run_home()
 		{
 			Assert.Equal(PlayHomeKind.FirstRun, PlayHome.Classify(0));
