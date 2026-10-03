@@ -232,8 +232,9 @@ public class PlaySheetsRenderTests : IDisposable
 		Render(window, "W-P5", sheet);
 	}
 
-	//W-P6: the 48 px share-green badge, the 19 px name, green layer chips,
-	//the orange music notice, Restore (destructive) and Done; 5 controls.
+	//W-P6: the 48 px share-green badge, the 19 px name, the three layer
+	//switch rows in an inset (this game only), the orange music notice,
+	//Restore (destructive) and Done; 5 controls besides the layer rows.
 	[AvaloniaFact]
 	public void Pack_detail_renders_as_W_P6()
 	{
@@ -262,13 +263,17 @@ public class PlaySheetsRenderTests : IDisposable
 		Border badge = sheet.FindAll<Border>().First(b => b.Classes.Contains("badge"));
 		Assert.Equal(48, badge.Bounds.Width, 0.5);
 		Assert.Equal(ShareTint, PlayerRender.SolidColor(badge.Background));
-		Border[] chips = window.FindNamed<StackPanel>("PackDetailChips").FindAll<Border>().Where(b => b.Classes.Contains("chip")).ToArray();
-		Assert.Equal(3, chips.Length);
-		Assert.Equal(Color.Parse("#E2F5E7"), PlayerRender.SolidColor(chips[0].Background));
-		Assert.Equal(24, chips[0].Bounds.Height, 0.5);
-		//The render's Patch chip is off beside the music notice; the notice needs a
-		//wired audio patch (ADR-0240), which lights that chip - so all three are on.
-		Assert.All(chips, c => Assert.Contains("on", c.Classes));
+		Border layers = window.FindNamed<StackPanel>("PackDetailLayers").FindAll<Border>().First(b => b.Classes.Contains("inset"));
+		Assert.Equal(InsetFill, PlayerRender.SolidColor(layers.Background));
+		Assert.Equal(new CornerRadius(12), layers.CornerRadius);
+		//The notice needs a wired audio patch (ADR-0240), so this pack has all
+		//three layers, each on for this game.
+		CheckBox[] switches = { window.FindNamed<CheckBox>("PackDetailTexturesSwitch"), window.FindNamed<CheckBox>("PackDetailAudioSwitch"), window.FindNamed<CheckBox>("PackDetailPatchSwitch") };
+		Assert.All(switches, s => AssertSwitch(s, on: true));
+		Assert.All(switches, s => Assert.True(s.IsEnabled));
+		Assert.Equal(new[] { "Textures", "Audio", "ROM Patch" }, switches.Select(s => s.Content as string).ToArray());
+		Assert.Equal(46, switches[0].FindAncestorOfType<Border>()!.Bounds.Height, 1);
+		Assert.Equal("The switches apply to this game only.", window.FindNamed<TextBlock>("PackDetailLayersHint").Text);
 		Border notice = window.FindNamed<Border>("PackDetailNotice");
 		Assert.True(notice.IsOnScreen());
 		Assert.Equal(NoticeFill, PlayerRender.SolidColor(notice.Background));
@@ -276,7 +281,8 @@ public class PlaySheetsRenderTests : IDisposable
 		AssertFooterButton(window.FindNamed<Button>("PackDetailRestoreButton"), Color.Parse("#FFEBEA"));
 		AssertFooterButton(window.FindNamed<Button>("PackDetailDoneButton"), PlayTint);
 		Assert.Equal(90, window.FindNamed<Button>("PackDetailDoneButton").Bounds.Width, 0.5);
-		Assert.Equal(5, sheet.FindAll<Button>().Count(b => b.IsOnScreen()));
+		Assert.Equal(5, sheet.FindAll<Button>().Count(b => b.IsOnScreen() && b is not CheckBox));
+		Assert.Equal(8, ControlsOnScreen(sheet));
 		//The render's orange warning icon leads the notice title (no glyph).
 		Assert.Equal("Some music is missing", window.FindNamed<TextBlock>("PackDetailNoticeTitle").Text);
 		Assert.True(notice.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning")).IsOnScreen());

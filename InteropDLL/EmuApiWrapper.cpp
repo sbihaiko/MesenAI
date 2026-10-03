@@ -434,8 +434,16 @@ extern "C"
 		_emu->GetVideoRenderer()->InvalidateBorderAsset();
 	}
 
-	//P.3: the UI resets the per-ROM preferences before re-pushing the current
-	//map, so a choice removed from the config is never left stale in the core.
+	//W-P6: the layers ("textures,audio,patch") the player turned off for one
+	//ROM, pushed beside the per-ROM pack choice; "" turns them all back on.
+	DllExport void __stdcall SetMepRomLayersOff(const char* romSha1, const char* layers)
+	{
+		_emu->GetEnhancementPackManager()->SetRomLayersOff(romSha1 ? romSha1 : "", layers ? layers : "");
+	}
+
+	//P.3: the UI resets the per-ROM preferences (and W-P6's layer switches)
+	//before re-pushing the current maps, so a choice removed from the config
+	//is never left stale in the core.
 	DllExport void __stdcall ClearPreferredMepPacks()
 	{
 		_emu->GetEnhancementPackManager()->ClearPreferredMepPacks();

@@ -34,7 +34,9 @@
 		<Form ID="PlayerPackDetailSheetView">
 			<Control ID="lblPackDetailTextures">Textures</Control>
 			<Control ID="lblPackDetailAudio">Audio</Control>
-			<Control ID="lblPackDetailPatch">Patch</Control>
+			<Control ID="lblPackDetailPatch">ROM Patch</Control>
+			<Control ID="lblPackDetailLayersHint">The switches apply to this game only.</Control>
+			<Control ID="lblPackDetailLayersWait">Applying…</Control>
 			<Control ID="lblPackDetailMissingMusicTitle">Some music is missing</Control>
 			<Control ID="lblPackDetailOfferTitle">A community pack is available</Control>
 			<Control ID="btnPackDetailUseCommunity">Use Community Pack</Control>
@@ -2529,6 +2531,8 @@ E
 		<Message ID="PackOfferNotInUse">“{0}” is made for this game. It is installed, but not in use.</Message>
 		<Message ID="PackOfferAutoInstallOff">“{0}” is made for this game. It is not installed because automatic installs of community packs are off.</Message>
 		<Message ID="PackOfferNotInstalled">“{0}” is made for this game, but it is not installed.</Message>
+		<Message ID="PackLayerNotInPack">Not in this pack</Message>
+		<Message ID="PackLayerOffEverywhere">Off for every game</Message>
 		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
 		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
 		<Message ID="EnhancementsApply">Apply</Message>

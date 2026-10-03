@@ -5,6 +5,7 @@
 #include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
 #include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Utilities/SimpleLock.h"
+#include "Utilities/FolderUtilities.h"
 
 class VirtualFile;
 class Emulator;
@@ -23,6 +24,16 @@ struct MepPackIdentity
 {
 	string PackId;
 	string ContentId;
+};
+
+//W-P6's per-game layer switches (PRD Part B §13.5.2): a layer the player
+//turned off for one ROM, on top of the global EnhancementPackConfig switches
+//(either one off turns the layer off). Bit values of the per-ROM mask.
+enum class MepRomLayer : uint8_t
+{
+	Textures = 1,
+	Audio = 2,
+	Patch = 4
 };
 
 class MepPackManager
@@ -81,6 +92,10 @@ private:
 	//loaded, so the right choice applies per ROM; "" or a missing key means no
 	//preference (lexicographic default, ADR-0040).
 	unordered_map<string, string> _preferredPackIdByRomSha1;
+	//W-P6: per-ROM-sha1 mask of MepRomLayer bits the player turned off, pushed
+	//by the UI from EnhancementPackConfig.RomLayersOff beside the preference
+	//above. A missing key means every layer on.
+	unordered_map<string, uint8_t> _romLayersOffBySha1;
 	//P.3: pack_id/content_id read from each container's .mep-install.json
 	//stamp, keyed by the lower-cased container name. Kept OUT of MepPack on
 	//purpose: this Makefile does not track header dependencies, so changing
@@ -176,6 +191,8 @@ private:
 	//The stored preference for the loaded ROM's sha1 (a pack_id or
 	//kNoPackPreference), "" when there is none. Caller holds _stateLock.
 	string PreferredIdForRom() const;
+	//W-P6: the loaded ROM's MepRomLayer mask. Caller holds _stateLock.
+	uint8_t RomLayersOff() const;
 	//ADR-0145: true when the pack was kept as an optimistic candidate (no
 	//target matched the loaded ROM's No-Intro SHA1)
 	bool IsOptimistic(const MepPack& pack) const;
@@ -381,9 +398,59 @@ public:
 	{
 		return !IsNoPackPreference(preferredId) || origin == MepPackOrigin::Sibling;
 	}
-	//P.3: drops every per-ROM preference, so a config-apply is authoritative
-	//(the UI resets then re-pushes the full current map - a removed choice is
-	//never left stale in the core).
+	//ADR-0147: the .mep-install.json stamp that carries a pack's identity.
+	//The installer writes it into the folder it installs to, which for a
+	//community pack installed beside the ROM is <sibling>/mep/ while the
+	//container root stays the sibling folder. A stamp at the root still wins
+	//(legacy, mep/-less siblings and every EnhancementPacks/ container).
+	static string InstallStampPath(const string& rootFolder, MepPackOrigin origin)
+	{
+		string rootStamp = FolderUtilities::CombinePath(rootFolder, ".mep-install.json");
+		if(origin != MepPackOrigin::Sibling || ifstream(rootStamp).good()) {
+			return rootStamp;
+		}
+		string mepStamp = FolderUtilities::CombinePath(FolderUtilities::CombinePath(rootFolder, "mep"), ".mep-install.json");
+		return ifstream(mepStamp).good() ? mepStamp : rootStamp;
+	}
+	//W-P6: the layers turned off for one ROM, as the UI's comma list
+	//("textures,audio,patch"); "" turns every layer back on for it.
+	void SetRomLayersOff(const string& romSha1, const string& layers);
+	//W-P6: whether the player turned this layer off for the loaded ROM.
+	bool IsRomLayerOff(MepRomLayer layer) const;
+	//The MepRomLayer mask of the UI's comma list; unknown words are ignored.
+	static uint8_t ParseRomLayersOff(const string& layers)
+	{
+		uint8_t mask = 0;
+		std::stringstream ss(layers);
+		string word;
+		while(std::getline(ss, word, ',')) {
+			word.erase(0, word.find_first_not_of(" \t"));
+			word.erase(word.find_last_not_of(" \t") + 1);
+			std::transform(word.begin(), word.end(), word.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+			if(word == "textures") {
+				mask |= (uint8_t)MepRomLayer::Textures;
+			} else if(word == "audio") {
+				mask |= (uint8_t)MepRomLayer::Audio;
+			} else if(word == "patch") {
+				mask |= (uint8_t)MepRomLayer::Patch;
+			}
+		}
+		return mask;
+	}
+	static bool IsLayerOff(uint8_t mask, MepRomLayer layer)
+	{
+		return (mask & (uint8_t)layer) != 0;
+	}
+	//The section a per-ROM switch turns off: Textures and Audio have one
+	//each; Synth (enhanced audio) and Border stay on the global switches.
+	static bool SectionOff(uint8_t mask, MepSectionType type)
+	{
+		return (type == MepSectionType::Textures && IsLayerOff(mask, MepRomLayer::Textures)) ||
+			(type == MepSectionType::Audio && IsLayerOff(mask, MepRomLayer::Audio));
+	}
+	//P.3: drops every per-ROM preference - the pack choice and W-P6's layer
+	//switches - so a config-apply is authoritative (the UI resets then
+	//re-pushes both full maps - a removed choice is never left stale in the core).
 	void ClearPreferredMepPacks();
 
 	//ADR-0145: runtime health signal from the HD renderer. When the bg-tile

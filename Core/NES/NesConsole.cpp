@@ -540,14 +540,18 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	//<patch> lines are keyed by the whole-file sha1 of the ROM they were made
 	//for; ADR-0044 adds an explicit override for other revisions
 	EnhancementPackConfig& mepCfg = _emu->GetSettings()->GetEnhancementPackConfig();
+	//W-P6: a layer turned off for this game counts as off, like the global switch.
+	bool packAudioOn = mepCfg.EnableAudio && !mep->IsRomLayerOff(MepRomLayer::Audio);
 	//A pack that ships <bgm> uses its patch to route the game's music to those
 	//OGG files, stripping it out of the PRG. Applying it with the audio layer
 	//off would leave the game with no music at all and nothing for the
 	//enhanced synth to re-interpret, so the audio layer being off also turns
 	//this patch off - the player asked to hear the game, not silence.
-	bool patchServesPackAudio = !_hdData->BgmFilesById.empty() && !mepCfg.EnableAudio;
+	bool patchServesPackAudio = !_hdData->BgmFilesById.empty() && !packAudioOn;
 	if(!_hdData->PatchesByHash.empty() && !mepCfg.EnablePatches) {
 		MessageManager::Log("[HDPack] <patch> skipped: 'ROM patch' layer disabled in Tools > Enhancement Packs");
+	} else if(!_hdData->PatchesByHash.empty() && mep->IsRomLayerOff(MepRomLayer::Patch)) {
+		MessageManager::Log("[HDPack] <patch> skipped: the ROM patch is turned off for this game");
 	} else if(!_hdData->PatchesByHash.empty() && patchServesPackAudio) {
 		MessageManager::DisplayMessage("HDPack", "ROM patch skipped: it replaces the game's music with the pack's OGG tracks, which are turned off - the game's own music plays instead");
 		MessageManager::Log("[HDPack] <patch> skipped: the pack's <bgm> patch would mute the game while 'Audio (OGG)' is off (turn the audio layer on to use the pack's music)");
@@ -585,6 +589,15 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 				(noIntroSha1 != wholeFileSha1 ? (" / no-intro " + noIntroSha1) : "") +
 				(mepCfg.ApplyPatchOnHashMismatch ? " (the forced patch is off for this ROM: the player reloaded without it)" : " (enable 'apply patches on hash mismatch' to force it)"));
 		}
+	}
+
+	//W-P6: the pack's audio turned off for this game - the textures' <bgm>/<sfx>
+	//tracks go too (the audio section itself was never served). The global
+	//switch stays live in HdAudioDevice; this one applies by reloading.
+	if(mep->IsRomLayerOff(MepRomLayer::Audio) && (!_hdData->BgmFilesById.empty() || !_hdData->SfxFilesById.empty())) {
+		MessageManager::Log("[HDPack] pack audio turned off for this game: " + std::to_string(_hdData->BgmFilesById.size()) + " BGM / " + std::to_string(_hdData->SfxFilesById.size()) + " SFX track(s) not used");
+		_hdData->BgmFilesById.clear();
+		_hdData->SfxFilesById.clear();
 	}
 
 	shared_ptr<HdPackData> data = _hdData.lock();
