@@ -372,6 +372,8 @@ namespace Mesen.ViewModels
 			if(back == PackPickReturn.Overlay) {
 				OpenPauseOverlay();
 			} else if(back == PackPickReturn.Game) {
+				//Back to the game: W-P7's detour ends with the pause.
+				EndEnhancementsDraftVisit();
 				IsPlayerOverlayVisible = false;
 				EmuApi.Resume();
 			}
@@ -403,7 +405,12 @@ namespace Mesen.ViewModels
 			IsPlayerOverlayVisible = false;
 			RefreshEnhancementsState();
 			//G.4 (W-P7): the switches edit a draft that the Apply button applies.
-			LoadEnhancementsDraft();
+			//Coming back from the Pack row's detour the flips are kept; any other
+			//open reads them from what is applied (EnhancementsDraftVisit). The
+			//detour is spent by this open: one Pack row, one way back.
+			bool fromPackRow = EnhancementsDraftVisit.Holds(_enhancementsDraftExit);
+			EndEnhancementsDraftVisit();
+			LoadEnhancementsDraft(fromPackRow ? EnhancementsDraft : null);
 			IsEnhancementsPanelVisible = true;
 		}
 
@@ -424,6 +431,7 @@ namespace Mesen.ViewModels
 
 		public void CloseEnhancementsPanel()
 		{
+			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;
 			OpenPauseOverlay();
 		}

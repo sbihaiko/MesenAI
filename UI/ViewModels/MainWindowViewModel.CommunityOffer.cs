@@ -94,6 +94,8 @@ namespace Mesen.ViewModels
 		//the W-P9 pill and restarts the game when done - back to the game.
 		public void LeaveDetailForCommunityInstall()
 		{
+			//Back to the game: W-P7's detour (if one was open) ends here.
+			EndEnhancementsDraftVisit();
 			IsPackDetailVisible = false;
 			ShowCommunityOffer(CommunityPackOffer.None, "");
 			IsPlayerOverlayVisible = false;

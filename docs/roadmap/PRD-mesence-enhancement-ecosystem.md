@@ -3064,7 +3064,13 @@ Elements: 4 toggles + the Pack row + 1 = 6. ✔ (Cheats moved to W-P4,
 2026-10-02. Textures and Audio left on 2026-10-03: one place per switch, the
 pack's layers are W-P6's. *Modern instruments* is `AudioConfig.EnableEnhancedAudio`,
 the same switch as Settings › Audio, and applies live with no reload; the
-Pack row routes like W-P4's. Leaving by the Pack row drops an unapplied draft.) The one
+Pack row routes like W-P4's. Leaving by the Pack row keeps an unapplied draft
+for the way back — only the one button applies it, so a look at the pack must
+not throw the switches away: the switches the player flipped come back as they
+set them, and the ones they left alone are re-read from what is applied, so a
+switch turned elsewhere during the detour is never shown stale. Every other end
+of the visit — Esc, the button, leaving the pause back to the game, another
+game — reads them from what is applied.) The one
 console-dependent element is shown
 disabled with its reason (rule 4). The button replaces today's immediate
 action on each toggle, so the player decides when the game restarts. Today

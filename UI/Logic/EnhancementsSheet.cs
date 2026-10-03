@@ -33,6 +33,26 @@ public enum EnhancementsApplyKind
 	Restart
 }
 
+//How the panel was left, which decides what the next open shows. Only the
+//button applies the draft (ADR-0244 Decision 3), so a detour that is not a
+//decision about the switches must not throw the flips away.
+public enum EnhancementsDraftExit
+{
+	//Esc, the button itself, the game changing: the visit is over, and the
+	//next open reads the switches from what is applied.
+	Closed,
+	//The Pack row: W-P5/W-P6 open over the panel to look at the pack, and the
+	//player comes back to the switches already flipped.
+	PackRow
+}
+
+public static class EnhancementsDraftVisit
+{
+	//Only the Pack row's detour carries the draft: looking at the pack is not
+	//a decision about the switches.
+	public static bool Holds(EnhancementsDraftExit exit) => exit == EnhancementsDraftExit.PackRow;
+}
+
 public static class EnhancementsSheet
 {
 	//A switch the console cannot use (Overclock on SMS) is shown disabled with
@@ -51,6 +71,26 @@ public static class EnhancementsSheet
 	public static bool LayersChanged(EnhancementsState applied, EnhancementsState draft)
 	{
 		return applied.Border != draft.Border;
+	}
+
+	//The way back from the Pack row (EnhancementsDraftVisit.Holds): a switch the
+	//player flipped keeps the value they set, and a switch they left alone
+	//follows what is applied now - so a switch turned elsewhere during the
+	//detour (Settings › Audio's synth, Look's widescreen) is shown as it is,
+	//never stale, and a flip that now matches what is applied is not left
+	//looking like a change still pending.
+	public static EnhancementsState Resume(EnhancementsState appliedAtLeave, EnhancementsState draftAtLeave, EnhancementsState appliedNow)
+	{
+		return new EnhancementsState(
+			Flipped(appliedAtLeave.ModernInstruments, draftAtLeave.ModernInstruments, appliedNow.ModernInstruments),
+			Flipped(appliedAtLeave.Border, draftAtLeave.Border, appliedNow.Border),
+			Flipped(appliedAtLeave.Widescreen, draftAtLeave.Widescreen, appliedNow.Widescreen),
+			Flipped(appliedAtLeave.Overclock, draftAtLeave.Overclock, appliedNow.Overclock));
+	}
+
+	private static bool Flipped(bool appliedAtLeave, bool draftAtLeave, bool appliedNow)
+	{
+		return appliedAtLeave != draftAtLeave ? draftAtLeave : appliedNow;
 	}
 
 	//layerChangeKeepsPlace: whether a pack layer change can apply in place
