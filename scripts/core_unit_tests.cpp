@@ -68,6 +68,8 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
+#include "NES/NesWidescreenReveal.h"
+#include "Shared/MemoryOperationType.h"
 #include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
@@ -2740,6 +2742,350 @@ namespace
 			std::to_string(wide.Width) + "x" + std::to_string(wide.Height));
 		Check(wide.Width > standard.Width && standard.Width > square.Width, "BlocoN: 16:9 is wider than 4:3, which is wider than native");
 		Check(wide.Height == square.Height, "BlocoN: stretching never changes the row count");
+	}
+}
+
+//--- Bloco W253: NES widescreen Reveal (ADR-0253, slice W.1) ----------------
+//The pure half of the Reveal: which nametable columns sit beside the 256-px
+//picture on a row, whether they hold real content (the black fallback), the
+//frame-width contract (N = 64 extra columns per side) and the double-buffered
+//extended frame. The fake mapper below exposes the same VRAM surface as
+//BaseMapper (ReadVram / MapperReadVram / NotifyVramAddressChange and the
+//debugger's DebugReadVram) and counts every call, so the "a mapper hook never
+//fires twice" rule of ADR-0253 §2 is asserted, not assumed.
+namespace
+{
+	struct RevealFakeMapper
+	{
+		uint8_t Chr[0x2000] = {};
+		uint8_t Nametables[4][0x400] = {};
+		int NametableMap[4] = { 0, 1, 0, 1 };
+		int SideEffectReads = 0;
+		int VramHookCalls = 0;
+		int DebugReads = 0;
+
+		uint8_t Internal(uint16_t addr)
+		{
+			addr &= 0x3FFF;
+			if(addr < 0x2000) {
+				return Chr[addr];
+			}
+			return Nametables[NametableMap[(addr >> 10) & 0x03]][addr & 0x3FF];
+		}
+
+		//BaseMapper's side-effecting paths: a PPU rendering read and the A12 hook
+		uint8_t ReadVram(uint16_t addr, MemoryOperationType = MemoryOperationType::PpuRenderingRead) { SideEffectReads++; return Internal(addr); }
+		uint8_t MapperReadVram(uint16_t addr, MemoryOperationType) { SideEffectReads++; return Internal(addr); }
+		void NotifyVramAddressChange(uint16_t) { VramHookCalls++; }
+
+		//BaseMapper::DebugReadVram, same default and same hook behaviour
+		uint8_t DebugReadVram(uint16_t addr, bool disableSideEffects = true)
+		{
+			if(!disableSideEffects) {
+				NotifyVramAddressChange(addr);
+			}
+			DebugReads++;
+			return Internal(addr);
+		}
+
+		void SetTile(uint8_t tile, uint8_t lo[8], uint8_t hi[8])
+		{
+			for(int i = 0; i < 8; i++) {
+				Chr[tile * 16 + i] = lo[i];
+				Chr[tile * 16 + 8 + i] = hi[i];
+			}
+		}
+
+		void FillNametable(int physical, uint8_t tile, uint8_t attribute)
+		{
+			memset(Nametables[physical], tile, 0x3C0);
+			memset(Nametables[physical] + 0x3C0, attribute, 0x40);
+		}
+	};
+
+	//Tile 1: solid colour 1. Tile 2: solid colour 2. Tile 4: colour 1 on the
+	//tile's first pixel column only. Tile 5: colour 1 on fine row 2 only.
+	void SetUpRevealTiles(RevealFakeMapper& m)
+	{
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		uint8_t zero[8] = {};
+		uint8_t col0[8] = { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+		uint8_t row2[8] = { 0, 0, 0xFF, 0, 0, 0, 0, 0 };
+		m.SetTile(1, ff, zero);
+		m.SetTile(2, zero, ff);
+		m.SetTile(4, col0, zero);
+		m.SetTile(5, row2, zero);
+	}
+
+	//pal[0] backdrop 0x0D; palette 0 = 11/12/13, palette 1 = 21/22/23
+	void SetUpRevealPalette(uint8_t pal[0x20])
+	{
+		memset(pal, 0, 0x20);
+		pal[0] = 0x0D;
+		pal[1] = 0x11; pal[2] = 0x12; pal[3] = 0x13;
+		pal[5] = 0x21; pal[6] = 0x22; pal[7] = 0x23;
+	}
+
+	NesWidescreenReveal::RowBasis RevealBasis(uint8_t coarseX, uint8_t fineX, uint8_t fineY = 0)
+	{
+		NesWidescreenReveal::RowBasis basis;
+		basis.VideoRamAddr = (uint16_t)((fineY << 12) | (coarseX & 0x1F));
+		basis.FineX = fineX;
+		basis.BgPatternAddr = 0;
+		basis.BgEnabled = true;
+		return basis;
+	}
+
+	bool AllEqual(const uint16_t* px, uint32_t count, uint16_t value)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(px[i] != value) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	std::string Hex16(uint16_t v)
+	{
+		char buf[8];
+		snprintf(buf, sizeof(buf), "0x%02X", v);
+		return buf;
+	}
+
+	void TestRevealWidthContractIsSixtyFourColumnsPerSide()
+	{
+		using namespace NesWidescreenReveal;
+		Check(ExtraColumns == 64, "W253: the NES Reveal adds 64 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 384, "W253: an extended NES frame is 384 px wide", std::to_string(ExtendedWidth));
+		Check(ExtraColumns % 8 == 0, "W253: the extra columns are whole 8-px tiles");
+
+		//At the NES's 8:7 pixel aspect, 384x240 is within 3 % of 16:9
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, (384.0 / 240.0) * 8.0 / 7.0), "W253: Widescreen shows an extended frame at the 8:7 pixel aspect, not stretched", std::to_string(ratio));
+		Check(std::fabs(ratio / (16.0 / 9.0) - 1.0) < 0.03, "W253: the extended NES frame is within 3 % of 16:9", std::to_string(ratio));
+
+		in.Region = ConsoleRegion::Pal;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(in), (384.0 / 240.0) * 11.0 / 8.0), "W253: a PAL extended frame keeps the 11:8 pixel aspect");
+
+		//A frame without extra columns keeps today's 16:9 (no Reveal to show)
+		AspectRatioMath::Inputs standard = in;
+		standard.Region = ConsoleRegion::Ntsc;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253: Widescreen on a standard frame is unchanged");
+	}
+
+	void TestRevealClassifiesMirroringFromTheNametablePages()
+	{
+		using namespace NesWidescreenReveal;
+		int a = 0, b = 0, c = 0, d = 0;
+		Check(ClassifyMirroring(&a, &b, &a, &b) == MirroringType::Vertical, "W253: NT0=NT2, NT1=NT3 is vertical mirroring");
+		Check(ClassifyMirroring(&a, &a, &b, &b) == MirroringType::Horizontal, "W253: NT0=NT1, NT2=NT3 is horizontal mirroring");
+		Check(ClassifyMirroring(&a, &a, &a, &a) == MirroringType::ScreenAOnly, "W253: one page everywhere is single-screen");
+		Check(ClassifyMirroring(&a, &b, &c, &d) == MirroringType::FourScreens, "W253: four distinct pages are four-screen");
+	}
+
+	void TestRevealContentRulePerMirroring()
+	{
+		using namespace NesWidescreenReveal;
+		Check(SideColumnsHaveContent(MirroringType::Vertical, 0), "W253: vertical mirroring has a neighbouring screen beside the picture");
+		Check(SideColumnsHaveContent(MirroringType::Vertical, 300), "W253: vertical mirroring has content at any scroll");
+		Check(SideColumnsHaveContent(MirroringType::FourScreens, 37), "W253: four-screen has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::ScreenAOnly, 0), "W253: single-screen (A) never has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::ScreenBOnly, 128), "W253: single-screen (B) never has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 8), "W253: horizontal mirroring while scrolled horizontally has no content");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 256 + 3), "W253: horizontal mirroring scrolled within the right nametable has no content");
+		Check(SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring with no horizontal scroll keeps the nametable (ADR-0253 §3 wording)");
+		Check(SideColumnsHaveContent(MirroringType::Horizontal, 256), "W253: horizontal mirroring aligned on the right nametable is not scrolled");
+	}
+
+	void TestRevealOriginFollowsCoarseXFineXAndNametableBit()
+	{
+		using namespace NesWidescreenReveal;
+		RowBasis basis = RevealBasis(16, 5);
+		Check(RowOriginX(basis) == 16 * 8 + 5, "W253: origin = coarse X * 8 + fine X", std::to_string(RowOriginX(basis)));
+		basis.VideoRamAddr |= 0x0400;
+		Check(RowOriginX(basis) == 256 + 16 * 8 + 5, "W253: the horizontal nametable bit adds 256", std::to_string(RowOriginX(basis)));
+	}
+
+	void TestRevealShowsTheNeighbouringNametableOnVerticalMirroring()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00); //colour 1, palette 0 -> 0x11
+		m.FillNametable(1, 2, 0x55); //colour 2, palette 1 -> 0x22
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//Unscrolled: both sides are the other nametable (wrapping on the left)
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x22), "W253: unscrolled, the left columns come from the neighbouring nametable", Hex16(left[0]));
+		Check(AllEqual(right, ExtraColumns, 0x22), "W253: unscrolled, the right columns come from the neighbouring nametable", Hex16(right[0]));
+
+		//Scrolled by 128: the left side is still NT0, the right side is NT1
+		RenderRowSides(RevealBasis(16, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x11), "W253: scrolled 128 px, the left columns are the current nametable", Hex16(left[0]));
+		Check(AllEqual(right, ExtraColumns, 0x22), "W253: scrolled 128 px, the right columns are the next nametable", Hex16(right[0]));
+	}
+
+	void TestRevealHonoursFineXFineYAndTheAttributeQuadrant()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//Fine X: tile 4 lights only its first pixel column; shifting by 3
+		//moves the lit pixel of the first right-side tile to index 5
+		m.FillNametable(0, 4, 0x00);
+		m.FillNametable(1, 4, 0x55);
+		RenderRowSides(RevealBasis(0, 3), MirroringType::Vertical, m, pal, left, right);
+		Check(right[5] == 0x21 && right[4] == 0x0D && right[6] == 0x0D, "W253: fine X shifts the extra columns like the picture",
+			Hex16(right[4]) + " " + Hex16(right[5]) + " " + Hex16(right[6]));
+
+		//Fine Y: tile 5 lights only fine row 2
+		m.FillNametable(1, 5, 0x00);
+		RenderRowSides(RevealBasis(0, 0, 2), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x11), "W253: fine Y selects the tile row", Hex16(right[0]));
+		RenderRowSides(RevealBasis(0, 0, 1), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x0D), "W253: a transparent tile row shows the backdrop", Hex16(right[0]));
+
+		//Attribute 0xE4: top-left palette 0, top-right palette 1
+		m.FillNametable(1, 1, 0xE4);
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, 16, 0x11) && AllEqual(right + 16, 16, 0x21), "W253: the attribute quadrant picks the palette",
+			Hex16(right[0]) + " " + Hex16(right[16]));
+	}
+
+	void TestRevealDrawsBlackWhereThereIsNoContent()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		m.NametableMap[0] = m.NametableMap[1] = m.NametableMap[2] = m.NametableMap[3] = 0;
+		RenderRowSides(RevealBasis(4, 0), MirroringType::ScreenAOnly, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: single-screen draws the black fallback", Hex16(left[0]));
+
+		RenderRowSides(RevealBasis(1, 0), MirroringType::Horizontal, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring scrolled horizontally draws black", Hex16(left[0]));
+
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Horizontal, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x11), "W253: horizontal mirroring unscrolled draws the nametable", Hex16(left[0]));
+
+		//Black stays black under grayscale/emphasis: it is not a game colour
+		RowBasis gray = RevealBasis(4, 0);
+		gray.PaletteMask = 0x30;
+		gray.EmphasisBits = 0x40;
+		RenderRowSides(gray, MirroringType::ScreenBOnly, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, BlackColor), "W253: the black fallback ignores grayscale and emphasis", Hex16(right[0]));
+	}
+
+	void TestRevealFollowsTheRowsMaskState()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		RowBasis off = RevealBasis(0, 0);
+		off.BgEnabled = false;
+		RenderRowSides(off, MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x0D) && AllEqual(right, ExtraColumns, 0x0D), "W253: with the background off the extra columns show the backdrop", Hex16(left[0]));
+
+		RowBasis gray = RevealBasis(0, 0);
+		gray.PaletteMask = 0x30;
+		gray.EmphasisBits = 0x40;
+		RenderRowSides(gray, MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, (0x22 & 0x30) | 0x40), "W253: grayscale and emphasis apply to the extra columns", Hex16(right[0]));
+	}
+
+	void TestRevealNeverTouchesTheMappersSideEffectingVramPath()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		for(uint8_t fineX = 0; fineX < 8; fineX++) {
+			RenderRowSides(RevealBasis(fineX * 3, fineX, fineX), MirroringType::Vertical, m, pal, left, right);
+			RenderRowSides(RevealBasis(fineX, fineX), MirroringType::Horizontal, m, pal, left, right);
+		}
+		Check(m.SideEffectReads == 0, "W253: the extra columns never use the mapper's rendering VRAM read", std::to_string(m.SideEffectReads));
+		Check(m.VramHookCalls == 0, "W253: the extra columns never fire the mapper's VRAM address hook", std::to_string(m.VramHookCalls));
+		//8 vertical rows of 16-18 tiles at 4 reads each (NT, AT, two CHR planes)
+		Check(m.DebugReads >= 8 * 16 * 4, "W253: the extra columns are fetched through DebugReadVram", std::to_string(m.DebugReads));
+	}
+
+	void TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace NesWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 7 + i / 256) & 0x1FF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		Check(!frames.RowSides(0, left, right), "W253: with the switch off there are no extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off the frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253: the switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right) && left && right, "W253: a row's side columns are writable while active");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = 0x21;
+				right[i] = 0x22;
+			}
+		}
+		Check(!frames.RowSides(240, left, right) && !frames.RowSides(-1, left, right), "W253: rows outside 0-239 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253: an active frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253: the centre 256 columns of every row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, 0x21) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x22), "W253: a drawn row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253: a row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
 	}
 }
 
@@ -13362,6 +13708,17 @@ int main()
 
 	TestAspectRatioPerSetting();
 	TestAspectRatioAutoPerConsole();
+
+	TestRevealWidthContractIsSixtyFourColumnsPerSide();
+	TestRevealClassifiesMirroringFromTheNametablePages();
+	TestRevealContentRulePerMirroring();
+	TestRevealOriginFollowsCoarseXFineXAndNametableBit();
+	TestRevealShowsTheNeighbouringNametableOnVerticalMirroring();
+	TestRevealHonoursFineXFineYAndTheAttributeQuadrant();
+	TestRevealDrawsBlackWhereThereIsNoContent();
+	TestRevealFollowsTheRowsMaskState();
+	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
+	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
 	TestStretchedSizePerSetting();
 
 	TestToggleOverlayStaysReachableInAKeyboardGame();

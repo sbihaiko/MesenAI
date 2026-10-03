@@ -185,7 +185,7 @@ void NesDefaultVideoFilter::DecodePpuBuffer(uint16_t* ppuOutputBuffer, uint32_t*
 	FrameInfo frame = _frameInfo;
 
 	if(_nesConfig.EnablePalBorders && _emu->GetRegion() != ConsoleRegion::Ntsc) {
-		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer);
+		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer, _baseFrameInfo.Width);
 	}
 
 	for(uint32_t i = 0; i < frame.Height; i++) {
@@ -196,20 +196,20 @@ void NesDefaultVideoFilter::DecodePpuBuffer(uint16_t* ppuOutputBuffer, uint32_t*
 	}
 }
 
-void NesDefaultVideoFilter::ApplyPalBorder(uint16_t* ppuOutputBuffer)
+void NesDefaultVideoFilter::ApplyPalBorder(uint16_t* ppuOutputBuffer, uint32_t width)
 {
-	for(uint32_t i = 0; i < NesConstants::ScreenWidth; i++) {
+	for(uint32_t i = 0; i < width; i++) {
 		//First row is black ($0E)
 		ppuOutputBuffer[i] = 0x0E;
 	}
 
 	//First 2 pixels and last 2 pixels on each row are black ($0E)
 	for(uint32_t i = 0; i < NesConstants::ScreenHeight; i++) {
-		uint32_t rowOffset = i * NesConstants::ScreenWidth;
+		uint32_t rowOffset = i * width;
 		ppuOutputBuffer[rowOffset] = 0x0E;
 		ppuOutputBuffer[rowOffset + 1] = 0x0E;
-		ppuOutputBuffer[rowOffset + NesConstants::ScreenWidth - 2] = 0x0E;
-		ppuOutputBuffer[rowOffset + NesConstants::ScreenWidth - 1] = 0x0E;
+		ppuOutputBuffer[rowOffset + width - 2] = 0x0E;
+		ppuOutputBuffer[rowOffset + width - 1] = 0x0E;
 	}
 }
 

@@ -90,6 +90,9 @@
 //4x/6x/8x/10x); the default is "none", i.e. a 1:1 native-resolution frame.
 //A scaling filter multiplies the PNG dimensions by its scale factor - this is
 //what scripts/check_hq4x_screenshot.sh asserts for HQ4x (P.7).
+//With "widescreen" the WideScrn switch is on (VideoConfig.AspectRatio =
+//Widescreen): on a NES game the capture/screenshot is the ADR-0253 Reveal
+//frame, 384 px wide, whose centre 256 columns are the standard picture.
 //With "shader=<preset.slangp>" a RetroArch shader preset is configured the way
 //the Video settings configure one. It must change nothing this tool writes - a
 //shader is a display effect, never a recording one (ADR-0237);
@@ -147,6 +150,7 @@
 //HeadlessCaptureNesSpriteLayer, and the $2000 sprite-control bits come back in
 //a NesPpuState. NesTypes.h keeps the ABI the exact one the core was built with.
 #include "NES/NesTypes.h"
+#include "NES/NesWidescreenReveal.h"
 //ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate's rules
 //live in Core/Shared/MovieSyncGate.{h,cpp} - host-free, no Emulator, no
 //filesystem - so this file only samples the trace and reports the verdict.
@@ -1182,7 +1186,7 @@ int main(int argc, char** argv)
 {
 	if(argc < 4) {
 		fprintf(stderr, "usage: %s <rom> <seconds> <output-prefix> [pal] [hdpack] [romtiles]\n"
-			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [shader=<preset.slangp>] [mep-off]\n"
+			"       [screenshot] [capture] [log] [bootstrap] [filter=<name>] [shader=<preset.slangp>] [widescreen] [mep-off]\n"
 "       [reload-at-frame=<n>] [replace=<destination>=<source>]...\n"
 			"       [hdpack-off] [mep-notextures] [mep-nosynth] [mep-noaudio] [mep-noborder] [mep-forcepatch] [mep-disable=<pack>]\n"
 			"       [state=<file.mss>] [save-state=<file.mss>] [input=<script>] [realtime]\n"
@@ -1231,6 +1235,7 @@ int main(int argc, char** argv)
 	bool reloadRequested = false;
 	std::vector<std::pair<std::string, std::string>> replacements; //destination -> source
 	VideoFilterType videoFilter = VideoFilterType::None;
+	bool widescreen = false;
 	EnhancementPackConfig mep = {};
 	mep.BootstrapEnhancementFolder = false; //opt-in headless ("bootstrap" flag) - it writes beside the ROM
 	//Repeatable: ADR-0244's exactness harness launches with every pack but one off.
@@ -1317,9 +1322,13 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 			screenshot = true;
 		} else if(strcmp(argv[i], "capture") == 0) {
 			capture = true;
+		} else if(strcmp(argv[i], "widescreen") == 0) {
+			widescreen = true;
 		} else if(strncmp(argv[i], "filter=", 7) == 0) {
 			const char* name = argv[i] + 7;
 			if(strcmp(name, "none") == 0) { videoFilter = VideoFilterType::None; }
+			else if(strcmp(name, "ntsc-blargg") == 0) { videoFilter = VideoFilterType::NtscBlargg; }
+			else if(strcmp(name, "ntsc-bisqwit") == 0) { videoFilter = VideoFilterType::NtscBisqwit; }
 			else if(strcmp(name, "hq2x") == 0) { videoFilter = VideoFilterType::HQ2x; }
 			else if(strcmp(name, "hq3x") == 0) { videoFilter = VideoFilterType::HQ3x; }
 			else if(strcmp(name, "hq4x") == 0) { videoFilter = VideoFilterType::HQ4x; }
@@ -1681,6 +1690,10 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//struct's own default (neutral pipeline: no scanlines, no rotation).
 	VideoConfig video = {};
 	video.VideoFilter = videoFilter;
+	if(widescreen) {
+		//ADR-0253: the WideScrn switch, i.e. the Widescreen aspect setting
+		video.AspectRatio = VideoAspectRatio::Widescreen;
+	}
 	SetVideoConfig(video);
 
 	//F9.14: the frame limiter only decides how long a run takes on the wall
@@ -2193,6 +2206,23 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 					width, height, frameNumber, pixelCount, FrameCaptureMath::Checksum(pixels.data(), pixelCount));
 				printf("capture borders: left=%u right=%u top=%u bottom=%u colour=0x%08X blank=%d\n",
 					borders.Left, borders.Right, borders.Top, borders.Bottom, borders.Colour, borders.IsBlank ? 1 : 0);
+
+				//ADR-0253: on a NES Reveal frame (384x240, times a scale
+				//filter's factor) the standard picture is the centre 256
+				//columns. Its checksum is what scripts/accuracy_compare.py's
+				//"widescreen" arm compares against the vanilla arm's whole
+				//frame - the extra columns must leave it bit-identical.
+				uint32_t scale = height / NesWidescreenReveal::Height;
+				if(widescreen && scale > 0 && height == scale * NesWidescreenReveal::Height && width == scale * NesWidescreenReveal::ExtendedWidth) {
+					uint32_t centreWidth = scale * NesWidescreenReveal::StandardWidth;
+					uint32_t offset = scale * NesWidescreenReveal::ExtraColumns;
+					std::vector<uint32_t> centre((size_t)centreWidth * height);
+					for(uint32_t y = 0; y < height; y++) {
+						memcpy(centre.data() + (size_t)y * centreWidth, pixels.data() + (size_t)y * width + offset, centreWidth * sizeof(uint32_t));
+					}
+					printf("capture centre: %ux%u checksum=0x%08X\n", centreWidth, height,
+						FrameCaptureMath::Checksum(centre.data(), (uint32_t)centre.size()));
+				}
 
 				//ADR-0167: same canvas size as the frame capture above (the
 				//base frame size when no video filter is active). Additive -

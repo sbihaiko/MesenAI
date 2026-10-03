@@ -122,11 +122,32 @@ void VideoDecoder::RedrawPausedFrame()
 	UpdateFrame(_frame, true, false);
 }
 
+void VideoDecoder::KeepStandardCentre()
+{
+	//Only the NES emits extended frames today, in its 16-bit PPU format
+	uint32_t standardWidth = _frame.Width - 2 * _frame.ExtendedColumns;
+	_standardCentre.resize((size_t)standardWidth * _frame.Height);
+	const uint16_t* src = (const uint16_t*)_frame.FrameBuffer;
+	for(uint32_t y = 0; y < _frame.Height; y++) {
+		memcpy(_standardCentre.data() + (size_t)y * standardWidth, src + (size_t)y * _frame.Width + _frame.ExtendedColumns, standardWidth * sizeof(uint16_t));
+	}
+	_frame.FrameBuffer = _standardCentre.data();
+	_frame.Width = standardWidth;
+	_frame.ExtendedColumns = 0;
+}
+
 void VideoDecoder::DecodeFrame(bool forRewind)
 {
 	UpdateVideoFilter();
 	bool compare = _emu->GetSettings()->IsLookCompare();
 	BaseVideoFilter* videoFilter = GetFrameFilter(compare);
+
+	//ADR-0253 W.1: a filter or border that assumes the standard width gets
+	//the standard picture, so nothing downstream ever reads a row at the
+	//wrong stride; the aspect ratio then falls back with it (IsFrameExtended)
+	if(_frame.ExtendedColumns > 0 && _frame.FrameBuffer && (!videoFilter->AcceptsExtendedFrame() || _emu->GetVideoRenderer()->IsBorderComposited())) {
+		KeepStandardCentre();
+	}
 
 	bool isAudioPlayer = _emu->GetAudioPlayerHud() != nullptr;
 	if(isAudioPlayer) {

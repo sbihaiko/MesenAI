@@ -317,6 +317,12 @@ public:
 		}
 	}
 
+	//ADR-0253 (NES widescreen Reveal): the memory nametable slot 0-3
+	//($2000/$2400/$2800/$2C00) points at right now. Only compared for
+	//identity - two slots on the same page mirror each other - so the Reveal
+	//sees the arrangement the mapper really has in effect.
+	const void* GetNametableSlotPage(uint8_t slot) { return _chrPages[0x20 + (slot & 0x03) * 4]; }
+
 	//Debugger Helper Functions
 	bool HasChrRam();
 	bool HasChrRom();

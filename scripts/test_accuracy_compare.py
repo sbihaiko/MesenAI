@@ -188,12 +188,41 @@ def test_format_report():
 def test_arm_table():
     print("arm table")
     check(ac.BASELINE in ac.ARMS, "the baseline is one of the arms")
-    check(all(set(spec) == {"install", "flags", "layer"} for spec in ac.ARMS.values()),
-          "every arm declares install, flags and layer")
+    check(all({"install", "flags", "layer"} <= set(spec) <= {"install", "flags", "layer", "compare"}
+              for spec in ac.ARMS.values()),
+          "every arm declares install, flags and layer (and optionally compare)")
+    check({spec.get("compare") for spec in ac.ARMS.values()} <= {None, "centre"},
+          "compare modes are the ones compared_capture knows")
+    check(ac.ARMS["widescreen"]["flags"] == ("widescreen",) and ac.ARMS["widescreen"]["compare"] == "centre",
+          "ADR-0253: the widescreen arm turns WideScrn on and is compared on its standard centre")
     check(ac.ARMS[ac.BASELINE]["install"] is None and ac.ARMS[ac.BASELINE]["flags"] == (),
           "the baseline turns no layer on - otherwise there is nothing to compare against")
     check({spec["install"] for spec in ac.ARMS.values()} <= {None, "hdpack", "mep"},
           "install kinds are the ones install_pack knows")
+
+
+WIDESCREEN_OUTPUT = """running 4808 frames for a final capture
+capture: 384x240 frame=4808 pixels=92160 checksum=0x11112222
+capture borders: left=0 right=0 top=0 bottom=0 colour=0xFF000000 blank=0
+capture centre: 256x240 checksum=0xe5c1e0d8
+capture finished: 4809 frames (target 4808), 7.1s of wall clock
+"""
+
+
+def test_widescreen_centre():
+    print("widescreen centre (ADR-0253)")
+    got = ac.parse_capture(WIDESCREEN_OUTPUT)
+    check(got["width"] == 384 and got["centre"] == {"width": 256, "height": 240, "checksum": "E5C1E0D8"},
+          "reads the extended frame and its centre line")
+    compared = ac.compared_capture(got, "centre")
+    check(compared["checksum"] == "E5C1E0D8" and compared["width"] == 256 and compared["extended_width"] == 384,
+          "the widescreen arm is compared on the centre checksum")
+    check(ac.compared_capture(got, None) is got, "other arms are compared on the whole frame")
+    vanilla = ac.parse_capture(REAL_OUTPUT)
+    check(ac.compare({("vanilla", "results-table"): vanilla, ("widescreen", "results-table"): compared}) == [],
+          "a centre equal to the vanilla frame is no divergence")
+    raises(lambda: ac.compared_capture(vanilla, "centre"), ValueError,
+           "a widescreen run whose frame was never extended is an error, not a pass")
 
 
 def main():
@@ -207,6 +236,7 @@ def main():
         test_resolve_rom(tmp)
         test_format_report()
         test_arm_table()
+        test_widescreen_centre()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s)")

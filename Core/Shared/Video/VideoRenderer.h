@@ -100,6 +100,12 @@ public:
 	VideoRenderer(Emulator* emu);
 	~VideoRenderer();
 
+	//ADR-0253 W.1: whether the ADR-0149 border layer is drawn around the
+	//frame. The border's viewport is sized for the standard picture, so the
+	//decoder keeps a widescreen Reveal frame standard while it is (W.3 makes
+	//the border a widescreen fallback). Decode-thread only, like the border.
+	bool IsBorderComposited();
+
 	FrameInfo GetRendererSize();
 	void SetRendererSize(uint32_t width, uint32_t height);
 

@@ -47,8 +47,13 @@ private:
 	bool _videoFilterIsPackArt = false;
 	unique_ptr<RotateFilter> _rotateFilter;
 
+	//ADR-0253: the standard centre of a widescreen Reveal frame, for a filter
+	//(or a border layer) that cannot take the extra columns
+	vector<uint16_t> _standardCentre;
+
 	void UpdateVideoFilter();
 	BaseVideoFilter* GetFrameFilter(bool compare);
+	void KeepStandardCentre();
 
 	void DecodeThread();
 
@@ -79,6 +84,10 @@ public:
 	FrameInfo GetBaseFrameInfo(bool removeOverscan);
 	FrameInfo GetFrameInfo();
 	double GetLastFrameScale() { return _frame.Scale; }
+
+	//ADR-0253: whether the frame being shown carries a widescreen Reveal's
+	//extra columns (read by EmuSettings::GetAspectRatio)
+	bool IsFrameExtended() { return _frame.ExtendedColumns > 0; }
 
 	void UpdateFrame(RenderedFrame frame, bool sync, bool forRewind);
 

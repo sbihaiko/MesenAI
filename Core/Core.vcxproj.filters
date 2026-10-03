@@ -248,6 +248,9 @@
     <ClInclude Include="NES\NesScanlineTraceValidity.h">
       <Filter>NES</Filter>
     </ClInclude>
+    <ClInclude Include="NES\NesWidescreenReveal.h">
+      <Filter>NES</Filter>
+    </ClInclude>
     <ClInclude Include="NES\DefaultNesPpu.h">
       <Filter>NES</Filter>
     </ClInclude>

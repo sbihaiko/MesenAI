@@ -328,6 +328,11 @@ void VideoRenderer::UpdateBorderAsset()
 	_borderAvailable = true;
 }
 
+bool VideoRenderer::IsBorderComposited()
+{
+	return _emu->GetSettings()->GetEnhancementPackConfig().EnableBorder && _borderAvailable;
+}
+
 RenderedFrame* VideoRenderer::CompositeBorder(RenderedFrame& inFrame)
 {
 	if(!_emu->GetSettings()->GetEnhancementPackConfig().EnableBorder) {
