@@ -199,7 +199,8 @@ public class RemasterWorkspaceTests : IDisposable
 			Assert.True(window.FindNamed<StackPanel>("RemasterProjectScreen").IsOnScreen());
 			Assert.Equal("synthetic-nrom", window.FindNamed<TextBlock>("RemasterProjectName").Text);
 			Assert.Equal("1 recording", window.FindNamed<TextBlock>("RemasterRecordSummary").Text);
-			Assert.StartsWith("Latest: Recording 1", window.FindNamed<TextBlock>("RemasterRecordDetail").Text);
+			//ADR-0252 §1: the shapes the real recording drew, read off its hires.txt.
+			Assert.Matches(@"^(No shapes|1 shape|[0-9,]+ shapes) seen while you played$", window.FindNamed<TextBlock>("RemasterRecordDetail").Text);
 			Assert.False(window.FindNamed<Button>("RemasterTasButton").IsEffectivelyEnabled);
 			Assert.Equal("Coming in a later version.", window.FindNamed<TextBlock>("RemasterTasReason").Text);
 			Assert.False(window.FindNamed<Button>("RemasterAiButton").IsEffectivelyEnabled);

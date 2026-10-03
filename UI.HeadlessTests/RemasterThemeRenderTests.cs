@@ -142,8 +142,10 @@ public partial class RemasterThemeRenderTests : IDisposable
 	private string ContraProject()
 	{
 		string project = Path.Combine(TempFolder(), "Contra (USA)");
-		Write(project, "auto/rec-001/textures/hires.txt", "<ver>107\n");
-		Write(project, "auto/rec-002/textures/hires.txt", "<ver>107\n");
+		//ADR-0252 §1: three played shapes between the two recordings (AA twice,
+		//under two palettes, is one); the `Y` row is the ROM export, not played.
+		Write(project, "auto/rec-001/textures/hires.txt", "<ver>107\n<tile>0,AA,0F102816,0,0,1,N\n<tile>1,BB,0F102816,8,0,1,N\n<tile>2,DD,0F001030,0,8,1,Y\n");
+		Write(project, "auto/rec-002/textures/hires.txt", "<ver>107\n<tile>0,AA,0F162736,0,0,1,N\n<tile>1,CC,0F102816,8,0,1,N\n");
 		StringBuilder files = new();
 		for(int i = 0; i < Figures.Length; i++) {
 			var f = Figures[i];
@@ -372,7 +374,8 @@ public partial class RemasterThemeRenderTests : IDisposable
 		TextBlock latest = view.FindNamed<TextBlock>("RemasterRecordDetail");
 		AssertText(latest, 12.5, FontWeight.Normal, Text2);
 		Assert.True(latest.IsOnScreen());
-		Assert.StartsWith("Latest: Recording 2", latest.Text);
+		//ADR-0252 §1: the render's "1 240 shapes seen while you played".
+		Assert.Equal("3 shapes seen while you played", latest.Text);
 		Assert.False(view.FindNamed<ItemsControl>("RemasterRecordingList").IsOnScreen());
 		AssertButton(view.FindNamed<Button>("RemasterRecordButton"), 28, 8, 13, Red);
 		AssertSecondary(view.FindNamed<Button>("RemasterTasButton"));
@@ -619,7 +622,7 @@ public partial class RemasterThemeRenderTests : IDisposable
 		//The render's counters sit in the pill; its hint is a separate toast at the bottom.
 		TextBlock counters = strip.FindNamed<TextBlock>("RemasterRecordingCounters");
 		Assert.True(counters.IsOnScreen());
-		Assert.Equal("318 new shapes · 2 screens captured", counters.Text);
+		Assert.Equal("318 shapes seen · 2 screens captured", counters.Text);
 		AssertText(counters, 12.5, FontWeight.Normal, Color.Parse("#C8C8CD"));
 		Assert.DoesNotContain(strip.FindAll<TextBlock>(), t => t.IsOnScreen() && t.Text == "Play through what you want to repaint. Esc stops.");
 		Border toast = hint.FindNamed<Border>("RemasterRecordingHintBox");

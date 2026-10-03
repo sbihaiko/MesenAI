@@ -20,6 +20,9 @@ namespace Mesen.ViewModels
 	public partial class RemasterWorkspaceViewModel
 	{
 		private readonly RemasterPaintCache _paintCache = new();
+		//ADR-0252 §2/§3: the build cells painted per tile, shared with W-R0's rows.
+		private readonly RemasterCellPaintCache _cellCache = new();
+		private int _cellsGeneration;
 		private RemasterKit _kit = RemasterKit.Empty;
 		private RemasterKitCategory? _category;
 		private int _tilesGeneration;
@@ -29,6 +32,13 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool HasTiles { get; private set; }
 		[ObservableProperty] public partial bool IsPatchedProject { get; private set; }
 		[ObservableProperty] public partial string KitProblemText { get; private set; } = "";
+		//ADR-0252 §2: the project's painted cells (null = unknown, or still
+		//being measured) and its words for the status line ("" = unknown).
+		[ObservableProperty] public partial int? PaintedCells { get; private set; }
+		[ObservableProperty] public partial string PaintedCellsText { get; private set; } = "";
+
+		//Completes when the project's painted-cell total the last refresh asked for is in.
+		public Task CellsSettled { get; private set; } = Task.CompletedTask;
 
 		//Opens a tile's PNG with the OS default (RemasterFileOpener); a test
 		//swaps it to see the path.
@@ -51,6 +61,45 @@ namespace Mesen.ViewModels
 				PaintText = ResourceHelper.GetMessage("RemasterKitReady");
 			}
 			BuildTileRows();
+			RefreshPaintedCells();
+		}
+
+		//The total reads every tile's PNGs, so it runs off the UI thread; a
+		//result for an older kit is dropped.
+		private void RefreshPaintedCells()
+		{
+			int generation = ++_cellsGeneration;
+			RemasterKit kit = _kit;
+			if(kit.Tiles.Count == 0) {
+				SetPaintedCells(null);
+				CellsSettled = Task.CompletedTask;
+				return;
+			}
+			TaskCompletionSource settled = new();
+			CellsSettled = settled.Task;
+			Task.Run(() => _cellCache.Total(kit)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				if(generation == _cellsGeneration) {
+					SetPaintedCells(t.IsCompletedSuccessfully ? t.Result : null);
+				}
+				settled.TrySetResult();
+			}), TaskScheduler.Default);
+		}
+
+		private void SetPaintedCells(int? cells)
+		{
+			PaintedCells = cells;
+			PaintedCellsText = CellsPaintedText(cells);
+		}
+
+		//"412 cells painted", "nothing painted yet", or "" when no file can say.
+		public static string CellsPaintedText(int? cells)
+		{
+			return cells switch {
+				null => "",
+				0 => ResourceHelper.GetMessage("RemasterCellsPaintedNone"),
+				1 => ResourceHelper.GetMessage("RemasterCellsPaintedOne"),
+				int n => ResourceHelper.GetMessage("RemasterCellsPaintedMany", n),
+			};
 		}
 
 		public void SelectCategory(RemasterKitCategory category)
@@ -83,14 +132,23 @@ namespace Mesen.ViewModels
 			}
 			foreach(RemasterKitTile t in shown) {
 				RemasterPaintResult? paint = null;
-				if(_paintCache.TryGet(t, out RemasterPaintResult hit)) {
+				bool measured = _paintCache.TryGet(t, out RemasterPaintResult hit);
+				if(measured) {
 					paint = hit;
+				}
+				//ADR-0252 §3: the painted phases, once the cells are measured.
+				(int, int)? phases = null;
+				if(_cellCache.TryGet(t, out RemasterTileCells cells)) {
+					phases = RemasterCellPaint.Phases(t, cells);
 				} else {
+					measured = false;
+				}
+				if(!measured) {
 					pending.Add(t);
 				}
 				string stamp = RemasterPaintCache.Stamp(t);
-				rows.Add(previous.TryGetValue(t.ImagePath, out RemasterTileRow? old) && old.Tile == t && old.Stamp == stamp && Equals(old.Paint, paint)
-					? old : RemasterTileRow.From(t, paint, stamp));
+				rows.Add(previous.TryGetValue(t.ImagePath, out RemasterTileRow? old) && old.Tile == t && old.Stamp == stamp && Equals(old.Paint, paint) && old.Phases == phases
+					? old : RemasterTileRow.From(t, paint, stamp, phases));
 			}
 			if(!rows.SequenceEqual(Tiles, ReferenceEqualityComparer.Instance)) {
 				Tiles = rows;
@@ -104,6 +162,7 @@ namespace Mesen.ViewModels
 			Task.Run(() => {
 				foreach(RemasterKitTile t in pending) {
 					_paintCache.Get(t, RemasterPaintProbe.Compare);
+					_cellCache.Get(t);
 				}
 			}).ContinueWith(_ => Dispatcher.UIThread.Post(() => {
 				if(generation == _tilesGeneration) {
@@ -166,6 +225,8 @@ namespace Mesen.ViewModels
 		public required string OpenPath { get; init; }
 		public required string Stamp { get; init; }
 		public required RemasterPaintResult? Paint { get; init; }
+		//ADR-0252 §3: (painted, of) phases, null when not known.
+		public required (int Painted, int Of)? Phases { get; init; }
 
 		public Bitmap? Thumbnail
 		{
@@ -187,7 +248,7 @@ namespace Mesen.ViewModels
 		}
 
 		//paint == null: the comparison is still running; the popover says so.
-		public static RemasterTileRow From(RemasterKitTile tile, RemasterPaintResult? paint, string stamp)
+		public static RemasterTileRow From(RemasterKitTile tile, RemasterPaintResult? paint, string stamp, (int Painted, int Of)? phases = null)
 		{
 			(RemasterTileCountKind kind, int n) = RemasterTileFacts.CountOf(tile);
 			string count = kind switch {
@@ -195,7 +256,7 @@ namespace Mesen.ViewModels
 				RemasterTileCountKind.Cells => ResourceHelper.GetMessage(n == 1 ? "RemasterTileCell" : "RemasterTileCells", n),
 				_ => "",
 			};
-			IReadOnlyList<RemasterProvenanceLine> facts = RemasterProvenance.Lines(tile, paint ?? RemasterPaintResult.Unknown(RemasterPaintUnknown.None));
+			IReadOnlyList<RemasterProvenanceLine> facts = RemasterProvenance.Lines(tile, paint ?? RemasterPaintResult.Unknown(RemasterPaintUnknown.None), phases);
 			List<RemasterTileLine> lines = facts.Select(l => paint == null && IsPaintLine(l.Kind)
 				? new RemasterTileLine(RemasterTileLineIcon.None, ResourceHelper.GetMessage("RemasterProvenancePaintChecking"))
 				: new RemasterTileLine(IconOf(l.Kind), Sentence(l))).ToList();
@@ -226,6 +287,7 @@ namespace Mesen.ViewModels
 				OpenPath = RemasterTileFacts.OpenPath(tile),
 				Stamp = stamp,
 				Paint = paint,
+				Phases = phases,
 			};
 		}
 
@@ -236,20 +298,20 @@ namespace Mesen.ViewModels
 			return kind switch {
 				RemasterProvenanceKind.Seen or RemasterProvenanceKind.CellsSeen => RemasterTileLineIcon.Seen,
 				RemasterProvenanceKind.CellsFilled or RemasterProvenanceKind.NotSeen => RemasterTileLineIcon.Warning,
-				RemasterProvenanceKind.Painted => RemasterTileLineIcon.Painted,
+				RemasterProvenanceKind.Painted or RemasterProvenanceKind.PaintedPhases => RemasterTileLineIcon.Painted,
 				_ => RemasterTileLineIcon.None,
 			};
 		}
 
 		private static bool IsPaintLine(RemasterProvenanceKind kind)
 		{
-			return kind is RemasterProvenanceKind.Painted or RemasterProvenanceKind.NotPainted or RemasterProvenanceKind.PaintUnknown;
+			return kind is RemasterProvenanceKind.Painted or RemasterProvenanceKind.PaintedPhases or RemasterProvenanceKind.NotPainted or RemasterProvenanceKind.PaintUnknown;
 		}
 
 		private static string Sentence(RemasterProvenanceLine l)
 		{
 			return l.Kind switch {
-				RemasterProvenanceKind.CellsSeen or RemasterProvenanceKind.CellsFilled or RemasterProvenanceKind.CellsEmpty
+				RemasterProvenanceKind.CellsSeen or RemasterProvenanceKind.CellsFilled or RemasterProvenanceKind.CellsEmpty or RemasterProvenanceKind.PaintedPhases
 					=> ResourceHelper.GetMessage("RemasterProvenance" + l.Kind, l.Count, l.Of),
 				RemasterProvenanceKind.PaintUnknown => ResourceHelper.GetMessage("RemasterProvenancePaintUnknown" + l.Why),
 				_ => ResourceHelper.GetMessage("RemasterProvenance" + l.Kind),

@@ -30,6 +30,7 @@ namespace Mesen.ViewModels
 		private readonly IJobProcessLauncher _launcher;
 		private readonly bool _hasHeadlessRecorder;
 		private readonly Stopwatch _recordingClock = new();
+		private readonly RemasterShapeCache _shapeCache = new();
 		private DispatcherTimer? _recordingTimer;
 		private DispatcherTimer? _jobResultTimer;
 
@@ -83,6 +84,8 @@ namespace Mesen.ViewModels
 		//W-R1's second line under the summary: the newest recording (Player mode
 		//shows it instead of the list).
 		[ObservableProperty] public partial string RecordDetail { get; private set; } = "";
+		//ADR-0252 §1: "1 240 shapes seen while you played" ("" = unknown).
+		[ObservableProperty] public partial string ShapesSeenText { get; private set; } = "";
 		[ObservableProperty] public partial RemasterControlViewModel Record { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel RecordFromTas { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel LetTheAiPlay { get; private set; } = RemasterControlViewModel.Hidden;
@@ -322,9 +325,11 @@ namespace Mesen.ViewModels
 
 		private void UpdateRecordingCounters(uint tilesSeen, uint screensSeen)
 		{
+			//ADR-0252 §4: shapes this recording has drawn; screens up to the cap the core writes.
+			uint screens = RemasterScreen.ScreensCaptured(screensSeen);
 			RecordingCounters = !RemasterScreen.ShowsRecordingCounters(tilesSeen, screensSeen) ? ""
 				: ResourceHelper.GetMessage(tilesSeen == 1 ? "RemasterRecordingShapesOne" : "RemasterRecordingShapesMany", tilesSeen)
-					+ " · " + ResourceHelper.GetMessage(screensSeen == 1 ? "RemasterRecordingScreensOne" : "RemasterRecordingScreensMany", screensSeen);
+					+ " · " + ResourceHelper.GetMessage(screens == 1 ? "RemasterRecordingScreensOne" : "RemasterRecordingScreensMany", screens);
 		}
 
 		//Zone ② Prepare Figures, and the run after Stop: mep_project.py kit.
@@ -474,7 +479,12 @@ namespace Mesen.ViewModels
 			}
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
 			RemasterRecordingRow? latest = Recordings.FirstOrDefault();
-			RecordDetail = latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
+			//ADR-0252 §1: the shapes the recordings drew; the newest recording
+			//stands in only while no recording's hires.txt can say.
+			int? shapes = _project == null ? null : _shapeCache.Count(_project.Recordings);
+			ShapesSeenText = shapes is int n ? ResourceHelper.GetMessage(n == 0 ? "RemasterShapesSeenNone" : n == 1 ? "RemasterShapesSeenOne" : "RemasterShapesSeenMany", n) : "";
+			RecordDetail = ShapesSeenText.Length > 0 ? ShapesSeenText
+				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 
 			Record = Control(s.Record);
 			RecordFromTas = Control(s.RecordFromTas);
