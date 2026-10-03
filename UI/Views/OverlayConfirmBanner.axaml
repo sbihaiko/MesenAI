@@ -1,0 +1,27 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="332" d:DesignHeight="110"
+	x:DataType="vm:InterruptionViewModel"
+	x:Class="Mesen.Views.OverlayConfirmBanner"
+>
+	<!--ADR-0249 (W-X1): W-P4's Quit game asks in place, on the overlay card -
+	the shared stop banner (PlayerTheme.axaml "in-place banner"), stacked for
+	the card's width: the sentence, then the safe button and the dark one that
+	goes on. Only ever shown in Player mode (the overlay is Player-only).-->
+	<Border Name="QuitGameConfirmBanner" Classes="banner stop">
+		<StackPanel Spacing="10">
+			<DockPanel>
+				<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconStop}" VerticalAlignment="Top" Margin="3 4 14 0" />
+				<TextBlock Name="QuitGameConfirmText" Classes="banner-text" Text="{Binding Text}" />
+			</DockPanel>
+			<StackPanel Classes="banner-actions" HorizontalAlignment="Right" Margin="0" XYFocus.NavigationModes="Enabled">
+				<Button Name="QuitGameKeepButton" Classes="secondary" Content="{Binding KeepText}" Click="OnKeep" />
+				<Button Name="QuitGameGoButton" Classes="primary neutral" Content="{Binding GoText}" Click="OnGo" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

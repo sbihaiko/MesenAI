@@ -52,19 +52,28 @@ namespace Mesen.Views
 			(DataContext as LookConfigViewModel)?.SetCompare(compare);
 		}
 
+		//ADR-0249 (W-P10 › W-P6): in Player mode (Look on the main window's
+		//Settings sheet) the Art row swaps that sheet for the pack detail sheet,
+		//as the pause overlay's Pack row opens it. The classic Options window
+		//keeps Enhancement Packs.
 		private void OnPackDetails(object? sender, RoutedEventArgs e)
 		{
+			if(PlayerDialogScope.UsesPlayerLook(this) && TopLevel.GetTopLevel(this) is MainWindow main) {
+				main.OpenPackDetailFromSettings();
+				return;
+			}
 			ApplicationHelper.GetOrCreateUniqueWindow(this, () => new EnhancementPacksWindow());
 		}
 
-		//The shader's own parameters (the classic ShaderConfigWindow).
+		//The shader's own parameters (ShaderConfigWindow), in the Player look
+		//when Look is the Player sheet's (ADR-0249).
 		private void OnAdjust(object? sender, RoutedEventArgs e)
 		{
 			string shader = ConfigManager.Config.Video.ShaderFile;
 			if(!File.Exists(shader)) {
 				return;
 			}
-			new ShaderConfigWindow() {
+			new ShaderConfigWindow(PlayerDialogScope.UsesPlayerLook(this)) {
 				DataContext = new ShaderConfigViewModel(true, shader)
 			}.ShowCenteredDialog((Control)this);
 		}

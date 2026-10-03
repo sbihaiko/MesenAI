@@ -285,10 +285,24 @@ namespace Mesen.Windows
 
 		private async void ValidateExit()
 		{
+			//ADR-0249 (W-X1): Player mode asks in place, the stop banner above the
+			//profile (the shared InterruptionBar), never in a message box.
+			if(_model.IsPlayerMode) {
+				if(_model.ConfirmQuitApp(ConfigManager.Config.Preferences.ConfirmExitResetPower, QuitAfterConfirm)) {
+					QuitAfterConfirm();
+				}
+				return;
+			}
 			if(!ConfigManager.Config.Preferences.ConfirmExitResetPower || await MesenMsgBox.Show(null, "ConfirmExit", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
 				_needCloseValidation = false;
 				Close();
 			}
+		}
+
+		private void QuitAfterConfirm()
+		{
+			_needCloseValidation = false;
+			Close();
 		}
 
 		protected override void OnClosed(EventArgs e)
@@ -359,11 +373,18 @@ namespace Mesen.Windows
 		//(§13.6); the emulator and the window stay open. The existing
 		//ConfirmExitResetPower preference still asks first, in place over the
 		//overlay, which stays up when the answer is no.
-		private async void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
+		private void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
 		{
-			if(ConfigManager.Config.Preferences.ConfirmExitResetPower && await MesenMsgBox.Show(this, "ConfirmPowerOff", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
+			//ADR-0249 (W-X1): the question is the stop banner on the card itself.
+			if(!_model.ConfirmQuitGame(ConfigManager.Config.Preferences.ConfirmExitResetPower, QuitGameFromOverlay)) {
+				Dispatcher.UIThread.Post(() => FindNamedDescendant("QuitGameKeepButton")?.Focus());
 				return;
 			}
+			QuitGameFromOverlay();
+		}
+
+		private void QuitGameFromOverlay()
+		{
 			_model.IsPlayerOverlayVisible = false;
 			LoadRomHelper.PowerOff();
 		}
@@ -646,9 +667,9 @@ namespace Mesen.Windows
 							if(_coreRequests.IsClosed) {
 								return;
 							}
-							//G.5 W-P13: Player mode's Play gets the in-place sheet;
-							//Advanced (and Remaster/Share) keep the classic dialog loop.
-							if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
+							//G.5 W-P13: Player mode gets the in-place sheet in every
+							//workspace (ADR-0249); Advanced keeps the classic dialog loop.
+							if(_model.IsPlayerMode) {
 								string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
 								await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
 							} else {

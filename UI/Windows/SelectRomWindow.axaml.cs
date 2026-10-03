@@ -23,12 +23,24 @@ namespace Mesen.Windows
 		private ListBox _listBox;
 		private TextBox _searchBox;
 
-		public SelectRomWindow()
+		public SelectRomWindow() : this(false)
+		{
+		}
+
+		//playerLook (ADR-0249, UI/Logic/PlayerDialog): the W-P5 sheet shape
+		//instead of the classic dialog - same view-model, keys and double-click.
+		public SelectRomWindow(bool playerLook)
 		{
 			InitializeComponent();
 
-			_searchBox = this.GetControl<TextBox>("Search");
-			_listBox = this.GetControl<ListBox>("ListBox");
+			if(playerLook) {
+				Border root = this.GetControl<Border>("PlayerSelectRomRoot");
+				root.Classes.Add("player");
+				root.IsVisible = true;
+				this.GetControl<DockPanel>("ClassicSelectRomRoot").IsVisible = false;
+			}
+			_searchBox = this.GetControl<TextBox>(playerLook ? "PlayerSelectRomSearch" : "Search");
+			_listBox = this.GetControl<ListBox>(playerLook ? "PlayerSelectRomList" : "ListBox");
 		}
 
 		private void InitializeComponent()
@@ -80,13 +92,17 @@ namespace Mesen.Windows
 			}
 
 			SelectRomViewModel model = new(entries) { SelectedEntry = entries[0] };
-			SelectRomWindow wnd = new SelectRomWindow() { DataContext = model };
-
-			wnd.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 			Window? parent = ApplicationHelper.GetMainWindow();
 			if(parent == null) {
 				return null;
 			}
+			bool playerLook = PlayerDialogScope.UsesPlayerLook(parent);
+			SelectRomWindow wnd = new SelectRomWindow(playerLook) { DataContext = model };
+			if(playerLook) {
+				wnd.GetControl<TextBlock>("PlayerSelectRomTitle").Text = ResourceHelper.GetMessage("SelectRomPlayerTitle", System.IO.Path.GetFileName(file));
+			}
+
+			wnd.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 			await wnd.ShowDialog(parent);
 
 			if(model.Cancelled || model.SelectedEntry == null) {

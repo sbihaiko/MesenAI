@@ -12,6 +12,43 @@ namespace Mesen.ViewModels
 	{
 		public InterruptionViewModel Interruption { get; } = new();
 
+		//ADR-0249 (W-X1): W-P4's Quit game asks on the overlay card itself (the
+		//ConfirmExitResetPower preference), never in a message box.
+		public InterruptionViewModel QuitGameConfirm { get; } = new();
+
+		//W-P4's Quit game. True = power off now. False = the stop banner is up on
+		//the overlay; quit runs after Quit Game.
+		public bool ConfirmQuitGame(bool confirm, Action quit)
+		{
+			InterruptionKind kind = Interruptions.ForQuitGame(confirm);
+			if(kind == InterruptionKind.None) {
+				return true;
+			}
+			QuitGameConfirm.Ask(kind, IsGameLoaded ? RomInfo.GetRomName() : "", 0, false, quit);
+			return false;
+		}
+
+		//Closing the window in Player mode (MainWindow.ValidateExit), after
+		//ConfirmQuit found no work to lose. True = quit now. False = the stop
+		//banner is up above the profile; quit runs after Quit.
+		public bool ConfirmQuitApp(bool confirm, Action quit)
+		{
+			InterruptionKind kind = Interruptions.ForQuitApp(confirm);
+			if(kind == InterruptionKind.None) {
+				return true;
+			}
+			Interruption.Ask(kind, IsGameLoaded ? RomInfo.GetRomName() : "", 0, false, quit);
+			return false;
+		}
+
+		//The overlay's question goes with the overlay (Resume, Esc, a sheet).
+		partial void OnIsPlayerOverlayVisibleChanged(bool value)
+		{
+			if(!value) {
+				QuitGameConfirm.Keep();
+			}
+		}
+
 		//MainWindow.OnClosing. True = nothing to lose, quit now. False = the
 		//question is up; quit runs after Stop and Quit / Quit.
 		public bool ConfirmQuit(Action quit)

@@ -232,9 +232,11 @@
 						</Border>
 						<!--W-P4: powers the game off and lands on the Play home; it no
 						longer closes the app (Tools ⋯ › File › Exit, ⌘Q / Alt+F4).-->
-						<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0">
+						<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0" IsVisible="{Binding !QuitGameConfirm.IsVisible}">
 							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
 						</Button>
+						<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
+						<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
 						<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
 						PlaySheetsContrastTests' 4.5:1.-->
 						<TextBlock Classes="footnote secondary" Text="{l:Translate lblOverlayEscHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
@@ -290,7 +292,6 @@
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
 				<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
-				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
 			</Panel>
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
@@ -305,6 +306,13 @@
 			`:not(.player)`); its DataContext is Share, hence the cast.-->
 			<Panel Name="ShareWorkspaceHost" IsVisible="{Binding IsShareScreenVisible}">
 				<v:ShareWorkspaceView Name="ShareWorkspace" DataContext="{Binding Share}" Classes="share" Classes.player="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
+			</Panel>
+
+			<!--G.5 (W-P13), ADR-0249: the BIOS sheet asks in whichever workspace
+			started the load (Play, or Remaster/Share opening a disk game), so it
+			sits above every workspace with its own Player scope (Play's tint).-->
+			<Panel Name="BiosSheetLayer" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
+				<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
 			</Panel>
 		</Panel>
 	</DockPanel>

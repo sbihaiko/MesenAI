@@ -72,8 +72,26 @@ namespace Mesen.Windows
 		private void OnOverlayPack(object? sender, RoutedEventArgs e)
 		{
 			string romSha1 = EmuApi.GetMepRomSha1();
-			string? installed = string.IsNullOrWhiteSpace(romSha1) ? null : CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256;
-			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), installed);
+			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1));
+		}
+
+		//ADR-0249 (W-P10 › W-P6): Settings › Look's Art row - the Settings sheet
+		//closes, keeping what was changed (as Done does), and the current pack's
+		//detail sheet opens, closing back to W-P4 like every sheet from it.
+		//Posted: closing the sheet disposes Look's view-model, whose row's click
+		//is still running.
+		public void OpenPackDetailFromSettings()
+		{
+			Dispatcher.UIThread.Post(() => {
+				_model.ClosePlayerSettings();
+				string romSha1 = EmuApi.GetMepRomSha1();
+				_model.OpenPackDetail(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1));
+			});
+		}
+
+		private static string? InstalledSourceSha256(string romSha1)
+		{
+			return string.IsNullOrWhiteSpace(romSha1) ? null : CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256;
 		}
 
 		//W-P8 (ADR-0249): Player mode's Settings is a sheet in this window - the

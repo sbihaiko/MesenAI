@@ -44,6 +44,11 @@ namespace Mesen.ViewModels
 				InterruptionKind.QuitWhilePackaging => (ResourceHelper.GetMessage("InterruptQuitWhilePackaging"), "InterruptKeepRunning", "InterruptQuit"),
 				InterruptionKind.OpenWhileRecording => (ResourceHelper.GetMessage("InterruptOpenWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndOpen"),
 				InterruptionKind.ReloadWhileRecording => (ResourceHelper.GetMessage("InterruptReloadWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndReload"),
+				//ADR-0249 (W-X1): Player mode's ConfirmExitResetPower questions; game
+				//is the loaded game's name, empty when none is loaded.
+				InterruptionKind.QuitGame => (ResourceHelper.GetMessage("InterruptQuitGame", game), "InterruptKeepPlaying", "InterruptQuitGameGo"),
+				InterruptionKind.QuitApp when game.Length > 0 => (ResourceHelper.GetMessage("InterruptQuitApp", game), "InterruptKeepPlaying", "InterruptQuit"),
+				InterruptionKind.QuitApp => (ResourceHelper.GetMessage("InterruptQuitAppNoGame"), "InterruptCancel", "InterruptQuit"),
 				_ => (ResourceHelper.GetMessage("InterruptOpenWhileClassicBuilder", game), "InterruptCancel", "InterruptStopAndOpen"),
 			};
 			Text = text;
