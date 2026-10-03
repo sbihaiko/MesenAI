@@ -1,0 +1,85 @@
+name: CI channel publish
+
+# ADR-0204 §6 (2026-10-03, the user's go-ahead "pode seguir com a A"): refresh
+# the `ci-latest` download channel when a promotion pull request merges into
+# `prod`, without building anything.
+#
+# A pull request against `prod` already ran build.yml's full matrix on its merge
+# preview (ADR-0200). When it merges, this workflow looks for that build and
+# compares the tree it compiled - recorded by build.yml's `provenance` job -
+# with the tree of the merge commit now on `prod`:
+#
+#   - equal: the artifacts ARE a build of what landed. They are downloaded from
+#     that run, staged under the six fixed names by the same script build.yml's
+#     `publish` job uses, and uploaded to `ci-latest` with --clobber. Zero
+#     build minutes.
+#   - anything else - `prod` moved between the build and the merge, the build
+#     failed or was cancelled, it predates the provenance record, or its
+#     artifacts expired (90 days) - and nothing is published from it. The job
+#     dispatches build.yml on `prod` instead, whose own `publish` job refreshes
+#     the channel, and says so in the job summary.
+#
+# The tree-equality reasoning (why not head sha, why not `git merge-tree`) is in
+# scripts/ci_channel_find_build.sh. A manual
+# `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod` still works.
+#
+# `pull_request` and not `pull_request_target`: the workflow file and scripts
+# come from the merge commit, which is code that has already landed on `prod`,
+# and the same-repository guard below keeps fork pull requests (whose token is
+# read-only) from even starting.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [prod]
+
+# Two promotions merged back to back publish in merge order; a pending run is
+# replaced by a newer one, which is the newer `prod`.
+concurrency:
+  group: ci-channel-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    permissions:
+      # gh release create/upload.
+      contents: write
+      # Read the pull request build and its artifacts, and dispatch the
+      # fallback build.yml run (a GITHUB_TOKEN dispatch does start a run).
+      actions: write
+
+    steps:
+      - name: Checkout the merge commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Republish the pull request build, or dispatch a rebuild
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          summary() { printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"; }
+          summary "### ci-latest after #$PR_NUMBER (merge $MERGE_SHA)"
+
+          reason=""
+          if run_id="$(scripts/ci_channel_find_build.sh "$MERGE_SHA" "$HEAD_SHA")"; then
+            if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -D artifacts &&
+               scripts/stage_ci_channel_assets.sh artifacts out; then
+              scripts/publish_ci_channel.sh out
+              summary "Republished the artifacts of build run [$run_id]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id): it compiled the same tree as the merge commit, so no rebuild was needed."
+              exit 0
+            fi
+            reason="build run $run_id compiled the merged tree, but its artifacts could not be downloaded or staged"
+          else
+            reason="no successful pull request build of $HEAD_SHA compiled the merged tree (see the step log for each candidate)"
+          fi
+
+          echo "$reason; dispatching build.yml on prod" >&2
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref prod
+          summary "Nothing was republished: $reason. Dispatched \`build.yml\` on \`prod\`; its \`publish\` job refreshes the channel when the matrix is green."

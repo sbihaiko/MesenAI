@@ -1,8 +1,8 @@
 # ADR-0204: The CI download channel is a rolling pre-release, not nightly.link
 
-- Status: accepted (2026-09-17, at the user's direction: "b entao" — option B of the three laid out, a rolling pre-release as the download channel plus a check that the links resolve)
+- Status: accepted (2026-09-17, at the user's direction: "b entao" — option B of the three laid out, a rolling pre-release as the download channel plus a check that the links resolve; amended 2026-10-03 with §6, implemented in the same change, at the user's direction: "pode seguir com a A" — option A, republish a merged promotion pull request's own build when `prod`'s merged tree is the tree it compiled, and dispatch `build.yml` otherwise. Per CLAUDE.md's same-turn rule the change ships with tests covering the decision: `scripts/test_ci_channel_scripts.py` and `scripts/checks/verify_download_channel.sh`)
 - Date: 2026-09-17
-- Related: ADR-0203 (§6, amended here), ADR-0200 (the `prod` pull-request trigger), ADR-0191 (the trigger set this leaves alone), `.github/workflows/build.yml`, `README.md`, `scripts/checks/verify_download_channel.sh`
+- Related: ADR-0203 (§6, amended here), ADR-0200 (the `prod` pull-request trigger), ADR-0191 (the trigger set this leaves alone), `.github/workflows/build.yml`, `.github/workflows/ci-channel-publish.yml`, `scripts/stage_ci_channel_assets.sh`, `scripts/publish_ci_channel.sh`, `scripts/ci_channel_find_build.sh`, `README.md`, `scripts/checks/verify_download_channel.sh`, `scripts/test_ci_channel_scripts.py`
 - Supersedes / amends: amends ADR-0203 §6 — the README's on-demand download links stop being nightly.link URLs on the `prod` channel and become fixed-name assets of a rolling pre-release.
 
 ## Context
@@ -67,8 +67,51 @@ locally by `scripts/release_macos.sh`.
 
 5. **The triggers do not change**, and neither does the refresh command:
    `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod`, run after a
-   promotion. What changes is that the command now produces downloadable files
+   promotion (§6, 2026-10-03, makes that step automatic; the command still
+   works). What changes is that the command now produces downloadable files
    instead of a run nobody can link to.
+
+6. **A promotion merge refreshes the channel by itself** (amendment,
+   2026-10-03). A new workflow, `ci-channel-publish.yml`, fires on
+   `pull_request: types: [closed]` with base `prod`, gated on
+   `github.event.pull_request.merged == true` and on the head being in this
+   repository. It reuses the build the pull request already ran instead of
+   building again:
+
+   - **What the build compiled is recorded, not inferred.** A pull request run
+     of `build.yml` compiles `refs/pull/N/merge`, GitHub's merge preview against
+     the base *as it stood when the event fired*. The runs API exposes only the
+     head sha, the preview commit lives on no branch, and `prod` can move
+     between the build and the merge without a new `pull_request` event. So
+     "same head sha" proves nothing, and neither does recomputing
+     `git merge-tree <first parent of the merge> <head>`: that equals the merge
+     commit's tree by construction, whatever base the build saw. Inferring the
+     base from timestamps would need the history of the `prod` ref, which git
+     does not keep. Instead a new `provenance` job in `build.yml` writes
+     `github.sha` — the commit every build job checked out — and its tree to an
+     artifact, `ci-channel-provenance`. It runs on pull requests (that is the
+     run being compared), costs one API call on an Ubuntu runner, and builds
+     nothing.
+   - **The verdict is tree equality.** `scripts/ci_channel_find_build.sh`
+     lists `build.yml`'s successful `pull_request` runs for the pull request's
+     head sha, newest first, and picks the first whose recorded tree equals the
+     merge commit's tree. Equal trees are equal inputs, whatever the merge
+     method (merge commit, squash, rebase). Measured on the promotion that
+     prompted this, #714 (2026-10-03): its build run 37092169545 checked
+     out preview `addc04ad3` (parents `4c456fe7`, `2123db7d`), whose tree `c9a51405` is the
+     tree of the merge commit `60e37e6`.
+   - **Equal: republish.** The workflow downloads that run's artifacts, stages
+     them with `scripts/stage_ci_channel_assets.sh` and uploads them with
+     `scripts/publish_ci_channel.sh` — the same two scripts `build.yml`'s
+     `publish` job now runs, so the artifact-to-asset mapping, the tag, the
+     pre-release flag and the release text exist once. Zero build minutes.
+   - **Anything else: dispatch.** No qualifying run (prod moved, the build
+     failed or was cancelled, it predates the provenance job, its artifacts
+     expired after 90 days), or artifacts that cannot be downloaded or staged,
+     and nothing is published from it: the workflow runs
+     `gh workflow run build.yml --ref prod` (a `GITHUB_TOKEN` dispatch does
+     start a run) and says which path it took in the job summary. Staging is
+     all or nothing, so a partial matrix can never reach the release.
 
 ## Consequences
 
@@ -78,11 +121,19 @@ locally by `scripts/release_macos.sh`.
 - **The download needs no GitHub session.** Both nightly.link and release assets
   satisfy this; the workflow-runs page would not have, which is what ruled out
   pointing the README at Actions directly.
-- **The channel is still manual.** Nothing publishes on a promotion merge; a
-  maintainer has to dispatch. That was already true under ADR-0203 §6 and is the
-  price of leaving the trigger set alone. The fix, if it is ever wanted, is
-  `push: branches: [prod]` — one more full matrix per promotion, in exchange for
-  a channel that refreshes itself.
+- **The channel refreshes itself on a promotion merge** (§6). Usually for
+  free — the pull request's own build is republished — and otherwise for one
+  dispatched matrix, the cost the manual step already had. A change that lands
+  on `prod` without a pull request (a direct push) still needs the manual
+  dispatch; nothing fires for it, and the trigger set of `build.yml` is
+  unchanged. The republished binaries carry the preview commit's sha in
+  `BuildSha.txt`, not the merge commit's — the same tree under a different
+  commit id.
+- **Two publishers, one mapping.** `build.yml`'s `publish` job (dispatch) and
+  `ci-channel-publish.yml` (merge) both stage through
+  `stage_ci_channel_assets.sh` and upload through `publish_ci_channel.sh`;
+  `verify_download_channel.sh` reads the six asset names from the staging
+  script and fails if either workflow names one itself.
 - **`ci-latest` is visible on the releases page.** A pre-release titled "CI
   builds (not a release)" now sits beside the real ones. Marking it a
   pre-release keeps it out of `releases/latest` (badge, README links, and
@@ -97,4 +148,7 @@ locally by `scripts/release_macos.sh`.
   once and only inside `publish`**, so a build job cannot quietly regain it and
   the publish job cannot quietly lose it. The new
   `verify_download_channel.sh` holds the rest: the publish job's shape, the six
-  asset names, the README's six URLs, and the absence of nightly.link.
+  asset names, the README's six URLs, and the absence of nightly.link — and,
+  since §6, the provenance job, the merge-time workflow's trigger, guards,
+  permissions, tree check and fallback. `scripts/test_ci_channel_scripts.py`
+  exercises the three scripts against a fake `gh`.
