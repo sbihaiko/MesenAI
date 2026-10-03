@@ -976,7 +976,7 @@ namespace Mesen.ViewModels
 						IsEnabled = () => !NetplayApi.IsConnected() && !NetplayApi.IsServerRunning(),
 						OnClick = () => {
 							PlayerWindowLook.ApplyToForm(new NetplayConnectWindow() {
-								DataContext = ConfigManager.Config.Netplay.Clone()
+								DataContext = new NetplayConnectViewModel(ConfigManager.Config.Netplay.Clone())
 							}, wnd).ShowCenteredDialog((Control)wnd);
 						}
 					},
@@ -996,7 +996,7 @@ namespace Mesen.ViewModels
 						IsEnabled = () => !NetplayApi.IsConnected() && !NetplayApi.IsServerRunning(),
 						OnClick = () => {
 							PlayerWindowLook.ApplyToForm(new NetplayStartServerWindow() {
-								DataContext = ConfigManager.Config.Netplay.Clone()
+								DataContext = new NetplayConnectViewModel(ConfigManager.Config.Netplay.Clone())
 							}, wnd).ShowCenteredDialog((Control)wnd);
 						}
 					},

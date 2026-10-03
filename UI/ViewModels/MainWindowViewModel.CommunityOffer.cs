@@ -33,8 +33,7 @@ namespace Mesen.ViewModels
 			}
 			MepPackListResult parsed = MepPackListParser.Parse(packListText);
 			PackPreferenceResolver.Resolution resolution = PackPreferenceResolver.Resolve(OfferedCandidates(parsed), Config.EnhancementPacks.GetRomPackPreference(romSha1));
-			string? rendered = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer);
-			return CommunityPackOfferRule.Decide(community, parsed.Packs, rendered, Config.EnhancementPacks.EnableMepPacks, Config.EnhancementPacks.AutoInstallCommunityPacks);
+			return CommunityPackOfferRule.DecideForResolution(community, parsed.Packs, resolution, Config.EnhancementPacks.EnableMepPacks, Config.EnhancementPacks.AutoInstallCommunityPacks);
 		}
 
 		//W-P4's Pack row value: the offer, else the pack that renders.

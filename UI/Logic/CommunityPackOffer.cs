@@ -108,6 +108,15 @@ public static class CommunityPackOfferRule
 		return new CommunityPackOffer(autoInstallOn ? CommunityPackOfferReason.NotInstalled : CommunityPackOfferReason.AutoInstallOff, pick.Name, "", renderedContainer);
 	}
 
+	//The window's entry point: derives the rendered pack from the ROM's
+	//resolved preference, so W-P5's "No pack" (resolution.PrefersNoPack) is
+	//honoured exactly as the picker and the pack detail do.
+	public static CommunityPackOffer DecideForResolution(CommunityPackOfferContext context, IReadOnlyList<MepPackListEntry> packs, PackPreferenceResolver.Resolution resolution, bool mepPacksEnabled, bool autoInstallOn)
+	{
+		string? rendered = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer, resolution.PrefersNoPack);
+		return Decide(context, packs, rendered, mepPacksEnabled, autoInstallOn);
+	}
+
 	//An installed container is the catalog's pack when its stamp carries the
 	//row's content_id, or its pack_id ("owner/repo", or "owner/repo:slot" for
 	//one slot of it - an edited install keeps it), or when it is the container

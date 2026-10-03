@@ -12,24 +12,26 @@
 	mc:Ignorable="d" d:DesignWidth="250" d:DesignHeight="150"
 	x:Class="Mesen.Windows.NetplayConnectWindow"
 	Width="300" Height="150"
-	x:DataType="cfg:NetplayConfig"
+	x:DataType="vm:NetplayConnectViewModel"
 	Title="{l:Translate wndTitle}"
 >
 	<DockPanel Margin="5">
 		<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right">
-			<Button Name="btnNetplayOk" Classes="regular primary" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnOK}" />
+			<Button Name="btnNetplayOk" Classes="regular primary" MinWidth="70" HorizontalContentAlignment="Center" IsEnabled="{Binding !IsConnecting}" Click="Ok_OnClick" Content="{l:Translate btnOK}" />
 			<Button Name="btnNetplayCancel" Classes="regular secondary" MinWidth="70" HorizontalContentAlignment="Center" IsCancel="True" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
 		</StackPanel>
 
+		<ProgressBar Name="NetplayConnectWaitBar" DockPanel.Dock="Bottom" IsIndeterminate="True" IsVisible="{Binding IsConnecting}" Margin="0 4 0 4" />
+
 		<Grid ColumnDefinitions="Auto,1*" RowDefinitions="Auto,Auto,Auto">
 			<TextBlock Text="{l:Translate lblHost}" />
-			<TextBox Grid.Column="1" Text="{Binding Host, Converter={StaticResource NullTextConverter}}" />
+			<TextBox Grid.Column="1" Text="{Binding Config.Host, Converter={StaticResource NullTextConverter}}" />
 
 			<TextBlock Grid.Row="1" Text="{l:Translate lblPort}" />
-			<c:MesenNumericTextBox Grid.Row="1" Grid.Column="1" Value="{Binding Port}" />
+			<c:MesenNumericTextBox Grid.Row="1" Grid.Column="1" Value="{Binding Config.Port}" />
 
 			<TextBlock Grid.Row="2" Text="{l:Translate lblPassword}" />
-			<TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Password, Converter={StaticResource NullTextConverter}}" />
+			<TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Config.Password, Converter={StaticResource NullTextConverter}}" />
 		</Grid>
 	</DockPanel>
 </Window>

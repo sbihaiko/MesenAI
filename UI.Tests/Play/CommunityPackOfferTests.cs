@@ -157,5 +157,25 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal(expected, PackRowRoute.For(distinct, sibling, offer));
 		}
+	
+		//The player picked "No pack" for the ROM: only a sibling still renders
+		//(PlayerPackPicker.CurrentContainer, MepPackManager::PreferenceAllowsPack),
+		//so an enabled non-sibling community pack is NOT rendering and is offered.
+		[Fact]
+		public void No_pack_choice_makes_a_non_sibling_community_pack_an_offer()
+		{
+			MepPackListEntry contra = Entry("Contra community", "tastichacks/contra80s:contra-usa", Contra.ContentId, source: PackOrigin.Folder);
+			PackPreferenceResolver.Resolution resolution = PackPreferenceResolver.Resolve(new[] {
+				new PackPreferenceResolver.Candidate { Container = contra.Container, PackId = contra.PackId, ContentId = contra.ContentId, Enabled = true, IsSibling = false }
+			}, PackPreferenceResolver.NoPack);
+			Assert.True(resolution.PrefersNoPack);
+
+			CommunityPackOffer offer = CommunityPackOfferRule.DecideForResolution(
+				new CommunityPackOfferContext(Contra, null, false), new[] { contra }, resolution, true, true);
+
+			Assert.Equal(CommunityPackOfferReason.NotChosen, offer.Reason);
+			Assert.Equal(contra.Container, offer.Container);
+			Assert.Null(offer.RenderedContainer);
+		}
 	}
 }
