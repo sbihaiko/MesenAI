@@ -126,9 +126,7 @@ namespace Mesen.ViewModels
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
-			PlayerPackChoice? current = resolution.PreferredContainer != null
-				? PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(resolution.PreferredContainer, StringComparison.OrdinalIgnoreCase))
-				: PlayerPackChoices.FirstOrDefault();
+			PlayerPackChoice? current = RenderedPackChoice(resolution);
 			MepPackListEntry? entry = current == null ? null : MepPackListParser.Parse(packListText).Packs
 				.FirstOrDefault(e => e.Container.Equals(current.Container, StringComparison.OrdinalIgnoreCase));
 

@@ -82,6 +82,19 @@ namespace Mesen.Tests.Play
 			Assert.False(PackDetail.Build(false, "", null, 0, false, installedFromCatalog: true, "").ShowsRestore);
 		}
 
+		//#691: Use This Pack from W-P4 returns to W-P4 when the pack swaps in
+		//place (the game is still paused), and to the game when it restarts -
+		//the same split as W-P7's Apply. From the on-load picker it goes nowhere.
+		[Theory]
+		[InlineData(true, true, PackPickReturn.Overlay)]
+		[InlineData(true, false, PackPickReturn.Game)]
+		[InlineData(false, true, PackPickReturn.Stay)]
+		[InlineData(false, false, PackPickReturn.Stay)]
+		public void Using_a_pack_returns_where_the_picker_came_from(bool fromOverlay, bool keepsPlace, PackPickReturn expected)
+		{
+			Assert.Equal(expected, PackPickClose.After(fromOverlay, keepsPlace));
+		}
+
 		[Fact]
 		public void Change_pack_works_only_when_there_is_a_choice()
 		{

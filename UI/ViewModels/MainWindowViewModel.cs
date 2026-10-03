@@ -259,8 +259,11 @@ namespace Mesen.ViewModels
 				PackId = e.PackId,
 				ContentId = e.ContentId,
 				Version = e.Version,
-				Enabled = e.Enabled
+				Enabled = e.Enabled,
+				IsAutoOnly = e.IsAutoOnly
 			}).ToList();
+			//#693: a disabled pack is neither offered nor counted.
+			candidates = PlayerPackPicker.Offered(candidates);
 
 			Dictionary<string, MepPackListEntry> entriesByContainer = new(StringComparer.OrdinalIgnoreCase);
 			foreach(MepPackListEntry e in parsed.Packs) {
@@ -272,7 +275,7 @@ namespace Mesen.ViewModels
 			//sibling pack; an auto/-only sibling (the F5 bootstrap's machine layer) is
 			//not a user choice and must not suppress the picker (same human-vs-auto
 			//distinction already applied in core via the isAutoOnly column).
-			hasSibling = parsed.Packs.Any(e => e.Source == "sibling" && !e.IsAutoOnly);
+			hasSibling = parsed.Packs.Any(e => e.Source == "sibling" && !e.IsAutoOnly && e.Enabled);
 
 			//P.6 §5: the picker sorts by community 👍 (catalog MEI votes) first,
 			//then by name - local-only packs (votes 0) fall back to name order.
@@ -287,19 +290,20 @@ namespace Mesen.ViewModels
 			SelectInitialPackChoice(resolution.PreferredContainer);
 		}
 
-		//The current pack (chip/toast): the preferred container, else the
-		//lexicographic default (the first content-merged candidate).
+		//The current pack (chip/toast): the one the core renders (#703,
+		//PlayerPackPicker.CurrentContainer), not the picker's display order.
+		private PlayerPackChoice? RenderedPackChoice(PackPreferenceResolver.Resolution resolution)
+		{
+			string? container = PlayerPackPicker.CurrentContainer(resolution.Candidates, resolution.PreferredContainer);
+			return container == null ? null : PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(container, StringComparison.OrdinalIgnoreCase));
+		}
+
 		private void UpdateCurrentPack(PackPreferenceResolver.Resolution resolution)
 		{
 			CurrentPackName = "";
 			CurrentPackLayers = "";
 
-			PlayerPackChoice? current = null;
-			if(resolution.PreferredContainer != null) {
-				current = PlayerPackChoices.FirstOrDefault(c => c.Container.Equals(resolution.PreferredContainer, StringComparison.OrdinalIgnoreCase));
-			} else if(PlayerPackChoices.Count > 0) {
-				current = PlayerPackChoices[0];
-			}
+			PlayerPackChoice? current = RenderedPackChoice(resolution);
 			if(current != null) {
 				CurrentPackName = current.Name;
 				CurrentPackLayers = current.Layers;
@@ -322,9 +326,24 @@ namespace Mesen.ViewModels
 			Config.ApplyConfig();
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
+			//The chosen pack is enabled (#693), so it is what the core renders next.
+			CurrentPackName = choice.Name;
+			CurrentPackLayers = choice.Layers;
+			//#691: from W-P4, back to W-P4 (in place) or to the game (restart).
+			PackPickReturn back = PackPickClose.After(_packPickerFromOverlay, LayerChangeKeepsPlace);
 			_packPickerFromOverlay = false;
-			LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.PowerCycle);
+			PackPickApplied = LoadRomHelper.ApplyPackChange(RomInfo.ConsoleType, LoadRomHelper.PowerCycle);
+			if(back == PackPickReturn.Overlay) {
+				OpenPauseOverlay();
+			} else if(back == PackPickReturn.Game) {
+				IsPlayerOverlayVisible = false;
+				EmuApi.Resume();
+			}
 		}
+
+		//The last pick's in-place swap (LoadRomHelper.ApplyPackChange): the
+		//headless tests wait for it, like ShareGateRefresh.
+		public Task PackPickApplied { get; private set; } = Task.CompletedTask;
 
 		//P.5: dismissing stores nothing - the game keeps playing un-enhanced this
 		//session and, with no preference on disk, the picker asks again next launch.

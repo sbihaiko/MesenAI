@@ -22,7 +22,7 @@
 	<DockPanel DataContext="{Binding ElementName=root}">
 		<Panel DockPanel.Dock="Top" Margin="5" IsVisible="{Binding Title.Length}">
 			<TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Medium" Foreground="White" TextAlignment="Center" />
-			<Button IsVisible="{Binding ShowClose}" Click="OnCloseClick" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Padding="0" Margin="0 -2 0 -2" MinWidth="0">
+			<Button Name="StateGridCloseButton" IsVisible="{Binding ShowClose}" Click="OnCloseClick" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Padding="0" Margin="0 -2 0 -2" MinWidth="0">
 				<Image Source="/Assets/CloseWhite.png" Width="16" Height="16" />
 			</Button>
 		</Panel>

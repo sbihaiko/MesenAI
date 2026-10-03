@@ -136,6 +136,10 @@ namespace Mesen.Controls
 
 		private void OnCloseClick(object sender, RoutedEventArgs e)
 		{
+			//#692 (G.2): a grid opened from the pause overlay closes back to it.
+			if(MainWindowViewModel.Instance?.CloseSlotGridToOverlay() == true) {
+				return;
+			}
 			if(DataContext is RecentGamesViewModel model) {
 				if(model.NeedResume) {
 					EmuApi.Resume();

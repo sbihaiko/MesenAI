@@ -297,7 +297,13 @@ can be exercised by real xunit tests without Avalonia or the native
   stores nothing so the next launch asks again. The picker's order is
   community 👍 first (`CommunityPackInstallService.GetVotes(pack_id)`, from
   the last catalog fetch's MEI `votes`), then name — local-only packs (no
-  catalog row, votes 0) fall back to name order.
+  catalog row, votes 0) fall back to name order. Only enabled packs are offered or
+  counted (`PlayerPackPicker.Offered`, before `Resolve`, #693). That display
+  order is never the "current pack": `PlayerPackPicker.CurrentContainer`
+  mirrors the core's `GetPackForSection` (stored choice, else the first
+  enabled human pack in pack-list order, else the first auto-only one, #703).
+  Use This Pack opened from W-P4 returns to W-P4 when the swap is in place
+  and to the game when it restarts (`PackPickClose`, #691).
 - `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
   change — the Enhancements panel's Textures/Audio/Border toggles
   (`ToggleLayer`) and the picker's Apply: in place

@@ -277,7 +277,9 @@ namespace Mesen.Utilities
 			return PackChangePolicy.Plan(console, movieActive, netplayActive);
 		}
 
-		public static void ApplyPackChange(ConsoleType console, Action restart)
+		//Returns the in-place swap's background work (completed for a restart),
+		//so a headless test can wait for it before its dispatcher goes away.
+		public static Task ApplyPackChange(ConsoleType console, Action restart)
 		{
 			PackChangePlan plan = PlanPackChange(console);
 			if(plan.Route == PackChangeRoute.Restart) {
@@ -285,14 +287,14 @@ namespace Mesen.Utilities
 					EmuApi.DisplayMessage("MEP", plan.NoticeKey);
 				}
 				restart();
-				return;
+				return Task.CompletedTask;
 			}
 
 			//#655: the load this change is for - a fallback restart posted after
 			//another game opened is dropped (PackChangePolicy.RestartsLoadedGame).
 			int openGeneration = MainWindowViewModel.Instance.OpenGeneration;
 			string romSha1 = EmuApi.GetMepRomSha1();
-			Task.Run(() => {
+			return Task.Run(() => {
 				//One swap at a time. Each reloads with the switches as they are
 				//when it runs, so a second toggle flipped during the first one is
 				//applied by its own swap and never lost.
