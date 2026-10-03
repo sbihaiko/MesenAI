@@ -2955,8 +2955,8 @@ namespace
 		Check(!SideColumnsHaveContent(MirroringType::ScreenBOnly, 128), "W253: single-screen (B) never has content beside the picture");
 		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 8), "W253: horizontal mirroring while scrolled horizontally has no content");
 		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 256 + 3), "W253: horizontal mirroring scrolled within the right nametable has no content");
-		Check(SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring with no horizontal scroll keeps the nametable (ADR-0253 §3 wording)");
-		Check(SideColumnsHaveContent(MirroringType::Horizontal, 256), "W253: horizontal mirroring aligned on the right nametable is not scrolled");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring is black even with no horizontal scroll (SMB3 title, ADR-0253 §3 amended)");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 256), "W253: horizontal mirroring aligned on the right nametable is black too");
 	}
 
 	void TestRevealOriginFollowsCoarseXFineXAndNametableBit()
@@ -3040,7 +3040,7 @@ namespace
 		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring scrolled horizontally draws black", Hex16(left[0]));
 
 		RenderRowSides(RevealBasis(0, 0), MirroringType::Horizontal, m, pal, left, right);
-		Check(AllEqual(left, ExtraColumns, 0x11), "W253: horizontal mirroring unscrolled draws the nametable", Hex16(left[0]));
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring unscrolled draws black (SMB3 title)", Hex16(left[0]));
 
 		//Black stays black under grayscale/emphasis: it is not a game colour
 		RowBasis gray = RevealBasis(4, 0);

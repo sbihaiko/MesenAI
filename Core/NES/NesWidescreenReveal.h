@@ -92,18 +92,18 @@ namespace NesWidescreenReveal
 		return nt0 != nt1 ? MirroringType::Vertical : MirroringType::Horizontal;
 	}
 
-	//ADR-0253 §3, "cannot fill" on NES: single-screen mirroring, or horizontal
-	//mirroring while the row is scrolled horizontally (the columns beside the
-	//picture are then the picture's own opposite edge, mid-rewrite). Vertical
-	//and four-screen mirroring have a distinct nametable beside the picture.
+	//ADR-0253 §3, "cannot fill" on NES: single-screen or horizontal mirroring,
+	//at any scroll. Beside the picture they only hold the picture's own
+	//opposite edge (a wrapped copy, or a column mid-rewrite), so the sides stay
+	//black - the SMB3 title included. Vertical and four-screen mirroring have
+	//a distinct nametable beside the picture.
 	inline bool SideColumnsHaveContent(MirroringType mirroring, uint16_t originX)
 	{
+		(void)originX;
 		switch(mirroring) {
 			case MirroringType::Vertical:
 			case MirroringType::FourScreens:
 				return true;
-			case MirroringType::Horizontal:
-				return (originX & 0xFF) == 0;
 			default:
 				return false;
 		}
