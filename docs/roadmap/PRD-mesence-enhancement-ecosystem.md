@@ -2831,13 +2831,19 @@ sentence says what happens next.
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                                           ┌────────────────────────────────┐ │
-│                                           │ Applied Contra 80s — textures  │ │  ← toast, 3 s
-│                                           └────────────────────────────────┘ │
+│                         ┌──────────────────────────────────────────────────┐ │
+│                         │ Applied Contra 80s — textures · Esc for the menu │ │  ← toast, 3 s
+│                         └──────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Unchanged from today. The toast is the only pack feedback (§6).
+The toast is the only pack feedback (§6). During the first three game starts
+after install it ends with the way into W-P4 (ADR-0251): "· Esc for the menu"
+from the keyboard, or the controller binding ("· Select+Start for the menu";
+Home where the platform reports it) when a controller is connected. A game
+without a pack gets the hint alone during those starts. The count is the
+persisted `PlayMenuHintsShown`; a power-cycle reload is not a start. The rule
+is `UI/Logic/PlayMenuHint.cs`.
 
 **W-P4 — Pause overlay (Esc)**
 

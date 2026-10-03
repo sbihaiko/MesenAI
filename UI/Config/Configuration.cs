@@ -149,6 +149,11 @@ namespace Mesen.Config
 				EmuApi.DisplayMessage("MEP", "MepBootstrapNowOnDemand");
 			}
 
+			//ADR-0251: an upgrade gets ToggleOverlay's controller binding too
+			if(ConfigUpgrade < (int)ConfigUpgradeHint.OverlayControllerBinding) {
+				Preferences.SeedOverlayControllerBinding();
+			}
+
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
 			Version = EmuApi.GetMesenVersion().ToString(3);
 		}
@@ -346,6 +351,7 @@ namespace Mesen.Config
 		WsInput,
 		WindowsAudioLatency,
 		RecordingOnDemand,
+		OverlayControllerBinding,
 		NextValue,
 	}
 }
