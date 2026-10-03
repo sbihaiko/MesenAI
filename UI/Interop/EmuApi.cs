@@ -205,6 +205,17 @@ namespace Mesen.Interop
 		//LoadRomHelper.ApplyPackChange decides when to call it at all.
 		[DllImport(DllPath)] public static extern byte ReloadRomKeepingState();
 
+		//#732: the pack ROM patch the ApplyPatchOnHashMismatch override forced on
+		//the running game (made for another revision of it), empty when the load
+		//forced none. Read after GameLoaded (PlayForcedPatch decides the banner).
+		[DllImport(DllPath, EntryPoint = "GetForcedPackPatch")] private static extern void GetForcedPackPatchWrapper(IntPtr outPath, Int32 maxLength);
+		public static string GetForcedPackPatch() { return Utf8Utilities.CallStringApi(GetForcedPackPatchWrapper, 4096); }
+
+		//#732: play the running ROM without its forced patch until the app quits,
+		//leaving the setting as it is. False when the running game had none. The
+		//caller power-cycles the game for it to take effect.
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SuppressForcedPackPatch();
+
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);
 

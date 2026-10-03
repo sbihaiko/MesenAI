@@ -266,6 +266,7 @@ namespace Mesen.ViewModels
 			}
 			ClosePlaySurfaces();
 			ClearPackDepWithoutGame();
+			WithdrawForcedPatchWithoutGame();
 		}
 
 		//Every Player surface over the game, hidden at once and silently: no

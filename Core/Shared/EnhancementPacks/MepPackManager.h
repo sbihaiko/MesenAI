@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.h"
+#include "Shared/EnhancementPacks/ForcedPatchGate.h"
 #include "Shared/EnhancementPacks/MepPack.h"
 #include "Shared/EnhancementPacks/MepLocalIdentityCache.h"
 #include "Shared/EnhancementPacks/RemasterProject.h"
@@ -43,6 +44,8 @@ public:
 		unordered_set<string> OptimisticContainers;
 		string TexturesContainer;
 		bool TexturesIsOptimistic = false;
+		//#732: the patch the ApplyPatchOnHashMismatch override forced on this ROM
+		string ForcedPatch;
 	};
 
 private:
@@ -96,6 +99,11 @@ private:
 	//thread can fire) and asks to auto-disable when match rate stays low.
 	string _texturesContainer;
 	bool _texturesIsOptimistic = false;
+	//#732: the patch this load forced through ApplyPatchOnHashMismatch, and the
+	//ROMs the player asked to play without it this session (ForcedPatchGate.h).
+	//Written by the emulation thread (ApplyPatches, NesConsole::LoadHdPack),
+	//read and suppressed from the UI thread - under _stateLock.
+	ForcedPatchGate _forcedPatch;
 	bool _bootstrapping = false;
 	string _bootstrapSaveFolder; //owns the char* handed to HdPackBuilderOptions
 	//ADR-0243 (F12.20): the recording in progress - its project root, its
@@ -312,6 +320,19 @@ public:
 		auto lock = _stateLock.AcquireSafe();
 		return _romName;
 	}
+
+	//#732: whether the ApplyPatchOnHashMismatch override may force a patch on
+	//the ROM being loaded (the setting is on and the player has not asked to
+	//play this ROM without it), and the record of one it did force. Every
+	//forced-patch site (ApplyPatches, NesConsole's <patch>) goes through these.
+	bool AllowsForcedPatch() const;
+	void NoteForcedPatch(const string& patchFile);
+	//The forced patch's file on the running game; empty when none was forced.
+	string GetForcedPatch() const;
+	//The player's way out: the running ROM is played without its forced patch
+	//until the app quits (the setting is not changed). False when the running
+	//game had no forced patch. The caller reloads the game.
+	bool SuppressForcedPatch();
 
 	string GetRomSha1() const
 	{

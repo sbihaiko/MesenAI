@@ -44,6 +44,7 @@
 #include "Shared/Audio/ChannelRoleClassifier.h"
 #include "Shared/Audio/EnhancedSynthEngine.h"
 #include "Shared/EnhancementPacks/AudioFingerprint.h"
+#include "Shared/EnhancementPacks/ForcedPatchGate.h"
 #include "Shared/EnhancementPacks/MepPack.h"
 #include "Shared/EnhancementPacks/MepRecipeInstaller.h"
 #include "Shared/EnhancementPacks/MepRecipeOps.h"
@@ -12905,6 +12906,54 @@ void TestRomHashResolveSurvivesNoConsole()
 	Check(hash.empty() && fallbackCalls == 1, "rom hash: a console that was unloaded returns an empty string");
 }
 
+//--- #732: the ApplyPatchOnHashMismatch override's forced patch -------------
+//A pack's patch made for another revision of the game can freeze this one.
+//The load that forces it records which file it was, so the UI can tell the
+//player, and the player can reload this ROM without it - for this session,
+//without changing the setting, and without touching other games.
+namespace
+{
+	const std::string kForcedRomA = "7A20C44F302FB2F1B7ADFFA6B619E3E1CAE7B546";
+	const std::string kForcedRomB = "0000000000000000000000000000000000000001";
+
+	void TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed()
+	{
+		ForcedPatchGate gate;
+		Check(gate.Allows(true, kForcedRomA), "#732: the override forces a patch while the setting is on");
+		Check(!gate.Allows(false, kForcedRomA), "#732: the override forces nothing while the setting is off");
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.SuppressFor(kForcedRomA), "#732: the ROM a patch was forced on can be reloaded without it");
+		Check(!gate.Allows(true, kForcedRomA), "#732: a suppressed ROM is never patched by force again this session");
+		Check(gate.Allows(true, kForcedRomB), "#732: suppressing one ROM leaves the override on for other games");
+	}
+
+	void TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean()
+	{
+		ForcedPatchGate gate;
+		Check(gate.Applied().empty(), "#732: nothing is forced before a load forces it");
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.Applied() == "Castlevania.ips", "#732: the load that forced a patch records its file", "got '" + gate.Applied() + "'");
+		gate.ResetForLoad();
+		Check(gate.Applied().empty(), "#732: the next load starts with nothing forced", "got '" + gate.Applied() + "'");
+		gate.RestoreApplied("Castlevania.ips");
+		Check(gate.Applied() == "Castlevania.ips", "#694/#732: a failed load puts the running game's forced patch back", "got '" + gate.Applied() + "'");
+	}
+
+	void TestOnlyARomWithAForcedPatchCanBeSuppressed()
+	{
+		ForcedPatchGate gate;
+		Check(!gate.SuppressFor(kForcedRomA), "#732: nothing to suppress when the load forced no patch");
+		Check(gate.Allows(true, kForcedRomA), "#732: a refused suppression stores nothing");
+		gate.NoteApplied("Castlevania.ips");
+		Check(!gate.SuppressFor(""), "#732: an unknown ROM hash is never suppressed");
+		gate.ResetForLoad();
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.SuppressFor(kForcedRomA), "#732: a forced patch on this load can be suppressed");
+		gate.ResetForLoad();
+		Check(!gate.Allows(true, kForcedRomA), "#732: the suppression outlives the reload it asked for");
+	}
+}
+
 //#733: a device that takes seconds to answer must not hold the caller - the
 //emulation thread - for those seconds. The fake device below sleeps the way
 //the CoreAudio open of a sleeping monitor did (~10 s in the report, 600 ms
@@ -12997,6 +13046,9 @@ void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
 
 int main()
 {
+	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
+	TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean();
+	TestOnlyARomWithAForcedPatchCanBeSuppressed();
 	TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice();
 	TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice();
 	TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway();

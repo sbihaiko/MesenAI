@@ -2333,6 +2333,8 @@
 		<Message ID="InterruptQuitAppNoGame">Quit MesenAI?</Message>
 		<Message ID="InterruptKeepPlaying">Keep Playing</Message>
 		<Message ID="InterruptQuitGameGo">Quit Game</Message>
+		<Message ID="InterruptForcedPatch">This game's HD pack patch, {0}, was made for another version of the game and may break it. If the game freezes or looks wrong, reload it without the patch.</Message>
+		<Message ID="InterruptReloadWithoutPatch">Reload Without Patch</Message>
 		<Message ID="SelectRomPlayerTitle">Choose a game in {0}</Message>
 		<Message ID="ShellStatusPlaying">Playing {0}</Message>
 		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>

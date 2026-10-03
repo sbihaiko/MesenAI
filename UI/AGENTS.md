@@ -170,7 +170,13 @@ can be exercised by real xunit tests without Avalonia or the native
   open. A recent card stays enabled while its `.rgd` exists. An OS file open
   (`App.OpenFromOs`, macOS open-documents) waits for `MainWindow.Startup`
   through `RunWhenStarted`, so a cold launch never loads before
-  `EmuApi.InitializeEmu` (#681).
+  `EmuApi.InitializeEmu` (#681). A pack ROM patch forced onto another
+  revision by `ApplyPatchOnHashMismatch` (#732) is read back after every
+  `GameLoaded` (`EmuApi.GetForcedPackPatch`, from the core's
+  `ForcedPatchGate`) and `PlayForcedPatch` puts the warning banner
+  (`InterruptionKind.ForcedPatch`, docked above the game) up in Player mode
+  only; *Reload Without Patch* is `EmuApi.SuppressForcedPackPatch` (that
+  ROM, this session, the setting untouched) plus a power cycle.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way

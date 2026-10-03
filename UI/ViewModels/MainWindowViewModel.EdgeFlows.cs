@@ -6,6 +6,7 @@ using Mesen.Interop;
 using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Services;
+using Mesen.Utilities;
 
 namespace Mesen.ViewModels
 {
@@ -103,6 +104,37 @@ namespace Mesen.ViewModels
 
 		//The file landed in the drop folder: the status sentence is gone.
 		public void OnPackDepFileAdded() => Shell.SetPlayNotice("");
+
+		//#732: the way out of a forced pack patch - play this ROM without it
+		//(this session; the setting is not changed) and power-cycle. Swapped by
+		//headless tests that only check the banner.
+		public Action ReloadWithoutForcedPatch { get; set; } = () => {
+			if(EmuApi.SuppressForcedPackPatch()) {
+				LoadRomHelper.PowerCycle();
+			}
+		};
+
+		//#732: after every load, the patch the core forced on this game through
+		//ApplyPatchOnHashMismatch (EmuApi.GetForcedPackPatch; empty for none).
+		public void OnForcedPackPatch(string forcedPatch)
+		{
+			switch(PlayForcedPatch.AfterLoad(Config.Preferences.UiMode, forcedPatch, Interruption.Kind)) {
+				case ForcedPatchBanner.Show:
+					Interruption.Ask(InterruptionKind.ForcedPatch, PlayForcedPatch.PatchName(forcedPatch), 0, false, () => ReloadWithoutForcedPatch());
+					break;
+				case ForcedPatchBanner.Withdraw:
+					Interruption.Keep();
+					break;
+			}
+		}
+
+		//The game is gone or replaced: its forced-patch banner goes with it.
+		private void WithdrawForcedPatchWithoutGame()
+		{
+			if(PlayForcedPatch.WithdrawsWithoutGame(Interruption.Kind)) {
+				Interruption.Keep();
+			}
+		}
 
 		//Esc on a sheet that does not belong to the overlay: the BIOS sheet
 		//cancels (the game does not load), the controller setup cancels and
