@@ -539,6 +539,12 @@ namespace Mesen.Windows
 					Dispatcher.UIThread.Post(() => _model.IsGamePaused = loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
 
+					//#732: a pack patch forced onto another revision of the game
+					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so
+					//in place, with a reload without it.
+					string forcedPatch = EmuApi.GetForcedPackPatch();
+					Dispatcher.UIThread.Post(() => _model.OnForcedPackPatch(forcedPatch));
+
 					//P.5 (PRD Part B §5/§6): Player pack UX - the picker opens
 					//once over the un-enhanced game when 2+ competing pack_ids exist
 					//and no stored per-ROM choice applies; a pick stores the choice

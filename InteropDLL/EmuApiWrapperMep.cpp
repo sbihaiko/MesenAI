@@ -126,4 +126,20 @@ extern "C"
 	{
 		return (uint8_t)_emu->ReloadRomKeepingState();
 	}
+
+	//#732: the pack ROM patch the ApplyPatchOnHashMismatch override forced on
+	//the running game (MEP patches[] or an HD pack's <patch>), empty when the
+	//load forced none. The UI reads it after GameLoaded to tell the player.
+	DllExport void __stdcall GetForcedPackPatch(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetForcedPatch(), outBuffer, maxLength);
+	}
+
+	//#732: play the running ROM without its forced patch until the app quits;
+	//the setting is not changed. False when the running game had none. The
+	//caller reloads the game (a power cycle) for it to take effect.
+	DllExport bool __stdcall SuppressForcedPackPatch()
+	{
+		return _emu->GetEnhancementPackManager()->SuppressForcedPatch();
+	}
 }

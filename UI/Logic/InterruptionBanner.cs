@@ -13,7 +13,8 @@ public enum BannerKind
 //banner: a recording that would end, or a game's unsaved progress (Player
 //mode's Quit game / quit questions), is the stop banner, anything else a
 //warning; the button that goes on is dark for a quit and tinted for an open
-//or a reload; the tint is the workspace whose work would be lost.
+//or a reload (#732's Reload Without Patch included); the tint is the
+//workspace whose work would be lost.
 public static class InterruptionBanner
 {
 	public static BannerKind KindOf(InterruptionKind kind)
@@ -26,14 +27,15 @@ public static class InterruptionBanner
 
 	public static bool GoIsTinted(InterruptionKind kind)
 	{
-		return kind is InterruptionKind.OpenWhileRecording or InterruptionKind.ReloadWhileRecording or InterruptionKind.OpenWhileClassicBuilder;
+		return kind is InterruptionKind.OpenWhileRecording or InterruptionKind.ReloadWhileRecording or InterruptionKind.OpenWhileClassicBuilder
+			or InterruptionKind.ForcedPatch;
 	}
 
 	public static Workspace WorkspaceOf(InterruptionKind kind)
 	{
 		return kind switch {
 			InterruptionKind.QuitWhilePackaging => Workspace.Share,
-			InterruptionKind.OpenWhileClassicBuilder or InterruptionKind.QuitGame or InterruptionKind.QuitApp => Workspace.Play,
+			InterruptionKind.OpenWhileClassicBuilder or InterruptionKind.QuitGame or InterruptionKind.QuitApp or InterruptionKind.ForcedPatch => Workspace.Play,
 			_ => Workspace.Remaster,
 		};
 	}

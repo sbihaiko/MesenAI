@@ -28,7 +28,8 @@ namespace Mesen.ViewModels
 
 		private Action? _go;
 
-		//game: the game being opened (or reloaded); recording: the recording number kept;
+		//game: the game being opened (or reloaded), or ForcedPatch's patch file;
+		//recording: the recording number kept;
 		//buildJob: the running job is a build (else the kit).
 		public void Ask(InterruptionKind kind, string game, int recording, bool buildJob, Action go)
 		{
@@ -49,6 +50,8 @@ namespace Mesen.ViewModels
 				InterruptionKind.QuitGame => (ResourceHelper.GetMessage("InterruptQuitGame", game), "InterruptKeepPlaying", "InterruptQuitGameGo"),
 				InterruptionKind.QuitApp when game.Length > 0 => (ResourceHelper.GetMessage("InterruptQuitApp", game), "InterruptKeepPlaying", "InterruptQuit"),
 				InterruptionKind.QuitApp => (ResourceHelper.GetMessage("InterruptQuitAppNoGame"), "InterruptCancel", "InterruptQuit"),
+				//#732: game is the forced patch's file name (PlayForcedPatch.PatchName).
+				InterruptionKind.ForcedPatch => (ResourceHelper.GetMessage("InterruptForcedPatch", game), "InterruptKeepPlaying", "InterruptReloadWithoutPatch"),
 				_ => (ResourceHelper.GetMessage("InterruptOpenWhileClassicBuilder", game), "InterruptCancel", "InterruptStopAndOpen"),
 			};
 			Text = text;

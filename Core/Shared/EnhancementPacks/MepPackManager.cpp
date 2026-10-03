@@ -449,13 +449,14 @@ void MepPackManager::Clear()
 	_optimisticContainers.clear();
 	_texturesContainer.clear();
 	_texturesIsOptimistic = false;
+	_forcedPatch.ResetForLoad();
 }
 
 MepPackManager::RomState MepPackManager::SaveRomState() const
 {
 	auto lock = _stateLock.AcquireSafe();
 	return RomState{ _romSha1, _romFileSha1, _romExtension, _romName, _romFolder, _packs, _rejected,
-		_packIdentityByContainer, _optimisticContainers, _texturesContainer, _texturesIsOptimistic };
+		_packIdentityByContainer, _optimisticContainers, _texturesContainer, _texturesIsOptimistic, _forcedPatch.Applied() };
 }
 
 void MepPackManager::RestoreRomState(RomState state)
@@ -472,6 +473,35 @@ void MepPackManager::RestoreRomState(RomState state)
 	_optimisticContainers = std::move(state.OptimisticContainers);
 	_texturesContainer = std::move(state.TexturesContainer);
 	_texturesIsOptimistic = state.TexturesIsOptimistic;
+	_forcedPatch.RestoreApplied(std::move(state.ForcedPatch));
+}
+
+bool MepPackManager::AllowsForcedPatch() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return _forcedPatch.Allows(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch, _romSha1);
+}
+
+void MepPackManager::NoteForcedPatch(const string& patchFile)
+{
+	auto lock = _stateLock.AcquireSafe();
+	_forcedPatch.NoteApplied(patchFile);
+}
+
+string MepPackManager::GetForcedPatch() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return _forcedPatch.Applied();
+}
+
+bool MepPackManager::SuppressForcedPatch()
+{
+	auto lock = _stateLock.AcquireSafe();
+	bool suppressed = _forcedPatch.SuppressFor(_romSha1);
+	if(suppressed) {
+		Log("forced patch '" + _forcedPatch.Applied() + "' suppressed for sha1 " + _romSha1 + " until the app quits (the player chose to reload without it)");
+	}
+	return suppressed;
 }
 
 string MepPackManager::GetSiblingFolder(VirtualFile& romFile)
@@ -1109,6 +1139,7 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 			continue;
 		}
 		const MepPatch* patch = pack.FindPatch(_romSha1);
+		bool forced = false;
 		if(!patch) {
 			//ADR-0145: relax the exact-match gate by format. A self-validating
 			//BPS patch (embedded source+output CRC32, refuses bad applies) is
@@ -1120,12 +1151,14 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 			if(bpsPatch) {
 				patch = bpsPatch;
 				Log("pack '" + pack.Name + "': no patch for sha1 " + _romSha1 + " - attempting self-validating BPS patch '" + patch->File + "' optimistically (ADR-0145)");
-			} else if(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch) {
+			} else if(AllowsForcedPatch()) {
 				patch = &pack.Patches[0];
+				forced = true;
 				MessageManager::DisplayMessage("MEP", "Applying patch made for another ROM revision (hash override enabled)");
 				Log("pack '" + pack.Name + "': no patch for sha1 " + _romSha1 + " - applying '" + patch->File + "' anyway (ApplyPatchOnHashMismatch)");
 			} else {
-				Log("pack '" + pack.Name + "': patch skipped - none of its " + std::to_string(pack.Patches.size()) + " patches[] entries matches sha1 " + _romSha1 + " and no self-validating BPS patch to fall back to");
+				Log("pack '" + pack.Name + "': patch skipped - none of its " + std::to_string(pack.Patches.size()) + " patches[] entries matches sha1 " + _romSha1 + " and no self-validating BPS patch to fall back to" +
+					(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch ? " (the forced patch is off for this ROM: the player reloaded without it)" : ""));
 				continue;
 			}
 		}
@@ -1136,6 +1169,9 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 		}
 		if(romFile.ApplyPatch(patchFile)) {
 			Log("pack '" + pack.Name + "': applied patch '" + patch->File + "'");
+			if(forced) {
+				_forcedPatch.NoteApplied(patch->File);
+			}
 			return true;
 		}
 		Log("pack '" + pack.Name + "': failed to apply patch '" + patch->File + "'");
