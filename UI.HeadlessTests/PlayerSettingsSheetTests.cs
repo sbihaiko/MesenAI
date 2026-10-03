@@ -133,7 +133,7 @@ public class PlayerSettingsSheetTests : IDisposable
 
 		Assert.False(sheet.IsOnScreen());
 		Assert.Null(model.PlayerSettings);
-		//The same window Tools ⋯ › Options opens (one at a time).
+		//The same window Classic › Settings opens (one at a time).
 		ConfigWindow options = Assert.IsType<ConfigWindow>(model.MainMenu.OptionsWindow);
 		try {
 			ConfigViewModel optionsModel = Assert.IsType<ConfigViewModel>(options.DataContext);

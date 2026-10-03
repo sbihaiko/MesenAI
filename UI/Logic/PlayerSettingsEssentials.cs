@@ -8,7 +8,7 @@ namespace Mesen.Logic;
 //the essentials, as one strip in this order: Display | Look | Audio | Controls.
 //Display is the window (full screen, aspect ratio, scale) and Look (W-P10,
 //ADR-0246) is what the pixels look like, so Advanced's Video tab is not part of
-//Play; everything else is Tools ⋯ › Options. The ConfigWindow shows a separate
+//Play; everything else is Classic › Settings. The ConfigWindow shows a separate
 //tab strip in Player mode, bound through this order, and the initial tab is
 //clamped here so a non-essentials selection (e.g. Preferences from the
 //Advanced GUI path) cannot land on a hidden tab.

@@ -212,8 +212,8 @@ namespace Mesen.ViewModels
 		//P.4/G.2: the overlay shortcut lands in TogglePlayerOverlay
 		//(MainWindowViewModel.PauseOverlay.cs), which routes Esc through the
 		//host-free PlayEsc order: game → W-P4 → resume. P.4's "Advanced GUI"
-		//overlay item is gone (W-P4): the UiMode choice is reached from Tools ⋯ ›
-		//Settings › Preferences, in the bar the overlay reveals.
+		//overlay item is gone (W-P4): the UiMode choice is the Classic door, in
+		//the switcher the bar the overlay reveals carries.
 
 		//P.5 (PRD Part B §5): decides whether the Player picker opens for
 		//the loaded ROM and, when it does, fills the competing choices. Data is

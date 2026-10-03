@@ -34,7 +34,7 @@ namespace Mesen.ViewModels
 		//fetch in flight: a moving bar, and "looking" rather than "none".
 		[ObservableProperty] public partial bool IsCommunityLoading { get; private set; }
 
-		//*Add a Code…*: an inline entry row (the full editor stays in Tools ⋯).
+		//*Add a Code…*: an inline entry row (the full editor stays in Classic › Tools › Cheats).
 		[ObservableProperty] public partial bool IsAddCodeOpen { get; set; }
 		[ObservableProperty] public partial string NewCode { get; set; } = "";
 		[ObservableProperty] public partial string NewDescription { get; set; } = "";

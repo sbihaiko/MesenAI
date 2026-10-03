@@ -164,7 +164,7 @@ public class PackLayerSwitchTests : IDisposable
 		CheckBox textures = window.FindNamed<CheckBox>("PackDetailTexturesSwitch");
 		Assert.False(textures.IsEnabled);
 		Assert.False(textures.IsChecked == true);
-		Assert.Equal("Off for every game — Tools ⋯ › Enhancement Packs", window.FindNamed<TextBlock>("PackDetailTexturesNote").Text);
+		Assert.Equal("Off for every game — Remaster ⋯ › Enhancement Packs", window.FindNamed<TextBlock>("PackDetailTexturesNote").Text);
 	}
 
 	private static void WaitUntilApplied(MainWindowViewModel model)

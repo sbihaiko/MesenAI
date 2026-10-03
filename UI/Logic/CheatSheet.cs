@@ -47,7 +47,7 @@ namespace Mesen.Logic
 		public const string FromListMark = "From the cheat list";
 		public const string AnotherCopyMark = "made for another copy — may not work";
 		public const string ReplayNote = "Cheats you have on are recorded in a shared replay.";
-		public const string AllOffNote = "All cheats are switched off in Tools ⋯ › Cheats";
+		public const string AllOffNote = "All cheats are switched off in Classic › Tools › Cheats";
 		public const string CommunityOnlyLine = "codes from the community for your copy";
 		public const int MaxGameResults = 20;
 
