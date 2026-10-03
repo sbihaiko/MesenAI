@@ -27,6 +27,12 @@ public static class TestAppBuilder
 		//replies - after its test ended, possibly while Avalonia is resetting the
 		//dispatcher for the next one. A test never needs the network.
 		Mesen.Config.ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates = false;
+		//Same for the community catalog: a synthetic ROM saved as
+		//"Castlevania.nes" matched the real catalog entry by game name, the
+		//app downloaded the 60 MB pack into bin/, and every later load of the
+		//synthetic ROM was dressed by it. Tests that exercise auto-install
+		//turn it on themselves.
+		Mesen.Config.ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = false;
 		//ADR-0249 Decision 5: Skia renders real frames (UseHeadlessDrawing =
 		//false), so the render gate can write PNGs of the Player screens and
 		//read their pixels back. WithInterFont registers the bundled Inter the

@@ -112,7 +112,7 @@ public class PlayerReplaysSheetTests
 
 		Assert.True(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
 		Assert.False(h.Window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 		string[] texts = VisibleTexts(h.Window);
 		int bob = Array.IndexOf(texts, "bob — no death");
 		int alice = Array.IndexOf(texts, "alice — stage skip");
@@ -172,7 +172,7 @@ public class PlayerReplaysSheetTests
 		Assert.Equal(new[] { 302 }, h.Downloaded);
 		Assert.Equal(new[] { "/cache/302.mmo" }, h.Played);
 		Assert.False(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 	}
 
 	[AvaloniaFact]
@@ -305,7 +305,7 @@ public class PlayerReplaysSheetTests
 		Dispatcher.UIThread.RunJobs();
 
 		Assert.True(h.Window.FindNamed<Panel>("PackDepSheetBackdrop").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 		Assert.False(h.Model.IsPlayerOverlayVisible);
 	}
 

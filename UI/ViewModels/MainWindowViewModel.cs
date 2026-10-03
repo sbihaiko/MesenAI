@@ -572,6 +572,7 @@ namespace Mesen.ViewModels
 			//sheets opened over the game (PlayGameLayer).
 			IsNativeRendererVisible = PlayGameLayer.ShowsNativeRenderer(IsGameViewVisible, RecentGames.Visible, SoftwareRenderer.FrameSurface != null, IsPlaySurfaceOverGame);
 			IsSoftwareRendererVisible = IsGameViewVisible && !RecentGames.Visible && SoftwareRenderer.FrameSurface != null;
+			UpdatePausedPicture(IsPlaySurfaceOverGame);
 
 			if(Renderer != null) {
 				Dispatcher.UIThread.Post(() => {
