@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -39,7 +40,7 @@ public class PackLayerSwitchTests : IDisposable
 		ConfigManager.Config.Save();
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) ShowDetail(string packList = OnePack)
+	private static (MainWindow Window, MainWindowViewModel Model) ShowDetail(string packList = OnePack, string packsFolder = "/packs")
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
@@ -50,7 +51,7 @@ public class PackLayerSwitchTests : IDisposable
 		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		model.OpenPauseOverlay();
 		Dispatcher.UIThread.RunJobs();
-		Assert.False(model.OpenPackFromOverlay(packList, Sha1, "/packs", "", installedSourceSha256: null));
+		Assert.False(model.OpenPackFromOverlay(packList, Sha1, packsFolder, "", installedSourceSha256: null));
 		Dispatcher.UIThread.RunJobs();
 		return (window, model);
 	}
@@ -127,6 +128,29 @@ public class PackLayerSwitchTests : IDisposable
 		CheckBox music = window.FindNamed<CheckBox>("PackDetailAudioSwitch");
 		Assert.False(music.IsEnabled);
 		Assert.Equal("Not in this pack", window.FindNamed<TextBlock>("PackDetailAudioNote").Text);
+	}
+
+	//W-P6 names the scaler the automatic upscale was made with, when the
+	//project's `.bootstrap` stamp says (PackDetailAutoMadeWith).
+	[AvaloniaFact]
+	public void The_automatic_upscale_names_the_scaler_it_was_made_with()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		const string rom = "Dr. Mario (1990) (Nintendo)";
+		string packs = Path.Combine(Path.GetTempPath(), "mesen-autoscaler-" + Guid.NewGuid().ToString("N"));
+		string folder = Path.Combine(packs, rom);
+		Directory.CreateDirectory(folder);
+		File.WriteAllText(Path.Combine(folder, ".bootstrap"),
+			"generator=mesence-bootstrap/1\nrom=" + rom + "\nfilter=xBRZ\nscale=4\n");
+		try {
+			const string auto = rom + "\t" + rom + "\t0.0.0\t\tunspecified\ttextures,audio\t1\t0\t\t\t1\n";
+			(MainWindow window, _) = ShowDetail(auto, packs);
+
+			Assert.Equal(rom + "\nMade on this computer from what you played (xBRZ 4×)",
+				window.FindNamed<TextBlock>("PackDetailByline").Text);
+		} finally {
+			Directory.Delete(packs, true);
+		}
 	}
 
 	//"se nao existe o pack tem que deixar claro que e um upscale automatico":
