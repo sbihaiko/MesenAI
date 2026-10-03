@@ -26,6 +26,13 @@ public static class PackRowRoute
 	{
 		return !hasHumanSibling && distinctPackIds >= 2 ? PackRowTarget.Picker : PackRowTarget.Detail;
 	}
+
+	//#736: W-P6 holds the community-pack offer (CommunityPackOfferRule), so
+	//with one the row inspects - the picker lists only installed, enabled packs.
+	public static PackRowTarget For(int distinctPackIds, bool hasHumanSibling, bool hasCommunityOffer)
+	{
+		return hasCommunityOffer ? PackRowTarget.Detail : For(distinctPackIds, hasHumanSibling);
+	}
 }
 
 public static class PackPickerRow

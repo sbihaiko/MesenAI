@@ -17,6 +17,8 @@ namespace Mesen.Views
 	{
 		public event EventHandler? ChangePackRequested;
 		public event EventHandler? RestoreRequested;
+		//#736: Use Community Pack - the window turns on, chooses or installs it.
+		public event EventHandler? UseCommunityPackRequested;
 
 		public PlayerPackDetailSheetView()
 		{
@@ -34,6 +36,7 @@ namespace Mesen.Views
 		private MainWindowViewModel? Model => DataContext as MainWindowViewModel;
 
 		private void OnChange(object? sender, RoutedEventArgs e) => ChangePackRequested?.Invoke(this, EventArgs.Empty);
+		private void OnUseCommunityPack(object? sender, RoutedEventArgs e) => UseCommunityPackRequested?.Invoke(this, EventArgs.Empty);
 
 		private void OnShowFolder(object? sender, RoutedEventArgs e)
 		{
