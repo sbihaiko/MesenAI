@@ -103,6 +103,15 @@
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}">
 				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
+				<!--#716: the pause overlay and the sheets it opens are dark scrims
+				over the game in either app theme, so they render with the Dark theme
+				variant: text, check boxes, radio buttons and text boxes resolve their
+				light-on-dark colors (in the light theme they used to inherit black
+				text - unreadable). The white edge-flow sheets below keep the app's
+				theme. PlaySheetsContrastTests checks every text's contrast.-->
+				<ThemeVariantScope RequestedThemeVariant="Dark">
+				<Panel>
+
 				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
 				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
 				states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
@@ -206,6 +215,8 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+				</Panel>
+				</ThemeVariantScope>
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
