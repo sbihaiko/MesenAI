@@ -137,6 +137,23 @@ public partial class PlayEdgeFlowsTests
 		}
 	}
 
+	//#707: the controller poll is a DispatcherTimer, and once the game pauses
+	//nothing else is posted to the UI thread. WaitFor must still let a due
+	//timer tick, as the app's main loop does, or the pill test below only
+	//passes when some unrelated job happens to run after the poll is due.
+	[AvaloniaFact]
+	public void WaitFor_lets_a_due_timer_tick_while_nothing_else_is_posted()
+	{
+		int ticks = 0;
+		DispatcherTimer timer = new(TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, (s, e) => ticks++);
+		timer.Start();
+		try {
+			WaitFor(() => ticks > 0, "a 50 ms DispatcherTimer never ticked inside WaitFor (#707)");
+		} finally {
+			timer.Stop();
+		}
+	}
+
 	//#660: the pill's 8 s advance only on the controller poll's ticks, which
 	//stop with the game; pausing within the 8 s must not leave it on screen.
 	[AvaloniaFact]
