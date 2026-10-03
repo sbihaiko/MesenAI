@@ -73,6 +73,10 @@
 		game runs unpaused in Play (WorkspaceShell.IsBarVisible).-->
 		<v:WorkspaceShellBar Name="ShellBar" DockPanel.Dock="Top" IsVisible="{Binding Shell.IsBarVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
 
+		<!--macOS, bar hidden: the strip the native game view does not cover, so
+		the window stays draggable (ShellTitleBar.DragStripHeight).-->
+		<Border Name="ShellDragStrip" DockPanel.Dock="Top" Background="Black" IsVisible="False" />
+
 		<!--G.6 (W-X3): the inline question before work is lost, above any profile.-->
 		<Panel Name="InterruptionBarHost" DockPanel.Dock="Top" IsVisible="{Binding Interruption.IsVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 			<v:InterruptionBar Name="InterruptionBar" DataContext="{Binding Interruption}" />

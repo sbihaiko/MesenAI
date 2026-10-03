@@ -192,6 +192,14 @@ public static class ShellTitleBar
 	//buttons plus their margins), so the profile button never sits under them.
 	public const double MacTrafficLightInset = 78;
 
+	//Height of the strip kept above the game while the bar is hidden. The
+	//native game view covers the title-bar zone and swallows the mouse-down
+	//there (airspace: an Avalonia control cannot sit over it), so the window
+	//could not be dragged; reserving a strip the view does not cover keeps a
+	//normal draggable top edge. About a macOS title bar (the traffic lights
+	//sit in it); the game loses these pixels to its letterbox.
+	public const double DragStripSize = 28;
+
 	public static bool ExtendsIntoTitleBar(bool isMacOS)
 	{
 		return isMacOS;
@@ -209,5 +217,13 @@ public static class ShellTitleBar
 	public static double LeadingInset(bool extended, bool fullScreen)
 	{
 		return extended && !fullScreen ? MacTrafficLightInset : 0;
+	}
+
+	//The reserved drag strip: only on an extended (macOS) window, windowed,
+	//and only while the bar is hidden - a visible bar is the drag area itself,
+	//and fullscreen has no title bar to drag.
+	public static double DragStripHeight(bool extended, bool fullScreen, bool barVisible)
+	{
+		return extended && !fullScreen && !barVisible ? DragStripSize : 0;
 	}
 }

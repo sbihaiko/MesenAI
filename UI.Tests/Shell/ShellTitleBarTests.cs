@@ -45,5 +45,22 @@ namespace Mesen.Tests.Shell
 			Assert.Equal(0, ShellTitleBar.LeadingInset(extended: false, fullScreen: false));
 			Assert.Equal(0, ShellTitleBar.LeadingInset(extended: false, fullScreen: true));
 		}
+
+		//Bug: with the bar hidden the native game view covers the title-bar zone
+		//and swallows the mouse-down, so the window could not be dragged. A thin
+		//strip stays reserved above the game in that state only.
+		[Fact]
+		public void Hidden_bar_on_an_extended_window_reserves_a_drag_strip()
+		{
+			Assert.True(ShellTitleBar.DragStripHeight(extended: true, fullScreen: false, barVisible: false) >= 20);
+		}
+
+		[Fact]
+		public void Drag_strip_is_not_needed_when_the_bar_is_visible_or_the_window_is_not_extended_or_fullscreen()
+		{
+			Assert.Equal(0, ShellTitleBar.DragStripHeight(extended: true, fullScreen: false, barVisible: true));
+			Assert.Equal(0, ShellTitleBar.DragStripHeight(extended: false, fullScreen: false, barVisible: false));
+			Assert.Equal(0, ShellTitleBar.DragStripHeight(extended: true, fullScreen: true, barVisible: false));
+		}
 	}
 }
