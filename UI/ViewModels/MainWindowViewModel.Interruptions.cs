@@ -58,5 +58,26 @@ namespace Mesen.ViewModels
 			});
 			return false;
 		}
+
+		//#698: LoadRomHelper's reloads of the running game - Reload ROM, Power
+		//Cycle, a pack switch or pick (ADR-0244's in-place reload included) -
+		//before they run. The core ends a recording with the ROM it recorded,
+		//so they ask like opening another game. True = reload now. False = the
+		//question is up; reload runs after Stop and Reload, which keeps the
+		//recording and prepares its figures, as Stop does.
+		public bool ConfirmReload(Action reload)
+		{
+			InterruptionKind kind = Interruptions.ForReload(Remaster.IsRecording);
+			if(kind == InterruptionKind.None) {
+				return true;
+			}
+			Interruption.Ask(kind, RomInfo.GetRomName(), Remaster.CurrentRecordingNumber(), false, () => {
+				if(Remaster.IsRecording) {
+					Remaster.StopRecording();
+				}
+				reload();
+			});
+			return false;
+		}
 	}
 }

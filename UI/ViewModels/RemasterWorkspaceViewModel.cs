@@ -118,6 +118,8 @@ namespace Mesen.ViewModels
 		public RemasterFeasibility? Feasibility => _feasibility;
 		public RemasterProjectInfo? Project => _project;
 		public string GameName => _gameName;
+		//What the jobs get as --rom (#689: an archive's inner ROM, written out).
+		public string RomPath => _romPath;
 
 		[Obsolete("For designer only")]
 		public RemasterWorkspaceViewModel() : this(new RemasterConfig(), _ => new RemasterFeasibility(PythonGate.Found, "", Array.Empty<string>(), "", ToolsGate.Found, ""), new NullLauncher(), false) { }
@@ -236,6 +238,12 @@ namespace Mesen.ViewModels
 			}
 			//Held back from here on, so nothing turned on later reaches the core.
 			BeginRecordingArtCheats();
+			if(EmuApi.IsMepBootstrapping()) {
+				//#690: the legacy "Record while I play" setting (ADR-0243 Q3)
+				//already records this load. Record takes over: that recording is
+				//closed and kept, and this one starts as the next rec-NNN.
+				EmuApi.StopMepRecording();
+			}
 			if(!EmuApi.StartMepRecording("play", "")) {
 				EndRecordingArtCheats();
 				NoticeText = ResourceHelper.GetMessage("RemasterRecordFailed");
@@ -342,7 +350,6 @@ namespace Mesen.ViewModels
 		{
 			RemasterJobSnapshot job = _jobs.Snapshot;
 			IsJobRunning = job.IsRunning;
-			IsJobCardVisible = job.Status != RemasterJobStatus.Idle;
 			JobPercent = job.Percent;
 			switch(job.Status) {
 				case RemasterJobStatus.Running:

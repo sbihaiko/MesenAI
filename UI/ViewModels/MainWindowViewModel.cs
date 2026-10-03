@@ -566,7 +566,10 @@ namespace Mesen.ViewModels
 			ClosePauseSurfacesOnGameChange();
 
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
-			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
+			//#689: the jobs get an archive's inner ROM, written out (RemasterRomFile).
+			ResourcePath rom = RomInfo.RomPath;
+			string romForJobs = gameLoaded ? RemasterRomFile.ForJobs(rom.Path, rom.InnerFile, rom, System.IO.Path.GetTempPath(), EmuApi.ExtractRomFile) : rom.Path;
+			Remaster?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), romForJobs,
 				gameLoaded ? EmuApi.GetMepSiblingFolder() : "", ConfigManager.EnhancementPackFolder);
 			UpdateShareGame(gameLoaded, gameLoaded ? EmuApi.GetMepSiblingFolder() : "");
 		}

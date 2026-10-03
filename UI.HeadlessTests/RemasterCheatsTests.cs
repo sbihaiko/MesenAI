@@ -231,6 +231,86 @@ public class RemasterCheatsTests : IDisposable
 		}
 	}
 
+	//#706: the classic cheat window's Disable All turns every code off, the
+	//ones held back for the recording too - none stays named on the strip, and
+	//none is waiting to come back when the recording ends.
+	[AvaloniaFact]
+	public void Disable_all_in_the_classic_cheat_window_clears_the_codes_held_back_for_a_recording()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		try {
+			LoadSyntheticRom(model);
+			SaveCheats(Genie, Lives);
+			CheatCodes.SetRecordingArt(true);
+			Assert.Equal(Genie.Codes, Assert.Single(CheatCodes.HeldForRecording).Codes);
+
+			CheatListWindowViewModel classic = new();
+			classic.DisableAllCheats = true;
+			classic.ApplyCheats();
+
+			Assert.Empty(CheatCodes.HeldForRecording);
+		} finally {
+			if(CheatCodes.RecordingArt) {
+				CheatCodes.SetRecordingArt(false);
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//#690: an install that kept the legacy "Record while I play" setting on
+	//(ADR-0243 Q3) records every load by itself. That recording holds back
+	//every code that is not a RAM code like Remaster's (ADR-0184 §1), and
+	//Record While I Play takes over from it - the automatic recording is
+	//closed and kept, and Remaster's own starts as the next rec-NNN - instead
+	//of refusing with a message about another pack.
+	[AvaloniaFact]
+	public void Remaster_takes_over_the_automatic_recording_and_both_hold_back_non_ram_codes()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		try {
+			ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder = true;
+			ConfigManager.Config.EnhancementPacks.ApplyConfig();
+			string project = LoadSyntheticRom(model);
+
+			Assert.True(EmuApi.IsMepBootstrapping(), "the legacy setting did not record the load");
+			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, true), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
+			Assert.True(CheatCodes.RecordingArt, "the automatic recording let a Game Genie code reach the core");
+			Assert.Equal(Genie.Codes, Assert.Single(CheatCodes.HeldForRecording).Codes);
+
+			model.SelectWorkspace(Workspace.Remaster);
+			Dispatcher.UIThread.RunJobs();
+			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, false), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
+			//The automatic recording already made the project: W-R1's button.
+			Click(window.FindNamed<Button>("RemasterRecordButton"));
+
+			Assert.True(model.Remaster.IsRecording, "Remaster refused to record over the automatic recording: " + window.FindNamed<TextBlock>("RemasterNotice").Text);
+			Assert.False(window.FindNamed<TextBlock>("RemasterNotice").IsOnScreen());
+			Assert.True(EmuApi.IsMepBootstrapping());
+			Assert.EndsWith("rec-002", EmuApi.GetMepRecordingFolder().TrimEnd('/', '\\'));
+			Assert.True(CheatCodes.RecordingArt);
+			string manifest = File.ReadAllText(Path.Combine(project, "project.json"));
+			Assert.Contains("\"id\": \"rec-001\"", manifest);
+			Assert.Contains("\"id\": \"rec-002\"", manifest);
+
+			model.Remaster.StopRecording(prepareFigures: false);
+			Dispatcher.UIThread.RunJobs();
+			Assert.False(EmuApi.IsMepBootstrapping());
+			Assert.False(CheatCodes.RecordingArt);
+		} finally {
+			if(EmuApi.IsMepBootstrapping()) {
+				EmuApi.StopMepRecording();
+			}
+			if(CheatCodes.RecordingArt) {
+				CheatCodes.SetRecordingArt(false);
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
 	//Play with no Remaster recording is unrestricted (ADR-0245 §3).
 	[AvaloniaFact]
 	public void In_play_without_a_remaster_recording_a_game_genie_code_is_accepted()

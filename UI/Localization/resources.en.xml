@@ -2275,12 +2275,14 @@
 		<Message ID="InterruptQuitWhilePackaging">⚠ Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.</Message>
 		<Message ID="InterruptOpenWhileRecording">■ Open {0}? This recording stops and is kept as recording {1}.</Message>
 		<Message ID="InterruptOpenWhileClassicBuilder">⚠ Open {0}? HD Pack Builder (classic) stops; what it wrote is kept.</Message>
+		<Message ID="InterruptReloadWhileRecording">■ Reload {0}? This recording stops and is kept as recording {1}.</Message>
 		<Message ID="InterruptKeepRecording">Keep Recording</Message>
 		<Message ID="InterruptStopAndQuit">Stop and Quit</Message>
 		<Message ID="InterruptKeepRunning">Keep Running</Message>
 		<Message ID="InterruptQuit">Quit</Message>
 		<Message ID="InterruptCancel">Cancel</Message>
 		<Message ID="InterruptStopAndOpen">Stop and Open</Message>
+		<Message ID="InterruptStopAndReload">Stop and Reload</Message>
 		<Message ID="ShellStatusPlaying">Playing {0}</Message>
 		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>
 		<Message ID="ShellStatusPaused">{0} is paused</Message>

@@ -29,12 +29,23 @@ namespace Mesen.Tests.Remaster
 			Assert.Equal(kind, Interruptions.ForOpen(recording, classicBuilder));
 		}
 
+		//#698: Reload ROM, Power Cycle, a pack switch or pick reload the running
+		//game, which ends its recording like opening another game would.
+		[Theory]
+		[InlineData(false, InterruptionKind.None)]
+		[InlineData(true, InterruptionKind.ReloadWhileRecording)]
+		public void Reloading_the_game_asks_only_while_a_recording_runs(bool recording, InterruptionKind kind)
+		{
+			Assert.Equal(kind, Interruptions.ForReload(recording));
+		}
+
 		[Theory]
 		[InlineData(InterruptionKind.None, false)]
 		[InlineData(InterruptionKind.QuitWhileRecording, true)]
 		[InlineData(InterruptionKind.QuitWhileJob, true)]
 		[InlineData(InterruptionKind.OpenWhileRecording, false)]
 		[InlineData(InterruptionKind.OpenWhileClassicBuilder, false)]
+		[InlineData(InterruptionKind.ReloadWhileRecording, false)]
 		public void Quit_kinds_quit_and_open_kinds_open(InterruptionKind kind, bool quits)
 		{
 			Assert.Equal(quits, Interruptions.Quits(kind));

@@ -216,6 +216,9 @@ namespace Mesen.Interop
 			}, 1000000);
 		}
 
+		//#689: writes the file a ROM resource names (an archive's inner ROM) to outPath.
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool ExtractRomFile([MarshalAs(UnmanagedType.LPUTF8Str)] string resourcePath, [MarshalAs(UnmanagedType.LPUTF8Str)] string outPath);
+
 		[DllImport(DllPath)] public static extern IntPtr GetArchiveRomList([MarshalAs(UnmanagedType.LPUTF8Str)] string filename, IntPtr outFileList, Int32 maxLength);
 
 		[DllImport(DllPath)] public static extern void SaveState(UInt32 stateIndex);

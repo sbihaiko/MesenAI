@@ -75,7 +75,7 @@ namespace Mesen.ViewModels
 		public void ApplyCheats()
 		{
 			if(DisableAllCheats) {
-				EmuApi.ClearCheats();
+				CheatCodes.ClearCheats();
 			} else {
 				CheatCodes.ApplyCheats(Cheats);
 			}
