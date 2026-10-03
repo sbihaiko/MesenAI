@@ -38,8 +38,11 @@ under `kit/` or `auto/` is ever written.
 
 The stamp is written into `mep/` before the first file is synced (#646): a
 build stopped mid-sync leaves a stamped, half-written `mep/` the next build
-simply finishes, never a stampless one it would refuse as foreign. It is
-rewritten after a clean sync, so its mtime is the last good build's.
+simply finishes, never a stampless one it would refuse as foreign. Every
+build, a rebuild too, first rewrites it as `complete: false` (#665), so a stop
+mid-sync never leaves the previous build's `complete: true` over a half-synced
+`mep/`. It is rewritten `complete: true` after a clean sync, so its mtime is
+the last good build's.
 
 A `mep/` this tool did not write (no `.remaster-build.json` stamp — an
 installed catalog pack, ADR-0147, or a hand-made one) is never touched: the
@@ -314,8 +317,9 @@ def _build(project: Path, rec, rom, python: str, stage: Path, mep: Path) -> int:
     try:
         # check_mep_is_ours passed, so mep/ is absent or already stamped: claim
         # it before the first file lands, or a stop mid-sync locks it out (#646).
-        if not stamp_path(project).is_file():
-            write_stamp(project, rec, complete=False)
+        # Always, not only on a first build: a rebuild stopped mid-sync must not
+        # keep the last build's `complete: true` and read as up to date (#665).
+        write_stamp(project, rec, complete=False)
         written = sync_into(stage, mep)
         write_stamp(project, rec)
     except OSError as exc:

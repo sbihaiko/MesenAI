@@ -255,6 +255,32 @@ public class ShareWorkspaceTests : IDisposable
 		Assert.True(h.Window.FindNamed<StackPanel>("ShareHome").IsOnScreen());
 	}
 
+	//#666: a .gbc game inside a .zip runs on the Game Boy core; the console is
+	//told by the archive's inner file name, not the archive's, while
+	//mep_build.py pack's --rom keeps the file the core opened.
+	[AvaloniaFact]
+	public void W_H2_prefills_GBC_for_a_zipped_gbc_game()
+	{
+		Harness h = ShowShare();
+		ResourcePath rom = new() { Path = "/roms/Zelda DX.zip", InnerFile = "Zelda DX (USA).gbc" };
+		h.Model.UpdateGame(true, ConsoleType.Gameboy, "Zelda DX (USA)", rom, "");
+		Click(h.Window.FindNamed<Button>("ShareAPackButton"));
+
+		Assert.Equal("GBC", h.Window.FindNamed<ComboBox>("SharePackConsole").SelectedItem);
+
+		//W-H3: the running game's project, with no pack.json target yet.
+		string project = Project("Zelda DX (USA)", built: true);
+		h.Known.Add(project);
+		h.Model.UpdateGame(true, ConsoleType.Gameboy, "Zelda DX (USA)", rom, project);
+		h.Model.OpenProject(project);
+		Dispatcher.UIThread.RunJobs();
+		Click(h.Window.FindNamed<Button>("ShareBuildZipButton"));
+		Assert.Equal("/roms/Zelda DX.zip", h.Launcher.Argv[h.Launcher.Argv.ToList().IndexOf("--rom") + 1]);
+		Type(h.Window.FindNamed<TextBox>("ShareProjectLink"), "https://drive.google.com/file/d/abc/view?usp=sharing");
+		Click(h.Window.FindNamed<Button>("ShareProjectContinueButton"));
+		Assert.Equal("GBC", Query(h.Opened.Last())["console"]);
+	}
+
 	//W-H2 › Package a Project… lists Remaster's projects inside Share and opens
 	//W-H3; step 1 runs mep_build.py pack as a job; step 2 opens Drive; step 3
 	//sends Game/Console taken from the project.
