@@ -2444,6 +2444,8 @@ E
 		<Message ID="LoadFailedBodyZipWithoutGame">Open the zip that holds the game, or the game file itself.</Message>
 		<Message ID="LoadFailedTitleDamaged">⚠ "{0}" did not open — the file looks damaged or cut short.</Message>
 		<Message ID="LoadFailedBodyDamaged">Try another copy of the game.</Message>
+		<Message ID="LoadFailedTitleMissing">⚠ "{0}" is no longer where it was.</Message>
+		<Message ID="LoadFailedBodyMissing">It was moved, renamed or deleted. Open it from where it is now.</Message>
 		<Message ID="PackDepSheetTitleOne">{0} waits for one file</Message>
 		<Message ID="PackDepSheetTitleMany">{0} waits for {1} files</Message>
 		<Message ID="PackDepSheetLicense">License: {0}</Message>

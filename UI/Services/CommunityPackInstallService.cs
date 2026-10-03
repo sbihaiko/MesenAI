@@ -28,6 +28,11 @@ namespace Mesen.Services
 		//CommunityPackInstallGate, UI.Tests). At most one holder at a time; a
 		//refused caller backs off without releasing the holder's token.
 		private static readonly CommunityPackInstallGate _installGate = new();
+
+		//True while an auto-install or Restore holds the gate. Read-only; lets
+		//UI.HeadlessTests/CommunityPackApplyTests wait out an install a game load
+		//in an earlier test started, before it drives the gate itself.
+		public static bool InstallInFlight => _installGate.IsHeld;
 		//§51 per-session idempotency key: one successful-or-in-flight attempt
 		//per ROM sha1 per process, decided before any network call. A failed
 		//fetch/install or a thrown extract is removed so the next load retries.
@@ -141,8 +146,15 @@ namespace Mesen.Services
 			//SHA-1, sibling folder, ROM name), captured before the download. The
 			//coordinator installs for it or drops the install if another open
 			//started meanwhile; a later open also drops the pending-file post.
-			CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
-			_ = Task.Run(() => RunAsync(load));
+			//#681: RunAsync's finally releases the gate; a throw before RunAsync
+			//starts releases it here, or every later load would be deferred forever.
+			try {
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				_ = Task.Run(() => RunAsync(load));
+			} catch(Exception ex) {
+				EmuApi.WriteLogEntry("[CommunityPack] skipped: reading the loaded game threw: " + ex);
+				ExitGate();
+			}
 		}
 
 		//Releases the install gate; when a ROM load's auto-install was refused
@@ -226,7 +238,7 @@ namespace Mesen.Services
 				if(pillShown) {
 					RaiseFinished(outcome.Status == CommunityPackInstallStatus.Installed, silent: outcome.Status == CommunityPackInstallStatus.Skipped || outcome.Status == CommunityPackInstallStatus.UpdateAvailable || outcome.Status == CommunityPackInstallStatus.Stale);
 				}
-				Surface(outcome, romSha1, load.OpenGeneration);
+				Surface(outcome, load);
 			} catch(Exception ex) {
 				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
@@ -247,7 +259,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static void Surface(CommunityPackInstallOutcome outcome, string installedRomSha1, int openGeneration)
+		private static void Surface(CommunityPackInstallOutcome outcome, CommunityPackLoadTarget load)
 		{
 			switch(outcome.Status) {
 				case CommunityPackInstallStatus.Installed:
@@ -259,8 +271,8 @@ namespace Mesen.Services
 					foreach(string notice in outcome.Notices) {
 						Notify(notice);
 					}
-					NotifyPendingDeps(outcome.ContainerName, outcome.PendingDeps, installedRomSha1, openGeneration);
-					ApplyInstalledPack(installedRomSha1);
+					NotifyPendingDeps(outcome.ContainerName, outcome.PendingDeps, load.RomSha1, load.OpenGeneration);
+					ApplyInstalledPack(load);
 					break;
 
 				case CommunityPackInstallStatus.Failed:
@@ -282,23 +294,31 @@ namespace Mesen.Services
 			}
 		}
 
+		//Test seam (UI.HeadlessTests/CommunityPackApplyTests): what applies a
+		//freshly installed pack to the running game.
+		public static Action PowerCycleGame { get; set; } = LoadRomHelper.PowerCycle;
+
 		//HD/MEP packs are applied at console init, not live. After a background
 		//auto-install, power-cycle the same ROM so the new HdPacks/<rom>/ (or MEP
 		//container) is picked up without a second manual load. OnGameLoaded skips
-		//power cycles, so this does not re-fetch. If the user switched games while
-		//the download was in flight, leave the newly loaded ROM alone.
-		private static void ApplyInstalledPack(string installedRomSha1)
+		//power cycles, so this does not re-fetch. #675: only while the load the
+		//install was for is still the one running (the W-P16 rule, open
+		//generation + SHA-1) - a game the player switched to, or reopened (e.g.
+		//Continue to resume a save), is left alone.
+		//Public for UI.HeadlessTests/CommunityPackApplyTests; the production
+		//caller is Surface, after an Installed outcome.
+		public static void ApplyInstalledPack(CommunityPackLoadTarget installedFor)
 		{
 			Dispatcher.UIThread.Post(() => {
-				string currentSha1 = EmuApi.GetMepRomSha1();
-				if(!string.Equals(currentSha1, installedRomSha1, StringComparison.OrdinalIgnoreCase)) {
-					EmuApi.WriteLogEntry("[CommunityPack] not power-cycling: ROM changed since install started (was " +
-						installedRomSha1 + ", now " + currentSha1 + ")");
+				CommunityPackLoadTarget current = CommunityPackInstallCoordinator.ReadCurrentLoad();
+				if(!installedFor.IsStillLoaded(current)) {
+					EmuApi.WriteLogEntry("[CommunityPack] not power-cycling: the game was opened again or changed since the install started (was " +
+						installedFor.RomSha1 + " open #" + installedFor.OpenGeneration + ", now " + current.RomSha1 + " open #" + current.OpenGeneration + ")");
 					Notify("Community pack installed - reload the game to apply");
 					return;
 				}
 				EmuApi.WriteLogEntry("[CommunityPack] power-cycling to apply newly installed pack");
-				LoadRomHelper.PowerCycle();
+				PowerCycleGame();
 			});
 		}
 

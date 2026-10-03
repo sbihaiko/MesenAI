@@ -30,6 +30,10 @@ namespace Mesen.ViewModels
 			//#658: a BIOS sheet still up belongs to the previous attempt; its
 			//load would hold the Core's load locks and queue this one behind it.
 			BiosSheet.Dismiss();
+			//#674: a cancel belongs to the open it ended. This open starts clean,
+			//so its own failure shows the W-P14 alert even when the earlier load
+			//never reported (a recent game, Remaster's workspace).
+			BiosSheet.ClearCancelled();
 			RecentGames.OnOpenStarted();
 			Shell.SetPlayNotice("");
 			PackDepSheet.Clear();

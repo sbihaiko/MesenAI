@@ -52,10 +52,12 @@ public static class ByokJobLauncher
 	//line of its stdout/stderr to onOutputLine with the key redacted.
 	public static ByokJob Start(IByokKeyStore store, ByokVendor vendor, string fileName, IReadOnlyList<string> arguments, string? workingDirectory, Action<string>? onOutputLine)
 	{
-		string? key = store.Read(vendor);
-		if(string.IsNullOrEmpty(key)) {
+		string? stored = store.Read(vendor);
+		if(string.IsNullOrWhiteSpace(stored)) {
 			throw new ByokKeyMissingException(vendor);
 		}
+		//#681: the bare key the child uses (jev_client strips it) is the one to redact.
+		string key = ByokKey.Normalize(stored);
 
 		ProcessStartInfo info = BuildStartInfo(fileName, arguments, workingDirectory, vendor, key);
 		Process process = new() { StartInfo = info, EnableRaisingEvents = true };

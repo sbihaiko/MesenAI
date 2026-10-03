@@ -77,6 +77,26 @@ public sealed class ByokKeyStoreException : Exception
 	}
 }
 
+//#681: the key as it is stored, handed to the child and redacted.
+//scripts/jev_client.py strips the variable it reads (load_api_key), so a key
+//pasted with whitespace around it must be the bare key here too - otherwise
+//ByokJobLauncher.Redact looks for the padded text and misses the bare key the
+//child prints. Every store's Write goes through this, and so does the key a
+//job reads (an entry written before this rule, or by hand in the OS store).
+public static class ByokKey
+{
+	//Throws ArgumentException for a key that is empty once trimmed.
+	public static string Normalize(string key)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		string bare = key.Trim();
+		if(bare.Length == 0) {
+			throw new ArgumentException("A key cannot be empty or only whitespace.", nameof(key));
+		}
+		return bare;
+	}
+}
+
 public static class ByokKeyStores
 {
 	//Linux: libsecret's store/lookup calls are variadic (secret_password_store_sync)
@@ -138,8 +158,7 @@ public sealed class InMemoryByokKeyStore : IByokKeyStore
 
 	public void Write(ByokVendor vendor, string key)
 	{
-		ArgumentException.ThrowIfNullOrEmpty(key);
-		_keys[vendor.Id] = key;
+		_keys[vendor.Id] = ByokKey.Normalize(key);
 	}
 
 	public bool Remove(ByokVendor vendor) => _keys.Remove(vendor.Id);

@@ -54,7 +54,7 @@ public sealed class MacKeychainByokKeyStore : IByokKeyStore
 
 	public void Write(ByokVendor vendor, string key)
 	{
-		ArgumentException.ThrowIfNullOrEmpty(key);
+		key = ByokKey.Normalize(key);
 		byte[] bytes = Encoding.UTF8.GetBytes(key);
 		try {
 			using CfScope cf = new();

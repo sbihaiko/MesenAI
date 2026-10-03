@@ -72,6 +72,16 @@ namespace Mesen.Windows
 		//never outlives the test that opened the window.
 		public Task Startup { get; private set; } = Task.CompletedTask;
 
+		//#681: completes once Startup has finished (the core is initialized and
+		//the command-line files' post is queued). On a cold launch the OS's
+		//open-documents event can arrive before that; RunWhenStarted holds it.
+		private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public void RunWhenStarted(Action action)
+		{
+			_started.Task.ContinueWith(_ => Dispatcher.UIThread.Post(action), TaskScheduler.Default);
+		}
+
 		private FrameInfo _prevScreenSize;
 
 		private Size _originalSize;
@@ -444,6 +454,7 @@ namespace Mesen.Windows
 
 				ConfigApi.CheckShaderSupport();
 			});
+			Startup.ContinueWith(_ => _started.TrySetResult(), TaskScheduler.Default);
 		}
 
 		private void Instance_ArgumentsReceived(object? sender, ArgumentsReceivedEventArgs e)

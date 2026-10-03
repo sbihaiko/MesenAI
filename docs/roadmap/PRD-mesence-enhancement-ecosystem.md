@@ -3282,6 +3282,8 @@ only way out of the case.
   - a zip with no game in it;
   - the file is damaged or cut short (a known console, but the loader
     failed).
+  - a recent game (Continue, a recent card) whose file was moved, renamed
+    or deleted (#676).
 - **A zip with several games** keeps today's chooser (`SelectRomWindow`,
   which lists only game files and opens a one-game zip directly). It is
   not redrawn: the native file dialog cannot browse into a zip on macOS or
