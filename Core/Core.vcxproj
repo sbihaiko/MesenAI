@@ -610,6 +610,7 @@
     <ClInclude Include="Shared\InputHud.h" />
     <ClInclude Include="Shared\Audio\BaseSoundManager.h" />
     <ClInclude Include="Shared\Video\BaseVideoFilter.h" />
+    <ClInclude Include="Shared\Video\WidescreenFrameFlow.h" />
     <ClInclude Include="Shared\FirmwareHelper.h" />
     <ClInclude Include="Debugger\Breakpoint.h" />
     <ClInclude Include="Debugger\BreakpointManager.h" />
