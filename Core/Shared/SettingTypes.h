@@ -1010,6 +1010,17 @@ enum class HudDisplaySize
 	Scaled,
 };
 
+//"Estilizar o HUD do Core" (user's decision, 2026-10-03): the look of the
+//system toasts SystemHud draws. Classic is Mesen's outlined "[title] message"
+//text in the bottom-left corner; Player is W-P3's rounded dark card in the
+//bottom-right (Shared/Video/HudToastLayout.h). The UI sets Player in Player
+//mode (UI/Logic/HudToastStyleRule.cs mirrors this enum value for value).
+enum class HudToastStyle
+{
+	Classic,
+	Player
+};
+
 struct PreferencesConfig
 {
 	bool ShowFps = false;
@@ -1025,6 +1036,7 @@ struct PreferencesConfig
 	bool DisableGameSelectionScreen = false;
 
 	HudDisplaySize HudSize = HudDisplaySize::Fixed;
+	HudToastStyle ToastStyle = HudToastStyle::Classic;
 
 	uint32_t AutoSaveStateDelay = 5;
 	uint32_t RewindBufferSize = 300;
