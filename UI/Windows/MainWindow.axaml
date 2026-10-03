@@ -136,6 +136,31 @@
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
+				<!--#734: the load card (W-P9's HUD pill shape) over the dimmed home,
+				from an open to the game's first picture (Logic/PlayLoadWait). The
+				home stays up for all of it, so the native picture is hidden and
+				cannot cover the card. The scrim takes the clicks, so a second open
+				does not queue behind this one; the BIOS sheet asks over it.-->
+				<Panel Name="PlayLoadWaitLayer" Classes="scrim">
+					<Panel.IsVisible>
+						<MultiBinding Converter="{x:Static BoolConverters.And}">
+							<Binding Path="IsLoadWaitActive" />
+							<Binding Path="!BiosSheet.IsVisible" />
+						</MultiBinding>
+					</Panel.IsVisible>
+					<Border Name="PlayLoadWaitCard" Classes="hud" Width="340" Padding="16 14" HorizontalAlignment="Center" VerticalAlignment="Center">
+						<DockPanel>
+							<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0"><PathIcon Data="{StaticResource PlayerIconPlay}" /></Border>
+							<StackPanel VerticalAlignment="Center" Spacing="9">
+								<TextBlock Name="PlayLoadWaitText" Classes="headline" Text="{Binding LoadWaitText}" TextTrimming="CharacterEllipsis" />
+								<!--Indeterminate: neither the Core's load nor the first
+								frames report a percentage.-->
+								<ProgressBar Name="PlayLoadWaitBar" IsIndeterminate="True" />
+							</StackPanel>
+						</DockPanel>
+					</Border>
+				</Panel>
+
 				<!--W-P4: the game stays behind the overlay, dimmed.-->
 				<Border Name="PlayerOverlayScrim" Classes="scrim">
 					<Border.IsVisible>

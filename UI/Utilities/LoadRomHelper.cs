@@ -59,6 +59,8 @@ namespace Mesen.Utilities
 			RequestedGameName = gameName;
 			MainWindowViewModel.Instance.OnOpenStarted();
 			bool keepsHome = KeepsHomeDuringLoad;
+			//#734: the load card is up from here until the first picture.
+			MainWindowViewModel.Instance.BeginLoadWait(gameName, keepsHome);
 			if(!keepsHome) {
 				//Temporarily hide selection screen to allow displaying error messages
 				MainWindowViewModel.Instance.RecentGames.Visible = false;
@@ -77,7 +79,9 @@ namespace Mesen.Utilities
 
 			Task.Run(() => {
 				//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side
-				if(EmuApi.LoadRom(romPath, patchPath)) {
+				bool loaded = EmuApi.LoadRom(romPath, patchPath);
+				EndLoadWaitIfNotLoaded(openGeneration);
+				if(loaded) {
 					ConfigManager.Config.RecentFiles.AddRecentFile(romPath, patchPath);
 					ConfigManager.Config.Save();
 				} else if(keepsHome) {
@@ -86,6 +90,16 @@ namespace Mesen.Utilities
 				}
 				ShowSelectionOnScreenAfterError();
 			});
+		}
+
+		//#734: the load call returned without GameLoaded - the open failed, and
+		//its load card goes (W-P14's alert follows on the home).
+		private static void EndLoadWaitIfNotLoaded(int openGeneration)
+		{
+			MainWindowViewModel model = MainWindowViewModel.Instance;
+			if(model.LoadWait.OnLoadReturned(openGeneration)) {
+				Dispatcher.UIThread.Post(model.RefreshLoadWait);
+			}
 		}
 
 		private static void ReportLoadFailure(ResourcePath romPath, int openGeneration)
@@ -130,6 +144,7 @@ namespace Mesen.Utilities
 				if(recentFileExists) {
 					EmuApi.LoadRecentGame(filename, !forceLoadState && ConfigManager.Config.Preferences.GameSelectionScreenMode == GameSelectionMode.PowerOn);
 				}
+				EndLoadWaitIfNotLoaded(openGeneration);
 				//#676: the core's LoadRecentGame answers nothing - no game running
 				//now means the recent game did not open (W-P14, like any open).
 				if(keepsHome && !EmuApi.IsRunning()) {
