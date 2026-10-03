@@ -6,6 +6,8 @@
 #include "NES/NesConsole.h"
 #include "NES/BaseMapper.h"
 #include "Shared/EmuSettings.h"
+#include "Shared/Emulator.h"
+#include "Shared/EnhancementPacks/MepPackManager.h"
 #include "Shared/RenderedFrame.h"
 
 class DefaultNesPpu final : public NesPpu<DefaultNesPpu>
@@ -21,6 +23,17 @@ private:
 	bool _frameHadRendering = false;
 	bool _frameHadSideContent = false;
 
+	//ADR-0253 §3 (W.3): whether the pack loaded for this ROM ships the
+	//`widescreen` section. Asked once per frame, on the emulation thread, the
+	//same way the renderer's decode asks it - the manager resolves the winning
+	//pack, so the answer is "the art this ROM would actually get".
+	bool PackHasWidescreenArt()
+	{
+		Emulator* emu = _console->GetEmulator();
+		MepPackManager* mgr = emu ? emu->GetEnhancementPackManager() : nullptr;
+		return mgr && mgr->HasWidescreenSection();
+	}
+
 	bool IsRevealRequested()
 	{
 		//WideScrn is the Widescreen aspect setting. A Vs. DualSystem merges two
@@ -28,10 +41,14 @@ private:
 		//ADR-0253 §4 (W.5): and a game the measurement settled as unsupported is
 		//not widened either, whatever the setting says - the switch is disabled
 		//for it, so Reveal/black columns nobody can turn off must not appear.
+		//ADR-0253 §3 (W.3) is the one exception: a pack with widescreen art gives
+		//that game a mode of its own, and the frame has to be extended for the
+		//art to have a side to land on.
 		return NesWidescreenSupport::Reveals(
 			_mapper && _settings->GetVideoConfig().AspectRatio == VideoAspectRatio::Widescreen &&
 				!_console->GetVsMainConsole() && !_console->GetVsSubConsole(),
-			_revealProbe.GetVerdict());
+			_revealProbe.GetVerdict(),
+			PackHasWidescreenArt());
 	}
 
 public:

@@ -369,6 +369,41 @@ public class PlaySheetsViewTests : IDisposable
 		}
 	}
 
+	//ADR-0253 §3 (W.3) x §4 (W.5), the app half of the seam: the sheet asks the
+	//core whether the loaded pack ships widescreen art and keeps the switch
+	//enabled over a game the measurement settled - the record was made without
+	//the pack, and this game now has a mode. The rule that decides is host-free
+	//in UI.Tests (SwitchForLoadedGame); what only this can show is that the sheet
+	//reads the core's answer at all - a hard-coded `false` at the call site
+	//leaves SwitchForLoadedGame's own tests green and turns this one red.
+	[AvaloniaFact]
+	public void A_pack_shipping_widescreen_art_keeps_the_switch_enabled_for_a_recorded_game()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.ReadWidescreenPackArt = () => true;
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.False(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+
+			//The same recorded game with no pack art is W.5's disabled switch.
+			model.ReadWidescreenPackArt = () => false;
+			model.CloseEnhancementsPanel();
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.False(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.True(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
 	[AvaloniaFact]
 	public void Install_pill_sentence_reaches_the_status_line_and_clears()
 	{

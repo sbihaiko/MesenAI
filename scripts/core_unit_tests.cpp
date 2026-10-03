@@ -5412,11 +5412,24 @@ namespace
 		//the player is left with Reveal/black columns and no way to turn them
 		//off (the switch is disabled for this game). The saved preference is
 		//untouched, so the next game that can use it gets it back.
-		Check(Reveals(true, Verdict::Supported), "W253: a supported game is widened while the switch is on");
-		Check(Reveals(true, Verdict::Undecided), "W253: the picture is widened while the game is still being measured");
-		Check(!Reveals(true, Verdict::Unsupported), "W253: a game settled as unsupported is never widened");
-		Check(!Reveals(false, Verdict::Supported), "W253: the switch off widens nothing, even a supported game");
-		Check(!Reveals(false, Verdict::Undecided), "W253: the switch off widens nothing while measuring");
+		Check(Reveals(true, Verdict::Supported, false), "W253: a supported game is widened while the switch is on");
+		Check(Reveals(true, Verdict::Undecided, false), "W253: the picture is widened while the game is still being measured");
+		Check(!Reveals(true, Verdict::Unsupported, false), "W253: a game settled as unsupported is never widened");
+		Check(!Reveals(false, Verdict::Supported, false), "W253: the switch off widens nothing, even a supported game");
+		Check(!Reveals(false, Verdict::Undecided, false), "W253: the switch off widens nothing while measuring");
+	}
+
+	void TestWidescreenSupportPackArtReenablesASettledGame()
+	{
+		//ADR-0253 §3 x §4 (the W.3 x W.5 seam): the measurement only ever looked
+		//at the game's own map. A pack shipping the `widescreen` section is §1's
+		//Pack-art mode - a mode of its own - so it overrules a settled
+		//"unsupported", and the sides show the pack's art instead of black.
+		Check(Reveals(true, Verdict::Unsupported, true), "W253C: pack art widens a game the window settled as unsupported");
+		Check(!Reveals(true, Verdict::Unsupported, false), "W253C: without pack art an unsupported game stays unwidened");
+		Check(!Reveals(false, Verdict::Unsupported, true), "W253C: the switch off widens nothing, pack art or not");
+		Check(Reveals(true, Verdict::Supported, false), "W253C: a supported game is widened without any pack art");
+		Check(Reveals(true, Verdict::Undecided, false), "W253C: measuring is still widened without any pack art");
 	}
 }
 
@@ -16299,6 +16312,7 @@ int main()
 	TestWidescreenSupportProbeResetStartsTheNextRunOver();
 	TestWidescreenSupportProbeReadsTheRevealContentRule();
 	TestWidescreenSupportSettledGameIsNotWidenedAtAll();
+	TestWidescreenSupportPackArtReenablesASettledGame();
 	TestW6BlitGeometryFollowsTheFrameWidth();
 	TestW6BisqwitRowFollowsTheFrameWidth();
 	TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns();

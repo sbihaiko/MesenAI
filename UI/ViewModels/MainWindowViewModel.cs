@@ -120,6 +120,13 @@ namespace Mesen.ViewModels
 		//The switch's state for the loaded game, from the core's verdict.
 		private WidescreenSwitchState _widescreenSwitch = new(true, "");
 
+		//ADR-0253 §3 (W.3) x §4 (W.5): the core's "the loaded pack ships
+		//widescreen art" answer, behind a settable delegate for the same reason
+		//ReadPackRowState is one (#736) - the sheet tests have no pack installed
+		//and cannot make the export answer true. Defaulting to the export keeps
+		//production a plain call.
+		public Func<bool> ReadWidescreenPackArt { get; set; } = EmuApi.HasWidescreenPackArt;
+
 		public MainWindowViewModel()
 		{
 			Instance = this;
@@ -474,14 +481,16 @@ namespace Mesen.ViewModels
 		//already holds as unsupported - the run that measured it shows the
 		//disabled switch instead, so the user reads the reason where it applies.
 		//It stacks with W-P3's entry toast (SystemHud::DrawMessages draws up to
-		//four), so it never costs the pack line or the menu hint.
+		//four), so it never costs the pack line or the menu hint. §3 (W.3): a
+		//pack that ships widescreen art gives the game a mode, so it silences the
+		//notice rather than have it contradict the enabled switch beside it.
 		public void AnnounceWidescreenUnavailable(string romSha1)
 		{
 			if(Config.Preferences.UiMode != UiMode.Player) {
 				return;
 			}
 			if(!WidescreenSupportRule.ShouldAnnounceUnavailable(
-				romSha1, Config.PlayerEnhancements.IsRomWidescreenUnsupported(romSha1), _widescreenAnnouncedFor)) {
+				romSha1, Config.PlayerEnhancements.IsRomWidescreenUnsupported(romSha1), _widescreenAnnouncedFor, ReadWidescreenPackArt())) {
 				return;
 			}
 			_widescreenAnnouncedFor = romSha1;
@@ -496,13 +505,15 @@ namespace Mesen.ViewModels
 			IsWideScrnEnabled = Config.Video.AspectRatio == VideoAspectRatio.Widescreen;
 			IsOverclockSupported = PlayerEnhancementsToggle.SupportsOverclock(RomInfo.ConsoleType);
 
-			//ADR-0253 §4 (W.5): the switch's state is the host-free rule's over
-			//what the core measured for this ROM. Widescreen pack art (§3) does
-			//not exist yet - W.3 brings it, and this call site flips to true.
-			_widescreenSwitch = WidescreenSupportRule.Switch(
-				WidescreenSupportRule.ConsoleHasSideMap(RomInfo.ConsoleType, RomInfo.Format == RomFormat.GameGear),
+			//ADR-0253 §4 (W.5) with §3 (W.3): the switch's state is the host-free
+			//rule's over the three answers the core gives about this game - the
+			//console's side map, what the measurement settled, and whether the
+			//loaded pack ships widescreen art, which is a mode of its own and
+			//overrules a measured "unsupported".
+			_widescreenSwitch = WidescreenSupportRule.SwitchForLoadedGame(
+				RomInfo.ConsoleType, RomInfo.Format == RomFormat.GameGear,
 				Config.PlayerEnhancements.IsRomWidescreenUnsupported(_widescreenRomSha1) ? WidescreenSupport.Unsupported : WidescreenSupport.Unknown,
-				hasWidescreenPackArt: false);
+				ReadWidescreenPackArt());
 			IsWidescreenSupported = _widescreenSwitch.Enabled;
 			EnhWidescreenReason = _widescreenSwitch.Enabled ? "" : ResourceHelper.GetMessage(_widescreenSwitch.ReasonKey);
 

@@ -54,23 +54,52 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
+		public void A_game_measured_unsupported_is_widened_when_its_pack_ships_widescreen_art()
+		{
+			//ADR-0253 §3 × §4 (the W.3 × W.5 seam): the measurement only ever read
+			//the game's own map, so a pack shipping widescreen art is a mode of its
+			//own and overrules a settled "unsupported" - the switch stays enabled
+			//and the game is widened, its sides showing the pack's art.
+			WidescreenSwitchState state = WidescreenSupportRule.SwitchForLoadedGame(
+				ConsoleType.Nes, gameGear: false, WidescreenSupport.Unsupported, hasWidescreenPackArt: true);
+			Assert.True(state.Enabled);
+			Assert.Equal("", state.ReasonKey);
+			Assert.True(WidescreenSupportRule.EffectiveWidescreen(savedOn: true, state));
+
+			//The same recorded game without the art is the disabled switch W.5 ships.
+			Assert.False(WidescreenSupportRule.SwitchForLoadedGame(
+				ConsoleType.Nes, gameGear: false, WidescreenSupport.Unsupported, hasWidescreenPackArt: false).Enabled);
+		}
+
+		[Fact]
 		public void A_recorded_game_announces_its_reason_once_per_session()
 		{
 			//ADR-0253 §4: "the switch then shows disabled from the next load,
 			//and a toast says so once". Once per load of that ROM, not on every
 			//game start and not on every sheet open.
-			Assert.True(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: ""));
-			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: Sha1));
+			Assert.True(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: "", hasWidescreenPackArt: false));
+			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: Sha1, hasWidescreenPackArt: false));
 		}
 
 		[Fact]
 		public void Only_a_game_recorded_as_unsupported_announces_anything()
 		{
-			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: false, alreadyAnnouncedFor: ""));
+			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: false, alreadyAnnouncedFor: "", hasWidescreenPackArt: false));
 			//No ROM loaded: nothing to say, and nothing to key the memory on.
-			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable("", rememberedUnsupported: true, alreadyAnnouncedFor: ""));
+			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable("", rememberedUnsupported: true, alreadyAnnouncedFor: "", hasWidescreenPackArt: false));
 			//A second game still gets its own notice.
-			Assert.True(WidescreenSupportRule.ShouldAnnounceUnavailable("bbbb", rememberedUnsupported: true, alreadyAnnouncedFor: Sha1));
+			Assert.True(WidescreenSupportRule.ShouldAnnounceUnavailable("bbbb", rememberedUnsupported: true, alreadyAnnouncedFor: Sha1, hasWidescreenPackArt: false));
+		}
+
+		[Fact]
+		public void A_pack_with_widescreen_art_silences_the_unavailable_notice()
+		{
+			//ADR-0253 §4: "installing a pack with widescreen art re-enables the
+			//switch" - so the toast saying the game has no widescreen mode must not
+			//fire over a game the loaded pack just gave one, or the disabled-switch
+			//sentence would contradict the switch right beside it.
+			Assert.False(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: "", hasWidescreenPackArt: true));
+			Assert.True(WidescreenSupportRule.ShouldAnnounceUnavailable(Sha1, rememberedUnsupported: true, alreadyAnnouncedFor: "", hasWidescreenPackArt: false));
 		}
 
 		[Fact]
