@@ -40,13 +40,13 @@ namespace Mesen.ViewModels
 
 		//PlayGameLayer: a Play surface is up over the game, so the native picture,
 		//drawn above every Avalonia control, has to step aside for it.
-		private bool IsPlaySurfaceOverGame => IsPlayerOverlayVisible || CurrentPlaySheet() != PlaySheet.None || BiosSheet.IsVisible || ControllerSetup.IsVisible
+		private bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
 			|| SelectRomSheet.IsVisible || IsShaderSheetVisible;
 
 		private static readonly HashSet<string> PlaySurfaceProperties = new() {
 			nameof(IsPlayerOverlayVisible), nameof(IsSaveStatesSheetVisible), nameof(IsEnhancementsPanelVisible),
 			nameof(IsPlayerPackPickerVisible), nameof(IsPackDetailVisible), nameof(IsPlayerSettingsVisible),
-			nameof(IsShaderSheetVisible)
+			nameof(IsLoadWaitActive), nameof(IsShaderSheetVisible)
 		};
 
 		private void WatchPlaySurfaces()

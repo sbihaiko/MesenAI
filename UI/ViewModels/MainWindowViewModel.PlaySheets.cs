@@ -56,6 +56,12 @@ namespace Mesen.ViewModels
 		//W-P9: the HUD pill's sentence; empty when the pill is hidden.
 		[ObservableProperty] public partial string PackInstallPillText { get; private set; } = "";
 		[ObservableProperty] public partial bool IsPackInstallPillInstalling { get; private set; }
+		//#734: the pill on screen (a popup over the game picture), its bar's
+		//fill in percent and whether it is indeterminate.
+		[ObservableProperty] public partial bool IsPackInstallPillShown { get; private set; }
+		[ObservableProperty] public partial bool IsPackInstallPillFailed { get; private set; }
+		[ObservableProperty] public partial double PackInstallPillPercent { get; private set; }
+		[ObservableProperty] public partial bool IsPackInstallPillIndeterminate { get; private set; } = true;
 
 		//ADR-0244 / P.9: whether a pack layer change keeps the player's place
 		//(the in-place swap of LoadRomHelper.ApplyPackChange), so W-P7 reads
@@ -312,6 +318,27 @@ namespace Mesen.ViewModels
 			UpdatePill();
 		}
 
+		//CommunityPackInstallService.InstallProgress: the artifact's bytes so far.
+		public void OnPackInstallProgress(long received, long? total)
+		{
+			if(_pill.Report(received, total)) {
+				UpdatePillBar();
+			}
+		}
+
+		partial void OnIsPlayWorkspaceChanged(bool value)
+		{
+			UpdatePillBar();
+		}
+
+		private void UpdatePillBar()
+		{
+			IsPackInstallPillShown = PackInstallPill.ShowsOnScreen(_pill.State, Config.Preferences.UiMode == UiMode.Player, IsPlayWorkspace);
+			IsPackInstallPillFailed = _pill.State == PackInstallPillState.Failed;
+			IsPackInstallPillIndeterminate = _pill.Fraction == null;
+			PackInstallPillPercent = (_pill.Fraction ?? 0) * 100;
+		}
+
 		public void OnPackInstallFinished(bool installed, bool silent)
 		{
 			if(silent) {
@@ -331,6 +358,7 @@ namespace Mesen.ViewModels
 				_ => ""
 			};
 			IsPackInstallPillInstalling = _pill.State == PackInstallPillState.Installing;
+			UpdatePillBar();
 			Shell.UpdatePackInstall(PackInstallPillText);
 
 			if(PackInstallPillText.Length > 0 && PackInstallPillText != previous) {
@@ -355,13 +383,14 @@ namespace Mesen.ViewModels
 			_pillTimer.Start();
 		}
 
-		//The native renderer draws over Avalonia content, so over a running game
-		//the pill is the core's HUD message (the same channel as the W-P3 toast).
-		//A HUD message lasts PackInstallPillHud.RepostMilliseconds; it is posted
-		//again while the install runs.
+		//Where the pill is not on screen (Advanced mode) the sentence is the
+		//core's HUD message (the same channel as the W-P3 toast). A HUD message
+		//lasts PackInstallPillHud.RepostMilliseconds; it is posted again while
+		//the install runs. In Player mode's Play the pill is a popup - its own
+		//window, above the native game picture - with a moving bar (#734).
 		private void PostPillToHud()
 		{
-			if(EmuApi.IsRunning()) {
+			if(!IsPackInstallPillShown && EmuApi.IsRunning()) {
 				EmuApi.DisplayMessage("MEP", PackInstallPillText);
 			}
 		}

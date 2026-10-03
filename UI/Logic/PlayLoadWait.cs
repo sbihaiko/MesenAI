@@ -17,9 +17,16 @@ namespace Mesen.Logic;
 //at once, leaving a black still window until the first frame. Now the home
 //stays until the picture is out (OnGameLoaded returns true).
 //
-//Threading: Begin runs on the UI thread, OnGameLoaded and OnLoadReturned on
-//the load thread, OnFrameDone on the emulation thread (PpuFrameDone, every
-//frame, so its idle path is one volatile read).
+//A reload of the game on screen (power cycle, Reload, an in-place pack
+//change - W-P7, the picker, Remaster's Build & Show) is the same wait: the
+//Core reloads the ROM and its pack, then draws. BeginReload shows the card
+//("Reloading <game>…") from the request to the first picture after it. A
+//reload has more ways to end without a picture (refused, paused, failed),
+//and each one ends the wait; Expire is the safety net of the one it names.
+//
+//Threading: Begin/BeginReload run on the UI thread, OnGameLoaded and
+//OnLoadReturned on the load thread, OnFrameDone on the emulation thread
+//(PpuFrameDone, every frame, so its idle path is one volatile read).
 
 public enum PlayLoadWaitPhase
 {
@@ -28,6 +35,14 @@ public enum PlayLoadWaitPhase
 	Opening,
 	//From GameLoaded until the first picture is out.
 	WaitingForPicture
+}
+
+public enum PlayLoadWaitKind
+{
+	//An open: from the click to the new game's first picture.
+	Open,
+	//A reload of the game on screen.
+	Reload
 }
 
 public sealed class PlayLoadWait
@@ -45,44 +60,104 @@ public sealed class PlayLoadWait
 	private readonly object _lock = new();
 	private int _phase;
 	private int _frames;
+	private int _ticket;
 
 	public PlayLoadWaitPhase Phase => (PlayLoadWaitPhase)Volatile.Read(ref _phase);
 	public bool IsActive => Phase != PlayLoadWaitPhase.Idle;
 	public string GameName { get; private set; } = "";
 	public int OpenGeneration { get; private set; }
+	public PlayLoadWaitKind Kind { get; private set; }
+	//Which wait this is: every Begin/BeginReload takes a new one.
+	public int Ticket => Volatile.Read(ref _ticket);
 
 	//Where the card can be seen: Player mode's Play workspace, the same place
 	//the home stays through an open.
 	public static bool ShowsFor(bool playerMode, bool playWorkspace) => PlayLoadFailure.KeepsHomeDuringLoad(playerMode, playWorkspace);
 
+	//Where a reload's card can be seen: Player mode, wherever the game is on
+	//screen (Play, Remaster's and Share's game views).
+	public static bool ShowsReloadFor(bool playerMode, bool gameOnScreen) => playerMode && gameOnScreen;
+
 	//What the card says: a resource message id and its argument.
-	public static (string MessageId, string? Arg) Text(string gameName)
+	public static (string MessageId, string? Arg) Text(string gameName, PlayLoadWaitKind kind = PlayLoadWaitKind.Open)
 	{
-		return string.IsNullOrWhiteSpace(gameName) ? ("PlayLoadWaitOpeningGame", null) : ("PlayLoadWaitOpening", gameName.Trim());
+		string verb = kind == PlayLoadWaitKind.Reload ? "Reloading" : "Opening";
+		return string.IsNullOrWhiteSpace(gameName) ? ("PlayLoadWait" + verb + "Game", null) : ("PlayLoadWait" + verb, gameName.Trim());
 	}
 
-	public void Begin(string gameName, int openGeneration)
+	public int Begin(string gameName, int openGeneration) => Start(gameName, openGeneration, PlayLoadWaitKind.Open);
+
+	public int BeginReload(string gameName, int openGeneration) => Start(gameName, openGeneration, PlayLoadWaitKind.Reload);
+
+	private int Start(string gameName, int openGeneration, PlayLoadWaitKind kind)
 	{
 		lock(_lock) {
 			GameName = gameName ?? "";
 			OpenGeneration = openGeneration;
+			Kind = kind;
 			Volatile.Write(ref _frames, 0);
 			SetPhase(PlayLoadWaitPhase.Opening);
+			return Interlocked.Increment(ref _ticket);
 		}
 	}
 
 	//GameLoaded. True when the home must stay up until the picture is out;
 	//false when nothing waits (no open, or the game loaded paused and will
-	//draw nothing until resumed).
-	public bool OnGameLoaded(bool loadedPaused)
+	//draw nothing until resumed). emulatorPaused is the Core's pause flag: a
+	//reload keeps it (a paused game draws one frame and parks), an open's new
+	//game does not inherit it.
+	public bool OnGameLoaded(bool loadedPaused, bool emulatorPaused = false)
 	{
 		lock(_lock) {
 			if(Phase != PlayLoadWaitPhase.Opening) {
 				return false;
 			}
+			bool paused = loadedPaused || (Kind == PlayLoadWaitKind.Reload && emulatorPaused);
 			Volatile.Write(ref _frames, 0);
-			SetPhase(loadedPaused ? PlayLoadWaitPhase.Idle : PlayLoadWaitPhase.WaitingForPicture);
-			return !loadedPaused;
+			SetPhase(paused ? PlayLoadWaitPhase.Idle : PlayLoadWaitPhase.WaitingForPicture);
+			return !paused;
+		}
+	}
+
+	//A blocking reload call returned (the in-place swap, Reload). Still
+	//opening: the Core refused or failed it, no GameLoaded is coming. Paused:
+	//no frame is coming. True when that ended the wait.
+	public bool OnReloadReturned(int ticket, bool emulatorPaused)
+	{
+		lock(_lock) {
+			if(Kind != PlayLoadWaitKind.Reload || ticket != Ticket) {
+				return false;
+			}
+			if(Phase == PlayLoadWaitPhase.Opening || (Phase == PlayLoadWaitPhase.WaitingForPicture && emulatorPaused)) {
+				SetPhase(PlayLoadWaitPhase.Idle);
+				return true;
+			}
+			return false;
+		}
+	}
+
+	//GameLoadFailed: a reload that failed (a power cycle of a file that is
+	//gone). An open's failure is OnLoadReturned's, with its generation.
+	public bool OnLoadFailed()
+	{
+		lock(_lock) {
+			if(Kind != PlayLoadWaitKind.Reload || Phase != PlayLoadWaitPhase.Opening) {
+				return false;
+			}
+			SetPhase(PlayLoadWaitPhase.Idle);
+			return true;
+		}
+	}
+
+	//The safety net: ends the wait the ticket names, whatever its phase.
+	public bool Expire(int ticket)
+	{
+		lock(_lock) {
+			if(ticket != Ticket || Phase == PlayLoadWaitPhase.Idle) {
+				return false;
+			}
+			SetPhase(PlayLoadWaitPhase.Idle);
+			return true;
 		}
 	}
 
@@ -103,7 +178,7 @@ public sealed class PlayLoadWait
 	public bool OnLoadReturned(int openGeneration)
 	{
 		lock(_lock) {
-			if(Phase != PlayLoadWaitPhase.Opening || openGeneration != OpenGeneration) {
+			if(Kind != PlayLoadWaitKind.Open || Phase != PlayLoadWaitPhase.Opening || openGeneration != OpenGeneration) {
 				return false;
 			}
 			SetPhase(PlayLoadWaitPhase.Idle);

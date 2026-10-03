@@ -2506,6 +2506,8 @@ E
 		<Message ID="PackInstallPillFailed">The pack could not be downloaded. Playing without it.</Message>
 		<Message ID="PlayLoadWaitOpening">Opening {0}…</Message>
 		<Message ID="PlayLoadWaitOpeningGame">Opening the game…</Message>
+		<Message ID="PlayLoadWaitReloading">Reloading {0}…</Message>
+		<Message ID="PlayLoadWaitReloadingGame">Reloading the game…</Message>
 		<!--G.5 (PRD Part B §13.5.2 W-P12–W-P16): the Play edge flows.-->
 		<Message ID="FirstRunCannotWrite">MesenAI cannot write to {0}. Choose the other place, or move the app somewhere you can write to.</Message>
 		<Message ID="BiosSheetBodyFds">Famicom Disk System games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every disk game.</Message>
