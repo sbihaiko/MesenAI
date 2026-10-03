@@ -10,6 +10,14 @@ Status the item had before the run is captured up front and restored by an
 only while the item is still in "Em validação" (a verdict this run already
 wrote, or a human move, stands).
 
+#702 — every step that writes a verdict wrote the comment and the
+pack:valid/invalid labels before the Status. A transient gh failure in
+between left the item in "Em validação" with the new verdict label, and the
+#671 restore then put the prior Status back: e.g. pack:invalid next to "Aceito
+parcial (HD Mesen)", still listed. The Status (the catalog's source of truth)
+is now written first in each verdict step, so a later failure leaves the new
+Status, which the restore never touches.
+
 #679 — catalog regeneration was dispatched only on acceptance, so a
 revalidation that rejected an accepted pack left it listed (and
 auto-installing) until the daily catalog run. A final "Inválido" dispatches
@@ -118,9 +126,35 @@ def workflow_checks():
               f"env.FINAL_STATUS_ID == env.{status}" in cond, True)
 
 
+VERDICT_STEPS = ("id: apply-verdict", "- name: Reject disallowed host",
+                 "- name: Reject oversized/failed download", "- name: Reject on lint failure")
+
+
+def verdict_step(text, marker):
+    for block in text.split("\n      - name:"):
+        if marker in ("\n      - name:" + block if not block.startswith("name:") else block):
+            return block
+    return ""
+
+
+def ordering_checks():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    for marker in VERDICT_STEPS:
+        block = verdict_step(text, marker)
+        status = block.find("--field-id \"$STATUS_FIELD_ID\"")
+        writes = [i for i in (block.find("gh issue comment"), block.find("gh issue edit")) if i >= 0]
+        label = marker.split(":", 1)[1].strip()
+        check(f"#702: {label!r} writes the Status before any comment or label",
+              bool(block) and status >= 0 and bool(writes) and status < min(writes), True)
+        final_env = block.find('FINAL_STATUS_ID=')
+        check(f"#702: {label!r} records FINAL_STATUS_ID right after the Status write",
+              status >= 0 and final_env > status and (not writes or final_env < min(writes)), True)
+
+
 def main():
     unit_checks()
     workflow_checks()
+    ordering_checks()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED")
         return 1

@@ -87,8 +87,10 @@ jobs:
           # Re-read the issue: a fast edit may have landed since the event was queued.
           gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json body,title,labels > issue.json
           # The live rows a submission must not duplicate (section 3). Open
-          # issues only: closing one removes it (section 6).
-          gh issue list --repo "$REPO" --label cheat:valid --state open --limit 1000 --json number,body > live.json
+          # issues only: closing one removes it (section 6). The limit is
+          # LIVE_FETCH_LIMIT in scripts/cheat_submission.py, which refuses a
+          # listing that reaches it as possibly truncated (#704).
+          gh issue list --repo "$REPO" --label cheat:valid --state open --limit 5000 --json number,body > live.json
           python3 - <<'PY'
           import json
           d = json.load(open("issue.json"))
