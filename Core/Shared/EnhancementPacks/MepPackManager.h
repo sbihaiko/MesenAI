@@ -6,6 +6,7 @@
 #include "Shared/EnhancementPacks/RemasterProject.h"
 #include "Utilities/SimpleLock.h"
 #include "Utilities/FolderUtilities.h"
+#include "Shared/SettingTypes.h"
 
 class VirtualFile;
 class Emulator;
@@ -447,6 +448,24 @@ public:
 	{
 		return (type == MepSectionType::Textures && IsLayerOff(mask, MepRomLayer::Textures)) ||
 			(type == MepSectionType::Audio && IsLayerOff(mask, MepRomLayer::Audio));
+	}
+	//MEP-v1 §5 (ADR-0253 §1): which global switch a section answers to.
+	//`widescreen` is the one section with no switch of its own - the WideScrn
+	//setting is what makes a frame extended at all - so it is gated by
+	//EnableMepPacks alone and never by Synth (which is only the fall-through
+	//arm of this chain). Pure, so scripts/core_unit_tests.cpp can pin it.
+	static bool SectionSwitchEnabled(const EnhancementPackConfig& cfg, MepSectionType type)
+	{
+		if(!cfg.EnableMepPacks) {
+			return false;
+		}
+		switch(type) {
+			case MepSectionType::Textures: return cfg.EnableTextures;
+			case MepSectionType::Audio: return cfg.EnableAudio;
+			case MepSectionType::Border: return cfg.EnableBorder;
+			case MepSectionType::Widescreen: return true;
+			default: return cfg.EnableSynth;
+		}
 	}
 	//P.3: drops every per-ROM preference - the pack choice and W-P6's layer
 	//switches - so a config-apply is authoritative (the UI resets then

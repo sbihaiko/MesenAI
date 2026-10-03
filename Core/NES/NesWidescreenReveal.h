@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "NES/NesTypes.h"
+#include "Shared/Video/WidescreenFallback.h"
 
 //ADR-0253 slice W.1: the NES "Reveal" widescreen mode. With the WideScrn
 //switch on, the standard PPU draws ExtraColumns more pixels on each side of
@@ -113,8 +114,14 @@ namespace NesWidescreenReveal
 	//in the PPU output buffer's format: palette index in bits 0-5, emphasis in
 	//bits 6-8. `vram` is a BaseMapper, or anything with its
 	//DebugReadVram(uint16_t) - the only call made on it.
+	//
+	//`fillOut`, when given, receives WidescreenFallback::LeftBit/RightBit for the
+	//sides this row filled from the console's own map, and 0 for a row that hit
+	//ADR-0253 §3's "cannot fill" case (which is what the fallback chain then
+	//fills). The backdrop a row shows with the background layer off is the
+	//console's own output, so it counts as filled.
 	template<typename Vram>
-	void RenderRowSides(const RowBasis& basis, MirroringType mirroring, Vram& vram, const uint8_t* paletteRam, uint16_t* left, uint16_t* right)
+	void RenderRowSides(const RowBasis& basis, MirroringType mirroring, Vram& vram, const uint8_t* paletteRam, uint16_t* left, uint16_t* right, uint8_t* fillOut = nullptr)
 	{
 		uint16_t originX = RowOriginX(basis);
 		if(!SideColumnsHaveContent(mirroring, originX)) {
@@ -122,7 +129,13 @@ namespace NesWidescreenReveal
 				left[i] = BlackColor;
 				right[i] = BlackColor;
 			}
+			if(fillOut) {
+				*fillOut = 0;
+			}
 			return;
+		}
+		if(fillOut) {
+			*fillOut = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
 		}
 
 		uint16_t backdrop = (uint16_t)((paletteRam[0] & basis.PaletteMask) | basis.EmphasisBits);
@@ -190,9 +203,13 @@ namespace NesWidescreenReveal
 	{
 	private:
 		vector<uint16_t> _buffers[2];
+		//ADR-0253 §3: one byte per row per buffer, the sides the game filled
+		//(WidescreenFallback.h). Double-buffered with the pixels it describes.
+		uint8_t _fill[2][Height] = {};
 		uint8_t _write = 0;
 		bool _active = false;
 		bool _rowDrawn[Height] = {};
+		const uint8_t* _lastFill = nullptr;
 
 	public:
 		void BeginFrame(bool active)
@@ -202,12 +219,17 @@ namespace NesWidescreenReveal
 				_buffers[_write].assign(ExtendedWidth * Height, BlackColor);
 			}
 			memset(_rowDrawn, 0, sizeof(_rowDrawn));
+			memset(_fill[_write], 0, sizeof(_fill[_write]));
+			if(!_active) {
+				_lastFill = nullptr;
+			}
 		}
 
 		bool IsActive() const { return _active; }
 
-		//The row's two runs of extra columns, to be drawn by the caller.
-		bool RowSides(int16_t row, uint16_t*& left, uint16_t*& right)
+		//The row's two runs of extra columns and the byte recording which of
+		//them the caller filled, to be drawn by the caller.
+		bool RowSides(int16_t row, uint16_t*& left, uint16_t*& right, uint8_t*& fill)
 		{
 			if(!_active || row < 0 || row >= (int16_t)Height) {
 				return false;
@@ -215,6 +237,7 @@ namespace NesWidescreenReveal
 			uint16_t* rowStart = _buffers[_write].data() + row * ExtendedWidth;
 			left = rowStart;
 			right = rowStart + ExtraColumns + StandardWidth;
+			fill = &_fill[_write][row];
 			_rowDrawn[row] = true;
 			return true;
 		}
@@ -225,9 +248,11 @@ namespace NesWidescreenReveal
 		const uint16_t* Finish(const uint16_t* standardFrame)
 		{
 			if(!_active) {
+				_lastFill = nullptr;
 				return nullptr;
 			}
-			uint16_t* frame = _buffers[_write].data();
+			uint8_t index = _write;
+			uint16_t* frame = _buffers[index].data();
 			ComposeCenter(standardFrame, frame);
 			for(uint32_t y = 0; y < Height; y++) {
 				if(!_rowDrawn[y]) {
@@ -239,7 +264,12 @@ namespace NesWidescreenReveal
 			_write ^= 1;
 			_active = false;
 			memset(_rowDrawn, 0, sizeof(_rowDrawn));
+			_lastFill = _fill[index];
 			return frame;
 		}
+
+		//The per-row fill map of the frame Finish just returned (ADR-0253 §3),
+		//or nullptr when that frame was standard.
+		const uint8_t* LastFill() const { return _lastFill; }
 	};
 }

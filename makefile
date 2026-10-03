@@ -530,6 +530,9 @@ doc-checks-2:
 	#Synthetic packs in a temp dir; no emulator, no ROM.
 	python3 scripts/test_mep_add_cell.py
 	python3 scripts/test_mep_lint_border.py
+	#ADR-0253 §3 (W.3): the `widescreen` section — `widescreen.json` plus the
+	#side art it names, safe relative paths that must resolve in the container.
+	python3 scripts/test_mep_lint_widescreen.py
 	#ADR-0196 (F12.5): the `<addition>` tag's synthetic target key — the rule
 	#itself, then the lint that gates a pack carrying one.
 	python3 scripts/test_mep_addition.py
@@ -673,6 +676,7 @@ CUTSRC := \
   Core/Shared/Audio/SmfWriter.cpp \
   Core/Shared/EnhancementPacks/AudioFingerprint.cpp \
   Core/Shared/EnhancementPacks/MepPack.cpp \
+  Core/Shared/EnhancementPacks/MepWidescreen.cpp \
   Core/Shared/EnhancementPacks/MepRecipeInstaller.cpp \
   Core/Shared/EnhancementPacks/MepRecipeOps.cpp \
   Core/Shared/EnhancementPacks/MepContentId.cpp \

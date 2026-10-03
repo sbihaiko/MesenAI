@@ -1081,13 +1081,7 @@ const MepPack* MepPackManager::FindPreferredPack(MepSectionType type) const
 const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 {
 	EnhancementPackConfig& cfg = _emu->GetSettings()->GetEnhancementPackConfig();
-	bool sectionEnabled = cfg.EnableMepPacks && (
-		type == MepSectionType::Textures ? cfg.EnableTextures :
-		type == MepSectionType::Audio ? cfg.EnableAudio :
-		type == MepSectionType::Border ? cfg.EnableBorder :
-		cfg.EnableSynth
-	);
-	if(!sectionEnabled) {
+	if(!SectionSwitchEnabled(cfg, type)) {
 		return nullptr;
 	}
 	auto lock = _stateLock.AcquireSafe();

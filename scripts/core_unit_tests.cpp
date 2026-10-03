@@ -61,6 +61,9 @@
 #include "Shared/Video/FrameCapture.h"
 #include "Shared/Video/AspectRatioMath.h"
 #include "Shared/Video/HudToastLayout.h"
+#include "Shared/Video/WidescreenFallback.h"
+#include "Shared/RenderedFrame.h"
+#include "Shared/EnhancementPacks/MepWidescreen.h"
 #include "Shared/HeadlessInputEngine.h"
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
@@ -3115,19 +3118,21 @@ namespace
 		frames.BeginFrame(false);
 		uint16_t* left = nullptr;
 		uint16_t* right = nullptr;
-		Check(!frames.RowSides(0, left, right), "W253: with the switch off there are no extra columns to draw");
+		uint8_t* fill = nullptr;
+		Check(!frames.RowSides(0, left, right, fill), "W253: with the switch off there are no extra columns to draw");
 		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off the frame stays standard");
 
 		frames.BeginFrame(true);
 		Check(frames.IsActive(), "W253: the switch latched on at the start of the frame");
-		Check(frames.RowSides(0, left, right) && left && right, "W253: a row's side columns are writable while active");
-		if(left && right) {
+		Check(frames.RowSides(0, left, right, fill) && left && right && fill, "W253: a row's side columns are writable while active");
+		if(left && right && fill) {
 			for(uint32_t i = 0; i < ExtraColumns; i++) {
 				left[i] = 0x21;
 				right[i] = 0x22;
 			}
+			*fill = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
 		}
-		Check(!frames.RowSides(240, left, right) && !frames.RowSides(-1, left, right), "W253: rows outside 0-239 are refused");
+		Check(!frames.RowSides(240, left, right, fill) && !frames.RowSides(-1, left, right, fill), "W253: rows outside 0-239 are refused");
 
 		const uint16_t* wide = frames.Finish(standard.data());
 		Check(wide != nullptr, "W253: an active frame finishes extended");
@@ -3147,6 +3152,421 @@ namespace
 		const uint16_t* next = frames.Finish(standard.data());
 		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
 		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W253C: the widescreen fallback chain (ADR-0253 §3, slice W.3) -----
+//Where W.1 drew black for a side column the game cannot fill, W.3 picks the
+//first source that applies: the pack's `<widescreen>` art (MEP-v1 §5.5), then
+//its border layer (ADR-0149), then black. The policy is pure (WidescreenFallback.h)
+//and so is the border composite's extended path (BorderLayout); the loader of
+//the `<widescreen>` section is pure apart from the convention probe, which gets
+//a throwaway folder tree like Bloco D's.
+namespace
+{
+	using WidescreenFallback::Source;
+
+	Source ResolveSide(bool reveal, bool art, bool border)
+	{
+		WidescreenFallback::Inputs in;
+		in.RevealFilled = reveal;
+		in.PackArtAvailable = art;
+		in.BorderAvailable = border;
+		return WidescreenFallback::Resolve(in);
+	}
+
+	std::string Hex32(uint32_t value)
+	{
+		char buf[16];
+		snprintf(buf, sizeof(buf), "0x%08X", value);
+		return buf;
+	}
+
+	std::string SourceName(Source source)
+	{
+		switch(source) {
+			case Source::Reveal: return "Reveal";
+			case Source::PackArt: return "PackArt";
+			case Source::Border: return "Border";
+			default: return "Black";
+		}
+	}
+
+	void TestW253FallbackPrefersTheMostSpecificSource()
+	{
+		Check(ResolveSide(true, true, true) == Source::Reveal, "W253C: real content beside the picture always wins");
+		Check(ResolveSide(false, true, true) == Source::PackArt, "W253C: with nothing to reveal, the pack's widescreen art comes first (ADR-0253 §3)", SourceName(ResolveSide(false, true, true)));
+		Check(ResolveSide(false, false, true) == Source::Border, "W253C: without pack art, the border layer fills the sides", SourceName(ResolveSide(false, false, true)));
+		Check(ResolveSide(false, false, false) == Source::Black, "W253C: with no art and no border, the sides stay black");
+		Check(ResolveSide(true, false, false) == Source::Reveal, "W253C: reveal alone is enough");
+		Check(ResolveSide(false, true, false) == Source::PackArt, "W253C: pack art alone beats black");
+	}
+
+	void TestW253FallbackSupportNeverComesFromBorderOrBlack()
+	{
+		//ADR-0253 §3, last paragraph: the border and black are per-frame
+		//fill-ins, so they never keep the WideScrn switch enabled on their own.
+		Check(WidescreenFallback::SupportsWidescreen(true, false), "W253C: a game with real side content supports widescreen");
+		Check(WidescreenFallback::SupportsWidescreen(false, true), "W253C: a pack with widescreen art supports widescreen");
+		Check(WidescreenFallback::SupportsWidescreen(true, true), "W253C: both together support widescreen");
+		Check(!WidescreenFallback::SupportsWidescreen(false, false), "W253C: a border or black alone never makes a game supported (ADR-0253 §3)");
+	}
+
+	void TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty()
+	{
+		//A frame 8 px wide with 2-px side runs (ExtendedColumns = 2), 4 rows
+		const uint32_t width = 8, height = 4, extra = 2;
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint32_t art[extra * height] = { 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x42 };
+		//Row 1 already filled on the left by the game; row 3 filled on both sides
+		uint8_t fill[height] = { 0, WidescreenFallback::LeftBit, 0, WidescreenFallback::LeftBit | WidescreenFallback::RightBit };
+
+		WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, true, art, extra, height, fill);
+
+		Check(fill[0] == WidescreenFallback::LeftBit, "W253C: the art marks the rows it filled", std::to_string(fill[0]));
+		Check(fill[1] == WidescreenFallback::LeftBit, "W253C: a row the game already filled is left alone", std::to_string(fill[1]));
+		Check(frame[0] == 0x11 && frame[1] == 0x12, "W253C: the left art lands in the left run, 1:1");
+		Check(frame[width] == 0xFF000000u, "W253C: a filled row keeps the game's own side pixels");
+		Check(frame[2 * width] == 0x31 && frame[2 * width + 1] == 0x32, "W253C: every unfilled row takes its own art row");
+		Check(frame[3 * width] == 0xFF000000u, "W253C: a row filled on both sides is not touched");
+
+		WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, false, art, extra, height, fill);
+
+		Check(frame[width - 1] == 0x12 && frame[width - 2] == 0x11, "W253C: the right art lands in the right run");
+		Check(frame[2 * width - 1] == 0x22, "W253C: the right side fills the rows the left side did not");
+		Check(fill[1] == (WidescreenFallback::LeftBit | WidescreenFallback::RightBit), "W253C: both sides now read as filled", std::to_string(fill[1]));
+		Check(frame[3 * width + width - 1] == 0xFF000000u, "W253C: the right side skips the rows the game filled");
+
+		//A wrong-sized image is refused outright: the next source in the chain
+		//fills the column instead of a stretched or tiled side (MEP-v1 §5.5)
+		std::vector<uint32_t> untouched(width * height, 0xFF000000u);
+		uint8_t full[height] = {};
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, extra, true, art, extra + 1, height, full);
+		Check(untouched[0] == 0xFF000000u && full[0] == 0, "W253C: a side image of the wrong width is refused");
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, extra, true, art, extra, height + 1, full);
+		Check(untouched[0] == 0xFF000000u && full[0] == 0, "W253C: a side image of the wrong height is refused");
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, 0, true, art, extra, height, full);
+		Check(untouched[0] == 0xFF000000u, "W253C: a standard frame has no side run to fill");
+	}
+
+	void TestW253MepWidescreenParsesTheDefaultPairAndScreens()
+	{
+		MepWidescreen ws;
+		std::string error;
+		bool ok = MepWidescreen::Parse(R"({
+			"version": 1,
+			"left": "left.png",
+			"right": "right.png",
+			"screens": [
+				{ "id": 3, "left": "screens/3-left.png" },
+				{ "id": 7, "right": "screens/7-right.png" }
+			]
+		})", ws, error);
+		Check(ok, "W253C: a valid widescreen.json parses", error);
+		if(!ok) {
+			return;
+		}
+		Check(ws.Left == "left.png" && ws.Right == "right.png", "W253C: the default pair is the pack's fallback art", ws.Left + " / " + ws.Right);
+		Check(ws.Screens.size() == 2, "W253C: every per-screen entry is kept", std::to_string(ws.Screens.size()));
+		Check(ws.HasAnyArt(), "W253C: a section with images reads as art");
+		Check(ws.FindScreen(MepWidescreen::DefaultScreenId) == nullptr, "W253C: no screen answers to the default id");
+		Check(ws.FindScreen(3) != nullptr && ws.FindScreen(3)->Left == "screens/3-left.png", "W253C: the screen's own side is found");
+		Check(ws.FindScreen(3) != nullptr && ws.FindScreen(3)->Right.empty(), "W253C: a screen may override only one side");
+		Check(ws.FindScreen(99) == nullptr, "W253C: an unknown screen uses the default pair");
+		Check(ws.GetSidePath(3, true) == "screens/3-left.png", "W253C: the override wins for its own side", ws.GetSidePath(3, true));
+		Check(ws.GetSidePath(3, false) == "right.png", "W253C: a half-overridden screen inherits the other side from the default pair", ws.GetSidePath(3, false));
+		Check(ws.GetSidePath(7, false) == "screens/7-right.png" && ws.GetSidePath(7, true) == "left.png", "W253C: the same rule holds for the right side");
+		Check(ws.GetSidePath(99, true) == "left.png" && ws.GetSidePath(99, false) == "right.png", "W253C: an unknown screen gets the default pair on both sides");
+
+		MepWidescreen defaults;
+		Check(MepWidescreen::Parse(R"({"version": 1, "right": "r.png"})", defaults, error), "W253C: one side alone is a valid section", error);
+		Check(defaults.GetSidePath(1, true).empty() && defaults.GetSidePath(1, false) == "r.png", "W253C: the side with no art resolves to nothing");
+
+		MepWidescreen loose;
+		Check(MepWidescreen::Parse(R"({"version": 1, "left": "l.png", "unknown": {"a": 1}})", loose, error), "W253C: unknown fields are ignored (MEP-v1 §3.2)", error);
+		Check(MepWidescreen::Parse(R"({"version": 1, "left": "sub/dir/LEFT.PNG"})", loose, error), "W253C: a nested path and a capitalised extension are accepted", error);
+	}
+
+	void TestW253MepWidescreenRejectsBadManifests()
+	{
+		static const std::pair<const char*, const char*> cases[] = {
+			{ "{}", "a manifest with no images" },
+			{ "{\"version\": 2, \"left\": \"l.png\"}", "an unknown version" },
+			{ "{\"left\": \"l.png\"}", "a missing version" },
+			{ "{\"version\": 1, \"left\": \"../escape.png\"}", "a path that escapes the section folder" },
+			{ "{\"version\": 1, \"left\": \"/abs.png\"}", "an absolute path" },
+			{ "{\"version\": 1, \"left\": \"left.jpg\"}", "a non-PNG image" },
+			{ "{\"version\": 1, \"left\": \"left.png/x\"}", "a path that does not end in .png" },
+			{ "{\"version\": 1, \"left\": \"\"}", "an empty path" },
+			{ "{\"version\": 1, \"left\": 7}", "a non-string path" },
+			{ "{\"version\": 1, \"screens\": [{\"left\": \"l.png\"}]}", "a screen with no id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": -1, \"left\": \"l.png\"}]}", "a negative screen id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": 2}, {\"id\": 2, \"right\": \"r.png\"}]}", "a duplicated screen id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": 1}]}", "a screen with no image" },
+			{ "{\"version\": 1, \"screens\": {}}", "a non-array screens field" },
+			{ "not json", "malformed JSON" },
+		};
+		for(const auto& c : cases) {
+			MepWidescreen out;
+			std::string error;
+			bool ok = MepWidescreen::Parse(c.first, out, error);
+			Check(!ok, std::string("W253C: widescreen.json rejects ") + c.second, ok ? "unexpectedly succeeded" : error);
+			Check(!ok && !error.empty(), std::string("W253C: the rejection of ") + c.second + " says why");
+		}
+
+		Check(MepWidescreen::IsValidImagePath("left.png"), "W253C: a plain .png name is a valid image path");
+		Check(MepWidescreen::IsValidImagePath("screens/3-left.PNG"), "W253C: the extension check is case-insensitive");
+		Check(!MepWidescreen::IsValidImagePath("../left.png"), "W253C: an escaping path is never a valid image path");
+		Check(!MepWidescreen::IsValidImagePath("screens/../../left.png"), "W253C: a nested escape is never a valid image path");
+	}
+
+	void TestW253DetectConventionLayoutFindsTheWidescreenSection()
+	{
+		std::filesystem::path dir = MakeTempPackDir("widescreen_section");
+		std::error_code ec;
+		std::filesystem::create_directories(dir / "widescreen", ec);
+		WriteTestFile(dir / "widescreen" / "widescreen.json", "{\"version\":1,\"left\":\"left.png\",\"right\":\"right.png\"}");
+		WriteTestFile(dir / "textures" / "hires.txt", "<ver>106\n");
+
+		MepPack pack;
+		pack.RootFolder = dir.string();
+		Check(pack.DetectConventionLayout(), "W253C: a pack with a widescreen/ folder is recognized");
+		Check(pack.HasSection(MepSectionType::Widescreen), "W253C: widescreen/widescreen.json is the widescreen section");
+		Check(pack.GetSectionPath(MepSectionType::Widescreen) == (dir / "widescreen").string(), "W253C: the section path is the folder holding the images", pack.GetSectionPath(MepSectionType::Widescreen));
+		Check(pack.GetSectionName(MepSectionType::Widescreen) == std::string("widescreen"), "W253C: the section's manifest name is 'widescreen'");
+		std::filesystem::remove_all(dir, ec);
+	}
+
+	void TestW253WidescreenSectionHasNoSwitchOfItsOwn()
+	{
+		//MEP-v1 §5 / ADR-0253 §1: `widescreen` is the one section with no switch
+		//of its own — WideScrn is what makes a frame extended at all — so the
+		//other sections' switches never gate its art. Synth is the trap: it used
+		//to be the fall-through arm of that chain, which is now explicit.
+		EnhancementPackConfig cfg;
+		auto enabled = [&](MepSectionType type) { return MepPackManager::SectionSwitchEnabled(cfg, type); };
+
+		Check(enabled(MepSectionType::Widescreen), "W253C: widescreen art is on with every section switch on");
+		cfg.EnableSynth = false;
+		Check(!enabled(MepSectionType::Synth), "W253C: the synth switch still gates the synth section");
+		Check(enabled(MepSectionType::Widescreen), "W253C: the synth switch does not gate the widescreen art");
+		cfg.EnableTextures = false;
+		cfg.EnableAudio = false;
+		cfg.EnableBorder = false;
+		Check(enabled(MepSectionType::Widescreen), "W253C: no section switch gates the widescreen art");
+		Check(!enabled(MepSectionType::Border), "W253C: the border switch still gates the border section");
+		cfg.EnableMepPacks = false;
+		Check(!enabled(MepSectionType::Widescreen), "W253C: packs off is the one switch that does gate it");
+	}
+
+	void TestW253BorderCompositeFillsOnlyTheUnfilledSideRows()
+	{
+		//Canvas 16x8, a 4:3-style viewport at x=4 w=8 h=8; source 12x8 with
+		//ExtendedColumns = 2, so the centre 8 px map 1:1 into the viewport and
+		//each side run is 2 canvas px wide, right beside it.
+		const uint32_t canvasW = 16, canvasH = 8, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = 8;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0); //fully transparent
+		std::vector<uint32_t> backdrop;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH);
+		for(uint32_t y = 0; y < canvasH; y++) {
+			for(uint32_t x = 0; x < standardWidth + 2 * extra; x++) {
+				src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+			}
+		}
+		uint8_t fill[canvasH] = { 0, WidescreenFallback::LeftBit, WidescreenFallback::RightBit,
+			WidescreenFallback::LeftBit | WidescreenFallback::RightBit, 0, 0, 0, 0 };
+
+		std::vector<uint32_t> dst((size_t)canvasW * canvasH, 0xDEADBEEFu);
+		BorderCompositeExtendedFrame(dst.data(), backdrop.data(), border.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+
+		auto at = [&](uint32_t x, uint32_t y) { return dst[(size_t)y * canvasW + x]; };
+		auto srcAt = [&](uint32_t x, uint32_t y) { return src[(size_t)y * (standardWidth + 2 * extra) + x]; };
+
+		Check(at(4, 0) == srcAt(extra, 0) && at(11, 0) == srcAt(extra + standardWidth - 1, 0), "W253C: the centre picture lands in the viewport");
+		Check(at(2, 0) == 0 && at(3, 0) == 0 && at(12, 0) == 0 && at(13, 0) == 0, "W253C: an unfilled side row keeps the border backdrop", Hex32(at(2, 0)));
+		Check(at(2, 1) == srcAt(0, 1) && at(3, 1) == srcAt(1, 1), "W253C: a left-filled row draws the left run beside the viewport", Hex32(at(2, 1)));
+		Check(at(12, 2) == srcAt(extra + standardWidth, 2) && at(13, 2) == srcAt(extra + standardWidth + 1, 2), "W253C: a right-filled row draws the right run", Hex32(at(12, 2)));
+		Check(at(2, 3) == srcAt(0, 3) && at(13, 3) == srcAt(extra + standardWidth + 1, 3), "W253C: a row filled on both sides draws both runs");
+		Check(at(0, 1) == 0 && at(15, 3) == 0, "W253C: outside the viewport and the side runs the backdrop is untouched");
+		Check(at(4, 4) == srcAt(extra, 4), "W253C: the centre is drawn on every row, filled or not");
+
+		//Overlay mode blends the border over the side runs it just drew, so an
+		//opaque bezel still covers the game there; underlay leaves the game on top.
+		std::vector<uint32_t> opaque((size_t)canvasW * canvasH, 0xFF204080u);
+		std::vector<uint32_t> opaqueBackdrop;
+		BorderPrepareBackdrop(opaqueBackdrop, opaque.data(), layout);
+		std::vector<uint32_t> over((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(over.data(), opaqueBackdrop.data(), opaque.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+		Check(over[(size_t)1 * canvasW + 2] == 0xFF204080u, "W253C: in overlay mode the border is blended over a filled side row", Hex32(over[(size_t)1 * canvasW + 2]));
+
+		BorderLayout under = layout;
+		under.Underlay = true;
+		std::vector<uint32_t> underBackdrop;
+		BorderPrepareBackdrop(underBackdrop, opaque.data(), under);
+		std::vector<uint32_t> underlay((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(underlay.data(), underBackdrop.data(), opaque.data(), under, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+		Check(underlay[(size_t)1 * canvasW + 2] == srcAt(0, 1), "W253C: in underlay mode the game stays over the border in the side run", Hex32(underlay[(size_t)1 * canvasW + 2]));
+	}
+
+	void TestW253BorderCompositeWithoutASideFillMapDrawsTheBorderAlone()
+	{
+		//BorderLayout.h's contract for the extended composite: a null side map
+		//means "the border alone" - the caller has a picture to place but no
+		//per-row fill map to place side runs from - not a crash. Both the draw
+		//loop and the overlay blend below it read the map per row.
+		const uint32_t canvasW = 16, canvasH = 4, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = canvasH;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0xFF204080u);
+		std::vector<uint32_t> backdrop;
+		//Underlay so the picture is readable in the viewport: in overlay mode an
+		//opaque border is blended over it, side runs included.
+		layout.Underlay = true;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH);
+		for(uint32_t y = 0; y < canvasH; y++) {
+			for(uint32_t x = 0; x < standardWidth + 2 * extra; x++) {
+				src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+			}
+		}
+
+		std::vector<uint32_t> dst((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(dst.data(), backdrop.data(), border.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, nullptr);
+
+		auto at = [&](uint32_t x, uint32_t y) { return dst[(size_t)y * canvasW + x]; };
+		auto srcAt = [&](uint32_t x, uint32_t y) { return src[(size_t)y * (standardWidth + 2 * extra) + x]; };
+		Check(at(4, 0) == srcAt(extra, 0) && at(11, 1) == srcAt(extra + standardWidth - 1, 1), "W253C: with no side map the picture still lands in the viewport", Hex32(at(4, 0)));
+		Check(at(2, 0) == 0xFF204080u && at(13, 3) == 0xFF204080u, "W253C: with no side map the side runs keep the border instead of reading it as filled", Hex32(at(2, 0)));
+	}
+
+	void TestW253StandardFrameCarriesNoExtendedState()
+	{
+		//ADR-0253 §2/§3: the two extended fields describe each other - a side-fill
+		//map with no extra columns is a map of columns the standard picture does
+		//not have, and VideoDecoder's drop-back-to-the-centre path (the filter
+		//that cannot take an extended frame) is one of the places that has to
+		//clear both, not just the width.
+		uint8_t fill[240] = {};
+		RenderedFrame frame;
+		frame.ExtendedColumns = 64;
+		frame.ExtendedSideFill = fill;
+		frame.ClearExtension();
+
+		Check(frame.ExtendedColumns == 0, "W253C: dropping back to the standard width clears the extra columns");
+		Check(frame.ExtendedSideFill == nullptr, "W253C: dropping back to the standard width drops the side-fill map with it");
+	}
+
+	void TestW253FallbackRunsTheArtBeforeTheBorderComposite()
+	{
+		//ADR-0253 §3: the pack art is the chain's first link, so it has already
+		//filled - and marked - its rows by the time the border composite runs;
+		//that is what makes the border the *second* link instead of a reason to
+		//drop the art. The order lives in WidescreenFallback::ApplyChain, the
+		//function VideoRenderer::UpdateFrame calls, so a chain assembled the
+		//other way round fails here rather than only on screen.
+		const uint32_t width = 4, height = 2, extra = 1;
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint32_t art[extra * height] = { 0xAA, 0xBB };
+		uint8_t fill[height] = { 0, WidescreenFallback::LeftBit };
+
+		std::string order;
+		uint8_t seenFill0 = 0, seenFill1 = 0;
+		uint32_t seenPixel = 0;
+		int returned = WidescreenFallback::ApplyChain(true,
+			[&]() {
+				order += "art";
+				WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, true, art, extra, height, fill);
+			},
+			[&]() {
+				order += ">border";
+				seenFill0 = fill[0];
+				seenFill1 = fill[1];
+				seenPixel = frame[0];
+				return 7;
+			});
+
+		Check(order == "art>border", "W253C: the pack art runs before the border composite (ADR-0253 §3)", order);
+		Check(returned == 7, "W253C: the chain hands back what the border stage produced", std::to_string(returned));
+		Check(seenPixel == 0xAA, "W253C: the art is already on the frame when the border composite runs", Hex32(seenPixel));
+		Check(seenFill0 == WidescreenFallback::LeftBit && seenFill1 == WidescreenFallback::LeftBit,
+			"W253C: the rows the art filled are marked before the border composite runs");
+
+		//A standard frame has no side run to fill, so the art stage is skipped
+		order.clear();
+		WidescreenFallback::ApplyChain(false, [&]() { order += "art"; }, [&]() { order += ">border"; return 0; });
+		Check(order == ">border", "W253C: a standard frame skips the art stage and only composites", order);
+	}
+
+	void TestW253FallbackKeepsTheArtThroughTheBorderComposite()
+	{
+		//The two links as the screen gets them: the art fills the extended frame,
+		//then the composite turns that frame into the canvas. Running them the
+		//other way round would draw the art into a frame the composite has
+		//already replaced - the failure ApplyChain's order prevents - so the
+		//reversed run is asserted here too, as the reason the order is pinned.
+		const uint32_t canvasW = 16, canvasH = 4, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = canvasH;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0); //fully transparent
+		std::vector<uint32_t> backdrop;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		auto makeFrame = [&]() {
+			std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH, 0xFF111111u);
+			for(uint32_t y = 0; y < canvasH; y++) {
+				for(uint32_t x = extra; x < extra + standardWidth; x++) {
+					src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+				}
+			}
+			return src;
+		};
+		const uint32_t art[extra * canvasH] = { 0xA0, 0xB0, 0xA1, 0xB1, 0xA2, 0xB2, 0xA3, 0xB3 };
+
+		std::vector<uint32_t> frame = makeFrame();
+		uint8_t fill[canvasH] = { 0, WidescreenFallback::LeftBit, 0, 0 };
+		std::vector<uint32_t> canvas((size_t)canvasW * canvasH, 0xDEADBEEFu);
+		WidescreenFallback::ApplyChain(true,
+			[&]() { WidescreenFallback::FillSideFromArt(frame.data(), standardWidth + 2 * extra, canvasH, extra, true, art, extra, canvasH, fill); },
+			[&]() {
+				BorderCompositeExtendedFrame(canvas.data(), backdrop.data(), border.data(), layout, frame.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+				return 0;
+			});
+
+		auto at = [&](uint32_t x, uint32_t y) { return canvas[(size_t)y * canvasW + x]; };
+		Check(at(2, 0) == 0xA0 && at(3, 0) == 0xB0, "W253C: the pack art reaches the canvas beside the viewport", Hex32(at(2, 0)));
+		Check(at(2, 2) == 0xA2, "W253C: every row the game left empty takes its own art row", Hex32(at(2, 2)));
+		Check(at(2, 1) == 0xFF111111u, "W253C: a row the game filled keeps the game's own side pixels", Hex32(at(2, 1)));
+		Check(at(0, 0) == 0 && at(15, 0) == 0, "W253C: with a transparent border the rest of the canvas stays empty", Hex32(at(0, 0)));
+
+		std::vector<uint32_t> late = makeFrame();
+		uint8_t lateFill[canvasH] = { 0, WidescreenFallback::LeftBit, 0, 0 };
+		std::vector<uint32_t> lateCanvas((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(lateCanvas.data(), backdrop.data(), border.data(), layout, late.data(), standardWidth + 2 * extra, canvasH, extra, lateFill);
+		WidescreenFallback::FillSideFromArt(late.data(), standardWidth + 2 * extra, canvasH, extra, true, art, extra, canvasH, lateFill);
+		Check(lateCanvas[2] != 0xA0, "W253C: compositing before the art loses it, which is why the order is pinned", Hex32(lateCanvas[2]));
 	}
 }
 
@@ -14077,6 +14497,18 @@ int main()
 	TestRevealFollowsTheRowsMaskState();
 	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
 	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestW253FallbackPrefersTheMostSpecificSource();
+	TestW253FallbackSupportNeverComesFromBorderOrBlack();
+	TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty();
+	TestW253MepWidescreenParsesTheDefaultPairAndScreens();
+	TestW253MepWidescreenRejectsBadManifests();
+	TestW253DetectConventionLayoutFindsTheWidescreenSection();
+	TestW253WidescreenSectionHasNoSwitchOfItsOwn();
+	TestW253BorderCompositeFillsOnlyTheUnfilledSideRows();
+	TestW253BorderCompositeWithoutASideFillMapDrawsTheBorderAlone();
+	TestW253StandardFrameCarriesNoExtendedState();
+	TestW253FallbackRunsTheArtBeforeTheBorderComposite();
+	TestW253FallbackKeepsTheArtThroughTheBorderComposite();
 	TestWidescreenSupportProbeIsUndecidedWhileTheWindowIsOpen();
 	TestWidescreenSupportProbeFindsContentOnTheFirstFrameThatHasIt();
 	TestWidescreenSupportProbeConcludesUnsupportedAfterAFullWindowOfNothing();

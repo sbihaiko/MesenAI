@@ -857,6 +857,7 @@
     <ClCompile Include="Shared\BaseControlDevice.cpp" />
     <ClCompile Include="Shared\Audio\BaseSoundManager.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepPack.cpp" />
+    <ClCompile Include="Shared\EnhancementPacks\MepWidescreen.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepPackManager.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\AudioFingerprint.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepContentId.cpp" />

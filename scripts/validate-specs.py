@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Validates the golden files under docs/specs/ against the normative rules
-of the ESP v1, MEP v1 (incl. the v1.5 border section), MEI v1.4, MEP-recipe v1 specs and the hires-gbsms draft,
+of the ESP v1, MEP v1 (incl. the v1.5 border and v1.8 widescreen sections), MEI v1.4, MEP-recipe v1 specs and the hires-gbsms draft,
 and enforces the wire format of shared cross-language test fixtures
 (path-cases.txt, ADR-0124); also lints every MEP golden root via mep_lint.py (ADR-0136). Exits non-zero on the first violation. Run from the repo root:
 python3 scripts/validate-specs.py
@@ -100,7 +100,7 @@ def validate_mep(path):
     sections = d.get("sections", {})
     check(len(sections) >= 1, f"{path.name}: sections is empty")
     for name, sec in sections.items():
-        check(name in ("textures", "audio", "synth", "border"), f"{path.name}: unknown section '{name}' (ok if a future version)")
+        check(name in ("textures", "audio", "synth", "border", "widescreen"), f"{path.name}: unknown section '{name}' (ok if a future version)")
         check("path" in sec and safe_relative_path(sec["path"]), f"{path.name}: sections.{name}.path missing or unsafe")
 
 def png_size(path):
