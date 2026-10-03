@@ -27,5 +27,19 @@ namespace Mesen.Tests.Shell
 		{
 			Assert.False(PlayGameLayer.ShowsNativeRenderer(gameView, recents, softwareFrame, false));
 		}
+
+		//#734 follow-up: the load card is a surface over the game too - an open
+		//from a game on screen, or a reload, would otherwise spin under the
+		//native picture, invisible on macOS.
+		[Fact]
+		public void The_load_card_is_a_surface_over_the_game()
+		{
+			Assert.True(PlayGameLayer.SurfaceOverGame(overlay: false, sheet: false, biosSheet: false, controllerSetup: false, loadWait: true));
+			Assert.False(PlayGameLayer.SurfaceOverGame(false, false, false, false, false));
+			Assert.True(PlayGameLayer.SurfaceOverGame(true, false, false, false, false));
+			Assert.True(PlayGameLayer.SurfaceOverGame(false, true, false, false, false));
+			Assert.True(PlayGameLayer.SurfaceOverGame(false, false, true, false, false));
+			Assert.True(PlayGameLayer.SurfaceOverGame(false, false, false, true, false));
+		}
 	}
 }
