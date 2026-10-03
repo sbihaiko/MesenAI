@@ -45,14 +45,24 @@ public static class TestAppBuilder
 	//bin/, instead of mutating the developer's real MesenCE settings.
 	//Runs from a module initializer as well as from BuildAvaloniaApp, so it
 	//cannot lose the race against the first ConfigManager.HomeFolder read.
+	//#724: the seed is rewritten on every run, not only when missing - the
+	//tests save config into it (a Remaster/Share switch persists Workspace), so
+	//a kept file made the next run start from whatever the last one left, and a
+	//filtered run then failed where the full suite passed.
+	//Once per process: the second call (BuildAvaloniaApp) must not wipe what a
+	//test already saved.
+	private static bool _seeded;
+
 	[ModuleInitializer]
 	internal static void UsePortableHomeFolder()
 	{
+		if(_seeded) {
+			return;
+		}
+		_seeded = true;
 		try {
 			string settings = Path.Combine(AppContext.BaseDirectory, "settings.json");
-			if(!File.Exists(settings)) {
-				File.WriteAllText(settings, "{}");
-			}
+			File.WriteAllText(settings, "{}");
 		} catch(Exception) {
 			//A read-only output folder would fall back to the real home folder;
 			//the tests that write config assert on the in-memory value anyway.
