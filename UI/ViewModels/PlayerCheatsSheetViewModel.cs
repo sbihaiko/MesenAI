@@ -30,6 +30,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string StatusLine { get; private set; } = "";
 		[ObservableProperty] public partial bool IsAllOff { get; private set; }
 		[ObservableProperty] public partial int CountOn { get; private set; }
+		//The user's rule (2026-10-03): every wait moves. The community catalog
+		//fetch in flight: a moving bar, and "looking" rather than "none".
+		[ObservableProperty] public partial bool IsCommunityLoading { get; private set; }
 
 		//*Add a Code…*: an inline entry row (the full editor stays in Tools ⋯).
 		[ObservableProperty] public partial bool IsAddCodeOpen { get; set; }
@@ -58,6 +61,7 @@ namespace Mesen.ViewModels
 		//#639: the cheat hash of the copy running now; null = the copy never
 		//changes under the sheet (a caller with no running game, or a test).
 		private Func<string>? _runningCheatSha1;
+		private int _communityLoading;
 
 		//CheatCodes saves to the running game's file: a sheet left over from
 		//another copy must not write that game's list (CheatSheet.SavesTo).
@@ -101,6 +105,25 @@ namespace Mesen.ViewModels
 		public void SetCommunityCatalog(IReadOnlyList<CommunityCheatGame> catalog)
 		{
 			_community = CommunityCheatCatalog.ForCopy(catalog, _cheatSha1, _console);
+			Refresh();
+		}
+
+		//The owner's community fetch started; FinishCommunityLoading(token) ends
+		//it (a later BeginCommunityLoading's fetch owns the wait).
+		public int BeginCommunityLoading()
+		{
+			IsCommunityLoading = true;
+			Refresh();
+			return ++_communityLoading;
+		}
+
+		//The fetch answered - a catalog, or nothing (offline, a bad file).
+		public void FinishCommunityLoading(int token)
+		{
+			if(token != _communityLoading || !IsCommunityLoading) {
+				return;
+			}
+			IsCommunityLoading = false;
 			Refresh();
 		}
 
@@ -215,7 +238,7 @@ namespace Mesen.ViewModels
 			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(_console, game, anotherCopy, _stored, _recordingArt, rowFilter, _community);
 			Rows = rows.Select(r => new PlayerCheatRow(r, CheatShare.CanShare(r, _console, _cheatSha1))).ToList();
 			CountOn = CheatSheet.CountOn(_stored);
-			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community));
+			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community), IsCommunityLoading);
 		}
 	}
 

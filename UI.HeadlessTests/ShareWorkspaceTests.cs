@@ -133,9 +133,13 @@ public class ShareWorkspaceTests : IDisposable
 		public string File = "";
 		public bool IsSharing { get; set; }
 		public int Starts;
+		//When set, Start/StopAndKeep block on it like the core's power cycle
+		//(bounded, so a synchronous caller cannot hang the run).
+		public ManualResetEventSlim? Gate;
 
 		public string? Start()
 		{
+			Gate?.Wait(2000);
 			Starts++;
 			IsSharing = true;
 			return File;
@@ -143,6 +147,7 @@ public class ShareWorkspaceTests : IDisposable
 
 		public string? StopAndKeep()
 		{
+			Gate?.Wait(2000);
 			IsSharing = false;
 			return File;
 		}
@@ -377,12 +382,12 @@ public class ShareWorkspaceTests : IDisposable
 		Assert.Equal("Record and share", h.Window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
 		Assert.StartsWith("Contra (USA) restarts from power-on", h.Window.FindNamed<TextBlock>("ShareReplaySheetBody").Text);
 		Click(h.Window.FindNamed<Button>("ShareReplayStartButton"));
+		WaitFor(() => h.Model.IsRecording, "the replay never started");
 		Assert.Equal(1, h.Recorder.Starts);
-		Assert.True(h.Model.IsRecording);
 		Assert.False(h.Window.FindNamed<Panel>("ShareReplayStartSheet").IsOnScreen());
 
 		Assert.True(h.Model.HandleEsc());
-		Assert.False(h.Model.IsRecording);
+		WaitFor(() => !h.Model.IsRecording, "Esc never stopped the replay");
 		Assert.True(h.Window.FindNamed<Panel>("ShareReplaySavedSheet").IsOnScreen());
 		Assert.Equal(Path.GetFileName(h.Recorder.File), h.Window.FindNamed<TextBlock>("ShareReplayFileName").Text);
 		//Nothing opened by itself: both are the user's clicks.
@@ -392,6 +397,56 @@ public class ShareWorkspaceTests : IDisposable
 		Assert.Equal(new[] { h.Recorder.File }, h.Revealed);
 		Click(h.Window.FindNamed<Button>("ShareReplayContinueButton"));
 		Assert.StartsWith("https://github.com/sbihaiko/MesenAI/issues/new?template=replay.yml", Assert.Single(h.Opened));
+	}
+
+	//The user's rule (2026-10-03): every wait moves. Starting a shared replay
+	//power-cycles the game and stopping it writes the .mmo, so both run off the
+	//UI thread: the sheet (then the strip) shows a moving wait, its buttons and
+	//Esc do nothing until the core answers.
+	[AvaloniaFact]
+	public void Starting_and_stopping_a_replay_show_a_moving_wait_off_the_ui_thread()
+	{
+		Harness h = ShowShare();
+		using ManualResetEventSlim gate = new();
+		h.Recorder.Gate = gate;
+		h.Recorder.File = Path.Combine(TempFolder(), "Contra (USA) 2026-10-03 10.00.00.mmo");
+		File.WriteAllBytes(h.Recorder.File, new byte[] { 0x50, 0x4B });
+		h.Model.UpdateGame(true, ConsoleType.Nes, "Contra (USA)", "/roms/Contra (USA).nes", "");
+		Window stripWindow = new() { Content = new ShareRecordingStrip { DataContext = h.Model }, Width = 900, Height = 60 };
+		stripWindow.Show();
+		Click(h.Window.FindNamed<Button>("RecordAndShareButton"));
+
+		Click(h.Window.FindNamed<Button>("ShareReplayStartButton"));
+		Assert.False(h.Model.IsRecording, "Start blocked the UI thread until the core answered");
+		Assert.True(h.Window.FindNamed<Panel>("ShareReplayStartSheet").IsOnScreen());
+		Control startWait = h.Window.FindNamed<Control>("ShareReplayStartWait");
+		Assert.True(startWait.IsOnScreen());
+		Assert.True(startWait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Equal("Restarting the game…", h.Window.FindNamed<TextBlock>("ShareReplayStartWaitText").Text);
+		Assert.False(h.Window.FindNamed<Button>("ShareReplayStartButton").IsEffectivelyEnabled, "a second click could start twice");
+		Assert.False(h.Window.FindNamed<Button>("ShareReplayCancelButton").IsEffectivelyEnabled);
+		Assert.False(h.Model.HandleEsc());
+
+		gate.Set();
+		WaitFor(() => h.Model.IsRecording, "the replay never started");
+		Assert.Equal(1, h.Recorder.Starts);
+		Assert.False(h.Window.FindNamed<Panel>("ShareReplayStartSheet").IsOnScreen());
+		gate.Reset();
+
+		Button stop = stripWindow.FindNamed<Button>("ShareStopRecordingButton");
+		Click(stop);
+		Assert.True(h.Model.IsRecording, "Stop blocked the UI thread until the core answered");
+		Control stopWait = stripWindow.FindNamed<Control>("ShareReplayStopWait");
+		Assert.True(stopWait.IsOnScreen());
+		Assert.True(stopWait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.False(stop.IsEffectivelyEnabled);
+		Assert.False(h.Model.HandleEsc());
+
+		gate.Set();
+		WaitFor(() => h.Window.FindNamed<Panel>("ShareReplaySavedSheet").IsOnScreen(), "the saved sheet never came");
+		Assert.False(h.Model.IsRecording);
+		Assert.Equal(Path.GetFileName(h.Recorder.File), h.Window.FindNamed<TextBlock>("ShareReplayFileName").Text);
+		stripWindow.Close();
 	}
 
 	//The stop rule against the real core: Share replaces G.1's placeholder,
@@ -435,6 +490,8 @@ public class ShareWorkspaceTests : IDisposable
 			Assert.Equal("Record and share", window.FindNamed<TextBlock>("ShareReplaySheetTitle").Text);
 			Assert.StartsWith("synthetic-nrom restarts from power-on", window.FindNamed<TextBlock>("ShareReplaySheetBody").Text);
 			Click(window.FindNamed<Button>("ShareReplayStartButton"));
+			//The game power-cycles off the UI thread.
+			WaitFor(() => model.Share.IsRecording, "the replay never started");
 
 			Assert.True(new CoreReplayRecorder().IsSharing, "the core is not recording a shared replay");
 			Assert.True(model.IsGameViewVisible);
@@ -454,6 +511,7 @@ public class ShareWorkspaceTests : IDisposable
 			model.SelectWorkspace(Workspace.Share);
 			Dispatcher.UIThread.RunJobs();
 			Click(window.FindNamed<Button>("ShareStopRecordingButton"));
+			WaitFor(() => !model.Share.IsRecording, "the replay never stopped");
 
 			Assert.False(new CoreReplayRecorder().IsSharing);
 			Assert.True(window.FindNamed<Panel>("ShareWorkspaceHost").IsOnScreen());

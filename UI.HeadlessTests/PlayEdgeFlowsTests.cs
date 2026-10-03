@@ -18,6 +18,7 @@ using Mesen.Logic;
 using Mesen.Services;
 using Mesen.Utilities;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Mesen.Windows;
 using Xunit;
 using Xunit.Sdk;
@@ -437,6 +438,35 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		Assert.Equal(0, added);
 		Assert.False(sheet.IsVisible);
 		Assert.False(sheet.IsBusy);
+	}
+
+	//The user's rule (2026-10-03): while a dropped file is hashed and copied,
+	//the sheet says so with a moving bar (the controls used to just grey out).
+	[AvaloniaFact]
+	public void Adding_a_pack_file_shows_a_moving_wait_until_it_is_checked()
+	{
+		string drop = Path.Combine(_folder, "drop");
+		string expected = Convert.ToHexString(SHA256.HashData(new byte[] { 1, 2, 3 }));
+		PlayPackDepSheetViewModel sheet = new();
+		sheet.SetPending("Contra Remastered", new[] { new CommunityPackDepPrompt("contra-usa", "Contra (USA).nes", "", drop, expected) });
+		sheet.Open();
+		Window window = new() { Content = new PlayPackDepSheetView { DataContext = sheet }, Width = 1000, Height = 700 };
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		Control wait = window.FindNamed<Control>("PackDepSheetBusy");
+		Assert.False(wait.IsOnScreen());
+
+		string wrong = Path.Combine(_folder, "wrong.nes");
+		File.WriteAllBytes(wrong, new byte[] { 9 });
+		Task adding = sheet.TryFile(wrong);
+		Assert.True(sheet.IsBusy);
+		Assert.True(wait.IsOnScreen());
+		Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Equal("Checking the file…", window.FindNamed<TextBlock>("PackDepSheetBusyText").Text);
+
+		WaitTask(adding);
+		Assert.False(wait.IsOnScreen());
+		window.Close();
 	}
 
 	//An install's post that lands after another open started is dropped, so

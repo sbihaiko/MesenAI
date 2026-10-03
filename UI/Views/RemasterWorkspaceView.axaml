@@ -158,6 +158,18 @@
 				</StackPanel>
 			</Border>
 
+			<!--The user's rule (2026-10-03): every wait moves. The Python/tools
+			probe, then Record's start (the core exports the ROM's tiles first),
+			each a sentence over an indeterminate bar until it answers.-->
+			<StackPanel Name="RemasterFeasibilityChecking" Classes="wait" Margin="40 20 40 0" Spacing="8" IsVisible="{Binding IsFeasibilityChecking}">
+				<TextBlock Classes="subhead secondary" Text="{l:Translate lblRemasterCheckingTools}" />
+				<ProgressBar IsIndeterminate="True" Width="240" HorizontalAlignment="Left" />
+			</StackPanel>
+			<StackPanel Name="RemasterRecordWait" Classes="wait" Margin="40 16 40 0" Spacing="8" IsVisible="{Binding IsRecordWaitVisible}">
+				<TextBlock Name="RemasterRecordWaitText" Classes="paragraph" Text="{Binding RecordWaitText}" />
+				<ProgressBar IsIndeterminate="True" Width="240" HorizontalAlignment="Left" />
+			</StackPanel>
+
 			<TextBlock Name="RemasterNotice" Classes="paragraph" Margin="40 16 40 0" Text="{Binding NoticeText}" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
 			<!--W-R0: Remaster, no project yet. Two elements + rows (rule 2).-->
@@ -299,7 +311,7 @@
 										<TextBlock Name="RemasterJobTitle" Classes="emphasis" Margin="0 0 14 0" Text="{Binding JobTitle}" />
 										<TextBlock Name="RemasterJobDetail" Classes="subhead secondary" VerticalAlignment="Center" Text="{Binding JobDetail}" IsVisible="{Binding JobDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 									</WrapPanel>
-									<ProgressBar Name="RemasterJobProgress" Margin="0 10 0 0" Minimum="0" Maximum="100" Value="{Binding JobPercent}" IsVisible="{Binding IsJobRunning}" />
+									<ProgressBar Name="RemasterJobProgress" Margin="0 10 0 0" Minimum="0" Maximum="100" Value="{Binding JobPercent}" IsIndeterminate="{Binding IsJobBarIndeterminate}" IsVisible="{Binding IsJobRunning}" />
 								</StackPanel>
 							</DockPanel>
 						</StackPanel>

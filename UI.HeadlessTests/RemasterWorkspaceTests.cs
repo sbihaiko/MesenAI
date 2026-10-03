@@ -164,7 +164,8 @@ public class RemasterWorkspaceTests : IDisposable
 
 			Click(start);
 
-			Assert.True(model.Remaster.IsRecording);
+			//The core starts it off the UI thread (Record_and_stop_run_off_the_ui_thread...).
+			WaitFor(() => model.Remaster.IsRecording, "the recording never started");
 			Assert.True(EmuApi.IsMepBootstrapping());
 			Assert.True(Directory.Exists(Path.Combine(project, "auto", "rec-001")), "no auto/rec-001/ next to the ROM");
 			//W-R2: the game fills the content area inside Remaster, one strip on top.
@@ -189,8 +190,8 @@ public class RemasterWorkspaceTests : IDisposable
 			Assert.False(model.Shell.ShowsRecordingDot);
 			Click(window.FindNamed<Button>("RemasterStopRecordingButton"));
 
+			WaitFor(() => !model.Remaster.IsRecording, "the recording never stopped");
 			Assert.False(EmuApi.IsMepBootstrapping());
-			Assert.False(model.Remaster.IsRecording);
 			string manifest = File.ReadAllText(Path.Combine(project, "project.json"));
 			Assert.Contains("\"id\": \"rec-001\"", manifest);
 			Assert.Contains("\"source\": \"play\"", manifest);
@@ -325,6 +326,108 @@ public class RemasterWorkspaceTests : IDisposable
 
 		Assert.Equal("Preparing the figures failed.", window.FindNamed<TextBlock>("RemasterJobTitle").Text);
 		Assert.Equal("FAIL artist_chr_kit.py -> kit/pages", window.FindNamed<TextBlock>("RemasterJobDetail").Text);
+	}
+
+	//The user's rule (2026-10-03): every wait moves. Record and Stop block in
+	//the core (the builder exports every ROM tile, 0.4-1 s on real games), so
+	//they run off the UI thread: right after the click the wait is on screen,
+	//the button is off (no double start), and the UI thread keeps running
+	//jobs while the core works; the recording view comes when it answers.
+	[AvaloniaFact]
+	public void Record_and_stop_run_off_the_ui_thread_behind_a_moving_wait()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		string folder = TempFolder();
+		string rom = Path.Combine(folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, BuildSyntheticNrom());
+		try {
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
+			EmuApi.Resume();
+			model.SelectWorkspace(Workspace.Remaster);
+			Dispatcher.UIThread.RunJobs();
+
+			Button start = window.FindNamed<Button>("RemasterStartButton");
+			//No RunJobs before the checks: the core's answer comes back as a
+			//posted job, so whatever is seen here is what the click left.
+			start.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+			Assert.False(model.Remaster.IsRecording, "Record blocked the UI thread until the core answered");
+			Control wait = window.FindNamed<Control>("RemasterRecordWait");
+			Assert.True(wait.IsOnScreen());
+			Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+			Assert.Equal("Starting the recording…", window.FindNamed<TextBlock>("RemasterRecordWaitText").Text);
+			Assert.False(start.IsEffectivelyEnabled, "a second click could start a second recording");
+
+			WaitFor(() => model.Remaster.IsRecording, "the recording never started");
+			Assert.True(EmuApi.IsMepBootstrapping());
+			Assert.False(wait.IsOnScreen());
+			Assert.True(window.FindNamed<Panel>("RemasterRecordingStripHost").IsOnScreen());
+
+			Button stop = window.FindNamed<Button>("RemasterStopRecordingButton");
+			stop.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+			Assert.True(model.Remaster.IsRecording, "Stop blocked the UI thread until the core answered");
+			Control stopWait = window.FindNamed<Control>("RemasterStopWait");
+			Assert.True(stopWait.IsOnScreen());
+			Assert.True(stopWait.FindAll<ProgressBar>().Single().IsIndeterminate);
+			Assert.False(stop.IsEffectivelyEnabled);
+
+			WaitFor(() => !model.Remaster.IsRecording, "the recording never stopped");
+			Assert.False(EmuApi.IsMepBootstrapping());
+			Assert.True(File.Exists(Path.Combine(folder, "synthetic-nrom", "project.json")));
+			WaitFor(() => !model.Remaster.IsJobRunning, "the kit job never finished", 180000);
+		} finally {
+			if(EmuApi.IsMepBootstrapping()) {
+				EmuApi.StopMepRecording();
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//A step reports nothing until it ends: the card's bar moves meanwhile.
+	[AvaloniaFact]
+	public void The_kit_cards_bar_moves_within_a_step()
+	{
+		(Window window, _, _, _) = ShowProjectView(Ready);
+		Click(window.FindNamed<Button>("RemasterPrepareButton"));
+		ProgressBar bar = window.FindNamed<ProgressBar>("RemasterJobProgress");
+		Assert.True(bar.IsOnScreen());
+		Assert.True(bar.IsIndeterminate, "the bar sat still at 0 % through the first step");
+	}
+
+	//The Python/tools probe: until it answers, the jobs say why they wait and
+	//a moving line says it is checking (a click used to do nothing).
+	[AvaloniaFact]
+	public void The_tools_probe_shows_a_moving_wait_and_the_jobs_say_why()
+	{
+		string root = TempFolder();
+		string project = Path.Combine(root, "Contra (USA)");
+		Directory.CreateDirectory(Path.Combine(project, "auto", "rec-001", "textures"));
+		File.WriteAllText(Path.Combine(project, "auto", "rec-001", "textures", "hires.txt"), "<ver>107\n");
+		using ManualResetEventSlim gate = new();
+		RemasterWorkspaceViewModel model = new(new RemasterConfig(), _ => {
+			gate.Wait(10000);
+			return Ready;
+		}, new HangingLauncher(), hasHeadlessRecorder: false);
+		model.UpdateGame(true, ConsoleType.Nes, "Contra (USA)", Path.Combine(root, "Contra (USA).nes"), project, Path.Combine(root, "EnhancementPacks"));
+		Window window = new() { Content = new RemasterWorkspaceView { DataContext = model }, Width = 1000, Height = 800 };
+		window.Show();
+		try {
+			model.EnsureFeasibilityMeasured();
+			Dispatcher.UIThread.RunJobs();
+
+			Control checking = window.FindNamed<Control>("RemasterFeasibilityChecking");
+			Assert.True(checking.IsOnScreen());
+			Assert.True(checking.FindAll<ProgressBar>().Single().IsIndeterminate);
+			Assert.False(window.FindNamed<Button>("RemasterPrepareButton").IsEffectivelyEnabled);
+			Assert.Equal("Checking for Python and MesenAI's tools…", window.FindNamed<TextBlock>("RemasterPrepareReason").Text);
+		} finally {
+			gate.Set();
+		}
+		WaitFor(() => model.Feasibility != null, "the gate was never measured");
+		Assert.False(window.FindNamed<Control>("RemasterFeasibilityChecking").IsOnScreen());
+		Assert.True(window.FindNamed<Button>("RemasterPrepareButton").IsEffectivelyEnabled);
 	}
 
 	//scripts/gen_synthetic_nrom.py, byte for byte (as WorkspaceShellTests).

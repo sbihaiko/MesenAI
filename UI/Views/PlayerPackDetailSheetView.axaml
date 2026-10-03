@@ -110,6 +110,12 @@
 						<TextBlock Classes="banner-text" Text="{l:Translate lblPackDetailRestoreConfirm}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</Border>
+				<!--Every wait moves (2026-10-03): from the confirm until the restore
+				ends - the catalog fetch and match come before the install pill.-->
+				<StackPanel Name="PackDetailRestoreWait" Spacing="8" IsVisible="{Binding PackDetailRestoreRunning}">
+					<TextBlock Name="PackDetailRestoreWaitText" Classes="subhead secondary" Text="{l:Translate lblPackDetailRestoreWait}" />
+					<ProgressBar IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
+				</StackPanel>
 			</StackPanel>
 
 			<Separator Classes="hairline" Margin="0 16 0 0" IsVisible="{Binding PackDetailHasPack}" />

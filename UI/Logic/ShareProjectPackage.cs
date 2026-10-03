@@ -21,7 +21,9 @@ namespace Mesen.Logic
 		NeedsGame,
 		JobRunning,
 		//#647: a Remaster job (kit, build) runs on this project's folder.
-		RemasterJobRunning
+		RemasterJobRunning,
+		//The Python/tools probe has not answered yet.
+		CheckingTools
 	}
 
 	//What W-H3 shows about a project: its name for the title, and what step 3
@@ -78,7 +80,7 @@ namespace Mesen.Logic
 
 		//remasterJobOnProject: Remaster's runner works on this project (#647);
 		//mep_build.py pack would zip mep/ while the build rewrites it.
-		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning, bool remasterJobOnProject = false)
+		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning, bool remasterJobOnProject = false, bool feasibilityPending = false)
 		{
 			if(jobRunning) {
 				return ShareBuildReason.JobRunning;
@@ -91,6 +93,10 @@ namespace Mesen.Logic
 			}
 			if(!project.HasTargets && !isRunningGamesProject) {
 				return ShareBuildReason.NeedsGame;
+			}
+			//Until the probe answers a click would do nothing: say why instead.
+			if(feasibilityPending) {
+				return ShareBuildReason.CheckingTools;
 			}
 			if(feasibility.Python != PythonGate.Found) {
 				return ShareBuildReason.NeedsPython;

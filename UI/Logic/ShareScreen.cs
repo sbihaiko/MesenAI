@@ -99,6 +99,13 @@ namespace Mesen.Logic
 	//going back is ‹ Share, and navigation never needs a confirmation.
 	public static class ShareEsc
 	{
+		//While a replay starts or stops (RecordingTransition) Esc waits for
+		//the core's answer, like the buttons.
+		public static ShareEscAction Next(ReplaySheet sheet, bool projectListOpen, RecordingTransition transition)
+		{
+			return RecordingTransitions.AcceptsClick(transition) ? Next(sheet, projectListOpen) : ShareEscAction.None;
+		}
+
 		public static ShareEscAction Next(ReplaySheet sheet, bool projectListOpen)
 		{
 			if(sheet == ReplaySheet.Recording) {

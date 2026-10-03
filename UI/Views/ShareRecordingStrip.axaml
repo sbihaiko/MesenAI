@@ -25,6 +25,9 @@
 			<Setter Property="Foreground" Value="White" />
 			<Setter Property="FontWeight" Value="Bold" />
 		</Style>
+		<Style Selector="v|ShareRecordingStrip:not(.player) StackPanel#ShareReplayStopWait TextBlock">
+			<Setter Property="Foreground" Value="White" />
+		</Style>
 		<Style Selector="v|ShareRecordingStrip:not(.player) Ellipse#ShareRecordingDot">
 			<Setter Property="Fill" Value="#FF3B30" />
 		</Style>
@@ -45,9 +48,14 @@
 	</UserControl.Styles>
 	<Border Name="ShareRecordingStripBorder" Classes="hud">
 		<DockPanel>
-			<Button Name="ShareStopRecordingButton" DockPanel.Dock="Right" Classes="primary hud" Click="OnStop">
+			<Button Name="ShareStopRecordingButton" DockPanel.Dock="Right" Classes="primary hud" IsEnabled="{Binding !IsReplayStopping}" Click="OnStop">
 				<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconStop}" /><TextBlock Text="{l:Translate btnStopReplay}" /></StackPanel>
 			</Button>
+			<!--The core writes the .mmo off the UI thread: a moving wait until it answers.-->
+			<StackPanel Name="ShareReplayStopWait" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" Margin="0 0 14 0" VerticalAlignment="Center" IsVisible="{Binding IsReplayStopping}">
+				<TextBlock Text="{Binding ReplayWaitText}" VerticalAlignment="Center" />
+				<ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+			</StackPanel>
 			<StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
 				<Ellipse Name="ShareRecordingDot" Width="10" Height="10" VerticalAlignment="Center" />
 				<TextBlock Name="ShareRecordingPill" Text="{Binding RecordingPill}" VerticalAlignment="Center" />

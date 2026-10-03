@@ -316,7 +316,7 @@
 			<Border Name="ShareReplayStartCard" Classes="sheet" HorizontalAlignment="Center" c:PlayerTheme.Tint="{StaticResource PlayerIndigoBrush}">
 				<DockPanel>
 					<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 16 0 0">
-						<Button Name="ShareReplayCancelButton" Content="{l:Translate btnShareCancel}" Classes="secondary" Click="OnCloseSheet" />
+						<Button Name="ShareReplayCancelButton" Content="{l:Translate btnShareCancel}" Classes="secondary" IsEnabled="{Binding !IsReplayStarting}" Click="OnCloseSheet" />
 						<Button Name="ShareReplayStartButton" Classes="accent primary" c:PlayerTheme.Tint="{StaticResource PlayerRedBrush}" IsEnabled="{Binding IsStartEnabled}" Click="OnStartReplay">
 							<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconRecord}" /><TextBlock Text="{l:Translate btnStartReplayRecording}" /></StackPanel>
 						</Button>
@@ -328,6 +328,12 @@
 						</StackPanel>
 						<TextBlock Name="ShareReplaySheetBody" Text="{Binding StartSheetBody}" Classes="callout" TextWrapping="Wrap" LineHeight="19" Margin="0 6 0 0" />
 						<TextBlock Name="ShareReplayStartReason" Text="{Binding StartReason}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding StartReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<!--The game power-cycles off the UI thread: a moving wait until the
+						core answers (the user's rule, 2026-10-03: every wait moves).-->
+						<StackPanel Name="ShareReplayStartWait" Spacing="8" Margin="0 10 0 0" IsVisible="{Binding IsReplayStarting}">
+							<TextBlock Name="ShareReplayStartWaitText" Classes="subhead secondary" Text="{Binding ReplayWaitText}" />
+							<ProgressBar IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
+						</StackPanel>
 					</StackPanel>
 				</DockPanel>
 			</Border>

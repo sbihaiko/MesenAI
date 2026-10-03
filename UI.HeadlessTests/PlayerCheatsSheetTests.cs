@@ -102,6 +102,30 @@ public class PlayerCheatsSheetTests : IDisposable
 		Assert.Equal("2 on", window.FindNamed<TextBlock>("OverlayCheatsSummary").Text);
 	}
 
+	//The user's rule (2026-10-03): until the community catalog answers, the
+	//sheet says it is looking, with a moving bar; a failed fetch ends it.
+	[AvaloniaFact]
+	public void The_sheet_shows_a_moving_wait_until_the_community_catalog_answers()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		TaskCompletionSource<IReadOnlyList<CommunityCheatGame>?> fetch = new();
+		model.CommunityCheatsSource = () => fetch.Task;
+		model.TogglePlayerOverlay();
+		Dispatcher.UIThread.RunJobs();
+		Click(window.FindNamed<Button>("OverlayCheatsButton"));
+
+		ProgressBar bar = window.FindNamed<ProgressBar>("CheatsLoadingBar");
+		Assert.True(bar.IsOnScreen());
+		Assert.True(bar.IsIndeterminate);
+		Assert.Equal(CheatSheet.CommunityLoadingLine, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
+
+		fetch.SetResult(null);
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(bar.IsOnScreen());
+		Assert.Equal(CheatSheet.NotInListLine, window.FindNamed<TextBlock>("CheatsStatusLine").Text);
+	}
+
 	//The stop condition: a toggle clicked in W-P11 and the classic cheat window
 	//show the same state. Drives the real database (CheatDb.Nes.json) through
 	//the not-in-list fallback - the test copy has no cheat hash in the list.

@@ -402,9 +402,11 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.True(dimmed.R < 230, $"the home behind the sheet is not dimmed: {dimmed}");
 		AssertFill(frame, h.Window, h.Window.FindNamed<Button>("ShareReplayStartButton"), Red);
 
-		Assert.True(h.Model.StartReplay());
-		h.Model.StopReplay();
-		Dispatcher.UIThread.RunJobs();
+		System.Threading.Tasks.Task<bool> started = h.Model.StartReplay();
+		WaitFor(() => started.IsCompleted, "the replay never started");
+		Assert.True(started.Result);
+		System.Threading.Tasks.Task stopped = h.Model.StopReplay();
+		WaitFor(() => stopped.IsCompleted, "the replay never stopped");
 		Border after = h.Window.FindNamed<Border>("ShareReplaySavedCard");
 		Assert.Equal(Card, PlayerRender.SolidColor(after.Background));
 		Assert.Equal(new CornerRadius(14), after.CornerRadius);
@@ -428,8 +430,9 @@ public class ShareThemeRenderTests : IDisposable
 		ShareWorkspaceViewModel model = new(EmbeddedAllowlist(), new FakeLauncher(), () => Ready, () => Array.Empty<string>(), new FakeRecorder(), _ => { }, _ => { }, () => (false, false));
 		Host h = ShowShareView(new ShareRecordingStrip { DataContext = model, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top }, model);
 		model.OpenReplaySheet();
-		Assert.True(model.StartReplay());
-		Dispatcher.UIThread.RunJobs();
+		System.Threading.Tasks.Task<bool> started = model.StartReplay();
+		WaitFor(() => started.IsCompleted, "the replay never started");
+		Assert.True(started.Result);
 		Assert.False(string.IsNullOrEmpty(model.RecordingPill));
 
 		Border strip = h.Window.FindNamed<Border>("ShareRecordingStripBorder");

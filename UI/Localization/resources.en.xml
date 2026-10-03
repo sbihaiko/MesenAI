@@ -42,6 +42,7 @@
 			<Control ID="btnPackDetailShowInFinder">Show Pack in Finder</Control>
 			<Control ID="btnPackDetailRestore">Restore Original Files…</Control>
 			<Control ID="lblPackDetailRestoreConfirm">Restore original files? Your edits to this pack will be lost.</Control>
+			<Control ID="lblPackDetailRestoreWait">Restoring the pack…</Control>
 			<Control ID="btnPackDetailRestoreConfirm">Restore</Control>
 			<Control ID="btnPackDetailRestoreKeep">Keep Edits</Control>
 			<Control ID="btnPackDetailDetails">Details</Control>
@@ -88,6 +89,7 @@
 			<Control ID="lblPackDepSheetSubtitle">Everything else is installed.</Control>
 			<Control ID="lblPackDepSheetBody">The pack's author could not share this file, so it is not downloaded. If you have it, add it and the pack completes.</Control>
 			<Control ID="lblPackDepSheetDrop">Drop the file here</Control>
+			<Control ID="lblPackDepSheetBusy">Checking the file…</Control>
 			<Control ID="btnPackDepSheetShowFolder">Show Folder</Control>
 			<Control ID="btnPackDepSheetPlayWithout">Play Without It</Control>
 		</Form>
@@ -120,6 +122,7 @@
 			<Control ID="btnOpenBrowser">Open</Control>
 			<Control ID="btnCancelBrowser">Cancel</Control>
 			<Control ID="lblRemasterTitle">Remaster a game</Control>
+			<Control ID="lblRemasterCheckingTools">Checking for Python and MesenAI's tools…</Control>
 			<Control ID="lblRemasterIntro">Play the game once while MesenAI records it. You get its figures, scenery and stage maps as pictures to paint in your own program. Come back and see them in the game.</Control>
 			<Control ID="lblStartWithRunningGame">Start with the running game</Control>
 			<Control ID="lblOpenProjectFolder">Open a project folder…</Control>
@@ -2196,6 +2199,8 @@
 		<Message ID="RemasterKitReady">Click a tile to open it in your paint program. Save it as the same PNG and come back.</Message>
 		<Message ID="RemasterKitNotYet">Figures and pattern pages are made from your recordings, after each one.</Message>
 		<Message ID="RemasterRecordingPill">Recording {0}</Message>
+		<Message ID="RemasterRecordingStarting">Starting the recording…</Message>
+		<Message ID="RemasterRecordingStopping">Stopping the recording…</Message>
 		<Message ID="RemasterRecordingShapesOne">1 shape seen</Message>
 		<Message ID="RemasterRecordingShapesMany">{0} shapes seen</Message>
 		<Message ID="RemasterRecordingScreensOne">1 screen captured</Message>
@@ -2217,6 +2222,8 @@
 		<Message ID="RemasterReasonJobRunning">Wait for the running job to finish.</Message>
 		<Message ID="RemasterReasonShareJobRunning">Share is packaging this project. Wait for it to finish.</Message>
 		<Message ID="RemasterReasonRecordingRunning">A recording is running.</Message>
+		<Message ID="RemasterReasonRecordingStarting">Starting the recording…</Message>
+		<Message ID="RemasterReasonCheckingTools">Checking for Python and MesenAI's tools…</Message>
 		<Message ID="RemasterReasonNesOnly">Figures and pages are NES only for now.</Message>
 		<Message ID="RemasterReasonNeedsPython">Needs Python 3.10 or newer.</Message>
 		<Message ID="RemasterReasonNeedsTools">Needs MesenAI's tools.</Message>
@@ -2280,6 +2287,7 @@
 		<Message ID="ShareBuildReasonNeedsGame">Open this project's game first, so the pack knows which game it is for.</Message>
 		<Message ID="ShareBuildReasonNeedsPython">Needs Python 3.10 or newer.</Message>
 		<Message ID="ShareBuildReasonNeedsTools">Needs MesenAI's tools.</Message>
+		<Message ID="ShareBuildReasonCheckingTools">Checking for Python and MesenAI's tools…</Message>
 		<Message ID="ShareBuildReasonRemasterJobRunning">Remaster is working on this project. Wait for it to finish.</Message>
 		<Message ID="ShareBuildRunning">Packaging and checking…</Message>
 		<Message ID="ShareBuildDone">{0} · {1} · no problems</Message>
@@ -2293,6 +2301,8 @@
 		<Message ID="ShareReplayReasonMovieBusy">A movie is already recording or playing (Tools ⋯ › Tools › Movies).</Message>
 		<Message ID="ShareReplayReasonNetplay">Replays cannot be recorded during netplay.</Message>
 		<Message ID="ShareReplayRefused">Nothing was recorded. Tools ⋯ › Tools › Log Window says why.</Message>
+		<Message ID="ShareReplayStarting">Restarting the game…</Message>
+		<Message ID="ShareReplayStopping">Saving the replay…</Message>
 		<Message ID="ShareReplayEnded">The replay recording ended outside this screen: a save state was loaded, the game closed, or it was stopped from Tools ⋯ › Tools › Movies.</Message>
 		<Message ID="ShareRecordingPill">Recording a replay {0} · Esc stops</Message>
 		<Message ID="RemasterReasonNoKitYet">Prepare your figures first.</Message>

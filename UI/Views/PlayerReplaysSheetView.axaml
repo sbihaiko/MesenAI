@@ -56,6 +56,12 @@
 			</Panel>
 
 			<TextBlock Name="ReplaysStatusLine" Classes="subhead secondary" Text="{Binding StatusLine}" TextWrapping="Wrap" Margin="2 16 0 0" />
+			<!--Every wait moves (2026-10-03): the catalog fetch, then Watch's download.-->
+			<ProgressBar Name="ReplaysLoadingBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" Margin="2 8 0 0" IsVisible="{Binding IsLoading}" />
+			<StackPanel Name="ReplaysDownloadWait" Spacing="8" Margin="2 12 0 0" IsVisible="{Binding IsBusy}">
+				<TextBlock Classes="subhead secondary" Text="{Binding DownloadingText}" />
+				<ProgressBar IsIndeterminate="True" Width="200" HorizontalAlignment="Left" />
+			</StackPanel>
 			<TextBlock Name="ReplaysNoticeLine" Classes="replay-note" TextWrapping="Wrap" Margin="2 8 0 0" Text="{Binding NoticeLine}" />
 			<Button Name="ReplaysDoneButton" Classes="primary regular" HorizontalAlignment="Right" Margin="0 24 0 0" Content="{l:Translate btnReplaysDone}" Click="OnDone" />
 		</StackPanel>

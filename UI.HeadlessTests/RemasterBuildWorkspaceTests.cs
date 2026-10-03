@@ -333,7 +333,10 @@ public class RemasterBuildWorkspaceTests : IDisposable
 			EmuApi.Resume();
 			model.SelectWorkspace(Workspace.Remaster);
 			Dispatcher.UIThread.RunJobs();
-			Assert.True(model.Remaster.StartRecording());
+			//The core starts the recording off the UI thread.
+			System.Threading.Tasks.Task<bool> started = model.Remaster.StartRecording();
+			WaitFor(() => started.IsCompleted, "the recording never started");
+			Assert.True(started.Result);
 			Assert.True(EmuApi.IsMepBootstrapping());
 
 			window.Close();
@@ -351,8 +354,9 @@ public class RemasterBuildWorkspaceTests : IDisposable
 			Assert.Equal("Open other-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 			Assert.True(EmuApi.IsMepBootstrapping(), "the question stopped the recording before an answer");
 			Click(window.FindNamed<Button>("InterruptionGoButton"));
+			//The core closes the recording off the UI thread; the game opens after.
+			WaitFor(() => !model.Remaster.IsRecording, "the recording never stopped");
 			Assert.False(EmuApi.IsMepBootstrapping());
-			Assert.False(model.Remaster.IsRecording);
 			Assert.Equal(Workspace.Play, model.Shell.Active);
 			WaitFor(() => model.RomInfo.GetRomName() == "other-nrom", "the other game never opened");
 			Assert.Contains("\"id\": \"rec-001\"", File.ReadAllText(Path.Combine(folder, "synthetic-nrom", "project.json")));

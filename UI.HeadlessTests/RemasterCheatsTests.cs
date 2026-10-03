@@ -182,7 +182,7 @@ public class RemasterCheatsTests : IDisposable
 			//A RAM code alone does not refuse.
 			SaveCheats(new CheatCode() { Description = Genie.Description, Type = Genie.Type, Codes = Genie.Codes, Enabled = false }, Lives);
 			Click(window.FindNamed<Button>("RemasterStartButton"));
-			Assert.True(model.Remaster.IsRecording);
+			WaitFor(() => model.Remaster.IsRecording, "the recording never started");
 			Assert.True(EmuApi.IsMepBootstrapping());
 			Assert.False(notice.IsOnScreen());
 			Assert.True(CheatCodes.RecordingArt);
@@ -213,8 +213,8 @@ public class RemasterCheatsTests : IDisposable
 			//Stop: the held code reaches the core again.
 			model.SelectWorkspace(Workspace.Remaster);
 			Dispatcher.UIThread.RunJobs();
-			model.Remaster.StopRecording(prepareFigures: false);
-			Dispatcher.UIThread.RunJobs();
+			Task stopped = model.Remaster.StopRecording(prepareFigures: false);
+			WaitFor(() => stopped.IsCompleted, "the recording never stopped");
 			Assert.False(EmuApi.IsMepBootstrapping());
 			Assert.False(CheatCodes.RecordingArt);
 			Assert.Empty(CheatCodes.HeldForRecording);
@@ -285,6 +285,8 @@ public class RemasterCheatsTests : IDisposable
 			PlayerCheatsStore.SaveAndApply(new[] { new StoredCheat(Genie.Description, Genie.Type, Genie.Codes, false), new StoredCheat(Lives.Description, Lives.Type, Lives.Codes, true) });
 			//The automatic recording already made the project: W-R1's button.
 			Click(window.FindNamed<Button>("RemasterRecordButton"));
+			//The core starts it off the UI thread.
+			WaitFor(() => model.Remaster.Transition == RecordingTransition.None, "the recording never started");
 
 			Assert.True(model.Remaster.IsRecording, "Remaster refused to record over the automatic recording: " + window.FindNamed<TextBlock>("RemasterNotice").Text);
 			Assert.False(window.FindNamed<TextBlock>("RemasterNotice").IsOnScreen());
@@ -295,8 +297,8 @@ public class RemasterCheatsTests : IDisposable
 			Assert.Contains("\"id\": \"rec-001\"", manifest);
 			Assert.Contains("\"id\": \"rec-002\"", manifest);
 
-			model.Remaster.StopRecording(prepareFigures: false);
-			Dispatcher.UIThread.RunJobs();
+			Task stopped = model.Remaster.StopRecording(prepareFigures: false);
+			WaitFor(() => stopped.IsCompleted, "the recording never stopped");
 			Assert.False(EmuApi.IsMepBootstrapping());
 			Assert.False(CheatCodes.RecordingArt);
 		} finally {

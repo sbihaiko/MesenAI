@@ -81,7 +81,7 @@ namespace Mesen.ViewModels
 		public void LeaveGameView()
 		{
 			if(IsRecording) {
-				StopRecording();
+				_ = StopRecording();
 				return;
 			}
 			if(IsShowingBuild) {

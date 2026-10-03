@@ -128,6 +128,31 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
+	//The user's rule (2026-10-03): from the confirm until the restore ends,
+	//the sheet shows a moving wait (the catalog fetch and match come before
+	//the install pill does).
+	[AvaloniaFact]
+	public void A_running_restore_shows_a_moving_wait_until_it_ends()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		model.OpenPackFromOverlay(OnePack, Sha1, "/packs", "", installedSourceSha256: "abc123");
+		Dispatcher.UIThread.RunJobs();
+		Control wait = window.FindNamed<Control>("PackDetailRestoreWait");
+		Assert.False(wait.IsOnScreen());
+
+		Assert.False(model.PressRestore());
+		Assert.True(model.PressRestore());
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(wait.IsOnScreen());
+		Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Equal("Restoring the pack…", window.FindNamed<TextBlock>("PackDetailRestoreWaitText").Text);
+
+		model.RestoreFinished();
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(wait.IsOnScreen());
+	}
+
 	[AvaloniaFact]
 	public void Pack_row_with_two_packs_opens_the_picker_with_one_radio_selected()
 	{

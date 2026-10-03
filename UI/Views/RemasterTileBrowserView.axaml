@@ -285,6 +285,7 @@
 											</ItemsControl.ItemsPanel>
 											<ItemsControl.ItemTemplate>
 												<DataTemplate x:DataType="vm:RemasterTileLine">
+													<StackPanel>
 													<Panel>
 													<TextBlock Classes="line-classic" Text="{Binding ClassicText}" TextWrapping="Wrap" />
 													<DockPanel Classes="line-split">
@@ -296,6 +297,9 @@
 														<TextBlock Classes="line" Text="{Binding Text}" TextWrapping="Wrap" />
 													</DockPanel>
 													</Panel>
+													<!--Every wait moves (2026-10-03): the comparison still running.-->
+													<ProgressBar Classes="line-checking" IsIndeterminate="True" Width="160" HorizontalAlignment="Left" Margin="0 6 0 0" IsVisible="{Binding IsChecking}" />
+													</StackPanel>
 												</DataTemplate>
 											</ItemsControl.ItemTemplate>
 										</ItemsControl>

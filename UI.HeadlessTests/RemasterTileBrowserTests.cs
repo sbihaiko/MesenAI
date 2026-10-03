@@ -196,6 +196,35 @@ public class RemasterTileBrowserTests : IDisposable
 		Assert.Equal(new[] { Path.Combine(project, "kit", "pages", "chr", "Chr_0.png") }, opened.ToArray());
 	}
 
+	//The user's rule (2026-10-03): while the paint comparison runs, the
+	//popover's "checking" line carries a moving bar, not a still sentence.
+	[AvaloniaFact]
+	public void A_paint_line_still_being_checked_moves()
+	{
+		string project = KitProject();
+		(Window window, RemasterWorkspaceViewModel model, _, _) = Show(Ready(), project, gameLoaded: true);
+		ToggleButton pages = window.FindNamed<ItemsControl>("RemasterTileCategories").FindAll<ToggleButton>().Single(b => (b.Content as string)!.StartsWith("Pattern pages"));
+		pages.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+		model.TilesSettled.Wait(10000);
+		Dispatcher.UIThread.RunJobs();
+
+		RemasterTileRow row = Assert.Single(model.Tiles);
+		List<RemasterTileLine> checking = RemasterTileRow.From(row.Tile, null, row.Stamp).Lines;
+		RemasterTileLine line = Assert.Single(checking, l => l.Icon.ToString() == "Checking");
+		Assert.Equal("Checking whether it was painted…", line.Text);
+
+		Button details = window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().Single(b => b.Classes.Contains("details"));
+		details.Flyout!.ShowAt(details);
+		Dispatcher.UIThread.RunJobs();
+		StackPanel popover = Assert.IsType<StackPanel>(((Flyout)details.Flyout!).Content);
+		ItemsControl lines = popover.FindAll<ItemsControl>().Single();
+		lines.ItemsSource = checking;
+		Dispatcher.UIThread.RunJobs();
+		ProgressBar bar = Assert.Single(popover.FindAll<ProgressBar>(), b => b.Classes.Contains("line-checking") && b.IsOnScreen());
+		Assert.True(bar.IsIndeterminate);
+	}
+
 	//ADR-0252 §2/§3: a six-phase run whose figure view the artist painted in
 	//two phases' cells - the popover says "Painted: 2 of 6 phases" and the
 	//project counts two build cells.

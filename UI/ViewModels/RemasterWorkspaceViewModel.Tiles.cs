@@ -178,7 +178,9 @@ namespace Mesen.ViewModels
 		None,
 		Seen,
 		Warning,
-		Painted
+		Painted,
+		//The paint comparison is still running: the line carries a moving bar.
+		Checking
 	}
 
 	//One W-R5 popover line: its drawn mark and its sentence (Player), or the
@@ -194,6 +196,7 @@ namespace Mesen.ViewModels
 		public bool IsSeen => Icon == RemasterTileLineIcon.Seen;
 		public bool IsWarning => Icon == RemasterTileLineIcon.Warning;
 		public bool IsPainted => Icon == RemasterTileLineIcon.Painted;
+		public bool IsChecking => Icon == RemasterTileLineIcon.Checking;
 	}
 
 	public sealed record RemasterCategoryChip(RemasterKitCategory Category, string Text, bool IsSelected);
@@ -258,7 +261,7 @@ namespace Mesen.ViewModels
 			};
 			IReadOnlyList<RemasterProvenanceLine> facts = RemasterProvenance.Lines(tile, paint ?? RemasterPaintResult.Unknown(RemasterPaintUnknown.None), phases);
 			List<RemasterTileLine> lines = facts.Select(l => paint == null && IsPaintLine(l.Kind)
-				? new RemasterTileLine(RemasterTileLineIcon.None, ResourceHelper.GetMessage("RemasterProvenancePaintChecking"))
+				? new RemasterTileLine(RemasterTileLineIcon.Checking, ResourceHelper.GetMessage("RemasterProvenancePaintChecking"))
 				: new RemasterTileLine(IconOf(l.Kind), Sentence(l))).ToList();
 			bool painted = paint?.State == RemasterPaintState.Painted;
 			bool warns = RemasterTileFacts.Warns(facts);

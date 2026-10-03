@@ -77,21 +77,25 @@ namespace Mesen.ViewModels
 				//checks it is still the copy it opened for.
 				runningCheatSha1: CheatRomSha1
 			);
-			_ = RefreshCommunityCheatsAsync(cheatSha1);
+			_ = RefreshCommunityCheatsAsync(cheatSha1, CheatsSheet.BeginCommunityLoading());
 		}
 
 		//The sheet opens on the last known catalog; the fetched one replaces it
-		//when it returns, if the sheet is still up for the same copy.
-		private async Task RefreshCommunityCheatsAsync(string cheatSha1)
+		//when it returns, if the sheet is still up for the same copy. Whatever
+		//the fetch answers - nothing included - ends the sheet's wait.
+		private async Task RefreshCommunityCheatsAsync(string cheatSha1, int loading)
 		{
-			IReadOnlyList<CommunityCheatGame>? catalog = await CommunityCheatsSource();
-			if(catalog == null) {
-				return;
+			IReadOnlyList<CommunityCheatGame>? catalog;
+			try {
+				catalog = await CommunityCheatsSource();
+			} catch(Exception) {
+				catalog = null;
 			}
 			Dispatcher.UIThread.Post(() => {
-				if(CheatsSheet.IsVisible && CheatsSheet.CheatSha1 == cheatSha1) {
+				if(catalog != null && CheatsSheet.IsVisible && CheatsSheet.CheatSha1 == cheatSha1) {
 					CheatsSheet.SetCommunityCatalog(catalog);
 				}
+				CheatsSheet.FinishCommunityLoading(loading);
 			});
 		}
 

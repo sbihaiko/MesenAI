@@ -192,6 +192,17 @@ namespace Mesen.Logic
 			return StatusLine(console, game, gameIsAnotherCopy, countOn, 0);
 		}
 
+		//The user's rule (2026-10-03): while the community catalog is fetched,
+		//the "no list yet" and "not in the list" lines would answer before the
+		//catalog has: the sheet says it is looking (with a moving bar).
+		public const string CommunityLoadingLine = "Looking for community codes…";
+
+		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount, bool communityLoading)
+		{
+			bool noOwnList = game == null || !CheatConsoleScope.HasCheatList(console);
+			return communityLoading && noOwnList && communityCount == 0 ? CommunityLoadingLine : StatusLine(console, game, gameIsAnotherCopy, countOn, communityCount);
+		}
+
 		//With community rows for the copy, the "no list yet" and "not in the
 		//list" lines give way to saying where the codes come from (ADR-0248 §5).
 		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount)

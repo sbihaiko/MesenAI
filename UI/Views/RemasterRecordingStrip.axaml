@@ -109,12 +109,18 @@
 		<Panel>
 		<Border Name="RemasterRecordingPillBox" Classes="pill hud" IsVisible="{Binding IsRecording}">
 			<DockPanel>
-				<Button Name="RemasterStopRecordingButton" DockPanel.Dock="Right" Classes="primary hud" VerticalAlignment="Center" Click="OnStop">
+				<Button Name="RemasterStopRecordingButton" DockPanel.Dock="Right" Classes="primary hud" VerticalAlignment="Center" IsEnabled="{Binding !IsStopWaitVisible}" Click="OnStop">
 					<StackPanel Orientation="Horizontal">
 						<PathIcon Classes="leading stop" Data="{StaticResource PlayerIconStop}" />
 						<TextBlock Text="{l:Translate btnStopRecording}" />
 					</StackPanel>
 				</Button>
+				<!--The core closes the recording off the UI thread (0.2-0.5 s): the
+				strip says so over a moving bar until it answers (every wait moves).-->
+				<StackPanel Name="RemasterStopWait" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" Margin="0 0 14 0" VerticalAlignment="Center" IsVisible="{Binding IsStopWaitVisible}">
+					<TextBlock Classes="subhead secondary" Text="{Binding StopWaitText}" VerticalAlignment="Center" />
+					<ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+				</StackPanel>
 				<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
 					<Ellipse Classes="dot" VerticalAlignment="Center" />
 					<TextBlock Name="RemasterRecordingPill" Classes="emphasis" Text="{Binding RecordingPill}" VerticalAlignment="Center" />

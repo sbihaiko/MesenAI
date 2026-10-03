@@ -75,6 +75,8 @@
 			</Panel>
 
 			<TextBlock Name="CheatsStatusLine" Classes="subhead secondary" Text="{Binding StatusLine}" TextWrapping="Wrap" Margin="2 16 0 0" />
+			<!--Every wait moves (2026-10-03): the community catalog is still being fetched.-->
+			<ProgressBar Name="CheatsLoadingBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" Margin="2 8 0 0" IsVisible="{Binding IsCommunityLoading}" />
 			<Button Name="CheatsChangeGameButton" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 8 0 0" Content="{l:Translate btnCheatsChangeGame}" IsVisible="{Binding IsBorrowingGame}" Click="OnChangeGame" />
 			<TextBlock Classes="footnote secondary" TextWrapping="Wrap" Margin="2 6 0 0" Text="{Binding AllOffNote}" IsVisible="{Binding IsAllOff}" />
 			<TextBlock Classes="replay-note" TextWrapping="Wrap" Margin="2 8 0 0" Text="{Binding ReplayNote}" />

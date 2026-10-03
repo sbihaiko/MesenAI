@@ -73,6 +73,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string BannerLine { get; private set; } = "";
 		[ObservableProperty] public partial bool IsPythonMissing { get; private set; }
 		[ObservableProperty] public partial bool IsToolsMissing { get; private set; }
+		//The Python/tools probe is running (a moving line until it answers).
+		[ObservableProperty] public partial bool IsFeasibilityChecking { get; private set; }
 		[ObservableProperty] public partial string PendingBrowserUrl { get; private set; } = "";
 		[ObservableProperty] public partial string BrowserConfirmText { get; private set; } = "";
 
@@ -104,6 +106,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string JobTitle { get; private set; } = "";
 		[ObservableProperty] public partial string JobDetail { get; private set; } = "";
 		[ObservableProperty] public partial int JobPercent { get; private set; }
+		//A step reports nothing until it ends: the bar moves meanwhile.
+		[ObservableProperty] public partial bool IsJobBarIndeterminate { get; private set; }
 
 		//Raised when Activity or the job's progress changes, for the shell's
 		//dot and status line (§13.6, W-X3).
@@ -163,6 +167,8 @@ namespace Mesen.ViewModels
 						Refresh();
 					});
 				}, TaskScheduler.Default);
+				//The jobs wait with their reason, and the probe shows, until it answers.
+				Refresh();
 			}
 			return _measuring;
 		}
@@ -233,82 +239,10 @@ namespace Mesen.ViewModels
 			return true;
 		}
 
-		//W-R0 › Start Recording / W-R1 › Record While I Play: the bootstrap
-		//recorder into the next auto/rec-NNN/ (ADR-0243 Decision 2, source play).
-		public bool StartRecording()
-		{
-			RemasterScreenState state = Evaluate();
-			if(!state.Record.Enabled) {
-				return false;
-			}
-			//ADR-0184 §1: a cheat that is not a RAM code refuses the run, named.
-			string refusal = CheatRefusal();
-			if(refusal.Length > 0) {
-				NoticeText = refusal;
-				Refresh();
-				return false;
-			}
-			//Held back from here on, so nothing turned on later reaches the core.
-			BeginRecordingArtCheats();
-			if(EmuApi.IsMepBootstrapping()) {
-				//#690: the legacy "Record while I play" setting (ADR-0243 Q3)
-				//already records this load. Record takes over: that recording is
-				//closed and kept, and this one starts as the next rec-NNN.
-				EmuApi.StopMepRecording();
-			}
-			if(!EmuApi.StartMepRecording("play", "")) {
-				EndRecordingArtCheats();
-				NoticeText = ResourceHelper.GetMessage("RemasterRecordFailed");
-				Refresh();
-				return false;
-			}
-			//#663: the builder stops the project's own pack art, if it was drawing.
-			PackArtSwitch.Raise();
-			NoticeText = "";
-			_chosenProject = RemasterProjectLocator.FromRecordingFolder(EmuApi.GetMepRecordingFolder());
-			_chosenByUser = false;
-			IsRecording = true;
-			_recordingClock.Restart();
-			_recordingTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => OnRecordingTick());
-			_recordingTimer.Start();
-			Refresh();
-			return true;
-		}
-
-		//W-R2 › Stop (or Esc): the recording is closed and kept, W-R1 shows it,
-		//and the kit runs as a job when it can (W-R2 text). G.6 (W-X3): quitting
-		//or opening another game stops it without the kit run.
-		public void StopRecording(bool prepareFigures = true)
-		{
-			if(!IsRecording) {
-				return;
-			}
-			string folder = EmuApi.GetMepRecordingFolder();
-			EmuApi.StopMepRecording();
-			PackArtSwitch.Raise();
-			string project = RemasterProjectLocator.FromRecordingFolder(folder);
-			if(project.Length > 0) {
-				_chosenProject = project;
-			}
-			EndRecordingView();
-			Refresh();
-			if(prepareFigures && RemasterScreen.RunKitAfterRecording(Inputs())) {
-				StartKit();
-			}
-		}
-
-		private void EndRecordingView()
-		{
-			EndRecordingArtCheats();
-			IsRecording = false;
-			RecordingCounters = "";
-			_recordingClock.Reset();
-			_recordingTimer?.Stop();
-		}
-
 		private void OnRecordingTick()
 		{
-			if(!IsRecording) {
+			//A stop in flight ends the view itself when the core answers.
+			if(!IsRecording || Transition != RecordingTransition.None) {
 				return;
 			}
 			//The core ends a recording by itself when its ROM goes away.
@@ -376,6 +310,7 @@ namespace Mesen.ViewModels
 			RemasterJobSnapshot job = _jobs.Snapshot;
 			IsJobRunning = job.IsRunning;
 			JobPercent = job.Percent;
+			IsJobBarIndeterminate = job.BarIsIndeterminate;
 			switch(job.Status) {
 				case RemasterJobStatus.Running:
 					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage(JobMessage(job.Kind, "RemasterJobKitTitle"));
@@ -423,7 +358,7 @@ namespace Mesen.ViewModels
 			string shown = _project?.Folder ?? "";
 			return new RemasterInputs(_gameLoaded, _console, IsRecording, _jobs.Snapshot.IsRunning, shown, IsGamesProject(shown) && _gameLoaded,
 				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder, _project?.HasKit ?? false,
-				RemasterJobs.RunsOn(OtherWorkspaceJob(), shown));
+				RemasterJobs.RunsOn(OtherWorkspaceJob(), shown), Transition, IsFeasibilityPending);
 		}
 
 		//Before the first recording the game's project does not exist yet; a
@@ -459,6 +394,8 @@ namespace Mesen.ViewModels
 
 			RemasterFeasibility f = _feasibility ?? PendingFeasibility;
 			IsBannerVisible = s.ShowFeasibilityBanner;
+			IsFeasibilityChecking = s.ShowFeasibilityChecking;
+			RefreshRecordingWait();
 			IsPythonMissing = f.Python != PythonGate.Found;
 			IsToolsMissing = !IsPythonMissing && f.Tools != ToolsGate.Found;
 			string banner = f.Python == PythonGate.TooOld ? "RemasterPythonTooOld"
