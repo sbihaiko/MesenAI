@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Mesen.Config;
+using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.Utilities;
@@ -38,8 +39,11 @@ public partial class PlayEdgeFlowsTests
 		Assert.Equal("Inter", window.FindNamed<TextBlock>("BiosSheetDropTitle").FontFamily.Name);
 		PlayerRender.Save(PlayerRender.Capture(window), "W-P13-bios-from-remaster");
 
-		//Esc cancels it there too.
-		model.TogglePlayerOverlay();
+		//Esc cancels it there too. The press goes through the shortcut handler
+		//(its permission check and workspace gate), as the Core delivers it; a
+		//window key press never reaches it on macOS, where the Core reads keys.
+		new ShortcutHandler(window).ExecuteShortcut(EmulatorShortcut.ToggleOverlay);
+		Dispatcher.UIThread.RunJobs();
 		Assert.True(request.WaitAnswered(TimeSpan.FromSeconds(10)), "Esc left the Core's request waiting");
 		Assert.False(model.BiosSheet.IsVisible);
 		Assert.Equal(Workspace.Remaster, ConfigManager.Config.Preferences.Workspace);
