@@ -34,11 +34,14 @@ namespace Mesen.HeadlessTests;
 public class PlaySheetsContrastTests : IDisposable
 {
 	private const double MinContrast = 4.5;
-	//The two accent buttons carry colors chosen on purpose (system blue, alert
-	//red); restyling them is ADR-0249's, so they are held to the 3:1 WCAG
-	//minimum for large text and UI components instead of AA body text.
+	//Accent buttons carry colors chosen on purpose (system blue, alert red):
+	//the two named here, and every ADR-0249 `primary`/`destructive` button,
+	//whose white-on-tint and RED-on-pale-red pairs are the rendered
+	//wireframes' tokens. They are held to the 3:1 WCAG minimum for large text
+	//and UI components instead of AA body text.
 	private const double AccentMinContrast = 3.0;
 	private static readonly HashSet<string> AccentButtons = new() { "OverlayResumeButton", "OverlayQuitGameButton" };
+	private static bool IsAccent(Button b) => AccentButtons.Contains(b.Name ?? "") || b.Classes.Contains("primary") || b.Classes.Contains("destructive");
 	private const string OnePack = "aaa\tAaa Pack\t1.2\tTastic\tCC BY-NC 4.0\ttextures,audio\t1\t0\tissue-1\tc1\n";
 	private const string TwoPacks =
 		"aaa\tAaa Pack\t1.0\t\t\ttextures\t1\t0\tissue-1\tc1\n" +
@@ -89,7 +92,7 @@ public class PlaySheetsContrastTests : IDisposable
 			Color back = BackgroundBehind(text, root);
 			Color fore = Over(EffectiveForeground(text, root), back);
 			double ratio = Contrast(fore, back);
-			bool accent = text.GetVisualAncestors().OfType<Button>().FirstOrDefault() is Button b && AccentButtons.Contains(b.Name ?? "");
+			bool accent = text.GetVisualAncestors().OfType<Button>().FirstOrDefault() is Button b && IsAccent(b);
 			if(ratio < (accent ? AccentMinContrast : MinContrast)) {
 				unreadable.Add($"'{text.Text}' {fore} on {back} = {ratio:0.00}:1");
 			}
@@ -171,7 +174,7 @@ public class PlaySheetsContrastTests : IDisposable
 	//on a Border beside, not around, its text) counts when it covers the text.
 	private static Color BackgroundBehind(TextBlock text, Visual root)
 	{
-		Rect area = text.GetTransformedBounds()?.Clip ?? default;
+		Rect area = OnScreen(text);
 		List<IBrush> layers = new();
 		for(Visual? v = text; v != null; v = v.GetVisualParent()) {
 			if(Painted(v) is IBrush own) {
@@ -183,7 +186,7 @@ public class PlaySheetsContrastTests : IDisposable
 			Visual[] siblings = v.GetVisualParent()?.GetVisualChildren().ToArray() ?? Array.Empty<Visual>();
 			for(int i = Array.IndexOf(siblings, v) - 1; i >= 0; i--) {
 				Visual s = siblings[i];
-				if(s.IsEffectivelyVisible && Painted(s) is IBrush under && (s.GetTransformedBounds()?.Clip ?? default).Contains(area.Center)) {
+				if(s.IsEffectivelyVisible && Painted(s) is IBrush under && OnScreen(s).Contains(area.Center)) {
 					layers.Add(under);
 				}
 			}
@@ -195,6 +198,17 @@ public class PlaySheetsContrastTests : IDisposable
 			back = Over(Color.FromArgb((byte)Math.Round(c.A * solid.Opacity), c.R, c.G, c.B), back);
 		}
 		return back;
+	}
+
+	//A visual's own rectangle in window coordinates, cut by its clip.
+	//(TransformedBounds.Clip alone is the ancestors' clip region, not the
+	//visual: with it, an icon badge beside a row's text counted as behind it.)
+	private static Rect OnScreen(Visual v)
+	{
+		if(v.GetTransformedBounds() is not TransformedBounds tb) {
+			return default;
+		}
+		return tb.Bounds.TransformToAABB(tb.Transform).Intersect(tb.Clip);
 	}
 
 	private static IBrush? Painted(Visual v) => v switch {

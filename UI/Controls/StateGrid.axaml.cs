@@ -166,6 +166,11 @@ namespace Mesen.Controls
 			SelectedPage = page;
 		}
 
+		//ADR-0249: the `tiles` class lays the recent games out as the Player
+		//home's row of tiles (W-P2) and tags each entry so the theme styles it.
+		private const double TileColumnWidth = 198;
+		private bool IsTiles => Classes.Contains("tiles") && Mode == GameScreenMode.RecentGames;
+
 		private void InitGrid(bool forceUpdate = false)
 		{
 			if(Entries == null) {
@@ -189,6 +194,10 @@ namespace Mesen.Controls
 			if(Mode != GameScreenMode.RecentGames) {
 				colCount = 4;
 				rowCount = 3;
+			} else if(IsTiles) {
+				//ADR-0249 W-P2: one row of fixed-width tiles, as many as fit (max 5).
+				colCount = Math.Min(5, Math.Max(1, (int)(size.Width / TileColumnWidth)));
+				rowCount = 1;
 			}
 
 			bool layoutChanged = _colCount != colCount || _rowCount != rowCount;
@@ -208,7 +217,7 @@ namespace Mesen.Controls
 
 			ColumnDefinitions columnDefinitions = new ColumnDefinitions();
 			for(int i = 0; i < colCount; i++) {
-				columnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star));
+				columnDefinitions.Add(IsTiles ? new ColumnDefinition(TileColumnWidth, GridUnitType.Pixel) : new ColumnDefinition(1, GridUnitType.Star));
 			}
 			grid.ColumnDefinitions = columnDefinitions;
 
@@ -234,6 +243,9 @@ namespace Mesen.Controls
 					}
 
 					StateGridEntry ctrl = new StateGridEntry();
+					if(IsTiles) {
+						ctrl.Classes.Add("tiles");
+					}
 
 					ctrl.SetValue(Grid.ColumnProperty, col);
 					ctrl.SetValue(Grid.RowProperty, row);
