@@ -88,17 +88,24 @@ public:
 
 		uint16_t* left = nullptr;
 		uint16_t* right = nullptr;
-		if(!_reveal.RowSides(row, left, right)) {
+		uint8_t* fill = nullptr;
+		if(!_reveal.RowSides(row, left, right, fill)) {
 			return;
 		}
-		NesWidescreenReveal::RenderRowSides(basis, mirroring, *_mapper, _paletteRam, left, right);
+		uint8_t filled = 0;
+		NesWidescreenReveal::RenderRowSides(basis, mirroring, *_mapper, _paletteRam, left, right, &filled);
+		if(fill) {
+			*fill = filled;
+		}
 	}
 
 	//ADR-0253 §4 (W.5): what the core measured for the running game.
 	NesWidescreenSupport::Verdict GetWidescreenSupportVerdict() const { return _revealProbe.GetVerdict(); }
 
 	//ADR-0253: an extended frame replaces the standard one on its way to the
-	//video decoder only; _currentOutputBuffer stays the 256-px picture.
+	//video decoder only; _currentOutputBuffer stays the 256-px picture. The
+	//per-row fill map travels with it (ADR-0253 §3, W.3) so the renderer knows
+	//which side columns still need the fallback chain.
 	void OnFrameBuilt(RenderedFrame& frame)
 	{
 		const uint16_t* extended = _reveal.Finish(_currentOutputBuffer);
@@ -106,6 +113,7 @@ public:
 			frame.FrameBuffer = (void*)extended;
 			frame.Width = NesWidescreenReveal::ExtendedWidth;
 			frame.ExtendedColumns = NesWidescreenReveal::ExtraColumns;
+			frame.ExtendedSideFill = _reveal.LastFill();
 		}
 	}
 

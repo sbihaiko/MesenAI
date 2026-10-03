@@ -133,7 +133,9 @@ void VideoDecoder::KeepStandardCentre()
 	}
 	_frame.FrameBuffer = _standardCentre.data();
 	_frame.Width = standardWidth;
-	_frame.ExtendedColumns = 0;
+	//Both extended fields, not just the width: the side-fill map describes
+	//columns this frame no longer has (RenderedFrame::ClearExtension).
+	_frame.ClearExtension();
 }
 
 void VideoDecoder::DecodeFrame(bool forRewind)
@@ -142,10 +144,13 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 	bool compare = _emu->GetSettings()->IsLookCompare();
 	BaseVideoFilter* videoFilter = GetFrameFilter(compare);
 
-	//ADR-0253 W.1: a filter or border that assumes the standard width gets
-	//the standard picture, so nothing downstream ever reads a row at the
-	//wrong stride; the aspect ratio then falls back with it (IsFrameExtended)
-	if(_frame.ExtendedColumns > 0 && _frame.FrameBuffer && (!videoFilter->AcceptsExtendedFrame() || _emu->GetVideoRenderer()->IsBorderComposited())) {
+	//ADR-0253 W.1: a filter that assumes the standard width gets the standard
+	//picture, so nothing downstream ever reads a row at the wrong stride; the
+	//aspect ratio then falls back with it (IsFrameExtended). W.3 taught the
+	//border composite to take an extended frame itself (the side columns the
+	//game left unfilled become the border's), so a composited border is no
+	//longer a reason to drop the extra columns.
+	if(_frame.ExtendedColumns > 0 && _frame.FrameBuffer && !videoFilter->AcceptsExtendedFrame()) {
 		KeepStandardCentre();
 	}
 
@@ -189,6 +194,16 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 	}
 
 	RenderedFrame convertedFrame((void*)outputBuffer, frameSize.Width, frameSize.Height, _frame.Scale, _frame.FrameNumber, _frame.InputData);
+
+	//ADR-0253 §3 (W.3): the frame-width contract and the per-row side fill map
+	//travel to the renderer with the picture, so the fallback chain (pack art,
+	//then the border layer) can fill the side columns the console could not.
+	//Only when no filter rescaled the picture: the map's rows are the console's
+	//rows, and a scale/rotate filter would invalidate that correspondence.
+	if(frameSize.Width == _frame.Width && frameSize.Height == _frame.Height) {
+		convertedFrame.ExtendedColumns = _frame.ExtendedColumns;
+		convertedFrame.ExtendedSideFill = _frame.ExtendedSideFill;
+	}
 
 	double aspectRatio = _emu->GetSettings()->GetAspectRatio(_emu->GetRegion(), _baseFrameSize);
 	if(frameSize.Height != _lastFrameSize.Height || frameSize.Width != _lastFrameSize.Width || aspectRatio != _lastAspectRatio) {

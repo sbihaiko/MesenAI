@@ -18,10 +18,14 @@ enum class MepSectionType : uint8_t
 	Textures = 0,
 	Audio = 1,
 	Synth = 2,
-	Border = 3
+	Border = 3,
+	//ADR-0253 §3 (slice W.3, MEP-v1 §5.5): art for the extra columns a
+	//widescreen Reveal cannot fill. The section path is the folder holding
+	//`widescreen.json` and the images it names.
+	Widescreen = 4
 };
 
-constexpr int kMepSectionCount = 4;
+constexpr int kMepSectionCount = 5;
 
 struct MepSection
 {

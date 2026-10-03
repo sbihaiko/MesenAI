@@ -77,8 +77,26 @@ private:
 	vector<uint32_t> _compositeBuffer;
 	RenderedFrame _compositedFrame;
 
-	void UpdateBorderAsset();
+	//ADR-0253 §3 (slice W.3): the `<widescreen>` section's side art (MEP-v1
+	//§5.5), decoded once per pack change on the same dirty flag as the border.
+	//Same ownership rule as the border cache: decode thread only.
+	string _widescreenPackFolder;
+	vector<uint32_t> _widescreenLeft;
+	vector<uint32_t> _widescreenRight;
+	FrameInfo _widescreenLeftSize;
+	FrameInfo _widescreenRightSize;
+	//The frame's own per-row fill map, copied out of the console's buffer
+	//before the pack art is drawn into it (the console owns that memory).
+	vector<uint8_t> _sideFillScratch;
+
+	void UpdatePackArtAssets();
 	void ResetBorderAsset();
+	//ADR-0253 §3: decodes the `<widescreen>` section's side art, if the pack has one
+	void LoadWidescreenArt(const string& folder);
+	//ADR-0253 §3: draws the pack's widescreen art into the side columns the
+	//console's Reveal could not fill, and hands the border composite the
+	//resulting fill map. A no-op on a standard frame or with no side art.
+	void ApplyWidescreenFallback(RenderedFrame& frame);
 	//Returns `&inFrame` when the border is disabled or unavailable (no copy),
 	//or `&_compositedFrame` (backed by _compositeBuffer) otherwise. Non-const
 	//only because IRenderingDevice::UpdateFrame takes a mutable reference.
