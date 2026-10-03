@@ -60,6 +60,7 @@
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
 #include "Shared/Video/AspectRatioMath.h"
+#include "Shared/Video/HudToastLayout.h"
 #include "Shared/HeadlessInputEngine.h"
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
@@ -13044,6 +13045,118 @@ void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
 	Check(logged && calls->size() == 4, "audio open: an opener destroyed mid-open finishes the open first");
 }
 
+//--- Player-style system toast (user's decision 2026-10-03, "Estilizar o HUD
+//do Core"): HudToastLayout is the pure half of SystemHud's Player card - the
+//W-P3/W-P9 geometry, glyph choice, colours, text mapping and word wrap. The
+//pixels themselves are checked by scripts/test_headless_record_player_toast.py.
+namespace
+{
+	int SixPerChar(const std::string& s)
+	{
+		return (int)s.size() * 6;
+	}
+}
+
+static void TestTheToastStyleDefaultsToClassic()
+{
+	PreferencesConfig cfg;
+	Check(cfg.ToastStyle == HudToastStyle::Classic, "toast: a default PreferencesConfig keeps the Classic toast");
+	Check((int)HudToastStyle::Classic == 0 && (int)HudToastStyle::Player == 1,
+		"toast: HudToastStyle values match the C# mirror (Classic=0, Player=1)");
+}
+
+static void TestAPlayerToastSitsInTheBottomRightCorner()
+{
+	//A one-line toast on the 256x240 HUD a NES frame gets.
+	HudToastLayout::Box box = HudToastLayout::Layout(256, 240, 100, 1, 0);
+	Check(box.X + box.Width == 256 - HudToastLayout::MarginRight, "toast: the card's right edge is MarginRight from the HUD's",
+		std::to_string(box.X + box.Width));
+	Check(box.Y + box.Height == 240 - HudToastLayout::MarginBottom, "toast: the card's bottom edge is MarginBottom from the HUD's",
+		std::to_string(box.Y + box.Height));
+	Check(box.Height == 17, "toast: a one-line card is 17 px tall (5 + 8 glyph rows + 4)", std::to_string(box.Height));
+	Check(box.Width == 6 + 7 + 4 + 100 + 7, "toast: the card is padding + glyph + gap + text + padding wide", std::to_string(box.Width));
+	Check(box.IconX == box.X + 6 && box.IconY == box.Y + 5, "toast: the glyph sits PadLeft in, on the text's first line");
+	Check(box.TextX == box.IconX + 7 + 4 && box.TextY == box.IconY, "toast: the text starts after the glyph and its gap");
+}
+
+static void TestPlayerToastsStackUpwardsNewestLowest()
+{
+	HudToastLayout::Box newest = HudToastLayout::Layout(256, 240, 60, 1, 0);
+	int offset = newest.Height + HudToastLayout::StackGap;
+	HudToastLayout::Box older = HudToastLayout::Layout(256, 240, 60, 2, offset);
+	Check(older.Y + older.Height + HudToastLayout::StackGap == newest.Y, "toast: an older card sits StackGap above the newer one");
+	Check(older.Height == newest.Height + HudToastLayout::LineHeight, "toast: each extra line adds one line pitch to the card");
+}
+
+static void TestAPlayerToastNeverStartsLeftOfTheMargin()
+{
+	HudToastLayout::Box box = HudToastLayout::Layout(120, 240, 400, 1, 0);
+	Check(box.X == HudToastLayout::MarginLeft, "toast: a card wider than the HUD is pinned to the left margin", std::to_string(box.X));
+	Check(HudToastLayout::MaxTextWidth(256) == 256 - 8 - 8 - 6 - 7 - 4 - 7, "toast: the widest text leaves both margins and the card's chrome");
+	Check(HudToastLayout::MaxTextWidth(10) == 1, "toast: a degenerate HUD still gets a positive wrap width");
+}
+
+static void TestThePlayerCardHasRoundedCorners()
+{
+	using HudToastLayout::CornerInset;
+	Check(CornerInset(0, 17, 4) == 2 && CornerInset(1, 17, 4) == 1 && CornerInset(2, 17, 4) == 0 && CornerInset(3, 17, 4) == 0,
+		"toast: a radius-4 corner cuts rows 0-3 in by 2,1,0,0",
+		std::to_string(CornerInset(0, 17, 4)) + "," + std::to_string(CornerInset(1, 17, 4)) + "," + std::to_string(CornerInset(2, 17, 4)));
+	Check(CornerInset(16, 17, 4) == 2 && CornerInset(15, 17, 4) == 1, "toast: the bottom corners mirror the top ones");
+	Check(CornerInset(8, 17, 4) == 0, "toast: the middle rows are full width");
+	Check(CornerInset(0, 17, 0) == 0, "toast: radius 0 is a plain rectangle");
+	Check(CornerInset(0, 4, 4) <= 2, "toast: a radius taller than half the card is clamped to it");
+}
+
+static void TestEachToastGetsTheRendersGlyph()
+{
+	using HudToastLayout::Classify;
+	using HudToastLayout::Icon;
+	Check(Classify("MEP", "Applied Contra 80s - textures") == Icon::Check, "toast: an applied pack gets W-P3's check");
+	Check(Classify("Error", "Could not load file: x.nes") == Icon::Warning, "toast: the Error title gets W-P9's warning");
+	Check(Classify("MEP", u8"Couldn't keep your place \u2014 the game restarted") == Icon::Warning,
+		"toast: a failure sentence gets the warning whatever its title");
+	Check(Classify("Save States", "State #1 saved.") == Icon::Dot, "toast: any other toast gets the Player-accent dot");
+	Check(HudToastLayout::IconRgb(Icon::Check) == 0x34C759 && HudToastLayout::IconRgb(Icon::Warning) == 0xFF9F0A &&
+		HudToastLayout::IconRgb(Icon::Dot) == 0x007AFF, "toast: glyph colours are the Player palette's green, orange and Play blue");
+	int lit = 0;
+	for(int i = 0; i < HudToastLayout::IconSize; i++) {
+		lit += HudToastLayout::IconRows(Icon::Check)[i] != 0 ? 1 : 0;
+	}
+	Check(lit >= 5, "toast: the check glyph is drawn on most of its rows");
+}
+
+static void TestToastColoursFadeThroughTheHudsInvertedAlpha()
+{
+	using HudToastLayout::HudColor;
+	Check(HudColor(0x1E1E20, 225, 255) == 0x1E1E1E20u, "toast: the card is PlayerHudColor at alpha 225 (transparency 30)");
+	Check(HudColor(0xFFFFFF, 255, 255) == 0x00FFFFFFu, "toast: opaque text has a zero transparency byte");
+	Check((HudColor(0xFFFFFF, 255, 0) >> 24) == 255, "toast: a fully faded toast is fully transparent");
+	Check((HudColor(0x1E1E20, 225, 128) >> 24) == 255 - 225 * 128 / 255, "toast: the fade scales the colour's own alpha");
+}
+
+static void TestToastTextIsMappedOntoTheBitmapFont()
+{
+	using HudToastLayout::ToFontText;
+	Check(ToFontText(u8"Applied Contra 80s \u2014 textures") == "Applied Contra 80s - textures", "toast: an em dash becomes a hyphen");
+	Check(ToFontText(u8"Pack changed \u00B7 rewind history cleared") == "Pack changed - rewind history cleared", "toast: a middle dot becomes a hyphen");
+	Check(ToFontText(u8"Installing\u2026 don\u2019t quit") == "Installing... don't quit", "toast: an ellipsis and a curly apostrophe become ASCII");
+	Check(ToFontText("plain ascii") == "plain ascii", "toast: ASCII is untouched");
+}
+
+static void TestToastTextWrapsAtWords()
+{
+	std::vector<std::string> lines = HudToastLayout::Wrap("aaa bbb ccc", 7 * 6, SixPerChar);
+	Check(lines.size() == 2 && lines[0] == "aaa bbb" && lines[1] == "ccc", "toast: text wraps at the last space that fits",
+		std::to_string(lines.size()));
+	lines = HudToastLayout::Wrap("short", 100, SixPerChar);
+	Check(lines.size() == 1 && lines[0] == "short", "toast: text that fits stays one line");
+	lines = HudToastLayout::Wrap("averyveryverylongword x", 30, SixPerChar);
+	Check(lines.size() == 2 && lines[0] == "averyveryverylongword", "toast: a word wider than the line is kept whole");
+	lines = HudToastLayout::Wrap("", 30, SixPerChar);
+	Check(lines.size() == 1 && lines[0].empty(), "toast: an empty message is one empty line");
+}
+
 int main()
 {
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
@@ -13457,6 +13570,16 @@ int main()
 	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();
 	TestShaderParamsTouchNoListWhenThePresetFailsToLoad();
+
+	TestTheToastStyleDefaultsToClassic();
+	TestAPlayerToastSitsInTheBottomRightCorner();
+	TestPlayerToastsStackUpwardsNewestLowest();
+	TestAPlayerToastNeverStartsLeftOfTheMargin();
+	TestThePlayerCardHasRoundedCorners();
+	TestEachToastGetsTheRendersGlyph();
+	TestToastColoursFadeThroughTheHudsInvertedAlpha();
+	TestToastTextIsMappedOntoTheBitmapFont();
+	TestToastTextWrapsAtWords();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

@@ -287,6 +287,8 @@ namespace Mesen.Config
 				ShowTurboRewindIcons = ShowTurboRewindIcons,
 				DisableGameSelectionScreen = GameSelectionScreenMode == GameSelectionMode.Disabled,
 				HudSize = HudSize,
+				//The Core draws its toasts as the Player card only in Player mode.
+				ToastStyle = HudToastStyleRule.For(UiMode),
 				SaveFolderOverride = OverrideSaveDataFolder ? SaveDataFolder : "",
 				SaveStateFolderOverride = OverrideSaveStateFolder ? SaveStateFolder : "",
 				ScreenshotFolderOverride = OverrideScreenshotFolder ? ScreenshotFolder : "",
@@ -345,6 +347,7 @@ namespace Mesen.Config
 		[MarshalAs(UnmanagedType.I1)] public bool DisableGameSelectionScreen;
 
 		public HudDisplaySize HudSize;
+		public HudToastStyle ToastStyle;
 
 		public UInt32 AutoSaveStateDelay;
 		public UInt32 RewindBufferSize;

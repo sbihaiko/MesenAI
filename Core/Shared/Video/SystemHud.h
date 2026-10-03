@@ -30,6 +30,7 @@ private:
 	void DrawRecordIcon(DebugHud* hud) const;
 	void DrawTurboRewindIcon(DebugHud* hud, bool forRewind, int xOffset) const;
 	void DrawMessage(DebugHud* hud, MessageInfo& msg, uint32_t screenWidth, uint32_t screenHeight, int& lastHeight) const;
+	void DrawPlayerMessage(DebugHud* hud, MessageInfo& msg, uint32_t screenWidth, uint32_t screenHeight, int& stackOffset) const;
 	void DrawString(DebugHud* hud, uint32_t screenWidth, string msg, int x, int y, uint8_t opacity = 255) const;
 	void DisplayMessage(string title, string message) override;
 

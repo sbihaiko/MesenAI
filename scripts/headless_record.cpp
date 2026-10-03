@@ -268,6 +268,7 @@ extern "C"
 	void SetVideoConfig(VideoConfig config);
 	void SetShaderConfig(InteropShaderConfig config);
 	void SetEmulationConfig(EmulationConfig config);
+	void SetPreferences(PreferencesConfig config);
 	void SetMepPackEnabled(const char* containerName, bool enabled);
 	//ADR-0243 (F12.20) - InteropDLL/EmuApiWrapper.cpp
 	void SetMepNextRecordingSource(const char* source, const char* note);
@@ -1192,6 +1193,8 @@ int main(int argc, char** argv)
 			"       [sync-watch=AAAA:<rule>[=<n>][:<label>]] (ADR-0185 sec. 4; repeatable)\n"
 			"       [sync-baseline=<trace.csv>] [sync-movie-frames=<n>] [sync-sample=<frames>]\n"
 			"       [hud-message=<title>|<msg>] [live=<ms>] [cdl=<file.cdl>]\n"
+			"       [hud-style=<classic|player>] [hud-dump=<prefix>] (the toast's look; write the captured\n"
+			"                  HUD and frame as raw little-endian ARGB, <prefix>-hud.argb / -frame.argb)\n"
 			"       [recording-source=<play|tas|ai|script>] [recording-note=<text>] (ADR-0243 Q2: what\n"
 			"                  project.json records as having driven this recording)\n"
 			"       [session] (F14.12: serve run/ram/state requests on stdin until quit,\n"
@@ -1292,6 +1295,12 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//the first '|' (neither Localize()'d key needs one).
 	std::string hudMessageTitle;
 	std::string hudMessageText;
+	//"Estilizar o HUD do Core" (2026-10-03): hud-style= picks the system
+	//toast's look (PreferencesConfig::ToastStyle) and hud-dump= writes the HUD
+	//capture and the frame under it as raw ARGB, so a test can read the pixels
+	//the Core drew (scripts/test_headless_record_player_toast.py).
+	std::string hudStyle;
+	std::string hudDumpPrefix;
 	//ADR-0184 - RAM-address cheats, validated by parseRamCheat() as they are
 	//parsed and applied after the ROM (and any state) is loaded.
 	std::vector<CheatCodeAbi> cheats;
@@ -1467,6 +1476,14 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 			}
 			hudMessageTitle = spec.substr(0, sep);
 			hudMessageText = spec.substr(sep + 1);
+		} else if(strncmp(argv[i], "hud-style=", 10) == 0) {
+			hudStyle = argv[i] + 10;
+			if(hudStyle != "classic" && hudStyle != "player") {
+				fprintf(stderr, "hud-style= must be classic or player: %s\n", argv[i]);
+				return 1;
+			}
+		} else if(strncmp(argv[i], "hud-dump=", 9) == 0) {
+			hudDumpPrefix = argv[i] + 9;
 		} else if(strncmp(argv[i], "live=", 5) == 0) {
 			//ADR-0169: publish cadence in wall-clock milliseconds. Below ~50ms the
 			//capture+publish itself costs more than the interval - just spin disk.
@@ -1702,6 +1719,16 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	//is a fixed frame rather than "whatever the emulation thread reached while
 	//this thread was calling into the DLL".
 	HeadlessSetPauseFrame(1);
+
+	//hud-style=: the harness never set preferences before, so a default
+	//PreferencesConfig is the state every run already had, plus the toast
+	//style. SetPreferences re-applies the OSD switch from DisableOsd, which is
+	//why this runs before the OSD gate below turns it off again.
+	if(!hudStyle.empty()) {
+		PreferencesConfig preferences = {};
+		preferences.ToastStyle = hudStyle == "player" ? HudToastStyle::Player : HudToastStyle::Classic;
+		SetPreferences(preferences);
+	}
 
 	//ADR-0167: with the OSD on (the default), LoadRom enqueues a "game loaded"
 	//toast (Emulator.cpp) that never ages out of a short parked run, so a HUD
@@ -2258,6 +2285,20 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 						FrameBorders hudBorders = FrameCaptureMath::MeasureBorders(hudPixels.data(), hudWidth, hudHeight);
 						printf("capture hud: %ux%u checksum=0x%08X blank=%d\n",
 							hudWidth, hudHeight, FrameCaptureMath::Checksum(hudPixels.data(), hudPixelCount), hudBorders.IsBlank ? 1 : 0);
+						if(!hudDumpPrefix.empty()) {
+							auto dump = [](const std::string& path, const std::vector<uint32_t>& data) {
+								FILE* f = fopen(path.c_str(), "wb");
+								bool ok = f && fwrite(data.data(), sizeof(uint32_t), data.size(), f) == data.size();
+								if(f) {
+									fclose(f);
+								}
+								return ok;
+							};
+							if(!dump(hudDumpPrefix + "-hud.argb", hudPixels) || !dump(hudDumpPrefix + "-frame.argb", pixels)) {
+								fprintf(stderr, "hud-dump failed: could not write %s-hud.argb / -frame.argb\n", hudDumpPrefix.c_str());
+								captureFailed = true;
+							}
+						}
 					}
 				}
 			}
