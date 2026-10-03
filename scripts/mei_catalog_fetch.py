@@ -13,7 +13,7 @@ write time); the item accessors use defensive `dict.get` lookups, never
 direct indexing on an assumed key path.
 
 stdlib only (plus the stdlib-only leaves `mep_meta_parser`,
-`community_pack_markdown`, `mei_catalog_entry`).
+`community_pack_markdown`, `mei_catalog_entry`, `pack_board_fields`).
 """
 from __future__ import annotations
 
@@ -23,6 +23,15 @@ import subprocess
 
 import community_pack_markdown as markdown
 import gh_project_items
+# The board-item field lookup is shared with mep_identity_check and the
+# drift-check workflow (bug #685); re-exported for the generator.
+from pack_board_fields import (  # noqa: F401
+    item_issue_number,
+    item_pack_hash,
+    item_pack_url,
+    item_rom_sha1,
+    item_status,
+)
 from mep_meta_parser import MARKER as MEP_META_MARKER, parse_mep_meta
 
 REPO = "sbihaiko/MesenAI"
@@ -44,10 +53,11 @@ def fetch_accepted_items(accepted_statuses):
     names were an open COVERAGE GAP at write time (`gh project item-list`
     returned zero items) and are now CONFIRMED (2026-08-29, board holds 11
     accepted items): `gh project item-list` lowercases the first letter of
-    each Project field name, so "Pack URL"/"Pack Hash"/"ROM SHA1" surface as
-    "pack URL"/"pack Hash"/"ROM SHA1" item keys. The accessors below check the
-    confirmed lowercase key first and keep camelCase/underscore aliases for
-    safety; parsing is defensive and must not crash on an unexpected key.
+    each Project field name, so "Pack URL"/"Pack Hash" surface as
+    "pack URL"/"pack Hash" item keys. The accessors live in
+    `pack_board_fields` (one lookup for every board reader, bug #685): gh's
+    key first, then the older spellings; parsing is defensive and must
+    not crash on an unexpected key.
     Any negative conclusion (e.g. "no MEI entry") is qualified by this gap:
     an absent key may mean the datastore never held the value, not that the
     field is genuinely unset.
@@ -56,37 +66,6 @@ def fetch_accepted_items(accepted_statuses):
     # refused (SystemExit) instead of silently dropping rows past the 30th.
     items = gh_project_items.list_items(run_gh, PROJECT_NUMBER, OWNER)
     return [it for it in items if item_status(it) in accepted_statuses]
-
-
-def item_status(item):
-    return item.get("status") or item.get("Status") or ""
-
-
-def item_issue_number(item):
-    content = item.get("content") or {}
-    return content.get("number") or item.get("number") or item.get("issue_number")
-
-
-def item_pack_url(item):
-    # `gh project item-list` lowercases the first letter of each Project field
-    # name when building its JSON keys: the "Pack URL" field surfaces as
-    # "pack URL" (CONFIRMED 2026-08-29 against the live board, which the
-    # COVERAGE-GAP note below could not do at write time). Check the lowercase
-    # key first, keep the camelCase/underscore aliases for safety.
-    return (item.get("pack URL") or item.get("Pack URL")
-            or item.get("packUrl") or item.get("pack_url"))
-
-
-def item_pack_hash(item):
-    return (item.get("pack Hash") or item.get("Pack Hash")
-            or item.get("packHash") or item.get("pack_hash"))
-
-
-def item_rom_sha1(item):
-    # The ROM SHA1 field is returned by item-list only when populated; the
-    # generator treats it as optional (None -> MEI entry without a rom_sha1).
-    return (item.get("ROM SHA1") or item.get("romSha1")
-            or item.get("rom_sha1"))
 
 
 def fetch_issue_details(issue_number):

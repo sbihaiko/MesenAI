@@ -38,6 +38,7 @@ import sys
 
 import gh_project_items
 from mep_meta_parser import parse_mep_meta
+import pack_board_fields
 import pack_id_rules
 
 REPO = "sbihaiko/MesenAI"
@@ -153,12 +154,9 @@ def main(argv):
     items = []
     # Bug #670: the whole board or nothing (a truncated listing exits non-zero).
     for it in gh_project_items.list_items(run_gh, PROJECT_NUMBER, OWNER):
-        content = it.get("content") or {}
-        items.append({
-            "status": it.get("status") or it.get("Status") or "",
-            "issue_number": content.get("number") or it.get("number") or it.get("issue_number"),
-            "pack_url": it.get("packUrl") or it.get("Pack URL") or it.get("pack_url"),
-        })
+        # The shared lookup reads gh's real keys ("pack URL"); a private key
+        # list here missed it and blinded the origin check (bug #685).
+        items.append(pack_board_fields.normalize(it))
     existing = [e for e in existing_identities(items) if e.get("issue_number") != args.issue_number]
 
     new_identity = {"content_id": args.content_id, "pack_id": my_pack_id, "origin": my_origin}

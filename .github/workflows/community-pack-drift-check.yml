@@ -27,12 +27,16 @@
 #              cd763737 (Aceito MEP completo)
 #   - Pack Hash field: PVTF_lAHOB1MsbM4BhjpNzhge9Is
 #
-# Per-item JSON shape (confirmed live 2026-09-06 against the populated
-# Project via `gh project item-list 3 --owner sbihaiko --format json`):
-# `.status` is a plain string, `.content.number` is the issue number, and
-# the text field appears under its name (`.["Pack Hash"]`). The parsing
-# below stays deliberately defensive (`//` fallbacks, never direct indexing)
-# so a renamed field becomes a skipped item with a warning, not a crash.
+# Per-item JSON shape (confirmed live 2026-10-02 via `gh project item-list
+# 3 --owner sbihaiko --format json`): `.status` is a plain string,
+# `.content.number` is the issue number, and a field is keyed by its name
+# with the first letter lowercased ("Pack Hash" -> "pack Hash"). This
+# workflow never spells those keys: the listing goes through
+# `scripts/pack_board_fields.py normalize`, the one lookup every board reader
+# shares (bug #685: this step used to read the hash under the display name,
+# matched no item and skipped the whole board). The parsing below stays
+# defensive (`//` fallbacks, never direct indexing) so a missing value
+# becomes a skipped item with a warning, not a crash.
 # -----------------------------------------------------------------------------
 
 name: Community Pack Drift Check
@@ -74,6 +78,7 @@ jobs:
           LIMIT=$(python3 scripts/gh_project_items.py limit)
           gh project item-list 3 --owner sbihaiko --limit "$LIMIT" --format json > items.json
           python3 scripts/gh_project_items.py check items.json
+          python3 scripts/pack_board_fields.py normalize items.json > board.json
 
       # `pack:valid` and `pack:invalid` are mutually exclusive. Every verdict
       # path in community-pack-validate.yml already enforces that (the three
@@ -97,8 +102,8 @@ jobs:
         run: |
           set -euo pipefail
           while IFS= read -r item; do
-            status=$(jq -r '.status // .["Status"] // empty' <<<"$item")
-            issue_number=$(jq -r '.content.number // .number // empty' <<<"$item")
+            status=$(jq -r '.status // empty' <<<"$item")
+            issue_number=$(jq -r '.issue_number // empty' <<<"$item")
             [ -n "$issue_number" ] || continue
             case "$status" in
               "$STATUS_ACCEPTED_PARTIAL"|"$STATUS_ACCEPTED_FULL") want="pack:valid"; stale="pack:invalid" ;;
@@ -112,7 +117,7 @@ jobs:
             fi
             echo "issue #$issue_number: board Status '$status' - applying $want, dropping $stale"
             gh issue edit "$issue_number" --repo "$REPO" --add-label "$want" --remove-label "$stale"
-          done < <(jq -c '.items[]' items.json)
+          done < <(jq -c '.items[]' board.json)
 
       - name: Recompute hash and diff against Pack Hash (fetch_pack.py + sha256sum only)
         id: diff
@@ -122,19 +127,19 @@ jobs:
           set -euo pipefail
           mismatched="[]"
           while IFS= read -r item; do
-            # Candidate keys with a `//` fallback instead of direct indexing
-            # (see the provenance block above): a renamed/missing key becomes
-            # an empty string and a skipped item, not a crash.
-            status=$(jq -r '.status // .["Status"] // empty' <<<"$item")
+            # Normalized keys (pack_board_fields.py) with a `//` fallback
+            # instead of direct indexing: a missing value becomes an empty
+            # string and a skipped item, not a crash.
+            status=$(jq -r '.status // empty' <<<"$item")
             case "$status" in
               "$STATUS_ACCEPTED_PARTIAL"|"$STATUS_ACCEPTED_FULL") ;;
               *) continue ;;
             esac
 
-            issue_number=$(jq -r '.content.number // .number // empty' <<<"$item")
-            stored_hash=$(jq -r '.["Pack Hash"] // .packHash // .pack_hash // empty' <<<"$item")
+            issue_number=$(jq -r '.issue_number // empty' <<<"$item")
+            stored_hash=$(jq -r '.pack_hash // empty' <<<"$item")
             if [ -z "$issue_number" ] || [ -z "$stored_hash" ]; then
-              echo "::warning::item has no recognizable issue_number or Pack Hash among the candidate keys - skipping defensively"
+              echo "::warning::item has no issue number or Pack Hash value - skipping defensively"
               continue
             fi
 
@@ -165,7 +170,7 @@ jobs:
               mismatched=$(jq -c --arg n "$issue_number" --arg u "$pack_url" \
                 '. + [{"issue_number": ($n | tonumber), "pack_url": $u}]' <<<"$mismatched")
             fi
-          done < <(jq -c '.items[]' items.json)
+          done < <(jq -c '.items[]' board.json)
 
           echo "mismatched=$mismatched" >> "$GITHUB_OUTPUT"
 
