@@ -513,12 +513,12 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Panel sheet = window.FindNamed<Panel>("ControllerSetupBackdrop");
 			Assert.True(sheet.IsOnScreen());
 			Assert.Equal(2, ControlsOnScreen(sheet));
-			//The sheet is white in either theme: the chip labels never inherit
-			//the theme's foreground - white on the lit chip, dark on the rest.
+			//The keys are drawn dark or tinted in either theme (ADR-0249 W-P15):
+			//the chip labels never inherit the theme's foreground - always white.
 			TextBlock[] chips = sheet.FindAll<TextBlock>().Where(t => t.Name == "ControllerSetupChipLabel").ToArray();
 			Assert.Equal(8, chips.Length);
 			Assert.Equal(Colors.White, Assert.IsAssignableFrom<ISolidColorBrush>(chips[0].Foreground).Color);
-			Assert.Equal(Color.Parse("#1C1C1E"), Assert.IsAssignableFrom<ISolidColorBrush>(chips[1].Foreground).Color);
+			Assert.Equal(Colors.White, Assert.IsAssignableFrom<ISolidColorBrush>(chips[1].Foreground).Color);
 
 			//Release Start (arms), then one press/release per step.
 			setup.Tick(none, t += TimeSpan.FromMilliseconds(100));

@@ -6,14 +6,16 @@
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
-	mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
+	mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="380"
 	VerticalAlignment="Stretch"
 	HorizontalAlignment="Stretch"
 	x:DataType="vm:LookConfigViewModel"
 	x:Class="Mesen.Views.LookConfigView"
 >
 	<!-- ADR-0246 (P.13): Art, Pixels and Screen in the order they apply, each
-	     with the mark of where its result goes. -->
+	     with the mark of where its result goes. ADR-0249 (W-P10): three inset
+	     groups under a caps label and its hint; Hold to Compare at the foot,
+	     beside the window's Done. -->
 	<UserControl.Styles>
 		<Style Selector="ComboBox.lookChoices ComboBoxItem">
 			<Setter Property="IsEnabled" Value="{Binding IsEnabled, DataType={x:Type vm:LookChoice}}" />
@@ -23,66 +25,118 @@
 			<Setter Property="TextWrapping" Value="Wrap" />
 			<Setter Property="Margin" Value="0 3 0 0" />
 		</Style>
+		<Style Selector=".player TextBlock.lookNote">
+			<Setter Property="Opacity" Value="1" />
+		</Style>
+		<Style Selector="StackPanel.lookGroupLabel">
+			<Setter Property="Orientation" Value="Horizontal" />
+			<Setter Property="Spacing" Value="6" />
+			<Setter Property="Margin" Value="2 0 0 6" />
+		</Style>
+		<Style Selector="Border.lookGroup">
+			<Setter Property="Margin" Value="0 0 0 16" />
+		</Style>
+		<Style Selector="StackPanel.lookGroupBody">
+			<Setter Property="Margin" Value="16 11 16 10" />
+		</Style>
+		<!-- Outside the Player scope the Art row still names its action. -->
+		<Style Selector=".player TextBlock.lookClassicOnly">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<!-- The Art row's text sits after the pack badge when a pack draws the art. -->
+		<Style Selector="TextBlock#txtLookArt">
+			<Setter Property="Margin" Value="16 0" />
+		</Style>
+		<Style Selector="TextBlock#txtLookArt.art">
+			<Setter Property="Margin" Value="48 0 36 0" />
+		</Style>
 	</UserControl.Styles>
 
-	<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">
-		<StackPanel Margin="5">
-			<c:OptionSection Header="{l:Translate lblLookArt}">
-				<StackPanel Orientation="Horizontal">
-					<TextBlock Name="txtLookArt" Text="{Binding ArtText}" VerticalAlignment="Center" Margin="0 0 10 0" />
-					<Button Name="btnLookPackDetails" Content="{l:Translate btnLookPackDetails}" IsVisible="{Binding HasArt}" Click="OnPackDetails" />
-				</StackPanel>
-			</c:OptionSection>
+	<DockPanel>
+		<DockPanel DockPanel.Dock="Bottom" Margin="0 4 110 0">
+			<Button DockPanel.Dock="Left" Name="btnLookHoldToCompare" Classes="secondary medium" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
+			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" VerticalAlignment="Center" Margin="10 0 0 0" />
+		</DockPanel>
 
-			<c:OptionSection Header="{l:Translate lblLookPixels}">
-				<StackPanel>
-					<ComboBox
-						Name="cboLookPixels"
-						Classes="lookChoices"
-						MinWidth="260"
-						ItemsSource="{Binding PixelsChoices}"
-						SelectedItem="{Binding SelectedPixels, Mode=TwoWay}"
-						IsEnabled="{Binding PixelsEnabled}"
-					>
-						<ComboBox.ItemTemplate>
-							<DataTemplate DataType="vm:LookChoice">
-								<TextBlock Text="{Binding Label}" />
-							</DataTemplate>
-						</ComboBox.ItemTemplate>
-					</ComboBox>
-					<TextBlock Name="txtLookPixelsReason" Classes="lookNote" Text="{Binding PixelsReason}" IsVisible="{Binding PixelsReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<TextBlock Name="txtLookPixelsMark" Classes="lookNote" Text="{Binding PixelsMark}" />
+		<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">
+			<StackPanel>
+				<StackPanel Classes="lookGroupLabel">
+					<TextBlock Name="lblLookArtHeader" Classes="group-label" Text="{l:Translate lblLookArt}" />
+					<TextBlock Name="lblLookArtHint" Classes="group-hint" Text="{l:Translate lblLookArtHint}" />
 				</StackPanel>
-			</c:OptionSection>
+				<Border Name="LookArtGroup" Classes="group inset lookGroup">
+					<Panel MinHeight="46">
+						<Button Name="btnLookPackDetails" Classes="row" Height="46" IsVisible="{Binding HasArt}" Click="OnPackDetails" AutomationProperties.Name="{l:Translate btnLookPackDetails}">
+							<DockPanel>
+								<Border Classes="badge" Background="{StaticResource PlayerTintShareBrush}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
+								<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+								<TextBlock Classes="lookClassicOnly" DockPanel.Dock="Right" Text="{l:Translate btnLookPackDetails}" VerticalAlignment="Center" />
+								<Panel />
+							</DockPanel>
+						</Button>
+						<TextBlock Name="txtLookArt" Classes="callout" Classes.art="{Binding HasArt}" Text="{Binding ArtText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsHitTestVisible="False" />
+					</Panel>
+				</Border>
 
-			<c:OptionSection Header="{l:Translate lblLookScreen}">
-				<StackPanel>
-					<StackPanel Orientation="Horizontal">
-						<TextBlock Text="{l:Translate lblLookEffect}" VerticalAlignment="Center" Margin="0 0 5 0" />
-						<ComboBox
-							Name="cboLookScreen"
-							Classes="lookChoices"
-							MinWidth="260"
-							ItemsSource="{Binding ScreenChoices}"
-							SelectedItem="{Binding SelectedScreen, Mode=TwoWay}"
-						>
-							<ComboBox.ItemTemplate>
-								<DataTemplate DataType="vm:LookChoice">
-									<TextBlock Text="{Binding Label}" />
-								</DataTemplate>
-							</ComboBox.ItemTemplate>
-						</ComboBox>
-						<Button Name="btnLookAdjust" Content="{l:Translate btnLookAdjust}" IsEnabled="{Binding CanAdjust}" Margin="5 0 0 0" Click="OnAdjust" />
+				<StackPanel Classes="lookGroupLabel">
+					<TextBlock Classes="group-label" Text="{l:Translate lblLookPixels}" />
+					<TextBlock Classes="group-hint" Text="{l:Translate lblLookPixelsHint}" />
+				</StackPanel>
+				<Border Name="LookPixelsGroup" Classes="group inset lookGroup">
+					<StackPanel Classes="lookGroupBody">
+						<DockPanel>
+							<ComboBox
+								DockPanel.Dock="Right"
+								Name="cboLookPixels"
+								Classes="lookChoices popup"
+								Width="200"
+								ItemsSource="{Binding PixelsChoices}"
+								SelectedItem="{Binding SelectedPixels, Mode=TwoWay}"
+								IsEnabled="{Binding PixelsEnabled}"
+							>
+								<ComboBox.ItemTemplate>
+									<DataTemplate DataType="vm:LookChoice">
+										<TextBlock Text="{Binding Label}" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
+							<TextBlock Classes="callout" Classes.tertiary="{Binding !PixelsEnabled}" Text="{l:Translate lblLookSmoothing}" VerticalAlignment="Center" />
+						</DockPanel>
+						<TextBlock Name="txtLookPixelsReason" Classes="lookNote reason" Text="{Binding PixelsReason}" IsVisible="{Binding PixelsReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0 10 0 0" />
+						<TextBlock Name="txtLookPixelsMark" Classes="lookNote footnote secondary" Text="{Binding PixelsMark}" Margin="0 6 0 0" />
 					</StackPanel>
-					<TextBlock Name="txtLookScreenNote" Classes="lookNote" Text="{Binding ScreenNote}" IsVisible="{Binding ScreenNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<TextBlock Name="txtLookScreenMark" Classes="lookNote" Text="{Binding ScreenMark}" />
-				</StackPanel>
-			</c:OptionSection>
+				</Border>
 
-			<StackPanel Margin="0 10 0 0">
-				<Button Name="btnLookHoldToCompare" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" />
-				<TextBlock Name="txtLookCompareReason" Classes="lookNote" Text="{Binding CompareReason}" />
+				<StackPanel Classes="lookGroupLabel">
+					<TextBlock Classes="group-label" Text="{l:Translate lblLookScreen}" />
+					<TextBlock Classes="group-hint" Text="{l:Translate lblLookScreenHint}" />
+				</StackPanel>
+				<Border Name="LookScreenGroup" Classes="group inset lookGroup">
+					<StackPanel Classes="lookGroupBody">
+						<DockPanel>
+							<Button DockPanel.Dock="Right" Name="btnLookAdjust" Classes="secondary" Content="{l:Translate btnLookAdjust}" IsEnabled="{Binding CanAdjust}" Margin="8 0 0 0" Click="OnAdjust" VerticalAlignment="Center" />
+							<ComboBox
+								DockPanel.Dock="Right"
+								Name="cboLookScreen"
+								Classes="lookChoices popup"
+								Width="200"
+								ItemsSource="{Binding ScreenChoices}"
+								SelectedItem="{Binding SelectedScreen, Mode=TwoWay}"
+								VerticalAlignment="Center"
+							>
+								<ComboBox.ItemTemplate>
+									<DataTemplate DataType="vm:LookChoice">
+										<TextBlock Text="{Binding Label}" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
+							<TextBlock Classes="callout" Text="{l:Translate lblLookEffect}" VerticalAlignment="Center" />
+						</DockPanel>
+						<TextBlock Name="txtLookScreenNote" Classes="lookNote reason" Text="{Binding ScreenNote}" IsVisible="{Binding ScreenNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0 10 0 0" />
+						<TextBlock Name="txtLookScreenMark" Classes="lookNote footnote secondary" Text="{Binding ScreenMark}" Margin="0 6 0 0" />
+					</StackPanel>
+				</Border>
 			</StackPanel>
-		</StackPanel>
-	</ScrollViewer>
+		</ScrollViewer>
+	</DockPanel>
 </UserControl>

@@ -29,6 +29,20 @@ namespace Mesen.Windows
 
 			_model = new ConfigViewModel(tab, playerMode, CreateDisplaySettings);
 			DataContext = _model;
+			ApplyModeSize();
+			_model.PropertyChanged += (_, e) => {
+				if(e.PropertyName == nameof(ConfigViewModel.PlayerMode)) {
+					ApplyModeSize();
+				}
+			};
+		}
+
+		//ADR-0249 (W-P8, W-P10): Player mode is the render's 480 px sheet;
+		//"More in Options…" turns the same window into the classic Options.
+		private void ApplyModeSize()
+		{
+			Width = _model.PlayerMode ? 480 : 620;
+			Height = 500;
 		}
 
 		//G.4 (W-P8): Display edits the main window - its full screen and scale.

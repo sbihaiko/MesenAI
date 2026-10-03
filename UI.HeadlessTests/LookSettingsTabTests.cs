@@ -98,9 +98,9 @@ public class LookSettingsTabTests : IDisposable
 		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display) + 1, tabs.IndexOf(look));
 
 		string[] texts = VisibleTexts(window);
-		Assert.Contains("Art", texts);
-		Assert.Contains("Pixels", texts);
-		Assert.Contains("Screen", texts);
+		Assert.Contains("ART", texts);
+		Assert.Contains("PIXELS", texts);
+		Assert.Contains("SCREEN", texts);
 		Assert.Contains("The game's own art (no pack)", texts);
 		Assert.Equal("◉ Shows in screenshots and videos", window.FindNamed<TextBlock>("txtLookPixelsMark").Text);
 		Assert.Equal("Adds nothing to the picture", window.FindNamed<TextBlock>("txtLookScreenMark").Text);

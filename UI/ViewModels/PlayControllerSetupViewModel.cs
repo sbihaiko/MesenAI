@@ -10,8 +10,21 @@ using System.Linq;
 
 namespace Mesen.ViewModels
 {
-	//One button on the sheet's picture: lit for the current step, ticked once bound.
-	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone);
+	//One button on the sheet's picture: lit for the current step, ticked once
+	//bound, placed where it sits on the pad (ADR-0249 W-P15).
+	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone, SetupButton Button = SetupButton.A)
+	{
+		private PadKey Key => ControllerPadLayout.Of(Button);
+		public double Left => Key.Left;
+		public double Top => Key.Top;
+		public double Width => Key.Width;
+		public double Height => Key.Height;
+		public bool IsDPad => Key.Shape == PadKeyShape.DPad;
+		public bool IsPill => Key.Shape == PadKeyShape.Pill;
+		public bool IsRound => Key.Shape == PadKeyShape.Round;
+		public bool IsShoulder => Key.Shape == PadKeyShape.Shoulder;
+		public bool ShowsLabel => ControllerPadLayout.ShowsLabel(Button);
+	}
 
 	//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P15): the HUD pill for an unknown
 	//pad and the pad-driven setup sheet. The rules (detection, steps, hold to
@@ -123,7 +136,7 @@ namespace Mesen.ViewModels
 			Prompt = ResourceHelper.GetMessage("ControllerSetupPrompt", ButtonName(step));
 			StepText = ResourceHelper.GetMessage("ControllerSetupStep", session.StepIndex + 1, session.Steps.Count, string.Join(", ", session.Steps.Select(ButtonName)));
 			Progress = session.Progress;
-			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b))).ToList();
+			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b), b)).ToList();
 		}
 
 		private void Close(ControllerSetupSession session)

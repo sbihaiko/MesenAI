@@ -80,7 +80,7 @@
 			<Control ID="btnPackDepSheetPlayWithout">Play Without It</Control>
 		</Form>
 		<Form ID="PlayControllerSetupView">
-			<Control ID="lblControllerSetupPill">⚙ New controller. Press Start on it to set it up.</Control>
+			<Control ID="lblControllerSetupPill">New controller. Press Start on it to set it up.</Control>
 			<Control ID="lblControllerSetupIntro">Use the controller itself — no keyboard needed.</Control>
 			<Control ID="lblControllerSetupHint">Hold any button 2 seconds to skip this one. Press nothing for 10 seconds to stop — the keyboard keeps working.</Control>
 			<Control ID="btnControllerSetupSkip">Skip</Control>
@@ -368,11 +368,15 @@
 			<Control ID="lblRight">Right</Control>
 		</Form>
 		<Form ID="LookConfigView">
-			<Control ID="lblLookArt">Art</Control>
+			<Control ID="lblLookArt">ART</Control>
+			<Control ID="lblLookArtHint">drawn by an artist</Control>
 			<Control ID="btnLookPackDetails">Pack details…</Control>
-			<Control ID="lblLookPixels">Pixels</Control>
-			<Control ID="lblLookScreen">Screen</Control>
-			<Control ID="lblLookEffect">Effect:</Control>
+			<Control ID="lblLookPixels">PIXELS</Control>
+			<Control ID="lblLookPixelsHint">the emulator smooths the edges</Control>
+			<Control ID="lblLookSmoothing">Smoothing</Control>
+			<Control ID="lblLookScreen">SCREEN</Control>
+			<Control ID="lblLookScreenHint">imitates a TV or a handheld</Control>
+			<Control ID="lblLookEffect">Effect</Control>
 			<Control ID="btnLookAdjust">Adjust…</Control>
 			<Control ID="btnLookHoldToCompare">Hold to Compare</Control>
 		</Form>
@@ -932,7 +936,7 @@
 		</Form>
 
 		<Form ID="PlayerDisplaySettingsView">
-			<Control ID="lblDisplayFullscreen">Fullscreen</Control>
+			<Control ID="lblDisplayFullscreen">Full screen</Control>
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
 		</Form>
@@ -946,6 +950,7 @@
 			<Control ID="tabLook">Look</Control>
 			<Control ID="tabDisplay">Display</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="lblPlayerSettingsTitle">Settings</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
 			<Control ID="tabNes">NES</Control>
@@ -1185,7 +1190,7 @@
 			<Control ID="chkFirstRunCheckForUpdates">Check for updates</Control>
 			<Control ID="lblUpdateCheckUnavailable">MesenAI has no update feed yet. New builds are published on the MesenAI releases page (Help &gt; Check for updates opens it).</Control>
 			<Control ID="chkFirstRunDesktopShortcut">Desktop shortcut</Control>
-			<Control ID="btnFirstRunStartPlaying">▶ Start Playing</Control>
+			<Control ID="btnFirstRunStartPlaying">Start Playing</Control>
 		</Form>
 		<Form ID="MovieRecordWindow">
 			<Control ID="wndTitle">Movie Recording Settings</Control>
@@ -2092,7 +2097,7 @@
 		<Message ID="LookScreenNtsc">TV signal (NTSC)</Message>
 		<Message ID="LookScreenChooseFile">Choose a shader file…</Message>
 		<Message ID="LookMarkCaptured">◉ Shows in screenshots and videos</Message>
-		<Message ID="LookMarkDisplayOnly">◌ Only on your display — not in screenshots, videos or recordings</Message>
+		<Message ID="LookMarkDisplayOnly">◌ Only on your display — never in screenshots, videos or recordings</Message>
 		<Message ID="LookMarkMixed">◉ The filter shows in screenshots and videos; ◌ the shader only on your display</Message>
 		<Message ID="LookMarkNone">Adds nothing to the picture</Message>
 		<Message ID="LookReasonPackDrawsArt">Off while a pack draws the art</Message>
@@ -2270,13 +2275,13 @@
 		<Message ID="RemasterProblemNotAPng">"{0}" is not a PNG the build can read. Save it again as PNG.</Message>
 		<Message ID="RemasterProblemForeignPack">The project's mep folder holds a pack this build did not write, such as an installed one. Move it out of the project folder to build your own.</Message>
 		<Message ID="RemasterProblemNothingRecorded">Nothing with tiles is recorded yet. Record the game first.</Message>
-		<Message ID="InterruptQuitWhileRecording">■ Quit while recording? What you recorded so far is kept as recording {0}.</Message>
-		<Message ID="InterruptQuitWhileBuild">⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.</Message>
-		<Message ID="InterruptQuitWhileKit">⚠ Your figures are being prepared. Quit anyway? It stops, and nothing you recorded is lost.</Message>
-		<Message ID="InterruptQuitWhilePackaging">⚠ Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.</Message>
-		<Message ID="InterruptOpenWhileRecording">■ Open {0}? This recording stops and is kept as recording {1}.</Message>
-		<Message ID="InterruptOpenWhileClassicBuilder">⚠ Open {0}? HD Pack Builder (classic) stops; what it wrote is kept.</Message>
-		<Message ID="InterruptReloadWhileRecording">■ Reload {0}? This recording stops and is kept as recording {1}.</Message>
+		<Message ID="InterruptQuitWhileRecording">Quit while recording? What you recorded so far is kept as recording {0}.</Message>
+		<Message ID="InterruptQuitWhileBuild">A build is running. Quit anyway? It stops, and nothing you painted is lost.</Message>
+		<Message ID="InterruptQuitWhileKit">Your figures are being prepared. Quit anyway? It stops, and nothing you recorded is lost.</Message>
+		<Message ID="InterruptQuitWhilePackaging">Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.</Message>
+		<Message ID="InterruptOpenWhileRecording">Open {0}? This recording stops and is kept as recording {1}.</Message>
+		<Message ID="InterruptOpenWhileClassicBuilder">Open {0}? HD Pack Builder (classic) stops; what it wrote is kept.</Message>
+		<Message ID="InterruptReloadWhileRecording">Reload {0}? This recording stops and is kept as recording {1}.</Message>
 		<Message ID="InterruptKeepRecording">Keep Recording</Message>
 		<Message ID="InterruptStopAndQuit">Stop and Quit</Message>
 		<Message ID="InterruptKeepRunning">Keep Running</Message>
