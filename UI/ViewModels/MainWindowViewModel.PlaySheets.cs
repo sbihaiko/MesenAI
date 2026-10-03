@@ -51,6 +51,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool EnhWidescreen { get; set; }
 		[ObservableProperty] public partial bool EnhOverclock { get; set; }
 		[ObservableProperty] public partial string EnhOverclockReason { get; private set; } = "";
+		//ADR-0253 §4 (W.5): the one-line reason under a disabled Widescreen
+		//switch; empty when the switch is enabled.
+		[ObservableProperty] public partial string EnhWidescreenReason { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsApplyText { get; private set; } = "";
 		//W-P7's last row: "Pack: Contra (USA)  ›", the way into W-P6 (or W-P5).
 		[ObservableProperty] public partial string EnhPackRowText { get; private set; } = "";
@@ -243,7 +246,12 @@ namespace Mesen.ViewModels
 		//EnhancementsDraftVisit / EnhancementsSheet.Resume).
 		private void LoadEnhancementsDraft(EnhancementsState? heldDraft = null)
 		{
-			EnhancementsState appliedNow = new(IsModernInstrumentsEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
+			//ADR-0253 §1/§4 (W.5): the applied baseline is this game's effective
+			//widescreen, not the saved preference - so a game that cannot use it
+			//shows the switch off (and disabled), and Apply has nothing to write.
+			//The saved preference stays, and the next game that can use it gets
+			//it back (WidescreenSupportRule.EffectiveWidescreen).
+			EnhancementsState appliedNow = new(IsModernInstrumentsEnabled, IsBorderEnabled, EffectiveWidescreen, IsOverclockEnabled);
 			EnhancementsState draft = heldDraft == null ? appliedNow : EnhancementsSheet.Resume(_enhancementsApplied, heldDraft, appliedNow);
 			_enhancementsApplied = appliedNow;
 			EnhModernInstruments = draft.ModernInstruments;
@@ -254,6 +262,11 @@ namespace Mesen.ViewModels
 			EnhOverclockReason = IsOverclockSupported ? "" : ResourceHelper.GetMessage("EnhancementsOverclockUnavailable", ResourceHelper.GetEnumText(RomInfo.ConsoleType));
 			UpdateEnhancementsApplyText();
 		}
+
+		//ADR-0253 §1/§4 (W.5): what widescreen means for the loaded game - the
+		//saved preference only where the game can use it (the switch state
+		//RefreshEnhancementsState computed from the core's verdict).
+		private bool EffectiveWidescreen => WidescreenSupportRule.EffectiveWidescreen(IsWideScrnEnabled, _widescreenSwitch);
 
 		//W-P7's Pack row: the row opens W-P5/W-P6 over the panel, which is a look
 		//at the pack, not a decision about the switches - so the draft waits for
@@ -270,7 +283,7 @@ namespace Mesen.ViewModels
 			_enhancementsDraftExit = EnhancementsDraftExit.Closed;
 		}
 
-		private EnhancementsState EnhancementsDraft => new(EnhModernInstruments, EnhBorder, EnhWidescreen, EnhOverclock && IsOverclockSupported);
+		private EnhancementsState EnhancementsDraft => new(EnhModernInstruments, EnhBorder, EnhWidescreen && IsWidescreenSupported, EnhOverclock && IsOverclockSupported);
 
 		partial void OnEnhModernInstrumentsChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhBorderChanged(bool value) => UpdateEnhancementsApplyText();

@@ -41,7 +41,10 @@
 					</Panel>
 				</Border>
 				<Border Classes="switch-row">
-					<CheckBox Name="EnhancementsWidescreenCheckBox" Classes="switch" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" />
+					<Panel>
+						<CheckBox Name="EnhancementsWidescreenCheckBox" Classes="switch" Classes.subtitled="{Binding !IsWidescreenSupported}" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" IsEnabled="{Binding IsWidescreenSupported}" />
+						<TextBlock Name="EnhancementsWidescreenReason" Classes="row-subtitle" Text="{Binding EnhWidescreenReason}" IsVisible="{Binding !IsWidescreenSupported}" />
+					</Panel>
 				</Border>
 				<Border Classes="switch-row">
 					<Panel>

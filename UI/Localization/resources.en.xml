@@ -2553,6 +2553,10 @@ E
 		<Message ID="PackDetailAutoMadeWith">Made on this computer from what you played ({0})</Message>
 		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
 		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
+		<!--ADR-0253 §4 (W.5): the Widescreen switch's one-line reason when the
+		game has nothing to show beside the picture (or a console with no side
+		map: SMS/SG-1000 without widescreen pack art).-->
+		<Message ID="EnhancementsWidescreenUnavailable">This game has nothing to show beside the picture</Message>
 		<Message ID="EnhancementsApply">Apply</Message>
 		<Message ID="EnhancementsApplyReload">Apply &amp; Reload</Message>
 		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>
