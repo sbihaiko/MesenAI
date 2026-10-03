@@ -27,6 +27,9 @@ namespace Mesen.ViewModels
 		public void OnOpenStarted()
 		{
 			Interlocked.Increment(ref _openGeneration);
+			//#658: a BIOS sheet still up belongs to the previous attempt; its
+			//load would hold the Core's load locks and queue this one behind it.
+			BiosSheet.Dismiss();
 			RecentGames.OnOpenStarted();
 			Shell.SetPlayNotice("");
 			PackDepSheet.Clear();
@@ -37,7 +40,7 @@ namespace Mesen.ViewModels
 		public async System.Threading.Tasks.Task<bool> RequestBios(FirmwareType type, string fileName, uint size, uint altSize, string gameName)
 		{
 			bool installed = await BiosSheet.Request(type, fileName, size, altSize, gameName);
-			if(!installed && BiosSheet.LastRequestCancelled) {
+			if(!installed && BiosSheet.LastRequestCancelled && BiosSheet.CancelNotice.Length > 0) {
 				Shell.SetPlayNotice(BiosSheet.CancelNotice);
 			}
 			return installed;

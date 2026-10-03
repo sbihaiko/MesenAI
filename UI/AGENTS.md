@@ -153,7 +153,13 @@ can be exercised by real xunit tests without Avalonia or the native
   and the OSD pending-dep line. `PlaySheet.PackDep` closes back to W-P4; the
   BIOS and controller sheets take Esc first (`HandleEdgeFlowEsc`, as Cancel).
   The W-P15 poll lives in `UI/Windows/PlayEdgeFlowsWiring.cs` and writes only
-  a free port-1 mapping slot, never over a binding.
+  a free port-1 mapping slot, never over a binding; when it stops listening
+  the pill goes too (#660, its 8 s only advance on ticks). The Core's load
+  thread blocks on `MissingFirmware` holding its load locks, so every wait
+  goes through `CoreRequestWaits` (`UI/Logic`): `CloseEmu` dismisses the BIOS
+  sheet and closes the waits before `EmuApi.Stop`, and another open or a
+  power off dismisses the sheet (#658). The first-run sheet never cancels an
+  application/OS shutdown close and writes nothing then (#661).
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way

@@ -120,6 +120,18 @@ public sealed class UnknownControllerDetector
 		}
 		return DetectorEvent.None;
 	}
+
+	//#660: the 8 s above only advance on ticks, and the owner stops ticking
+	//with the game (paused, quit, another workspace). The pill goes when
+	//listening stops; the device keeps its one ask per session.
+	public DetectorEvent StopListening()
+	{
+		if(!_pillShown) {
+			return DetectorEvent.None;
+		}
+		_pillShown = false;
+		return DetectorEvent.DismissPill;
+	}
 }
 
 public enum SetupConsole

@@ -124,6 +124,19 @@ namespace Mesen.ViewModels
 			Finish(false);
 		}
 
+		//#658: the request is dropped, not refused - another open, a power off
+		//or quitting. The Core's load ends without the file, quietly: no W-P14
+		//alert (LastRequestCancelled) and no "needs the BIOS" sentence.
+		public void Dismiss()
+		{
+			if(!IsVisible) {
+				return;
+			}
+			LastRequestCancelled = true;
+			CancelNotice = "";
+			Finish(false);
+		}
+
 		private void Finish(bool installed)
 		{
 			IsVisible = false;

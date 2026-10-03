@@ -68,6 +68,15 @@ namespace Mesen.ViewModels
 			}
 		}
 
+		//#660: the owner stopped ticking (the game paused or quit): the pill
+		//cannot time out without ticks, so it goes now.
+		public void StopListening()
+		{
+			if(_session == null && _detector.StopListening() == DetectorEvent.DismissPill) {
+				IsPillVisible = false;
+			}
+		}
+
 		private void OpenSheet(int device, IReadOnlyCollection<ushort> pressed, TimeSpan now)
 		{
 			IsPillVisible = false;

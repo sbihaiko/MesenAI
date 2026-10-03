@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using System;
 
@@ -53,13 +54,20 @@ namespace Mesen.Windows
 		protected override void OnClosing(WindowClosingEventArgs e)
 		{
 			base.OnClosing(e);
-			if(!_confirmed) {
-				//The app cannot run without a storage choice: closing applies the
-				//one on screen. A folder that cannot be written keeps the sheet
-				//open with its sentence (W-X2).
-				_confirmed = _model.Confirm();
-				e.Cancel = !_confirmed;
+			if(_confirmed) {
+				return;
 			}
+			//#661: quitting the app or shutting the OS down writes nothing and
+			//is never cancelled; the sheet shows again next launch.
+			bool shuttingDown = e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown;
+			if(!PlayFirstRun.ConfirmsOnClose(shuttingDown)) {
+				return;
+			}
+			//The app cannot run without a storage choice: closing applies the
+			//one on screen. A folder that cannot be written keeps the sheet
+			//open with its sentence (W-X2).
+			_confirmed = _model.Confirm();
+			e.Cancel = !_confirmed;
 		}
 
 		private void BtnStart_OnClick(object? sender, RoutedEventArgs e)
