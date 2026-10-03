@@ -145,6 +145,7 @@
 						</DockPanel>
 					</Border>
 				</Grid>
+				<v:RemasterRecentProjectsView Name="RemasterRecentProjects" />
 			</StackPanel>
 
 			<!--W-R1: the one project screen, three zones in loop order. At rest:

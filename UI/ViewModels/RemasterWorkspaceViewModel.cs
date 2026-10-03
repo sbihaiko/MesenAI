@@ -424,6 +424,7 @@ namespace Mesen.ViewModels
 			View = s.View;
 			IsNoProject = s.View == RemasterView.NoProject;
 			IsProject = s.View == RemasterView.Project;
+			RefreshRecentProjects();
 
 			StartCardGame = _gameLoaded ? _gameName : ResourceHelper.GetMessage("RemasterNoGameRunning");
 			StartButtonText = ResourceHelper.GetMessage(s.PrimaryOpensRom ? "RemasterOpenRomToStart" : "RemasterStartRecording");
