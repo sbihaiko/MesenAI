@@ -198,7 +198,8 @@
 				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
 				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
 				states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
-				and quitting the app moved to Tools ⋯ in the bar the overlay reveals.
+				moved to the switcher's Classic door and quitting the app to the
+				shared tail, in the bar the overlay reveals.
 				D-pad/A/B and arrows move through the rows (XY focus); Resume has
 				focus on open. Esc resumes (rule 8).-->
 				<Border
@@ -274,7 +275,7 @@
 							</StackPanel>
 						</Border>
 						<!--W-P4: powers the game off and lands on the Play home; it no
-						longer closes the app (Tools ⋯ › File › Exit, ⌘Q / Alt+F4).-->
+						longer closes the app (the shared tail's Quit MesenAI, ⌘Q / Alt+F4).-->
 						<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0" IsVisible="{Binding !QuitGameConfirm.IsVisible}">
 							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
 						</Button>

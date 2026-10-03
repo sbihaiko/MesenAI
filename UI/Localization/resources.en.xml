@@ -992,7 +992,7 @@
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
-			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Tools ⋯ › Options</Control>
+			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
 		</Form>
 		<Form ID="ConfigWindow">
@@ -2217,7 +2217,7 @@
 		<Message ID="RemasterNotAProject">This folder is not a project. A project is the folder MesenAI records a game into, next to the game.</Message>
 		<Message ID="RemasterRecordRefusedCheats">Not recording: these cheats change the game itself and would corrupt the recorded art. Turn them off first: {0}</Message>
 		<Message ID="RemasterCheatsHeld">Off while recording art: {0}</Message>
-		<Message ID="RemasterRecordFailed">Nothing was recorded: another pack already covers this game, or this game cannot be recorded. Tools ⋯ › Tools › Log Window says which.</Message>
+		<Message ID="RemasterRecordFailed">Nothing was recorded: another pack already covers this game, or this game cannot be recorded. Remaster ⋯ › Log Window says which.</Message>
 		<Message ID="RemasterNeedsPython">Painting needs Python 3.10 or newer, which MesenAI could not find.</Message>
 		<Message ID="RemasterNeedsPythonDetail">You can still record. Your figures are prepared once Python is available.</Message>
 		<Message ID="RemasterPythonTooOld">Painting needs Python 3.10 or newer; MesenAI found Python {0}.</Message>
@@ -2346,12 +2346,12 @@
 		<Message ID="ShareReplaySheetBodyNoGame">The game restarts from power-on and records until you stop. Loading a save state ends the recording; cheats you have on are recorded with it.</Message>
 		<Message ID="ShareReplayReasonNoGame">Open a game first.</Message>
 		<Message ID="ShareReplayReasonConsoleNotSupported">Replays cannot be shared for this console.</Message>
-		<Message ID="ShareReplayReasonMovieBusy">A movie is already recording or playing (Tools ⋯ › Tools › Movies).</Message>
+		<Message ID="ShareReplayReasonMovieBusy">A movie is already recording or playing (Classic › Tools › Movies).</Message>
 		<Message ID="ShareReplayReasonNetplay">Replays cannot be recorded during netplay.</Message>
-		<Message ID="ShareReplayRefused">Nothing was recorded. Tools ⋯ › Tools › Log Window says why.</Message>
+		<Message ID="ShareReplayRefused">Nothing was recorded. Remaster ⋯ › Log Window says why.</Message>
 		<Message ID="ShareReplayStarting">Restarting the game…</Message>
 		<Message ID="ShareReplayStopping">Saving the replay…</Message>
-		<Message ID="ShareReplayEnded">The replay recording ended outside this screen: a save state was loaded, the game closed, or it was stopped from Tools ⋯ › Tools › Movies.</Message>
+		<Message ID="ShareReplayEnded">The replay recording ended outside this screen: a save state was loaded, the game closed, or it was stopped from Classic › Tools › Movies.</Message>
 		<Message ID="ShareRecordingPill">Recording a replay {0} · Esc stops</Message>
 		<Message ID="RemasterReasonNoKitYet">Prepare your figures first.</Message>
 		<Message ID="ShellStatusRemasterBuild">● Remaster: building {0} · {1} %</Message>
@@ -2546,7 +2546,7 @@ E
 		<Message ID="PackOfferAutoInstallOff">“{0}” is made for this game. It is not installed because automatic installs of community packs are off.</Message>
 		<Message ID="PackOfferNotInstalled">“{0}” is made for this game, but it is not installed.</Message>
 		<Message ID="PackLayerNotInPack">Not in this pack</Message>
-		<Message ID="PackLayerOffEverywhere">Off for every game — Tools ⋯ › Enhancement Packs</Message>
+		<Message ID="PackLayerOffEverywhere">Off for every game — Remaster ⋯ › Enhancement Packs</Message>
 		<Message ID="EnhancementsPackRow">Pack: {0}</Message>
 		<Message ID="PackDetailAutoTitle">Automatic upscale</Message>
 		<Message ID="PackDetailAutoMade">Made on this computer from what you played</Message>
@@ -2608,7 +2608,7 @@ E
 		<Message ID="ControllerSetupPrompt">Press the button you want as {0}</Message>
 		<Message ID="ControllerSetupStep">Step {0} of {1} · {2}</Message>
 		<Message ID="ControllerSetupSaved">{0} is set up.</Message>
-		<Message ID="ControllerSetupNoSlot">All four mappings for this console are in use, so nothing was changed. Free one in Tools ⋯ › Settings › Input.</Message>
+		<Message ID="ControllerSetupNoSlot">All four mappings for this console are in use, so nothing was changed. Free one in Classic › Settings › Input.</Message>
 	</Messages>
 	<Enums>
 		<Enum ID="EmulatorShortcut">

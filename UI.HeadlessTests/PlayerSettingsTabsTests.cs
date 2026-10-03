@@ -62,7 +62,7 @@ public class PlayerSettingsTabsTests
 		//and Done take their place (rule 10, W-P8's five elements).
 		Assert.Empty(window.FindAll<TabControl>().Where(t => t.Name == "AdvancedSettingsTabs"));
 		Assert.True(window.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
-		Assert.Equal("Everything else: Tools ⋯ › Options", window.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").Text);
+		Assert.Equal("Everything else: Classic › Settings", window.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").Text);
 		Assert.DoesNotContain(window.FindAll<Button>().Where(b => b.IsOnScreen()), b => b.Content as string is "OK" or "Cancel");
 	}
 

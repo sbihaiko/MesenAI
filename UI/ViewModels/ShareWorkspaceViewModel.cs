@@ -456,7 +456,7 @@ namespace Mesen.ViewModels
 				return;
 			}
 			//The core ends a shared recording by itself (save state, ROM change),
-			//or Tools ⋯ › Movies › Stop handed the file over already.
+			//or Classic › Tools › Movies › Stop handed the file over already.
 			if(!_recorder.IsSharing) {
 				EndRecording(null);
 				return;
@@ -501,7 +501,7 @@ namespace Mesen.ViewModels
 			//W-H4: the title is the action; the body names the game that restarts.
 			StartSheetTitle = ResourceHelper.GetMessage("ShareReplaySheetTitle");
 			StartSheetBody = _gameLoaded ? ResourceHelper.GetMessage("ShareReplaySheetBody", _gameName) : ResourceHelper.GetMessage("ShareReplaySheetBodyNoGame");
-			//A movie or netplay session can start from Tools ⋯ at any time: asked each refresh.
+			//A movie or netplay session can start outside Share at any time: asked each refresh.
 			(bool movieBusy, bool netplay) = Sheet == ReplaySheet.Start ? _sessions() : (false, false);
 			ReplayStartReason reason = ShareReplay.StartReason(_gameLoaded, _console, movieBusy, netplay);
 			IsStartEnabled = reason == ReplayStartReason.None && Sheet == ReplaySheet.Start && RecordingTransitions.AcceptsClick(Transition);
