@@ -1318,6 +1318,8 @@
 		<Form ID="SelectRomWindow">
 			<Control ID="wndTitle">Select rom...</Control>
 			<Control ID="lblSearch">Search:</Control>
+			<Control ID="txtPlayerSearch">Search</Control>
+			<Control ID="btnPlayerOpen">Open</Control>
 			<Control ID="btnOK">OK</Control>
 			<Control ID="btnCancel">Cancel</Control>
 		</Form>
@@ -2326,6 +2328,12 @@
 		<Message ID="InterruptCancel">Cancel</Message>
 		<Message ID="InterruptStopAndOpen">Stop and Open</Message>
 		<Message ID="InterruptStopAndReload">Stop and Reload</Message>
+		<Message ID="InterruptQuitGame">Quit {0}? Progress since your last save state is lost.</Message>
+		<Message ID="InterruptQuitApp">Quit MesenAI? Progress in {0} since your last save state is lost.</Message>
+		<Message ID="InterruptQuitAppNoGame">Quit MesenAI?</Message>
+		<Message ID="InterruptKeepPlaying">Keep Playing</Message>
+		<Message ID="InterruptQuitGameGo">Quit Game</Message>
+		<Message ID="SelectRomPlayerTitle">Choose a game in {0}</Message>
 		<Message ID="ShellStatusPlaying">Playing {0}</Message>
 		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>
 		<Message ID="ShellStatusPaused">{0} is paused</Message>

@@ -74,6 +74,11 @@ namespace Mesen.ViewModels
 		//opened from W-P4 closes back to it.
 		public void TogglePlayerOverlay()
 		{
+			//ADR-0249 (W-X1): Esc on Quit game's question answers it as Keep Playing.
+			if(QuitGameConfirm.IsVisible) {
+				QuitGameConfirm.Keep();
+				return;
+			}
 			if(HandleEdgeFlowEsc()) {
 				return;
 			}

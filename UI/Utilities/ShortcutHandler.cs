@@ -73,7 +73,9 @@ namespace Mesen.Utilities
 					//G.1 (rule 8): the overlay is a Play surface - outside Play the
 					//press does nothing (it must not pause the game or open an
 					//overlay hidden behind Remaster/Share).
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayWorkspace) {
+					//ADR-0249: the BIOS sheet (W-P13) shows in every workspace,
+					//and Esc cancels it there too (TogglePlayerOverlay takes it first).
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible)) {
 						MainWindowModel.TogglePlayerOverlay();
 					} else if(MainWindowModel.IsRemasterGameView) {
 						//G.3 (W-R2): in Remaster's recording view Esc stops the
