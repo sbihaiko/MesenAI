@@ -202,11 +202,12 @@ public static class PackDetail
 
 	//Where "Show pack folder" goes: a folder pack is EnhancementPacks/<container>,
 	//a zip pack lives in EnhancementPacks itself, a sibling pack is the folder
-	//next to the ROM. Empty when there is nothing to show.
+	//next to the ROM - its mep/ layer when the pack roots there (ADR-0147), else
+	//the sibling root. Empty when there is nothing to show.
 	public static string FolderFor(string origin, string container, string packsFolder, string siblingFolder)
 	{
 		return origin switch {
-			PackOrigin.Sibling => siblingFolder ?? "",
+			PackOrigin.Sibling => MepPackLayer.Resolve(siblingFolder),
 			PackOrigin.Zip => packsFolder ?? "",
 			_ => string.IsNullOrEmpty(container) || string.IsNullOrEmpty(packsFolder) ? "" : Path.Combine(packsFolder, container)
 		};

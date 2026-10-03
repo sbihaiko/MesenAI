@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Mesen.Logic;
 using Xunit;
@@ -86,6 +87,34 @@ namespace Mesen.Tests.Play
 			Assert.Equal("/roms/Contra", PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", "/roms/Contra"));
 			Assert.False(PackDetail.CanScan(PackOrigin.Zip));
 			Assert.True(PackDetail.CanScan(PackOrigin.Folder));
+		}
+
+		//ADR-0147: a sibling MEP pack roots its human layer at mep/ (the sibling
+		//of auto/), so the folder button opens mep/; a legacy sibling without one
+		//still opens the sibling root.
+		[Fact]
+		public void The_sibling_folder_follows_the_mep_layer()
+		{
+			string mep = NewTempSibling("pack.json");
+			string bare = NewTempSibling(null);
+			try {
+				Assert.Equal(Path.Combine(mep, "mep"), PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", mep));
+				Assert.Equal(bare, PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", bare));
+			} finally {
+				Directory.Delete(mep, true);
+				Directory.Delete(bare, true);
+			}
+		}
+
+		//A throwaway sibling folder; probe != null writes <sibling>/mep/<probe>.
+		private static string NewTempSibling(string? mepProbe)
+		{
+			string sibling = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "mep-layer-" + Guid.NewGuid().ToString("N"))).FullName;
+			if(mepProbe != null) {
+				string mep = Directory.CreateDirectory(Path.Combine(sibling, "mep")).FullName;
+				File.WriteAllText(Path.Combine(mep, mepProbe), "{}");
+			}
+			return sibling;
 		}
 
 		//ADR-0240 Option 1, shown where it is useful: missing music only when a

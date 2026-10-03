@@ -198,7 +198,11 @@ can be exercised by real xunit tests without Avalonia or the native
   sibling) or W-P6; `PackPickerRow`/`PackDetail` build a row, the chips, the
   folder and the Restore visibility (catalog installs only, ADR-0147);
   `RestoreFlow` is the one in-place confirm; `PackAudioNotice.Scan` is the
-  counted ADR-0240 check W-P6 re-reads when it opens. `EnhancementsSheet.Pending`
+  counted ADR-0240 check W-P6 re-reads when it opens. Both the folder button
+  and that scan go through `MepPackLayer.Resolve` (ADR-0147): a container
+  whose pack roots at `mep/` (pack.json or a convention probe there - the
+  core's `HasSiblingMepPack`) is read at `mep/`, a legacy sibling or a
+  central `EnhancementPacks/<container>` at its own root. `EnhancementsSheet.Pending`
   names W-P7's button from the applied state and the draft; the ViewModel
   (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
   `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9

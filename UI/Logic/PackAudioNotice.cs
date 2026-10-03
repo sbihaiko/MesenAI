@@ -55,10 +55,17 @@ namespace Mesen.Logic
 		//G.4 (W-P6): the same scan as Evaluate, as counts, so the pack detail
 		//sheet can say it in plain words and show the Patch chip. Null when the
 		//folder cannot be read (best effort, like Evaluate).
+		//ADR-0147: a container roots its pack at mep/ when it has one - the scan
+		//reads that layer, never the container root (a legacy sibling or a central
+		//EnhancementPacks/<container> has no mep/ and keeps the root).
 		public static PackAudioScan? Scan(string packRoot)
 		{
+			string root = MepPackLayer.Resolve(packRoot);
+			if(root.Length == 0) {
+				return null;
+			}
 			try {
-				return ScanCore(packRoot);
+				return ScanCore(root);
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or JsonException) {
 				//Best effort: a notice must never turn a finished install into a failure.
 				return null;
