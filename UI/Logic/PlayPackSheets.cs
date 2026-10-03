@@ -55,6 +55,11 @@ public static class PackPickerRow
 		return string.Join(" · ", parts);
 	}
 
+	//W-P5's "No pack" second line: the render's "Play with enhanced audio
+	//only" holds while enhanced audio is on; with it off, the row must not
+	//promise it.
+	public static string NoPackDetailKey(bool enhancedAudioOn) => enhancedAudioOn ? "PackPickerNoPackDetail" : "PackPickerNoPackDetailOriginal";
+
 	//The radio that starts selected: the stored choice when it is one of the
 	//rows (changing the choice later, from W-P4), else the first row - the list
 	//is already in 👍-then-name order (P.6).
@@ -161,7 +166,9 @@ public static class PackDetail
 	//installedFromCatalog: the install registry holds a source sha256 for this
 	//ROM - Restore (ADR-0147) re-downloads it, so a local or sibling pack has
 	//nothing to restore from and the button is absent there, not disabled.
-	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder)
+	//prefersNoPack: W-P5's "No pack" is stored - Change Pack… is the way back
+	//even with one pack (PlayerPackPicker.CanChangeChoice).
+	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder, bool prefersNoPack = false)
 	{
 		bool missingMusic = hasPack && scan != null && scan.ShowsNotice;
 		return new PackDetailModel(
@@ -170,7 +177,7 @@ public static class PackDetail
 			missingMusic ? PackDetailNotice.MissingMusic : PackDetailNotice.None,
 			missingMusic ? scan!.Missing : 0,
 			missingMusic ? scan!.Total : 0,
-			PackRowRoute.For(distinctPackIds, hasHumanSibling) == PackRowTarget.Picker,
+			PlayerPackPicker.CanChangeChoice(hasHumanSibling, distinctPackIds, prefersNoPack),
 			hasPack && installedFromCatalog,
 			folder ?? ""
 		);

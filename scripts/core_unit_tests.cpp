@@ -1282,6 +1282,29 @@ namespace
 	}
 }
 
+//W-P5's "No pack": the per-ROM preference value the UI stores
+//(PackPreferenceResolver.NoPack) turns every pack off for that ROM - the
+//sections and the ROM patch alike - except a sibling-folder pack (ADR-0049,
+//§4: the folder beside the ROM always wins). The sentinel starts with ':',
+//which no ADR-0140 pack_id does, so it can never select a real pack.
+namespace
+{
+	void TestNoPackPreferenceTurnsEveryPackOffButTheSibling()
+	{
+		Check(string(MepPackManager::kNoPackPreference) == ":none", "No pack: the core sentinel matches the UI's PackPreferenceResolver.NoPack");
+		Check(MepPackManager::IsNoPackPreference(":none"), "No pack: the sentinel reads as no pack");
+		Check(!MepPackManager::IsNoPackPreference("none"), "No pack: a slug pack_id `none` is a pack, not the sentinel");
+		Check(!MepPackManager::IsNoPackPreference("local::none"), "No pack: a container named `:none` is a pack, not the sentinel");
+		Check(!MepPackManager::IsNoPackPreference(""), "No pack: no preference is not no pack");
+
+		Check(!MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Folder), "No pack: an installed folder pack is off");
+		Check(!MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Zip), "No pack: an installed zip pack is off");
+		Check(MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Sibling), "No pack: the sibling folder still wins (ADR-0049)");
+		Check(MepPackManager::PreferenceAllowsPack("issue-1", MepPackOrigin::Folder), "No pack: a pack preference leaves the others eligible");
+		Check(MepPackManager::PreferenceAllowsPack("", MepPackOrigin::Folder), "No pack: no preference leaves every pack eligible");
+	}
+}
+
 //--- Bloco H: FingerprintStore loop field round-trip (ADR-0134 Option A) ------
 //F5.4g Block C item 8: fingerprints.json's optional `loop` point (PCM
 //samples at the OGG's own rate). Absence/zero means loop-the-whole-file;
@@ -13167,6 +13190,7 @@ int main()
 	TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway();
 
 	TestMepPackManagerGettersReturnCopies();
+	TestNoPackPreferenceTurnsEveryPackOffButTheSibling();
 	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();

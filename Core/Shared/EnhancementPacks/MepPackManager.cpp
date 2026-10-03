@@ -720,6 +720,9 @@ void MepPackManager::LoadForRom(VirtualFile& romFile)
 			string matchNote = IsOptimistic(pack) ? " does not match ROM sha1 " + _romSha1 + " (optimistic, ADR-0145 - textures/BPS may still apply)" : " matches ROM sha1 " + _romSha1;
 			Log("pack '" + pack.Name + "' v" + pack.Version + (pack.Synthetic ? " [folder convention]" : "") + matchNote + " (" + origin + " '" + pack.ContainerName + "', sections: " + sections + (IsPackEnabled(pack.ContainerName) ? ")" : ") - disabled by user"));
 		}
+		if(IsNoPackPreference(PreferredIdForRom())) {
+			Log("\"No pack\" is chosen for this game - only a sibling-folder pack applies");
+		}
 	}
 }
 
@@ -999,14 +1002,21 @@ void MepPackManager::ClearPreferredMepPacks()
 	_preferredPackIdByRomSha1.clear();
 }
 
-const MepPack* MepPackManager::FindPreferredPack(MepSectionType type) const
+string MepPackManager::PreferredIdForRom() const
 {
 	auto it = _preferredPackIdByRomSha1.find(_romSha1);
-	if(it == _preferredPackIdByRomSha1.end() || it->second.empty()) {
+	return it == _preferredPackIdByRomSha1.end() ? "" : it->second;
+}
+
+const MepPack* MepPackManager::FindPreferredPack(MepSectionType type) const
+{
+	string preferredId = PreferredIdForRom();
+	//W-P5's "No pack" names no pack, even one whose stamp claims the sentinel.
+	if(preferredId.empty() || IsNoPackPreference(preferredId)) {
 		return nullptr;
 	}
 	for(const MepPack& pack : _packs) {
-		if(pack.HasSection(type) && IsPackEnabled(pack.ContainerName) && EffectivePackId(pack) == it->second) {
+		if(pack.HasSection(type) && IsPackEnabled(pack.ContainerName) && EffectivePackId(pack) == preferredId) {
 			//ADR-0145: an optimistic pack may serve Textures, but Audio/Synth
 			//still require an exact match (out of the ADR's scope)
 			if(type != MepSectionType::Textures && IsOptimistic(pack)) {
@@ -1038,9 +1048,11 @@ const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 		return preferred;
 	}
 
+	//W-P5's "No pack": every pack is off for this ROM but a sibling folder.
+	string preferredId = PreferredIdForRom();
 	const MepPack* autoOnlyFallback = nullptr;
 	for(const MepPack& pack : _packs) {
-		if(IsPackEnabled(pack.ContainerName) && pack.HasSection(type)) {
+		if(IsPackEnabled(pack.ContainerName) && pack.HasSection(type) && PreferenceAllowsPack(preferredId, pack.Origin)) {
 			//ADR-0145: an optimistic candidate is only eligible for textures -
 			//HdNesPack falls through per-tile without crashing, and the health signal
 			//auto-disables a wrong-game pack. Audio/Synth stay gated on an
@@ -1134,8 +1146,14 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 		return false;
 	}
 	auto lock = _stateLock.AcquireSafe();
+	//W-P5's "No pack" plays the original game: no pack's ROM patch either.
+	string preferredId = PreferredIdForRom();
 	for(const MepPack& pack : _packs) {
 		if(pack.Patches.empty() || !IsPackEnabled(pack.ContainerName)) {
+			continue;
+		}
+		if(!PreferenceAllowsPack(preferredId, pack.Origin)) {
+			Log("pack '" + pack.Name + "': patch skipped - \"No pack\" is chosen for this game");
 			continue;
 		}
 		const MepPatch* patch = pack.FindPatch(_romSha1);

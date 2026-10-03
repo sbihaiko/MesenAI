@@ -20,6 +20,18 @@ namespace Mesen.Logic
 	//order) untouched when there is no stored preference.
 	public static class PackPreferenceResolver
 	{
+		//W-P5's "No pack": the stored preference meaning "no pack for this
+		//ROM". Every ADR-0140 pack_id starts with [a-z0-9] (the slug `id`,
+		//`owner/repo[:game]`, `issue-{n}`, `local:<container>`), so a leading
+		//':' can never name a real pack. The core reads the same literal
+		//(MepPackManager::kNoPackPreference).
+		public const string NoPack = ":none";
+
+		public static bool IsNoPack(string? preference)
+		{
+			return preference != null && preference.Trim().ToLowerInvariant() == NoPack;
+		}
+
 		public sealed class Candidate
 		{
 			public string Container { get; init; } = "";
@@ -34,6 +46,9 @@ namespace Mesen.Logic
 			//A sibling pack with only the bootstrap's auto/ layer (pack list
 			//column 11): the core renders it only when no human pack serves.
 			public bool IsAutoOnly { get; init; }
+			//A pack in the folder beside the ROM (pack list column 8 = 2). It
+			//always wins (ADR-0049, §4), so a "No pack" choice leaves it on.
+			public bool IsSibling { get; init; }
 		}
 
 		public sealed class Resolution
@@ -45,6 +60,12 @@ namespace Mesen.Logic
 			//Content-merged candidates in the caller's order; a later container
 			//duplicating an earlier one's content_id is not a new entry (§5).
 			public List<Candidate> Candidates { get; init; } = new();
+			//The stored choice is W-P5's "No pack": no container wins (but a
+			//sibling, PlayerPackPicker.CurrentContainer), and it is still a
+			//choice - the picker stays silent.
+			public bool PrefersNoPack { get; init; }
+			//A stored choice that applies: a pack that resolves, or "No pack".
+			public bool HasEffectivePreference => PreferredContainer != null || PrefersNoPack;
 		}
 
 		//A pack's effective pack_id for preference matching (ADR-0140): the
@@ -60,7 +81,9 @@ namespace Mesen.Logic
 
 		public static Resolution Resolve(IReadOnlyList<Candidate> candidates, string? preference)
 		{
-			string? wanted = string.IsNullOrWhiteSpace(preference)
+			bool prefersNoPack = IsNoPack(preference);
+			//"No pack" names no container, even one whose stamp claims the sentinel.
+			string? wanted = string.IsNullOrWhiteSpace(preference) || prefersNoPack
 				? null
 				: preference.Trim().ToLowerInvariant();
 
@@ -98,7 +121,8 @@ namespace Mesen.Logic
 
 			return new Resolution {
 				PreferredContainer = preferredContainer,
-				Candidates = merged
+				Candidates = merged,
+				PrefersNoPack = prefersNoPack
 			};
 		}
 	}

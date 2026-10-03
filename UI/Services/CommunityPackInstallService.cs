@@ -214,6 +214,13 @@ namespace Mesen.Services
 				//is the single master switch before the catalog is contacted.
 				romSha1 = load.RomSha1;
 				EmuApi.WriteLogEntry("[CommunityPack] romSha1=" + romSha1);
+				//ADR-0146: W-P5's "No pack" for this ROM is a user disable - no
+				//download, no pill. Not latched as attempted, so choosing a pack
+				//again lets the next load install.
+				if(CommunityPackAutoInstallGate.SkipReason(true, false, PackPreferenceResolver.IsNoPack(ConfigManager.Config.EnhancementPacks.GetRomPackPreference(romSha1))) is string skip) {
+					EmuApi.WriteLogEntry("[CommunityPack] skipped: " + skip);
+					return;
+				}
 				lock(_attemptedRomSha1) {
 					if(string.IsNullOrWhiteSpace(romSha1)) {
 						EmuApi.WriteLogEntry("[CommunityPack] skipped: no ROM sha1");

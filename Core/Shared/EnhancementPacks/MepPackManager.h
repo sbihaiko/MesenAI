@@ -173,6 +173,9 @@ private:
 	//preferred one for the loaded ROM, or nullptr when there is no preference
 	//or no matching pack
 	const MepPack* FindPreferredPack(MepSectionType type) const;
+	//The stored preference for the loaded ROM's sha1 (a pack_id or
+	//kNoPackPreference), "" when there is none. Caller holds _stateLock.
+	string PreferredIdForRom() const;
 	//ADR-0145: true when the pack was kept as an optimistic candidate (no
 	//target matched the loaded ROM's No-Intro SHA1)
 	bool IsOptimistic(const MepPack& pack) const;
@@ -360,6 +363,22 @@ public:
 	//container>`); "" or an empty container removes it. Pushed at config-apply
 	//time; consulted per ROM in GetPackForSection (see _preferredPackIdByRomSha1).
 	void SetPreferredMepPack(const string& romSha1, const string& packId);
+	//W-P5's "No pack": the preference value meaning "no pack for this ROM"
+	//(the UI's PackPreferenceResolver.NoPack). Every ADR-0140 pack_id starts
+	//with [a-z0-9], so a leading ':' can never name a real pack.
+	static constexpr const char* kNoPackPreference = ":none";
+	static bool IsNoPackPreference(const string& preferredId)
+	{
+		return preferredId == kNoPackPreference;
+	}
+	//Whether a pack may serve the loaded ROM under its stored preference: under
+	//"No pack" only a sibling-folder pack does (ADR-0049, §4 - the folder
+	//beside the ROM always wins); otherwise every enabled pack stays eligible.
+	//Applies to the sections and to the ROM patch alike.
+	static bool PreferenceAllowsPack(const string& preferredId, MepPackOrigin origin)
+	{
+		return !IsNoPackPreference(preferredId) || origin == MepPackOrigin::Sibling;
+	}
 	//P.3: drops every per-ROM preference, so a config-apply is authoritative
 	//(the UI resets then re-pushes the full current map - a removed choice is
 	//never left stale in the core).

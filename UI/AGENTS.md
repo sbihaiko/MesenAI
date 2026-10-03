@@ -313,7 +313,14 @@ can be exercised by real xunit tests without Avalonia or the native
   mirrors the core's `GetPackForSection` (stored choice, else the first
   enabled human pack in pack-list order, else the first auto-only one, #703).
   Use This Pack opened from W-P4 returns to W-P4 when the swap is in place
-  and to the game when it restarts (`PackPickClose`, #691).
+  and to the game when it restarts (`PackPickClose`, #691). W-P5's last row,
+  *No pack* (`PlayerPackChoice.NoPackRow`, offered whenever a pack is
+  listed), stores `PackPreferenceResolver.NoPack` (`:none`, never an ADR-0140
+  pack_id); `Resolution.PrefersNoPack` makes it an effective choice (silent
+  load), `CurrentContainer` then returns only a sibling-folder pack (the
+  core's `MepPackManager::PreferenceAllowsPack`), `CanChangeChoice` keeps the
+  way back open with one pack, and `CommunityPackAutoInstallGate` skips the
+  auto-install for that ROM (ADR-0146: a user disable overrides).
 - `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
   change — the Enhancements panel's Textures/Audio/Border toggles
   (`ToggleLayer`) and the picker's Apply: in place

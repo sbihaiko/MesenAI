@@ -2465,11 +2465,15 @@ E
 		<Message ID="RecentShaders">Recent shaders </Message>
 
 		<Message ID="PackPickerTitle">Choose a pack for {0}</Message>
+		<Message ID="PackPickerNoPackTitle">No pack</Message>
+		<Message ID="PackPickerNoPackDetail">Play with enhanced audio only</Message>
+		<Message ID="PackPickerNoPackDetailOriginal">Play with the game's original art and sound</Message>
 		<Message ID="PackByAuthor">by {0}</Message>
 		<Message ID="PackAuthorUnknown">author unknown</Message>
 		<Message ID="PackDetailVersion">version {0}</Message>
 		<Message ID="PackDetailNoPackTitle">No pack</Message>
 		<Message ID="PackDetailNoPackBody">No enhancement pack is installed for this game.</Message>
+		<Message ID="PackDetailNoPackChosenBody">You chose to play this game without a pack.</Message>
 		<Message ID="PackDetailMissingMusicBody">{0} of {1} tracks have no audio file. Add the .ogg files to the pack.</Message>
 		<Message ID="PackDetailChangeSibling">The pack in the folder next to the game always wins.</Message>
 		<Message ID="PackDetailChangeOnlyOne">There is no other pack for this game.</Message>

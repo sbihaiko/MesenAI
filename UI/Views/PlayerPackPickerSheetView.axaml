@@ -13,8 +13,9 @@
 	applies, and from W-P4's Pack row to change the choice. One radio per pack
 	(the stored choice, else the 👍-first row, starts selected); Use This Pack
 	stores the per-ROM preference (P.3) and applies it; Cancel/Esc plays
-	un-enhanced and asks again next launch. The "No pack" row needs a core
-	"no pack" preference that does not exist yet (W-P5 calls it a slice).-->
+	un-enhanced and asks again next launch. The last row is "No pack"
+	(PlayerPackChoice.NoPackRow): it stores PackPreferenceResolver.NoPack,
+	which the core honours (MepPackManager::PreferenceAllowsPack).-->
 	<!--ADR-0249 (W-P5): a light sheet - option cards (RadioButton.option),
 	the 👍 count at the card's top right, Cancel and Use This Pack.-->
 	<Border
