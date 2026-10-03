@@ -133,7 +133,7 @@ namespace Mesen.Windows
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerPackPickerVisible) && _model.IsPlayerPackPickerVisible) {
 					Dispatcher.UIThread.Post(FocusPackPickerChoice);
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
-					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsTexturesCheckBox")?.Focus());
+					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsModernCheckBox")?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPackDetailVisible) && _model.IsPackDetailVisible) {
 					//G.4 (W-P6): Change pack… when it can act, else Done.
 					Dispatcher.UIThread.Post(() => FindNamedDescendant(_model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton")?.Focus());

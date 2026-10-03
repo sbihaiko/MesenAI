@@ -264,7 +264,7 @@ public class PlaySheetsViewTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 		Button apply = window.FindNamed<Button>("EnhancementsApplyButton");
 		Assert.Equal("Done", apply.Content);
-		Assert.True(window.FindNamed<CheckBox>("EnhancementsTexturesCheckBox").IsFocused);
+		Assert.True(window.FindNamed<CheckBox>("EnhancementsModernCheckBox").IsFocused);
 
 		CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
 		widescreen.IsChecked = !widescreen.IsChecked;

@@ -8,16 +8,17 @@
 	x:Class="Mesen.Views.PlayerEnhancementsSheetView"
 	x:DataType="vm:MainWindowViewModel"
 >
-	<!--G.4 (PRD Part B §13.5.2 W-P7; P.7 §6.1 minus Hi-res filter): the five
-	switches edit a draft (EnhTextures…EnhOverclock) that starts from what is
-	applied; the one button applies it through the existing ToggleLayer /
-	ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
+	<!--G.4 (PRD Part B §13.5.2 W-P7; P.7 §6.1 minus Hi-res filter): the four
+	switches edit a draft (EnhModernInstruments…EnhOverclock) that starts from
+	what is applied; the one button applies it through the existing
+	SetModernInstruments / ToggleLayer / ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
 	causes (EnhancementsSheet.Pending, ADR-0244 Decision 3). Overclock is shown
 	disabled with its reason where the console has no overclock knob (rule 4).
 	Hi-res filter lives once, as Settings › Look › Pixels (ADR-0246).-->
-	<!--ADR-0249 (W-P7): a light sheet - the five switches in an inset list
-	(CheckBox.switch rows, "Applies on reload" under the layer rows, the
-	overclock reason under Overclock), the Look hint, and the one button.-->
+	<!--ADR-0249 (W-P7): a light sheet - the four switches and the Pack row in an
+	inset list (CheckBox.switch rows, "Applies on reload" under Border, the
+	overclock reason under Overclock; Pack opens W-P6/W-P5, where the
+	per-game Textures and Music live), the Look hint, and the one button.-->
 	<Border
 		Name="PlayerEnhancementsPanel"
 		Classes="sheet"
@@ -31,16 +32,7 @@
 			<Border Classes="inset">
 				<StackPanel>
 				<Border Classes="switch-row">
-					<Panel>
-						<CheckBox Name="EnhancementsTexturesCheckBox" Classes="switch" Classes.subtitled="{Binding !LayerChangeKeepsPlace}" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding EnhTextures, Mode=TwoWay}" />
-						<TextBlock Classes="row-subtitle" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" />
-					</Panel>
-				</Border>
-				<Border Classes="switch-row">
-					<Panel>
-						<CheckBox Name="EnhancementsAudioCheckBox" Classes="switch" Classes.subtitled="{Binding !LayerChangeKeepsPlace}" Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding EnhAudio, Mode=TwoWay}" />
-						<TextBlock Classes="row-subtitle" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" />
-					</Panel>
+					<CheckBox Name="EnhancementsModernCheckBox" Classes="switch" Content="{l:Translate chkEnhancementsModernInstruments}" IsChecked="{Binding EnhModernInstruments, Mode=TwoWay}" />
 				</Border>
 				<Border Classes="switch-row">
 					<Panel>
@@ -57,6 +49,12 @@
 						<TextBlock Name="EnhancementsOverclockReason" Classes="row-subtitle" Text="{Binding EnhOverclockReason}" IsVisible="{Binding !IsOverclockSupported}" />
 					</Panel>
 				</Border>
+				<Button Name="EnhancementsPackButton" Classes="row" Click="OnPack">
+					<DockPanel>
+						<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+						<TextBlock Classes="title" Text="{Binding EnhPackRowText}" />
+					</DockPanel>
+				</Button>
 				</StackPanel>
 			</Border>
 			<TextBlock Classes="subhead secondary" Text="{l:Translate lblEnhancementsLookHint}" Margin="2 18 0 20" />

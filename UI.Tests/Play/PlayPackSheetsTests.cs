@@ -54,6 +54,8 @@ namespace Mesen.Tests.Play
 		[Theory]
 		[InlineData("unknown")]
 		[InlineData(" Unknown ")]
+		[InlineData("unspecified")]
+		[InlineData(" Unspecified ")]
 		[InlineData("")]
 		public void A_pack_naming_no_license_leaves_it_out_of_the_byline(string license)
 		{
@@ -179,6 +181,45 @@ namespace Mesen.Tests.Play
 			Assert.True(PackDetail.Chips("audio", new PackAudioScan(0, 4, true)).Patch);
 			Assert.False(PackDetail.Chips("audio", new PackAudioScan(3, 17, false)).Patch);
 			Assert.False(PackDetail.Build(true, "audio", new PackAudioScan(3, 17, false), 1, false, true, "/f").Chips.Patch);
+		}
+
+		//The local automatic upscale (F5 bootstrap, an auto-only folder pack) is
+		//not a pack someone made: no author, version or license, and its
+		//recorded music fingerprints/MIDI are not tracks to play.
+		[Fact]
+		public void The_automatic_layer_has_textures_but_no_music_to_switch()
+		{
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures,audio", null, automatic: true));
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures,audio", new PackAudioScan(0, 0, false), automatic: true));
+		}
+
+		[Fact]
+		public void The_automatic_layer_shows_music_only_when_it_has_playable_tracks()
+		{
+			Assert.True(PackDetail.Chips("textures,audio", new PackAudioScan(2, 5, false), automatic: true).Audio);
+		}
+
+		[Fact]
+		public void The_detail_model_flags_the_automatic_layer()
+		{
+			PackDetailModel model = PackDetail.Build(true, "textures,audio", null, 1, false, false, "/f", automatic: true);
+			Assert.True(model.IsAutomatic);
+			Assert.False(model.Chips.Audio);
+			Assert.False(PackDetail.Build(true, "textures,audio", null, 1, false, false, "/f").IsAutomatic);
+		}
+
+		[Fact]
+		public void The_automatic_layer_byline_names_the_game_and_how_it_was_made()
+		{
+			Assert.Equal("Dr. Mario (1990) (Nintendo)\nMade on this computer from what you played", PackDetail.AutoByline("Dr. Mario (1990) (Nintendo)", null, s => "Made (" + s + ")", "Made on this computer from what you played"));
+			Assert.Equal("Dr. Mario\nMade (xBRZ 4×)", PackDetail.AutoByline("Dr. Mario", "xBRZ 4×", s => "Made (" + s + ")", "Made"));
+		}
+
+		[Fact]
+		public void The_automatic_layer_is_named_by_what_it_is_never_by_the_rom()
+		{
+			Assert.Equal("Automatic upscale", PackDetail.DisplayName("Dr. Mario (1990) (Nintendo)", autoOnly: true, "Automatic upscale"));
+			Assert.Equal("Contra 80s", PackDetail.DisplayName("Contra 80s", autoOnly: false, "Automatic upscale"));
 		}
 }
 }

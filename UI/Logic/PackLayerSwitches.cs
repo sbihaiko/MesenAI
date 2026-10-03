@@ -9,8 +9,8 @@ namespace Mesen.Logic;
 //Stored per ROM sha1 beside the per-ROM pack choice
 //(EnhancementPackConfig.RomLayersOff, next to RomPackPreference) and pushed to
 //the core (MepPackManager::SetRomLayersOff), which then neither serves the
-//section nor applies the patch for that ROM. The global switches (W-P7's
-//Textures/Audio, Advanced's ROM patch) still apply on top: either one off
+//section nor applies the patch for that ROM. The global defaults (Tools ⋯ ›
+//Enhancement Packs: Textures, Music, ROM patch) still apply on top: either one off
 //turns the layer off.
 public enum PackLayer
 {

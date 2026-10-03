@@ -44,15 +44,16 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool PackDetailShowsIds { get; set; }
 		[ObservableProperty] public partial string PackDetailIds { get; private set; } = "";
 
-		//W-P7: the draft the five switches edit (the Is*Enabled properties stay
+		//W-P7: the draft the four switches edit (the Is*Enabled properties stay
 		//what is applied, and feed W-P4's "N on").
-		[ObservableProperty] public partial bool EnhTextures { get; set; }
-		[ObservableProperty] public partial bool EnhAudio { get; set; }
+		[ObservableProperty] public partial bool EnhModernInstruments { get; set; }
 		[ObservableProperty] public partial bool EnhBorder { get; set; }
 		[ObservableProperty] public partial bool EnhWidescreen { get; set; }
 		[ObservableProperty] public partial bool EnhOverclock { get; set; }
 		[ObservableProperty] public partial string EnhOverclockReason { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsApplyText { get; private set; } = "";
+		//W-P7's last row: "Pack: Contra (USA)  ›", the way into W-P6 (or W-P5).
+		[ObservableProperty] public partial string EnhPackRowText { get; private set; } = "";
 
 		//W-P9: the HUD pill's sentence; empty when the pill is hidden.
 		[ObservableProperty] public partial string PackInstallPillText { get; private set; } = "";
@@ -71,7 +72,7 @@ namespace Mesen.ViewModels
 			&& LoadRomHelper.PlanPackChange(RomInfo.ConsoleType).Route == PackChangeRoute.InPlace;
 
 		private RestoreStep _restoreStep = RestoreStep.Idle;
-		private EnhancementsState _enhancementsApplied = new(false, false, false, false, false);
+		private EnhancementsState _enhancementsApplied = new(false, false, false, false);
 		private readonly PackInstallPill _pill = new();
 		private DispatcherTimer? _pillTimer;
 
@@ -122,6 +123,7 @@ namespace Mesen.ViewModels
 		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			IsPlayerOverlayVisible = false;
+			IsEnhancementsPanelVisible = false;
 			//PackRowRoute: W-P5 for 2+ packs, else W-P6 - also under "No pack"
 			//with one pack, where W-P6 shows the choice and Change Pack… leads back.
 			//#736: with a community-pack offer the row opens W-P6, which holds it.
@@ -149,12 +151,15 @@ namespace Mesen.ViewModels
 			string folder = current == null ? "" : PackDetail.FolderFor(current.Origin, current.Container, packsFolder, siblingFolder);
 			PackAudioScan? scan = current != null && folder.Length > 0 && PackDetail.CanScan(current.Origin) ? PackAudioNotice.Scan(folder) : null;
 			PackDetailModel model = PackDetail.Build(current != null, entry?.Sections ?? "", scan,
-				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder, resolution.PrefersNoPack);
+				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder, resolution.PrefersNoPack, current?.IsAutoOnly == true);
 
 			PackDetailHasPack = model.HasPack;
-			PackDetailTitle = current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
+			//The automatic upscale is made here, not by an author: say that, with
+			//no author/version/license (PackDetail.AutoByline).
+			PackDetailTitle = model.IsAutomatic ? ResourceHelper.GetMessage("PackDetailAutoTitle") : current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
 			//W-P5's "No pack" is a choice, not a missing pack: say so.
-			PackDetailByline = current != null ? BuildPackByline(current)
+			PackDetailByline = model.IsAutomatic ? PackDetail.AutoByline(current!.Name, null, sc => ResourceHelper.GetMessage("PackDetailAutoMadeWith", sc), ResourceHelper.GetMessage("PackDetailAutoMade"))
+				: current != null ? BuildPackByline(current)
 				: ResourceHelper.GetMessage(resolution.PrefersNoPack ? "PackDetailNoPackChosenBody" : "PackDetailNoPackBody");
 			PackDetailTextures = model.Chips.Textures;
 			PackDetailAudio = model.Chips.Audio;
@@ -173,6 +178,14 @@ namespace Mesen.ViewModels
 
 			IsPlayerOverlayVisible = false;
 			IsPackDetailVisible = true;
+		}
+
+		//W-P7's Pack row names what renders: the automatic upscale as such, a
+		//community offer, the pack's name, or "No pack".
+		private string PackRowName()
+		{
+			bool none = string.IsNullOrWhiteSpace(PackSummary) || PackSummary == ResourceHelper.GetMessage("OverlayRowNone");
+			return none ? ResourceHelper.GetMessage("PackDetailNoPackTitle") : PackSummary;
 		}
 
 		//"by Tastic · version 1.2 · CC BY-NC 4.0"
@@ -224,9 +237,9 @@ namespace Mesen.ViewModels
 		//W-P7: the switches start from what is applied.
 		private void LoadEnhancementsDraft()
 		{
-			_enhancementsApplied = new EnhancementsState(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
-			EnhTextures = IsTexturesEnabled;
-			EnhAudio = IsAudioEnabled;
+			_enhancementsApplied = new EnhancementsState(IsModernInstrumentsEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
+			EnhModernInstruments = IsModernInstrumentsEnabled;
+			EnhPackRowText = ResourceHelper.GetMessage("EnhancementsPackRow", PackRowName());
 			EnhBorder = IsBorderEnabled;
 			EnhWidescreen = IsWideScrnEnabled;
 			EnhOverclock = IsOverclockEnabled;
@@ -234,10 +247,9 @@ namespace Mesen.ViewModels
 			UpdateEnhancementsApplyText();
 		}
 
-		private EnhancementsState EnhancementsDraft => new(EnhTextures, EnhAudio, EnhBorder, EnhWidescreen, EnhOverclock && IsOverclockSupported);
+		private EnhancementsState EnhancementsDraft => new(EnhModernInstruments, EnhBorder, EnhWidescreen, EnhOverclock && IsOverclockSupported);
 
-		partial void OnEnhTexturesChanged(bool value) => UpdateEnhancementsApplyText();
-		partial void OnEnhAudioChanged(bool value) => UpdateEnhancementsApplyText();
+		partial void OnEnhModernInstrumentsChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhBorderChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhWidescreenChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhOverclockChanged(bool value) => UpdateEnhancementsApplyText();
@@ -253,11 +265,9 @@ namespace Mesen.ViewModels
 		}
 
 		//W-P7's one button. Each change goes through the path that already owns
-		//it: ToggleWideScrn (renderer only), ToggleLayer (the pack reload, which
-		//P.9 turns into LoadRomHelper.ApplyPackChange) and ToggleOverclock (the
-		//power cycle). Several layer changes cost one reload, not one each: the
-		//others are written first and the last goes through ToggleLayer. With
-		//Overclock pending, its power cycle reloads the pack too.
+		//it: SetModernInstruments (live), ToggleWideScrn (renderer only),
+		//ToggleLayer (the Border pack reload, which P.9 turns into
+		//LoadRomHelper.ApplyPackChange) and ToggleOverclock (the power cycle).
 		public void ApplyEnhancements()
 		{
 			EnhancementsState applied = _enhancementsApplied;
@@ -268,30 +278,20 @@ namespace Mesen.ViewModels
 				ToggleWideScrn();
 			}
 
-			List<(Action<bool> Set, bool Value, Action Toggle)> layers = new();
-			if(applied.Textures != draft.Textures) {
-				layers.Add((v => Config.EnhancementPacks.EnableTextures = v, draft.Textures, ToggleTextures));
-			}
-			if(applied.Audio != draft.Audio) {
-				layers.Add((v => Config.EnhancementPacks.EnableAudio = v, draft.Audio, ToggleAudio));
-			}
-			if(applied.Border != draft.Border) {
-				layers.Add((v => Config.EnhancementPacks.EnableBorder = v, draft.Border, ToggleBorder));
+			if(applied.ModernInstruments != draft.ModernInstruments) {
+				SetModernInstruments(draft.ModernInstruments);
 			}
 
+			//Border is the one pack layer left here; with Overclock pending, its
+			//power cycle reloads the pack too, so it is written first.
 			if(applied.Overclock != draft.Overclock) {
-				foreach((Action<bool> set, bool value, _) in layers) {
-					set(value);
-				}
-				if(layers.Count > 0) {
+				if(applied.Border != draft.Border) {
+					Config.EnhancementPacks.EnableBorder = draft.Border;
 					Config.EnhancementPacks.ApplyConfig();
 				}
 				ToggleOverclock();
-			} else if(layers.Count > 0) {
-				for(int i = 0; i < layers.Count - 1; i++) {
-					layers[i].Set(layers[i].Value);
-				}
-				layers[^1].Toggle();
+			} else if(applied.Border != draft.Border) {
+				ToggleBorder();
 			}
 
 			RefreshEnhancementsState();

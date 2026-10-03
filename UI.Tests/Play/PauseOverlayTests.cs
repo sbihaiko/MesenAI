@@ -54,10 +54,10 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void Enhancements_count_skips_overclock_where_the_console_has_none()
 		{
-			Assert.Equal(5, PauseOverlay.EnhancementsOn(true, true, true, true, true, overclockSupported: true));
-			Assert.Equal(4, PauseOverlay.EnhancementsOn(true, true, true, true, true, overclockSupported: false));
-			Assert.Equal(0, PauseOverlay.EnhancementsOn(false, false, false, false, false, true));
-			Assert.Equal(2, PauseOverlay.EnhancementsOn(true, false, false, true, false, true));
+			Assert.Equal(4, PauseOverlay.EnhancementsOn(true, true, true, true, overclockSupported: true));
+			Assert.Equal(3, PauseOverlay.EnhancementsOn(true, true, true, true, overclockSupported: false));
+			Assert.Equal(0, PauseOverlay.EnhancementsOn(false, false, false, false, true));
+			Assert.Equal(2, PauseOverlay.EnhancementsOn(true, false, true, false, true));
 		}
 
 		[Fact]
