@@ -278,8 +278,11 @@ namespace Mesen.ViewModels
 					EmuApi.Resume();
 				});
 			} else {
+				//#783: no Resume() here. It ran before the load even started, and a
+				//game that opens now starts running in the core, which is where the
+				//pause flag lives - the reload branch above resumes because its load
+				//is a state restore onto the game already on screen.
 				LoadRomHelper.LoadRecentGame(FileName, false);
-				EmuApi.Resume();
 			}
 		}
 	}
