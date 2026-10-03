@@ -292,7 +292,10 @@ public class LookSettingsTabTests : IDisposable
 		Assert.True(panel.IsOnScreen());
 		string[] boxes = panel.FindAll<CheckBox>().Select(c => c.Content as string ?? "").ToArray();
 		Assert.Contains("Widescreen", boxes);
-		Assert.Equal(new[] { "Textures", "Audio", "Border", "Widescreen", "Overclock" }, boxes);
+		//One place per switch (ADR-0250): the pack's layers (Textures, Music)
+		//moved to the pack detail sheet (W-P6), per game; this panel keeps the
+		//synth and the renderer/overclock switches.
+		Assert.Equal(new[] { "Modern instruments", "Border", "Widescreen", "Overclock" }, boxes);
 		//...and the sheet points at the place for the look of the picture (W-P7).
 		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Look");
 	}
