@@ -155,7 +155,7 @@ Names come from the data or from a human — never from a guess.
 2. **Open a ROM…** from the Play home, or drop one on the window. Games you
    played come back as *Continue playing* and a recent-games grid. Enhanced
    Audio is already on (Style: *Studio*).
-3. **Esc** pauses into the overlay: *Save states* (slot grids, plus *Shared
+3. In Player mode, **Esc** on the Play workspace pauses into the overlay: *Save states* (slot grids, plus *Shared
    replays…*), *Pack*, *Enhancements*, *Cheats*, *Settings*, *Quit game*.
    Different sound? **Settings → Audio → General → Enhanced audio** — pick
    Synthwave, Chip Deluxe, Orchestral Lite, Dry or Studio, or point it at your
@@ -174,6 +174,8 @@ back, and **Settings → Preferences → UI mode** switches to **Advanced**, whi
 keeps the classic dialogs. A new install records nothing while you play:
 recording starts from Remaster's **Record While I Play** (ADR-0243), and the
 old *Record while I play* setting stays, off, in the Enhancement Packs window.
+An upgraded install keeps its old value, and a settings file from before the
+setting existed keeps recording on (with a one-time notice saying so).
 
 Want to redraw a game? Start at **[docs/remastering-a-game.md](docs/remastering-a-game.md)** —
 every command, in order. The tools are Python scripts under `scripts/` plus the
