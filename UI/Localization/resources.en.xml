@@ -33,7 +33,7 @@
 		</Form>
 		<Form ID="PlayerPackDetailSheetView">
 			<Control ID="lblPackDetailTextures">Textures</Control>
-			<Control ID="lblPackDetailAudio">Audio</Control>
+			<Control ID="lblPackDetailAudio">Music</Control>
 			<Control ID="lblPackDetailPatch">ROM Patch</Control>
 			<Control ID="lblPackDetailLayersHint">The switches apply to this game only.</Control>
 			<Control ID="lblPackDetailLayersWait">Applying…</Control>
@@ -54,8 +54,7 @@
 		</Form>
 		<Form ID="PlayerEnhancementsSheetView">
 			<Control ID="lblEnhancementsPanelTitle">Enhancements</Control>
-			<Control ID="chkEnhancementsTextures">Textures</Control>
-			<Control ID="chkEnhancementsAudio">Audio</Control>
+			<Control ID="chkEnhancementsModernInstruments">Modern instruments</Control>
 			<Control ID="chkEnhancementsBorder">Border</Control>
 			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
 			<Control ID="chkEnhancementsOverclock">Overclock</Control>
@@ -1257,13 +1256,13 @@
 		<Form ID="EnhancementPacksWindow">
 			<Control ID="wndTitle">Enhancement Packs</Control>
 			<Control ID="lblRomSha1">ROM No-Intro SHA-1:</Control>
-			<Control ID="grpSections">Layers</Control>
+			<Control ID="grpSections">Packs, every game: defaults (each game can switch its pack layers off in Pack › Textures / Music)</Control>
 			<Control ID="chkEnableMepPacks">Enable enhancement packs</Control>
 			<Control ID="chkEnableTextures">Textures</Control>
-			<Control ID="chkEnableAudio">Audio (OGG)</Control>
+			<Control ID="chkEnableAudio">Music (OGG)</Control>
 			<Control ID="chkEnableSynth">Synth preset</Control>
 			<Control ID="chkEnablePatches">ROM patch</Control>
-			<Control ID="tipEnablePatches">Apply the pack's IPS patch. A patch that routes the game's music to the pack's OGG tracks is skipped on its own while Audio (OGG) is off, so the game's own music plays - textures may glitch where the patch changed graphics.</Control>
+			<Control ID="tipEnablePatches">Apply the pack's IPS patch. A patch that routes the game's music to the pack's OGG tracks is skipped on its own while Music (OGG) is off, so the game's own music plays - textures may glitch where the patch changed graphics.</Control>
 			<Control ID="chkBootstrapEnhancementFolder">Record while I play: every game load records its tiles (upscaled) into a new &lt;Game&gt;/auto/rec-NNN/ unless another pack dresses it. Off by default - Remaster's Record does this on demand</Control>
 			<Control ID="btnOpenSiblingFolder">Open Game Folder</Control>
 			<Control ID="chkApplyPatchOnHashMismatch">Apply ROM patches even when the hash does not match (may break other revisions)</Control>
@@ -2547,7 +2546,11 @@ E
 		<Message ID="PackOfferAutoInstallOff">“{0}” is made for this game. It is not installed because automatic installs of community packs are off.</Message>
 		<Message ID="PackOfferNotInstalled">“{0}” is made for this game, but it is not installed.</Message>
 		<Message ID="PackLayerNotInPack">Not in this pack</Message>
-		<Message ID="PackLayerOffEverywhere">Off for every game</Message>
+		<Message ID="PackLayerOffEverywhere">Off for every game — Tools ⋯ › Enhancement Packs</Message>
+		<Message ID="EnhancementsPackRow">Pack: {0}</Message>
+		<Message ID="PackDetailAutoTitle">Automatic upscale</Message>
+		<Message ID="PackDetailAutoMade">Made on this computer from what you played</Message>
+		<Message ID="PackDetailAutoMadeWith">Made on this computer from what you played ({0})</Message>
 		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
 		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
 		<Message ID="EnhancementsApply">Apply</Message>

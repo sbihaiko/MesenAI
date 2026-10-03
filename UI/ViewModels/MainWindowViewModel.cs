@@ -78,8 +78,7 @@ namespace Mesen.ViewModels
 		//VideoFilter, the per-console overclock field), refreshed whenever the
 		//panel opens, never a second source of truth.
 		[ObservableProperty] public partial bool IsEnhancementsPanelVisible { get; set; }
-		[ObservableProperty] public partial bool IsTexturesEnabled { get; set; }
-		[ObservableProperty] public partial bool IsAudioEnabled { get; set; }
+		[ObservableProperty] public partial bool IsModernInstrumentsEnabled { get; set; }
 		[ObservableProperty] public partial bool IsBorderEnabled { get; set; }
 		[ObservableProperty] public partial bool IsWideScrnEnabled { get; set; }
 		[ObservableProperty] public partial bool IsOverclockEnabled { get; set; }
@@ -411,8 +410,7 @@ namespace Mesen.ViewModels
 		//Also feeds W-P4's "Enhancements · N on" row (G.2).
 		private void RefreshEnhancementsState()
 		{
-			IsTexturesEnabled = Config.EnhancementPacks.EnableTextures;
-			IsAudioEnabled = Config.EnhancementPacks.EnableAudio;
+			IsModernInstrumentsEnabled = Config.Audio.EnableEnhancedAudio;
 			IsBorderEnabled = Config.EnhancementPacks.EnableBorder;
 			IsWideScrnEnabled = Config.Video.AspectRatio == VideoAspectRatio.Widescreen;
 			IsOverclockSupported = PlayerEnhancementsToggle.SupportsOverclock(RomInfo.ConsoleType);
@@ -430,23 +428,24 @@ namespace Mesen.ViewModels
 			OpenPauseOverlay();
 		}
 
-		//Texture/Audio/Border (§6.1, ADR-0149): plain passthrough to the existing MEP layer
-		//switches - applies through a ROM reload, like the rest of
+		//Border (§6.1, ADR-0149): plain passthrough to the existing MEP layer
+		//switch - applies through a ROM reload, like the rest of
 		//EnhancementPackConfig; ADR-0244 (P.9) makes that reload keep the
-		//player's place where PackChangePolicy allows it.
-		public void ToggleTextures()
-		{
-			IsTexturesEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableTextures = v, Config.EnhancementPacks.EnableTextures);
-		}
-
-		public void ToggleAudio()
-		{
-			IsAudioEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableAudio = v, Config.EnhancementPacks.EnableAudio);
-		}
-
+		//player's place where PackChangePolicy allows it. Textures and Music are
+		//W-P6's per-game switches (their defaults live in Options).
 		public void ToggleBorder()
 		{
 			IsBorderEnabled = ToggleLayer(v => Config.EnhancementPacks.EnableBorder = v, Config.EnhancementPacks.EnableBorder);
+		}
+
+		//Modern instruments: the same AudioConfig.EnableEnhancedAudio as Settings ›
+		//Audio, applied live (the synth reads the config, no reload).
+		public void SetModernInstruments(bool on)
+		{
+			Config.Audio.EnableEnhancedAudio = on;
+			Config.Audio.ApplyConfig();
+			Config.Save();
+			IsModernInstrumentsEnabled = on;
 		}
 
 		//Flips one MEP layer switch, persists it and applies it (in place where

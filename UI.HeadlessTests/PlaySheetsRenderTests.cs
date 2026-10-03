@@ -271,7 +271,7 @@ public class PlaySheetsRenderTests : IDisposable
 		CheckBox[] switches = { window.FindNamed<CheckBox>("PackDetailTexturesSwitch"), window.FindNamed<CheckBox>("PackDetailAudioSwitch"), window.FindNamed<CheckBox>("PackDetailPatchSwitch") };
 		Assert.All(switches, s => AssertSwitch(s, on: true));
 		Assert.All(switches, s => Assert.True(s.IsEnabled));
-		Assert.Equal(new[] { "Textures", "Audio", "ROM Patch" }, switches.Select(s => s.Content as string).ToArray());
+		Assert.Equal(new[] { "Textures", "Music", "ROM Patch" }, switches.Select(s => s.Content as string).ToArray());
 		Assert.Equal(46, switches[0].FindAncestorOfType<Border>()!.Bounds.Height, 1);
 		Assert.Equal("The switches apply to this game only.", window.FindNamed<TextBlock>("PackDetailLayersHint").Text);
 		Border notice = window.FindNamed<Border>("PackDetailNotice");
@@ -309,15 +309,14 @@ public class PlaySheetsRenderTests : IDisposable
 		Render(window, "W-X1-restore", sheet);
 	}
 
-	//W-P7: the five switches in an inset list, Apply & Reload; 6 controls.
+	//W-P7: the four switches and the Pack row in an inset list, Apply & Reload; 6 controls.
 	[AvaloniaFact]
 	public void Enhancements_render_as_W_P7()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = Show();
 		model.OpenEnhancementsPanel();
-		model.EnhTextures = true;
-		model.EnhAudio = true;
+		model.EnhModernInstruments = true;
 		model.EnhBorder = true;
 		model.EnhWidescreen = false;
 		Settle(window);
@@ -328,8 +327,9 @@ public class PlaySheetsRenderTests : IDisposable
 		Border inset = sheet.FindAll<Border>().First(b => b.Classes.Contains("inset"));
 		Assert.Equal(InsetFill, PlayerRender.SolidColor(inset.Background));
 		Assert.Equal(new CornerRadius(12), inset.CornerRadius);
-		CheckBox textures = window.FindNamed<CheckBox>("EnhancementsTexturesCheckBox");
+		CheckBox textures = window.FindNamed<CheckBox>("EnhancementsModernCheckBox");
 		AssertSwitch(textures, on: true);
+		Assert.NotNull(window.FindNamed<Button>("EnhancementsPackButton"));
 		AssertSwitch(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox"), on: false);
 		Assert.Equal(13.5, textures.FontSize);
 		Assert.Equal(46, textures.FindAncestorOfType<Border>()!.Bounds.Height, 1);

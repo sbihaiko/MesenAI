@@ -74,12 +74,12 @@ public static class PauseOverlay
 		};
 	}
 
-	//The Enhancements row's "N on": the §6.1 quick toggles that are on. A toggle
+	//The Enhancements row's "N on": the W-P7 switches that are on. A toggle
 	//the loaded console cannot use (Overclock on SMS) is never counted.
-	public static int EnhancementsOn(bool textures, bool audio, bool border, bool wideScreen, bool overclock, bool overclockSupported)
+	public static int EnhancementsOn(bool modernInstruments, bool border, bool wideScreen, bool overclock, bool overclockSupported)
 	{
 		int count = 0;
-		foreach(bool on in new[] { textures, audio, border, wideScreen, overclock && overclockSupported }) {
+		foreach(bool on in new[] { modernInstruments, border, wideScreen, overclock && overclockSupported }) {
 			if(on) {
 				count++;
 			}

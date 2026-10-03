@@ -39,7 +39,7 @@ public class PackLayerSwitchTests : IDisposable
 		ConfigManager.Config.Save();
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) ShowDetail()
+	private static (MainWindow Window, MainWindowViewModel Model) ShowDetail(string packList = OnePack)
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
@@ -50,7 +50,7 @@ public class PackLayerSwitchTests : IDisposable
 		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		model.OpenPauseOverlay();
 		Dispatcher.UIThread.RunJobs();
-		Assert.False(model.OpenPackFromOverlay(OnePack, Sha1, "/packs", "", installedSourceSha256: null));
+		Assert.False(model.OpenPackFromOverlay(packList, Sha1, "/packs", "", installedSourceSha256: null));
 		Dispatcher.UIThread.RunJobs();
 		return (window, model);
 	}
@@ -108,6 +108,52 @@ public class PackLayerSwitchTests : IDisposable
 		Assert.False(ConfigManager.Config.EnhancementPacks.RomLayersOff.ContainsKey(Sha1));
 	}
 
+	//The F5 bootstrap's layer (isAutoOnly column) is shown as what it is: made
+	//here, no author/version/license, and its recorded audio is not music.
+	[AvaloniaFact]
+	public void The_automatic_upscale_is_not_presented_as_a_pack_someone_made()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		const string auto = "Dr. Mario (1990) (Nintendo)\tDr. Mario (1990) (Nintendo)\t0.0.0\t\tunspecified\ttextures,audio\t1\t0\t\t\t1\n";
+		(MainWindow window, MainWindowViewModel model) = ShowDetail(auto);
+
+		Assert.Equal("Automatic upscale", window.FindNamed<TextBlock>("PackDetailTitle").Text);
+		string byline = window.FindNamed<TextBlock>("PackDetailByline").Text ?? "";
+		Assert.Equal("Dr. Mario (1990) (Nintendo)\nMade on this computer from what you played", byline);
+		Assert.DoesNotContain("unknown", byline);
+		Assert.DoesNotContain("unspecified", byline);
+		Assert.DoesNotContain("0.0.0", byline);
+		Assert.True(window.FindNamed<CheckBox>("PackDetailTexturesSwitch").IsEnabled);
+		CheckBox music = window.FindNamed<CheckBox>("PackDetailAudioSwitch");
+		Assert.False(music.IsEnabled);
+		Assert.Equal("Not in this pack", window.FindNamed<TextBlock>("PackDetailAudioNote").Text);
+	}
+
+	//"se nao existe o pack tem que deixar claro que e um upscale automatico":
+	//every surface that names the current pack says so, never the ROM name.
+	[AvaloniaFact]
+	public void Every_surface_names_the_automatic_upscale_not_the_rom_as_a_pack()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		const string rom = "Dr. Mario (1990) (Nintendo)";
+		const string auto = rom + "\t" + rom + "\t0.0.0\tSomeone\tunspecified\ttextures,audio\t1\t0\t\t\t1\n";
+		(MainWindow window, MainWindowViewModel model) = ShowDetail(auto);
+
+		model.OpenPauseOverlay();
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal("Automatic upscale", model.PackSummary);
+		model.OpenEnhancementsPanel();
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal("Pack: Automatic upscale", model.EnhPackRowText);
+		Assert.Equal("Automatic upscale", window.FindNamed<TextBlock>("PackDetailTitle").Text);
+		string[] surfaces = { model.PackSummary, model.EnhPackRowText, window.FindNamed<TextBlock>("PackDetailTitle").Text ?? "" };
+		Assert.All(surfaces, t => Assert.DoesNotContain(rom, t));
+		string byline = window.FindNamed<TextBlock>("PackDetailByline").Text ?? "";
+		Assert.DoesNotContain("by ", byline);
+		Assert.DoesNotContain("version", byline);
+		Assert.DoesNotContain("Someone", byline);
+	}
+
 	[AvaloniaFact]
 	public void The_global_switch_off_wins_and_is_named()
 	{
@@ -118,7 +164,7 @@ public class PackLayerSwitchTests : IDisposable
 		CheckBox textures = window.FindNamed<CheckBox>("PackDetailTexturesSwitch");
 		Assert.False(textures.IsEnabled);
 		Assert.False(textures.IsChecked == true);
-		Assert.Equal("Off for every game", window.FindNamed<TextBlock>("PackDetailTexturesNote").Text);
+		Assert.Equal("Off for every game — Tools ⋯ › Enhancement Packs", window.FindNamed<TextBlock>("PackDetailTexturesNote").Text);
 	}
 
 	private static void WaitUntilApplied(MainWindowViewModel model)

@@ -43,7 +43,8 @@ namespace Mesen.ViewModels
 			if(state != null && DecideCommunityOffer(state.PackList, state.RomSha1, state.Community).IsShown) {
 				return ResourceHelper.GetMessage("OverlayPackCommunityAvailable");
 			}
-			return string.IsNullOrWhiteSpace(CurrentPackName) ? ResourceHelper.GetMessage("OverlayRowNone") : CurrentPackName;
+			return string.IsNullOrWhiteSpace(CurrentPackName) ? ResourceHelper.GetMessage("OverlayRowNone")
+				: PackDetail.DisplayName(CurrentPackName, _currentPackAutoOnly, ResourceHelper.GetMessage("PackDetailAutoTitle"));
 		}
 
 		private void ShowCommunityOffer(CommunityPackOffer offer, string packListText)

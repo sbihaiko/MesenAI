@@ -129,13 +129,19 @@ public sealed record PackDetailModel(
 	int TotalTracks,
 	bool CanChangePack,
 	bool ShowsRestore,
-	string Folder
+	string Folder,
+	//The local automatic upscale (an auto-only folder pack): W-P6 shows it as
+	//what it is, not as a pack someone made.
+	bool IsAutomatic = false
 );
 
 public static class PackDetail
 {
 	//sections: the core's raw comma list ("textures,audio,border").
-	public static PackLayerChips Chips(string sections, PackAudioScan? scan)
+	//automatic: the F5 bootstrap's layer. Its "audio" section is recorded
+	//music fingerprints and MIDI, not tracks to play, so Music is present only
+	//when a scan finds playable <bgm>/<sfx> files.
+	public static PackLayerChips Chips(string sections, PackAudioScan? scan, bool automatic = false)
 	{
 		HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
 		foreach(string part in (sections ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
@@ -143,7 +149,7 @@ public static class PackDetail
 		}
 		//An HDNes-style pack plays its music from <bgm>/<sfx> lines next to its
 		//textures, with no audio section: that is audio too (W-P6's switch).
-		return new PackLayerChips(present.Contains("textures"), present.Contains("audio") || scan?.Total > 0, scan?.HasWiredPatch == true);
+		return new PackLayerChips(present.Contains("textures"), (!automatic && present.Contains("audio")) || scan?.Total > 0, scan?.HasWiredPatch == true);
 	}
 
 	//W-P6's byline: "by Tastic · version 1.2 · CC BY-NC 4.0". byAuthor and
@@ -163,11 +169,31 @@ public static class PackDetail
 	}
 
 	//The catalog install writes "license": "unknown" into pack.json when the
-	//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown) - a
-	//placeholder, not a license, so the byline leaves it out like an empty one.
+	//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown), and a
+	//pack.json-less folder pack reads "unspecified" - placeholders, not
+	//licenses, so the byline leaves them out like an empty one.
 	public static bool NamesLicense(string license)
 	{
-		return !string.IsNullOrWhiteSpace(license) && !license.Trim().Equals("unknown", StringComparison.OrdinalIgnoreCase);
+		if(string.IsNullOrWhiteSpace(license)) {
+			return false;
+		}
+		string trimmed = license.Trim();
+		return !trimmed.Equals("unknown", StringComparison.OrdinalIgnoreCase) && !trimmed.Equals("unspecified", StringComparison.OrdinalIgnoreCase);
+	}
+
+	//What every surface calls the current pack: the automatic upscale is named
+	//by what it is ("Automatic upscale"), never by the ROM's name as if it were
+	//a pack someone made.
+	public static string DisplayName(string name, bool autoOnly, string autoLabel) => autoOnly ? autoLabel : name;
+
+	//The automatic upscale's two lines under its "Automatic upscale" title: the
+	//game, then how it was made - no author, version or license. scaler: the
+	//scaler's name when known ("xBRZ 4×"); withScaler formats the localized
+	//"Made on this computer from what you played ({0})".
+	public static string AutoByline(string gameName, string? scaler, Func<string, string> withScaler, string plain)
+	{
+		string made = string.IsNullOrWhiteSpace(scaler) ? plain : withScaler(scaler.Trim());
+		return string.IsNullOrWhiteSpace(gameName) ? made : gameName.Trim() + "\n" + made;
 	}
 
 	//W-P6's folder button: the render's "Show Pack in Finder" names macOS's
@@ -195,18 +221,19 @@ public static class PackDetail
 	//nothing to restore from and the button is absent there, not disabled.
 	//prefersNoPack: W-P5's "No pack" is stored - Change Pack… is the way back
 	//even with one pack (PlayerPackPicker.CanChangeChoice).
-	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder, bool prefersNoPack = false)
+	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder, bool prefersNoPack = false, bool automatic = false)
 	{
 		bool missingMusic = hasPack && scan != null && scan.ShowsNotice;
 		return new PackDetailModel(
 			hasPack,
-			hasPack ? Chips(sections, scan) : new PackLayerChips(false, false, false),
+			hasPack ? Chips(sections, scan, automatic) : new PackLayerChips(false, false, false),
 			missingMusic ? PackDetailNotice.MissingMusic : PackDetailNotice.None,
 			missingMusic ? scan!.Missing : 0,
 			missingMusic ? scan!.Total : 0,
 			PlayerPackPicker.CanChangeChoice(hasHumanSibling, distinctPackIds, prefersNoPack),
 			hasPack && installedFromCatalog,
-			folder ?? ""
+			folder ?? "",
+			hasPack && automatic
 		);
 	}
 }

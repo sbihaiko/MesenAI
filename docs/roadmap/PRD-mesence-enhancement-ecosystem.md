@@ -2957,7 +2957,7 @@ is `UI/Logic/PlayMenuHint.cs`.
                      │  by Tastic · version 1.2 · CC BY-NC 4.0      │
                      │  ┌────────────────────────────────────────┐  │
                      │  │ Textures                          (●)  │  │
-                     │  │ Audio                             (●)  │  │
+                     │  │ Music                             (●)  │  │
                      │  │ ROM Patch                         (●)  │  │
                      │  └────────────────────────────────────────┘  │
                      │  The switches apply to this game only.       │
@@ -2993,6 +2993,25 @@ is `UI/Logic/PlayMenuHint.cs`.
   from, so the button is absent there, not disabled.
 - *Details ▸* reveals ids and hashes for the curious — the only place in Play
   they appear.
+- **One place per switch** (2026-10-03, amends W-P6/W-P7; the user asked
+  *"está confuso, tem como melhorar isso?"* and chose *"Pack = camadas do
+  pack (Recomendado)"*): Textures and Music are **only** here, per game. W-P7
+  no longer has them; its last row, *Pack: Contra 80s ›*, opens this sheet
+  (W-P5 with 2+ packs, "No pack" with none). The global Textures/Music master
+  switches left Player mode: they are the defaults for every game in Tools ⋯ ›
+  Enhancement Packs ("Packs, every game"), and a layer whose default is off
+  reads here "Off for every game — Tools ⋯ › Enhancement Packs". The UI word
+  is *Music* (the OGG tracks), not *Audio*.
+- **The automatic upscale** (the F5 bootstrap's `auto/rec-NNN` layer, the
+  `isAutoOnly` column — the same rule as the status line's "automatic
+  upscale"): nobody made it, so every surface that names the current pack
+  (W-P4's Pack row, W-P7's Pack row, this title, the status line) says
+  *Automatic upscale*, never the ROM's name as if it were a pack. This sheet
+  shows the game's name and "Made on this computer from what you played"
+  (plus the scaler, e.g. xBRZ 4×, when known) in place of the author/version
+  byline, and no license. Its recorded audio (music fingerprints, MIDI) is not
+  music: Music reads "Not in this pack" unless `<bgm>`/`<sfx>` tracks exist.
+  A placeholder license ("unknown", "unspecified") is never shown.
 - **Layer switches** (2026-10-03, the user's request: *"nessa tela tem que ter
   uma opção para desligar texturas, outra para o audio, outra para ips"*):
   the pack's Textures, Audio and ROM Patch are an inset list of switch rows
@@ -3005,12 +3024,13 @@ is `UI/Logic/PlayMenuHint.cs`.
   is present when the pack has an audio section or `<bgm>`/`<sfx>` tracks;
   ROM Patch when it wires a bundled `.ips`/`.bps`. A layer the pack lacks is
   a grey switch with "Not in this pack" (the former grey chip, rule 4); a
-  layer whose global switch (W-P7's Textures/Audio, Advanced's ROM patch) is
-  off is a grey switch with "Off for every game" — the global switch still
+  layer whose global default (Tools ⋯ › Enhancement Packs: Textures, Music, ROM patch) is
+  off is a grey switch with "Off for every game — Tools ⋯ › Enhancement Packs" — the global switch still
   wins. A flip applies at once through `LoadRomHelper.ApplyPackChange` (in
   place where P.9 allows: the sheet stays and the switches wait under a
   moving bar; elsewhere the game restarts, back to the game, like W-P7).
-  Synth (enhanced audio) and Border keep their global switches only.
+  Border keeps its global switch only (W-P7); Modern instruments (the synth)
+  is W-P7's, global.
 - Elements: 5 + the layer list (3 rows, each with its switch — counted as
   list rows under rule 2, like W-P11's cheat rows). ✔
 
@@ -3022,11 +3042,11 @@ is `UI/Logic/PlayMenuHint.cs`.
                      ┌──────────────────────────────────────────────┐
                      │  Enhancements                                │
                      │                                              │
-                     │  [x] Textures        applies on reload       │
-                     │  [x] Audio           applies on reload       │
+                     │  [x] Modern instruments                      │
                      │  [x] Border          applies on reload       │
                      │  [ ] Widescreen                              │
                      │  [ ] Overclock       ⟨not available on SMS⟩  │
+                     │  Pack: Contra 80s                          › │
                      │                                              │
                      │  How the picture looks: Settings › Look      │
                      │                                              │
@@ -3040,11 +3060,15 @@ is `UI/Logic/PlayMenuHint.cs`.
   keeps what the *pack and the console* add — art, sound, frame, width,
   speed — and points at the place for the look of the picture.
 
-Elements: 5 toggles + 1 = 6. ✔ (Cheats moved to W-P4, 2026-10-02.) The one
+Elements: 4 toggles + the Pack row + 1 = 6. ✔ (Cheats moved to W-P4,
+2026-10-02. Textures and Audio left on 2026-10-03: one place per switch, the
+pack's layers are W-P6's. *Modern instruments* is `AudioConfig.EnableEnhancedAudio`,
+the same switch as Settings › Audio, and applies live with no reload; the
+Pack row routes like W-P4's. Leaving by the Pack row drops an unapplied draft.) The one
 console-dependent element is shown
 disabled with its reason (rule 4). The button replaces today's immediate
 action on each toggle, so the player decides when the game restarts. Today
-there are two different restarts: Textures, Audio and Border go through
+there are two different restarts: Border goes through
 `ToggleLayer` → `ReloadRom`, and Overclock goes through `PowerCycle`. The
 button names the bigger one that is pending: *Apply & Reload*, or *Apply &
 Restart* when Overclock changed (a restart loses unsaved progress, so it

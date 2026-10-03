@@ -747,7 +747,7 @@ def pause_panel(c):
     c.rrect(g2, 12, fill=CARD, outline=(232, 232, 236))
     c.row(g2[0], g2[2], g2[1], 50, "Save States", "Slot 1 · 2 min ago", icon="film", tint=(88, 86, 214))
     c.row(g2[0], g2[2], g2[1] + 50, 50, "Pack", "Contra 80s 1.2", icon="box", tint=TINT["share"])
-    c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "5 on", icon="sparkle", tint=ORANGE)
+    c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "4 on", icon="sparkle", tint=ORANGE)
     c.row(g2[0], g2[2], g2[1] + 150, 50, "Cheats", "2 on", icon="sparkle", tint=(255, 45, 85))
     c.row(g2[0], g2[2], g2[1] + 200, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
     c.button((px0 + px1) / 2, py0 + 434, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
@@ -807,7 +807,7 @@ def w_p6():
     # lacks is a grey switch with "Not in this pack" under its name).
     g = (x0 + 24, y0 + 88, x1 - 24, y0 + 88 + 3 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
-    for i, n in enumerate(("Textures", "Audio", "ROM Patch")):
+    for i, n in enumerate(("Textures", "Music", "ROM Patch")):
         yy = g[1] + i * 46
         c.text(g[0] + 16, yy + 23, n, 13.5, 500, TEXT, "lm")
         c.toggle(g[2] - 54, yy + 12, True, True)
@@ -839,17 +839,20 @@ def w_p7():
     x0, y0, x1, y1 = b
     g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 5 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
-    items = [("Textures", "Applies on reload", True, True), ("Audio", "Applies on reload", True, True),
-             ("Border", "Applies on reload", True, True), ("Widescreen", None, False, True),
-             ("Overclock", "Not available on SMS", False, False)]
+    # One place per switch (ADR-0250 amendment): the pack's Textures/Music are
+    # W-P6's, per game; the last row opens W-P6 (or W-P5 with 2+ packs).
+    items = [("Modern instruments", None, True, True), ("Border", "Applies on reload", True, True),
+             ("Widescreen", None, False, True), ("Overclock", "Not available on SMS", False, False)]
     for i, (n, sub, on, en) in enumerate(items):
         yy = g[1] + i * 46
         c.text(g[0] + 16, yy + (17 if sub else 23), n, 13.5, 500, TEXT if en else TEXT3, "lm")
         if sub:
             c.text(g[0] + 16, yy + 33, sub, 11.5, 400, TEXT2 if en else TEXT3, "lm")
         c.toggle(g[2] - 54, yy + 12, on, en)
-        if i < 4:
-            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+        c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    yy = g[1] + 4 * 46
+    c.text(g[0] + 16, yy + 23, "Pack: Contra 80s", 13.5, 500, TEXT, "lm")
+    c.icon("chev_right", g[2] - 22, yy + 23, 12, TEXT3)
     c.text(x0 + 22, g[3] + 26, "How the picture looks: Settings › Look", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Apply & Reload", "primary", TINT["play"], anchor="r", h=32)
     c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 6)
