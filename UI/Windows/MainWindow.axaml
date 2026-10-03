@@ -86,6 +86,11 @@
 			<v:RemasterRecordingStrip Name="RemasterRecordingStrip" DataContext="{Binding Remaster}" />
 		</Panel>
 
+		<!--ADR-0249 (W-R2): the recording hint's toast under the game (Player only; empty in Advanced).-->
+		<Panel Name="RemasterRecordingHintHost" DockPanel.Dock="Bottom" IsVisible="{Binding IsRemasterGameView}" Classes="remaster" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
+			<v:RemasterRecordingHint Name="RemasterRecordingHint" DataContext="{Binding Remaster}" />
+		</Panel>
+
 		<!--G.8 (W-H4): the replay pill and Stop above the game, inside Share.-->
 		<Panel Name="ShareRecordingStripHost" DockPanel.Dock="Top" IsVisible="{Binding IsShareGameView}">
 			<v:ShareRecordingStrip Name="ShareRecordingStrip" DataContext="{Binding Share}" Classes="share" Classes.player="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" />
@@ -172,8 +177,13 @@
 					<StackPanel Name="OverlayControls" Margin="8 0" XYFocus.NavigationModes="Enabled">
 						<TextBlock Name="OverlayGameTitle" Classes="title2" Text="{Binding OverlayGameTitle}" TextTrimming="CharacterEllipsis" />
 						<TextBlock Classes="secondary" Text="{l:Translate lblOverlayPaused}" Margin="0 4 0 16" />
-						<!--The label carries its own ▶ (btnOverlayResume), so no leading icon.-->
-						<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Content="{l:Translate btnOverlayResume}" Click="OnOverlayResume" Margin="0 0 0 20" />
+						<!--W-P4: a drawn play icon leads the label (no ▶ glyph in the string).-->
+						<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Click="OnOverlayResume" Margin="0 0 0 20">
+							<StackPanel Orientation="Horizontal">
+								<PathIcon Classes="leading" Data="{StaticResource PlayerIconPlay}" />
+								<TextBlock Text="{l:Translate btnOverlayResume}" />
+							</StackPanel>
+						</Button>
 						<Border Classes="group" Margin="-8 0">
 							<StackPanel>
 								<Button Name="OverlaySaveStatesButton" Classes="row" Click="OnOverlaySaveStates">

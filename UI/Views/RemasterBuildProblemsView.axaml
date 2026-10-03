@@ -17,8 +17,49 @@
 	<!--ADR-0249 (W-R4): the title as a card's first line, each problem a
 	subhead sentence with a small secondary Open File, the plain Show Log and
 	the small primary Try Again.-->
+	<!--The render's hierarchy (Player only): a drawn orange warning before the
+	title; each problem's name in bold, then its sentence in the secondary
+	colour. Advanced keeps the "⚠ …" title and the caption-led "· …" rows.-->
+	<UserControl.Styles>
+		<Style Selector="DockPanel#RemasterBuildProblemsTitleRow, DockPanel.problem-split">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player DockPanel#RemasterBuildProblemsTitleRow, .player DockPanel.problem-split">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterBuildProblemsClassicTitle, .player TextBlock.problem-line">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="PathIcon#RemasterBuildProblemsIcon">
+			<Setter Property="Width" Value="14" />
+			<Setter Property="Height" Value="14" />
+			<Setter Property="Margin" Value="0 0 8 0" />
+		</Style>
+		<Style Selector=".player PathIcon#RemasterBuildProblemsIcon">
+			<Setter Property="Width" Value="18" />
+			<Setter Property="Height" Value="18" />
+			<Setter Property="Margin" Value="0 0 10 0" />
+		</Style>
+		<Style Selector="TextBlock.problem-name">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Margin" Value="0 0 10 0" />
+		</Style>
+		<Style Selector=".player TextBlock.problem-name">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+		</Style>
+		<Style Selector=".player TextBlock.problem-text">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+		</Style>
+		<Style Selector=".player StackPanel#RemasterBuildProblems">
+			<Setter Property="Spacing" Value="8" />
+		</Style>
+	</UserControl.Styles>
 	<StackPanel Name="RemasterBuildProblems" Spacing="10">
-		<TextBlock Name="RemasterBuildProblemsTitle" Classes="emphasis" Text="{Binding BuildProblemsTitle}" />
+		<TextBlock Name="RemasterBuildProblemsClassicTitle" Classes="emphasis" Text="{Binding BuildProblemsClassicTitle}" />
+		<DockPanel Name="RemasterBuildProblemsTitleRow">
+			<PathIcon Name="RemasterBuildProblemsIcon" Classes="warning" DockPanel.Dock="Left" VerticalAlignment="Center" Data="{StaticResource PlayerIconWarning}" />
+			<TextBlock Name="RemasterBuildProblemsTitle" Classes="emphasis" Text="{Binding BuildProblemsTitle}" VerticalAlignment="Center" />
+		</DockPanel>
 		<ItemsControl Name="RemasterBuildProblemList" ItemsSource="{Binding BuildProblems}">
 			<ItemsControl.ItemsPanel>
 				<ItemsPanelTemplate>
@@ -29,7 +70,13 @@
 				<DataTemplate x:DataType="vm:RemasterProblemRow">
 					<DockPanel Margin="28 0 0 0">
 						<Button DockPanel.Dock="Right" Classes="secondary small" Margin="16 0 0 0" VerticalAlignment="Center" Content="{l:Translate btnOpenProblemFile}" IsVisible="{Binding CanOpen}" Click="OnOpenFile" />
-						<TextBlock Classes="body" Text="{Binding Text, StringFormat='· {0}'}" TextWrapping="Wrap" VerticalAlignment="Center" />
+						<Panel>
+							<TextBlock Classes="problem-line body" Text="{Binding ClassicText, StringFormat='· {0}'}" TextWrapping="Wrap" VerticalAlignment="Center" />
+							<DockPanel Classes="problem-split">
+								<TextBlock DockPanel.Dock="Left" Classes="problem-name body" Text="{Binding Name}" TextWrapping="NoWrap" VerticalAlignment="Center" IsVisible="{Binding Name, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+								<TextBlock Classes="problem-text subhead secondary" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+							</DockPanel>
+						</Panel>
 					</DockPanel>
 				</DataTemplate>
 			</ItemsControl.ItemTemplate>

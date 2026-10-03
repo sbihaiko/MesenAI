@@ -199,7 +199,7 @@ public class RemasterWorkspaceTests : IDisposable
 			Assert.True(window.FindNamed<StackPanel>("RemasterProjectScreen").IsOnScreen());
 			Assert.Equal("synthetic-nrom", window.FindNamed<TextBlock>("RemasterProjectName").Text);
 			Assert.Equal("1 recording", window.FindNamed<TextBlock>("RemasterRecordSummary").Text);
-			Assert.Contains(window.FindNamed<ItemsControl>("RemasterRecordingList").FindAll<TextBlock>(), t => t.Text == "Recording 1");
+			Assert.StartsWith("Latest: Recording 1", window.FindNamed<TextBlock>("RemasterRecordDetail").Text);
 			Assert.False(window.FindNamed<Button>("RemasterTasButton").IsEffectivelyEnabled);
 			Assert.Equal("Coming in a later version.", window.FindNamed<TextBlock>("RemasterTasReason").Text);
 			Assert.False(window.FindNamed<Button>("RemasterAiButton").IsEffectivelyEnabled);

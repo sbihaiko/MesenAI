@@ -230,7 +230,9 @@ public class ShareWorkspaceTests : IDisposable
 
 		Type(h.Window.FindNamed<TextBox>("SharePackLink"), "https://example.com/contra.zip");
 		Assert.True(h.Window.FindNamed<TextBlock>("SharePackHostError").IsOnScreen());
-		Assert.StartsWith("⚠ This host is not accepted.", h.Window.FindNamed<TextBlock>("SharePackHostError").Text);
+		Assert.StartsWith("This host is not accepted.", h.Window.FindNamed<TextBlock>("SharePackHostError").Text);
+		//The warning mark is drawn beside the sentence, not a ⚠ in the copy.
+		Assert.True(h.Window.FindNamed<PathIcon>("SharePackHostErrorIcon").IsOnScreen());
 		Assert.False(go.IsEffectivelyEnabled);
 
 		const string link = "https://github.com/someone/contra-80s/releases/download/v1.2/contra.zip";

@@ -156,7 +156,8 @@ public class RemasterTileBrowserTests : IDisposable
 		Assert.Equal("Click a tile to open it in your paint program. Save it as the same PNG and come back.", window.FindNamed<TextBlock>("RemasterPaintText").Text);
 
 		Button tile = Assert.Single(window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>(), b => b.Classes.Contains("tile"));
-		string[] texts = tile.FindAll<TextBlock>().Select(t => t.Text ?? "").ToArray();
+		//This host is Advanced's (no `player` scope): the glyph badge stays.
+		string[] texts = tile.FindAll<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Equal(new[] { "run", "6 phases", "✎" }, texts);
 		Click(tile);
 		Assert.Equal(new[] { Path.Combine(project, "kit", "rec-001", "figures", "usr000-figure.png") }, opened.ToArray());
@@ -174,7 +175,9 @@ public class RemasterTileBrowserTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 
 		Button tile = Assert.Single(window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>(), b => b.Classes.Contains("tile"));
-		Assert.Equal("⚠", tile.FindAll<TextBlock>().Last().Text);
+		//Advanced keeps the ⚠ glyph badge; Player's drawn warning stays hidden.
+		Assert.Equal("⚠", tile.FindAll<TextBlock>().Last(t => t.IsOnScreen()).Text);
+		Assert.False(tile.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning")).IsOnScreen());
 		Assert.Contains("12 of 64 cells not seen in the game", ToolTip.GetTip(tile) as string);
 
 		Button details = window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().Single(b => b.Classes.Contains("details"));
@@ -182,9 +185,9 @@ public class RemasterTileBrowserTests : IDisposable
 		details.Flyout!.ShowAt(details);
 		Dispatcher.UIThread.RunJobs();
 		StackPanel popover = Assert.IsType<StackPanel>(((Flyout)details.Flyout!).Content);
-		WaitFor(() => popover.FindAll<TextBlock>().Any(t => t.Classes.Contains("line")), "the popover never showed its lines");
-		Assert.Equal("\"Chr_0\" · 64 cells · from every recording", popover.FindAll<TextBlock>().First(t => t.Classes.Contains("header")).Text);
-		string[] lines = popover.FindAll<TextBlock>().Where(t => t.Classes.Contains("line")).Select(t => t.Text ?? "").ToArray();
+		WaitFor(() => popover.FindAll<TextBlock>().Any(t => t.Classes.Contains("line-classic")), "the popover never showed its lines");
+		Assert.Equal("\"Chr_0\" · 64 cells · from every recording", popover.FindAll<TextBlock>().Single(t => t.Classes.Contains("header-line")).Text);
+		string[] lines = popover.FindAll<TextBlock>().Where(t => t.Classes.Contains("line-classic") && t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Equal(4, lines.Length);
 		Assert.StartsWith("✔ 50 of 64 cells seen", lines[0]);
 		Assert.StartsWith("⚠ 12 of 64 cells not seen", lines[1]);

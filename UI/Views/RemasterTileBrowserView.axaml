@@ -13,7 +13,8 @@
 	<!--G.7 (PRD Part B §13.5.3 W-R1 zone ②, W-R5): the kit's tiles in reading
 	order, one strip of categories over them. A click opens the PNG with the
 	OS default; hover or ▸ shows where its pixels came from (the honesty
-	surface). ✎ = painted, ⚠ = some of it was not seen in play.
+	surface). The badge says "Painted"; a drawn warning = some of it was not
+	seen in play.
 	ADR-0249: inside the `player` scope the strip is a segmented control, a
 	tile is W-R1's 118 x 150 card with its badge pill, and ▸ opens W-R5's
 	popover; the classic values come first, the `.player` ones after.-->
@@ -50,7 +51,7 @@
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
 			<Setter Property="Opacity" Value="0.7" />
 		</Style>
-		<Style Selector="TextBlock.header">
+		<Style Selector="TextBlock.header, TextBlock.header-line">
 			<Setter Property="FontWeight" Value="Bold" />
 		</Style>
 		<Style Selector=".player Button.tile TextBlock.name">
@@ -74,7 +75,7 @@
 			<Setter Property="Padding" Value="7 1" />
 			<Setter Property="Margin" Value="0 -6 -4 0" />
 		</Style>
-		<Style Selector=".player Border.badges > TextBlock">
+		<Style Selector=".player Border.badges TextBlock.badges">
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontCaption}" />
 			<Setter Property="FontWeight" Value="SemiBold" />
 			<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
@@ -151,10 +152,63 @@
 		<Style Selector=".player ToggleButton.chip:focus-visible /template/ Border#PART_Background">
 			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
 		</Style>
+		<!-- ADR-0249: the drawn marks, "Painted" and the split header are
+		Player's; Advanced keeps the glyph badge, the one-line header and the
+		glyph-led lines and tooltip. -->
+		<Style Selector="Button.tile" x:DataType="vm:RemasterTileRow">
+			<Setter Property="ToolTip.Tip" Value="{Binding ClassicToolTipText}" />
+		</Style>
+		<Style Selector=".player Button.tile" x:DataType="vm:RemasterTileRow">
+			<Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
+		</Style>
+		<Style Selector="StackPanel.badge-split, WrapPanel.header-split, DockPanel.line-split">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player StackPanel.badge-split, .player WrapPanel.header-split, .player DockPanel.line-split">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player TextBlock.badges-classic, .player TextBlock.header-line, .player TextBlock.line-classic">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
 		<!-- W-R5's popover text -->
 		<Style Selector=".player TextBlock.header">
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
-			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="TextBlock.header-detail">
+			<Setter Property="Opacity" Value="0.7" />
+		</Style>
+		<Style Selector=".player TextBlock.header-detail">
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<!-- A line's drawn mark (the render: an 11 px icon in a 14 px column). -->
+		<Style Selector="Panel.line-mark">
+			<Setter Property="Width" Value="18" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+			<Setter Property="Margin" Value="0 2 2 0" />
+		</Style>
+		<Style Selector="PathIcon.line-icon">
+			<Setter Property="Width" Value="11" />
+			<Setter Property="Height" Value="11" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector=".player PathIcon.line-icon.warning">
+			<Setter Property="Width" Value="12" />
+			<Setter Property="Height" Value="12" />
+		</Style>
+		<Style Selector=".player PathIcon.line-icon.painted">
+			<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		</Style>
+		<!-- The tile pill's warning: 10 px, so the pill keeps its 16 px height. -->
+		<Style Selector="PathIcon.badge-warning">
+			<Setter Property="Width" Value="10" />
+			<Setter Property="Height" Value="10" />
+		</Style>
+		<Style Selector=".player PathIcon.badge-warning">
+			<Setter Property="Width" Value="10" />
+			<Setter Property="Height" Value="10" />
 		</Style>
 		<Style Selector=".player TextBlock.line">
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
@@ -196,15 +250,21 @@
 			<ItemsControl.ItemTemplate>
 				<DataTemplate x:DataType="vm:RemasterTileRow">
 					<Panel>
-						<Button Classes="tile" Click="OnOpenTile" ToolTip.Tip="{Binding ToolTipText}">
+						<Button Classes="tile" Click="OnOpenTile">
 							<Panel>
 								<StackPanel Spacing="2">
 									<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
 									<TextBlock Classes="name" Text="{Binding Caption}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
 									<TextBlock Classes="count" Text="{Binding CountText}" TextWrapping="NoWrap" />
 								</StackPanel>
-								<Border Classes="badges" IsVisible="{Binding Badges, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-									<TextBlock Classes="badges" Text="{Binding Badges}" TextWrapping="NoWrap" />
+								<Border Classes="badges" IsVisible="{Binding HasBadge}">
+									<Panel>
+									<TextBlock Classes="badges-classic" Text="{Binding ClassicBadges}" TextWrapping="NoWrap" />
+									<StackPanel Classes="badge-split" Orientation="Horizontal" Spacing="4">
+										<PathIcon Classes="warning badge-warning" Data="{StaticResource PlayerIconWarning}" VerticalAlignment="Center" IsVisible="{Binding Warns}" />
+										<TextBlock Classes="badges" Text="{Binding Badges}" TextWrapping="NoWrap" VerticalAlignment="Center" IsVisible="{Binding Badges, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+									</StackPanel>
+									</Panel>
 								</Border>
 							</Panel>
 						</Button>
@@ -212,7 +272,11 @@
 							<Button.Flyout>
 								<Flyout Placement="BottomEdgeAlignedLeft" FlyoutPresenterClasses="popover">
 									<StackPanel Spacing="8" MaxWidth="300">
-										<TextBlock Classes="header" Text="{Binding Header}" TextWrapping="Wrap" />
+										<TextBlock Classes="header-line" Text="{Binding Header}" TextWrapping="Wrap" />
+										<WrapPanel Classes="header-split" Orientation="Horizontal">
+											<TextBlock Classes="header" Text="{Binding HeaderName}" TextWrapping="Wrap" Margin="0 0 8 0" VerticalAlignment="Center" />
+											<TextBlock Classes="header-detail" Text="{Binding HeaderDetail}" TextWrapping="Wrap" VerticalAlignment="Center" />
+										</WrapPanel>
 										<ItemsControl ItemsSource="{Binding Lines}">
 											<ItemsControl.ItemsPanel>
 												<ItemsPanelTemplate>
@@ -220,8 +284,18 @@
 												</ItemsPanelTemplate>
 											</ItemsControl.ItemsPanel>
 											<ItemsControl.ItemTemplate>
-												<DataTemplate x:DataType="x:String">
-													<TextBlock Classes="line" Text="{Binding}" TextWrapping="Wrap" />
+												<DataTemplate x:DataType="vm:RemasterTileLine">
+													<Panel>
+													<TextBlock Classes="line-classic" Text="{Binding ClassicText}" TextWrapping="Wrap" />
+													<DockPanel Classes="line-split">
+														<Panel DockPanel.Dock="Left" Classes="line-mark">
+															<PathIcon Classes="line-icon done" Data="{StaticResource PlayerIconCheck}" IsVisible="{Binding IsSeen}" />
+															<PathIcon Classes="line-icon warning" Data="{StaticResource PlayerIconWarning}" IsVisible="{Binding IsWarning}" />
+															<PathIcon Classes="line-icon painted" Data="{StaticResource PlayerIconPencil}" IsVisible="{Binding IsPainted}" />
+														</Panel>
+														<TextBlock Classes="line" Text="{Binding Text}" TextWrapping="Wrap" />
+													</DockPanel>
+													</Panel>
 												</DataTemplate>
 											</ItemsControl.ItemTemplate>
 										</ItemsControl>

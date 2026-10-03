@@ -64,6 +64,18 @@
 		<Style Selector=".player TextBlock.hint">
 			<Setter Property="Foreground" Value="{StaticResource PlayerHudText2Brush}" />
 		</Style>
+		<!--Player: the counters show in the pill and the hint moves to its own
+		toast at the bottom (RemasterRecordingHint); Advanced keeps the hint inline.-->
+		<Style Selector="Panel.counters">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Panel.counters">
+			<Setter Property="IsVisible" Value="True" />
+			<Setter Property="Margin" Value="4 0 18 0" />
+		</Style>
+		<Style Selector=".player TextBlock.hint.inline">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
 		<Style Selector="TextBlock.held">
 			<Setter Property="Foreground" Value="#FFB4A0" />
 		</Style>
@@ -106,13 +118,17 @@
 				<StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
 					<Ellipse Classes="dot" VerticalAlignment="Center" />
 					<TextBlock Name="RemasterRecordingPill" Classes="emphasis" Text="{Binding RecordingPill}" VerticalAlignment="Center" />
+					<!--W-R2: the core's live counters, then the badge; the hint is RemasterRecordingHint's toast.-->
+					<Panel Classes="counters" VerticalAlignment="Center">
+						<TextBlock Name="RemasterRecordingCounters" Classes="subhead secondary" Text="{Binding RecordingCounters}" VerticalAlignment="Center" IsVisible="{Binding RecordingCounters, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+					</Panel>
 					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 						<Border Name="RemasterRecordingBadge" Classes="badge small">
 							<PathIcon Data="{StaticResource PlayerIconRemaster}" />
 						</Border>
 						<TextBlock Classes="tag subhead tint" Text="{l:Translate lblRecordingRemasterTag}" VerticalAlignment="Center" />
 					</StackPanel>
-					<TextBlock Classes="hint subhead secondary" Text="{l:Translate lblRecordingHint}" VerticalAlignment="Center" />
+					<TextBlock Classes="hint inline subhead secondary" Text="{l:Translate lblRecordingHint}" VerticalAlignment="Center" />
 					<!--ADR-0245 §3 / ADR-0184 §1: codes turned on during the recording that are not RAM codes are held back from the core; this says which.-->
 					<TextBlock Name="RemasterHeldCheats" Classes="held subhead" Text="{Binding HeldCheatsText}" VerticalAlignment="Center" IsVisible="{Binding HeldCheatsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 				</StackPanel>

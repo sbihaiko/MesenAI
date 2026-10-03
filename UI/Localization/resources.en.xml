@@ -10,7 +10,7 @@
 			<Control ID="mnuHelp">_Help</Control>
 		</Form>
 		<Form ID="MainWindow">
-			<Control ID="btnOverlayResume">▶ Resume</Control>
+			<Control ID="btnOverlayResume">Resume</Control>
 			<Control ID="lblOverlayPaused">Paused</Control>
 			<Control ID="btnOverlaySaveStates">Save States</Control>
 			<Control ID="btnOverlayPack">Pack</Control>
@@ -61,7 +61,7 @@
 			<Control ID="lblPlayHomeDropSubtitle">or open one.</Control>
 			<Control ID="btnPlayHomeOpenRom">Open a ROM…</Control>
 			<Control ID="lblPlayHomeContinueHeader">Continue playing</Control>
-			<Control ID="btnPlayHomeContinue">▶ Continue</Control>
+			<Control ID="btnPlayHomeContinue">Continue</Control>
 			<Control ID="lblPlayHomeRecentHeader">Recent</Control>
 			<Control ID="btnPlayHomeOpenAnother">Open Another…</Control>
 		</Form>
@@ -165,6 +165,9 @@
 			<Control ID="btnBackToProject">Back to Project</Control>
 			<Control ID="lblShowingHint">Esc returns to the project.</Control>
 			<Control ID="lblRecordingRemasterTag">Remaster</Control>
+			<Control ID="lblRecordingHint">Play through what you want to repaint. Esc stops.</Control>
+		</Form>
+		<Form ID="RemasterRecordingHint">
 			<Control ID="lblRecordingHint">Play through what you want to repaint. Esc stops.</Control>
 		</Form>
 		<Form ID="ShareWorkspaceView">
@@ -2152,15 +2155,19 @@
 		<Message ID="RemasterRecordRefusedCheats">Not recording: these cheats change the game itself and would corrupt the recorded art. Turn them off first: {0}</Message>
 		<Message ID="RemasterCheatsHeld">Off while recording art: {0}</Message>
 		<Message ID="RemasterRecordFailed">Nothing was recorded: another pack already covers this game, or this game cannot be recorded. Tools ⋯ › Tools › Log Window says which.</Message>
-		<Message ID="RemasterNeedsPython">Painting needs Python 3.10 or newer, which MesenAI could not find. You can still record. Your figures are prepared once Python is available.</Message>
-		<Message ID="RemasterPythonTooOld">Painting needs Python 3.10 or newer; MesenAI found Python {0}. You can still record. Your figures are prepared once a newer Python is available.</Message>
-		<Message ID="RemasterNeedsTools">Painting needs MesenAI's tools (the mesenai-tools download), which MesenAI could not find. You can still record. Your figures are prepared once the tools are found.</Message>
+		<Message ID="RemasterNeedsPython">Painting needs Python 3.10 or newer, which MesenAI could not find.</Message>
+		<Message ID="RemasterNeedsPythonDetail">You can still record. Your figures are prepared once Python is available.</Message>
+		<Message ID="RemasterPythonTooOld">Painting needs Python 3.10 or newer; MesenAI found Python {0}.</Message>
+		<Message ID="RemasterPythonTooOldDetail">You can still record. Your figures are prepared once a newer Python is available.</Message>
+		<Message ID="RemasterNeedsTools">Painting needs MesenAI's tools (the mesenai-tools download), which MesenAI could not find.</Message>
+		<Message ID="RemasterNeedsToolsDetail">You can still record. Your figures are prepared once the tools are found.</Message>
 		<Message ID="RemasterOpenBrowserConfirm">Open {0} in your browser?</Message>
 		<Message ID="RemasterRecordingsNone">No recordings yet. Record while you play to make the first one.</Message>
 		<Message ID="RemasterRecordingsOne">1 recording</Message>
 		<Message ID="RemasterRecordingsMany">{0} recordings</Message>
 		<Message ID="RemasterRecentNoRecordings">No recordings yet</Message>
 		<Message ID="RemasterRecordingTitle">Recording {0}</Message>
+		<Message ID="RemasterRecordingsLatest">Latest: {0}</Message>
 		<Message ID="RemasterRecordingNoTiles">music only</Message>
 		<Message ID="RemasterSourcePlay">played</Message>
 		<Message ID="RemasterSourceTas">from a TAS movie</Message>
@@ -2169,6 +2176,10 @@
 		<Message ID="RemasterKitReady">Click a tile to open it in your paint program. Save it as the same PNG and come back.</Message>
 		<Message ID="RemasterKitNotYet">Figures and pattern pages are made from your recordings, after each one.</Message>
 		<Message ID="RemasterRecordingPill">Recording {0}</Message>
+		<Message ID="RemasterRecordingShapesOne">1 new shape</Message>
+		<Message ID="RemasterRecordingShapesMany">{0} new shapes</Message>
+		<Message ID="RemasterRecordingScreensOne">1 screen captured</Message>
+		<Message ID="RemasterRecordingScreensMany">{0} screens captured</Message>
 		<Message ID="RemasterJobKitTitle">Preparing your figures…</Message>
 		<Message ID="RemasterJobStep">step {0} of {1} · {2}</Message>
 		<Message ID="RemasterStepNone">starting</Message>
@@ -2206,14 +2217,15 @@
 		<Message ID="RemasterTileFromRecording">from recording {0}</Message>
 		<Message ID="RemasterTileFromEveryRecording">from every recording</Message>
 		<Message ID="RemasterTileFromImport">from the imported pack</Message>
-		<Message ID="RemasterProvenanceSeen">✔ Seen in the game</Message>
-		<Message ID="RemasterProvenanceCellsSeen">✔ {0} of {1} cells seen in the game</Message>
-		<Message ID="RemasterProvenanceCellsFilled">⚠ {0} of {1} cells not seen in the game. Filled from the game's own data. Play further while recording to see them.</Message>
+		<Message ID="RemasterProvenanceSeen">Seen in the game</Message>
+		<Message ID="RemasterProvenanceCellsSeen">{0} of {1} cells seen in the game</Message>
+		<Message ID="RemasterProvenanceCellsFilled">{0} of {1} cells not seen in the game. Filled from the game's own data. Play further while recording to see them.</Message>
 		<Message ID="RemasterProvenanceCellsEmpty">{0} of {1} cells are empty in the game's data.</Message>
-		<Message ID="RemasterProvenanceNotSeen">⚠ Not seen in the game. Filled from the game's own data.</Message>
+		<Message ID="RemasterProvenanceNotSeen">Not seen in the game. Filled from the game's own data.</Message>
 		<Message ID="RemasterProvenanceSeenUnknown">? The kit does not say whether this was seen in the game.</Message>
 		<Message ID="RemasterProvenanceFromImportedPack">From the pack you imported, not from a recording.</Message>
-		<Message ID="RemasterProvenancePainted">✎ Painted</Message>
+		<Message ID="RemasterProvenancePainted">Painted</Message>
+		<Message ID="RemasterTileBadgePainted">Painted</Message>
 		<Message ID="RemasterProvenanceNotPainted">Not painted yet</Message>
 		<Message ID="RemasterProvenancePaintChecking">Checking whether it was painted…</Message>
 		<Message ID="RemasterProvenancePaintUnknownNone">? MesenAI cannot tell whether this was painted.</Message>
@@ -2238,7 +2250,7 @@
 		<Message ID="RemasterComposeHasLayout">This project has the layout data the composer needs</Message>
 		<Message ID="RemasterComposeNoLayout">Record again to get the layout data</Message>
 		<Message ID="RemasterComposerFailed">The scene composer closed with an error: {0}</Message>
-		<Message ID="ShareHostNotAccepted">⚠ This host is not accepted. Use a GitHub release, Google Drive, MediaFire, Dropbox or MEGA.</Message>
+		<Message ID="ShareHostNotAccepted">This host is not accepted. Use a GitHub release, Google Drive, MediaFire, Dropbox or MEGA.</Message>
 		<Message ID="ShareReasonNeedsLink">Paste the pack's download link first.</Message>
 		<Message ID="ShareReasonNeedsGame">Name the game the pack is for.</Message>
 		<Message ID="ShareReasonNeedsConsole">Pick the console.</Message>
@@ -2278,16 +2290,26 @@
 		<Message ID="RemasterBuildChangedOne">1 file changed since the last build.</Message>
 		<Message ID="RemasterBuildChangedMany">{0} files changed since the last build.</Message>
 		<Message ID="RemasterProblemsNone">⚠ The build stopped.</Message>
+		<Message ID="RemasterProblemsTitleNone">The build stopped</Message>
 		<Message ID="RemasterProblemsOne">⚠ 1 problem stopped the build.</Message>
+		<Message ID="RemasterProblemsTitleOne">1 problem stopped the build</Message>
 		<Message ID="RemasterProblemsMany">⚠ {0} problems stopped the build.</Message>
+		<Message ID="RemasterProblemsTitleMany">{0} problems stopped the build</Message>
 		<Message ID="RemasterProblemsOnlyInLog">Show Log says what went wrong.</Message>
 		<Message ID="RemasterProblemsMoreInLog">{0} more only in the log (Show Log).</Message>
+		<Message ID="RemasterProblemName">“{0}”</Message>
 		<Message ID="RemasterProblemCanvasResized">"{0}" — the canvas was resized. Undo the resize and save again.</Message>
+		<Message ID="RemasterProblemSentenceCanvasResized">The canvas was resized. Undo the resize and save again.</Message>
 		<Message ID="RemasterProblemCanvasResizedWas">"{0}" — the canvas was resized (was {1}). Undo the resize and save again.</Message>
+		<Message ID="RemasterProblemSentenceCanvasResizedWas">The canvas was resized (it was {0}). Undo the resize and save again.</Message>
 		<Message ID="RemasterProblemReferenceChanged">"{0}" — its reference copy (.orig.png) changed size. Put it back, or resize both together.</Message>
+		<Message ID="RemasterProblemSentenceReferenceChanged">Its reference copy (.orig.png) changed size. Put it back, or resize both together.</Message>
 		<Message ID="RemasterProblemScaleMismatch">"{0}" is painted at {1} while the others are at {2}. Paint every picture at the same size.</Message>
+		<Message ID="RemasterProblemSentenceScaleMismatch">Painted at {0} while the others are at {1}. Paint every picture at the same size.</Message>
 		<Message ID="RemasterProblemGuideMarker">"{0}" — a pink marker is still on the image. Paint over it, or hide the guides layer, and save again.</Message>
+		<Message ID="RemasterProblemSentenceGuideMarker">A pink marker is still on the image. Paint over it, or hide the guides layer, and save again.</Message>
 		<Message ID="RemasterProblemNotAPng">"{0}" is not a PNG the build can read. Save it again as PNG.</Message>
+		<Message ID="RemasterProblemSentenceNotAPng">Not a PNG the build can read. Save it again as PNG.</Message>
 		<Message ID="RemasterProblemForeignPack">The project's mep folder holds a pack this build did not write, such as an installed one. Move it out of the project folder to build your own.</Message>
 		<Message ID="RemasterProblemNothingRecorded">Nothing with tiles is recorded yet. Record the game first.</Message>
 		<Message ID="InterruptQuitWhileRecording">Quit while recording? What you recorded so far is kept as recording {0}.</Message>
@@ -2444,7 +2466,7 @@ E
 		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>
 		<Message ID="EnhancementsDone">Done</Message>
 		<Message ID="PackInstallPillInstalling">Installing {0}…</Message>
-		<Message ID="PackInstallPillFailed">⚠ The pack could not be downloaded. Playing without it.</Message>
+		<Message ID="PackInstallPillFailed">The pack could not be downloaded. Playing without it.</Message>
 		<!--G.5 (PRD Part B §13.5.2 W-P12–W-P16): the Play edge flows.-->
 		<Message ID="FirstRunCannotWrite">MesenAI cannot write to {0}. Choose the other place, or move the app somewhere you can write to.</Message>
 		<Message ID="BiosSheetBodyFds">Famicom Disk System games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every disk game.</Message>

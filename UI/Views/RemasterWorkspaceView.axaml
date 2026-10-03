@@ -31,6 +31,24 @@
 			<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
 			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
 		</Style>
+		<!--W-R4: at the render's 660 px the failed build's Show Log and Try Again
+		stay on screen - Player tightens the zone headers and lets an action's
+		reason run one line wide (classic keeps its spacing).-->
+		<Style Selector="StackPanel.zone-header">
+			<Setter Property="Margin" Value="9 18 0 8" />
+		</Style>
+		<Style Selector="StackPanel.zone-header.first">
+			<Setter Property="Margin" Value="9 16 0 8" />
+		</Style>
+		<Style Selector=".player StackPanel.zone-header">
+			<Setter Property="Margin" Value="9 12 0 8" />
+		</Style>
+		<Style Selector="StackPanel.action">
+			<Setter Property="MaxWidth" Value="240" />
+		</Style>
+		<Style Selector=".player StackPanel.action">
+			<Setter Property="MaxWidth" Value="340" />
+		</Style>
 		<Style Selector="TextBlock.reason">
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
 			<Setter Property="Opacity" Value="0.8" />
@@ -60,6 +78,26 @@
 			<Setter Property="Width" Value="11" />
 			<Setter Property="Height" Value="11" />
 			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector="StackPanel#RemasterFeasibilityLines, .player TextBlock#RemasterFeasibilityLine">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player StackPanel#RemasterFeasibilityLines">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterFeasibilityText">
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<!--W-R1 zone ①: Player shows the summary and the newest recording on one
+		secondary line (the render); Advanced keeps the list of recordings.-->
+		<Style Selector="TextBlock#RemasterRecordDetail">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterRecordDetail">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player ItemsControl#RemasterRecordingList">
+			<Setter Property="IsVisible" Value="False" />
 		</Style>
 		<!--The render's Record While I Play is the red primary, not the tint.-->
 		<Style Selector=".player Button.primary.record">
@@ -102,7 +140,15 @@
 						</StackPanel>
 						<!--W-R0b: the render's orange warning icon leads the sentence.-->
 						<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" Margin="0 0 10 0" VerticalAlignment="Center" />
-						<TextBlock Name="RemasterFeasibilityText" Classes="paragraph warning" Text="{Binding BannerText}" VerticalAlignment="Center" />
+						<!--W-R0b: the bold fact, then what still works in the regular weight
+						(Player); Advanced keeps the one-line sentence.-->
+						<Panel VerticalAlignment="Center">
+							<TextBlock Name="RemasterFeasibilityLine" Classes="paragraph warning" Text="{Binding BannerLine}" />
+							<StackPanel Name="RemasterFeasibilityLines" Spacing="2">
+								<TextBlock Name="RemasterFeasibilityText" Classes="paragraph warning" Text="{Binding BannerText}" />
+								<TextBlock Name="RemasterFeasibilityDetail" Classes="subhead warning" Text="{Binding BannerDetail}" />
+							</StackPanel>
+						</Panel>
 					</DockPanel>
 					<DockPanel IsVisible="{Binding PendingBrowserUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
 						<Button DockPanel.Dock="Right" Classes="primary" Content="{l:Translate btnOpenBrowser}" Margin="8 0 0 0" Click="OnConfirmBrowser" />
@@ -168,14 +214,14 @@
 					<TextBlock Classes="headline secondary" FontWeight="Medium" Text="{l:Translate lblRemasterProject}" VerticalAlignment="Center" />
 				</StackPanel>
 
-				<StackPanel Orientation="Horizontal" Spacing="9" Margin="9 16 0 8">
+				<StackPanel Orientation="Horizontal" Spacing="9" Classes="zone-header first">
 					<Border Name="RemasterStepRecord" Classes="step"><TextBlock Text="1" /></Border>
 					<TextBlock Name="RemasterZoneRecordLabel" Classes="section-header" Text="{l:Translate lblZoneRecord}" VerticalAlignment="Center" />
 				</StackPanel>
 				<Border Name="RemasterRecordCard" Classes="card" Margin="8 0">
 					<DockPanel>
 						<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" Margin="16 0 0 0" VerticalAlignment="Top">
-							<StackPanel Spacing="3" MaxWidth="240">
+							<StackPanel Spacing="3" Classes="action">
 								<Button Name="RemasterRecordButton" Classes="primary record" IsEnabled="{Binding Record.IsEnabled}" Click="OnRecord">
 									<StackPanel Orientation="Horizontal">
 										<PathIcon Classes="leading" Data="{StaticResource PlayerIconRecord}" />
@@ -184,11 +230,11 @@
 								</Button>
 								<TextBlock Classes="reason secondary" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
 							</StackPanel>
-							<StackPanel Spacing="3" MaxWidth="240">
+							<StackPanel Spacing="3" Classes="action">
 								<Button Name="RemasterTasButton" Classes="secondary" Content="{l:Translate btnRecordFromTas}" IsEnabled="{Binding RecordFromTas.IsEnabled}" />
 								<TextBlock Name="RemasterTasReason" Classes="reason secondary" Text="{Binding RecordFromTas.Reason}" IsVisible="{Binding RecordFromTas.HasReason}" />
 							</StackPanel>
-							<StackPanel Spacing="3" MaxWidth="240">
+							<StackPanel Spacing="3" Classes="action">
 								<Button Name="RemasterAiButton" Classes="secondary" IsEnabled="{Binding LetTheAiPlay.IsEnabled}">
 									<StackPanel Orientation="Horizontal">
 										<PathIcon Classes="leading" Data="{StaticResource PlayerIconSparkle}" />
@@ -200,6 +246,7 @@
 						</StackPanel>
 						<StackPanel Spacing="4" VerticalAlignment="Center">
 							<TextBlock Name="RemasterRecordSummary" Classes="emphasis" Text="{Binding RecordSummary}" />
+							<TextBlock Name="RemasterRecordDetail" Classes="subhead secondary" Text="{Binding RecordDetail}" />
 							<ItemsControl Name="RemasterRecordingList" ItemsSource="{Binding Recordings}">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
@@ -219,7 +266,7 @@
 					</DockPanel>
 				</Border>
 
-				<StackPanel Orientation="Horizontal" Spacing="9" Margin="9 18 0 8">
+				<StackPanel Orientation="Horizontal" Spacing="9" Classes="zone-header">
 					<Border Name="RemasterStepPaint" Classes="step"><TextBlock Text="2" /></Border>
 					<TextBlock Classes="section-header" Text="{l:Translate lblZonePaint}" VerticalAlignment="Center" />
 				</StackPanel>
@@ -236,7 +283,7 @@
 					</StackPanel>
 				</Border>
 
-				<StackPanel Orientation="Horizontal" Spacing="9" Margin="9 18 0 8">
+				<StackPanel Orientation="Horizontal" Spacing="9" Classes="zone-header">
 					<Border Name="RemasterStepSeeIt" Classes="step"><TextBlock Text="3" /></Border>
 					<TextBlock Classes="section-header" Text="{l:Translate lblZoneSeeIt}" VerticalAlignment="Center" />
 				</StackPanel>

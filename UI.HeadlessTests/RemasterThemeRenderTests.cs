@@ -38,7 +38,7 @@ namespace Mesen.HeadlessTests;
 //background and the render's "N controls at rest". The last test checks the
 //MainWindow side: the hosts carry the scope in Player mode only.
 [Collection(NativeCoreCollection.Name)]
-public class RemasterThemeRenderTests : IDisposable
+public partial class RemasterThemeRenderTests : IDisposable
 {
 	private const double ContentWidth = 1100;
 	private const double ContentHeight = 660;
@@ -185,10 +185,14 @@ public class RemasterThemeRenderTests : IDisposable
 	}
 
 	//The view inside a scope like MainWindow's RemasterWorkspaceHost.
-	private static (Window Window, T View) Host<T>(T view, object model) where T : Control
+	//player: false hosts it as Advanced does (no `player` class).
+	private static (Window Window, T View) Host<T>(T view, object model, bool player = true) where T : Control
 	{
 		view.DataContext = model;
-		Panel host = new() { Classes = { "player", "remaster" }, Children = { view } };
+		Panel host = new() { Classes = { "remaster" }, Children = { view } };
+		if(player) {
+			host.Classes.Add("player");
+		}
 		Window window = new() { Content = host, Width = ContentWidth, Height = ContentHeight };
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
@@ -316,7 +320,13 @@ public class RemasterThemeRenderTests : IDisposable
 		Border banner = view.FindNamed<Border>("RemasterFeasibilityBanner");
 		Assert.Equal(WarningFill, PlayerRender.SolidColor(banner.Background));
 		Assert.Equal(new CornerRadius(12), banner.CornerRadius);
-		AssertText(view.FindNamed<TextBlock>("RemasterFeasibilityText"), 13.5, FontWeight.Normal, WarningText);
+		//The render's two lines: the bold fact, then what still works.
+		TextBlock fact = view.FindNamed<TextBlock>("RemasterFeasibilityText");
+		AssertText(fact, 13.5, FontWeight.SemiBold, WarningText);
+		Assert.Equal("Painting needs Python 3.10 or newer, which MesenAI could not find.", fact.Text);
+		TextBlock still = view.FindNamed<TextBlock>("RemasterFeasibilityDetail");
+		AssertText(still, 12.5, FontWeight.Normal, WarningText);
+		Assert.Equal("You can still record. Your figures are prepared once Python is available.", still.Text);
 		AssertSecondary(view.FindNamed<Button>("LocatePythonButton"));
 		Button howTo = view.FindNamed<Button>("HowToInstallPythonButton");
 		Assert.Contains("plain", howTo.Classes);
@@ -357,6 +367,13 @@ public class RemasterThemeRenderTests : IDisposable
 		AssertCard(view.FindNamed<Border>("RemasterPaintCard"));
 		AssertCard(view.FindNamed<Border>("RemasterSeeItCard"));
 		AssertText(view.FindNamed<TextBlock>("RemasterRecordSummary"), 14, FontWeight.SemiBold, Text);
+		//Zone ①: the summary and one secondary line, not a list of recordings.
+		Assert.Equal("2 recordings", view.FindNamed<TextBlock>("RemasterRecordSummary").Text);
+		TextBlock latest = view.FindNamed<TextBlock>("RemasterRecordDetail");
+		AssertText(latest, 12.5, FontWeight.Normal, Text2);
+		Assert.True(latest.IsOnScreen());
+		Assert.StartsWith("Latest: Recording 2", latest.Text);
+		Assert.False(view.FindNamed<ItemsControl>("RemasterRecordingList").IsOnScreen());
 		AssertButton(view.FindNamed<Button>("RemasterRecordButton"), 28, 8, 13, Red);
 		AssertSecondary(view.FindNamed<Button>("RemasterTasButton"));
 		AssertSecondary(view.FindNamed<Button>("RemasterAiButton"));
@@ -421,8 +438,32 @@ public class RemasterThemeRenderTests : IDisposable
 		WaitFor(() => !model.IsJobRunning, "the failed build never ended");
 
 		Assert.True(view.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen());
-		AssertText(view.FindNamed<TextBlock>("RemasterBuildProblemsTitle"), 14, FontWeight.SemiBold, Text);
-		Button open = view.FindNamed<ItemsControl>("RemasterBuildProblemList").FindAll<Button>().First(b => b.IsOnScreen());
+		TextBlock problemsTitle = view.FindNamed<TextBlock>("RemasterBuildProblemsTitle");
+		AssertText(problemsTitle, 14, FontWeight.SemiBold, Text);
+		//The render's title: a drawn orange warning, then the words - no glyph.
+		Assert.Equal("2 problems stopped the build", problemsTitle.Text);
+		PathIcon warn = view.FindNamed<PathIcon>("RemasterBuildProblemsIcon");
+		Assert.True(warn.IsOnScreen());
+		Assert.Contains("warning", warn.Classes);
+		Assert.Equal(18, warn.Bounds.Width, 0.5);
+		//Each problem: the bold name, then the secondary sentence.
+		ItemsControl list = view.FindNamed<ItemsControl>("RemasterBuildProblemList");
+		TextBlock name = list.FindAll<TextBlock>().First(t => t.Classes.Contains("problem-name"));
+		AssertText(name, 13, FontWeight.SemiBold, Text);
+		Assert.Equal("\u201Crun\u201D", name.Text);
+		TextBlock sentence = list.FindAll<TextBlock>().First(t => t.Classes.Contains("problem-text"));
+		AssertText(sentence, 12.5, FontWeight.Normal, Text2);
+		Assert.StartsWith("The canvas was resized (it was ", sentence.Text);
+		Assert.DoesNotContain(view.FindAll<TextBlock>(), t => t.IsOnScreen() && (t.Text ?? "").Contains('\u26A0'));
+		//At the render's 660 px Show Log and Try Again are on screen without scrolling
+		//(the render itself crops the card's bottom edge, so only the buttons must fit).
+		ScrollViewer page = view.FindAll<ScrollViewer>().First();
+		foreach(string action in new[] { "RemasterShowBuildLogButton", "RemasterTryBuildAgainButton" }) {
+			Button b = view.FindNamed<Button>(action);
+			double bottom = b.TranslatePoint(new Point(0, b.Bounds.Height), page)!.Value.Y;
+			Assert.True(bottom <= page.Viewport.Height, $"{action} ends at {bottom}, below the {page.Viewport.Height} px viewport");
+		}
+		Button open = list.FindAll<Button>().First(b => b.IsOnScreen());
 		AssertButton(open, 24, 8, 12, Card);
 		Button showLog = view.FindNamed<Button>("RemasterShowBuildLogButton");
 		Assert.Contains("plain", showLog.Classes);
@@ -441,6 +482,8 @@ public class RemasterThemeRenderTests : IDisposable
 		Button tile = view.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().First(b => b.Classes.Contains("tile"));
 		TextBlock painted = tile.FindAll<TextBlock>().Single(t => t.Classes.Contains("badges"));
 		Assert.Equal(RemasterTint, PlayerRender.SolidColor(painted.Foreground));
+		//The render's pill says "Painted" in words, not a ✎.
+		Assert.Equal("Painted", painted.Text);
 
 		Button details = view.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().First(b => b.Classes.Contains("details"));
 		Flyout flyout = Assert.IsType<Flyout>(details.Flyout);
@@ -452,9 +495,21 @@ public class RemasterThemeRenderTests : IDisposable
 		FlyoutPresenter presenter = content.FindAncestorOfType<FlyoutPresenter>()!;
 		Assert.Equal(Color.Parse("#FCFCFD"), PlayerRender.SolidColor(presenter.Background));
 		Assert.Equal(new CornerRadius(12), presenter.CornerRadius);
+		//The render's header: the bold name, then "N phases · from recording N" in TEXT2 (this fixture's run is a 6-cell grid, so it counts cells).
 		TextBlock header = content.FindAll<TextBlock>().First(t => t.Classes.Contains("header"));
-		AssertText(header, 15, FontWeight.SemiBold, Text);
-		AssertText(content.FindAll<TextBlock>().First(t => t.Classes.Contains("line")), 12.5, FontWeight.Medium, Text);
+		AssertText(header, 15, FontWeight.Bold, Text);
+		Assert.Equal("run", header.Text);
+		TextBlock headerDetail = content.FindAll<TextBlock>().First(t => t.Classes.Contains("header-detail"));
+		AssertText(headerDetail, 12, FontWeight.Normal, Text2);
+		Assert.Equal("6 cells · from recording 1", headerDetail.Text);
+		TextBlock seen = content.FindAll<TextBlock>().First(t => t.Classes.Contains("line"));
+		AssertText(seen, 12.5, FontWeight.Medium, Text);
+		Assert.Equal("Seen in the game", seen.Text);
+		//Each fact leads with a drawn icon: the green check, the tinted pencil.
+		PathIcon[] marks = content.FindAll<PathIcon>().Where(p => p.Classes.Contains("line-icon")).ToArray();
+		Assert.Contains(marks, p => p.Classes.Contains("done") && p.IsOnScreen());
+		Assert.Contains(marks, p => p.Classes.Contains("painted") && p.IsOnScreen());
+		Assert.DoesNotContain(content.FindAll<TextBlock>(), t => t.IsOnScreen() && (t.Text ?? "").IndexOfAny(new[] { '\u2714', '\u270E', '\u26A0' }) >= 0);
 		AssertButton(content.FindAll<Button>().Single(b => b.Classes.Contains("open")), 28, 8, 13, RemasterTint);
 		Save(window, "W-R5");
 	}
@@ -544,8 +599,12 @@ public class RemasterThemeRenderTests : IDisposable
 		//Recording needs the core; the strip only reads these two.
 		typeof(RemasterWorkspaceViewModel).GetProperty(nameof(RemasterWorkspaceViewModel.IsRecording))!.SetValue(model, true);
 		typeof(RemasterWorkspaceViewModel).GetProperty(nameof(RemasterWorkspaceViewModel.RecordingPill))!.SetValue(model, "Recording 01:42");
+		//The core's live coverage report (TilesSeen, ScreensSeen) as the tick reads it.
+		typeof(RemasterWorkspaceViewModel).GetMethod("UpdateRecordingCounters", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(model, new object[] { 318u, 2u });
 		RemasterRecordingStrip strip = new() { VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
-		(Window window, _) = Host(strip, model);
+		RemasterRecordingHint hint = new() { VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom };
+		hint.DataContext = model;
+		(Window window, _) = Host(new Panel { Children = { strip, hint } }, model);
 		window.Background = Brushes.Black;
 		Dispatcher.UIThread.RunJobs();
 
@@ -557,6 +616,22 @@ public class RemasterThemeRenderTests : IDisposable
 		Assert.Equal(RemasterTint, PlayerRender.SolidColor(strip.FindNamed<Border>("RemasterRecordingBadge").Background));
 		AssertButton(strip.FindNamed<Button>("RemasterStopRecordingButton"), 28, 8, 13, Color.Parse("#5A5A5F"));
 		Assert.Equal(1, strip.FindAll<Button>().Count(b => b.IsOnScreen()));
+		//The render's counters sit in the pill; its hint is a separate toast at the bottom.
+		TextBlock counters = strip.FindNamed<TextBlock>("RemasterRecordingCounters");
+		Assert.True(counters.IsOnScreen());
+		Assert.Equal("318 new shapes · 2 screens captured", counters.Text);
+		AssertText(counters, 12.5, FontWeight.Normal, Color.Parse("#C8C8CD"));
+		Assert.DoesNotContain(strip.FindAll<TextBlock>(), t => t.IsOnScreen() && t.Text == "Play through what you want to repaint. Esc stops.");
+		Border toast = hint.FindNamed<Border>("RemasterRecordingHintBox");
+		Assert.True(toast.IsOnScreen());
+		Assert.Contains("hud", toast.Classes);
+		Assert.Equal(new CornerRadius(10), toast.CornerRadius);
+		Assert.Equal(36, toast.Bounds.Height, 0.5);
+		TextBlock hintText = hint.FindNamed<TextBlock>("RemasterRecordingHintText");
+		Assert.Equal("Play through what you want to repaint. Esc stops.", hintText.Text);
+		AssertText(hintText, 12.5, FontWeight.Medium, Card);
+		Point toastTop = toast.TranslatePoint(new Point(0, 0), window)!.Value;
+		Assert.True(toastTop.Y > ContentHeight / 2, "the hint toast is not at the bottom");
 		Save(window, "W-R2");
 	}
 
@@ -588,7 +663,7 @@ public class RemasterThemeRenderTests : IDisposable
 		model.SelectWorkspace(Workspace.Remaster);
 		Dispatcher.UIThread.RunJobs();
 
-		foreach(string host in new[] { "RemasterWorkspaceHost", "RemasterRecordingStripHost" }) {
+		foreach(string host in new[] { "RemasterWorkspaceHost", "RemasterRecordingStripHost", "RemasterRecordingHintHost" }) {
 			Panel panel = window.FindNamed<Panel>(host);
 			Assert.Contains("remaster", panel.Classes);
 			Assert.Equal(mode == UiMode.Player, panel.Classes.Contains("player"));
