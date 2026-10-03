@@ -84,9 +84,20 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			if(clock.ElapsedMilliseconds > 30000) {
 				throw new XunitException(failure);
 			}
-			Dispatcher.UIThread.RunJobs();
+			RunJobsAndDueTimers();
 			Thread.Sleep(20);
 		}
+		RunJobsAndDueTimers();
+	}
+
+	//#707: Avalonia's dispatcher promotes a due DispatcherTimer from the OS
+	//timer callback, which only the main loop runs - never a test body - or
+	//after it executes some other job. A paused game posts nothing, so the
+	//controller poll (PlayEdgeFlowsWiring) stopped ticking in RunJobs alone.
+	//The empty job stands in for the main loop's timer wake-up.
+	private static void RunJobsAndDueTimers()
+	{
+		Dispatcher.UIThread.Post(static () => { }, DispatcherPriority.Background);
 		Dispatcher.UIThread.RunJobs();
 	}
 
