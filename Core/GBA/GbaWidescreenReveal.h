@@ -422,13 +422,27 @@ namespace GbaWidescreenReveal
 		_active = active;
 		//Each frame decides for itself whether it holds the last one
 		_hold = false;
-		_write ^= 1;
+		//Never draw into the frame the decoder may still be reading: a skipped
+		//frame sends the last extended frame again, so blind alternation would
+		//put the next drawn frame straight back into that buffer.
+		uint8_t write = _write ^ 1;
+		if(_lastFrame != nullptr && _lastFrame == _buffers[write].data()) {
+			write ^= 1;
+		}
+		_write = write;
 		memset(_rowDrawn, 0, sizeof(_rowDrawn));
 	}
 
 	inline bool FrameBuffers::RowSides(int16_t row, uint16_t*& left, uint16_t*& right)
 	{
 		if(!_active || row < 0 || row >= (int16_t)Height) {
+			return false;
+		}
+		if(_rowDrawn[row]) {
+			//The row's sides belong to its first render. GbaPpu::RenderScanline
+			//runs again for every register write inside the row and in a loop
+			//while VRAM is being accessed; a later partial render would rewrite
+			//the whole row from state the row never used and redo the fetch.
 			return false;
 		}
 		_rowDrawn[row] = true;

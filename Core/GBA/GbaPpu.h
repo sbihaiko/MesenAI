@@ -238,8 +238,11 @@ private:
 	//control (decision 1): there is no per-game switch on the GBA yet.
 	bool IsRevealRequested();
 
-	//Draws the extra columns of the row RenderScanline has just finished, from
-	//the text BGs' own tilemaps. Only ever reads VRAM and the palette.
+	//Draws the extra columns of the row RenderScanline is drawing, from the
+	//text BGs' own tilemaps. Only ever reads VRAM and the palette. A row's
+	//sides belong to its first render of the frame: later partial renders of
+	//the same row are refused, so a mid-line register write cannot rewrite
+	//them from state the row never used (ADR-0253 W.7).
 	void DrawRevealRowSides();
 
 	template<int i> void UpdateLayerTransform();

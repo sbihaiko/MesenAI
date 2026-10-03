@@ -3695,6 +3695,69 @@ namespace
 		}
 	}
 
+	void TestGbaRevealDrawsARowOnceWhateverTheRegisterWritesDo()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0);
+		FrameBuffers frames;
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+
+		//RenderScanline runs again for every PPU register write inside the row,
+		//and in a loop while VRAM is being accessed. The row's side columns are
+		//latched at its first render, the way the console latches the row's BG
+		//state at its first tile fetch: drawing them again on a later partial
+		//render would rewrite the whole row from state the row never used (a
+		//mid-line scroll or BLDCNT write), and would redo the fetch every time.
+		frames.BeginFrame(true);
+		Check(frames.RowSides(40, left, right) && left && right, "W253: the row's first render gets its side columns");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = GbaColor(31, 0, 0);
+				right[i] = GbaColor(0, 31, 0);
+			}
+		}
+		Check(!frames.RowSides(40, left, right), "W253: a second render of the same row is not handed its side columns");
+
+		const uint16_t* frame = frames.Finish(standard.data());
+		Check(frame != nullptr, "W253: the frame is still built after a repeated render");
+		if(frame) {
+			Check(AllEqual(frame + 40 * ExtendedWidth, ExtraColumns, GbaColor(31, 0, 0))
+				&& AllEqual(frame + 40 * ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, GbaColor(0, 31, 0)),
+				"W253: the row keeps the side columns of its first render",
+				Hex16(frame[40 * ExtendedWidth]));
+		}
+	}
+
+	void TestGbaRevealDoesNotDrawIntoTheFrameItJustSent()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0);
+		FrameBuffers frames;
+
+		//A skipped frame sends the last extended frame again, so the decoder may
+		//still be reading that buffer while the next frame is drawn. Blind
+		//alternation puts the frame after a skip straight back into it.
+		frames.BeginFrame(true);
+		const uint16_t* drawn = frames.Finish(standard.data());
+		Check(drawn != nullptr, "W253: a drawn frame is extended");
+
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(true);
+		const uint16_t* skipped = frames.Finish(standard.data());
+		Check(skipped == drawn, "W253: a skipped frame sends the last extended frame again");
+
+		frames.BeginFrame(true);
+		const uint16_t* after = frames.Finish(standard.data());
+		Check(after != nullptr && after != skipped, "W253: the frame after a skip does not draw into the buffer the skip sent");
+
+		//And a plain run of drawn frames still alternates, so the decoder never
+		//reads the buffer being drawn
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != after, "W253: two drawn frames still alternate buffers");
+	}
+
 	void TestGbaRevealOnlyRevealsTheModesTextBgs()
 	{
 		using namespace GbaWidescreenReveal;
@@ -15671,6 +15734,8 @@ int main()
 	TestGbaRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
 	TestGbaRevealHoldsAnExtendedFrameOnlyWhileTheRevealIsOn();
 	TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn();
+	TestGbaRevealDrawsARowOnceWhateverTheRegisterWritesDo();
+	TestGbaRevealDoesNotDrawIntoTheFrameItJustSent();
 	TestGbaRevealOnlyRevealsTheModesTextBgs();
 
 	TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates();
