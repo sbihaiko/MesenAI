@@ -149,6 +149,20 @@ extern "C"
 		return 0;
 	}
 
+	//ADR-0253 §3 (W.3) x §4 (W.5): whether the pack loaded for the running ROM
+	//ships the `widescreen` section. That art is a widescreen mode of its own, so
+	//it is what lets a game the core measured as having nothing beside the
+	//picture still be widened (NesWidescreenSupport::Reveals) and what keeps the
+	//Enhancements sheet's Widescreen switch enabled for it
+	//(UI/Logic/WidescreenSupportRule.cs). The resolution - winning pack, section
+	//switches, per-ROM preference - is MepPackManager's, the same one the
+	//renderer's decode uses, so the app and the picture never disagree.
+	DllExport bool __stdcall HasWidescreenPackArt()
+	{
+		MepPackManager* mgr = _emu->GetEnhancementPackManager();
+		return mgr && mgr->HasWidescreenSection();
+	}
+
 	//#732: play the running ROM without its forced patch until the app quits;
 	//the setting is not changed. False when the running game had none. The
 	//caller reloads the game (a power cycle) for it to take effect.

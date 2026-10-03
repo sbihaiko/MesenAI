@@ -1151,6 +1151,22 @@ string MepPackManager::GetPackListText() const
 	return out;
 }
 
+//ADR-0253 §3 (W.3) x §4 (W.5): the section path pair VideoRenderer::
+//UpdatePackArtAssets resolves, asked as one question. A pack whose section is
+//present but whose layers are both empty has no art to draw, so it must not
+//count as one - the Reveal would extend the frame for nothing and the switch
+//would offer a mode that shows black.
+bool MepPackManager::HasWidescreenSection() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	const MepPack* pack = GetPackForSection(MepSectionType::Widescreen);
+	if(!pack) {
+		return false;
+	}
+	return !pack->GetSectionPath(MepSectionType::Widescreen).empty() ||
+		!pack->GetSectionAutoPath(MepSectionType::Widescreen).empty();
+}
+
 string MepPackManager::GetSectionPath(MepSectionType type) const
 {
 	auto lock = _stateLock.AcquireSafe();

@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.h"
+#include "Shared/Video/WidescreenFallback.h"
 
 //ADR-0253 slice W.5: the per-game support measurement behind the Enhancements
 //sheet's Widescreen switch. Section 4: the first time a game runs, the core
@@ -35,9 +36,25 @@ namespace NesWidescreenSupport
 	//otherwise the player is left with Reveal/black columns and a switch that is
 	//disabled, with no way to turn them off. The switch's saved value is never
 	//written off, so the next game that can use it gets it back.
-	inline bool Reveals(bool switchOn, Verdict verdict)
+	//
+	//`packArtAvailable` is section 3's first fallback source (slice W.3): a pack
+	//shipping the `widescreen` section is section 1's Pack-art mode, a mode of
+	//its own, so it overrules a settled "unsupported" - the measurement only ever
+	//read the game's own map. The frame is then extended and every side row the
+	//game left black gets the pack's art (WidescreenFallback::FillSideFromArt),
+	//which is why the Reveal has to run for such a game at all. A pack whose art
+	//is the wrong size still extends the frame and draws black: the size check
+	//belongs to the renderer's decode, not to this decision.
+	//
+	//"This game reveals" and "this game is supported" are the same sentence, so
+	//they are the same function: the switch-on gate wraps section 3's own
+	//predicate, WidescreenFallback::SupportsWidescreen, rather than restating it.
+	//Its first half is `verdict != Unsupported` - a game still being measured is
+	//not known to have nothing beside the picture, so the picture widens while
+	//the window is open (§4).
+	inline bool Reveals(bool switchOn, Verdict verdict, bool packArtAvailable)
 	{
-		return switchOn && verdict != Verdict::Unsupported;
+		return switchOn && WidescreenFallback::SupportsWidescreen(verdict != Verdict::Unsupported, packArtAvailable);
 	}
 
 	class Probe

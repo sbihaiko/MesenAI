@@ -6,8 +6,9 @@ namespace Mesen.Logic;
 //only control for the automatic mode. It is shown disabled, with a one-line
 //reason, when the loaded game cannot use any widescreen mode at all - a console
 //with no side map, or a game the core measured with nothing beside the picture
-//(NesWidescreenSupport::Probe). While that measurement is still running the
-//switch stays enabled. The app keeps the per-ROM answer
+//(NesWidescreenSupport::Probe) and whose pack ships no widescreen art (W.3's
+//`widescreen` section, §1's Pack-art mode). While that measurement is still
+//running the switch stays enabled. The app keeps the per-ROM answer
 //(PlayerEnhancementsConfig.RomWidescreenSupport); this class is the host-free
 //rule between the core's verdict and the switch's state.
 //
@@ -51,7 +52,8 @@ public static class WidescreenSupportRule
 	//hasWidescreenPackArt: ADR-0253 §3's first fallback source. Installing a
 	//pack with widescreen art gives the game a mode of its own and re-enables
 	//the switch, which is why the MEP <widescreen> section (W.3) can clear a
-	//recorded "unsupported". No pack ships one yet, so every caller passes false.
+	//recorded "unsupported". It comes from the core (EmuApi.HasWidescreenPackArt),
+	//which resolves the same winning pack the renderer's decode draws from.
 	public static WidescreenSwitchState Switch(bool consoleHasSideMap, WidescreenSupport measured, bool hasWidescreenPackArt)
 	{
 		if(hasWidescreenPackArt) {
@@ -61,6 +63,19 @@ public static class WidescreenSupportRule
 			return new WidescreenSwitchState(false, UnavailableReasonKey);
 		}
 		return Enabled;
+	}
+
+	//ADR-0253 §3 x §4 (the W.3 x W.5 seam): the switch's state for the loaded
+	//game, from the three answers the core gives about it - the console's own
+	//side map (§2), what the measurement settled (§4, W.5) and whether a pack
+	//shipping widescreen art is loaded (§3, W.3). The measurement only ever read
+	//the game's own map, so the art overrules an "unsupported": the game is
+	//widened in Pack-art mode instead. Keeping the three inputs together here is
+	//what makes the seam host-free testable - the ViewModel is a pass-through of
+	//the core's answers (EmuApi.GetWidescreenSupportVerdict / HasWidescreenPackArt).
+	public static WidescreenSwitchState SwitchForLoadedGame(ConsoleType console, bool gameGear, WidescreenSupport measured, bool hasWidescreenPackArt)
+	{
+		return Switch(ConsoleHasSideMap(console, gameGear), measured, hasWidescreenPackArt);
 	}
 
 	//ADR-0253 §4: the core's measurement closes after the first gameplay
@@ -87,9 +102,14 @@ public static class WidescreenSupportRule
 	//loads - the same one-line reason the disabled switch shows. calledFor is
 	//the ROM the session already announced ("" for none), which is what keeps a
 	//second load of the same game quiet while still letting the next game speak.
-	public static bool ShouldAnnounceUnavailable(string romSha1, bool rememberedUnsupported, string alreadyAnnouncedFor)
+	//hasWidescreenPackArt silences it (ADR-0253 §4's "installing a pack with
+	//widescreen art re-enables the switch"): the record was made without the
+	//pack, and this game now has a mode, so the disabled-switch sentence would
+	//contradict the switch right beside it.
+	public static bool ShouldAnnounceUnavailable(string romSha1, bool rememberedUnsupported, string alreadyAnnouncedFor, bool hasWidescreenPackArt)
 	{
 		return rememberedUnsupported
+			&& !hasWidescreenPackArt
 			&& !string.IsNullOrEmpty(romSha1)
 			&& romSha1 != alreadyAnnouncedFor;
 	}

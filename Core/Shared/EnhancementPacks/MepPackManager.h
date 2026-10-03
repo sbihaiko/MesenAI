@@ -486,6 +486,18 @@ public:
 	//followed by "!<container>: <reason>" lines for rejected containers
 	string GetPackListText() const;
 
+	//ADR-0253 §3 (W.3) x §4 (W.5): whether a pack shipping the `widescreen`
+	//section is loaded for this ROM. That section is §1's Pack-art mode - a
+	//widescreen mode of its own - so it is what lets the Reveal run for a game
+	//§4 measured with nothing beside the picture, and what keeps the
+	//Enhancements sheet's Widescreen switch enabled for it. True when the
+	//winning pack for the section has a human or auto layer - the same lookup
+	//VideoRenderer::UpdatePackArtAssets does, section switches and the per-ROM
+	//preference included. Whether the layer holds a decodable, correctly sized
+	//widescreen.json is the renderer's decode (W.3); this is the section's
+	//presence, which is what both callers act on.
+	bool HasWidescreenSection() const;
+
 	//Absolute content path of the winning section's human layer, or "" when
 	//none: folder for textures/audio, file for synth
 	string GetSectionPath(MepSectionType type) const;

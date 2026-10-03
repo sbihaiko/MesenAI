@@ -129,6 +129,13 @@ namespace Mesen.Interop
 		//(WidescreenSupportRule) turns it into the switch's state.
 		[DllImport(DllPath)] public static extern byte GetWidescreenSupportVerdict();
 
+		//ADR-0253 §3 (W.3) x §4 (W.5): whether the pack loaded for the running
+		//ROM ships the `widescreen` section. That art is a widescreen mode of its
+		//own, so it overrules a measured "unsupported" - both in the core, which
+		//then widens the frame for the art, and here, where the switch stays
+		//enabled for the game (WidescreenSupportRule.SwitchForLoadedGame).
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool HasWidescreenPackArt();
+
 		//ADR-0211: whole-file SHA-1 (header included) - what an HD pack's
 		//<supportedRom> declares. Not interchangeable with GetMepRomSha1()
 		//above, which is the No-Intro body hash (ADR-0003).
