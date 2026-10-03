@@ -96,5 +96,17 @@ namespace Mesen.Logic
 				_ => new PackChangeOutcome(true, null)
 			};
 		}
+
+		//#655: the fallback restart runs on whatever game is loaded when it
+		//runs. Core answers Refused before it takes the emulator lock, so it
+		//also answers it while another game's load has torn the old console
+		//down; that restart would then reload the game just opened (and lose a
+		//resumed save). It applies only to the load the change was for (the
+		//W-P16 rule, PlayPackDepPrompt.BelongsToCurrentLoad).
+		public static bool RestartsLoadedGame(PackChangeOutcome outcome, int changeOpenGeneration, int currentOpenGeneration, string changeRomSha1, string currentRomSha1)
+		{
+			return outcome.RestartNeeded
+				&& PlayPackDepPrompt.BelongsToCurrentLoad(changeOpenGeneration, currentOpenGeneration, changeRomSha1, currentRomSha1);
+		}
 	}
 }
