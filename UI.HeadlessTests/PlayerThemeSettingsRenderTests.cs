@@ -245,7 +245,9 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Button start = window.FindNamed<Button>("FirstRunStartPlaying");
 			AssertButton(start, 36, 11, 14, PlayTint);
 			Assert.Equal("Start Playing", LabelOf(start).Text);
-			Assert.Equal(PlayFirstRun.ControlCount(OperatingSystem.IsMacOS()), ControlsAtRest(window));
+			//Off macOS the update check is disabled (not a control at rest) when the build has no feed.
+			bool updateCheckDisabled = !OperatingSystem.IsMacOS() && !UpdateChannel.HasFeed;
+			Assert.Equal(PlayFirstRun.ControlCount(OperatingSystem.IsMacOS()) - (updateCheckDisabled ? 1 : 0), ControlsAtRest(window));
 
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P12");
