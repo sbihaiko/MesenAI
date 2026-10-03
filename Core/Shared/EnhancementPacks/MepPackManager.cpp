@@ -201,7 +201,7 @@ void MepPackManager::StartBootstrapIfNeeded()
 		source = _nextRecordingSource;
 		note = _nextRecordingNote;
 	}
-	StartRecording(source, note);
+	StartRecording(source, note, false);
 }
 
 void MepPackManager::SetNextRecordingSource(const string& source, const string& note)
@@ -231,7 +231,7 @@ bool MepPackManager::IsOwnProjectLayer(const MepPack* pack, MepSectionType type)
 	return RemasterProject::IsOwnProjectSection(isProject, section.HasHuman, section.Path);
 }
 
-bool MepPackManager::StartRecording(const string& source, const string& note)
+bool MepPackManager::StartRecording(const string& source, const string& note, bool onDemand)
 {
 	auto lock = _emu->AcquireLock();
 	if(_bootstrapping) {
@@ -260,9 +260,11 @@ bool MepPackManager::StartRecording(const string& source, const string& note)
 	string existingManifest = FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::GetHdPackFolder(), _romName), "hires.txt");
 	bool loosePack = fs::exists(fs::u8path(existingManifest), ec);
 	RemasterProject::RecordingPlan plan = RemasterProject::PlanRecording(
-		{ texturesPack != nullptr, IsOwnProjectLayer(texturesPack, MepSectionType::Textures) }, loosePack,
+		{ texturesPack != nullptr, IsOwnProjectLayer(texturesPack, MepSectionType::Textures),
+			texturesPack != nullptr && texturesPack->Sections[(int)MepSectionType::Textures].HasHuman }, loosePack,
 		{ audioPack != nullptr, IsOwnProjectLayer(audioPack, MepSectionType::Audio) },
-		type == ConsoleType::Nes); //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
+		type == ConsoleType::Nes, //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
+		onDemand);
 	string foreignTextures = loosePack ? existingManifest : (texturesPack ? texturesPack->ContainerName : "");
 	if(plan.Declined()) {
 		//Declining is the point: this is a first draft, not an override of a pack
