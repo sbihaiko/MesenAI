@@ -675,6 +675,26 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     (and the shared `PathIcon.warning`). A Play sheet is light: never put one under a Dark
     `ThemeVariantScope` (#716 is closed by these classes);
     `PlaySheetsContrastTests` lists every sheet surface.
+  - What each Play sheet holds. *Enhancements* (W-P7,
+    `PlayerEnhancementsSheetView`) is one inset list of four switches that
+    edit a draft - Modern instruments, Border ("Applies on reload" under it
+    where the change restarts), Widescreen, Overclock (grey with its reason
+    where the console has no knob) - then the Pack row, `Pack: <name> ›`,
+    which opens W-P6, or W-P5 with 2+ packs; one Apply button writes the
+    draft. *Pack detail* (W-P6, `PlayerPackDetailSheetView`) holds this
+    game's Textures / Music / ROM Patch switch rows, never a global one:
+    a layer the pack lacks is grey ("Not in this pack"), one whose global
+    default is off reads "Off for every game — Tools ⋯ › Enhancement
+    Packs", and those three defaults live only in the Enhancement Packs
+    window (Classic's Tools ▸, the Remaster door's ⋯). When the only pack is
+    the bootstrap's `auto/` layer the title is *Automatic upscale* and the
+    byline is the game's name plus "Made on this computer from what you
+    played", naming the scaler in parentheses when the project's
+    `.bootstrap` stamp does ("(xBRZ 4×)"). *Settings* (W-P8) is the
+    Display | Look | Audio | Controls strip: Audio (Sound, Volume, Output
+    device) and Controls (pads, Rumble, deadzone) are three-row lists whose
+    "More in Options…" opens that tab's classic page, Display carries the
+    "Everything else: Tools ⋯ › Options" hint, Look its own footer.
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,

@@ -158,10 +158,11 @@ namespace Mesen.ViewModels
 
 			PackDetailHasPack = model.HasPack;
 			//The automatic upscale is made here, not by an author: say that, with
-			//no author/version/license (PackDetail.AutoByline).
+			//the scaler it was made with (the .bootstrap stamp beside the ROM,
+			//when known) and no author/version/license (PackDetail.AutoByline).
 			PackDetailTitle = model.IsAutomatic ? ResourceHelper.GetMessage("PackDetailAutoTitle") : current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
 			//W-P5's "No pack" is a choice, not a missing pack: say so.
-			PackDetailByline = model.IsAutomatic ? PackDetail.AutoByline(current!.Name, null, sc => ResourceHelper.GetMessage("PackDetailAutoMadeWith", sc), ResourceHelper.GetMessage("PackDetailAutoMade"))
+			PackDetailByline = model.IsAutomatic ? PackDetail.AutoByline(current!.Name, RemasterProjectReader.BootstrapScaler(model.Folder), sc => ResourceHelper.GetMessage("PackDetailAutoMadeWith", sc), ResourceHelper.GetMessage("PackDetailAutoMade"))
 				: current != null ? BuildPackByline(current)
 				: ResourceHelper.GetMessage(resolution.PrefersNoPack ? "PackDetailNoPackChosenBody" : "PackDetailNoPackBody");
 			PackDetailTextures = model.Chips.Textures;

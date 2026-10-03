@@ -73,7 +73,7 @@ namespace Mesen.Logic
 			//#659: a first build stopped mid-sync left a half-written mep/.
 			built = built && !RemasterBuildFreshness.IsClaimOnly(Path.Combine(mep, RemasterBuildFreshness.StampFile));
 			string system = FirstTargetSystem(Path.Combine(mep, "pack.json"), out bool hasTargets);
-			string game = StampValue(Path.Combine(projectFolder, RemasterProjectReader.StampFile), "rom");
+			string game = RemasterProjectReader.StampValue(projectFolder, "rom");
 			return new ShareProjectIdentity(projectFolder, info.Name, game.Length > 0 ? game : info.Name,
 				PackShare.ConsoleOptionForSystem(system), built, hasTargets);
 		}
@@ -151,23 +151,6 @@ namespace Mesen.Logic
 				return Math.Max(1, (bytes + 1023) / 1024).ToString(CultureInfo.InvariantCulture) + " KB";
 			}
 			return Math.Round(bytes / (1024.0 * 1024.0)).ToString(CultureInfo.InvariantCulture) + " MB";
-		}
-
-		//`.bootstrap` is `key=value` lines (MepPackManager::StartBootstrapIfNeeded).
-		private static string StampValue(string stampPath, string key)
-		{
-			try {
-				if(!File.Exists(stampPath)) {
-					return "";
-				}
-				foreach(string line in File.ReadAllLines(stampPath)) {
-					if(line.StartsWith(key + "=", StringComparison.Ordinal)) {
-						return line.Substring(key.Length + 1).Trim();
-					}
-				}
-			} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException) {
-			}
-			return "";
 		}
 
 		private static string FirstTargetSystem(string packJson, out bool hasTargets)

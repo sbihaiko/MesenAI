@@ -82,6 +82,35 @@ public static class RemasterProjectReader
 
 	public static string FormatId(int number) => "rec-" + number.ToString("000", CultureInfo.InvariantCulture);
 
+	//The scaler the automatic upscale was made with, from the stamp the
+	//recorder writes ("filter=xBRZ", "scale=4"): "xBRZ 4×". W-P6 names it in
+	//the automatic layer's byline; without the stamp or either key it says
+	//nothing about the scaler (PackDetail.AutoByline).
+	public static string BootstrapScaler(string projectFolder)
+	{
+		string filter = StampValue(projectFolder, "filter");
+		string scale = StampValue(projectFolder, "scale");
+		return filter.Length == 0 || scale.Length == 0 ? "" : filter + " " + scale + "×";
+	}
+
+	//`.bootstrap` is `key=value` lines (MepPackManager::StartBootstrapIfNeeded).
+	public static string StampValue(string projectFolder, string key)
+	{
+		try {
+			string stampPath = System.IO.Path.Combine(projectFolder ?? "", StampFile);
+			if(!File.Exists(stampPath)) {
+				return "";
+			}
+			foreach(string line in File.ReadAllLines(stampPath)) {
+				if(line.StartsWith(key + "=", StringComparison.Ordinal)) {
+					return line.Substring(key.Length + 1).Trim();
+				}
+			}
+		} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException) {
+		}
+		return "";
+	}
+
 	//A folder is a project once it holds auto/ or the .bootstrap stamp
 	//(ADR-0243 Decision 1); W-R0's "Open a project folder…" accepts exactly that.
 	public static bool IsProjectFolder(string folder)

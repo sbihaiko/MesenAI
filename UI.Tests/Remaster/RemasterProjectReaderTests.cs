@@ -60,6 +60,26 @@ namespace Mesen.Tests.Remaster
 			Assert.True(RemasterProjectReader.IsProjectFolder(other));
 		}
 
+		//W-P6: the automatic upscale's byline names the scaler it was made with,
+		//read from the `.bootstrap` stamp MepPackManager writes.
+		[Fact]
+		public void The_automatic_upscales_scaler_comes_from_the_bootstrap_stamp()
+		{
+			File.WriteAllText(Path.Combine(_root, ".bootstrap"),
+				"generator=mesence-bootstrap/1\nsha1=abc\nrom=Contra (USA)\nfilter=xBRZ\nscale=4\n");
+
+			Assert.Equal("xBRZ 4×", RemasterProjectReader.BootstrapScaler(_root));
+		}
+
+		[Fact]
+		public void No_stamp_or_no_filter_or_scale_key_names_no_scaler()
+		{
+			Assert.Equal("", RemasterProjectReader.BootstrapScaler(_root));
+
+			File.WriteAllText(Path.Combine(_root, ".bootstrap"), "filter=xBRZ\n");
+			Assert.Equal("", RemasterProjectReader.BootstrapScaler(_root));
+		}
+
 		[Fact]
 		public void Recordings_are_listed_in_id_order_with_the_manifest_metadata()
 		{
