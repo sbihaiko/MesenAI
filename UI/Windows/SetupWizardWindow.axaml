@@ -4,6 +4,7 @@
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:l="using:Mesen.Localization"
+	xmlns:lg="using:Mesen.Logic"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	mc:Ignorable="d"
 	x:Class="Mesen.Windows.SetupWizardWindow"
@@ -51,7 +52,14 @@
 		<TextBlock Text="{l:Translate lblFirstRunGamepads}" Opacity="0.7" TextWrapping="Wrap" />
 
 		<StackPanel Name="FirstRunDesktopOptions" Spacing="2" IsVisible="{Binding ShowsDesktopOptions}">
-			<CheckBox Content="{l:Translate chkFirstRunCheckForUpdates}" IsChecked="{Binding CheckForUpdates}" />
+			<CheckBox
+				Name="FirstRunCheckForUpdates"
+				Content="{l:Translate chkFirstRunCheckForUpdates}"
+				IsChecked="{Binding CheckForUpdates}"
+				IsEnabled="{x:Static lg:UpdateChannel.HasFeed}"
+				ToolTip.Tip="{l:Translate lblUpdateCheckUnavailable}"
+				ToolTip.ShowOnDisabled="True"
+			/>
 			<CheckBox Content="{l:Translate chkFirstRunDesktopShortcut}" IsChecked="{Binding CreateShortcut}" />
 		</StackPanel>
 

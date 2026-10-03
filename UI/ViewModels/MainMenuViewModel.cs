@@ -1255,6 +1255,22 @@ namespace Mesen.ViewModels
 
 		public void CheckForUpdate(Window mainWindow, bool silent)
 		{
+			//#672: the fork has no update feed (ADR-0204 publishes no version
+			//file), so the startup check does nothing and the menu item offers
+			//the fork's release page instead of reaching the upstream feed.
+			switch(UpdateChannel.Decide(silent)) {
+				case UpdateCheckAction.Skip:
+					return;
+
+				case UpdateCheckAction.OfferReleasePage:
+					Dispatcher.UIThread.Post(async () => {
+						if(await MesenMsgBox.Show(mainWindow, "UpdateCheckNoFeed", MessageBoxButtons.OKCancel, MessageBoxIcon.Info, UpdateChannel.ReleasesPageUrl) == DialogResult.OK) {
+							ApplicationHelper.OpenBrowser(UpdateChannel.ReleasesPageUrl);
+						}
+					});
+					return;
+			}
+
 			Task.Run(async () => {
 				UpdatePromptViewModel? updateInfo = await UpdatePromptViewModel.GetUpdateInformation(silent);
 				if(updateInfo == null) {

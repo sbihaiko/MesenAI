@@ -972,6 +972,7 @@
 			<Control ID="lblDisplayLanguage">Display Language:</Control>
 			<Control ID="chkSingleInstance">Only allow one instance of Mesen at a time</Control>
 			<Control ID="chkAutomaticallyCheckForUpdates">Automatically check for updates</Control>
+			<Control ID="lblUpdateCheckUnavailable">MesenAI has no update feed yet. New builds are published on the MesenAI releases page (Help &gt; Check for updates opens it).</Control>
 
 			<Control ID="chkDeveloperMode">Enable developer mode</Control>
 
@@ -1181,6 +1182,7 @@
 			<Control ID="cboFirstRunWasd">WASD + K / J</Control>
 			<Control ID="lblFirstRunGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
 			<Control ID="chkFirstRunCheckForUpdates">Check for updates</Control>
+			<Control ID="lblUpdateCheckUnavailable">MesenAI has no update feed yet. New builds are published on the MesenAI releases page (Help &gt; Check for updates opens it).</Control>
 			<Control ID="chkFirstRunDesktopShortcut">Desktop shortcut</Control>
 			<Control ID="btnFirstRunStartPlaying">▶ Start Playing</Control>
 		</Form>
@@ -2350,6 +2352,7 @@ E
 		<Message ID="UnableToStartMissingSdl">Mesen could not launch because SDL2 could not be found. Install SDL2 using your package manager and try again.&#xA;&#xA;Error details:&#xA;{0}</Message>
 		<Message ID="UnableToStartMissingDependencies">Mesen could not launch because of missing dependencies.&#xA;&#xA;Error details:&#xA;{0}</Message>
 		<Message ID="UnexpectedError">An unexpected error has occurred.&#xA;&#xA;Error details:&#xA;{0}</Message>
+		<Message ID="UpdateCheckNoFeed">MesenAI cannot check for updates automatically yet. New builds are published on the MesenAI releases page:&#xA;&#xA;{0}&#xA;&#xA;Open it in your browser?</Message>
 		<Message ID="UpdateDownloadFailed">Download failed - the file appears to be corrupted. Please visit the Mesen website to download the latest version manually.</Message>
 
 		<Message ID="ConfirmReset">Are you sure you want to reset?</Message>

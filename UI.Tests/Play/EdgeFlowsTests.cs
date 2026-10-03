@@ -15,7 +15,8 @@ namespace Mesen.Tests.Play
 			FirstRunChoice d = PlayFirstRun.Defaults;
 			Assert.True(d.StoreInUserProfile);
 			Assert.Equal(FirstRunKeyboard.ArrowKeys, d.Keyboard);
-			Assert.True(d.CheckForUpdates);
+			//#672: off while the fork has no update feed (UpdateChannelTests)
+			Assert.Equal(UpdateChannel.HasFeed, d.CheckForUpdates);
 			Assert.True(d.CreateShortcut);
 		}
 

@@ -153,6 +153,27 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		}
 	}
 
+	//#672: with no fork update feed, Check for updates is unchecked and
+	//disabled, and says why (rule: UI.Tests UpdateChannelTests).
+	[AvaloniaFact]
+	public void First_run_sheet_disables_check_for_updates_while_there_is_no_feed()
+	{
+		RecordingFirstRun model = new();
+		SetupWizardWindow window = new(model);
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		try {
+			CheckBox check = window.FindNamed<CheckBox>("FirstRunCheckForUpdates");
+			Assert.Equal(UpdateChannel.HasFeed, check.IsEnabled);
+			Assert.Equal(UpdateChannel.HasFeed, check.IsChecked);
+			Assert.True(ToolTip.GetShowOnDisabled(check));
+			Assert.False(string.IsNullOrEmpty(ToolTip.GetTip(check) as string));
+		} finally {
+			model.Succeeds = true;
+			window.Close();
+		}
+	}
+
 	//Esc keeps the defaults and continues: the close applies the choice once.
 	[AvaloniaFact]
 	public void Esc_on_the_first_run_sheet_applies_the_choice_and_continues()

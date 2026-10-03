@@ -24,8 +24,9 @@ public static class PlayFirstRun
 {
 	//Today's wizard defaults. Check for updates and Desktop shortcut are only
 	//shown on Windows/Linux; on macOS they keep the wizard's values (the
-	//shortcut was already a no-op there).
-	public static FirstRunChoice Defaults { get; } = new(true, FirstRunKeyboard.ArrowKeys, true, true);
+	//shortcut was already a no-op there). Check for updates is off, and its
+	//checkbox disabled, while the fork has no update feed (#672, UpdateChannel).
+	public static FirstRunChoice Defaults { get; } = new(true, FirstRunKeyboard.ArrowKeys, UpdateChannel.HasFeed, true);
 
 	public static FirstRunMappings Mappings(FirstRunKeyboard keyboard)
 	{
