@@ -39,6 +39,8 @@ namespace Mesen.ViewModels
 				_config.RecentProjects = RemasterRecentProjects.Remember(_config.RecentProjects, _project.Folder);
 			}
 			if(!IsNoProject) {
+				_scans.Cancel(RemasterScanKind.Recent);
+				UpdateScanWait();
 				return;
 			}
 			IReadOnlyList<RemasterRecentProject> projects = RemasterRecentProjects.List(_config.RecentProjects, RecentRomPaths(), RecentPacksFolder());
@@ -56,12 +58,18 @@ namespace Mesen.ViewModels
 		{
 			int generation = ++_recentGeneration;
 			if(projects.Count == 0) {
+				_scans.Cancel(RemasterScanKind.Recent);
+				UpdateScanWait();
 				RecentSettled = Task.CompletedTask;
 				return;
 			}
 			TaskCompletionSource settled = new();
 			RecentSettled = settled.Task;
+			int scan = _scans.Begin(RemasterScanKind.Recent);
+			UpdateScanWait();
 			Task.Run(() => projects.Select(p => (p.Folder, _cellCache.Total(RemasterKitReader.Read(p.Folder)))).ToList()).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				_scans.End(RemasterScanKind.Recent, scan);
+				UpdateScanWait();
 				bool changed = false;
 				if(generation == _recentGeneration && t.IsCompletedSuccessfully) {
 					foreach((string folder, int? cells) in t.Result) {

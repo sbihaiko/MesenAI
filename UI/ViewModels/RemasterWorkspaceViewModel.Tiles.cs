@@ -71,13 +71,19 @@ namespace Mesen.ViewModels
 			int generation = ++_cellsGeneration;
 			RemasterKit kit = _kit;
 			if(kit.Tiles.Count == 0) {
+				_scans.Cancel(RemasterScanKind.Cells);
+				UpdateScanWait();
 				SetPaintedCells(null);
 				CellsSettled = Task.CompletedTask;
 				return;
 			}
 			TaskCompletionSource settled = new();
 			CellsSettled = settled.Task;
+			int scan = _scans.Begin(RemasterScanKind.Cells);
+			UpdateScanWait();
 			Task.Run(() => _cellCache.Total(kit)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				_scans.End(RemasterScanKind.Cells, scan);
+				UpdateScanWait();
 				if(generation == _cellsGeneration) {
 					SetPaintedCells(t.IsCompletedSuccessfully ? t.Result : null);
 				}
@@ -154,17 +160,23 @@ namespace Mesen.ViewModels
 				Tiles = rows;
 			}
 			if(pending.Count == 0) {
+				_scans.Cancel(RemasterScanKind.Tiles);
+				UpdateScanWait();
 				TilesSettled = Task.CompletedTask;
 				return;
 			}
 			TaskCompletionSource settled = new();
 			TilesSettled = settled.Task;
+			int scan = _scans.Begin(RemasterScanKind.Tiles);
+			UpdateScanWait();
 			Task.Run(() => {
 				foreach(RemasterKitTile t in pending) {
 					_paintCache.Get(t, RemasterPaintProbe.Compare);
 					_cellCache.Get(t);
 				}
 			}).ContinueWith(_ => Dispatcher.UIThread.Post(() => {
+				_scans.End(RemasterScanKind.Tiles, scan);
+				UpdateScanWait();
 				if(generation == _tilesGeneration) {
 					BuildTileRows();
 				}

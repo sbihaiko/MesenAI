@@ -424,6 +424,43 @@ public class RemasterWorkspaceTests : IDisposable
 		Assert.True(window.FindNamed<Button>("RemasterPrepareButton").IsEffectivelyEnabled);
 	}
 
+	//Opening a project reads its recordings off the UI thread; until that
+	//answers a moving line says so (the user's rule, 2026-10-03), and a failed
+	//read clears it too.
+	[AvaloniaFact]
+	public void Reading_the_projects_recordings_shows_a_moving_wait_until_it_answers()
+	{
+		string root = TempFolder();
+		string project = Path.Combine(root, "Contra (USA)");
+		Directory.CreateDirectory(Path.Combine(project, "auto", "rec-001", "textures"));
+		File.WriteAllText(Path.Combine(project, "auto", "rec-001", "textures", "hires.txt"), "<ver>107\n");
+		using ManualResetEventSlim gate = new();
+		RemasterWorkspaceViewModel model = new(new RemasterConfig(), _ => Ready, new HangingLauncher(), hasHeadlessRecorder: false);
+		model.CountShapes = _ => {
+			gate.Wait(10000);
+			throw new IOException("the disk went away");
+		};
+		model.UpdateGame(true, ConsoleType.Nes, "Contra (USA)", Path.Combine(root, "Contra (USA).nes"), project, Path.Combine(root, "EnhancementPacks"));
+		model.EnsureFeasibilityMeasured();
+		WaitFor(() => model.Feasibility != null, "the gate was never measured");
+		Window window = new() { Content = new RemasterWorkspaceView { DataContext = model }, Width = 1000, Height = 800 };
+		window.Show();
+		try {
+			model.Refresh();
+			Dispatcher.UIThread.RunJobs();
+
+			Control wait = window.FindNamed<Control>("RemasterScanWait");
+			Assert.True(wait.IsOnScreen(), "the project read showed nothing moving");
+			Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+			Assert.Equal("Reading the project's files…", window.FindNamed<TextBlock>("RemasterScanWaitText").Text);
+		} finally {
+			gate.Set();
+		}
+		WaitFor(() => model.ShapesSettled.IsCompleted, "the read never settled");
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(window.FindNamed<Control>("RemasterScanWait").IsOnScreen(), "a failed read left the wait on screen");
+	}
+
 	//scripts/gen_synthetic_nrom.py, byte for byte (as WorkspaceShellTests).
 	private static byte[] BuildSyntheticNrom()
 	{
