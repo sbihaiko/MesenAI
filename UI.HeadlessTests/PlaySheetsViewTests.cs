@@ -80,7 +80,7 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.False(window.IsPauseCardActive());
 		Assert.Equal("Aaa Pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
 		Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", window.FindNamed<TextBlock>("PackDetailByline").Text);
-		Assert.True(window.FindNamed<StackPanel>("PackDetailChips").IsOnScreen());
+		Assert.True(window.FindNamed<StackPanel>("PackDetailLayers").IsOnScreen());
 
 		//Rule 4: nothing to change to - disabled, with its reason.
 		Assert.False(window.FindNamed<Button>("PackDetailChangeButton").IsEnabled);

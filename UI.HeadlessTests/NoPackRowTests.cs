@@ -155,7 +155,7 @@ public class NoPackRowTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerPackDetailSheet").IsOnScreen());
 		Assert.Equal("No pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
 		Assert.Equal("You chose to play this game without a pack.", window.FindNamed<TextBlock>("PackDetailByline").Text);
-		Assert.False(window.FindNamed<StackPanel>("PackDetailChips").IsOnScreen());
+		Assert.False(window.FindNamed<StackPanel>("PackDetailLayers").IsOnScreen());
 		Assert.Equal("", model.CurrentPackName);
 		//The way back: Change Pack… opens the picker, "No pack" selected.
 		Button change = window.FindNamed<Button>("PackDetailChangeButton");

@@ -739,6 +739,11 @@ void MepPackManager::LoadForRom(VirtualFile& romFile)
 		if(IsNoPackPreference(PreferredIdForRom())) {
 			Log("\"No pack\" is chosen for this game - only a sibling-folder pack applies");
 		}
+		uint8_t layersOff = RomLayersOff();
+		if(layersOff != 0) {
+			Log(string("turned off for this game:") + (IsLayerOff(layersOff, MepRomLayer::Textures) ? " textures" : "") +
+				(IsLayerOff(layersOff, MepRomLayer::Audio) ? " audio" : "") + (IsLayerOff(layersOff, MepRomLayer::Patch) ? " ROM patch" : ""));
+		}
 	}
 }
 
@@ -757,7 +762,7 @@ void MepPackManager::ReadInstallIdentity(MepPack& pack, const MepLocalIdentityCa
 	//`local:<container>` (PRD §5).
 	MepPackIdentity identity;
 	string text;
-	if(ReadTextFile(FolderUtilities::CombinePath(pack.RootFolder, ".mep-install.json"), text)) {
+	if(ReadTextFile(InstallStampPath(pack.RootFolder, pack.Origin), text)) {
 		JsonValue root;
 		JsonReader reader;
 		if(reader.Parse(text, root) && root.IsObject()) {
@@ -1016,6 +1021,35 @@ void MepPackManager::ClearPreferredMepPacks()
 {
 	auto lock = _stateLock.AcquireSafe();
 	_preferredPackIdByRomSha1.clear();
+	_romLayersOffBySha1.clear();
+}
+
+void MepPackManager::SetRomLayersOff(const string& romSha1, const string& layers)
+{
+	//W-P6: keyed like the preference (the No-Intro sha1 of the ROM as loaded).
+	string sha1 = StringUtilities::Trim(romSha1);
+	if(sha1.empty()) {
+		return;
+	}
+	uint8_t mask = ParseRomLayersOff(layers);
+	auto lock = _stateLock.AcquireSafe();
+	if(mask == 0) {
+		_romLayersOffBySha1.erase(sha1);
+	} else {
+		_romLayersOffBySha1[sha1] = mask;
+	}
+}
+
+uint8_t MepPackManager::RomLayersOff() const
+{
+	auto it = _romLayersOffBySha1.find(_romSha1);
+	return it == _romLayersOffBySha1.end() ? 0 : it->second;
+}
+
+bool MepPackManager::IsRomLayerOff(MepRomLayer layer) const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return IsLayerOff(RomLayersOff(), layer);
 }
 
 string MepPackManager::PreferredIdForRom() const
@@ -1057,6 +1091,10 @@ const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 		return nullptr;
 	}
 	auto lock = _stateLock.AcquireSafe();
+	//W-P6: the player turned this layer off for this game.
+	if(SectionOff(RomLayersOff(), type)) {
+		return nullptr;
+	}
 	//P.3: the per-ROM preference overrides the ADR-0040 lexicographic order;
 	//the default stays "first enabled pack in precedence order" when there is
 	//no stored preference or the preferred pack_id does not match a candidate.
@@ -1162,6 +1200,10 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 		return false;
 	}
 	auto lock = _stateLock.AcquireSafe();
+	if(IsLayerOff(RomLayersOff(), MepRomLayer::Patch)) {
+		Log("ROM patch turned off for this game - no pack patch applied");
+		return false;
+	}
 	//W-P5's "No pack" plays the original game: no pack's ROM patch either.
 	string preferredId = PreferredIdForRom();
 	for(const MepPack& pack : _packs) {

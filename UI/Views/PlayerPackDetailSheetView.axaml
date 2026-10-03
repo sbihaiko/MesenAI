@@ -10,14 +10,14 @@
 >
 	<!--G.4 (PRD Part B §13.5.2 W-P6): the current pack's detail, opened from
 	W-P4's Pack row when there is no choice to make (one pack, a sibling pack,
-	or none). The chips and the ⚠ music line come from the pack folder read
+	or none). The layers and the ⚠ music line come from the pack folder read
 	when the sheet opens (PackAudioNotice.Scan, ADR-0240 Option 1 in plain
-	words). Change pack… is disabled with its reason when there is nothing to
+	words); each layer has a per-game switch (PackLayerSwitches). Change pack… is disabled with its reason when there is nothing to
 	change to (rule 4); Restore (ADR-0147) appears only for a catalog-installed
 	pack and confirms once in place (rule 7). Details ▸ is the one place in Play
 	where ids appear. Esc and Done close back to W-P4.-->
 	<!--ADR-0249 (W-P6): a light sheet - the share-green pack badge, title and
-	byline, the layer chips, the orange music notice, the action buttons, a
+	byline, the layer switches in an inset list, the orange music notice, the action buttons, a
 	hairline, then Details (with its hint) and Done.-->
 	<Border
 		Name="PlayerPackDetailSheet"
@@ -37,25 +37,39 @@
 					<TextBlock Name="PackDetailByline" Classes="subhead secondary" Text="{Binding PackDetailByline}" TextWrapping="Wrap" />
 				</StackPanel>
 			</DockPanel>
-			<StackPanel Name="PackDetailChips" Orientation="Horizontal" Spacing="6" IsVisible="{Binding PackDetailHasPack}" Margin="0 0 0 16">
-				<Border Classes="chip" Classes.on="{Binding PackDetailTextures}">
-					<StackPanel Orientation="Horizontal">
-						<PathIcon IsVisible="{Binding PackDetailTextures}" />
-						<TextBlock Text="{l:Translate lblPackDetailTextures}" />
+			<!--W-P6: the pack's three layers, one switch each, for this game only
+			(PackLayerSwitches): a layer the pack lacks is a grey switch that says
+			so, and one its global switch has off says that instead. A flip applies
+			at once (in place where ADR-0244 allows) under a moving bar.-->
+			<StackPanel Name="PackDetailLayers" IsVisible="{Binding PackDetailHasPack}" Margin="0 0 0 16">
+				<Border Classes="inset">
+					<StackPanel>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailTexturesSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailTexturesNote.Length}" Content="{l:Translate lblPackDetailTextures}" IsChecked="{Binding PackDetailTexturesOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailTexturesSwitchable}" />
+								<TextBlock Name="PackDetailTexturesNote" Classes="row-subtitle" Text="{Binding PackDetailTexturesNote}" IsVisible="{Binding !!PackDetailTexturesNote.Length}" />
+							</Panel>
+						</Border>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailAudioSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailAudioNote.Length}" Content="{l:Translate lblPackDetailAudio}" IsChecked="{Binding PackDetailAudioOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailAudioSwitchable}" />
+								<TextBlock Name="PackDetailAudioNote" Classes="row-subtitle" Text="{Binding PackDetailAudioNote}" IsVisible="{Binding !!PackDetailAudioNote.Length}" />
+							</Panel>
+						</Border>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailPatchSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailPatchNote.Length}" Content="{l:Translate lblPackDetailPatch}" IsChecked="{Binding PackDetailPatchOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailPatchSwitchable}" />
+								<TextBlock Name="PackDetailPatchNote" Classes="row-subtitle" Text="{Binding PackDetailPatchNote}" IsVisible="{Binding !!PackDetailPatchNote.Length}" />
+							</Panel>
+						</Border>
 					</StackPanel>
 				</Border>
-				<Border Classes="chip" Classes.on="{Binding PackDetailAudio}">
-					<StackPanel Orientation="Horizontal">
-						<PathIcon IsVisible="{Binding PackDetailAudio}" />
-						<TextBlock Text="{l:Translate lblPackDetailAudio}" />
-					</StackPanel>
-				</Border>
-				<Border Classes="chip" Classes.on="{Binding PackDetailPatch}">
-					<StackPanel Orientation="Horizontal">
-						<PathIcon IsVisible="{Binding PackDetailPatch}" />
-						<TextBlock Text="{l:Translate lblPackDetailPatch}" />
-					</StackPanel>
-				</Border>
+				<TextBlock Name="PackDetailLayersHint" Classes="subhead secondary" Text="{l:Translate lblPackDetailLayersHint}" IsVisible="{Binding !PackDetailApplyingLayer}" Margin="2 8 0 0" />
+				<!--Every wait moves (2026-10-03): from the flip until the swap is done.-->
+				<StackPanel Name="PackDetailLayersWait" Spacing="8" IsVisible="{Binding PackDetailApplyingLayer}" Margin="2 8 0 0">
+					<TextBlock Classes="subhead secondary" Text="{l:Translate lblPackDetailLayersWait}" />
+					<ProgressBar Name="PackDetailLayersWaitBar" IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
+				</StackPanel>
 			</StackPanel>
 
 			<Border Name="PackDetailNotice" Classes="warning notice large" IsVisible="{Binding PackDetailHasNotice}" Margin="0 0 0 16">

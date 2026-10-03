@@ -2955,7 +2955,12 @@ is `UI/Logic/PlayMenuHint.cs`.
                      ┌──────────────────────────────────────────────┐
                      │  Contra 80s                                  │
                      │  by Tastic · version 1.2 · CC BY-NC 4.0      │
-                     │  textures ✔   audio ✔   patch —              │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │ Textures                          (●)  │  │
+                     │  │ Audio                             (●)  │  │
+                     │  │ ROM Patch                         (●)  │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  The switches apply to this game only.       │
                      │                                              │
                      │  ⚠ Some music is missing                     │
                      │    3 of 17 tracks have no audio file. Add    │
@@ -2988,7 +2993,26 @@ is `UI/Logic/PlayMenuHint.cs`.
   from, so the button is absent there, not disabled.
 - *Details ▸* reveals ids and hashes for the curious — the only place in Play
   they appear.
-- Elements: 5. ✔
+- **Layer switches** (2026-10-03, the user's request: *"nessa tela tem que ter
+  uma opção para desligar texturas, outra para o audio, outra para ips"*):
+  the pack's Textures, Audio and ROM Patch are an inset list of switch rows
+  that turn the layer off **for this game only** — stored per ROM sha1 beside
+  the W-P5 pack choice (`EnhancementPackConfig.RomLayersOff`, rules in
+  `UI/Logic/PackLayerSwitches.cs`) and pushed to the core
+  (`MepPackManager::SetRomLayersOff`), which then serves neither the textures
+  nor the audio section, drops an HDNes pack's `<bgm>`/`<sfx>` tracks, and
+  applies no pack ROM patch (MEP `patches[]` or `<patch>`) on that ROM. Audio
+  is present when the pack has an audio section or `<bgm>`/`<sfx>` tracks;
+  ROM Patch when it wires a bundled `.ips`/`.bps`. A layer the pack lacks is
+  a grey switch with "Not in this pack" (the former grey chip, rule 4); a
+  layer whose global switch (W-P7's Textures/Audio, Advanced's ROM patch) is
+  off is a grey switch with "Off for every game" — the global switch still
+  wins. A flip applies at once through `LoadRomHelper.ApplyPackChange` (in
+  place where P.9 allows: the sheet stays and the switches wait under a
+  moving bar; elsewhere the game restarts, back to the game, like W-P7).
+  Synth (enhanced audio) and Border keep their global switches only.
+- Elements: 5 + the layer list (3 rows, each with its switch — counted as
+  list rows under rule 2, like W-P11's cheat rows). ✔
 
 **W-P7 — Enhancements panel (§6.1 minus *Hi-res filter*)**
 

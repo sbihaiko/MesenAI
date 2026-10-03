@@ -23,7 +23,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PackPickerTitle { get; private set; } = "";
 		[ObservableProperty] public partial bool CanUseSelectedPack { get; private set; }
 
-		//W-P6: the current pack's detail.
+		//W-P6: the current pack's detail. PackDetailTextures/Audio/Patch: the
+		//pack has the layer (its switch lives in MainWindowViewModel.PackLayers).
 		[ObservableProperty] public partial bool IsPackDetailVisible { get; set; }
 		[ObservableProperty] public partial bool PackDetailHasPack { get; private set; }
 		[ObservableProperty] public partial string PackDetailTitle { get; private set; } = "";
@@ -158,6 +159,7 @@ namespace Mesen.ViewModels
 			PackDetailTextures = model.Chips.Textures;
 			PackDetailAudio = model.Chips.Audio;
 			PackDetailPatch = model.Chips.Patch;
+			LoadPackLayerSwitches(model.Chips);
 			PackDetailHasNotice = model.Notice == PackDetailNotice.MissingMusic;
 			PackDetailNoticeBody = PackDetailHasNotice ? ResourceHelper.GetMessage("PackDetailMissingMusicBody", model.MissingTracks, model.TotalTracks) : "";
 			PackDetailCanChange = model.CanChangePack;
@@ -176,16 +178,8 @@ namespace Mesen.ViewModels
 		//"by Tastic · version 1.2 · CC BY-NC 4.0"
 		private static string BuildPackByline(PlayerPackChoice pack)
 		{
-			List<string> parts = new() {
-				string.IsNullOrWhiteSpace(pack.Author) ? ResourceHelper.GetMessage("PackAuthorUnknown") : ResourceHelper.GetMessage("PackByAuthor", pack.Author)
-			};
-			if(!string.IsNullOrWhiteSpace(pack.Version)) {
-				parts.Add(ResourceHelper.GetMessage("PackDetailVersion", pack.Version));
-			}
-			if(!string.IsNullOrWhiteSpace(pack.License)) {
-				parts.Add(pack.License);
-			}
-			return string.Join(" · ", parts);
+			return PackDetail.Byline(pack.Author, pack.Version, pack.License, a => ResourceHelper.GetMessage("PackByAuthor", a),
+				ResourceHelper.GetMessage("PackAuthorUnknown"), v => ResourceHelper.GetMessage("PackDetailVersion", v));
 		}
 
 		public void ClosePackDetail()

@@ -798,33 +798,37 @@ def w_p5():
 def w_p6():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
-    b = c.sheet(500, 420)
+    b = c.sheet(500, 554)
     x0, y0, x1, y1 = b
     c.badge("box", x0 + 24, y0 + 24, 48, TINT["share"])
     c.text(x0 + 86, y0 + 40, "Contra 80s", 19, 700, TEXT, "lm")
     c.text(x0 + 86, y0 + 62, "by Tastic · version 1.2 · CC BY-NC 4.0", 12.5, 400, TEXT2, "lm")
-    xx = x0 + 24
-    for lab, ok in (("Textures", True), ("Audio", True), ("Patch", False)):
-        w = c.tw(lab, 12, 600) + (34 if ok else 22)
-        c.rrect((xx, y0 + 92, xx + w, y0 + 116), 12, fill=(226, 245, 231) if ok else FILL)
-        if ok:
-            c.icon("check", xx + 13, y0 + 104, 10, (36, 138, 61))
-        c.text(xx + (24 if ok else 11), y0 + 104, lab, 12, 600, (36, 138, 61) if ok else TEXT2, "lm")
-        xx += w + 8
-    wb = (x0 + 24, y0 + 134, x1 - 24, y0 + 194)
+    # The pack's layers, one switch each, for this game only (a layer the pack
+    # lacks is a grey switch with "Not in this pack" under its name).
+    g = (x0 + 24, y0 + 88, x1 - 24, y0 + 88 + 3 * 46)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    for i, n in enumerate(("Textures", "Audio", "ROM Patch")):
+        yy = g[1] + i * 46
+        c.text(g[0] + 16, yy + 23, n, 13.5, 500, TEXT, "lm")
+        c.toggle(g[2] - 54, yy + 12, True, True)
+        if i < 2:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.text(x0 + 26, g[3] + 16, "The switches apply to this game only.", 12.5, 400, TEXT2, "lm")
+    d = 134
+    wb = (x0 + 24, y0 + 134 + d, x1 - 24, y0 + 194 + d)
     c.rrect(wb, 10, fill=(255, 244, 225))
     c.icon("warn", wb[0] + 22, wb[1] + 22, 15, ORANGE)
     c.text(wb[0] + 40, wb[1] + 22, "Some music is missing", 13.5, 650, (150, 85, 0), "lm")
     c.text(wb[0] + 40, wb[1] + 42, "3 of 17 tracks have no audio file. Add the .ogg files to the pack.", 12.5, 400, (150, 85, 0), "lm")
-    c.button(x0 + 24, y0 + 214, "Change Pack…", "secondary", h=30)
-    c.button(x0 + 150, y0 + 214, "Show Pack in Finder", "secondary", h=30, icon="folder")
-    c.button(x0 + 24, y0 + 256, "Restore Original Files…", "destructive", h=30)
-    c.line([(x0 + 24, y0 + 306), (x1 - 24, y0 + 306)], SEP)
-    c.text(x0 + 24, y0 + 330, "Details", 13.5, 500, TEXT, "lm")
-    c.icon("chev_right", x0 + 82, y0 + 331, 11, TEXT3)
-    c.text(x1 - 24, y0 + 330, "ids and hashes", 12.5, 400, TEXT3, "rm")
+    c.button(x0 + 24, y0 + 214 + d, "Change Pack…", "secondary", h=30)
+    c.button(x0 + 150, y0 + 214 + d, "Show Pack in Finder", "secondary", h=30, icon="folder")
+    c.button(x0 + 24, y0 + 256 + d, "Restore Original Files…", "destructive", h=30)
+    c.line([(x0 + 24, y0 + 306 + d), (x1 - 24, y0 + 306 + d)], SEP)
+    c.text(x0 + 24, y0 + 330 + d, "Details", 13.5, 500, TEXT, "lm")
+    c.icon("chev_right", x0 + 82, y0 + 331 + d, 11, TEXT3)
+    c.text(x1 - 24, y0 + 330 + d, "ids and hashes", 12.5, 400, TEXT3, "rm")
     c.button(x1 - 24, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
-    c.caption("W-P6", "Play — current pack details", 5)
+    c.caption("W-P6", "Play — current pack details (layer switches: this game only)", 5)
     return c
 
 

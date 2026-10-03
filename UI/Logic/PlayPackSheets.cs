@@ -109,8 +109,9 @@ public static class PackOrigin
 	public const string Sibling = "sibling";
 }
 
-//W-P6's three chips. Patch is not a pack section: it is a bundled ROM patch
-//wired by the pack (PackAudioNotice's meaning), read from the folder.
+//W-P6's three layers (one switch each, PackLayerSwitches). Patch is not a
+//pack section: it is a bundled ROM patch wired by the pack (PackAudioNotice's
+//meaning), read from the folder.
 public sealed record PackLayerChips(bool Textures, bool Audio, bool Patch);
 
 public enum PackDetailNotice
@@ -140,7 +141,33 @@ public static class PackDetail
 		foreach(string part in (sections ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
 			present.Add(part);
 		}
-		return new PackLayerChips(present.Contains("textures"), present.Contains("audio"), scan?.HasWiredPatch == true);
+		//An HDNes-style pack plays its music from <bgm>/<sfx> lines next to its
+		//textures, with no audio section: that is audio too (W-P6's switch).
+		return new PackLayerChips(present.Contains("textures"), present.Contains("audio") || scan?.Total > 0, scan?.HasWiredPatch == true);
+	}
+
+	//W-P6's byline: "by Tastic · version 1.2 · CC BY-NC 4.0". byAuthor and
+	//versionText format the localized "by {0}" and "version {0}".
+	public static string Byline(string author, string version, string license, Func<string, string> byAuthor, string authorUnknown, Func<string, string> versionText)
+	{
+		List<string> parts = new() {
+			string.IsNullOrWhiteSpace(author) ? authorUnknown : byAuthor(author.Trim())
+		};
+		if(!string.IsNullOrWhiteSpace(version)) {
+			parts.Add(versionText(version.Trim()));
+		}
+		if(NamesLicense(license)) {
+			parts.Add(license.Trim());
+		}
+		return string.Join(" · ", parts);
+	}
+
+	//The catalog install writes "license": "unknown" into pack.json when the
+	//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown) - a
+	//placeholder, not a license, so the byline leaves it out like an empty one.
+	public static bool NamesLicense(string license)
+	{
+		return !string.IsNullOrWhiteSpace(license) && !license.Trim().Equals("unknown", StringComparison.OrdinalIgnoreCase);
 	}
 
 	//W-P6's folder button: the render's "Show Pack in Finder" names macOS's

@@ -43,10 +43,37 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
+		public void The_detail_byline_reads_author_version_and_license()
+		{
+			Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", PackDetail.Byline("Tastic", "1.2", "CC BY-NC 4.0", a => "by " + a, "author unknown", v => "version " + v));
+		}
+
+		//The catalog install writes "license": "unknown" into pack.json when the
+		//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown); the
+		//byline read it back as a bare trailing "unknown".
+		[Theory]
+		[InlineData("unknown")]
+		[InlineData(" Unknown ")]
+		[InlineData("")]
+		public void A_pack_naming_no_license_leaves_it_out_of_the_byline(string license)
+		{
+			Assert.Equal("author unknown · version 1.0.0", PackDetail.Byline("", "1.0.0", license, a => "by " + a, "author unknown", v => "version " + v));
+		}
+
+		[Fact]
 		public void Chips_come_from_the_sections_and_the_wired_patch()
 		{
 			Assert.Equal(new PackLayerChips(true, true, false), PackDetail.Chips("textures,audio,border", null));
 			Assert.Equal(new PackLayerChips(false, true, true), PackDetail.Chips("audio", new PackAudioScan(0, 4, true)));
+		}
+
+		//W-P6's Audio switch: an HDNes-style pack's <bgm> lines sit beside its
+		//textures, with no audio section - its music is still the pack's audio.
+		[Fact]
+		public void Tracks_next_to_the_textures_count_as_audio()
+		{
+			Assert.Equal(new PackLayerChips(true, true, false), PackDetail.Chips("textures", new PackAudioScan(0, 3, false)));
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures", new PackAudioScan(0, 0, false)));
 		}
 
 		[Fact]

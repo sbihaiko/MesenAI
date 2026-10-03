@@ -1313,6 +1313,61 @@ namespace
 	}
 }
 
+//W-P6's per-game layer switches: the UI pushes the layers turned off for one
+//ROM as a comma list; the textures and audio sections stop being served and
+//the ROM patch is not applied. Synth (enhanced audio) and Border keep their
+//global switches only.
+namespace
+{
+	void TestRomLayerSwitchesTurnOffTheirSectionOnly()
+	{
+		Check(MepPackManager::ParseRomLayersOff("") == 0, "W-P6 layers: an empty list turns nothing off");
+		Check(MepPackManager::ParseRomLayersOff("textures") == (uint8_t)MepRomLayer::Textures, "W-P6 layers: textures reads as the textures bit");
+		uint8_t all = MepPackManager::ParseRomLayersOff(" Textures, audio ,PATCH");
+		Check(MepPackManager::IsLayerOff(all, MepRomLayer::Textures) && MepPackManager::IsLayerOff(all, MepRomLayer::Audio) && MepPackManager::IsLayerOff(all, MepRomLayer::Patch),
+			"W-P6 layers: the list is trimmed and case-insensitive");
+		Check(MepPackManager::ParseRomLayersOff("synth,border,,x") == 0, "W-P6 layers: unknown words turn nothing off");
+
+		uint8_t audio = (uint8_t)MepRomLayer::Audio;
+		Check(MepPackManager::SectionOff(audio, MepSectionType::Audio), "W-P6 layers: audio off stops serving the audio section");
+		Check(!MepPackManager::SectionOff(audio, MepSectionType::Textures), "W-P6 layers: audio off leaves the textures section");
+		Check(!MepPackManager::SectionOff(audio, MepSectionType::Synth), "W-P6 layers: audio off leaves enhanced audio (Synth) on its global switch");
+		uint8_t textures = (uint8_t)MepRomLayer::Textures;
+		Check(MepPackManager::SectionOff(textures, MepSectionType::Textures), "W-P6 layers: textures off stops serving the textures section");
+		Check(!MepPackManager::SectionOff(textures, MepSectionType::Border), "W-P6 layers: textures off leaves the border");
+		Check(!MepPackManager::SectionOff((uint8_t)MepRomLayer::Patch, MepSectionType::Textures) && !MepPackManager::SectionOff((uint8_t)MepRomLayer::Patch, MepSectionType::Audio),
+			"W-P6 layers: patch off serves every section");
+	}
+}
+
+//ADR-0147: a community pack installed beside the ROM goes into <sibling>/mep/,
+//and the installer writes its .mep-install.json there - the sibling folder
+//itself is the container root. Reading the stamp only at the root left that
+//pack without its pack_id/content_id, so W-P6 offered the very community
+//pack that was rendering as "not installed".
+namespace
+{
+	void TestSiblingMepLayoutReadsItsInstallStamp()
+	{
+		std::filesystem::path sibling = std::filesystem::temp_directory_path() / "mep_sibling_stamp_test";
+		std::error_code ec;
+		std::filesystem::remove_all(sibling, ec);
+		std::filesystem::create_directories(sibling / "mep", ec);
+		std::ofstream(sibling / "mep" / ".mep-install.json", std::ios::out | std::ios::binary) << "{\"pack_id\":\"issue-207\"}\n";
+
+		string root = sibling.string();
+		string mepStamp = FolderUtilities::CombinePath(FolderUtilities::CombinePath(root, "mep"), ".mep-install.json");
+		string rootStamp = FolderUtilities::CombinePath(root, ".mep-install.json");
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Sibling) == mepStamp, "sibling stamp: a sibling installed under mep/ reads mep/.mep-install.json");
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Folder) == rootStamp, "sibling stamp: a folder pack keeps its root stamp");
+
+		std::ofstream(sibling / ".mep-install.json", std::ios::out | std::ios::binary) << "{\"pack_id\":\"root\"}\n";
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Sibling) == rootStamp, "sibling stamp: a stamp at the sibling root still wins (legacy layout)");
+
+		std::filesystem::remove_all(sibling, ec);
+	}
+}
+
 //--- Bloco H: FingerprintStore loop field round-trip (ADR-0134 Option A) ------
 //F5.4g Block C item 8: fingerprints.json's optional `loop` point (PCM
 //samples at the OGG's own rate). Absence/zero means loop-the-whole-file;
@@ -13199,6 +13254,8 @@ int main()
 
 	TestMepPackManagerGettersReturnCopies();
 	TestNoPackPreferenceTurnsEveryPackOffButTheSibling();
+	TestSiblingMepLayoutReadsItsInstallStamp();
+	TestRomLayerSwitchesTurnOffTheirSectionOnly();
 	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();
