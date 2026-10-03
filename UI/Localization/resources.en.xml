@@ -2336,10 +2336,9 @@
 		<Message ID="InterruptForcedPatch">This game's HD pack patch, {0}, was made for another version of the game and may break it. If the game freezes or looks wrong, reload it without the patch.</Message>
 		<Message ID="InterruptReloadWithoutPatch">Reload Without Patch</Message>
 		<Message ID="SelectRomPlayerTitle">Choose a game in {0}</Message>
-		<Message ID="ShellStatusPlaying">Playing {0}</Message>
-		<Message ID="ShellStatusPlayingWithPack">Playing {0} with {1}</Message>
-		<Message ID="ShellStatusPaused">{0} is paused</Message>
-		<Message ID="ShellStatusPausedWithPack">{0} is paused, with {1}</Message>
+		<Message ID="ShellStatusPack">pack {0}</Message>
+		<Message ID="ShellStatusProjectPack">your project's pack</Message>
+		<Message ID="ShellStatusAutoUpscale">automatic upscale</Message>
 		<Message ID="ClassicMenuNoticeTitle">Tools</Message>
 		<Message ID="ClassicMenuNoticeText">Your menus are under Tools ⋯</Message>
 		<Message ID="AutoSave">Auto-save</Message>

@@ -88,6 +88,10 @@ namespace Mesen.ViewModels
 		//P.5 (PRD Part B §6): the currently-applied pack's name/layers for
 		//the overlay chip and the "Applied ..." toast.
 		[ObservableProperty] public partial string CurrentPackName { get; private set; } = "";
+		//W-S1: the status line's "pack Contra 80s 1.2"; set before CurrentPackName,
+		//whose change refreshes the line.
+		private string _currentPackVersion = "";
+		private bool _currentPackAutoOnly;
 		[ObservableProperty] public partial string CurrentPackLayers { get; private set; } = "";
 
 		[ObservableProperty] public partial bool IsNativeRendererVisible { get; private set; }
@@ -176,7 +180,7 @@ namespace Mesen.ViewModels
 		private void UpdateShellState()
 		{
 			bool gameLoaded = RomInfo.Format != RomFormat.Unknown;
-			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName, IsPlayerPackPickerVisible);
+			Shell.UpdateGameState(gameLoaded, IsGamePaused, RomInfo.GetRomName(), CurrentPackName, _currentPackVersion, _currentPackAutoOnly, IsPlayerPackPickerVisible);
 		}
 
 		partial void OnIsGamePausedChanged(bool value) => UpdateShellState();
@@ -303,11 +307,15 @@ namespace Mesen.ViewModels
 
 		private void UpdateCurrentPack(PackPreferenceResolver.Resolution resolution)
 		{
+			_currentPackVersion = "";
+			_currentPackAutoOnly = false;
 			CurrentPackName = "";
 			CurrentPackLayers = "";
 
 			PlayerPackChoice? current = RenderedPackChoice(resolution);
 			if(current != null) {
+				_currentPackVersion = current.Version;
+				_currentPackAutoOnly = current.IsAutoOnly;
 				CurrentPackName = current.Name;
 				CurrentPackLayers = current.Layers;
 			}
@@ -330,6 +338,8 @@ namespace Mesen.ViewModels
 			Config.Save();
 			IsPlayerPackPickerVisible = false;
 			//The chosen pack is enabled (#693), so it is what the core renders next.
+			_currentPackVersion = choice.Version;
+			_currentPackAutoOnly = choice.IsAutoOnly;
 			CurrentPackName = choice.Name;
 			CurrentPackLayers = choice.Layers;
 			//#691: from W-P4, back to W-P4 (in place) or to the game (restart).
@@ -612,6 +622,8 @@ namespace Mesen.ViewModels
 		public bool HasVotes => Votes > 0;
 		public string Origin { get; } = "";
 		public string ContentId { get; } = "";
+		//The F5 bootstrap's machine-only sibling (ADR-0049), not a human's pack.
+		public bool IsAutoOnly { get; }
 
 		public string Container { get; }
 		public string PackId { get; }
@@ -643,6 +655,7 @@ namespace Mesen.ViewModels
 			Votes = Math.Max(0, votes);
 			Origin = entry?.Source ?? "";
 			ContentId = candidate.ContentId ?? "";
+			IsAutoOnly = candidate.IsAutoOnly;
 
 			//G.4 (W-P5): "by Tastic · 1.2 · textures, audio"; the license moved
 			//to the pack detail (W-P6, rule 3). GetMessage always formats, so the

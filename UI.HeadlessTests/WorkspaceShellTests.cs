@@ -405,7 +405,8 @@ public class WorkspaceShellTests : IDisposable
 			EmuApi.Pause();
 			WaitFor(() => model.IsGamePaused, "the pause never reached the shell");
 			Assert.True(window.FindNamed<WorkspaceShellBar>("ShellBar").IsOnScreen());
-			Assert.Contains("paused", model.Shell.StatusText);
+			//W-S1: the line names the game, never "is paused" (the overlay says so).
+			Assert.Equal("synthetic-nrom", model.Shell.StatusText);
 		} finally {
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();
