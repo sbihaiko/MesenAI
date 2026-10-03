@@ -36,6 +36,8 @@ public class LookSettingsTabTests : IDisposable
 {
 	private readonly VideoFilterType _filter;
 	private readonly string _shader;
+	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
+	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 
 	public LookSettingsTabTests()
 	{
@@ -47,17 +49,24 @@ public class LookSettingsTabTests : IDisposable
 	{
 		ConfigManager.Config.Video.VideoFilter = _filter;
 		ConfigManager.Config.Video.ShaderFile = _shader;
+		ConfigManager.Config.Preferences.UiMode = _uiMode;
+		ConfigManager.Config.Preferences.Workspace = _workspace;
 	}
 
-	private static MainWindowViewModel ShowPlayer(ConsoleType console, RomFormat format)
+	//#724: the Play sheets only show in the Play workspace, and the workspace is
+	//persisted (a Remaster/Share test's switch saves it to the test home's
+	//settings.json), so a filtered run could start in Remaster. Set it here
+	//rather than rely on what an earlier test or run left behind.
+	private static (MainWindow Window, MainWindowViewModel Model) ShowPlayer(ConsoleType console, RomFormat format)
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
+		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
 		MainWindow main = new();
 		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
 		model.RomInfo = new RomInfo() { ConsoleType = console, Format = format };
-		return model;
+		return (main, model);
 	}
 
 	private static (ConfigWindow Window, ConfigViewModel Model) ShowSettings(ConfigWindowTab tab, bool playerMode = true)
@@ -252,12 +261,7 @@ public class LookSettingsTabTests : IDisposable
 	public void Hi_res_filter_has_left_the_enhancements_panel()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
-		MainWindow main = new();
-		main.ShowStarted();
-		Dispatcher.UIThread.RunJobs();
-		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
-		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		(MainWindow main, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
 		model.OpenEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
 
