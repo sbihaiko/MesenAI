@@ -58,7 +58,7 @@ namespace Mesen.ViewModels
 
 		private void UpdateShareGame(bool gameLoaded, string siblingFolder)
 		{
-			Share?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), ((ResourcePath)RomInfo.RomPath).Path,
+			Share?.UpdateGame(gameLoaded, RomInfo.ConsoleType, RomInfo.GetRomName(), (ResourcePath)RomInfo.RomPath,
 				gameLoaded ? RemasterProjectLocator.ForGame(siblingFolder, ConfigManager.EnhancementPackFolder) : "");
 		}
 

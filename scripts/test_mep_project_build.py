@@ -251,6 +251,37 @@ def test_an_interrupted_first_build_does_not_lock_the_project_out():
         check((project / "mep" / "textures" / "hires.txt").is_file(), "and finishes mep/")
 
 
+def test_an_interrupted_rebuild_drops_the_complete_claim():
+    """#665: the `complete: false` claim was written only when no stamp existed,
+    so a rebuild stopped mid-sync kept the last build's `complete: true` and
+    Remaster read the half-synced mep/ as up to date."""
+    with tempfile.TemporaryDirectory() as td:
+        project = make_project(Path(td))
+        rc, out = build(project)
+        stamp = PB.stamp_path(project)
+        first = json.loads(stamp.read_text())
+        check(rc == 0 and first.get("complete") is True, "the first build stamps complete", out[-400:])
+        paint(project / "kit" / "rec-001" / "sheets" / "metatiles.png", (1, 2, 3, 255))
+        real = PB.sync_into
+
+        def interrupted(stage, mep):
+            raise OSError("disk went away")
+
+        PB.sync_into = interrupted
+        try:
+            rc = PB.run(project)
+        finally:
+            PB.sync_into = real
+        doc = json.loads(stamp.read_text())
+        check(rc == 1 and doc.get("complete") is False,
+              "the interrupted rebuild leaves the stamp a claim, not complete", json.dumps(doc))
+        rc, out = build(project)
+        doc = json.loads(stamp.read_text())
+        check(rc == 0 and doc.get("complete") is True, "the next build proceeds and stamps complete", out[-400:])
+        kit_mtime = max(f.stat().st_mtime for f in (project / "kit").rglob("*") if f.is_file())
+        check(stamp.stat().st_mtime >= kit_mtime, "and the stamp is newer than every kit file (up to date)")
+
+
 def test_a_hand_made_mep_is_still_refused():
     """The #646 fix must not weaken the guard: a mep/ with no stamp that this
     build never started is someone else's pack."""
@@ -275,6 +306,7 @@ def main():
         test_sync_removes_what_the_build_no_longer_has,
         test_the_pack_json_share_wrote_survives_a_rebuild,
         test_an_interrupted_first_build_does_not_lock_the_project_out,
+        test_an_interrupted_rebuild_drops_the_complete_claim,
         test_a_hand_made_mep_is_still_refused,
     ]
     for t in tests:

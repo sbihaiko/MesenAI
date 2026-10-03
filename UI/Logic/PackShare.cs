@@ -52,13 +52,14 @@ namespace Mesen.Logic
 		public static IReadOnlyList<string> ConsoleOptions => Options;
 
 		//The option for the running game. The Game Boy core runs GBC games too;
-		//the file extension tells them apart. Consoles the form does not name
-		//(GBA, and cores that are not product consoles) are "Other".
-		public static string ConsoleOption(ConsoleType console, string romPath)
+		//the file extension tells them apart - the game's own file, an archive's
+		//inner one (#666). Consoles the form does not name (GBA, and cores that
+		//are not product consoles) are "Other".
+		public static string ConsoleOption(ConsoleType console, string romFile)
 		{
 			return console switch {
 				ConsoleType.Nes => "NES",
-				ConsoleType.Gameboy => string.Equals(Path.GetExtension(romPath ?? ""), ".gbc", StringComparison.OrdinalIgnoreCase) ? "GBC" : "GB",
+				ConsoleType.Gameboy => string.Equals(Path.GetExtension(romFile ?? ""), ".gbc", StringComparison.OrdinalIgnoreCase) ? "GBC" : "GB",
 				ConsoleType.Sms => "SMS",
 				_ => OtherConsole
 			};

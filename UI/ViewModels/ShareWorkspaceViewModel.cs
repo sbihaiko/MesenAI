@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Interop;
 using Mesen.Localization;
 using Mesen.Logic;
+using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -38,6 +39,7 @@ namespace Mesen.ViewModels
 		private ConsoleType _console = ConsoleType.Nes;
 		private string _gameName = "";
 		private string _romPath = "";
+		private string _romFile = "";
 		private string _gameProject = "";
 		private ShareProjectIdentity? _project;
 		private string _replayFile = "";
@@ -120,12 +122,15 @@ namespace Mesen.ViewModels
 
 		//Fed by MainWindowViewModel on every RomInfo change. A game change never
 		//closes a Share screen (rule 5); the fields the user typed are kept.
-		public void UpdateGame(bool gameLoaded, ConsoleType console, string gameName, string romPath, string gameProject)
+		public void UpdateGame(bool gameLoaded, ConsoleType console, string gameName, ResourcePath rom, string gameProject)
 		{
 			_gameLoaded = gameLoaded;
 			_console = console;
 			_gameName = gameName ?? "";
-			_romPath = romPath ?? "";
+			//#666: --rom gets the file the core opened (an archive too); the
+			//console is told by the game's own file name, an archive's inner one.
+			_romPath = rom.Path ?? "";
+			_romFile = rom.FileName ?? "";
 			_gameProject = gameProject ?? "";
 			Refresh();
 		}
@@ -162,7 +167,7 @@ namespace Mesen.ViewModels
 		{
 			if(_gameLoaded && Game.Length == 0) {
 				Game = _gameName;
-				ConsoleChoice = PackShare.ConsoleOption(_console, _romPath);
+				ConsoleChoice = PackShare.ConsoleOption(_console, _romFile);
 			}
 			Navigate(ShareView.Pack);
 		}
@@ -208,7 +213,7 @@ namespace Mesen.ViewModels
 				return "";
 			}
 			return _project.ConsoleOption.Length > 0 ? _project.ConsoleOption
-				: IsRunningGamesProject ? PackShare.ConsoleOption(_console, _romPath) : "";
+				: IsRunningGamesProject ? PackShare.ConsoleOption(_console, _romFile) : "";
 		}
 
 		//W-H2 › Continue on GitHub ↗. Returns the URL it opened ("" when disabled).
