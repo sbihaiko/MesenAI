@@ -18,8 +18,16 @@ namespace Mesen.HeadlessTests;
 //this only proves the wiring (coordinator -> outcome -> log) plus the
 //"texture install stays intact" half. Skips when the core is not built.
 [Collection(NativeCoreCollection.Name)]
-public class PackAudioNoticeInstallTests
+public class PackAudioNoticeInstallTests : IDisposable
 {
+	//TestAppBuilder turns auto-install off for the whole test home (#751);
+	//these drive the auto-install path, so they turn it on and put it back.
+	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
+
+	public PackAudioNoticeInstallTests() => ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = true;
+
+	public void Dispose() => ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
+
 	private const string Notice = "audio not generated: 2 of 3 tracks unresolved; supply the `.ogg` files";
 	private const string Sha = "0123456789ABCDEF0123456789ABCDEF01234567";
 
