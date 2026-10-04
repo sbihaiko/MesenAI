@@ -395,7 +395,7 @@ void Emulator::ReloadRom(bool forPowerCycle)
 	//Cast RomFile/PatchFile to string to make sure the file is reloaded from the disk
 	//In some scenarios, the file might be in memory already, which will prevent the reload
 	//from actually reloading the rom from the disk.
-	if(!LoadRom((string)info.RomFile, (string)info.PatchFile, !forPowerCycle, forPowerCycle)) {
+	if(!LoadRom((string)info.RomFile, (string)info.PatchFile, !forPowerCycle, forPowerCycle, true)) {
 		if(forPowerCycle) {
 			//Power cycle failed (rom not longer exists, etc.), reset flag
 			//(otherwise power cycle will continue to be attempted on each frame)
@@ -421,8 +421,9 @@ void Emulator::PowerCycle()
 //The emulator lock is held from the save to the restore. The emulation thread
 //started by LoadRom waits on _runLock before its first frame (Run), so the
 //fresh console never runs a frame of its own between the two. If the game was
-//paused it stays paused; like any ReloadRom, the new thread then runs one frame
-//of the restored state before it parks.
+//paused it stays paused: this reload reaches the core through ReloadRom, which
+//passes keepPaused (#783) - a plain open of a game does not keep the flag. The
+//new thread then runs one frame of the restored state before it parks.
 //
 //Refused - nothing done - while a movie plays or records or netplay is
 //connected: InternalLoadRom stops the movie, and SaveStateManager::LoadState
@@ -458,11 +459,11 @@ InPlaceReloadResult Emulator::ReloadRomKeepingState()
 	return restored ? InPlaceReloadResult::Restored : InPlaceReloadResult::Restarted;
 }
 
-bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle)
+bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle, bool keepPaused)
 {
 	bool result = false;
 	try {
-		result = InternalLoadRom(romFile, patchFile, stopRom, forPowerCycle);
+		result = InternalLoadRom(romFile, patchFile, stopRom, forPowerCycle, keepPaused);
 	} catch(std::exception& ex) {
 		_videoDecoder->StartThread();
 		_videoRenderer->StartThread();
@@ -478,7 +479,7 @@ bool Emulator::LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom,
 	return result;
 }
 
-bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle)
+bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom, bool forPowerCycle, bool keepPaused)
 {
 	if(!romFile.IsValid()) {
 		MessageManager::DisplayMessage("Error", "CouldNotLoadFile", romFile.GetFileName());
@@ -582,6 +583,26 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 		bool gameChanged = (string)_rom.RomFile != (string)romFile || (string)_rom.PatchFile != (string)patchFile;
 		Stop(false, !gameChanged, false);
 		memset(originalConsoleMemory, 0, sizeof(originalConsoleMemory));
+	}
+
+	//#783: the game just opened starts running. The flag belongs to the game that
+	//was on screen, and nothing in the Player takes it back - a parked fresh game
+	//draws one frame and then nothing, and the overlay is an Esc menu rather than
+	//a reaction to the flag, which is what makes the blank screen look like a
+	//rendering bug. Both writers are cleared: _pauseOnNextFrame is a second
+	//one-shot that re-sets _paused on the next frame, and Stop() above can arm it
+	//through the movie manager's end-of-movie PauseOnMovieEnd.
+	//
+	//Only reached when the previous game was stopped, so no thread can be sitting
+	//in WaitForPauseEnd here; that wait polls the flag every 30ms rather than
+	//blocking on a signal, so the write alone is enough. Written directly, never
+	//Resume(): with a debugger attached Resume() routes to debugger->Run() and
+	//would defeat break-on-load. A power cycle (stopRom false) keeps its running
+	//thread and is never asked to clear - ReloadRom keeps the place of a paused
+	//game, which is what ADR-0244 reads below.
+	if(stopRom && !keepPaused) {
+		_paused = false;
+		_pauseOnNextFrame = false;
 	}
 
 	_videoDecoder->StopThread();

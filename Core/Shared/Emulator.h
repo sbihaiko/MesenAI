@@ -188,7 +188,7 @@ private:
 
 	void InitConsole(unique_ptr<IConsole>& newConsole, ConsoleMemoryInfo originalConsoleMemory[], bool preserveRom);
 
-	bool InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom = true, bool forPowerCycle = false);
+	bool InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom = true, bool forPowerCycle = false, bool keepPaused = false);
 
 public:
 	Emulator();
@@ -213,6 +213,8 @@ public:
 	void ProcessEndOfFrame();
 
 	void Reset();
+	//A reload re-loads the game already on screen through LoadRom with
+	//keepPaused=true, so a paused game stays parked across it (#783).
 	void ReloadRom(bool forPowerCycle);
 	void PowerCycle();
 	InPlaceReloadResult ReloadRomKeepingState();
@@ -225,7 +227,13 @@ public:
 
 	void OnBeforePause(bool clearAudioBuffer);
 
-	bool LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom = true, bool forPowerCycle = false);
+	//keepPaused (#783): a load starts the game running. The pause flag belongs to
+	//the game that was on screen - a parked freshly loaded game draws exactly one
+	//frame and then nothing, and no overlay comes with it to explain the blank
+	//screen (the Player overlay is an Esc menu, not a reaction to the flag). Only a
+	//caller that re-loads the game already on screen and wants the player's place
+	//kept passes true; ReloadRom does, for every reload shape it serves.
+	bool LoadRom(VirtualFile romFile, VirtualFile patchFile, bool stopRom = true, bool forPowerCycle = false, bool keepPaused = false);
 	RomInfo& GetRomInfo() { return _rom; }
 	string GetHash(HashType type);
 	uint32_t GetCrc32();
