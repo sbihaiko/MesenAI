@@ -28,7 +28,7 @@ circularity test (`GamepadCircularity`), a drift warning, and rumble through
 pad's buttons are undifferentiated chips in a `WrapPanel`, and only the **left**
 stick is drawn — the right stick is literally two `TextBlock`s of X and Y.
 
-Three requirements came after the wireframe was chosen, and each widens the
+Four requirements came after the wireframe was chosen, and each widens the
 problem beyond "make the tester prettier":
 
 1. **View and remap.** *"quero poder vizualizar e re mapear cada controle"* —
@@ -40,6 +40,21 @@ problem beyond "make the tester prettier":
 3. **Extra buttons become emulator actions.** *"se o jostick tiver mais botoes
    que o nitendo quero poder atribuir outros controles como retroceder,
    avancar, compartilhar, home, etc"*.
+
+4. **A keyboard has to play the game on its own.** *"se nenhum controle estiver
+   conectado o teclado deve estar configurado de maneira padrao e permitir o
+   jogo"* — with no pad plugged in, the keyboard must be bound and playable
+   without the player opening anything.
+
+That last one is **already true on a fresh install**, and the reason is worth
+writing down because it is easy to break: `PlayFirstRun.Mappings` always turns
+on both pad presets and one keyboard preset — `Wasd` or `ArrowKeys`, whichever
+radio the first-run sheet was left on — and `NesConfig.InitializeDefaults`
+applies them. The gaps are the two edges: a configuration that predates the
+preset, or one whose `DefaultKeyMappings` is `None` (a wizard that was never
+completed), has no keyboard preset at all and nothing restores it; and the
+sheet over a *running* game is the one place a player would look to find out
+what their keyboard does right now, which nothing shows today.
 
 **The constraint that shapes requirement 3, and the reason this ADR exists:**
 the actions already exist — `EmulatorShortcut` has `FastForward`, `Rewind`,
@@ -83,6 +98,13 @@ other Play surface** (`Classes="sheet"`, W-P8's card, Done in the corner):
 4. **EXTRA BUTTONS** — the host controls the console has no use for, each
    assignable to an `EmulatorShortcut` (Rewind, Fast-forward, Share,
    Home/menu, Save state, …).
+
+Requirement 4 is a state of the same sheet, not a fourth section: when no pad
+is connected the PLAYERS and mapping rows are empty and the sheet's job is to
+say **what the keyboard does now**, on the console's own buttons, and to offer
+the keyboard preset back when there is none. `DefaultKeyMappingType.WasdKeys`
+and `ArrowKeys` already exist as presets; what does not exist is a surface that
+applies one to a configuration that never got it.
 
 Player colour reaches the pad where the pad can show it: the macOS backend is
 Apple's **GameController** framework (`MacOS/MacOSKeyManager.mm`), not SDL, and
