@@ -40,12 +40,6 @@ namespace ShortcutKeyRules
 	//overlay, which is the only surface that reaches the menus while a game runs.
 	//What a binding names is the *button*; which pad is holding it is the code's
 	//own 0x100 block (ADR-0256 Decision 5, "Qualquer controle").
-	//
-	//Block and not base + device: Windows has two bases at once
-	//(IKeyManager::BaseGamepadIndex for XInput, WindowsKeyManager's
-	//BaseDirectInputIndex above it for DirectInput joysticks), and a rule that
-	//reconstructed the pair would have to know both. Everything a shortcut does
-	//with a pad key is the block arithmetic, so the block is what it keeps.
 	inline bool IsPadKey(uint16_t keyCode)
 	{
 		return keyCode >= IKeyManager::BaseGamepadIndex;
@@ -61,6 +55,21 @@ namespace ShortcutKeyRules
 		return (uint16_t)(keyCode & ~0xFF);
 	}
 
+	//The 0x1000 page a pad key code sits in, which is its backend family: XInput
+	//from IKeyManager::BaseGamepadIndex, and Windows' DirectInput joysticks from
+	//IKeyManager::BaseDirectInputIndex above it. The families number their buttons
+	//independently and there is no mapping between the two tables to consult -
+	//DirectInput's own names are axis directions ("Y2-") and But1..But128, with no
+	//semantic pad button anywhere - so a button byte is only a button within its
+	//page. A binding is therefore answered inside the page it was written from and
+	//nowhere else: without this, one joystick's Y2- and X2- axes (offsets 5 and 6)
+	//satisfy the XInput Start+Back chord (suffixes 5 and 6), which is precisely
+	//the coincidence that makes them look like the same buttons.
+	inline uint16_t PadPageOf(uint16_t keyCode)
+	{
+		return (uint16_t)(keyCode & 0xF000);
+	}
+
 	inline void AddPadBlock(vector<uint16_t>& blocks, uint16_t keyCode)
 	{
 		if(!IsPadKey(keyCode)) {
@@ -72,12 +81,25 @@ namespace ShortcutKeyRules
 		}
 	}
 
+	//Whether `blocks` already holds a pad from the page `keyCode` belongs to.
+	inline bool HasPadPage(const vector<uint16_t>& blocks, uint16_t keyCode)
+	{
+		uint16_t page = PadPageOf(keyCode);
+		for(uint16_t block : blocks) {
+			if(PadPageOf(block) == page) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	//The pads a combination may be resolved on: the block each of its own pad keys
 	//was written in (so a one-pad setup still answers exactly the code the binding
-	//holds), plus the block of every pad key the player is holding (so a pad the
-	//binding never named - a second one, or a joystick in the other family -
-	//answers it too). A combination with no pad key at all resolves through the
-	//host probe alone, as it always did.
+	//holds), plus the block of every pad the player is holding that is in the same
+	//page as one of those - a second pad of the same family answers it; a pad from
+	//another family is a different button numbering and does not. A combination
+	//with no pad key at all resolves through the host probe alone, as it always
+	//did.
 	inline vector<uint16_t> PadBlocksFor(const KeyCombination& comb, const vector<uint16_t>& pressedKeys)
 	{
 		vector<uint16_t> blocks;
@@ -85,7 +107,9 @@ namespace ShortcutKeyRules
 		AddPadBlock(blocks, comb.Key2);
 		AddPadBlock(blocks, comb.Key3);
 		for(uint16_t keyCode : pressedKeys) {
-			AddPadBlock(blocks, keyCode);
+			if(IsPadKey(keyCode) && HasPadPage(blocks, keyCode)) {
+				AddPadBlock(blocks, keyCode);
+			}
 		}
 		return blocks;
 	}

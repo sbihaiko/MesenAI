@@ -5999,23 +5999,61 @@ namespace
 			"BlocoO.2: ...and on the fourth, because the device is not what a binding names");
 	}
 
-	//Windows enumerates a pad twice over: XInput from BaseGamepadIndex, and a
-	//DirectInput joystick from WindowsKeyManager::BaseDirectInputIndex, which sits
-	//above it. A binding is seeded by key *name* ("Pad1 Select"), so a player
-	//whose pad came up as a joystick would otherwise never satisfy it - the same
-	//bug as #800 one dimension over. The rule keeps the code's 0x100 block, not
-	//base + device, so it does not have to know either base.
+	//Windows enumerates a pad twice over, and the two families number their
+	//buttons independently: XInput's table (WindowsKeyManager's `buttonNames`) has
+	//Start at suffix 5 and Back at suffix 6, while DirectInput's `diButtonNames`
+	//has suffix 5 = "Y2-" and suffix 6 = "X2-" - axis directions, and
+	//WindowsKeyManager::GetPressedKeys reports DirectInput offsets 0..143, which
+	//covers them. Equal suffixes are a coincidence, not an identity: 5 is Start in
+	//one table and an axis direction in the other. This codebase has no
+	//XInput<->DirectInput button mapping to resolve it with, because DirectInput's
+	//own name table carries no semantic pad-button names at all, so the page a
+	//binding was written from has to be part of what its buttons are.
 	uint16_t JoystickKey(int device, uint16_t button)
 	{
 		return (uint16_t)(0x2000 + device * 0x100 + button);
 	}
 
-	void TestPadChordIsAnsweredInEitherPadFamily()
+	KeyCombination TwoKeys(uint16_t first, uint16_t second)
 	{
-		Check(PadChordFires({ JoystickKey(0, kPadSelectButton), JoystickKey(0, kPadStartButton) }),
-			"BlocoO.2: the chord fires on a pad the backend numbered in its other family");
-		Check(!PadChordFires({ JoystickKey(0, kPadSelectButton), JoystickKey(1, kPadStartButton) }),
-			"BlocoO.2: ...and is still one pad's chord, not two joysticks' worth");
+		KeyCombination comb = {};
+		comb.Key1 = first;
+		comb.Key2 = second;
+		return comb;
+	}
+
+	//A shortcut bound to these two codes, held on the given keys.
+	bool ChordFires(KeyCombination binding, vector<uint16_t> down)
+	{
+		return ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay,
+			binding, {}, false, false, true, ProbeFor(down), down);
+	}
+
+	void TestPadChordIsNotAnsweredAcrossPadFamilies()
+	{
+		//The Windows chord as the seeder writes it: XInput Start + Back.
+		KeyCombination xinput = TwoKeys(PadKey(0, 5), PadKey(0, 6));
+
+		//The regression this guards: matching on the button byte alone let one
+		//joystick's Y2-/X2- axes fire that chord, because DirectInput numbers them
+		//5 and 6 too.
+		Check(!ChordFires(xinput, { JoystickKey(0, 5), JoystickKey(0, 6) }),
+			"BlocoO.2: a joystick's Y2-/X2- axes do not satisfy an XInput Start+Back chord");
+		Check(!ChordFires(xinput, { JoystickKey(0, 5), JoystickKey(1, 6) }),
+			"BlocoO.2: ...nor two joysticks' worth of them, one key each");
+
+		//The other direction, for the same reason: a joystick binding is not
+		//answered by the XInput pad that happens to share its button bytes.
+		KeyCombination joystick = TwoKeys(JoystickKey(0, 5), JoystickKey(0, 6));
+		Check(!ChordFires(joystick, { PadKey(0, 5), PadKey(0, 6) }),
+			"BlocoO.2: ...and an XInput pad does not satisfy a joystick's binding");
+
+		//Same page, second device: the #800 fix, and it is unaffected by the rule
+		//above.
+		Check(ChordFires(xinput, { PadKey(1, 5), PadKey(1, 6) }),
+			"BlocoO.2: the chord still fires on the second XInput pad");
+		Check(ChordFires(joystick, { JoystickKey(2, 5), JoystickKey(2, 6) }),
+			"BlocoO.2: ...and on the third joystick, in its own page");
 	}
 
 	void TestPadChordIsStillAChord()
@@ -16671,7 +16709,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
 	TestPadChordFiresOnWhicheverPadIsInHand();
-	TestPadChordIsAnsweredInEitherPadFamily();
+	TestPadChordIsNotAnsweredAcrossPadFamilies();
 	TestPadChordIsStillAChord();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
