@@ -219,17 +219,33 @@ namespace Mesen.Config
 			IReadOnlyList<string> keys = PlayMenuHint.DefaultControllerKeys(name => code(name) != 0);
 			KeyCombination combo = DefaultOverlayControllerCombination(code);
 			string signature = ShortcutSignature(combo);
-			bool taken = ShortcutKeys.Any(sk => ShortcutSignature(sk.KeyCombination) == signature || ShortcutSignature(sk.KeyCombination2) == signature);
+			//ADR-0255 slice 4: the pad slot is a binding too, so a combination is
+			//already in use when any of a shortcut's three slots holds it.
+			bool taken = ShortcutKeys.Any(sk => ShortcutSignatures(sk).Contains(signature));
 			if(PlayMenuHint.SeedsControllerBinding(overlay.KeyCombination2.IsEmpty, taken, keys)) {
 				overlay.KeyCombination2 = combo;
 			}
 		}
 
 		//ADR-0251: the ToggleOverlay slots as key names, for the entry toast.
-		public (List<string> First, List<string> Second) OverlayBindingKeyNames()
+		//ADR-0255 slice 4: the pad slot is one of them - a shortcut may hold a
+		//button and no key, so all three travel and PlayMenuHint.BindingName picks
+		//the one that speaks for the device in the player's hand ("Home for the
+		//menu" on a pad whose overlay binding is Home alone, "Esc for the menu"
+		//when the pad count says keyboard).
+		public (List<string> First, List<string> Second, List<string> Pad) OverlayBindingKeyNames()
 		{
 			ShortcutKeyInfo? overlay = ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
-			return (KeyNames(overlay?.KeyCombination), KeyNames(overlay?.KeyCombination2));
+			return (KeyNames(overlay?.KeyCombination), KeyNames(overlay?.KeyCombination2), PadKeyNames(overlay?.PadBinding));
+		}
+
+		private static List<string> PadKeyNames(PadShortcutBinding? pad)
+		{
+			if(pad == null || pad.IsEmpty) {
+				return new List<string>();
+			}
+			string name = InputApi.GetKeyName(pad.KeyCode);
+			return string.IsNullOrWhiteSpace(name) ? new List<string>() : new List<string>() { name };
 		}
 
 		private static List<string> KeyNames(KeyCombination? combo)
@@ -310,13 +326,36 @@ namespace Mesen.Config
 			);
 
 			List<InteropShortcutKeyInfo> shortcutKeys = new List<InteropShortcutKeyInfo>();
+			//The core holds two key sets per shortcut - EmuSettings::SetShortcutKeys
+			//fills sets 0 and 1 and ShortcutKeyHandler polls exactly those two, so a
+			//third binding for one shortcut would overwrite the second instead of
+			//adding to it. The pad slot has to fit under that ceiling.
+			const int coreKeySetsPerShortcut = 2;
 			foreach(ShortcutKeyInfo shortcutInfo in ShortcutKeys) {
 				bool isOverlay = shortcutInfo.Shortcut == EmulatorShortcut.ToggleOverlay;
+				int pushed = 0;
 				if(!shortcutInfo.KeyCombination.IsEmpty && (isOverlay || !overlayOwned.Contains(ShortcutSignature(shortcutInfo.KeyCombination)))) {
 					shortcutKeys.Add(new InteropShortcutKeyInfo(shortcutInfo.Shortcut, shortcutInfo.KeyCombination.ToInterop()));
+					pushed++;
 				}
 				if(!shortcutInfo.KeyCombination2.IsEmpty && (isOverlay || !overlayOwned.Contains(ShortcutSignature(shortcutInfo.KeyCombination2)))) {
 					shortcutKeys.Add(new InteropShortcutKeyInfo(shortcutInfo.Shortcut, shortcutInfo.KeyCombination2.ToInterop()));
+					pushed++;
+				}
+				//ADR-0255 slice 4: the pad slot is a third binding, so it takes
+				//whichever key set the combinations left free - a shortcut with a
+				//button and no key has both empty and lands in set 0, which is the
+				//case the ADR is about - and is dropped when there is none, never
+				//silently replacing a key.
+				//
+				//An axis direction is deliberately not pushed: the core would answer
+				//it at the platform's own deadzone threshold rather than at the
+				//player's, and a binding whose setting is ignored is worse than one
+				//that has not landed yet. Its comparison is PadAxisAction's and waits
+				//for the sheet that offers the threshold.
+				if(pushed < coreKeySetsPerShortcut && shortcutInfo.PadBinding is PadShortcutBinding pad && !pad.IsEmpty && !pad.IsAxis) {
+					shortcutKeys.Add(new InteropShortcutKeyInfo(shortcutInfo.Shortcut, pad.ToKeyCombination().ToInterop()));
+					pushed++;
 				}
 			}
 			ConfigApi.SetShortcutKeys(shortcutKeys.ToArray(), (UInt32)shortcutKeys.Count);
@@ -350,6 +389,19 @@ namespace Mesen.Config
 		private static string ShortcutSignature(KeyCombination combo)
 		{
 			return combo.Key1 + "-" + combo.Key2 + "-" + combo.Key3;
+		}
+
+		//ADR-0255 slice 4: a shortcut holds three bindings now - two key
+		//combinations and the pad slot - and anything asking "is this combination
+		//already used" has to see all three, or a seeded default could shadow a
+		//button the player bound.
+		private static IEnumerable<string> ShortcutSignatures(ShortcutKeyInfo info)
+		{
+			yield return ShortcutSignature(info.KeyCombination);
+			yield return ShortcutSignature(info.KeyCombination2);
+			if(info.PadBinding is PadShortcutBinding pad && !pad.IsEmpty) {
+				yield return ShortcutSignature(pad.ToKeyCombination());
+			}
 		}
 	}
 
