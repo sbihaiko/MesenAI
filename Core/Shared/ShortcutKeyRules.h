@@ -55,19 +55,55 @@ namespace ShortcutKeyRules
 		return (uint16_t)(keyCode & ~0xFF);
 	}
 
-	//The 0x1000 page a pad key code sits in, which is its backend family: XInput
+	//The pad families the running backend exposes, as their base indices: XInput
 	//from IKeyManager::BaseGamepadIndex, and Windows' DirectInput joysticks from
-	//IKeyManager::BaseDirectInputIndex above it. The families number their buttons
-	//independently and there is no mapping between the two tables to consult -
-	//DirectInput's own names are axis directions ("Y2-") and But1..But128, with no
-	//semantic pad button anywhere - so a button byte is only a button within its
-	//page. A binding is therefore answered inside the page it was written from and
+	//BaseDirectInputIndex above it. The families number their buttons independently
+	//and there is no mapping between the two tables to consult - DirectInput's own
+	//names are axis directions ("Y2-") and But1..But128, with no semantic pad
+	//button anywhere - so a button byte is only a button within its own family. A
+	//binding is therefore answered inside the family it was written from and
 	//nowhere else: without this, one joystick's Y2- and X2- axes (offsets 5 and 6)
-	//satisfy the XInput Start+Back chord (suffixes 5 and 6), which is precisely
-	//the coincidence that makes them look like the same buttons.
-	inline uint16_t PadPageOf(uint16_t keyCode)
+	//satisfy the XInput Start+Back chord (suffixes 5 and 6), which is precisely the
+	//coincidence that makes them look like the same buttons.
+	//
+	//The list is supplied by the caller rather than derived from the code, because
+	//only the backend knows it. Windows is the one backend with two families; macOS
+	//and Linux have a single one whose device index is unbounded, so their 17th pad
+	//(device 16) sits at code 0x2000 - the same code as a Windows joystick's first
+	//button, meaning something else entirely. A mask over the code cannot tell
+	//those apart, and reading it as a second family would take Pad17..Pad20 away
+	//from the chord.
+	typedef vector<uint16_t> PadFamilies;
+
+	//The one-family backend: macOS and Linux in production, and the shape a test
+	//uses when the test is not about families.
+	inline const PadFamilies& SinglePadFamily()
 	{
-		return (uint16_t)(keyCode & 0xF000);
+		static const PadFamilies families = { (uint16_t)IKeyManager::BaseGamepadIndex };
+		return families;
+	}
+
+	//The family a pad key code belongs to: the highest family base at or below it,
+	//or the lowest base when the code sits under all of them. With one family - and
+	//however high the device index goes - that is always the same answer.
+	inline uint16_t PadFamilyOf(uint16_t keyCode, const PadFamilies& families)
+	{
+		if(families.empty()) {
+			return (uint16_t)IKeyManager::BaseGamepadIndex;
+		}
+		uint16_t lowest = families[0];
+		uint16_t family = 0;
+		bool found = false;
+		for(uint16_t candidate : families) {
+			if(candidate < lowest) {
+				lowest = candidate;
+			}
+			if(candidate <= keyCode && (!found || candidate > family)) {
+				family = candidate;
+				found = true;
+			}
+		}
+		return found ? family : lowest;
 	}
 
 	inline void AddPadBlock(vector<uint16_t>& blocks, uint16_t keyCode)
@@ -81,12 +117,12 @@ namespace ShortcutKeyRules
 		}
 	}
 
-	//Whether `blocks` already holds a pad from the page `keyCode` belongs to.
-	inline bool HasPadPage(const vector<uint16_t>& blocks, uint16_t keyCode)
+	//Whether `blocks` already holds a pad from the family `keyCode` belongs to.
+	inline bool HasPadFamily(const vector<uint16_t>& blocks, uint16_t keyCode, const PadFamilies& families)
 	{
-		uint16_t page = PadPageOf(keyCode);
+		uint16_t family = PadFamilyOf(keyCode, families);
 		for(uint16_t block : blocks) {
-			if(PadPageOf(block) == page) {
+			if(PadFamilyOf(block, families) == family) {
 				return true;
 			}
 		}
@@ -96,18 +132,19 @@ namespace ShortcutKeyRules
 	//The pads a combination may be resolved on: the block each of its own pad keys
 	//was written in (so a one-pad setup still answers exactly the code the binding
 	//holds), plus the block of every pad the player is holding that is in the same
-	//page as one of those - a second pad of the same family answers it; a pad from
+	//family as one of those - a second pad of the same family answers it; a pad from
 	//another family is a different button numbering and does not. A combination
 	//with no pad key at all resolves through the host probe alone, as it always
 	//did.
-	inline vector<uint16_t> PadBlocksFor(const KeyCombination& comb, const vector<uint16_t>& pressedKeys)
+	inline vector<uint16_t> PadBlocksFor(const KeyCombination& comb, const vector<uint16_t>& pressedKeys,
+		const PadFamilies& families)
 	{
 		vector<uint16_t> blocks;
 		AddPadBlock(blocks, comb.Key1);
 		AddPadBlock(blocks, comb.Key2);
 		AddPadBlock(blocks, comb.Key3);
 		for(uint16_t keyCode : pressedKeys) {
-			if(IsPadKey(keyCode) && HasPadPage(blocks, keyCode)) {
+			if(IsPadKey(keyCode) && HasPadFamily(blocks, keyCode, families)) {
 				AddPadBlock(blocks, keyCode);
 			}
 		}
@@ -164,9 +201,9 @@ namespace ShortcutKeyRules
 	//no pad key at all, asked once through the host probe, which is every
 	//combination that existed before this rule did.
 	inline bool IsCombinationPressedOnAnyPad(KeyCombination comb, bool blockKeyboardKeys, bool anyKeyDown,
-		const KeyDownProbe& isKeyDown, const vector<uint16_t>& pressedKeys)
+		const KeyDownProbe& isKeyDown, const vector<uint16_t>& pressedKeys, const PadFamilies& families)
 	{
-		vector<uint16_t> blocks = PadBlocksFor(comb, pressedKeys);
+		vector<uint16_t> blocks = PadBlocksFor(comb, pressedKeys, families);
 		if(blocks.empty()) {
 			return IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, isKeyDown);
 		}
@@ -185,9 +222,13 @@ namespace ShortcutKeyRules
 	//which pads the player is holding. The combination is resolved once per such
 	//pad, and every pad key in it has to come from the *same* one - so the chord
 	//is "these buttons on a pad", not "these buttons somewhere".
+	//
+	//`families` is the backend's own pad families, and the production caller is
+	//ShortcutKeyHandler::GetPadFamilies (which is where the platform's answer
+	//lives - see the note on PadFamilies).
 	inline bool IsShortcutPressed(EmulatorShortcut shortcut, KeyCombination comb, const vector<KeyCombination>& supersets,
 		bool isKeyboardConnected, bool isPaused, bool anyKeyDown, const KeyDownProbe& isKeyDown,
-		const vector<uint16_t>& pressedKeys)
+		const vector<uint16_t>& pressedKeys, const PadFamilies& families)
 	{
 		bool blockKeyboardKeys = ShouldBlockKeyboardKeys(shortcut, isKeyboardConnected, isPaused);
 
@@ -195,7 +236,7 @@ namespace ShortcutKeyRules
 		//subset whichever pad it was pressed on, which is the precedence this had
 		//before there was more than one pad to ask.
 		for(const KeyCombination& superset : supersets) {
-			if(IsCombinationPressedOnAnyPad(superset, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys)) {
+			if(IsCombinationPressedOnAnyPad(superset, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys, families)) {
 				//A superset is pressed, ignore this subset
 				return false;
 			}
@@ -203,6 +244,6 @@ namespace ShortcutKeyRules
 
 		//No supersets are pressed, check if all matching keys are pressed on some
 		//one pad
-		return IsCombinationPressedOnAnyPad(comb, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys);
+		return IsCombinationPressedOnAnyPad(comb, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys, families);
 	}
 }
