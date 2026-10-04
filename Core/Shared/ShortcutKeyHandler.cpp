@@ -15,6 +15,25 @@
 #include "Shared/Interfaces/ITapeRecorder.h"
 #include "Netplay/GameClient.h"
 
+namespace {
+	//The pad families this build's backend exposes - the one fact the host-free
+	//rule in ShortcutKeyRules cannot work out for itself. Windows is the only
+	//backend with two: a pad there is either an XInput pad (from
+	//IKeyManager::BaseGamepadIndex) or a DirectInput joystick (from
+	//BaseDirectInputIndex), and the two number their buttons independently. macOS
+	//and Linux have a single family that every device lives in, however high the
+	//device index goes - their 17th pad (device 16) reaches code 0x2000, which is
+	//Windows' DirectInput base but, here, is still the same family as Pad1.
+	static const ShortcutKeyRules::PadFamilies& GetPadFamilies()
+	{
+#ifdef _WIN32
+		return ShortcutKeyRules::TwoPadFamilies();
+#else
+		return ShortcutKeyRules::SinglePadFamily();
+#endif
+	}
+}
+
 ShortcutKeyHandler::ShortcutKeyHandler(Emulator* emu)
 {
 	_emu = emu;
@@ -45,10 +64,20 @@ bool ShortcutKeyHandler::IsKeyPressed(EmulatorShortcut shortcut)
 	//The rule itself lives in ShortcutKeyRules (host-free, unit-tested): when
 	//running while a keyboard is plugged into the console, keyboard shortcut
 	//keys are disabled, except Pause and (P.4) ToggleOverlay.
+	//
+	//_pressedKeys goes in because a pad key code carries its device (#800): the
+	//rule needs the host's pressed keys to resolve a pad binding on the pad the
+	//player is actually holding, rather than on the one the binding was written
+	//from. It was refreshed from KeyManager::GetPressedKeys() at the top of
+	//ProcessKeys, immediately before CheckMappedKeys calls in here.
+	//
+	//GetPadFamilies() goes in because which families exist is the backend's own
+	//answer and nothing in the code says it - see that function's note.
 	KeyCombination keyComb = _emu->GetSettings()->GetShortcutKey(shortcut, _keySetIndex);
 	vector<KeyCombination> supersets = _emu->GetSettings()->GetShortcutSupersets(shortcut, _keySetIndex);
 	return ShortcutKeyRules::IsShortcutPressed(shortcut, keyComb, supersets, _isKeyboardConnected, _isPaused,
-		!_pressedKeys.empty(), [](uint16_t keyCode) { return KeyManager::IsKeyPressed(keyCode); });
+		!_pressedKeys.empty(), [](uint16_t keyCode) { return KeyManager::IsKeyPressed(keyCode); },
+		_pressedKeys, GetPadFamilies());
 }
 
 bool ShortcutKeyHandler::DetectKeyPress(EmulatorShortcut shortcut)

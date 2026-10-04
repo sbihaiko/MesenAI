@@ -61,6 +61,12 @@ class IKeyManager
 public:
 	static constexpr int BaseMouseButtonIndex = 0x200;
 	static constexpr int BaseGamepadIndex = 0x1000;
+	//Windows is the only backend with a second pad family: XInput above, and
+	//DirectInput joysticks here. It lives in the shared key-code namespace rather
+	//than in WindowsKeyManager because the pad rule in ShortcutKeyRules has to
+	//tell the two apart - the families number their buttons independently, so the
+	//same button byte is "Start" in one and an axis direction in the other.
+	static constexpr int BaseDirectInputIndex = 0x2000;
 
 	virtual ~IKeyManager() {}
 
