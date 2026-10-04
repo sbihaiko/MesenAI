@@ -59,6 +59,11 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   (`make shader-sweep`, ADR-0237): prerequisites, the classes it reports and
   how to read them. Not a CI gate and never to become one - the maintainer
   does not want GPU runs in CI.
+- `COMPILING.md`, `MIGRATION.md`, `SteamOS.md` - the build, pack-folder
+  migration and Steam Deck notes. Moved here from the repository root on
+  2026-10-04 (a root with one README and no loose docs); the paths that cite
+  them (`README.md`, `CLAUDE.md`, the community-pack validation workflow) name
+  `docs/` accordingly.
 - F12.2 cold-read protocol (ADR-0214, amended 2026-09-19: the evaluator is a
   fresh **Opus** session): `docs/validation/f12.2-sweep-evaluator-briefing.md`
   is the only evaluator-facing document for the 28-ROM sweep;
