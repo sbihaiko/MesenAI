@@ -147,6 +147,32 @@ heading are answered by them and by the section after.**
    (`DefaultKeyMappingType.Xbox` or `Ps4`), so "back" is B on one desk and ○ on
    another, and the footer has to say which.
 
+   **What the bridge that feeds this line has to satisfy** (found in review,
+   2026-10-04, before it was wired - the rule is landed as
+   `PlayMenuHint.ResumeHint` and the seam that answers which device is in hand
+   is not):
+   - **The line follows the resolution, not the family.** A family alone can
+     name a control the pad cannot press: `PadNavControls.Resolve` answers
+     `null` for a device index it cannot resolve and for a backend that spells
+     no such button - a Windows DirectInput joystick, which is #804's case - and
+     a footer reading "B to resume" over a dead D-pad is the same lie as "Esc to
+     resume" on a cabinet. If the mapping did not resolve, the line is the
+     neutral one.
+   - **It is recomputed when the device in hand changes, not only when the
+     overlay opens.** Today the line is read on open, which is enough while
+     nothing answers the seam; wiring the seam without also refreshing on the
+     change leaves the old control named after the player picks up the other
+     pad.
+   - **The device tracker must not be wired before back actually works.** With
+     the tracker live and Decision 2's back unshipped, the footer would name the
+     pad's circle while the only working way out is still ADR-0251's chord -
+     a correct-looking instruction pointing at an inert button. The bridge
+     lands both together.
+   - **The control is named in words, not as a glyph.** W-P4's Resume button
+     already draws its play mark rather than putting one in the string, because
+     the Player theme's font is the bundled Inter and a symbol depends on
+     fallback. The footer says "Circle", not U+25CB, for the same reason.
+
 7. **A held D-pad repeats** (decided with the user, 2026-10-04). The Core's
    shortcut thread only re-emits a key when the set of pressed keys *changes*,
    so a held direction produces one event and nothing else. A menu cursor needs
