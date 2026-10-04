@@ -52,7 +52,9 @@ namespace Mesen.ViewModels
 
 			_loading = true;
 			IsFullscreen = isFullscreen;
-			SelectedScale = Scales.FirstOrDefault(s => s.Value == current);
+			//Never blank: under 1× the nearest offered scale shows (W-P8).
+			double selected = PlayDisplaySettings.Nearest(values, current);
+			SelectedScale = Scales.First(s => s.Value == selected);
 			_loading = false;
 
 			if(!Avalonia.Controls.Design.IsDesignMode) {

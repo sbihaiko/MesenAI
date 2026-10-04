@@ -4,52 +4,99 @@
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:l="using:Mesen.Localization"
 	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:lg="using:Mesen.Logic"
 	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
 	x:Class="Mesen.Views.PlayControllerSetupView"
 	x:DataType="vm:PlayControllerSetupViewModel"
 >
 	<!--G.5 (PRD Part B §13.5.2 W-P15): the HUD pill for an unknown pad, and the
-	setup sheet the pad itself drives. Rule 2: Skip, Cancel = 2.-->
+	setup sheet the pad itself drives. Rule 2: Skip, Cancel = 2. ADR-0249: the
+	pill is the HUD, the sheet the overlay card, and the picture a drawn pad
+	(UI/Logic/ControllerPadLayout) with the step's button lit in the tint.-->
+	<UserControl.Styles>
+		<Style Selector="ItemsControl#ControllerSetupChips > ContentPresenter" x:DataType="vm:ControllerSetupChip">
+			<Setter Property="Canvas.Left" Value="{Binding Left}" />
+			<Setter Property="Canvas.Top" Value="{Binding Top}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey">
+			<Setter Property="Background" Value="{StaticResource PlayerPadButtonBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.dpad">
+			<Setter Property="Background" Value="{StaticResource PlayerPadKeyBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusPadKey}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.round">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusPadRound}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.shoulder">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.done">
+			<Setter Property="Background" Value="{StaticResource PlayerTintShareBrush}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.current">
+			<Setter Property="Background" Value="{StaticResource PlayerTintPlayBrush}" />
+		</Style>
+		<Style Selector="Border#ControllerSetupKey.current.round">
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="BorderThickness" Value="3" />
+		</Style>
+		<!--The keys are dark or tinted in either theme: the label is always white,
+		never inherited.-->
+		<Style Selector="TextBlock#ControllerSetupChipLabel">
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+	</UserControl.Styles>
+
 	<Panel>
-		<Border Name="ControllerSetupPill" IsVisible="{Binding IsPillVisible}" Background="#E61C1C1E" CornerRadius="18" Padding="16 8" Margin="0 24 0 0" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
-			<TextBlock Text="{l:Translate lblControllerSetupPill}" Foreground="White" />
+		<Border Name="ControllerSetupPill" Classes="hud compact" IsVisible="{Binding IsPillVisible}" Margin="0 40 0 0" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
+			<StackPanel Orientation="Horizontal">
+				<PathIcon Data="{StaticResource PlayerIconSettings}" />
+				<TextBlock Text="{l:Translate lblControllerSetupPill}" />
+			</StackPanel>
 		</Border>
-		<Panel Name="ControllerSetupBackdrop" IsVisible="{Binding IsVisible}" Background="#80000000">
-			<Border Name="ControllerSetupSheet" Background="White" CornerRadius="14" Padding="28 24" MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center">
-				<StackPanel Spacing="12" XYFocus.NavigationModes="Enabled">
-					<TextBlock Name="ControllerSetupTitle" Text="{Binding Title}" FontSize="19" FontWeight="Bold" Foreground="#1C1C1E" />
-					<TextBlock Text="{l:Translate lblControllerSetupIntro}" Foreground="#6E6E73" TextWrapping="Wrap" />
-					<!--The picture: the console's buttons, the step's one lit.-->
-					<ItemsControl Name="ControllerSetupChips" ItemsSource="{Binding Chips}" HorizontalAlignment="Center">
-						<ItemsControl.ItemsPanel>
-							<ItemsPanelTemplate>
-								<WrapPanel Orientation="Horizontal" />
-							</ItemsPanelTemplate>
-						</ItemsControl.ItemsPanel>
-						<ItemsControl.ItemTemplate>
-							<DataTemplate x:DataType="vm:ControllerSetupChip">
-								<Border Margin="3" Padding="10 4" CornerRadius="12" BorderBrush="#C7C7CC" BorderThickness="1"
-									Classes.current="{Binding IsCurrent}" Classes.done="{Binding IsDone}">
-									<!--The sheet is white in either theme: the label's colour is set
-									here (dark, white on the lit chip), never inherited.-->
-									<Border.Styles>
-										<Style Selector="Border.current"><Setter Property="Background" Value="#0A84FF" /></Style>
-										<Style Selector="Border.done"><Setter Property="Background" Value="#D1F2DB" /></Style>
-										<Style Selector="Border > TextBlock"><Setter Property="Foreground" Value="#1C1C1E" /></Style>
-										<Style Selector="Border.current > TextBlock"><Setter Property="Foreground" Value="White" /></Style>
-									</Border.Styles>
-									<TextBlock Name="ControllerSetupChipLabel" Text="{Binding Name}" FontWeight="Bold" />
-								</Border>
-							</DataTemplate>
-						</ItemsControl.ItemTemplate>
-					</ItemsControl>
-					<TextBlock Name="ControllerSetupPrompt" Text="{Binding Prompt}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#1C1C1E" />
-					<TextBlock Name="ControllerSetupStep" Text="{Binding StepText}" Foreground="#6E6E73" TextWrapping="Wrap" />
-					<ProgressBar Name="ControllerSetupProgress" Minimum="0" Maximum="1" Value="{Binding Progress}" Height="6" />
-					<TextBlock Text="{l:Translate lblControllerSetupHint}" Foreground="#6E6E73" TextWrapping="Wrap" />
-					<DockPanel Margin="0 8 0 0">
-						<Button Name="ControllerSetupSkip" DockPanel.Dock="Left" Content="{l:Translate btnControllerSetupSkip}" Padding="16 6" Click="OnSkip" />
-						<Button Name="ControllerSetupCancel" HorizontalAlignment="Right" Content="{l:Translate btnControllerSetupCancel}" Padding="16 6" Click="OnCancel" />
+		<Panel Name="ControllerSetupBackdrop" IsVisible="{Binding IsVisible}" Background="{StaticResource PlayerScrimBrush}">
+			<Border Name="ControllerSetupSheet" Classes="overlay-card" Width="460" Padding="24 22 24 20" HorizontalAlignment="Center" VerticalAlignment="Center">
+				<StackPanel XYFocus.NavigationModes="Enabled">
+					<TextBlock Name="ControllerSetupTitle" Classes="title2" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+					<TextBlock Classes="body secondary" Text="{l:Translate lblControllerSetupIntro}" TextWrapping="Wrap" Margin="0 6 0 0" />
+					<!--The picture: the console's pad, the step's button lit.-->
+					<Border Name="ControllerSetupPad" Background="{StaticResource PlayerPadBrush}" CornerRadius="{StaticResource PlayerRadiusPad}" Width="340" Height="140" HorizontalAlignment="Center" Margin="0 18 0 0">
+						<Panel>
+							<Canvas>
+								<Border Canvas.Left="58" Canvas.Top="58" Width="24" Height="24" Background="{StaticResource PlayerPadKeyBrush}" />
+							</Canvas>
+							<ItemsControl Name="ControllerSetupChips" ItemsSource="{Binding Chips}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<Canvas />
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:ControllerSetupChip">
+										<Border Name="ControllerSetupKey" Width="{Binding Width}" Height="{Binding Height}"
+											Classes.dpad="{Binding IsDPad}" Classes.round="{Binding IsRound}" Classes.shoulder="{Binding IsShoulder}"
+											Classes.current="{Binding IsCurrent}" Classes.done="{Binding IsDone}"
+											AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Name}">
+											<TextBlock Name="ControllerSetupChipLabel" Text="{Binding Name}" IsVisible="{Binding ShowsLabel}" />
+										</Border>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+						</Panel>
+					</Border>
+					<TextBlock Name="ControllerSetupPrompt" Classes="headline" Text="{Binding Prompt}" HorizontalAlignment="Center" Margin="0 20 0 0" />
+					<TextBlock Name="ControllerSetupStep" Classes="subhead secondary" Text="{Binding StepText}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0 6 0 0" />
+					<ProgressBar Name="ControllerSetupProgress" Classes="track" Minimum="0" Maximum="1" Value="{Binding Progress}" Margin="36 12 36 0" />
+					<TextBlock Classes="subhead secondary" Text="{l:Translate lblControllerSetupHint}" TextWrapping="Wrap" Margin="10 14 10 0" />
+					<DockPanel Margin="0 22 0 0">
+						<Button Name="ControllerSetupSkip" Classes="secondary medium" DockPanel.Dock="Left" Width="90" Content="{l:Translate btnControllerSetupSkip}" Click="OnSkip" />
+						<Button Name="ControllerSetupCancel" Classes="secondary medium" HorizontalAlignment="Right" Width="100" Content="{l:Translate btnControllerSetupCancel}" Click="OnCancel" />
 					</DockPanel>
 				</StackPanel>
 			</Border>

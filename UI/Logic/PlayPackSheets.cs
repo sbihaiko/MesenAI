@@ -26,6 +26,13 @@ public static class PackRowRoute
 	{
 		return !hasHumanSibling && distinctPackIds >= 2 ? PackRowTarget.Picker : PackRowTarget.Detail;
 	}
+
+	//#736: W-P6 holds the community-pack offer (CommunityPackOfferRule), so
+	//with one the row inspects - the picker lists only installed, enabled packs.
+	public static PackRowTarget For(int distinctPackIds, bool hasHumanSibling, bool hasCommunityOffer)
+	{
+		return hasCommunityOffer ? PackRowTarget.Detail : For(distinctPackIds, hasHumanSibling);
+	}
 }
 
 public static class PackPickerRow
@@ -47,6 +54,11 @@ public static class PackPickerRow
 		}
 		return string.Join(" · ", parts);
 	}
+
+	//W-P5's "No pack" second line: the render's "Play with enhanced audio
+	//only" holds while enhanced audio is on; with it off, the row must not
+	//promise it.
+	public static string NoPackDetailKey(bool enhancedAudioOn) => enhancedAudioOn ? "PackPickerNoPackDetail" : "PackPickerNoPackDetailOriginal";
 
 	//The radio that starts selected: the stored choice when it is one of the
 	//rows (changing the choice later, from W-P4), else the first row - the list
@@ -97,8 +109,9 @@ public static class PackOrigin
 	public const string Sibling = "sibling";
 }
 
-//W-P6's three chips. Patch is not a pack section: it is a bundled ROM patch
-//wired by the pack (PackAudioNotice's meaning), read from the folder.
+//W-P6's three layers (one switch each, PackLayerSwitches). Patch is not a
+//pack section: it is a bundled ROM patch wired by the pack (PackAudioNotice's
+//meaning), read from the folder.
 public sealed record PackLayerChips(bool Textures, bool Audio, bool Patch);
 
 public enum PackDetailNotice
@@ -116,28 +129,85 @@ public sealed record PackDetailModel(
 	int TotalTracks,
 	bool CanChangePack,
 	bool ShowsRestore,
-	string Folder
+	string Folder,
+	//The local automatic upscale (an auto-only folder pack): W-P6 shows it as
+	//what it is, not as a pack someone made.
+	bool IsAutomatic = false
 );
 
 public static class PackDetail
 {
 	//sections: the core's raw comma list ("textures,audio,border").
-	public static PackLayerChips Chips(string sections, PackAudioScan? scan)
+	//automatic: the F5 bootstrap's layer. Its "audio" section is recorded
+	//music fingerprints and MIDI, not tracks to play, so Music is present only
+	//when a scan finds playable <bgm>/<sfx> files.
+	public static PackLayerChips Chips(string sections, PackAudioScan? scan, bool automatic = false)
 	{
 		HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
 		foreach(string part in (sections ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
 			present.Add(part);
 		}
-		return new PackLayerChips(present.Contains("textures"), present.Contains("audio"), scan?.HasWiredPatch == true);
+		//An HDNes-style pack plays its music from <bgm>/<sfx> lines next to its
+		//textures, with no audio section: that is audio too (W-P6's switch).
+		return new PackLayerChips(present.Contains("textures"), (!automatic && present.Contains("audio")) || scan?.Total > 0, scan?.HasWiredPatch == true);
 	}
+
+	//W-P6's byline: "by Tastic · version 1.2 · CC BY-NC 4.0". byAuthor and
+	//versionText format the localized "by {0}" and "version {0}".
+	public static string Byline(string author, string version, string license, Func<string, string> byAuthor, string authorUnknown, Func<string, string> versionText)
+	{
+		List<string> parts = new() {
+			string.IsNullOrWhiteSpace(author) ? authorUnknown : byAuthor(author.Trim())
+		};
+		if(!string.IsNullOrWhiteSpace(version)) {
+			parts.Add(versionText(version.Trim()));
+		}
+		if(NamesLicense(license)) {
+			parts.Add(license.Trim());
+		}
+		return string.Join(" · ", parts);
+	}
+
+	//The catalog install writes "license": "unknown" into pack.json when the
+	//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown), and a
+	//pack.json-less folder pack reads "unspecified" - placeholders, not
+	//licenses, so the byline leaves them out like an empty one.
+	public static bool NamesLicense(string license)
+	{
+		if(string.IsNullOrWhiteSpace(license)) {
+			return false;
+		}
+		string trimmed = license.Trim();
+		return !trimmed.Equals("unknown", StringComparison.OrdinalIgnoreCase) && !trimmed.Equals("unspecified", StringComparison.OrdinalIgnoreCase);
+	}
+
+	//What every surface calls the current pack: the automatic upscale is named
+	//by what it is ("Automatic upscale"), never by the ROM's name as if it were
+	//a pack someone made.
+	public static string DisplayName(string name, bool autoOnly, string autoLabel) => autoOnly ? autoLabel : name;
+
+	//The automatic upscale's two lines under its "Automatic upscale" title: the
+	//game, then how it was made - no author, version or license. scaler: the
+	//scaler's name when known ("xBRZ 4×"); withScaler formats the localized
+	//"Made on this computer from what you played ({0})".
+	public static string AutoByline(string gameName, string? scaler, Func<string, string> withScaler, string plain)
+	{
+		string made = string.IsNullOrWhiteSpace(scaler) ? plain : withScaler(scaler.Trim());
+		return string.IsNullOrWhiteSpace(gameName) ? made : gameName.Trim() + "\n" + made;
+	}
+
+	//W-P6's folder button: the render's "Show Pack in Finder" names macOS's
+	//file browser; on Windows and Linux it is "Show Pack Folder".
+	public static string ShowFolderLabelKey(bool isMacOS) => isMacOS ? "btnPackDetailShowInFinder" : "btnPackDetailShowFolder";
 
 	//Where "Show pack folder" goes: a folder pack is EnhancementPacks/<container>,
 	//a zip pack lives in EnhancementPacks itself, a sibling pack is the folder
-	//next to the ROM. Empty when there is nothing to show.
+	//next to the ROM - its mep/ layer when the pack roots there (ADR-0147), else
+	//the sibling root. Empty when there is nothing to show.
 	public static string FolderFor(string origin, string container, string packsFolder, string siblingFolder)
 	{
 		return origin switch {
-			PackOrigin.Sibling => siblingFolder ?? "",
+			PackOrigin.Sibling => MepPackLayer.Resolve(siblingFolder),
 			PackOrigin.Zip => packsFolder ?? "",
 			_ => string.IsNullOrEmpty(container) || string.IsNullOrEmpty(packsFolder) ? "" : Path.Combine(packsFolder, container)
 		};
@@ -150,18 +220,21 @@ public static class PackDetail
 	//installedFromCatalog: the install registry holds a source sha256 for this
 	//ROM - Restore (ADR-0147) re-downloads it, so a local or sibling pack has
 	//nothing to restore from and the button is absent there, not disabled.
-	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder)
+	//prefersNoPack: W-P5's "No pack" is stored - Change Pack… is the way back
+	//even with one pack (PlayerPackPicker.CanChangeChoice).
+	public static PackDetailModel Build(bool hasPack, string sections, PackAudioScan? scan, int distinctPackIds, bool hasHumanSibling, bool installedFromCatalog, string folder, bool prefersNoPack = false, bool automatic = false)
 	{
 		bool missingMusic = hasPack && scan != null && scan.ShowsNotice;
 		return new PackDetailModel(
 			hasPack,
-			hasPack ? Chips(sections, scan) : new PackLayerChips(false, false, false),
+			hasPack ? Chips(sections, scan, automatic) : new PackLayerChips(false, false, false),
 			missingMusic ? PackDetailNotice.MissingMusic : PackDetailNotice.None,
 			missingMusic ? scan!.Missing : 0,
 			missingMusic ? scan!.Total : 0,
-			PackRowRoute.For(distinctPackIds, hasHumanSibling) == PackRowTarget.Picker,
+			PlayerPackPicker.CanChangeChoice(hasHumanSibling, distinctPackIds, prefersNoPack),
 			hasPack && installedFromCatalog,
-			folder ?? ""
+			folder ?? "",
+			hasPack && automatic
 		);
 	}
 }

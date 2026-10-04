@@ -104,20 +104,19 @@ can be exercised by real xunit tests without Avalonia or the native
   in keyboard games.
 - `WorkspaceShell` (G.1, ADR-0241, PRD Part B §13.2) is the host-free
   shell model: the `Workspace` enum (`Play`, `Remaster`, `Share` — that
-  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'), `WorkspaceState`
-  (one active workspace; an undefined persisted value falls back to `Play`),
-  `IsBarVisible` (the bar hides only while a Play game runs unpaused),
-  `ShellStatusLine` (the one-sentence status kind) and `ClassicMenuNotice`
-  (`ShowClassicMenuBar` defaults to `false` on fresh installs and upgrades,
-  §13.8 Q4; the one-time toast is due only for an upgraded settings file
-  whose bar is off). `PreferencesConfig.Workspace` is separate from
-  `UiMode`, which is not reinterpreted. Switching never pauses or stops the
-  game; outside Play the native renderer and every Play surface are hidden.
-  Tools ⋯ binds the same `MainMenuViewModel` item lists as the classic bar
-  (its menu style templates `ActionIcon.Source`, because one `Image` cannot
-  have two visual parents). Since G.1 `PlayerChrome.IsMenuVisible` takes
-  `ShowClassicMenuBar`, not `UiMode`, and the P.4 Debug-menu gate on
-  `UiMode` is retired so every classic action is reachable from Tools ⋯.
+  fixed order is the switcher's and the ⌘1/⌘2/⌘3 digits'; ADR-0250 adds
+  `Classic`, ⌘4), `WorkspaceState` (one active workspace; an undefined
+  persisted value falls back to `Play`), `IsBarVisible` (the bar hides
+  while a Play game runs unpaused, and always in Classic) and
+  `ShellStatusLine` (the status line's parts). Classic owns
+  `UiMode.Advanced`: entering it sets Advanced, a task door sets Player.
+  Switching never pauses or stops the game; outside Play the native
+  renderer and every Play surface are hidden. Each task door's Tools ⋯ is
+  its own short menu from `WorkspaceMenu` (ADR-0250), whose guards are an
+  entry no door places and a duplicate within a door. Its menu style
+  templates `ActionIcon.Source`, because one `Image` cannot have two visual
+  parents. The Player row template draws `-` separators itself: a style
+  keyed on Header throws while the items attach.
   `ShellTitleBar` decides the macOS title-bar integration: only macOS
   extends the client area (height hint = the 52 px bar), the bar background
   carries `WindowDecorationProperties.ElementRole="TitleBar"` and its two
@@ -170,7 +169,13 @@ can be exercised by real xunit tests without Avalonia or the native
   open. A recent card stays enabled while its `.rgd` exists. An OS file open
   (`App.OpenFromOs`, macOS open-documents) waits for `MainWindow.Startup`
   through `RunWhenStarted`, so a cold launch never loads before
-  `EmuApi.InitializeEmu` (#681).
+  `EmuApi.InitializeEmu` (#681). A pack ROM patch forced onto another
+  revision by `ApplyPatchOnHashMismatch` (#732) is read back after every
+  `GameLoaded` (`EmuApi.GetForcedPackPatch`, from the core's
+  `ForcedPatchGate`) and `PlayForcedPatch` puts the warning banner
+  (`InterruptionKind.ForcedPatch`, docked above the game) up in Player mode
+  only; *Reload Without Patch* is `EmuApi.SuppressForcedPackPatch` (that
+  ROM, this session, the setting untouched) plus a power cycle.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
@@ -193,11 +198,23 @@ can be exercised by real xunit tests without Avalonia or the native
   sibling) or W-P6; `PackPickerRow`/`PackDetail` build a row, the chips, the
   folder and the Restore visibility (catalog installs only, ADR-0147);
   `RestoreFlow` is the one in-place confirm; `PackAudioNotice.Scan` is the
-  counted ADR-0240 check W-P6 re-reads when it opens. `EnhancementsSheet.Pending`
-  names W-P7's button from the applied state and the draft; the ViewModel
+  counted ADR-0240 check W-P6 re-reads when it opens. Both the folder button
+  and that scan go through `MepPackLayer.Resolve` (ADR-0147): a container
+  whose pack roots at `mep/` (pack.json or a convention probe there - the
+  core's `HasSiblingMepPack`) is read at `mep/`, a legacy sibling or a
+  central `EnhancementPacks/<container>` at its own root. `EnhancementsSheet.Pending`
+  names W-P7's button from the applied state and the draft, and
+  `EnhancementsSheet.Resume` (with `EnhancementsDraftVisit.Holds`) is what the
+  draft does across the Pack row's detour into the pack sheets: the flips come
+  back, the switches the player left alone are re-read from what is applied;
+  the ViewModel
   (`MainWindowViewModel.PlaySheets.cs`) applies through `ToggleLayer`/
   `ToggleWideScrn`/`ToggleOverclock` and its `LayerChangeKeepsPlace` is the P.9
-  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip; `ConfigWindowTab.Display`
+  hook. `PlayerSettingsEssentials.Tabs` is W-P8's strip, shown by
+  `PlayerSettingsSheetView` in MainWindow (`MainWindowViewModel.PlayerSettings`,
+  `PlaySheet.Settings` for Esc; "More in Options…" hands over to the classic
+  `ConfigWindow` through `MainMenuViewModel.OpenConfig`, which has no Player
+  mode any more); `ConfigWindowTab.Display`
   is Player-only (not in `ConfigWindowTabOrder`) and `ConfigViewModel` keeps
   `SelectedTabIndex`/`PlayerTabIndex` at -1 for the hidden strip, so a tab's
   content is realized once. `PackInstallPill` is W-P9's state;
@@ -303,7 +320,14 @@ can be exercised by real xunit tests without Avalonia or the native
   mirrors the core's `GetPackForSection` (stored choice, else the first
   enabled human pack in pack-list order, else the first auto-only one, #703).
   Use This Pack opened from W-P4 returns to W-P4 when the swap is in place
-  and to the game when it restarts (`PackPickClose`, #691).
+  and to the game when it restarts (`PackPickClose`, #691). W-P5's last row,
+  *No pack* (`PlayerPackChoice.NoPackRow`, offered whenever a pack is
+  listed), stores `PackPreferenceResolver.NoPack` (`:none`, never an ADR-0140
+  pack_id); `Resolution.PrefersNoPack` makes it an effective choice (silent
+  load), `CurrentContainer` then returns only a sibling-folder pack (the
+  core's `MepPackManager::PreferenceAllowsPack`), `CanChangeChoice` keeps the
+  way back open with one pack, and `CommunityPackAutoInstallGate` skips the
+  auto-install for that ROM (ADR-0146: a user disable overrides).
 - `PackChangePolicy` (P.9, ADR-0244) is the host-free decision for a pack
   change — the Enhancements panel's Textures/Audio/Border toggles
   (`ToggleLayer`) and the picker's Apply: in place
@@ -525,6 +549,204 @@ can be exercised by real xunit tests without Avalonia or the native
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the
   pre-filled `[Replay]` issue form from the host-free `ReplayShare`
   (`UI.Tests/Recording/ReplayShareTests.cs`). No upload, no credential.
+
+## Player theme (ADR-0249)
+
+The Player GUI follows its rendered wireframes (`docs/media/gui-redesign/W-*.png`,
+drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
+`UI/Styles/PlayerTheme.axaml`, included by `App.axaml` after `MesenStyles`.
+
+- **Scope.** Every style is under the `player` class. `MainWindow` binds
+  `Classes.player` to `UiMode == Player` on `PlayWorkspace`, `ShellBar` and
+  `ShellStatusLine` (and `InterruptionBarHost`), on Remaster's
+  `RemasterWorkspaceHost` and `RemasterRecordingStripHost` (which also carry
+  `remaster`), and on the Share views themselves (`ShareWorkspace`,
+  `ShareRecordingStrip`, whose DataContext is Share, hence a cast binding);
+  outside MainWindow only the first-run card (`SetupWizardWindow`'s
+  `FirstRunCard`) carries it. Player-mode Settings is a sheet inside
+  `PlayWorkspace` (`PlayerSettingsSheetView`, W-P8/W-P10), not a window. A component class outside the
+  scope does nothing, so classic windows, dialogs, the debugger and Advanced
+  mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,
+  `FontSize` or `Foreground` on a control beats every style: put the classic
+  value in the view's own `Styles` and the `.player` override after it
+  (`WorkspaceShellBar.axaml`, the status line in `MainWindow.axaml`,
+  `StateGridEntry.axaml`). A view that carries the class itself can key its
+  classic styles off `v|View:not(.player)` (`ShareWorkspaceView.axaml`). A
+  Fluent `accent` class paints over `PlayerButtonTemplate`'s fill; clear its
+  `PART_ContentPresenter` background in Player if a button keeps `accent`
+  for Advanced.
+- **Tokens.** The script's palette (TEXT, TEXT2, TEXT3, SEP, WINBG, CARD,
+  FILL, RED, ORANGE, TINT, TINT_TEXT) is transcribed as `Player*Color` /
+  `Player*Brush`; `UI.Tests/Theme/PlayerThemeDriftTests` fails when either
+  side moves. Also: type ramp `PlayerFont*` (LargeTitle 28 … Caption 10.5),
+  radii `PlayerRadius*` (Control 8, ControlLarge 11, Card 12, Sheet 14,
+  Hero 16, Overlay 18; W-P15's pad: Pad 40, PadKey 3, PadRound 17), spacing `PlayerSpacing*` and `PlayerPageMargin`, shadows `PlayerShadow*`,
+  `PlayerFocusRing`. Font: Inter (`Avalonia.Fonts.Inter`, `WithInterFont()`).
+  No dark variant.
+- **Tint.** `c:PlayerTheme.Tint` / `TintSoft` / `TintText`
+  (`UI/Controls/PlayerTheme.cs`) are inherited attached brushes: the scope
+  sets Play's blue; a `remaster` or `share` class on any element inside it
+  switches to purple / green below that element. Tinted components bind to
+  them, so never hard-code a workspace colour.
+- **Components** (classes, inside the scope):
+  - Buttons: `Button.primary` (tint fill, white semibold), `.secondary`
+    (white, hairline, shadow), `.tinted` (TintSoft fill, TintText label),
+    `.destructive` (pale red fill, RED label), `.plain` (text only, TintText).
+    Sizes: default 28 high, `.small` 24, `.medium` 36, `.large` 44 (radius 8
+    up to 32 high, 11 above). A leading icon is `PathIcon Classes="leading"`.
+  - Grouped list: `Border.group` holding `Button.row` items (50 high, the
+    last row has no hairline). Row content: a DockPanel with
+    `Border.badge` (background = a badge colour) + `PathIcon`,
+    `PathIcon.chevron` docked right, `TextBlock.value` docked right,
+    `TextBlock.title`. `Button.row.text` is a row without a badge.
+  - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.xlarge` 40
+    below, `.hero` 56, `.large` 80) with a white `PathIcon`; tint by default.
+  - Steps: `Border.step` (below; `.step.large` is W-H3's 28 px circle with a
+    13 px number, declared after the wave 2 block) and `Rectangle.step-line`
+    (2 px SEP connector) - W-H3.
+  - Surfaces: `Border.card` (`.hero` radius 16), `Border.sheet`,
+    `Border.overlay-card`, `Border.scrim`, `Border.page` (WINBG), tokens
+    `PlayerPopoverBrush`/`PlayerPopoverBorderBrush` (below) and shadows
+    `PlayerShadowPopover`/`PlayerShadowMenu` for popovers and menus,
+    `Separator.hairline`. Card, sheet and overlay-card set
+    `TextElement.Foreground` to TEXT themselves (#716), so text on them is
+    readable whatever its parent sets; build a new sheet on `Border.sheet`
+    rather than a local dark background.
+  - Text: `TextBlock.large-title`, `title1`, `title2`, `title3` (for 26
+    bold and 16 semibold use `display` and `card-title`, below),
+    `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
+    `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
+    (TEXT3), `tint`.
+  - Settings groups (W-P8, W-P10): `Border Classes="group inset"` (the
+    play sheets' `Border.inset` fill, #F8F8FA, radius 12) holding `:is(Panel).setting-row` rows (46 high) split by
+    `Separator.row-hairline`; above a group `TextBlock.group-label` (11.5
+    bold TEXT2 caps) and `TextBlock.group-hint` (TEXT3); `TextBlock.reason`
+    is why a control is off (11.5 semibold, dark orange).
+  - In-place banner (W-X1 confirmations, W-X2 errors, W-X3 interruptions):
+    `Border.banner` (pale orange warning) / `.info` (pale blue) / `.stop`
+    (pale red), radius 12, 56 high, plus `remaster`/`share` for the tint;
+    inside a DockPanel `PathIcon.banner-icon` (left: `PlayerIconWarning`,
+    the tinted icon, or `PlayerIconStop`), `StackPanel.banner-actions`
+    (right: `secondary` then `primary` / `primary neutral` (dark) /
+    `destructive`, 30 high) and `TextBlock.banner-text`.
+    `Views/InterruptionBar` is built on it, its look chosen by
+    `Logic/InterruptionBanner`. Ask in place with a banner, never a dialog.
+    The pack-detail restore confirmation (`PackDetailRestoreConfirm`), the
+    BIOS sheet's wrong-file error and "use it anyway?" confirm and the pack
+    dependency sheet's error are all `banner warning`.
+  - Status glyphs are drawn, never text characters (no ⚠ or ✔ in copy):
+    `PathIcon.warning` beside a warning, `PathIcon.done` (`PlayerIconCheck`,
+    Share green) beside a finished result (W-H3 build, W-R7 layout hint).
+  - Recent-game tile pack badge (W-P2): `Border#TilePackBadge` in
+    `c:StateGrid Classes="tiles"` (22 card square, radius 6, top-right, 13 px
+    `PlayerIconPack` in Share green), shown when an `HdPacks/<rom>` folder
+    exists (`PlayHome.HasHdPack`); never on Save-state slots.
+    The block sits after the wave 2: Remaster block so `banner warning`
+    beats Remaster's `Border.warning`.
+  - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the
+    renders' 24-high macOS pop-up button: white, hairline, radius 6, Play-blue
+    up/down stepper in every workspace; its own template, greyed with no
+    stepper when disabled), `TabControl.segmented`
+    (a TabControl with the segmented strip, 96 px segments),
+    `RadioButton.choice` (tint-filled, 13.5 medium), `Border.hud.compact`
+    (W-P9/W-P15's smaller HUD pill: radius 10, 40 high, 13 semibold text,
+    14 px icon; after the wave 2 block so it beats `Border.hud`), a sheet
+    title's 40 px badge is `Border.badge.xlarge` and a progress bar is the
+    plain `ProgressBar` (both below; `ControllerSetupProgress` keeps a
+    `track` marker class with no style of its own), `ListBox.segmented` (segmented tabs), `ToggleSwitch` (green
+    on), `TextBox` (30 high, radius 7, focus ring), `c:StateGrid
+    Classes="tiles"` (one row of 176 x 132 recent-game tiles; add `slots`
+    for the Save states grid: FILL tiles that fill their cell, title + date,
+    17 px bold heading, inside `Border.sheet.slot-sheet`).
+  - Play sheets (wave 2: W-P5/6/7/11/13/14/16): `Border.inset` (#F8F8FA
+    list, radius 12; `.file-box` radius 10) holding `Border.switch-row`
+    (46, `.tall` 50, hairline but the last) with a `CheckBox.switch` (label
+    + 38 x 22 switch; `.subtitled` top-aligns it over a
+    `TextBlock.row-subtitle`); `RadioButton.option` (selectable card with a
+    ring); `Button.drop-zone` (bordered inset; `PathIcon.drop-icon`,
+    `TextBlock.drop-title` / `drop-hint`); `Border.warning.notice` (compact
+    shared `warning` banner, `.large`; `notice-title`, `notice-line`), `Border.alert`
+    (W-P14), `Border.chip` (`.on` green; AA-darkened chip tokens);
+    `ToggleButton.disclosure`; `Panel.scrim`; `Button.regular` (32 high
+    footer buttons, `.wide`); `Border.badge.heading` 48 (40: the shared
+    `badge.xlarge`); text `sheet-heading` (19), `option-title`,
+    `replay-note`, `cheat-badge` / `TextBlock.warning.badge-text`,
+    `SelectableTextBlock.ids`; glyphs `PathIcon.votes`, `close-glyph`
+    (and the shared `PathIcon.warning`). A Play sheet is light: never put one under a Dark
+    `ThemeVariantScope` (#716 is closed by these classes);
+    `PlaySheetsContrastTests` lists every sheet surface.
+  - What each Play sheet holds. *Enhancements* (W-P7,
+    `PlayerEnhancementsSheetView`) is one inset list of four switches that
+    edit a draft - Modern instruments, Border ("Applies on reload" under it
+    where the change restarts), Widescreen, Overclock (grey with its reason
+    where the console has no knob) - then the Pack row, `Pack: <name> ›`,
+    which opens W-P6, or W-P5 with 2+ packs; one Apply button writes the
+    draft. *Pack detail* (W-P6, `PlayerPackDetailSheetView`) holds this
+    game's Textures / Music / ROM Patch switch rows, never a global one:
+    a layer the pack lacks is grey ("Not in this pack"), one whose global
+    default is off reads "Off for every game — Tools ⋯ › Enhancement
+    Packs", and those three defaults live only in the Enhancement Packs
+    window (Classic's Tools ▸, the Remaster door's ⋯). When the only pack is
+    the bootstrap's `auto/` layer the title is *Automatic upscale* and the
+    byline is the game's name plus "Made on this computer from what you
+    played", naming the scaler in parentheses when the project's
+    `.bootstrap` stamp does ("(xBRZ 4×)"). *Settings* (W-P8) is the
+    Display | Look | Audio | Controls strip: Audio (Sound, Volume, Output
+    device) and Controls (pads, Rumble, deadzone) are three-row lists whose
+    "More in Options…" opens that tab's classic page, Display carries the
+    "Everything else: Tools ⋯ › Options" hint, Look its own footer.
+  - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
+    `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
+    `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
+    `ChevronDown`, `ChevronLeft`, `Record`, `Replay`, `More`, `Check`,
+    `Lock`, `UpDown`, `Warning` (even-odd, so the "!" is cut out), `Stop`,
+    `ArrowUpRight`, `Sparkle` (alias of `Enhancements`), `Thumb`, `Close`.
+  - Wave 2 (Remaster, W-R0…W-R7), in the theme's "wave 2: Remaster" block:
+    - Text: `TextBlock.display` (26 bold), `sheet-title` (18 bold),
+      `card-title` (16 semibold), `emphasis` (14 semibold), `lead` (14),
+      `paragraph` (13.5); tokens `PlayerFontDisplay`, `SheetTitle`,
+      `CardTitle`, `Lead`.
+    - Warning: `Border.warning` (soft orange `PlayerWarningFill`, radius 12,
+      brown `PlayerWarningText` foreground), `TextBlock.warning`,
+      `Button.plain.warning`, `PathIcon.warning` (orange 16).
+    - `Border.badge.xlarge` (40, radius 10); `Border.step` (22 tint circle
+      with a white 12.5 bold number: the "1 RECORD" step marker).
+    - `Button.chip` (FILL chip, radius 8, 32 high: the project menu).
+    - `ProgressBar` (6 high, FILL track, tint bar).
+    - `Border.popover` / `FlyoutPresenter.popover` (`PlayerPopover` fill,
+      hairline, radius 12, shadow `PlayerShadowPopover`); use
+      `FlyoutPresenterClasses="popover"` on a `Flyout`.
+    - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
+      white text; `secondary` / `tint` text inside it read
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      Stop); `PlayerGameBackgroundBrush` (black behind the game).
+    - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
+- **No classic dialog from a Player flow** (ADR-0249 final audit). Quit
+  game on W-P4 asks with `Views/OverlayConfirmBanner` (`banner stop` on the
+  overlay card, `QuitGameConfirm`; Esc answers Keep Playing) and closing the
+  window with the `InterruptionBar` (`InterruptionKind.QuitApp`), never
+  `MesenMsgBox`. A `MessageBox` the Player GUI still raises takes the
+  Player look (`PlayerMsgRoot`: a white sheet, the shared banner,
+  `regular` footer buttons, the safe one first) when
+  `Utilities/PlayerDialogScope.UsesPlayerLook` holds: Player mode **and**
+  an owner that shows the `player` class (`Logic/PlayerDialog`). A
+  multi-ROM archive and Look's Adjust… are sheets inside the main window
+  in Player mode (user decision 2026-10-03): `Views/PlaySelectRomSheetView`
+  (`SelectRomSheet`, in `BiosSheetLayer`, routed by
+  `Logic/ArchiveRomPick`) and `Views/PlayerShaderSheetView`
+  (`ShaderSheet`, over the Settings sheet); Esc closes either
+  (`HandleInWindowSheetEsc`). `SelectRomWindow` and `ShaderConfigWindow`
+  are classic-only. Under a
+  classic window, the debugger or Advanced the classic tree stays. Look's
+  Art row opens W-P6 in the main window
+  (`MainWindow.OpenPackDetailFromSettings`). The BIOS sheet sits in the
+  root-level `BiosSheetLayer`, so W-P13 asks in every workspace.
+  `UI.HeadlessTests/PlayerNoClassicDialogTests` pins all of it.
+- **Restyling a screen.** Keep every `Name`, binding, handler and focus
+  order (the headless suites find controls by name). Swap local colours and
+  sizes for classes; add a render test next to
+  `UI.HeadlessTests/PlayerThemeRenderTests` that saves the PNG and asserts
+  font, size, radius, tint and background of the named controls.
 
 ## Work Guidance
 

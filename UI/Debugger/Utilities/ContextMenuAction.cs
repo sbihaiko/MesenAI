@@ -603,13 +603,9 @@ namespace Mesen.Debugger.Utilities
 		//(Record/Stop) so the Tools menu reads the same way. The viewer is not
 		//in the menu (ADR-0169 section 4, amended 2026-09-23).
 		LiveRecorder,
-		//ADR-0205: Tools > Movies > Record and share.
-		RecordAndShare,
 
 		[IconFile("HdPack")]
 		HdPacks,
-		[IconFile("Import")]
-		InstallHdPack,
 		[IconFile("HdPack")]
 		HdPackBuilder,
 		[IconFile("HdPack")]
@@ -627,16 +623,12 @@ namespace Mesen.Debugger.Utilities
 		[IconFile("Export")]
 		SaveSpcFile,
 
-		[IconFile("Help")]
-		OnlineHelp,
 		[IconFile("CommandLine")]
 		CommandLineHelp,
 		[IconFile("Update")]
 		CheckForUpdates,
 		[IconFile("Exclamation")]
 		About,
-		[IconFile("Comment")]
-		ReportBug,
 
 		[IconFile("Speed")]
 		Speed,

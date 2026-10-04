@@ -14,49 +14,163 @@
 	Asks once, in place (rule 7): Cancel / Make editable = 2 elements. While
 	mep_import runs, the sheet shows it with Stop; a refusal lists one plain
 	sentence per rule with Show line, and no Make editable. Esc closes it.-->
-	<Border Name="RemasterImportCard" Background="#262626" CornerRadius="8" Padding="16" MaxWidth="560" HorizontalAlignment="Left">
-		<StackPanel Spacing="10">
-			<TextBlock Text="{l:Translate lblFinishedPackTitle}" FontSize="16" FontWeight="Bold" />
+	<!--ADR-0249 (W-R6): in Player mode a light 480 px sheet over the scrim -
+	the 44 px Remaster badge and an 18 px title, the body, the patched-game
+	warning as a soft orange box with its icon, Cancel and Make Editable at
+	32 px. Advanced keeps the classic dark card.-->
+	<UserControl.Styles>
+		<Style Selector="Border#RemasterImportCard">
+			<Setter Property="Background" Value="#262626" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="16" />
+			<Setter Property="MaxWidth" Value="560" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector=".player Border#RemasterImportCard">
+			<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSheet}" />
+			<Setter Property="Padding" Value="24 24 24 22" />
+			<Setter Property="Width" Value="480" />
+			<Setter Property="MaxWidth" Value="480" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+		</Style>
+		<Style Selector="TextBlock#RemasterImportTitle">
+			<Setter Property="FontSize" Value="16" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterImportTitle">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSheetTitle}" />
+		</Style>
+		<Style Selector="Border#RemasterImportBadge">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Border#RemasterImportBadge">
+			<Setter Property="IsVisible" Value="True" />
+			<Setter Property="Width" Value="44" />
+			<Setter Property="Height" Value="44" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
+		</Style>
+		<Style Selector=".player Border#RemasterImportBadge > PathIcon">
+			<Setter Property="Width" Value="25" />
+			<Setter Property="Height" Value="25" />
+		</Style>
+		<Style Selector="TextBlock#RemasterImportPatchedWarning">
+			<Setter Property="Foreground" Value="#FFD27A" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterImportPatchedWarning">
+			<Setter Property="Foreground" Value="{StaticResource PlayerWarningTextBrush}" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+		</Style>
+		<Style Selector=".player Border#RemasterImportPatchedBox">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+			<Setter Property="Padding" Value="14 12 16 12" />
+		</Style>
+		<Style Selector="PathIcon.warning">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player PathIcon.warning">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player Button.secondary">
+			<Setter Property="Height" Value="32" />
+		</Style>
+		<Style Selector=".player Button.primary">
+			<Setter Property="Height" Value="32" />
+		</Style>
+		<!--Classic (Advanced) keeps small icons and no badges; the theme sizes them in Player mode.-->
+		<Style Selector="PathIcon.leading">
+			<Setter Property="Width" Value="11" />
+			<Setter Property="Height" Value="11" />
+			<Setter Property="Margin" Value="0 0 6 0" />
+		</Style>
+		<Style Selector=".player Button PathIcon.leading">
+			<Setter Property="Width" Value="13" />
+			<Setter Property="Height" Value="13" />
+			<Setter Property="Margin" Value="0 0 7 0" />
+		</Style>
+		<!--The render's stop square is a third smaller than a leading glyph.-->
+		<Style Selector=".player Button PathIcon.leading.stop">
+			<Setter Property="Width" Value="9" />
+			<Setter Property="Height" Value="9" />
+		</Style>
+		<!--Fluent paints a Button.accent on its ContentPresenter (blue, square);
+		the Player primary paints on PART_Background, so the presenter stays clear.-->
+		<Style Selector=".player Button.primary.accent /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=".player Button.primary.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=".player Button.primary.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+	</UserControl.Styles>
+	<Border Name="RemasterImportCard" Classes="sheet">
+		<StackPanel Spacing="14">
+			<StackPanel Orientation="Horizontal" Spacing="14">
+				<Border Name="RemasterImportBadge" Classes="badge">
+					<PathIcon Data="{StaticResource PlayerIconRemaster}" />
+				</Border>
+				<TextBlock Name="RemasterImportTitle" Classes="sheet-title" Text="{l:Translate lblFinishedPackTitle}" VerticalAlignment="Center" />
+			</StackPanel>
 
-			<StackPanel Spacing="10" IsVisible="{Binding IsImportAsking}">
-				<TextBlock Text="{l:Translate lblFinishedPackBody}" />
-				<TextBlock Name="RemasterImportPatchedWarning" Text="{l:Translate lblFinishedPackPatched}" Foreground="#FFD27A" IsVisible="{Binding IsImportPatched}" />
-				<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-					<Button Name="RemasterImportCancelButton" Content="{l:Translate btnImportCancel}" Click="OnCancel" />
+			<StackPanel Spacing="14" IsVisible="{Binding IsImportAsking}">
+				<TextBlock Classes="paragraph" Text="{l:Translate lblFinishedPackBody}" />
+				<Border Name="RemasterImportPatchedBox" Classes="warning" IsVisible="{Binding IsImportPatched}">
+					<DockPanel>
+						<PathIcon Classes="warning" DockPanel.Dock="Left" VerticalAlignment="Top" Margin="0 1 10 0" Data="{StaticResource PlayerIconWarning}" />
+						<TextBlock Name="RemasterImportPatchedWarning" Text="{l:Translate lblFinishedPackPatched}" />
+					</DockPanel>
+				</Border>
+				<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0 26 0 0">
+					<Button Name="RemasterImportCancelButton" Classes="secondary" VerticalAlignment="Top" Content="{l:Translate btnImportCancel}" Click="OnCancel" />
 					<StackPanel Spacing="2" MaxWidth="240">
-						<Button Name="RemasterMakeEditableButton" Content="{l:Translate btnMakeEditable}" Classes="accent" IsEnabled="{Binding MakeEditable.IsEnabled}" Click="OnMakeEditable" />
-						<TextBlock Name="RemasterMakeEditableReason" Classes="reason" Text="{Binding MakeEditable.Reason}" IsVisible="{Binding MakeEditable.HasReason}" />
+						<Button Name="RemasterMakeEditableButton" Content="{l:Translate btnMakeEditable}" Classes="accent primary" IsEnabled="{Binding MakeEditable.IsEnabled}" Click="OnMakeEditable" />
+						<TextBlock Name="RemasterMakeEditableReason" Classes="reason footnote secondary" Text="{Binding MakeEditable.Reason}" IsVisible="{Binding MakeEditable.HasReason}" />
 					</StackPanel>
 				</StackPanel>
 			</StackPanel>
 
 			<DockPanel IsVisible="{Binding IsImportRunning}">
-				<Button Name="RemasterImportStopButton" DockPanel.Dock="Right" Content="{l:Translate btnImportStop}" Click="OnCancel" />
-				<StackPanel Spacing="6">
-					<TextBlock Name="RemasterImportRunningText" Text="{l:Translate lblImportRunning}" />
+				<Button Name="RemasterImportStopButton" DockPanel.Dock="Right" Classes="secondary" Margin="16 0 0 0" VerticalAlignment="Center" Click="OnCancel">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading stop" Data="{StaticResource PlayerIconStop}" />
+						<TextBlock Text="{l:Translate btnImportStop}" />
+					</StackPanel>
+				</Button>
+				<StackPanel Spacing="8">
+					<TextBlock Name="RemasterImportRunningText" Classes="emphasis" Text="{l:Translate lblImportRunning}" />
 					<ProgressBar IsIndeterminate="True" />
 				</StackPanel>
 			</DockPanel>
 
-			<StackPanel Spacing="8" IsVisible="{Binding IsImportRefused}">
-				<TextBlock Text="{l:Translate lblImportRefused}" />
+			<StackPanel Spacing="10" IsVisible="{Binding IsImportRefused}">
+				<TextBlock Classes="paragraph" Text="{l:Translate lblImportRefused}" />
 				<ItemsControl Name="RemasterImportRefusalList" ItemsSource="{Binding ImportRefusals}">
+					<ItemsControl.ItemsPanel>
+						<ItemsPanelTemplate>
+							<StackPanel Spacing="8" />
+						</ItemsPanelTemplate>
+					</ItemsControl.ItemsPanel>
 					<ItemsControl.ItemTemplate>
 						<DataTemplate x:DataType="vm:RemasterRefusalRow">
 							<StackPanel Spacing="4">
 								<DockPanel>
-									<ToggleButton Name="ShowLine" DockPanel.Dock="Right" Content="{l:Translate btnShowLine}" IsVisible="{Binding HasLine}" />
+									<ToggleButton Name="ShowLine" DockPanel.Dock="Right" Margin="12 0 0 0" VerticalAlignment="Top" Content="{l:Translate btnShowLine}" IsVisible="{Binding HasLine}" />
 									<StackPanel Spacing="2">
-										<TextBlock Classes="refusal" Text="{Binding Sentence}" />
-										<TextBlock Classes="reason" Text="{Binding Where}" IsVisible="{Binding Where, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+										<TextBlock Classes="refusal subhead" Text="{Binding Sentence}" />
+										<TextBlock Classes="reason footnote secondary" Text="{Binding Where}" IsVisible="{Binding Where, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 									</StackPanel>
 								</DockPanel>
-								<TextBlock Classes="cited" Text="{Binding CitedLine}" FontFamily="monospace" Opacity="0.8" IsVisible="{Binding #ShowLine.IsChecked}" />
+								<TextBlock Classes="cited footnote secondary" Text="{Binding CitedLine}" FontFamily="{DynamicResource MesenMonospaceFont}" IsVisible="{Binding #ShowLine.IsChecked}" />
 							</StackPanel>
 						</DataTemplate>
 					</ItemsControl.ItemTemplate>
 				</ItemsControl>
-				<Button Name="RemasterImportCloseButton" Content="{l:Translate btnImportClose}" HorizontalAlignment="Right" Click="OnCancel" />
+				<Button Name="RemasterImportCloseButton" Classes="secondary" Content="{l:Translate btnImportClose}" HorizontalAlignment="Right" Click="OnCancel" />
 			</StackPanel>
 		</StackPanel>
 	</Border>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Config;
@@ -37,8 +38,38 @@ namespace Mesen.ViewModels
 
 		private bool IsGameLoaded => RomInfo.Format != RomFormat.Unknown;
 
+		//PlayGameLayer: a Play surface is up over the game, so the native picture,
+		//drawn above every Avalonia control, has to step aside for it.
+		private bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
+			|| SelectRomSheet.IsVisible || IsShaderSheetVisible || ToolSheet.IsVisible;
+
+		private static readonly HashSet<string> PlaySurfaceProperties = new() {
+			nameof(IsPlayerOverlayVisible), nameof(IsSaveStatesSheetVisible), nameof(IsEnhancementsPanelVisible),
+			nameof(IsPlayerPackPickerVisible), nameof(IsPackDetailVisible), nameof(IsPlayerSettingsVisible),
+			nameof(IsLoadWaitActive), nameof(IsShaderSheetVisible)
+		};
+
+		private void WatchPlaySurfaces()
+		{
+			PropertyChanged += (s, e) => {
+				if(PlaySurfaceProperties.Contains(e.PropertyName ?? "")) {
+					UpdateRendererVisibility();
+				}
+			};
+			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet }) {
+				sheet.PropertyChanged += (s, e) => {
+					if(e.PropertyName == "IsVisible") {
+						UpdateRendererVisibility();
+					}
+				};
+			}
+		}
+
 		private PlaySheet CurrentPlaySheet()
 		{
+			if(IsPlayerSettingsVisible) {
+				return PlaySheet.Settings;
+			}
 			if(PackDepSheet.IsVisible) {
 				return PlaySheet.PackDep;
 			}
@@ -71,6 +102,11 @@ namespace Mesen.ViewModels
 		//opened from W-P4 closes back to it.
 		public void TogglePlayerOverlay()
 		{
+			//ADR-0249 (W-X1): Esc on Quit game's question answers it as Keep Playing.
+			if(QuitGameConfirm.IsVisible) {
+				QuitGameConfirm.Keep();
+				return;
+			}
 			if(HandleEdgeFlowEsc()) {
 				return;
 			}
@@ -87,6 +123,8 @@ namespace Mesen.ViewModels
 					break;
 
 				case PlayEscAction.CloseOverlayAndResume:
+					//Back to the game: W-P7's detour (if one was open) ends here.
+					EndEnhancementsDraftVisit();
 					IsPlayerOverlayVisible = false;
 					EmuApi.Resume();
 					break;
@@ -109,12 +147,17 @@ namespace Mesen.ViewModels
 					IsPlayerPackPickerVisible = false;
 					_packPickerFromOverlay = false;
 					break;
-				case PlaySheet.Enhancements: IsEnhancementsPanelVisible = false; break;
+				case PlaySheet.Enhancements:
+					//Esc ends the visit: the next open reads what is applied.
+					EndEnhancementsDraftVisit();
+					IsEnhancementsPanelVisible = false;
+					break;
 				case PlaySheet.PackDetail: IsPackDetailVisible = false; CancelRestore(); break;
 				case PlaySheet.Cheats: HideCheatsSheet(); break;
 				case PlaySheet.Replays: HideReplaysSheet(); break;
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
+				case PlaySheet.Settings: ClosePlayerSettings(); break;
 				case PlaySheet.SaveStateGrid:
 					//Init with the grid's own mode hides it (RecentGamesViewModel);
 					//the overlay had already paused, so nothing resumes.
@@ -137,10 +180,11 @@ namespace Mesen.ViewModels
 		{
 			OverlayGameTitle = RomInfo.GetRomName();
 			RefreshCheatsSummary();
-			PackSummary = string.IsNullOrWhiteSpace(CurrentPackName) ? ResourceHelper.GetMessage("OverlayRowNone") : CurrentPackName;
+			//#736: "Community pack available" when one is not the pack rendering.
+			PackSummary = BuildPackSummary();
 
 			RefreshEnhancementsState();
-			int on = PauseOverlay.EnhancementsOn(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled, IsOverclockSupported);
+			int on = PauseOverlay.EnhancementsOn(IsModernInstrumentsEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled, IsOverclockSupported);
 			EnhancementsSummary = on == 0 ? ResourceHelper.GetMessage("OverlayRowNone") : ResourceHelper.GetMessage("OverlayRowCountOn", on);
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
@@ -231,6 +275,7 @@ namespace Mesen.ViewModels
 			}
 			ClosePlaySurfaces();
 			ClearPackDepWithoutGame();
+			WithdrawForcedPatchWithoutGame();
 		}
 
 		//Every Player surface over the game, hidden at once and silently: no
@@ -241,13 +286,19 @@ namespace Mesen.ViewModels
 		{
 			HideCheatsSheet();
 			HideReplaysSheet();
+			ClosePlayerSettings();
 			IsSaveStatesSheetVisible = false;
+			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;
 			IsPackDetailVisible = false;
 			IsPlayerPackPickerVisible = false;
 			if(PackDepSheet.IsVisible) {
 				PackDepSheet.CloseOnEsc();
 			}
+			if(SelectRomSheet.IsVisible) {
+				SelectRomSheet.Cancel();
+			}
+			ToolSheet.Close();
 			IsPlayerOverlayVisible = false;
 			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;

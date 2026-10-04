@@ -50,10 +50,11 @@ namespace Mesen.ViewModels
 		//(the sheet says "not in the list"). Headless tests swap it.
 		public Func<string> CheatRomSha1 { get; set; } = () => EmuApi.IsRunning() ? EmuApi.GetRomHash(HashType.Sha1Cheat) : "";
 
-		//Play is unrestricted (ADR-0245 §3), so recordingArt is false in Play;
-		//it is true in Remaster and while a Remaster recording runs, which
-		//switching to Play does not stop (§13.6): Game Genie rows are disabled
-		//with their reason and Add a Code refuses them.
+		//Play is unrestricted (ADR-0245 §3), so recordingArt is false in Play,
+		//also over the passive automatic recording; it is true in Remaster and
+		//while a Remaster recording runs, which switching to Play does not stop
+		//(§13.6): Game Genie rows are disabled with their reason and Add a Code
+		//refuses them.
 		public void OpenCheatsSheet()
 		{
 			IsPlayerOverlayVisible = false;
@@ -64,8 +65,9 @@ namespace Mesen.ViewModels
 				cheatSha1,
 				PlayerCheatsStore.LoadDatabase(console),
 				PlayerCheatsStore.LoadStored(),
-				//#690: the legacy automatic recording (any core recording) holds codes back too.
-				recordingArt: CheatRecordingRule.IsRecordingArtContext(Shell.Active == Workspace.Remaster, Remaster.IsRecording || EmuApi.IsMepBootstrapping()),
+				//Only a Remaster context locks: the passive automatic recording does not
+				//(it stops when a code changes the game; ADR-0245 amendment 2026-10-03).
+				recordingArt: CheatRecordingRule.IsRecordingArtContext(Shell.Active == Workspace.Remaster, Remaster.IsRecording),
 				Config.Cheats.DisableAllCheats,
 				PlayerCheatsStore.SaveAndApply,
 				gameName: EmuApi.IsRunning() ? EmuApi.GetRomInfo().GetRomName() : "",
@@ -77,21 +79,25 @@ namespace Mesen.ViewModels
 				//checks it is still the copy it opened for.
 				runningCheatSha1: CheatRomSha1
 			);
-			_ = RefreshCommunityCheatsAsync(cheatSha1);
+			_ = RefreshCommunityCheatsAsync(cheatSha1, CheatsSheet.BeginCommunityLoading());
 		}
 
 		//The sheet opens on the last known catalog; the fetched one replaces it
-		//when it returns, if the sheet is still up for the same copy.
-		private async Task RefreshCommunityCheatsAsync(string cheatSha1)
+		//when it returns, if the sheet is still up for the same copy. Whatever
+		//the fetch answers - nothing included - ends the sheet's wait.
+		private async Task RefreshCommunityCheatsAsync(string cheatSha1, int loading)
 		{
-			IReadOnlyList<CommunityCheatGame>? catalog = await CommunityCheatsSource();
-			if(catalog == null) {
-				return;
+			IReadOnlyList<CommunityCheatGame>? catalog;
+			try {
+				catalog = await CommunityCheatsSource();
+			} catch(Exception) {
+				catalog = null;
 			}
 			Dispatcher.UIThread.Post(() => {
-				if(CheatsSheet.IsVisible && CheatsSheet.CheatSha1 == cheatSha1) {
+				if(catalog != null && CheatsSheet.IsVisible && CheatsSheet.CheatSha1 == cheatSha1) {
 					CheatsSheet.SetCommunityCatalog(catalog);
 				}
+				CheatsSheet.FinishCommunityLoading(loading);
 			});
 		}
 

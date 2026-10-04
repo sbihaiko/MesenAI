@@ -8,7 +8,7 @@ SdlSoundManager::SdlSoundManager(Emulator* emu)
 {
 	_emu = emu;
 
-	if(InitializeAudio(44100, false)) {
+	if(InitializeAudio(44100, false, false)) {
 		_emu->GetSoundMixer()->RegisterAudioDevice(this);
 	}
 }
@@ -41,9 +41,18 @@ void SdlSoundManager::FillAudioBuffer(void* userData, uint8_t* stream, int len)
 
 void SdlSoundManager::Release()
 {
+	if(_deviceOpen.IsPending()) {
+		//#733: PlayBuffer never releases mid-open, so this is the destructor.
+		//Wait for the open so the device it returns is closed, not leaked with
+		//a callback pointing at this object.
+		_deviceOpen.Wait();
+		_deviceOpen.TryTake(_audioDeviceID);
+	}
+
 	if(_audioDeviceID != 0) {
 		Stop();
 		SDL_CloseAudioDevice(_audioDeviceID);
+		_audioDeviceID = 0;
 	}
 
 	if(_buffer) {
@@ -53,14 +62,12 @@ void SdlSoundManager::Release()
 	}
 }
 
-bool SdlSoundManager::InitializeAudio(uint32_t sampleRate, bool isStereo)
+bool SdlSoundManager::InitializeAudio(uint32_t sampleRate, bool isStereo, bool openInBackground)
 {
 	if(SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
 		MessageManager::Log("[Audio] Failed to initialize audio subsystem");
 		return false;
 	}
-
-	int isCapture = 0;
 
 	_sampleRate = sampleRate;
 	_isStereo = isStereo;
@@ -81,19 +88,27 @@ bool SdlSoundManager::InitializeAudio(uint32_t sampleRate, bool isStereo)
 	audioSpec.callback = &SdlSoundManager::FillAudioBuffer;
 	audioSpec.userdata = this;
 
-	SDL_AudioSpec obtainedSpec;
-
-	_audioDeviceID = SDL_OpenAudioDevice(_deviceName.empty() ? nullptr : _deviceName.c_str(), isCapture, &audioSpec, &obtainedSpec, 0);
-	if(_audioDeviceID == 0 && !_deviceName.empty()) {
-		MessageManager::Log("[Audio] Failed opening audio device '" + _deviceName + "', will retry with default device.");
-		_audioDeviceID = SDL_OpenAudioDevice(nullptr, isCapture, &audioSpec, &obtainedSpec, 0);
-	}
+	//The device opens paused, so the callback cannot run before PlayBuffer
+	//unpauses it on the emulation thread.
+	AsyncAudioDeviceOpen::OpenFn open = [audioSpec](const string& deviceName) -> uint32_t {
+		SDL_AudioSpec obtainedSpec;
+		return SDL_OpenAudioDevice(deviceName.empty() ? nullptr : deviceName.c_str(), 0, &audioSpec, &obtainedSpec, 0);
+	};
+	AsyncAudioDeviceOpen::LogFn log = [](const string& message) { MessageManager::Log(message); };
 
 	_writePosition = 0;
 	_readPosition = 0;
 
 	_needReset = false;
 
+	if(openInBackground) {
+		//#733: a device that does not answer (~10 s for a sleeping monitor's
+		//CoreAudio device) must not stall the emulation thread.
+		_deviceOpen.Start(_deviceName, open, log);
+		return true;
+	}
+
+	_audioDeviceID = AsyncAudioDeviceOpen::OpenWithFallback(_deviceName, open, log);
 	return _audioDeviceID != 0;
 }
 
@@ -162,11 +177,18 @@ void SdlSoundManager::WriteToBuffer(uint8_t* input, uint32_t len)
 }
 void SdlSoundManager::PlayBuffer(int16_t* soundBuffer, uint32_t sampleCount, uint32_t sampleRate, bool isStereo)
 {
+	if(_deviceOpen.IsPending() && !_deviceOpen.TryTake(_audioDeviceID)) {
+		//#733: the device is still opening off this thread - drop the samples
+		//rather than wait for it.
+		return;
+	}
+
 	uint32_t bytesPerSample = 2 * (isStereo ? 2 : 1);
 	uint32_t latency = _emu->GetSettings()->GetAudioConfig().AudioLatency;
 	if(_sampleRate != sampleRate || _isStereo != isStereo || _needReset || _previousLatency != latency) {
 		Release();
-		InitializeAudio(sampleRate, isStereo);
+		InitializeAudio(sampleRate, isStereo, true);
+		return;
 	}
 
 	WriteToBuffer((uint8_t*)soundBuffer, sampleCount * bytesPerSample);

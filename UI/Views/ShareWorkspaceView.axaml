@@ -4,8 +4,10 @@
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:v="using:Mesen.Views"
+	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
-	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
+	mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="660"
 	x:DataType="vm:ShareWorkspaceViewModel"
 	x:Class="Mesen.Views.ShareWorkspaceView"
 >
@@ -16,110 +18,212 @@
 	confirmation (rule 7, §13.4). A disabled control shows its reason (rule 4).
 	While a replay records, the game is shown inside Share under
 	ShareRecordingStrip, not this view.-->
+	<!--ADR-0249: in Player mode MainWindow gives this view the `player share`
+	classes and the screens follow W-H1-W-H4's renders through PlayerTheme's
+	components (layout numbers are the renderer's, in logical px). The dark
+	classic look below stays for Advanced mode, which can switch to Share too;
+	its selectors exclude the Player scope so neither leaks into the other.-->
 	<UserControl.Styles>
-		<Style Selector="TextBlock">
-			<Setter Property="Foreground" Value="White" />
-			<Setter Property="TextWrapping" Value="Wrap" />
+		<Style Selector="v|ShareWorkspaceView:not(.player) Panel#ShareRoot">
+			<Setter Property="Background" Value="#181818" />
 		</Style>
-		<Style Selector="TextBlock.hint">
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock">
+			<Setter Property="Foreground" Value="White" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.hint">
 			<Setter Property="FontSize" Value="11" />
 			<Setter Property="Opacity" Value="0.7" />
 		</Style>
-		<Style Selector="TextBlock.error">
-			<Setter Property="Foreground" Value="#FFB4A0" />
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.body, v|ShareWorkspaceView:not(.player) TextBlock.secondary">
+			<Setter Property="Opacity" Value="0.8" />
 		</Style>
-		<Style Selector="TextBlock.label">
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.display">
+			<Setter Property="FontSize" Value="22" />
 			<Setter Property="FontWeight" Value="Bold" />
 		</Style>
-		<Style Selector="Border.card">
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.title2, v|ShareWorkspaceView:not(.player) TextBlock.title3">
+			<Setter Property="FontSize" Value="16" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.label, v|ShareWorkspaceView:not(.player) TextBlock.card-title">
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.card">
 			<Setter Property="Background" Value="#262626" />
 			<Setter Property="CornerRadius" Value="8" />
 			<Setter Property="Padding" Value="16" />
 		</Style>
-		<Style Selector="Border.sheet">
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.sheet">
 			<Setter Property="Background" Value="#2C2C2E" />
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="20" />
 			<Setter Property="MaxWidth" Value="460" />
-			<Setter Property="HorizontalAlignment" Value="Center" />
 			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) StackPanel.form">
+			<Setter Property="Margin" Value="24 8 24 24" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.scrim">
+			<Setter Property="Background" Value="#99000000" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) Border.badge, v|ShareWorkspaceView:not(.player) Border.step, v|ShareWorkspaceView:not(.player) Rectangle.step-line, v|ShareWorkspaceView:not(.player) PathIcon:not(.leading):not(.host-error)">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView:not(.player) TextBlock.step-number">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+
+		<!--Player: the renders' positions and the pieces PlayerTheme has no class for.-->
+		<Style Selector="v|ShareWorkspaceView.player Panel#ShareRoot">
+			<Setter Property="Background" Value="{StaticResource PlayerWindowBackgroundBrush}" />
+		</Style>
+		<!--Advanced keeps Fluent's accent buttons; in Player the `accent`
+		class must not paint over PlayerButtonTemplate's tint fill.-->
+		<Style Selector="v|ShareWorkspaceView.player Button.accent.primary /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<!--The host error's mark is drawn, not a ⚠ in its copy (both looks).-->
+		<Style Selector="PathIcon.host-error">
+			<Setter Property="Width" Value="13" />
+			<Setter Property="Height" Value="13" />
+			<Setter Property="Margin" Value="0 1 6 0" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player PathIcon.host-error">
+			<Setter Property="Width" Value="14" />
+			<Setter Property="Height" Value="14" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player TextBlock.error">
+			<Setter Property="Foreground" Value="{StaticResource PlayerRedBrush}" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player TextBlock.label">
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player TextBlock.step-number">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player Border.card.hero">
+			<Setter Property="Padding" Value="24" />
+			<Setter Property="Height" Value="284" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player Border.sheet">
+			<Setter Property="Padding" Value="22" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Width" Value="400" />
+			<Setter Property="MinHeight" Value="270" />
+			<Setter Property="Margin" Value="0 67 0 0" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player Border.sheet Button.primary, v|ShareWorkspaceView.player Border.sheet Button.secondary">
+			<Setter Property="Height" Value="32" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player TextBlock.callout">
+			<Setter Property="FontWeight" Value="Normal" />
+		</Style>
+		<Style Selector="v|ShareWorkspaceView.player StackPanel.form">
+			<Setter Property="HorizontalAlignment" Value="Left" />
+			<Setter Property="Margin" Value="180 30 0 24" />
 		</Style>
 	</UserControl.Styles>
 
-	<Panel Background="#181818">
+	<Panel Name="ShareRoot">
 		<ScrollViewer>
-			<StackPanel Margin="24" Spacing="16" MaxWidth="960">
-				<TextBlock Name="ShareNotice" Text="{Binding NoticeText}" Classes="error" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+			<Panel>
+				<TextBlock Name="ShareNotice" Text="{Binding NoticeText}" Classes="error" Margin="40 16 40 0" TextWrapping="Wrap" VerticalAlignment="Top" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
 				<!--W-H1: two cards, two pipelines (ADR-0205 keeps them apart). The
 				closing sentence is the trust boundary, stated once.-->
-				<StackPanel Name="ShareHome" Spacing="16" IsVisible="{Binding IsHome}">
-					<TextBlock Text="{l:Translate lblShareTitle}" FontSize="22" FontWeight="Bold" />
-					<UniformGrid Columns="2">
-						<Border Classes="card" Margin="0 0 8 0">
-							<StackPanel Spacing="8">
-								<TextBlock Text="{l:Translate lblSharePackCard}" FontWeight="Bold" FontSize="16" />
-								<TextBlock Text="{l:Translate lblSharePackCardBody}" Opacity="0.8" />
-								<Button Name="ShareAPackButton" Content="{l:Translate btnShareAPack}" Classes="accent" Click="OnSharePack" />
-							</StackPanel>
+				<StackPanel Name="ShareHome" Margin="40 52 40 24" IsVisible="{Binding IsHome}">
+					<TextBlock Name="ShareHomeTitle" Text="{l:Translate lblShareTitle}" Classes="display" TextWrapping="Wrap" />
+					<Grid ColumnDefinitions="*,20,*" Margin="0 16 0 0">
+						<Border Name="SharePackCard" Classes="card hero">
+							<DockPanel>
+								<Button Name="ShareAPackButton" DockPanel.Dock="Bottom" HorizontalAlignment="Left" Content="{l:Translate btnShareAPack}" Classes="accent primary medium" Click="OnSharePack" />
+								<StackPanel Spacing="6">
+									<Border Name="SharePackBadge" Classes="badge hero" HorizontalAlignment="Left" Margin="0 0 0 22"><PathIcon Data="{StaticResource PlayerIconShare}" /></Border>
+									<TextBlock Name="SharePackCardTitle" Text="{l:Translate lblSharePackCard}" Classes="title2" />
+									<TextBlock Name="SharePackCardBody" Text="{l:Translate lblSharePackCardBody}" Classes="callout secondary" TextWrapping="Wrap" />
+								</StackPanel>
+							</DockPanel>
 						</Border>
-						<Border Classes="card" Margin="8 0 0 0">
-							<StackPanel Spacing="8">
-								<TextBlock Text="{l:Translate lblShareReplayCard}" FontWeight="Bold" FontSize="16" />
-								<TextBlock Text="{l:Translate lblShareReplayCardBody}" Opacity="0.8" />
-								<Button Name="RecordAndShareButton" Content="{l:Translate btnRecordAndShare}" Classes="accent" Click="OnRecordAndShare" />
-							</StackPanel>
+						<Border Name="ShareReplayCard" Grid.Column="2" Classes="card hero" c:PlayerTheme.Tint="{StaticResource PlayerIndigoBrush}">
+							<DockPanel>
+								<Button Name="RecordAndShareButton" DockPanel.Dock="Bottom" HorizontalAlignment="Left" Content="{l:Translate btnRecordAndShare}" Classes="accent primary medium" Click="OnRecordAndShare" />
+								<StackPanel Spacing="6">
+									<Border Name="ShareReplayBadge" Classes="badge hero" HorizontalAlignment="Left" Margin="0 0 0 22"><PathIcon Data="{StaticResource PlayerIconReplay}" /></Border>
+									<TextBlock Text="{l:Translate lblShareReplayCard}" Classes="title2" />
+									<TextBlock Text="{l:Translate lblShareReplayCardBody}" Classes="callout secondary" TextWrapping="Wrap" />
+								</StackPanel>
+							</DockPanel>
 						</Border>
-					</UniformGrid>
-					<TextBlock Name="ShareTrustLine" Text="{l:Translate lblShareTrust}" Opacity="0.7" />
+					</Grid>
+					<StackPanel Orientation="Horizontal" Spacing="8" Margin="8 30 0 0">
+						<PathIcon Data="{StaticResource PlayerIconLock}" Width="13" Height="13" Foreground="{StaticResource PlayerText2Brush}" VerticalAlignment="Center" />
+						<TextBlock Name="ShareTrustLine" Text="{l:Translate lblShareTrust}" Classes="subhead secondary" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</StackPanel>
 				</StackPanel>
 
 				<!--W-H2: exactly the Issue Form's three fields (pack_link,
 				rom_target, console). Game/Console are prefilled from the running
 				game; no ROM is required. Elements: ‹ Share, 3 fields, Package a
 				Project…, Continue = 6.-->
-				<StackPanel Name="SharePackPage" Spacing="10" IsVisible="{Binding IsPackPage}">
-					<Button Name="SharePackBackButton" Content="{l:Translate btnShareBack}" Click="OnBack" />
-					<TextBlock Text="{l:Translate lblSharePackTitle}" FontSize="22" FontWeight="Bold" />
-					<TextBlock Text="{l:Translate lblSharePackIntro}" Opacity="0.8" />
-					<TextBlock Text="{l:Translate lblPackLink}" Classes="label" Margin="0 8 0 0" />
-					<TextBox Name="SharePackLink" Text="{Binding PackLink}" PlaceholderText="https://github.com/you/your-pack/releases/download/…" />
-					<TextBlock Text="{l:Translate lblPackLinkHosts}" Classes="hint" />
-					<TextBlock Name="SharePackHostError" Text="{Binding HostError}" Classes="error" IsVisible="{Binding HostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<Grid ColumnDefinitions="*,16,180" RowDefinitions="Auto,Auto" Margin="0 8 0 0">
-						<TextBlock Grid.Column="0" Text="{l:Translate lblPackGame}" Classes="label" />
-						<TextBlock Grid.Column="2" Text="{l:Translate lblPackConsole}" Classes="label" />
-						<TextBox Name="SharePackGame" Grid.Row="1" Grid.Column="0" Text="{Binding Game}" />
-						<ComboBox Name="SharePackConsole" Grid.Row="1" Grid.Column="2" HorizontalAlignment="Stretch" ItemsSource="{Binding ConsoleOptions}" SelectedItem="{Binding ConsoleChoice}" />
-					</Grid>
-					<TextBlock Text="{l:Translate lblPackGameHint}" Classes="hint" />
-					<StackPanel Orientation="Horizontal" Spacing="8" Margin="0 8 0 0">
-						<TextBlock Text="{l:Translate lblShareOwnRemaster}" VerticalAlignment="Center" Opacity="0.8" />
-						<Button Name="PackageAProjectButton" Content="{l:Translate btnPackageAProject}" Click="OnPackageAProject" />
-					</StackPanel>
-					<!--Package a Project… stays inside Share (rule 11): the projects
-					Remaster knows, or any project folder.-->
-					<Border Name="ShareProjectList" Classes="card" IsVisible="{Binding IsProjectListOpen}">
-						<StackPanel Spacing="6">
-							<TextBlock Text="{l:Translate lblShareNoProjects}" Classes="hint" IsVisible="{Binding HasNoProjects}" />
-							<ItemsControl Name="ShareProjectChoices" ItemsSource="{Binding ProjectChoices}">
-								<ItemsControl.ItemsPanel>
-									<ItemsPanelTemplate>
-										<StackPanel Spacing="6" />
-									</ItemsPanelTemplate>
-								</ItemsControl.ItemsPanel>
-								<ItemsControl.ItemTemplate>
-									<DataTemplate x:DataType="vm:ShareProjectRow">
-										<Button HorizontalAlignment="Stretch" Content="{Binding Name}" Tag="{Binding Folder}" Click="OnPickProject" />
-									</DataTemplate>
-								</ItemsControl.ItemTemplate>
-							</ItemsControl>
-							<Button Name="ShareChooseProjectFolderButton" Content="{l:Translate btnShareChooseFolder}" Click="OnChooseProjectFolder" />
+				<StackPanel Name="SharePackPage" IsVisible="{Binding IsPackPage}">
+					<Button Name="SharePackBackButton" Classes="plain" HorizontalAlignment="Left" Margin="32 20 0 0" Click="OnBack">
+						<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconChevronLeft}" /><TextBlock Text="{l:Translate btnShareBack}" /></StackPanel>
+					</Button>
+					<StackPanel Classes="form" Width="600">
+						<TextBlock Name="SharePackTitle" Text="{l:Translate lblSharePackTitle}" Classes="display" />
+						<TextBlock Name="SharePackIntro" Text="{l:Translate lblSharePackIntro}" Classes="callout secondary" TextWrapping="Wrap" Margin="0 2 0 0" />
+						<TextBlock Text="{l:Translate lblPackLink}" Classes="label" Margin="0 28 0 0" />
+						<TextBox Name="SharePackLink" Text="{Binding PackLink}" PlaceholderText="https://github.com/you/your-pack/releases/download/…" Margin="0 0 0 0" />
+						<TextBlock Text="{l:Translate lblPackLinkHosts}" Classes="hint" TextWrapping="Wrap" Margin="0 13 0 0" />
+						<DockPanel Margin="0 4 0 0" IsVisible="{Binding HostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+							<PathIcon Name="SharePackHostErrorIcon" Classes="warning host-error" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" />
+							<TextBlock Name="SharePackHostError" Text="{Binding HostError}" Classes="error" TextWrapping="Wrap" />
+						</DockPanel>
+						<Grid ColumnDefinitions="420,20,160" RowDefinitions="Auto,30" Margin="0 26 0 0">
+							<TextBlock Grid.Column="0" Text="{l:Translate lblPackGame}" Classes="label" />
+							<TextBlock Grid.Column="2" Text="{l:Translate lblPackConsole}" Classes="label" />
+							<TextBox Name="SharePackGame" Grid.Row="1" Grid.Column="0" Text="{Binding Game}" />
+							<ComboBox Name="SharePackConsole" Grid.Row="1" Grid.Column="2" Classes="popup" HorizontalAlignment="Stretch" VerticalAlignment="Center" ItemsSource="{Binding ConsoleOptions}" SelectedItem="{Binding ConsoleChoice}" />
+						</Grid>
+						<TextBlock Text="{l:Translate lblPackGameHint}" Classes="hint" TextWrapping="Wrap" Margin="0 13 0 0" />
+						<StackPanel Orientation="Horizontal" Spacing="6" Margin="0 30 0 0">
+							<TextBlock Text="{l:Translate lblShareOwnRemaster}" Classes="body secondary" VerticalAlignment="Center" />
+							<Button Name="PackageAProjectButton" Content="{l:Translate btnPackageAProject}" Classes="plain" Click="OnPackageAProject" />
 						</StackPanel>
-					</Border>
-					<StackPanel HorizontalAlignment="Right" Spacing="4" Margin="0 12 0 0">
-						<Button Name="SharePackContinueButton" Content="{l:Translate btnContinueOnGitHub}" Classes="accent" HorizontalAlignment="Right" IsEnabled="{Binding IsContinueEnabled}" Click="OnContinuePack" />
-						<TextBlock Name="SharePackContinueReason" Text="{Binding ContinueReason}" Classes="hint" HorizontalAlignment="Right" IsVisible="{Binding ContinueReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<!--Package a Project… stays inside Share (rule 11): the projects
+						Remaster knows, or any project folder.-->
+						<Border Name="ShareProjectList" Classes="card" Padding="12" Margin="0 8 0 0" IsVisible="{Binding IsProjectListOpen}">
+							<StackPanel Spacing="6">
+								<TextBlock Text="{l:Translate lblShareNoProjects}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasNoProjects}" />
+								<ItemsControl Name="ShareProjectChoices" ItemsSource="{Binding ProjectChoices}">
+									<ItemsControl.ItemsPanel>
+										<ItemsPanelTemplate>
+											<StackPanel Spacing="6" />
+										</ItemsPanelTemplate>
+									</ItemsControl.ItemsPanel>
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="vm:ShareProjectRow">
+											<Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Classes="secondary" Content="{Binding Name}" Tag="{Binding Folder}" Click="OnPickProject" />
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+								<Button Name="ShareChooseProjectFolderButton" Content="{l:Translate btnShareChooseFolder}" Classes="secondary" HorizontalAlignment="Left" Click="OnChooseProjectFolder" />
+							</StackPanel>
+						</Border>
+						<StackPanel HorizontalAlignment="Right" Spacing="4" Margin="0 36 0 0">
+							<Button Name="SharePackContinueButton" Classes="accent primary medium" HorizontalAlignment="Right" IsEnabled="{Binding IsContinueEnabled}" Click="OnContinuePack">
+								<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconArrowUpRight}" /><TextBlock Text="{l:Translate btnContinueOnGitHub}" /></StackPanel>
+							</Button>
+							<TextBlock Name="SharePackContinueReason" Text="{Binding ContinueReason}" Classes="hint" HorizontalAlignment="Right" IsVisible="{Binding ContinueReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						</StackPanel>
 					</StackPanel>
 				</StackPanel>
 
@@ -127,68 +231,135 @@
 				Step 2 is the honest gap - MesenAI hosts and uploads nothing.
 				Elements: ‹ Share, Build, Show file, Open Google Drive, link field,
 				Continue = 6.-->
-				<StackPanel Name="ShareProjectPage" Spacing="10" IsVisible="{Binding IsProjectPage}">
-					<Button Name="ShareProjectBackButton" Content="{l:Translate btnShareBack}" Click="OnBack" />
-					<TextBlock Name="ShareProjectTitle" Text="{Binding ProjectTitle}" FontSize="22" FontWeight="Bold" />
+				<StackPanel Name="ShareProjectPage" IsVisible="{Binding IsProjectPage}">
+					<Button Name="ShareProjectBackButton" Classes="plain" HorizontalAlignment="Left" Margin="32 20 0 0" Click="OnBack">
+						<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconChevronLeft}" /><TextBlock Text="{l:Translate btnShareBack}" /></StackPanel>
+					</Button>
+					<StackPanel Classes="form" Width="640">
+						<TextBlock Name="ShareProjectTitle" Text="{Binding ProjectTitle}" Classes="display" TextWrapping="Wrap" />
 
-					<TextBlock Text="{l:Translate lblShareStep1}" Classes="label" Margin="0 8 0 0" />
-					<StackPanel Orientation="Horizontal" Spacing="12">
-						<Button Name="ShareBuildZipButton" Content="{l:Translate btnBuildPackZip}" IsEnabled="{Binding IsBuildEnabled}" IsVisible="{Binding !IsBuildRunning}" Click="OnBuildZip" />
-						<Button Name="ShareBuildStopButton" Content="{l:Translate btnShareBuildStop}" IsVisible="{Binding IsBuildRunning}" Click="OnStopBuild" />
-						<ProgressBar Name="ShareBuildProgress" IsIndeterminate="True" Width="120" VerticalAlignment="Center" IsVisible="{Binding IsBuildRunning}" />
-						<TextBlock Name="ShareBuildResult" Text="{Binding BuildResult}" VerticalAlignment="Center" />
-						<Button Name="ShareShowZipButton" Content="{l:Translate btnShowInFinder}" IsVisible="{Binding IsZipReady}" Click="OnShowZip" />
-					</StackPanel>
-					<TextBlock Name="ShareBuildReason" Text="{Binding BuildReason}" Classes="hint" IsVisible="{Binding BuildReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<TextBlock Name="ShareBuildFailure" Text="{Binding BuildFailure}" Classes="error" IsVisible="{Binding BuildFailure, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<Grid ColumnDefinitions="28,12,*" RowDefinitions="28,*" MinHeight="104" Margin="0 12 0 0">
+							<Border Classes="step large"><TextBlock Text="1" /></Border>
+							<Rectangle Grid.Row="1" Classes="step-line" Margin="0 4 0 4" />
+							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+								<TextBlock Text="1" Classes="card-title step-number" VerticalAlignment="Center" />
+								<TextBlock Name="ShareStep1Title" Text="{l:Translate lblShareStep1}" Classes="card-title" VerticalAlignment="Center" />
+							</StackPanel>
+							<StackPanel Grid.Row="1" Grid.Column="2" Spacing="6" Margin="0 6 0 0">
+								<DockPanel>
+									<Button Name="ShareShowZipButton" DockPanel.Dock="Right" Classes="plain" IsVisible="{Binding IsZipReady}" Click="OnShowZip">
+										<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" /><TextBlock Text="{l:Translate btnShowInFinder}" /></StackPanel>
+									</Button>
+									<StackPanel Orientation="Horizontal" Spacing="24">
+										<Button Name="ShareBuildZipButton" Content="{l:Translate btnBuildPackZip}" Classes="secondary" IsEnabled="{Binding IsBuildEnabled}" IsVisible="{Binding !IsBuildRunning}" Click="OnBuildZip" />
+										<Button Name="ShareBuildStopButton" Content="{l:Translate btnShareBuildStop}" Classes="secondary" IsVisible="{Binding IsBuildRunning}" Click="OnStopBuild" />
+										<ProgressBar Name="ShareBuildProgress" IsIndeterminate="True" Width="120" VerticalAlignment="Center" IsVisible="{Binding IsBuildRunning}" />
+										<!--W-H3: the render's green check before a finished build's result.-->
+										<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+											<PathIcon Name="ShareBuildDoneIcon" Classes="done" Data="{StaticResource PlayerIconCheck}" Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding IsBuildDone}" />
+											<TextBlock Name="ShareBuildResult" Text="{Binding BuildResult}" Classes="subhead" FontWeight="Medium" VerticalAlignment="Center" />
+										</StackPanel>
+									</StackPanel>
+								</DockPanel>
+								<TextBlock Name="ShareBuildReason" Text="{Binding BuildReason}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding BuildReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+								<TextBlock Name="ShareBuildFailure" Text="{Binding BuildFailure}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding BuildFailure, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+							</StackPanel>
+						</Grid>
 
-					<TextBlock Text="{l:Translate lblShareStep2}" Classes="label" Margin="0 8 0 0" />
-					<TextBlock Text="{l:Translate lblShareStep2Body}" Opacity="0.8" />
-					<StackPanel Orientation="Horizontal" Spacing="8">
-						<Button Name="ShareOpenDriveButton" Content="{l:Translate btnOpenGoogleDrive}" Click="OnOpenDrive" />
-						<TextBlock Text="{l:Translate lblShareStep2Hint}" Classes="hint" VerticalAlignment="Center" />
-					</StackPanel>
+						<Grid ColumnDefinitions="28,12,*" RowDefinitions="28,*" MinHeight="140">
+							<Border Classes="step large"><TextBlock Text="2" /></Border>
+							<Rectangle Grid.Row="1" Classes="step-line" Margin="0 4 0 4" />
+							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+								<TextBlock Text="2" Classes="card-title step-number" VerticalAlignment="Center" />
+								<TextBlock Text="{l:Translate lblShareStep2}" Classes="card-title" VerticalAlignment="Center" />
+							</StackPanel>
+							<StackPanel Grid.Row="1" Grid.Column="2" Margin="0 6 0 0">
+								<TextBlock Text="{l:Translate lblShareStep2Body}" Classes="body secondary" TextWrapping="Wrap" LineHeight="18" />
+								<StackPanel Orientation="Horizontal" Spacing="12" Margin="0 14 0 0">
+									<Button Name="ShareOpenDriveButton" Classes="secondary" Click="OnOpenDrive">
+										<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconArrowUpRight}" /><TextBlock Text="{l:Translate btnOpenGoogleDrive}" /></StackPanel>
+									</Button>
+									<TextBlock Text="{l:Translate lblShareStep2Hint}" Classes="hint" VerticalAlignment="Center" />
+								</StackPanel>
+							</StackPanel>
+						</Grid>
 
-					<TextBlock Text="{l:Translate lblShareStep3}" Classes="label" Margin="0 8 0 0" />
-					<TextBox Name="ShareProjectLink" Text="{Binding ProjectLink}" PlaceholderText="https://" />
-					<TextBlock Name="ShareProjectHostError" Text="{Binding ProjectHostError}" Classes="error" IsVisible="{Binding ProjectHostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<StackPanel HorizontalAlignment="Right" Spacing="4" Margin="0 12 0 0">
-						<Button Name="ShareProjectContinueButton" Content="{l:Translate btnContinueOnGitHub}" Classes="accent" HorizontalAlignment="Right" IsEnabled="{Binding IsProjectContinueEnabled}" Click="OnContinueProject" />
-						<TextBlock Name="ShareProjectContinueReason" Text="{Binding ProjectContinueReason}" Classes="hint" HorizontalAlignment="Right" IsVisible="{Binding ProjectContinueReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<Grid ColumnDefinitions="28,12,*" RowDefinitions="28,Auto">
+							<Border Classes="step large"><TextBlock Text="3" /></Border>
+							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+								<TextBlock Text="3" Classes="card-title step-number" VerticalAlignment="Center" />
+								<TextBlock Text="{l:Translate lblShareStep3}" Classes="card-title" VerticalAlignment="Center" />
+							</StackPanel>
+							<StackPanel Grid.Row="1" Grid.Column="2" Spacing="4" Margin="0 6 0 0">
+								<TextBox Name="ShareProjectLink" Text="{Binding ProjectLink}" PlaceholderText="https://" />
+								<DockPanel IsVisible="{Binding ProjectHostError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+									<PathIcon Name="ShareProjectHostErrorIcon" Classes="warning host-error" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" />
+									<TextBlock Name="ShareProjectHostError" Text="{Binding ProjectHostError}" Classes="error" TextWrapping="Wrap" />
+								</DockPanel>
+							</StackPanel>
+						</Grid>
+						<StackPanel HorizontalAlignment="Right" Spacing="4" Margin="0 26 0 0">
+							<Button Name="ShareProjectContinueButton" Classes="accent primary medium" HorizontalAlignment="Right" IsEnabled="{Binding IsProjectContinueEnabled}" Click="OnContinueProject">
+								<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconArrowUpRight}" /><TextBlock Text="{l:Translate btnContinueOnGitHub}" /></StackPanel>
+							</Button>
+							<TextBlock Name="ShareProjectContinueReason" Text="{Binding ProjectContinueReason}" Classes="hint" HorizontalAlignment="Right" IsVisible="{Binding ProjectContinueReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						</StackPanel>
 					</StackPanel>
 				</StackPanel>
-			</StackPanel>
+			</Panel>
 		</ScrollViewer>
 
 		<!--W-H4, before: the game restarts from power-on. Start is disabled with
 		its one-line reason where the share recording cannot run (rule 4).-->
-		<Panel Name="ShareReplayStartSheet" Background="#99000000" IsVisible="{Binding IsStartSheetOpen}">
-			<Border Classes="sheet">
-				<StackPanel Spacing="12">
-					<TextBlock Name="ShareReplaySheetTitle" Text="{Binding StartSheetTitle}" FontWeight="Bold" FontSize="16" />
-					<TextBlock Text="{l:Translate lblShareReplaySheetBody}" Opacity="0.85" />
-					<TextBlock Name="ShareReplayStartReason" Text="{Binding StartReason}" Classes="hint" IsVisible="{Binding StartReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-						<Button Name="ShareReplayCancelButton" Content="{l:Translate btnShareCancel}" Click="OnCloseSheet" />
-						<Button Name="ShareReplayStartButton" Content="{l:Translate btnStartReplayRecording}" Classes="accent" IsEnabled="{Binding IsStartEnabled}" Click="OnStartReplay" />
+		<Panel Name="ShareReplayStartSheet" IsVisible="{Binding IsStartSheetOpen}">
+			<Border Classes="scrim" />
+			<Border Name="ShareReplayStartCard" Classes="sheet" HorizontalAlignment="Center" c:PlayerTheme.Tint="{StaticResource PlayerIndigoBrush}">
+				<DockPanel>
+					<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 16 0 0">
+						<Button Name="ShareReplayCancelButton" Content="{l:Translate btnShareCancel}" Classes="secondary" IsEnabled="{Binding !IsReplayStarting}" Click="OnCloseSheet" />
+						<Button Name="ShareReplayStartButton" Classes="accent primary" c:PlayerTheme.Tint="{StaticResource PlayerRedBrush}" IsEnabled="{Binding IsStartEnabled}" Click="OnStartReplay">
+							<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconRecord}" /><TextBlock Text="{l:Translate btnStartReplayRecording}" /></StackPanel>
+						</Button>
 					</StackPanel>
-				</StackPanel>
+					<StackPanel Spacing="12">
+						<StackPanel Orientation="Horizontal" Spacing="12">
+							<Border Name="ShareReplayStartBadge" Classes="badge xlarge"><PathIcon Data="{StaticResource PlayerIconReplay}" /></Border>
+							<TextBlock Name="ShareReplaySheetTitle" Text="{Binding StartSheetTitle}" Classes="title3" TextWrapping="Wrap" VerticalAlignment="Center" />
+						</StackPanel>
+						<TextBlock Name="ShareReplaySheetBody" Text="{Binding StartSheetBody}" Classes="callout" TextWrapping="Wrap" LineHeight="19" Margin="0 6 0 0" />
+						<TextBlock Name="ShareReplayStartReason" Text="{Binding StartReason}" Classes="hint" TextWrapping="Wrap" IsVisible="{Binding StartReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<!--The game power-cycles off the UI thread: a moving wait until the
+						core answers (the user's rule, 2026-10-03: every wait moves).-->
+						<StackPanel Name="ShareReplayStartWait" Spacing="8" Margin="0 10 0 0" IsVisible="{Binding IsReplayStarting}">
+							<TextBlock Name="ShareReplayStartWaitText" Classes="subhead secondary" Text="{Binding ReplayWaitText}" />
+							<ProgressBar IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
+						</StackPanel>
+					</StackPanel>
+				</DockPanel>
 			</Border>
 		</Panel>
 
 		<!--W-H4, after you stop: the file is kept; revealing it and opening the
 		form are the user's two clicks.-->
-		<Panel Name="ShareReplaySavedSheet" Background="#99000000" IsVisible="{Binding IsSavedSheetOpen}">
-			<Border Classes="sheet">
-				<StackPanel Spacing="12">
-					<TextBlock Text="{l:Translate lblReplaySaved}" FontWeight="Bold" FontSize="16" />
-					<TextBlock Name="ShareReplayFileName" Text="{Binding SavedFileName}" FontWeight="Bold" />
-					<TextBlock Text="{l:Translate lblReplaySavedBody}" Opacity="0.85" />
-					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-						<Button Name="ShareReplayShowFileButton" Content="{l:Translate btnShowInFinder}" Click="OnShowReplayFile" />
-						<Button Name="ShareReplayContinueButton" Content="{l:Translate btnContinueOnGitHub}" Classes="accent" Click="OnContinueReplay" />
+		<Panel Name="ShareReplaySavedSheet" IsVisible="{Binding IsSavedSheetOpen}">
+			<Border Classes="scrim" />
+			<Border Name="ShareReplaySavedCard" Classes="sheet" HorizontalAlignment="Center">
+				<DockPanel>
+					<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 16 0 0">
+						<Button Name="ShareReplayShowFileButton" Content="{l:Translate btnShowInFinder}" Classes="secondary" Click="OnShowReplayFile" />
+						<Button Name="ShareReplayContinueButton" Classes="accent primary" Click="OnContinueReplay">
+							<StackPanel Orientation="Horizontal"><PathIcon Classes="leading" Data="{StaticResource PlayerIconArrowUpRight}" /><TextBlock Text="{l:Translate btnContinueOnGitHub}" /></StackPanel>
+						</Button>
 					</StackPanel>
-				</StackPanel>
+					<StackPanel Spacing="8">
+						<StackPanel Orientation="Horizontal" Spacing="12" Margin="0 0 0 12">
+							<Border Name="ShareReplaySavedBadge" Classes="badge xlarge"><PathIcon Data="{StaticResource PlayerIconCheck}" /></Border>
+							<TextBlock Name="ShareReplaySavedTitle" Text="{l:Translate lblReplaySaved}" Classes="title3" VerticalAlignment="Center" />
+						</StackPanel>
+						<TextBlock Name="ShareReplayFileName" Text="{Binding SavedFileName}" Classes="callout" FontWeight="SemiBold" TextWrapping="Wrap" />
+						<TextBlock Text="{l:Translate lblReplaySavedBody}" Classes="callout secondary" TextWrapping="Wrap" />
+					</StackPanel>
+				</DockPanel>
 			</Border>
 		</Panel>
 	</Panel>

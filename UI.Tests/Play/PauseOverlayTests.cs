@@ -27,7 +27,7 @@ namespace Mesen.Tests.Play
 		{
 			foreach(FormerOverlayAction action in Enum.GetValues<FormerOverlayAction>()) {
 				PauseOverlayDestination where = PauseOverlay.WhereNow(action);
-				Assert.True(where.Control.HasValue || where.ToolsPath.StartsWith("Tools ⋯ › "), action.ToString());
+				Assert.True(where.Control.HasValue || where.ToolsPath.StartsWith("Tools ⋯ › ") || where.ToolsPath.StartsWith("Switcher › "), action.ToString());
 				if(where.Control.HasValue) {
 					Assert.Contains(where.Control.Value, PauseOverlay.Controls);
 				}
@@ -42,21 +42,22 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void Advanced_gui_and_quitting_the_app_move_under_tools()
+		public void Advanced_gui_moves_to_the_classic_door_and_quitting_the_app_under_tools()
 		{
 			Assert.Null(PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).Control);
-			Assert.Equal("Tools ⋯ › Settings › Preferences", PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).ToolsPath);
+			Assert.Equal("Switcher › Classic", PauseOverlay.WhereNow(FormerOverlayAction.AdvancedGui).ToolsPath);
 			Assert.Null(PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).Control);
-			Assert.Equal("Tools ⋯ › File › Exit", PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).ToolsPath);
+			//ADR-0250: the shared tail's Quit (the app menu on macOS).
+			Assert.Equal("Tools ⋯ › Quit MesenAI", PauseOverlay.WhereNow(FormerOverlayAction.QuitApp).ToolsPath);
 		}
 
 		[Fact]
 		public void Enhancements_count_skips_overclock_where_the_console_has_none()
 		{
-			Assert.Equal(5, PauseOverlay.EnhancementsOn(true, true, true, true, true, overclockSupported: true));
-			Assert.Equal(4, PauseOverlay.EnhancementsOn(true, true, true, true, true, overclockSupported: false));
-			Assert.Equal(0, PauseOverlay.EnhancementsOn(false, false, false, false, false, true));
-			Assert.Equal(2, PauseOverlay.EnhancementsOn(true, false, false, true, false, true));
+			Assert.Equal(4, PauseOverlay.EnhancementsOn(true, true, true, true, overclockSupported: true));
+			Assert.Equal(3, PauseOverlay.EnhancementsOn(true, true, true, true, overclockSupported: false));
+			Assert.Equal(0, PauseOverlay.EnhancementsOn(false, false, false, false, true));
+			Assert.Equal(2, PauseOverlay.EnhancementsOn(true, false, true, false, true));
 		}
 
 		[Fact]
@@ -129,6 +130,8 @@ namespace Mesen.Tests.Play
 		[InlineData(PlaySheet.PackDetail)]
 		//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet.
 		[InlineData(PlaySheet.Replays)]
+		//ADR-0249 (W-P8, W-P10): Settings is an in-window sheet, not a window.
+		[InlineData(PlaySheet.Settings)]
 		public void A_sheet_opened_from_the_overlay_closes_back_to_it(PlaySheet sheet)
 		{
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));

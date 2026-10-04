@@ -23,7 +23,22 @@ namespace AspectRatioMath
 		//Game Gear: 6:5 PAR in Auto
 		bool GameGearPar = false;
 		double CustomRatio = 0.0;
+		//ADR-0253: the frame carries its own extra columns (NES Reveal), so
+		//Widescreen shows it at the console's pixel aspect instead of stretching
+		bool ExtendedFrame = false;
 	};
+
+	//The base screen at the console's own pixel aspect ratio - what Auto shows.
+	inline double ComputeNativeAspectRatio(const Inputs& in)
+	{
+		double screenAspectRatio = (double)in.BaseWidth / in.BaseHeight;
+		if(in.SquarePixelInAuto) {
+			return screenAspectRatio;
+		} else if(in.GameGearPar) {
+			return screenAspectRatio * (6.0 / 5.0);
+		}
+		return screenAspectRatio * ((in.Region == ConsoleRegion::Pal || in.Region == ConsoleRegion::Dendy) ? (11.0 / 8.0) : (8.0 / 7.0));
+	}
 
 	//The screen aspect ratio to render at, or 0.0 for an unknown setting.
 	//Auto/NTSC/PAL are pixel aspect ratios, so they multiply the base screen's
@@ -35,19 +50,19 @@ namespace AspectRatioMath
 		switch(in.Setting) {
 			case VideoAspectRatio::NoStretching: return screenAspectRatio;
 
-			case VideoAspectRatio::Auto:
-				if(in.SquarePixelInAuto) {
-					return screenAspectRatio;
-				} else if(in.GameGearPar) {
-					return screenAspectRatio * (6.0 / 5.0);
-				}
-				return screenAspectRatio * ((in.Region == ConsoleRegion::Pal || in.Region == ConsoleRegion::Dendy) ? (11.0 / 8.0) : (8.0 / 7.0));
+			case VideoAspectRatio::Auto: return ComputeNativeAspectRatio(in);
 
 			case VideoAspectRatio::NTSC: return screenAspectRatio * 8.0 / 7.0;
 			case VideoAspectRatio::PAL: return screenAspectRatio * 11.0 / 8.0;
 
 			case VideoAspectRatio::Standard: return 4.0 / 3.0;
-			case VideoAspectRatio::Widescreen: return 16.0 / 9.0;
+			case VideoAspectRatio::Widescreen:
+				//ADR-0253: a frame that already carries the extra columns is
+				//shown at its own width and the console's pixel aspect - the
+				//picture is wider because there is more of it, not stretched.
+				//A standard frame keeps the 16:9 stretch until W.5 disables the
+				//switch for games with nothing to reveal.
+				return in.ExtendedFrame ? ComputeNativeAspectRatio(in) : 16.0 / 9.0;
 			case VideoAspectRatio::Custom: return in.CustomRatio;
 		}
 		return 0.0;

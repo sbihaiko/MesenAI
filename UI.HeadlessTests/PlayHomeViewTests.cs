@@ -37,8 +37,6 @@ public class PlayHomeViewTests : IDisposable
 	private readonly bool _audio = ConfigManager.Config.EnhancementPacks.EnableAudio;
 	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
 	private readonly GameSelectionMode _selection = ConfigManager.Config.Preferences.GameSelectionScreenMode;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
@@ -57,15 +55,13 @@ public class PlayHomeViewTests : IDisposable
 		ConfigManager.Config.EnhancementPacks.EnableAudio = _audio;
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
 		ConfigManager.Config.Preferences.GameSelectionScreenMode = _selection;
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = _noticeShown;
-		ConfigManager.Config.Preferences.ShowClassicMenuBar = _showClassicMenuBar;
 		ConfigManager.Config.Preferences.ConfirmExitResetPower = _confirm;
 		ConfigManager.Config.Preferences.PauseWhenInBackground = _pauseInBackground;
 		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = _pauseInMenus;
 	}
 
 	//recentGames are listed newest first.
-	private static (MainWindow Window, MainWindowViewModel Model) ShowHome(UiMode uiMode, params string[] recentGames)
+	internal static (MainWindow Window, MainWindowViewModel Model) ShowHome(UiMode uiMode, params string[] recentGames)
 	{
 		ConfigManager.Config.Preferences.UiMode = uiMode;
 		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
@@ -74,7 +70,6 @@ public class PlayHomeViewTests : IDisposable
 		//classes restore the flag they found, so settings.json can carry `false`
 		//into this one; pin it, or the home is off screen whenever that block
 		//runs inside a test. The notice path itself is pinned below.
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 
 		string folder = ConfigManager.RecentGamesFolder;
 		foreach(string stale in Directory.GetFiles(folder, "*.rgd")) {
@@ -195,31 +190,6 @@ public class PlayHomeViewTests : IDisposable
 			} catch(IOException) {
 			}
 		}
-	}
-
-	//#625: the classic-menu notice (first launch after an upgrade) hides the
-	//home while its message shows, then brings it back: Continue has focus.
-	[AvaloniaFact]
-	public void Home_that_returns_after_the_classic_menu_notice_focuses_continue()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		//The default: with it, a message shown with no game hides the home.
-		ConfigManager.Config.Preferences.GameSelectionScreenMode = GameSelectionMode.ResumeState;
-		(MainWindow window, MainWindowViewModel model) = ShowHome(UiMode.Player, "Contra", "Zelda");
-		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished its background Init");
-		Assert.True(window.FindNamed<Button>("PlayHomeContinueButton").IsFocused);
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = false;
-		ConfigManager.Config.Preferences.ShowClassicMenuBar = false;
-
-		//What the window's post-init block does on an upgraded install.
-		Assert.True(model.ConsumeClassicMenuNotice());
-		DisplayMessageHelper.DisplayMessage("ClassicMenuNoticeTitle", "ClassicMenuNoticeText");
-		Dispatcher.UIThread.RunJobs();
-		Assert.False(window.FindNamed<DockPanel>("PlayHomeWithRecents").IsOnScreen());
-
-		WaitFor(() => model.RecentGames.Visible, "the home did not come back after the notice");
-		Assert.True(window.FindNamed<DockPanel>("PlayHomeWithRecents").IsOnScreen());
-		Assert.Same(window.FindNamed<Button>("PlayHomeContinueButton"), window.FocusManager?.GetFocusedElement());
 	}
 
 	private static void WaitFor(Func<bool> condition, string failure)

@@ -6,6 +6,8 @@
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/Audio/SoundMixer.h"
+#include "Shared/Audio/ReplacementMuteMask.h"
+#include "NES/NesSoundMixer.h"
 #include "Shared/Audio/MidiExporter.h"
 #include "Shared/MessageManager.h"
 
@@ -105,6 +107,7 @@ void EnhancedSynth::Reset()
 	_engine.LoadSoundFont(EnhancedSynthEngine::ResolveSoundFontPath(_emu->GetSettings()->GetAudioConfig().EnhancedAudioSoundFontPath));
 	_roles.Reset();
 	_wasActive = false;
+	_musicGain = _noiseGain = 1.0;
 }
 
 void EnhancedSynth::MixAudio(int16_t* out, uint32_t sampleCount, uint32_t sampleRate)
@@ -117,6 +120,7 @@ void EnhancedSynth::MixAudio(int16_t* out, uint32_t sampleCount, uint32_t sample
 			//preset file re-read) - this runs inside the mix path.
 			_engine.Reset();
 			_wasActive = false;
+			_musicGain = _noiseGain = 1.0;
 		}
 		return;
 	}
@@ -188,6 +192,22 @@ void EnhancedSynth::MixAudio(int16_t* out, uint32_t sampleCount, uint32_t sample
 	//The flush's sampleCount/sampleRate feed the emulated tick clock (ADR-0013).
 	if(MidiExporter* midi = _emu->GetSoundMixer()->GetMidiExporter()) {
 		midi->LogFrame("NES", cfg.EnhancedAudioPreset, in, sampleCount, sampleRate);
+	}
+
+	//ADR-0052 item 3b: a playing pack OGG track wins over the synth on the
+	//channels it replaces (the synth stays the fallback when there is no track,
+	//and SFX voices - not in the mask - keep playing). Applied after the MIDI tap
+	//so a MIDI capture still records the game's music, and after Route() so the
+	//classifier keeps seeing the real channels. Faded, not cut (ADR-0142).
+	{
+		uint8_t mask = _console->GetSoundMixer()->GetReplacementMuteMask();
+		double dt = (double)sampleCount / sampleRate;
+		_musicGain = ReplacementMuteMask::SynthGainStep(_musicGain, ReplacementMuteMask::SynthSilencesMusic(mask), dt);
+		_noiseGain = ReplacementMuteMask::SynthGainStep(_noiseGain, ReplacementMuteMask::SynthSilencesNoise(mask), dt);
+		in.LeadVol *= _musicGain;
+		in.HarmVol *= _musicGain;
+		in.BassVol *= _musicGain;
+		in.NoiseVol *= _noiseGain;
 	}
 
 	//The two peak scans below exist only for LogDiagnostics; they used to run

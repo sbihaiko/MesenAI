@@ -113,3 +113,17 @@ void BorderCompositePrepared(uint32_t* dst, const uint32_t* backdrop, const uint
 //`border` are CanvasWidth * CanvasHeight pixels. Reference form of
 //BorderCompositePrepared (no cached backdrop), kept for the unit tests.
 void BorderCompositeFrame(uint32_t* dst, const uint32_t* border, const BorderLayout& layout, const uint32_t* src, uint32_t srcWidth, uint32_t srcHeight);
+
+//ADR-0253 §3 (slice W.3): composites a widescreen Reveal's extended frame.
+//`src` is `srcWidth` px wide with `extendedColumns` extra columns on each side
+//(RenderedFrame::ExtendedColumns); its centre `srcWidth - 2 * extendedColumns`
+//columns go into the viewport exactly as BorderCompositePrepared draws them, and
+//each side run is drawn immediately beside the viewport at the same pixel scale
+//- but only where `sideFill` says the game filled that row's side (one byte per
+//row, bit 0 = left, bit 1 = right, WidescreenFallback.h). Everywhere else the
+//prepared backdrop stays, so the pack's border art is what fills a side column
+//the game could not. In overlay mode the border is blended over the side runs
+//it drew, exactly as it is over the viewport; in underlay mode the game stays on
+//top. A null/empty `sideFill` draws the border alone.
+void BorderCompositeExtendedFrame(uint32_t* dst, const uint32_t* backdrop, const uint32_t* border, const BorderLayout& layout,
+	const uint32_t* src, uint32_t srcWidth, uint32_t srcHeight, uint32_t extendedColumns, const uint8_t* sideFill);

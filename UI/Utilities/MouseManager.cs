@@ -154,12 +154,11 @@ namespace Mesen.Utilities
 
 		private void UpdateMainMenuVisibility()
 		{
-			//P.4/G.1 (PRD Part B §6, §13.2): with ShowClassicMenuBar off the menu
-			//bar is hidden entirely - the AutoHideMenu mouse-hover re-show below is
-			//ignored (the menus are under Tools ⋯). The rule itself lives in
-			//PlayerChrome so this site and the MainWindowViewModel initializer
-			//cannot drift.
-			bool showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
+			//P.4/G.1, ADR-0250: the classic menu bar is the Classic door's - in a
+			//task door it is hidden entirely and the AutoHideMenu mouse-hover
+			//re-show below is ignored. The rule itself lives in PlayerChrome so
+			//this site and the MainWindowViewModel initializer cannot drift.
+			bool showClassicMenuBar = MainWindowViewModel.Instance.Shell.Active == Workspace.Classic;
 			if(!showClassicMenuBar) {
 				MainWindowViewModel.Instance.IsMenuVisible = PlayerChrome.IsMenuVisible(false, false, false, false, false);
 				return;

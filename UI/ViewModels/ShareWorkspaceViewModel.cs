@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
 {
@@ -72,6 +73,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string BuildResult { get; private set; } = "";
 		[ObservableProperty] public partial string BuildFailure { get; private set; } = "";
 		[ObservableProperty] public partial bool IsZipReady { get; private set; }
+		//W-H3: the result line is a finished build (the green check shows).
+		[ObservableProperty] public partial bool IsBuildDone { get; private set; }
 		[ObservableProperty] public partial string ProjectLink { get; set; } = "";
 		[ObservableProperty] public partial string ProjectHostError { get; private set; } = "";
 		[ObservableProperty] public partial bool IsProjectContinueEnabled { get; private set; }
@@ -83,10 +86,17 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsSavedSheetOpen { get; private set; }
 		[ObservableProperty] public partial bool IsRecording { get; private set; }
 		[ObservableProperty] public partial string StartSheetTitle { get; private set; } = "";
+		[ObservableProperty] public partial string StartSheetBody { get; private set; } = "";
 		[ObservableProperty] public partial bool IsStartEnabled { get; private set; }
 		[ObservableProperty] public partial string StartReason { get; private set; } = "";
 		[ObservableProperty] public partial string RecordingPill { get; private set; } = "";
 		[ObservableProperty] public partial string SavedFileName { get; private set; } = "";
+		//A start or stop in flight: the sheet (start) or the strip (stop) shows
+		//ReplayWaitText over an indeterminate bar.
+		[ObservableProperty] public partial RecordingTransition Transition { get; private set; }
+		[ObservableProperty] public partial bool IsReplayStarting { get; private set; }
+		[ObservableProperty] public partial bool IsReplayStopping { get; private set; }
+		[ObservableProperty] public partial string ReplayWaitText { get; private set; } = "";
 
 		//Raised when the replay recording starts or ends, for the game view.
 		public event Action? RecordingChanged;
@@ -302,9 +312,11 @@ namespace Mesen.ViewModels
 			ProjectTitle = ResourceHelper.GetMessage("ShareProjectTitle", _project.Name);
 			//#648: a job that ended on another project is not this one's result.
 			RemasterJobSnapshot job = RemasterJobs.ShownFor(_jobs.Snapshot, _project.Folder);
-			RemasterFeasibility f = _feasibility() ?? PendingFeasibility;
-			ShareBuildReason build = ShareProjectPackage.BuildReason(_project, IsRunningGamesProject, f, job.IsRunning,
-				RemasterJobs.RunsOn(OtherWorkspaceJob(), _project.Folder));
+			RemasterFeasibility? measured = _feasibility();
+			//Until Remaster's probe answers, Build waits with its reason (a click
+			//used to do nothing).
+			ShareBuildReason build = ShareProjectPackage.BuildReason(_project, IsRunningGamesProject, measured ?? PendingFeasibility, job.IsRunning,
+				RemasterJobs.RunsOn(OtherWorkspaceJob(), _project.Folder), feasibilityPending: measured == null);
 			IsBuildEnabled = build == ShareBuildReason.None;
 			BuildReason = build is ShareBuildReason.None or ShareBuildReason.JobRunning ? "" : ResourceHelper.GetMessage("ShareBuildReason" + build);
 
@@ -316,6 +328,7 @@ namespace Mesen.ViewModels
 				RemasterJobStatus.Failed => ResourceHelper.GetMessage("ShareBuildFailed"),
 				_ => IsZipReady ? ResourceHelper.GetMessage("ShareBuildDone", Path.GetFileName(_project.ZipPath), ShareProjectPackage.FormatSize(new FileInfo(_project.ZipPath).Length)) : "",
 			};
+			IsBuildDone = IsZipReady && job.Status is not (RemasterJobStatus.Running or RemasterJobStatus.Stopped or RemasterJobStatus.Failed);
 			if(job.Status == RemasterJobStatus.Failed) {
 				//W-R4 (inline build problems) is Remaster's slice: a plain line here.
 				BuildFailure = job.FailureLine;
@@ -348,13 +361,32 @@ namespace Mesen.ViewModels
 		}
 
 		//Start Recording: ShareRecordingSession, unchanged (ADR-0205 §2, R.1).
-		public bool StartReplay()
+		//It power-cycles the game, so it runs off the UI thread while the sheet
+		//shows a moving wait (the user's rule, 2026-10-03: every wait moves);
+		//its buttons and Esc do nothing until the core answers. Called on the UI
+		//thread; completes there.
+		public Task<bool> StartReplay()
 		{
+			if(!RecordingTransitions.AcceptsClick(Transition)) {
+				return Task.FromResult(false);
+			}
 			RefreshReplay();
 			if(!IsStartEnabled) {
-				return false;
+				return Task.FromResult(false);
 			}
-			string? file = _recorder.Start();
+			SetReplayTransition(RecordingTransition.Starting);
+			return FinishStartReplay(Task.Run(_recorder.Start));
+		}
+
+		private async Task<bool> FinishStartReplay(Task<string?> core)
+		{
+			string? file;
+			try {
+				file = await core;
+			} catch(Exception) {
+				file = null;
+			}
+			Transition = RecordingTransition.None;
 			if(file == null) {
 				NoticeText = ResourceHelper.GetMessage("ShareReplayRefused");
 				Sheet = ReplaySheet.None;
@@ -372,13 +404,32 @@ namespace Mesen.ViewModels
 		}
 
 		//Stop (or Esc): the second sheet names the file; nothing opens by itself.
-		public void StopReplay()
+		//The core writes the .mmo off the UI thread; the strip waits meanwhile.
+		public Task StopReplay()
 		{
-			if(Sheet != ReplaySheet.Recording) {
-				return;
+			if(Sheet != ReplaySheet.Recording || !RecordingTransitions.AcceptsClick(Transition)) {
+				return Task.CompletedTask;
 			}
-			string? file = _recorder.StopAndKeep();
+			SetReplayTransition(RecordingTransition.Stopping);
+			return FinishStopReplay(Task.Run(_recorder.StopAndKeep));
+		}
+
+		private async Task FinishStopReplay(Task<string?> core)
+		{
+			string? file;
+			try {
+				file = await core;
+			} catch(Exception) {
+				file = null;
+			}
+			Transition = RecordingTransition.None;
 			EndRecording(file);
+		}
+
+		private void SetReplayTransition(RecordingTransition transition)
+		{
+			Transition = transition;
+			RefreshReplay();
 		}
 
 		private void EndRecording(string? file)
@@ -400,11 +451,12 @@ namespace Mesen.ViewModels
 
 		private void OnRecordingTick()
 		{
-			if(Sheet != ReplaySheet.Recording) {
+			//A stop in flight ends the recording itself when the core answers.
+			if(Sheet != ReplaySheet.Recording || Transition != RecordingTransition.None) {
 				return;
 			}
 			//The core ends a shared recording by itself (save state, ROM change),
-			//or Tools ⋯ › Movies › Stop handed the file over already.
+			//or Classic › Tools › Movies › Stop handed the file over already.
 			if(!_recorder.IsSharing) {
 				EndRecording(null);
 				return;
@@ -433,8 +485,8 @@ namespace Mesen.ViewModels
 		//Rule 8 in Share (ShareEsc). Returns true when Esc did something.
 		public bool HandleEsc()
 		{
-			switch(ShareEsc.Next(Sheet, IsProjectListOpen)) {
-				case ShareEscAction.StopRecording: StopReplay(); return true;
+			switch(ShareEsc.Next(Sheet, IsProjectListOpen, Transition)) {
+				case ShareEscAction.StopRecording: _ = StopReplay(); return true;
 				case ShareEscAction.CloseSheet: CloseSheet(); return true;
 				case ShareEscAction.CloseProjectList: IsProjectListOpen = false; return true;
 				default: return false;
@@ -446,12 +498,18 @@ namespace Mesen.ViewModels
 			IsStartSheetOpen = Sheet == ReplaySheet.Start;
 			IsSavedSheetOpen = Sheet == ReplaySheet.Saved;
 			IsRecording = Sheet == ReplaySheet.Recording;
-			StartSheetTitle = _gameLoaded ? ResourceHelper.GetMessage("ShareReplaySheetTitle", _gameName) : ResourceHelper.GetMessage("ShareReplaySheetTitleNoGame");
-			//A movie or netplay session can start from Tools ⋯ at any time: asked each refresh.
+			//W-H4: the title is the action; the body names the game that restarts.
+			StartSheetTitle = ResourceHelper.GetMessage("ShareReplaySheetTitle");
+			StartSheetBody = _gameLoaded ? ResourceHelper.GetMessage("ShareReplaySheetBody", _gameName) : ResourceHelper.GetMessage("ShareReplaySheetBodyNoGame");
+			//A movie or netplay session can start outside Share at any time: asked each refresh.
 			(bool movieBusy, bool netplay) = Sheet == ReplaySheet.Start ? _sessions() : (false, false);
 			ReplayStartReason reason = ShareReplay.StartReason(_gameLoaded, _console, movieBusy, netplay);
-			IsStartEnabled = reason == ReplayStartReason.None && Sheet == ReplaySheet.Start;
+			IsStartEnabled = reason == ReplayStartReason.None && Sheet == ReplaySheet.Start && RecordingTransitions.AcceptsClick(Transition);
 			StartReason = reason == ReplayStartReason.None ? "" : ResourceHelper.GetMessage("ShareReplayReason" + reason);
+			IsReplayStarting = Transition == RecordingTransition.Starting;
+			IsReplayStopping = Transition == RecordingTransition.Stopping;
+			ReplayWaitText = IsReplayStarting ? ResourceHelper.GetMessage("ShareReplayStarting")
+				: IsReplayStopping ? ResourceHelper.GetMessage("ShareReplayStopping") : "";
 			if(IsRecording) {
 				RecordingPill = ResourceHelper.GetMessage("ShareRecordingPill", RemasterScreen.FormatElapsed(_recordingClock.Elapsed));
 			}

@@ -12,14 +12,24 @@ namespace Mesen.ViewModels
 	public partial class InterruptionViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
-		[ObservableProperty] public partial InterruptionKind Kind { get; private set; }
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(IsStop), nameof(GoIsNeutral), nameof(IsRemaster), nameof(IsShare))]
+		public partial InterruptionKind Kind { get; private set; }
 		[ObservableProperty] public partial string Text { get; private set; } = "";
 		[ObservableProperty] public partial string KeepText { get; private set; } = "";
 		[ObservableProperty] public partial string GoText { get; private set; } = "";
 
+		//ADR-0249 (W-X3): how the shared banner draws this question - see
+		//UI/Logic/InterruptionBanner.cs.
+		public bool IsStop => InterruptionBanner.KindOf(Kind) == BannerKind.Stop;
+		public bool GoIsNeutral => !InterruptionBanner.GoIsTinted(Kind);
+		public bool IsRemaster => Kind != InterruptionKind.None && InterruptionBanner.WorkspaceOf(Kind) == Workspace.Remaster;
+		public bool IsShare => Kind != InterruptionKind.None && InterruptionBanner.WorkspaceOf(Kind) == Workspace.Share;
+
 		private Action? _go;
 
-		//game: the game being opened (or reloaded); recording: the recording number kept;
+		//game: the game being opened (or reloaded), or ForcedPatch's patch file;
+		//recording: the recording number kept;
 		//buildJob: the running job is a build (else the kit).
 		public void Ask(InterruptionKind kind, string game, int recording, bool buildJob, Action go)
 		{
@@ -35,6 +45,13 @@ namespace Mesen.ViewModels
 				InterruptionKind.QuitWhilePackaging => (ResourceHelper.GetMessage("InterruptQuitWhilePackaging"), "InterruptKeepRunning", "InterruptQuit"),
 				InterruptionKind.OpenWhileRecording => (ResourceHelper.GetMessage("InterruptOpenWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndOpen"),
 				InterruptionKind.ReloadWhileRecording => (ResourceHelper.GetMessage("InterruptReloadWhileRecording", game, recording), "InterruptCancel", "InterruptStopAndReload"),
+				//ADR-0249 (W-X1): Player mode's ConfirmExitResetPower questions; game
+				//is the loaded game's name, empty when none is loaded.
+				InterruptionKind.QuitGame => (ResourceHelper.GetMessage("InterruptQuitGame", game), "InterruptKeepPlaying", "InterruptQuitGameGo"),
+				InterruptionKind.QuitApp when game.Length > 0 => (ResourceHelper.GetMessage("InterruptQuitApp", game), "InterruptKeepPlaying", "InterruptQuit"),
+				InterruptionKind.QuitApp => (ResourceHelper.GetMessage("InterruptQuitAppNoGame"), "InterruptCancel", "InterruptQuit"),
+				//#732: game is the forced patch's file name (PlayForcedPatch.PatchName).
+				InterruptionKind.ForcedPatch => (ResourceHelper.GetMessage("InterruptForcedPatch", game), "InterruptKeepPlaying", "InterruptReloadWithoutPatch"),
 				_ => (ResourceHelper.GetMessage("InterruptOpenWhileClassicBuilder", game), "InterruptCancel", "InterruptStopAndOpen"),
 			};
 			Text = text;

@@ -28,7 +28,10 @@ public:
 		return -1;
 	}
 
-	virtual void Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan) = 0;
+	//`extended` (ADR-0253 W.4): this frame carries the Reveal's extra columns on
+	//each side, so the output row is (256 + 2 * 64) wide minus the overscan and
+	//starts on the left side instead of on the picture's own left edge.
+	virtual void Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan, bool extended) = 0;
 
 	virtual ~BaseHdNesPack() {}
 };
@@ -130,17 +133,17 @@ private:
 	__forceinline void DrawColor(uint32_t color, uint32_t* outputBuffer, uint32_t screenWidth);
 	__forceinline void DrawTile(HdPpuTileInfo& tileInfo, HdPackTileInfo& hdPackTileInfo, uint32_t* outputBuffer, uint32_t screenWidth);
 
-	__forceinline HdPackTileInfo* GetCachedMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile);
-	__forceinline HdPackTileInfo* GetMatchingTile(uint32_t x, uint32_t y, HdPpuTileInfo* tile, bool* disableCache = nullptr);
+	__forceinline HdPackTileInfo* GetCachedMatchingTile(int32_t x, int32_t y, HdPpuTileInfo* tile);
+	__forceinline HdPackTileInfo* GetMatchingTile(int32_t x, int32_t y, HdPpuTileInfo* tile, bool* disableCache = nullptr);
 
 	//Returns the background it drew, or nullptr when this pixel is outside it -
 	//the suppression diagnostic needs to name the layer that did the covering -
 	//and also when ADR-0236's guard masks the cell this pixel belongs to, which
 	//is the same statement: this layer has nothing to say about this pixel.
-	__forceinline HdBackgroundInfo* DrawBackgroundLayer(uint8_t priority, uint32_t x, uint32_t y, uint32_t* outputBuffer, uint32_t screenWidth);
+	__forceinline HdBackgroundInfo* DrawBackgroundLayer(uint8_t priority, int32_t x, int32_t y, uint32_t* outputBuffer, uint32_t screenWidth);
 
 	template<HdPackBlendMode blendMode>
-	__forceinline void DrawCustomBackground(HdBackgroundInfo& bgInfo, uint32_t* outputBuffer, uint32_t x, uint32_t y, uint32_t screenWidth);
+	__forceinline void DrawCustomBackground(HdBackgroundInfo& bgInfo, uint32_t* outputBuffer, int32_t x, int32_t y, uint32_t screenWidth);
 
 	void OnLineStart(HdPpuPixelInfo& lineFirstPixel, uint8_t y);
 	int32_t GetLayerIndex(uint8_t priority);
@@ -154,9 +157,15 @@ private:
 	//The behind-background sprite pass. Records in lowestBgSprite the topmost
 	//opaque one it drew (999 when none). Run once before layer 1 as always, and
 	//again after layer 2 on the pixels ADR-0224's opt-in names.
-	__forceinline void DrawBehindBgSprites(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite);
-	__forceinline void GetPixels(uint32_t x, uint32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth);
+	__forceinline void DrawBehindBgSprites(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth, int& lowestBgSprite);
+	__forceinline void GetPixels(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t screenWidth);
 	__forceinline void ProcessGrayscaleAndEmphasis(HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t hdScreenWidth);
+
+	//ADR-0253 W.4: one row of the Reveal's extra columns, drawn through the same
+	//GetPixels the centre uses - so a `<tile>` rule cannot tell a side pixel from
+	//a centred one - at the pack's own scale. `sideTiles` is one row of
+	//HdScreenInfo::SideTiles; `rowStart` is the row's first output pixel.
+	void DrawWidescreenColumns(int32_t y, HdSideTile* sideTiles, uint32_t* rowStart, uint32_t screenWidth);
 
 	void CleanupInvalidRules();
 	void InitializeFallbackTiles();
@@ -168,5 +177,5 @@ public:
 
 	uint32_t GetScale() override { return scale; }
 
-	void Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan) override;
+	void Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffer, OverscanDimensions& overscan, bool extended) override;
 };

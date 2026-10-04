@@ -284,6 +284,10 @@ namespace Mesen.Config
 			}
 		}
 
+		//ADR-0249: true once the configuration exists, so a caller can read it
+		//without creating it (PlayerDialogScope).
+		public static bool IsConfigLoaded => _config != null;
+
 		public static Configuration Config
 		{
 			get

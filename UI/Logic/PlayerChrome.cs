@@ -8,24 +8,23 @@ namespace Mesen.Logic;
 //MouseManager.UpdateMainMenuVisibility(), which recomputes it on every mouse
 //move. Both now call in here so the two cannot drift.
 //
-//G.1 (ADR-0241, PRD Part B §13.2): the classic bar is keyed on
-//PreferencesConfig.ShowClassicMenuBar (default false everywhere), which
-//replaces UiMode as the "upgrade keeps my menus" rule of §6. With the bar off,
-//the same MainMenuAction tree is reachable from the shell's Tools ⋯.
+//ADR-0250: the classic bar belongs to the Classic door, the original Mesen
+//GUI. The three task doors have no menu bar; their Tools ⋯ holds a short menu
+//(UI/Logic/WorkspaceMenu.cs).
 public static class PlayerChrome
 {
-	//Bar off hides the menu bar entirely (there is no menu bar to re-show, so
-	//the AutoHideMenu hover rule is ignored). Bar on keeps the classic rule:
+	//A task door hides the menu bar entirely (there is no menu bar to re-show,
+	//so the AutoHideMenu hover rule is ignored). Classic keeps the classic rule:
 	//exclusive fullscreen always hides; with auto-hide on, the bar shows while
 	//the menu is open or the cursor sits in the top hover band; otherwise the
 	//bar is always shown.
 	//
 	//The MainWindowViewModel initializer has no cursor/window state yet and
 	//passes isExclusiveFullscreen: false, menuOpen: false, cursorInBand: false,
-	//which reduces to "ShowClassicMenuBar && !AutoHideMenu".
-	public static bool IsMenuVisible(bool showClassicMenuBar, bool isExclusiveFullscreen, bool autoHide, bool menuOpen, bool cursorInBand)
+	//which reduces to "Classic door && !AutoHideMenu".
+	public static bool IsMenuVisible(bool classicDoor, bool isExclusiveFullscreen, bool autoHide, bool menuOpen, bool cursorInBand)
 	{
-		if(!showClassicMenuBar) {
+		if(!classicDoor) {
 			return false;
 		}
 

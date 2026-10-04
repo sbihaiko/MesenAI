@@ -29,4 +29,11 @@ public:
 	GbaDefaultVideoFilter(Emulator* emu, bool applyNtscFilter);
 
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override;
+
+	//ADR-0253 W.7: this filter reads the frame's own width (see ApplyFilter),
+	//so the GBA Reveal's extended frames go through whole - except the NTSC
+	//filters, which still assume the console's standard width. W.6 widens
+	//them; until then VideoDecoder hands them the standard centre and the
+	//aspect ratio falls back with it.
+	bool AcceptsExtendedFrame() override { return !_applyNtscFilter; }
 };

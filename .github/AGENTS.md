@@ -37,6 +37,17 @@ what CI actually runs; this doc records why they're split the way they are.
   #230 and ADR-0191 existed to stop. Restoring a platform is a revert of the
   ADR-0191 commit plus a line in that ADR. The rationale is in the file's
   header comment.
+- `workflows/ci-channel-publish.yml` — **ADR-0204 §6** (2026-10-03): on a
+  pull request merged into `prod` (`pull_request: types: [closed]`, guarded
+  on `merged == true` and a same-repository head) it republishes that pull
+  request's own `build.yml` artifacts to the `ci-latest` pre-release when the
+  tree the build recorded (`build.yml`'s `provenance` job, artifact
+  `ci-channel-provenance`) equals the merge commit's tree, and otherwise
+  dispatches `build.yml` on `prod`. It and `build.yml`'s `publish` job share
+  `scripts/stage_ci_channel_assets.sh` (the only artifact-to-asset mapping)
+  and `scripts/publish_ci_channel.sh`; never inline either in a workflow.
+  Guarded by `scripts/checks/verify_download_channel.sh` and
+  `scripts/test_ci_channel_scripts.py`.
 - `workflows/checks.yml` — `make doc-checks` on every pull request into
   `main`, on every push to `main`, and on dispatch. The two triggers are not
   duplicates, and the `push` one is not removable as an optimization

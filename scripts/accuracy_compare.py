@@ -79,11 +79,20 @@ ARMS = {
     "builder": {"install": None, "flags": ("hdpack",), "layer": "HD Pack Builder recording"},
     "hdpack": {"install": "hdpack", "flags": (), "layer": "loose HD pack, textures replaced"},
     "mep": {"install": "mep", "flags": (), "layer": "MEP container (textures + synth)"},
+    # ADR-0253: the WideScrn switch. The frame is 384 px wide, so the arm is
+    # compared on its centre 256 columns (`capture centre:`), which the Reveal
+    # must leave bit-identical to the vanilla frame.
+    "widescreen": {"install": None, "flags": ("widescreen",), "layer": "NES widescreen Reveal (centre 256 px)",
+                   "compare": "centre"},
 }
 
 CAPTURE_RE = re.compile(
     r"^capture: (?P<width>\d+)x(?P<height>\d+) frame=(?P<frame>\d+) "
     r"pixels=(?P<pixels>\d+) checksum=0x(?P<checksum>[0-9A-Fa-f]{8})$",
+    re.MULTILINE,
+)
+CENTRE_RE = re.compile(
+    r"^capture centre: (?P<width>\d+)x(?P<height>\d+) checksum=0x(?P<checksum>[0-9A-Fa-f]{8})$",
     re.MULTILINE,
 )
 
@@ -100,13 +109,36 @@ def parse_capture(stdout):
     if not match:
         raise ValueError("no 'capture:' line in the recorder output")
     got = match.groupdict()
-    return {
+    capture = {
         "width": int(got["width"]),
         "height": int(got["height"]),
         "frame": int(got["frame"]),
         "pixels": int(got["pixels"]),
         "checksum": got["checksum"].upper(),
     }
+    centre = CENTRE_RE.search(stdout)
+    if centre:
+        capture["centre"] = {
+            "width": int(centre["width"]),
+            "height": int(centre["height"]),
+            "checksum": centre["checksum"].upper(),
+        }
+    return capture
+
+
+def compared_capture(capture, mode):
+    """The capture an arm is compared on. `mode` "centre" (ADR-0253's
+    widescreen arm) swaps in the standard centre of the extended frame, and
+    fails when the run printed none - a widescreen arm whose frame was never
+    extended compared nothing new."""
+    if mode != "centre":
+        return capture
+    centre = capture.get("centre")
+    if centre is None:
+        raise ValueError("the widescreen arm printed no 'capture centre:' line - its frame was not extended")
+    return dict(capture, width=centre["width"], height=centre["height"],
+                pixels=centre["width"] * centre["height"], checksum=centre["checksum"],
+                extended_width=capture["width"])
 
 
 def frames_to_seconds(frames, frame_rate=NTSC_FRAME_RATE):
@@ -359,7 +391,8 @@ def main(argv=None):
             if arm in perturb_flags:
                 notes.append(f"PERTURBED {arm}: extra recorder flag(s) {' '.join(perturb_flags[arm])}")
             for name, frame in CHECKPOINTS:
-                captures[(arm, name)] = run_recorder(rom, arm_dir / f"out-{name}", frame, flags, script_path)
+                captures[(arm, name)] = compared_capture(
+                    run_recorder(rom, arm_dir / f"out-{name}", frame, flags, script_path), spec.get("compare"))
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

@@ -4,6 +4,7 @@
 #include "Shared/Movies/MovieManager.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Video/DrawStringCommand.h"
+#include "Shared/Video/HudToastLayout.h"
 #include "Utilities/StringUtilities.h"
 
 SystemHud::SystemHud(Emulator* emu)
@@ -150,15 +151,73 @@ void SystemHud::DisplayMessage(string title, string message)
 
 void SystemHud::DrawMessages(DebugHud* hud, uint32_t screenWidth, uint32_t screenHeight) const
 {
+	bool playerStyle = _emu->GetSettings()->GetPreferences().ToastStyle == HudToastStyle::Player;
 	int counter = 0;
 	int lastHeight = 3;
+	int stackOffset = 0;
 	for(auto& msg : _messages) {
 		if(counter < 4) {
-			DrawMessage(hud, *msg.get(), screenWidth, screenHeight, lastHeight);
+			if(playerStyle) {
+				DrawPlayerMessage(hud, *msg.get(), screenWidth, screenHeight, stackOffset);
+			} else {
+				DrawMessage(hud, *msg.get(), screenWidth, screenHeight, lastHeight);
+			}
 		} else {
 			break;
 		}
 		counter++;
+	}
+}
+
+void SystemHud::DrawPlayerMessage(DebugHud* hud, MessageInfo& msg, uint32_t screenWidth, uint32_t screenHeight, int& stackOffset) const
+{
+	//W-P3's toast (HudToastLayout.h): a rounded PlayerHudColor card in the
+	//bottom-right corner, a status glyph, and the message alone in white -
+	//no "[title]" prefix and no black outline.
+	using namespace HudToastLayout;
+	uint8_t fade = (uint8_t)(msg.GetOpacity() * 255);
+
+	auto measure = [](const string& line) {
+		string copy = line;
+		return (int)DrawStringCommand::MeasureString(copy).X;
+	};
+	vector<string> lines = Wrap(ToFontText(msg.GetMessage()), MaxTextWidth((int)screenWidth), measure);
+	int textWidth = 0;
+	for(const string& line : lines) {
+		textWidth = std::max(textWidth, measure(line));
+	}
+
+	Box box = Layout((int)screenWidth, (int)screenHeight, textWidth, (int)lines.size(), stackOffset);
+	stackOffset += box.Height + StackGap;
+
+	//The card, one span per row so no pixel is blended twice; the pixel just
+	//outside each cut-in corner row gets half the card's alpha as a cheap
+	//anti-aliased edge.
+	int cardColor = (int)HudColor(CardRgb, CardAlpha, fade);
+	int edgeColor = (int)HudColor(CardRgb, (uint8_t)(CardAlpha / 2), fade);
+	for(int row = 0; row < box.Height; row++) {
+		int inset = CornerInset(row, box.Height, Radius);
+		hud->DrawRectangle(box.X + inset, box.Y + row, box.Width - inset * 2, 1, cardColor, true, 1);
+		if(inset > 0) {
+			hud->DrawPixel(box.X + inset - 1, box.Y + row, edgeColor, 1);
+			hud->DrawPixel(box.X + box.Width - inset, box.Y + row, edgeColor, 1);
+		}
+	}
+
+	Icon icon = Classify(msg.GetTitle(), msg.GetMessage());
+	const uint8_t* rows = IconRows(icon);
+	int iconColor = (int)HudColor(IconRgb(icon), 255, fade);
+	for(int row = 0; row < IconSize; row++) {
+		for(int col = 0; col < IconSize; col++) {
+			if((rows[row] >> (7 - col)) & 0x01) {
+				hud->DrawPixel(box.IconX + col, box.IconY + row, iconColor, 1);
+			}
+		}
+	}
+
+	int textColor = (int)HudColor(TextRgb, 255, fade);
+	for(size_t i = 0; i < lines.size(); i++) {
+		hud->DrawString(box.TextX, box.TextY + (int)i * LineHeight, lines[i], textColor, 0xFF000000, 1, -1, 0, false);
 	}
 }
 

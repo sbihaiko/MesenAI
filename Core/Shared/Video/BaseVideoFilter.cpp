@@ -52,6 +52,16 @@ void BaseVideoFilter::UpdateBufferSize()
 	}
 }
 
+BaseVideoFilter::FrameExtension BaseVideoFilter::GetOutputFrameExtension()
+{
+	//Only when this filter left the picture alone: the map has one byte per
+	//console row, and every consumer reads it per output row.
+	if(_frameInfo.Width == _frame.Width && _frameInfo.Height == _frame.Height) {
+		return { _frame.ExtendedColumns, _frame.ExtendedSideFill };
+	}
+	return {};
+}
+
 OverscanDimensions BaseVideoFilter::GetOverscan()
 {
 	return _overscan;

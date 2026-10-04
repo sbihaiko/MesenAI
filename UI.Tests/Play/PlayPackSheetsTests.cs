@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Mesen.Logic;
 using Xunit;
@@ -43,10 +44,39 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
+		public void The_detail_byline_reads_author_version_and_license()
+		{
+			Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", PackDetail.Byline("Tastic", "1.2", "CC BY-NC 4.0", a => "by " + a, "author unknown", v => "version " + v));
+		}
+
+		//The catalog install writes "license": "unknown" into pack.json when the
+		//catalog row names none (CommunityPackCatalogEntry.LicenseOrUnknown); the
+		//byline read it back as a bare trailing "unknown".
+		[Theory]
+		[InlineData("unknown")]
+		[InlineData(" Unknown ")]
+		[InlineData("unspecified")]
+		[InlineData(" Unspecified ")]
+		[InlineData("")]
+		public void A_pack_naming_no_license_leaves_it_out_of_the_byline(string license)
+		{
+			Assert.Equal("author unknown · version 1.0.0", PackDetail.Byline("", "1.0.0", license, a => "by " + a, "author unknown", v => "version " + v));
+		}
+
+		[Fact]
 		public void Chips_come_from_the_sections_and_the_wired_patch()
 		{
 			Assert.Equal(new PackLayerChips(true, true, false), PackDetail.Chips("textures,audio,border", null));
 			Assert.Equal(new PackLayerChips(false, true, true), PackDetail.Chips("audio", new PackAudioScan(0, 4, true)));
+		}
+
+		//W-P6's Audio switch: an HDNes-style pack's <bgm> lines sit beside its
+		//textures, with no audio section - its music is still the pack's audio.
+		[Fact]
+		public void Tracks_next_to_the_textures_count_as_audio()
+		{
+			Assert.Equal(new PackLayerChips(true, true, false), PackDetail.Chips("textures", new PackAudioScan(0, 3, false)));
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures", new PackAudioScan(0, 0, false)));
 		}
 
 		[Fact]
@@ -57,6 +87,34 @@ namespace Mesen.Tests.Play
 			Assert.Equal("/roms/Contra", PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", "/roms/Contra"));
 			Assert.False(PackDetail.CanScan(PackOrigin.Zip));
 			Assert.True(PackDetail.CanScan(PackOrigin.Folder));
+		}
+
+		//ADR-0147: a sibling MEP pack roots its human layer at mep/ (the sibling
+		//of auto/), so the folder button opens mep/; a legacy sibling without one
+		//still opens the sibling root.
+		[Fact]
+		public void The_sibling_folder_follows_the_mep_layer()
+		{
+			string mep = NewTempSibling("pack.json");
+			string bare = NewTempSibling(null);
+			try {
+				Assert.Equal(Path.Combine(mep, "mep"), PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", mep));
+				Assert.Equal(bare, PackDetail.FolderFor(PackOrigin.Sibling, "Contra", "/packs", bare));
+			} finally {
+				Directory.Delete(mep, true);
+				Directory.Delete(bare, true);
+			}
+		}
+
+		//A throwaway sibling folder; probe != null writes <sibling>/mep/<probe>.
+		private static string NewTempSibling(string? mepProbe)
+		{
+			string sibling = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "mep-layer-" + Guid.NewGuid().ToString("N"))).FullName;
+			if(mepProbe != null) {
+				string mep = Directory.CreateDirectory(Path.Combine(sibling, "mep")).FullName;
+				File.WriteAllText(Path.Combine(mep, mepProbe), "{}");
+			}
+			return sibling;
 		}
 
 		//ADR-0240 Option 1, shown where it is useful: missing music only when a
@@ -135,5 +193,62 @@ namespace Mesen.Tests.Play
 			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, "AB12", currentRomSha1: ""));
 			Assert.Equal(RestoreOutcome.Stale, RestoreFlow.After(true, 3, 3, restoreRomSha1: "", currentRomSha1: ""));
 		}
-	}
+	
+		//W-P6: macOS names the Finder (the render); elsewhere a folder.
+		[Theory]
+		[InlineData(true, "btnPackDetailShowInFinder")]
+		[InlineData(false, "btnPackDetailShowFolder")]
+		public void The_folder_button_names_the_platforms_file_browser(bool isMacOS, string key)
+		{
+			Assert.Equal(key, PackDetail.ShowFolderLabelKey(isMacOS));
+		}
+
+		//The Patch chip is lit by a patch alone, with or without missing music.
+		[Fact]
+		public void The_patch_chip_follows_the_patch_not_the_music_notice()
+		{
+			Assert.True(PackDetail.Chips("audio", new PackAudioScan(0, 4, true)).Patch);
+			Assert.False(PackDetail.Chips("audio", new PackAudioScan(3, 17, false)).Patch);
+			Assert.False(PackDetail.Build(true, "audio", new PackAudioScan(3, 17, false), 1, false, true, "/f").Chips.Patch);
+		}
+
+		//The local automatic upscale (F5 bootstrap, an auto-only folder pack) is
+		//not a pack someone made: no author, version or license, and its
+		//recorded music fingerprints/MIDI are not tracks to play.
+		[Fact]
+		public void The_automatic_layer_has_textures_but_no_music_to_switch()
+		{
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures,audio", null, automatic: true));
+			Assert.Equal(new PackLayerChips(true, false, false), PackDetail.Chips("textures,audio", new PackAudioScan(0, 0, false), automatic: true));
+		}
+
+		[Fact]
+		public void The_automatic_layer_shows_music_only_when_it_has_playable_tracks()
+		{
+			Assert.True(PackDetail.Chips("textures,audio", new PackAudioScan(2, 5, false), automatic: true).Audio);
+		}
+
+		[Fact]
+		public void The_detail_model_flags_the_automatic_layer()
+		{
+			PackDetailModel model = PackDetail.Build(true, "textures,audio", null, 1, false, false, "/f", automatic: true);
+			Assert.True(model.IsAutomatic);
+			Assert.False(model.Chips.Audio);
+			Assert.False(PackDetail.Build(true, "textures,audio", null, 1, false, false, "/f").IsAutomatic);
+		}
+
+		[Fact]
+		public void The_automatic_layer_byline_names_the_game_and_how_it_was_made()
+		{
+			Assert.Equal("Dr. Mario (1990) (Nintendo)\nMade on this computer from what you played", PackDetail.AutoByline("Dr. Mario (1990) (Nintendo)", null, s => "Made (" + s + ")", "Made on this computer from what you played"));
+			Assert.Equal("Dr. Mario\nMade (xBRZ 4×)", PackDetail.AutoByline("Dr. Mario", "xBRZ 4×", s => "Made (" + s + ")", "Made"));
+		}
+
+		[Fact]
+		public void The_automatic_layer_is_named_by_what_it_is_never_by_the_rom()
+		{
+			Assert.Equal("Automatic upscale", PackDetail.DisplayName("Dr. Mario (1990) (Nintendo)", autoOnly: true, "Automatic upscale"));
+			Assert.Equal("Contra 80s", PackDetail.DisplayName("Contra 80s", autoOnly: false, "Automatic upscale"));
+		}
+}
 }

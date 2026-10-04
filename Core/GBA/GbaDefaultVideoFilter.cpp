@@ -79,14 +79,19 @@ void GbaDefaultVideoFilter::ApplyFilter(uint16_t* ppuOutputBuffer)
 {
 	uint32_t* out = GetOutputBuffer();
 
-	for(uint32_t i = 0; i < GbaConstants::ScreenHeight; i++) {
-		for(uint32_t j = 0; j < GbaConstants::ScreenWidth; j++) {
-			out[i * GbaConstants::ScreenWidth + j] = GetPixel(ppuOutputBuffer, i * GbaConstants::ScreenWidth + j);
+	//The frame's own size, not the console's: ADR-0253 W.7 hands this filter a
+	//frame that is ExtraColumns wider per side when the GBA Reveal is on.
+	uint32_t width = _baseFrameInfo.Width;
+	uint32_t height = _baseFrameInfo.Height;
+
+	for(uint32_t i = 0; i < height; i++) {
+		for(uint32_t j = 0; j < width; j++) {
+			out[i * width + j] = GetPixel(ppuOutputBuffer, i * width + j);
 		}
 	}
 
 	if(_applyNtscFilter) {
-		_ntscFilter.ApplyFilter(out, GbaConstants::ScreenWidth, GbaConstants::ScreenHeight, IsOddFrame());
+		_ntscFilter.ApplyFilter(out, width, height, IsOddFrame());
 	}
 }
 

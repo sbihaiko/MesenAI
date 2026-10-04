@@ -67,6 +67,7 @@ internal static class MainWindowStartup
 					WaitFor(model.Remaster.Measuring, "The Remaster gate measurement");
 					WaitFor(model.ShareGateRefresh, "The Share refresh after the gate measurement");
 					WaitFor(model.PackPickApplied, "The pack swap after Use This Pack");
+					WaitFor(model.PackLayerApplied, "The pack swap after a W-P6 layer switch");
 				}
 			}
 		} finally {

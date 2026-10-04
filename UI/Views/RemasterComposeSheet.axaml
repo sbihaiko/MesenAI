@@ -11,19 +11,91 @@
 	IsVisible="{Binding IsComposeSheetVisible}"
 >
 	<!--G.7 (PRD Part B §13.5.3 W-R7, ADR-0165): the composer is a separate
-	tool in its own window. Cancel / Open Composer ↗ = 2 elements; without
+	tool in its own window. Cancel / Open Composer = 2 elements; without
 	adjacency.json the hint says to record again and the button is disabled
 	(rule 4). Esc closes it.-->
-	<Border Name="RemasterComposeCard" Background="#262626" CornerRadius="8" Padding="16" MaxWidth="560" HorizontalAlignment="Left">
-		<StackPanel Spacing="10">
-			<TextBlock Text="{l:Translate lblComposeTitle}" FontSize="16" FontWeight="Bold" />
-			<TextBlock Text="{l:Translate lblComposeBody}" />
-			<TextBlock Name="RemasterComposeHint" Text="{Binding ComposeHint}" />
-			<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-				<Button Name="RemasterComposeCancelButton" Content="{l:Translate btnComposeCancel}" Click="OnCancel" />
+	<!--ADR-0249 (W-R7): in Player mode a light 460 px sheet over the scrim -
+	an 18 px title, the body, the hint in the secondary colour, Cancel and
+	Open Composer (with its arrow) at 32 px. Advanced keeps the dark card.-->
+	<UserControl.Styles>
+		<Style Selector="Border#RemasterComposeCard">
+			<Setter Property="Background" Value="#262626" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="16" />
+			<Setter Property="MaxWidth" Value="560" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector=".player Border#RemasterComposeCard">
+			<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSheet}" />
+			<Setter Property="Padding" Value="24 24 24 22" />
+			<Setter Property="Width" Value="460" />
+			<Setter Property="MaxWidth" Value="460" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+		</Style>
+		<Style Selector="TextBlock#RemasterComposeTitle">
+			<Setter Property="FontSize" Value="16" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterComposeTitle">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSheetTitle}" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterComposeHint">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector=".player Button.secondary">
+			<Setter Property="Height" Value="32" />
+		</Style>
+		<Style Selector=".player Button.primary">
+			<Setter Property="Height" Value="32" />
+		</Style>
+		<!--Classic (Advanced) keeps small icons and no badges; the theme sizes them in Player mode.-->
+		<Style Selector="PathIcon.leading">
+			<Setter Property="Width" Value="11" />
+			<Setter Property="Height" Value="11" />
+			<Setter Property="Margin" Value="0 0 6 0" />
+		</Style>
+		<Style Selector=".player Button PathIcon.leading">
+			<Setter Property="Width" Value="13" />
+			<Setter Property="Height" Value="13" />
+			<Setter Property="Margin" Value="0 0 7 0" />
+		</Style>
+		<!--Fluent paints a Button.accent on its ContentPresenter (blue, square);
+		the Player primary paints on PART_Background, so the presenter stays clear.-->
+		<Style Selector=".player Button.primary.accent /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=".player Button.primary.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=".player Button.primary.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+	</UserControl.Styles>
+	<Border Name="RemasterComposeCard" Classes="sheet">
+		<StackPanel Spacing="14">
+			<TextBlock Name="RemasterComposeTitle" Classes="sheet-title" Text="{l:Translate lblComposeTitle}" />
+			<TextBlock Classes="paragraph" Text="{l:Translate lblComposeBody}" />
+			<!--W-R7: a drawn green check before the line when the layout data is there.-->
+			<StackPanel Orientation="Horizontal" Spacing="6">
+				<PathIcon Name="RemasterComposeHintIcon" Classes="done" Data="{StaticResource PlayerIconCheck}" Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding HasLayoutData}" />
+				<TextBlock Name="RemasterComposeHint" Text="{Binding ComposeHint}" VerticalAlignment="Center" />
+			</StackPanel>
+			<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0 40 0 0">
+				<Button Name="RemasterComposeCancelButton" Classes="secondary" VerticalAlignment="Top" Content="{l:Translate btnComposeCancel}" Click="OnCancel" />
 				<StackPanel Spacing="2" MaxWidth="240">
-					<Button Name="RemasterOpenComposerButton" Content="{l:Translate btnOpenComposer}" Classes="accent" IsEnabled="{Binding OpenComposer.IsEnabled}" Click="OnOpen" />
-					<TextBlock Name="RemasterOpenComposerReason" Classes="reason" Text="{Binding OpenComposer.Reason}" IsVisible="{Binding OpenComposer.HasReason}" />
+					<Button Name="RemasterOpenComposerButton" Classes="accent primary" IsEnabled="{Binding OpenComposer.IsEnabled}" Click="OnOpen">
+						<StackPanel Orientation="Horizontal">
+							<PathIcon Classes="leading" Data="{StaticResource PlayerIconArrowUpRight}" />
+							<TextBlock Text="{l:Translate btnOpenComposer}" />
+						</StackPanel>
+					</Button>
+					<TextBlock Name="RemasterOpenComposerReason" Classes="reason footnote secondary" Text="{Binding OpenComposer.Reason}" IsVisible="{Binding OpenComposer.HasReason}" />
 				</StackPanel>
 			</StackPanel>
 		</StackPanel>

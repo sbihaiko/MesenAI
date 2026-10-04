@@ -22,6 +22,9 @@ namespace Mesen.Windows
 		{
 			FocusOnOpen(window, model.BiosSheet, nameof(PlayBiosSheetViewModel.IsVisible), () => model.BiosSheet.IsVisible, "BiosSheetChooseFile");
 			FocusOnOpen(window, model.PackDepSheet, nameof(PlayPackDepSheetViewModel.IsVisible), () => model.PackDepSheet.IsVisible, "PackDepSheetChooseFile");
+			FocusOnOpen(window, model.SelectRomSheet, nameof(PlaySelectRomSheetViewModel.IsVisible), () => model.SelectRomSheet.IsVisible, "SelectRomSheetSearch");
+			FocusOnOpen(window, model.ToolSheet, nameof(PlayerToolSheetViewModel.IsBarcode), () => model.ToolSheet.IsBarcode, "ToolSheetBarcode");
+			FocusOnOpen(window, model, nameof(MainWindowViewModel.IsShaderSheetVisible), () => model.IsShaderSheetVisible, "ShaderSheetOk");
 			FocusOnOpen(window, model.ControllerSetup, nameof(PlayControllerSetupViewModel.IsVisible), () => model.ControllerSetup.IsVisible, "ControllerSetupSkip");
 
 			//Play Without It: back to the pause overlay (rule 8).
@@ -57,6 +60,11 @@ namespace Mesen.Windows
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {
 				model.ControllerSetup.Tick(InputApi.GetPressedKeys());
+				//ADR-0253 §4 (W.5): the per-game widescreen measurement closes
+				//after the first gameplay seconds; the record is written as it
+				//closes, whether or not the player ever opens Enhancements. It
+				//needs frames, so the tick only runs while the game runs.
+				model.TickWidescreenSupport();
 			} else if(wasListening || model.ControllerSetup.IsPillVisible) {
 				model.ControllerSetup.StopListening();
 			}

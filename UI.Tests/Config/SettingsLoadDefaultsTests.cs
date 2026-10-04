@@ -12,7 +12,6 @@ namespace Mesen.Tests.Config
 		{
 			MissingKeyDefaults d = SettingsLoadDefaults.For(settingsFileExists: false);
 			Assert.Equal(UiMode.Player, d.UiMode);
-			Assert.True(d.ClassicMenuNoticeShown);
 			Assert.Equal(BootstrapRecordingDefault.ForNewInstall, d.BootstrapEnhancementFolder);
 		}
 
@@ -21,7 +20,6 @@ namespace Mesen.Tests.Config
 		{
 			MissingKeyDefaults d = SettingsLoadDefaults.For(settingsFileExists: true);
 			Assert.Equal(UiMode.Advanced, d.UiMode);
-			Assert.False(d.ClassicMenuNoticeShown);
 			Assert.Equal(BootstrapRecordingDefault.ForExistingSettingsWithoutKey, d.BootstrapEnhancementFolder);
 		}
 	}

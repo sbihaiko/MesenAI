@@ -7,6 +7,8 @@
 	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
 	xmlns:chrome="using:Avalonia.Controls.Chrome"
+	xmlns:lg="using:Mesen.Logic"
+	xmlns:sys="clr-namespace:System;assembly=netstandard"
 	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="52"
 	x:DataType="vm:MainWindowViewModel"
 	x:Class="Mesen.Views.WorkspaceShellBar"
@@ -19,26 +21,347 @@
 	drags the window (ElementRole TitleBar), the two controls keep their input
 	(ElementRole User), and MainWindow pads the leading edge for the traffic
 	lights. The roles have no effect when the client area is not extended.-->
-	<DockPanel Name="TitleBarArea" Height="52" Background="{DynamicResource MesenMenuBackground}" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+	<!--ADR-0249: in Player mode MainWindow gives this bar the `player` class,
+	and the bar follows W-S1's render: light chrome with a hairline, a tinted
+	badge, the 15 px semibold name and a grey ⋯. The classic look stays the
+	default here (these styles sit closer than PlayerTheme.axaml, so both live
+	in this file).-->
+	<UserControl.Resources>
+		<c:WorkspaceIconConverter x:Key="WorkspaceIcon" />
+
+		<!--W-S2 (Player only): the ⋯ button with the render's popup chrome - a
+		light rounded panel, no icon gutter. The items it hosts are unchanged.-->
+		<ControlTemplate x:Key="PlayerToolsMenuTemplate" TargetType="MenuItem">
+			<Border Name="PART_LayoutRoot" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+				<Panel>
+					<ContentPresenter Name="PART_HeaderPresenter" Content="{TemplateBinding Header}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="{TemplateBinding Padding}">
+						<ContentPresenter.DataTemplates>
+							<DataTemplate DataType="sys:String">
+								<AccessText Text="{Binding}" />
+							</DataTemplate>
+						</ContentPresenter.DataTemplates>
+					</ContentPresenter>
+					<Popup Name="PART_Popup" WindowManagerAddShadowHint="False" Placement="BottomEdgeAlignedRight" VerticalOffset="6" IsLightDismissEnabled="True" IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}" OverlayInputPassThroughElement="{Binding $parent[Menu]}">
+						<Border Name="PlayerMenuPanel" Classes="player-menu" Margin="14 0 14 22">
+							<ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+						</Border>
+					</Popup>
+				</Panel>
+			</Border>
+		</ControlTemplate>
+
+		<!--W-S2 (Player only): one row of that panel - a 26 px Inter label, a
+		check when toggled, a right chevron when it opens a submenu. The
+		submenu itself keeps the classic chrome (unchanged contents).-->
+		<ControlTemplate x:Key="PlayerToolsMenuRowTemplate" TargetType="MenuItem">
+			<Panel>
+				<!--ADR-0250: a "-" action is the thin line between the door's groups.
+				Chosen here from Header rather than by a [Header=-] style: a style
+				keyed on Header threw while the ⋯ items were attached.-->
+				<Border Name="PlayerSeparatorLine" Height="1" Margin="6 4" VerticalAlignment="Center" Background="{StaticResource PlayerSeparatorBrush}"
+					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=-}" />
+				<Border Name="PART_LayoutRoot" Height="26" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PlayerRadiusSmall}" Padding="{TemplateBinding Padding}"
+					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.NotEqual}, ConverterParameter=-}">
+					<Grid ColumnDefinitions="Auto,*,Auto">
+						<PathIcon Name="PlayerCheck" Data="{StaticResource PlayerIconCheck}" Width="11" Height="11" Margin="2 0 5 0" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+						<ContentPresenter Name="PlayerHeader" Grid.Column="1" Content="{TemplateBinding Header}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center">
+							<ContentPresenter.DataTemplates>
+								<DataTemplate DataType="sys:String">
+									<AccessText Text="{Binding}" TextTrimming="CharacterEllipsis" />
+								</DataTemplate>
+							</ContentPresenter.DataTemplates>
+						</ContentPresenter>
+						<PathIcon Name="PlayerChevron" Grid.Column="2" Classes="chevron" Data="{StaticResource PlayerIconChevronRight}" Width="11" Height="11" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+					</Grid>
+				</Border>
+				<Popup Name="PART_Popup" WindowManagerAddShadowHint="False" Placement="RightEdgeAlignedTop" HorizontalOffset="{DynamicResource MenuFlyoutSubItemPopupHorizontalOffset}" IsLightDismissEnabled="False" IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}">
+					<Border Background="{DynamicResource MenuFlyoutPresenterBackground}"
+						BorderBrush="{DynamicResource MenuFlyoutPresenterBorderBrush}"
+						BorderThickness="{DynamicResource MenuFlyoutPresenterBorderThemeThickness}"
+						Padding="{DynamicResource MenuFlyoutPresenterThemePadding}"
+						MaxWidth="{DynamicResource FlyoutThemeMaxWidth}"
+						MinHeight="{DynamicResource MenuFlyoutThemeMinHeight}"
+						HorizontalAlignment="Stretch"
+						CornerRadius="{DynamicResource OverlayCornerRadius}"
+						TextElement.FontFamily="{DynamicResource MesenFont}"
+						TextElement.FontSize="{DynamicResource MesenFontSize}"
+						TextElement.FontWeight="Normal"
+						TextElement.Foreground="{DynamicResource MenuFlyoutItemForeground}">
+						<Panel>
+							<Rectangle HorizontalAlignment="Left" Width="24">
+								<Rectangle.Fill>
+									<LinearGradientBrush StartPoint="0,0" EndPoint="24,0">
+										<GradientStop Color="{DynamicResource MesenMenuMarginStartColor}" Offset="0.0" />
+										<GradientStop Color="{DynamicResource MesenMenuMarginEndColor}" Offset="1.0" />
+									</LinearGradientBrush>
+								</Rectangle.Fill>
+							</Rectangle>
+							<ScrollViewer Theme="{StaticResource FluentMenuScrollViewer}">
+								<ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="{DynamicResource MenuFlyoutScrollerMargin}" Grid.IsSharedSizeScope="True" />
+							</ScrollViewer>
+						</Panel>
+					</Border>
+				</Popup>
+			</Panel>
+		</ControlTemplate>
+	</UserControl.Resources>
+	<UserControl.Styles>
+		<Style Selector="DockPanel#TitleBarArea">
+			<Setter Property="Background" Value="{DynamicResource MesenMenuBackground}" />
+		</Style>
+		<Style Selector="TextBlock#ProfileButtonName">
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="FontSize" Value="16" />
+		</Style>
+		<Style Selector="Border#ProfileBadge">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player DockPanel#TitleBarArea">
+			<Setter Property="Background" Value="{StaticResource PlayerBarBackgroundBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border#TitleBarHairline">
+			<Setter Property="Background" Value="{StaticResource PlayerBarSeparatorBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border#ProfileBadge">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileGlyph">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileButtonName">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#ProfileChevron">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="PathIcon#ProfileChevronIcon">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player PathIcon#ProfileChevronIcon">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+			<Setter Property="Padding" Value="6 3 10 3" />
+			<Setter Property="Height" Value="28" />
+			<!--W-S1/W-S3: the render's pill is 150 wide whatever the name.-->
+			<Setter Property="Width" Value="150" />
+			<Setter Property="HorizontalContentAlignment" Value="Left" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton:pointerover /template/ Border#PART_Background, :is(UserControl).player Button#ProfileButton:pressed /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Menu#ToolsMenu">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Margin" Value="0 0 10 0" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton">
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+			<Setter Property="Width" Value="32" />
+			<Setter Property="Height" Value="28" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > AccessText, :is(UserControl).player MenuItem#ToolsMenuButton AccessText">
+			<Setter Property="FontSize" Value="18" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+
+		<!--W-S2 (Player): the Tools ⋯ popup's chrome. Classic everywhere else.-->
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton">
+			<Setter Property="Template" Value="{StaticResource PlayerToolsMenuTemplate}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton:pointerover /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton:selected /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton:open /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border.player-menu">
+			<Setter Property="Background" Value="{StaticResource PlayerOverlayCardBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerPopoverBorderBrush}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowMenu}" />
+			<Setter Property="Padding" Value="0 8 0 8" />
+			<Setter Property="Width" Value="236" />
+			<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
+			<Setter Property="TextElement.FontSize" Value="{StaticResource PlayerFontCallout}" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem">
+			<Setter Property="Template" Value="{StaticResource PlayerToolsMenuRowTemplate}" />
+			<Setter Property="FontFamily" Value="{StaticResource PlayerFontFamily}" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="Background" Value="Transparent" />
+			<!--Rows are 26 px from the template (a separator is thinner), so
+			the menus' fixed item height is lifted.-->
+			<Setter Property="Height" Value="NaN" />
+			<Setter Property="Margin" Value="6 2" />
+			<Setter Property="Padding" Value="12 0 10 0" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:selected, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:open, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:pointerover">
+			<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:selected /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:open /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="{Binding $parent[MenuItem].(c:PlayerTheme.Tint)}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:empty /template/ PathIcon#PlayerChevron">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem /template/ PathIcon#PlayerCheck">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:checked /template/ PathIcon#PlayerCheck">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem AccessText">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
+			<Setter Property="FontWeight" Value="Medium" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > Separator">
+			<Setter Property="Margin" Value="12 4" />
+			<Setter Property="Height" Value="1" />
+			<Setter Property="Background" Value="{StaticResource PlayerSeparatorBrush}" />
+		</Style>
+
+		<!--W-S3 (Player): the switcher popover - radius 14, one 58 px row per
+		profile with its tinted 32 px badge, the active row highlighted with a
+		tinted check. The classic look hides the badge and check icon.-->
+		<Style Selector="Border.switcher-badge, PathIcon.switcher-check">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="TextBlock.switcher-name">
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="TextBlock.switcher-description, TextBlock#SwitcherFooter">
+			<Setter Property="FontSize" Value="11" />
+			<Setter Property="Opacity" Value="0.7" />
+		</Style>
+		<Style Selector="TextBlock.switcher-shortcut">
+			<Setter Property="Opacity" Value="0.5" />
+		</Style>
+		<Style Selector=":is(UserControl).player FlyoutPresenter">
+			<Setter Property="Background" Value="{StaticResource PlayerPopoverBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerPopoverBorderBrush}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSheet}" />
+			<Setter Property="Padding" Value="8 12 8 12" />
+			<!--Room in the popup for the drop shadow (right and below; the left
+			edge stays aligned with the profile pill).-->
+			<Setter Property="Margin" Value="0 7 14 22" />
+			<Setter Property="TextElement.FontFamily" Value="{StaticResource PlayerFontFamily}" />
+			<Setter Property="TextElement.FontSize" Value="{StaticResource PlayerFontBody}" />
+			<Setter Property="TextElement.Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<!--W-S3: the popover floats on the menu shadow, as W-S2's panel.-->
+		<Style Selector=":is(UserControl).player FlyoutPresenter /template/ Border#LayoutRoot">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowMenu}" />
+		</Style>
+		<Style Selector=":is(UserControl).player StackPanel#SwitcherPanel">
+			<Setter Property="Width" Value="342" />
+			<Setter Property="MinWidth" Value="0" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button.switcher-row">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Height" Value="58" />
+			<Setter Property="Padding" Value="12 0 12 0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="VerticalContentAlignment" Value="Center" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button.switcher-row:pointerover">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button.switcher-row.active, :is(UserControl).player Button.switcher-row.active:pointerover">
+			<Setter Property="Background" Value="{StaticResource PlayerSelectedRowBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button.switcher-row:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Border.switcher-badge">
+			<Setter Property="IsVisible" Value="True" />
+			<Setter Property="Margin" Value="0 0 12 0" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock.switcher-glyph, :is(UserControl).player TextBlock.switcher-checkmark">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<!--ADR-0250 (W-S3): Classic's badge is grey with the gear.-->
+		<Style Selector=":is(UserControl).player Border.switcher-badge.classic">
+			<Setter Property="Background" Value="{StaticResource PlayerGrayBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player PathIcon.switcher-check">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock.switcher-name">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock.switcher-description">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock.switcher-shortcut">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player TextBlock#SwitcherFooter">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+			<Setter Property="Margin" Value="12 2 12 0" />
+			<Setter Property="LineHeight" Value="16" />
+		</Style>
+		<Style Selector=":is(UserControl).player StackPanel#SwitcherPanel > Separator">
+			<Setter Property="Margin" Value="8 6" />
+			<Setter Property="Height" Value="1" />
+			<Setter Property="Background" Value="{StaticResource PlayerSeparatorBrush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player Button#ProfileButton:flyout-open /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+	</UserControl.Styles>
+
+	<DockPanel Name="TitleBarArea" Height="52" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+		<Border Name="TitleBarHairline" DockPanel.Dock="Bottom" Height="1" Background="Transparent" />
 		<c:MesenMenu Name="ToolsMenu" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0 0 8 0" chrome:WindowDecorationProperties.ElementRole="User">
-			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32">
-				<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding MainMenu.FileMenuItems}" />
-				<MenuItem Header="{l:Translate mnuGame}" ItemsSource="{Binding MainMenu.GameMenuItems}" />
-				<MenuItem Header="{l:Translate mnuOptions}" ItemsSource="{Binding MainMenu.OptionsMenuItems}" />
-				<MenuItem Name="ToolsMenuTools" Header="{l:Translate mnuTools}" ItemsSource="{Binding MainMenu.ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
-				<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding MainMenu.DebugMenuItems}" />
-				<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding MainMenu.HelpMenuItems}" />
-				<Separator />
-				<MenuItem Name="ShowClassicMenuBarItem" Header="{l:Translate mnuShowClassicMenuBar}" ToggleType="CheckBox" IsChecked="{Binding Config.Preferences.ShowClassicMenuBar, Mode=OneWay}" Click="OnToggleClassicMenuBar" />
-				<MenuItem Header="{l:Translate lblToolsHint}" IsEnabled="False" FontSize="11" />
-			</MenuItem>
+			<!--ADR-0250 (W-S2): the active door's own short menu, from the
+			host-free WorkspaceMenu rule (MainMenuViewModel.DoorMenuItems).-->
+			<MenuItem Name="ToolsMenuButton" Header="⋯" FontSize="18" Height="32" ItemsSource="{Binding MainMenu.DoorMenuItems}" SubmenuOpened="MnuTools_Opened" />
 		</c:MesenMenu>
 
 		<Button Name="ProfileButton" DockPanel.Dock="Left" Margin="12 0 0 0" VerticalAlignment="Center" Padding="10 4" chrome:WindowDecorationProperties.ElementRole="User">
 			<StackPanel Orientation="Horizontal" Spacing="8">
-				<TextBlock Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
-				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
-				<TextBlock Text="⌄" VerticalAlignment="Center" />
+				<!--W-S1: the workspace's badge in its tint (Player); the text glyph is the classic look.-->
+				<Border Name="ProfileBadge" Classes="badge small"
+					Classes.remaster="{Binding Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Remaster}}"
+					Classes.share="{Binding Shell.Active, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}">
+					<PathIcon Data="{Binding Shell.Active, Converter={StaticResource WorkspaceIcon}}" />
+				</Border>
+				<TextBlock Name="ProfileGlyph" Text="{Binding Shell.ActiveGlyph}" FontSize="16" VerticalAlignment="Center" />
+				<TextBlock Name="ProfileButtonName" Text="{Binding Shell.ActiveName}" VerticalAlignment="Center" />
+				<TextBlock Name="ProfileChevron" Text="⌄" VerticalAlignment="Center" />
+				<PathIcon Name="ProfileChevronIcon" Data="{StaticResource PlayerIconChevronDown}" Width="10" Height="10" Margin="-2 2 0 0" Foreground="{StaticResource PlayerText2Brush}" VerticalAlignment="Center" />
 				<!--G.3 (§13.6): red = Remaster is recording, tint = a Remaster job
 				runs, while another profile is shown.-->
 				<TextBlock Name="ProfileRecordingDot" Text="●" FontSize="10" VerticalAlignment="Center" Foreground="#FF3B30" IsVisible="{Binding Shell.ShowsRecordingDot}" />
@@ -47,7 +370,8 @@
 			<Button.Flyout>
 				<!--W-S3: a popover anchored to the profile button; Esc or a click
 				outside closes it with nothing changed (light dismiss). Fixed order
-				Play, Remaster, Share; the check mark moves, the rows do not.-->
+				Play, Remaster, Share, Classic (ADR-0250); the check mark moves, the
+				rows do not.-->
 				<Flyout Placement="BottomEdgeAlignedLeft">
 					<StackPanel Name="SwitcherPanel" Spacing="4" MinWidth="360">
 						<ItemsControl Name="SwitcherRows" ItemsSource="{Binding Shell.Rows}">
@@ -58,14 +382,24 @@
 							</ItemsControl.ItemsPanel>
 							<ItemsControl.ItemTemplate>
 								<DataTemplate x:DataType="vm:WorkspaceSwitcherRowViewModel">
-									<Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Tag="{Binding Workspace}" Click="OnPickWorkspace">
+									<Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Classes="switcher-row" Classes.active="{Binding IsActive}" Tag="{Binding Workspace}" Click="OnPickWorkspace">
 										<DockPanel>
-											<TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" FontSize="18" Width="28" VerticalAlignment="Center" />
-											<TextBlock DockPanel.Dock="Right" Text="✔" Margin="8 0 0 0" VerticalAlignment="Center" IsVisible="{Binding IsActive}" />
-											<TextBlock DockPanel.Dock="Right" Text="{Binding ShortcutHint}" Opacity="0.5" Margin="12 0 0 0" VerticalAlignment="Center" />
-											<StackPanel Spacing="2">
-												<TextBlock Text="{Binding Name}" FontWeight="Bold" />
-												<TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.7" />
+											<!--Player: the profile's tinted badge; classic: the text glyph.-->
+											<Border DockPanel.Dock="Left" Classes="badge medium switcher-badge"
+												Classes.remaster="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Remaster}}"
+												Classes.share="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Share}}"
+												Classes.classic="{Binding Workspace, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:Workspace.Classic}}">
+												<PathIcon Data="{Binding Workspace, Converter={StaticResource WorkspaceIcon}}" />
+											</Border>
+											<TextBlock DockPanel.Dock="Left" Classes="switcher-glyph" Text="{Binding Glyph}" FontSize="18" Width="28" VerticalAlignment="Center" />
+											<Panel DockPanel.Dock="Right" Width="20" Margin="12 0 0 0" VerticalAlignment="Center" IsVisible="{Binding IsActive}">
+												<TextBlock Classes="switcher-checkmark" Text="✔" VerticalAlignment="Center" />
+												<PathIcon Classes="switcher-check" Data="{StaticResource PlayerIconCheck}" Width="14" Height="14" Foreground="{Binding $self.(c:PlayerTheme.Tint)}" />
+											</Panel>
+											<TextBlock DockPanel.Dock="Right" Classes="switcher-shortcut" Text="{Binding ShortcutHint}" Margin="12 0 0 0" VerticalAlignment="Center" />
+											<StackPanel Spacing="3" VerticalAlignment="Center">
+												<TextBlock Classes="switcher-name" Text="{Binding Name}" />
+												<TextBlock Classes="switcher-description" Text="{Binding Description}" />
 											</StackPanel>
 										</DockPanel>
 									</Button>
@@ -73,7 +407,7 @@
 							</ItemsControl.ItemTemplate>
 						</ItemsControl>
 						<Separator />
-						<TextBlock Text="{l:Translate lblSwitcherFooter}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" MaxWidth="360" />
+						<TextBlock Name="SwitcherFooter" Text="{l:Translate lblSwitcherFooter}" TextWrapping="Wrap" MaxWidth="360" />
 					</StackPanel>
 				</Flyout>
 			</Button.Flyout>

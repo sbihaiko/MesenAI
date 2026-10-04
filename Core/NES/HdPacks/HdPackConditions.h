@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdNesPack.h"
+#include "NES/HdPacks/HdWidescreenGeometry.h"
 #include "NES/NesConstants.h"
 #include "Utilities/HexUtilities.h"
 
@@ -179,6 +180,15 @@ struct HdPackBasePositionCheckCondition : public HdPackCondition
 
 	bool InternalCheckCondition(int x, int y, HdPpuTileInfo* tile) override
 	{
+		if(!HdWidescreenColumns::IsPicturePixel(x, y)) {
+			//ADR-0253 W.4: the Reveal's side columns are drawn through the pack
+			//path, but they are not pixels of the picture a pack's rules were
+			//written against. Refusing them here is what stops `x = -64` from
+			//being read as the huge unsigned it would otherwise be - and, with
+			//the old coordinate wrap, from being answered about an unrelated
+			//centre pixel. No improvement is the failure mode, never a hole.
+			return false;
+		}
 		uint32_t val;
 		switch(Type) {
 			default:
@@ -386,6 +396,13 @@ struct HdPackTileNearbyCondition : public HdPackBaseTileCondition
 
 	bool InternalCheckCondition(int x, int y, HdPpuTileInfo* tile) override
 	{
+		if(!HdWidescreenColumns::IsPicturePixel(x, y)) {
+			//ADR-0253 W.4: `x = -1, y = 1` would otherwise index the picture's
+			//last pixel of the previous row and answer about a real, unrelated
+			//tile. A side pixel is not in the picture, so the rule has nothing
+			//to say about it.
+			return false;
+		}
 		int pixelIndex = PixelOffset + (y * 256) + x;
 		if(pixelIndex < 0 || pixelIndex >= NesConstants::ScreenPixelCount) {
 			return false;
@@ -411,6 +428,11 @@ struct HdPackSpriteNearbyCondition : public HdPackBaseTileCondition
 
 	bool InternalCheckCondition(int x, int y, HdPpuTileInfo* tile) override
 	{
+		if(!HdWidescreenColumns::IsPicturePixel(x, y)) {
+			//ADR-0253 W.4: same wrap as tileNearby, on the same picture-only
+			//coordinates - see the note there.
+			return false;
+		}
 		int xSign = tile && tile->HorizontalMirroring ? -1 : 1;
 		int ySign = tile && tile->VerticalMirroring ? -1 : 1;
 		int pixelIndex = ((y + TileY * ySign) * 256) + x + (TileX * xSign);

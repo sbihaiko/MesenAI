@@ -31,8 +31,6 @@ public class RemasterBuildWorkspaceTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly bool _confirmExit = ConfigManager.Config.Preferences.ConfirmExitResetPower;
@@ -45,8 +43,6 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		prefs.ConfirmExitResetPower = _confirmExit;
@@ -204,8 +200,10 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		Assert.Empty(shown);
 		Assert.False(window.FindNamed<StackPanel>("RemasterJobCard").IsOnScreen());
 		Assert.True(window.FindNamed<StackPanel>("RemasterBuildProblems").IsOnScreen());
-		Assert.Equal("⚠ 3 problems stopped the build.", window.FindNamed<TextBlock>("RemasterBuildProblemsTitle").Text);
-		string[] rows = window.FindNamed<ItemsControl>("RemasterBuildProblemList").FindAll<TextBlock>().Select(t => t.Text ?? "").ToArray();
+		//This host is Advanced's (no `player` scope): the original ⚠ title and caption-led rows.
+		Assert.Equal("⚠ 3 problems stopped the build.", window.FindNamed<TextBlock>("RemasterBuildProblemsClassicTitle").Text);
+		Assert.True(window.FindNamed<TextBlock>("RemasterBuildProblemsClassicTitle").IsOnScreen());
+		string[] rows = window.FindNamed<ItemsControl>("RemasterBuildProblemList").FindAll<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Contains("· \"run\" — the canvas was resized (was 640×128). Undo the resize and save again.", rows);
 		Assert.Contains(rows, r => r.StartsWith("· \"stage 1 map\" — a pink marker is still on the image."));
 		Assert.DoesNotContain(rows, r => r.Contains("something the reader"));
@@ -280,7 +278,7 @@ public class RemasterBuildWorkspaceTests : IDisposable
 
 		question.Ask(InterruptionKind.OpenWhileClassicBuilder, "Castlevania", 0, false, () => ran++);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("Open Castlevania? HD Pack Builder (classic) stops; what it wrote is kept.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.Equal("Cancel", window.FindNamed<Button>("InterruptionKeepButton").Content);
 		Click(window.FindNamed<Button>("InterruptionKeepButton"));
 		Assert.False(question.IsVisible);
@@ -288,7 +286,7 @@ public class RemasterBuildWorkspaceTests : IDisposable
 
 		question.Ask(InterruptionKind.QuitWhileJob, "", 0, true, () => ran++);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ A build is running. Quit anyway? It stops, and nothing you painted is lost.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("A build is running. Quit anyway? It stops, and nothing you painted is lost.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.Equal("Quit", window.FindNamed<Button>("InterruptionGoButton").Content);
 		Click(window.FindNamed<Button>("InterruptionGoButton"));
 		Assert.Equal(1, ran);
@@ -305,8 +303,6 @@ public class RemasterBuildWorkspaceTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
-		prefs.ShowClassicMenuBar = false;
-		prefs.ClassicMenuNoticeShown = true;
 		prefs.PauseWhenInBackground = false;
 		prefs.PauseWhenInMenusAndConfig = false;
 		prefs.ConfirmExitResetPower = false;
@@ -331,7 +327,10 @@ public class RemasterBuildWorkspaceTests : IDisposable
 			EmuApi.Resume();
 			model.SelectWorkspace(Workspace.Remaster);
 			Dispatcher.UIThread.RunJobs();
-			Assert.True(model.Remaster.StartRecording());
+			//The core starts the recording off the UI thread.
+			System.Threading.Tasks.Task<bool> started = model.Remaster.StartRecording();
+			WaitFor(() => started.IsCompleted, "the recording never started");
+			Assert.True(started.Result);
 			Assert.True(EmuApi.IsMepBootstrapping());
 
 			window.Close();
@@ -339,18 +338,19 @@ public class RemasterBuildWorkspaceTests : IDisposable
 			Assert.True(window.IsVisible, "the window closed with a recording running");
 			Assert.True(EmuApi.IsMepBootstrapping(), "closing cut the recording");
 			Assert.True(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
-			Assert.Equal("■ Quit while recording? What you recorded so far is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+			Assert.Equal("Quit while recording? What you recorded so far is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 			Click(window.FindNamed<Button>("InterruptionKeepButton"));
 			Assert.False(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
 			Assert.True(EmuApi.IsMepBootstrapping());
 
 			LoadRomHelper.LoadFile(other);
 			WaitFor(() => model.Interruption.IsVisible, "opening another game never asked");
-			Assert.Equal("■ Open other-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+			Assert.Equal("Open other-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 			Assert.True(EmuApi.IsMepBootstrapping(), "the question stopped the recording before an answer");
 			Click(window.FindNamed<Button>("InterruptionGoButton"));
+			//The core closes the recording off the UI thread; the game opens after.
+			WaitFor(() => !model.Remaster.IsRecording, "the recording never stopped");
 			Assert.False(EmuApi.IsMepBootstrapping());
-			Assert.False(model.Remaster.IsRecording);
 			Assert.Equal(Workspace.Play, model.Shell.Active);
 			WaitFor(() => model.RomInfo.GetRomName() == "other-nrom", "the other game never opened");
 			Assert.Contains("\"id\": \"rec-001\"", File.ReadAllText(Path.Combine(folder, "synthetic-nrom", "project.json")));

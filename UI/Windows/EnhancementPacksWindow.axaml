@@ -16,14 +16,14 @@
 >
 	<DockPanel Margin="5">
 		<DockPanel DockPanel.Dock="Bottom" Margin="0 5 0 0">
-			<Button DockPanel.Dock="Right" MinWidth="70" HorizontalContentAlignment="Center" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
-			<Button DockPanel.Dock="Right" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnOK}" />
-			<StackPanel Orientation="Horizontal">
-				<c:ButtonWithIcon Icon="Assets/Import.png" Click="Install_OnClick" Text="{l:Translate btnInstall}" />
-				<c:ButtonWithIcon Icon="Assets/Folder.png" Command="{Binding OpenFolder}" Text="{l:Translate btnOpenFolder}" />
-				<c:ButtonWithIcon Icon="Assets/Folder.png" Command="{Binding OpenSiblingFolder}" IsEnabled="{Binding HasSiblingFolder}" Text="{l:Translate btnOpenSiblingFolder}" />
-				<c:ButtonWithIcon Icon="Assets/Refresh.png" Command="{Binding Refresh}" Text="{l:Translate btnRefresh}" />
-				<c:ButtonWithIcon Icon="Assets/Refresh.png" Click="Restore_OnClick" Text="{l:Translate btnRestore}" />
+			<Button Name="btnPacksCancel" DockPanel.Dock="Right" Classes="regular secondary" MinWidth="70" HorizontalContentAlignment="Center" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
+			<Button Name="btnPacksOk" DockPanel.Dock="Right" Classes="regular primary" MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" IsEnabled="{Binding !IsBusy}" Content="{l:Translate btnOK}" />
+			<StackPanel Name="PacksActions" Orientation="Horizontal" IsEnabled="{Binding !IsBusy}">
+				<c:ButtonWithIcon Name="btnPacksInstall" Classes="regular secondary" Icon="Assets/Import.png" Click="Install_OnClick" Text="{l:Translate btnInstall}" />
+				<c:ButtonWithIcon Classes="regular secondary" Icon="Assets/Folder.png" Command="{Binding OpenFolder}" Text="{l:Translate btnOpenFolder}" />
+				<c:ButtonWithIcon Classes="regular secondary" Icon="Assets/Folder.png" Command="{Binding OpenSiblingFolder}" IsEnabled="{Binding HasSiblingFolder}" Text="{l:Translate btnOpenSiblingFolder}" />
+				<c:ButtonWithIcon Classes="regular secondary" Icon="Assets/Refresh.png" Command="{Binding Refresh}" Text="{l:Translate btnRefresh}" />
+				<c:ButtonWithIcon Classes="regular secondary" Icon="Assets/Refresh.png" Click="Restore_OnClick" Text="{l:Translate btnRestore}" />
 			</StackPanel>
 		</DockPanel>
 
@@ -34,7 +34,7 @@
 			</StackPanel>
 			<StackPanel Orientation="Horizontal" Margin="0 3 0 0">
 				<TextBlock Text="{l:Translate lblPreferredPackForRom}" VerticalAlignment="Center" />
-				<ComboBox MinWidth="300" Margin="5 0" ItemsSource="{Binding PreferredChoices}" SelectedItem="{Binding SelectedPreferredChoice}" />
+				<ComboBox Classes="popup" MinWidth="300" Margin="5 0" ItemsSource="{Binding PreferredChoices}" SelectedItem="{Binding SelectedPreferredChoice}" />
 			</StackPanel>
 			<StackPanel Orientation="Horizontal" IsVisible="{Binding HasPreferredContainer}" Margin="0 2 0 0">
 				<TextBlock Text="{l:Translate lblCurrentChoice}" VerticalAlignment="Center" Foreground="Gray" />
@@ -55,6 +55,8 @@
 			<TextBlock Text="{l:Translate lblPacksHelp}" TextWrapping="Wrap" Margin="0 3" />
 		</StackPanel>
 
+		<!--An install or a restore is running (every visible wait moves).-->
+		<ProgressBar Name="PacksBusyBar" DockPanel.Dock="Bottom" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Margin="0 4 0 0" />
 		<TextBlock DockPanel.Dock="Bottom" Text="{Binding RejectedInfo}" IsVisible="{Binding HasRejected}" Foreground="DarkRed" TextWrapping="Wrap" Margin="0 3 0 0" />
 		<TextBlock DockPanel.Dock="Bottom" Text="{l:Translate lblNoPacks}" IsVisible="{Binding !HasPacks}" Margin="0 3 0 0" />
 

@@ -133,7 +133,7 @@ namespace Mesen.Windows
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerPackPickerVisible) && _model.IsPlayerPackPickerVisible) {
 					Dispatcher.UIThread.Post(FocusPackPickerChoice);
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
-					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsTexturesCheckBox")?.Focus());
+					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsModernCheckBox")?.Focus());
 				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPackDetailVisible) && _model.IsPackDetailVisible) {
 					//G.4 (W-P6): Change pack… when it can act, else Done.
 					Dispatcher.UIThread.Post(() => FindNamedDescendant(_model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton")?.Focus());
@@ -285,10 +285,24 @@ namespace Mesen.Windows
 
 		private async void ValidateExit()
 		{
+			//ADR-0249 (W-X1): Player mode asks in place, the stop banner above the
+			//profile (the shared InterruptionBar), never in a message box.
+			if(_model.IsPlayerMode) {
+				if(_model.ConfirmQuitApp(ConfigManager.Config.Preferences.ConfirmExitResetPower, QuitAfterConfirm)) {
+					QuitAfterConfirm();
+				}
+				return;
+			}
 			if(!ConfigManager.Config.Preferences.ConfirmExitResetPower || await MesenMsgBox.Show(null, "ConfirmExit", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) {
 				_needCloseValidation = false;
 				Close();
 			}
+		}
+
+		private void QuitAfterConfirm()
+		{
+			_needCloseValidation = false;
+			Close();
 		}
 
 		protected override void OnClosed(EventArgs e)
@@ -349,6 +363,10 @@ namespace Mesen.Windows
 		{
 			//P.7 (§6.1): replaces the overlay with the quick-toggle panel,
 			//same shape as OnOverlayPack replacing it with the picker.
+			//ADR-0253 §4 (W.5): the core's per-game measurement is read as the
+			//sheet opens, so the Widescreen switch already reflects it and the
+			//per-ROM record is written for the next load.
+			_model.SyncWidescreenSupport(EmuApi.GetMepRomSha1(), (WidescreenSupport)EmuApi.GetWidescreenSupportVerdict());
 			_model.OpenEnhancementsPanel();
 		}
 
@@ -359,11 +377,18 @@ namespace Mesen.Windows
 		//(§13.6); the emulator and the window stay open. The existing
 		//ConfirmExitResetPower preference still asks first, in place over the
 		//overlay, which stays up when the answer is no.
-		private async void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
+		private void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
 		{
-			if(ConfigManager.Config.Preferences.ConfirmExitResetPower && await MesenMsgBox.Show(this, "ConfirmPowerOff", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
+			//ADR-0249 (W-X1): the question is the stop banner on the card itself.
+			if(!_model.ConfirmQuitGame(ConfigManager.Config.Preferences.ConfirmExitResetPower, QuitGameFromOverlay)) {
+				Dispatcher.UIThread.Post(() => FindNamedDescendant("QuitGameKeepButton")?.Focus());
 				return;
 			}
+			QuitGameFromOverlay();
+		}
+
+		private void QuitGameFromOverlay()
+		{
 			_model.IsPlayerOverlayVisible = false;
 			LoadRomHelper.PowerOff();
 		}
@@ -439,14 +464,6 @@ namespace Mesen.Windows
 					cmdLine.LoadFiles();
 					cmdLine.OnAfterInit(this);
 
-					//G.1 (§13.2, §13.8 Q4): an upgraded install learns once that its
-					//menus moved under Tools ⋯. The text is the UI's own localized
-					//string (the core shows an unknown key verbatim);
-					//DisplayMessageHelper makes it visible with no game loaded.
-					if(_model.ConsumeClassicMenuNotice()) {
-						DisplayMessageHelper.DisplayMessage(ResourceHelper.GetMessage("ClassicMenuNoticeTitle"), ResourceHelper.GetMessage("ClassicMenuNoticeText"));
-					}
-
 					if(ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates) {
 						_model.MainMenu.CheckForUpdate(this, true);
 					}
@@ -476,13 +493,17 @@ namespace Mesen.Windows
 		private void OnNotification(NotificationEventArgs e)
 		{
 			DebugWindowManager.ProcessNotification(e);
+			//#734: the Play load card ends with the first picture, a pause or a stop.
+			OnLoadWaitNotification(e.NotificationType);
 
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
-					//#690 (ADR-0184 §1): the legacy "Record while I play" setting
-					//(ADR-0243 Q3) starts a recording with the load; it holds back
-					//every code that is not a RAM code, as Remaster's does.
-					CheatCodes.SetRecordingArt(EmuApi.IsMepBootstrapping());
+					//A recording the user started never survives a load, so none holds
+					//codes back here. The legacy "Record while I play" setting
+					//(ADR-0243 Q3) starts a passive one with the load: it yields to a
+					//code that changes the game, which ApplyCheats stops it for
+					//(ADR-0245 amendment 2026-10-03).
+					CheatCodes.SetRecordingArt(false);
 					RomInfo romInfo = EmuApi.GetRomInfo();
 
 					Dispatcher.UIThread.Post(() => {
@@ -516,7 +537,20 @@ namespace Mesen.Windows
 					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
 					bool loadedPaused = evtParams.IsPaused;
 					Dispatcher.UIThread.Post(() => _model.IsGamePaused = loadedPaused);
+					//#734: in Play the home and its load card stay until the first picture.
+					bool holdsHome = HoldsHomeForPicture(loadedPaused);
 					CommunityPackInstallService.OnGameLoaded(evtParams.IsPowerCycle);
+					//W-P2: the hash the home's pack badge looks up later.
+					RecentPackLookup.RememberLoadedGame(romInfo);
+					//ADR-0253 §4 (W.5): a load starts the per-game measurement
+					//from scratch; the window's Play poll writes the answer.
+					Dispatcher.UIThread.Post(() => _model.BeginWidescreenMeasurement());
+
+					//#732: a pack patch forced onto another revision of the game
+					//(ApplyPatchOnHashMismatch) can freeze it; Player mode says so
+					//in place, with a reload without it.
+					string forcedPatch = EmuApi.GetForcedPackPatch();
+					Dispatcher.UIThread.Post(() => _model.OnForcedPackPatch(forcedPatch));
 
 					//P.5 (PRD Part B §5/§6): Player pack UX - the picker opens
 					//once over the un-enhanced game when 2+ competing pack_ids exist
@@ -524,11 +558,16 @@ namespace Mesen.Windows
 					//(P.3) and power-cycles, and the reload applies silently (no
 					//picker, just the "Applied ..." toast). No toast while the picker
 					//is open - the game is un-enhanced until a pick.
+					//ADR-0251: during the first three starts the toast also says
+					//how to open W-P4 (a game without a pack gets that hint alone).
+					bool isGameStart = !evtParams.IsPowerCycle;
 					Dispatcher.UIThread.Post(() => {
 						bool pickerOpen = _model.EvaluatePlayerPackPicker(EmuApi.GetMepPackList(), EmuApi.GetMepRomSha1());
-						if(!pickerOpen && _model.Config.Preferences.UiMode == UiMode.Player && !string.IsNullOrEmpty(_model.CurrentPackName)) {
-							string layers = string.IsNullOrEmpty(_model.CurrentPackLayers) ? "" : " — " + _model.CurrentPackLayers;
-							EmuApi.DisplayMessage("MEP", "MepPackApplied", _model.CurrentPackName + layers);
+						if(!pickerOpen) {
+							_model.ShowPlayEntryToast(isGameStart);
+							//ADR-0253 §4 (W.5): a game the core recorded as having
+							//nothing beside the picture says so, once, as it loads.
+							_model.AnnounceWidescreenUnavailable(EmuApi.GetMepRomSha1());
 						}
 					});
 
@@ -556,9 +595,8 @@ namespace Mesen.Windows
 					}
 					if(!evtParams.IsPowerCycle) {
 						Dispatcher.UIThread.Post(() => {
-							_model.RecentGames.Visible = false;
-							if(IsKeyboardFocusWithin || IsActive || ApplicationHelper.GetActiveOrMainWindow() == this) {
-								this.GetControl<Panel>("RendererPanel").Focus();
+							if(!holdsHome) {
+								ShowGamePicture();
 							}
 
 							DispatcherTimer.RunOnce(() => {
@@ -646,9 +684,9 @@ namespace Mesen.Windows
 							if(_coreRequests.IsClosed) {
 								return;
 							}
-							//G.5 W-P13: Player mode's Play gets the in-place sheet;
-							//Advanced (and Remaster/Share) keep the classic dialog loop.
-							if(_model.IsPlayerMode && _model.IsPlayWorkspace) {
+							//G.5 W-P13: Player mode gets the in-place sheet in every
+							//workspace (ADR-0249); Advanced keeps the classic dialog loop.
+							if(_model.IsPlayerMode) {
 								string fileName = Marshal.PtrToStringUTF8(msg.Filename) ?? "";
 								await _model.RequestBios(msg.Firmware, fileName, msg.Size, msg.AltSize, LoadRomHelper.RequestedGameName);
 							} else {
@@ -785,7 +823,7 @@ namespace Mesen.Windows
 
 		//G.1 (W-S1): the shell bar and status line, while on screen, take room
 		//from the game like the classic menu bar does.
-		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : 0;
+		private double ShellChromeHeight => _shellBar.IsVisible ? _shellBar.Bounds.Height + this.GetControl<Border>("ShellStatusLine").Bounds.Height : this.GetControl<Border>("ShellDragStrip").Bounds.Height;
 
 		private void ResizeRenderer()
 		{
@@ -851,6 +889,7 @@ namespace Mesen.Windows
 			_rendererSize = new Size();
 			ResizeRenderer();
 			UpdateShellTitleBarInset();
+			UpdateShellDragStrip();
 		}
 
 		//G.1 (W-S1; user's choice 2026-10-02, "Integrar agora"): on macOS the
@@ -860,18 +899,53 @@ namespace Mesen.Windows
 		//hides (a Play game running unpaused) the game fills the whole window
 		//and the traffic lights stay over its top-left corner; Esc/pause brings
 		//the bar back. Windows/Linux keep the in-window strip (ShellTitleBar).
+		//ADR-0250: Classic has no shell bar and keeps the plain title bar, so
+		//the extension follows the door.
 		private void InitShellTitleBar()
 		{
 			if(!ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS())) {
 				return;
 			}
-			ExtendClientAreaToDecorationsHint = true;
-			ExtendClientAreaTitleBarHeightHint = ShellTitleBar.Height;
 			if(_shellBar.Parent is DockPanel dock) {
 				dock.Children.Remove(_shellBar);
 				dock.Children.Insert(0, _shellBar);
+				Border strip = this.GetControl<Border>("ShellDragStrip");
+				dock.Children.Remove(strip);
+				dock.Children.Insert(1, strip);
 			}
+			Border dragStrip = this.GetControl<Border>("ShellDragStrip");
+			dragStrip.PointerPressed += (_, e) => {
+				if(e.GetCurrentPoint(dragStrip).Properties.IsLeftButtonPressed) {
+					BeginMoveDrag(e);
+				}
+			};
+			_model.Shell.WorkspaceChanged += _ => ApplyShellTitleBar();
+			_model.Shell.PropertyChanged += (_, e) => {
+				if(e.PropertyName == nameof(WorkspaceShellViewModel.IsBarVisible)) {
+					UpdateShellDragStrip();
+				}
+			};
+			ApplyShellTitleBar();
+		}
+
+		private void ApplyShellTitleBar()
+		{
+			bool extend = ShellTitleBar.ExtendsIntoTitleBar(OperatingSystem.IsMacOS(), _model.Shell.Active);
+			ExtendClientAreaToDecorationsHint = extend;
+			ExtendClientAreaTitleBarHeightHint = extend ? ShellTitleBar.Height : -1;
 			UpdateShellTitleBarInset();
+			UpdateShellDragStrip();
+		}
+
+		//The strip shows only while the bar is hidden, so the window can still
+		//be dragged by its top edge; the game's own mouse input is untouched
+		//(the strip is outside the renderer panel).
+		private void UpdateShellDragStrip()
+		{
+			Border strip = this.GetControl<Border>("ShellDragStrip");
+			double height = ShellTitleBar.DragStripHeight(ExtendClientAreaToDecorationsHint, WindowState == WindowState.FullScreen, _model.Shell.IsBarVisible);
+			strip.Height = height;
+			strip.IsVisible = height > 0;
 		}
 
 		private void UpdateShellTitleBarInset()
@@ -988,8 +1062,8 @@ namespace Mesen.Windows
 			return false;
 		}
 
-		//G.1 (W-S3): ⌘1/⌘2/⌘3 (Ctrl+1/2/3 off macOS) switch to Play/Remaster/Share
-		//directly, in the switcher's fixed order. Handled before the key reaches
+		//G.1 (W-S3), ADR-0250: ⌘1-⌘4 (Ctrl+1-4 off macOS) switch to
+		//Play/Remaster/Share/Classic directly, in the switcher's fixed order. Handled before the key reaches
 		//the core, so it never doubles as an emulator input.
 		private bool ProcessWorkspaceShortcut(KeyEventArgs e)
 		{
@@ -1001,6 +1075,7 @@ namespace Mesen.Windows
 				Key.D1 or Key.NumPad1 => 1,
 				Key.D2 or Key.NumPad2 => 2,
 				Key.D3 or Key.NumPad3 => 3,
+				Key.D4 or Key.NumPad4 => 4,
 				_ => 0
 			};
 			Workspace? target = WorkspaceShell.FromShortcutDigit(digit);

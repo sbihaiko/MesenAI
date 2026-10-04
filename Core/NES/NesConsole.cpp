@@ -540,14 +540,18 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 	//<patch> lines are keyed by the whole-file sha1 of the ROM they were made
 	//for; ADR-0044 adds an explicit override for other revisions
 	EnhancementPackConfig& mepCfg = _emu->GetSettings()->GetEnhancementPackConfig();
+	//W-P6: a layer turned off for this game counts as off, like the global switch.
+	bool packAudioOn = mepCfg.EnableAudio && !mep->IsRomLayerOff(MepRomLayer::Audio);
 	//A pack that ships <bgm> uses its patch to route the game's music to those
 	//OGG files, stripping it out of the PRG. Applying it with the audio layer
 	//off would leave the game with no music at all and nothing for the
 	//enhanced synth to re-interpret, so the audio layer being off also turns
 	//this patch off - the player asked to hear the game, not silence.
-	bool patchServesPackAudio = !_hdData->BgmFilesById.empty() && !mepCfg.EnableAudio;
+	bool patchServesPackAudio = !_hdData->BgmFilesById.empty() && !packAudioOn;
 	if(!_hdData->PatchesByHash.empty() && !mepCfg.EnablePatches) {
 		MessageManager::Log("[HDPack] <patch> skipped: 'ROM patch' layer disabled in Tools > Enhancement Packs");
+	} else if(!_hdData->PatchesByHash.empty() && mep->IsRomLayerOff(MepRomLayer::Patch)) {
+		MessageManager::Log("[HDPack] <patch> skipped: the ROM patch is turned off for this game");
 	} else if(!_hdData->PatchesByHash.empty() && patchServesPackAudio) {
 		MessageManager::DisplayMessage("HDPack", "ROM patch skipped: it replaces the game's music with the pack's OGG tracks, which are turned off - the game's own music plays instead");
 		MessageManager::Log("[HDPack] <patch> skipped: the pack's <bgm> patch would mute the game while 'Audio (OGG)' is off (turn the audio layer on to use the pack's music)");
@@ -567,17 +571,33 @@ void NesConsole::LoadHdPack(VirtualFile& romFile)
 			romFile.ApplyPatch(patchFile);
 			MessageManager::Log("[HDPack] <patch> applied: '" + result->second + "' (ROM sha1 " + result->first + "; the running ROM's hash is now the patched one)");
 			WarnAboutSilentPatchedMusic();
-		} else if(mepCfg.ApplyPatchOnHashMismatch) {
-			VirtualFile patchFile = _hdData->PatchesByHash.begin()->second;
-			romFile.ApplyPatch(patchFile);
+		} else if(_emu->GetEnhancementPackManager()->AllowsForcedPatch()) {
+			//#732: a patch made for another revision can freeze this one. The
+			//OSD line is Advanced mode's signal; the UI reads the forced patch
+			//back (GetForcedPackPatch) after GameLoaded and offers Player mode a
+			//reload without it.
+			string forcedPath = _hdData->PatchesByHash.begin()->second;
+			VirtualFile patchFile = forcedPath;
+			if(romFile.ApplyPatch(patchFile)) {
+				_emu->GetEnhancementPackManager()->NoteForcedPatch(forcedPath);
+			}
 			MessageManager::DisplayMessage("HDPack", "Applying patch made for another ROM revision (hash override enabled)");
 			WarnAboutSilentPatchedMusic();
-			MessageManager::Log("[HDPack] <patch> hash mismatch - applied '" + _hdData->PatchesByHash.begin()->second + "' anyway (ApplyPatchOnHashMismatch)");
+			MessageManager::Log("[HDPack] <patch> hash mismatch - applied '" + forcedPath + "' anyway (ApplyPatchOnHashMismatch)");
 		} else {
 			MessageManager::Log("[HDPack] <patch> skipped: no entry for this ROM's sha1 " + wholeFileSha1 +
 				(noIntroSha1 != wholeFileSha1 ? (" / no-intro " + noIntroSha1) : "") +
-				" (enable 'apply patches on hash mismatch' to force it)");
+				(mepCfg.ApplyPatchOnHashMismatch ? " (the forced patch is off for this ROM: the player reloaded without it)" : " (enable 'apply patches on hash mismatch' to force it)"));
 		}
+	}
+
+	//W-P6: the pack's audio turned off for this game - the textures' <bgm>/<sfx>
+	//tracks go too (the audio section itself was never served). The global
+	//switch stays live in HdAudioDevice; this one applies by reloading.
+	if(mep->IsRomLayerOff(MepRomLayer::Audio) && (!_hdData->BgmFilesById.empty() || !_hdData->SfxFilesById.empty())) {
+		MessageManager::Log("[HDPack] pack audio turned off for this game: " + std::to_string(_hdData->BgmFilesById.size()) + " BGM / " + std::to_string(_hdData->SfxFilesById.size()) + " SFX track(s) not used");
+		_hdData->BgmFilesById.clear();
+		_hdData->SfxFilesById.clear();
 	}
 
 	shared_ptr<HdPackData> data = _hdData.lock();
@@ -775,6 +795,15 @@ PpuFrameInfo NesConsole::GetPpuFrame()
 	frame.ScanlineCount = _ppu->GetScanlineCount();
 	frame.CycleCount = 341;
 	return frame;
+}
+
+NesWidescreenSupport::Verdict NesConsole::GetWidescreenSupportVerdict()
+{
+	//ADR-0253 §4 (W.5): the measurement lives in whichever PPU draws the
+	//picture - DefaultNesPpu and HdNesPpu share NesWidescreenPpu::State, so an
+	//HD pack measures the same game the same way. A PPU that draws no picture
+	//(NsfPpu) answers Undecided, so the switch keeps its stored value for it.
+	return _ppu->GetWidescreenSupportVerdict();
 }
 
 ConsoleType NesConsole::GetConsoleType()

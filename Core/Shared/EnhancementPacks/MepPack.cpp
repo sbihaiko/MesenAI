@@ -7,11 +7,14 @@
 
 namespace
 {
-	constexpr const char* kSectionNames[kMepSectionCount] = { "textures", "audio", "synth", "border" };
-	//Fixed layout of the folder convention (ADR-0049, ADR-0149); textures/audio/border are
-	//folders holding content (hires.txt, border.png), synth is the preset file itself
-	constexpr const char* kConventionPaths[kMepSectionCount] = { "textures", "audio", "synth/preset.cfg", "border" };
-	constexpr const char* kConventionProbe[kMepSectionCount] = { "textures/hires.txt", "audio/hires.txt", "synth/preset.cfg", "border/border.png" };
+	constexpr const char* kSectionNames[kMepSectionCount] = { "textures", "audio", "synth", "border", "widescreen" };
+	//Fixed layout of the folder convention (ADR-0049, ADR-0149, ADR-0253);
+	//textures/audio/border/widescreen are folders holding content (hires.txt,
+	//border.png, widescreen.json), synth is the preset file itself
+	constexpr const char* kConventionPaths[kMepSectionCount] = { "textures", "audio", "synth/preset.cfg", "border", "widescreen" };
+	//The widescreen manifest is what makes the section present - a bare folder
+	//of images is not a section the loader can resolve (MEP-v1 §5.5)
+	constexpr const char* kConventionProbe[kMepSectionCount] = { "textures/hires.txt", "audio/hires.txt", "synth/preset.cfg", "border/border.png", "widescreen/widescreen.json" };
 	//Leaf names of kConventionProbe (+ ADR-0047's audio/fingerprints.json
 	//alt) - what MepPack::FindFallbackSubfolder looks for directly under a
 	//ROM-named subfolder (ADR-0120)
@@ -452,7 +455,7 @@ bool MepPack::Parse(const string& json, MepPack& out, string& error)
 		knownSections++;
 	}
 	if(knownSections == 0) {
-		error = "'sections' must contain at least one of textures/audio/synth/border";
+		error = "'sections' must contain at least one of textures/audio/synth/border/widescreen";
 		return false;
 	}
 

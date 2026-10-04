@@ -4,8 +4,10 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using System;
@@ -28,6 +30,24 @@ namespace Mesen.Controls
 		public static readonly StyledProperty<bool> EnabledProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(Enabled));
 		public static readonly StyledProperty<bool> IsActiveEntryProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(IsActiveEntry));
 		public static readonly StyledProperty<double> AspectRatioProperty = AvaloniaProperty.Register<StateGridEntry, double>(nameof(AspectRatio));
+		//W-P2: the game has an HD pack (PlayHome.HasHdPack); the Player tiles
+		//show the pack badge, the classic grid and the slot tiles do not.
+		public static readonly StyledProperty<bool> HasPackProperty = AvaloniaProperty.Register<StateGridEntry, bool>(nameof(HasPack));
+		//The badge's tooltip: installed, or a community pack that installs when
+		//the game is played (RecentPackBadge).
+		public static readonly StyledProperty<string> PackBadgeTextProperty = AvaloniaProperty.Register<StateGridEntry, string>(nameof(PackBadgeText), "");
+
+		public string PackBadgeText
+		{
+			get { return GetValue(PackBadgeTextProperty); }
+			set { SetValue(PackBadgeTextProperty, value); }
+		}
+
+		public bool HasPack
+		{
+			get { return GetValue(HasPackProperty); }
+			set { SetValue(HasPackProperty, value); }
+		}
 
 		public RecentGameInfo Entry
 		{
@@ -108,6 +128,12 @@ namespace Mesen.Controls
 			Entry.Load();
 		}
 
+		private void ApplyPackBadge(RecentPackBadgeState state)
+		{
+			HasPack = state.Visible;
+			PackBadgeText = state.Visible ? ResourceHelper.GetMessage(state.TextKey) : "";
+		}
+
 		public void Init()
 		{
 			RecentGameInfo game = Entry;
@@ -116,6 +142,15 @@ namespace Mesen.Controls
 			}
 
 			Title = game.Name;
+			//W-P2: a pack found by name shows at once; one found by the entry's
+			//remembered hash (installed or in the community catalog) is looked
+			//up with the preview, off the UI thread, and may appear a moment later.
+			bool isRecentGame = !game.SaveMode && Path.GetExtension(game.FileName) == ".rgd";
+			string recentName = Path.GetFileNameWithoutExtension(game.FileName);
+			bool namedHdPack = isRecentGame && PlayHome.HasHdPack(ConfigManager.HdPackFolder, recentName);
+			RecentGameHash? recentHash = isRecentGame ? RecentGameHashes.Find(ConfigManager.Config.RecentFiles.GameHashes, recentName) : null;
+			bool autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
+			ApplyPackBadge(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: namedHdPack, PackDisabled: namedHdPack && RecentPackLookup.Suppressed(recentName, recentHash))));
 
 			bool fileExists = File.Exists(game.FileName);
 			if(fileExists) {
@@ -126,7 +161,7 @@ namespace Mesen.Controls
 					SubTitle = writeTime.ToShortDateString() + " " + writeTime.ToShortTimeString();
 				}
 			} else {
-				SubTitle = ResourceHelper.GetMessage("EmptyState");
+				SubTitle = ResourceHelper.GetMessage(PlaySlotGrid.EmptyKey(ConfigManager.Config.Preferences.UiMode == UiMode.Player));
 			}
 			Enabled = fileExists || game.SaveMode;
 			Image = StateGridEntry.EmptyImage;
@@ -136,6 +171,14 @@ namespace Mesen.Controls
 				Task.Run(() => {
 					Bitmap? img = null;
 					double aspectRatio = 0;
+					RecentPackBadgeState? badge = null;
+					if(isRecentGame && (!namedHdPack || recentHash != null)) {
+						try {
+							badge = RecentPackLookup.Lookup(recentName, recentHash, namedHdPack, autoInstall).Badge;
+						} catch(Exception ex) {
+							EmuApi.WriteLogEntry("[PlayHome] pack badge lookup failed: " + ex.Message);
+						}
+					}
 					try {
 						if(Path.GetExtension(game.FileName) == "." + FileDialogHelper.MesenSaveStateExt) {
 							img = EmuApi.GetSaveStatePreview(game.FileName);
@@ -173,6 +216,9 @@ namespace Mesen.Controls
 					Dispatcher.UIThread.Post(() => {
 						Image = img ?? StateGridEntry.EmptyImage;
 						AspectRatio = aspectRatio;
+						if(badge != null && ReferenceEquals(Entry, game)) {
+							ApplyPackBadge(badge.Value);
+						}
 					});
 					Interlocked.Decrement(ref _thumbnailsInFlight);
 				});

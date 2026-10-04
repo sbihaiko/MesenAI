@@ -21,7 +21,9 @@ namespace Mesen.Logic
 		NeedsGame,
 		JobRunning,
 		//#647: a Remaster job (kit, build) runs on this project's folder.
-		RemasterJobRunning
+		RemasterJobRunning,
+		//The Python/tools probe has not answered yet.
+		CheckingTools
 	}
 
 	//What W-H3 shows about a project: its name for the title, and what step 3
@@ -71,14 +73,14 @@ namespace Mesen.Logic
 			//#659: a first build stopped mid-sync left a half-written mep/.
 			built = built && !RemasterBuildFreshness.IsClaimOnly(Path.Combine(mep, RemasterBuildFreshness.StampFile));
 			string system = FirstTargetSystem(Path.Combine(mep, "pack.json"), out bool hasTargets);
-			string game = StampValue(Path.Combine(projectFolder, RemasterProjectReader.StampFile), "rom");
+			string game = RemasterProjectReader.StampValue(projectFolder, "rom");
 			return new ShareProjectIdentity(projectFolder, info.Name, game.Length > 0 ? game : info.Name,
 				PackShare.ConsoleOptionForSystem(system), built, hasTargets);
 		}
 
 		//remasterJobOnProject: Remaster's runner works on this project (#647);
 		//mep_build.py pack would zip mep/ while the build rewrites it.
-		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning, bool remasterJobOnProject = false)
+		public static ShareBuildReason BuildReason(ShareProjectIdentity project, bool isRunningGamesProject, RemasterFeasibility feasibility, bool jobRunning, bool remasterJobOnProject = false, bool feasibilityPending = false)
 		{
 			if(jobRunning) {
 				return ShareBuildReason.JobRunning;
@@ -91,6 +93,10 @@ namespace Mesen.Logic
 			}
 			if(!project.HasTargets && !isRunningGamesProject) {
 				return ShareBuildReason.NeedsGame;
+			}
+			//Until the probe answers a click would do nothing: say why instead.
+			if(feasibilityPending) {
+				return ShareBuildReason.CheckingTools;
 			}
 			if(feasibility.Python != PythonGate.Found) {
 				return ShareBuildReason.NeedsPython;
@@ -145,23 +151,6 @@ namespace Mesen.Logic
 				return Math.Max(1, (bytes + 1023) / 1024).ToString(CultureInfo.InvariantCulture) + " KB";
 			}
 			return Math.Round(bytes / (1024.0 * 1024.0)).ToString(CultureInfo.InvariantCulture) + " MB";
-		}
-
-		//`.bootstrap` is `key=value` lines (MepPackManager::StartBootstrapIfNeeded).
-		private static string StampValue(string stampPath, string key)
-		{
-			try {
-				if(!File.Exists(stampPath)) {
-					return "";
-				}
-				foreach(string line in File.ReadAllLines(stampPath)) {
-					if(line.StartsWith(key + "=", StringComparison.Ordinal)) {
-						return line.Substring(key.Length + 1).Trim();
-					}
-				}
-			} catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException) {
-			}
-			return "";
 		}
 
 		private static string FirstTargetSystem(string packJson, out bool hasTargets)

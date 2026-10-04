@@ -43,10 +43,10 @@ namespace Mesen.Views
 				}
 				return;
 			}
-			Model.StartRecording();
+			_ = Model.StartRecording();
 		}
 
-		private void OnRecord(object? sender, RoutedEventArgs e) => Model?.StartRecording();
+		private void OnRecord(object? sender, RoutedEventArgs e) => _ = Model?.StartRecording();
 
 		private void OnPrepare(object? sender, RoutedEventArgs e) => Model?.StartKit();
 

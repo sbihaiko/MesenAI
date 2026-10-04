@@ -37,12 +37,14 @@ namespace Mesen.Services
 		//§46: <EnhancementPackFolder>/.cache/downloads/ (ADR-0040 scratch space, safe to delete).
 		private static string CacheFolder => CommunityPackPaths.CacheRoot;
 		private static string DownloadsFolder => CommunityPackPaths.DownloadsFolder;
-		private static string CatalogCachePath => Path.Combine(CacheFolder, "community-packs.json");
+		private static string CatalogCachePath => CommunityPackPaths.CatalogCachePath;
 		private static string CatalogEtagPath => Path.Combine(CacheFolder, "community-packs.etag");
 
 		//onMatched (G.4, W-P9): called once a catalog row matches, before its
 		//download starts, so the Play HUD can show which pack is installing.
-		public static async Task<CommunityPackFetchResult?> FetchMatchingPackAsync(Action<CommunityPackCatalogEntry>? onMatched = null)
+		//onProgress (#734): the primary artifact's bytes so far and its size,
+		//for the pill's bar (deps are not counted).
+		public static async Task<CommunityPackFetchResult?> FetchMatchingPackAsync(Action<CommunityPackCatalogEntry>? onMatched = null, Action<long, long?>? onProgress = null)
 		{
 			string romSha1 = EmuApi.GetMepRomSha1();
 			if(string.IsNullOrWhiteSpace(romSha1)) {
@@ -69,7 +71,9 @@ namespace Mesen.Services
 			}
 			onMatched?.Invoke(entry);
 
+			CommunityPackDownloader.Progress = onProgress;
 			string? primaryPath = await DownloadAndVerifyAsync(entry.Url, entry.Sha256, allowedHosts);
+			CommunityPackDownloader.Progress = null;
 			EmuApi.WriteLogEntry("[CommunityPackFetch] primary download+verify: " + (primaryPath ?? "FAILED (see [CommunityPackDownload] lines above)"));
 			if(primaryPath == null) {
 				return null;
@@ -156,6 +160,18 @@ namespace Mesen.Services
 			}
 			string? body = response.Body == null ? null : System.Text.Encoding.UTF8.GetString(response.Body);
 			return new CommunityCatalogFetchOutcome(response.StatusCode, response.ETag, body);
+		}
+
+		//#736: the catalog copy on disk (the last fetch's), read without the
+		//network - Play's community-pack offer must not contact a host when the
+		//player turned auto-install off. Null when there is no usable copy.
+		public static CommunityPackCatalog? ReadCachedCatalog()
+		{
+			try {
+				return File.Exists(CatalogCachePath) ? TryParseCatalog(File.ReadAllText(CatalogCachePath)) : null;
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				return null;
+			}
 		}
 
 		//A catalog is real only when it parses AND carries a `packs` array - an

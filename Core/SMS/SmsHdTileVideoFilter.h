@@ -24,4 +24,9 @@ public:
 	{
 		_console = console;
 	}
+
+	//ADR-0253 slice W.2: the SMS provenance array is as wide as the VDP's line
+	//(256), the same width a Game Gear Reveal frame keeps, so the pack path
+	//composes the revealed columns like any other column.
+	bool AcceptsExtendedFrame() override { return true; }
 };

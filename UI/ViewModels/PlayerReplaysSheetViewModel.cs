@@ -23,6 +23,11 @@ namespace Mesen.ViewModels
 		//Why Watch is off (rule 4), or the in-place confirmation, or a failure.
 		[ObservableProperty] public partial string NoticeLine { get; private set; } = "";
 		[ObservableProperty] public partial bool IsBusy { get; private set; }
+		//The user's rule (2026-10-03): every wait moves. The catalog fetch in
+		//flight (a moving bar, "looking" rather than "none"), and Watch's
+		//download (a moving line under the list).
+		[ObservableProperty] public partial bool IsLoading { get; private set; }
+		public string DownloadingText => ReplayWatch.DownloadingLine;
 
 		//Raised by Close() so the owner can bring the pause overlay back (rule 8).
 		public event Action? Closed;
@@ -42,10 +47,30 @@ namespace Mesen.ViewModels
 		//Bumped by Open and Close: a download that ends after the sheet was
 		//closed or reopened belongs to a Watch that no longer exists (#640).
 		private int _generation;
+		private int _loading;
 
 		//The ROM hash the sheet was opened for, so a late fetch can check it
 		//still applies.
 		public string RomSha1 => _romSha1;
+
+		//The owner's fetch started; FinishLoading(token) ends it (a later
+		//BeginLoading's fetch owns the wait).
+		public int BeginLoading()
+		{
+			IsLoading = true;
+			Refresh();
+			return ++_loading;
+		}
+
+		//The fetch answered - a catalog, or nothing (offline, a bad file).
+		public void FinishLoading(int token)
+		{
+			if(token != _loading || !IsLoading) {
+				return;
+			}
+			IsLoading = false;
+			Refresh();
+		}
 
 		public void Open(string romSha1, ConsoleType console, IReadOnlyList<CommunityReplayGame> catalog, ReplayWatchReason reason,
 			Action<string> openUrl, Func<CommunityReplay, Task<ReplayFetchResult>> download, Action<string> play, Func<string> currentRomSha1)
@@ -136,7 +161,7 @@ namespace Mesen.ViewModels
 		{
 			bool canWatch = _reason == ReplayWatchReason.None && !IsBusy;
 			Rows = _replays.Select(r => new PlayerReplayRow(r, armed: r.Issue == _armedIssue, canWatch)).ToList();
-			StatusLine = ReplayWatch.StatusLine(_replays.Count);
+			StatusLine = ReplayWatch.StatusLine(_replays.Count, IsLoading);
 		}
 	}
 

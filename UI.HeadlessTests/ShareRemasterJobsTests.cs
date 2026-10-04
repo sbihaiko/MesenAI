@@ -31,7 +31,6 @@ public class ShareRemasterJobsTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly List<string> _folders = new();
 
 	public void Dispose()
@@ -39,7 +38,6 @@ public class ShareRemasterJobsTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		ConfigManager.Config.Save();
 		foreach(string folder in _folders) {
 			try {
@@ -270,7 +268,7 @@ public class ShareRemasterJobsTests : IDisposable
 
 		Assert.True(s.Model.OpenProject(a));
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("✔ contra-usa-mep.zip · 4 KB · no problems", result.Text);
+		Assert.Equal("contra-usa-mep.zip · 4 KB · no problems", result.Text);
 	}
 
 	//#649: a build whose manifest changed asks for a pack reload. During a
@@ -367,7 +365,6 @@ public class ShareRemasterJobsTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ConfigManager.Config.Preferences.Workspace = Workspace.Share;
-		ConfigManager.Config.Preferences.ClassicMenuNoticeShown = true;
 		MainWindow window = new();
 		window.ShowStarted();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
@@ -385,7 +382,7 @@ public class ShareRemasterJobsTests : IDisposable
 		Assert.False(model.ConfirmQuit(() => quits++), "quit went ahead with Share's job running");
 		Dispatcher.UIThread.RunJobs();
 		Assert.True(window.FindNamed<Panel>("InterruptionBarHost").IsOnScreen());
-		Assert.Equal("⚠ Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.", window.FindNamed<TextBlock>("InterruptionText").Text);
+		Assert.Equal("Your pack is being packaged. Quit anyway? It stops, and Build Pack .zip runs it again.", window.FindNamed<TextBlock>("InterruptionText").Text);
 		Assert.False(launcher.Last!.Killed);
 
 		Click(window.FindNamed<Button>("InterruptionGoButton"));

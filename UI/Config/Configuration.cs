@@ -72,9 +72,6 @@ namespace Mesen.Config
 			//default rule says Player mode. An existing file - readable but
 			//without the UiMode key, or unreadable - is the upgrade path (Advanced).
 			cfg.Preferences.UiMode = defaults.UiMode;
-			//G.1 (PRD Part B §13.2): a fresh install never had the classic menu
-			//bar, so the one-time "your menus are under Tools ⋯" toast is not owed.
-			cfg.Preferences.ClassicMenuNoticeShown = defaults.ClassicMenuNoticeShown;
 			//ADR-0243 Q3: a new install records only on Remaster's Record
 			cfg.EnhancementPacks.BootstrapEnhancementFolder = defaults.BootstrapEnhancementFolder;
 			return cfg;
@@ -147,6 +144,11 @@ namespace Mesen.Config
 			if(BootstrapRecordingDefault.UpgradeNoticeDue(ConfigUpgrade < (int)ConfigUpgradeHint.RecordingOnDemand, EnhancementPacks.BootstrapEnhancementFolder)) {
 				EmuApi.WriteLogEntry("[MEP] ADR-0243: BootstrapEnhancementFolder stays on for this install; new installs record only on Remaster's Record");
 				EmuApi.DisplayMessage("MEP", "MepBootstrapNowOnDemand");
+			}
+
+			//ADR-0251: an upgrade gets ToggleOverlay's controller binding too
+			if(ConfigUpgrade < (int)ConfigUpgradeHint.OverlayControllerBinding) {
+				Preferences.SeedOverlayControllerBinding();
 			}
 
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
@@ -346,6 +348,7 @@ namespace Mesen.Config
 		WsInput,
 		WindowsAudioLatency,
 		RecordingOnDemand,
+		OverlayControllerBinding,
 		NextValue,
 	}
 }

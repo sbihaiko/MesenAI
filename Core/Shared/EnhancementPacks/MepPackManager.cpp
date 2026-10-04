@@ -201,7 +201,7 @@ void MepPackManager::StartBootstrapIfNeeded()
 		source = _nextRecordingSource;
 		note = _nextRecordingNote;
 	}
-	StartRecording(source, note);
+	StartRecording(source, note, false);
 }
 
 void MepPackManager::SetNextRecordingSource(const string& source, const string& note)
@@ -231,7 +231,7 @@ bool MepPackManager::IsOwnProjectLayer(const MepPack* pack, MepSectionType type)
 	return RemasterProject::IsOwnProjectSection(isProject, section.HasHuman, section.Path);
 }
 
-bool MepPackManager::StartRecording(const string& source, const string& note)
+bool MepPackManager::StartRecording(const string& source, const string& note, bool onDemand)
 {
 	auto lock = _emu->AcquireLock();
 	if(_bootstrapping) {
@@ -260,10 +260,21 @@ bool MepPackManager::StartRecording(const string& source, const string& note)
 	string existingManifest = FolderUtilities::CombinePath(FolderUtilities::CombinePath(FolderUtilities::GetHdPackFolder(), _romName), "hires.txt");
 	bool loosePack = fs::exists(fs::u8path(existingManifest), ec);
 	RemasterProject::RecordingPlan plan = RemasterProject::PlanRecording(
-		{ texturesPack != nullptr, IsOwnProjectLayer(texturesPack, MepSectionType::Textures) }, loosePack,
+		{ texturesPack != nullptr, IsOwnProjectLayer(texturesPack, MepSectionType::Textures),
+			texturesPack != nullptr && texturesPack->Sections[(int)MepSectionType::Textures].HasHuman }, loosePack,
 		{ audioPack != nullptr, IsOwnProjectLayer(audioPack, MepSectionType::Audio) },
-		type == ConsoleType::Nes); //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
+		type == ConsoleType::Nes, //audio fingerprints (ADR-0047) are NES-only (ADR-0041 scope)
+		onDemand);
 	string foreignTextures = loosePack ? existingManifest : (texturesPack ? texturesPack->ContainerName : "");
+	//Play's automatic bootstrap kept the project's own mep/ art: not a foreign
+	//pack, so "delete that pack" would be the wrong advice.
+	bool keptOwnArt = !onDemand && !loosePack && texturesPack && IsOwnProjectLayer(texturesPack, MepSectionType::Textures) &&
+		texturesPack->Sections[(int)MepSectionType::Textures].HasHuman;
+	if(plan.Declined() && keptOwnArt) {
+		Log("bootstrap: nothing was recorded - the automatic bootstrap keeps this project's own mep/ textures as they are "
+			"(and another pack dresses its audio). Use Remaster's Record button to record on demand.");
+		return false;
+	}
 	if(plan.Declined()) {
 		//Declining is the point: this is a first draft, not an override of a pack
 		//someone already has. Declining *silently* was not the point. The run
@@ -340,8 +351,13 @@ bool MepPackManager::StartRecording(const string& source, const string& note)
 		//The tile half is skipped for the same reason as the early return, and a
 		//bootstrap that comes back with audio and no tiles has to say which half
 		//it did - otherwise "the run finished" reads as "the recording is there".
-		Log("bootstrap: no tiles were recorded - '" + foreignTextures +
-			"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
+		if(keptOwnArt) {
+			Log("bootstrap: no tiles were recorded - the automatic bootstrap keeps this project's own mep/ textures as they are. "
+				"Only the audio section was written by this run; use Remaster's Record button to record tiles on demand.");
+		} else {
+			Log("bootstrap: no tiles were recorded - '" + foreignTextures +
+				"' already dresses this ROM. Only the audio section was written by this run; the textures are unchanged.");
+		}
 		return _bootstrapping;
 	}
 
@@ -449,13 +465,14 @@ void MepPackManager::Clear()
 	_optimisticContainers.clear();
 	_texturesContainer.clear();
 	_texturesIsOptimistic = false;
+	_forcedPatch.ResetForLoad();
 }
 
 MepPackManager::RomState MepPackManager::SaveRomState() const
 {
 	auto lock = _stateLock.AcquireSafe();
 	return RomState{ _romSha1, _romFileSha1, _romExtension, _romName, _romFolder, _packs, _rejected,
-		_packIdentityByContainer, _optimisticContainers, _texturesContainer, _texturesIsOptimistic };
+		_packIdentityByContainer, _optimisticContainers, _texturesContainer, _texturesIsOptimistic, _forcedPatch.Applied() };
 }
 
 void MepPackManager::RestoreRomState(RomState state)
@@ -472,6 +489,35 @@ void MepPackManager::RestoreRomState(RomState state)
 	_optimisticContainers = std::move(state.OptimisticContainers);
 	_texturesContainer = std::move(state.TexturesContainer);
 	_texturesIsOptimistic = state.TexturesIsOptimistic;
+	_forcedPatch.RestoreApplied(std::move(state.ForcedPatch));
+}
+
+bool MepPackManager::AllowsForcedPatch() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return _forcedPatch.Allows(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch, _romSha1);
+}
+
+void MepPackManager::NoteForcedPatch(const string& patchFile)
+{
+	auto lock = _stateLock.AcquireSafe();
+	_forcedPatch.NoteApplied(patchFile);
+}
+
+string MepPackManager::GetForcedPatch() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return _forcedPatch.Applied();
+}
+
+bool MepPackManager::SuppressForcedPatch()
+{
+	auto lock = _stateLock.AcquireSafe();
+	bool suppressed = _forcedPatch.SuppressFor(_romSha1);
+	if(suppressed) {
+		Log("forced patch '" + _forcedPatch.Applied() + "' suppressed for sha1 " + _romSha1 + " until the app quits (the player chose to reload without it)");
+	}
+	return suppressed;
 }
 
 string MepPackManager::GetSiblingFolder(VirtualFile& romFile)
@@ -690,6 +736,14 @@ void MepPackManager::LoadForRom(VirtualFile& romFile)
 			string matchNote = IsOptimistic(pack) ? " does not match ROM sha1 " + _romSha1 + " (optimistic, ADR-0145 - textures/BPS may still apply)" : " matches ROM sha1 " + _romSha1;
 			Log("pack '" + pack.Name + "' v" + pack.Version + (pack.Synthetic ? " [folder convention]" : "") + matchNote + " (" + origin + " '" + pack.ContainerName + "', sections: " + sections + (IsPackEnabled(pack.ContainerName) ? ")" : ") - disabled by user"));
 		}
+		if(IsNoPackPreference(PreferredIdForRom())) {
+			Log("\"No pack\" is chosen for this game - only a sibling-folder pack applies");
+		}
+		uint8_t layersOff = RomLayersOff();
+		if(layersOff != 0) {
+			Log(string("turned off for this game:") + (IsLayerOff(layersOff, MepRomLayer::Textures) ? " textures" : "") +
+				(IsLayerOff(layersOff, MepRomLayer::Audio) ? " audio" : "") + (IsLayerOff(layersOff, MepRomLayer::Patch) ? " ROM patch" : ""));
+		}
 	}
 }
 
@@ -708,7 +762,7 @@ void MepPackManager::ReadInstallIdentity(MepPack& pack, const MepLocalIdentityCa
 	//`local:<container>` (PRD §5).
 	MepPackIdentity identity;
 	string text;
-	if(ReadTextFile(FolderUtilities::CombinePath(pack.RootFolder, ".mep-install.json"), text)) {
+	if(ReadTextFile(InstallStampPath(pack.RootFolder, pack.Origin), text)) {
 		JsonValue root;
 		JsonReader reader;
 		if(reader.Parse(text, root) && root.IsObject()) {
@@ -967,16 +1021,52 @@ void MepPackManager::ClearPreferredMepPacks()
 {
 	auto lock = _stateLock.AcquireSafe();
 	_preferredPackIdByRomSha1.clear();
+	_romLayersOffBySha1.clear();
+}
+
+void MepPackManager::SetRomLayersOff(const string& romSha1, const string& layers)
+{
+	//W-P6: keyed like the preference (the No-Intro sha1 of the ROM as loaded).
+	string sha1 = StringUtilities::Trim(romSha1);
+	if(sha1.empty()) {
+		return;
+	}
+	uint8_t mask = ParseRomLayersOff(layers);
+	auto lock = _stateLock.AcquireSafe();
+	if(mask == 0) {
+		_romLayersOffBySha1.erase(sha1);
+	} else {
+		_romLayersOffBySha1[sha1] = mask;
+	}
+}
+
+uint8_t MepPackManager::RomLayersOff() const
+{
+	auto it = _romLayersOffBySha1.find(_romSha1);
+	return it == _romLayersOffBySha1.end() ? 0 : it->second;
+}
+
+bool MepPackManager::IsRomLayerOff(MepRomLayer layer) const
+{
+	auto lock = _stateLock.AcquireSafe();
+	return IsLayerOff(RomLayersOff(), layer);
+}
+
+string MepPackManager::PreferredIdForRom() const
+{
+	auto it = _preferredPackIdByRomSha1.find(_romSha1);
+	return it == _preferredPackIdByRomSha1.end() ? "" : it->second;
 }
 
 const MepPack* MepPackManager::FindPreferredPack(MepSectionType type) const
 {
-	auto it = _preferredPackIdByRomSha1.find(_romSha1);
-	if(it == _preferredPackIdByRomSha1.end() || it->second.empty()) {
+	string preferredId = PreferredIdForRom();
+	//W-P5's "No pack" names no pack, even one whose stamp claims the sentinel.
+	if(preferredId.empty() || IsNoPackPreference(preferredId)) {
 		return nullptr;
 	}
 	for(const MepPack& pack : _packs) {
-		if(pack.HasSection(type) && IsPackEnabled(pack.ContainerName) && EffectivePackId(pack) == it->second) {
+		if(pack.HasSection(type) && IsPackEnabled(pack.ContainerName) && EffectivePackId(pack) == preferredId) {
 			//ADR-0145: an optimistic pack may serve Textures, but Audio/Synth
 			//still require an exact match (out of the ADR's scope)
 			if(type != MepSectionType::Textures && IsOptimistic(pack)) {
@@ -991,16 +1081,14 @@ const MepPack* MepPackManager::FindPreferredPack(MepSectionType type) const
 const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 {
 	EnhancementPackConfig& cfg = _emu->GetSettings()->GetEnhancementPackConfig();
-	bool sectionEnabled = cfg.EnableMepPacks && (
-		type == MepSectionType::Textures ? cfg.EnableTextures :
-		type == MepSectionType::Audio ? cfg.EnableAudio :
-		type == MepSectionType::Border ? cfg.EnableBorder :
-		cfg.EnableSynth
-	);
-	if(!sectionEnabled) {
+	if(!SectionSwitchEnabled(cfg, type)) {
 		return nullptr;
 	}
 	auto lock = _stateLock.AcquireSafe();
+	//W-P6: the player turned this layer off for this game.
+	if(SectionOff(RomLayersOff(), type)) {
+		return nullptr;
+	}
 	//P.3: the per-ROM preference overrides the ADR-0040 lexicographic order;
 	//the default stays "first enabled pack in precedence order" when there is
 	//no stored preference or the preferred pack_id does not match a candidate.
@@ -1008,9 +1096,11 @@ const MepPack* MepPackManager::GetPackForSection(MepSectionType type) const
 		return preferred;
 	}
 
+	//W-P5's "No pack": every pack is off for this ROM but a sibling folder.
+	string preferredId = PreferredIdForRom();
 	const MepPack* autoOnlyFallback = nullptr;
 	for(const MepPack& pack : _packs) {
-		if(IsPackEnabled(pack.ContainerName) && pack.HasSection(type)) {
+		if(IsPackEnabled(pack.ContainerName) && pack.HasSection(type) && PreferenceAllowsPack(preferredId, pack.Origin)) {
 			//ADR-0145: an optimistic candidate is only eligible for textures -
 			//HdNesPack falls through per-tile without crashing, and the health signal
 			//auto-disables a wrong-game pack. Audio/Synth stay gated on an
@@ -1061,6 +1151,22 @@ string MepPackManager::GetPackListText() const
 	return out;
 }
 
+//ADR-0253 §3 (W.3) x §4 (W.5): the section path pair VideoRenderer::
+//UpdatePackArtAssets resolves, asked as one question. A pack whose section is
+//present but whose layers are both empty has no art to draw, so it must not
+//count as one - the Reveal would extend the frame for nothing and the switch
+//would offer a mode that shows black.
+bool MepPackManager::HasWidescreenSection() const
+{
+	auto lock = _stateLock.AcquireSafe();
+	const MepPack* pack = GetPackForSection(MepSectionType::Widescreen);
+	if(!pack) {
+		return false;
+	}
+	return !pack->GetSectionPath(MepSectionType::Widescreen).empty() ||
+		!pack->GetSectionAutoPath(MepSectionType::Widescreen).empty();
+}
+
 string MepPackManager::GetSectionPath(MepSectionType type) const
 {
 	auto lock = _stateLock.AcquireSafe();
@@ -1104,11 +1210,22 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 		return false;
 	}
 	auto lock = _stateLock.AcquireSafe();
+	if(IsLayerOff(RomLayersOff(), MepRomLayer::Patch)) {
+		Log("ROM patch turned off for this game - no pack patch applied");
+		return false;
+	}
+	//W-P5's "No pack" plays the original game: no pack's ROM patch either.
+	string preferredId = PreferredIdForRom();
 	for(const MepPack& pack : _packs) {
 		if(pack.Patches.empty() || !IsPackEnabled(pack.ContainerName)) {
 			continue;
 		}
+		if(!PreferenceAllowsPack(preferredId, pack.Origin)) {
+			Log("pack '" + pack.Name + "': patch skipped - \"No pack\" is chosen for this game");
+			continue;
+		}
 		const MepPatch* patch = pack.FindPatch(_romSha1);
+		bool forced = false;
 		if(!patch) {
 			//ADR-0145: relax the exact-match gate by format. A self-validating
 			//BPS patch (embedded source+output CRC32, refuses bad applies) is
@@ -1120,12 +1237,14 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 			if(bpsPatch) {
 				patch = bpsPatch;
 				Log("pack '" + pack.Name + "': no patch for sha1 " + _romSha1 + " - attempting self-validating BPS patch '" + patch->File + "' optimistically (ADR-0145)");
-			} else if(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch) {
+			} else if(AllowsForcedPatch()) {
 				patch = &pack.Patches[0];
+				forced = true;
 				MessageManager::DisplayMessage("MEP", "Applying patch made for another ROM revision (hash override enabled)");
 				Log("pack '" + pack.Name + "': no patch for sha1 " + _romSha1 + " - applying '" + patch->File + "' anyway (ApplyPatchOnHashMismatch)");
 			} else {
-				Log("pack '" + pack.Name + "': patch skipped - none of its " + std::to_string(pack.Patches.size()) + " patches[] entries matches sha1 " + _romSha1 + " and no self-validating BPS patch to fall back to");
+				Log("pack '" + pack.Name + "': patch skipped - none of its " + std::to_string(pack.Patches.size()) + " patches[] entries matches sha1 " + _romSha1 + " and no self-validating BPS patch to fall back to" +
+					(_emu->GetSettings()->GetEnhancementPackConfig().ApplyPatchOnHashMismatch ? " (the forced patch is off for this ROM: the player reloaded without it)" : ""));
 				continue;
 			}
 		}
@@ -1136,6 +1255,9 @@ bool MepPackManager::ApplyPatches(VirtualFile& romFile)
 		}
 		if(romFile.ApplyPatch(patchFile)) {
 			Log("pack '" + pack.Name + "': applied patch '" + patch->File + "'");
+			if(forced) {
+				_forcedPatch.NoteApplied(patch->File);
+			}
 			return true;
 		}
 		Log("pack '" + pack.Name + "': failed to apply patch '" + patch->File + "'");

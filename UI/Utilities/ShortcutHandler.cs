@@ -73,8 +73,16 @@ namespace Mesen.Utilities
 					//G.1 (rule 8): the overlay is a Play surface - outside Play the
 					//press does nothing (it must not pause the game or open an
 					//overlay hidden behind Remaster/Share).
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayWorkspace) {
+					//ADR-0249: the BIOS sheet (W-P13) shows in every workspace,
+					//and Esc cancels it there too (TogglePlayerOverlay takes it first);
+					//so does an archive's game list (an open from any workspace),
+					//and ADR-0250's tool sheet (About, Command Line…) from any door.
+					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible || MainWindowModel.ToolSheet.IsVisible)) {
 						MainWindowModel.TogglePlayerOverlay();
+					} else if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayerSettingsVisible) {
+						//ADR-0250: Settings… opened from Remaster's or Share's
+						//Tools ⋯ closes on Esc, keeping what was changed.
+						MainWindowModel.ClosePlayerSettings();
 					} else if(MainWindowModel.IsRemasterGameView) {
 						//G.3 (W-R2): in Remaster's recording view Esc stops the
 						//recording and returns to the project screen; G.6: from
@@ -147,8 +155,15 @@ namespace Mesen.Utilities
 			}
 		}
 
-		private async void InputBarcode()
+		//The InputBarcode shortcut's action, past the Core's "allowed" check (public
+		//so UI.HeadlessTests can reach it without a barcode game loaded).
+		public async void InputBarcode()
 		{
+			//ADR-0250: in Player mode the barcode is asked on the tool sheet.
+			if(MainWindowModel.IsPlayerMode) {
+				MainWindowModel.ToolSheet.OpenBarcode();
+				return;
+			}
 			string? barcode = await new InputBarcodeWindow().ShowCenteredDialog<string?>(_mainWindow);
 			if(barcode != null && UInt64.TryParse(barcode, out UInt64 value)) {
 				EmuApi.InputBarcode(value, (UInt32)(barcode.Length > 8 ? 13 : 8));

@@ -30,7 +30,7 @@ namespace Mesen.Logic
 		None,
 		NoGame,
 		ConsoleNotSupported,
-		//A movie is already recording or playing (Tools ⋯ › Tools › Movies).
+		//A movie is already recording or playing (Classic › Tools › Movies).
 		MovieBusy,
 		Netplay
 	}
@@ -77,8 +77,8 @@ namespace Mesen.Logic
 			};
 		}
 
-		//The same gate as Tools ⋯ › Tools › Movies › Record and share, plus the
-		//console check the core would otherwise make after the click.
+		//The same gate as the Share home's Record and share, plus the console
+		//check the core would otherwise make after the click.
 		public static ReplayStartReason StartReason(bool gameRunning, ConsoleType console, bool movieBusy, bool netplay)
 		{
 			if(!gameRunning) {
@@ -99,6 +99,13 @@ namespace Mesen.Logic
 	//going back is ‹ Share, and navigation never needs a confirmation.
 	public static class ShareEsc
 	{
+		//While a replay starts or stops (RecordingTransition) Esc waits for
+		//the core's answer, like the buttons.
+		public static ShareEscAction Next(ReplaySheet sheet, bool projectListOpen, RecordingTransition transition)
+		{
+			return RecordingTransitions.AcceptsClick(transition) ? Next(sheet, projectListOpen) : ShareEscAction.None;
+		}
+
 		public static ShareEscAction Next(ReplaySheet sheet, bool projectListOpen)
 		{
 			if(sheet == ReplaySheet.Recording) {

@@ -54,5 +54,34 @@ namespace Mesen.Tests.Cheats
 
 			Assert.Equal("Infinite lives - 1P game (SZKGPAVG), Two (SXIOPO, AAAAAA)", CheatRecordingRule.Names(new[] { Genie, twoParts }));
 		}
+
+		//User decision 2026-10-03 ("Liberar e pausar gravação (Recomendado)"): in Play
+		//the passive automatic bootstrap never locks a cheat; a code that changes
+		//the game stops it instead.
+		[Fact]
+		public void A_non_ram_code_stops_the_passive_bootstrap_in_play()
+		{
+			Assert.True(CheatRecordingRule.PausesPassiveBootstrap(new[] { Lives, Genie }, recordingArt: false, bootstrapping: true));
+			Assert.True(CheatRecordingRule.PausesPassiveBootstrap(new[] { PrgCustom }, recordingArt: false, bootstrapping: true));
+		}
+
+		[Fact]
+		public void Ram_codes_and_codes_that_are_off_leave_the_passive_bootstrap_running()
+		{
+			Assert.False(CheatRecordingRule.PausesPassiveBootstrap(new[] { Lives, GenieOff }, recordingArt: false, bootstrapping: true));
+			Assert.False(CheatRecordingRule.PausesPassiveBootstrap(Array.Empty<StoredCheat>(), recordingArt: false, bootstrapping: true));
+		}
+
+		[Fact]
+		public void Nothing_is_stopped_when_no_recording_runs()
+		{
+			Assert.False(CheatRecordingRule.PausesPassiveBootstrap(new[] { Genie }, recordingArt: false, bootstrapping: false));
+		}
+
+		[Fact]
+		public void A_user_started_remaster_recording_holds_the_code_back_instead_of_being_stopped()
+		{
+			Assert.False(CheatRecordingRule.PausesPassiveBootstrap(new[] { Genie }, recordingArt: true, bootstrapping: true));
+		}
 	}
 }

@@ -347,6 +347,38 @@ jobs:
           name: Mesen (Linux ${{ matrix.platform.name }} - AppImage)
           path: Mesen.AppImage
 
+  # ADR-0204 §6 (2026-10-03): record which commit - and so which tree - this
+  # run compiles. On a pull request that is `refs/pull/N/merge`, GitHub's merge
+  # preview against the base as it stood when the event fired; nothing else
+  # keeps that sha, and the runs API exposes only the head. When the pull
+  # request later merges into `prod`, ci-channel-publish.yml compares this
+  # tree with the merge commit's: equal means these artifacts are a build of
+  # exactly what landed, so they are republished instead of rebuilding the
+  # matrix. It must run on pull requests - that is the run being compared - so
+  # it has no event guard, and it is a separate job because a matrix job would
+  # upload the same artifact name once per leg.
+  provenance:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Record the commit and tree this run builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$BUILT_SHA" --jq '.tree.sha')"
+          printf 'commit=%s\ntree=%s\n' "$BUILT_SHA" "$tree" > ci-channel-provenance.txt
+          cat ci-channel-provenance.txt
+
+      - name: Upload the record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-channel-provenance
+          path: ci-channel-provenance.txt
+
   # ADR-0204: the README's download links point at fixed-name assets of one
   # rolling pre-release, not at nightly.link. nightly.link resolves a branch
   # against a PUSH run and nothing else - its 404 says so outright,
@@ -358,7 +390,13 @@ jobs:
   # `refs/pull/N/merge`, a merge preview of code that has not landed. This is
   # the one place in this file where the event guard belongs - the build jobs'
   # uploads must never carry it, which is what §5 of
-  # `verify_ci_platform_matrix.sh` asserts.
+  # `verify_ci_platform_matrix.sh` asserts. That preview's binaries still reach
+  # the channel once it HAS landed: ci-channel-publish.yml republishes them on
+  # the merge when the merged tree is the one recorded by `provenance` above
+  # (ADR-0204 §6). This job is the dispatch path, and that workflow's fallback.
+  #
+  # The artifact-to-asset translation and the release call are two shared
+  # scripts, run by both publishers, so the six names exist in one place.
   publish:
     needs: [windows, macos, linux, appimage]
     if: github.event_name != 'pull_request'
@@ -367,38 +405,18 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
       - name: Download this run's artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
 
-      # The artifact names carry the matrix coordinates and may change; the
-      # asset names below are the README's URLs and must not. Keeping the
-      # translation in one step is what makes that separation checkable.
       - name: Stage the assets under their fixed names
-        run: |
-          set -euo pipefail
-          mkdir -p out
-          zip -j out/MesenAI-ci-linux-x64.zip       "artifacts/Mesen (Linux - ubuntu-22.04 - clang_aot)/Mesen"
-          zip -j out/MesenAI-ci-linux-arm64.zip     "artifacts/Mesen (Linux - ubuntu-22.04-arm - clang_aot)/Mesen"
-          zip -j out/MesenAI-ci-windows-x64-aot.zip "artifacts/Mesen (Windows - net10.0 - AoT)/Mesen.exe"
-          cp "artifacts/Mesen (Linux x64 - AppImage)/Mesen.AppImage"     out/MesenAI-ci-linux-x64.AppImage
-          cp "artifacts/Mesen (Linux ARM64 - AppImage)/Mesen.AppImage"   out/MesenAI-ci-linux-arm64.AppImage
-          cp "artifacts/Mesen (macOS - macos-15 - clang_aot)/Mesen.app.zip" out/MesenAI-ci-macos-arm64.zip
-          ls -l out
+        run: scripts/stage_ci_channel_assets.sh artifacts out
 
       - name: Publish to the rolling pre-release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          TAG=ci-latest
-          # --prerelease is load-bearing: it keeps `releases/latest` - the
-          # badge, the README's release link, `gh release view` with no tag -
-          # resolving to the real release instead of to a CI build.
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --prerelease \
-              --title "CI builds (not a release)" \
-              --notes "Rolling build of the \`prod\` branch, replaced on every publish (ADR-0204). Not a release: the tagged release is macOS Apple Silicon only. Unzip and run; see the README's Download section for each platform's prerequisite."
-          gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber
+        run: scripts/publish_ci_channel.sh out

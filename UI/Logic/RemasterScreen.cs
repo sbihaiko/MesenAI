@@ -35,7 +35,11 @@ public enum RemasterReason
 	//G.6: Build & show needs the kit the recording is painted on.
 	NoKitYet,
 	//#647: Share packages this project's mep/ (mep_build.py pack).
-	ShareJobRunning
+	ShareJobRunning,
+	//The core is starting a recording (RecordingTransition).
+	RecordingStarting,
+	//The Python/tools probe has not answered yet.
+	CheckingTools
 }
 
 public sealed record RemasterControl(bool Enabled, RemasterReason Reason)
@@ -59,7 +63,11 @@ public sealed record RemasterInputs(
 	//G.6: the project holds a kit (kit/ is not empty) to build from.
 	bool HasKit = false,
 	//#647: Share's runner packages this project (RemasterJobs.RunsOn).
-	bool ShareJobOnProject = false
+	bool ShareJobOnProject = false,
+	//A start or stop the core has not answered yet.
+	RecordingTransition Transition = RecordingTransition.None,
+	//The Python/tools probe is still running (the feasibility is not known).
+	bool FeasibilityPending = false
 );
 
 public sealed record RemasterScreenState(
@@ -72,7 +80,9 @@ public sealed record RemasterScreenState(
 	RemasterControl PrepareFigures,
 	RemasterControl BuildAndShow,
 	//W-R0b: shown inside W-R0/W-R1 until resolved.
-	bool ShowFeasibilityBanner
+	bool ShowFeasibilityBanner,
+	//The probe's wait (a sentence and a moving bar) where the banner would be.
+	bool ShowFeasibilityChecking = false
 );
 
 public static class RemasterScreen
@@ -92,9 +102,11 @@ public static class RemasterScreen
 
 		RemasterControl record = RecordControl(i);
 		RemasterControl prepare = PrepareControl(i);
-		bool canStartAny = !i.JobRunning && !i.Recording;
+		bool starting = i.Transition == RecordingTransition.Starting;
+		bool canStartAny = !i.JobRunning && !i.Recording && !starting;
 		//#647: the kit writes the project too; it waits for Share's pack job.
-		RemasterControl prepareShown = canStartAny || !prepare.Enabled ? prepare : Off(i.JobRunning ? RemasterReason.JobRunning : RemasterReason.RecordingRunning);
+		RemasterControl prepareShown = canStartAny || !prepare.Enabled ? prepare
+			: Off(i.JobRunning ? RemasterReason.JobRunning : starting ? RemasterReason.RecordingStarting : RemasterReason.RecordingRunning);
 		if(prepareShown.Enabled && i.ShareJobOnProject) {
 			prepareShown = Off(RemasterReason.ShareJobRunning);
 		}
@@ -112,6 +124,7 @@ public static class RemasterScreen
 		RemasterControl build = !prepare.Enabled ? prepare
 			: !i.HasKit ? Off(RemasterReason.NoKitYet)
 			: i.Recording ? Off(RemasterReason.RecordingRunning)
+			: starting ? Off(RemasterReason.RecordingStarting)
 			: i.JobRunning ? Off(RemasterReason.JobRunning)
 			: i.ShareJobOnProject ? Off(RemasterReason.ShareJobRunning)
 			: RemasterControl.On;
@@ -124,7 +137,8 @@ public static class RemasterScreen
 			LetTheAiPlay: ai,
 			PrepareFigures: prepareShown,
 			BuildAndShow: build,
-			ShowFeasibilityBanner: !i.Feasibility.CanRunJobs && view != RemasterView.Recording
+			ShowFeasibilityBanner: !i.FeasibilityPending && !i.Feasibility.CanRunJobs && view != RemasterView.Recording,
+			ShowFeasibilityChecking: i.FeasibilityPending && view != RemasterView.Recording
 		);
 	}
 
@@ -132,6 +146,9 @@ public static class RemasterScreen
 
 	private static RemasterControl RecordControl(RemasterInputs i)
 	{
+		if(i.Transition == RecordingTransition.Starting) {
+			return Off(RemasterReason.RecordingStarting);
+		}
 		if(i.Recording) {
 			return Off(RemasterReason.RecordingRunning);
 		}
@@ -164,6 +181,10 @@ public static class RemasterScreen
 		if(i.Console != ConsoleType.Nes) {
 			return Off(RemasterReason.NesOnly);
 		}
+		//Until the probe answers, a click would do nothing: say why instead.
+		if(i.FeasibilityPending) {
+			return Off(RemasterReason.CheckingTools);
+		}
 		if(i.Feasibility.Python != PythonGate.Found) {
 			return Off(RemasterReason.NeedsPython);
 		}
@@ -180,6 +201,18 @@ public static class RemasterScreen
 	{
 		return PrepareControl(afterStop).Enabled && !afterStop.JobRunning && !afterStop.ShareJobOnProject;
 	}
+
+	//W-R2's pill counters ("318 new shapes · 2 screens captured") come from
+	//the core's coverage report, which is all zero off NES or before the
+	//builder saw anything: then the pill shows no counters.
+	public static bool ShowsRecordingCounters(uint tilesSeen, uint screensSeen) => tilesSeen > 0 || screensSeen > 0;
+
+	//ADR-0252 §4: the core keeps counting distinct stable screens past the
+	//number it writes (HdPackBuilder::MaxScreensPerPack), so "captured" is the
+	//count up to that cap. Mirror of the core constant: change both together.
+	public const uint MaxScreensPerRecording = 300;
+
+	public static uint ScreensCaptured(uint screensSeen) => Math.Min(screensSeen, MaxScreensPerRecording);
 
 	//W-R2's pill: "Recording 01:42"; hours appear past 59:59.
 	public static string FormatElapsed(TimeSpan elapsed)
