@@ -85,10 +85,19 @@
 				</Panel>
 			</Border>
 
-			<!--Which pad this is, or why the pad is dark.-->
+			<!--Which pad this is, or why the pad is dark. Slice 2: with more than
+			one pad the line under it is a picker, not a count - the sheet says
+			which pad it is showing by letting the player choose.-->
 			<TextBlock Name="ControllerSheetPadName" Classes="headline" Text="{Binding Pad.Name}" IsVisible="{Binding HasPad}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0 14 0 0" />
 			<TextBlock Name="ControllerSheetPadInfo" Classes="subhead secondary" Text="{Binding Pad.InfoText}" IsVisible="{Binding HasPad}" HorizontalAlignment="Center" />
-			<TextBlock Name="ControllerSheetMorePads" Classes="subhead secondary" Text="{Binding MorePadsText}" IsVisible="{Binding MorePadsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+			<ListBox Name="ControllerSheetPadPicker" Classes="segmented" IsVisible="{Binding ShowPadPicker}" HorizontalAlignment="Center" Margin="0 10 0 0"
+				ItemsSource="{Binding Tester.Gamepads}" SelectedIndex="{Binding SelectedPadIndex, Mode=TwoWay}">
+				<ListBox.ItemTemplate>
+					<DataTemplate x:DataType="vm:GamepadTestItem">
+						<TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+					</DataTemplate>
+				</ListBox.ItemTemplate>
+			</ListBox>
 			<TextBlock Name="ControllerSheetNoPad" Classes="body secondary" Text="{l:Translate lblControllerSheetNoPad}" IsVisible="{Binding !HasPad}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0 14 0 0" />
 
 			<!--The values: the tester's own readouts, the ones its Test tab shows,
@@ -124,9 +133,47 @@
 				</StackPanel>
 			</Border>
 
-			<!--Slice 2 (PLAYERS) and slice 3 (remapping) are not here yet, and a
-			control that lies is worse than a line that says so: the classic page
-			does both today and stays one link away.-->
+			<!--Slice 2 (W-P17): PLAYERS - one row per port, naming the device whose
+			keys live under it (read off the ports; there is no second table of who
+			is P1). Shown only with more than one pad: with none the keyboard
+			section below says what plays, and with one there is nothing to assign.
+			A row's device is read *now*, from the connection order the key codes
+			carry - not a stable identity until slice 5 repairs a reconnect.-->
+			<StackPanel Name="ControllerSheetPlayers" IsVisible="{Binding ShowPlayers}" Margin="0 14 0 0">
+				<TextBlock Classes="group-label" Text="{l:Translate lblControllerSheetPlayers}" />
+				<Border Classes="group" Margin="0 8 0 0">
+					<StackPanel>
+						<ItemsControl Name="ControllerSheetPlayerRows" ItemsSource="{Binding Players}">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:ControllerSheetPlayerRow">
+									<Button Name="ControllerSheetPlayerRow" Classes="row text" Click="OnAssignPlayer">
+										<DockPanel>
+											<Border Width="12" Height="12" CornerRadius="6" Background="{Binding Color}" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0 0 10 0" />
+											<TextBlock Classes="value" DockPanel.Dock="Right" Text="{Binding DeviceName}" />
+											<TextBlock Classes="title" Text="{Binding Label}" />
+										</DockPanel>
+									</Button>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</StackPanel>
+				</Border>
+				<TextBlock Name="ControllerSheetPlayersHint" Classes="subhead secondary" Text="{l:Translate lblControllerSheetPlayersHint}" TextWrapping="Wrap" Margin="2 8 0 0" />
+				<TextBlock Name="ControllerSheetAssignNote" Classes="subhead" Text="{Binding AssignNote}" IsVisible="{Binding AssignNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="2 8 0 0" />
+			</StackPanel>
+
+			<!--The keyboard case (ADR-0255 slice 2): with no pad the sheet says
+			what the keyboard plays, and offers the preset back when nothing is
+			bound anywhere (the same guard the load path uses).-->
+			<StackPanel Name="ControllerSheetKeyboard" IsVisible="{Binding ShowKeyboard}" Margin="0 14 0 0">
+				<TextBlock Classes="group-label" Text="{l:Translate lblControllerSheetKeyboard}" />
+				<TextBlock Name="ControllerSheetKeyboardText" Classes="body secondary" Text="{Binding KeyboardText}" TextWrapping="Wrap" Margin="2 8 0 0" />
+				<Button Name="ControllerSheetKeyboardRestore" Classes="secondary small" HorizontalAlignment="Left" Margin="0 10 0 0" IsVisible="{Binding CanRestoreKeyboard}" Click="OnRestoreKeyboard" Content="{l:Translate btnControllerSheetKeyboardRestore}" />
+			</StackPanel>
+
+			<!--Slice 3 (remapping) is not here yet, and a control that lies is
+			worse than a line that says so: the classic page does it today and
+			stays one link away.-->
 			<TextBlock Classes="subhead secondary" Text="{l:Translate lblControllerSheetComing}" TextWrapping="Wrap" Margin="2 14 0 0" />
 			<DockPanel Margin="0 16 0 0">
 				<Button Name="ControllerSheetMoreInOptions" Classes="plain small" DockPanel.Dock="Left" Margin="-9 0 0 0" Click="OnMoreInOptions" Content="{l:Translate btnControllerSheetMoreInOptions}" />

@@ -123,3 +123,207 @@ public static class ControllerSheetReads
 	//keep the stricter rule above; this only decides whether a tick happens at all.
 	public static bool Polls(bool sheetVisible) => sheetVisible;
 }
+
+//ADR-0255 slice 2 (W-P17 PLAYERS): a player port as the sheet sees it. The
+//port is a ControllerConfig (Port1, Port2, Controller) - never a mapping slot:
+//Mapping1..4 are alternatives within one port, and reading them as four ports
+//is the mistake the ADR records under "The answers, against the code". Slots
+//are the port's four KeyMapping slots, each the key codes it binds (empty =
+//free); the sheet reads a pad's device off the key codes, which is where the
+//device a mapping speaks for lives (ControllerDevices.BaseGamepadIndex).
+//
+//A slot answers two different questions, so it carries two answers. `Slots` is
+//every key the slot binds - the fixed fields plus the port type's own custom
+//keys - which is what "is this slot taken?" (the free-slot rule, W-P15's HasKeys)
+//and "which pad's keys are here?" read. `KeyboardSlots` is the fixed fields
+//alone: the keyboard line asks what the *keyboard* plays, and a port type's
+//custom keys (a Zapper's mouse clicks, a Family Basic Keyboard's rows) are that
+//port device's buttons, not the keyboard's - so a Zapper-typed port must not
+//report its mouse buttons as the keyboard's bindings.
+public sealed record SheetPort(string Key, string Label, int ColorIndex, IReadOnlyList<ushort[]> Slots, IReadOnlyList<ushort[]> KeyboardSlots);
+
+public enum PortMoveOutcome
+{
+	Moved,
+	//The device's keys are already under the target port.
+	AlreadyThere,
+	//The target has fewer free slots than the device's keys need: refused rather
+	//than overwriting a slot the user (or a preset) already bound.
+	NoFreeSlot,
+	//No mapping holds this device's keys: there is nothing to move.
+	NotBound
+}
+
+//One slot of the device's keys moving, from a slot of a source port to a free
+//slot of the target.
+public sealed record SlotMove(int SourcePort, int SourceSlot, int TargetSlot);
+
+//The plan for "put this device on that port". A move takes *every* slot that
+//holds the device's keys - a device bound in two slots of a port must not leave
+//one behind and end up playing as two players - so the plan is a list, one entry
+//per slot. Empty unless Outcome is Moved.
+public sealed record PortMove(PortMoveOutcome Outcome, IReadOnlyList<SlotMove> Slots)
+{
+	public bool Moves => Outcome == PortMoveOutcome.Moved;
+}
+
+public static class ControllerSheetPorts
+{
+	//The player ports of the loaded console, in the players' order. The console
+	//decides - a fixed list would be a second table of "who is P1" (ADR-0250).
+	public static IReadOnlyList<(string Key, int Player)> For(ConsoleType type)
+	{
+		return type switch {
+			ConsoleType.Nes => new[] { ("Port1", 1), ("Port2", 2) },
+			ConsoleType.Sms => new[] { ("Port1", 1), ("Port2", 2) },
+			ConsoleType.Gameboy => new[] { ("Controller", 1) },
+			ConsoleType.Gba => new[] { ("Controller", 1) },
+			_ => System.Array.Empty<(string, int)>()
+		};
+	}
+
+	//The one gamepad block a slot's keys belong to, or null when the slot is empty,
+	//binds keyboard keys only, or names two pads (which is not an assignment this
+	//sheet made, so it reads as no device rather than a guess). The block is the
+	//key code with its button byte cleared, the same value
+	//ControllerDevices.PadBlock builds from a pad's (Backend, Slot) - so a row
+	//matches a pad however the host enumerated it, and a DirectInput pad is not the
+	//XInput pad of the same ordinal (#813).
+	public static int? SlotDevice(ushort[] slot)
+	{
+		int? block = null;
+		foreach(ushort key in slot) {
+			if(ControllerDevices.KeyBlock(key) is not int found) {
+				continue;
+			}
+			if(block is int existing && existing != found) {
+				return null;
+			}
+			block = found;
+		}
+		return block;
+	}
+
+	//The device whose keys live under a port: the device of its first slot that
+	//names one.
+	public static int? PortDevice(SheetPort port)
+	{
+		foreach(ushort[] slot in port.Slots) {
+			if(SlotDevice(slot) is int device) {
+				return device;
+			}
+		}
+		return null;
+	}
+
+	//Whether the port holds this device in ANY of its slots. Distinct from
+	//PortDevice, which answers the *first* named slot's device: a pad whose keys
+	//sit in a later slot of the target (with an earlier slot naming another
+	//device) is bound to that player, and "already there" must say so.
+	private static bool TargetHolds(SheetPort port, int device)
+	{
+		foreach(ushort[] slot in port.Slots) {
+			if(SlotDevice(slot) == device) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	//The first slot that binds nothing, or null when all four are taken.
+	public static int? FreeSlot(SheetPort port)
+	{
+		for(int i = 0; i < port.Slots.Count; i++) {
+			if(port.Slots[i].Length == 0) {
+				return i;
+			}
+		}
+		return null;
+	}
+
+	//"Put this device on that port": which free slots of the target receive the
+	//keys and which slots of which ports they are moved out of, one plan for the
+	//whole device so it cannot be split across two ports. The move refuses rather
+	//than overwriting a slot the user (or a preset) already bound, refuses when the
+	//target has too few free slots for every slot the device holds, and refuses a
+	//pad nothing has bound yet - there would be no keys to move.
+	public static PortMove PlanMove(IReadOnlyList<SheetPort> ports, int device, int targetPort)
+	{
+		if(targetPort < 0 || targetPort >= ports.Count) {
+			return new(PortMoveOutcome.NotBound, System.Array.Empty<SlotMove>());
+		}
+		SheetPort target = ports[targetPort];
+
+		//Every slot of every *other* port that holds the device's keys. The target's
+		//own slots are left out: they are where the keys are going, not where they
+		//come from.
+		List<(int Port, int Slot)> sources = new();
+		for(int port = 0; port < ports.Count; port++) {
+			if(port == targetPort) {
+				continue;
+			}
+			for(int slot = 0; slot < ports[port].Slots.Count; slot++) {
+				if(SlotDevice(ports[port].Slots[slot]) == device) {
+					sources.Add((port, slot));
+				}
+			}
+		}
+
+		if(sources.Count == 0) {
+			return TargetHolds(target, device)
+				? new(PortMoveOutcome.AlreadyThere, System.Array.Empty<SlotMove>())
+				: new(PortMoveOutcome.NotBound, System.Array.Empty<SlotMove>());
+		}
+
+		List<int> free = new();
+		for(int i = 0; i < target.Slots.Count; i++) {
+			if(target.Slots[i].Length == 0) {
+				free.Add(i);
+			}
+		}
+		if(free.Count < sources.Count) {
+			return new(PortMoveOutcome.NoFreeSlot, System.Array.Empty<SlotMove>());
+		}
+
+		List<SlotMove> moves = new();
+		for(int i = 0; i < sources.Count; i++) {
+			moves.Add(new SlotMove(sources[i].Port, sources[i].Slot, free[i]));
+		}
+		return new(PortMoveOutcome.Moved, moves);
+	}
+}
+
+//ADR-0255 slice 2, the keyboard case's read side: with no pad connected the
+//sheet says what the keyboard does. The "may the preset be written back" question
+//is NOT here: it belongs to Configuration.CanRestoreKeyboardPreset, the guard the
+//load path itself uses, and the sheet asks that one rather than a copy (ADR-0255:
+//"the guard belongs where the presets are resolved, not in one caller").
+public static class ControllerSheetKeyboard
+{
+	//The keyboard keys the player's port binds - every key that is not a
+	//gamepad's - in slot then field order, distinct. The keyboard plays as
+	//player 1, so this is the first port that binds any; a keyboard bound to a
+	//player no pad is on is still the player's. The ViewModel names the codes
+	//(InputApi.GetKeyName); the rule here is which codes count.
+	//
+	//It reads KeyboardSlots, not Slots: the fixed KeyMapping fields only. A port
+	//type's custom keys are that port device's buttons, not the keyboard's, so a
+	//Zapper's mouse clicks must not surface as the keyboard's bindings (finding 1).
+	public static IReadOnlyList<ushort> Keys(IReadOnlyList<SheetPort> ports)
+	{
+		foreach(SheetPort port in ports) {
+			List<ushort> keys = new();
+			foreach(ushort[] slot in port.KeyboardSlots) {
+				foreach(ushort key in slot) {
+					if(key != 0 && ControllerDevices.KeyBlock(key) == null && !keys.Contains(key)) {
+						keys.Add(key);
+					}
+				}
+			}
+			if(keys.Count > 0) {
+				return keys;
+			}
+		}
+		return System.Array.Empty<ushort>();
+	}
+}

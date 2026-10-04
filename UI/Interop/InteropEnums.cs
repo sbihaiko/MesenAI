@@ -1,14 +1,13 @@
 namespace Mesen.Interop
 {
-	//Host-free counterpart to the ConsoleType/CheatType enums that previously
-	//lived in EmuApi.cs (Fase 2, docs/roadmap/plano-testes-unitarios.md).
-	//EmuApi.cs is Avalonia-tainted (references Avalonia.Media.Imaging), so
-	//these two enums were split out into this file so UI/Logic/ helpers (and
-	//UI.Tests, via UI.Tests.csproj's dual-compile of this file) can consume
-	//ConsoleType/CheatType without pulling in Avalonia or the EmuApi P/Invoke
-	//surface. Both stay in the Mesen.Interop namespace and keep their exact
-	//member names/values, so every existing consumer of EmuApi.cs continues
-	//to compile unchanged.
+	//Host-free counterpart to the ConsoleType/CheatType/GamepadBackend enums that
+	//previously lived in EmuApi.cs and InputApi.cs (Fase 2,
+	//docs/roadmap/plano-testes-unitarios.md). Those files are Avalonia-tainted and
+	//carry the P/Invoke surface, so the enums were split out into this file so
+	//UI/Logic/ helpers (and UI.Tests, via UI.Tests.csproj's dual-compile of this
+	//file) can consume them without pulling in Avalonia or the native bridge.
+	//All three stay in the Mesen.Interop namespace and keep their exact member
+	//names/values, so every existing consumer keeps compiling unchanged.
 	public enum ConsoleType
 	{
 		Snes = 0,

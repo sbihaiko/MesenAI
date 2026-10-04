@@ -4,7 +4,6 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Interop;
-using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Utilities;
 
@@ -41,7 +40,7 @@ namespace Mesen.ViewModels
 		//this pad has no counterpart for, leaves the key dark instead of throwing.
 		public void Follow(GamepadTestItem? pad)
 		{
-			int? bit = ControllerLivePad.BitOf(Button, pad?.BackendKind ?? GamepadBackend.None);
+			int? bit = ControllerLivePad.BitOf(Button, pad?.Backend ?? GamepadBackend.None);
 			IsLit = pad != null && bit is int index && index < pad.Buttons.Count && pad.Buttons[index].IsPressed;
 		}
 	}
@@ -66,11 +65,10 @@ namespace Mesen.ViewModels
 	{
 		[ObservableProperty] public partial bool IsVisible { get; set; }
 
-		//The pad the sheet shows: the first connected one. Which pad plays as
-		//which player is slice 2, so until it lands the sheet says how many it is
-		//not showing rather than pretending there is only one.
+		//The pad the sheet shows: the one the pad picker has selected (the first
+		//connected one until the player picks). Slice 2 reads which player each
+		//pad is off the ports (RefreshPlayers).
 		[ObservableProperty, NotifyPropertyChangedFor(nameof(HasPad))] public partial GamepadTestItem? Pad { get; private set; }
-		[ObservableProperty] public partial string MorePadsText { get; private set; } = "";
 
 		public bool HasPad => Pad != null;
 
@@ -171,19 +169,25 @@ namespace Mesen.ViewModels
 			ApplyPad();
 		}
 
-		//The sheet's own state from the tester's list: the pad it shows, its name,
-		//how many it is not showing, and which drawn key each of its buttons
-		//lights. Split from Refresh because the read is the one part a test cannot
-		//make (it needs a physical pad): the test holds the list still and applies
-		//it, the same way the Test tab's own tests inject a pad.
+		//The sheet's own state from the tester's list: the pad the picker has
+		//selected, and which drawn key each of its buttons lights. Split from
+		//Refresh because the read is the one part a test cannot make (it needs a
+		//physical pad): the test holds the list still and applies it, the same way
+		//the Test tab's own tests inject a pad.
 		public void ApplyPad()
 		{
-			GamepadTestItem? pad = Tester.Gamepads.Count > 0 ? Tester.Gamepads[0] : null;
+			int count = Tester.Gamepads.Count;
+			//Kept inside the list, so a pad that goes away leaves the picker on a
+			//pad that is there (or on none).
+			if(SelectedPadIndex < 0 || SelectedPadIndex >= count) {
+				SelectedPadIndex = count > 0 ? 0 : -1;
+			}
+			GamepadTestItem? pad = SelectedPadIndex >= 0 && SelectedPadIndex < count ? Tester.Gamepads[SelectedPadIndex] : null;
 			Pad = pad;
-			MorePadsText = Tester.Gamepads.Count > 1 ? ResourceHelper.GetMessage("ControllerSheetMorePads", Tester.Gamepads.Count) : "";
 			foreach(ControllerPadLight key in PadKeys) {
 				key.Follow(pad);
 			}
+			RefreshPlayers();
 		}
 	}
 }

@@ -173,7 +173,7 @@ namespace Mesen.Config
 		//callers - and the test - need to tell "restored" from "left alone".
 		public bool RestoreKeyboardPresetIfNothingIsBound()
 		{
-			if(DefaultKeyMappings != DefaultKeyMappingType.None || !NothingIsBound()) {
+			if(!CanRestoreKeyboardPreset()) {
 				return false;
 			}
 			DefaultKeyMappings = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
@@ -182,6 +182,20 @@ namespace Mesen.Config
 			Gba.InitializeDefaults(DefaultKeyMappings);
 			Sms.InitializeDefaults(DefaultKeyMappings);
 			return true;
+		}
+
+		//The one question the guard above asks, on its own: may the keyboard preset
+		//be written back? DefaultKeyMappings.None is the state that leaves the player
+		//unable to play, and "nothing is bound anywhere" (every console's player
+		//ports - see NothingIsBound) is what keeps a preset from overwriting the
+		//player's own keys. The Play Controller sheet's "Use the keyboard preset"
+		//button is offered on THIS answer and no other, so the button can never be
+		//shown where RestoreKeyboardPresetIfNothingIsBound would silently do nothing
+		//(ADR-0255: "the guard belongs where the presets are resolved, not in one
+		//caller"). This is the authority; callers ask it rather than restating it.
+		public bool CanRestoreKeyboardPreset()
+		{
+			return DefaultKeyMappings == DefaultKeyMappingType.None && NothingIsBound();
 		}
 
 		//Whether every console's four mapping slots are empty - the state in
