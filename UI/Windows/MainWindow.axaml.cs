@@ -97,6 +97,10 @@ namespace Mesen.Windows
 		private bool _focusInMenu;
 		private bool _needRendererReset;
 
+		//ADR-0254: the focus pause opened W-P4, so the automatic resume waits for
+		//the player's Esc instead of firing the moment the window comes forward.
+		private bool _focusPausedWithOverlay;
+
 		public Control Renderer => _usesSoftwareRenderer ? _softwareRenderer : _renderer;
 
 		static MainWindow()
@@ -1202,7 +1206,10 @@ namespace Mesen.Windows
 			Window? activeWindow = ApplicationHelper.GetActiveWindow();
 			PreferencesConfig cfg = ConfigManager.Config.Preferences;
 
-			bool needPause = activeWindow == null && cfg.PauseWhenInBackground;
+			//ADR-0254: the focus half is resolved on its own, because it is the one
+			//that gets a voice - the menus/config half keeps its silent pause.
+			bool focusLost = activeWindow == null && cfg.PauseWhenInBackground;
+			bool needPause = focusLost;
 			if(activeWindow != null) {
 				bool isConfigWindow = (activeWindow != this) && !DebugWindowManager.IsDebugWindow(activeWindow);
 				needPause |= cfg.PauseWhenInMenusAndConfig && !isConfigWindow && (_mainMenu.MainMenu.IsOpen || _shellBar.ToolsMenu.IsOpen); //in main menu or Tools ⋯
@@ -1220,10 +1227,18 @@ namespace Mesen.Windows
 					}
 
 					EmuApi.Pause();
+
+					//ADR-0254: a focus pause in Play says why, and the player's own
+					//Esc is the way back in. A game already paused by the player is
+					//left alone: they have their own surface, or no need of one.
+					if(FocusPause.ShowsOverlay(focusLost, _model.IsPlayerMode, _model.RomInfo.Format != RomFormat.Unknown)) {
+						_focusPausedWithOverlay = true;
+						_model.OpenPauseOverlay();
+					}
 				}
 			} else if(_model.MainMenu.AutoPaused) {
 				//Don't resume if the load/save state dialog is opened
-				if(!_model.RecentGames.Visible) {
+				if(!_model.RecentGames.Visible && FocusPause.AutoResumes(_focusPausedWithOverlay, _model.IsPlayerOverlayVisible)) {
 					EmuApi.Resume();
 					_model.MainMenu.AutoPaused = false;
 				}
