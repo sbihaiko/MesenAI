@@ -15,13 +15,31 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//From the Settings sheet's Controls row; false when no game is loaded, so
-		//the caller can keep the classic Input page as the landing (the sheet
-		//reads a paused game, and both its Done and its Esc go to W-P4 - there is
-		//nothing to return to without one).
+		//From the Settings sheet's Controls row; false when the sheet cannot be
+		//operated, so the caller keeps the classic Input page as the landing.
+		//
+		//No game: the sheet reads a paused game, and both its Done and its Esc go
+		//to W-P4 - there is nothing to return to without one.
+		//
+		//Not in the Play door (#816): the sheet's host lives inside PlayWorkspace,
+		//and the Settings sheet it is reached from is a sibling, on screen from
+		//every door. Two doors had to be refused, and they are not the same one:
+		//
+		//  - Remaster/Share: IsPlayWorkspace hides PlayWorkspace, so the sheet drew
+		//    under a hidden ancestor and froze the session (Esc's ToggleOverlay there
+		//    routes to Remaster.LeaveGameView, and CurrentPlaySheet kept answering
+		//    Controller). Before the Controller sheet landed this path opened the
+		//    classic Input page, which is visible from every door - so a task door
+		//    keeps it.
+		//  - Classic: IsPlayWorkspace is the *game screen* gate, not the Play door,
+		//    and Classic shows the game screen too - so a guard on it admitted
+		//    Classic, whose Esc is Advanced's (ShortcutHandler routes ToggleOverlay
+		//    only in Player mode) and could not close the sheet. The door is the
+		//    rule, and it is the same Shell.IsPlay CloseControllerSheetToOverlay
+		//    already uses.
 		public bool OpenControllerSheet()
 		{
-			if(!IsGameLoaded) {
+			if(!IsGameLoaded || !Shell.IsPlay) {
 				return false;
 			}
 			//The Settings sheet it came from closes first: only one Play sheet is

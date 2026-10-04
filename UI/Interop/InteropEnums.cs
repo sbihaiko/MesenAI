@@ -25,6 +25,9 @@ namespace Mesen.Interop
 	//CheatType did: ADR-0255 slice 5's host-free rule (UI/Logic/DeviceReconnect)
 	//keys a pad's identity by its backend, and UI.Tests dual-compiles UI/Logic
 	//without InputApi.cs (which names EmuApi.DllName, so it is not host-free).
+	//Slice 1 needed the same thing first: the Controller sheet's host-free rule
+	//(UI/Logic/ControllerSheet.cs) names a backend to pick the core's own button
+	//order for it, so the sheet and DeviceReconnect share this one copy.
 	//Member names/values match the core's GamepadBackend (IKeyManager.h) and
 	//InputApi's previous copy, so every consumer compiles unchanged.
 	public enum GamepadBackend : byte

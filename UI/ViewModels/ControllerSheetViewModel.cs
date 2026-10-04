@@ -41,7 +41,7 @@ namespace Mesen.ViewModels
 		//this pad has no counterpart for, leaves the key dark instead of throwing.
 		public void Follow(GamepadTestItem? pad)
 		{
-			int? bit = ControllerLivePad.BitOf(Button);
+			int? bit = ControllerLivePad.BitOf(Button, pad?.BackendKind ?? GamepadBackend.None);
 			IsLit = pad != null && bit is int index && index < pad.Buttons.Count && pad.Buttons[index].IsPressed;
 		}
 	}
@@ -54,11 +54,14 @@ namespace Mesen.ViewModels
 	//
 	//Reads are scoped, as ADR-0255's consequences require: the tester's own
 	//60 Hz poll is gated on a visible Test tab, and a sheet over a running game
-	//would break that scoping, so this sheet polls on its own timer and only
+	//would break that scoping, so this sheet reads on its own timer and only
 	//while it is visible *and* the game is paused - a state it makes true when it
 	//opens, and lets go of the moment it stops being true (a game that starts
-	//running under it stops the reads on the next tick). It never resumes: the
-	//pause outlives the sheet, as the one W-P4 opened it over did.
+	//running under it stops the reads on the next tick, and starts them again if
+	//it pauses once more). The timer itself keeps running while the sheet is up,
+	//because a tick is the only thing that can see that second pause. It never
+	//resumes the game: the pause outlives the sheet, as the one W-P4 opened it
+	//over did.
 	public partial class ControllerSheetViewModel : DisposableViewModel
 	{
 		[ObservableProperty] public partial bool IsVisible { get; set; }
@@ -115,17 +118,22 @@ namespace Mesen.ViewModels
 			IsVisible = false;
 		}
 
+		//The timer's lifetime follows the sheet's visibility, not the stricter read
+		//condition: nothing observes the pause state, so the tick is the only thing
+		//that can notice a game pausing again under the sheet. A timer that stopped
+		//the moment the game resumed never restarted (ControllerSheetReads.Polls).
 		private void UpdatePolling()
 		{
-			bool wanted = ControllerSheetReads.Wanted(IsVisible, IsPaused());
-			if(wanted == (_poll != null)) {
-				return;
-			}
-			if(!wanted) {
+			if(!ControllerSheetReads.Polls(IsVisible)) {
 				StopPolling();
 				return;
 			}
-			Refresh();
+			if(_poll != null) {
+				return;
+			}
+			if(ControllerSheetReads.Wanted(IsVisible, IsPaused())) {
+				Refresh();
+			}
 			_poll = new DispatcherTimer();
 			_poll.Interval = TimeSpan.FromMilliseconds(16); //the tester's own ~60 Hz
 			_poll.Tick += (s, e) => Tick();
@@ -135,12 +143,11 @@ namespace Mesen.ViewModels
 		private void Tick()
 		{
 			//A shortcut resumed the game under the sheet (the Esc router does not
-			//route it): the reads stop with it, as the tester's tab gate does.
-			if(!ControllerSheetReads.Wanted(IsVisible, IsPaused())) {
-				UpdatePolling();
-				return;
+			//route it): the reads stop with it, as the tester's tab gate does - and
+			//start again on a later tick if the game pauses once more.
+			if(ControllerSheetReads.Wanted(IsVisible, IsPaused())) {
+				Refresh();
 			}
-			Refresh();
 		}
 
 		private void StopPolling()
