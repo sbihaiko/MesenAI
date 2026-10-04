@@ -32,6 +32,13 @@ namespace Mesen.HeadlessTests;
 //Needs a MainWindow (EmuApi.InitDll in its constructor), so it self-skips on the
 //core-less CI runner like the other MainWindow tests - except
 //ControllerSheetPadTests at the bottom, which reads no device at all.
+//
+//Provenance, stated plainly: the slice-1 wiring tests above (open/close, Esc,
+//Done, the classic link, the poll scoping) were written alongside that
+//implementation, so they characterize the wiring as built rather than a contract
+//agreed first. The slice-2 findings' tests below (the assignment move, the
+//keyboard gate, the device identity, the rebuild and the note) were written
+//red-first against the WIP diff - their failing output is in the slice's review.
 [Collection(NativeCoreCollection.Name)]
 public class PlayerControllerSheetTests : IDisposable
 {
@@ -263,7 +270,7 @@ public class PlayerControllerSheetTests : IDisposable
 
 		GamepadTestItem pad = new(0) {
 			Name = "Wireless Controller",
-			BackendKind = GamepadBackend.GameController,
+			Backend = GamepadBackend.GameController,
 			InfoText = "SDL · Pad1 · VID:054C · PID:0CE6",
 			LeftStickReadout = "X: 128  Y: -64  mag 45%",
 			RightX = -32,
@@ -588,8 +595,10 @@ public class PlayerControllerSheetTests : IDisposable
 			Assert.False(window.FindNamed<StackPanel>("ControllerSheetPlayers").IsOnScreen());
 
 			//A second pad: PLAYERS appears, one row per NES port, each naming the
-			//device the port's keys carry.
-			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One" });
+			//device the port's keys carry. The pad's own slot is what its keys carry
+			//(device 1), which is where the row's name comes from - not its place in
+			//the host's enumeration (Index).
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
 			sheet.ApplyPad();
 			Dispatcher.UIThread.RunJobs();
 			window.UpdateLayout();
@@ -632,7 +641,7 @@ public class PlayerControllerSheetTests : IDisposable
 			ConfigManager.Config.Nes.Port1.Mapping1.Start = PadButton(1, 7);
 
 			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
-			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
 			sheet.SelectedPadIndex = 1;
 			sheet.ApplyPad();
 			Dispatcher.UIThread.RunJobs();
@@ -716,6 +725,362 @@ public class PlayerControllerSheetTests : IDisposable
 		}
 	}
 
+	//ADR-0255 slice 2 ("moves a device's keys from one port's slots to another's"):
+	//a pad bound in more than one slot of a port must not leave half of itself
+	//behind, or one physical pad plays as two players. The whole device moves.
+	[AvaloniaFact]
+	public void Assigning_a_pad_bound_in_two_slots_moves_both_slots_together()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//Device 1's keys sit in two slots of Port1 (a preset plus a hand
+			//binding, say).
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+			ConfigManager.Config.Nes.Port1.Mapping3.B = PadButton(1, 1);
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
+			sheet.SelectedPadIndex = 1;
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			Click(PlayerRows(window)[1]);
+
+			//Both slots move off Port1 and onto Port2's first two free slots.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping3.B);
+			Assert.Equal(PadButton(1, 0), ConfigManager.Config.Nes.Port2.Mapping1.A);
+			Assert.Equal(PadButton(1, 1), ConfigManager.Config.Nes.Port2.Mapping2.B);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 Consequences ("the two surfaces must not disagree about which slot a
+	//pad is in"): a slot that binds only the port type's custom keys is taken, so
+	//the assignment must skip it and land in the next free slot - the same rule
+	//W-P15's own Save reads.
+	[AvaloniaFact]
+	public void A_slot_that_binds_only_custom_keys_is_not_free()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//Port2's first slot binds the Zapper's custom keys only - no base
+			//key - so only a reader that looks at the custom keys sees it taken.
+			ConfigManager.Config.Nes.Port2.Type = ControllerType.NesZapper;
+			ConfigManager.Config.Nes.Port2.Mapping1.ZapperButtons = new ushort[] { 0x20 };
+			//The pad's keys live in Port1's first slot.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
+			sheet.SelectedPadIndex = 1;
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			Click(PlayerRows(window)[1]);
+
+			//Slot 0 is taken, so the pad lands in slot 1 and the custom keys stay.
+			Assert.Equal(PadButton(1, 0), ConfigManager.Config.Nes.Port2.Mapping2.A);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port2.Mapping1.A);
+			Assert.Equal(new ushort[] { 0x20 }, ConfigManager.Config.Nes.Port2.Mapping1.ZapperButtons);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//Finding 1: the KEYBOARD line answers what the keyboard plays, so it reads the
+	//player's own keys - the fixed KeyMapping fields - and never the port type's
+	//custom keys. A Zapper-typed port whose slot binds only its mouse buttons (
+	//real custom keys, below the gamepad base, so no pad block either) must not be
+	//reported as the keyboard's bindings - which is what a reader that handed the
+	//same slots to both questions did.
+	[AvaloniaFact]
+	public void The_keyboard_line_does_not_report_a_ports_custom_keys()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		sheet.KeyName = key => $"K{key:X}";
+
+		NesConfig savedNes = SavedNes();
+		DefaultKeyMappingType savedFlags = ConfigManager.Config.DefaultKeyMappings;
+		try {
+			ClearPlayerPorts();
+			ConfigManager.Config.DefaultKeyMappings = DefaultKeyMappingType.None;
+			//NES Port2 = Zapper: its first slot binds only the port type's own
+			//custom keys - a Zapper's mouse buttons, non-pad and non-keyboard codes.
+			ConfigManager.Config.Nes.Port2.Type = ControllerType.NesZapper;
+			ConfigManager.Config.Nes.Port2.Mapping1.ZapperButtons = new ushort[] { 0x200, 0x201 };
+
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(sheet.ShowKeyboard);
+			//The custom keys are the port device's buttons, not the keyboard's:
+			//the line says nothing is bound, it does not play them as keys. (The
+			//resource string is asserted as text like the sibling tests do; the
+			//suite runs en-US.)
+			Assert.Equal("No controller connected, and no keyboard keys are bound.", sheet.KeyboardText);
+			Assert.DoesNotContain("K200", sheet.KeyboardText);
+			Assert.DoesNotContain("K201", sheet.KeyboardText);
+		} finally {
+			ConfigManager.Config.Nes = savedNes;
+			ConfigManager.Config.DefaultKeyMappings = savedFlags;
+		}
+	}
+
+	//Finding 4: the assignment note names the pad it was written about. Moving the
+	//picker to another pad is exactly where that stops being true, and the rows do
+	//not depend on which pad is selected - so the note has to go on the pad change
+	//itself, not only when the rows change.
+	[AvaloniaFact]
+	public void The_assignment_note_goes_away_when_the_picker_moves_to_another_pad()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
+			sheet.SelectedPadIndex = 1;
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//Pad One is bound nowhere: a tap says so, naming it.
+			Click(PlayerRows(window)[0]);
+			Assert.Contains("Pad One", sheet.AssignNote);
+
+			//The picker moves to Pad Zero. The rows (which only name devices bound
+			//to the ports) do not move with the picker, so the pad change itself has
+			//to clear the note.
+			sheet.SelectedPadIndex = 0;
+			Assert.Equal("", sheet.AssignNote);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//#813 / ADR-0255 slice 2: the pad a row names is identified by the block its
+	//keys carry - the same block its (Backend, Slot) builds - never by the host's
+	//enumeration ordinal, which is global on Windows (XInput slots first, then the
+	//joysticks). Index 0 with Slot 1 must match the keys' device 1.
+	[AvaloniaFact]
+	public void A_player_row_names_the_pad_by_its_family_slot_and_not_the_enumeration_ordinal()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//The keys carry the family's own device slot, 1.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+
+			//The pad is first in the host's enumeration (Index 0) but its own slot
+			//is 1: the row must follow the slot the keys carry, not the ordinal.
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad One", Slot = 1 });
+			sheet.ApplyPad();
+
+			Assert.Equal("Pad One", sheet.Players[0].DeviceName);
+			Assert.True(sheet.Players[0].HasDevice);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 slice 5's own axis: a DirectInput pad (its own family, code 0x2000)
+	//is not the XInput pad of the same ordinal. Only a rule that carries the
+	//family matches it; a bare device index cannot tell the two apart.
+	[AvaloniaFact]
+	public void A_directinput_pad_is_matched_in_its_own_key_code_family()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//A joystick's first button, in the DirectInput family.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = (ushort)(0x2000 + 3);
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Joystick", Slot = 0, Backend = GamepadBackend.DirectInput });
+			sheet.ApplyPad();
+
+			Assert.Equal("Joystick", sheet.Players[0].DeviceName);
+			Assert.True(sheet.Players[0].HasDevice);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 slice 2: PLAYERS is rebuilt every 60 Hz read today; it must not be,
+	//but the rule must not become a cache that can go stale - a config change made
+	//elsewhere still has to show.
+	[AvaloniaFact]
+	public void Players_is_not_rebuilt_when_nothing_it_shows_changed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
+			sheet.ApplyPad();
+
+			IReadOnlyList<ControllerSheetPlayerRow> first = sheet.Players;
+			sheet.ApplyPad();
+			Assert.Same(first, sheet.Players);
+
+			//A config change made elsewhere still shows: no stale cache.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+			sheet.ApplyPad();
+			Assert.NotSame(first, sheet.Players);
+			Assert.Equal("Pad One", sheet.Players[0].DeviceName);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 slice 2: the assignment note has to go when it stops being true,
+	//not stay on screen for the rest of the sheet's life.
+	[AvaloniaFact]
+	public void The_assignment_note_goes_away_when_it_stops_being_true()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero" });
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Slot = 1 });
+			sheet.SelectedPadIndex = 1;
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//Pad One is bound nowhere: the tap says so.
+			Click(PlayerRows(window)[0]);
+			Assert.NotEqual("", sheet.AssignNote);
+
+			//It gets bound on another surface: the note's state changed, so the
+			//note goes.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+			sheet.ApplyPad();
+			Assert.Equal("", sheet.AssignNote);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//Finding 1: the "Use the keyboard preset" button must ask the guard's own
+	//question, not a weaker one - Configuration reads every console's ports and
+	//requires DefaultKeyMappings to be None, so a button gated on the loaded
+	//console's ports alone is offered where the click is a silent no-op.
+	[AvaloniaFact]
+	public void The_keyboard_preset_button_is_gated_by_the_guards_own_question()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig savedNes = SavedNes();
+		GameboyConfig savedGb = ConfigManager.Config.Gameboy.Clone();
+		GbaConfig savedGba = ConfigManager.Config.Gba.Clone();
+		SmsConfig savedSms = ConfigManager.Config.Sms.Clone();
+		DefaultKeyMappingType savedFlags = ConfigManager.Config.DefaultKeyMappings;
+		try {
+			//Nothing bound anywhere and the preset flag is None: offered.
+			ClearPlayerPorts();
+			ConfigManager.Config.DefaultKeyMappings = DefaultKeyMappingType.None;
+			sheet.ApplyPad();
+			Assert.True(sheet.CanRestoreKeyboard);
+
+			//Another console holds a binding. The loaded console (NES) is empty,
+			//but the guard reads every console - so the click would be a no-op and
+			//the button must not be offered.
+			ClearPlayerPorts();
+			ConfigManager.Config.Gameboy.Controller.Mapping1.A = 0x20;
+			sheet.ApplyPad();
+			Assert.False(sheet.CanRestoreKeyboard);
+
+			//The preset flag is not None: the guard refuses whatever the slots say.
+			ClearPlayerPorts();
+			ConfigManager.Config.DefaultKeyMappings = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
+			sheet.ApplyPad();
+			Assert.False(sheet.CanRestoreKeyboard);
+		} finally {
+			ConfigManager.Config.Nes = savedNes;
+			ConfigManager.Config.Gameboy = savedGb;
+			ConfigManager.Config.Gba = savedGba;
+			ConfigManager.Config.Sms = savedSms;
+			ConfigManager.Config.DefaultKeyMappings = savedFlags;
+		}
+	}
+
 	//Every console's player ports, emptied: the state the keyboard guard
 	//("nothing is bound anywhere") reads.
 	private static void ClearPlayerPorts()
@@ -752,7 +1117,7 @@ public class ControllerSheetPadTests
 	[AvaloniaFact]
 	public void The_macos_tester_labels_still_read_the_cores_own_bits()
 	{
-		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.GameController };
+		GamepadTestItem pad = new(0) { Backend = GamepadBackend.GameController };
 		foreach((string label, int bit) in MacCoreButtons) {
 			Assert.Equal(label, pad.Buttons[bit].Label);
 		}
@@ -772,14 +1137,14 @@ public class ControllerSheetPadTests
 		//Every bit the chip list carries is the core's own name for that bit, for
 		//every backend the sheet can place.
 		foreach(GamepadBackend backend in new[] { GamepadBackend.GameController, GamepadBackend.XInput, GamepadBackend.Evdev }) {
-			GamepadTestItem pad = new(0) { BackendKind = backend };
+			GamepadTestItem pad = new(0) { Backend = backend };
 			for(int bit = 0; bit < pad.Buttons.Count; bit++) {
 				Assert.Equal(ControllerLivePad.NameOfBit(backend, bit), pad.Buttons[bit].Label);
 			}
 		}
 
 		//The concrete defect.
-		GamepadTestItem xinput = new(0) { BackendKind = GamepadBackend.XInput };
+		GamepadTestItem xinput = new(0) { Backend = GamepadBackend.XInput };
 		Assert.Equal("A", xinput.Buttons[12].Label);
 		Assert.Equal("Up", xinput.Buttons[0].Label);
 		Assert.Equal("L1", xinput.Buttons[8].Label);
@@ -794,7 +1159,7 @@ public class ControllerSheetPadTests
 	[AvaloniaFact]
 	public void An_xinput_pad_lights_the_core_buttons_an_xinput_pad_reports()
 	{
-		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.XInput };
+		GamepadTestItem pad = new(0) { Backend = GamepadBackend.XInput };
 		pad.Buttons[0].IsPressed = true; //D-pad Up on XInput
 		Assert.False(Lit(pad, SetupButton.A));
 		Assert.True(Lit(pad, SetupButton.Up));
@@ -811,7 +1176,7 @@ public class ControllerSheetPadTests
 	[AvaloniaFact]
 	public void An_evdev_pad_lights_the_core_buttons_an_evdev_pad_reports()
 	{
-		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.Evdev };
+		GamepadTestItem pad = new(0) { Backend = GamepadBackend.Evdev };
 		pad.Buttons[0].IsPressed = true; //BTN_A
 		pad.Buttons[1].IsPressed = true; //BTN_B
 		Assert.True(Lit(pad, SetupButton.A));
@@ -842,7 +1207,7 @@ public class ControllerSheetPadTests
 		//The header's side: each row lights exactly the key it names, from a pad
 		//that reports only that bit.
 		foreach(var row in core) {
-			GamepadTestItem pad = new(0) { BackendKind = row.Key.Backend };
+			GamepadTestItem pad = new(0) { Backend = row.Key.Backend };
 			pad.Buttons[row.Value].IsPressed = true;
 			foreach(SetupButton key in ControllerLivePad.Keys) {
 				Assert.Equal(key == row.Key.Key, Lit(pad, key));
@@ -915,7 +1280,7 @@ public class ControllerSheetPadTests
 	[AvaloniaFact]
 	public void A_key_lights_only_from_its_own_button()
 	{
-		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.GameController };
+		GamepadTestItem pad = new(0) { Backend = GamepadBackend.GameController };
 		pad.Buttons[ControllerLivePad.BitOf(SetupButton.B, GamepadBackend.GameController)!.Value].IsPressed = true;
 
 		ControllerPadLight[] keys = ControllerLivePad.Keys.Select(b => new ControllerPadLight(b)).ToArray();

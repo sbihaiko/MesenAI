@@ -66,8 +66,8 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void TestForceFeedback(UInt32 index, UInt16 magnitudeRight, UInt16 magnitudeLeft);
 	}
 
-	//GamepadBackend lives in InteropEnums.cs (dual-compiled into the host-free
-	//UI.Tests) because the Controller sheet's UI/Logic rule names it.
+	//GamepadBackend lives in InteropEnums.cs (host-free, dual-compiled into
+	//UI.Tests) so UI/Logic's pad-family rules can name it without this bridge.
 	[StructLayout(LayoutKind.Sequential)]
 	public struct GamepadInfo
 	{

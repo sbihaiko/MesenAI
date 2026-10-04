@@ -40,7 +40,7 @@ namespace Mesen.ViewModels
 		//this pad has no counterpart for, leaves the key dark instead of throwing.
 		public void Follow(GamepadTestItem? pad)
 		{
-			int? bit = ControllerLivePad.BitOf(Button, pad?.BackendKind ?? GamepadBackend.None);
+			int? bit = ControllerLivePad.BitOf(Button, pad?.Backend ?? GamepadBackend.None);
 			IsLit = pad != null && bit is int index && index < pad.Buttons.Count && pad.Buttons[index].IsPressed;
 		}
 	}

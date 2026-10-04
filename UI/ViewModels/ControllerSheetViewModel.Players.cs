@@ -17,6 +17,7 @@ namespace Mesen.ViewModels
 	{
 		public int PortIndex { get; }
 		public string Label { get; }
+		public int ColorIndex { get; }
 		public string DeviceName { get; }
 		public bool HasDevice { get; }
 		public IBrush Color { get; }
@@ -25,6 +26,7 @@ namespace Mesen.ViewModels
 		{
 			PortIndex = portIndex;
 			Label = label;
+			ColorIndex = colorIndex;
 			DeviceName = deviceName;
 			HasDevice = hasDevice;
 			Color = ControllerSheetViewModel.PlayerBrush(colorIndex);
@@ -35,7 +37,13 @@ namespace Mesen.ViewModels
 	//One row per port, naming the device whose keys are under it; assignment
 	//moves a device's keys from one port's slots to another's through the same
 	//ConfigManager path and the same ApplyConfig() call the classic Input page
-	//uses, so the two surfaces cannot disagree about which slot a pad is in.
+	//uses. The two surfaces agree about which slot a pad is in by construction,
+	//not by a test that drives the classic page: both read and write the same
+	//KeyMapping objects inside ConfigManager.Config, and the free-slot rule here
+	//is the one W-P15's HasKeys applies (KeyMapping.ToInterop, which includes the
+	//port type's custom keys). The one test that would catch a drift - a slot
+	//bound only by custom keys - is
+	//PlayerControllerSheetTests.A_slot_that_binds_only_custom_keys_is_not_free.
 	//
 	//A device index is a *connection ordering*, not an identity (ADR-0255
 	//Consequences): a pad unplugged and plugged back can return under another
@@ -72,7 +80,23 @@ namespace Mesen.ViewModels
 
 		internal static IBrush PlayerBrush(int colorIndex) => _playerBrushes[Math.Clamp(colorIndex, 0, _playerBrushes.Length - 1)];
 
-		partial void OnSelectedPadIndexChanged(int value) => ApplyPad();
+		//The rows the sheet last showed. Kept so a 60 Hz read that finds nothing
+		//new does not replace the observable list (which would rebuild every row
+		//on screen each tick); it is a comparison against what the ports say now,
+		//never a cache, so a config change made elsewhere still surfaces.
+		private IReadOnlyList<ControllerSheetPlayerRow> _lastPlayers = Array.Empty<ControllerSheetPlayerRow>();
+
+		partial void OnSelectedPadIndexChanged(int value)
+		{
+			//The note names the pad it was written about (ControllerSheetNotBound /
+			//ControllerSheetAssigned take pad.Name). The picker moving to another pad
+			//is where it stops being true, and the rows do not move with the picker -
+			//so the note goes here, not only when RefreshPlayers sees a row change.
+			//(AssignTo writes a fresh note after its own refresh, so this cannot
+			//clear what it just said.)
+			AssignNote = "";
+			ApplyPad();
+		}
 
 		//The ports of the loaded console, read from ConfigManager as the sheet's
 		//own plain data. Nothing about "who is P1" is stored: the row's device is
@@ -86,10 +110,16 @@ namespace Mesen.ViewModels
 					continue;
 				}
 				ushort[][] slots = {
-					SlotKeys(config.Mapping1), SlotKeys(config.Mapping2),
-					SlotKeys(config.Mapping3), SlotKeys(config.Mapping4)
+					SlotKeys(config, 0).All, SlotKeys(config, 1).All,
+					SlotKeys(config, 2).All, SlotKeys(config, 3).All
 				};
-				ports.Add(new SheetPort(key, ResourceHelper.GetMessage("ControllerSheetPlayer", player), player - 1, slots));
+				//The keyboard line's own input: the fixed fields alone, never the
+				//port type's custom keys (SheetPort explains the split).
+				ushort[][] keyboardSlots = {
+					SlotKeys(config, 0).Fixed, SlotKeys(config, 1).Fixed,
+					SlotKeys(config, 2).Fixed, SlotKeys(config, 3).Fixed
+				};
+				ports.Add(new SheetPort(key, ResourceHelper.GetMessage("ControllerSheetPlayer", player), player - 1, slots, keyboardSlots));
 			}
 			return ports;
 		}
@@ -104,15 +134,29 @@ namespace Mesen.ViewModels
 			_ => null
 		};
 
-		//A slot's keys, in KeyMapping's own field order, with the unbound (zero)
-		//fields dropped - so a slot that binds nothing is the empty array the
-		//host-free rule reads as free. A slot that binds custom keys only (a
-		//Zapper's mouse clicks, a keyboard device) reads as free here; this sheet
-		//assigns player pads, and none of those bind custom keys.
-		private static ushort[] SlotKeys(KeyMapping m) => new[] {
-			m.A, m.B, m.X, m.Y, m.L, m.R, m.Up, m.Down, m.Left, m.Right, m.Start, m.Select, m.U, m.D,
-			m.TurboA, m.TurboB, m.TurboX, m.TurboY, m.TurboL, m.TurboR, m.TurboSelect, m.TurboStart, m.GenericKey1
-		}.Where(key => key != 0).ToArray();
+		//A slot's keys, read the way the classic Input page and W-P15 read them:
+		//through KeyMapping.ToInterop, so the port type's custom keys (a Zapper's
+		//clicks, a keyboard's rows) are included and a slot that binds only those is
+		//not read as free. All is every bound key - what the free-slot rule and the
+		//device match read; Fixed is the fixed KeyMapping fields alone - what the
+		//keyboard line reads, since a port type's custom keys are that device's
+		//buttons, not the keyboard's. The unbound (zero) fields are dropped, so a
+		//slot that binds nothing is the empty array the host-free rules read as
+		//free. This is the same rule W-P15's HasKeys applies; the two surfaces must
+		//not disagree about which slot a pad is in (ADR-0255 Consequences).
+		private static (ushort[] All, ushort[] Fixed) SlotKeys(ControllerConfig config, int index)
+		{
+			InteropKeyMapping k = Slot(config, index).ToInterop(config.Type, index);
+			ushort[] fixedKeys = {
+				k.A, k.B, k.X, k.Y, k.L, k.R, k.Up, k.Down, k.Left, k.Right, k.Start, k.Select, k.U, k.D,
+				k.TurboA, k.TurboB, k.TurboX, k.TurboY, k.TurboL, k.TurboR, k.TurboSelect, k.TurboStart, k.GenericKey1
+			};
+			List<ushort> all = new(fixedKeys);
+			if(k.CustomKeys != null) {
+				all.AddRange(k.CustomKeys);
+			}
+			return (all.Where(key => key != 0).ToArray(), fixedKeys.Where(key => key != 0).ToArray());
+		}
 
 		//The rows, and which of the sheet's sections a state shows. Appears with
 		//more than one pad: with none the keyboard plays, and with one there is
@@ -126,17 +170,45 @@ namespace Mesen.ViewModels
 				int? device = ControllerSheetPorts.PortDevice(ports[i]);
 				rows.Add(new ControllerSheetPlayerRow(i, ports[i].Label, ports[i].ColorIndex, DeviceLabel(device), device != null));
 			}
-			Players = rows;
+			if(!SameRows(_lastPlayers, rows)) {
+				//The rows changed under the note (a pad plugged in or taken out, a
+				//binding made on another surface): what the note said is no longer
+				//true, so it goes.
+				AssignNote = "";
+				_lastPlayers = rows;
+				Players = rows;
+			}
 			ShowPadPicker = Tester.Gamepads.Count > 1;
 			ShowPlayers = Tester.Gamepads.Count > 1 && ports.Count > 1;
 			RefreshKeyboard(ports);
+		}
+
+		//Whether two readings of the rows are the same shown surface. Value
+		//comparison, not reference: it is what lets an unchanged read keep the list
+		//without rebuilding it, while any real change still gets through.
+		private static bool SameRows(IReadOnlyList<ControllerSheetPlayerRow> a, IReadOnlyList<ControllerSheetPlayerRow> b)
+		{
+			if(a.Count != b.Count) {
+				return false;
+			}
+			for(int i = 0; i < a.Count; i++) {
+				if(a[i].PortIndex != b[i].PortIndex || a[i].Label != b[i].Label || a[i].ColorIndex != b[i].ColorIndex
+					|| a[i].DeviceName != b[i].DeviceName || a[i].HasDevice != b[i].HasDevice) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		private void RefreshKeyboard(IReadOnlyList<SheetPort> ports)
 		{
 			IReadOnlyList<ushort> keys = ControllerSheetKeyboard.Keys(ports);
 			ShowKeyboard = Tester.Gamepads.Count == 0;
-			CanRestoreKeyboard = ShowKeyboard && ControllerSheetKeyboard.NothingBound(ports);
+			//The button asks Configuration's own guard - the exact predicate
+			//RestoreKeyboardPresetIfNothingIsBound uses - so it is never offered where
+			//the click would be a silent no-op, and the guard is never weakened to
+			//match a weaker gate (ADR-0255).
+			CanRestoreKeyboard = ShowKeyboard && ConfigManager.Config.CanRestoreKeyboardPreset();
 			if(keys.Count == 0) {
 				KeyboardText = ResourceHelper.GetMessage("ControllerSheetKeyboardNothing");
 			} else {
@@ -144,53 +216,68 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//Which device is under a port, as a name: the connected pad's own name
-		//when it is still connected, else its place in the connection order. The
-		//latter is why the row is not a stable identity (ADR-0255 slice 5).
-		private string DeviceLabel(int? device)
+		//Which device is under a port, as a name: the connected pad's own name when
+		//it is still connected, else its place in the connection order. The pad is
+		//found by the same block its keys carry - its backend's family plus its
+		//family-relative slot - never by the host's enumeration ordinal, which is not
+		//the same numbering on Windows (#813). The latter fallback is why the row is
+		//not a stable identity (ADR-0255 slice 5).
+		private string DeviceLabel(int? deviceBlock)
 		{
-			if(device is not int index) {
+			if(deviceBlock is not int block) {
 				return ResourceHelper.GetMessage("ControllerSheetNoDevice");
 			}
-			GamepadTestItem? pad = Tester.Gamepads.FirstOrDefault(g => g.Index == index);
-			return pad?.Name ?? ResourceHelper.GetMessage("ControllerSheetUnnamedDevice", index + 1);
+			GamepadTestItem? pad = Tester.Gamepads.FirstOrDefault(g => ControllerDevices.PadBlock(g.Backend, (int)g.Slot) == block);
+			if(pad != null) {
+				return pad.Name;
+			}
+			//No connected pad owns this block: name the device by its offset from the
+			//base family. A DirectInput pad on Windows would number from 0x2000 and so
+			//read high here, but such a pad is connected and named above; this is only
+			//the "keys are here but the pad is gone" line.
+			return ResourceHelper.GetMessage("ControllerSheetUnnamedDevice", ((block - ControllerDevices.BaseGamepadIndex) >> 8) + 1);
 		}
 
-		//The assignment: move the selected pad's keys to the chosen port, through
-		//the same ConfigManager path and ApplyConfig() call the classic Input
-		//page uses. The keys live under the port, so there is nothing else to
-		//update - no second table of "who is P1" to keep in step.
+		//The assignment: move every slot the selected pad's keys live in to the chosen
+		//port, through the same ConfigManager path and ApplyConfig() call the classic
+		//Input page uses. All of the device's slots move together, so a pad bound in
+		//two slots cannot end up in two ports at once. The keys live under the port,
+		//so there is nothing else to update - no second table of "who is P1".
 		public void AssignTo(int portIndex)
 		{
 			IReadOnlyList<SheetPort> ports = BuildPorts();
 			if(Pad is not GamepadTestItem pad || portIndex < 0 || portIndex >= ports.Count) {
 				return;
 			}
-			PortMove plan = ControllerSheetPorts.PlanMove(ports, (int)pad.Index, portIndex);
-			AssignNote = plan.Outcome switch {
+			int device = ControllerDevices.PadBlock(pad.Backend, (int)pad.Slot);
+			PortMove plan = ControllerSheetPorts.PlanMove(ports, device, portIndex);
+			string note = plan.Outcome switch {
 				PortMoveOutcome.Moved => ResourceHelper.GetMessage("ControllerSheetAssigned", pad.Name, ports[portIndex].Label),
 				PortMoveOutcome.NotBound => ResourceHelper.GetMessage("ControllerSheetNotBound", pad.Name),
 				PortMoveOutcome.NoFreeSlot => ResourceHelper.GetMessage("ControllerSheetNoSlot"),
 				_ => ""
 			};
-			if(!plan.Moves) {
-				return;
+			if(plan.Moves) {
+				ConsoleType console = CurrentConsole();
+				if(PortConfig(console, ports[portIndex].Key) is ControllerConfig target) {
+					foreach(SlotMove move in plan.Slots) {
+						if(PortConfig(console, ports[move.SourcePort].Key) is not ControllerConfig source) {
+							continue;
+						}
+						CopySlot(Slot(source, move.SourceSlot), Slot(target, move.TargetSlot));
+						ClearSlot(Slot(source, move.SourceSlot));
+					}
+					//The same tail the classic Input page and W-P15 use: push the config
+					//to the core, then persist it.
+					ConfigManager.Config.ApplyConfig();
+					ConfigManager.Config.Save();
+				}
 			}
-
-			ConsoleType console = CurrentConsole();
-			if(PortConfig(console, ports[portIndex].Key) is not ControllerConfig target
-				|| PortConfig(console, ports[plan.SourcePort].Key) is not ControllerConfig source) {
-				return;
-			}
-			KeyMapping from = Slot(source, plan.SourceSlot);
-			KeyMapping to = Slot(target, plan.TargetSlot);
-			CopySlot(from, to);
-			ClearSlot(from);
-			//The same tail the classic Input page and W-P15 use: push the config
-			//to the core, then persist it.
-			ConfigManager.Config.ApplyConfig();
-			ConfigManager.Config.Save();
+			//Refresh first - RefreshPlayers clears a stale note when the rows change,
+			//and the move just made is exactly that change - then set the note for the
+			//state the refresh landed on.
 			RefreshPlayers();
+			AssignNote = note;
 		}
 
 		//The keyboard case's action: write the default keyboard (and pad) preset
