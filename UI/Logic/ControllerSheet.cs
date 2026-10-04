@@ -123,3 +123,154 @@ public static class ControllerSheetReads
 	//keep the stricter rule above; this only decides whether a tick happens at all.
 	public static bool Polls(bool sheetVisible) => sheetVisible;
 }
+
+//ADR-0255 slice 2 (W-P17 PLAYERS): a player port as the sheet sees it. The
+//port is a ControllerConfig (Port1, Port2, Controller) - never a mapping slot:
+//Mapping1..4 are alternatives within one port, and reading them as four ports
+//is the mistake the ADR records under "The answers, against the code". Slots
+//are the port's four KeyMapping slots, each the key codes it binds (empty =
+//free); the sheet reads a pad's device off the key codes, which is where the
+//device a mapping speaks for lives (ControllerDevices.BaseGamepadIndex).
+public sealed record SheetPort(string Key, string Label, int ColorIndex, IReadOnlyList<ushort[]> Slots);
+
+public enum PortMoveOutcome
+{
+	Moved,
+	//The device's keys are already under the target port.
+	AlreadyThere,
+	//The target's four slots are all taken: refused rather than overwritten.
+	NoFreeSlot,
+	//No mapping holds this device's keys: there is nothing to move.
+	NotBound
+}
+
+//The plan for "put this device on that port". A move is a whole slot (a slot is
+//one pad's binding), so the plan names where the keys go and where they come
+//from; SourcePort -1 when they are nowhere.
+public sealed record PortMove(PortMoveOutcome Outcome, int TargetSlot, int SourcePort, int SourceSlot)
+{
+	public bool Moves => Outcome == PortMoveOutcome.Moved;
+}
+
+public static class ControllerSheetPorts
+{
+	//The player ports of the loaded console, in the players' order. The console
+	//decides - a fixed list would be a second table of "who is P1" (ADR-0250).
+	public static IReadOnlyList<(string Key, int Player)> For(ConsoleType type)
+	{
+		return type switch {
+			ConsoleType.Nes => new[] { ("Port1", 1), ("Port2", 2) },
+			ConsoleType.Sms => new[] { ("Port1", 1), ("Port2", 2) },
+			ConsoleType.Gameboy => new[] { ("Controller", 1) },
+			ConsoleType.Gba => new[] { ("Controller", 1) },
+			_ => System.Array.Empty<(string, int)>()
+		};
+	}
+
+	//The one gamepad device a slot's keys belong to, or null when the slot is
+	//empty, binds keyboard keys only, or names two pads (which is not an
+	//assignment this sheet made, so it reads as no device rather than a guess).
+	public static int? SlotDevice(ushort[] slot)
+	{
+		int? device = null;
+		foreach(ushort key in slot) {
+			if(ControllerDevices.DeviceOf(key) is not int found) {
+				continue;
+			}
+			if(device is int existing && existing != found) {
+				return null;
+			}
+			device = found;
+		}
+		return device;
+	}
+
+	//The device whose keys live under a port: the device of its first slot that
+	//names one.
+	public static int? PortDevice(SheetPort port)
+	{
+		foreach(ushort[] slot in port.Slots) {
+			if(SlotDevice(slot) is int device) {
+				return device;
+			}
+		}
+		return null;
+	}
+
+	//The first slot that binds nothing, or null when all four are taken.
+	public static int? FreeSlot(SheetPort port)
+	{
+		for(int i = 0; i < port.Slots.Count; i++) {
+			if(port.Slots[i].Length == 0) {
+				return i;
+			}
+		}
+		return null;
+	}
+
+	//"Put this device on that port": which slot of the target receives the keys
+	//and which slot they are moved out of. The move refuses rather than
+	//overwriting a slot the user (or a preset) already bound, and refuses a pad
+	//nothing has bound yet - there would be no keys to move.
+	public static PortMove PlanMove(IReadOnlyList<SheetPort> ports, int device, int targetPort)
+	{
+		SheetPort target = ports[targetPort];
+		if(PortDevice(target) == device) {
+			return new(PortMoveOutcome.AlreadyThere, -1, -1, -1);
+		}
+		for(int port = 0; port < ports.Count; port++) {
+			for(int slot = 0; slot < ports[port].Slots.Count; slot++) {
+				if(SlotDevice(ports[port].Slots[slot]) != device) {
+					continue;
+				}
+				return FreeSlot(target) is int free
+					? new PortMove(PortMoveOutcome.Moved, free, port, slot)
+					: new PortMove(PortMoveOutcome.NoFreeSlot, -1, -1, -1);
+			}
+		}
+		return new(PortMoveOutcome.NotBound, -1, -1, -1);
+	}
+}
+
+//ADR-0255 slice 2, the keyboard case's read side: with no pad connected the
+//sheet says what the keyboard does. Both read the same ports.
+public static class ControllerSheetKeyboard
+{
+	//The keyboard keys the player's port binds - every key that is not a
+	//gamepad's - in slot then field order, distinct. The keyboard plays as
+	//player 1, so this is the first port that binds any; a keyboard bound to a
+	//player no pad is on is still the player's. The ViewModel names the codes
+	//(InputApi.GetKeyName); the rule here is which codes count.
+	public static IReadOnlyList<ushort> Keys(IReadOnlyList<SheetPort> ports)
+	{
+		foreach(SheetPort port in ports) {
+			List<ushort> keys = new();
+			foreach(ushort[] slot in port.Slots) {
+				foreach(ushort key in slot) {
+					if(key != 0 && ControllerDevices.DeviceOf(key) == null && !keys.Contains(key)) {
+						keys.Add(key);
+					}
+				}
+			}
+			if(keys.Count > 0) {
+				return keys;
+			}
+		}
+		return System.Array.Empty<ushort>();
+	}
+
+	//Whether every slot of every port binds nothing - the state in which the
+	//preset can be written back without overwriting a binding the player made
+	//(the condition Configuration.RestoreKeyboardPresetIfNothingIsBound guards).
+	public static bool NothingBound(IReadOnlyList<SheetPort> ports)
+	{
+		foreach(SheetPort port in ports) {
+			foreach(ushort[] slot in port.Slots) {
+				if(slot.Length > 0) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+}

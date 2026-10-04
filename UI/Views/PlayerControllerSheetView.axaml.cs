@@ -28,5 +28,23 @@ namespace Mesen.Views
 		private void OnDone(object? sender, RoutedEventArgs e) => DoneRequested?.Invoke(this, EventArgs.Empty);
 
 		private void OnMoreInOptions(object? sender, RoutedEventArgs e) => MoreInOptionsRequested?.Invoke(this, EventArgs.Empty);
+
+		//ADR-0255 slice 2: a PLAYERS row assigns the pad the picker has selected
+		//to that row's port. The row carries its port index in its DataContext.
+		private void OnAssignPlayer(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: ViewModels.ControllerSheetPlayerRow row } && DataContext is ViewModels.ControllerSheetViewModel sheet) {
+				sheet.AssignTo(row.PortIndex);
+			}
+		}
+
+		//The keyboard case's action: write the preset back (the ViewModel keeps
+		//the guard - it only shows this button when nothing is bound).
+		private void OnRestoreKeyboard(object? sender, RoutedEventArgs e)
+		{
+			if(DataContext is ViewModels.ControllerSheetViewModel sheet) {
+				sheet.RestoreKeyboardPreset();
+			}
+		}
 	}
 }

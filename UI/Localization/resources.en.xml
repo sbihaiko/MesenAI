@@ -251,7 +251,11 @@
 			<Control ID="lblControllerSheetNoPad">No controller connected. Plug one in — a new one offers to set itself up.</Control>
 			<Control ID="lblControllerSheetLeftStick">Left stick</Control>
 			<Control ID="lblControllerSheetRightStick">Right stick</Control>
-			<Control ID="lblControllerSheetComing">Remapping a controller and giving one to each player are coming; the full Options page stays one link away.</Control>
+			<Control ID="lblControllerSheetPlayers">PLAYERS</Control>
+			<Control ID="lblControllerSheetPlayersHint">Pick a controller above, then tap the player it should play as.</Control>
+			<Control ID="lblControllerSheetKeyboard">KEYBOARD</Control>
+			<Control ID="btnControllerSheetKeyboardRestore">Use the keyboard preset</Control>
+			<Control ID="lblControllerSheetComing">Remapping a controller is coming; the full Options page stays one link away.</Control>
 			<Control ID="btnControllerSheetMoreInOptions">More in Options…</Control>
 			<Control ID="btnControllerSheetDone">Done</Control>
 		</Form>
@@ -2153,7 +2157,14 @@
 		<Message ID="PlayerControllersNone">No controller connected</Message>
 		<Message ID="PlayerControllersOne">1 controller connected</Message>
 		<Message ID="PlayerControllersMany">{0} controllers connected</Message>
-		<Message ID="ControllerSheetMorePads">Showing the first of {0} connected controllers.</Message>
+		<Message ID="ControllerSheetPlayer">Player {0}</Message>
+		<Message ID="ControllerSheetNoDevice">No controller</Message>
+		<Message ID="ControllerSheetUnnamedDevice">Controller {0}</Message>
+		<Message ID="ControllerSheetAssigned">{0} now plays as {1}.</Message>
+		<Message ID="ControllerSheetNotBound">{0} has no keys bound yet — set it up first.</Message>
+		<Message ID="ControllerSheetNoSlot">That player has no free mapping slot.</Message>
+		<Message ID="ControllerSheetKeyboardPlays">The keyboard plays: {0}.</Message>
+		<Message ID="ControllerSheetKeyboardNothing">No controller connected, and no keyboard keys are bound.</Message>
 		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>
