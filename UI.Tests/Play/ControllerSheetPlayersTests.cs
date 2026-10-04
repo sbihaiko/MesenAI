@@ -234,6 +234,29 @@ namespace Mesen.Tests.Play
 			Assert.Empty(move.Slots);
 		}
 
+		//The read/plan half of the assignment the write side must agree with: a pad
+		//whose keys live ONLY in the port type's own custom-button array is still
+		//that device's keys, so the plan must move it out of that slot. PlanMove
+		//already reads the custom keys (Slots carries them). The write half - which
+		//used to copy only the fixed KeyMapping fields and leave the custom keys
+		//behind - is pinned where Mesen.Config exists:
+		//UI.HeadlessTests/ControllerSheetPadKeyMoveTests.
+		[Fact]
+		public void A_device_bound_only_by_a_ports_custom_keys_is_planned_as_a_move()
+		{
+			//Not a keyboard key: a pad's button stored in the port type's custom array.
+			SheetPort p1 = PortWithCustomKeys("Port1", 1, all: new ushort[] { PadKey(1, 0) }, keyboard: System.Array.Empty<ushort>());
+			SheetPort p2 = Port("Port2", 2);
+
+			PortMove move = ControllerSheetPorts.PlanMove(new[] { p1, p2 }, 0x1100, 1);
+
+			Assert.Equal(PortMoveOutcome.Moved, move.Outcome);
+			SlotMove slot = Assert.Single(move.Slots);
+			Assert.Equal(0, slot.SourcePort);
+			Assert.Equal(0, slot.SourceSlot);
+			Assert.Equal(0, slot.TargetSlot);
+		}
+
 		//What the keyboard does, read off the same ports: the keys that are not a
 		//gamepad's, in slot order.
 		[Fact]
