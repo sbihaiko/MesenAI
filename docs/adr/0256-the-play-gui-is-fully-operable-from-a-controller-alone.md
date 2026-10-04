@@ -5,10 +5,19 @@
   accepted the ADR and asked for the work later the same day, quoted verbatim:
   **"espera a review e mergeia os três. depois que estiver no main pode
   implementar tudo em paralelo usando workflows"**. So this is a request for the
-  work listed under Decision - the decision is made and **nothing implements it
-  yet**; the first landing is the Controller sheet (ADR-0255), which this ADR's
-  Consequences already names as the cheaper order. Ids are never reused
-  (ADR-0035), which is why this is 0256 and not 0255.
+  work listed under Decision - the decision is made, and at the time of writing
+  **nothing implemented it**; the first landing is the Controller sheet
+  (ADR-0255), which this ADR's Consequences already names as the cheaper order.
+  Ids are never reused (ADR-0035), which is why this is 0256 and not 0255.
+  **Partly implemented 2026-10-04**, the same day: Decision 5's chord rule on
+  any pad (#802, `Core/Shared/ShortcutKeyRules.h`), Decisions 2-4's host-free
+  rules (`UI/Logic/PlayPadNavigation.cs`, `PadNavControls.cs`, `PadInHand.cs`,
+  pinned by `UI.Tests/Play/PadNavigationTests.cs`) and Decision 6's footer
+  vocabulary (`PlayMenuHint.ResumeHint`). Those rules are **rules only** - the
+  bridge that hands them the app's pad state is not wired, so the pad still does
+  not move the GUI's focus. **Not implemented**: the bridge, Decision 3's
+  single focus owner, Decision 7's repeat in the running app, and Decision 8's
+  first run.
   **Amended 2026-10-04**, the same day, after the work started: four more
   questions were put to the user and answered — the focus mechanism (Decision
   7's paragraph: the focus engine, not synthetic key events), what "one
@@ -138,6 +147,32 @@ heading are answered by them and by the section after.**
    (`DefaultKeyMappingType.Xbox` or `Ps4`), so "back" is B on one desk and ○ on
    another, and the footer has to say which.
 
+   **What the bridge that feeds this line has to satisfy** (found in review,
+   2026-10-04, before it was wired - the rule is landed as
+   `PlayMenuHint.ResumeHint` and the seam that answers which device is in hand
+   is not):
+   - **The line follows the resolution, not the family.** A family alone can
+     name a control the pad cannot press: `PadNavControls.Resolve` answers
+     `null` for a device index it cannot resolve and for a backend that spells
+     no such button - a Windows DirectInput joystick, which is #804's case - and
+     a footer reading "B to resume" over a dead D-pad is the same lie as "Esc to
+     resume" on a cabinet. If the mapping did not resolve, the line is the
+     neutral one.
+   - **It is recomputed when the device in hand changes, not only when the
+     overlay opens.** Today the line is read on open, which is enough while
+     nothing answers the seam; wiring the seam without also refreshing on the
+     change leaves the old control named after the player picks up the other
+     pad.
+   - **The device tracker must not be wired before back actually works.** With
+     the tracker live and Decision 2's back unshipped, the footer would name the
+     pad's circle while the only working way out is still ADR-0251's chord -
+     a correct-looking instruction pointing at an inert button. The bridge
+     lands both together.
+   - **The control is named in words, not as a glyph.** W-P4's Resume button
+     already draws its play mark rather than putting one in the string, because
+     the Player theme's font is the bundled Inter and a symbol depends on
+     fallback. The footer says "Circle", not U+25CB, for the same reason.
+
 7. **A held D-pad repeats** (decided with the user, 2026-10-04). The Core's
    shortcut thread only re-emits a key when the set of pressed keys *changes*,
    so a held direction produces one event and nothing else. A menu cursor needs
@@ -218,3 +253,23 @@ All on 2026-10-04, by the user, quoted verbatim from the questions they answered
 - This ADR does not cover the pad's *way in* being discoverable; ADR-0251 owns
   that, and the count it keeps (`PlayMenuHintsShown`) is per install, not per
   pad.
+- **Two mechanisms already in the tree move focus without going through this
+  ADR's rules, and neither is named in the Decision (found 2026-10-04, before
+  the bridge landed).** They are the reason the bridge is not merely additive:
+  - `XYFocus.NavigationModes="Enabled"` is set on some nineteen Play surfaces
+    (`UI/Windows/MainWindow.axaml`'s overlay and sheets, every `UI/Views/Play*`
+    sheet, `PlayHomeView.axaml`, `SetupWizardWindow.axaml`). That is a
+    directional-focus mechanism the ADR never decided on and does not mention
+    as prior art; it is neither the focus engine named above nor a thing this
+    ADR forbids, and the bridge has to coexist with it rather than assume it is
+    absent.
+  - `UI/Controls/StateGrid.axaml.cs`'s `TimerInput_Tick` is per-view navigation
+    code of exactly the shape the non-goals forbid: it polls
+    `InputApi.GetPressedKeys`, walks the recent-games grid using **player 1's
+    own console mappings** off `Nes.Port1` and friends, keeps its own
+    de-duplication set, and never repeats. Decision 4 says navigation is not
+    rebindable and follows the pad's preset; this follows whatever the player
+    bound to the console, so a player who moves their D-pad loses grid
+    navigation, and a second pad cannot drive it at all. The grid is reachable
+    from W-P4, so the stop rule covers it; folding it into the bridge is part of
+    this ADR's work, not a follow-up.

@@ -7,8 +7,15 @@
   **"Sim, com um limiar"** (whether an axis can carry a digital action). One of
   the three does not survive contact with the code as stated; see "The answers,
   against the code" below, which is the part of this ADR that matters. The
-  sheet itself is **not implemented** yet - the slices are listed under
-  Decision.
+  sheet itself is **not implemented** - the slices are listed under Decision.
+  Slice 4's storage half and "the keyboard case" have since landed
+  (2026-10-04): `ShortcutKeyInfo.PadBinding`, `PadShortcutBinding`,
+  `PadAxisAction` and their readers in `EmulatorShortcut`/`PreferencesConfig`,
+  plus `Configuration.RestoreKeyboardPresetIfNothingIsBound` with
+  `UI.HeadlessTests/KeyboardPresetRecoveryTests`. Slice 4's **surface** has not
+  - nothing in the app writes a `PadBinding`, and `PreferencesConfig` drops an
+  axis binding before the core push (`!pad.IsAxis`), so a player-set threshold
+  can be stored but cannot fire.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the
   Esc router and W-P15 - the setup sheet this one sits beside), ADR-0250 (one
@@ -220,3 +227,16 @@ anywhere, because a config whose keys the player bound by hand is theirs.
   light where it has one (DualShock 4/DualSense via `GCController.light`; `nil`
   on an Xbox pad, which is not an error state), and nowhere else. Colour that
   appears once is decoration, not language.
+- **The pad's own light is the one promise above with no owner, and it is
+  recorded here rather than silently dropped (2026-10-04).** No slice carries
+  it, and it cannot be built from what exists: `GamepadInfo`
+  (`Core/Shared/Interfaces/IKeyManager.h`) has no light field, nothing in `Core/`
+  or `UI/` reads or writes one, and the only way to make a DualShock's light
+  follow a player colour is a new output path - a core call the macOS key
+  manager implements through the GameController framework, a no-op on Windows
+  and Linux, whose pads have no addressable light at all. That is new
+  cross-backend work with no headless test behind it and no pad carrying an
+  addressable light in this environment, which is why it is named here instead
+  of guessed at. Until it exists, the colour language this ADR asks for is the
+  port label alone - and by this ADR's own test ("colour that appears once is
+  decoration") that is a weaker language than the one it specifies.
