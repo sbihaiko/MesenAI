@@ -8,6 +8,10 @@ namespace Mesen.Logic;
 //controller opens it. The bar stays a pause-only surface; this rule decides
 //whether a game start shows the hint, which binding it names, and the
 //default controller binding for ToggleOverlay.
+//
+//ADR-0256 Decision 6 ("Segue o controle na mão"): the same vocabulary names the
+//control in W-P4's own footer, which is the way *out* of the menu rather than
+//the way in.
 public enum PlayInputDevice
 {
 	Keyboard,
@@ -17,6 +21,11 @@ public enum PlayInputDevice
 //One DisplayMessage call (title key, message key, %1 parameter). ShowsHint
 //says whether the toast spends one of the PlayMenuHintsShown starts.
 public sealed record PlayEntryToast(string Title, string Message, string Param, bool ShowsHint);
+
+//W-P4's footer line: the resource message to format and the control's name to
+//put in it (empty for the neutral line, which names no control). Same shape as
+//PlayEntryToast - the copy lives in resources, the decision lives here.
+public sealed record PlayResumeHint(string Message, string Param);
 
 public static class PlayMenuHint
 {
@@ -103,6 +112,29 @@ public static class PlayMenuHint
 		}
 		IReadOnlyList<string>? chosen = device == PlayInputDevice.Controller ? controller ?? keyboard : keyboard ?? controller;
 		return chosen == null ? null : string.Join("+", chosen.Select(ShortKeyName));
+	}
+
+	//W-P4's footer names the control the player actually presses to leave the
+	//menu: Esc from the keyboard (fixed, Decision 4), the pad's own back button
+	//from a pad - B on an Xbox pad, ○ on a DualShock.
+	//
+	//A pad whose family the app cannot tell names *no* control: a guess would
+	//point the player at a button their pad may not have, which is the same
+	//reason Decision 4 refuses to let navigation be rebound.
+	//
+	//The label is the one printed on the plastic, not the host's key name:
+	//PadNavControls.Controls holds the codes the config binds ("But3" for the
+	//DualShock's circle), and no player reads "But3" off their pad.
+	public static PlayResumeHint ResumeHint(PlayInputDevice device, PadFamily? family)
+	{
+		string? control = device == PlayInputDevice.Keyboard ? "Esc" : family switch {
+			PadFamily.Xbox => "B",
+			PadFamily.Ps4 => "○",
+			_ => null
+		};
+		return control == null
+			? new PlayResumeHint("OverlayResumeHintNeutral", "")
+			: new PlayResumeHint("OverlayResumeHint", control);
 	}
 
 	//keyExists: does the platform's key manager define this key name.

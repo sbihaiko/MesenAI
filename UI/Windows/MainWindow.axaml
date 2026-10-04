@@ -282,8 +282,10 @@
 						<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
 						<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
 						<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
-						PlaySheetsContrastTests' 4.5:1.-->
-						<TextBlock Classes="footnote secondary" Text="{l:Translate lblOverlayEscHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
+						PlaySheetsContrastTests' 4.5:1. ADR-0256 Decision 6: the control
+						named is the one in the player's hand, so the line is computed
+						(MainWindowViewModel.PauseOverlay), not a fixed string.-->
+						<TextBlock Name="OverlayResumeHint" Classes="footnote secondary" Text="{Binding OverlayResumeHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
 					</StackPanel>
 					</ScrollViewer>
 				</Border>

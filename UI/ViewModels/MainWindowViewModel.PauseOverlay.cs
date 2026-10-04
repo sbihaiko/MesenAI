@@ -25,6 +25,20 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PackSummary { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsSummary { get; private set; } = "";
 
+		//ADR-0256 Decision 6 ("Segue o controle na mão"): W-P4's footer names the
+		//control in the player's hand, not the keyboard's Esc.
+		[ObservableProperty] public partial string OverlayResumeHint { get; private set; } = "";
+
+		//Which device the player is holding: the pad's family, or null for the
+		//keyboard and for a pad the app cannot tell apart (the two the footer must
+		//not guess between - ADR-0256 Decision 4's reason). The pad navigation
+		//bridge (ADR-0256 Decision 2, next to ShortcutHandler) owns the tracker
+		//that answers this in the running app and assigns it there; until that
+		//lands the answer is the keyboard, which is what the footer said before.
+		//The headless tests replace it to drive every state.
+		public Func<(PlayInputDevice Device, PadFamily? Family)> InHandDevice { get; set; }
+			= () => (PlayInputDevice.Keyboard, null);
+
 		//The Save states sheet (W-P4's merged Save/Load row). It offers today's
 		//two slot grids (GameScreenMode.SaveState / LoadState); Esc closes it,
 		//and either grid, back to the overlay.
@@ -188,6 +202,10 @@ namespace Mesen.ViewModels
 			EnhancementsSummary = on == 0 ? ResourceHelper.GetMessage("OverlayRowNone") : ResourceHelper.GetMessage("OverlayRowCountOn", on);
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
+
+			(PlayInputDevice device, PadFamily? family) = InHandDevice();
+			PlayResumeHint hint = PlayMenuHint.ResumeHint(device, family);
+			OverlayResumeHint = ResourceHelper.GetMessage(hint.Message, hint.Param);
 		}
 
 		//"Slot 1 · 2 min ago": the newest of the ten manual slots (the auto-save
