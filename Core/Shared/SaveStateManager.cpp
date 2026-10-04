@@ -380,7 +380,16 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			string data = pngStream.str();
 			memcpy(pngData, data.c_str(), data.size());
 
-			return (int32_t)frameData.size();
+			//The caller's buffer holds a PNG, so the length it is told is the
+			//PNG's - not the decompressed frame's, which is what this returned
+			//until #833. The two differ by two orders of magnitude (a 256x240
+			//uint16 frame is ~123 KB, the PNG written from it a few tens of KB),
+			//and every caller sizes a buffer with the answer: the app resizes the
+			//managed array to it before handing it to the PNG decoder, which
+			//therefore decoded with tens of thousands of stray zero bytes behind
+			//the image. It survived only while the frame stayed larger than the
+			//PNG, which is an accident of the NES's resolution.
+			return (int32_t)data.size();
 		}
 	}
 	return -1;
