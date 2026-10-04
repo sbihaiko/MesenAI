@@ -1,9 +1,9 @@
 # ADR-0256: The Play GUI is fully operable from a controller alone
 
-- Status: proposed (2026-10-04). The requirement is the user's, and three of
-  the four questions under "Open questions" are still theirs to make; the second
-  was answered on 2026-10-04 - **"Não reconfigurável"** - and is recorded under
-  Decision. Nothing is implemented. Ids are never reused (ADR-0035), which is
+- Status: proposed (2026-10-04). **All four questions were answered by the user
+  on 2026-10-04** and are recorded under Decision, quoted verbatim - this ADR is
+  now a decided shape that nothing implements yet. Accepting it is a request for
+  the work listed there, not a note. Ids are never reused (ADR-0035), which is
   why this is 0256 and not 0255.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
@@ -84,29 +84,51 @@ Not decided. The shape the four questions below have to settle:
    controls are **excluded** from it, because offering them is the same bug with
    a nicer dialog in front of it.
 
+5. **The gesture that opens W-P4 belongs to a button, not to device 0** (the
+   user's answer, 2026-10-04: *"Qualquer controle"*). Today it does not:
+   `PlayMenuHint.ControllerCandidates` hardcodes every candidate to `Pad1`
+   (`"Pad1 Home"`, `"Pad1 Guide"`, `"Pad1 Select" + "Pad1 Start"`,
+   `"Pad1 Back" + "Pad1 Start"`), and no backend exposes a Home or Guide pad
+   button - `Core/Shared/KeyDefinitions.h` has `"Home"` only as keyboard
+   scancode 22, and the per-platform pad button lists have neither - so the
+   seeded binding is always `Pad1 Select` + `Pad1 Start`. With two pads
+   connected, the one in the player's hand has no way into the overlay at all,
+   and the overlay is the only route to the menus while a game runs. Filed as
+   issue #800; this rule is the fix it has to satisfy.
+6. **On-screen text names the control in the player's hand**, not the keyboard
+   (the user's answer, 2026-10-04: *"Segue o controle na mão"*). W-P4's footer
+   reads "Esc to resume" today, which is a lie on the cabinet this ADR is about:
+   the player has no Esc key. Confirm and back follow the pad's own preset
+   (`DefaultKeyMappingType.Xbox` or `Ps4`), so "back" is B on one desk and ○ on
+   another, and the footer has to say which.
+
+There is no second gesture into W-P4: the chord on any pad, and nothing else
+(the user's pick, 2026-10-04, over adding a long-press). A pad whose Select or
+Start is broken therefore has no way in, which is accepted rather than
+overlooked.
+
 The cheap implementation, and the one worth trying first: translate pad events
 into the **keyboard navigation events Avalonia already handles** (arrow keys,
 Tab, Enter, Escape) rather than teaching each view about the pad. Every
 existing surface then works unchanged, and the wiring lives in one place next
 to `ShortcutHandler`.
 
-## Open questions
+## The four questions, and how they were answered
 
-1. **Which buttons are confirm and back?** A and B are swapped between a
-   Nintendo-style pad and an Xbox one, and the app already models that
-   difference: `DefaultKeyMappingType.Xbox` and `Ps4` are first-run presets.
-   Whether navigation follows the pad's own preset, or is fixed, decides
-   whether "back" is B or A on a given desk.
-2. ~~**Is navigation rebindable?**~~ **Answered 2026-10-04: not rebindable** -
-   the user's pick, verbatim: **"Não reconfigurável"**. See Decision 4.
-3. **Can the player get stuck?** With rule 1, a running game offers exactly one
-   gesture. If that chord is rebound away, or the pad is one whose Home button
-   the platform does not report, is there a second way in?
-4. **Does the app say which pad it means?** W-P4's footer reads "Esc to
-   resume" and the entry toast names the binding that started the game
-   (ADR-0251). Whether those strings follow the device in hand — "B to resume"
-   on a pad — or stay keyboard-worded is a small decision with a wide reach,
-   because every Play surface has a footer.
+All on 2026-10-04, by the user, quoted verbatim from the questions they answered.
+
+1. **Which buttons are confirm and back?** **Answered by the navigation answer**:
+   they follow the pad's own preset - `DefaultKeyMappingType.Xbox` or `Ps4`,
+   which the first run already models - so "back" is B on one desk and ○ on
+   another.
+2. **Is navigation rebindable?** **"Não reconfigurável"** - no. See Decision 4.
+3. **Can the player get stuck?** **Answered, and the answer found a live bug.**
+   Checking the premise turned up issue #800: the chord is hardcoded to `Pad1`,
+   so a second pad has no way in. The user's pick was "Qualquer controle" - the
+   gesture is fixed per button rather than per device, and there is no second
+   gesture. See Decision 5.
+4. **Does the app say which pad it means?** **"Segue o controle na mão"** - the
+   text follows the device in hand. See Decision 6.
 
 ## Consequences
 
