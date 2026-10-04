@@ -11,7 +11,7 @@
 [![Open specs: CC0](https://img.shields.io/badge/open%20specs-CC0-lightgrey.svg)](docs/specs/)
 [![Community packs](https://img.shields.io/badge/community%20packs-15%20validated-2ea043.svg)](docs/community-packs.md)
 
-**[⬇ Download](https://github.com/sbihaiko/MesenAI/releases/latest)** · **[Remaster a game](docs/remastering-a-game.md)** · [Hear it](#hear-it) · [See it](#see-it) · [Quick start](#quick-start) · [What's real today](#whats-real-today) · [FAQ](#faq)
+**[⬇ Download](https://github.com/sbihaiko/MesenAI/releases/latest)** · **[Remaster a game](docs/remastering-a-game.md)** · [Hear it](#hear-it) · [See it](#see-it) · [Widen it](#widen-it) · [Quick start](#quick-start) · [What's real today](#whats-real-today) · [FAQ](#faq)
 
 </div>
 
@@ -19,9 +19,10 @@
 
 Emulators stopped at *faithful* twenty years ago. **MesenAI starts there** — it is
 Mesen's accuracy-first core, unchanged — **and keeps going**: the first ROM you
-open already sounds better, HD art works on three console families instead of
-one, and the emulator quietly turns the game you are playing into a folder an
-artist can paint.
+open already sounds better, the picture reaches past the console's own window
+instead of stretching to fill it, HD art works on three console families
+instead of one, and the emulator quietly turns the game you are playing into a
+folder an artist can paint.
 
 That last part is the step forward. Redrawing a game used to mean playing it
 end to end with a recorder running, then untangling thousands of 8×8 fragments
@@ -45,9 +46,11 @@ Download, open a ROM, done. Enhanced Audio is **on by default** — same notes,
 same timing, modern instruments. Open a ROM that has a validated community
 HD pack and the pack downloads, installs and loads on its own — zero clicks,
 no config. Fifteen packs ship that way today, and a hand-dropped copy of a
-catalog pack is recognized as that same pack — one entry in the picker, and
-your stored per-ROM choice follows it. Esc pauses into one overlay: save
-states, pack, enhancements, cheats, settings.
+catalog pack is recognized as that same pack — one entry in the picker, your
+stored per-ROM choice following it, *No pack* included. Turn **Widescreen**
+on and the picture stops stretching: the console draws the playfield it
+already had beside the screen. Esc pauses into one overlay: save states, pack,
+enhancements, cheats, settings.
 
 **→ [Download](#download)** · [Community packs](docs/community-packs.md)
 
@@ -126,6 +129,42 @@ threads again.
 
 ---
 
+## Widen it
+
+Widescreen used to mean one thing: stretch the picture until the sides fill.
+MesenAI **reveals** instead — the console already draws a background map wider
+than the window it shows you, so the window widens (ADR-0253). One switch,
+**Widescreen** under Enhancements, off until you turn it on; there is no mode
+picker, the core decides per frame.
+
+| Console | Picture | With the Reveal | What the sides show |
+|---|---|---|---|
+| **NES** | 256×240 | 384×240 — 64 px per side | the neighbouring nametable, through the mapper's mirroring |
+| **GB / GBC** | 160×144 | 256×144 — 48 px per side | the wrapping 256×256 BG map and the window |
+| **Game Gear** | 160×144 | 256×144 — 48 px per side | the 96 px its shipped preset crops, which the VDP drew all along |
+| **GBA** | 240×160 | 284×160 — 22 px per side | text backgrounds only |
+| **SMS / SG-1000** | 256×192 | no Reveal | the map is exactly as wide as the screen — nothing exists beside it |
+
+A row the console cannot fill — a vertical scroller's sides, a single-screen
+game, a bitmap-mode GBA frame — takes the loaded pack's own `widescreen` art
+(MEP v1.8 §5.5), then the pack's **border** layer, then black. A fill-in never
+counts as a mode on its own: a game with no Reveal and no pack art gets the
+switch **disabled, with a one-line reason**, remembered per ROM, and a pack
+that ships widescreen art turns it back on.
+
+Three things to know before you report a bug:
+
+- **Sprites still appear at the original edge.** The scenery widens; an enemy
+  walks in from where it always did. The game's own logic is untouched —
+  widescreen is presentation only, so save states, movies and netplay stay the
+  4:3 game.
+- **The extra columns are never recorded as tiles**, so a remaster is
+  unaffected and pack art is still authored against the 256/160 px picture.
+- **The GBA path is unit-tested and has not been seen on screen**: it was
+  built with no GBA ROM in reach.
+
+---
+
 ## Why artists pick up MesenAI
 
 The artist's real competitor was never another emulator. It was a spreadsheet,
@@ -150,28 +189,36 @@ Names come from the data or from a human — never from a guess.
 ## Quick start
 
 1. **[Download](#download)**, unzip, run `Mesen`. A fresh install opens in
-   **Player** mode on the **Play** workspace; **Remaster** and **Share** sit
-   beside it in the workspace switcher (⌘1 / ⌘2 / ⌘3, Ctrl elsewhere).
+   **Player** mode on the **Play** workspace; **Remaster**, **Share** and
+   **Classic** sit beside it in the workspace switcher (⌘1 / ⌘2 / ⌘3 / ⌘4,
+   Ctrl elsewhere) — Classic being the original Mesen GUI.
 2. **Open a ROM…** from the Play home, or drop one on the window. Games you
    played come back as *Continue playing* and a recent-games grid. Enhanced
    Audio is already on (Style: *Studio*).
 3. In Player mode, **Esc** on the Play workspace pauses into the overlay: *Save states* (slot grids, plus *Shared
    replays…*), *Pack*, *Enhancements*, *Cheats*, *Settings*, *Quit game*.
-   Different sound? **Settings → Audio → General → Enhanced audio** — pick
-   Synthwave, Chip Deluxe, Orchestral Lite, Dry or Studio, or point it at your
-   own `.sf2` SoundFont. **Settings → Look** names the picture's three layers:
-   pack art, pixel filter, screen.
+   Different sound? *Enhancements* has **Modern instruments** on by default;
+   the style — Synthwave, Chip Deluxe, Orchestral Lite, Dry or Studio, or your
+   own `.sf2` SoundFont — is behind **Settings → Audio → More in Options…**.
+   **Settings → Look** names the picture's three layers: pack art, pixel
+   filter, screen.
 4. Got a pack? Drop the folder or `.zip` beside the ROM (or into
    `EnhancementPacks/`). The overlay's *Pack* row picks among packs for the
-   game and *Enhancements* switches textures, audio, border, widescreen and
-   overclock; per-pack layer toggles stay under **Tools ⋯ → Tools → HD Packs
-   (NES) → Enhancement Packs (MEP)…**.
-5. Want the soundtrack as MIDI or VGM? **Tools ⋯ → Tools → Record Music (MIDI/VGM)**.
+   game and holds that game's Textures, Music and ROM Patch switches;
+   *Enhancements* switches Modern instruments, Border, **Widescreen** and
+   Overclock. The global per-layer defaults sit in another door —
+   **Remaster ⋯ → Enhancement Packs** — and the HD Pack Builder under
+   **Classic → Tools → HD Packs (NES)**.
+5. Want the soundtrack as MIDI or VGM? **Remaster ⋯ → Record Music (MIDI/VGM)**.
 
-Every classic Mesen menu — File, Game, Settings, Tools, Debug, Help — lives
-under **Tools ⋯** in both modes; *Show classic menu bar* there brings the bar
-back, and **Settings → Preferences → UI mode** switches to **Advanced**, which
-keeps the classic dialogs. A new install records nothing while you play:
+Every classic Mesen menu — File, Game, Settings, Tools, Debug, Help — has a
+door of its own: **Classic**, the original GUI, with the menu bar, the
+debugger, Lua and every classic dialog. Play, Remaster and Share each carry a
+short Tools ⋯ holding only what that task needs — Play's disk, coin, barcode
+and tape items appear when the loaded game uses them — and no task-door entry
+opens a classic window: it opens the Player look instead. An install that was
+in Advanced opens straight in Classic, so the GUI you chose is the GUI you get.
+A new install records nothing while you play:
 recording starts from Remaster's **Record While I Play** (ADR-0243), and the
 old *Record while I play* setting stays, off, in the Enhancement Packs window.
 An upgraded install keeps its old value, and a settings file from before the
@@ -189,15 +236,16 @@ emulator plus `mesenai-tools-<version>.zip`, the command-line tools the
 remastering guide uses as of that tag. **v0.1.0 (2026-09-15) is macOS Apple
 Silicon only**, cut locally from a tagged commit, and its tools zip predates
 what the guide has gained since — `mep_figure.py`, `mep_add_cell.py`,
-`record_library.sh`, the `stage-set.json` route sets that now cover ten
-games, and the route search (`route_search.py`, `jev_harness.py`) with the
-recorder's step-mode session it runs on. Those come from a checkout instead.
-v0.1.0 also predates the Play / Remaster / Share GUI described in
+`record_library.sh`, the `stage-set.json` route sets that now cover
+twenty-one games, and the route search (`route_search.py`, `jev_harness.py`)
+with the recorder's step-mode session it runs on. Those come from a checkout
+instead. v0.1.0 also predates the workspaces described in
 [Quick start](#quick-start): it opens in the earlier Player shell (overlay,
-recent games, pack picker), and *Bootstrap* still records a starter pack
-beside each ROM you play. No installer: unzip and run. macOS
-needs SDL2 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then
-**System Settings → Privacy & Security → Open Anyway**.
+recent games, pack picker) with no Remaster, Share or Classic door, and
+*Bootstrap* still records a starter pack beside each ROM you play. No
+installer: unzip and run. macOS needs SDL2 (`brew install sdl2`); the app is
+ad-hoc signed, so open it once, then **System Settings → Privacy & Security →
+Open Anyway**.
 
 Platforms without a tagged release use the on-demand CI channel — the newest
 build of `prod` that passed, unzip and run:
@@ -221,9 +269,10 @@ build of `prod` that passed, unzip and run:
 > dispatched on `prod` otherwise (ADR-0204 §6). A manual refresh still works:
 > `gh workflow run build.yml --repo sbihaiko/MesenAI --ref prod`.
 > A CI build carries what `prod` held when it ran. The current assets are the
-> 2026-10-03 promotion (#714), so they include the Play / Remaster / Share GUI;
-> anything merged into `main` since reaches the channel with the next
-> promotion, or build from source: [COMPILING.md](COMPILING.md).
+> promotion in #791, so they include widescreen W.1–W.7, the Play / Remaster /
+> Share GUI and the fixes through #790; anything merged into `main` since
+> reaches the channel with the next promotion, or build from source:
+> [COMPILING.md](COMPILING.md).
 >
 > **Help → Check for updates** never offers an upstream Mesen build: the fork
 > publishes no update feed, so the startup check does nothing and the menu item
@@ -242,7 +291,7 @@ build of `prod` that passed, unzip and run:
    builder: a frame-counted input script, a **save state** to start mid-level,
    a published **TAS movie** (`.bk2`), or a **RAM-only cheat** to reach a
    later stage. No window, no human at the pad, about 3× real time. Route sets
-   for ten games ship in `scripts/stages/`. No route yet? `scripts/route_search.py`
+   for twenty-one games ship in `scripts/stages/`. No route yet? `scripts/route_search.py`
    searches one, locally and for free. Where the search stalls,
    `scripts/jev_harness.py` can optionally ask **Jev** (TypeSafe, through your own
    OpenRouter key) to pick one macro from a fixed set; it sees RAM-derived numbers
@@ -271,15 +320,16 @@ promotes, never as evidence ([docs/ai-kit-review.md](docs/ai-kit-review.md)).
 |---|---|---|
 | **Audio** | Faithful chip emulation | Faithful **+ real-time modern re-voicing**, on by default, 5 styles, SoundFont, text-file presets |
 | **HD textures** | NES only | **NES, Game Boy/GBC, SMS/Game Gear** |
+| **Widescreen** | Aspect-ratio stretch — the picture is never re-drawn | **Reveals the playfield the console already had**, per console; pack art, then the border, then black fill what it cannot |
 | **Recording a game** | Press Start, play to the end, press Stop | Same window, **plus a headless recorder driven by scripts, states, TAS movies or RAM cheats** |
 | **Knowing what you missed** | Play more and look | **Coverage per recording, per image, per state** |
 | **Vocabulary** | Tiles in cartridge order | **Metatiles, sprite figures, poses, animation cycles**, inferred and marked |
 | **The rule file** | By hand, or your own spreadsheet | **Generated from the sheets**; conditions for reused tiles attached from observed neighbours |
 | **Validation** | None | **Linter, versioned spec, content id, sha256 errata, pack CI** |
 | **Finding packs** | Forum threads | **Validated catalog**, hash-tracked, labeled by content, ranked by 👍 |
-| **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets + a border frame in one hash-keyed pack, folder or `.zip`, per-layer toggles |
+| **Pack format** | `hires.txt` per game | **MEP**: textures + audio + synth presets + a border frame + widescreen side art in one hash-keyed pack, folder or `.zip`, per-layer toggles |
 | **Music export** | — | **MIDI / VGM** while you play |
-| **Player GUI** | — | **Play / Remaster / Share workspaces** on a fresh install: recent games, a pause overlay with pack picker, enhancements, save-state slots, cheats and shared replays; the classic menus under Tools ⋯ |
+| **Player GUI** | — | **Play / Remaster / Share workspaces** on a fresh install: recent games, a pause overlay with pack picker, enhancements, save-state slots, cheats and shared replays — plus a **Classic** door holding the original GUI unchanged |
 | **Consoles** | 10+ systems | **4 families**, chosen because their enhancement ecosystems already exist |
 
 Everything in the left column is also in the right one. `Core/NES/HdPacks/`,
@@ -309,7 +359,10 @@ players get one trustworthy list and pack makers get found.
   Issue (`pack:valid` / `pack:invalid`, `assets:*`, `patch:*`, `console:*`) and
   comments with the spec section behind the verdict.
 - **Play:** every accepted pack is auto-installed for the matching ROM. One
-  master switch, per-pack disable.
+  master switch, a per-pack disable, and ***No pack*** as a row of the picker
+  when you want that game un-enhanced — stored per ROM, and the core then
+  draws no pack and applies no pack's ROM patch for it (a pack in a sibling
+  folder beside the ROM still wins, ADR-0049).
 - **Update:** comment `/revalidate` on the Issue.
 - **Cheats and replays, new and still empty:** the same loop now carries a
   [cheat code](https://github.com/sbihaiko/MesenAI/issues/new?template=cheat-code.yml)
@@ -319,9 +372,12 @@ players get one trustworthy list and pack makers get found.
   (ADR-0205). Accepted ones land in
   [docs/community-cheats.json](docs/community-cheats.json) and
   [docs/community-replays.json](docs/community-replays.json), which Play reads:
-  the Cheats sheet lists the codes for your exact copy, with *Share This Cheat
-  ↗* for your own, and *Save states → Shared replays…* lists the replays. Both
-  catalogs are live and have no entries yet.
+  the Cheats sheet lists your copy's **own bundled codes first** (NES), the
+  accepted community ones for its exact SHA-1 below them, with *Share This
+  Cheat ↗* for a code you added yourself — on GB and SMS it is manual entry
+  only, the sheet saying *no cheat list for this console yet* — and
+  *Save states → Shared replays…* lists the replays. Both community catalogs
+  are live and have no entries yet.
 
 Both formats are welcome — a plain **Mesen `hires.txt` pack** or a **full MEP
 `pack.json`**. Making one? [Remastering guide](docs/remastering-a-game.md), then
@@ -340,6 +396,14 @@ A project that measures its own claims should say what is and isn't shipped.
   on NES only until the GB/SMS `hires.txt` extension freezes.
 - The MEP `border` layer: a frame or bezel composited around the game viewport,
   toggled with the other enhancement layers (ADR-0149).
+- **Widescreen that reveals instead of stretching** (ADR-0253, slices W.1–W.7,
+  2026-10-03): the console draws the columns its own background map already has
+  (NES 64 px per side, GB/GBC and Game Gear 48, GBA 22), what it cannot draw
+  comes from the pack's `widescreen` art, then the border layer, then black,
+  and a game with neither a Reveal nor pack art gets the switch disabled with
+  its reason, remembered per ROM. Standard frames stay bit-identical
+  (ADR-0162), the extra columns are never recorded as tiles, and a double-width
+  frame still goes through both NTSC filters and the recorder whole.
 - The headless recorder, all four drivers, coverage measurement, the four-surface
   kit — every palette a shape was drawn in reaches its cell (ADR-0230) —
   `mep_build`/`mep_lint`, the composition editor, auto-attached
@@ -354,17 +418,18 @@ A project that measures its own claims should say what is and isn't shipped.
   on its first rung in two decisions; every script it wrote replays without the
   model to the same positions. The adoption verdict is **do not adopt beyond the
   spike** ([the F14.15 log](docs/validation/f1415-jev-adoption-2026-09-26.md)).
-- The Play / Remaster / Share GUI (ADR-0241): the shell and Tools ⋯, the Play
-  home, pause overlay and its sheets, the first-run sheet, the Look tab
-  (ADR-0246), Remaster's recording, kit browser, import and Build & Show in
-  Game (NES), and Share's pack, project-package and replay flows — each
-  surface's rules unit-tested and its wiring tested headless against the real
-  core.
+- The Play / Remaster / Share / Classic GUI (ADR-0241, ADR-0250; slices
+  G.1–G.9): the shell and its per-door Tools ⋯, the Play home, pause overlay
+  and its sheets, the first-run sheet, the Look tab (ADR-0246), Remaster's
+  recording, kit browser, import and Build & Show in Game (NES), Share's pack,
+  project-package and replay flows, and the fourth door, Classic, which is the
+  original GUI and the only one a classic window opens from — each surface's
+  rules unit-tested and its wiring tested headless against the real core.
 - Community cheats (ADR-0248) and shared replays (ADR-0205), submit and
   consume: Issue Forms, structural gates, generated catalogs, Play's sheets.
 - A CI gate on every pull request to `main` and every push to `main`: the
   structural suite, the Python tool suites, a headless boot of the real core,
-  about 1 460 dependency-free C++ unit tests, and the C# unit and headless-UI
+  about 2 080 dependency-free C++ unit tests, and the C# unit and headless-UI
   suites.
 
 **Not yet, and named as such**
@@ -392,10 +457,10 @@ A project that measures its own claims should say what is and isn't shipped.
   first paint re-points its rule, so it wants one reopen of its own (ADR-0231) —
   and the layered `.ora` is write-only, so the flat PNG stays the return path.
   Otherwise **Phase 12** is delivered, with only human rows left; **Phase 13**
-  (shared replays and community cheats) and the Play / Remaster / Share GUI
-  (G.1–G.8) are delivered too; and the live work is **Phase 14** (proof at
-  scale) plus Phase 7's open rows (shaders on macOS, in-place pack change,
-  cheat search), of the
+  (shared replays and community cheats), the Play / Remaster / Share / Classic
+  GUI (G.1–G.9) and widescreen (W.1–W.7) are delivered too; and the live work is
+  **Phase 14** (proof at scale) plus Phase 7's open rows (shaders on macOS,
+  in-place pack change, cheat search), of the
   [roadmap](docs/roadmap/PRD-mesence-enhancement-ecosystem.md) opened from a
   [side-by-side with upstream](docs/hd-pack-toolchain-comparison.md) that says
   where a hand author is still better served.
@@ -403,7 +468,10 @@ A project that measures its own claims should say what is and isn't shipped.
   workflow end to end. Every acceptance so far is measured, but by proxy.
 - Nobody has opened the new GUI on a real display yet: its look against the
   wireframes, a real gamepad, drag-and-drop, the browser and Finder hand-offs
-  and a Remaster build shown on a running game are still human rows. Neither
+  and a Remaster build shown on a running game are still human rows.
+  Widescreen's GBA path was built with no GBA ROM in reach, so its 22 extra
+  columns and its black fallback for an affine or bitmap-mode frame have never
+  been seen on a display — everything else about it is unit-tested. Neither
   the cheat nor the replay workflow has run against a real Issue, and a Game
   Boy or Master System cheat is refused as an unknown game until the
   repository carries No-Intro data for those consoles.
@@ -453,8 +521,15 @@ video: [issue #166](https://github.com/sbihaiko/MesenAI/issues/166).
 **Does Enhanced Audio change the music?** No. It changes the *instruments*.
 Notes, timing and dynamics come from the game's own registers, frame by frame.
 
-**Can I turn it all off?** Yes — one checkbox in Settings → Audio, and you have
-stock Mesen accuracy.
+**Can I turn it all off?** Yes — *Modern instruments* off on the Enhancements
+sheet, or the Enhanced Audio checkbox in Options → Audio, and you have stock
+Mesen accuracy.
+
+**Does Widescreen stretch the picture?** Not any more. The console draws the
+playfield it already had beside the screen, and only what it cannot draw comes
+from the loaded pack's art, the border layer or black (ADR-0253). Sprites still
+enter at the original edge: the game's own logic is untouched. If a game has
+neither, the switch is disabled and says why.
 
 **Do existing NES HD packs work?** Yes. The `hires.txt` format is unchanged;
 drop them in `HdPacks/` as always, or wrap them in a MEP pack.
