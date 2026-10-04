@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Runtime.InteropServices;
 using Mesen.Interop;
 
@@ -18,6 +16,9 @@ namespace Mesen.HeadlessTests;
 //the REAL library when the repo happens to have one built, and skips the test
 //with an explicit reason when it does not - which is the case on the CI runner,
 //where building MesenCore is out of scope for unit-tests.yml (ADR-0131).
+//
+//Which file that is comes from CoreLibraryLocator, kept out of this type so its
+//rule can be asserted without naming the core (#786).
 public static class NativeCore
 {
 	private static bool _initialized;
@@ -40,7 +41,7 @@ public static class NativeCore
 		}
 		_initialized = true;
 
-		string? library = FindLibrary();
+		string? library = CoreLibraryLocator.Find();
 		if(library == null) {
 			_skipReason = "MesenCore is not built in this checkout (looked for MESEN_CORE_LIB and bin/<rid>/{Release,Debug}/, InteropDLL/obj.<rid>/). " +
 				"unit-tests.yml never builds the native core (ADR-0131), so this XAML-wiring check runs locally after `make` and is skipped in CI.";
@@ -55,87 +56,5 @@ public static class NativeCore
 		} catch(Exception ex) {
 			_skipReason = $"MesenCore at '{library}' could not be loaded: {ex.GetType().Name} - {ex.Message}";
 		}
-	}
-
-	private static string? FindLibrary()
-	{
-		string fromEnv = Environment.GetEnvironmentVariable("MESEN_CORE_LIB") ?? "";
-		if(fromEnv == "none") {
-			//Escape hatch to reproduce the CI runner's "no native core" state on a
-			//machine that does have one built.
-			return null;
-		}
-		if(fromEnv.Length > 0 && File.Exists(fromEnv)) {
-			return fromEnv;
-		}
-
-		string? repo = FindRepoRoot();
-		return repo == null ? null : FindBuiltLibrary(repo);
-	}
-
-	//The RID sub-folder is whatever the local `make` produced; it is globbed rather
-	//than guessed (RuntimeInformation.RuntimeIdentifier can carry an OS version,
-	//e.g. osx.15-arm64, that the build folder never has).
-	internal static string LibraryFileName =>
-		OperatingSystem.IsWindows() ? "MesenCore.dll" : (OperatingSystem.IsMacOS() ? "MesenCore.dylib" : "MesenCore.so");
-
-	//Internal rather than private so the resolution rule can be asserted without a
-	//native core present (NativeCoreLibraryResolutionTests.cs, #786).
-	internal static string? FindBuiltLibrary(string repoRoot)
-	{
-		//#786: the newest build is the one this checkout just made, and the only one
-		//that can answer for the current source. No fixed precedence can do this:
-		//`make core` writes InteropDLL/obj.<rid>/ and `make ui` writes
-		//bin/<rid>/<config>/, so either order is wrong half the time - and a leftover
-		//Release build under bin/ made it wrong for the rest of the checkout's life.
-		List<string> candidates = new();
-		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "bin"))) {
-			foreach(string config in new[] { "Release", "Debug" }) {
-				string candidate = Path.Combine(dir, config, LibraryFileName);
-				if(File.Exists(candidate)) {
-					candidates.Add(candidate);
-				}
-			}
-		}
-		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "InteropDLL"))) {
-			if(!Path.GetFileName(dir).StartsWith("obj.", StringComparison.Ordinal)) {
-				continue;
-			}
-			string candidate = Path.Combine(dir, LibraryFileName);
-			if(File.Exists(candidate)) {
-				candidates.Add(candidate);
-			}
-		}
-
-		//Sorted first so an exact tie (two copies of one image) resolves the same way
-		//on every run, instead of following the filesystem's directory order.
-		candidates.Sort(StringComparer.Ordinal);
-		string? newest = null;
-		DateTime newestTime = DateTime.MinValue;
-		foreach(string candidate in candidates) {
-			DateTime written = File.GetLastWriteTimeUtc(candidate);
-			if(newest == null || written > newestTime) {
-				newest = candidate;
-				newestTime = written;
-			}
-		}
-		return newest;
-	}
-
-	private static string[] EnumerateDirectories(string path)
-	{
-		return Directory.Exists(path) ? Directory.GetDirectories(path) : Array.Empty<string>();
-	}
-
-	private static string? FindRepoRoot()
-	{
-		DirectoryInfo? dir = new(AppContext.BaseDirectory);
-		while(dir != null) {
-			if(File.Exists(Path.Combine(dir.FullName, "Mesen.sln"))) {
-				return dir.FullName;
-			}
-			dir = dir.Parent;
-		}
-		return null;
 	}
 }

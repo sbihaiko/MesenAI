@@ -21,7 +21,7 @@ public class NativeCoreLibraryResolutionTests
 		repo.WriteLibrary("bin/osx-arm64/Release", age: TimeSpan.FromHours(1));
 		string fresh = repo.WriteLibrary("InteropDLL/obj.osx-arm64", age: TimeSpan.Zero);
 
-		Assert.Equal(fresh, NativeCore.FindBuiltLibrary(repo.Root));
+		Assert.Equal(fresh, CoreLibraryLocator.FindBuilt(repo.Root));
 	}
 
 	[Fact]
@@ -34,7 +34,7 @@ public class NativeCoreLibraryResolutionTests
 		repo.WriteLibrary("InteropDLL/obj.osx-arm64", age: TimeSpan.FromHours(1));
 		string fresh = repo.WriteLibrary("bin/osx-arm64/Release", age: TimeSpan.Zero);
 
-		Assert.Equal(fresh, NativeCore.FindBuiltLibrary(repo.Root));
+		Assert.Equal(fresh, CoreLibraryLocator.FindBuilt(repo.Root));
 	}
 
 	[Fact]
@@ -42,7 +42,7 @@ public class NativeCoreLibraryResolutionTests
 	{
 		using TempRepo repo = new();
 
-		Assert.Null(NativeCore.FindBuiltLibrary(repo.Root));
+		Assert.Null(CoreLibraryLocator.FindBuilt(repo.Root));
 	}
 
 	private sealed class TempRepo : IDisposable
@@ -60,7 +60,7 @@ public class NativeCoreLibraryResolutionTests
 		{
 			string directory = Path.Combine(Root, relativeDirectory.Replace('/', Path.DirectorySeparatorChar));
 			Directory.CreateDirectory(directory);
-			string file = Path.Combine(directory, NativeCore.LibraryFileName);
+			string file = Path.Combine(directory, CoreLibraryLocator.FileName);
 			File.WriteAllText(file, "");
 			File.SetLastWriteTimeUtc(file, DateTime.UtcNow - age);
 			return Path.GetFullPath(file);
