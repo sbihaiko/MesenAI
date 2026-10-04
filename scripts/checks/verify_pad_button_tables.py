@@ -24,12 +24,15 @@ the mirror in between, and the enum not at all. This closes both directly,
 host-free and without a core:
 
   * the three backends' `buttonNames` lists are read straight from source;
-  * `ControllerLivePad._names[backend]` must equal that list, index for index;
-  * every `PadButtonBit` row's `Bit` must name, in the backend's OWN table, the
-    key the row's console button maps to - the console pad is the one
-    `SetupButton` (UI/Logic/PlayControllerSetup.cs) names, and the button -> name
-    mapping is read from `ControllerLivePad._keyNames` plus `CoreNameOf`'s XInput
-    override (so it is not a second copy of the bit tables);
+  * `ControllerLivePad._names[backend]` must be the first `MIRROR_WINDOW` of that
+    list, index for index - the bits the sheet can actually read, so a mirror
+    that is short, long or renamed fails;
+  * every `PadButtonBit` row's `Bit` must land inside that window AND name, in
+    the backend's OWN table, the key the row's console button maps to - the
+    console pad is the one `SetupButton` (UI/Logic/PlayControllerSetup.cs) names,
+    and the button -> name mapping is read from `ControllerLivePad._keyNames`
+    plus `CoreNameOf`'s XInput override (so it is not a second copy of the bit
+    tables);
   * the C# `GamepadBackend` enum and `IKeyManager.h`'s must agree name for value;
   * `PadButton` and `SetupButton` must name the same console pad.
 
@@ -65,8 +68,11 @@ BACKEND_TABLES = (
 )
 TABLE_FILE = dict(BACKEND_TABLES)
 
-# The bits GamepadState's consumers show: the sheet mirrors the first 24 of each
-# backend's table, and every bit a PadButtonBit row names must land inside it.
+# The window the sheet reads: `ControllerLivePad._names[backend]` is a 24-entry
+# array and `BitOf`/`NameOfBit` index it directly, so bit 24 and up name a key
+# the sheet can never light. Every PadButtonBit row must land inside it, and
+# every mirror must be exactly this long - a truncated mirror silently darkens
+# keys the same way an out-of-window row does.
 MIRROR_WINDOW = 24
 
 ROW_RE = re.compile(
@@ -184,17 +190,27 @@ def check(root: Path):
         sheet_names[backend] = re.findall(r'"([^"]*)"', COMMENT_RE.sub("", body))
 
     # ControllerLivePad._names[backend] == the backend's own table, index for
-    # index. This is what makes a wrong bit in the header visible below.
+    # index, for exactly the window the sheet reads. Both directions fail: a
+    # longer mirror is read out of the backend's range, a shorter one (or a
+    # dropped entry inside it) leaves the sheet unable to light a key the header
+    # still names - which is what makes a wrong bit in the header visible below.
     for backend, rel in BACKEND_TABLES:
         if backend not in sheet_names or backend not in backend_names:
             continue
         mirror = sheet_names[backend]
         names = backend_names[backend]
-        if len(mirror) > len(names):
+        if len(names) < MIRROR_WINDOW:
             failures.append(
-                f"{SHEET}: GamepadBackend.{backend} lists {len(mirror)} names but "
-                f"{rel} names only {len(names)} buttons")
-        for i in range(min(len(mirror), len(names))):
+                f"{rel}: names {len(names)} buttons, fewer than the "
+                f"{MIRROR_WINDOW} the sheet reads")
+            continue
+        if len(mirror) != MIRROR_WINDOW:
+            failures.append(
+                f"{SHEET}: GamepadBackend.{backend} mirrors {len(mirror)} bits but "
+                f"the sheet reads {MIRROR_WINDOW} of {rel}'s {len(names)} buttons - "
+                f"a bit outside the mirror is a key the sheet cannot light")
+            continue
+        for i in range(MIRROR_WINDOW):
             if mirror[i] != names[i]:
                 failures.append(
                     f"{SHEET}: GamepadBackend.{backend} bit {i} is \"{mirror[i]}\" "
@@ -235,10 +251,11 @@ def check(root: Path):
             failures.append(
                 f"{CORE_ORDER}: PadButton::{button} has no console name in {SHEET}")
             continue
-        if not 0 <= bit < len(names):
+        if not 0 <= bit < MIRROR_WINDOW:
             failures.append(
-                f"{CORE_ORDER}: {backend}.{button} names bit {bit}, outside "
-                f"{TABLE_FILE[backend]}'s {len(names)} buttons")
+                f"{CORE_ORDER}: {backend}.{button} names bit {bit}, but {SHEET} "
+                f"reads only {MIRROR_WINDOW} bits ({TABLE_FILE[backend]} does name "
+                f"{len(names)} buttons), so no drawn key could be lit from there")
             continue
         actual = names[bit]
         if actual != expected:

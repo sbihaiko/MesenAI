@@ -17,11 +17,12 @@
   bridge that hands them the app's pad state is not wired, so the pad still does
   not move the GUI's focus. **The bridge landed later the same day** (#827, with
   its review finding fixed in the same PR): every rule above is wired to the
-  window, Decision 3's single focus owner is in place with a claim per surface,
-  and Decision 7's repeat rides the same tick. The corrections the slices needed
-  followed in #834 — a claim for ADR-0255's Controller sheet, which the
-  Consequences name, and the tool sheet's claim widened from the barcode kind to
-  every kind it shows. **Not implemented**: Decision 8's first run — storage
+  window, Decision 3's single focus owner is in place (a claim for each surface
+  the bridge registered), and Decision 7's repeat rides the same tick. The
+  corrections the slices needed followed in #834 — a claim for ADR-0255's
+  Controller sheet, which the Consequences name, and the tool sheet's claim
+  widened from the barcode kind to every kind it shows. **Not implemented**:
+  Decision 8's first run — storage
   choice, keyboard preset and the ROM picker are not yet drivable from a pad,
   which the Consequences call the hard part and which the PRD's stop rule still
   waits on.

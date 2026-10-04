@@ -13,7 +13,12 @@ guards), so each case asserts the checker exits non-zero AND says what it saw:
   4. a reordered mirror - ControllerLivePad._names' XInput row swaps Up/Down;
   5. a renumbered enum - InteropEnums.cs moves Evdev off the core's value;
   6. a commented-out row with a wrong bit - the table is the code, not the text
-     around it, so this one must PASS.
+     around it, so this one must PASS;
+  7. a row past the sheet's window - evdev's bit 29 IS its "Up", so every other
+     check in the file is satisfied; the row is still unlit, because the sheet
+     mirrors 24 bits;
+  8. a truncated mirror - dropping entries from ControllerLivePad._names leaves
+     the sheet unable to light keys the header still names.
 
 Usage: python3 scripts/test_verify_pad_button_tables.py
 """
@@ -153,6 +158,27 @@ def main():
              f"{proc.returncode}: {(proc.stdout + proc.stderr).strip()}")
     else:
         ok("a commented-out row is not part of the table")
+
+    # 7. A row the sheet cannot read. evdev's bit 29 is literally named "Up", so
+    #    the row agrees with the backend table and the console name - the only
+    #    thing wrong with it is that ControllerLivePad._names has 24 entries and
+    #    BitOf/NameOfBit index that array, so the key would stay dark forever.
+    case("a row past the sheet's window",
+         lambda root: edit(root, "Core/Shared/GamepadButtonOrder.h",
+                           r"\{ GamepadBackend::Evdev, PadButton::A, 0 \},",
+                           "{ GamepadBackend::Evdev, PadButton::A, 0 },\n\t"
+                           "{ GamepadBackend::Evdev, PadButton::Up, 29 },"),
+         ["GamepadButtonOrder.h", "Evdev.Up", "29", "24"])
+
+    # 8. A truncated mirror. Dropping entries from ControllerLivePad._names keeps
+    #    every index it still has correct, so an index-for-index comparison that
+    #    stops at the shorter array sees nothing wrong - and the sheet silently
+    #    stops lighting the keys the dropped entries named.
+    case("a truncated ControllerLivePad._names",
+         lambda root: edit(root, "UI/Logic/ControllerSheet.cs",
+                           r'"RT Left", "RT Right", "LT Up", "LT Down"',
+                           '"RT Left", "RT Right"'),
+         ["ControllerSheet.cs", "XInput", "mirrors", "24"])
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")

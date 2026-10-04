@@ -143,9 +143,10 @@ namespace Mesen.Windows
 			//replaces the Settings sheet's Controls landing), so the arbiter's
 			//order keeps mirroring the chain PlayEsc.Next walks. Done is the
 			//sheet's own control, and the one to open it on: it is always on
-			//screen and focusable whatever the sheet is showing (the pad picker
-			//and the PLAYERS rows exist only with two or more pads, so with one or
-			//with none the sheet's focusables are its two footer buttons), and a
+			//screen and focusable whatever the sheet is showing - the pad picker,
+			//the PLAYERS rows and the keyboard block's restore button each come
+			//and go with the connected pad and the preset, and Done is declared
+			//outside every one of those conditions - and a
 			//Confirm on it closes the sheet back to W-P4 - where the other one,
 			//More in Options…, leaves for the classic Input window, which
 			//ADR-0256's non-goals say a pad cannot drive.
