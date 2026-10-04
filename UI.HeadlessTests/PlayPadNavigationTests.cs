@@ -150,6 +150,26 @@ public class PlayPadNavigationTests : IDisposable
 		return (window, model);
 	}
 
+	//The other door: Advanced keeps the classic look and the classic StateGrid
+	//(PlayHomeView's plain grid) as its game-selection and Save/Load screens. The
+	//bridge is attached in every window, so its Back edge has to be told which
+	//door it is in.
+	private static (MainWindow Window, MainWindowViewModel Model) ShowAdvanced()
+	{
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.UiMode = UiMode.Advanced;
+		prefs.Workspace = Workspace.Classic;
+		prefs.ConfirmExitResetPower = false;
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+
+		MainWindow window = new();
+		window.ShowStarted();
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus (MainMenuViewModel.Initialize).");
+		return (window, model);
+	}
+
 	private static void WaitFor(Func<bool> condition, string failure)
 	{
 		WaitFor(condition, () => failure);
@@ -263,6 +283,16 @@ public class PlayPadNavigationTests : IDisposable
 	//the codes the pad navigates with are the codes the backend names "Pad1 ...",
 	//and on Windows a DirectInput code in the same namespace would be "Joy1 ..."
 	//at a base that block arithmetic reads as pad 17.
+	//
+	//This is a PERMANENT skip, not coverage. The repo runs this suite headless
+	//(the Avalonia headless runner is the only host it has), and a headless build
+	//never registers a key manager - InitializeEmu does so only when the window
+	//and the viewer both hand it a platform handle, which a headless window does
+	//not. So the guard below can never pass here and this test cannot be made to
+	//execute anywhere the repo runs tests; the rule it would check is pinned
+	//host-free (UI.Tests/Play/PadNamingTests and PadNavigationTests' stand-in
+	//table). It is kept, not deleted, because it is the one place the live name
+	//table is asserted, for whichever environment ever does have a key manager.
 	[AvaloniaFact]
 	public void The_backend_names_every_navigation_code_for_the_pad_in_hand()
 	{
@@ -502,5 +532,155 @@ public class PlayPadNavigationTests : IDisposable
 
 		model.CloseShaderSheet(false);
 		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"closing the shader did not hand the focus back to the Settings sheet underneath ({Focused(window, model)})");
+	}
+
+	//Defect 1: a Play surface that does NOT pause the game must not take the pad
+	//from the console. The barcode tool sheet is reachable while a game runs
+	//unpaused - the Core allows InputBarcode while running and ShortcutHandler
+	//opens the sheet - and it never pauses anything. Before the fix the bridge
+	//read IsPlaySurfaceOverGame ("something is drawn over the game"), which
+	//counts the sheet, so Back closed it out from under the running game while
+	//the pad was also the console's.
+	[AvaloniaFact]
+	public void A_surface_that_does_not_pause_the_game_does_not_take_the_pad()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model);
+		Assert.False(EmuApi.IsPaused(), "the game is not running unpaused");
+
+		model.ToolSheet.OpenBarcode();
+		Assert.True(model.ToolSheet.IsBarcode, "the barcode tool sheet did not open");
+		Assert.True(model.IsPlaySurfaceOverGame, "the tool sheet is not counted as a surface drawn over the game");
+
+		Feed(window, PadNavAction.Back);
+		Pump();
+		Assert.True(model.ToolSheet.IsBarcode, "the pad took the barcode tool sheet, which never paused the game (ADR-0256 Decision 1)");
+		Assert.False(EmuApi.IsPaused(), "the pad paused a game it does not own");
+	}
+
+	//Defect 1, the load card: it is a surface over the game but it pauses nothing
+	//and has no focusable control of its own, so granting authority while it is up
+	//only let a pad Confirm activate whatever the home still held the focus on -
+	//a way to launch a game through the card. The predicate must not grant
+	//authority while a load is in progress.
+	[AvaloniaFact]
+	public void The_load_card_does_not_grant_the_pad_authority()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model);
+		Assert.False(EmuApi.IsPaused(), "the game is not running unpaused");
+
+		model.BeginLoadWait("Synthetic", keepsHome: true);
+		Assert.True(model.IsLoadWaitActive, "the load card is not up");
+
+		Feed(window, PadNavAction.Back);
+		Pump();
+		Assert.False(model.IsPlayerOverlayVisible, "the pad opened W-P4 over the load card (ADR-0256 Decision 1: the card pauses nothing and has no focusable control)");
+	}
+
+	//Defect 2: the Load/Save-state shortcuts open the slot grid directly
+	//(ShortcutHandler -> RecentGames.Init(LoadState/SaveState)), never through
+	//W-P4, so _stateGridFromOverlay stays false, CurrentPlaySheet() is None and
+	//the authority rule answers false. Before the fix the bridge never called
+	//Apply, and Back - the grid's only way out from a pad, whose own 50 ms loop
+	//has no exit - did nothing: the player was stuck on the grid, the very
+	//failure the bridge's grid comment claims to prevent. Back must leave the
+	//grid however it was opened.
+	[AvaloniaFact]
+	public void Back_leaves_a_slot_grid_opened_by_the_shortcut()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model);
+
+		//The emulator shortcut's own path, verbatim.
+		model.RecentGames.Init(GameScreenMode.LoadState);
+		WaitFor(() => model.RecentGames.Visible, "the Load-state shortcut did not open the slot grid");
+		WaitFor(() => GridHasFocus(window), () => $"the slot grid opened without the focus ({Focused(window, model)})");
+
+		Release(window);
+		Feed(window, PadNavAction.Back);
+		Pump();
+		WaitFor(() => !model.RecentGames.Visible, "Back did not leave the slot grid opened by the shortcut (ADR-0256 Decision 2)");
+	}
+
+	//Finding 1: the W-P13 BIOS sheet is shown inside EmuApi.LoadRom -
+	//LoadRomHelper.BeginLoad runs it after BeginLoadWait (so IsLoadWaitActive is
+	//true) and before the console exists (EmuApi.IsRunning false) - and
+	//BiosSheetChooseFile is a focusable control the bridge claims. The load card
+	//and the BIOS sheet share that load, but the card has no focusable control of
+	//its own and the sheet does, so the coarse load flag that used to refuse the
+	//whole load must not refuse the sheet. Back is the observable: with authority
+	//the pad walks ADR-0249's Esc order and cancels the sheet; without it the
+	//press is dropped.
+	[AvaloniaFact]
+	public void The_bios_sheet_is_the_pads_even_inside_a_load()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		Assert.False(EmuApi.IsRunning(), "this test starts from no game");
+
+		model.BeginLoadWait("Zelda", keepsHome: true);
+		Assert.True(model.IsLoadWaitActive, "the load card is not up");
+		_ = model.BiosSheet.Request(FirmwareType.Gameboy, "gb_bios.bin", 0x900, 0, "Zelda");
+		WaitFor(() => model.BiosSheet.IsVisible, "the BIOS sheet did not open");
+
+		Release(window);
+		Feed(window, PadNavAction.Back);
+		Pump();
+		WaitFor(() => !model.BiosSheet.IsVisible,
+			"Back did not cancel the BIOS sheet: the pad has no authority under a load, but the sheet is a no-game surface the ADR says the pad drives (ADR-0256 Decision 2)");
+	}
+
+	//Finding 2: W-P5 opened by itself over an un-enhanced first start is up over a
+	//game that is NOT paused (EvaluatePlayerPackPicker never calls EmuApi.Pause),
+	//so the pause pair alone refuses it. It is the one unpaused surface a first-run
+	//cabinet must be able to act on - the pack has to be chosen before the game is
+	//played - so the pad drives it, and Back dismisses it (ADR-0249's Esc order).
+	[AvaloniaFact]
+	public void The_on_load_pack_picker_is_the_pads()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model);
+		Assert.False(EmuApi.IsPaused(), "the game is not running unpaused");
+
+		//The on-load open: Player mode, no stored preference, a competing pack -
+		//the model path that never pauses (not W-P4's own picker, which sits over
+		//W-P4's pause and is already covered by the pause pair).
+		model.IsPlayerPackPickerVisible = true;
+		Assert.False(model.IsPlayerOverlayVisible, "W-P4 is up: this is not the on-load picker");
+
+		Release(window);
+		Feed(window, PadNavAction.Back);
+		Pump();
+		WaitFor(() => !model.IsPlayerPackPickerVisible,
+			"Back did not dismiss the on-load pack picker: a first-run cabinet cannot choose a pack over an unpaused game (ADR-0256 Decision 2)");
+	}
+
+	//Finding 3: the Back-edge branch fires on a closeable grid with no door check,
+	//but Advanced (Classic) shows the same classic StateGrid - PlayHomeView's plain
+	//grid - as its game-selection and Save/Load screens. The bridge is attached in
+	//every window, so without the door gate a pad Back would close an Advanced
+	//screen the Play door does not own. The ADR is the Play GUI's; Advanced keeps
+	//its own behavior, so the branch is scoped to Play and this pins it.
+	[AvaloniaFact]
+	public void Back_does_not_close_an_advanced_grid()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowAdvanced();
+		Assert.False(model.IsPlayerMode, "this test is not in Player mode");
+		Assert.False(model.IsPlayWorkspace && model.IsPlayerMode, "the Play door is unexpectedly the one that is open");
+
+		model.RecentGames.Init(GameScreenMode.LoadState);
+		WaitFor(() => model.RecentGames.Visible, "the Advanced slot grid did not open");
+		WaitFor(() => GridHasFocus(window), () => $"the Advanced slot grid opened without the focus ({Focused(window, model)})");
+
+		Release(window);
+		Feed(window, PadNavAction.Back);
+		Pump();
+		Assert.True(model.RecentGames.Visible, "the bridge closed an Advanced slot grid: the Back edge must be scoped to the Play door (ADR-0256 Decision 2)");
 	}
 }
