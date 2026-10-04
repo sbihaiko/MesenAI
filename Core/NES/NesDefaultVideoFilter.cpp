@@ -158,8 +158,25 @@ void NesDefaultVideoFilter::OnBeforeApplyFilter()
 	VideoConfig& config = _emu->GetSettings()->GetVideoConfig();
 	NesConfig& nesConfig = _emu->GetSettings()->GetNesConfig();
 
+	//No console is a real state, not an error: Emulator::GetVideoFilter hands out
+	//this filter for exactly that case, and SaveStateManager::GetSaveStatePreview
+	//renders a state's thumbnail through it - including after the game was closed,
+	//which is what a preview still in flight when the console goes away does.
+	//Reading the model off a console that is not there was an access violation at
+	//the Ppu field's offset of a null NesConsole (#829).
+	//
+	//With no console there is nothing to ask, and a state carries no PPU model of
+	//its own, so the filter's own default stands: a thumbnail rendered while no
+	//game is loaded uses the default palette, and a state written by a Vs. System
+	//or PlayChoice PPU shows those colours wrong. That is a smaller wrong than the
+	//one it replaces (the crash), it cannot arise while that game is loaded - the
+	//console is there and is asked - and the preview path has no other source for
+	//the model to offer.
 	shared_ptr<IConsole> console = _emu->GetConsole();
-	PpuModel model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+	PpuModel model = _ppuModel;
+	if(console) {
+		model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+	}
 
 	bool optionsChanged = (_ppuModel != model ||
 		_videoConfig.Hue != config.Hue ||
