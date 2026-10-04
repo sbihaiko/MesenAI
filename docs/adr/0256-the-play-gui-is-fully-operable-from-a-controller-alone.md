@@ -9,6 +9,13 @@
   yet**; the first landing is the Controller sheet (ADR-0255), which this ADR's
   Consequences already names as the cheaper order. Ids are never reused
   (ADR-0035), which is why this is 0256 and not 0255.
+  **Amended 2026-10-04**, the same day, after the work started: four more
+  questions were put to the user and answered — the focus mechanism (Decision
+  7's paragraph: the focus engine, not synthetic key events), what "one
+  focusable control at a time" means concretely (Decision 3), auto-repeat
+  (Decision 7) and the first run's scope (Decision 8). Their picks are recorded
+  in the decisions themselves, quoted verbatim, and they changed the Decision
+  text rather than being noted beside it.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
@@ -79,6 +86,15 @@ heading are answered by them and by the section after.**
    as from the keyboard.
 3. **One focusable control at a time**, with the focus visible — an arcade
    cabinet has no cursor to fall back on, so "where am I" has to be drawn.
+   Concretely, and decided with the user on 2026-10-04 after measuring the
+   ground: Avalonia already focuses one element, so this rule is **not** a new
+   roving-focus container — it is (a) one place that decides who receives the
+   focus when a surface opens, replacing the four-plus sites that decide it
+   today and fight each other (`MainWindow.axaml.cs`, `PlayEdgeFlowsWiring`, the
+   Play sheets wiring, `PlayHomeView`, `StateGrid`), and (b) that path entering
+   focus with a `NavigationMethod`, so `:focus-visible` paints the
+   `PlayerFocusRing` the theme already carries. Suppressing the tab stops of a
+   hidden surface is a separate, larger question this rule does not settle.
 4. **Navigation is not rebindable** (the user's answer, 2026-10-04:
    *"Não reconfigurável"*). Confirm, back and focus movement follow the pad's own
    preset - `DefaultKeyMappingType.Xbox` or `Ps4`, which the first run already
@@ -102,7 +118,19 @@ heading are answered by them and by the section after.**
    `Pad1 Start` on XInput/Windows, whose button table calls that button Back.
    With two pads connected, the one in the player's hand has no way into the
    overlay at all, and the overlay is the only route to the menus while a game
-   runs. Filed as issue #800; this rule is the fix it has to satisfy.
+   runs. Filed as issue #800 and fixed in #802; this rule is what that fix had to
+   satisfy.
+
+   **The rule does not, and cannot, seed a default chord for a Windows
+   DirectInput joystick** — filed as #804 and decided with the user on
+   2026-10-04. DirectInput exposes no semantic button names at all (axis
+   directions and `But1..But128`), so "the Select+Start gesture" has no
+   spelling in that family, and guessing two high-numbered buttons would put a
+   default chord on top of the player's own controls. What that pad gets instead
+   is Decision 2 plus ADR-0255 slice 4: **with no game loaded the pad drives the
+   GUI**, so it reaches Play › Settings › Controls › the sheet and binds its own
+   menu button from the one shortcut list. #804 is therefore closed by this work
+   rather than by a second default, and the stop rule below covers it.
 6. **On-screen text names the control in the player's hand**, not the keyboard
    (the user's answer, 2026-10-04: *"Segue o controle na mão"*). W-P4's footer
    reads "Esc to resume" today, which is a lie on the cabinet this ADR is about:
@@ -110,16 +138,40 @@ heading are answered by them and by the section after.**
    (`DefaultKeyMappingType.Xbox` or `Ps4`), so "back" is B on one desk and ○ on
    another, and the footer has to say which.
 
+7. **A held D-pad repeats** (decided with the user, 2026-10-04). The Core's
+   shortcut thread only re-emits a key when the set of pressed keys *changes*,
+   so a held direction produces one event and nothing else. A menu cursor needs
+   its own timing: the first step on the press, then a repeat after a short
+   delay. The exact numbers are an implementation detail, not a decision — what
+   is decided is that holding a direction **does** repeat, rather than stepping
+   once per press.
+8. **The first run is in scope** (decided with the user, 2026-10-04). Storage
+   choice, keyboard preset and the ROM picker happen before any game and before
+   any pad binding exists, which is exactly the state a cabinet boots into, and
+   the PRD's stop rule cannot be signed off while they need a keyboard. They
+   are driven by the same rules above — this is the surface the ADR's own
+   Consequences section already called "the hard part", and it is a slice of
+   this work rather than a later ADR.
+
 There is no second gesture into W-P4: the chord on any pad, and nothing else
 (the user's pick, 2026-10-04, over adding a long-press). A pad whose Select or
 Start is broken therefore has no way in, which is accepted rather than
 overlooked.
 
-The cheap implementation, and the one worth trying first: translate pad events
-into the **keyboard navigation events Avalonia already handles** (arrow keys,
-Tab, Enter, Escape) rather than teaching each view about the pad. Every
-existing surface then works unchanged, and the wiring lives in one place next
-to `ShortcutHandler`.
+The cheap implementation, and the one worth trying first: do **not** teach each
+Play view about the pad. Every pad press is reduced to one navigation intent in
+a single place next to `ShortcutHandler`, and that place moves the focus.
+
+**How it moves the focus is decided with the user, 2026-10-04**, and it is not
+the wording this ADR first carried. Translating pad events into synthetic
+keyboard events was the first idea, and it was rejected on measurement: no code
+in the app has ever set a `NavigationMethod`, and there is no evidence that a
+synthesised `KeyEventArgs` drives Avalonia 12's focus navigation — a mechanism
+that cannot be proven to work from a headless test is the wrong foundation for
+the one path a keyboard-less cabinet depends on. The bridge calls the focus
+engine directly (`KeyboardNavigationHandler` / `FocusManager` with
+`NavigationMethod.Directional`), which is deterministic, testable without a
+pad, and still one place rather than a per-view concern.
 
 ## The four questions, and how they were answered
 
@@ -144,7 +196,9 @@ All on 2026-10-04, by the user, quoted verbatim from the questions they answered
   ROM picker all happen before any game, before any pad binding exists, and
   possibly on a machine with no keyboard at all — so they need pad input from a
   path that has never been configured. This is the case a cabinet actually
-  boots into, and it is earlier in the flow than everything above.
+  boots into, and it is earlier in the flow than everything above — which is
+  why Decision 8 brings it into this ADR's scope rather than leaving it to a
+  later one.
 - Focus traversal has to be *drawn*, and here the ground is better than it
   looks: `PlayerTheme.axaml` has carried a `PlayerFocusRing` on `:focus-visible`
   since the theme landed, and it is now a three-layer glow on every button class
