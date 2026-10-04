@@ -83,8 +83,10 @@ internal sealed class PlayFocusOnOpen
 	//Re-arbitrate: the topmost open surface takes the focus, else the content
 	//area, else the renderer (the game's own surface, which is what has the
 	//focus while a game runs with nothing over it). Posted, because a control
-	//that is only now visible cannot take the focus in the same turn, and at
-	//Loaded so the layout pass has run.
+	//that is only now visible cannot take the focus in the same turn. Loaded, and
+	//NOT later: measured, a control can be found, focusable, enabled and still not
+	//yet *effectively visible* under this priority, which is why the retry below
+	//steps down to Background rather than repeating this one - see Apply.
 	public void Refresh()
 	{
 		//Whoever holds the focus now is captured before the decision is posted:
@@ -103,6 +105,14 @@ internal sealed class PlayFocusOnOpen
 	//bounded - and abandoned the moment the focus has moved to something this
 	//decision did not choose, so the pad moving the ring while a surface is
 	//settling is never undone by the surface.
+	//
+	//The retry applies to BOTH halves of the decision. It used to be skipped
+	//whenever no surface was up ("nothing is up, so nothing can still become
+	//focusable"), and that shortcut was wrong in the one case that matters:
+	//#824, where the home's primary action was found, focusable and enabled and
+	//was still not *effectively visible*, so Enter failed and the home opened
+	//with nothing focused - the exact failure ADR-0256 Decision 3 exists to
+	//prevent, and the one Decision 8's keyboard-less first run cannot survive.
 	private void Apply(int attempt, object? held)
 	{
 		if(attempt > 0 && !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held)) {
@@ -117,12 +127,17 @@ internal sealed class PlayFocusOnOpen
 			Retry(attempt, held);
 			return;
 		}
-		if(Enter(target ?? _content?.Invoke() ?? _window.GetControl<Panel>("RendererPanel")) || claim is null) {
-			//Nothing is up, so there is nothing that could still become
-			//focusable: the content area and the renderer are what is left, and
-			//a window with neither keeps whatever focus it has.
+		if(Enter(target ?? _content?.Invoke() ?? _window.GetControl<Panel>("RendererPanel"))) {
 			return;
 		}
+		//#824: the retry is for whichever half of the decision produced the
+		//target. Instrumented, the home's case reads exactly:
+		//  attempt=0 name=PlayHomeOpenRomPrimary visible=False enter=False
+		//  attempt=1 name=PlayHomeOpenRomPrimary visible=True  enter=True
+		//so the control exists, is focusable and is enabled, and the layout pass
+		//that makes it effectively visible lands after the Loaded turn this
+		//decision is posted in - which is why Retry steps down to Background
+		//instead of repeating Loaded, where every attempt would see False.
 		Retry(attempt, held);
 	}
 
@@ -131,7 +146,7 @@ internal sealed class PlayFocusOnOpen
 		if(attempt + 1 >= Attempts) {
 			return;
 		}
-		Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Loaded);
+		Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Background);
 	}
 
 	//True while a Play surface is up over the content area. A screen that asks

@@ -145,17 +145,85 @@ public class PadNavigationTests
 		Assert.Equal(KeyCode("Joy2 But3"), Nav(PadFamily.Ps4, 1).Back);
 	}
 
-	//Decision 2, in full: W-P4 up, or no game loaded. Decision 1 is the other
-	//three rows - a game that runs unpaused keeps its pad, and so does a game
-	//paused with no Play surface over it.
+	//Decisions 1 and 2, in full, with the surfaces named rather than one coarse
+	//"something is drawn over the game". The pair that matters: a surface is the
+	//pad's only when the game is paused under it. A surface that does not pause
+	//(the barcode tool sheet, Settings from a task door, the archive's ROM list)
+	//is drawn over a running game but must not take the pad (Decision 1); a game
+	//paused by the classic menus or an auto-pause with no Play surface over it has
+	//nothing to drive, so it keeps its pad too. The load card (rows 7-8) is refused
+	//because it has no focusable control, the BIOS sheet over the same load (row 3)
+	//is not, and the on-load pack picker (rows 9-10) is granted because it must be
+	//answered before play.
 	[Theory]
-	[InlineData(true, true, true)]
-	[InlineData(true, false, true)]
-	[InlineData(false, false, true)]
-	[InlineData(false, true, false)]
-	public void The_pad_has_the_gui_when_the_overlay_is_up_or_no_game_is_loaded(bool overlayOpen, bool gameLoaded, bool expected)
+	[InlineData(true, true, true, false, false, true)]    // W-P4 (or a sheet from it) over a game it paused
+	[InlineData(true, true, false, false, false, false)]  // a surface that never paused the game
+	[InlineData(true, false, false, false, false, true)]  // a sheet over the home, no game (the BIOS sheet inside a load shares this shape)
+	[InlineData(false, false, false, false, false, true)] // the Play home, no game
+	[InlineData(false, true, true, false, false, false)]  // paused, but no Play surface (classic menu / auto-pause)
+	[InlineData(false, true, false, false, false, false)] // a game running unpaused (Decision 1)
+	[InlineData(true, false, false, true, false, false)]  // the load card over the home
+	[InlineData(true, true, true, true, false, false)]    // the load card over a paused game (a reload)
+	[InlineData(true, true, false, false, true, true)]    // the on-load pack picker over an unpaused game
+	[InlineData(true, true, false, true, true, true)]     // the on-load picker while the load card is still up
+	public void The_pad_has_the_gui_only_when_a_pausing_surface_is_up_or_no_game_is_loaded(bool playSurfaceUp, bool gameLoaded, bool gamePaused, bool loadCardUp, bool firstRunPickerUp, bool expected)
 	{
-		Assert.Equal(expected, PlayPadNavigation.HasAuthority(overlayOpen, gameLoaded));
+		Assert.Equal(expected, PlayPadNavigation.HasAuthority(playSurfaceUp, gameLoaded, gamePaused, loadCardUp, firstRunPickerUp));
+	}
+
+	//Decision 2 for the slot grid: Back is the grid's only way out from a pad, and
+	//the Load/Save-state shortcuts open it with no authority to gate it - so the
+	//edge is asked for directly, whatever the authority rule says.
+	[Fact]
+	public void Back_is_an_edge_even_without_menu_authority()
+	{
+		PadNavMapping nav = Nav(PadFamily.Xbox);
+
+		Assert.True(PlayPadNavigation.IsBackEdge(new[] { nav.Back }, new ushort[0], nav));
+		Assert.False(PlayPadNavigation.IsBackEdge(new[] { nav.Back }, new[] { nav.Back }, nav));
+		Assert.False(PlayPadNavigation.IsBackEdge(new[] { nav.Confirm }, new ushort[0], nav));
+		Assert.False(PlayPadNavigation.IsBackEdge(new[] { nav.Back }, new ushort[0], null));
+	}
+
+	//The door every rule here is asked inside, and a rule of its own because two
+	//callers ask it: the bridge (authority, the Back edge) and the slot grid's own
+	//pad branch. The grid is one control drawing both doors' grids - W-P2's tiles
+	//and the Save/Load screens in Play, Advanced's game-selection and Save/Load
+	//screens in the classic GUI - so a branch of it that reads the pad's preset has
+	//to ask the same door the bridge does, or the classic grid loses the console
+	//mapping it navigated with before ADR-0256 (the ADR is the Play GUI's).
+	[Theory]
+	[InlineData(true, true, true)]    // Player mode in a game-screen workspace: the Play door
+	[InlineData(true, false, false)]  // Player mode with the game screen away (Remaster/Share)
+	[InlineData(false, true, false)]  // the classic UI mode under a game-screen workspace
+	[InlineData(false, false, false)]
+	public void The_play_door_is_player_mode_in_a_game_screen_workspace(bool isPlayerMode, bool isPlayWorkspace, bool expected)
+	{
+		Assert.Equal(expected, PlayPadNavigation.InPlayDoor(isPlayerMode, isPlayWorkspace));
+	}
+
+	//Decision 4 for the grid: its four directions and Confirm come off the pad's
+	//own preset, and Back is deliberately not one of them - leaving the grid is the
+	//bridge's. That split is what tells the pad's B (the preset's Back) apart from
+	//the console's A, which sits on the same button.
+	[Theory]
+	[InlineData(PadNavAction.Up)]
+	[InlineData(PadNavAction.Down)]
+	[InlineData(PadNavAction.Left)]
+	[InlineData(PadNavAction.Right)]
+	[InlineData(PadNavAction.Confirm)]
+	public void The_grid_reads_its_directions_and_confirm_off_the_pad_preset(PadNavAction action)
+	{
+		PadNavMapping nav = Nav(PadFamily.Xbox);
+		Assert.Equal(action, PlayPadNavigation.GridAction(CodeOf(nav, action), nav));
+	}
+
+	[Fact]
+	public void The_grid_never_reads_back_because_back_leaves_it()
+	{
+		PadNavMapping nav = Nav(PadFamily.Xbox);
+		Assert.Equal(PadNavAction.None, PlayPadNavigation.GridAction(nav.Back, nav));
+		Assert.Equal(PadNavAction.None, PlayPadNavigation.GridAction(KeyCode("Pad1 Start"), nav));
 	}
 
 	[Fact]

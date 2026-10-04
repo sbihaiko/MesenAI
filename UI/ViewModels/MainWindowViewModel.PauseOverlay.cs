@@ -62,6 +62,24 @@ namespace Mesen.ViewModels
 		public bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
 			|| SelectRomSheet.IsVisible || IsShaderSheetVisible || ToolSheet.IsVisible;
 
+		//ADR-0256 (accepted 2026-10-04) Decisions 1 and 2: the W-P13 BIOS sheet and
+		//the #734 load card share the same load - IsLoadWaitActive is true under
+		//both - but they are not the same surface to the pad. The card is the one
+		//Play surface with no focusable control of its own (the home stays under
+		//it), so the pad has nothing to drive there and authority would only let a
+		//Confirm reach the home and launch a game through the card; the BIOS sheet
+		//does have a focusable control and is the pad's. Named apart so the
+		//authority rule is handed the distinction instead of the coarse load flag.
+		public bool IsLoadCardVisible => IsLoadWaitActive && !BiosSheet.IsVisible;
+
+		//P.5 (W-P5): the picker opened by itself over an un-enhanced first start,
+		//never from W-P4. It is up over a game that is NOT paused
+		//(EvaluatePlayerPackPicker never pauses) and still has to be answered
+		//before play, so it is the one unpaused surface the pad drives (ADR-0256
+		//Decision 2). W-P4's own picker sits over the pause the overlay took, so
+		//the ordinary pause pair already covers it.
+		public bool IsOnLoadPackPickerVisible => IsPlayerPackPickerVisible && !_packPickerFromOverlay;
+
 		private static readonly HashSet<string> PlaySurfaceProperties = new() {
 			nameof(IsPlayerOverlayVisible), nameof(IsSaveStatesSheetVisible), nameof(IsEnhancementsPanelVisible),
 			nameof(IsPlayerPackPickerVisible), nameof(IsPackDetailVisible), nameof(IsPlayerSettingsVisible),

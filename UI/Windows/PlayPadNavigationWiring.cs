@@ -299,7 +299,27 @@ namespace Mesen.Windows
 					_lastTick = now;
 				}
 
-				PadNavAction action = _repeat.Next(pressed, _previous, mapping, HasAuthority(), step);
+				bool authority = HasAuthority();
+				PadNavAction action = _repeat.Next(pressed, _previous, mapping, authority, step);
+
+				//Defect 2: Back is the slot grid's only way out from a pad, and it
+				//must not be gated by authority. A grid opened by the Load/Save-state
+				//shortcuts sits over a game CurrentPlaySheet() does not name, so
+				//authority is false and _repeat.Next answers None - which left the
+				//player stuck on the grid. The grid asks for Back directly when a
+				//closable grid (not the Play home's tiles, which have no close)
+				//holds the focus; Apply then closes it through the grid's own path.
+				//
+				//Scoped to the Play door, like the authority it sidesteps: the
+				//classic StateGrid is also Advanced's game-selection and Save/Load
+				//screen, and the bridge ticks in every window, so without this gate
+				//a pad Back would close an Advanced screen the ADR never gave it
+				//(ADR-0256 is the Play GUI's; Advanced keeps its own behavior).
+				if(action == PadNavAction.None && InPlayDoor && CloseableGridHasFocus()
+					&& PlayPadNavigation.IsBackEdge(pressed, _previous, mapping)) {
+					action = PadNavAction.Back;
+				}
+
 				//Recorded on EVERY tick, authority or not: a button held across
 				//the moment the overlay opens would otherwise look like a new
 				//press and step the menu the instant it appeared.
@@ -310,20 +330,42 @@ namespace Mesen.Windows
 				}
 			}
 
-			//ADR-0256 Decision 2, through the rule: the pad drives the GUI while a
-			//Play surface is up, or with no game loaded. `IsPlaySurfaceOverGame`
-			//is that question already answered once in this app (it is what makes
-			//the native picture step aside for a surface), read here rather than
-			//re-derived - and the pause state is never re-tested, because the rule
-			//owns it and a second guard could only disagree with the first.
+			//ADR-0256 Decisions 1 and 2, through the rule. `IsPlaySurfaceOverGame`
+			//answers "is something drawn over the game", which is a weaker question
+			//than "did that something take the console away from the pad": it counts
+			//the barcode tool sheet, Settings reached from a task door, the archive's
+			//ROM list and the load card - none of which pause. So the rule is handed
+			//the pause state beside it (a surface qualifies only when the game is
+			//paused under it), plus the two non-pausing surfaces that ARE the pad's
+			//and are named rather than folded in: the load card, which is refused
+			//because it has no focusable control of its own, and the on-load pack
+			//picker, which is granted because it has to be answered before play.
 			//
 			//The Player-mode/Play-workspace gate is ShortcutHandler's own
 			//(ToggleOverlay's): the pad drives the *Play* GUI, which is the door an
-			//arcade cabinet boots into, not the classic menus.
+			//arcade cabinet boots into, not the classic menus. Named InPlayDoor so
+			//the authority path and the grid's Back edge ask the same door.
 			private bool HasAuthority()
 			{
-				return _model.IsPlayerMode && _model.IsPlayWorkspace
-					&& PlayPadNavigation.HasAuthority(_model.IsPlaySurfaceOverGame, EmuApi.IsRunning());
+				return InPlayDoor
+					&& PlayPadNavigation.HasAuthority(_model.IsPlaySurfaceOverGame, EmuApi.IsRunning(), EmuApi.IsPaused(), _model.IsLoadCardVisible, _model.IsOnLoadPackPickerVisible);
+			}
+
+			//The door the bridge is for: Player UI mode in a game-screen workspace
+			//(the switcher's Play door, or Classic under the same UI mode). The rule
+			//is PlayPadNavigation's, not a private one here, because the slot grid's
+			//own pad branch asks the same door (StateGrid.TimerInput_Tick) and the
+			//two must never answer differently.
+			private bool InPlayDoor => PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
+
+			//A slot grid the pad can leave: the classic grid the Save/Load screens
+			//and Advanced use, which draws a close box. The Play home's row of tiles
+			//is a StateGrid too (ShowClose false) and has nothing to leave, so Back
+			//on it stays what it was with Esc - a no-op on the home.
+			private bool CloseableGridHasFocus()
+			{
+				return _window.FocusManager?.GetFocusedElement() is Control focused
+					&& GridOf(focused) is StateGrid grid && grid.CanCloseFromPad;
 			}
 
 			//What a press does. Directions move the focus through the engine's own
@@ -332,10 +374,23 @@ namespace Mesen.Windows
 			private void Apply(PadNavAction action)
 			{
 				if(action == PadNavAction.Back) {
-					//Back is the same shortcut ADR-0251 gave the pad's chord, so a
-					//pad walks ADR-0249's Esc order (sheet → W-P4 → resume) through
-					//the one router that already implements it. On the home Esc does
-					//nothing, and the pad's Back does nothing with it.
+					//The grid's Back closes the grid through the grid's own path,
+					//never the Esc router: for a grid opened from W-P4 the two agree
+					//(both come back to the overlay), but for the Load/Save-state
+					//shortcuts the router would open W-P4 over a grid that is not its
+					//own, while the grid's close hides the grid and resumes the game.
+					//A grid with no close (the Play home's tiles) has nothing to
+					//leave: Back does nothing there, as Esc does.
+					if(_window.FocusManager?.GetFocusedElement() is Control gridFocus && GridOf(gridFocus) is StateGrid grid) {
+						if(grid.CanCloseFromPad) {
+							grid.CloseFromPad();
+						}
+						return;
+					}
+					//Not a grid: Back is the same shortcut ADR-0251 gave the pad's
+					//chord, so a pad walks ADR-0249's Esc order (sheet → W-P4 →
+					//resume) through the one router that already implements it. On the
+					//home Esc does nothing, and the pad's Back does nothing with it.
 					EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.ToggleOverlay });
 					return;
 				}
@@ -346,23 +401,34 @@ namespace Mesen.Windows
 				//StateGrid is scoped OUT of the bridge, deliberately - the choice
 				//ADR-0256 Decision 3 left open ("either own the grid or exclude it").
 				//It already moves its own SelectedIndex from the pad, in its own
-				//50 ms timer, off player 1's port mappings (StateGrid.TimerInput_Tick),
-				//and that same loop serves Advanced, where no Play surface and so no
-				//mapping exists. Its slots are not individually focusable, so "owning"
-				//it here would mean inventing the roving-focus container Decision 3
-				//rules out.
+				//50 ms timer, and that same loop serves Advanced, where no Play
+				//surface and so no mapping exists. Its slots are not individually
+				//focusable, so "owning" it here would mean inventing the roving-focus
+				//container Decision 3 rules out. Since defect 3 its pad codes come
+				//from the pad's own preset (PlayPadNavigation.GridAction, resolved
+				//for the device the code came from), not the rebindable console port
+				//mapping - so the pad's own directions move it and its own Confirm
+				//loads, and a second pad drives it too.
 				//
 				//So while the grid holds the focus the D-pad and Confirm are the
 				//grid's, and Back is still ours: Back is the grid's only way out from
 				//a pad (the grid's own loop has no exit, and Esc - what Back already
 				//is - is a route a cabinet has no keyboard for), and a player stuck
 				//in the slot grid is the exact failure this ADR exists to prevent.
+				//The grid asks for Back in Tick even without authority, and Apply
+				//closes the grid through the grid's own path, never the Esc router.
 				//
-				//The wart that leaves, stated rather than hidden: the pad's B is both
-				//the console's B and Back, so on the grid it reads as "load this slot"
-				//to the grid and "leave" to us. That ambiguity is a rebinding question
-				//(ADR-0255's), not this slice's, and resolving it silently here would
-				//be the second source of truth the ADR warns against.
+				//The B ambiguity, written down and resolved rather than hidden: on
+				//the pad's own preset Back is the pad's B, and the console mapping
+				//puts the console's A on that same button (KeyPresets maps the Xbox
+				//B to the console's A). While the grid read its load off the console
+				//mapping, the pad's B both loaded the slot (as console A) and left the
+				//grid (as Back) - two readings of one press. Reading the grid's pad
+				//codes off the preset instead puts the load on the pad's A (the
+				//preset's Confirm) and leaves the pad's B to Back, so the two no
+				//longer collide. The keyboard's console mapping is untouched:
+				//Decision 4 is about the pad, and the keyboard player's own choice is
+				//theirs.
 				if(action != PadNavAction.Back && IsGrid(focused)) {
 					return;
 				}
@@ -388,7 +454,14 @@ namespace Mesen.Windows
 			//but the walk is what makes the exclusion hold if a sheet ever does).
 			private static bool IsGrid(Control focused)
 			{
-				return focused is StateGrid || focused.GetVisualAncestors().OfType<StateGrid>().Any();
+				return GridOf(focused) is not null;
+			}
+
+			//The grid a focused control belongs to, or null - the same walk IsGrid
+			//used, returned rather than only answered so Back can close it.
+			private static StateGrid? GridOf(Control focused)
+			{
+				return focused as StateGrid ?? focused.GetVisualAncestors().OfType<StateGrid>().FirstOrDefault();
 			}
 
 			private static NavigationDirection Direction(PadNavAction action)
