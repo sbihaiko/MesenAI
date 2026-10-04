@@ -362,27 +362,36 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 
 		if(fileFormatVersion <= 3) {
 			//Skip over old SHA1 field, as LoadState does: it sits between the
-			//format version and the console type, so reading the type without
-			//skipping it would read the SHA1's first four bytes as the console and
-			//refuse every state at the oldest format this preview accepts.
+			//format version and the console type. The preview never skipped it, so
+			//a state at the oldest format this accepts had its console type read
+			//out of the SHA1 and its frame length read 40 bytes early - a garbage
+			//size, which GetVideoData refuses. Those states showed no thumbnail at
+			//all rather than a wrong one, and the skip is what gives them one.
 			stream.seekg(40, ios::cur);
 		}
 
-		//The state's own console, which is what the four bytes were skipped for
-		//until #832. The frame below is rendered through _emu->GetVideoFilter,
-		//and that is the *loaded* console's filter, so a state that came from
-		//another console has nothing to render it with: a Game Boy frame decoded
-		//through the NES palette is noise, and no assertion downstream can tell.
-		//
-		//Refused only while a console is loaded, which is when "the loaded
-		//console's filter" is a claim that means anything. With none (a preview
-		//still in flight when the game was closed, #829) there is no console to
-		//disagree with - Emulator::GetConsoleType answers the last active one,
-		//and its zero default is Snes, so reading it here would refuse a state
-		//that the default filter would in fact have rendered correctly.
+		//The state's own console, which these four bytes are read for as of #832:
+		//the frame below is rendered through the loaded console's filter, so a
+		//state that came from another console has nothing to render it with - a
+		//Game Boy frame decoded through the NES palette is noise, and no
+		//assertion downstream can tell.
 		ConsoleType stateConsoleType = (ConsoleType)ReadValue(stream);
+
+		//One read of the console, used both for the comparison and for the filter
+		//the frame is rendered through: two reads are two answers, and a Stop()
+		//between them would compare the state against one console and render it
+		//through the filter of no console at all.
 		shared_ptr<IConsole> console = _emu->GetConsole();
-		if(console && console->GetConsoleType() != stateConsoleType) {
+
+		//With no console the filter that renders is NesDefaultVideoFilter, which
+		//is Emulator::GetVideoFilter's own answer for that case - not "whatever
+		//was loaded last" (Emulator::GetConsoleType keeps answering that, and its
+		//zero default is Snes), so it is written down here as the console type
+		//that filter belongs to. A state from another console has nothing to
+		//render it with either way, and answering a bitmap for it is the noise
+		//this guard exists to refuse.
+		ConsoleType filterConsoleType = console ? console->GetConsoleType() : ConsoleType::Nes;
+		if(filterConsoleType != stateConsoleType) {
 			return -1;
 		}
 
@@ -393,7 +402,10 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			baseFrameInfo.Width = frame.Width;
 			baseFrameInfo.Height = frame.Height;
 
-			unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter(true));
+			//The console the guard above compared against, held for the whole
+			//render; with none, GetVideoFilter's own answer, which is the NES
+			//default filter the type above was written as.
+			unique_ptr<BaseVideoFilter> filter(console ? console->GetVideoFilter(true) : _emu->GetVideoFilter(true));
 			filter->SetBaseFrameInfo(baseFrameInfo);
 			FrameInfo frameInfo = filter->SendFrame((uint16_t*)frameData.data(), 0, 0, nullptr);
 

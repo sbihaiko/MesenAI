@@ -68,6 +68,25 @@ public class ForeignStatePreviewTests : IDisposable
 		Assert.Null(EmuApi.GetSaveStatePreview(state));
 	}
 
+	//The same refusal with no game loaded, and the case that keeps the guard from
+	//being written as "only when a console exists". The filter a preview gets with
+	//no console is the NES default one - Emulator::GetVideoFilter's own answer for
+	//that case, not the last console's, which is what Emulator::GetConsoleType
+	//still answers and why it is not the field the guard reads - so a Game
+	//Boy-labelled state has nothing to render it with here either. Before the fix
+	//this line answered a bitmap, the same noise as above rendered through the NES
+	//palette.
+	[AvaloniaFact]
+	public void A_state_of_another_console_has_no_preview_with_no_game_loaded()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string state = WriteStateOfAnotherConsole(foreign: true);
+
+		EmuApi.Stop();
+		Assert.False(EmuApi.IsRunning());
+		Assert.Null(EmuApi.GetSaveStatePreview(state));
+	}
+
 	//The other half: the state the console actually wrote still previews, so the
 	//guard refuses foreign states and nothing else. This is the case that fails if
 	//the check is written the wrong way round - refusing every state, or reading
@@ -85,8 +104,11 @@ public class ForeignStatePreviewTests : IDisposable
 	//shape: a file at the oldest format the preview accepts (v3) carries a 40-byte
 	//SHA1 field between the format version and the console type - the field
 	//`LoadState` skips before it reads the type, so a preview that reads the type
-	//without skipping reads the SHA1's first four bytes as the console and refuses
-	//every old state it used to render.
+	//without skipping reads the SHA1's first four bytes as the console and, 40
+	//bytes further on, a frame length that is not a length. These states had no
+	//thumbnail before the skip rather than a wrong one: GetVideoData refused the
+	//garbage size. This case is what says the skip is there and in the right
+	//place, not merely that the guard accepts a state.
 	[AvaloniaFact]
 	public void An_old_format_state_still_previews()
 	{
