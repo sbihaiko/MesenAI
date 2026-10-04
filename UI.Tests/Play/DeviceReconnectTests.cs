@@ -16,6 +16,7 @@ namespace Mesen.Tests.Play
 	{
 		private const uint Vid = 0x054C, Pid = 0x0CE6; //DualSense
 		private const uint OtherVid = 0x045E, OtherPid = 0x028E; //Xbox 360
+		private const uint ThirdVid = 0x1532, ThirdPid = 0x0A29; //a third model
 
 		//A one-family key code (evdev, macOS, XInput): base + device * 0x100 + button.
 		private static ushort Key(int device, int button) => (ushort)(0x1000 + device * 0x100 + button);
@@ -109,6 +110,46 @@ namespace Mesen.Tests.Play
 			//reconnected, so nothing may move. A baseline advanced past the dropped
 			//move rewrites the Xbox pad's Port1 keys onto device 1 here.
 			Assert.Empty(history.Observe(new[] { Pad(0, OtherVid, OtherPid), Pad(1, Vid, Pid) }));
+		}
+
+		[Fact]
+		public void A_move_onto_an_index_a_dropped_ambiguous_source_did_not_vacate_is_refused()
+		{
+			//A candidate dropped because its source is ambiguous never moves, so its
+			//source index is NOT vacated: its keys are still exactly where they were.
+			//A later candidate whose target is that index must be refused, not land on
+			//keys another pad still occupies (ADR-0255 Decision 5).
+			DeviceReconnectHistory history = new();
+			//Two pads both recorded at index 1 - whose keys sat there is unknown, so a
+			//move out of 1 is ambiguous for both.
+			history.Observe(new[] { Pad(1, Vid, Pid) });
+			history.Observe(new[] { Pad(1, OtherVid, OtherPid) });
+			history.Observe(new[] { Pad(3, ThirdVid, ThirdPid) });
+
+			//Both ambiguous pads reconnect to fresh indexes (their moves drop), and
+			//the third pad reconnects onto index 1, where the first two pads' keys
+			//still are.
+			Assert.Empty(history.Observe(new[] { Pad(2, Vid, Pid), Pad(4, OtherVid, OtherPid), Pad(1, ThirdVid, ThirdPid) }));
+		}
+
+		[Fact]
+		public void A_move_onto_an_index_a_dropped_target_taken_move_did_not_vacate_is_refused()
+		{
+			//A candidate dropped because another candidate already claimed its target
+			//never moves either, so its source is not vacated. A later candidate
+			//targeting that source must be refused.
+			DeviceReconnectHistory history = new();
+			history.Observe(new[] { Pad(1, Vid, Pid) });
+			history.Observe(new[] { Pad(2, OtherVid, OtherPid) });
+			history.Observe(new[] { Pad(0, ThirdVid, ThirdPid) });
+
+			//The third pad reconnects to 5; the DualSense also targets 5, so its move
+			//is dropped for a taken target - leaving its keys at index 1. The Xbox
+			//pad's move onto 1 must be refused; only the third pad's move survives.
+			IReadOnlyList<DeviceMove> moves = history.Observe(new[] { Pad(5, ThirdVid, ThirdPid), Pad(5, Vid, Pid), Pad(1, OtherVid, OtherPid) });
+
+			DeviceMove move = Assert.Single(moves);
+			Assert.Equal(new DeviceMove(GamepadBackend.Evdev, 0, 5), move);
 		}
 
 		[Fact]

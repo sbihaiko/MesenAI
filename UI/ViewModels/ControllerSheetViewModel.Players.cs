@@ -146,7 +146,7 @@ namespace Mesen.ViewModels
 		//not disagree about which slot a pad is in (ADR-0255 Consequences).
 		private static (ushort[] All, ushort[] Fixed) SlotKeys(ControllerConfig config, int index)
 		{
-			InteropKeyMapping k = Slot(config, index).ToInterop(config.Type, index);
+			InteropKeyMapping k = ControllerSheetSlotWrite.Slot(config, index).ToInterop(config.Type, index);
 			ushort[] fixedKeys = {
 				k.A, k.B, k.X, k.Y, k.L, k.R, k.Up, k.Down, k.Left, k.Right, k.Start, k.Select, k.U, k.D,
 				k.TurboA, k.TurboB, k.TurboX, k.TurboY, k.TurboL, k.TurboR, k.TurboSelect, k.TurboStart, k.GenericKey1
@@ -264,8 +264,7 @@ namespace Mesen.ViewModels
 						if(PortConfig(console, ports[move.SourcePort].Key) is not ControllerConfig source) {
 							continue;
 						}
-						CopySlot(Slot(source, move.SourceSlot), Slot(target, move.TargetSlot));
-						ClearSlot(Slot(source, move.SourceSlot));
+						ControllerSheetSlotWrite.MoveSlot(source, move.SourceSlot, target, move.TargetSlot);
 					}
 					//The same tail the classic Input page and W-P15 use: push the config
 					//to the core, then persist it.
@@ -294,23 +293,54 @@ namespace Mesen.ViewModels
 			RefreshPlayers();
 		}
 
-		private static KeyMapping Slot(ControllerConfig config, int index) => index switch {
+	}
+
+	//ADR-0255 slice 2, the write half of the assignment, moved out of the
+	//view-model so the headless suite can pin it without a running app (as
+	//ControllerKeyMigration.Apply is pinned). `Slot` is the one index -> KeyMapping
+	//mapping the read side (SlotKeys) and the write side (MoveSlot) both use, so
+	//the slot a key is read from is the slot it is written to.
+	public static class ControllerSheetSlotWrite
+	{
+		public static KeyMapping Slot(ControllerConfig config, int index) => index switch {
 			0 => config.Mapping1,
 			1 => config.Mapping2,
 			2 => config.Mapping3,
 			_ => config.Mapping4
 		};
 
-		private static void CopySlot(KeyMapping from, KeyMapping to)
+		//Move one slot's every key from `source` to a free slot of `target`. The
+		//PLAYERS surface reads a device off all the keys a slot holds - the fixed
+		//fields AND the port type's own custom-button array (KeyMapping.ToInterop's
+		//CustomKeys: a Zapper's buttons, a keyboard's rows) - so the write has to
+		//move that same set. The keys all live in the one KeyMapping object, so the
+		//move relocates the object itself: copying the fixed fields alone left the
+		//custom keys on the source port, so a pad whose binding lived only in them
+		//was reported "assigned" while it still held a binding on the source, and a
+		//clear that copied only the fixed fields left the slot it had just reported
+		//free still naming the old device. Swap, rather than copy, also keeps keys
+		//the target's own Type does not expose (a port type other than the source's)
+		//instead of dropping them. The target slot is one PlanMove found free, so
+		//what the source receives is an empty slot.
+		public static void MoveSlot(ControllerConfig source, int sourceSlot, ControllerConfig target, int targetSlot)
 		{
-			to.A = from.A; to.B = from.B; to.X = from.X; to.Y = from.Y; to.L = from.L; to.R = from.R;
-			to.Up = from.Up; to.Down = from.Down; to.Left = from.Left; to.Right = from.Right;
-			to.Start = from.Start; to.Select = from.Select; to.U = from.U; to.D = from.D;
-			to.TurboA = from.TurboA; to.TurboB = from.TurboB; to.TurboX = from.TurboX; to.TurboY = from.TurboY;
-			to.TurboL = from.TurboL; to.TurboR = from.TurboR; to.TurboSelect = from.TurboSelect; to.TurboStart = from.TurboStart;
-			to.GenericKey1 = from.GenericKey1;
+			if(source == target && sourceSlot == targetSlot) {
+				return;
+			}
+			KeyMapping from = Slot(source, sourceSlot);
+			KeyMapping to = Slot(target, targetSlot);
+			SetSlot(target, targetSlot, from);
+			SetSlot(source, sourceSlot, to);
 		}
 
-		private static void ClearSlot(KeyMapping m) => CopySlot(new KeyMapping(), m);
+		private static void SetSlot(ControllerConfig config, int index, KeyMapping mapping)
+		{
+			switch(index) {
+				case 0: config.Mapping1 = mapping; break;
+				case 1: config.Mapping2 = mapping; break;
+				case 2: config.Mapping3 = mapping; break;
+				default: config.Mapping4 = mapping; break;
+			}
+		}
 	}
 }
