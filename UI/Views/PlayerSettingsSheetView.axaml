@@ -27,7 +27,7 @@
 	<!--ADR-0249 (PRD Part B §13.5.2 W-P8, W-P10): Player mode's Settings is a
 	sheet inside the main window, over the dimmed game like the other Play
 	sheets - 480 wide, as high as the tab needs (PlayerSettingsEssentials.
-	SheetHeight), 24 px under the bar. The title, the segmented Display | Look |
+	SheetHeight), 24 px under the bar. The title, the segmented Window | Video |
 	Audio | Controls strip, the page, and one Done that keeps the changes (Esc
 	does the same, back to W-P4). Advanced keeps the classic ConfigWindow.-->
 	<Border
@@ -42,7 +42,7 @@
 	>
 		<Grid RowDefinitions="Auto,*">
 			<Grid.Styles>
-				<!--The page stops above the hint and the Done row; Look's own
+				<!--The page stops above the hint and the Done row; Video's own
 				footer (Hold to Compare, W-P10) shares Done's row, left of it.-->
 				<Style Selector="TabControl#PlayerSettingsTabs">
 					<Setter Property="Margin" Value="0 0 0 62" />
@@ -53,8 +53,10 @@
 			</Grid.Styles>
 			<TextBlock Grid.Row="0" Name="lblPlayerSettingsTitle" Classes="title3" Text="{l:Translate lblPlayerSettingsTitle}" Margin="0 0 0 14" />
 			<!--G.4 (W-P8): the strip in PlayerSettingsEssentials.Tabs order -
-			Display (the window) and Look (the pixels) are the two halves of
-			Advanced's Video tab.-->
+			Window (the window) and Video (the pixels) are the two halves of
+			Advanced's Video tab, the pixels half being the page Advanced calls
+			Look (ADR-0246). The XAML names below keep the older `PlayerDisplay`
+			/ `PlayerLook` spelling; only the labels follow the strip.-->
 			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerLookTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
 				<TabItem Name="tabPlayerDisplay" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
 				<TabItem Name="tabPlayerLook" Header="{l:Translate tabLook}" Content="{Binding Look}" />
@@ -62,9 +64,9 @@
 				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding PlayerControls}" />
 			</TabControl>
 			<!--G.4 (W-P8): rule 10 applied to settings - one line right under the
-			group, then Done. Display shows the Options hint; Audio and Controls
+			group, then Done. Window shows the Options hint; Audio and Controls
 			put "More in Options…" there (it expands to that tab's classic page,
-			as Look's does). Look's footer is its Hold to Compare (W-P10).-->
+			as Video's does). Video's footer is its Hold to Compare (W-P10).-->
 			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
 				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding IsPlayerHintTab}" />
 				<Button Name="btnPlayerSettingsMoreInOptions" Classes="plain small" HorizontalAlignment="Left" Margin="-9 -6 0 6" Click="OnMoreInOptions" IsVisible="{Binding IsPlayerMoreTab}" Content="{l:Translate btnPlayerSettingsMoreInOptions}" />
