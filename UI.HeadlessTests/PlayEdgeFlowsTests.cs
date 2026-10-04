@@ -47,6 +47,29 @@ public partial class PlayEdgeFlowsTests : IDisposable
 	public PlayEdgeFlowsTests()
 	{
 		Directory.CreateDirectory(_folder);
+
+		//#790: the core is process-global and a case that ran a game leaves its
+		//console loaded, so EmuApi.IsRunning() was still true when the next case
+		//started. That is not cosmetic. LoadRomHelper.ReportLoadFailure suppresses the
+		//home's alert while a game is running (a failure with a game on screen stays
+		//today's message, #674), so the alert cases below passed or failed on the order
+		//the runner happened to pick - and the order is only stable per build.
+		//
+		//Cleared here rather than in Dispose because a leak can also come from another
+		//class in the serial collection, and this is the side that has to be true.
+		if(NativeCore.IsAvailable && EmuApi.IsRunning()) {
+			EmuApi.Stop();
+			WaitUntilStopped();
+		}
+	}
+
+	private static void WaitUntilStopped()
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(EmuApi.IsRunning() && clock.ElapsedMilliseconds < 5000) {
+			Thread.Sleep(10);
+		}
+		Assert.False(EmuApi.IsRunning(), "EmuApi.Stop() left the previous case's game loaded (#790)");
 	}
 
 	public void Dispose()
