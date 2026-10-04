@@ -170,6 +170,22 @@ public class RendererViewportFitTests
 		Assert.Equal(0u, viewport.RealWidth);
 	}
 
+	//#792: the caller's half of the same case. The zero viewport above is the
+	//right answer for the fit, but a layout pass with no panel must not reach the
+	//native host at all - Avalonia silently refuses to show a 0x0 native view, so
+	//the picture stays black. `HasSpace` is the test the caller makes.
+	[Theory]
+	[InlineData(0, 0, false)]
+	[InlineData(0, 400, false)]
+	[InlineData(900, 0, false)]
+	[InlineData(double.NaN, 400, false)]
+	[InlineData(-1, 400, false)]
+	[InlineData(900, 400, true)]
+	public void A_pass_only_speaks_for_a_panel_that_has_space(double width, double height, bool hasSpace)
+	{
+		Assert.Equal(hasSpace, RendererViewportFit.HasSpace(width, height));
+	}
+
 	//Upstream 3924215 (shader support): an odd renderer size puts a one-pixel
 	//seam down the middle of a shaded frame, so the physical size is even and
 	//the logical size is snapped to whole physical pixels at the current
