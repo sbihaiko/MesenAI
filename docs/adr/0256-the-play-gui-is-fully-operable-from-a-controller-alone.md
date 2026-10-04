@@ -1,10 +1,14 @@
 # ADR-0256: The Play GUI is fully operable from a controller alone
 
-- Status: proposed (2026-10-04). **All four questions were answered by the user
-  on 2026-10-04** and are recorded under Decision, quoted verbatim - this ADR is
-  now a decided shape that nothing implements yet. Accepting it is a request for
-  the work listed there, not a note. Ids are never reused (ADR-0035), which is
-  why this is 0256 and not 0255.
+- Status: accepted (2026-10-04). **All four questions were answered by the user
+  on 2026-10-04** and are recorded under Decision, quoted verbatim; the user
+  accepted the ADR and asked for the work later the same day, quoted verbatim:
+  **"espera a review e mergeia os três. depois que estiver no main pode
+  implementar tudo em paralelo usando workflows"**. So this is a request for the
+  work listed under Decision - the decision is made and **nothing implements it
+  yet**; the first landing is the Controller sheet (ADR-0255), which this ADR's
+  Consequences already names as the cheaper order. Ids are never reused
+  (ADR-0035), which is why this is 0256 and not 0255.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
@@ -56,7 +60,9 @@ already a chord (ADR-0251), chosen exactly so it cannot collide with play.
 
 ## Decision
 
-Not decided. The shape the four questions below have to settle:
+**Decided, in six rules. The pad's authority is a function of the pause state,
+and each rule below is binding - the four questions that used to sit under this
+heading are answered by them and by the section after.**
 
 1. **While a game runs unpaused, the pad is the console's and nothing else** -
    with one exception that already ships and that this rule has to name rather
