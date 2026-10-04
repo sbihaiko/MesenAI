@@ -33,6 +33,25 @@ public enum PadNavAction
 
 public static class PlayPadNavigation
 {
+	//The door the whole ADR is for: Player UI mode in a game-screen workspace -
+	//the switcher's Play door, or Classic under Player mode. ADR-0256 is the Play
+	//GUI's, and the classic (Advanced) GUI keeps its own input behavior, so every
+	//rule below is asked *inside* this gate, never instead of it.
+	//
+	//It is a rule of its own, and not a private test in the window that wires the
+	//pad, because two places ask the same door: the bridge's authority and Back
+	//edge (PlayPadNavigationWiring) and the slot grid's own key loop
+	//(StateGrid.TimerInput_Tick). The grid is one control serving both doors - it
+	//is W-P2's row of tiles and the Save/Load screens in Play, and Advanced's
+	//game-selection and Save/Load screens in the classic GUI - so a branch of it
+	//that reads the pad's preset has to ask the same door the bridge does, or the
+	//classic grid loses the console mapping it had before ADR-0256 and its pad
+	//keys are consumed by a branch nothing else in Advanced can act on.
+	public static bool InPlayDoor(bool isPlayerMode, bool isPlayWorkspace)
+	{
+		return isPlayerMode && isPlayWorkspace;
+	}
+
 	//Decisions 1 and 2, stated as the predicate they actually are: the pad drives
 	//the GUI while the console is not in the player's hands. Three things say it
 	//is not, and each is a named surface - never the coarse "something is drawn

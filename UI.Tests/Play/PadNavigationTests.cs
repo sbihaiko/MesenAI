@@ -185,6 +185,23 @@ public class PadNavigationTests
 		Assert.False(PlayPadNavigation.IsBackEdge(new[] { nav.Back }, new ushort[0], null));
 	}
 
+	//The door every rule here is asked inside, and a rule of its own because two
+	//callers ask it: the bridge (authority, the Back edge) and the slot grid's own
+	//pad branch. The grid is one control drawing both doors' grids - W-P2's tiles
+	//and the Save/Load screens in Play, Advanced's game-selection and Save/Load
+	//screens in the classic GUI - so a branch of it that reads the pad's preset has
+	//to ask the same door the bridge does, or the classic grid loses the console
+	//mapping it navigated with before ADR-0256 (the ADR is the Play GUI's).
+	[Theory]
+	[InlineData(true, true, true)]    // Player mode in a game-screen workspace: the Play door
+	[InlineData(true, false, false)]  // Player mode with the game screen away (Remaster/Share)
+	[InlineData(false, true, false)]  // the classic UI mode under a game-screen workspace
+	[InlineData(false, false, false)]
+	public void The_play_door_is_player_mode_in_a_game_screen_workspace(bool isPlayerMode, bool isPlayWorkspace, bool expected)
+	{
+		Assert.Equal(expected, PlayPadNavigation.InPlayDoor(isPlayerMode, isPlayWorkspace));
+	}
+
 	//Decision 4 for the grid: its four directions and Confirm come off the pad's
 	//own preset, and Back is deliberately not one of them - leaving the grid is the
 	//bridge's. That split is what tells the pad's B (the preset's Back) apart from

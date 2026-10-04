@@ -314,8 +314,11 @@ namespace Mesen.Windows
 			}
 
 			//The door the bridge is for: Player UI mode in a game-screen workspace
-			//(the switcher's Play door, or Classic under the same UI mode).
-			private bool InPlayDoor => _model.IsPlayerMode && _model.IsPlayWorkspace;
+			//(the switcher's Play door, or Classic under the same UI mode). The rule
+			//is PlayPadNavigation's, not a private one here, because the slot grid's
+			//own pad branch asks the same door (StateGrid.TimerInput_Tick) and the
+			//two must never answer differently.
+			private bool InPlayDoor => PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
 
 			//A slot grid the pad can leave: the classic grid the Save/Load screens
 			//and Advanced use, which draws a close box. The Play home's row of tiles

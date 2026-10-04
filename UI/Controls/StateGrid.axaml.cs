@@ -334,7 +334,21 @@ namespace Mesen.Controls
 				//never the rebindable console mapping. That is what lets a second pad
 				//drive this grid at all, and what keeps a player who clears or moves
 				//their console D-pad from losing grid navigation.
-				if(PadNaming.Of(keyCode, InputApi.GetKeyName) is PadId pad
+				//
+				//Scoped to the Play door, which is the same gate the bridge asks
+				//(PlayPadNavigation.InPlayDoor): this one control draws both doors'
+				//grids - W-P2's tiles and the Save/Load screens in Play, Advanced's
+				//game-selection and Save/Load screens in the classic GUI - and the
+				//ADR is the Play GUI's. Ungated, the branch silently ate every pad
+				//button in Advanced: the preset's Back has no GridAction, so the
+				//`continue` below dropped it, and the bridge's own Back edge is
+				//gated off there - while the pad buttons the console mapping does
+				//bind to A/B/X/Y/Select/Start no longer reached the mapping that
+				//loaded the entry, which is how Advanced navigated this screen
+				//before ADR-0256 and how it still does.
+				MainWindowViewModel? playDoor = MainWindowViewModel.Instance;
+				if(PlayPadNavigation.InPlayDoor(playDoor?.IsPlayerMode == true, playDoor?.IsPlayWorkspace == true)
+					&& PadNaming.Of(keyCode, InputApi.GetKeyName) is PadId pad
 					&& PadNavControls.Resolve(pad.Family, pad.Device, InputApi.GetKeyCode) is PadNavMapping padNav) {
 					switch(PlayPadNavigation.GridAction(keyCode, padNav)) {
 						case PadNavAction.Left: MoveLeft(); break;
