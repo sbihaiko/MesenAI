@@ -55,6 +55,19 @@ namespace Mesen.Windows
 		//the game running) goes too. Returns whether it is listening now.
 		private static bool Poll(MainWindowViewModel model, bool wasListening)
 		{
+			//ADR-0255 slice 5: before the setup detector decides a pad is unknown,
+			//give a pad that reconnected at another device index the chance to keep
+			//its bindings. Gated on the whole Play door (IsPlayWorkspace), not just
+			//the game screen: the keys must be right by the time a game reads them,
+			//so the home screen - where the player is about to launch one - is the
+			//better moment, not a later one. The cost is one pad enumeration per
+			//50 ms while the door is active, and on the backends that report a
+			//VID:PID it can actually move something. On macOS and Windows XInput
+			//every pad is unidentified, so the repair cannot fire there at all.
+			if(model.IsPlayerMode && model.IsPlayWorkspace) {
+				model.ControllerReconnect.Check();
+			}
+
 			bool listening = model.ControllerSetup.IsVisible
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {

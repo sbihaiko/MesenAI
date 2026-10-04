@@ -66,15 +66,6 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void TestForceFeedback(UInt32 index, UInt16 magnitudeRight, UInt16 magnitudeLeft);
 	}
 
-	public enum GamepadBackend : byte
-	{
-		None = 0,
-		XInput = 1,
-		DirectInput = 2,
-		Evdev = 3,
-		GameController = 4
-	}
-
 	[StructLayout(LayoutKind.Sequential)]
 	public struct GamepadInfo
 	{

@@ -20,6 +20,22 @@ namespace Mesen.Interop
 		Ws = 6,
 	}
 
+	//Host-free counterpart to the GamepadBackend enum that lived in
+	//UI/Interop/InputApi.cs. It moved here for the same reason ConsoleType and
+	//CheatType did: ADR-0255 slice 5's host-free rule (UI/Logic/DeviceReconnect)
+	//keys a pad's identity by its backend, and UI.Tests dual-compiles UI/Logic
+	//without InputApi.cs (which names EmuApi.DllName, so it is not host-free).
+	//Member names/values match the core's GamepadBackend (IKeyManager.h) and
+	//InputApi's previous copy, so every consumer compiles unchanged.
+	public enum GamepadBackend : byte
+	{
+		None = 0,
+		XInput = 1,
+		DirectInput = 2,
+		Evdev = 3,
+		GameController = 4
+	}
+
 	public enum CheatType : byte
 	{
 		NesGameGenie = 0,
