@@ -10,8 +10,8 @@
 	x:DataType="vm:ConfigViewModel"
 >
 	<UserControl.DataTemplates>
-		<DataTemplate DataType="{x:Type vm:PlayerDisplaySettingsViewModel}">
-			<v:PlayerDisplaySettingsView />
+		<DataTemplate DataType="{x:Type vm:PlayerWindowSettingsViewModel}">
+			<v:PlayerWindowSettingsView />
 		</DataTemplate>
 		<DataTemplate DataType="{x:Type vm:LookConfigViewModel}">
 			<v:LookConfigView />
@@ -57,9 +57,9 @@
 			Advanced's Video tab, the pixels half being the page Advanced calls
 			Look (ADR-0246). The XAML names below keep the older `PlayerDisplay`
 			/ `PlayerLook` spelling; only the labels follow the strip.-->
-			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerLookTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
-				<TabItem Name="tabPlayerDisplay" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
-				<TabItem Name="tabPlayerLook" Header="{l:Translate tabLook}" Content="{Binding Look}" />
+			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerVideoTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
+				<TabItem Name="tabPlayerWindow" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
+				<TabItem Name="tabPlayerVideo" Header="{l:Translate tabLook}" Content="{Binding Look}" />
 				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding PlayerAudio}" />
 				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding PlayerControls}" />
 			</TabControl>

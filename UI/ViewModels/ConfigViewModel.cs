@@ -19,7 +19,7 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial VideoConfigViewModel? Video { get; set; }
 		[ObservableProperty] public partial LookConfigViewModel? Look { get; set; }
 		//G.4 (W-P8): Player mode's Display tab (the window), next to Look.
-		[ObservableProperty] public partial PlayerDisplaySettingsViewModel? Display { get; set; }
+		[ObservableProperty] public partial PlayerWindowSettingsViewModel? Display { get; set; }
 		[ObservableProperty] public partial PreferencesConfigViewModel? Preferences { get; set; }
 		[ObservableProperty] public partial EmulationConfigViewModel? Emulation { get; set; }
 
@@ -36,14 +36,14 @@ namespace Mesen.ViewModels
 		//G.4 (W-P8): the Player strip's position (PlayerSettingsEssentials.Tabs).
 		//-1 outside Player mode, as SelectedTabIndex is -1 inside it, so only one
 		//of the two strips realizes a tab's content.
-		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerLookTab)), NotifyPropertyChangedFor(nameof(IsPlayerHintTab)), NotifyPropertyChangedFor(nameof(IsPlayerMoreTab)), NotifyPropertyChangedFor(nameof(PlayerSheetHeight))] public partial int PlayerTabIndex { get; set; } = -1;
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerVideoTab)), NotifyPropertyChangedFor(nameof(IsPlayerHintTab)), NotifyPropertyChangedFor(nameof(IsPlayerMoreTab)), NotifyPropertyChangedFor(nameof(PlayerSheetHeight))] public partial int PlayerTabIndex { get; set; } = -1;
 		//W-P8: the line under the group is Display's hint, or Audio's and
 		//Controls' "More in Options…" link; Look has neither (Hold to Compare).
 		public bool IsPlayerMoreTab => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab.Audio or ConfigWindowTab.Input;
-		public bool IsPlayerHintTab => !IsPlayerLookTab && !IsPlayerMoreTab;
+		public bool IsPlayerHintTab => !IsPlayerVideoTab && !IsPlayerMoreTab;
 		//ADR-0249 (W-P10): Look's footer is Hold to Compare; the Options hint
 		//shows on the other tabs.
-		public bool IsPlayerLookTab => PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		public bool IsPlayerVideoTab => PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
 		//ADR-0249 (W-P8, W-P10): the Settings sheet is as high as its tab needs.
 		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
 
@@ -58,7 +58,7 @@ namespace Mesen.ViewModels
 
 		//Supplied by the window: Display's view-model needs the main window's
 		//state and actions, which this class does not reach.
-		private readonly Func<PlayerDisplaySettingsViewModel>? _createDisplay;
+		private readonly Func<PlayerWindowSettingsViewModel>? _createDisplay;
 		private readonly Func<IReadOnlyList<string>> _audioDevices;
 		private readonly Func<int> _connectedPads;
 
@@ -67,7 +67,7 @@ namespace Mesen.ViewModels
 
 		public ConfigViewModel(ConfigWindowTab selectedTab) : this(selectedTab, playerMode: false) { }
 
-		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerDisplaySettingsViewModel>? createDisplay = null, Func<System.Collections.Generic.IReadOnlyList<string>>? audioDevices = null, Func<int>? connectedPads = null)
+		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerWindowSettingsViewModel>? createDisplay = null, Func<System.Collections.Generic.IReadOnlyList<string>>? audioDevices = null, Func<int>? connectedPads = null)
 		{
 			AlwaysOnTop = ConfigManager.Config.Preferences.AlwaysOnTop;
 			PlayerMode = playerMode;
@@ -153,7 +153,7 @@ namespace Mesen.ViewModels
 					break;
 				case ConfigWindowTab.Display:
 					_originalVideo ??= ConfigManager.Config.Video.Clone();
-					Display ??= AddDisposable(_createDisplay?.Invoke() ?? new PlayerDisplaySettingsViewModel(ConfigManager.Config.Video, false, 0, () => { }, _ => { }));
+					Display ??= AddDisposable(_createDisplay?.Invoke() ?? new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, false, 0, () => { }, _ => { }));
 					break;
 				case ConfigWindowTab.Look:
 					_originalVideo ??= ConfigManager.Config.Video.Clone();

@@ -124,7 +124,7 @@ public class LookSettingsTabTests : IDisposable
 		//G.4 (W-P8): Player mode's own strip, Display | Look | Audio | Controls.
 		List<TabItem> tabs = window.FindNamed<TabControl>("PlayerSettingsTabs").Items.Cast<TabItem>().ToList();
 		TabItem look = tabs[PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look)];
-		Assert.Equal("tabPlayerLook", look.Name);
+		Assert.Equal("tabPlayerVideo", look.Name);
 		Assert.True(look.IsSelected);
 		Assert.True(look.IsOnScreen());
 		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display) + 1, tabs.IndexOf(look));

@@ -85,7 +85,7 @@ public class PlayerSettingsTabsTests
 	public void Scale_shows_the_nearest_offered_value_below_one()
 	{
 		double? resized = null;
-		PlayerDisplaySettingsViewModel display = new(new VideoConfig(), false, 0.5, () => { }, s => resized = s);
+		PlayerWindowSettingsViewModel display = new(new VideoConfig(), false, 0.5, () => { }, s => resized = s);
 		Assert.NotNull(display.SelectedScale);
 		Assert.Equal(1, display.SelectedScale!.Value);
 		Assert.Null(resized);

@@ -3,9 +3,9 @@ using Avalonia.Markup.Xaml;
 
 namespace Mesen.Views
 {
-	public class PlayerDisplaySettingsView : UserControl
+	public class PlayerWindowSettingsView : UserControl
 	{
-		public PlayerDisplaySettingsView()
+		public PlayerWindowSettingsView()
 		{
 			InitializeComponent();
 		}

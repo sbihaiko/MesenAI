@@ -222,7 +222,7 @@ can be exercised by real xunit tests without Avalonia or the native
   UI thread and the sentence goes to the core HUD (`EmuApi.DisplayMessage`,
   the native renderer draws over Avalonia) and the status line. The sheets
   are `UI/Views/PlayerPackPickerSheetView`, `PlayerPackDetailSheetView`,
-  `PlayerEnhancementsSheetView` and `PlayerDisplaySettingsView`; their names
+  `PlayerEnhancementsSheetView` and `PlayerWindowSettingsView`; their names
   are in the UserControls' scopes, so `MainWindow` finds them through the
   visual tree (`MainWindow.PlaySheets.cs`), not `GetControl`.
 - The Share workspace (G.8, ADR-0241/ADR-0205/ADR-0154, PRD Part B

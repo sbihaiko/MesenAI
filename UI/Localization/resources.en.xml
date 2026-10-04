@@ -970,7 +970,7 @@
 			<Control ID="colBinding1">Keys</Control>
 		</Form>
 
-		<Form ID="PlayerDisplaySettingsView">
+		<Form ID="PlayerWindowSettingsView">
 			<Control ID="lblDisplayFullscreen">Full screen</Control>
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
