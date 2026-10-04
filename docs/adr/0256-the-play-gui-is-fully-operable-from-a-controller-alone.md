@@ -118,7 +118,19 @@ heading are answered by them and by the section after.**
    `Pad1 Start` on XInput/Windows, whose button table calls that button Back.
    With two pads connected, the one in the player's hand has no way into the
    overlay at all, and the overlay is the only route to the menus while a game
-   runs. Filed as issue #800; this rule is the fix it has to satisfy.
+   runs. Filed as issue #800 and fixed in #802; this rule is what that fix had to
+   satisfy.
+
+   **The rule does not, and cannot, seed a default chord for a Windows
+   DirectInput joystick** — filed as #804 and decided with the user on
+   2026-10-04. DirectInput exposes no semantic button names at all (axis
+   directions and `But1..But128`), so "the Select+Start gesture" has no
+   spelling in that family, and guessing two high-numbered buttons would put a
+   default chord on top of the player's own controls. What that pad gets instead
+   is Decision 2 plus ADR-0255 slice 4: **with no game loaded the pad drives the
+   GUI**, so it reaches Play › Settings › Controls › the sheet and binds its own
+   menu button from the one shortcut list. #804 is therefore closed by this work
+   rather than by a second default, and the stop rule below covers it.
 6. **On-screen text names the control in the player's hand**, not the keyboard
    (the user's answer, 2026-10-04: *"Segue o controle na mão"*). W-P4's footer
    reads "Esc to resume" today, which is a lie on the cabinet this ADR is about:
