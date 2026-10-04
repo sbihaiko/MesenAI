@@ -69,24 +69,29 @@ public static class NativeCore
 		}
 
 		string? repo = FindRepoRoot();
-		if(repo == null) {
-			return null;
-		}
+		return repo == null ? null : FindBuiltLibrary(repo);
+	}
 
-		//The RID sub-folder is whatever the local `make` produced; glob it rather
-		//than guessing (RuntimeInformation.RuntimeIdentifier can carry an OS
-		//version, e.g. osx.15-arm64, that the build folder never has).
-		string name = OperatingSystem.IsWindows() ? "MesenCore.dll" : (OperatingSystem.IsMacOS() ? "MesenCore.dylib" : "MesenCore.so");
-		foreach(string dir in EnumerateDirectories(Path.Combine(repo, "bin"))) {
+	//The RID sub-folder is whatever the local `make` produced; it is globbed rather
+	//than guessed (RuntimeInformation.RuntimeIdentifier can carry an OS version,
+	//e.g. osx.15-arm64, that the build folder never has).
+	internal static string LibraryFileName =>
+		OperatingSystem.IsWindows() ? "MesenCore.dll" : (OperatingSystem.IsMacOS() ? "MesenCore.dylib" : "MesenCore.so");
+
+	//Internal rather than private so the resolution rule can be asserted without a
+	//native core present (NativeCoreLibraryResolutionTests.cs, #786).
+	internal static string? FindBuiltLibrary(string repoRoot)
+	{
+		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "bin"))) {
 			foreach(string config in new[] { "Release", "Debug" }) {
-				string candidate = Path.Combine(dir, config, name);
+				string candidate = Path.Combine(dir, config, LibraryFileName);
 				if(File.Exists(candidate)) {
 					return candidate;
 				}
 			}
 		}
-		foreach(string dir in EnumerateDirectories(Path.Combine(repo, "InteropDLL"))) {
-			string candidate = Path.Combine(dir, name);
+		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "InteropDLL"))) {
+			string candidate = Path.Combine(dir, LibraryFileName);
 			if(Path.GetFileName(dir).StartsWith("obj.", StringComparison.Ordinal) && File.Exists(candidate)) {
 				return candidate;
 			}
