@@ -17,6 +17,12 @@ Two halves of one rule, both asserted at the Core boundary:
            still be paused. This is the half the fix could have broken, and it
            is what the Player's load card and ADR-0244 rely on.
 
+And the third case, which is issue #787: the "run single frame" shortcut, the
+other route that arms the same one-shot. Holding it makes the Core re-arm the
+pause every 50 ms, and until ReleaseShortcut was exported nothing on the host
+could stop that - so the route could not be driven from a test at all, and the
+`_pauseOnNextFrame` half of the fix above went in unpinned.
+
 Each case loads the real MesenCore through ctypes in a child process (InitDll +
 InitializeEmu with no window, like the headless tests) and builds a synthetic
 NROM (scripts/gen_synthetic_nrom.py, no game data). The two ROMs differ by one
@@ -28,6 +34,7 @@ exits 0. MESEN_CORE_LIB=<path> picks a specific build, which is how the
 mutation check runs the unfixed library and requires the `open` case to fail.
 """
 
+import ctypes
 import os
 import subprocess
 import sys
@@ -42,6 +49,28 @@ NAMES = ("MesenCore.dylib", "MesenCore.so")
 CHILD_TIMEOUT = 120
 FRAMES = 10
 SETTLE = 3.0
+HOLD = 3.0
+
+
+def enum_value(name):
+    """The ordinal of `name` in `EmulatorShortcut` (Core/Shared/SettingTypes.h).
+
+    Read rather than hard-coded: the value crosses the ABI as a struct field, and
+    a reordered enum would otherwise have this test press a different shortcut
+    while still passing.
+    """
+    header = (ROOT / "Core/Shared/SettingTypes.h").read_text()
+    body = header.split("enum class EmulatorShortcut", 1)[1].split("};", 1)[0]
+    entries = []
+    for line in body.splitlines():
+        line = line.split("//")[0].strip()
+        if not line or line == "{":
+            continue
+        entries.append(line.rstrip(","))
+    if name not in entries:
+        raise SystemExit(f"EmulatorShortcut::{name} is not in Core/Shared/SettingTypes.h")
+    return entries.index(name)
+
 
 CHILD = r"""
 import ctypes, os, sys, tempfile, time
@@ -51,6 +80,11 @@ rom_b = sys.argv[3].encode()
 mode = sys.argv[4]
 frames = int(sys.argv[5])
 settle = float(sys.argv[6])
+hold = float(sys.argv[7])
+run_single_frame = int(sys.argv[8])
+
+class ExecuteShortcutParams(ctypes.Structure):
+    _fields_ = [("Shortcut", ctypes.c_int), ("Param", ctypes.c_uint32), ("ParamPtr", ctypes.c_void_p)]
 
 lib.InitDll()
 lib.InitializeEmu(tempfile.mkdtemp().encode(), None, None, True, True, True, True)
@@ -60,13 +94,14 @@ lib.IsRunning.restype = ctypes.c_bool
 lib.IsPaused.restype = ctypes.c_bool
 lib.HeadlessGetFrameCount.restype = ctypes.c_uint32
 lib.ReloadRomKeepingState.restype = ctypes.c_uint8
+lib.ExecuteShortcut.argtypes = [ExecuteShortcutParams]
 
 def count():
     return lib.HeadlessGetFrameCount()
 
-def advance(n, start=None):
+def advance(n, start=None, window=None):
     start = count() if start is None else start
-    end = time.monotonic() + settle
+    end = time.monotonic() + (settle if window is None else window)
     while time.monotonic() < end:
         if count() > start + n:
             return True
@@ -113,7 +148,47 @@ def reload_case():
         return "the reload dropped the player's pause (result %d)" % result
     return "stays paused"
 
-print(open_case() if mode == "open" else reload_case(), flush=True)
+def shortcut_case():
+    # Resolved here rather than at import: on a core without the export the other
+    # two cases must still report for themselves instead of dying with this one.
+    # "Did you mean: ExecuteShortcut?" is the whole of #787.
+    lib.ReleaseShortcut.argtypes = [ExecuteShortcutParams]
+
+    if not lib.LoadRom(rom_a, None) or not lib.IsRunning():
+        return "the game did not load"
+    if not advance(5):
+        return "the game never ran"
+
+    params = ExecuteShortcutParams()
+    params.Shortcut = run_single_frame
+    params.Param = 0
+    params.ParamPtr = None
+
+    # Held. _needRepeat re-arms the one-shot every 50 ms once the 500 ms delay is
+    # past, so the game keeps drawing exactly one frame per repeat.
+    lib.ExecuteShortcut(params)
+    start = count()
+    if not advance(2, start, hold):
+        return ("a held run-single-frame stopped stepping after %d frame(s): nothing re-armed the pause"
+                % (count() - start))
+
+    # Released. Nothing may step the game after this - if the release is missing
+    # or a no-op, _needRepeat keeps re-arming and the frames keep coming.
+    lib.ReleaseShortcut(params)
+    time.sleep(0.25)
+    frozen = count()
+    time.sleep(0.5)
+    if count() != frozen:
+        return ("the released shortcut kept stepping the game: %d -> %d frames"
+                % (frozen, count()))
+    return "released"
+
+if mode == "open":
+    print(open_case(), flush=True)
+elif mode == "reload":
+    print(reload_case(), flush=True)
+else:
+    print(shortcut_case(), flush=True)
 os._exit(0)
 """
 
@@ -147,7 +222,7 @@ def run_child(library, rom_a, rom_b, mode):
         try:
             proc = subprocess.run(
                 [sys.executable, "-c", CHILD, str(library), str(rom_a), str(rom_b),
-                 mode, str(FRAMES), str(SETTLE)],
+                 mode, str(FRAMES), str(SETTLE), str(HOLD), str(enum_value("RunSingleFrame"))],
                 cwd=cwd, capture_output=True, text=True, timeout=CHILD_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
@@ -169,6 +244,13 @@ def test_reload_keeps_the_pause(library, rom_a, rom_b):
           f"exit {code}: {out}")
 
 
+def test_shortcut_release_stops_the_stepping(library, rom_a, rom_b):
+    code, out = run_child(library, rom_a, rom_b, "shortcut")
+    check(code == 0 and out.endswith("released"),
+          "releasing the run-single-frame shortcut stops it stepping the game (#787)",
+          f"exit {code}: {out}")
+
+
 def main():
     library = find_library()
     if library is None:
@@ -186,6 +268,7 @@ def main():
         rom_b.write_bytes(bytes(other))
         test_open_runs_and_keeps_running(library, rom_a, rom_b)
         test_reload_keeps_the_pause(library, rom_a, rom_b)
+        test_shortcut_release_stops_the_stepping(library, rom_a, rom_b)
     print(f"\n{len(_CHECKS) - len(_FAILURES)}/{len(_CHECKS)} checks passed")
     return 1 if _FAILURES else 0
 
