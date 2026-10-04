@@ -125,6 +125,8 @@ namespace Mesen.Config
 
 		public void UpgradeConfig()
 		{
+			RestoreKeyboardPresetIfNothingIsBound();
+
 			if(ConfigUpgrade < (int)ConfigUpgradeHint.SmsInput) {
 				Sms.InitializeDefaults(DefaultKeyMappings);
 			}
@@ -153,6 +155,65 @@ namespace Mesen.Config
 
 			ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
 			Version = EmuApi.GetMesenVersion().ToString(3);
+		}
+
+		//ADR-0255 (the keyboard case): with no pad connected the keyboard has to
+		//play, and DefaultKeyMappingType.None is the one value that leaves it with
+		//nothing bound at all - no pad preset and no keyboard preset, so the
+		//player cannot play and cannot reach the menus to fix it. ResetSettings
+		//already refuses to *write* None, but only for callers that reset: a
+		//settings.json already carrying 0 (hand-edited, or written by a build
+		//whose wizard offered it) loads straight through, and InitializeDefaults
+		//only ever runs on first run. The guard belongs where the presets are
+		//resolved.
+		//
+		//...and only when nothing is bound anywhere. A config whose keys the
+		//player bound by hand is theirs, and re-applying a preset over it would
+		//be this same bug in reverse. Returns whether it wrote, which is what the
+		//callers - and the test - need to tell "restored" from "left alone".
+		public bool RestoreKeyboardPresetIfNothingIsBound()
+		{
+			if(DefaultKeyMappings != DefaultKeyMappingType.None || !NothingIsBound()) {
+				return false;
+			}
+			DefaultKeyMappings = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
+			Nes.InitializeDefaults(DefaultKeyMappings);
+			Gameboy.InitializeDefaults(DefaultKeyMappings);
+			Gba.InitializeDefaults(DefaultKeyMappings);
+			Sms.InitializeDefaults(DefaultKeyMappings);
+			return true;
+		}
+
+		//Whether every console's four mapping slots are empty - the state in
+		//which a preset can be applied without overwriting anything. Read off the
+		//slots' own fields rather than through ToInterop(): a console with default
+		//custom keys reports them for an empty slot, which would answer "bound"
+		//for a config where the player never bound anything.
+		private bool NothingIsBound()
+		{
+			//The ports a player can play from, per console: the two NES and SMS
+			//ports, GB's and GBA's single one. A config whose only keys sat in
+			//Nes.ExpPort or Nes.MapperInput would call this "bound", which is
+			//absurd enough to be worth not paying for.
+			return !SendsAnyKey(Nes.Port1) && !SendsAnyKey(Nes.Port2)
+				&& !SendsAnyKey(Gameboy.Controller)
+				&& !SendsAnyKey(Gba.Controller)
+				&& !SendsAnyKey(Sms.Port1) && !SendsAnyKey(Sms.Port2);
+		}
+
+		private static bool SendsAnyKey(ControllerConfig port)
+		{
+			foreach(KeyMapping m in new[] { port.Mapping1, port.Mapping2, port.Mapping3, port.Mapping4 }) {
+				if(m.A != 0 || m.B != 0 || m.X != 0 || m.Y != 0 || m.L != 0 || m.R != 0
+					|| m.Up != 0 || m.Down != 0 || m.Left != 0 || m.Right != 0
+					|| m.Start != 0 || m.Select != 0 || m.U != 0 || m.D != 0
+					|| m.TurboA != 0 || m.TurboB != 0 || m.TurboX != 0 || m.TurboY != 0
+					|| m.TurboL != 0 || m.TurboR != 0 || m.TurboSelect != 0 || m.TurboStart != 0
+					|| m.GenericKey1 != 0) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		public void InitializeDefaults()

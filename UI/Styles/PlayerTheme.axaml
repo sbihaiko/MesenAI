@@ -41,7 +41,15 @@
 		<Color x:Key="PlayerCardBorderColor">#E8E8EC</Color>
 		<Color x:Key="PlayerSheetBorderColor">#DCDCE1</Color>
 		<Color x:Key="PlayerFieldBorderColor">#CECED4</Color>
-		<Color x:Key="PlayerFocusRingColor">#BEDAFF</Color>
+		<!-- The focus ring is a glow, and on the Play door it is load-bearing:
+		     a pad has no pointer, so the ring is the only thing saying where the
+		     player is. It is therefore built the way the console dashboards build
+		     theirs - a crisp saturated ring that says *this* control, then two
+		     blurred halos that carry at a distance, which is where an arcade
+		     sits. The old flat 3 px #BEDAFF ring was legible on a monitor at
+		     arm's length and read as nothing at all on a TV across the room. -->
+		<Color x:Key="PlayerFocusRingColor">#7FB0FF</Color>
+		<Color x:Key="PlayerFocusGlowColor">#3C7BE6</Color>
 		<Color x:Key="PlayerOverlayCardColor">#FAFAFC</Color>
 		<Color x:Key="PlayerDestructiveFillColor">#FFEBEA</Color>
 		<Color x:Key="PlayerPressedFillColor">#E8E8EC</Color>
@@ -182,7 +190,13 @@
 		<BoxShadows x:Key="PlayerShadowSheet">0 10 22 0 #5A000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowOverlay">0 12 26 0 #6E000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowMenu">0 6 14 0 #50000000</BoxShadows>
-		<BoxShadows x:Key="PlayerFocusRing">0 0 0 3 #BEDAFF</BoxShadows>
+		<!-- ring (spread, no blur) + near halo + wide bloom. The two halos are
+		     the same colour as the ring, at 35% and 18% alpha, so the glow reads
+		     as one light rather than as a ring with fuzz on it. -->
+		<BoxShadows x:Key="PlayerFocusRing">0 0 0 2 #7FB0FF, 0 0 10 2 #593C7BE6, 0 0 22 7 #2E3C7BE6</BoxShadows>
+		<!-- The same light, turned inward, for controls a parent clips and which
+		     therefore have nowhere to bloom into. -->
+		<BoxShadows x:Key="PlayerFocusGlowInset">inset 0 0 0 2 #7FB0FF, inset 0 0 14 3 #2E3C7BE6</BoxShadows>
 
 		<!-- Icons: filled glyphs in a 20 x 20 box, drawn like the renderer's
 		     Canvas.icon(); use with PathIcon (Foreground = colour). -->
@@ -290,7 +304,12 @@
 		<!-- A grouped-list row: content, then a hairline from the title to the
 		     right edge (hidden on the group's last row). -->
 		<ControlTemplate x:Key="PlayerRowTemplate" TargetType="Button">
-			<Panel Name="PART_Background" Background="{TemplateBinding Background}">
+			<!--Border, not Panel: a row is a command the pad lands on, and the glow that
+			says so is a BoxShadow, which Panel does not have. It is inset because a row
+			lives inside Border.group with ClipToBounds, so an outward bloom would be cut
+			off at the group edge - the one place it needs to be seen.-->
+			<Border Name="PART_Background" Background="{TemplateBinding Background}">
+					<Panel>
 				<ContentPresenter
 					Name="PART_ContentPresenter"
 					Content="{TemplateBinding Content}"
@@ -301,7 +320,8 @@
 					VerticalContentAlignment="Center"
 				/>
 				<Rectangle Name="PART_Separator" Height="1" VerticalAlignment="Bottom" Margin="48 0 0 0" Fill="{StaticResource PlayerSeparatorBrush}" />
-			</Panel>
+					</Panel>
+			</Border>
 		</ControlTemplate>
 	</Styles.Resources>
 
@@ -473,7 +493,11 @@
 	<Style Selector=".player Button.secondary:pressed /template/ Border#PART_Background, .player Button.plain:pressed /template/ Border#PART_Background">
 		<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
 	</Style>
-	<Style Selector=".player Button.primary:focus-visible /template/ Border#PART_Background, .player Button.secondary:focus-visible /template/ Border#PART_Background, .player Button.tinted:focus-visible /template/ Border#PART_Background, .player Button.destructive:focus-visible /template/ Border#PART_Background, .player Button.plain:focus-visible /template/ Border#PART_Background">
+	<!--Every button in Play, not a list of the five classes that happened to have
+	     one: a pad navigates by focus and nothing else, so a button that answers the
+	     d-pad with no visible focus is a dead end the player cannot see they are in.
+	     Button.row keeps its own inset glow below (higher specificity).-->
+	<Style Selector=".player Button:focus-visible /template/ Border#PART_Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
 	</Style>
 	<Style Selector=".player Button:disabled">
@@ -515,14 +539,19 @@
 	<Style Selector=".player Button.row:nth-last-child(1) /template/ Rectangle#PART_Separator">
 		<Setter Property="IsVisible" Value="False" />
 	</Style>
-	<Style Selector=".player Button.row:pointerover /template/ Panel#PART_Background">
+	<Style Selector=".player Button.row:pointerover /template/ Border#PART_Background">
 		<Setter Property="Background" Value="#F5F5F7" />
 	</Style>
-	<Style Selector=".player Button.row:pressed /template/ Panel#PART_Background">
+	<Style Selector=".player Button.row:pressed /template/ Border#PART_Background">
 		<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
 	</Style>
-	<Style Selector=".player Button.row:focus-visible /template/ Panel#PART_Background">
+	<!--The row glow is inset (see PlayerRowTemplate): the outward bloom every other
+	     control gets would be clipped away by the group around it. Inset also reads
+	     as "this line is lit" rather than "something near this line is lit", which at
+	     row height is the difference between findable and guesswork.-->
+	<Style Selector=".player Button.row:focus-visible /template/ Border#PART_Background">
 		<Setter Property="Background" Value="{StaticResource PlayerSelectedRowBrush}" />
+		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusGlowInset}" />
 	</Style>
 	<Style Selector=".player Button.row TextBlock.title">
 		<Setter Property="FontSize" Value="{StaticResource PlayerFontCallout}" />
