@@ -838,6 +838,18 @@ namespace Mesen.Windows
 
 			Size finalSize = _rendererSize == default ? _rendererPanel.Bounds.Size : _rendererSize;
 
+			//#792: a pass the panel cannot answer - it has no bounds yet (window
+			//setup, a Play transition). Sizing the native host to 0x0 does not just
+			//draw nothing: Avalonia refuses to show a 0x0 native view and reports
+			//nothing, so the game area stayed black, and EmuApi.SetRendererSize(0, 0)
+			//stopped the core presenting, until some other event forced a resize -
+			//which is why changing the scale or entering fullscreen "brought the
+			//picture back". Keep what the last usable pass computed; the next pass
+			//that has a panel updates it.
+			if(!RendererViewportFit.HasSpace(finalSize.Width, finalSize.Height)) {
+				return;
+			}
+
 			//P.7: the letterbox/pillarbox fit and the fullscreen integer-scale
 			//rule are pure geometry, so they live in UI/Logic and are asserted
 			//host-free by UI.Tests (RendererViewportFitTests). This method keeps

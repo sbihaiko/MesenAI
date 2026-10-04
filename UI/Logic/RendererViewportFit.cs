@@ -178,5 +178,16 @@ public static class RendererViewportFit
 		return Math.Min(Math.Abs(realWidth - realHeight * aspectRatio), Math.Abs(realHeight - realWidth / aspectRatio));
 	}
 
+	//Whether a layout pass has anything to say about the picture. A panel with no
+	//space yet (bounds never assigned - window setup, a Play transition) is not a
+	//reason to draw nothing: it is a pass that ran too early. `Fit` answers 0x0 for
+	//it on purpose (see A_panel_with_no_bounds_yet_produces_a_zero_viewport), and
+	//#792 is the cost of applying that answer - Avalonia's
+	//NativeControlHost.TryUpdateNativeControlPosition never shows a 0x0 view and
+	//reports nothing, so the native picture stayed black until some other event
+	//happened to force a resize.
+	public static bool HasSpace(double availableWidth, double availableHeight)
+		=> IsUsable(availableWidth) && IsUsable(availableHeight);
+
 	private static bool IsUsable(double value) => value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
 }
