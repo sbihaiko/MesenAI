@@ -7,8 +7,8 @@
 	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
 	mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="160"
-	x:DataType="vm:PlayerDisplaySettingsViewModel"
-	x:Class="Mesen.Views.PlayerDisplaySettingsView"
+	x:DataType="vm:PlayerWindowSettingsViewModel"
+	x:Class="Mesen.Views.PlayerWindowSettingsView"
 >
 	<!--G.4 (W-P8): Settings › Display - three rows. The aspect ratio and the
 	scale keep a value set elsewhere as their current item. ADR-0249: one

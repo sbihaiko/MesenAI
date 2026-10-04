@@ -54,7 +54,7 @@ public class PlayerSettingsTabsTests
 		Assert.True(strip.IsOnScreen());
 		List<TabItem> tabs = strip.Items.Cast<TabItem>().ToList();
 		Assert.Equal(PlayerSettingsEssentials.Tabs.Length, tabs.Count);
-		Assert.Equal(new[] { "Display", "Look", "Audio", "Controls" }, tabs.Select(t => t.Header as string).ToArray());
+		Assert.Equal(new[] { "Window", "Video", "Audio", "Controls" }, tabs.Select(t => t.Header as string).ToArray());
 		Assert.All(tabs, tab => Assert.True(tab.IsOnScreen()));
 		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Input), tabs.FindIndex(t => t.IsSelected));
 
@@ -85,7 +85,7 @@ public class PlayerSettingsTabsTests
 	public void Scale_shows_the_nearest_offered_value_below_one()
 	{
 		double? resized = null;
-		PlayerDisplaySettingsViewModel display = new(new VideoConfig(), false, 0.5, () => { }, s => resized = s);
+		PlayerWindowSettingsViewModel display = new(new VideoConfig(), false, 0.5, () => { }, s => resized = s);
 		Assert.NotNull(display.SelectedScale);
 		Assert.Equal(1, display.SelectedScale!.Value);
 		Assert.Null(resized);

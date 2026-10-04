@@ -21,7 +21,7 @@ namespace Mesen.ViewModels
 	//does no EmuApi or window I/O. A value set elsewhere that is not in a short
 	//list is shown as the current item and never rewritten
 	//(PlayDisplaySettings.ItemsWithCurrent).
-	public partial class PlayerDisplaySettingsViewModel : DisposableViewModel
+	public partial class PlayerWindowSettingsViewModel : DisposableViewModel
 	{
 		private static readonly VideoAspectRatio[] ShortAspectRatios = {
 			VideoAspectRatio.Auto, VideoAspectRatio.NoStretching, VideoAspectRatio.Standard, VideoAspectRatio.Widescreen
@@ -38,7 +38,7 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool IsFullscreen { get; set; }
 		[ObservableProperty] public partial PlayerScaleChoice? SelectedScale { get; set; }
 
-		public PlayerDisplaySettingsViewModel(VideoConfig config, bool isFullscreen, double currentScale, Action toggleFullscreen, Action<double> setScale)
+		public PlayerWindowSettingsViewModel(VideoConfig config, bool isFullscreen, double currentScale, Action toggleFullscreen, Action<double> setScale)
 		{
 			Config = config;
 			_toggleFullscreen = toggleFullscreen;

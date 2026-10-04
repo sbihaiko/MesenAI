@@ -59,7 +59,7 @@
 			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
 			<Control ID="chkEnhancementsOverclock">Overclock</Control>
 			<Control ID="lblEnhancementsAppliesOnReload">Applies on reload</Control>
-			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Video</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -970,7 +970,7 @@
 			<Control ID="colBinding1">Keys</Control>
 		</Form>
 
-		<Form ID="PlayerDisplaySettingsView">
+		<Form ID="PlayerWindowSettingsView">
 			<Control ID="lblDisplayFullscreen">Full screen</Control>
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
@@ -987,8 +987,8 @@
 		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
-			<Control ID="tabDisplay">Display</Control>
-			<Control ID="tabLook">Look</Control>
+			<Control ID="tabDisplay">Window</Control>
+			<Control ID="tabLook">Video</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>

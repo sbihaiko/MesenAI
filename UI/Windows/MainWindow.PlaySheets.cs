@@ -167,13 +167,13 @@ namespace Mesen.Windows
 			settings.PropertyChanged += OnPlayerSettingsChanged;
 			_model.OpenPlayerSettings(settings);
 			//Keyboard and gamepad start on the strip (rule: everything reachable).
-			Dispatcher.UIThread.Post(() => (FindNamedDescendant("tabPlayerDisplay") as TabItem)?.Focus());
+			Dispatcher.UIThread.Post(() => (FindNamedDescendant("tabPlayerWindow") as TabItem)?.Focus());
 		}
 
 		//G.4 (W-P8): Display edits this window - its full screen and scale.
-		private PlayerDisplaySettingsViewModel CreateDisplaySettings()
+		private PlayerWindowSettingsViewModel CreateDisplaySettings()
 		{
-			return new PlayerDisplaySettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale);
+			return new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale);
 		}
 
 		//Look's "More in Options…" leaves the essentials (ConfigViewModel turns
