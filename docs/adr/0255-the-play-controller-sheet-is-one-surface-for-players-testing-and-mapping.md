@@ -23,6 +23,18 @@
   backends that report a VID:PID, it names nothing where it cannot, and its cost
   is bounded and stated. The **sheet** is still not implemented: the sheet itself
   (#811), the PLAYERS slice and the remap mode are separate work.
+  **Slices 1 and 2 landed 2026-10-04** (#825 and #826), and the corrections they
+  needed landed with them or right after (#834): the sheet's own focus claim
+  (ADR-0256 Decision 3 — without it the arbiter focused the surface *under* the
+  sheet), the device moves' two write-side defects (a dropped reconnect move
+  counting as vacating its source index, and a slot move leaving a port type's
+  custom keys behind), and slice 1's own correction — the pad's
+  `GamepadState.Buttons` order is **per backend**, which
+  `Core/Shared/GamepadButtonOrder.h` now carries for the core and
+  `scripts/checks/verify_pad_button_tables.py` guards against the three
+  backends' tables. **Still not implemented**: the remap mode and slice 4's
+  surface (the extra buttons), so the sheet is not yet the whole of what the
+  Decision describes.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the
   Esc router and W-P15 - the setup sheet this one sits beside), ADR-0250 (one
