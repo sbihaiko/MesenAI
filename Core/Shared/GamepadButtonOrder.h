@@ -21,6 +21,13 @@
 //  - MacOS/MacOSGameController.mm + MacOS/MacOSKeyManager.mm
 //  - Windows/XInputManager.cpp + Windows/WindowsKeyManager.cpp
 //  - Linux/LinuxGameController.cpp + Linux/LinuxKeyManager.cpp
+//That C# class reads the backends off disk and does run in CI, but it compares
+//names by index and only through the C# mirror. The bit index is therefore also
+//checked directly, with no mirror in between, by
+//scripts/checks/verify_pad_button_tables.py (make doc-checks-2): it reads the
+//three buttonNames tables from source and fails when a row's Bit names a
+//different button there, and it checks the C# GamepadBackend enum against the
+//core's, which no C# test reads.
 namespace GamepadButtonOrder
 {
 	//The console pad the sheet draws, named after SetupButton (UI/Logic/
