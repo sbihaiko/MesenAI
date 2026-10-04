@@ -2,11 +2,10 @@
 
 # MesenAI
 
-A [MesenCE](https://github.com/nesdev-org/MesenCE) fork: NES, GB/GBC, SMS/GG/SG-1000, GBA, plus Enhanced Audio, HD packs, widescreen and remastering tools.
+[![Checks](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml?query=branch%3Amain)
 
 **Run it:** macOS Apple Silicon tagged release (`brew install sdl2`), Windows and Linux via the [CI channel](#download), or `make` from source ([COMPILING.md](COMPILING.md)).
 
-[![Checks](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/sbihaiko/MesenAI/actions/workflows/checks.yml?query=branch%3Amain)
 [![Release](https://img.shields.io/github/v/release/sbihaiko/MesenAI?label=release&color=2ea043)](https://github.com/sbihaiko/MesenAI/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Systems](https://img.shields.io/badge/systems-NES%20%7C%20GB%2FGBC%20%7C%20SMS%2FGG%2FSG--1000%20%7C%20GBA-8a2be2.svg)](#what-it-runs)
