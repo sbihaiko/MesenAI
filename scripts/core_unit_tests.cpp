@@ -5892,7 +5892,7 @@ namespace
 	bool FiresWithEsc(EmulatorShortcut shortcut, bool keyboardConnected, bool paused)
 	{
 		return ShortcutKeyRules::IsShortcutPressed(shortcut, SingleKey(kEscKey), {}, keyboardConnected, paused,
-			true, ProbeFor({ kEscKey }));
+			true, ProbeFor({ kEscKey }), { kEscKey });
 	}
 
 	void TestToggleOverlayStaysReachableInAKeyboardGame()
@@ -5931,12 +5931,12 @@ namespace
 		//The block is keyboard-only: a shortcut bound to a mouse button or a
 		//pad input (>= BaseMouseButtonIndex) keeps working in a keyboard game
 		bool mouseBound = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset, SingleKey(kMouseKey), {},
-			true, false, true, ProbeFor({ kMouseKey }));
+			true, false, true, ProbeFor({ kMouseKey }), { kMouseKey });
 		Check(mouseBound, "BlocoO: a shortcut bound to a mouse/pad input is not affected by the keyboard block");
 
 		//And with nothing pressed at all, nothing fires
 		bool nothingDown = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay, SingleKey(kEscKey), {},
-			false, false, false, ProbeFor({}));
+			false, false, false, ProbeFor({}), {});
 		Check(!nothingDown, "BlocoO: no key down means no shortcut fires");
 	}
 
@@ -5948,8 +5948,104 @@ namespace
 		superset.Key1 = 116; //left ctrl
 		superset.Key2 = kEscKey;
 		bool fires = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay, SingleKey(kEscKey), { superset },
-			true, false, true, ProbeFor({ kEscKey, (uint16_t)116, (uint16_t)117 }));
+			true, false, true, ProbeFor({ kEscKey, (uint16_t)116, (uint16_t)117 }), { kEscKey, (uint16_t)116, (uint16_t)117 });
 		Check(!fires, "BlocoO: a pressed superset still shadows ToggleOverlay in a keyboard game");
+	}
+
+	//--- Bloco O.2 (#800): a pad binding names a button, not device 0 ----------
+	//The pause-menu gesture is seeded from "Pad1 Select" + "Pad1 Start", and a pad
+	//key code carries its device: BaseGamepadIndex + device * 0x100 + button.
+	//Read literally, the chord only ever fires on the pad that was device 0 when
+	//the binding was written - so with two pads connected the one in the player's
+	//hand cannot open the overlay at all, and the overlay is the only surface that
+	//reaches the menus while a game runs. What the binding names is the *button*;
+	//the device byte is whoever is holding a pad (ADR-0256 Decision 5,
+	//"Qualquer controle").
+	//
+	//The button byte is the platform's own ordering (on this one 7 is Select and 6
+	//is Start); the rule only compares it, so the constants below are two distinct
+	//buttons rather than a promise about any platform's numbering.
+	const uint16_t kPadSelectButton = 7;
+	const uint16_t kPadStartButton = 6;
+	const uint16_t kPadOtherButton = 4;
+
+	uint16_t PadKey(int device, uint16_t button)
+	{
+		return (uint16_t)(IKeyManager::BaseGamepadIndex + device * 0x100 + button);
+	}
+
+	//The binding as the seeder writes it: both keys on device 0.
+	KeyCombination PadChord(uint16_t first, uint16_t second)
+	{
+		KeyCombination comb = {};
+		comb.Key1 = PadKey(0, first);
+		comb.Key2 = PadKey(0, second);
+		return comb;
+	}
+
+	bool PadChordFires(vector<uint16_t> down)
+	{
+		return ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay,
+			PadChord(kPadSelectButton, kPadStartButton), {}, false, false, true, ProbeFor(down), down);
+	}
+
+	void TestPadChordFiresOnWhicheverPadIsInHand()
+	{
+		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
+			"BlocoO.2: the chord still fires on the pad the binding was written from");
+		Check(PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadStartButton) }),
+			"BlocoO.2: Select+Start on the second pad opens the overlay (#800)");
+		Check(PadChordFires({ PadKey(3, kPadSelectButton), PadKey(3, kPadStartButton) }),
+			"BlocoO.2: ...and on the fourth, because the device is not what a binding names");
+	}
+
+	//Windows enumerates a pad twice over: XInput from BaseGamepadIndex, and a
+	//DirectInput joystick from WindowsKeyManager::BaseDirectInputIndex, which sits
+	//above it. A binding is seeded by key *name* ("Pad1 Select"), so a player
+	//whose pad came up as a joystick would otherwise never satisfy it - the same
+	//bug as #800 one dimension over. The rule keeps the code's 0x100 block, not
+	//base + device, so it does not have to know either base.
+	uint16_t JoystickKey(int device, uint16_t button)
+	{
+		return (uint16_t)(0x2000 + device * 0x100 + button);
+	}
+
+	void TestPadChordIsAnsweredInEitherPadFamily()
+	{
+		Check(PadChordFires({ JoystickKey(0, kPadSelectButton), JoystickKey(0, kPadStartButton) }),
+			"BlocoO.2: the chord fires on a pad the backend numbered in its other family");
+		Check(!PadChordFires({ JoystickKey(0, kPadSelectButton), JoystickKey(1, kPadStartButton) }),
+			"BlocoO.2: ...and is still one pad's chord, not two joysticks' worth");
+	}
+
+	void TestPadChordIsStillAChord()
+	{
+		Check(!PadChordFires({ PadKey(1, kPadSelectButton) }),
+			"BlocoO.2: one button of the chord on its own does not fire");
+		Check(!PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }),
+			"BlocoO.2: the wrong second button on the same pad does not fire");
+		//The device is dropped, the pad is not: two players each resting a finger on
+		//one button of the chord must not open the overlay between them.
+		Check(!PadChordFires({ PadKey(0, kPadSelectButton), PadKey(1, kPadStartButton) }),
+			"BlocoO.2: half the chord on one pad and half on another does not fire");
+	}
+
+	void TestPadRuleLeavesTheKeyboardAndMouseExact()
+	{
+		//Only a pad key is resolved per device: the keyboard stays an exact lookup,
+		//so a shortcut bound to a pad button is not satisfied by some unrelated
+		//keyboard key that happens to share its button byte.
+		bool keyboardSatisfiesPadBinding = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset,
+			SingleKey(PadKey(0, kPadSelectButton)), {}, false, false, true,
+			ProbeFor({ kPadSelectButton }), { kPadSelectButton });
+		Check(!keyboardSatisfiesPadBinding, "BlocoO.2: a keyboard key does not stand in for a pad button");
+
+		//...and a pad button does not stand in for a mouse button, which sits below
+		//the pad range
+		bool padSatisfiesMouseBinding = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset,
+			SingleKey(kMouseKey), {}, false, false, true,
+			ProbeFor({ PadKey(1, kPadSelectButton) }), { PadKey(1, kPadSelectButton) });
+		Check(!padSatisfiesMouseBinding, "BlocoO.2: a pad button does not stand in for a mouse button");
 	}
 
 	//--- Bloco P: artist-legible sheet pipeline (ADR-0153) -------------------
@@ -16574,6 +16670,10 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockOnlyAppliesWhileRunning();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
+	TestPadChordFiresOnWhicheverPadIsInHand();
+	TestPadChordIsAnsweredInEitherPadFamily();
+	TestPadChordIsStillAChord();
+	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();
 	TestSheetHudRowsSurviveAChangingScore();

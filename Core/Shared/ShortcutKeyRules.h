@@ -27,9 +27,82 @@ namespace ShortcutKeyRules
 		return isKeyboardConnected && !isPaused;
 	}
 
-	//The host key probe: keyCode -> is it down. Mouse buttons and pad inputs
-	//sit at or above IKeyManager::BaseMouseButtonIndex.
+	//The host key probe: keyCode -> is it down, exactly, for the keys that are
+	//not pad buttons - a mouse button, a keyboard scancode. Pad buttons are
+	//answered from `pressedKeys` instead (see IsShortcutPressed), because their
+	//code carries the device and "is this code down" is the wrong question.
 	typedef std::function<bool(uint16_t keyCode)> KeyDownProbe;
+
+	//#800: a pad key code is <base> + device * 0x100 + button, so the device is in
+	//the code and nowhere else. The pause-menu gesture is seeded from "Pad1
+	//Select" + "Pad1 Start", and read literally that means device 0 - with two
+	//pads connected, the one in the player's hand then has no way into the
+	//overlay, which is the only surface that reaches the menus while a game runs.
+	//What a binding names is the *button*; which pad is holding it is the code's
+	//own 0x100 block (ADR-0256 Decision 5, "Qualquer controle").
+	//
+	//Block and not base + device: Windows has two bases at once
+	//(IKeyManager::BaseGamepadIndex for XInput, WindowsKeyManager's
+	//BaseDirectInputIndex above it for DirectInput joysticks), and a rule that
+	//reconstructed the pair would have to know both. Everything a shortcut does
+	//with a pad key is the block arithmetic, so the block is what it keeps.
+	inline bool IsPadKey(uint16_t keyCode)
+	{
+		return keyCode >= IKeyManager::BaseGamepadIndex;
+	}
+
+	inline uint16_t PadButtonOf(uint16_t keyCode)
+	{
+		return (uint16_t)(keyCode & 0xFF);
+	}
+
+	inline uint16_t PadBlockOf(uint16_t keyCode)
+	{
+		return (uint16_t)(keyCode & ~0xFF);
+	}
+
+	inline void AddPadBlock(vector<uint16_t>& blocks, uint16_t keyCode)
+	{
+		if(!IsPadKey(keyCode)) {
+			return;
+		}
+		uint16_t block = PadBlockOf(keyCode);
+		if(std::find(blocks.begin(), blocks.end(), block) == blocks.end()) {
+			blocks.push_back(block);
+		}
+	}
+
+	//The pads a combination may be resolved on: the block each of its own pad keys
+	//was written in (so a one-pad setup still answers exactly the code the binding
+	//holds), plus the block of every pad key the player is holding (so a pad the
+	//binding never named - a second one, or a joystick in the other family -
+	//answers it too). A combination with no pad key at all resolves through the
+	//host probe alone, as it always did.
+	inline vector<uint16_t> PadBlocksFor(const KeyCombination& comb, const vector<uint16_t>& pressedKeys)
+	{
+		vector<uint16_t> blocks;
+		AddPadBlock(blocks, comb.Key1);
+		AddPadBlock(blocks, comb.Key2);
+		AddPadBlock(blocks, comb.Key3);
+		for(uint16_t keyCode : pressedKeys) {
+			AddPadBlock(blocks, keyCode);
+		}
+		return blocks;
+	}
+
+	//The probe for one pad: a pad key asks that pad's own button, every other key
+	//asks the host. For the block the binding was written in this is the code
+	//exactly as written, which is what keeps a one-pad setup on the behaviour it
+	//always had.
+	inline KeyDownProbe ProbeOnPad(uint16_t block, const vector<uint16_t>& pressedKeys, KeyDownProbe isKeyDown)
+	{
+		return [block, pressedKeys, isKeyDown](uint16_t keyCode) {
+			if(!IsPadKey(keyCode)) {
+				return isKeyDown(keyCode);
+			}
+			return std::find(pressedKeys.begin(), pressedKeys.end(), (uint16_t)(block + PadButtonOf(keyCode))) != pressedKeys.end();
+		};
+	}
 
 	inline bool IsKeyPressed(uint16_t keyCode, bool mergeCtrlAltShift, bool blockKeyboardKeys, const KeyDownProbe& isKeyDown)
 	{
@@ -63,21 +136,49 @@ namespace ShortcutKeyRules
 			(comb.Key3 == 0 || IsKeyPressed(comb.Key3, mergeCtrlAltShift, blockKeyboardKeys, isKeyDown));
 	}
 
+	//One combination, asked once per pad it could be held on - and, when it names
+	//no pad key at all, asked once through the host probe, which is every
+	//combination that existed before this rule did.
+	inline bool IsCombinationPressedOnAnyPad(KeyCombination comb, bool blockKeyboardKeys, bool anyKeyDown,
+		const KeyDownProbe& isKeyDown, const vector<uint16_t>& pressedKeys)
+	{
+		vector<uint16_t> blocks = PadBlocksFor(comb, pressedKeys);
+		if(blocks.empty()) {
+			return IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, isKeyDown);
+		}
+		for(uint16_t block : blocks) {
+			if(IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, ProbeOnPad(block, pressedKeys, isKeyDown))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	//The whole decision for one shortcut: a pressed superset shadows its
 	//subset, otherwise the shortcut's own combination decides.
+	//
+	//`pressedKeys` is the host's currently-pressed key codes, and it is what says
+	//which pads the player is holding. The combination is resolved once per such
+	//pad, and every pad key in it has to come from the *same* one - so the chord
+	//is "these buttons on a pad", not "these buttons somewhere".
 	inline bool IsShortcutPressed(EmulatorShortcut shortcut, KeyCombination comb, const vector<KeyCombination>& supersets,
-		bool isKeyboardConnected, bool isPaused, bool anyKeyDown, const KeyDownProbe& isKeyDown)
+		bool isKeyboardConnected, bool isPaused, bool anyKeyDown, const KeyDownProbe& isKeyDown,
+		const vector<uint16_t>& pressedKeys)
 	{
 		bool blockKeyboardKeys = ShouldBlockKeyboardKeys(shortcut, isKeyboardConnected, isPaused);
 
+		//Supersets first and across every pad: a pressed superset shadows its
+		//subset whichever pad it was pressed on, which is the precedence this had
+		//before there was more than one pad to ask.
 		for(const KeyCombination& superset : supersets) {
-			if(IsCombinationPressed(superset, blockKeyboardKeys, anyKeyDown, isKeyDown)) {
+			if(IsCombinationPressedOnAnyPad(superset, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys)) {
 				//A superset is pressed, ignore this subset
 				return false;
 			}
 		}
 
-		//No supersets are pressed, check if all matching keys are pressed
-		return IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, isKeyDown);
+		//No supersets are pressed, check if all matching keys are pressed on some
+		//one pad
+		return IsCombinationPressedOnAnyPad(comb, blockKeyboardKeys, anyKeyDown, isKeyDown, pressedKeys);
 	}
 }
