@@ -27,11 +27,7 @@ namespace {
 	static const ShortcutKeyRules::PadFamilies& GetPadFamilies()
 	{
 #ifdef _WIN32
-		static const ShortcutKeyRules::PadFamilies families = {
-			(uint16_t)IKeyManager::BaseGamepadIndex,
-			(uint16_t)IKeyManager::BaseDirectInputIndex
-		};
-		return families;
+		return ShortcutKeyRules::TwoPadFamilies();
 #else
 		return ShortcutKeyRules::SinglePadFamily();
 #endif

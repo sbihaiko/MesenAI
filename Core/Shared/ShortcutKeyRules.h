@@ -83,6 +83,20 @@ namespace ShortcutKeyRules
 		return families;
 	}
 
+	//The two-family backend: Windows' KeyManager, which reports XInput pads from
+	//BaseGamepadIndex and DirectInput joysticks from BaseDirectInputIndex. It lives
+	//here rather than next to GetPadFamilies so that the unit tests assert *this*
+	//list instead of a second copy of it - the two numbers are the whole fix, and a
+	//copy that drifted would keep the suite green while reopening #800.
+	inline const PadFamilies& TwoPadFamilies()
+	{
+		static const PadFamilies families = {
+			(uint16_t)IKeyManager::BaseGamepadIndex,
+			(uint16_t)IKeyManager::BaseDirectInputIndex
+		};
+		return families;
+	}
+
 	//The family a pad key code belongs to: the highest family base at or below it,
 	//or the lowest base when the code sits under all of them. With one family - and
 	//however high the device index goes - that is always the same answer.
@@ -155,10 +169,19 @@ namespace ShortcutKeyRules
 	//asks the host. For the block the binding was written in this is the code
 	//exactly as written, which is what keeps a one-pad setup on the behaviour it
 	//always had.
-	inline KeyDownProbe ProbeOnPad(uint16_t block, const vector<uint16_t>& pressedKeys, KeyDownProbe isKeyDown)
+	//
+	//A bound pad key from *another* family is not shifted onto this block: the
+	//families number their buttons independently, so re-using one family's button
+	//byte on another family's device is exactly the coincidence this rule exists to
+	//reject. It falls through to the exact host lookup, which is what an unheld
+	//button deserves. Without this, a binding written across two families - an
+	//XInput button and a joystick button - was satisfied by one XInput pad whose
+	//button byte happened to match the joystick's.
+	inline KeyDownProbe ProbeOnPad(uint16_t block, const vector<uint16_t>& pressedKeys, KeyDownProbe isKeyDown,
+		const PadFamilies& families)
 	{
-		return [block, pressedKeys, isKeyDown](uint16_t keyCode) {
-			if(!IsPadKey(keyCode)) {
+		return [block, pressedKeys, isKeyDown, families](uint16_t keyCode) {
+			if(!IsPadKey(keyCode) || PadFamilyOf(keyCode, families) != PadFamilyOf(block, families)) {
 				return isKeyDown(keyCode);
 			}
 			return std::find(pressedKeys.begin(), pressedKeys.end(), (uint16_t)(block + PadButtonOf(keyCode))) != pressedKeys.end();
@@ -208,7 +231,7 @@ namespace ShortcutKeyRules
 			return IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, isKeyDown);
 		}
 		for(uint16_t block : blocks) {
-			if(IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, ProbeOnPad(block, pressedKeys, isKeyDown))) {
+			if(IsCombinationPressed(comb, blockKeyboardKeys, anyKeyDown, ProbeOnPad(block, pressedKeys, isKeyDown, families))) {
 				return true;
 			}
 		}

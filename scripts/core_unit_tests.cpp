@@ -6045,12 +6045,11 @@ namespace
 	}
 
 	//The two-family backend, i.e. Windows: XInput pads and DirectInput joysticks.
-	ShortcutKeyRules::PadFamilies TwoPadFamilies()
+	//It is the header's own list, not a copy - the two numbers are the fix, and a
+	//copy here would keep this suite green while production drifted.
+	const ShortcutKeyRules::PadFamilies& TwoPadFamilies()
 	{
-		return {
-			(uint16_t)IKeyManager::BaseGamepadIndex,
-			(uint16_t)IKeyManager::BaseDirectInputIndex
-		};
+		return ShortcutKeyRules::TwoPadFamilies();
 	}
 
 	//A shortcut bound to these two codes, held on the given keys.
@@ -6139,6 +6138,22 @@ namespace
 		//the pad.
 		Check(PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadStartButton) }),
 			"BlocoO.2: ...and with only the subset down, it fires again");
+	}
+
+	//A binding may name pad keys from two families at once, and no single pad can
+	//answer it: the button bytes are only buttons inside their own family, so an
+	//XInput pad holding buttons 7 and 4 must not stand in for a binding written as
+	//"XInput button 7 plus joystick button 4". Only a Windows user can write such a
+	//binding, and the rule has to keep the families apart inside the pad probe too,
+	//not just when choosing which pads to ask.
+	void TestABindingAcrossTwoFamiliesIsNotAnsweredByOnePad()
+	{
+		KeyCombination spanned = TwoKeys(PadKey(0, kPadSelectButton), JoystickKey(0, kPadOtherButton));
+
+		Check(!ChordFires(spanned, { PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }),
+			"BlocoO.2: an XInput pad does not answer a binding that also names a joystick button");
+		Check(!ChordFires(spanned, { JoystickKey(1, kPadOtherButton) }),
+			"BlocoO.2: ...nor does the joystick half alone");
 	}
 
 	void TestPadChordIsStillAChord()
@@ -16797,6 +16812,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
 	TestPadChordIsStillAChord();
+	TestABindingAcrossTwoFamiliesIsNotAnsweredByOnePad();
 	TestAMixedCombinationAsksEachHalfItsOwnWay();
 	TestAPadSupersetShadowsItsSubsetOnAnyPad();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
