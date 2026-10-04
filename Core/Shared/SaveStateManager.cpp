@@ -360,8 +360,31 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			return -1;
 		}
 
-		//Skip console type field
-		stream.seekg(4, ios::cur);
+		if(fileFormatVersion <= 3) {
+			//Skip over old SHA1 field, as LoadState does: it sits between the
+			//format version and the console type, so reading the type without
+			//skipping it would read the SHA1's first four bytes as the console and
+			//refuse every state at the oldest format this preview accepts.
+			stream.seekg(40, ios::cur);
+		}
+
+		//The state's own console, which is what the four bytes were skipped for
+		//until #832. The frame below is rendered through _emu->GetVideoFilter,
+		//and that is the *loaded* console's filter, so a state that came from
+		//another console has nothing to render it with: a Game Boy frame decoded
+		//through the NES palette is noise, and no assertion downstream can tell.
+		//
+		//Refused only while a console is loaded, which is when "the loaded
+		//console's filter" is a claim that means anything. With none (a preview
+		//still in flight when the game was closed, #829) there is no console to
+		//disagree with - Emulator::GetConsoleType answers the last active one,
+		//and its zero default is Snes, so reading it here would refuse a state
+		//that the default filter would in fact have rendered correctly.
+		ConsoleType stateConsoleType = (ConsoleType)ReadValue(stream);
+		shared_ptr<IConsole> console = _emu->GetConsole();
+		if(console && console->GetConsoleType() != stateConsoleType) {
+			return -1;
+		}
 
 		vector<uint8_t> frameData;
 		RenderedFrame frame;
