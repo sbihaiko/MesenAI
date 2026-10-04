@@ -13,13 +13,23 @@
 
 </div>
 
+## Why this fork exists
+
+Upstream does not accept AI-assisted contributions (Enhanced Audio was [nesdev-org/MesenCE#262](https://github.com/nesdev-org/MesenCE/pull/262), closed under that policy), so **MesenAI is maintained as an independent fork**.
+
+Its lineage is: Mesen 0.9.x → Mesen2 → [MesenCE](https://github.com/nesdev-org/MesenCE) → **MesenAI**.
+
+The four supported console families are listed above; systems intentionally dropped from this fork are listed under [What it runs](#what-it-runs). For contribution guidelines, including the policy on AI-assisted work, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Pick your door
 
-MesenCE is one window that does everything; this fork is the same emulator behind three task-shaped workspaces, plus a **Classic** door that is the original GUI, a keystroke away.
+MesenCE puts everything in one window. MesenAI keeps the same emulator underneath, but organizes it around three task-focused workspaces — plus a **Classic** door that brings back the original GUI, always one keystroke away.
 
-- **🎮 Play.** Download, open a ROM, done. Enhanced Audio is on by default (Style: *Studio*) — same notes, same timing, modern instruments — and an accepted catalog pack for the loaded ROM downloads, installs and loads on its own, no config. **Widescreen** stops the stretch: the console draws the playfield it already had beside the screen. **Esc** opens the pause overlay: save states, pack, enhancements, cheats, settings. → [Download](#download) · [Community packs](docs/community-packs.md)
-- **🎨 Remaster.** Record the game once — scripted, from a save state, or driven by a published TAS — and get back sprite figures with their animation cycles, the stage stitched into one panorama, and completed pattern pages, every cell labeled. Paint the PNGs, build, see it in the game. → [Remastering guide](docs/remastering-a-game.md) · needs Python 3.10+ (the tools use `zip(strict=)`) and the tools for that release, or a checkout.
-- **📦 Share.** One pre-filled Issue for a pack, a cheat or a replay. A bot downloads it, lints it against an open spec, labels it and lists it in the public catalog with a 👍 vote; classic `hires.txt` packs qualify as-is. → [pack](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml) · [cheat](https://github.com/sbihaiko/MesenAI/issues/new?template=cheat-code.yml) · [replay](https://github.com/sbihaiko/MesenAI/issues/new?template=replay.yml)
+- **🎮 Play.** Download, open a ROM, and play. Enhanced Audio is enabled by default (Style: *Studio*): same notes, same timing, modern instruments. If an accepted catalog pack exists for the loaded ROM, MesenAI downloads, installs, and loads it automatically — no configuration required. **Widescreen** eliminates stretching by letting the console render the playfield that already exists beyond the original screen. Press **Esc** for the pause overlay: save states, packs, enhancements, cheats, and settings. → [Download](#download) · [Community packs](docs/community-packs.md)
+
+- **🎨 Remaster.** Record the game once — manually, from a save state, through a script, or driven by a published TAS — and get sprite sheets with complete animation cycles, the stage stitched into a single panorama, and completed pattern pages with every cell labeled. Paint the PNGs, build, and see the result in-game. → [Remastering guide](docs/remastering-a-game.md) · Requires Python 3.10+ (the tools use `zip(strict=)`) and either the tools bundled with that release or a source checkout.
+
+- **📦 Share.** Submit a pack, cheat, or replay through a pre-filled Issue. A bot downloads it, validates it against an open specification, labels it, and adds it to the public catalog with 👍 voting. Existing `hires.txt` packs are supported as-is. → [pack](https://github.com/sbihaiko/MesenAI/issues/new?template=community-pack.yml) · [cheat](https://github.com/sbihaiko/MesenAI/issues/new?template=cheat-code.yml) · [replay](https://github.com/sbihaiko/MesenAI/issues/new?template=replay.yml)
 
 ## What it runs
 
@@ -154,10 +164,6 @@ Plain **Mesen `hires.txt`** packs and full **MEP `pack.json`** packs are both ac
 - Only macOS Apple Silicon is a tagged release. Windows, Linux, and the macOS CI zip come from [Download](#download).
 
 Decisions: [docs/adr/](docs/adr/). Roadmap: [docs/roadmap/PRD-mesence-enhancement-ecosystem.md](docs/roadmap/PRD-mesence-enhancement-ecosystem.md).
-
-## Why this fork exists
-
-Upstream's contribution policy does not accept AI-assisted PRs (Enhanced Audio was [nesdev-org/MesenCE#262](https://github.com/nesdev-org/MesenCE/pull/262), closed for that reason). This is an independent fork. Product consoles are the four families above; the dropped ones are named under [What it runs](#what-it-runs). Lineage: Mesen 0.9.x → Mesen2 → [MesenCE](https://github.com/nesdev-org/MesenCE) → **MesenAI**. How to contribute, including the AI-assisted rule: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## FAQ
 
