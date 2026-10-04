@@ -192,21 +192,43 @@ can be exercised by real xunit tests without Avalonia or the native
   `InputApi.GetPressedKeys()` — never an event, so nothing hooks
   `OnPreviewKeyDown`, whose macOS path returns early — feeds the rules and
   applies the answer through `IFocusManager.FindNextElement` +
-  `PlayFocusOnOpen.Enter`. It never re-tests the pause: with a game running and
-  nothing up, `PlayPadNavigation.HasAuthority` (fed by `IsPlaySurfaceOverGame`)
-  is what says the pad belongs to the console, and a second guard could only
-  disagree with it. `StateGrid` is scoped **out** — it already moves its own
-  `SelectedIndex` from the pad in its own timer, its slots are not
-  individually focusable, and "owning" it here would mean the roving-focus
-  container Decision 3 rules out — except for Back, which is the bridge's: the
-  grid's loop has no exit, and a player stuck in the slot grid is the failure
-  ADR-0256 exists to prevent.
+  `PlayFocusOnOpen.Enter`. `PlayPadNavigation.HasAuthority(playSurfaceUp,
+  gameLoaded, gamePaused, loadCardUp, firstRunPickerUp)` is what says whether
+  the pad is the GUI's at all: the on-load pack picker outranks the load card
+  (it is posted while the card is still on screen, and it has to be answerable),
+  the load card itself refuses (it carries no focusable control, so authority
+  over it would only let a Confirm reach the home and launch a game *through*
+  the card), and otherwise the pad is the GUI's when no game is loaded, or when
+  a surface that took the console away is up — the pause is what makes it the
+  pad's, not the surface's, which is what keeps a surface that never pauses
+  (the barcode tool sheet, Settings from a task door) from handing the pad the
+  menus over a running game. `IsBackEdge` is asked **outside** that rule: the
+  tick hands the authority answer to `PadNavRepeat.Next`, and only when it
+  answers `None` does it test the Back edge, which needs no authority at all —
+  Back is the one press no authority rule may gate, because the slot grid the
+  Load/Save-state shortcuts open sits over a game `CurrentPlaySheet()` does not
+  name and has no other exit. `StateGrid` is scoped **out** — it moves its own
+  `SelectedIndex` from the pad in its own timer, through `GridAction` (the pad's
+  own preset inside the Play door, never the console mapping the port carries,
+  so rebinding or clearing the D-pad cannot change or lose grid navigation and a
+  second pad can drive it — and the console mapping outside it, which is how
+  Advanced draws its own game-selection and Save/Load screens from the same
+  control), its slots are not individually focusable, and "owning" it here
+  would mean the roving-focus container Decision 3 rules out — except for Back,
+  which is the bridge's: the grid's loop has no exit, and a player stuck in the
+  slot grid is the failure ADR-0256 exists to prevent.
 - `PlayFocusOnOpen` (`UI/Utilities`) is Decision 3's one focus path. A Play
   surface registers a claim in the order `TogglePlayerOverlay` walks it
   (`HandleEdgeFlowEsc`, then `CurrentPlaySheet`'s chain), so two surfaces up at
   once — Look's Adjust… opens the shader sheet over Settings, which stays open
   beneath — resolve the way Esc would; the arbiter re-reads the claims on a
   close as well as an open, which is what hands the focus back down the stack.
+  Every surface that chain can reach has a claim, and the claim opens on the
+  same predicate the surface stands for — a claim narrower than the surface
+  (the tool sheet's, which opened on the barcode kind alone, or the Controller
+  sheet having none at all) leaves the arbiter focusing what is *under* the
+  sheet, so the ring is drawn on a surface the player cannot reach and Confirm
+  fires that surface's action instead of the sheet's.
   `Enter` is the only place focus is taken, and always with
   `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
   focus, which is what paints `PlayerFocusRing`. Before it, each surface posted

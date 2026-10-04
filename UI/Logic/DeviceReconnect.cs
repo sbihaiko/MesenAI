@@ -136,7 +136,6 @@ namespace Mesen.Logic
 			}
 
 			List<(Identity Id, DeviceMove Move)> candidates = new();
-			HashSet<(GamepadBackend, int)> vacating = new();
 			Dictionary<(GamepadBackend, int), int> sourceCount = new();
 			Dictionary<Identity, int> firstSighting = new();
 			foreach(PadIdentity pad in pads) {
@@ -156,27 +155,56 @@ namespace Mesen.Logic
 					continue;
 				}
 				candidates.Add((id, new DeviceMove(pad.Backend, last, pad.DeviceIndex)));
-				vacating.Add((pad.Backend, last));
 				(GamepadBackend, int) source = (pad.Backend, last);
 				sourceCount[source] = sourceCount.TryGetValue(source, out int count) ? count + 1 : 1;
 			}
 
-			//A move is kept only when it is unambiguous and touches no other pad's
-			//keys: two pads recorded at the same source index (whose keys sat there
-			//is unknown) drop, and a target whose keys belonged to another pad that
-			//is not vacating that index drops.
-			List<DeviceMove> moves = new();
-			HashSet<Identity> advanced = new();
+			//Two pads recorded at the same source index (whose keys sat there is
+			//unknown) make the move ambiguous, and a target two candidates name is
+			//taken by the first (the later one would overwrite what the first just
+			//wrote); both drop. Vacating a source is NOT decided here: only a move
+			//that actually happens vacates its source index, and a dropped move must
+			//not look like it freed one (see the second pass).
+			List<(Identity Id, DeviceMove Move)> alive = new();
 			HashSet<(GamepadBackend, int)> targets = new();
 			foreach((Identity id, DeviceMove move) in candidates) {
 				(GamepadBackend, int) source = (move.Backend, move.FromIndex);
-				(GamepadBackend, int) target = (move.Backend, move.ToIndex);
 				bool ambiguousSource = sourceCount[source] > 1;
-				bool targetForeign = recorded.Contains(target) && !vacating.Contains(target);
-				bool targetTaken = !targets.Add(target);
-				if(ambiguousSource || targetForeign || targetTaken) {
+				bool targetTaken = !targets.Add((move.Backend, move.ToIndex));
+				if(ambiguousSource || targetTaken) {
 					continue;
 				}
+				alive.Add((id, move));
+			}
+
+			//A target whose keys belong to another pad that is not vacating that
+			//index is refused: the move would overwrite keys still sitting there.
+			//`vacating` holds only the sources of the moves that happen, so a dropped
+			//move vacates nothing. Dropping one candidate can withdraw the source
+			//another was relying on, so this repeats until no candidate drops.
+			while(true) {
+				HashSet<(GamepadBackend, int)> vacating = new();
+				foreach((Identity _, DeviceMove move) in alive) {
+					vacating.Add((move.Backend, move.FromIndex));
+				}
+				List<(Identity Id, DeviceMove Move)> kept = new();
+				foreach((Identity id, DeviceMove move) in alive) {
+					(GamepadBackend, int) target = (move.Backend, move.ToIndex);
+					if(recorded.Contains(target) && !vacating.Contains(target)) {
+						continue;
+					}
+					kept.Add((id, move));
+				}
+				bool reduced = kept.Count != alive.Count;
+				alive = kept;
+				if(!reduced) {
+					break;
+				}
+			}
+
+			List<DeviceMove> moves = new();
+			HashSet<Identity> advanced = new();
+			foreach((Identity id, DeviceMove move) in alive) {
 				moves.Add(move);
 				advanced.Add(id);
 			}

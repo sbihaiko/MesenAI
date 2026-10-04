@@ -455,6 +455,17 @@ doc-checks-2:
 	#live row whose Decision cell opens with "shipped" is a contract breach.
 	python3 scripts/checks/verify_prd_live_rows.py
 	python3 scripts/test_verify_prd_live_rows.py
+	#The Play Controller sheet lights a drawn key from the pad's own
+	#GamepadState.Buttons, whose order is per backend: the three backends' key
+	#tables, Core/Shared/GamepadButtonOrder.h, UI/Logic/ControllerSheet.cs's
+	#ControllerLivePad._names and the C# GamepadBackend enum (IKeyManager.h)
+	#must all agree. ControllerSheetPadTests reads the backends off disk and does
+	#run in CI, but it compares *names by index* through the C# mirror, and it
+	#never looks at the enum. This is the host-free, compile-free guard that
+	#reads all four copies directly - the bit index against each backend's own
+	#table, with no mirror in between, and the enum name for value.
+	python3 scripts/checks/verify_pad_button_tables.py
+	python3 scripts/test_verify_pad_button_tables.py
 	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
 	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
 	#141, which a check reads as a missing string - verify_community_pack_

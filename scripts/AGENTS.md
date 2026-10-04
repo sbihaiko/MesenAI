@@ -1676,6 +1676,21 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
   starts with the word `shipped` fails the row. A shipped slice loses its row
   and gains one line in the Part's shipped record (`docs/roadmap/AGENTS.md`).
   Its own fixtures live in `python3 scripts/test_verify_prd_live_rows.py`.
+- `python3 scripts/checks/verify_pad_button_tables.py` (ADR-0255 slice 1's
+  correction, also in `make doc-checks`) - the pad's `GamepadState.Buttons`
+  order is *per backend*, and four copies of it have to agree: the three
+  backends' own `buttonNames` tables (`Windows/WindowsKeyManager.cpp`,
+  `Linux/LinuxKeyManager.cpp`, `MacOS/MacOSKeyManager.mm`),
+  `Core/Shared/GamepadButtonOrder.h`'s one row per (backend, console button),
+  `UI/Logic/ControllerSheet.cs`'s `ControllerLivePad._names`, and the C#
+  `GamepadBackend` enum against `Core/Shared/Interfaces/IKeyManager.h`. A row's
+  `Bit` is checked against the backend's own table with no C# mirror in
+  between, so a wrong bit fails here instead of lighting the wrong key on
+  Windows. `ControllerSheetPadTests` reads the same backends off disk and runs
+  in CI, but by name through the mirror; this is the host-free, compile-free
+  guard, and the only one that reads the enum. Its fixtures - a swapped bit, a
+  renamed backend button, a reordered mirror, a renumbered enum - live in
+  `python3 scripts/test_verify_pad_button_tables.py`.
 - `python3 scripts/test_mep_import.py` (F12.7/F12.17, ADR-0198 §1/§3) -
   `mep_import.py` + `mep_patch.py` on a synthetic legacy pack and a
   synthetic iNES + IPS: data- and index-keyed round-trips through `build` +

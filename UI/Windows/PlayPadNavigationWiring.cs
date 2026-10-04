@@ -112,8 +112,18 @@ namespace Mesen.Windows
 				() => model.SelectRomSheet.IsVisible, () => Named(window, "SelectRomSheetSearch"));
 			focus.When(model, [nameof(MainWindowViewModel.IsShaderSheetVisible)],
 				() => model.IsShaderSheetVisible, () => Named(window, "ShaderSheetOk"));
-			focus.When(model.ToolSheet, [nameof(PlayerToolSheetViewModel.IsBarcode)],
-				() => model.ToolSheet.IsBarcode, () => Named(window, "ToolSheetBarcode"));
+			//The tool sheet is a surface for every kind it can show, not only the
+			//barcode: IsPlaySurfaceOverGame counts ToolSheet.IsVisible, and About,
+			//Command Line, Check for Updates and the video recorder's settings all
+			//come up as it. A claim that opened on IsBarcode alone left those kinds
+			//with no claim at all, so the arbiter put the focus back on the content
+			//under the sheet. The target follows the kind the same way: the barcode
+			//box for the barcode kind, and the sheet's own first focusable control
+			//otherwise - a single named control could not be both, and one that is
+			//only on screen in the barcode kind is the same bug in a new place.
+			focus.When(model.ToolSheet, [nameof(PlayerToolSheetViewModel.IsVisible)],
+				() => model.ToolSheet.IsVisible,
+				() => model.ToolSheet.IsBarcode ? Named(window, "ToolSheetBarcode") : FirstFocusable(window, "ToolSheet"));
 			//The edge-flow sheets, which HandleEdgeFlowEsc answers only after the
 			//in-window ones: Bios, then ControllerSetup.
 			focus.When(model.BiosSheet, [nameof(PlayBiosSheetViewModel.IsVisible)],
@@ -122,11 +132,26 @@ namespace Mesen.Windows
 				() => model.ControllerSetup.IsVisible, () => Named(window, "ControllerSetupSkip"));
 			//W-P4's sheets, in CurrentPlaySheet()'s order - the chain PlayEsc.Next
 			//reads, so the surface Esc would close first is the one that holds the
-			//focus: Settings, PackDep, PackPicker, Enhancements, PackDetail, Cheats,
+			//focus: Settings, Controller (ADR-0255's sheet, read right after
+			//Settings), PackDep, PackPicker, Enhancements, PackDetail, Cheats,
 			//Replays, SaveStates. (The chain's SaveStateGrid is the grid itself,
 			//which is content, not a sheet.)
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
 				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"));
+			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
+			//after Settings (one of the two is current at a time; the sheet
+			//replaces the Settings sheet's Controls landing), so the arbiter's
+			//order keeps mirroring the chain PlayEsc.Next walks. Done is the
+			//sheet's own control, and the one to open it on: it is always on
+			//screen and focusable whatever the sheet is showing - the pad picker,
+			//the PLAYERS rows and the keyboard block's restore button each come
+			//and go with the connected pad and the preset, and Done is declared
+			//outside every one of those conditions - and a
+			//Confirm on it closes the sheet back to W-P4 - where the other one,
+			//More in Options…, leaves for the classic Input window, which
+			//ADR-0256's non-goals say a pad cannot drive.
+			focus.When(model.ControllerSheet, [nameof(ControllerSheetViewModel.IsVisible)],
+				() => model.ControllerSheet.IsVisible, () => Named(window, "ControllerSheetDone"));
 			focus.When(model.PackDepSheet, [nameof(PlayPackDepSheetViewModel.IsVisible)],
 				() => model.PackDepSheet.IsVisible, () => Named(window, "PackDepSheetChooseFile"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerPackPickerVisible)],
@@ -202,6 +227,20 @@ namespace Mesen.Windows
 		private static Control? EnabledNamed(MainWindow window, string name)
 		{
 			return window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyEnabled);
+		}
+
+		//The first control inside a named surface's own tree that can take the
+		//focus now, in the surface's own order - the sheet's order of focus, the
+		//same one a keyboard's Tab walks. Used where the surface's first control
+		//is not one fixed name: the tool sheet's first control depends on the kind
+		//it is showing, and picking a name that only exists in one kind is what
+		//left the other kinds with no claim at all. A surface that is not up yet,
+		//or is still laying out, answers nothing, which the arbiter reads as "wait
+		//for it" rather than "focus what is underneath".
+		private static Control? FirstFocusable(MainWindow window, string surface)
+		{
+			return Named(window, surface)?.GetVisualDescendants().OfType<Control>()
+				.FirstOrDefault(c => c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible);
 		}
 
 		//The pad, once per tick. It reads the host's pressed set, asks the rules
