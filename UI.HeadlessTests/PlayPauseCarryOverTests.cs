@@ -8,11 +8,20 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//The pause flag is a Core-level atomic that no load path clears: Pause() sets
-//it, Resume() clears it, and LoadRom/InternalLoadRom/Lock/Unlock never touch
-//it. A game opened while it is set would then start parked - the picture stays
-//blank and no overlay is up, because the Player overlay is a menu the player
-//opens (Esc) rather than a reaction to the Core being paused.
+//A game opened while the emulator is paused starts running: the pause flag
+//belongs to the game that was on screen, and a parked freshly loaded game draws
+//exactly one frame and then nothing, with no overlay up to explain it (the
+//Player overlay is an Esc menu, not a reaction to the flag).
+//
+//The Core half of the contract is pinned at the Core boundary, with no UI and no
+//dylib resolution in the way: scripts/test_core_pause_carry_over.py asserts that
+//an open runs and keeps running past ten frames, and that a reload keeps the
+//pause. These cases cover the three UI entry points that reach it - the raw
+//EmuApi.LoadRom the file-open path uses, the Play home's Continue card, and
+//LoadRomHelper.LoadFile - and read the flag last, because no UI observable
+//separates a game that is about to park from one that is not (IsGamePaused is
+//still false at that moment either way; it turns true only when the parked
+//thread posts GamePaused).
 public partial class PlayEdgeFlowsTests
 {
 	[AvaloniaFact]
