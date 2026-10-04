@@ -97,10 +97,12 @@ heading are answered by them and by the section after.**
    `"Pad1 Back" + "Pad1 Start"`), and no backend exposes a Home or Guide pad
    button - `Core/Shared/KeyDefinitions.h` has `"Home"` only as keyboard
    scancode 22, and the per-platform pad button lists have neither - so the
-   seeded binding is always `Pad1 Select` + `Pad1 Start`. With two pads
-   connected, the one in the player's hand has no way into the overlay at all,
-   and the overlay is the only route to the menus while a game runs. Filed as
-   issue #800; this rule is the fix it has to satisfy.
+   seeded binding is always a `Pad1` chord, and it is `Pad1 Select` + `Pad1
+   Start` where the backend names a Select (macOS, Linux) or `Pad1 Back` +
+   `Pad1 Start` on XInput/Windows, whose button table calls that button Back.
+   With two pads connected, the one in the player's hand has no way into the
+   overlay at all, and the overlay is the only route to the menus while a game
+   runs. Filed as issue #800; this rule is the fix it has to satisfy.
 6. **On-screen text names the control in the player's hand**, not the keyboard
    (the user's answer, 2026-10-04: *"Segue o controle na mão"*). W-P4's footer
    reads "Esc to resume" today, which is a lie on the cabinet this ADR is about:
