@@ -106,6 +106,49 @@ ports, which would have made "P2" mean "the second alternative binding of
 player 1". `Mapping1..4` are alternatives; the ports are `PortN`. Caught in
 review before anything was built on it.
 
+**Point (2) also does not survive as stated, and this is the second correction
+of the same kind (found 2026-10-04, while implementing slice 5).** The answer
+was *"Por controle, pelo VID:PID"*, and the repair was to be keyed by VID:PID -
+but **two of the three backends do not report a VID:PID at all**:
+
+| Backend | `GamepadInfo.VendorId`/`ProductId` | Source |
+|---|---|---|
+| macOS (GameController) | **always 0:0000** | `MacOS/MacOSKeyManager.mm` sets both to 0, with the comment "The GameController framework does not expose VID/PID" |
+| Windows XInput | **always 0:0000** | `Windows/WindowsKeyManager.cpp`: "XInput exposes no VID/PID" |
+| Windows DirectInput | real | `DirectInputManager::GetVendorId/GetProductId` |
+| Linux (evdev) | real | `LinuxGameController::GetVendorId/GetProductId` |
+
+So a VID:PID-keyed repair is a **no-op on macOS** - the platform the tagged
+release ships on - and on every XInput pad on Windows. What survives a reconnect
+there is nothing: an XInput pad's name is `"XInput Pad N"`, which names its
+slot, and a GameController pad's name is its product name, which two identical
+pads share. There is no identity to migrate by, and this ADR will not pretend
+there is.
+
+**The index the repair would compare against is also the wrong axis**, and that
+is a defect in its own right, filed as #813: `WindowsKeyManager::GetGamepadInfo`
+enumerates the four XInput slots and *then* DirectInput, so the `index` it is
+given is a **global** ordinal, while the device a mapping's key code carries is
+**family-relative** (`base + device*0x100 + button`, with `device` the XInput
+slot or the DirectInput ordinal). The same function then writes `info.Slot = i`
+for XInput and `info.Slot = index` for DirectInput - one field, two meanings.
+
+**So slice 5 is re-specified to what the host can actually support:**
+
+1. The identity is `(Backend, VendorId, ProductId)`, and a pad whose pair is
+   `0:0000` is **unidentified**. An unidentified pad is never moved - never
+   matched, never guessed at.
+2. The index compared is the one the config's keys carry: the family's own
+   numbering, taken from `Backend` and `Slot` once #813 makes `Slot` mean one
+   thing. Until then the repair cannot be correct on Windows, which is why #813
+   is a blocker for it rather than a nicety.
+3. On macOS and on Windows XInput the repair **never fires**, because every pad
+   there is unidentified. Slice 2's copy must not promise stable membership on
+   those backends: that is the honest reading of "a device index is a connection
+   ordering", and it is stronger than the ADR first said.
+4. Two present pads sharing an identity make a move **ambiguous**, and an
+   ambiguous move is dropped rather than guessed.
+
 The other two answers survive as stated: `ShortcutKeyInfo` grows the slot (one
 list of actions, one editor, and its consumers learn that a shortcut may have a
 button and no key), and an axis may carry a digital action past a threshold the
@@ -140,8 +183,13 @@ mappings, and the reconnect is repaired by VID:PID. Slices, in order:**
    section below is the pad's spare controls, not its navigation.
 4. **EXTRA BUTTONS**, the `ShortcutKeyInfo` slot, with the axis threshold from
    the third answer. The section is a filtered view of the one shortcut list.
-5. **The reconnect repair**: on a pad appearing whose VID:PID was last seen at
-   another device index, its keys move with it.
+5. **The reconnect repair**: on a pad appearing whose **identity** was last seen
+   at another device index, its keys move with it. The identity is
+   `(Backend, VendorId, ProductId)` and a pad reporting `0:0000` is unidentified
+   and never moved; two present pads sharing an identity make the move ambiguous
+   and it is dropped; and on macOS and Windows XInput, where every pad is
+   unidentified, the repair does not fire at all. See "The answers, against the
+   code" for why - and #813, which blocks this slice on Windows.
 
 **The keyboard case (requirement 4)** is a state of the same sheet, and it also
 closes a real hole - reported on the bug board, not adjudicated here, because a
