@@ -79,6 +79,7 @@
     <ClInclude Include="GBA\GbaDefaultVideoFilter.h" />
     <ClInclude Include="GBA\GbaDmaController.h" />
     <ClInclude Include="GBA\GbaPpu.h" />
+    <ClInclude Include="GBA\GbaWidescreenReveal.h" />
     <ClInclude Include="GBA\GbaMemoryManager.h" />
     <ClInclude Include="GBA\GbaRomPrefetch.h" />
     <ClInclude Include="GBA\GbaSerial.h" />
@@ -427,6 +428,11 @@
     <ClInclude Include="Gameboy\Input\GbController.h" />
     <ClInclude Include="NES\BaseNesPpu.h" />
     <ClInclude Include="NES\NesScanlineTraceValidity.h" />
+    <ClInclude Include="NES\NesWidescreenPpu.h" />
+    <ClInclude Include="NES\NesWidescreenReveal.h" />
+    <ClInclude Include="Gameboy\GbWidescreenReveal.h" />
+    <ClInclude Include="SMS\SmsWidescreenReveal.h" />
+    <ClInclude Include="NES\NesWidescreenSupport.h" />
     <ClInclude Include="NES\BisqwitNtscFilter.h" />
     <ClInclude Include="NES\Debugger\DummyNesCpu.h" />
     <ClInclude Include="NES\Debugger\NesPpuTools.h" />
@@ -443,6 +449,8 @@
     <ClInclude Include="NES\HdPacks\HdPackErrorDedupe.h" />
     <ClInclude Include="NES\HdPacks\HdBehindBgSpriteRule.h" />
     <ClInclude Include="NES\HdPacks\HdCaptureCellGuard.h" />
+    <ClInclude Include="NES\HdPacks\HdWidescreenColumns.h" />
+    <ClInclude Include="NES\HdPacks\HdWidescreenGeometry.h" />
     <ClInclude Include="NES\HdPacks\OamFetchLatch.h" />
     <ClInclude Include="NES\HdPacks\SpriteFetchLog.h" />
     <ClInclude Include="NES\HdPacks\HdPackLoader.h" />
@@ -609,6 +617,7 @@
     <ClInclude Include="Shared\InputHud.h" />
     <ClInclude Include="Shared\Audio\BaseSoundManager.h" />
     <ClInclude Include="Shared\Video\BaseVideoFilter.h" />
+    <ClInclude Include="Shared\Video\WidescreenFrameFlow.h" />
     <ClInclude Include="Shared\FirmwareHelper.h" />
     <ClInclude Include="Debugger\Breakpoint.h" />
     <ClInclude Include="Debugger\BreakpointManager.h" />
@@ -854,6 +863,7 @@
     <ClCompile Include="Shared\BaseControlDevice.cpp" />
     <ClCompile Include="Shared\Audio\BaseSoundManager.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepPack.cpp" />
+    <ClCompile Include="Shared\EnhancementPacks\MepWidescreen.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepPackManager.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\AudioFingerprint.cpp" />
     <ClCompile Include="Shared\EnhancementPacks\MepContentId.cpp" />

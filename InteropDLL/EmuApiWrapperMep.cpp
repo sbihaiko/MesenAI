@@ -11,8 +11,8 @@ extern unique_ptr<Emulator>& _emu;
 //F6.4b - client-side MEP-recipe-v1 auto-install (ADR-0138 clarifications
 //4/37/38). Sibling file to EmuApiWrapper.cpp (already at its 200-line
 //per-file guardrail - see project AGENTS.md) rather than a new addition
-//there; this is the only export in the file, so it stays well under the
-//guardrail on its own.
+//there; the file's exports are thin marshaling wrappers, so it stays well
+//under the guardrail on its own.
 //
 //This export is a thin marshaling wrapper around the already-shipped F6.4a
 //offline installer (MepRecipeInstaller::Install, Core/Shared/EnhancementPacks/
@@ -125,5 +125,49 @@ extern "C"
 	DllExport uint8_t __stdcall ReloadRomKeepingState()
 	{
 		return (uint8_t)_emu->ReloadRomKeepingState();
+	}
+
+	//#732: the pack ROM patch the ApplyPatchOnHashMismatch override forced on
+	//the running game (MEP patches[] or an HD pack's <patch>), empty when the
+	//load forced none. The UI reads it after GameLoaded to tell the player.
+	DllExport void __stdcall GetForcedPackPatch(char* outBuffer, uint32_t maxLength)
+	{
+		StringUtilities::CopyToBuffer(_emu->GetEnhancementPackManager()->GetForcedPatch(), outBuffer, maxLength);
+	}
+
+	//ADR-0253 §4 (W.5): what the running NES game measured about its side
+	//columns - 0 Undecided (still measuring, or a non-NES console), 1 Supported,
+	//2 Unsupported. The window's Play poll reads it while a game runs and keeps
+	//the per-ROM record as the measurement closes; the rule that turns it into
+	//the switch's state is host-free in UI/Logic/WidescreenSupportRule.cs.
+	DllExport uint8_t __stdcall GetWidescreenSupportVerdict()
+	{
+		auto console = _emu->GetConsole();
+		if(NesConsole* nes = dynamic_cast<NesConsole*>(console.get())) {
+			return (uint8_t)nes->GetWidescreenSupportVerdict();
+		}
+		return 0;
+	}
+
+	//ADR-0253 §3 (W.3) x §4 (W.5): whether the pack loaded for the running ROM
+	//ships the `widescreen` section. That art is a widescreen mode of its own, so
+	//it is what lets a game the core measured as having nothing beside the
+	//picture still be widened (NesWidescreenSupport::Reveals) and what keeps the
+	//Enhancements sheet's Widescreen switch enabled for it
+	//(UI/Logic/WidescreenSupportRule.cs). The resolution - winning pack, section
+	//switches, per-ROM preference - is MepPackManager's, the same one the
+	//renderer's decode uses, so the app and the picture never disagree.
+	DllExport bool __stdcall HasWidescreenPackArt()
+	{
+		MepPackManager* mgr = _emu->GetEnhancementPackManager();
+		return mgr && mgr->HasWidescreenSection();
+	}
+
+	//#732: play the running ROM without its forced patch until the app quits;
+	//the setting is not changed. False when the running game had none. The
+	//caller reloads the game (a power cycle) for it to take effect.
+	DllExport bool __stdcall SuppressForcedPackPatch()
+	{
+		return _emu->GetEnhancementPackManager()->SuppressForcedPatch();
 	}
 }

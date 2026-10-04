@@ -25,6 +25,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string RejectedInfo { get; set; } = "";
 		[ObservableProperty] public partial bool HasRejected { get; set; }
 		[ObservableProperty] public partial bool HasPacks { get; set; }
+		//An install's validation and copy, or a restore, is running: the window
+		//shows a moving bar and holds its buttons (every visible wait moves).
+		[ObservableProperty] public partial bool IsBusy { get; set; }
 		[ObservableProperty] public partial string SiblingFolder { get; set; } = "";
 		[ObservableProperty] public partial bool HasSiblingFolder { get; set; }
 		//P.3 (PRD Part B §5): the container the per-ROM preference picks,
@@ -106,8 +109,12 @@ namespace Mesen.ViewModels
 					Display = candidate.Name + " (" + candidate.Container + ")"
 				});
 			}
+			//W-P5's "No pack" (PackPreferenceResolver.NoPack): shown as itself
+			//here, never read back as "(default)".
+			choices.Add(new PreferredChoice { PackId = PackPreferenceResolver.NoPack, Display = "(no pack)" });
 			PreferredChoices = choices;
-			SelectedPreferredChoice = choices.FirstOrDefault(c => c.PackId == (preference ?? "")) ?? choices[0];
+			string selectedId = resolution.PrefersNoPack ? PackPreferenceResolver.NoPack : (preference ?? "");
+			SelectedPreferredChoice = choices.FirstOrDefault(c => c.PackId == selectedId) ?? choices[0];
 		}
 
 		partial void OnSelectedPreferredChoiceChanged(PreferredChoice? value)
@@ -183,20 +190,25 @@ namespace Mesen.ViewModels
 				return null;
 			}
 
+			IsBusy = true;
 			try {
-				string? error;
-				using(ZipArchive zip = ZipFile.OpenRead(filename)) {
-					error = MepZipValidator.Validate(zip);
-				}
+				//A pack zip can be hundreds of MB - keep the validation and the
+				//copy off the UI thread, so the bar keeps moving.
+				string? error = await Task.Run(() => {
+					using(ZipArchive zip = ZipFile.OpenRead(filename)) {
+						return MepZipValidator.Validate(zip);
+					}
+				});
 				if(error != null) {
 					return error;
 				}
 
 				string target = Path.Combine(PacksFolder, Path.GetFileName(filename));
-				//A pack zip can be hundreds of MB - keep the copy off the UI thread.
 				await Task.Run(() => File.Copy(filename, target, true));
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException) {
 				return "InstallMepPackInvalidZipFile";
+			} finally {
+				IsBusy = false;
 			}
 
 			return "";

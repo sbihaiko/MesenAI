@@ -36,7 +36,7 @@ namespace Mesen.Views
 		private void OnOpenDrive(object? sender, RoutedEventArgs e) => Model?.OpenGoogleDrive();
 		private void OnContinueProject(object? sender, RoutedEventArgs e) => Model?.ContinueProject();
 		private void OnCloseSheet(object? sender, RoutedEventArgs e) => Model?.CloseSheet();
-		private void OnStartReplay(object? sender, RoutedEventArgs e) => Model?.StartReplay();
+		private void OnStartReplay(object? sender, RoutedEventArgs e) => _ = Model?.StartReplay();
 		private void OnShowReplayFile(object? sender, RoutedEventArgs e) => Model?.ShowReplayFile();
 		private void OnContinueReplay(object? sender, RoutedEventArgs e) => Model?.ContinueReplay();
 

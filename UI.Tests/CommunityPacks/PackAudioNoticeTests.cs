@@ -140,5 +140,39 @@ namespace Mesen.Tests
 			Write("textures/BGM/a.ogg");
 			Assert.Null(PackAudioNotice.Evaluate(_root));
 		}
+
+		//ADR-0147: a sibling MEP pack roots its human layer at mep/ (the sibling
+		//of auto/), so the scan reads that layer. The sibling root carries a decoy
+		//hires.txt here - it is the legacy layout, not this pack, and reading it
+		//would report no notice at all.
+		[Fact]
+		public void SiblingRoot_ScansTheMepLayer()
+		{
+			Write("mep/pack.json", "{}");
+			Write("mep/textures/hires.txt", "<patch>Music.ips," + Sha + "\n<bgm>1,1,BGM/a.ogg\n");
+			Write("mep/textures/Music.ips");
+			Write("textures/hires.txt", "<bgm>1,1,BGM/a.ogg\n");
+			Write("textures/BGM/a.ogg");
+			Assert.Equal(new PackAudioScan(1, 1, true), PackAudioNotice.Scan(_root));
+		}
+
+		//mep/ counts as the human layer on a convention probe alone, not only on
+		//pack.json (MepPackManager::HasSiblingMepPack).
+		[Fact]
+		public void SiblingRoot_MepProbeWithoutPackJson_ScansTheMepLayer()
+		{
+			Write("mep/textures/hires.txt", "<patch>Music.ips," + Sha + "\n<bgm>1,1,BGM/a.ogg\n");
+			Write("mep/textures/Music.ips");
+			Assert.Equal(new PackAudioScan(1, 1, true), PackAudioNotice.Scan(_root));
+		}
+
+		//The legacy sibling layout (no mep/) keeps the pack at the root.
+		[Fact]
+		public void SiblingRoot_WithoutMep_StillScansTheRoot()
+		{
+			Write("textures/hires.txt", "<patch>Music.ips," + Sha + "\n<bgm>1,1,BGM/a.ogg\n");
+			Write("textures/Music.ips");
+			Assert.Equal(new PackAudioScan(1, 1, true), PackAudioNotice.Scan(_root));
+		}
 	}
 }

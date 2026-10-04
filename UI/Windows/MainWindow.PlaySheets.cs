@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -33,19 +34,33 @@ namespace Mesen.Windows
 
 		private void InitPlaySheets()
 		{
+			this.GetControl<PlayerSettingsSheetView>("PlayerSettingsSheetHost").DoneRequested += (_, _) => _model.ClosePlayerSettingsToOverlay();
 			PlayerPackDetailSheetView detail = this.GetControl<PlayerPackDetailSheetView>("PlayerPackDetailHost");
 			detail.ChangePackRequested += (_, _) => _model.ChangePackFromDetail(EmuApi.GetMepPackList());
+			//W-P7's Pack row routes like W-P4's: W-P5 for 2+ packs, else W-P6.
+			//Leaving by it is a detour, not a decision: the unapplied draft waits
+			//for the way back (ADR-0244 Decision 3, only the button applies it).
+			this.GetControl<PlayerEnhancementsSheetView>("PlayerEnhancementsSheetHost").PackRequested += (_, _) => {
+				_model.HoldEnhancementsDraftForPackRow();
+				OnOverlayPack(null, new RoutedEventArgs());
+			};
 			detail.RestoreRequested += (_, _) => RestorePackFromDetail();
+			detail.UseCommunityPackRequested += (_, _) => UseCommunityPackFromDetail();
+			//#736: W-P4's Pack row reads the community-pack offer when it opens.
+			_model.ReadPackRowState = ReadPackRowState;
 
 			//W-P9: the auto-install's pill. Static events, so unsubscribe when
 			//the window goes (headless tests open several MainWindows).
 			Action<string> started = name => _model.OnPackInstallStarted(name);
 			Action<bool, bool> finished = (installed, silent) => _model.OnPackInstallFinished(installed, silent);
+			Action<long, long?> progress = (received, total) => _model.OnPackInstallProgress(received, total);
 			CommunityPackInstallService.InstallStarted += started;
 			CommunityPackInstallService.InstallFinished += finished;
+			CommunityPackInstallService.InstallProgress += progress;
 			Closed += (_, _) => {
 				CommunityPackInstallService.InstallStarted -= started;
 				CommunityPackInstallService.InstallFinished -= finished;
+				CommunityPackInstallService.InstallProgress -= progress;
 			};
 		}
 
@@ -70,24 +85,124 @@ namespace Mesen.Windows
 		private void OnOverlayPack(object? sender, RoutedEventArgs e)
 		{
 			string romSha1 = EmuApi.GetMepRomSha1();
-			string? installed = string.IsNullOrWhiteSpace(romSha1) ? null : CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256;
-			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), installed);
+			_model.OpenPackFromOverlay(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1), CommunityOfferContext(romSha1));
 		}
 
-		//W-P8: Player mode's Settings is the essentials strip (Display, Look,
-		//Audio, Controls), opened on Display; closing it returns to W-P4 while a
-		//game is loaded (every sheet from W-P4 closes back to it).
-		private void OnOverlaySettings(object? sender, RoutedEventArgs e)
+		//ADR-0249 (W-P10 › W-P6): Settings › Look's Art row - the Settings sheet
+		//closes, keeping what was changed (as Done does), and the current pack's
+		//detail sheet opens, closing back to W-P4 like every sheet from it.
+		//Posted: closing the sheet disposes Look's view-model, whose row's click
+		//is still running.
+		public void OpenPackDetailFromSettings()
 		{
-			_model.IsPlayerOverlayVisible = false;
-			ConfigWindow wnd = ApplicationHelper.GetOrCreateUniqueWindow(this, () => new ConfigWindow(ConfigWindowTab.Display, playerMode: true));
-			wnd.Closed += OnPlaySettingsClosed;
+			Dispatcher.UIThread.Post(() => {
+				_model.ClosePlayerSettings();
+				string romSha1 = EmuApi.GetMepRomSha1();
+				_model.OpenPackDetail(EmuApi.GetMepPackList(), romSha1, ConfigManager.EnhancementPackFolder, EmuApi.GetMepSiblingFolder(), InstalledSourceSha256(romSha1), CommunityOfferContext(romSha1));
+			});
 		}
 
-		private void OnPlaySettingsClosed(object? sender, EventArgs e)
+		//#736: the catalog row for the loaded game (the catalog copy on disk,
+		//no network) and the install registry's container for it.
+		private CommunityPackOfferContext CommunityOfferContext(string romSha1)
+		{
+			return CommunityPackInstallService.ReadOfferContext(romSha1, _model.RomInfo.GetRomName());
+		}
+
+		private PackRowState? ReadPackRowState()
+		{
+			if(!EmuApi.IsRunning()) {
+				return null;
+			}
+			string romSha1 = EmuApi.GetMepRomSha1();
+			return new PackRowState(EmuApi.GetMepPackList(), romSha1, CommunityOfferContext(romSha1));
+		}
+
+		//#736: W-P6's Use Community Pack. The player asked for this pack for
+		//this game, so it is turned back on and/or chosen (an installed pack),
+		//or installed even with auto-install off - which stays off.
+		private void UseCommunityPackFromDetail()
+		{
+			CommunityPackOffer offer = _model.CommunityOffer;
+			switch(offer.Action) {
+				case CommunityPackOfferAction.TurnOn:
+					ConfigManager.Config.EnhancementPacks.SetPackEnabled(offer.Container, true);
+					_model.UseOfferedPack(CurrentPackList(), offer.Container);
+					break;
+				case CommunityPackOfferAction.Choose:
+					_model.UseOfferedPack(CurrentPackList(), offer.Container);
+					break;
+				case CommunityPackOfferAction.Install:
+					if(CommunityPackInstallService.InstallOnRequest()) {
+						_model.LeaveDetailForCommunityInstall();
+					} else {
+						EmuApi.WriteLogEntry("[CommunityPack] W-P6 Use Community Pack: an install or Restore is already running");
+					}
+					break;
+			}
+		}
+
+		//Read after a turn-on, so the list carries the pack as enabled. Through
+		//the model's seam, which headless tests replace.
+		private string CurrentPackList()
+		{
+			return _model.ReadPackRowState?.Invoke()?.PackList ?? EmuApi.GetMepPackList();
+		}
+
+		private static string? InstalledSourceSha256(string romSha1)
+		{
+			return string.IsNullOrWhiteSpace(romSha1) ? null : CommunityPackInstallRegistry.Read(CommunityPackPaths.CacheRoot, romSha1)?.SourceSha256;
+		}
+
+		//W-P8 (ADR-0249): Player mode's Settings is a sheet in this window - the
+		//essentials strip (Display, Look, Audio, Controls), opened on Display;
+		//Done and Esc keep the changes and return to W-P4 while a game is loaded.
+		private void OnOverlaySettings(object? sender, RoutedEventArgs e) => OpenPlayerSettingsSheet();
+
+		//ADR-0250: also the shared tail's Settings… in every task door (Tools ⋯,
+		//or the macOS app menu).
+		public void OpenPlayerSettingsSheet()
+		{
+			ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true, CreateDisplaySettings);
+			settings.PropertyChanged += OnPlayerSettingsChanged;
+			_model.OpenPlayerSettings(settings);
+			//Keyboard and gamepad start on the strip (rule: everything reachable).
+			Dispatcher.UIThread.Post(() => (FindNamedDescendant("tabPlayerDisplay") as TabItem)?.Focus());
+		}
+
+		//G.4 (W-P8): Display edits this window - its full screen and scale.
+		private PlayerDisplaySettingsViewModel CreateDisplaySettings()
+		{
+			return new PlayerDisplaySettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale);
+		}
+
+		//Look's "More in Options…" leaves the essentials (ConfigViewModel turns
+		//PlayerMode off): the sheet closes, keeping what was changed, and the
+		//classic Options window opens on the tab it was asked for (Video from
+		//Look, Audio or Input from their own tab) - Advanced territory. Closing it
+		//returns to W-P4 while the game runs, as the sheet would.
+		private void OnPlayerSettingsChanged(object? sender, PropertyChangedEventArgs e)
+		{
+			if(e.PropertyName != nameof(ConfigViewModel.PlayerMode) || sender is not ConfigViewModel { PlayerMode: false } settings) {
+				return;
+			}
+			settings.PropertyChanged -= OnPlayerSettingsChanged;
+			//After SelectTab finishes: it is still running on this view-model.
+			Dispatcher.UIThread.Post(() => {
+				if(_model.PlayerSettings != settings) {
+					return;
+				}
+				_model.ClosePlayerSettings();
+				ConfigWindow options = _model.MainMenu.OpenConfig(this, settings.SelectedIndex);
+				options.Closed -= OnOptionsFromSettingsClosed;
+				options.Closed += OnOptionsFromSettingsClosed;
+			});
+		}
+
+		private void OnOptionsFromSettingsClosed(object? sender, EventArgs e)
 		{
 			if(sender is ConfigWindow wnd) {
-				wnd.Closed -= OnPlaySettingsClosed;
+				wnd.Closed -= OnOptionsFromSettingsClosed;
 			}
 			if(ConfigManager.Config.Preferences.UiMode == UiMode.Player && EmuApi.IsRunning()) {
 				_model.OpenPauseOverlay();

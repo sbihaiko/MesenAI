@@ -36,6 +36,8 @@ public class LookSettingsTabTests : IDisposable
 {
 	private readonly VideoFilterType _filter;
 	private readonly string _shader;
+	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
+	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 
 	public LookSettingsTabTests()
 	{
@@ -47,25 +49,55 @@ public class LookSettingsTabTests : IDisposable
 	{
 		ConfigManager.Config.Video.VideoFilter = _filter;
 		ConfigManager.Config.Video.ShaderFile = _shader;
+		ConfigManager.Config.Preferences.UiMode = _uiMode;
+		ConfigManager.Config.Preferences.Workspace = _workspace;
 	}
 
-	private static MainWindowViewModel ShowPlayer(ConsoleType console, RomFormat format)
+	//#724: the Play sheets only show in the Play workspace, and the workspace is
+	//persisted (a Remaster/Share test's switch saves it to the test home's
+	//settings.json), so a filtered run could start in Remaster. Set it here
+	//rather than rely on what an earlier test or run left behind.
+	private MainWindow? _main;
+
+	private (MainWindow Window, MainWindowViewModel Model) ShowPlayer(ConsoleType console, RomFormat format)
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
-		MainWindow main = new();
+		ConfigManager.Config.Preferences.Workspace = Workspace.Play;
+		//The renders' window: the Settings sheet (480 x 480) fits under the bar.
+		MainWindow main = new() { Width = 1100, Height = 740 };
 		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
 		model.RomInfo = new RomInfo() { ConsoleType = console, Format = format };
-		return model;
+		_main = main;
+		return (main, model);
 	}
 
-	private static (ConfigWindow Window, ConfigViewModel Model) ShowSettings(ConfigWindowTab tab, bool playerMode = true)
+	//ADR-0249 (W-P8, W-P10): Player's Settings is a sheet in the main window,
+	//opened from W-P4's Settings row, then the tab is picked.
+	private (MainWindow Window, ConfigViewModel Model) ShowSettings(ConfigWindowTab tab)
 	{
-		ConfigWindow window = new(tab, playerMode);
+		MainWindow main = Assert.IsType<MainWindow>(_main);
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
+		model.OpenPauseOverlay();
+		Dispatcher.UIThread.RunJobs();
+		main.FindNamed<Button>("OverlaySettingsButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+		main.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
+		Dispatcher.UIThread.RunJobs();
+		return (main, Assert.IsType<ConfigViewModel>(model.PlayerSettings));
+	}
+
+	//A MainWindow is never closed in a test (closing it shuts the core down for
+	//the rest of the run): the sheet is.
+	private void CloseSettings() => (_main?.DataContext as MainWindowViewModel)?.ClosePlayerSettings();
+
+	private static ConfigWindow ShowOptions(ConfigWindowTab tab)
+	{
+		ConfigWindow window = new(tab);
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
-		return (window, Assert.IsType<ConfigViewModel>(window.DataContext));
+		return window;
 	}
 
 	private static string[] VisibleTexts(Visual root) => root.FindAll<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
@@ -88,7 +120,7 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, _) = ShowSettings(ConfigWindowTab.Look);
 		//G.4 (W-P8): Player mode's own strip, Display | Look | Audio | Controls.
 		List<TabItem> tabs = window.FindNamed<TabControl>("PlayerSettingsTabs").Items.Cast<TabItem>().ToList();
 		TabItem look = tabs[PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look)];
@@ -98,16 +130,16 @@ public class LookSettingsTabTests : IDisposable
 		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display) + 1, tabs.IndexOf(look));
 
 		string[] texts = VisibleTexts(window);
-		Assert.Contains("Art", texts);
-		Assert.Contains("Pixels", texts);
-		Assert.Contains("Screen", texts);
+		Assert.Contains("ART", texts);
+		Assert.Contains("PIXELS", texts);
+		Assert.Contains("SCREEN", texts);
 		Assert.Contains("The game's own art (no pack)", texts);
 		Assert.Equal("◉ Shows in screenshots and videos", window.FindNamed<TextBlock>("txtLookPixelsMark").Text);
 		Assert.Equal("Adds nothing to the picture", window.FindNamed<TextBlock>("txtLookScreenMark").Text);
 		Assert.DoesNotContain(texts, t => t.Contains("[["));
 		Assert.False(window.FindNamed<Button>("btnLookPackDetails").IsOnScreen());
 		Assert.True(window.FindNamed<ComboBox>("cboLookPixels").IsEnabled);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -118,7 +150,7 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
 		ComboBox pixels = window.FindNamed<ComboBox>("cboLookPixels");
 		pixels.SelectedItem = pixels.Items.Cast<LookChoice>().First(c => c.Pixels?.Kind == PixelsItemKind.SmoothHq4x);
 		Dispatcher.UIThread.RunJobs();
@@ -127,7 +159,7 @@ public class LookSettingsTabTests : IDisposable
 		Assert.True(model.IsDirty());
 		model.RevertConfig();
 		Assert.Equal(VideoFilterType.None, ConfigManager.Config.Video.VideoFilter);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -138,14 +170,14 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.Scale2x;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
 		ComboBox pixels = window.FindNamed<ComboBox>("cboLookPixels");
 		LookChoice selected = Assert.IsType<LookChoice>(pixels.SelectedItem);
 		Assert.Equal(PixelsItemKind.Current, selected.Pixels?.Kind);
 		Assert.EndsWith("(set in Options)", selected.Label);
 		Assert.False(model.IsDirty());
 		Assert.Equal(VideoFilterType.Scale2x, ConfigManager.Config.Video.VideoFilter);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -156,13 +188,13 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, _) = ShowSettings(ConfigWindowTab.Look);
 		ComboBox screen = window.FindNamed<ComboBox>("cboLookScreen");
 		int ntsc = screen.Items.Cast<LookChoice>().ToList().FindIndex(c => c.Screen?.Kind == ScreenItemKind.Ntsc);
 		ComboBoxItem item = OpenItems(screen)[ntsc];
 		Assert.False(item.IsEnabled);
 		Assert.Equal("TV signal (NTSC) — NES games only", ((LookChoice)item.Content!).Label);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -173,7 +205,7 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.HQ4x;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
 		Button compare = window.FindNamed<Button>("btnLookHoldToCompare");
 		Assert.True(compare.IsEnabled);
 		Point center = compare.TranslatePoint(new Point(compare.Bounds.Width / 2, compare.Bounds.Height / 2), window) ?? throw new InvalidOperationException("button is not in the window");
@@ -185,7 +217,7 @@ public class LookSettingsTabTests : IDisposable
 		window.MouseUp(center, MouseButton.Left);
 		Dispatcher.UIThread.RunJobs();
 		Assert.False(model.Look?.IsComparing);
-		window.Close();
+		CloseSettings();
 	}
 
 	//#663: a Remaster recording (or the HD Pack Builder) stops the pack's art
@@ -196,7 +228,7 @@ public class LookSettingsTabTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
-		(ConfigWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, ConfigViewModel model) = ShowSettings(ConfigWindowTab.Look);
 		LookConfigViewModel look = Assert.IsType<LookConfigViewModel>(model.Look);
 		bool drawing = true;
 		look.DrawingPackArt = () => drawing;
@@ -213,7 +245,7 @@ public class LookSettingsTabTests : IDisposable
 		PackArtSwitch.Raise();
 		Dispatcher.UIThread.RunJobs();
 		Assert.False(window.FindNamed<ComboBox>("cboLookPixels").IsEnabled);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -224,10 +256,10 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
 		ConfigManager.Config.Video.ShaderFile = "";
 
-		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Look);
+		(MainWindow window, _) = ShowSettings(ConfigWindowTab.Look);
 		Assert.False(window.FindNamed<Button>("btnLookHoldToCompare").IsEnabled);
 		Assert.Equal("Nothing to compare: Pixels and Screen are off", window.FindNamed<TextBlock>("txtLookCompareReason").Text);
-		window.Close();
+		CloseSettings();
 	}
 
 	[AvaloniaFact]
@@ -236,7 +268,7 @@ public class LookSettingsTabTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
 		//Video is Options-only since W-P8 (Display + Look replace it in Play).
-		(ConfigWindow window, _) = ShowSettings(ConfigWindowTab.Video, playerMode: false);
+		ConfigWindow window = ShowOptions(ConfigWindowTab.Video);
 		Mesen.Views.VideoConfigView video = Assert.Single(window.FindAll<Mesen.Views.VideoConfigView>());
 		//The selector lived on the Picture page; only the selected page is realized.
 		TabControl pages = video.FindAll<TabControl>().First();
@@ -252,20 +284,18 @@ public class LookSettingsTabTests : IDisposable
 	public void Hi_res_filter_has_left_the_enhancements_panel()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
-		MainWindow main = new();
-		main.ShowStarted();
-		Dispatcher.UIThread.RunJobs();
-		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(main.DataContext);
-		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		(MainWindow main, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
 		model.OpenEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
 
 		Control panel = main.FindNamed<Control>("PlayerEnhancementsPanel");
 		Assert.True(panel.IsOnScreen());
 		string[] boxes = panel.FindAll<CheckBox>().Select(c => c.Content as string ?? "").ToArray();
-		Assert.Contains("Widescreen (16:9)", boxes);
-		Assert.Equal(new[] { "Texture pack", "Audio pack", "Border", "Widescreen (16:9)", "Reduce slowdown (overclock)" }, boxes);
+		Assert.Contains("Widescreen", boxes);
+		//One place per switch (ADR-0250): the pack's layers (Textures, Music)
+		//moved to the pack detail sheet (W-P6), per game; this panel keeps the
+		//synth and the renderer/overclock switches.
+		Assert.Equal(new[] { "Modern instruments", "Border", "Widescreen", "Overclock" }, boxes);
 		//...and the sheet points at the place for the look of the picture (W-P7).
 		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Look");
 	}
@@ -280,7 +310,7 @@ public class LookSettingsTabTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		ShowPlayer(ConsoleType.Nes, RomFormat.iNes);
-		ConfigWindow window = new(tab, playerMode: false);
+		ConfigWindow window = new(tab);
 		window.Show();
 		Dispatcher.UIThread.RunJobs();
 		TabItem selected = window.FindNamed<TabControl>("AdvancedSettingsTabs").Items.Cast<TabItem>().Single(t => t.IsSelected);

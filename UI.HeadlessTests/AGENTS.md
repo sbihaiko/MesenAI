@@ -6,7 +6,7 @@ project is the deliberate opposite of `UI.Tests`.
 ## What this project is for
 
 Instantiate the app's real windows/views under `Avalonia.Headless` (null
-windowing + software render, no display server) and assert on the realized
+windowing + Skia render, no display server) and assert on the realized
 visual tree: a named card is on screen, a tab is hidden, focus moves on a
 key press, a style class restyles a control. It covers the step that no
 host-free test can: the crossing from a rule into XAML.
@@ -25,6 +25,18 @@ host-free test can: the crossing from a rule into XAML.
   where `UI.Tests` asserts them; this project only checks the wiring.
 - The rules themselves are already covered host-free. If a test here is
   the *only* thing asserting a decision, it is in the wrong project.
+
+## Render gate (ADR-0249)
+
+`TestAppBuilder` renders with Skia (`UseHeadlessDrawing = false`) and loads
+Inter, so `CaptureRenderedFrame` returns a real bitmap.
+`PlayerRender.Save` writes it to `player-renders/` beside the test assembly
+(or `$MESEN_PLAYER_RENDERS`) and prints the path; `PlayerRender.Pixel`
+reads it back. `PlayerThemeRenderTests` (W-P1, W-P2, W-P4) and
+`PlayerThemeScopeTests` (the classic/Player boundary) assert font, size,
+radius, tint and background against the theme tokens; the PNGs are for a
+person to compare with `docs/media/gui-redesign/W-*.png` and are not
+pixel-diffed.
 
 ## Native core containment
 

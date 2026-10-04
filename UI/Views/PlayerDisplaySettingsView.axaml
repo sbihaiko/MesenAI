@@ -6,18 +6,29 @@
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
-	mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="300"
+	mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="160"
 	x:DataType="vm:PlayerDisplaySettingsViewModel"
 	x:Class="Mesen.Views.PlayerDisplaySettingsView"
 >
 	<!--G.4 (W-P8): Settings › Display - three rows. The aspect ratio and the
-	scale keep a value set elsewhere as their current item.-->
-	<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="10" XYFocus.NavigationModes="Enabled">
-		<TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Translate lblDisplayFullscreen}" VerticalAlignment="Center" Margin="0 0 20 8" />
-		<CheckBox Grid.Row="0" Grid.Column="1" Name="chkDisplayFullscreen" IsChecked="{Binding IsFullscreen}" Margin="0 0 0 8" />
-		<TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Translate lblDisplayAspectRatio}" VerticalAlignment="Center" Margin="0 0 20 8" />
-		<c:EnumComboBox Grid.Row="1" Grid.Column="1" Name="cboDisplayAspectRatio" AvailableValues="{Binding AspectRatios}" SelectedItem="{Binding Config.AspectRatio}" MinWidth="200" HorizontalAlignment="Left" Margin="0 0 0 8" />
-		<TextBlock Grid.Row="2" Grid.Column="0" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" Margin="0 0 20 0" />
-		<ComboBox Grid.Row="2" Grid.Column="1" Name="cboDisplayScale" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" MinWidth="200" HorizontalAlignment="Left" />
-	</Grid>
+	scale keep a value set elsewhere as their current item. ADR-0249: one
+	inset group of 46 px rows, the toggle and the two popups on the right.-->
+	<Border Name="DisplaySettingsGroup" Classes="group inset" VerticalAlignment="Top">
+		<StackPanel XYFocus.NavigationModes="Enabled">
+			<DockPanel Classes="setting-row">
+				<ToggleSwitch DockPanel.Dock="Right" Name="chkDisplayFullscreen" IsChecked="{Binding IsFullscreen}" VerticalAlignment="Center" />
+				<TextBlock Name="lblDisplayFullscreenRow" Classes="callout" Text="{l:Translate lblDisplayFullscreen}" VerticalAlignment="Center" />
+			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<DockPanel Classes="setting-row">
+				<c:EnumComboBox DockPanel.Dock="Right" Name="cboDisplayAspectRatio" Classes="popup" Width="120" AvailableValues="{Binding AspectRatios}" SelectedItem="{Binding Config.AspectRatio}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblDisplayAspectRatio}" VerticalAlignment="Center" />
+			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<DockPanel Classes="setting-row">
+				<ComboBox DockPanel.Dock="Right" Name="cboDisplayScale" Classes="popup" Width="120" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" />
+			</DockPanel>
+		</StackPanel>
+	</Border>
 </UserControl>

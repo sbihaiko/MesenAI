@@ -20,7 +20,7 @@ namespace Mesen.Views
 
 		private void OnStop(object? sender, RoutedEventArgs e)
 		{
-			(DataContext as ShareWorkspaceViewModel)?.StopReplay();
+			_ = (DataContext as ShareWorkspaceViewModel)?.StopReplay();
 		}
 	}
 }

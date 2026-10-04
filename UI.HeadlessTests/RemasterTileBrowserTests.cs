@@ -156,7 +156,8 @@ public class RemasterTileBrowserTests : IDisposable
 		Assert.Equal("Click a tile to open it in your paint program. Save it as the same PNG and come back.", window.FindNamed<TextBlock>("RemasterPaintText").Text);
 
 		Button tile = Assert.Single(window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>(), b => b.Classes.Contains("tile"));
-		string[] texts = tile.FindAll<TextBlock>().Select(t => t.Text ?? "").ToArray();
+		//This host is Advanced's (no `player` scope): the glyph badge stays.
+		string[] texts = tile.FindAll<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Equal(new[] { "run", "6 phases", "✎" }, texts);
 		Click(tile);
 		Assert.Equal(new[] { Path.Combine(project, "kit", "rec-001", "figures", "usr000-figure.png") }, opened.ToArray());
@@ -174,7 +175,9 @@ public class RemasterTileBrowserTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 
 		Button tile = Assert.Single(window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>(), b => b.Classes.Contains("tile"));
-		Assert.Equal("⚠", tile.FindAll<TextBlock>().Last().Text);
+		//Advanced keeps the ⚠ glyph badge; Player's drawn warning stays hidden.
+		Assert.Equal("⚠", tile.FindAll<TextBlock>().Last(t => t.IsOnScreen()).Text);
+		Assert.False(tile.FindAll<PathIcon>().Single(p => p.Classes.Contains("warning")).IsOnScreen());
 		Assert.Contains("12 of 64 cells not seen in the game", ToolTip.GetTip(tile) as string);
 
 		Button details = window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().Single(b => b.Classes.Contains("details"));
@@ -182,15 +185,109 @@ public class RemasterTileBrowserTests : IDisposable
 		details.Flyout!.ShowAt(details);
 		Dispatcher.UIThread.RunJobs();
 		StackPanel popover = Assert.IsType<StackPanel>(((Flyout)details.Flyout!).Content);
-		WaitFor(() => popover.FindAll<TextBlock>().Any(t => t.Classes.Contains("line")), "the popover never showed its lines");
-		Assert.Equal("\"Chr_0\" · 64 cells · from every recording", popover.FindAll<TextBlock>().First(t => t.Classes.Contains("header")).Text);
-		string[] lines = popover.FindAll<TextBlock>().Where(t => t.Classes.Contains("line")).Select(t => t.Text ?? "").ToArray();
+		WaitFor(() => popover.FindAll<TextBlock>().Any(t => t.Classes.Contains("line-classic")), "the popover never showed its lines");
+		Assert.Equal("\"Chr_0\" · 64 cells · from every recording", popover.FindAll<TextBlock>().Single(t => t.Classes.Contains("header-line")).Text);
+		string[] lines = popover.FindAll<TextBlock>().Where(t => t.Classes.Contains("line-classic") && t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
 		Assert.Equal(4, lines.Length);
 		Assert.StartsWith("✔ 50 of 64 cells seen", lines[0]);
 		Assert.StartsWith("⚠ 12 of 64 cells not seen", lines[1]);
 		Assert.StartsWith("? MesenAI cannot tell whether this was painted", lines[3]);
 		Click(popover.FindAll<Button>().Single(b => b.Classes.Contains("open")));
 		Assert.Equal(new[] { Path.Combine(project, "kit", "pages", "chr", "Chr_0.png") }, opened.ToArray());
+	}
+
+	//The user's rule (2026-10-03): while the paint comparison runs, the
+	//popover's "checking" line carries a moving bar, not a still sentence.
+	[AvaloniaFact]
+	public void A_paint_line_still_being_checked_moves()
+	{
+		string project = KitProject();
+		(Window window, RemasterWorkspaceViewModel model, _, _) = Show(Ready(), project, gameLoaded: true);
+		ToggleButton pages = window.FindNamed<ItemsControl>("RemasterTileCategories").FindAll<ToggleButton>().Single(b => (b.Content as string)!.StartsWith("Pattern pages"));
+		pages.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+		model.TilesSettled.Wait(10000);
+		Dispatcher.UIThread.RunJobs();
+
+		RemasterTileRow row = Assert.Single(model.Tiles);
+		List<RemasterTileLine> checking = RemasterTileRow.From(row.Tile, null, row.Stamp).Lines;
+		RemasterTileLine line = Assert.Single(checking, l => l.Icon.ToString() == "Checking");
+		Assert.Equal("Checking whether it was painted…", line.Text);
+
+		Button details = window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().Single(b => b.Classes.Contains("details"));
+		details.Flyout!.ShowAt(details);
+		Dispatcher.UIThread.RunJobs();
+		StackPanel popover = Assert.IsType<StackPanel>(((Flyout)details.Flyout!).Content);
+		ItemsControl lines = popover.FindAll<ItemsControl>().Single();
+		lines.ItemsSource = checking;
+		Dispatcher.UIThread.RunJobs();
+		ProgressBar bar = Assert.Single(popover.FindAll<ProgressBar>(), b => b.Classes.Contains("line-checking") && b.IsOnScreen());
+		Assert.True(bar.IsIndeterminate);
+	}
+
+	//ADR-0252 §2/§3: a six-phase run whose figure view the artist painted in
+	//two phases' cells - the popover says "Painted: 2 of 6 phases" and the
+	//project counts two build cells.
+	//W-R1/W-R5: Remaster at rest ends the shell's status line with the project's
+	//painted count; Play's line stays the game's; an unknown count adds no words.
+	[AvaloniaFact]
+	public void The_shell_status_line_follows_the_painted_count_in_remaster_only()
+	{
+		string project = Path.Combine(TempFolder(), "Contra (USA)");
+		Write(project, "auto/rec-001/textures/hires.txt", "<ver>107\n");
+		WritePair(project, "kit/rec-001/sheets/usr000.png", 48, 8, 2);
+		WritePair(project, "kit/rec-001/figures/usr000-figure.png", 48, 8, 2);
+		string sheetCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"index\": {i}, \"x\": {i * 8}, \"y\": 0}}"));
+		string figureCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"x\": {i * 8}, \"y\": 0, \"sheet\": \"usr000.json\", \"index\": {i}, \"pose\": \"pose{i}\"}}"));
+		Write(project, "kit/rec-001/sheets/usr000.json", "{\"version\": 1, \"gridUnit\": 8, \"cells\": [" + sheetCells + "]}");
+		Write(project, "kit/rec-001/figures/usr000-figure.json", "{\"version\": 2, \"kind\": \"figure\", \"unit\": 8, \"cells\": [" + figureCells + "]}");
+		Write(project, "kit/rec-001/kit.json", "{\"parts\": [{\"part\": \"sprites\", \"files\": [{\"path\": \"sheets/usr000.png\", \"title\": \"run\", " +
+			"\"unit\": \"grid\", \"rows\": 1, \"columns\": 6, \"cells\": 6, \"ids\": [\"pose0\", \"pose1\", \"pose2\", \"pose3\", \"pose4\", \"pose5\"], " +
+			"\"seen\": true, \"playsColumns\": [1, 2, 3, 4, 5, 6], \"figure\": \"figures/usr000-figure.png\"}]}]}");
+		File.WriteAllBytes(Path.Combine(project, "kit/rec-001/figures/usr000-figure.png"), Png(96, 16, i => i == 0 || i == 2 * 16 + 1 ? Blue : Red));
+		(_, RemasterWorkspaceViewModel model, _, _) = Show(Ready(), project, gameLoaded: true);
+
+		WorkspaceShellViewModel shell = new(Workspace.Remaster, isMacOS: false);
+		shell.UpdateGameState(true, false, "Contra (USA)", "");
+		shell.FollowPaintedCells(model);
+		WaitFor(() => model.PaintedCells == 2, "the project never counted its two painted cells");
+		Assert.Equal("Contra (USA) · 2 cells painted", shell.StatusText);
+
+		shell.Select(Workspace.Play);
+		Assert.Equal("Contra (USA)", shell.StatusText);
+
+		shell.Select(Workspace.Remaster);
+		shell.UpdateRemasterPainted("");
+		Assert.Equal("Contra (USA)", shell.StatusText);
+	}
+
+	[AvaloniaFact]
+	public void The_popover_counts_painted_phases_and_the_project_its_painted_cells()
+	{
+		string project = Path.Combine(TempFolder(), "Contra (USA)");
+		Write(project, "auto/rec-001/textures/hires.txt", "<ver>107\n");
+		WritePair(project, "kit/rec-001/sheets/usr000.png", 48, 8, 2);
+		WritePair(project, "kit/rec-001/figures/usr000-figure.png", 48, 8, 2);
+		string sheetCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"index\": {i}, \"x\": {i * 8}, \"y\": 0}}"));
+		string figureCells = string.Join(",", Enumerable.Range(0, 6).Select(i => $"{{\"x\": {i * 8}, \"y\": 0, \"sheet\": \"usr000.json\", \"index\": {i}, \"pose\": \"pose{i}\"}}"));
+		Write(project, "kit/rec-001/sheets/usr000.json", "{\"version\": 1, \"gridUnit\": 8, \"cells\": [" + sheetCells + "]}");
+		Write(project, "kit/rec-001/figures/usr000-figure.json", "{\"version\": 2, \"kind\": \"figure\", \"unit\": 8, \"cells\": [" + figureCells + "]}");
+		Write(project, "kit/rec-001/kit.json", "{\"parts\": [{\"part\": \"sprites\", \"files\": [{\"path\": \"sheets/usr000.png\", \"title\": \"run — a 6-phase loop\", " +
+			"\"unit\": \"grid\", \"rows\": 1, \"columns\": 6, \"cells\": 6, \"ids\": [\"pose0\", \"pose1\", \"pose2\", \"pose3\", \"pose4\", \"pose5\"], " +
+			"\"seen\": true, \"playsColumns\": [1, 2, 3, 4, 5, 6], \"figure\": \"figures/usr000-figure.png\"}]}]}");
+		//One brushed pixel in the first and the third figure's cell (at 2x).
+		File.WriteAllBytes(Path.Combine(project, "kit/rec-001/figures/usr000-figure.png"), Png(96, 16, i => i == 0 || i == 2 * 16 + 1 ? Blue : Red));
+		(Window window, RemasterWorkspaceViewModel model, _, _) = Show(Ready(), project, gameLoaded: true);
+		model.CellsSettled.Wait(10000);
+		WaitFor(() => model.PaintedCells == 2, "the project never counted its two painted cells");
+		Assert.Equal("2 cells painted", model.PaintedCellsText);
+
+		Button details = window.FindNamed<ItemsControl>("RemasterTileList").FindAll<Button>().Single(b => b.Classes.Contains("details"));
+		details.Flyout!.ShowAt(details);
+		Dispatcher.UIThread.RunJobs();
+		StackPanel popover = Assert.IsType<StackPanel>(((Flyout)details.Flyout!).Content);
+		WaitFor(() => popover.FindAll<TextBlock>().Any(t => t.Classes.Contains("line-classic") && (t.Text ?? "").Contains("phases")), "the popover never counted the painted phases");
+		Assert.Contains("✎ Painted: 2 of 6 phases", popover.FindAll<TextBlock>().Where(t => t.Classes.Contains("line-classic") && t.IsOnScreen()).Select(t => t.Text ?? ""));
 	}
 
 	[AvaloniaFact]
@@ -295,7 +392,7 @@ public class RemasterTileBrowserTests : IDisposable
 		Write(project, "auto/rec-001/textures/sheets/adjacency.json", "{}");
 		compose.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
-		Assert.StartsWith("✔ This project has the layout data", window.FindNamed<TextBlock>("RemasterComposeHint").Text);
+		Assert.StartsWith("This project has the layout data", window.FindNamed<TextBlock>("RemasterComposeHint").Text);
 		Click(window.FindNamed<Button>("RemasterOpenComposerButton"));
 
 		Assert.Equal(new[] { RemasterHandOff.ComposeScript, Path.Combine(project, "auto", "rec-001"), "--rom" },
@@ -327,7 +424,7 @@ public class RemasterTileBrowserTests : IDisposable
 
 	//8-bit RGBA, filter 0 (as UI.Tests/Remaster/KitFixture writes; this
 	//project cannot reference that one).
-	private static byte[] Png(int width, int height, Func<int, byte[]> pixel)
+	internal static byte[] Png(int width, int height, Func<int, byte[]> pixel)
 	{
 		using MemoryStream raw = new();
 		for(int y = 0; y < height; y++) {

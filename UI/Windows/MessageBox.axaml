@@ -11,7 +11,27 @@
 	CanResize="False"
 	Focusable="True"
 >
-	<StackPanel HorizontalAlignment="Stretch">
+	<Panel>
+	<!--ADR-0249 (W-X1, W-X2): the Player look, shown instead of the classic box
+	below when the owner shows the Player theme (UI/Logic/PlayerDialog): the
+	shared banner (stop for an error, warning for a warning or a question, pale
+	blue for information) on the white sheet, the safe button first and the one that
+	goes on last.-->
+	<Border Name="PlayerMsgRoot" Background="{StaticResource PlayerCardBrush}" Padding="20" MaxWidth="520" IsVisible="False">
+		<StackPanel Spacing="16">
+			<Border Name="PlayerMsgBanner" Classes="banner">
+				<DockPanel>
+					<PathIcon Name="PlayerMsgIcon" Classes="banner-icon" DockPanel.Dock="Left" VerticalAlignment="Top" Margin="0 2 12 0" />
+					<ScrollViewer MaxHeight="400" HorizontalScrollBarVisibility="Disabled">
+						<TextBlock Name="PlayerMsgText" Classes="banner-text" />
+					</ScrollViewer>
+				</DockPanel>
+			</Border>
+			<StackPanel Name="PlayerMsgButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" />
+		</StackPanel>
+	</Border>
+
+	<StackPanel Name="ClassicMsgRoot" HorizontalAlignment="Stretch">
 		<Panel Margin="20">
 			<StackPanel Orientation="Horizontal">
 				<Panel Margin="0 10 10 10">
@@ -45,4 +65,5 @@
 			</StackPanel>
 		</Panel>
 	</StackPanel>
+	</Panel>
 </Window>

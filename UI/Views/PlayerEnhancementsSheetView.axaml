@@ -8,43 +8,60 @@
 	x:Class="Mesen.Views.PlayerEnhancementsSheetView"
 	x:DataType="vm:MainWindowViewModel"
 >
-	<!--G.4 (PRD Part B §13.5.2 W-P7; P.7 §6.1 minus Hi-res filter): the five
-	switches edit a draft (EnhTextures…EnhOverclock) that starts from what is
-	applied; the one button applies it through the existing ToggleLayer /
-	ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
+	<!--G.4 (PRD Part B §13.5.2 W-P7; P.7 §6.1 minus Hi-res filter): the four
+	switches edit a draft (EnhModernInstruments…EnhOverclock) that starts from
+	what is applied; the one button applies it through the existing
+	SetModernInstruments / ToggleLayer / ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
 	causes (EnhancementsSheet.Pending, ADR-0244 Decision 3). Overclock is shown
 	disabled with its reason where the console has no overclock knob (rule 4).
 	Hi-res filter lives once, as Settings › Look › Pixels (ADR-0246).-->
+	<!--ADR-0249 (W-P7): a light sheet - the four switches and the Pack row in an
+	inset list (CheckBox.switch rows, "Applies on reload" under Border, the
+	overclock reason under Overclock; Pack opens W-P6/W-P5, where the
+	per-game Textures and Music live), the Look hint, and the one button.-->
 	<Border
 		Name="PlayerEnhancementsPanel"
-		Background="#DD000000"
-		CornerRadius="14"
+		Classes="sheet"
+		Width="460"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Center"
-		Padding="24"
 		IsVisible="{Binding IsEnhancementsPanelVisible}"
 	>
-		<StackPanel Spacing="6" MinWidth="320" XYFocus.NavigationModes="Enabled">
-			<TextBlock Text="{l:Translate lblEnhancementsPanelTitle}" FontWeight="Bold" FontSize="16" />
-			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
-				<CheckBox Name="EnhancementsTexturesCheckBox" Content="{l:Translate chkEnhancementsTextures}" IsChecked="{Binding EnhTextures, Mode=TwoWay}" />
-			</DockPanel>
-			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
-				<CheckBox Name="EnhancementsAudioCheckBox" Content="{l:Translate chkEnhancementsAudio}" IsChecked="{Binding EnhAudio, Mode=TwoWay}" />
-			</DockPanel>
-			<DockPanel>
-				<TextBlock DockPanel.Dock="Right" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
-				<CheckBox Name="EnhancementsBorderCheckBox" Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding EnhBorder, Mode=TwoWay}" />
-			</DockPanel>
-			<CheckBox Name="EnhancementsWidescreenCheckBox" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" />
-			<DockPanel>
-				<TextBlock Name="EnhancementsOverclockReason" DockPanel.Dock="Right" Text="{Binding EnhOverclockReason}" FontSize="11" Opacity="0.6" VerticalAlignment="Center" IsVisible="{Binding !IsOverclockSupported}" />
-				<CheckBox Name="EnhancementsOverclockCheckBox" Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding EnhOverclock, Mode=TwoWay}" IsEnabled="{Binding IsOverclockSupported}" />
-			</DockPanel>
-			<TextBlock Text="{l:Translate lblEnhancementsLookHint}" FontSize="11" Opacity="0.7" Margin="0 6 0 0" />
-			<Button Name="EnhancementsApplyButton" Content="{Binding EnhancementsApplyText}" HorizontalAlignment="Right" Click="OnApply" Margin="0 6 0 0" />
+		<StackPanel Spacing="0" XYFocus.NavigationModes="Enabled">
+			<TextBlock Classes="title3" Text="{l:Translate lblEnhancementsPanelTitle}" Margin="0 4 0 14" />
+			<Border Classes="inset">
+				<StackPanel>
+				<Border Classes="switch-row">
+					<CheckBox Name="EnhancementsModernCheckBox" Classes="switch" Content="{l:Translate chkEnhancementsModernInstruments}" IsChecked="{Binding EnhModernInstruments, Mode=TwoWay}" />
+				</Border>
+				<Border Classes="switch-row">
+					<Panel>
+						<CheckBox Name="EnhancementsBorderCheckBox" Classes="switch" Classes.subtitled="{Binding !LayerChangeKeepsPlace}" Content="{l:Translate chkEnhancementsBorder}" IsChecked="{Binding EnhBorder, Mode=TwoWay}" />
+						<TextBlock Classes="row-subtitle" Text="{l:Translate lblEnhancementsAppliesOnReload}" IsVisible="{Binding !LayerChangeKeepsPlace}" />
+					</Panel>
+				</Border>
+				<Border Classes="switch-row">
+					<Panel>
+						<CheckBox Name="EnhancementsWidescreenCheckBox" Classes="switch" Classes.subtitled="{Binding !IsWidescreenSupported}" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" IsEnabled="{Binding IsWidescreenSupported}" />
+						<TextBlock Name="EnhancementsWidescreenReason" Classes="row-subtitle" Text="{Binding EnhWidescreenReason}" IsVisible="{Binding !IsWidescreenSupported}" />
+					</Panel>
+				</Border>
+				<Border Classes="switch-row">
+					<Panel>
+						<CheckBox Name="EnhancementsOverclockCheckBox" Classes="switch" Classes.subtitled="{Binding !IsOverclockSupported}" Content="{l:Translate chkEnhancementsOverclock}" IsChecked="{Binding EnhOverclock, Mode=TwoWay}" IsEnabled="{Binding IsOverclockSupported}" />
+						<TextBlock Name="EnhancementsOverclockReason" Classes="row-subtitle" Text="{Binding EnhOverclockReason}" IsVisible="{Binding !IsOverclockSupported}" />
+					</Panel>
+				</Border>
+				<Button Name="EnhancementsPackButton" Classes="row" Click="OnPack">
+					<DockPanel>
+						<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+						<TextBlock Classes="title" Text="{Binding EnhPackRowText}" />
+					</DockPanel>
+				</Button>
+				</StackPanel>
+			</Border>
+			<TextBlock Classes="subhead secondary" Text="{l:Translate lblEnhancementsLookHint}" Margin="2 18 0 20" />
+			<Button Name="EnhancementsApplyButton" Classes="primary regular" Content="{Binding EnhancementsApplyText}" HorizontalAlignment="Right" Click="OnApply" />
 		</StackPanel>
 	</Border>
 </UserControl>

@@ -3,6 +3,7 @@
 //pch.h only satisfies the Windows precompiled-header build; nothing from it is
 //used, so `make core-unit-tests` links this file without the Emulator.
 #include "Shared/Video/BorderLayout.h"
+#include "Shared/Video/WidescreenFallback.h"
 #include <algorithm>
 #include <cstring>
 
@@ -261,6 +262,95 @@ void BorderCompositePrepared(uint32_t* dst, const uint32_t* backdrop, const uint
 	BorderDrawGameIntoViewport(dst, layout, src, srcWidth, srcHeight, sxLut);
 	if(!layout.Underlay) {
 		BlendBorderOverViewport(dst, border, layout);
+	}
+}
+
+void BorderCompositeExtendedFrame(uint32_t* dst, const uint32_t* backdrop, const uint32_t* border, const BorderLayout& layout,
+	const uint32_t* src, uint32_t srcWidth, uint32_t srcHeight, uint32_t extendedColumns, const uint8_t* sideFill)
+{
+	size_t totalPixels = (size_t)layout.CanvasWidth * layout.CanvasHeight;
+	if(totalPixels == 0) {
+		return;
+	}
+	memcpy(dst, backdrop, totalPixels * sizeof(uint32_t));
+
+	if(!src || !layout.HasViewport() || srcHeight == 0 || extendedColumns == 0 || srcWidth < 2 * extendedColumns) {
+		return;
+	}
+	uint32_t standardWidth = srcWidth - 2 * extendedColumns;
+
+	//The centre 256 px go into the viewport exactly as the non-extended path
+	//draws them, but from a column offset inside each row (the frame's rows are
+	//srcWidth apart, the centre starts `extendedColumns` in).
+	ClampedSpan span = ClampViewport(layout);
+	if(span.Empty()) {
+		return;
+	}
+	for(uint32_t vy = span.VyBegin; vy < span.VyEnd; vy++) {
+		uint32_t sy = (uint32_t)(((uint64_t)vy * srcHeight) / layout.ViewportHeight);
+		const uint32_t* srcRow = src + (size_t)sy * srcWidth + extendedColumns;
+		uint32_t* dstRow = dst + (size_t)(layout.ViewportY + (int32_t)vy) * layout.CanvasWidth + (layout.ViewportX + (int32_t)span.VxBegin);
+		for(uint32_t c = span.VxBegin; c < span.VxEnd; c++) {
+			dstRow[c - span.VxBegin] = srcRow[((uint64_t)c * standardWidth) / layout.ViewportWidth];
+		}
+	}
+	if(!layout.Underlay) {
+		BlendBorderOverViewport(dst, border, layout);
+	}
+
+	//No side map means no extended frame to place, so the caller gets the
+	//border alone (the contract in BorderLayout.h): the draw loop below and the
+	//overlay blend under it both read the map per row.
+	if(!sideFill) {
+		return;
+	}
+
+	//Each side run sits immediately beside the viewport at the same pixel
+	//scale, so the extra columns keep the picture's proportions. Only the rows
+	//the game filled are drawn; everywhere else the backdrop (the border art)
+	//stays, which is how the chain's border fill-in reaches the screen.
+	uint32_t sideWidth = (uint32_t)(((uint64_t)extendedColumns * layout.ViewportWidth) / standardWidth);
+	if(sideWidth == 0) {
+		return;
+	}
+	int64_t leftX = (int64_t)layout.ViewportX - sideWidth;
+	int64_t rightX = (int64_t)layout.ViewportX + layout.ViewportWidth;
+	for(int side = 0; side < 2; side++) {
+		bool left = side == 0;
+		int64_t runX = left ? leftX : rightX;
+		int64_t runX0 = std::max<int64_t>(runX, 0);
+		int64_t runX1 = std::min<int64_t>(runX + sideWidth, layout.CanvasWidth);
+		if(runX1 <= runX0) {
+			continue;
+		}
+		uint32_t srcBase = left ? 0 : (extendedColumns + standardWidth);
+		for(uint32_t vy = span.VyBegin; vy < span.VyEnd; vy++) {
+			uint32_t sy = (uint32_t)(((uint64_t)vy * srcHeight) / layout.ViewportHeight);
+			if(sy >= srcHeight || !(sideFill[sy] & WidescreenFallback::SideBit(left))) {
+				continue;
+			}
+			const uint32_t* srcRow = src + (size_t)sy * srcWidth + srcBase;
+			uint32_t* dstRow = dst + (size_t)(layout.ViewportY + (int32_t)vy) * layout.CanvasWidth;
+			for(int64_t x = runX0; x < runX1; x++) {
+				uint32_t offset = (uint32_t)(((uint64_t)(x - runX) * extendedColumns) / sideWidth);
+				dstRow[x] = srcRow[offset];
+			}
+		}
+		if(!layout.Underlay) {
+			//Overlay blends the border over everything the game just drew,
+			//including these runs (BlendBorderOverViewport only covers the
+			//viewport itself).
+			for(uint32_t vy = span.VyBegin; vy < span.VyEnd; vy++) {
+				uint32_t sy = (uint32_t)(((uint64_t)vy * srcHeight) / layout.ViewportHeight);
+				if(sy >= srcHeight || !(sideFill[sy] & WidescreenFallback::SideBit(left))) {
+					continue;
+				}
+				size_t rowBase = (size_t)(layout.ViewportY + (int32_t)vy) * layout.CanvasWidth;
+				for(int64_t x = runX0; x < runX1; x++) {
+					dst[rowBase + (size_t)x] = BorderBlendOver(dst[rowBase + (size_t)x], border[rowBase + (size_t)x]);
+				}
+			}
+		}
 	}
 }
 

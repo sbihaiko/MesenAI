@@ -54,7 +54,7 @@ public partial class PlayEdgeFlowsTests
 		Assert.True(model.RecentGames.Visible);
 		Assert.False(EmuApi.IsRunning());
 		Assert.True(window.FindNamed<Border>("PlayHomeLoadAlert").IsOnScreen());
-		Assert.Equal("⚠ \"Gone Game.nes\" is no longer where it was.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
+		Assert.Equal("\u201cGone Game.nes\u201d is no longer where it was.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
 	}
 
 	//#681 (1): on a cold launch the OS's open-documents event can arrive before

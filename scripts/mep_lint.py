@@ -72,8 +72,8 @@ import mep_errata  # ADR-0152 reviewed known-missing declarations, shared with t
 import mep_sentinel  # ADR-0220 §4: the guide sentinel and the per-cell scan that catches a wrong export
 import pack_id_rules  # ADR-0140 source (1): SLUG shape of the MEP root `id`
 
-SECTION_PATHS = {"textures": "textures", "audio": "audio", "synth": "synth/preset.cfg", "border": "border"}
-PROBES = {"textures": "textures/hires.txt", "audio": "audio/hires.txt", "synth": "synth/preset.cfg", "border": "border/border.png"}
+SECTION_PATHS = {"textures": "textures", "audio": "audio", "synth": "synth/preset.cfg", "border": "border", "widescreen": "widescreen"}
+PROBES = {"textures": "textures/hires.txt", "audio": "audio/hires.txt", "synth": "synth/preset.cfg", "border": "border/border.png", "widescreen": "widescreen/widescreen.json"}
 AUDIO_ALT_PROBE = "audio/fingerprints.json"
 
 # Structural fallback search limits (ADR-0120): last-priority, name-agnostic
@@ -335,6 +335,77 @@ def lint_border_json(bj, where, rep):
         rep.error(where, "'scale_mode' must be \"fit\" or \"stretch\"")
     if "underlay" in bj and not isinstance(bj["underlay"], bool):
         rep.error(where, "'underlay' must be a boolean")
+
+
+def _widescreen_side_path(value, label, rel, src, where, rep):
+    """MEP-v1 §5.5: one side image — a non-empty string, relative to the
+    section root, ending in `.png` (matched case-insensitively), safe after
+    normalization and resolving inside the container."""
+    if not isinstance(value, str) or not value.strip():
+        rep.error(where, f"{label} must be a string")
+        return
+    path = value.strip()
+    if not path.lower().endswith(".png"):
+        rep.error(where, f"{label} must be a .png path")
+        return
+    safe = safe_rel(path)
+    if safe is None:
+        rep.error(where, f"{label} is unsafe: {path}")
+        return
+    if not src.exists(f"{rel}/{safe}" if rel else safe):
+        rep.error(where, f"{label} does not exist: {path}")
+
+
+def lint_widescreen_json(wj, rel, src, where, rep):
+    """MEP-v1 §5.5 (ADR-0253 §3): `widescreen.json` carries `version` 1 and at
+    least one side image — the default `left`/`right` pair, or one or more
+    `screens[]` overrides. Every image is a safe, section-relative `.png` that
+    resolves inside the container."""
+    if not isinstance(wj, dict):
+        rep.error(where, "root must be an object")
+        return
+    if "version" not in wj:
+        rep.error(where, "'version' is required")
+    elif isinstance(wj["version"], bool) or wj["version"] != 1:
+        rep.error(where, "'version' must be 1")
+    sides = 0
+    for key in ("left", "right"):
+        if key in wj:
+            _widescreen_side_path(wj[key], f"'{key}'", rel, src, where, rep)
+            if isinstance(wj[key], str) and wj[key].strip():
+                sides += 1
+    screens = wj.get("screens")
+    screen_count = 0
+    if screens is not None:
+        if not isinstance(screens, list):
+            rep.error(where, "'screens' must be an array")
+        else:
+            screen_count = len(screens)
+            seen_ids = set()
+            for i, screen in enumerate(screens):
+                if not isinstance(screen, dict):
+                    rep.error(where, f"screens[{i}] must be an object")
+                    continue
+                sid = screen.get("id")
+                if "id" not in screen:
+                    rep.error(where, f"screens[{i}].id is required")
+                elif isinstance(sid, bool) or not isinstance(sid, int) or sid < 0:
+                    rep.error(where, f"screens[{i}].id must be an integer >= 0")
+                elif sid in seen_ids:
+                    rep.error(where, f"screens[{i}].id {sid} is duplicated")
+                else:
+                    seen_ids.add(sid)
+                named = False
+                for key in ("left", "right"):
+                    if key in screen:
+                        named = True
+                        _widescreen_side_path(screen[key], f"screens[{i}].{key}", rel, src, where, rep)
+                if not named:
+                    rep.error(where, f"screens[{i}] names no image")
+    if sides == 0 and screen_count == 0:
+        rep.error(where, "widescreen.json names no image")
+    else:
+        rep.info(where, f"widescreen manifest: {sides} side image(s), {screen_count} screen override(s)")
 
 
 def png_size(data: bytes):
@@ -910,6 +981,8 @@ def lint_pack_json(src: Source, rep: Report, root_prefix: str = ""):
                 probe = rel
             elif name == "border":
                 probe = f"{rel}/border.png" if rel else "border.png"
+            elif name == "widescreen":
+                probe = f"{rel}/widescreen.json" if rel else "widescreen.json"
             else:
                 probe = f"{rel}/hires.txt" if rel else "hires.txt"
             if not src.exists(f"{root_prefix}{probe}"):
@@ -923,7 +996,7 @@ def lint_pack_json(src: Source, rep: Report, root_prefix: str = ""):
             # ever having been validated.
             found[name] = f"{root_prefix}{rel}".rstrip("/")
         if not found:
-            rep.error(where, "'sections' needs textures/audio/synth/border")
+            rep.error(where, "'sections' needs textures/audio/synth/border/widescreen")
     return found
 
 
@@ -1934,6 +2007,16 @@ def main(argv):
                         rep.error(border_json, f"invalid JSON: {exc}")
                     else:
                         lint_border_json(bj, border_json, rep)
+            elif base == "widescreen":
+                manifest = f"{rel}/widescreen.json" if rel else "widescreen.json"
+                if manifest not in seen and src.exists(manifest):
+                    seen.add(manifest)
+                    try:
+                        wj = json.loads(src.text(manifest))
+                    except Exception as exc:  # noqa: BLE001
+                        rep.error(manifest, f"invalid JSON: {exc}")
+                    else:
+                        lint_widescreen_json(wj, rel, src, manifest, rep)
             else:
                 hires = f"{rel}/hires.txt" if rel else "hires.txt"
                 if hires not in seen and src.exists(hires):

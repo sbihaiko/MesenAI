@@ -41,7 +41,7 @@ namespace Mesen.Windows
 			try {
 				_model.ApplyChanges();
 				//Toggles apply on the next load (same rule as EnableHdPacks) - offer
-				//the power cycle right away, like InstallHdPack does
+				//the power cycle right away, as the retired Install HD Pack did (ADR-0250)
 				if(await MesenMsgBox.Show(this, "EnhancementPacksConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
 					LoadRomHelper.PowerCycle();
 				}
@@ -83,7 +83,13 @@ namespace Mesen.Windows
 		private async void Restore_OnClick(object sender, RoutedEventArgs e)
 		{
 			try {
-				(bool ok, string error) = await CommunityPackInstallService.RestoreInstalledPack();
+				(bool ok, string error) = (false, "");
+				_model.IsBusy = true;
+				try {
+					(ok, error) = await CommunityPackInstallService.RestoreInstalledPack();
+				} finally {
+					_model.IsBusy = false;
+				}
 				if(!ok) {
 					await MesenMsgBox.Show(this, error, MessageBoxButtons.OK, MessageBoxIcon.Error);
 					return;

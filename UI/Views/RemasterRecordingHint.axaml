@@ -1,0 +1,46 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="64"
+	x:DataType="vm:RemasterWorkspaceViewModel"
+	x:Class="Mesen.Views.RemasterRecordingHint"
+>
+	<!--ADR-0249 (W-R2): the render's hint is a separate toast near the bottom
+	of the game - a 440 x 36 HUD (radius 10) with one centred 12.5 medium
+	white line. The native renderer draws above Avalonia content, so the toast
+	sits in a strip under the game, as RemasterRecordingStrip sits above it.
+	Player mode only: Advanced keeps the hint inside its strip, and this
+	control is empty (0 high) there.-->
+	<UserControl.Styles>
+		<Style Selector="Border#RemasterRecordingHintStrip">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Border#RemasterRecordingHintStrip">
+			<Setter Property="IsVisible" Value="True" />
+			<Setter Property="Background" Value="{StaticResource PlayerGameBackgroundBrush}" />
+			<Setter Property="Padding" Value="0 6 0 28" />
+		</Style>
+		<Style Selector=".player Border#RemasterRecordingHintBox">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+			<Setter Property="Width" Value="440" />
+			<Setter Property="Height" Value="36" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+		</Style>
+		<Style Selector=".player TextBlock#RemasterRecordingHintText">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+	</UserControl.Styles>
+	<Border Name="RemasterRecordingHintStrip">
+		<Border Name="RemasterRecordingHintBox" Classes="hud" IsVisible="{Binding IsRecording}">
+			<TextBlock Name="RemasterRecordingHintText" Text="{l:Translate lblRecordingHint}" />
+		</Border>
+	</Border>
+</UserControl>

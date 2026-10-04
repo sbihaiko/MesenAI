@@ -18,6 +18,7 @@ using Mesen.Logic;
 using Mesen.Services;
 using Mesen.Utilities;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Mesen.Windows;
 using Xunit;
 using Xunit.Sdk;
@@ -46,6 +47,29 @@ public partial class PlayEdgeFlowsTests : IDisposable
 	public PlayEdgeFlowsTests()
 	{
 		Directory.CreateDirectory(_folder);
+
+		//#790: the core is process-global and a case that ran a game leaves its
+		//console loaded, so EmuApi.IsRunning() was still true when the next case
+		//started. That is not cosmetic. LoadRomHelper.ReportLoadFailure suppresses the
+		//home's alert while a game is running (a failure with a game on screen stays
+		//today's message, #674), so the alert cases below passed or failed on the order
+		//the runner happened to pick - and the order is only stable per build.
+		//
+		//Cleared here rather than in Dispose because a leak can also come from another
+		//class in the serial collection, and this is the side that has to be true.
+		if(NativeCore.IsAvailable && EmuApi.IsRunning()) {
+			EmuApi.Stop();
+			WaitUntilStopped();
+		}
+	}
+
+	private static void WaitUntilStopped()
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(EmuApi.IsRunning() && clock.ElapsedMilliseconds < 5000) {
+			Thread.Sleep(10);
+		}
+		Assert.False(EmuApi.IsRunning(), "EmuApi.Stop() left the previous case's game loaded (#790)");
 	}
 
 	public void Dispose()
@@ -315,7 +339,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 	}
 
 	//W-P14: a file that is not a game leaves the home on screen with one
-	//inline alert (3 controls with W-P2's 2); ✕ closes it.
+	//inline alert (3 controls with W-P2's 2); the next open clears it.
 	[AvaloniaFact]
 	public void A_file_that_is_not_a_game_shows_an_inline_alert_on_the_home()
 	{
@@ -332,11 +356,13 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		Assert.True(model.RecentGames.Visible);
 		Border alert = window.FindNamed<Border>("PlayHomeLoadAlert");
 		Assert.True(alert.IsOnScreen());
-		Assert.Equal("⚠ \"Contra.txt\" is not a game MesenAI can open.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
+		Assert.Equal("\u201cContra.txt\u201d is not a game MesenAI can open.", window.FindNamed<TextBlock>("PlayHomeLoadAlertTitle").Text);
 		Assert.Contains("or a zip holding one", window.FindNamed<TextBlock>("PlayHomeLoadAlertBody").Text);
 		Assert.True(window.FindNamed<Button>("PlayHomeOpenAnother").IsOnScreen());
 
-		Click(window, "PlayHomeLoadAlertClose");
+		//W-P14 has no close box: any open (Open Another…, a tile, a drop) clears it.
+		model.OnOpenStarted();
+		Dispatcher.UIThread.RunJobs();
 		Assert.False(alert.IsOnScreen());
 		Assert.True(model.RecentGames.Visible);
 	}
@@ -362,7 +388,7 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.True(sheet.IsOnScreen());
 			Assert.False(model.IsPlayerOverlayVisible);
 			Assert.Equal(PlayPackDepPrompt.ControlCount, ControlsOnScreen(sheet));
-			Assert.Equal("Contra Remastered waits for one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
+			Assert.Equal("Contra Remastered needs one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
 			Assert.Equal("License: not declared", window.FindNamed<TextBlock>("PackDepSheetLicense").Text);
 			Assert.Equal("Add and Restart…", window.FindNamed<Button>("PackDepSheetChooseFile").Content);
 			Assert.True(window.FindNamed<Button>("PackDepSheetChooseFile").IsFocused);
@@ -437,6 +463,35 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		Assert.False(sheet.IsBusy);
 	}
 
+	//The user's rule (2026-10-03): while a dropped file is hashed and copied,
+	//the sheet says so with a moving bar (the controls used to just grey out).
+	[AvaloniaFact]
+	public void Adding_a_pack_file_shows_a_moving_wait_until_it_is_checked()
+	{
+		string drop = Path.Combine(_folder, "drop");
+		string expected = Convert.ToHexString(SHA256.HashData(new byte[] { 1, 2, 3 }));
+		PlayPackDepSheetViewModel sheet = new();
+		sheet.SetPending("Contra Remastered", new[] { new CommunityPackDepPrompt("contra-usa", "Contra (USA).nes", "", drop, expected) });
+		sheet.Open();
+		Window window = new() { Content = new PlayPackDepSheetView { DataContext = sheet }, Width = 1000, Height = 700 };
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		Control wait = window.FindNamed<Control>("PackDepSheetBusy");
+		Assert.False(wait.IsOnScreen());
+
+		string wrong = Path.Combine(_folder, "wrong.nes");
+		File.WriteAllBytes(wrong, new byte[] { 9 });
+		Task adding = sheet.TryFile(wrong);
+		Assert.True(sheet.IsBusy);
+		Assert.True(wait.IsOnScreen());
+		Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Equal("Checking the file…", window.FindNamed<TextBlock>("PackDepSheetBusyText").Text);
+
+		WaitTask(adding);
+		Assert.False(wait.IsOnScreen());
+		window.Close();
+	}
+
 	//An install's post that lands after another open started is dropped, so
 	//the next game never inherits the previous game's pending file.
 	[AvaloniaFact]
@@ -506,19 +561,19 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.True(setup.IsVisible);
 			Assert.False(setup.IsPillVisible);
 			Assert.Equal(1, paused);
-			Assert.Equal("Set up \"Pad8\"", setup.Title);
+			Assert.Equal("Set up \u201cPad8\u201d", setup.Title);
 			Assert.Equal("Press the button you want as A", setup.Prompt);
 			Assert.StartsWith("Step 1 of 8", setup.StepText);
 			Dispatcher.UIThread.RunJobs();
 			Panel sheet = window.FindNamed<Panel>("ControllerSetupBackdrop");
 			Assert.True(sheet.IsOnScreen());
 			Assert.Equal(2, ControlsOnScreen(sheet));
-			//The sheet is white in either theme: the chip labels never inherit
-			//the theme's foreground - white on the lit chip, dark on the rest.
+			//The keys are drawn dark or tinted in either theme (ADR-0249 W-P15):
+			//the chip labels never inherit the theme's foreground - always white.
 			TextBlock[] chips = sheet.FindAll<TextBlock>().Where(t => t.Name == "ControllerSetupChipLabel").ToArray();
 			Assert.Equal(8, chips.Length);
 			Assert.Equal(Colors.White, Assert.IsAssignableFrom<ISolidColorBrush>(chips[0].Foreground).Color);
-			Assert.Equal(Color.Parse("#1C1C1E"), Assert.IsAssignableFrom<ISolidColorBrush>(chips[1].Foreground).Color);
+			Assert.Equal(Colors.White, Assert.IsAssignableFrom<ISolidColorBrush>(chips[1].Foreground).Color);
 
 			//Release Start (arms), then one press/release per step.
 			setup.Tick(none, t += TimeSpan.FromMilliseconds(100));

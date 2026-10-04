@@ -1,0 +1,51 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="200"
+	x:DataType="vm:RemasterWorkspaceViewModel"
+	x:Class="Mesen.Views.RemasterRecentProjectsView"
+	IsVisible="{Binding HasRecentProjects}"
+>
+	<!--W-R0 › Recent projects (PRD Part B §13.5.3, docs/media/gui-redesign/W-R0.png):
+	a 15 px heading over one group of 52 px rows - the Remaster brush badge,
+	the game's name, "N recordings" and a chevron. A row opens the project the
+	way Choose Folder… does. Hidden while the list is empty. Rows are list
+	rows, not controls at rest (W-R0: "2 + rows").-->
+	<UserControl.Styles>
+		<!--Each row sits in its own item container, so the theme's "no hairline
+		on the last row" is decided per container here.-->
+		<Style Selector=".player ContentPresenter > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player ContentPresenter:nth-last-child(1) > Button.row /template/ Rectangle#PART_Separator">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player Button.row">
+			<Setter Property="Height" Value="52" />
+		</Style>
+	</UserControl.Styles>
+
+	<StackPanel Margin="0 30 0 0">
+		<TextBlock Name="RemasterRecentHeader" Classes="headline" Text="{l:Translate lblRecentProjects}" Margin="0 0 0 6" />
+		<Border Name="RemasterRecentGroup" Classes="group">
+			<ItemsControl Name="RemasterRecentList" ItemsSource="{Binding RecentProjects}">
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:RemasterRecentProjectRow">
+						<Button Classes="row" ToolTip.Tip="{Binding Folder}" Click="OnOpenRecent">
+							<DockPanel>
+								<Border Classes="badge"><PathIcon Data="{StaticResource PlayerIconRemaster}" /></Border>
+								<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+								<TextBlock Classes="value" DockPanel.Dock="Right" Text="{Binding Detail}" TextWrapping="NoWrap" />
+								<TextBlock Classes="title" Text="{Binding Name}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+							</DockPanel>
+						</Button>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Border>
+	</StackPanel>
+</UserControl>

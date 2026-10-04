@@ -5,6 +5,7 @@
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	xmlns:vm="using:Mesen.ViewModels"
 	xmlns:l="using:Mesen.Localization"
+	xmlns:c="using:Mesen.Controls"
 	mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="240"
 	x:DataType="vm:RemasterWorkspaceViewModel"
 	x:Class="Mesen.Views.RemasterTileBrowserView"
@@ -12,68 +13,297 @@
 	<!--G.7 (PRD Part B §13.5.3 W-R1 zone ②, W-R5): the kit's tiles in reading
 	order, one strip of categories over them. A click opens the PNG with the
 	OS default; hover or ▸ shows where its pixels came from (the honesty
-	surface). ✎ = painted, ⚠ = some of it was not seen in play.-->
+	surface). The badge says "Painted"; a drawn warning = some of it was not
+	seen in play.
+	ADR-0249: inside the `player` scope the strip is a segmented control, a
+	tile is W-R1's 118 x 150 card with its badge pill, and ▸ opens W-R5's
+	popover; the classic values come first, the `.player` ones after.-->
 	<UserControl.Styles>
 		<Style Selector="Button.tile">
 			<Setter Property="Padding" Value="6" />
 			<Setter Property="Width" Value="120" />
 			<Setter Property="Background" Value="#303030" />
 		</Style>
+		<Style Selector=".player Button.tile">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Width" Value="118" />
+			<Setter Property="Height" Value="150" />
+			<Setter Property="Padding" Value="12 14 12 10" />
+			<Setter Property="Background" Value="{StaticResource PlayerTileFillBrush}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerTileBorderBrush}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusTile}" />
+			<Setter Property="HorizontalContentAlignment" Value="Stretch" />
+			<Setter Property="VerticalContentAlignment" Value="Stretch" />
+			<Setter Property="Cursor" Value="Hand" />
+		</Style>
+		<Style Selector=".player Button.tile:pointerover /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
+		</Style>
+		<Style Selector=".player Button.tile:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+		<Style Selector="Button.tile TextBlock.name">
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="Button.tile TextBlock.count">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+			<Setter Property="Opacity" Value="0.7" />
+		</Style>
+		<Style Selector="TextBlock.header, TextBlock.header-line">
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector=".player Button.tile TextBlock.name">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Margin" Value="0 14 0 0" />
+		</Style>
+		<Style Selector=".player Button.tile TextBlock.count">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="Margin" Value="0 3 0 0" />
+		</Style>
+		<Style Selector="Border.badges">
+			<Setter Property="HorizontalAlignment" Value="Right" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+		</Style>
+		<Style Selector=".player Border.badges">
+			<Setter Property="Background" Value="{Binding $self.(c:PlayerTheme.TintSoft)}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+			<Setter Property="Padding" Value="7 1" />
+			<Setter Property="Margin" Value="0 -6 -4 0" />
+		</Style>
+		<Style Selector=".player Border.badges TextBlock.badges">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontCaption}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		</Style>
+		<Style Selector="Button.details">
+			<Setter Property="Padding" Value="4 0" />
+			<Setter Property="HorizontalAlignment" Value="Right" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector=".player Button.details">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Width" Value="22" />
+			<Setter Property="Height" Value="22" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="MinWidth" Value="0" />
+			<Setter Property="MinHeight" Value="0" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Margin" Value="0 0 6 6" />
+			<Setter Property="VerticalAlignment" Value="Bottom" />
+			<Setter Property="HorizontalContentAlignment" Value="Center" />
+			<Setter Property="VerticalContentAlignment" Value="Center" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<Style Selector=".player Button.details:pointerover /template/ Border#PART_Background">
+			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+		</Style>
 		<Style Selector="ToggleButton.chip">
 			<Setter Property="Padding" Value="10 3" />
 		</Style>
+		<!-- The category strip as W-R1's segmented control: a FILL track, the
+		     selected segment white with a soft shadow. -->
+		<Style Selector=".player Border#RemasterCategoryTrack">
+			<Setter Property="Background" Value="{StaticResource PlayerFillBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+			<Setter Property="Padding" Value="2" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip">
+			<Setter Property="Template" Value="{StaticResource PlayerButtonTemplate}" />
+			<Setter Property="Height" Value="22" />
+			<Setter Property="Padding" Value="13 0" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="VerticalContentAlignment" Value="Center" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip:checked">
+			<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<!-- The classic ToggleButton paints its checked/hover state on the
+		     ContentPresenter; the segment paints on PART_Background only. -->
+		<Style Selector=".player ToggleButton.chip /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerTextBrush}" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip:checked /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="0 1 2 0 #23000000" />
+		</Style>
+		<Style Selector=".player ToggleButton.chip:focus-visible /template/ Border#PART_Background">
+			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		</Style>
+		<!-- ADR-0249: the drawn marks, "Painted" and the split header are
+		Player's; Advanced keeps the glyph badge, the one-line header and the
+		glyph-led lines and tooltip. -->
+		<Style Selector="Button.tile" x:DataType="vm:RemasterTileRow">
+			<Setter Property="ToolTip.Tip" Value="{Binding ClassicToolTipText}" />
+		</Style>
+		<Style Selector=".player Button.tile" x:DataType="vm:RemasterTileRow">
+			<Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
+		</Style>
+		<Style Selector="StackPanel.badge-split, WrapPanel.header-split, DockPanel.line-split">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector=".player StackPanel.badge-split, .player WrapPanel.header-split, .player DockPanel.line-split">
+			<Setter Property="IsVisible" Value="True" />
+		</Style>
+		<Style Selector=".player TextBlock.badges-classic, .player TextBlock.header-line, .player TextBlock.line-classic">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<!-- W-R5's popover text -->
+		<Style Selector=".player TextBlock.header">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontHeadline}" />
+			<Setter Property="FontWeight" Value="Bold" />
+		</Style>
+		<Style Selector="TextBlock.header-detail">
+			<Setter Property="Opacity" Value="0.7" />
+		</Style>
+		<Style Selector=".player TextBlock.header-detail">
+			<Setter Property="Opacity" Value="1" />
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+		<!-- A line's drawn mark (the render: an 11 px icon in a 14 px column). -->
+		<Style Selector="Panel.line-mark">
+			<Setter Property="Width" Value="18" />
+			<Setter Property="VerticalAlignment" Value="Top" />
+			<Setter Property="Margin" Value="0 2 2 0" />
+		</Style>
+		<Style Selector="PathIcon.line-icon">
+			<Setter Property="Width" Value="11" />
+			<Setter Property="Height" Value="11" />
+			<Setter Property="HorizontalAlignment" Value="Left" />
+		</Style>
+		<Style Selector=".player PathIcon.line-icon.warning">
+			<Setter Property="Width" Value="12" />
+			<Setter Property="Height" Value="12" />
+		</Style>
+		<Style Selector=".player PathIcon.line-icon.painted">
+			<Setter Property="Foreground" Value="{Binding $self.(c:PlayerTheme.Tint)}" />
+		</Style>
+		<!-- The tile pill's warning: 10 px, so the pill keeps its 16 px height. -->
+		<Style Selector="PathIcon.badge-warning">
+			<Setter Property="Width" Value="10" />
+			<Setter Property="Height" Value="10" />
+		</Style>
+		<Style Selector=".player PathIcon.badge-warning">
+			<Setter Property="Width" Value="10" />
+			<Setter Property="Height" Value="10" />
+		</Style>
+		<Style Selector=".player TextBlock.line">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="FontWeight" Value="Medium" />
+		</Style>
 	</UserControl.Styles>
 
-	<StackPanel Spacing="8" IsVisible="{Binding HasTiles}">
+	<StackPanel Spacing="14" IsVisible="{Binding HasTiles}">
 		<!--W-R5 / ADR-0198 §3: a project imported against a patched ROM.-->
-		<Border Name="RemasterPatchedBanner" Background="#3A2F14" CornerRadius="6" Padding="10 6" IsVisible="{Binding IsPatchedProject}">
-			<TextBlock Text="{l:Translate lblPatchedProject}" />
+		<Border Name="RemasterPatchedBanner" Classes="warning" Padding="14 8" IsVisible="{Binding IsPatchedProject}">
+			<DockPanel>
+				<PathIcon Classes="warning" DockPanel.Dock="Left" Width="14" Height="14" Margin="0 0 10 0" VerticalAlignment="Center" />
+				<TextBlock Classes="subhead warning" Text="{l:Translate lblPatchedProject}" TextWrapping="Wrap" VerticalAlignment="Center" />
+			</DockPanel>
 		</Border>
-		<TextBlock Name="RemasterKitProblems" Classes="reason" Text="{Binding KitProblemText}" IsVisible="{Binding KitProblemText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+		<TextBlock Name="RemasterKitProblems" Classes="reason secondary" Text="{Binding KitProblemText}" TextWrapping="Wrap" IsVisible="{Binding KitProblemText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-		<ItemsControl Name="RemasterTileCategories" ItemsSource="{Binding TileCategories}">
-			<ItemsControl.ItemsPanel>
-				<ItemsPanelTemplate>
-					<StackPanel Orientation="Horizontal" Spacing="6" />
-				</ItemsPanelTemplate>
-			</ItemsControl.ItemsPanel>
-			<ItemsControl.ItemTemplate>
-				<DataTemplate x:DataType="vm:RemasterCategoryChip">
-					<ToggleButton Classes="chip" Content="{Binding Text}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnCategory" />
-				</DataTemplate>
-			</ItemsControl.ItemTemplate>
-		</ItemsControl>
+		<Border Name="RemasterCategoryTrack">
+			<ItemsControl Name="RemasterTileCategories" ItemsSource="{Binding TileCategories}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Orientation="Horizontal" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:RemasterCategoryChip">
+						<ToggleButton Classes="chip" Content="{Binding Text}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnCategory" />
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Border>
 
 		<ItemsControl Name="RemasterTileList" ItemsSource="{Binding Tiles}">
 			<ItemsControl.ItemsPanel>
 				<ItemsPanelTemplate>
-					<WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+					<WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12" />
 				</ItemsPanelTemplate>
 			</ItemsControl.ItemsPanel>
 			<ItemsControl.ItemTemplate>
 				<DataTemplate x:DataType="vm:RemasterTileRow">
 					<Panel>
-						<Button Classes="tile" Click="OnOpenTile" ToolTip.Tip="{Binding ToolTipText}">
-							<StackPanel Spacing="2">
-								<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
-								<TextBlock Text="{Binding Caption}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" FontWeight="Bold" />
-								<TextBlock Text="{Binding CountText}" Classes="reason" TextWrapping="NoWrap" />
-								<TextBlock Classes="badges" Text="{Binding Badges}" TextWrapping="NoWrap" />
-							</StackPanel>
+						<Button Classes="tile" Click="OnOpenTile">
+							<Panel>
+								<StackPanel Spacing="2">
+									<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+									<TextBlock Classes="name" Text="{Binding Caption}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+									<TextBlock Classes="count" Text="{Binding CountText}" TextWrapping="NoWrap" />
+								</StackPanel>
+								<Border Classes="badges" IsVisible="{Binding HasBadge}">
+									<Panel>
+									<TextBlock Classes="badges-classic" Text="{Binding ClassicBadges}" TextWrapping="NoWrap" />
+									<StackPanel Classes="badge-split" Orientation="Horizontal" Spacing="4">
+										<PathIcon Classes="warning badge-warning" Data="{StaticResource PlayerIconWarning}" VerticalAlignment="Center" IsVisible="{Binding Warns}" />
+										<TextBlock Classes="badges" Text="{Binding Badges}" TextWrapping="NoWrap" VerticalAlignment="Center" IsVisible="{Binding Badges, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+									</StackPanel>
+									</Panel>
+								</Border>
+							</Panel>
 						</Button>
-						<Button Classes="details" Content="▸" Padding="4 0" HorizontalAlignment="Right" VerticalAlignment="Top" Background="Transparent">
+						<Button Classes="details" Content="▸">
 							<Button.Flyout>
-								<Flyout Placement="BottomEdgeAlignedLeft">
-									<StackPanel Spacing="6" MaxWidth="320">
-										<TextBlock Classes="header" Text="{Binding Header}" FontWeight="Bold" />
+								<Flyout Placement="BottomEdgeAlignedLeft" FlyoutPresenterClasses="popover">
+									<StackPanel Spacing="8" MaxWidth="300">
+										<TextBlock Classes="header-line" Text="{Binding Header}" TextWrapping="Wrap" />
+										<WrapPanel Classes="header-split" Orientation="Horizontal">
+											<TextBlock Classes="header" Text="{Binding HeaderName}" TextWrapping="Wrap" Margin="0 0 8 0" VerticalAlignment="Center" />
+											<TextBlock Classes="header-detail" Text="{Binding HeaderDetail}" TextWrapping="Wrap" VerticalAlignment="Center" />
+										</WrapPanel>
 										<ItemsControl ItemsSource="{Binding Lines}">
+											<ItemsControl.ItemsPanel>
+												<ItemsPanelTemplate>
+													<StackPanel Spacing="6" />
+												</ItemsPanelTemplate>
+											</ItemsControl.ItemsPanel>
 											<ItemsControl.ItemTemplate>
-												<DataTemplate x:DataType="x:String">
-													<TextBlock Classes="line" Text="{Binding}" />
+												<DataTemplate x:DataType="vm:RemasterTileLine">
+													<StackPanel>
+													<Panel>
+													<TextBlock Classes="line-classic" Text="{Binding ClassicText}" TextWrapping="Wrap" />
+													<DockPanel Classes="line-split">
+														<Panel DockPanel.Dock="Left" Classes="line-mark">
+															<PathIcon Classes="line-icon done" Data="{StaticResource PlayerIconCheck}" IsVisible="{Binding IsSeen}" />
+															<PathIcon Classes="line-icon warning" Data="{StaticResource PlayerIconWarning}" IsVisible="{Binding IsWarning}" />
+															<PathIcon Classes="line-icon painted" Data="{StaticResource PlayerIconPencil}" IsVisible="{Binding IsPainted}" />
+														</Panel>
+														<TextBlock Classes="line" Text="{Binding Text}" TextWrapping="Wrap" />
+													</DockPanel>
+													</Panel>
+													<!--Every wait moves (2026-10-03): the comparison still running.-->
+													<ProgressBar Classes="line-checking" IsIndeterminate="True" Width="160" HorizontalAlignment="Left" Margin="0 6 0 0" IsVisible="{Binding IsChecking}" />
+													</StackPanel>
 												</DataTemplate>
 											</ItemsControl.ItemTemplate>
 										</ItemsControl>
-										<Button Classes="open" Content="{l:Translate btnOpenTile}" HorizontalAlignment="Left" Click="OnOpenTile" />
+										<Button Classes="open primary" Content="{l:Translate btnOpenTile}" HorizontalAlignment="Left" Margin="0 6 0 0" Click="OnOpenTile" />
 									</StackPanel>
 								</Flyout>
 							</Button.Flyout>

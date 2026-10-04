@@ -93,7 +93,7 @@ public static class LookLayers
 	public const string LcdGrid = "LcdGrid";
 
 	//Recent shader files offered after the named looks; the rest stay in the
-	//classic shader menu (Tools ⋯ › Options).
+	//classic shader menu (Classic › Settings › Shaders).
 	public const int MaxRecentShaders = 3;
 
 	public static LookFilterLayer LayerOf(string filter)

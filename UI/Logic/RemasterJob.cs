@@ -53,6 +53,11 @@ public sealed record RemasterJobSnapshot(RemasterJobStatus Status, RemasterJobKi
 	//0-100, for the card's bar and the other profiles' status line.
 	public int Percent => TotalSteps <= 0 ? 0 : Math.Clamp(StepsDone * 100 / TotalSteps, 0, 100);
 
+	//The card's bar moves while the job runs (the user's rule, 2026-10-03): a
+	//step reports nothing until it ends, so a determinate bar sat still at 0 %
+	//for the whole first step. The card's "step N of M" line says how far.
+	public bool BarIsIndeterminate => IsRunning;
+
 	public static RemasterJobSnapshot Idle { get; } = new(RemasterJobStatus.Idle, RemasterJobKind.Kit, 0, 0, "", "", "");
 }
 

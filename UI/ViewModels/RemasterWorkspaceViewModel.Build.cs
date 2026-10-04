@@ -20,6 +20,8 @@ namespace Mesen.ViewModels
 		//W-R4
 		[ObservableProperty] public partial bool IsBuildProblemsVisible { get; private set; }
 		[ObservableProperty] public partial string BuildProblemsTitle { get; private set; } = "";
+		//Advanced's title: the original "⚠ N problems stopped the build."
+		[ObservableProperty] public partial string BuildProblemsClassicTitle { get; private set; } = "";
 		[ObservableProperty] public partial List<RemasterProblemRow> BuildProblems { get; private set; } = new();
 		[ObservableProperty] public partial string BuildProblemsNote { get; private set; } = "";
 		[ObservableProperty] public partial bool IsBuildLogVisible { get; private set; }
@@ -79,7 +81,7 @@ namespace Mesen.ViewModels
 		public void LeaveGameView()
 		{
 			if(IsRecording) {
-				StopRecording();
+				_ = StopRecording();
 				return;
 			}
 			if(IsShowingBuild) {
@@ -148,9 +150,9 @@ namespace Mesen.ViewModels
 			RemasterBuildOutcome outcome = RemasterBuildOutcome.Parse(_jobs.Log);
 			RemasterBuildProblems read = RemasterBuildProblemReader.Read(_jobs.Log, RemasterKitIndex.Load(_buildProject, outcome.RecordingId));
 			BuildProblems = read.Problems.Select(RemasterProblemRow.From).ToList();
-			BuildProblemsTitle = read.Count == 0 ? ResourceHelper.GetMessage("RemasterProblemsNone")
-				: read.Count == 1 ? ResourceHelper.GetMessage("RemasterProblemsOne")
-				: ResourceHelper.GetMessage("RemasterProblemsMany", read.Count);
+			string count = read.Count == 0 ? "None" : read.Count == 1 ? "One" : "Many";
+			BuildProblemsTitle = ResourceHelper.GetMessage("RemasterProblemsTitle" + count, read.Count);
+			BuildProblemsClassicTitle = ResourceHelper.GetMessage("RemasterProblems" + count, read.Count);
 			BuildProblemsNote = read.Untranslated == 0 ? ""
 				: read.Problems.Count == 0 ? ResourceHelper.GetMessage("RemasterProblemsOnlyInLog")
 				: ResourceHelper.GetMessage("RemasterProblemsMoreInLog", read.Untranslated);
@@ -216,19 +218,31 @@ namespace Mesen.ViewModels
 		}
 	}
 
-	//One W-R4 row: the sentence and the kit file Open File opens ("" = none).
-	public sealed record RemasterProblemRow(string Text, string FilePath)
+	//One W-R4 row: the painted surface's name (bold; "" for a project-wide
+	//problem), the sentence, Advanced's caption-led sentence, and the kit
+	//file Open File opens ("" = none).
+	public sealed record RemasterProblemRow(string Name, string Text, string ClassicText, string FilePath)
 	{
 		public bool CanOpen => FilePath.Length > 0;
 
 		public static RemasterProblemRow From(RemasterBuildProblem p)
 		{
-			string text = p.Kind switch {
+			string classic = p.Kind switch {
 				RemasterProblemKind.CanvasResized when p.Detail.Length > 0 => ResourceHelper.GetMessage("RemasterProblemCanvasResizedWas", p.Caption, p.Detail),
 				RemasterProblemKind.ScaleMismatch => ResourceHelper.GetMessage("RemasterProblemScaleMismatch", p.Caption, Part(p.Detail, 0), Part(p.Detail, 1)),
 				_ => ResourceHelper.GetMessage("RemasterProblem" + p.Kind, p.Caption),
 			};
-			return new RemasterProblemRow(text, p.FilePath);
+			if(p.Kind is RemasterProblemKind.ForeignPack or RemasterProblemKind.NothingRecorded) {
+				//Project-wide: no surface to name, one sentence for both looks.
+				return new RemasterProblemRow("", classic, classic, p.FilePath);
+			}
+			string text = p.Kind switch {
+				RemasterProblemKind.CanvasResized when p.Detail.Length > 0 => ResourceHelper.GetMessage("RemasterProblemSentenceCanvasResizedWas", p.Detail),
+				RemasterProblemKind.ScaleMismatch => ResourceHelper.GetMessage("RemasterProblemSentenceScaleMismatch", Part(p.Detail, 0), Part(p.Detail, 1)),
+				_ => ResourceHelper.GetMessage("RemasterProblemSentence" + p.Kind),
+			};
+			string name = p.Caption.Length > 0 ? ResourceHelper.GetMessage("RemasterProblemName", p.Caption) : "";
+			return new RemasterProblemRow(name, text, classic, p.FilePath);
 		}
 
 		private static string Part(string detail, int index)

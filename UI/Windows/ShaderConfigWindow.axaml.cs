@@ -9,6 +9,9 @@ namespace Mesen.Windows;
 
 public class ShaderConfigWindow : MesenWindow
 {
+	//The classic window (the Video menu's shader parameters, Advanced's Look).
+	//Player mode's Look shows the same parameters as a sheet in the main
+	//window (PlayerShaderSheetView, ADR-0249).
 	public ShaderConfigWindow()
 	{
 		InitializeComponent();

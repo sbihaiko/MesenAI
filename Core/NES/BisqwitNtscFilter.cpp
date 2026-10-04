@@ -8,6 +8,10 @@
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 
+//GenerateNtscSignal writes its row with `(x << 3) | j`, i.e. it assumes the
+//shared samples-per-pixel constant is 8 (ADR-0253 W.6). Keep the two together.
+static_assert(WidescreenFrameFlow::Ntsc::SignalsPerPixel == 8, "GenerateNtscSignal indexes the signal row with (x << 3)");
+
 BisqwitNtscFilter::BisqwitNtscFilter(Emulator* emu) : BaseVideoFilter(emu)
 {
 	_resDivider = 1;
@@ -83,7 +87,9 @@ void BisqwitNtscFilter::ApplyFilter(uint16_t* ppuOutputBuffer)
 	_ppuOutputBuffer = ppuOutputBuffer;
 
 	if(_emu->GetSettings()->GetNesConfig().EnablePalBorders && _emu->GetRegion() != ConsoleRegion::Ntsc) {
-		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer);
+		//ADR-0253 W.6: the border covers the frame the filter was handed, extra
+		//columns included
+		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer, _baseFrameInfo.Width);
 	}
 
 	_workDone = false;
@@ -182,8 +188,14 @@ void BisqwitNtscFilter::GenerateNtscSignal(int8_t* ntscSignal, int& phase, int r
 		0b111111111111
 	};
 
-	for(int x = 0; x < 256; x++) {
-		uint16_t ppuData = _ppuOutputBuffer[(rowNumber << 8) | x];
+	//ADR-0253 W.6: the row is as wide as the frame the filter was handed, and
+	//the frame's rows are that far apart. The old fixed 256-px stride
+	//((rowNumber << 8) | x) has to move with AcceptsExtendedFrame(): left as it
+	//was it would read a 384-px frame's first 256 columns as every row, shearing
+	//the picture rather than merely cropping it.
+	int width = (int)_baseFrameInfo.Width;
+	for(int x = 0; x < width; x++) {
+		uint16_t ppuData = _ppuOutputBuffer[(size_t)rowNumber * width + x];
 
 		uint16_t pixelColor = ppuData & 0x3F;
 		uint8_t emphasis = ppuData >> 6;
@@ -214,15 +226,23 @@ void BisqwitNtscFilter::GenerateNtscSignal(int8_t* ntscSignal, int& phase, int r
 
 		phase += _signalsPerPixel;
 	}
-	phase += (341 - 256) * _signalsPerPixel;
+	//ADR-0253 W.6: the phase advance after a row is what is left of the PPU's
+	//whole 341-cycle scanline once the row that was actually drawn is taken out.
+	//The "(341 - 256) * 8" this used to be left a 384-px row 128 subcarrier
+	//samples (10.7 colour cycles) short, which crawls the hue down the picture.
+	phase += WidescreenFrameFlow::Ntsc::PhaseAdvanceAfterRow((uint32_t)width);
 }
 
 void BisqwitNtscFilter::DecodeFrame(int startRow, int endRow, uint16_t* ppuOutputBuffer, uint32_t* outputBuffer, int startPhase)
 {
 	int pixelsPerCycle = 8 / _resDivider;
 	int phase = startPhase;
-	constexpr int lineWidth = 256;
-	int8_t rowSignal[lineWidth * _signalsPerPixel];
+	//ADR-0253 W.6: the row is as wide as the frame the filter was handed. It is
+	//heap-allocated because DecodeFrame runs on two threads at once - a shared
+	//member would be written by both.
+	int lineWidth = (int)_baseFrameInfo.Width;
+	int rowSamples = (int)WidescreenFrameFlow::Ntsc::SignalSamples((uint32_t)lineWidth);
+	std::vector<int8_t> rowSignal(rowSamples);
 	uint32_t rowPixelGap = _frameInfo.Width * pixelsPerCycle;
 
 	uint32_t* orgBuffer = outputBuffer;
@@ -231,10 +251,10 @@ void BisqwitNtscFilter::DecodeFrame(int startRow, int endRow, uint16_t* ppuOutpu
 		int startCycle = phase % 12;
 
 		//Convert the PPU's output to an NTSC signal
-		GenerateNtscSignal(rowSignal, phase, y);
+		GenerateNtscSignal(rowSignal.data(), phase, y);
 
 		//Convert the NTSC signal to RGB
-		NtscDecodeLine(lineWidth * _signalsPerPixel, rowSignal, outputBuffer, (startCycle + 7) % 12);
+		NtscDecodeLine(rowSamples, rowSignal.data(), outputBuffer, (startCycle + 7) % 12);
 
 		outputBuffer += rowPixelGap;
 	}

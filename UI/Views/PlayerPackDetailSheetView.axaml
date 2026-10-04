@@ -10,68 +10,136 @@
 >
 	<!--G.4 (PRD Part B §13.5.2 W-P6): the current pack's detail, opened from
 	W-P4's Pack row when there is no choice to make (one pack, a sibling pack,
-	or none). The chips and the ⚠ music line come from the pack folder read
+	or none). The layers and the ⚠ music line come from the pack folder read
 	when the sheet opens (PackAudioNotice.Scan, ADR-0240 Option 1 in plain
-	words). Change pack… is disabled with its reason when there is nothing to
+	words); each layer has a per-game switch (PackLayerSwitches). Change pack… is disabled with its reason when there is nothing to
 	change to (rule 4); Restore (ADR-0147) appears only for a catalog-installed
 	pack and confirms once in place (rule 7). Details ▸ is the one place in Play
 	where ids appear. Esc and Done close back to W-P4.-->
+	<!--ADR-0249 (W-P6): a light sheet - the share-green pack badge, title and
+	byline, the layer switches in an inset list, the orange music notice, the action buttons, a
+	hairline, then Details (with its hint) and Done.-->
 	<Border
 		Name="PlayerPackDetailSheet"
-		Background="#DD000000"
-		CornerRadius="14"
+		Classes="sheet"
+		Width="500"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Center"
-		Padding="24"
 		IsVisible="{Binding IsPackDetailVisible}"
 	>
-		<StackPanel Spacing="8" MinWidth="380" MaxWidth="520" XYFocus.NavigationModes="Enabled">
-			<TextBlock Name="PackDetailTitle" Text="{Binding PackDetailTitle}" FontWeight="Bold" FontSize="16" TextWrapping="Wrap" />
-			<TextBlock Name="PackDetailByline" Text="{Binding PackDetailByline}" Opacity="0.7" TextWrapping="Wrap" />
-			<StackPanel Name="PackDetailChips" Orientation="Horizontal" Spacing="16" IsVisible="{Binding PackDetailHasPack}">
-				<StackPanel Orientation="Horizontal" Spacing="4">
-					<TextBlock Text="{l:Translate lblPackDetailTextures}" />
-					<TextBlock Text="✔" IsVisible="{Binding PackDetailTextures}" />
-					<TextBlock Text="—" IsVisible="{Binding !PackDetailTextures}" />
+		<StackPanel Spacing="0" XYFocus.NavigationModes="Enabled">
+			<DockPanel Margin="0 0 0 16">
+				<Border Classes="badge heading share" DockPanel.Dock="Left" Margin="0 0 12 0" VerticalAlignment="Top">
+					<PathIcon Data="{StaticResource PlayerIconPack}" />
+				</Border>
+				<StackPanel VerticalAlignment="Center" Spacing="2">
+					<TextBlock Name="PackDetailTitle" Classes="sheet-heading" Text="{Binding PackDetailTitle}" TextWrapping="Wrap" />
+					<TextBlock Name="PackDetailByline" Classes="subhead secondary" Text="{Binding PackDetailByline}" TextWrapping="Wrap" />
 				</StackPanel>
-				<StackPanel Orientation="Horizontal" Spacing="4">
-					<TextBlock Text="{l:Translate lblPackDetailAudio}" />
-					<TextBlock Text="✔" IsVisible="{Binding PackDetailAudio}" />
-					<TextBlock Text="—" IsVisible="{Binding !PackDetailAudio}" />
-				</StackPanel>
-				<StackPanel Orientation="Horizontal" Spacing="4">
-					<TextBlock Text="{l:Translate lblPackDetailPatch}" />
-					<TextBlock Text="✔" IsVisible="{Binding PackDetailPatch}" />
-					<TextBlock Text="—" IsVisible="{Binding !PackDetailPatch}" />
-				</StackPanel>
-			</StackPanel>
-
-			<StackPanel Name="PackDetailNotice" Spacing="2" IsVisible="{Binding PackDetailHasNotice}" Margin="0 4 0 0">
-				<TextBlock Text="{l:Translate lblPackDetailMissingMusicTitle}" FontWeight="Bold" />
-				<TextBlock Name="PackDetailNoticeBody" Text="{Binding PackDetailNoticeBody}" Opacity="0.8" TextWrapping="Wrap" Margin="16 0 0 0" />
-			</StackPanel>
-
-			<StackPanel Orientation="Horizontal" Spacing="8" Margin="0 6 0 0">
-				<Button Name="PackDetailChangeButton" Content="{l:Translate btnPackDetailChange}" IsEnabled="{Binding PackDetailCanChange}" Click="OnChange" />
-				<Button Name="PackDetailFolderButton" Content="{l:Translate btnPackDetailShowFolder}" IsVisible="{Binding PackDetailHasFolder}" Click="OnShowFolder" />
-			</StackPanel>
-			<TextBlock Name="PackDetailChangeReason" Text="{Binding PackDetailChangeReason}" FontSize="11" Opacity="0.6" TextWrapping="Wrap" IsVisible="{Binding !PackDetailCanChange}" />
-
-			<StackPanel Spacing="4" IsVisible="{Binding PackDetailShowsRestore}">
-				<Button Name="PackDetailRestoreButton" Content="{l:Translate btnPackDetailRestore}" IsVisible="{Binding !PackDetailConfirmingRestore}" IsEnabled="{Binding !PackDetailRestoreRunning}" Click="OnRestore" />
-				<StackPanel Name="PackDetailRestoreConfirm" Spacing="4" IsVisible="{Binding PackDetailConfirmingRestore}">
-					<TextBlock Text="{l:Translate lblPackDetailRestoreConfirm}" TextWrapping="Wrap" />
-					<StackPanel Orientation="Horizontal" Spacing="8">
-						<Button Name="PackDetailRestoreConfirmButton" Content="{l:Translate btnPackDetailRestoreConfirm}" Click="OnRestore" />
-						<Button Name="PackDetailRestoreKeepButton" Content="{l:Translate btnPackDetailRestoreKeep}" Click="OnKeep" />
+			</DockPanel>
+			<!--W-P6: the pack's three layers, one switch each, for this game only
+			(PackLayerSwitches): a layer the pack lacks is a grey switch that says
+			so, and one its global switch has off says that instead. A flip applies
+			at once (in place where ADR-0244 allows) under a moving bar.-->
+			<StackPanel Name="PackDetailLayers" IsVisible="{Binding PackDetailHasPack}" Margin="0 0 0 16">
+				<Border Classes="inset">
+					<StackPanel>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailTexturesSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailTexturesNote.Length}" Content="{l:Translate lblPackDetailTextures}" IsChecked="{Binding PackDetailTexturesOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailTexturesSwitchable}" />
+								<TextBlock Name="PackDetailTexturesNote" Classes="row-subtitle" Text="{Binding PackDetailTexturesNote}" IsVisible="{Binding !!PackDetailTexturesNote.Length}" />
+							</Panel>
+						</Border>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailAudioSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailAudioNote.Length}" Content="{l:Translate lblPackDetailAudio}" IsChecked="{Binding PackDetailAudioOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailAudioSwitchable}" />
+								<TextBlock Name="PackDetailAudioNote" Classes="row-subtitle" Text="{Binding PackDetailAudioNote}" IsVisible="{Binding !!PackDetailAudioNote.Length}" />
+							</Panel>
+						</Border>
+						<Border Classes="switch-row">
+							<Panel>
+								<CheckBox Name="PackDetailPatchSwitch" Classes="switch" Classes.subtitled="{Binding !!PackDetailPatchNote.Length}" Content="{l:Translate lblPackDetailPatch}" IsChecked="{Binding PackDetailPatchOn, Mode=TwoWay}" IsEnabled="{Binding PackDetailPatchSwitchable}" />
+								<TextBlock Name="PackDetailPatchNote" Classes="row-subtitle" Text="{Binding PackDetailPatchNote}" IsVisible="{Binding !!PackDetailPatchNote.Length}" />
+							</Panel>
+						</Border>
 					</StackPanel>
+				</Border>
+				<TextBlock Name="PackDetailLayersHint" Classes="subhead secondary" Text="{l:Translate lblPackDetailLayersHint}" IsVisible="{Binding !PackDetailApplyingLayer}" Margin="2 8 0 0" />
+				<!--Every wait moves (2026-10-03): from the flip until the swap is done.-->
+				<StackPanel Name="PackDetailLayersWait" Spacing="8" IsVisible="{Binding PackDetailApplyingLayer}" Margin="2 8 0 0">
+					<TextBlock Classes="subhead secondary" Text="{l:Translate lblPackDetailLayersWait}" />
+					<ProgressBar Name="PackDetailLayersWaitBar" IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
 				</StackPanel>
 			</StackPanel>
 
-			<ToggleButton Name="PackDetailIdsToggle" Content="{l:Translate btnPackDetailDetails}" IsChecked="{Binding PackDetailShowsIds, Mode=TwoWay}" IsVisible="{Binding PackDetailHasPack}" Margin="0 6 0 0" />
-			<SelectableTextBlock Name="PackDetailIds" Text="{Binding PackDetailIds}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding PackDetailShowsIds}" />
+			<Border Name="PackDetailNotice" Classes="warning notice large" IsVisible="{Binding PackDetailHasNotice}" Margin="0 0 0 16">
+				<DockPanel>
+					<!--W-P6: the render's orange warning icon leads the title.-->
+					<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" VerticalAlignment="Top" Margin="0 1 10 0" />
+					<StackPanel Spacing="2">
+						<TextBlock Name="PackDetailNoticeTitle" Classes="notice-title" Text="{l:Translate lblPackDetailMissingMusicTitle}" TextWrapping="Wrap" />
+						<TextBlock Name="PackDetailNoticeBody" Text="{Binding PackDetailNoticeBody}" TextWrapping="Wrap" />
+					</StackPanel>
+				</DockPanel>
+			</Border>
 
-			<Button Name="PackDetailDoneButton" Content="{l:Translate btnPackDetailDone}" HorizontalAlignment="Right" Click="OnDone" />
+			<!--#736: an accepted community pack for this game is not the one
+			rendering. Plain words for why, and one button that offers it - never
+			forced: auto-install off and a turned-off pack are the player's choice.-->
+			<Border Name="PackDetailOffer" Classes="banner info" IsVisible="{Binding PackDetailHasOffer}" Margin="0 0 0 16">
+				<DockPanel>
+					<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconPack}" />
+					<StackPanel Classes="banner-actions" DockPanel.Dock="Right">
+						<Button Name="PackDetailUseCommunityButton" Classes="primary regular" Content="{l:Translate btnPackDetailUseCommunity}" Click="OnUseCommunityPack" />
+					</StackPanel>
+					<StackPanel Spacing="2" VerticalAlignment="Center">
+						<TextBlock Name="PackDetailOfferTitle" Classes="banner-text" FontWeight="SemiBold" Text="{l:Translate lblPackDetailOfferTitle}" />
+						<TextBlock Name="PackDetailOfferBody" Classes="banner-text" Text="{Binding PackDetailOfferBody}" />
+					</StackPanel>
+				</DockPanel>
+			</Border>
+
+			<StackPanel Orientation="Horizontal" Spacing="6">
+				<Button Name="PackDetailChangeButton" Classes="secondary regular" Content="{l:Translate btnPackDetailChange}" IsEnabled="{Binding PackDetailCanChange}" Click="OnChange" />
+				<Button Name="PackDetailFolderButton" Classes="secondary regular" IsVisible="{Binding PackDetailHasFolder}" Click="OnShowFolder">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
+						<TextBlock Name="PackDetailFolderLabel" />
+					</StackPanel>
+				</Button>
+			</StackPanel>
+			<TextBlock Name="PackDetailChangeReason" Classes="footnote secondary" Text="{Binding PackDetailChangeReason}" TextWrapping="Wrap" IsVisible="{Binding !PackDetailCanChange}" Margin="2 6 0 0" />
+
+			<StackPanel Spacing="8" IsVisible="{Binding PackDetailShowsRestore}" Margin="0 10 0 0">
+				<Button Name="PackDetailRestoreButton" Classes="destructive regular" HorizontalAlignment="Left" Content="{l:Translate btnPackDetailRestore}" IsVisible="{Binding !PackDetailConfirmingRestore}" IsEnabled="{Binding !PackDetailRestoreRunning}" Click="OnRestore" />
+				<!--W-X1: Restore asks once, in place, with the shared warning banner -
+				Keep Edits (secondary), then Restore (destructive).-->
+				<Border Name="PackDetailRestoreConfirm" Classes="banner warning" IsVisible="{Binding PackDetailConfirmingRestore}">
+					<DockPanel>
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<StackPanel Classes="banner-actions" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+							<Button Name="PackDetailRestoreKeepButton" Classes="secondary regular" Content="{l:Translate btnPackDetailRestoreKeep}" Click="OnKeep" />
+							<Button Name="PackDetailRestoreConfirmButton" Classes="destructive regular" Content="{l:Translate btnPackDetailRestoreConfirm}" Click="OnRestore" />
+						</StackPanel>
+						<TextBlock Classes="banner-text" Text="{l:Translate lblPackDetailRestoreConfirm}" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</DockPanel>
+				</Border>
+				<!--Every wait moves (2026-10-03): from the confirm until the restore
+				ends - the catalog fetch and match come before the install pill.-->
+				<StackPanel Name="PackDetailRestoreWait" Spacing="8" IsVisible="{Binding PackDetailRestoreRunning}">
+					<TextBlock Name="PackDetailRestoreWaitText" Classes="subhead secondary" Text="{l:Translate lblPackDetailRestoreWait}" />
+					<ProgressBar IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />
+				</StackPanel>
+			</StackPanel>
+
+			<Separator Classes="hairline" Margin="0 16 0 0" IsVisible="{Binding PackDetailHasPack}" />
+			<DockPanel IsVisible="{Binding PackDetailHasPack}" Margin="0 4 0 0">
+				<TextBlock Classes="subhead secondary" DockPanel.Dock="Right" VerticalAlignment="Center" Text="{l:Translate lblPackDetailDetailsHint}" />
+				<ToggleButton Name="PackDetailIdsToggle" Classes="disclosure" Content="{l:Translate btnPackDetailDetails}" IsChecked="{Binding PackDetailShowsIds, Mode=TwoWay}" />
+			</DockPanel>
+			<SelectableTextBlock Name="PackDetailIds" Classes="ids" Text="{Binding PackDetailIds}" TextWrapping="Wrap" IsVisible="{Binding PackDetailShowsIds}" Margin="0 4 0 0" />
+
+			<Button Name="PackDetailDoneButton" Classes="primary regular wide" Content="{l:Translate btnPackDetailDone}" HorizontalAlignment="Right" Click="OnDone" Margin="0 16 0 0" />
 		</StackPanel>
 	</Border>
 </UserControl>

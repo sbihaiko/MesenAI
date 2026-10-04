@@ -4,14 +4,14 @@
 #pragma once
 #include "pch.h"
 #include "Shared/Video/BaseVideoFilter.h"
+#include "Shared/Video/WidescreenFrameFlow.h"
 #include "Utilities/AutoResetEvent.h"
 
 class BisqwitNtscFilter : public BaseVideoFilter
 {
 private:
 	const uint16_t _bitmaskLut[12] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x100, 0x200, 0x400, 0x800 };
-	static constexpr int _signalsPerPixel = 8;
-	static constexpr int _signalWidth = 258;
+	static constexpr int _signalsPerPixel = WidescreenFrameFlow::Ntsc::SignalsPerPixel;
 
 	std::thread _extraThread;
 	AutoResetEvent _waitWork;
@@ -55,4 +55,10 @@ public:
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override;
 	FrameInfo GetFrameInfo() override;
 	HudScaleFactors GetScaleFactor() override;
+
+	//ADR-0253 W.6: the signal generator, the decoded row and the per-row phase
+	//correction all take the width of the frame the filter was handed, so a
+	//widescreen Reveal frame is decoded whole instead of being cropped to its
+	//standard centre (BaseVideoFilter::AcceptsExtendedFrame)
+	bool AcceptsExtendedFrame() override { return true; }
 };

@@ -40,6 +40,16 @@ namespace Mesen.Services
 		//the catalog fetch passes a much shorter one.
 		public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(10);
 
+		//#734 (W-P9's bar): told the bytes read so far and the declared size
+		//(null when the host does not say) of every body read. Async-local, so
+		//it reaches only the downloads awaited by whoever set it.
+		private static readonly AsyncLocal<Action<long, long?>?> _progress = new();
+		public static Action<long, long?>? Progress
+		{
+			get => _progress.Value;
+			set => _progress.Value = value;
+		}
+
 		//One process-wide client: sockets are pooled across ROM loads instead of
 		//being torn down per request. Redirects are never followed automatically
 		//(each hop is re-checked against the allow-list in FetchAsync). No
@@ -272,11 +282,14 @@ namespace Mesen.Services
 			using MemoryStream buffer = new();
 			byte[] chunk = new byte[81920];
 			int read;
+			Action<long, long?>? progress = _progress.Value;
+			long? declared = response.Content.Headers.ContentLength;
 			while((read = await stream.ReadAsync(chunk, ct)) > 0) {
 				if(buffer.Length + read > maxBytes) {
 					return null;
 				}
 				buffer.Write(chunk, 0, read);
+				progress?.Invoke(buffer.Length, declared);
 			}
 			return buffer.ToArray();
 		}

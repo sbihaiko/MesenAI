@@ -139,12 +139,13 @@ or Part B §8. Dates below describe delivery, not a new validation run.
 - **G.1** (2026-10-02, ADR-0241; Part B §13.2, §13.5.1) — the workspace shell: the active-profile button and switcher popover (Play, Remaster, Share; ⌘1/⌘2/⌘3, Ctrl elsewhere), Tools ⋯ rendering the `MainMenuAction` tree as one dropdown, a one-sentence read-only status line, the bar hidden while a Play game runs unpaused, `ShowClassicMenuBar` defaulting to `false` (fresh install and upgrade, §13.8 Q4) with a one-time "Your menus are under Tools ⋯" toast. Remaster and Share show a placeholder naming the next slice; switching keeps the game running. On macOS the bar is the window's title bar (client-area extension, room for the traffic lights, the classic bar under it); Windows/Linux keep the in-window strip. The P.4 UiMode Debug gate is retired so Tools ⋯ reaches every classic action in either `UiMode`. `UI/Logic/WorkspaceShell.cs` with unit tests; wiring in `UI.HeadlessTests/WorkspaceShellTests.cs`. The window was not opened by a person: the title-bar look, drag and double-click zoom, and full-speed emulation with the native renderer hidden under Remaster/Share are unchecked on a real display.
 - **G.2** (2026-10-02, ADR-0241; Part B §13.5.2 W-P1–W-P4, rules 2, 8, 9, 10) — the Play home and the pause overlay, under the go-ahead *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"*, *"pode implementar em paralelo tudo que puder"* and *"pode seguir com a segunda leva em paralelo"* (2026-10-02). W-P1 (no recents: *Drop a game here or open one*, one control, *Open a ROM…*, focused, plus the orientation sentence only where the settings make it true) replaces the P.7 Welcome card; W-P2 is *Continue playing* (the newest game, "last played …", focused) + *Open a ROM…* + the Recent grid of the other games; W-P3 is unchanged (the bar hides while the game runs). W-P4 replaces P.4's overlay with seven controls — Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game — with row values (newest slot and age, current pack, "N on"); Save/Load merged into a *Save states* sheet that opens today's slot grids, *Advanced GUI* moved to Tools ⋯ › Settings › Preferences and quitting the app to Tools ⋯ › File › Exit, and *Quit game* powers the game off and lands on the home. Esc goes game → W-P4 → resume; the Save states sheet and its slot grid, Enhancements, Cheats (P.10's sheet, untouched) and a picker opened from the Pack row close back to W-P4. Stop rule met in tests: a first-run user reaches a playing game in ≤2 actions from W-P1 (*Open a ROM…* + the file pick, or one drop), W-P4 shows 7 controls with every former overlay action still reachable, the arrow keys reach every W-P4 control, and Esc order is game → W-P4 → resume. Rules in `UI/Logic/PlayHome.cs` and `UI/Logic/PlayPauseOverlay.cs` (`UI.Tests/Play`); wiring in `UI.HeadlessTests/PlayHomeViewTests.cs` and `PauseOverlayViewTests.cs` (real core, synthetic NROM). Not taken: W-P2's 📦 glyph and the pack half of its subtitle (the §13.5.2 recent-entry ROM-hash data slice), the Continue card's thumbnail, a combined per-slot *Save here* / *Load* grid (the sheet offers today's two grids), and *Exit fullscreen* inside Settings (P.4's overlay never had it). The window was not opened by a person: the look against the PNGs and a real gamepad pass are unchecked on a real display.
 - **G.3** (2026-10-02, ADR-0241, ADR-0243; Part B §13.5.3 W-R0–W-R3) — the Remaster workspace: project screen and recording. Deliverable: W-R0 (no project yet: Start Recording, or Open a ROM to Start when no game runs, plus Choose Folder…); W-R0b (the banner when painting cannot run here: no Python 3.10+, or no MesenAI tools, with Locate…/How to… and recording still enabled); W-R1 (the project's recordings from `project.json` and `auto/rec-NNN/`, newest first; *Record While I Play*; *Record from a TAS…* and *Let the AI Play…* disabled with their reasons — later version / not in this build, and ADR-0242 Q3's "still being tested"); W-R2 (the game fills the Remaster area under one strip with the elapsed time and an explicit Stop → `StopMepRecording`, also on Esc; switching profile keeps recording, with the red dot and the W-X3 status sentence); W-R3 (`scripts/mep_project.py kit <project> --rom <ROM>` as a child process after Stop and from *Prepare Figures*: steps, a progress bar, Stop, and a plain result line — success collapses after 5 s). Stop rule: Record While I Play writes `auto/rec-001/` and its `project.json` entry (source `play`) against the real core, survives a switch to Play, and lists "Recording 1" on W-R1 after Stop; a kit run shows its progress and stops on Stop. Host-free rules in `UI/Logic/RemasterProject.cs`, `RemasterFeasibility.cs`, `RemasterJob.cs` (the runner, with the process behind `IJobProcessLauncher`) and `RemasterScreen.cs`, tested in `UI.Tests/Remaster/`; wiring in `UI.HeadlessTests/RemasterWorkspaceTests.cs` (real core, synthetic NROM). Build & show in game (W-R4+), the tile browser, W-R8 and Share are later slices; Build & show stays disabled with "Coming in a later version". The window was not opened by a person: the W-R2 layout over the native renderer, Esc on a real keyboard and a kit run on a real game are unchecked on a display.
-- **G.4** (2026-10-02, ADR-0241, ADR-0244 Decision 3; Part B §13.5.2 W-P5–W-P9) — the Play sheets, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). W-P5: the pack picker is one radio per pack (the stored choice, else the 👍-first row, starts selected; "by X · version · layers", *author unknown* for none; the ADR-0152 known-missing line kept with a ⚠), "Remembered for this game…", *Cancel* and *Use This Pack*. W-P6: W-P4's Pack row opens the picker for 2+ packs and otherwise the current-pack detail (title, byline, textures/audio/patch chips, the ADR-0240 missing-music line read from the pack folder when it opens, *Change pack…* disabled with its reason, *Show pack folder*, ADR-0147 *Restore* only for a catalog install with one in-place confirm, *Details ▸* for the ids, *Done*); Esc closes it back to W-P4. W-P7: the five switches edit a draft and one button names the biggest restart pending (*Done*, *Apply*, *Apply & Reload*, *Apply & Restart*), applied through the existing `ToggleLayer`/`ToggleWideScrn`/`ToggleOverclock` paths with one reload for several layer changes; `LayerChangeKeepsPlace` is where P.9 turns *Apply & Reload* into *Apply*. W-P8: Player Settings is its own strip, Display | Look | Audio | Controls, opened on Display (Fullscreen, Aspect ratio, Scale; a value set in Options stays the current item), with "Everything else: Tools ⋯ › Options" and *Done*; Esc keeps the changes, a non-strip tab (Look's *More in Options…*) expands to the full Options page, and closing returns to W-P4. W-P9: the auto-install raises started/finished events once a catalog row matches an artifact other than the installed one, and the pill's sentence (*Installing X…*, or the one failure sentence) rides the core HUD message, re-posted while it runs, and the status line. Stop rule met in tests: the Pack row reaches W-P5 or W-P6 by pack count, every sheet closes back to W-P4 on Esc, W-P7's label follows the draft, W-P8 shows its five elements, and the pill text reaches the status line. Rules in `UI/Logic/PlayPackSheets.cs`, `EnhancementsSheet.cs`, `PackInstallPill.cs` and `PlayerSettingsEssentials.cs` (`UI.Tests/Play`, `UI.Tests/Config`); wiring in `UI.HeadlessTests/PlaySheetsViewTests.cs`, `PlayerPackPickerTests.cs`, `PlayerSettingsTabsTests.cs` and `LookSettingsTabTests.cs`. Not taken: W-P5's *No pack* row (needs a core "no pack" preference), a moving bar in the pill (the core HUD draws text only: its message lasts 3 s, while the failure pill stays 5 s). The window was not opened by a person: the sheets against the PNGs, the pill over a running game and a real gamepad pass are unchecked on a real display.
+- **G.4** (2026-10-02, ADR-0241, ADR-0244 Decision 3; Part B §13.5.2 W-P5–W-P9) — the Play sheets, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). W-P5: the pack picker is one radio per pack (the stored choice, else the 👍-first row, starts selected; "by X · version · layers", *author unknown* for none; the ADR-0152 known-missing line kept with a ⚠), "Remembered for this game…", *Cancel* and *Use This Pack*. W-P6: W-P4's Pack row opens the picker for 2+ packs and otherwise the current-pack detail (title, byline, textures/audio/patch chips, the ADR-0240 missing-music line read from the pack folder when it opens, *Change pack…* disabled with its reason, *Show pack folder*, ADR-0147 *Restore* only for a catalog install with one in-place confirm, *Details ▸* for the ids, *Done*); Esc closes it back to W-P4. W-P7: the five switches edit a draft and one button names the biggest restart pending (*Done*, *Apply*, *Apply & Reload*, *Apply & Restart*), applied through the existing `ToggleLayer`/`ToggleWideScrn`/`ToggleOverclock` paths with one reload for several layer changes; `LayerChangeKeepsPlace` is where P.9 turns *Apply & Reload* into *Apply*. W-P8: Player Settings is its own strip, Display | Look | Audio | Controls, opened on Display (Fullscreen, Aspect ratio, Scale; a value set in Options stays the current item), with "Everything else: Tools ⋯ › Options" and *Done*; Esc keeps the changes, a non-strip tab (Look's *More in Options…*) expands to the full Options page, and closing returns to W-P4. W-P9: the auto-install raises started/finished events once a catalog row matches an artifact other than the installed one, and the pill's sentence (*Installing X…*, or the one failure sentence) rides the core HUD message, re-posted while it runs, and the status line. Stop rule met in tests: the Pack row reaches W-P5 or W-P6 by pack count, every sheet closes back to W-P4 on Esc, W-P7's label follows the draft, W-P8 shows its five elements, and the pill text reaches the status line. Rules in `UI/Logic/PlayPackSheets.cs`, `EnhancementsSheet.cs`, `PackInstallPill.cs` and `PlayerSettingsEssentials.cs` (`UI.Tests/Play`, `UI.Tests/Config`); wiring in `UI.HeadlessTests/PlaySheetsViewTests.cs`, `PlayerPackPickerTests.cs`, `PlayerSettingsTabsTests.cs` and `LookSettingsTabTests.cs`. Not taken then: W-P5's *No pack* row (needed a core "no pack" preference; shipped 2026-10-03, see W-P5 in §13.5.2), a moving bar in the pill (the core HUD draws text only: its message lasts 3 s, while the failure pill stays 5 s). The window was not opened by a person: the sheets against the PNGs, the pill over a running game and a real gamepad pass are unchecked on a real display.
 - **G.8** (2026-10-02, ADR-0241, ADR-0205, ADR-0154; Part B §13.5.4 W-H1–W-H4) — the Share workspace, under the user's go-ahead (*"pode cortar a próxima leva e implementar em paralelo"*, 2026-10-02). Deliverable: W-H1 home (Share a pack, Record and share a replay); W-H2 (`pack_link`, `rom_target`, `console` of `.github/ISSUE_TEMPLATE/community-pack.yml`, pre-filled from the running game, the link checked against the embedded `pack_host_allowlist.json`, Continue on GitHub ↗ disabled with its reason); W-H3 (`scripts/mep_build.py pack <project>/mep --out <project>/<slug>-mep.zip` as a child process, Show in Finder, *Open Google Drive ↗*, then the link step with Game/Console from the project; reached from *Package a Project…* or Remaster's `RequestShareProject` hook); W-H4 (`ShareRecordingSession` reused: a start sheet with the reason when recording cannot start, the game inside Share under one pill, Esc or Stop keeps the file, then Show in Finder / Continue on GitHub ↗). Tools ⋯ › Movies › Record and share is unchanged (§13.4). Host-free rules in `UI/Logic/PackShare.cs`, `ShareProjectPackage.cs` and `ShareScreen.cs`, tested in `UI.Tests/Share/`; wiring in `UI.HeadlessTests/ShareWorkspaceTests.cs` (real core, synthetic NROM). The window was not opened by a person: the look against the wireframes, the browser and Finder hand-offs, Esc on a real keyboard and a package run on a real project are unchecked on a display.
 - **G.6** (2026-10-02, ADR-0241, ADR-0243, ADR-0244, ADR-0212; Part B §13.5.3 W-R1 zone ③/W-R3/W-R4, §13.5.5 W-X3) — Remaster Build & show, build problems and interruptions, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). `scripts/mep_project.py build` (`scripts/mep_project_build.py`) refuses a `mep/` it did not write (an installed pack, ADR-0147), stages the newest textured recording plus its kit sheets, screens and pattern pages (pages only when made for that recording), runs `mep_build build` → `mep_figure import` per figure → `mep_build build`, and on success syncs only changed files into `mep/` with a `.remaster-build.json` stamp, printing `show: images` or `show: reload`; a failure leaves the last good `mep/` untouched. The UI shows it on the project's running NES game through `RequestMepImageReload` (ADR-0212) or `LoadRomHelper.ApplyPackChange` (ADR-0244), with a game view and *Back to Project*/Esc; W-R4 rewrites `mep_build`/`mep_lint`/`mep_figure` errors against the kit's captions (`kit.json`) with *Open File*, counting untranslated lines for *Show Log*; W-X3 asks inline before quitting during a recording or job and before opening another game during a Remaster or classic-builder recording (Stop and Open keeps the recording and lands in Play). Zone ③ says how many kit files changed since the last build. Rules in `UI/Logic/RemasterBuild.cs`, `RemasterBuildProblems.cs`, `RemasterInterruptions.cs` (`UI.Tests/Remaster/`); wiring in `UI.HeadlessTests/RemasterBuildWorkspaceTests.cs` (real core for W-X3); the script in `scripts/test_mep_project_build.py`. Not taken: the live recorder in Tools ⋯ asking before a game opens, and the macOS app-menu Quit path. The window was not opened by a person: the look against W-R4/W-X3, a real build shown on a running game, and Open File in a real paint program are unchecked on a display.
-- **G.7** (2026-10-02, ADR-0241, ADR-0183, ADR-0194, ADR-0198, ADR-0165; Part B §13.5.3 W-R1 zone ②, W-R5–W-R7) — the Remaster tile browser, provenance, import and composition hand-off, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (2026-10-02). Zone ② reads `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never `kit-proposals.json`, ADR-0188) into a category strip and tiles with the generators' captions and phase/cell counts; a click opens the figure's composed view (else the sheet) with the OS default — the first user-configured launch ADR-0209 names. The W-R5 popover and tooltip say *seen*, *A of B cells seen / filled from the game's data / empty* (pages only, ADR-0219), the source recording (ADR-0194), and *painted* only when the picture differs from its `*.orig.png` twin upscaled nearest-neighbour (mep_build's `_EditedProbe`); pattern pages, scene captures and imported sheets have no pre-paint twin and say "cannot tell". A project whose manifests carry `<patch>` shows ADR-0198 §3's banner. W-R6: a finished pack (a `hires.txt` without `auto/`) picked from *Choose Folder…* asks once; *Make Editable* runs `mep_import.py import <pack> --out "<pack> (editable)"` (`--rom` only for a patched pack) and opens the result, or lists the refusal with its `hires.txt` line behind *Show Line*. W-R7: *Compose a Scene…* starts `compose_editor.py <newest textured recording>` as its own process, disabled with "Record again to get the layout data" without `adjacency.json`. `mep_import.py`, `mep_patch.py` and the three `compose_*` modules joined the tools zip. Host-free rules in `UI/Logic/RemasterKit.cs`, `RemasterPng.cs`, `RemasterProvenance.cs`, `RemasterTileFacts.cs` and `RemasterHandOff.cs`, tested in `UI.Tests/Remaster/`; wiring in `UI.HeadlessTests/RemasterTileBrowserTests.cs`. Measured on a real two-recording Contra kit: 18 figures, 49 scenery, 18 pages, 0 tiles falsely painted. Not built: a per-phase painted count, dimmed fill cells on a page thumbnail, and stage-map tiles (the kit writes none). The window was not opened by a person: thumbnails, the popover's placement and a real paint program opening are unchecked on a display.
+- **G.7** (2026-10-02, ADR-0241, ADR-0183, ADR-0194, ADR-0198, ADR-0165; Part B §13.5.3 W-R1 zone ②, W-R5–W-R7) — the Remaster tile browser, provenance, import and composition hand-off, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (2026-10-02). Zone ② reads `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never `kit-proposals.json`, ADR-0188) into a category strip and tiles with the generators' captions and phase/cell counts; a click opens the figure's composed view (else the sheet) with the OS default — the first user-configured launch ADR-0209 names. The W-R5 popover and tooltip say *seen*, *A of B cells seen / filled from the game's data / empty* (pages only, ADR-0219), the source recording (ADR-0194), and *painted* only when the picture differs from its `*.orig.png` twin upscaled nearest-neighbour (mep_build's `_EditedProbe`); pattern pages, scene captures and imported sheets have no pre-paint twin and say "cannot tell". A project whose manifests carry `<patch>` shows ADR-0198 §3's banner. W-R6: a finished pack (a `hires.txt` without `auto/`) picked from *Choose Folder…* asks once; *Make Editable* runs `mep_import.py import <pack> --out "<pack> (editable)"` (`--rom` only for a patched pack) and opens the result, or lists the refusal with its `hires.txt` line behind *Show Line*. W-R7: *Compose a Scene…* starts `compose_editor.py <newest textured recording>` as its own process, disabled with "Record again to get the layout data" without `adjacency.json`. `mep_import.py`, `mep_patch.py` and the three `compose_*` modules joined the tools zip. Host-free rules in `UI/Logic/RemasterKit.cs`, `RemasterPng.cs`, `RemasterProvenance.cs`, `RemasterTileFacts.cs` and `RemasterHandOff.cs`, tested in `UI.Tests/Remaster/`; wiring in `UI.HeadlessTests/RemasterTileBrowserTests.cs`. Measured on a real two-recording Contra kit: 18 figures, 49 scenery, 18 pages, 0 tiles falsely painted. The per-phase painted count was built afterwards (ADR-0252: the popover's "Painted: 2 of 6 phases" line and the "N cells painted" counts, the latter ending the shell status line in Remaster at rest). Not built: dimmed fill cells on a page thumbnail, and stage-map tiles (the kit writes none). The window was not opened by a person: thumbnails, the popover's placement and a real paint program opening are unchecked on a display.
 - **G.5** (2026-10-02, ADR-0241; Part B §13.5.2 W-P12–W-P16, W-X1, W-X2) — the Play edge flows, under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). W-P12: `SetupWizardWindow` redrawn as the first-run sheet (storage radios, one keyboard popup over `KeyPresets`, Start Playing; the two desktop checkboxes off macOS), both gamepad presets always applied, Esc and the close button apply the choice, an unwritable folder is an inline sentence. In Player mode, in Play: W-P13 replaces the `FirmwareNotFound` box and dialog loop with a sheet (drop zone, Cancel, Choose File…; a wrong size is an inline line, an unknown dump an in-place W-X1 confirm; Cancel leaves "<game> needs <BIOS>" on the status line); W-P14 keeps the home on screen while a file opens and shows one inline alert per cause (not a game, a zip without a game, damaged) until the next open or ✕; W-P15 shows the pill on the first press of a pad no port mapping uses (once per device per session), Start on it (or a second press of the same button) opens a pad-driven sheet (8/8/6/10 steps, 2 s hold skips, 10 s silence cancels) that writes port 1's first free mapping slot; W-P16 turns the pending-dep OSD line into a status sentence and a sheet that opens with the first pause overlay (once per notice), checks the file by sha256, copies it into the drop folder and reloads the ROM (*Add and Restart…* until P.9). Advanced keeps the classic dialogs and OSD lines. Stop rule met in tests: each sheet's control count (4/6, 3, 3, 2, 4), focus on open, Esc (BIOS and controller sheets cancel, the pack-file sheet returns to W-P4), the wrong-size and wrong-file sentences, the alert on the home for a `.txt`, and a full pad setup into the free slot. Rules in `UI/Logic/Play{FirstRun,BiosPrompt,LoadFailure,PackDepPrompt,ControllerSetup}.cs` (`UI.Tests/Play/EdgeFlowsTests.cs`, `ControllerSetupTests.cs`); wiring in `UI.HeadlessTests/PlayEdgeFlowsTests.cs` (real core, synthetic NROM). Not taken: W-P12 drawn over W-P1 (it stays its own first window, because the storage choice must precede `MainWindow`), the controller's own name and per-device first-key event (the W-P15 prerequisite; the sheet names the pad "PadN"), macOS pads without `extendedGamepad` (they send no keys, so the pill cannot fire), and the pad picture (a row of button chips stands in). The window was not opened by a person: the look against the PNGs, a real drag-and-drop, a real BIOS and a real unknown pad are unchecked on a real display.
-- **P.10** (2026-10-02, ADR-0245 §1–§3, §5; ADR-0184 §1) — Cheats in Play, phase 1, under the go-ahead *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"* and *"pode implementar em paralelo tudo que puder"*; the Remaster wiring under *"acabe a implementação da nova GUI, garanta que tudo está na main, teste tudo que for possível"* (user, 2026-10-02). W-P11 from W-P4 › Cheats: the bundled `CheatDb.Nes.json` entries for the loaded copy (`HashType.Sha1Cheat`) as toggles with a search, stored in the same `CheatCodes` the classic cheat list uses; the not-in-list line with a search by game name and the "made for another copy" mark; *Add a Code…*; GB/SMS manual entry only, with the reason. Rules host-free in `UI/Logic/CheatSheet`, `CheatRecordingRule` (RAM code = `NesCustom` with every address below `0x0800`, plus GB GameShark / SMS Pro Action Replay) and `CheatConsoleScope`, tested in `UI.Tests/Cheats/`; wiring in `UI.HeadlessTests/PlayerCheatsSheetTests`. Remaster (ADR-0245 §3): Remaster's game view has no overlay, so the recording-art context is Remaster active or a Remaster recording running (switching to Play does not stop it, Part B §13.6) — there W-P11 disables Game Genie rows with their reason and *Add a Code…* refuses them; *Record While I Play* refuses to start while a non-RAM cheat is on, naming it (ADR-0184 §1: refuse, not warn); while it records, `CheatCodes.ApplyCheats` holds back any non-RAM code turned on later (classic window included), the W-R2 strip names it, and Stop gives it back. Play without a Remaster recording is unrestricted. Rule in `UI.Tests/Cheats/CheatRecordingContextTests`, wiring in `UI.HeadlessTests/RemasterCheatsTests` (real core, synthetic NROM).
+- **G.9** (2026-10-03, ADR-0250; Part B §13.5.1 W-S2, W-S3) — four doors and one place per door, under the user's go-ahead (*"implemente o que falta na GUI e corrija os bugs. mergeie tudo no main."*). The switcher lists Play ⌘1, Remaster ⌘2, Share ⌘3 and **Classic** ⌘4 (Ctrl off macOS; grey gear badge, "Every menu, debugger, Lua, HD Pack Builder."). Classic is the original GUI: `Workspace.Classic` owns `UiMode.Advanced` (entering it sets Advanced, a task door sets Player, the Preferences combo moves to the owning door), it shows the classic menu bar and the plain game screen with no shell bar and, on macOS, the plain title bar; an Advanced settings file opens in Classic, everything else in its saved task door or Play. Each task door's Tools ⋯ is its own short menu (Play: Reset, Power Cycle, the disk/coin/barcode/tape items the loaded game uses, Screenshot, Fullscreen; Remaster: Reload Pack Images, Record Music, Enhancement Packs, Log Window; Share: Play a Replay…, Record ▸ video/sound, Netplay ▸, Screenshot), ending with the shared tail — Help ▸ (Check for Updates, Command Line) on macOS, where About MesenAI and Settings… ⌘, are added to the system app menu and Quit is Avalonia's default ⌘Q; Settings…, Help ▸, About MesenAI, Quit MesenAI elsewhere. Settings… opens the W-P8 sheet in the door it was picked from (Esc closes it there). Classic loses only its duplicates: *Install HD Pack* (merged into Enhancement Packs, whose window installs a legacy zip), *Movies › Record and share* (Share's), the four Pause/Resume variants (one entry whose label follows the state), *Online Help* and *Report a bug*; on macOS About, Preferences and Exit leave its bar; the Super Game Boy viewers read "(Game Boy)"; a *Workspace* ▸ menu replaces the pill. `ShowClassicMenuBar`, `ClassicMenuNoticeShown` and the toast are removed. Rule in `UI/Logic/WorkspaceMenu.cs` (per-door Tools ⋯, app menu, Classic bar, every surface's placements) with the two guards — an entry no door places, a duplicate within a door — in `UI.Tests/Shell/WorkspaceMenuTests.cs`; wiring in `UI.HeadlessTests/WorkspaceShellTests.cs` and `ShareThemeRenderTests.cs`. Not done as written: Enhancement Packs, Log Window, Netplay, the recorders, About and Command Line still open classic windows from a task door (no Player sheet exists for them), and the W-S2 render's footnote ("Disk, coin and tape items appear when the game uses them.") is not drawn, since Decision 4 deletes the disabled hint row. The window was not opened by a person: the macOS app menu (including the default Quit) and the title bar switching off in Classic are unchecked on a real display.
+- **P.10** (2026-10-02, ADR-0245 §1–§3, §5; ADR-0184 §1) — Cheats in Play, phase 1, under the go-ahead *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"* and *"pode implementar em paralelo tudo que puder"*; the Remaster wiring under *"acabe a implementação da nova GUI, garanta que tudo está na main, teste tudo que for possível"* (user, 2026-10-02). W-P11 from W-P4 › Cheats: the bundled `CheatDb.Nes.json` entries for the loaded copy (`HashType.Sha1Cheat`) as toggles with a search, stored in the same `CheatCodes` the classic cheat list uses; the not-in-list line with a search by game name and the "made for another copy" mark; *Add a Code…*; GB/SMS manual entry only, with the reason. Rules host-free in `UI/Logic/CheatSheet`, `CheatRecordingRule` (RAM code = `NesCustom` with every address below `0x0800`, plus GB GameShark / SMS Pro Action Replay) and `CheatConsoleScope`, tested in `UI.Tests/Cheats/`; wiring in `UI.HeadlessTests/PlayerCheatsSheetTests`. Remaster (ADR-0245 §3): Remaster's game view has no overlay, so the recording-art context is Remaster active or a Remaster recording running (switching to Play does not stop it, Part B §13.6) — there W-P11 disables Game Genie rows with their reason and *Add a Code…* refuses them; *Record While I Play* refuses to start while a non-RAM cheat is on, naming it (ADR-0184 §1: refuse, not warn); while it records, `CheatCodes.ApplyCheats` holds back any non-RAM code turned on later (classic window included), the W-R2 strip names it, and Stop gives it back. Play without a Remaster recording is unrestricted. Rule in `UI.Tests/Cheats/CheatRecordingContextTests`, wiring in `UI.HeadlessTests/RemasterCheatsTests` (real core, synthetic NROM). **Amended 2026-10-03 (ADR-0245 Status):** in Play every cheat is switchable, also over Play's passive automatic recording; a non-RAM code stops that recording for the session (user's choice, verbatim: *"Liberar e pausar gravação (Recomendado)"*); the lock stays only in Remaster.
 - **F8.1–F8.3** — pack border layer (ADR-0149); optional rendering/lint residue is F8.4.
 - **F9.0–F9.5** — legible vocabulary, maps, sheets and sprite grouping (ADR-0153); delivered on spot checks, not a completed human panel.
 - **F9.6** — external repaint scaffold and classical output (ADR-0154/0161); ADR-0192 retires the unmeasured generative commitment.
@@ -2297,7 +2298,7 @@ One process. `PreferencesConfig.UiMode`: `Player` | `Advanced`.
 
 | | Player (default on a fresh install) | Advanced |
 |---|---|---|
-| Menu bar | since G.1, governed by `ShowClassicMenuBar` (default `false`, §13.8 Q4, upgrades included — user's choice *"Some + toast (Recomendado)"*, 2026-10-02) in both modes, not by `UiMode`; the classic menus stay reachable from Tools ⋯ in the shell bar, which on macOS is the window's title bar (user's choice *"Integrar agora"*, 2026-10-02) | same rule |
+| Menu bar | since G.9 (ADR-0250) none: each task door has its own short Tools ⋯ in the shell bar, which on macOS is the window's title bar (user's choice *"Integrar agora"*, 2026-10-02); `ShowClassicMenuBar` and its toast are gone | the Classic door: the classic menu bar (without its duplicates, plus *Workspace* ▸), no shell bar |
 | Home (no ROM) | since G.2 the Play home (§13.5.2): W-P1 when there is no recent game (*Open a ROM…*, replacing the P.7 welcome card) and W-P2 otherwise (*Continue playing* the newest game + *Open a ROM…* + the Recent grid of the others, from `RecentGamesViewModel`); drop a ROM anywhere | same grid, as today (`GameSelectionScreenMode` keeps its current meaning: what happens when a recent game is clicked; `Disabled` still hides the grid) |
 | Playing | game fills the window; since G.2 the overlay shortcut opens the W-P4 pause overlay (§13.5.2): Resume, Save states (one row; its sheet opens the save/load slot grids), Pack (picker if 2+ `pack_id`s, else the pack window), Enhancements (the P.7 panel), Cheats (P.10), Settings (video / audio / input essentials), Quit game (powers the game off, lands on the home). *Advanced GUI* and quitting the app moved to Tools ⋯ (Settings › Preferences; File › Exit), in the bar the overlay reveals. Esc order: game → overlay → resume; a sheet opened from the overlay closes back to it | current menus and windows |
 | Overlay shortcut | a new configurable `EmulatorShortcut` (default Esc on keyboard; `KeyCombination` already accepts controller buttons, so a gamepad binding is a config choice, no new code). Default rule in Player: while a ROM runs, Esc opens the overlay and never leaves fullscreen; "Exit fullscreen" is an overlay item. P.4 implements that precedence inside the shortcut config, not by hard-coding | n/a |
@@ -2327,7 +2328,7 @@ the overlay's existing Save/Load slot row already covers that.
 |---|---|---|---|
 | Texture | `EnhancementPackConfig.EnableTextures` | all | needs ROM reload |
 | Audio | `EnhancementPackConfig.EnableAudio` | all | needs ROM reload |
-| WideScrn | `VideoConfig.AspectRatio` toggled between `Widescreen` (16:9 stretch, `Core/Shared/EmuSettings.cpp:521`) and the value it had before the toggle was turned on (restored, not hardcoded to `NoStretching`/`Auto`, so an Advanced-configured custom ratio survives) | all | immediate (renderer-only) |
+| WideScrn | `VideoConfig.AspectRatio`'s existing on/off switch; with it on, the core picks the mode automatically — Reveal (the console draws extra side columns from its own background map), else the pack's widescreen art; when the game supports neither, the switch is disabled with a reason. No stretch (ADR-0253, supersedes the 16:9 stretch) | all | immediate (renderer-only) |
 | HiRes | `VideoConfig.VideoFilterType` toggled between one curated hi-res preset (candidate `HQ4x`) and the value it had before — same restore-not-clobber rule as WideScrn, so a filter already chosen in Advanced is never silently discarded | all | immediate (renderer-only) |
 | Overclock | NES: `NesConfig.PpuExtraScanlinesBeforeNmi`/`PpuExtraScanlinesAfterNmi` (extra vblank scanlines, `Core/NES/NesPpu.cpp:188-190`); GB/GBA: `GameboyConfig`/`GbaConfig.OverclockScanlineCount`; all three toggled between `0` and one curated preset value. **SMS has no overclock knob today** — the toggle stays visible but disabled on SMS so the panel layout doesn't shift per console | NES, GB, GBA (not SMS) | needs reset |
 
@@ -2379,16 +2380,14 @@ Two distinct, independent affordances — not one dialog wearing two hats:
 - Re-associating a recipe *output* folder copied without its
   `.mep-install.json` with its catalog row (§5).
 - SNES / PCE / WonderSwan / ColecoVision chrome.
-- A widescreen mode that reveals more of the playfield (extra per-console
-  PPU/VDP decode) — the WideScrn toggle only stretches the existing 4:3
-  frame to 16:9 (§6.1); "see more of the game" would be its own
-  per-console engine ADR.
 - The welcome card reappearing on every boot, or blocking the recent-
   games grid underneath it.
 
 ### 8. Slices
 
 P.8 (ADR-0237), P.9 (ADR-0244), P.11–P.12 (ADR-0245) and P.13 (ADR-0246) are tracked in Part A §4, Phase 7; P.10 (ADR-0245 phase 1) shipped 2026-10-02 (Part A §3). The GUI redesign (ADR-0241, §13) is cut here, one slice at a time. G.1 (the shell), G.2 (the Play home W-P1–W-P3 and the W-P4 pause overlay) and G.3 (the Remaster project screen and recording, W-R0–W-R3) shipped 2026-10-02 (Part A §3).
+
+**W.1–W.7 — widescreen that reveals the playfield (ADR-0253).** Go-ahead: *"sim, aceito a ADR. começa pela fatia 1"* (user, 2026-10-03). W.1: the frame-width contract (a console may emit a `RenderedFrame` 2N px wider, standard output bit-identical, ADR-0162) plus NES Reveal with the black fallback. W.2: GB/GBC/GG Reveal. W.3: the fallback chain (pack art, then border layer — ADR-0253 §3's order — plus the MEP `<widescreen>` spec bump to v1.8 §5.5). W.4 (**shipped 2026-10-03**): the NES HD pack path in the extra columns. W.5: per-game support measurement and memory, and the switch's disabled state with its reason. W.6: NTSC filters, recorder and capture tools. W.7: GBA text BGs. Stop rule for W.1: with WideScrn on, a vertically mirrored horizontal scroller shows real nametable content beside the 256-px picture, standard frames are unchanged in the accuracy suite, and the extra columns never trigger mapper VRAM hooks — all in tests. **W.1 shipped 2026-10-03**: N = 64 (384×240). A unit test fails if the extra columns ever call `ReadVram` instead of `DebugReadVram`, and the SMB3 MMC3 status bar keeps its checksum. **W.6 shipped 2026-10-03**: both NES NTSC filters are width-driven and accept an extended frame - the blargg filter's blit plane and HUD scale come from the frame (896×240 and 896/384 against 602×240 and 602/256), the Bisqwit filter's row length and row stride do too (3072 samples, not 2048), and its per-row colour phase advances by the whole 341-cycle scanline instead of the 256 px it assumed it had drawn. The recorder's behaviour needed no change (`VideoRenderer::ProcessAviRecording` already opens it at the frame's size), but the HUD canvas it lays out on is now the shared `RecorderHudCanvas` (448×240 for a Reveal recording, 301×240 standard), and the width it is opened at is the filter's own `BlitVisibleWidth`. The capture tools take an extended capture's centre through the one function the tests assert, which refuses a standard capture. At 256 px the same functions reproduce the constants the filters hardcoded, so the switch-off path is unchanged (ADR-0162). **W.4 shipped 2026-10-03**: with Reveal on and an HD pack loaded, `HdNesPpu` captures each row's basis and the sides are drawn through the pack's own per-pixel pipeline at the pack's scale; the widened low-res frame's own side pixels come from those same tiles, and a test cross-checks them against W.1's renderer for every column, both sides, all 8 fine-X and all 8 fine-Y offsets. The pack's `ScreenTiles` keep the picture's 256×240 coordinates, so no existing pack rule or ADR-0236 cell mask moves. **W.7 shipped 2026-10-03**: N = 22 (284×160, the GBA's square pixels put 16:9 at 284.4 px). `GbaPpu` draws the extra columns from the text BGs' own tilemaps — tile, palette bank, flips, both scroll axes, the map's own page wrapping, mosaic blocks and the row's BLDCNT/BLDALPHA/BLDY effect — through side-effect-free VRAM and palette reads; only the BGs the mode draws as text are revealed (BG mode 0's four; BG mode 1's BG0/BG1, its affine BG2 being the overlay case and its BG3 never drawn), an affine BG on the row, a bitmap mode and a map column the window already shows (a 256-wide map wrapping) fall back to black, and a forced-blank row stays white. `GbaDefaultVideoFilter` reads the frame's own width, so the extended frame goes through whole (except the NTSC filters, W.6). A skipped frame holds the last extended one only while the Reveal is on, so turning the switch off mid-turbo returns to the standard width, and a row's sides belong to its first render of the frame, so a mid-line scroll or BLDCNT write cannot rewrite them from state the row never used. **On-screen validation: not evaluated.** No GBA ROM was available in the work environment, so the visible result — the 22 extra columns on a real game, and the black fallback for an affine BG or a bitmap mode — was never seen; the evidence is the host-free unit tests plus a Core build, and this stays "not evaluated" until a human runs a ROM. W.7 evidence is in ADR-0253's Status line, including the wiring mutation pass: removing the filters' `AcceptsExtendedFrame` declaration - the thing that stops the decoder cropping a Reveal frame - turns the suite red, so the wiring is under test and not just the arithmetic. **W.5 shipped 2026-10-03**: the core measures the first 300 frames that actually drew the background (`NesWidescreenSupport::Probe`, sticky on the first frame with side content, exposed as `EmuApi.GetWidescreenSupportVerdict`), the app remembers the answer per ROM (`PlayerEnhancementsConfig.RomWidescreenSupport`) and the Enhancements sheet's Widescreen switch comes up disabled with its one-line reason, plus §4's toast once per session; a console with no side map (SMS/SG-1000) is disabled before the game ever runs, a later run that finds content clears the record, the record is written as the measurement window closes (not when a sheet opens) and a game settled as unsupported is not widened at all, so a disabled switch never leaves Reveal/black columns behind and the saved preference survives for the next game. Unit-tested in `scripts/core_unit_tests.cpp` ("W253:" probe cases) and `UI.Tests/Play/WidescreenSupportRuleTests.cs`, wired end to end in `UI.HeadlessTests/PlaySheetsViewTests.cs`; evidence is in ADR-0253's Status line. **W.3 shipped 2026-10-03**: the PPU publishes a per-row side-fill map with the extended frame (`RenderedFrame::ExtendedSideFill`), the renderer resolves the chain per side and per row — the console's own Reveal content, else the MEP `widescreen` section's art (decoded once per pack change, copied 1:1), else the border layer composited onto the extended frame, else black — the order the two stages run in lives in `WidescreenFallback::ApplyChain` (the one function `VideoRenderer::UpdateFrame` calls, so a swapped chain fails a test), and `WidescreenFallback::SupportsWidescreen` keeps a border or black alone from ever counting as "supported" (ADR-0253 §3; since the W.3 × W.5 seam below, the switch reads this predicate too). Tests: `W253C: the pack art runs before the border composite (ADR-0253 §3)`, `W253C: the art is already on the frame when the border composite runs`, `W253C: the pack art reaches the canvas beside the viewport`, `W253C: compositing before the art loses it, which is why the order is pinned`, `W253C: with nothing to reveal, the pack's widescreen art comes first (ADR-0253 §3)`, `W253C: without pack art, the border layer fills the sides`, `W253C: with no art and no border, the sides stay black`, `W253C: a border or black alone never makes a game supported (ADR-0253 §3)`, `W253C: the right side skips the rows the game filled`, `W253C: a left-filled row draws the left run beside the viewport`, `W253C: widescreen/widescreen.json is the widescreen section`, `W253C: the synth switch does not gate the widescreen art` (`MepPackManager::SectionSwitchEnabled`); the MEP section rules are enforced by `scripts/mep_lint.py` and `scripts/test_mep_lint_widescreen.py`. Per-screen art selection (`screens[]`) is parsed and unit-tested but the renderer uses the default pair for every frame until the HD pack path supplies a screen id (W.4). **W.2 shipped 2026-10-03**: the GB/GBC reveal N = 48 into a 256×144 frame (16:9 exactly at square pixels) from the wrapping 256×256 BG map around SCX/SCY — window included, CGB attributes/flips/palettes honoured, the emulator's own BG toggle flattening the row, black only for rows the frame never drew — with the side columns fetched solely through `GbPpu::LcdReadVram`; the Game Gear reveals the 96 px its own 160-px viewport crops, which is the VDP's line it already drew, so the frame keeps `Width = 256` and only `ExtendedColumns` is set (see ADR-0253's Status line for that deviation and its reasoning). Stop rule for W.2 met: with WideScrn on, both consoles show real map content beside the standard picture, the switch-off output is bit-identical, and the extra columns never touch a CPU-visible read — all in tests. Evidence is in ADR-0253's Status line. **The W.3 × W.5 seam closed 2026-10-03**: a game the measurement settled as unsupported is now widened when the loaded pack ships the `widescreen` section — `MepPackManager::HasWidescreenSection` answers for the winning pack, the core's `NesWidescreenSupport::Reveals` takes it as §3's pack-art mode, and the app reads the same answer through the new `EmuApi.HasWidescreenPackArt` for `WidescreenSupportRule.SwitchForLoadedGame`, which keeps the Enhancements switch enabled for that game and silences §4's "no widescreen mode" toast (the sheet reads that answer through the VM's `ReadWidescreenPackArt` seam, covered by `A_pack_shipping_widescreen_art_keeps_the_switch_enabled_for_a_recorded_game` in `UI.HeadlessTests/PlaySheetsViewTests.cs`); evidence is in ADR-0253's Status line. **HD-pack parity shipped 2026-10-03**: with an HD pack loaded `HdNesPpu` drives the same `NesWidescreenPpu::State` as `DefaultNesPpu` — one shared latch and measurement — so its frames carry the per-row side-fill map and `NesConsole::GetWidescreenSupportVerdict` answers for whichever PPU is live, the map reaching the renderer through `BaseVideoFilter::GetOutputFrameExtension` restated in the HD frame's own coordinates (`HdVideoFilter`, `HdWidescreenColumns::ScaleSideFill`), and the conforming per-console canvas (MEP-v1 §5.5: 64×240 on the NES) is what it draws from on both paths — `VideoRenderer::ApplyWidescreenFallback` scales that image up to the frame's own side run, nearest-neighbour by the pack's integer scale (`WidescreenFallback::ScaleSideArt`), so one conforming pack works with and without an HD pack loaded, while an image that is neither the frame's canvas nor a whole-number multiple of it is still refused and the chain falls to the border layer.
 
 **G.4 — Play sheets (W-P5–W-P9).** Go-ahead: *"pode cortar a próxima leva e implementar em paralelo"* (user, 2026-10-02). Deliverable: the pack picker as radios with *Use This Pack* (W-P5), the current-pack detail the Pack row opens when there is no choice to make (W-P6), the Enhancements draft with one button that names the restart (W-P7, ADR-0244 Decision 3), the Display | Look | Audio | Controls Settings strip (W-P8) and the install HUD pill (W-P9), built on the P.5 picker, P.7 panel, P.13 Look and `PlayerSettingsEssentials`. Stop rule: the Pack row opens W-P5 for 2+ packs and W-P6 otherwise, each sheet closes back to W-P4 on Esc, W-P7's label follows the draft, W-P8 shows five elements, and the pill text reaches the status line, all in tests. Shipped 2026-10-02 (Part A §3).
 
@@ -2399,7 +2398,7 @@ P.8 (ADR-0237), P.9 (ADR-0244), P.11–P.12 (ADR-0245) and P.13 (ADR-0246) are t
 
 **G.7 — Remaster tile browser, provenance, import and composition hand-off** (ADR-0241, ADR-0183, ADR-0194, ADR-0198, ADR-0165; wireframes W-R1 zone ②, W-R5, W-R6, W-R7), cut under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (2026-10-02). Deliverable: zone ② lists the kit `mep_project.py kit` wrote — Figures, Scenery, Stage maps, Pattern pages (and, for an imported project, the sheets cut from the pack) — with the generators' captions and counts; a click opens the PNG with the OS default; hover or ▸ shows the W-R5 popover (seen / cells filled from the game's data / painted, or an explicit "cannot tell"), and the patched-ROM banner; W-R0 *Choose Folder…* on a finished pack asks once to make it editable and runs `mep_import.py` as a job, listing a refusal with *Show line*; *Compose a Scene…* starts `compose_editor.py` in its own window when `adjacency.json` exists. Stop rule: every badge is read from a file a script wrote or says it cannot tell; a fresh real kit shows no tile as painted; the import and the composer start with the argv the tools take. Shipped 2026-10-02 (Part A §3).
 
-G.1–G.8 are implemented (records in Part A §3); W-R8 has its *Let the AI Play…* button on W-R1, disabled with its reason until the user decides ADR-0242 Q3's adoption verdict. P.0–P.7 implementation history is in Part A §3, and
+G.1–G.9 are implemented (records in Part A §3; G.9 is ADR-0250's four doors and per-door menus); W-R8 has its *Let the AI Play…* button on W-R1, disabled with its reason until the user decides ADR-0242 Q3's adoption verdict. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 
@@ -2537,9 +2536,13 @@ exists to remove.
   element, a stage map or a pattern page (ADR-0183) — never a tile key.
 - **Share**: a link or a built pack, three fields, the browser form. Also the
   existing *Record and share* for replays (ADR-0205), as a separate card.
-- **Tools ⋯** (top right, always present, never a profile): the classic
-  Mesen menus, debugger, Lua, netplay, HD Pack Builder, cheats. This is where
-  today's Advanced mode goes. It opens a menu, not a mode switch.
+- **Classic** (the fourth door, ADR-0250): the original Mesen GUI — the
+  in-window classic menu bar, the classic styles, debugger, Lua, netplay,
+  HD Pack Builder. This is where today's Advanced mode goes: entering Classic
+  sets `UiMode.Advanced`.
+- **Tools ⋯** (top right of the three task doors, never a profile): a short
+  menu of what the door's own screens don't hold (W-S2). Every action has one
+  place per door (ADR-0250 Decision 1).
 
 Switching workspaces changes what the window shows; it never stops the game,
 rewrites settings, picks a pack, deletes a file or publishes anything. Each
@@ -2550,14 +2553,14 @@ What this is **not**: not three executables, not a first-launch "who are
 you?" question, not a permission model. A player who starts painting is the
 same person at the same ROM.
 
-**Relation to `UiMode`.** `Player`/`Advanced` is not reinterpreted. Proposed:
-a new persisted `Workspace` key (`Play` default) plus a `ShowClassicMenuBar`
-boolean that replaces `UiMode` as the "upgrade keeps my menus" rule of §6
-(default `false` everywhere, user's decision 2026-10-02: an upgraded install
-shows a one-time toast "your menus are under Tools ⋯" instead of keeping the
-bar).
-The classic menu bar, when shown, sits above the switcher and is exactly
-today's `MainMenuView`. ADR-0241 owns this; the migration is a slice.
+**Relation to `UiMode`** (amended by ADR-0250, 2026-10-03). A new persisted
+`Workspace` key (`Play` default; `Classic` is a value of it). `UiMode.Advanced`
+belongs to the Classic door: entering Classic sets it, leaving Classic for a
+task door sets `UiMode.Player`, and an upgraded install whose `UiMode` is
+Advanced opens in Classic. The `ShowClassicMenuBar` toggle and its
+"your menus are under Tools ⋯" toast are withdrawn: Classic's menu bar is
+exactly today's `MainMenuView`, without its duplicates (ADR-0250 Decision 4).
+The migration is a slice.
 
 #### 13.3 Simplicity rules (acceptance, not taste)
 
@@ -2668,38 +2671,46 @@ says *Show file*/*Show folder* — the platform's own term is used on each OS
 - The status line is one sentence, never a control. It is the one place
   that always names the current pack while the bar is visible; W-P2's
   Continue card and W-P4's Pack row repeat it where the user acts on it.
-- Tools ⋯ opens the classic menus as a dropdown tree (File, Game, Options,
-  Tools, Debug, Help) — the same `MainMenuAction` data, rendered as one menu.
-  Optional `ShowClassicMenuBar` puts them back as a bar above (§13.2).
+- Tools ⋯ opens the door's short menu (W-S2, ADR-0250): only what the
+  door's own screens don't hold, from the same `MainMenuAction` data. The
+  classic menus live in the Classic door (§13.2).
 - The left of the bar is the **active profile only** — tinted glyph, name,
   chevron. It is a button that opens W-S3; it is not a tab strip.
 - Elements at rest: 2 (profile switcher + Tools). ✔
 
-**W-S2 — Tools ⋯ dropdown**
+**W-S2 — Tools ⋯ dropdown (Play's; ADR-0250)**
 
 ![W-S2](../media/gui-redesign/W-S2.png)
 
 ```
                                                        ┌──────────────────────┐
-                                                       │ File              ▸  │
-                                                       │ Game              ▸  │
-                                                       │ Options           ▸  │
-                                                       │ Tools             ▸  │
-                                                       │ Debug             ▸  │
-                                                       │ Help              ▸  │
+                                                       │ Reset                │
+                                                       │ Power Cycle          │
+                                                       │ ⟨FDS / VS / barcode /│
+                                                       │  tape, if the game   │
+                                                       │  uses them⟩          │
                                                        ├──────────────────────┤
-                                                       │ [x] Show classic     │
-                                                       │     menu bar         │
-                                                       │ ⟨Debugger, Lua, HD   │
-                                                       │  Pack Builder, …⟩    │
+                                                       │ Screenshot           │
+                                                       │ Fullscreen      ⌃⌘F  │
+                                                       ├──────────────────────┤
+                                                       │ Help              ▸  │
                                                        └──────────────────────┘
 ```
 
-Unchanged content; one new checkbox. This is where `HdPackBuilderWindow`,
-`EnhancementPacksWindow`, debugger, Lua, netplay, cheats and *Record Music*
-stay reachable. Nothing is removed from them in this proposal.
+**One place per door** (ADR-0250 Decision 1). The menu holds only what the
+door's own screens don't: in Play, *Open a ROM…* and the recents live on the
+home (W-P1/W-P2), and Pause, Save states, Pack, Enhancements, Cheats,
+Settings and Quit game on the pause overlay (W-P4). Shortcuts work in every
+door. On macOS *About*, *Settings…* ⌘, and *Quit* ⌘Q are in the system app
+menu; elsewhere they end the menu. Classic is a door: it appears only in
+the switcher (W-S3), never in a menu. Remaster's ⋯ is *Reload pack images*,
+*Record Music*, Enhancement Packs and the log window (the project chip holds
+the project items); Share's is *Play a Replay…*, *Record ▸*, Netplay and
+Screenshot (the home holds *Record and share* and *Share a pack*).
+`HdPackBuilderWindow`, the debugger, Lua and the rest of the classic menus
+are in the Classic door. No task-door entry opens a classic window.
 
-**W-S3 — Profile switcher (the only place the other profiles appear)**
+**W-S3 — Door switcher (the only place the other doors appear)**
 
 ![W-S3](../media/gui-redesign/W-S3.png)
 
@@ -2712,9 +2723,11 @@ stay reachable. Nothing is removed from them in this proposal.
    │ Record a game, paint its art, see it in game.│
    │ ▣  Share                               ⌘3   │
    │    Send a pack or a replay to the community. │
+   │ ⚙  Classic                             ⌘4   │
+   │    Every menu, debugger, Lua, HD Pack Builder.│
    ├──────────────────────────────────────────────┤
    │ Switching keeps your game running. Only the  │
-   │ chosen profile is shown.                     │
+   │ chosen door is shown.                        │
    └──────────────────────────────────────────────┘
 ```
 
@@ -2723,13 +2736,16 @@ stay reachable. Nothing is removed from them in this proposal.
   outside closes it with nothing changed.
 - Each row's one-line description is the README door in the app's words, so
   the switcher teaches the model once and needs no onboarding screen.
-- **Fixed order: 1. Play, 2. Remaster, 3. Share** — the README's door order
-  and the order a person usually meets them (plays, then repaints, then
-  shares). The order never changes with the current profile, recent use or
+- **Fixed order: 1. Play, 2. Remaster, 3. Share, 4. Classic** — the README's
+  door order and the order a person usually meets them (plays, then repaints,
+  then shares), with the full emulator last (ADR-0250). Play is the default
+  door. The order never changes with the current profile, recent use or
   the loaded console; the check mark moves, the rows do not.
-- Shortcuts ⌘1/⌘2/⌘3 switch directly, in that order; they are printed grey
-  on the rows as in a macOS menu (a hint, not a control — rule 2).
-- Elements: 3 rows. ✔
+- Shortcuts ⌘1–⌘4 switch directly, in that order; they are printed grey
+  on the rows as in a macOS menu (a hint, not a control — rule 2). Inside
+  Classic, which has no shell bar, the switcher is a *Workspace* ▸ menu in
+  the classic menu bar.
+- Elements: 4 rows. ✔
 
 ##### 13.5.2 Play
 
@@ -2814,13 +2830,19 @@ sentence says what happens next.
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                                           ┌────────────────────────────────┐ │
-│                                           │ Applied Contra 80s — textures  │ │  ← toast, 3 s
-│                                           └────────────────────────────────┘ │
+│                         ┌──────────────────────────────────────────────────┐ │
+│                         │ Applied Contra 80s — textures · Esc for the menu │ │  ← toast, 3 s
+│                         └──────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Unchanged from today. The toast is the only pack feedback (§6).
+The toast is the only pack feedback (§6). During the first three game starts
+after install it ends with the way into W-P4 (ADR-0251): "· Esc for the menu"
+from the keyboard, or the controller binding ("· Select+Start for the menu";
+Home where the platform reports it) when a controller is connected. A game
+without a pack gets the hint alone during those starts. The count is the
+persisted `PlayMenuHintsShown`; a power-cycle reload is not a start. The rule
+is `UI/Logic/PlayMenuHint.cs`.
 
 **W-P4 — Pause overlay (Esc)**
 
@@ -2908,9 +2930,21 @@ Unchanged from today. The toast is the only pack feedback (§6).
   opens only for 2+ distinct `pack_id`s with no stored choice and no sibling
   pack. *Cancel* and Esc keep today's dismissal — nothing is stored, the
   game plays un-enhanced this session and the picker asks again next
-  launch. *No pack* is **new**: it stores an explicit "no pack" preference
-  for this ROM, which `SetRomPackPreference` does not have yet (a slice).
-  Choosing a pack power-cycles the game, as today.
+  launch. *No pack* (shipped 2026-10-03, user's go-ahead *"Implementar"*) is
+  the last row whenever the picker lists a pack: it stores the explicit
+  per-ROM preference `PackPreferenceResolver.NoPack` (`:none` — every
+  ADR-0140 `pack_id` starts with `[a-z0-9]`, so it never names a pack). The
+  next load applies it silently; the core renders no pack and applies no
+  pack's ROM patch for that ROM, except a sibling-folder pack (ADR-0049, §4;
+  `MepPackManager::PreferenceAllowsPack`); auto-install neither downloads nor
+  raises the pill for it (ADR-0146: a user disable overrides —
+  `CommunityPackAutoInstallGate`). W-P4's Pack row and the status line name
+  no pack; W-P6 says "You chose to play this game without a pack" and keeps
+  *Change Pack…* enabled while one pack is left to go back to. The second
+  line reads the render's "Play with enhanced audio only" while enhanced
+  audio is on, and "Play with the game's original art and sound" when it is
+  off. Choosing a pack applies it through `ApplyPackChange` (in place where
+  P.9 allows, else a power cycle).
 - Elements: 3 radios + 2 buttons = 5. ✔ Gamepad: radios and buttons.
 
 **W-P6 — Current pack detail**
@@ -2921,7 +2955,12 @@ Unchanged from today. The toast is the only pack feedback (§6).
                      ┌──────────────────────────────────────────────┐
                      │  Contra 80s                                  │
                      │  by Tastic · version 1.2 · CC BY-NC 4.0      │
-                     │  textures ✔   audio ✔   patch —              │
+                     │  ┌────────────────────────────────────────┐  │
+                     │  │ Textures                          (●)  │  │
+                     │  │ Music                             (●)  │  │
+                     │  │ ROM Patch                         (●)  │  │
+                     │  └────────────────────────────────────────┘  │
+                     │  The switches apply to this game only.       │
                      │                                              │
                      │  ⚠ Some music is missing                     │
                      │    3 of 17 tracks have no audio file. Add    │
@@ -2954,7 +2993,46 @@ Unchanged from today. The toast is the only pack feedback (§6).
   from, so the button is absent there, not disabled.
 - *Details ▸* reveals ids and hashes for the curious — the only place in Play
   they appear.
-- Elements: 5. ✔
+- **One place per switch** (2026-10-03, amends W-P6/W-P7; the user asked
+  *"está confuso, tem como melhorar isso?"* and chose *"Pack = camadas do
+  pack (Recomendado)"*): Textures and Music are **only** here, per game. W-P7
+  no longer has them; its last row, *Pack: Contra 80s ›*, opens this sheet
+  (W-P5 with 2+ packs, "No pack" with none). The global Textures/Music master
+  switches left Player mode: they are the defaults for every game in Tools ⋯ ›
+  Enhancement Packs ("Packs, every game"), and a layer whose default is off
+  reads here "Off for every game — Tools ⋯ › Enhancement Packs". The UI word
+  is *Music* (the OGG tracks), not *Audio*.
+- **The automatic upscale** (the F5 bootstrap's `auto/rec-NNN` layer, the
+  `isAutoOnly` column — the same rule as the status line's "automatic
+  upscale"): nobody made it, so every surface that names the current pack
+  (W-P4's Pack row, W-P7's Pack row, this title, the status line) says
+  *Automatic upscale*, never the ROM's name as if it were a pack. This sheet
+  shows the game's name and "Made on this computer from what you played"
+  (plus the scaler, e.g. xBRZ 4×, when known) in place of the author/version
+  byline, and no license. Its recorded audio (music fingerprints, MIDI) is not
+  music: Music reads "Not in this pack" unless `<bgm>`/`<sfx>` tracks exist.
+  A placeholder license ("unknown", "unspecified") is never shown.
+- **Layer switches** (2026-10-03, the user's request: *"nessa tela tem que ter
+  uma opção para desligar texturas, outra para o audio, outra para ips"*):
+  the pack's Textures, Audio and ROM Patch are an inset list of switch rows
+  that turn the layer off **for this game only** — stored per ROM sha1 beside
+  the W-P5 pack choice (`EnhancementPackConfig.RomLayersOff`, rules in
+  `UI/Logic/PackLayerSwitches.cs`) and pushed to the core
+  (`MepPackManager::SetRomLayersOff`), which then serves neither the textures
+  nor the audio section, drops an HDNes pack's `<bgm>`/`<sfx>` tracks, and
+  applies no pack ROM patch (MEP `patches[]` or `<patch>`) on that ROM. Audio
+  is present when the pack has an audio section or `<bgm>`/`<sfx>` tracks;
+  ROM Patch when it wires a bundled `.ips`/`.bps`. A layer the pack lacks is
+  a grey switch with "Not in this pack" (the former grey chip, rule 4); a
+  layer whose global default (Tools ⋯ › Enhancement Packs: Textures, Music, ROM patch) is
+  off is a grey switch with "Off for every game — Tools ⋯ › Enhancement Packs" — the global switch still
+  wins. A flip applies at once through `LoadRomHelper.ApplyPackChange` (in
+  place where P.9 allows: the sheet stays and the switches wait under a
+  moving bar; elsewhere the game restarts, back to the game, like W-P7).
+  Border keeps its global switch only (W-P7); Modern instruments (the synth)
+  is W-P7's, global.
+- Elements: 5 + the layer list (3 rows, each with its switch — counted as
+  list rows under rule 2, like W-P11's cheat rows). ✔
 
 **W-P7 — Enhancements panel (§6.1 minus *Hi-res filter*)**
 
@@ -2964,11 +3042,11 @@ Unchanged from today. The toast is the only pack feedback (§6).
                      ┌──────────────────────────────────────────────┐
                      │  Enhancements                                │
                      │                                              │
-                     │  [x] Textures        applies on reload       │
-                     │  [x] Audio           applies on reload       │
+                     │  [x] Modern instruments                      │
                      │  [x] Border          applies on reload       │
                      │  [ ] Widescreen                              │
                      │  [ ] Overclock       ⟨not available on SMS⟩  │
+                     │  Pack: Contra 80s                          › │
                      │                                              │
                      │  How the picture looks: Settings › Look      │
                      │                                              │
@@ -2982,11 +3060,21 @@ Unchanged from today. The toast is the only pack feedback (§6).
   keeps what the *pack and the console* add — art, sound, frame, width,
   speed — and points at the place for the look of the picture.
 
-Elements: 5 toggles + 1 = 6. ✔ (Cheats moved to W-P4, 2026-10-02.) The one
+Elements: 4 toggles + the Pack row + 1 = 6. ✔ (Cheats moved to W-P4,
+2026-10-02. Textures and Audio left on 2026-10-03: one place per switch, the
+pack's layers are W-P6's. *Modern instruments* is `AudioConfig.EnableEnhancedAudio`,
+the same switch as Settings › Audio, and applies live with no reload; the
+Pack row routes like W-P4's. Leaving by the Pack row keeps an unapplied draft
+for the way back — only the one button applies it, so a look at the pack must
+not throw the switches away: the switches the player flipped come back as they
+set them, and the ones they left alone are re-read from what is applied, so a
+switch turned elsewhere during the detour is never shown stale. Every other end
+of the visit — Esc, the button, leaving the pause back to the game, another
+game — reads them from what is applied.) The one
 console-dependent element is shown
 disabled with its reason (rule 4). The button replaces today's immediate
 action on each toggle, so the player decides when the game restarts. Today
-there are two different restarts: Textures, Audio and Border go through
+there are two different restarts: Border goes through
 `ToggleLayer` → `ReloadRom`, and Overclock goes through `PowerCycle`. The
 button names the bigger one that is pending: *Apply & Reload*, or *Apply &
 Restart* when Overclock changed (a restart loses unsaved progress, so it
@@ -3020,6 +3108,36 @@ Today's `PlayerSettingsEssentials` tabs, with *Video* split in two:
 what the pixels look like. The shader selector moves out of here into Look,
 next to the filter it is usually confused with. The last line is rule 10
 applied to settings. Elements: tab strip, 3 rows, Done = 5. ✔
+
+**W-P8b / W-P8c — Settings › Audio and Controls (the same list, never the
+classic pages)**
+
+![W-P8b](../media/gui-redesign/W-P8b.png)
+![W-P8c](../media/gui-redesign/W-P8c.png)
+
+```
+ Audio                                  Controls
+ │  Sound            [x]            │   │  Controllers   2 controllers connected │
+ │  Volume     ──────●──── 100      │   │  Rumble        ───●─────────  5        │
+ │  Output device [Speakers   ▾]    │   │  Stick deadzone ──●────────  2         │
+ │  More in Options…                │   │  More in Options…                      │
+```
+
+Audio and Controls follow Display's pattern exactly: one inset list of three
+46 px rows in the same 340 px sheet, no scrollbars, no sub-tabs. They used to
+embed the whole classic option pages (General/Equalizer/Advanced and
+General/Display/Test sub-tabs, a per-console button row, two scrollbars),
+which broke rule 2. **Audio** is Sound (the Enable Audio switch), Volume
+(0–100) and Output device; equalizer, reverb, crossfeed, latency and sample
+rate stay in Options. **Controls** is what is console-independent: which pads
+are connected, Rumble strength (0 is off) and Stick deadzone; per-console
+controller types and button mapping stay in Options. Every row is bound to the
+same config the classic page edits, so a value set in Options (an output
+device that is not enumerated now, a volume) shows as the current item and
+opening the tab never rewrites it. The hint's line carries **More in
+Options…**, which expands to that tab's classic page exactly as Look's
+*More in Options…* does (Display keeps the hint, as it has nothing to expand
+to). Elements: tab strip, 3 rows, More in Options…, Done = 6. ✔
 
 **W-P9 — A pack installs while the game starts (a HUD pill, not a dialog)**
 
@@ -3107,7 +3225,7 @@ Rules the tab enforces, each from a measured fact rather than taste:
   because the difference that bites is "my screenshot doesn't look like my
   screen". The footnote changes with the selection: NTSC under Screen shows
   ◉, a shader shows ◌.
-- **Pixels is one popup** — *Sharp (original pixels)*, *Smooth — HQ4×*,
+- **Pixels is one popup** — *Sharp — original pixels*, *Smooth — HQ4×*,
   *Smooth — xBRZ 4×*, then *More in Options…*. A value set in Options that is
   not in the short list is shown as the current item, never overwritten
   (§6.1's restore-not-clobber rule, kept).
@@ -3360,14 +3478,14 @@ only way out of the case.
                      │  it, add it and the pack completes.          │
                      │  ┌────────────────────────────────────────┐  │
                      │  │ Arcade soundtrack (MP3 set, 23 files)  │  │
-                     │  │ ⟨Licence: not declared⟩                │  │
+                     │  │ ⟨License: not declared⟩                │  │
                      │  └────────────────────────────────────────┘  │
                      │  ┌────────────────────────────────────────┐  │
                      │  │          Drop the file here            │  │
-                     │  │ ⟨it is copied into the pack's download │  │
-                     │  │  folder⟩                               │  │
+                     │  │ ⟨It is checked, then the game         │  │
+                     │  │  restarts with it.⟩                    │  │
                      │  └────────────────────────────────────────┘  │
-                     │  [Show Folder]  [Play Without It] [Choose File…]│
+                     │  [Show Folder] [Play Without It] [Add and Restart…]│
                      └──────────────────────────────────────────────┘
 ```
 
@@ -3389,7 +3507,7 @@ only way out of the case.
   "That is not the file this pack was made with".
 - *Play Without It* closes the sheet. The pack stays partial, as today, and
   the status line says "waiting for one file".
-- Elements: drop zone, Show Folder, Play Without It, Choose File… = 4. ✔
+- Elements: drop zone, Show Folder, Play Without It, Add and Restart… = 4. ✔
 
 ##### 13.5.3 Remaster
 
@@ -3447,7 +3565,7 @@ zones in that order, and the screen never changes shape — zones fill in.
 ![W-R0b](../media/gui-redesign/W-R0b.png)
 
 ```
-│  ⚠ Painting needs Python 3, which MesenAI could not find.                    │
+│  ⚠ Painting needs Python 3.10 or newer, which MesenAI could not find.        │
 │    You can still record. Your figures are prepared once     [Locate Python…] │
 │    Python is available.                                     [How to Install] │
 ```
@@ -4048,8 +4166,9 @@ switcher (W-S3) or a link that names its destination (rule 11).
 3. ~~`.ora` in zone ②~~ — no; only in Tools ⋯ while ADR-0220 stop
    condition 2 is open (2026-10-02).
 4. ~~`ShowClassicMenuBar` on upgrade~~ — `false`, with a one-time toast
-   "your menus are under Tools ⋯" (2026-10-02). This replaces today's §6
-   promise of a visible bar.
+   "your menus are under Tools ⋯" (2026-10-02). Superseded by ADR-0250
+   (2026-10-03): the toggle and the toast go; an upgraded Advanced install
+   opens in the Classic door, which has the classic menu bar.
 5. ~~Remaster gamepad~~ — no; mouse/trackpad (rule 9 stands, 2026-10-02).
 6. ~~Remaster consoles~~ — answered by ADR-0243 Decision 5: NES first. On
    GB/SMS *Record* is enabled and the paint zone is disabled with its reason;

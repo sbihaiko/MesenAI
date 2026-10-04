@@ -11,6 +11,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 
 namespace Mesen.ViewModels
 {
@@ -32,9 +34,17 @@ namespace Mesen.ViewModels
 		//The classic grid of every entry: Advanced's game selection and the
 		//Save/Load state screens, exactly as before G.2.
 		[ObservableProperty] public partial bool ShowPlainGrid { get; private set; }
+		//ADR-0249: in Player mode the Save/Load state screens are a light sheet
+		//of slot tiles (StateGrid `tiles slots`), not the classic dark grid.
+		[ObservableProperty] public partial bool ShowSlotTiles { get; private set; }
 		[ObservableProperty] public partial string FirstRunOrientation { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueTitle { get; private set; } = "";
 		[ObservableProperty] public partial string ContinueSubtitle { get; private set; } = "";
+		//W-P2: the Continue card's picture, the recent entry's own screenshot
+		//(null keeps the placeholder art).
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(HasContinuePreview))] public partial Bitmap? ContinuePreview { get; private set; }
+		public bool HasContinuePreview => ContinuePreview != null;
+		private int _previewGeneration;
 		[ObservableProperty] public partial List<RecentGameInfo> HomeGridEntries { get; private set; } = new List<RecentGameInfo>();
 		[ObservableProperty] public partial bool ShowHomeGrid { get; private set; }
 
@@ -83,6 +93,8 @@ namespace Mesen.ViewModels
 			if(mode == GameScreenMode.RecentGames) {
 				NeedResume = false;
 				Title = string.Empty;
+				//W-P2: re-read the packs folder and catalog for this home's badges.
+				RecentPackLookup.Invalidate();
 
 				List<string> files = Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd").OrderByDescending((file) => new FileInfo(file).LastWriteTime).ToList();
 				for(int i = 0; i < files.Count && entries.Count < 72; i++) {
@@ -101,14 +113,16 @@ namespace Mesen.ViewModels
 					NeedResume = Pause();
 				}
 
-				Title = mode == GameScreenMode.LoadState ? ResourceHelper.GetMessage("LoadStateDialog") : ResourceHelper.GetMessage("SaveStateDialog");
+				//ADR-0249: Player mode speaks the overlay's language (PlaySlotGrid).
+				bool player = ConfigManager.Config.Preferences.UiMode == UiMode.Player;
+				Title = ResourceHelper.GetMessage(PlaySlotGrid.TitleKey(mode == GameScreenMode.LoadState, player));
 
 				string romName = EmuApi.GetRomInfo().GetRomName();
 				for(int i = 0; i < (mode == GameScreenMode.LoadState ? 11 : 10); i++) {
 					entries.Add(new RecentGameInfo() {
 						FileName = Path.Combine(ConfigManager.SaveStateFolder, romName + "_" + (i + 1) + "." + FileDialogHelper.MesenSaveStateExt),
 						StateIndex = i + 1,
-						Name = i == 10 ? ResourceHelper.GetMessage("AutoSave") : ResourceHelper.GetMessage("SlotNumber", i + 1),
+						Name = i == 10 ? ResourceHelper.GetMessage("AutoSave") : ResourceHelper.GetMessage(PlaySlotGrid.SlotKey(player), i + 1),
 						SaveMode = mode == GameScreenMode.SaveState
 					});
 				}
@@ -130,6 +144,7 @@ namespace Mesen.ViewModels
 			ShowFirstRunHome = isPlayerHome && kind == PlayHomeKind.FirstRun;
 			ShowRecentsHome = isPlayerHome && kind == PlayHomeKind.WithRecents;
 			ShowPlainGrid = !isPlayerHome;
+			ShowSlotTiles = !isPlayerHome && Mode != GameScreenMode.RecentGames && ConfigManager.Config.Preferences.UiMode == UiMode.Player;
 			HomeGridEntries = ShowRecentsHome ? PlayHome.RecentGrid(entries) : new List<RecentGameInfo>();
 			ShowHomeGrid = HomeGridEntries.Count > 0;
 
@@ -141,6 +156,56 @@ namespace Mesen.ViewModels
 				ContinueTitle = "";
 				ContinueSubtitle = "";
 			}
+			LoadContinuePreview(ShowRecentsHome ? entries[0].FileName : null);
+		}
+
+		//Read off the UI thread (the recent file is a zip); a newer home wins.
+		//The pack's name and version (RecentPackLookup, the same lookup as the
+		//tile badges) are read in the same task and join the subtitle when known.
+		private void LoadContinuePreview(string? recentFile)
+		{
+			int generation = ++_previewGeneration;
+			ContinuePreview = null;
+			if(recentFile == null) {
+				return;
+			}
+			string recentName = Path.GetFileNameWithoutExtension(recentFile);
+			string lastPlayed = ContinueSubtitle;
+			RecentGameHash? hash = RecentGameHashes.Find(ConfigManager.Config.RecentFiles.GameHashes, recentName);
+			bool namedHdPack = PlayHome.HasHdPack(ConfigManager.HdPackFolder, recentName);
+			bool autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
+			Task.Run(() => {
+				RecentPackInfo pack = default;
+				try {
+					pack = RecentPackLookup.Lookup(recentName, hash, namedHdPack, autoInstall);
+				} catch(Exception ex) {
+					EmuApi.WriteLogEntry("[PlayHome] continue pack lookup failed: " + ex.Message);
+				}
+				if(pack.Name.Length > 0) {
+					Dispatcher.UIThread.Post(() => {
+						if(generation == _previewGeneration) {
+							ContinueSubtitle = PlayHome.ContinueSubtitle(lastPlayed, pack.Name, pack.Version);
+						}
+					});
+				}
+			});
+			Task.Run(() => {
+				byte[]? png = PlayHome.ReadScreenshot(recentFile);
+				if(png == null) {
+					return;
+				}
+				Dispatcher.UIThread.Post(() => {
+					if(generation != _previewGeneration) {
+						return;
+					}
+					try {
+						using MemoryStream stream = new(png);
+						ContinuePreview = new Bitmap(stream);
+					} catch(Exception) {
+						ContinuePreview = null;
+					}
+				});
+			});
 		}
 
 		private static string OrientationText()
@@ -154,9 +219,8 @@ namespace Mesen.ViewModels
 			};
 		}
 
-		//W-P2's "last played today". The pack half of the wireframe's subtitle
-		//("· Contra 80s 1.2") needs the recent entry to carry the ROM hash and a
-		//pack lookup (the §13.5.2 data-slice prerequisite) and is not shown.
+		//W-P2's "last played today"; the pack half of the wireframe's subtitle
+		//("· Contra 80s 1.2") is added by LoadContinuePreview once looked up.
 		private static string LastPlayedText(string recentFile)
 		{
 			if(!File.Exists(recentFile)) {
@@ -214,8 +278,11 @@ namespace Mesen.ViewModels
 					EmuApi.Resume();
 				});
 			} else {
+				//#783: no Resume() here. It ran before the load even started, and a
+				//game that opens now starts running in the core, which is where the
+				//pause flag lives - the reload branch above resumes because its load
+				//is a state restore onto the game already on screen.
 				LoadRomHelper.LoadRecentGame(FileName, false);
-				EmuApi.Resume();
 			}
 		}
 	}

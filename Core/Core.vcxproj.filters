@@ -248,6 +248,21 @@
     <ClInclude Include="NES\NesScanlineTraceValidity.h">
       <Filter>NES</Filter>
     </ClInclude>
+    <ClInclude Include="NES\NesWidescreenPpu.h">
+      <Filter>NES</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\NesWidescreenReveal.h">
+      <Filter>NES</Filter>
+    </ClInclude>
+    <ClInclude Include="Gameboy\GbWidescreenReveal.h">
+      <Filter>Gameboy</Filter>
+    </ClInclude>
+    <ClInclude Include="SMS\SmsWidescreenReveal.h">
+      <Filter>SMS</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\NesWidescreenSupport.h">
+      <Filter>NES</Filter>
+    </ClInclude>
     <ClInclude Include="NES\DefaultNesPpu.h">
       <Filter>NES</Filter>
     </ClInclude>
@@ -828,6 +843,12 @@
     <ClInclude Include="NES\HdPacks\HdCaptureCellGuard.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdWidescreenColumns.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
+    <ClInclude Include="NES\HdPacks\HdWidescreenGeometry.h">
+      <Filter>NES\HdPacks</Filter>
+    </ClInclude>
     <ClInclude Include="NES\HdPacks\SpriteFetchLog.h">
       <Filter>NES\HdPacks</Filter>
     </ClInclude>
@@ -1153,6 +1174,9 @@
       <Filter>Shared\Video</Filter>
     </ClCompile>
     <ClInclude Include="Shared\Video\BaseVideoFilter.h">
+      <Filter>Shared\Video</Filter>
+    </ClInclude>
+    <ClInclude Include="Shared\Video\WidescreenFrameFlow.h">
       <Filter>Shared\Video</Filter>
     </ClInclude>
     <ClCompile Include="Shared\Video\DebugHud.cpp">
@@ -2603,6 +2627,9 @@
       <Filter>GBA</Filter>
     </ClInclude>
     <ClInclude Include="GBA\GbaPpu.h">
+      <Filter>GBA</Filter>
+    </ClInclude>
+    <ClInclude Include="GBA\GbaWidescreenReveal.h">
       <Filter>GBA</Filter>
     </ClInclude>
     <ClInclude Include="GBA\Debugger\GbaAssembler.h">

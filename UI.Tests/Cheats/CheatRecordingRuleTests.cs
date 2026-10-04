@@ -47,16 +47,16 @@ namespace Mesen.Tests.Cheats
 
 			CheatSheetRow ram = rows[1];
 			Assert.True(ram.CanToggle);
-			Assert.Equal("allowed while recording art", ram.Note);
+			Assert.Equal("From the cheat list · allowed while recording art", ram.Note);
 		}
 
 		[Fact]
-		public void Outside_a_recording_every_row_is_available_and_unmarked()
+		public void Outside_a_recording_every_row_is_available_and_only_says_its_source()
 		{
 			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(ConsoleType.Nes, Contra, false, Array.Empty<StoredCheat>(), recordingArt: false, "");
 
 			Assert.All(rows, r => Assert.True(r.CanToggle));
-			Assert.All(rows, r => Assert.Equal("", r.Note));
+			Assert.All(rows, r => Assert.Equal(CheatSheet.FromListMark, r.Note));
 		}
 
 		[Fact]

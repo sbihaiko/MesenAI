@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using Mesen.Logic;
 using Xunit;
 
@@ -9,6 +11,17 @@ namespace Mesen.Tests.Play
 	//grid lists, and the Continue card's "last played" wording.
 	public class PlayHomeTests
 	{
+		[Fact]
+		public void Continue_subtitle_names_the_pack_only_when_known()
+		{
+			Assert.Equal("Last played today · Contra 80s 1.2", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", "1.2"));
+			Assert.Equal("Last played today · Contra 80s", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", "0.0.0"));
+			Assert.Equal("Last played today · Contra 80s", PlayHome.ContinueSubtitle("Last played today", "Contra 80s", ""));
+			Assert.Equal("Last played today", PlayHome.ContinueSubtitle("Last played today", "", "1.2"));
+			Assert.Equal("Last played today", PlayHome.ContinueSubtitle("Last played today", null, null));
+			Assert.Equal("Contra 80s 1.2", PlayHome.ContinueSubtitle("", "Contra 80s", "1.2"));
+		}
+
 		[Fact]
 		public void No_recents_is_the_first_run_home()
 		{
@@ -46,5 +59,62 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal(expected, PlayHome.Orientation(audio, autoPacks));
 		}
-	}
+	
+		//W-P2's pack badge: a recent game whose HdPacks/<game name> folder holds
+		//a hires.txt (the folder HdPackLoader opens for that ROM).
+		[Fact]
+		public void A_recent_game_has_a_pack_when_its_hd_pack_folder_has_hires_txt()
+		{
+			string packs = Path.Combine(Path.GetTempPath(), "mesen-playhome-" + Guid.NewGuid().ToString("N"));
+			try {
+				Directory.CreateDirectory(Path.Combine(packs, "Contra (USA)"));
+				File.WriteAllText(Path.Combine(packs, "Contra (USA)", "hires.txt"), "<ver>106");
+				Directory.CreateDirectory(Path.Combine(packs, "Metroid (USA)"));
+				Assert.True(PlayHome.HasHdPack(packs, "Contra (USA)"));
+				Assert.False(PlayHome.HasHdPack(packs, "Metroid (USA)"));
+				Assert.False(PlayHome.HasHdPack(packs, "Zelda"));
+				Assert.False(PlayHome.HasHdPack(packs, ""));
+				Assert.False(PlayHome.HasHdPack("", "Contra (USA)"));
+			} finally {
+				Directory.Delete(packs, true);
+			}
+		}
+
+		//W-P2's Continue picture: the Screenshot.png inside the recent-game file.
+		[Fact]
+		public void The_continue_preview_is_the_recent_files_screenshot()
+		{
+			string folder = Path.Combine(Path.GetTempPath(), "mesen-playhome-" + Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(folder);
+			try {
+				byte[] png = { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+				string withShot = Path.Combine(folder, "Contra (USA).rgd");
+				using(ZipArchive zip = ZipFile.Open(withShot, ZipArchiveMode.Create)) {
+					using Stream s = zip.CreateEntry("Screenshot.png").Open();
+					s.Write(png, 0, png.Length);
+				}
+				string withoutShot = Path.Combine(folder, "Metroid (USA).rgd");
+				using(ZipArchive zip = ZipFile.Open(withoutShot, ZipArchiveMode.Create)) {
+					zip.CreateEntry("RomInfo.txt");
+				}
+				string notAZip = Path.Combine(folder, "Mega Man (USA).rgd");
+				File.WriteAllText(notAZip, "");
+
+				Assert.Equal(png, PlayHome.ReadScreenshot(withShot));
+				Assert.Null(PlayHome.ReadScreenshot(withoutShot));
+				Assert.Null(PlayHome.ReadScreenshot(notAZip));
+				Assert.Null(PlayHome.ReadScreenshot(Path.Combine(folder, "missing.rgd")));
+
+				//An entry that decompresses past the cap keeps the placeholder.
+				string huge = Path.Combine(folder, "Huge (USA).rgd");
+				using(ZipArchive zip = ZipFile.Open(huge, ZipArchiveMode.Create)) {
+					using Stream s = zip.CreateEntry("Screenshot.png").Open();
+					s.Write(new byte[PlayHome.MaxScreenshotBytes + 1], 0, PlayHome.MaxScreenshotBytes + 1);
+				}
+				Assert.Null(PlayHome.ReadScreenshot(huge));
+			} finally {
+				Directory.Delete(folder, true);
+			}
+		}
+}
 }

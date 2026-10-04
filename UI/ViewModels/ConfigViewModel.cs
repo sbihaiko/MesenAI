@@ -2,7 +2,9 @@
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.Utilities;
+using Mesen.Interop;
 using System;
+using System.Collections.Generic;
 
 namespace Mesen.ViewModels
 {
@@ -10,6 +12,10 @@ namespace Mesen.ViewModels
 	{
 		[ObservableProperty] public partial AudioConfigViewModel? Audio { get; set; }
 		[ObservableProperty] public partial InputConfigViewModel? Input { get; set; }
+		//W-P8: Player mode's Audio and Controls tabs are short essentials lists,
+		//not the classic pages (those open through "More in Options…").
+		[ObservableProperty] public partial PlayerAudioSettingsViewModel? PlayerAudio { get; set; }
+		[ObservableProperty] public partial PlayerControlsSettingsViewModel? PlayerControls { get; set; }
 		[ObservableProperty] public partial VideoConfigViewModel? Video { get; set; }
 		[ObservableProperty] public partial LookConfigViewModel? Look { get; set; }
 		//G.4 (W-P8): Player mode's Display tab (the window), next to Look.
@@ -30,7 +36,16 @@ namespace Mesen.ViewModels
 		//G.4 (W-P8): the Player strip's position (PlayerSettingsEssentials.Tabs).
 		//-1 outside Player mode, as SelectedTabIndex is -1 inside it, so only one
 		//of the two strips realizes a tab's content.
-		[ObservableProperty] public partial int PlayerTabIndex { get; set; } = -1;
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerLookTab)), NotifyPropertyChangedFor(nameof(IsPlayerHintTab)), NotifyPropertyChangedFor(nameof(IsPlayerMoreTab)), NotifyPropertyChangedFor(nameof(PlayerSheetHeight))] public partial int PlayerTabIndex { get; set; } = -1;
+		//W-P8: the line under the group is Display's hint, or Audio's and
+		//Controls' "More in Options…" link; Look has neither (Hold to Compare).
+		public bool IsPlayerMoreTab => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab.Audio or ConfigWindowTab.Input;
+		public bool IsPlayerHintTab => !IsPlayerLookTab && !IsPlayerMoreTab;
+		//ADR-0249 (W-P10): Look's footer is Hold to Compare; the Options hint
+		//shows on the other tabs.
+		public bool IsPlayerLookTab => PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		//ADR-0249 (W-P8, W-P10): the Settings sheet is as high as its tab needs.
+		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
 
 		//Video and Look edit the same VideoConfig, so they share one snapshot
 		//for Cancel/IsDirty, taken when the first of them opens.
@@ -44,17 +59,21 @@ namespace Mesen.ViewModels
 		//Supplied by the window: Display's view-model needs the main window's
 		//state and actions, which this class does not reach.
 		private readonly Func<PlayerDisplaySettingsViewModel>? _createDisplay;
+		private readonly Func<IReadOnlyList<string>> _audioDevices;
+		private readonly Func<int> _connectedPads;
 
 		[Obsolete("For designer only")]
 		public ConfigViewModel() : this(ConfigWindowTab.Audio) { }
 
 		public ConfigViewModel(ConfigWindowTab selectedTab) : this(selectedTab, playerMode: false) { }
 
-		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerDisplaySettingsViewModel>? createDisplay = null)
+		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerDisplaySettingsViewModel>? createDisplay = null, Func<System.Collections.Generic.IReadOnlyList<string>>? audioDevices = null, Func<int>? connectedPads = null)
 		{
 			AlwaysOnTop = ConfigManager.Config.Preferences.AlwaysOnTop;
 			PlayerMode = playerMode;
 			_createDisplay = createDisplay;
+			_audioDevices = audioDevices ?? (() => ConfigApi.GetAudioDevices());
+			_connectedPads = connectedPads ?? (() => (int)InputApi.GetConnectedGamepadCount());
 			//§6: Player starts on one of the essentials tabs; a non-essentials
 			//selection (e.g. Preferences from the Advanced GUI) clamps to Display.
 			SelectTab(playerMode ? PlayerSettingsEssentials.ClampToEssentials(selectedTab) : selectedTab);
@@ -79,20 +98,55 @@ namespace Mesen.ViewModels
 			}
 		}
 
+		//"More in Options…": Look's opens Video, Audio's and Controls' open their
+		//own classic page. The window watches PlayerMode and opens the Options
+		//window on SelectedIndex (MainWindow.OnPlayerSettingsChanged).
+		public void OpenInOptions(ConfigWindowTab essentialsTab)
+		{
+			if(PlayerSettingsEssentials.OptionsTabFor(essentialsTab) is ConfigWindowTab options) {
+				LeaveEssentials();
+				SelectTab(options);
+			}
+		}
+
+		private void LeaveEssentials()
+		{
+			PlayerMode = false;
+			PlayerTabIndex = -1;
+		}
+
 		public void SelectTab(ConfigWindowTab tab)
 		{
 			//W-P8: a tab outside the Player strip (Look's "More in Options…" opens
 			//Video) expands the window to the full Options page.
 			if(PlayerMode && !PlayerSettingsEssentials.IsEssentials(tab)) {
-				PlayerMode = false;
-				PlayerTabIndex = -1;
+				LeaveEssentials();
 			}
 
 			//Create each view model when the corresponding tab is clicked, for performance
 			switch(tab) {
-				case ConfigWindowTab.Audio: Audio ??= AddDisposable(new AudioConfigViewModel()); break;
+				case ConfigWindowTab.Audio:
+					if(PlayerMode) {
+						PlayerAudio ??= AddDisposable(new PlayerAudioSettingsViewModel(ConfigManager.Config.Audio, _audioDevices()));
+					} else {
+						//Expanded from Settings: Cancel still restores what the sheet opened with.
+						Audio ??= AddDisposable(new AudioConfigViewModel());
+						if(PlayerAudio != null) {
+							Audio.OriginalConfig = PlayerAudio.OriginalConfig;
+						}
+					}
+					break;
 				case ConfigWindowTab.Emulation: Emulation ??= AddDisposable(new EmulationConfigViewModel()); break;
-				case ConfigWindowTab.Input: Input ??= AddDisposable(new InputConfigViewModel()); break;
+				case ConfigWindowTab.Input:
+					if(PlayerMode) {
+						PlayerControls ??= AddDisposable(new PlayerControlsSettingsViewModel(ConfigManager.Config.Input, _connectedPads()));
+					} else {
+						Input ??= AddDisposable(new InputConfigViewModel());
+						if(PlayerControls != null) {
+							Input.OriginalConfig = PlayerControls.OriginalConfig;
+						}
+					}
+					break;
 				case ConfigWindowTab.Video:
 					_originalVideo ??= ConfigManager.Config.Video.Clone();
 					Video ??= AddDisposable(new VideoConfigViewModel() { OriginalConfig = _originalVideo });
@@ -138,8 +192,8 @@ namespace Mesen.ViewModels
 
 		public void RevertConfig()
 		{
-			ConfigManager.Config.Audio = Audio?.OriginalConfig ?? ConfigManager.Config.Audio;
-			ConfigManager.Config.Input = Input?.OriginalConfig ?? ConfigManager.Config.Input;
+			ConfigManager.Config.Audio = Audio?.OriginalConfig ?? PlayerAudio?.OriginalConfig ?? ConfigManager.Config.Audio;
+			ConfigManager.Config.Input = Input?.OriginalConfig ?? PlayerControls?.OriginalConfig ?? ConfigManager.Config.Input;
 			ConfigManager.Config.Video = _originalVideo ?? ConfigManager.Config.Video;
 			ConfigManager.Config.Preferences = Preferences?.OriginalConfig ?? ConfigManager.Config.Preferences;
 			ConfigManager.Config.Emulation = Emulation?.OriginalConfig ?? ConfigManager.Config.Emulation;
@@ -154,8 +208,8 @@ namespace Mesen.ViewModels
 		public bool IsDirty()
 		{
 			return (
-				Audio?.OriginalConfig.IsIdentical(ConfigManager.Config.Audio) == false ||
-				Input?.OriginalConfig.IsIdentical(ConfigManager.Config.Input) == false ||
+				(Audio?.OriginalConfig ?? PlayerAudio?.OriginalConfig)?.IsIdentical(ConfigManager.Config.Audio) == false ||
+				(Input?.OriginalConfig ?? PlayerControls?.OriginalConfig)?.IsIdentical(ConfigManager.Config.Input) == false ||
 				_originalVideo?.IsIdentical(ConfigManager.Config.Video) == false ||
 				Preferences?.OriginalConfig.IsIdentical(ConfigManager.Config.Preferences) == false ||
 				Emulation?.OriginalConfig.IsIdentical(ConfigManager.Config.Emulation) == false ||

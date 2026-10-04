@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "Shared/Video/BaseVideoFilter.h"
 #include "NES/NesTypes.h"
+#include "NES/NesConstants.h"
 
 class NesConsole;
 
@@ -23,7 +24,7 @@ protected:
 public:
 	NesDefaultVideoFilter(Emulator* emu);
 
-	static void ApplyPalBorder(uint16_t* ppuOutputBuffer);
+	static void ApplyPalBorder(uint16_t* ppuOutputBuffer, uint32_t width = NesConstants::ScreenWidth);
 
 	static void GenerateFullColorPalette(uint32_t paletteBuffer[512], PpuModel model);
 	static void GetFullPalette(uint32_t palette[512], NesConfig& nesCfg, PpuModel model);
@@ -31,4 +32,8 @@ public:
 	static uint32_t GetDefaultPixelBrightness(uint16_t colorIndex, PpuModel model);
 
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override;
+
+	//ADR-0253: DecodePpuBuffer walks _baseFrameInfo.Width, so an extended NES
+	//frame decodes whole
+	bool AcceptsExtendedFrame() override { return true; }
 };

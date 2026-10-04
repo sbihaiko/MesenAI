@@ -122,11 +122,37 @@ void VideoDecoder::RedrawPausedFrame()
 	UpdateFrame(_frame, true, false);
 }
 
+void VideoDecoder::KeepStandardCentre()
+{
+	//Only the NES emits extended frames today, in its 16-bit PPU format
+	uint32_t standardWidth = _frame.Width - 2 * _frame.ExtendedColumns;
+	_standardCentre.resize((size_t)standardWidth * _frame.Height);
+	const uint16_t* src = (const uint16_t*)_frame.FrameBuffer;
+	for(uint32_t y = 0; y < _frame.Height; y++) {
+		memcpy(_standardCentre.data() + (size_t)y * standardWidth, src + (size_t)y * _frame.Width + _frame.ExtendedColumns, standardWidth * sizeof(uint16_t));
+	}
+	_frame.FrameBuffer = _standardCentre.data();
+	_frame.Width = standardWidth;
+	//Both extended fields, not just the width: the side-fill map describes
+	//columns this frame no longer has (RenderedFrame::ClearExtension).
+	_frame.ClearExtension();
+}
+
 void VideoDecoder::DecodeFrame(bool forRewind)
 {
 	UpdateVideoFilter();
 	bool compare = _emu->GetSettings()->IsLookCompare();
 	BaseVideoFilter* videoFilter = GetFrameFilter(compare);
+
+	//ADR-0253 W.1: a filter that assumes the standard width gets the standard
+	//picture, so nothing downstream ever reads a row at the wrong stride; the
+	//aspect ratio then falls back with it (IsFrameExtended). W.3 taught the
+	//border composite to take an extended frame itself (the side columns the
+	//game left unfilled become the border's), so a composited border is no
+	//longer a reason to drop the extra columns.
+	if(_frame.ExtendedColumns > 0 && _frame.FrameBuffer && !videoFilter->AcceptsExtendedFrame()) {
+		KeepStandardCentre();
+	}
 
 	bool isAudioPlayer = _emu->GetAudioPlayerHud() != nullptr;
 	if(isAudioPlayer) {
@@ -140,6 +166,14 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 
 	videoFilter->SetBaseFrameInfo(_baseFrameSize);
 	FrameInfo frameSize = videoFilter->SendFrame((uint16_t*)_frame.FrameBuffer, _frame.FrameNumber, _frame.VideoPhase, _frame.Data, true, _frame);
+
+	//ADR-0253 §3 (W.3): the frame-width contract and the per-row side fill map,
+	//as the filter itself reports them - in the coordinates of the frame it just
+	//produced. The HD pack filter draws an extended frame at the pack's scale, so
+	//the console's own numbers would point the renderer's fallback chain at the
+	//wrong columns; a filter that rescaled the picture reports nothing.
+	BaseVideoFilter::FrameExtension extension = videoFilter->GetOutputFrameExtension();
+	FrameInfo filterFrameSize = frameSize;
 
 	uint32_t* outputBuffer = videoFilter->GetOutputBuffer();
 
@@ -168,6 +202,17 @@ void VideoDecoder::DecodeFrame(bool forRewind)
 	}
 
 	RenderedFrame convertedFrame((void*)outputBuffer, frameSize.Width, frameSize.Height, _frame.Scale, _frame.FrameNumber, _frame.InputData);
+
+	//ADR-0253 §3 (W.3): the contract travels to the renderer with the picture, so
+	//the fallback chain (pack art, then the border layer) can fill the side
+	//columns the console could not. A scale/rotate filter below the video filter
+	//rescales the picture, though, and the map's rows are the filter's rows - so
+	//that alone drops it.
+	if(frameSize.Width != filterFrameSize.Width || frameSize.Height != filterFrameSize.Height) {
+		extension = {};
+	}
+	convertedFrame.ExtendedColumns = extension.Columns;
+	convertedFrame.ExtendedSideFill = extension.SideFill;
 
 	double aspectRatio = _emu->GetSettings()->GetAspectRatio(_emu->GetRegion(), _baseFrameSize);
 	if(frameSize.Height != _lastFrameSize.Height || frameSize.Width != _lastFrameSize.Width || aspectRatio != _lastAspectRatio) {

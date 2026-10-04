@@ -434,8 +434,16 @@ extern "C"
 		_emu->GetVideoRenderer()->InvalidateBorderAsset();
 	}
 
-	//P.3: the UI resets the per-ROM preferences before re-pushing the current
-	//map, so a choice removed from the config is never left stale in the core.
+	//W-P6: the layers ("textures,audio,patch") the player turned off for one
+	//ROM, pushed beside the per-ROM pack choice; "" turns them all back on.
+	DllExport void __stdcall SetMepRomLayersOff(const char* romSha1, const char* layers)
+	{
+		_emu->GetEnhancementPackManager()->SetRomLayersOff(romSha1 ? romSha1 : "", layers ? layers : "");
+	}
+
+	//P.3: the UI resets the per-ROM preferences (and W-P6's layer switches)
+	//before re-pushing the current maps, so a choice removed from the config
+	//is never left stale in the core.
 	DllExport void __stdcall ClearPreferredMepPacks()
 	{
 		_emu->GetEnhancementPackManager()->ClearPreferredMepPacks();
@@ -499,6 +507,17 @@ extern "C"
 	DllExport void __stdcall ExecuteShortcut(ExecuteShortcutParams params)
 	{
 		_emu->GetNotificationManager()->SendNotification(ConsoleNotificationType::ExecuteShortcut, &params);
+	}
+
+	//#787: the release half of ExecuteShortcut. Without it a host could press a
+	//shortcut and never let go, so a shortcut that arms something until release -
+	//RunSingleFrame, which re-arms its pause every 50 ms while held - could not be
+	//driven from outside the Core at all, tests included. The Core already sends
+	//this notification on a real key release (ShortcutKeyHandler::CheckMappedKeys);
+	//this is the same call, reachable by a host.
+	DllExport void __stdcall ReleaseShortcut(ExecuteShortcutParams params)
+	{
+		_emu->GetNotificationManager()->SendNotification(ConsoleNotificationType::ReleaseShortcut, &params);
 	}
 
 	DllExport bool __stdcall IsShortcutAllowed(EmulatorShortcut shortcut, uint32_t shortcutParam)

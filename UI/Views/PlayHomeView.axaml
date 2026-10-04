@@ -14,49 +14,95 @@
 	UI/Logic/PlayHome; this view only binds it. A ROM dropped anywhere on the
 	window still loads it (MainWindow.OnDrop).-->
 	<Panel>
+		<!--ADR-0249: the Player home sits on the theme's light page (WINBG);
+		the classic grid below keeps the host's dark background.-->
+		<Border Name="PlayHomeBackground" Classes="page" IsVisible="{Binding !ShowPlainGrid}" />
+
 		<!--W-P1, true first run (no recents): one primary action (rule 2: 1
 		control), and a sentence that says what happens next (rule 10).-->
-		<StackPanel Name="PlayHomeFirstRun" Spacing="14" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ShowFirstRunHome}">
-			<TextBlock Text="{l:Translate lblPlayHomeDropTitle}" FontSize="22" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" />
-			<TextBlock Text="{l:Translate lblPlayHomeDropSubtitle}" FontSize="16" Foreground="#CCFFFFFF" HorizontalAlignment="Center" />
-			<Button Name="PlayHomeOpenRomPrimary" Content="{l:Translate btnPlayHomeOpenRom}" HorizontalAlignment="Center" MinWidth="240" HorizontalContentAlignment="Center" Padding="16 10" FontSize="15" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnOpenRom" />
-			<TextBlock Name="PlayHomeOrientation" Text="{Binding FirstRunOrientation}" IsVisible="{Binding FirstRunOrientation.Length}" Foreground="#AAFFFFFF" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
+		<StackPanel Name="PlayHomeFirstRun" Width="460" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 0 0 70" IsVisible="{Binding ShowFirstRunHome}">
+			<Border Name="PlayHomeFirstRunBadge" Classes="badge large" HorizontalAlignment="Center">
+				<PathIcon Data="{StaticResource PlayerIconPlay}" />
+			</Border>
+			<TextBlock Name="PlayHomeDropTitle" Classes="large-title" Text="{l:Translate lblPlayHomeDropTitle}" HorizontalAlignment="Center" Margin="0 32 0 0" />
+			<TextBlock Classes="headline secondary" FontWeight="Normal" Text="{l:Translate lblPlayHomeDropSubtitle}" HorizontalAlignment="Center" Margin="0 8 0 0" />
+			<Button Name="PlayHomeOpenRomPrimary" Classes="primary large" Width="220" Content="{l:Translate btnPlayHomeOpenRom}" HorizontalAlignment="Center" Margin="0 26 0 0" Click="OnOpenRom" />
+			<TextBlock Name="PlayHomeOrientation" Classes="secondary" Text="{Binding FirstRunOrientation}" IsVisible="{Binding FirstRunOrientation.Length}" TextWrapping="Wrap" LineHeight="18" Margin="0 46 0 0" />
 		</StackPanel>
 
 		<!--W-P2, with recents: Continue is the primary action; Open a ROM… the
 		second control; the tiles are list rows (rule 2: 2 + tiles). Gamepad:
 		the two buttons and the grid are focusable (XY focus), and the grid keeps
 		today's StateGrid arrow navigation.-->
-		<DockPanel Name="PlayHomeWithRecents" Margin="32 24" IsVisible="{Binding ShowRecentsHome}" XYFocus.NavigationModes="Enabled">
-			<DockPanel DockPanel.Dock="Top" Margin="0 0 0 8">
-				<Button Name="PlayHomeOpenRomSecondary" DockPanel.Dock="Right" Content="{l:Translate btnPlayHomeOpenRom}" VerticalAlignment="Center" Click="OnOpenRom" />
-				<TextBlock Text="{l:Translate lblPlayHomeContinueHeader}" FontSize="22" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+		<DockPanel Name="PlayHomeWithRecents" Margin="40 26 40 16" IsVisible="{Binding ShowRecentsHome}" XYFocus.NavigationModes="Enabled">
+			<DockPanel DockPanel.Dock="Top" Margin="0 0 0 14">
+				<Button Name="PlayHomeOpenRomSecondary" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenRom">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
+						<TextBlock Text="{l:Translate btnPlayHomeOpenRom}" />
+					</StackPanel>
+				</Button>
+				<TextBlock Classes="title1" Text="{l:Translate lblPlayHomeContinueHeader}" VerticalAlignment="Bottom" />
 			</DockPanel>
-			<Border Name="PlayHomeContinueCard" DockPanel.Dock="Top" Background="#22FFFFFF" CornerRadius="10" Padding="20 16" Margin="0 0 0 20">
-				<StackPanel Spacing="6">
-					<TextBlock Name="PlayHomeContinueTitle" Text="{Binding ContinueTitle}" FontSize="20" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
-					<TextBlock Name="PlayHomeContinueSubtitle" Text="{Binding ContinueSubtitle}" IsVisible="{Binding ContinueSubtitle.Length}" Foreground="#AAFFFFFF" />
-					<Button Name="PlayHomeContinueButton" Content="{l:Translate btnPlayHomeContinue}" Margin="0 6 0 0" Padding="18 8" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnContinue" />
-				</StackPanel>
+			<!--W-P2's hero: a game-picture panel and the Continue block. The
+			picture is the recent entry's screenshot (the .rgd's Screenshot.png),
+			a placeholder gradient when it has none.-->
+			<Border Name="PlayHomeContinueCard" Classes="card hero" DockPanel.Dock="Top" Height="160" ClipToBounds="True" Margin="0 0 0 34">
+				<DockPanel>
+					<Border Name="PlayHomeContinueArt" DockPanel.Dock="Left" Width="260" CornerRadius="16 0 0 16">
+						<Border.Background>
+							<LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+								<GradientStop Offset="0" Color="#182048" />
+								<GradientStop Offset="1" Color="#3C6EAA" />
+							</LinearGradientBrush>
+						</Border.Background>
+						<Panel>
+							<PathIcon Data="{StaticResource PlayerIconPlay}" Width="34" Height="34" Foreground="#B3FFFFFF" IsVisible="{Binding !HasContinuePreview}" />
+							<!--W-P2: the recent entry's own screenshot fills the panel.-->
+							<Image Name="PlayHomeContinuePreview" Source="{Binding ContinuePreview}" Stretch="UniformToFill" IsVisible="{Binding HasContinuePreview}" RenderOptions.BitmapInterpolationMode="LowQuality" />
+						</Panel>
+					</Border>
+					<StackPanel Margin="28 0 24 0" VerticalAlignment="Center">
+						<TextBlock Name="PlayHomeContinueTitle" Classes="title2" Text="{Binding ContinueTitle}" TextTrimming="CharacterEllipsis" />
+						<TextBlock Name="PlayHomeContinueSubtitle" Classes="secondary" Text="{Binding ContinueSubtitle}" IsVisible="{Binding ContinueSubtitle.Length}" Margin="0 6 0 0" />
+						<!--W-P2: a drawn play icon leads the label (no ▶ glyph in the string).-->
+						<Button Name="PlayHomeContinueButton" Classes="primary medium" HorizontalAlignment="Left" Margin="0 18 0 0" Click="OnContinue">
+							<StackPanel Orientation="Horizontal">
+								<PathIcon Classes="leading" Data="{StaticResource PlayerIconPlay}" />
+								<TextBlock Text="{l:Translate btnPlayHomeContinue}" />
+							</StackPanel>
+						</Button>
+					</StackPanel>
+				</DockPanel>
 			</Border>
-			<TextBlock DockPanel.Dock="Top" Text="{l:Translate lblPlayHomeRecentHeader}" FontWeight="Bold" Foreground="White" Margin="0 0 0 6" IsVisible="{Binding ShowHomeGrid}" />
+			<TextBlock DockPanel.Dock="Top" Classes="headline" Text="{l:Translate lblPlayHomeRecentHeader}" Margin="0 0 0 8" IsVisible="{Binding ShowHomeGrid}" />
 			<!--StateGrid names its own root ("root", for its ElementName bindings),
-			so the test handle is the Panel around it.-->
-			<Panel Name="PlayHomeRecentGrid" IsVisible="{Binding ShowHomeGrid}">
-				<c:StateGrid Entries="{Binding HomeGridEntries}" Title="" Mode="{Binding Mode}" />
+			so the test handle is the Panel around it. `tiles`: one row of
+			W-P2 tiles (StateGrid.Tiles) instead of the classic paged grid.-->
+			<Panel Name="PlayHomeRecentGrid" IsVisible="{Binding ShowHomeGrid}" VerticalAlignment="Top" Height="172">
+				<c:StateGrid Classes="tiles" Entries="{Binding HomeGridEntries}" Title="" Mode="{Binding Mode}" />
 			</Panel>
 		</DockPanel>
 
 		<!--G.5 (W-P14): a file that does not open - one inline alert under the
 		home's content (W-X2: a sentence and the next step, never a code). W-P2's
 		2 controls + Open Another… = 3; the ✕ only closes it.-->
-		<Border Name="PlayHomeLoadAlert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Background="#FFF4E5" CornerRadius="10" Padding="16 12" IsVisible="{Binding IsLoadAlertVisible}">
+		<!--ADR-0249 (W-P14): Border.alert - warm card, amber outline; the orange
+		warning icon, the title in TEXT, the body in TEXT2, Open Another…
+		(secondary, folder glyph) as its one control: opening anything (this
+		button, a tile, Continue, a drop) clears the alert, so no close box.-->
+		<Border Name="PlayHomeLoadAlert" Classes="alert" VerticalAlignment="Bottom" Margin="32 0 32 24" MaxWidth="900" Padding="18 12 12 14" IsVisible="{Binding IsLoadAlertVisible}">
 			<DockPanel>
-				<Button Name="PlayHomeLoadAlertClose" DockPanel.Dock="Right" Content="✕" Background="Transparent" Foreground="#B25000" VerticalAlignment="Top" Margin="8 0 0 0" Click="OnDismissLoadAlert" />
-				<Button Name="PlayHomeOpenAnother" DockPanel.Dock="Right" Content="{l:Translate btnPlayHomeOpenAnother}" VerticalAlignment="Top" Click="OnOpenAnother" />
-				<StackPanel Spacing="2">
-					<TextBlock Name="PlayHomeLoadAlertTitle" Text="{Binding LoadAlertTitle}" FontWeight="Bold" Foreground="#B25000" TextWrapping="Wrap" />
-					<TextBlock Name="PlayHomeLoadAlertBody" Text="{Binding LoadAlertBody}" Foreground="#7A3E00" TextWrapping="Wrap" />
+				<Button Name="PlayHomeOpenAnother" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenAnother">
+					<StackPanel Orientation="Horizontal">
+						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
+						<TextBlock Text="{l:Translate btnPlayHomeOpenAnother}" />
+					</StackPanel>
+				</Button>
+				<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="15" Height="15" VerticalAlignment="Top" Margin="0 6 10 0" />
+				<StackPanel Spacing="3" Margin="0 4 12 0">
+					<TextBlock Name="PlayHomeLoadAlertTitle" Classes="callout strong" Text="{Binding LoadAlertTitle}" TextWrapping="Wrap" />
+					<TextBlock Name="PlayHomeLoadAlertBody" Classes="subhead secondary" Text="{Binding LoadAlertBody}" TextWrapping="Wrap" />
 				</StackPanel>
 			</DockPanel>
 		</Border>
@@ -64,7 +110,13 @@
 		<!--Advanced's game selection and the Save/Load state screens: the
 		classic grid of every entry, unchanged by G.2.-->
 		<Panel Name="PlayHomePlainGrid" IsVisible="{Binding ShowPlainGrid}">
-			<c:StateGrid Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
+			<!--ADR-0249: in Player mode the Save/Load state slots are a light
+			sheet of tiles over the dimmed game (ShowSlotTiles); Advanced keeps
+			the classic grid - no class, no background, the grid fills.-->
+			<Border Classes.scrim="{Binding ShowSlotTiles}" />
+			<Border Name="PlayHomeSlotSheet" Classes.sheet="{Binding ShowSlotTiles}" Classes.slot-sheet="{Binding ShowSlotTiles}">
+				<c:StateGrid Classes.tiles="{Binding ShowSlotTiles}" Classes.slots="{Binding ShowSlotTiles}" Entries="{Binding GameEntries}" Title="{Binding Title}" Mode="{Binding Mode}" />
+			</Border>
 		</Panel>
 	</Panel>
 </UserControl>

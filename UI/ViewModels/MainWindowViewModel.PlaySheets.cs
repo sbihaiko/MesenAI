@@ -23,7 +23,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PackPickerTitle { get; private set; } = "";
 		[ObservableProperty] public partial bool CanUseSelectedPack { get; private set; }
 
-		//W-P6: the current pack's detail.
+		//W-P6: the current pack's detail. PackDetailTextures/Audio/Patch: the
+		//pack has the layer (its switch lives in MainWindowViewModel.PackLayers).
 		[ObservableProperty] public partial bool IsPackDetailVisible { get; set; }
 		[ObservableProperty] public partial bool PackDetailHasPack { get; private set; }
 		[ObservableProperty] public partial string PackDetailTitle { get; private set; } = "";
@@ -43,19 +44,29 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial bool PackDetailShowsIds { get; set; }
 		[ObservableProperty] public partial string PackDetailIds { get; private set; } = "";
 
-		//W-P7: the draft the five switches edit (the Is*Enabled properties stay
+		//W-P7: the draft the four switches edit (the Is*Enabled properties stay
 		//what is applied, and feed W-P4's "N on").
-		[ObservableProperty] public partial bool EnhTextures { get; set; }
-		[ObservableProperty] public partial bool EnhAudio { get; set; }
+		[ObservableProperty] public partial bool EnhModernInstruments { get; set; }
 		[ObservableProperty] public partial bool EnhBorder { get; set; }
 		[ObservableProperty] public partial bool EnhWidescreen { get; set; }
 		[ObservableProperty] public partial bool EnhOverclock { get; set; }
 		[ObservableProperty] public partial string EnhOverclockReason { get; private set; } = "";
+		//ADR-0253 §4 (W.5): the one-line reason under a disabled Widescreen
+		//switch; empty when the switch is enabled.
+		[ObservableProperty] public partial string EnhWidescreenReason { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsApplyText { get; private set; } = "";
+		//W-P7's last row: "Pack: Contra (USA)  ›", the way into W-P6 (or W-P5).
+		[ObservableProperty] public partial string EnhPackRowText { get; private set; } = "";
 
 		//W-P9: the HUD pill's sentence; empty when the pill is hidden.
 		[ObservableProperty] public partial string PackInstallPillText { get; private set; } = "";
 		[ObservableProperty] public partial bool IsPackInstallPillInstalling { get; private set; }
+		//#734: the pill on screen (a popup over the game picture), its bar's
+		//fill in percent and whether it is indeterminate.
+		[ObservableProperty] public partial bool IsPackInstallPillShown { get; private set; }
+		[ObservableProperty] public partial bool IsPackInstallPillFailed { get; private set; }
+		[ObservableProperty] public partial double PackInstallPillPercent { get; private set; }
+		[ObservableProperty] public partial bool IsPackInstallPillIndeterminate { get; private set; } = true;
 
 		//ADR-0244 / P.9: whether a pack layer change keeps the player's place
 		//(the in-place swap of LoadRomHelper.ApplyPackChange), so W-P7 reads
@@ -64,7 +75,10 @@ namespace Mesen.ViewModels
 			&& LoadRomHelper.PlanPackChange(RomInfo.ConsoleType).Route == PackChangeRoute.InPlace;
 
 		private RestoreStep _restoreStep = RestoreStep.Idle;
-		private EnhancementsState _enhancementsApplied = new(false, false, false, false, false);
+		private EnhancementsState _enhancementsApplied = new(false, false, false, false);
+		//W-P7: how the last visit of the panel ended; decides whether the next
+		//open keeps the draft (only the Pack row's detour does).
+		private EnhancementsDraftExit _enhancementsDraftExit = EnhancementsDraftExit.Closed;
 		private readonly PackInstallPill _pill = new();
 		private DispatcherTimer? _pillTimer;
 
@@ -110,19 +124,29 @@ namespace Mesen.ViewModels
 		//W-P4's Pack row: W-P5 for 2+ packs, else W-P6 (PackRowRoute). Returns
 		//true when the picker opened. packsFolder/siblingFolder locate the pack
 		//on disk; installedSourceSha256 is the install registry's (ADR-0147).
-		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256)
+		//community: the #736 offer context (null = none to offer); with an
+		//offer the row opens W-P6, which holds it.
+		public bool OpenPackFromOverlay(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			IsPlayerOverlayVisible = false;
-			_packPickerFromOverlay = OpenPlayerPackPickerForChange(packListText, romSha1);
+			IsEnhancementsPanelVisible = false;
+			//PackRowRoute: W-P5 for 2+ packs, else W-P6 - also under "No pack"
+			//with one pack, where W-P6 shows the choice and Change Pack… leads back.
+			//#736: with a community-pack offer the row opens W-P6, which holds it.
+			bool offer = DecideCommunityOffer(packListText, romSha1, community).IsShown;
+			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
+			bool picker = PackRowRoute.For(PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, offer) == PackRowTarget.Picker;
+			_packPickerFromOverlay = picker && OpenPlayerPackPickerForChange(packListText, romSha1, offer);
 			if(!_packPickerFromOverlay) {
-				OpenPackDetail(packListText, romSha1, packsFolder, siblingFolder, installedSourceSha256);
+				OpenPackDetail(packListText, romSha1, packsFolder, siblingFolder, installedSourceSha256, community);
 			}
 			return _packPickerFromOverlay;
 		}
 
-		public void OpenPackDetail(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256)
+		public void OpenPackDetail(string packListText, string romSha1, string packsFolder, string siblingFolder, string? installedSourceSha256, CommunityPackOfferContext? community = null)
 		{
 			_pickerRomSha1 = romSha1;
+			ShowCommunityOffer(DecideCommunityOffer(packListText, romSha1, community), packListText);
 			BuildPackPickerData(packListText, romSha1, out PackPreferenceResolver.Resolution resolution, out bool hasSibling);
 			UpdateCurrentPack(resolution);
 
@@ -133,14 +157,21 @@ namespace Mesen.ViewModels
 			string folder = current == null ? "" : PackDetail.FolderFor(current.Origin, current.Container, packsFolder, siblingFolder);
 			PackAudioScan? scan = current != null && folder.Length > 0 && PackDetail.CanScan(current.Origin) ? PackAudioNotice.Scan(folder) : null;
 			PackDetailModel model = PackDetail.Build(current != null, entry?.Sections ?? "", scan,
-				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder);
+				PlayerPackPicker.DistinctPackIdCount(resolution.Candidates), hasSibling, !string.IsNullOrWhiteSpace(installedSourceSha256), folder, resolution.PrefersNoPack, current?.IsAutoOnly == true);
 
 			PackDetailHasPack = model.HasPack;
-			PackDetailTitle = current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
-			PackDetailByline = current == null ? ResourceHelper.GetMessage("PackDetailNoPackBody") : BuildPackByline(current);
+			//The automatic upscale is made here, not by an author: say that, with
+			//the scaler it was made with (the .bootstrap stamp beside the ROM,
+			//when known) and no author/version/license (PackDetail.AutoByline).
+			PackDetailTitle = model.IsAutomatic ? ResourceHelper.GetMessage("PackDetailAutoTitle") : current?.Name ?? ResourceHelper.GetMessage("PackDetailNoPackTitle");
+			//W-P5's "No pack" is a choice, not a missing pack: say so.
+			PackDetailByline = model.IsAutomatic ? PackDetail.AutoByline(current!.Name, RemasterProjectReader.BootstrapScaler(model.Folder), sc => ResourceHelper.GetMessage("PackDetailAutoMadeWith", sc), ResourceHelper.GetMessage("PackDetailAutoMade"))
+				: current != null ? BuildPackByline(current)
+				: ResourceHelper.GetMessage(resolution.PrefersNoPack ? "PackDetailNoPackChosenBody" : "PackDetailNoPackBody");
 			PackDetailTextures = model.Chips.Textures;
 			PackDetailAudio = model.Chips.Audio;
 			PackDetailPatch = model.Chips.Patch;
+			LoadPackLayerSwitches(model.Chips);
 			PackDetailHasNotice = model.Notice == PackDetailNotice.MissingMusic;
 			PackDetailNoticeBody = PackDetailHasNotice ? ResourceHelper.GetMessage("PackDetailMissingMusicBody", model.MissingTracks, model.TotalTracks) : "";
 			PackDetailCanChange = model.CanChangePack;
@@ -156,19 +187,19 @@ namespace Mesen.ViewModels
 			IsPackDetailVisible = true;
 		}
 
+		//W-P7's Pack row names what renders: the automatic upscale as such, a
+		//community offer, the pack's name, or "No pack".
+		private string PackRowName()
+		{
+			bool none = string.IsNullOrWhiteSpace(PackSummary) || PackSummary == ResourceHelper.GetMessage("OverlayRowNone");
+			return none ? ResourceHelper.GetMessage("PackDetailNoPackTitle") : PackSummary;
+		}
+
 		//"by Tastic · version 1.2 · CC BY-NC 4.0"
 		private static string BuildPackByline(PlayerPackChoice pack)
 		{
-			List<string> parts = new() {
-				string.IsNullOrWhiteSpace(pack.Author) ? ResourceHelper.GetMessage("PackAuthorUnknown") : ResourceHelper.GetMessage("PackByAuthor", pack.Author)
-			};
-			if(!string.IsNullOrWhiteSpace(pack.Version)) {
-				parts.Add(ResourceHelper.GetMessage("PackDetailVersion", pack.Version));
-			}
-			if(!string.IsNullOrWhiteSpace(pack.License)) {
-				parts.Add(pack.License);
-			}
-			return string.Join(" · ", parts);
+			return PackDetail.Byline(pack.Author, pack.Version, pack.License, a => ResourceHelper.GetMessage("PackByAuthor", a),
+				ResourceHelper.GetMessage("PackAuthorUnknown"), v => ResourceHelper.GetMessage("PackDetailVersion", v));
 		}
 
 		public void ClosePackDetail()
@@ -210,23 +241,51 @@ namespace Mesen.ViewModels
 			PackDetailRestoreRunning = step == RestoreStep.Running;
 		}
 
-		//W-P7: the switches start from what is applied.
-		private void LoadEnhancementsDraft()
+		//W-P7: the switches start from what is applied, or - on the way back from
+		//the Pack row - from the flips made before the detour (see
+		//EnhancementsDraftVisit / EnhancementsSheet.Resume).
+		private void LoadEnhancementsDraft(EnhancementsState? heldDraft = null)
 		{
-			_enhancementsApplied = new EnhancementsState(IsTexturesEnabled, IsAudioEnabled, IsBorderEnabled, IsWideScrnEnabled, IsOverclockEnabled);
-			EnhTextures = IsTexturesEnabled;
-			EnhAudio = IsAudioEnabled;
-			EnhBorder = IsBorderEnabled;
-			EnhWidescreen = IsWideScrnEnabled;
-			EnhOverclock = IsOverclockEnabled;
+			//ADR-0253 §1/§4 (W.5): the applied baseline is this game's effective
+			//widescreen, not the saved preference - so a game that cannot use it
+			//shows the switch off (and disabled), and Apply has nothing to write.
+			//The saved preference stays, and the next game that can use it gets
+			//it back (WidescreenSupportRule.EffectiveWidescreen).
+			EnhancementsState appliedNow = new(IsModernInstrumentsEnabled, IsBorderEnabled, EffectiveWidescreen, IsOverclockEnabled);
+			EnhancementsState draft = heldDraft == null ? appliedNow : EnhancementsSheet.Resume(_enhancementsApplied, heldDraft, appliedNow);
+			_enhancementsApplied = appliedNow;
+			EnhModernInstruments = draft.ModernInstruments;
+			EnhBorder = draft.Border;
+			EnhWidescreen = draft.Widescreen;
+			EnhOverclock = draft.Overclock;
+			EnhPackRowText = ResourceHelper.GetMessage("EnhancementsPackRow", PackRowName());
 			EnhOverclockReason = IsOverclockSupported ? "" : ResourceHelper.GetMessage("EnhancementsOverclockUnavailable", ResourceHelper.GetEnumText(RomInfo.ConsoleType));
 			UpdateEnhancementsApplyText();
 		}
 
-		private EnhancementsState EnhancementsDraft => new(EnhTextures, EnhAudio, EnhBorder, EnhWidescreen, EnhOverclock && IsOverclockSupported);
+		//ADR-0253 §1/§4 (W.5): what widescreen means for the loaded game - the
+		//saved preference only where the game can use it (the switch state
+		//RefreshEnhancementsState computed from the core's verdict).
+		private bool EffectiveWidescreen => WidescreenSupportRule.EffectiveWidescreen(IsWideScrnEnabled, _widescreenSwitch);
 
-		partial void OnEnhTexturesChanged(bool value) => UpdateEnhancementsApplyText();
-		partial void OnEnhAudioChanged(bool value) => UpdateEnhancementsApplyText();
+		//W-P7's Pack row: the row opens W-P5/W-P6 over the panel, which is a look
+		//at the pack, not a decision about the switches - so the draft waits for
+		//the way back (the window calls this before it routes the row).
+		public void HoldEnhancementsDraftForPackRow()
+		{
+			_enhancementsDraftExit = EnhancementsDraftExit.PackRow;
+		}
+
+		//The visit ends (Esc, the button, the game changing): the next open of
+		//the panel reads the switches from what is applied again.
+		private void EndEnhancementsDraftVisit()
+		{
+			_enhancementsDraftExit = EnhancementsDraftExit.Closed;
+		}
+
+		private EnhancementsState EnhancementsDraft => new(EnhModernInstruments, EnhBorder, EnhWidescreen && IsWidescreenSupported, EnhOverclock && IsOverclockSupported);
+
+		partial void OnEnhModernInstrumentsChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhBorderChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhWidescreenChanged(bool value) => UpdateEnhancementsApplyText();
 		partial void OnEnhOverclockChanged(bool value) => UpdateEnhancementsApplyText();
@@ -242,11 +301,9 @@ namespace Mesen.ViewModels
 		}
 
 		//W-P7's one button. Each change goes through the path that already owns
-		//it: ToggleWideScrn (renderer only), ToggleLayer (the pack reload, which
-		//P.9 turns into LoadRomHelper.ApplyPackChange) and ToggleOverclock (the
-		//power cycle). Several layer changes cost one reload, not one each: the
-		//others are written first and the last goes through ToggleLayer. With
-		//Overclock pending, its power cycle reloads the pack too.
+		//it: SetModernInstruments (live), ToggleWideScrn (renderer only),
+		//ToggleLayer (the Border pack reload, which P.9 turns into
+		//LoadRomHelper.ApplyPackChange) and ToggleOverclock (the power cycle).
 		public void ApplyEnhancements()
 		{
 			EnhancementsState applied = _enhancementsApplied;
@@ -257,32 +314,24 @@ namespace Mesen.ViewModels
 				ToggleWideScrn();
 			}
 
-			List<(Action<bool> Set, bool Value, Action Toggle)> layers = new();
-			if(applied.Textures != draft.Textures) {
-				layers.Add((v => Config.EnhancementPacks.EnableTextures = v, draft.Textures, ToggleTextures));
-			}
-			if(applied.Audio != draft.Audio) {
-				layers.Add((v => Config.EnhancementPacks.EnableAudio = v, draft.Audio, ToggleAudio));
-			}
-			if(applied.Border != draft.Border) {
-				layers.Add((v => Config.EnhancementPacks.EnableBorder = v, draft.Border, ToggleBorder));
+			if(applied.ModernInstruments != draft.ModernInstruments) {
+				SetModernInstruments(draft.ModernInstruments);
 			}
 
+			//Border is the one pack layer left here; with Overclock pending, its
+			//power cycle reloads the pack too, so it is written first.
 			if(applied.Overclock != draft.Overclock) {
-				foreach((Action<bool> set, bool value, _) in layers) {
-					set(value);
-				}
-				if(layers.Count > 0) {
+				if(applied.Border != draft.Border) {
+					Config.EnhancementPacks.EnableBorder = draft.Border;
 					Config.EnhancementPacks.ApplyConfig();
 				}
 				ToggleOverclock();
-			} else if(layers.Count > 0) {
-				for(int i = 0; i < layers.Count - 1; i++) {
-					layers[i].Set(layers[i].Value);
-				}
-				layers[^1].Toggle();
+			} else if(applied.Border != draft.Border) {
+				ToggleBorder();
 			}
 
+			//The button is what applies the draft: the visit is over either way.
+			EndEnhancementsDraftVisit();
 			RefreshEnhancementsState();
 			IsEnhancementsPanelVisible = false;
 			if(kind == EnhancementsApplyKind.Reload || kind == EnhancementsApplyKind.Restart) {
@@ -299,6 +348,27 @@ namespace Mesen.ViewModels
 		{
 			_pill.Begin(packName);
 			UpdatePill();
+		}
+
+		//CommunityPackInstallService.InstallProgress: the artifact's bytes so far.
+		public void OnPackInstallProgress(long received, long? total)
+		{
+			if(_pill.Report(received, total)) {
+				UpdatePillBar();
+			}
+		}
+
+		partial void OnIsPlayWorkspaceChanged(bool value)
+		{
+			UpdatePillBar();
+		}
+
+		private void UpdatePillBar()
+		{
+			IsPackInstallPillShown = PackInstallPill.ShowsOnScreen(_pill.State, Config.Preferences.UiMode == UiMode.Player, IsPlayWorkspace);
+			IsPackInstallPillFailed = _pill.State == PackInstallPillState.Failed;
+			IsPackInstallPillIndeterminate = _pill.Fraction == null;
+			PackInstallPillPercent = (_pill.Fraction ?? 0) * 100;
 		}
 
 		public void OnPackInstallFinished(bool installed, bool silent)
@@ -320,6 +390,7 @@ namespace Mesen.ViewModels
 				_ => ""
 			};
 			IsPackInstallPillInstalling = _pill.State == PackInstallPillState.Installing;
+			UpdatePillBar();
 			Shell.UpdatePackInstall(PackInstallPillText);
 
 			if(PackInstallPillText.Length > 0 && PackInstallPillText != previous) {
@@ -344,13 +415,14 @@ namespace Mesen.ViewModels
 			_pillTimer.Start();
 		}
 
-		//The native renderer draws over Avalonia content, so over a running game
-		//the pill is the core's HUD message (the same channel as the W-P3 toast).
-		//A HUD message lasts PackInstallPillHud.RepostMilliseconds; it is posted
-		//again while the install runs.
+		//Where the pill is not on screen (Advanced mode) the sentence is the
+		//core's HUD message (the same channel as the W-P3 toast). A HUD message
+		//lasts PackInstallPillHud.RepostMilliseconds; it is posted again while
+		//the install runs. In Player mode's Play the pill is a popup - its own
+		//window, above the native game picture - with a moving bar (#734).
 		private void PostPillToHud()
 		{
-			if(EmuApi.IsRunning()) {
+			if(!IsPackInstallPillShown && EmuApi.IsRunning()) {
 				EmuApi.DisplayMessage("MEP", PackInstallPillText);
 			}
 		}

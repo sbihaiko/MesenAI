@@ -77,10 +77,10 @@ public class PlaySheetsViewTests : IDisposable
 
 		Border detail = window.FindNamed<Border>("PlayerPackDetailSheet");
 		Assert.True(detail.IsOnScreen());
-		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(window.IsPauseCardActive());
 		Assert.Equal("Aaa Pack", window.FindNamed<TextBlock>("PackDetailTitle").Text);
 		Assert.Equal("by Tastic · version 1.2 · CC BY-NC 4.0", window.FindNamed<TextBlock>("PackDetailByline").Text);
-		Assert.True(window.FindNamed<StackPanel>("PackDetailChips").IsOnScreen());
+		Assert.True(window.FindNamed<StackPanel>("PackDetailLayers").IsOnScreen());
 
 		//Rule 4: nothing to change to - disabled, with its reason.
 		Assert.False(window.FindNamed<Button>("PackDetailChangeButton").IsEnabled);
@@ -113,19 +113,44 @@ public class PlaySheetsViewTests : IDisposable
 
 		Button restore = window.FindNamed<Button>("PackDetailRestoreButton");
 		Assert.True(restore.IsOnScreen());
-		Assert.False(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 
 		Click(restore);
-		Assert.True(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.True(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 		Assert.False(restore.IsOnScreen());
 
 		Click(window.FindNamed<Button>("PackDetailRestoreKeepButton"));
-		Assert.False(window.FindNamed<StackPanel>("PackDetailRestoreConfirm").IsOnScreen());
+		Assert.False(window.FindNamed<Border>("PackDetailRestoreConfirm").IsOnScreen());
 		Assert.True(restore.IsOnScreen());
 
 		Click(window.FindNamed<Button>("PackDetailDoneButton"));
 		Assert.False(window.FindNamed<Border>("PlayerPackDetailSheet").IsOnScreen());
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//The user's rule (2026-10-03): from the confirm until the restore ends,
+	//the sheet shows a moving wait (the catalog fetch and match come before
+	//the install pill does).
+	[AvaloniaFact]
+	public void A_running_restore_shows_a_moving_wait_until_it_ends()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		model.OpenPackFromOverlay(OnePack, Sha1, "/packs", "", installedSourceSha256: "abc123");
+		Dispatcher.UIThread.RunJobs();
+		Control wait = window.FindNamed<Control>("PackDetailRestoreWait");
+		Assert.False(wait.IsOnScreen());
+
+		Assert.False(model.PressRestore());
+		Assert.True(model.PressRestore());
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(wait.IsOnScreen());
+		Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Equal("Restoring the pack…", window.FindNamed<TextBlock>("PackDetailRestoreWaitText").Text);
+
+		model.RestoreFinished();
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(wait.IsOnScreen());
 	}
 
 	[AvaloniaFact]
@@ -142,9 +167,11 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.StartsWith("Choose a pack for ", window.FindNamed<TextBlock>("PackPickerTitle").Text);
 
 		RadioButton[] radios = window.FindNamed<ItemsControl>("PackPickerList").FindAll<RadioButton>().ToArray();
-		Assert.Equal(2, radios.Length);
+		//Two packs and W-P5's "No pack" row, last.
+		Assert.Equal(3, radios.Length);
 		Assert.True(radios[0].IsChecked);
 		Assert.False(radios[1].IsChecked);
+		Assert.False(radios[2].IsChecked);
 		Assert.True(radios[0].IsFocused);
 		Assert.True(window.FindNamed<Button>("PackPickerUseButton").IsEnabled);
 		//"author unknown", not the catalog's "?" (W-P5).
@@ -180,7 +207,10 @@ public class PlaySheetsViewTests : IDisposable
 			Assert.False(window.FindNamed<Border>("PlayerPackPicker").IsOnScreen());
 			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 		} finally {
+			//Use This Pack saved the choice to the test home's settings.json;
+			//save the reset too, or the next run starts with it stored.
 			ConfigManager.Config.EnhancementPacks.SetRomPackPreference(Sha1, "");
+			ConfigManager.Config.Save();
 		}
 	}
 
@@ -234,7 +264,7 @@ public class PlaySheetsViewTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 		Button apply = window.FindNamed<Button>("EnhancementsApplyButton");
 		Assert.Equal("Done", apply.Content);
-		Assert.True(window.FindNamed<CheckBox>("EnhancementsTexturesCheckBox").IsFocused);
+		Assert.True(window.FindNamed<CheckBox>("EnhancementsModernCheckBox").IsFocused);
 
 		CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
 		widescreen.IsChecked = !widescreen.IsChecked;
@@ -265,6 +295,115 @@ public class PlaySheetsViewTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
+	//ADR-0253 §4 (W.5): a game the core measured with nothing beside the picture
+	//shows the Widescreen switch disabled, with its one-line reason under it.
+	//The rule itself is host-free in UI.Tests (WidescreenSupportRuleTests); this
+	//is only the wiring.
+	[AvaloniaFact]
+	public void Widescreen_switch_is_disabled_with_its_reason_when_the_game_cannot_use_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.False(widescreen.IsEnabled);
+			TextBlock reason = window.FindNamed<TextBlock>("EnhancementsWidescreenReason");
+			Assert.True(reason.IsVisible);
+			Assert.Equal("This game has nothing to show beside the picture", reason.Text);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
+	//ADR-0253 §1/§4 (W.5): a game that cannot use widescreen is shown as off -
+	//not "on but dead" - and turning it off on screen never writes the saved
+	//preference away, so the next game that can use it gets it back.
+	[AvaloniaFact]
+	public void A_game_that_cannot_use_widescreen_shows_the_switch_off_and_keeps_the_saved_preference()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		VideoAspectRatio wasAspect = ConfigManager.Config.Video.AspectRatio;
+
+		try {
+			ConfigManager.Config.Video.AspectRatio = VideoAspectRatio.Widescreen;
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.False(widescreen.IsEnabled);
+			Assert.False(widescreen.IsChecked);
+			Assert.True(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+			//Nothing to apply: the button is Done, and the preference survives.
+			Button apply = window.FindNamed<Button>("EnhancementsApplyButton");
+			Assert.Equal("Done", apply.Content);
+			Click(apply);
+			Assert.Equal(VideoAspectRatio.Widescreen, ConfigManager.Config.Video.AspectRatio);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+			ConfigManager.Config.Video.AspectRatio = wasAspect;
+		}
+	}
+
+	[AvaloniaFact]
+	public void Widescreen_switch_stays_enabled_with_no_reason_for_a_game_that_can_use_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Supported);
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.False(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
+	//ADR-0253 §3 (W.3) x §4 (W.5), the app half of the seam: the sheet asks the
+	//core whether the loaded pack ships widescreen art and keeps the switch
+	//enabled over a game the measurement settled - the record was made without
+	//the pack, and this game now has a mode. The rule that decides is host-free
+	//in UI.Tests (SwitchForLoadedGame); what only this can show is that the sheet
+	//reads the core's answer at all - a hard-coded `false` at the call site
+	//leaves SwitchForLoadedGame's own tests green and turns this one red.
+	[AvaloniaFact]
+	public void A_pack_shipping_widescreen_art_keeps_the_switch_enabled_for_a_recorded_game()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+
+		try {
+			model.SyncWidescreenSupport(Sha1, WidescreenSupport.Unsupported);
+			model.ReadWidescreenPackArt = () => true;
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.False(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+
+			//The same recorded game with no pack art is W.5's disabled switch.
+			model.ReadWidescreenPackArt = () => false;
+			model.CloseEnhancementsPanel();
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.False(window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox").IsEnabled);
+			Assert.True(window.FindNamed<TextBlock>("EnhancementsWidescreenReason").IsVisible);
+		} finally {
+			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
 	[AvaloniaFact]
 	public void Install_pill_sentence_reaches_the_status_line_and_clears()
 	{
@@ -278,7 +417,9 @@ public class PlaySheetsViewTests : IDisposable
 
 		model.OnPackInstallFinished(installed: false, silent: false);
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("⚠ The pack could not be downloaded. Playing without it.", model.PackInstallPillText);
+		//A core HUD/status line text: no ⚠ glyph, the words only.
+		Assert.Equal("The pack could not be downloaded. Playing without it.", model.PackInstallPillText);
+		Assert.Equal("The pack could not be downloaded. Playing without it.", window.FindNamed<TextBlock>("ShellStatusText").Text);
 
 		model.OnPackInstallStarted("Contra 80s");
 		model.OnPackInstallFinished(installed: true, silent: false);

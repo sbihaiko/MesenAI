@@ -13,7 +13,19 @@ NesNtscFilter::NesNtscFilter(Emulator* emu) : BaseVideoFilter(emu)
 	memset(&_ntscData, 0, sizeof(_ntscData));
 	_ntscSetup = {};
 	nes_ntsc_init(&_ntscData, &_ntscSetup);
-	_ntscBuffer = new uint32_t[NES_NTSC_OUT_WIDTH(256) * 240];
+}
+
+//ADR-0253 W.6: the plane the blit writes into follows the frame it is handed.
+//The buffer is kept between frames - only a change of frame size reallocates,
+//which is what flipping the WideScrn switch does.
+void NesNtscFilter::EnsureNtscBuffer(uint32_t width, uint32_t height)
+{
+	uint64_t pixels = WidescreenFrameFlow::Ntsc::BlitPlanePixels(width, height);
+	if(_ntscBufferPixels != pixels) {
+		delete[] _ntscBuffer;
+		_ntscBuffer = pixels > 0 ? new uint32_t[pixels] : nullptr;
+		_ntscBufferPixels = pixels;
+	}
 }
 
 OverscanDimensions NesNtscFilter::GetOverscan()
@@ -30,15 +42,26 @@ FrameInfo NesNtscFilter::GetFrameInfo()
 {
 	OverscanDimensions overscan = GetOverscan();
 
+	//Before the first frame the base size is a placeholder, and a blitted width
+	//of 0 would subtract the overscan from nothing and wrap into a 4-billion-px
+	//request. The old fixed width could not do that; this can, so
+	//BlitVisibleWidth refuses instead of subtracting, and a frame it refuses is
+	//no frame at all.
 	FrameInfo frameInfo;
-	frameInfo.Width = NES_NTSC_OUT_WIDTH(_baseFrameInfo.Width) - overscan.Left - overscan.Right;
+	frameInfo.Width = WidescreenFrameFlow::Ntsc::BlitVisibleWidth(_baseFrameInfo.Width, overscan.Left, overscan.Right);
+	if(frameInfo.Width == 0 || _baseFrameInfo.Height * 2 <= overscan.Top + overscan.Bottom) {
+		return { 0, 0 };
+	}
+
 	frameInfo.Height = _baseFrameInfo.Height * 2 - overscan.Top - overscan.Bottom;
 	return frameInfo;
 }
 
 HudScaleFactors NesNtscFilter::GetScaleFactor()
 {
-	return { (double)NES_NTSC_OUT_WIDTH(256) / 256, 2 };
+	//ADR-0253 W.6: the HUD is drawn over the frame the filter produced, so the
+	//horizontal scale is that frame's, not the console's 256 px.
+	return { WidescreenFrameFlow::Ntsc::BlitHudScaleX(_baseFrameInfo.Width), 2 };
 }
 
 void NesNtscFilter::OnBeforeApplyFilter()
@@ -71,17 +94,23 @@ void NesNtscFilter::ApplyFilter(uint16_t* ppuOutputBuffer)
 {
 	FrameInfo frameInfo = _frameInfo;
 	OverscanDimensions overscan = GetOverscan();
+	if(_baseFrameInfo.Width == 0 || _baseFrameInfo.Height == 0) {
+		return;
+	}
 
-	uint32_t baseWidth = NES_NTSC_OUT_WIDTH(_baseFrameInfo.Width);
+	uint32_t baseWidth = WidescreenFrameFlow::Ntsc::BlitOutputWidth(_baseFrameInfo.Width);
+	EnsureNtscBuffer(_baseFrameInfo.Width, _baseFrameInfo.Height);
 	uint32_t xOffset = overscan.Left;
 	uint32_t yOffset = overscan.Top / 2 * baseWidth;
 
 	if(_nesConfig.EnablePalBorders && _emu->GetRegion() != ConsoleRegion::Ntsc) {
-		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer);
+		//ADR-0253 W.6: the border covers the frame the filter was handed, extra
+		//columns included, so it cannot leave a Reveal frame's sides unframed
+		NesDefaultVideoFilter::ApplyPalBorder(ppuOutputBuffer, _baseFrameInfo.Width);
 	}
 
 	int phase = _ntscSetup.merge_fields ? 0 : GetVideoPhase();
-	nes_ntsc_blit(&_ntscData, ppuOutputBuffer, _baseFrameInfo.Width, phase, _baseFrameInfo.Width, _baseFrameInfo.Height, _ntscBuffer, NES_NTSC_OUT_WIDTH(_baseFrameInfo.Width) * 4);
+	nes_ntsc_blit(&_ntscData, ppuOutputBuffer, _baseFrameInfo.Width, phase, _baseFrameInfo.Width, _baseFrameInfo.Height, _ntscBuffer, baseWidth * 4);
 
 	for(uint32_t i = 0; i < frameInfo.Height; i += 2) {
 		memcpy(GetOutputBuffer() + i * frameInfo.Width, _ntscBuffer + yOffset + xOffset + (i / 2) * baseWidth, frameInfo.Width * sizeof(uint32_t));

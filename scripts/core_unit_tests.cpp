@@ -44,6 +44,7 @@
 #include "Shared/Audio/ChannelRoleClassifier.h"
 #include "Shared/Audio/EnhancedSynthEngine.h"
 #include "Shared/EnhancementPacks/AudioFingerprint.h"
+#include "Shared/EnhancementPacks/ForcedPatchGate.h"
 #include "Shared/EnhancementPacks/MepPack.h"
 #include "Shared/EnhancementPacks/MepRecipeInstaller.h"
 #include "Shared/EnhancementPacks/MepRecipeOps.h"
@@ -59,6 +60,10 @@
 #include "Shared/Video/BorderLayout.h"
 #include "Shared/Video/FrameCapture.h"
 #include "Shared/Video/AspectRatioMath.h"
+#include "Shared/Video/HudToastLayout.h"
+#include "Shared/Video/WidescreenFallback.h"
+#include "Shared/RenderedFrame.h"
+#include "Shared/EnhancementPacks/MepWidescreen.h"
 #include "Shared/HeadlessInputEngine.h"
 #include "Shared/HeadlessInputScript.h"
 #include "Shared/MovieSyncGate.h"
@@ -66,6 +71,20 @@
 #include "Shared/ShortcutKeyRules.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
+#include "NES/NesWidescreenReveal.h"
+#include "Gameboy/GbConstants.h"
+#include "Gameboy/GbWidescreenReveal.h"
+#include "SMS/SmsWidescreenReveal.h"
+#include "GBA/GbaWidescreenReveal.h"
+#include "NES/NesWidescreenSupport.h"
+#include "NES/NesWidescreenPpu.h"
+#include "Shared/Video/WidescreenFrameFlow.h"
+//W.6 asserts the two filters' own AcceptsExtendedFrame declaration (below).
+//Only the headers are needed - the trait check is unevaluated, so no filter
+//object file has to be linked, which is what makes it possible here at all.
+#include "NES/NesNtscFilter.h"
+#include "NES/BisqwitNtscFilter.h"
+#include "Shared/MemoryOperationType.h"
 #include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
@@ -75,6 +94,9 @@
 #include "NES/HdPacks/HdTileSuppressionLog.h"
 #include "NES/HdPacks/HdCaptureCellGuard.h"
 #include "NES/HdPacks/HdPackConditions.h"
+#include "NES/HdPacks/HdWidescreenGeometry.h"
+#include "NES/HdPacks/HdWidescreenColumns.h"
+#include "NES/HdPacks/HdVideoFilter.h"
 #include "NES/HdPacks/MetatileVocabulary.h"
 #include "NES/HdPacks/ScreenStitcher.h"
 #include "NES/HdPacks/SheetGrouping.h"
@@ -88,6 +110,7 @@
 #include "NES/HdPacks/OggLoopStream.h"
 #include "NES/HdPacks/OggMixer.h"
 #include "Shared/Audio/ReplacementMuteMask.h"
+#include "Shared/Audio/AsyncAudioDeviceOpen.h"
 #include "Utilities/Base64.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/JsonReader.h"
@@ -96,11 +119,15 @@
 #include "Utilities/sha256.h"
 #include "Utilities/Video/LibrashaderUtilities.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -573,6 +600,14 @@ void TestTheDeclineRuleRefusesAForeignPackAndExemptsTheProjectsOwnLayers()
 	Check(own.NeedTextures && own.NeedAudio && !own.Declined(), "F12.20: the project's own layers do not decline a second recording");
 	RemasterProject::RecordingPlan gb = PlanRecording(LayerOwner{}, false, LayerOwner{}, false);
 	Check(gb.NeedTextures && !gb.NeedAudio, "F12.20: audio fingerprints stay NES only");
+	//The legacy Play bootstrap (BootstrapEnhancementFolder kept on, ADR-0243 Q3) is not the Record button: recording
+	//swaps the HD PPU for the builder's, so recording over the project's own mep/ art would play the game without it.
+	RemasterProject::RecordingPlan passiveOverArt = PlanRecording(LayerOwner{ true, true, true }, false, LayerOwner{}, true, false);
+	Check(!passiveOverArt.NeedTextures && passiveOverArt.NeedAudio, "Play's automatic bootstrap never records tiles over the project's own mep/ art");
+	RemasterProject::RecordingPlan passiveOverDraft = PlanRecording(LayerOwner{ true, true, false }, false, LayerOwner{}, true, false);
+	Check(passiveOverDraft.NeedTextures, "Play's automatic bootstrap still records over the project's own earlier recordings");
+	RemasterProject::RecordingPlan recordOverArt = PlanRecording(LayerOwner{ true, true, true }, false, LayerOwner{}, true, true);
+	Check(recordOverArt.NeedTextures, "ADR-0243 Decision 3: the Record button still records over the project's own mep/ art");
 
 	using RemasterProject::IsOwnProjectSection;
 	Check(IsOwnProjectSection(true, true, "mep/textures"), "F12.20: the project's mep/ human layer is its own");
@@ -1275,6 +1310,84 @@ namespace
 	}
 }
 
+//W-P5's "No pack": the per-ROM preference value the UI stores
+//(PackPreferenceResolver.NoPack) turns every pack off for that ROM - the
+//sections and the ROM patch alike - except a sibling-folder pack (ADR-0049,
+//§4: the folder beside the ROM always wins). The sentinel starts with ':',
+//which no ADR-0140 pack_id does, so it can never select a real pack.
+namespace
+{
+	void TestNoPackPreferenceTurnsEveryPackOffButTheSibling()
+	{
+		Check(string(MepPackManager::kNoPackPreference) == ":none", "No pack: the core sentinel matches the UI's PackPreferenceResolver.NoPack");
+		Check(MepPackManager::IsNoPackPreference(":none"), "No pack: the sentinel reads as no pack");
+		Check(!MepPackManager::IsNoPackPreference("none"), "No pack: a slug pack_id `none` is a pack, not the sentinel");
+		Check(!MepPackManager::IsNoPackPreference("local::none"), "No pack: a container named `:none` is a pack, not the sentinel");
+		Check(!MepPackManager::IsNoPackPreference(""), "No pack: no preference is not no pack");
+
+		Check(!MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Folder), "No pack: an installed folder pack is off");
+		Check(!MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Zip), "No pack: an installed zip pack is off");
+		Check(MepPackManager::PreferenceAllowsPack(":none", MepPackOrigin::Sibling), "No pack: the sibling folder still wins (ADR-0049)");
+		Check(MepPackManager::PreferenceAllowsPack("issue-1", MepPackOrigin::Folder), "No pack: a pack preference leaves the others eligible");
+		Check(MepPackManager::PreferenceAllowsPack("", MepPackOrigin::Folder), "No pack: no preference leaves every pack eligible");
+	}
+}
+
+//W-P6's per-game layer switches: the UI pushes the layers turned off for one
+//ROM as a comma list; the textures and audio sections stop being served and
+//the ROM patch is not applied. Synth (enhanced audio) and Border keep their
+//global switches only.
+namespace
+{
+	void TestRomLayerSwitchesTurnOffTheirSectionOnly()
+	{
+		Check(MepPackManager::ParseRomLayersOff("") == 0, "W-P6 layers: an empty list turns nothing off");
+		Check(MepPackManager::ParseRomLayersOff("textures") == (uint8_t)MepRomLayer::Textures, "W-P6 layers: textures reads as the textures bit");
+		uint8_t all = MepPackManager::ParseRomLayersOff(" Textures, audio ,PATCH");
+		Check(MepPackManager::IsLayerOff(all, MepRomLayer::Textures) && MepPackManager::IsLayerOff(all, MepRomLayer::Audio) && MepPackManager::IsLayerOff(all, MepRomLayer::Patch),
+			"W-P6 layers: the list is trimmed and case-insensitive");
+		Check(MepPackManager::ParseRomLayersOff("synth,border,,x") == 0, "W-P6 layers: unknown words turn nothing off");
+
+		uint8_t audio = (uint8_t)MepRomLayer::Audio;
+		Check(MepPackManager::SectionOff(audio, MepSectionType::Audio), "W-P6 layers: audio off stops serving the audio section");
+		Check(!MepPackManager::SectionOff(audio, MepSectionType::Textures), "W-P6 layers: audio off leaves the textures section");
+		Check(!MepPackManager::SectionOff(audio, MepSectionType::Synth), "W-P6 layers: audio off leaves enhanced audio (Synth) on its global switch");
+		uint8_t textures = (uint8_t)MepRomLayer::Textures;
+		Check(MepPackManager::SectionOff(textures, MepSectionType::Textures), "W-P6 layers: textures off stops serving the textures section");
+		Check(!MepPackManager::SectionOff(textures, MepSectionType::Border), "W-P6 layers: textures off leaves the border");
+		Check(!MepPackManager::SectionOff((uint8_t)MepRomLayer::Patch, MepSectionType::Textures) && !MepPackManager::SectionOff((uint8_t)MepRomLayer::Patch, MepSectionType::Audio),
+			"W-P6 layers: patch off serves every section");
+	}
+}
+
+//ADR-0147: a community pack installed beside the ROM goes into <sibling>/mep/,
+//and the installer writes its .mep-install.json there - the sibling folder
+//itself is the container root. Reading the stamp only at the root left that
+//pack without its pack_id/content_id, so W-P6 offered the very community
+//pack that was rendering as "not installed".
+namespace
+{
+	void TestSiblingMepLayoutReadsItsInstallStamp()
+	{
+		std::filesystem::path sibling = std::filesystem::temp_directory_path() / "mep_sibling_stamp_test";
+		std::error_code ec;
+		std::filesystem::remove_all(sibling, ec);
+		std::filesystem::create_directories(sibling / "mep", ec);
+		std::ofstream(sibling / "mep" / ".mep-install.json", std::ios::out | std::ios::binary) << "{\"pack_id\":\"issue-207\"}\n";
+
+		string root = sibling.string();
+		string mepStamp = FolderUtilities::CombinePath(FolderUtilities::CombinePath(root, "mep"), ".mep-install.json");
+		string rootStamp = FolderUtilities::CombinePath(root, ".mep-install.json");
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Sibling) == mepStamp, "sibling stamp: a sibling installed under mep/ reads mep/.mep-install.json");
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Folder) == rootStamp, "sibling stamp: a folder pack keeps its root stamp");
+
+		std::ofstream(sibling / ".mep-install.json", std::ios::out | std::ios::binary) << "{\"pack_id\":\"root\"}\n";
+		Check(MepPackManager::InstallStampPath(root, MepPackOrigin::Sibling) == rootStamp, "sibling stamp: a stamp at the sibling root still wins (legacy layout)");
+
+		std::filesystem::remove_all(sibling, ec);
+	}
+}
+
 //--- Bloco H: FingerprintStore loop field round-trip (ADR-0134 Option A) ------
 //F5.4g Block C item 8: fingerprints.json's optional `loop` point (PCM
 //samples at the OGG's own rate). Absence/zero means loop-the-whole-file;
@@ -1934,6 +2047,60 @@ namespace
 
 		//A cleared mask (no replacement playing, or any stop path) mutes nothing.
 		Check(MutedChannels(0).empty(), "BlocoK: mask 0 mutes no channel at all");
+	}
+
+	//--- Enhanced synth under a pack track (ADR-0052 item 3b: 3b overrides
+	//level 2 only for the tracks that exist) ---------------------------------
+	void TestSynthYieldsToPackTrackOnReplacedChannels()
+	{
+		//No replacement playing (mask 0): the synth plays everything.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0) && !ReplacementMuteMask::SynthSilencesNoise(0),
+			"BlocoK: with no pack track playing the synth voices are not silenced");
+		//Full tonal mute: the pack track owns the music and the drums.
+		Check(ReplacementMuteMask::SynthSilencesMusic(ReplacementMuteMask::FullTonalMute),
+			"BlocoK: a pack track silences the synth's music voices (no double music)");
+		Check(ReplacementMuteMask::SynthSilencesNoise(ReplacementMuteMask::FullTonalMute),
+			"BlocoK: a pack track silences the synth's noise drums");
+		//Square2 flagged SFX (bit 1 clear): music still replaced, SFX slot untouched
+		//(SFX voices are not part of the gate at all).
+		Check(ReplacementMuteMask::SynthSilencesMusic(0x0D), "BlocoK: an SFX channel does not un-silence the other channels' music");
+		//Every melodic channel is SFX: no music slot is left to silence, noise still replaced.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0x08), "BlocoK: with all melodic channels on SFX there is no music to silence");
+		Check(ReplacementMuteMask::SynthSilencesNoise(0x08), "BlocoK: noise stays replaced when only it is masked");
+		//DMC bit alone is not a synth voice.
+		Check(!ReplacementMuteMask::SynthSilencesMusic(0x10) && !ReplacementMuteMask::SynthSilencesNoise(0x10), "BlocoK: a DMC-only mask silences no synth voice");
+	}
+
+	void TestSynthPackGainFadesInsteadOfClicking()
+	{
+		//One audio flush is ~5.6 ms; the ramp must take several flushes (ADR-0142
+		//philosophy: no hard cut) and arrive exactly at 0 / 1.
+		const double dt = 0.0056;
+		double gain = 1.0;
+		int steps = 0;
+		double biggestStep = 0;
+		while(gain > 0.0 && steps < 1000) {
+			double next = ReplacementMuteMask::SynthGainStep(gain, true, dt);
+			biggestStep = std::max(biggestStep, gain - next);
+			Check(next <= gain, "BlocoK: the pack gain only falls while silencing");
+			if(next == gain) {
+				break;
+			}
+			gain = next;
+			steps++;
+		}
+		Check(gain == 0.0, "BlocoK: the synth gain reaches exactly 0 while a pack track plays", std::to_string(gain));
+		Check(steps >= 4 && biggestStep < 0.5, "BlocoK: the synth gain fades over several flushes instead of cutting", std::to_string(steps) + " steps, max " + std::to_string(biggestStep));
+		int up = 0;
+		while(gain < 1.0 && up < 1000) {
+			double next = ReplacementMuteMask::SynthGainStep(gain, false, dt);
+			if(next <= gain) {
+				break;
+			}
+			gain = next;
+			up++;
+		}
+		Check(gain == 1.0 && up >= 4, "BlocoK: the synth returns to full gain after the track stops");
 	}
 }
 
@@ -2647,6 +2814,3052 @@ namespace
 			std::to_string(wide.Width) + "x" + std::to_string(wide.Height));
 		Check(wide.Width > standard.Width && standard.Width > square.Width, "BlocoN: 16:9 is wider than 4:3, which is wider than native");
 		Check(wide.Height == square.Height, "BlocoN: stretching never changes the row count");
+	}
+}
+
+//--- Bloco W253: NES widescreen Reveal (ADR-0253, slice W.1) ----------------
+//The pure half of the Reveal: which nametable columns sit beside the 256-px
+//picture on a row, whether they hold real content (the black fallback), the
+//frame-width contract (N = 64 extra columns per side) and the double-buffered
+//extended frame. The fake mapper below exposes the same VRAM surface as
+//BaseMapper (ReadVram / MapperReadVram / NotifyVramAddressChange and the
+//debugger's DebugReadVram) and counts every call, so the "a mapper hook never
+//fires twice" rule of ADR-0253 §2 is asserted, not assumed.
+namespace
+{
+	struct RevealFakeMapper
+	{
+		uint8_t Chr[0x2000] = {};
+		uint8_t Nametables[4][0x400] = {};
+		int NametableMap[4] = { 0, 1, 0, 1 };
+		int SideEffectReads = 0;
+		int VramHookCalls = 0;
+		int DebugReads = 0;
+
+		uint8_t Internal(uint16_t addr)
+		{
+			addr &= 0x3FFF;
+			if(addr < 0x2000) {
+				return Chr[addr];
+			}
+			return Nametables[NametableMap[(addr >> 10) & 0x03]][addr & 0x3FF];
+		}
+
+		//BaseMapper's side-effecting paths: a PPU rendering read and the A12 hook
+		uint8_t ReadVram(uint16_t addr, MemoryOperationType = MemoryOperationType::PpuRenderingRead) { SideEffectReads++; return Internal(addr); }
+		uint8_t MapperReadVram(uint16_t addr, MemoryOperationType) { SideEffectReads++; return Internal(addr); }
+		void NotifyVramAddressChange(uint16_t) { VramHookCalls++; }
+
+		//BaseMapper::DebugReadVram, same default and same hook behaviour
+		uint8_t DebugReadVram(uint16_t addr, bool disableSideEffects = true)
+		{
+			if(!disableSideEffects) {
+				NotifyVramAddressChange(addr);
+			}
+			DebugReads++;
+			return Internal(addr);
+		}
+
+		void SetTile(uint8_t tile, uint8_t lo[8], uint8_t hi[8])
+		{
+			for(int i = 0; i < 8; i++) {
+				Chr[tile * 16 + i] = lo[i];
+				Chr[tile * 16 + 8 + i] = hi[i];
+			}
+		}
+
+		void FillNametable(int physical, uint8_t tile, uint8_t attribute)
+		{
+			memset(Nametables[physical], tile, 0x3C0);
+			memset(Nametables[physical] + 0x3C0, attribute, 0x40);
+		}
+	};
+
+	//Tile 1: solid colour 1. Tile 2: solid colour 2. Tile 4: colour 1 on the
+	//tile's first pixel column only. Tile 5: colour 1 on fine row 2 only.
+	void SetUpRevealTiles(RevealFakeMapper& m)
+	{
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		uint8_t zero[8] = {};
+		uint8_t col0[8] = { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+		uint8_t row2[8] = { 0, 0, 0xFF, 0, 0, 0, 0, 0 };
+		m.SetTile(1, ff, zero);
+		m.SetTile(2, zero, ff);
+		m.SetTile(4, col0, zero);
+		m.SetTile(5, row2, zero);
+	}
+
+	//pal[0] backdrop 0x0D; palette 0 = 11/12/13, palette 1 = 21/22/23
+	void SetUpRevealPalette(uint8_t pal[0x20])
+	{
+		memset(pal, 0, 0x20);
+		pal[0] = 0x0D;
+		pal[1] = 0x11; pal[2] = 0x12; pal[3] = 0x13;
+		pal[5] = 0x21; pal[6] = 0x22; pal[7] = 0x23;
+	}
+
+	NesWidescreenReveal::RowBasis RevealBasis(uint8_t coarseX, uint8_t fineX, uint8_t fineY = 0)
+	{
+		NesWidescreenReveal::RowBasis basis;
+		basis.VideoRamAddr = (uint16_t)((fineY << 12) | (coarseX & 0x1F));
+		basis.FineX = fineX;
+		basis.BgPatternAddr = 0;
+		basis.BgEnabled = true;
+		return basis;
+	}
+
+	bool AllEqual(const uint16_t* px, uint32_t count, uint16_t value)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(px[i] != value) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	std::string Hex16(uint16_t v)
+	{
+		char buf[8];
+		snprintf(buf, sizeof(buf), "0x%02X", v);
+		return buf;
+	}
+
+	void TestRevealWidthContractIsSixtyFourColumnsPerSide()
+	{
+		using namespace NesWidescreenReveal;
+		Check(ExtraColumns == 64, "W253: the NES Reveal adds 64 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 384, "W253: an extended NES frame is 384 px wide", std::to_string(ExtendedWidth));
+		Check(ExtraColumns % 8 == 0, "W253: the extra columns are whole 8-px tiles");
+
+		//At the NES's 8:7 pixel aspect, 384x240 is within 3 % of 16:9
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, (384.0 / 240.0) * 8.0 / 7.0), "W253: Widescreen shows an extended frame at the 8:7 pixel aspect, not stretched", std::to_string(ratio));
+		Check(std::fabs(ratio / (16.0 / 9.0) - 1.0) < 0.03, "W253: the extended NES frame is within 3 % of 16:9", std::to_string(ratio));
+
+		in.Region = ConsoleRegion::Pal;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(in), (384.0 / 240.0) * 11.0 / 8.0), "W253: a PAL extended frame keeps the 11:8 pixel aspect");
+
+		//A frame without extra columns keeps today's 16:9 (no Reveal to show)
+		AspectRatioMath::Inputs standard = in;
+		standard.Region = ConsoleRegion::Ntsc;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253: Widescreen on a standard frame is unchanged");
+	}
+
+	void TestRevealClassifiesMirroringFromTheNametablePages()
+	{
+		using namespace NesWidescreenReveal;
+		int a = 0, b = 0, c = 0, d = 0;
+		Check(ClassifyMirroring(&a, &b, &a, &b) == MirroringType::Vertical, "W253: NT0=NT2, NT1=NT3 is vertical mirroring");
+		Check(ClassifyMirroring(&a, &a, &b, &b) == MirroringType::Horizontal, "W253: NT0=NT1, NT2=NT3 is horizontal mirroring");
+		Check(ClassifyMirroring(&a, &a, &a, &a) == MirroringType::ScreenAOnly, "W253: one page everywhere is single-screen");
+		Check(ClassifyMirroring(&a, &b, &c, &d) == MirroringType::FourScreens, "W253: four distinct pages are four-screen");
+	}
+
+	void TestRevealContentRulePerMirroring()
+	{
+		using namespace NesWidescreenReveal;
+		Check(SideColumnsHaveContent(MirroringType::Vertical, 0), "W253: vertical mirroring has a neighbouring screen beside the picture");
+		Check(SideColumnsHaveContent(MirroringType::Vertical, 300), "W253: vertical mirroring has content at any scroll");
+		Check(SideColumnsHaveContent(MirroringType::FourScreens, 37), "W253: four-screen has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::ScreenAOnly, 0), "W253: single-screen (A) never has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::ScreenBOnly, 128), "W253: single-screen (B) never has content beside the picture");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 8), "W253: horizontal mirroring while scrolled horizontally has no content");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 256 + 3), "W253: horizontal mirroring scrolled within the right nametable has no content");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring is black even with no horizontal scroll (SMB3 title, ADR-0253 §3 amended)");
+		Check(!SideColumnsHaveContent(MirroringType::Horizontal, 256), "W253: horizontal mirroring aligned on the right nametable is black too");
+	}
+
+	void TestRevealOriginFollowsCoarseXFineXAndNametableBit()
+	{
+		using namespace NesWidescreenReveal;
+		RowBasis basis = RevealBasis(16, 5);
+		Check(RowOriginX(basis) == 16 * 8 + 5, "W253: origin = coarse X * 8 + fine X", std::to_string(RowOriginX(basis)));
+		basis.VideoRamAddr |= 0x0400;
+		Check(RowOriginX(basis) == 256 + 16 * 8 + 5, "W253: the horizontal nametable bit adds 256", std::to_string(RowOriginX(basis)));
+	}
+
+	void TestRevealShowsTheNeighbouringNametableOnVerticalMirroring()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00); //colour 1, palette 0 -> 0x11
+		m.FillNametable(1, 2, 0x55); //colour 2, palette 1 -> 0x22
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//Unscrolled: both sides are the other nametable (wrapping on the left)
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x22), "W253: unscrolled, the left columns come from the neighbouring nametable", Hex16(left[0]));
+		Check(AllEqual(right, ExtraColumns, 0x22), "W253: unscrolled, the right columns come from the neighbouring nametable", Hex16(right[0]));
+
+		//Scrolled by 128: the left side is still NT0, the right side is NT1
+		RenderRowSides(RevealBasis(16, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x11), "W253: scrolled 128 px, the left columns are the current nametable", Hex16(left[0]));
+		Check(AllEqual(right, ExtraColumns, 0x22), "W253: scrolled 128 px, the right columns are the next nametable", Hex16(right[0]));
+	}
+
+	void TestRevealHonoursFineXFineYAndTheAttributeQuadrant()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//Fine X: tile 4 lights only its first pixel column; shifting by 3
+		//moves the lit pixel of the first right-side tile to index 5
+		m.FillNametable(0, 4, 0x00);
+		m.FillNametable(1, 4, 0x55);
+		RenderRowSides(RevealBasis(0, 3), MirroringType::Vertical, m, pal, left, right);
+		Check(right[5] == 0x21 && right[4] == 0x0D && right[6] == 0x0D, "W253: fine X shifts the extra columns like the picture",
+			Hex16(right[4]) + " " + Hex16(right[5]) + " " + Hex16(right[6]));
+
+		//Fine Y: tile 5 lights only fine row 2
+		m.FillNametable(1, 5, 0x00);
+		RenderRowSides(RevealBasis(0, 0, 2), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x11), "W253: fine Y selects the tile row", Hex16(right[0]));
+		RenderRowSides(RevealBasis(0, 0, 1), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x0D), "W253: a transparent tile row shows the backdrop", Hex16(right[0]));
+
+		//Attribute 0xE4: top-left palette 0, top-right palette 1
+		m.FillNametable(1, 1, 0xE4);
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, 16, 0x11) && AllEqual(right + 16, 16, 0x21), "W253: the attribute quadrant picks the palette",
+			Hex16(right[0]) + " " + Hex16(right[16]));
+	}
+
+	void TestRevealDrawsBlackWhereThereIsNoContent()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		m.NametableMap[0] = m.NametableMap[1] = m.NametableMap[2] = m.NametableMap[3] = 0;
+		RenderRowSides(RevealBasis(4, 0), MirroringType::ScreenAOnly, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: single-screen draws the black fallback", Hex16(left[0]));
+
+		RenderRowSides(RevealBasis(1, 0), MirroringType::Horizontal, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring scrolled horizontally draws black", Hex16(left[0]));
+
+		RenderRowSides(RevealBasis(0, 0), MirroringType::Horizontal, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring unscrolled draws black (SMB3 title)", Hex16(left[0]));
+
+		//Black stays black under grayscale/emphasis: it is not a game colour
+		RowBasis gray = RevealBasis(4, 0);
+		gray.PaletteMask = 0x30;
+		gray.EmphasisBits = 0x40;
+		RenderRowSides(gray, MirroringType::ScreenBOnly, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, BlackColor), "W253: the black fallback ignores grayscale and emphasis", Hex16(right[0]));
+	}
+
+	void TestRevealFollowsTheRowsMaskState()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		RowBasis off = RevealBasis(0, 0);
+		off.BgEnabled = false;
+		RenderRowSides(off, MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x0D) && AllEqual(right, ExtraColumns, 0x0D), "W253: with the background off the extra columns show the backdrop", Hex16(left[0]));
+
+		RowBasis gray = RevealBasis(0, 0);
+		gray.PaletteMask = 0x30;
+		gray.EmphasisBits = 0x40;
+		RenderRowSides(gray, MirroringType::Vertical, m, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, (0x22 & 0x30) | 0x40), "W253: grayscale and emphasis apply to the extra columns", Hex16(right[0]));
+	}
+
+	void TestRevealNeverTouchesTheMappersSideEffectingVramPath()
+	{
+		using namespace NesWidescreenReveal;
+		RevealFakeMapper m;
+		SetUpRevealTiles(m);
+		m.FillNametable(0, 1, 0x00);
+		m.FillNametable(1, 2, 0x55);
+		uint8_t pal[0x20];
+		SetUpRevealPalette(pal);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		for(uint8_t fineX = 0; fineX < 8; fineX++) {
+			RenderRowSides(RevealBasis(fineX * 3, fineX, fineX), MirroringType::Vertical, m, pal, left, right);
+			RenderRowSides(RevealBasis(fineX, fineX), MirroringType::Horizontal, m, pal, left, right);
+		}
+		Check(m.SideEffectReads == 0, "W253: the extra columns never use the mapper's rendering VRAM read", std::to_string(m.SideEffectReads));
+		Check(m.VramHookCalls == 0, "W253: the extra columns never fire the mapper's VRAM address hook", std::to_string(m.VramHookCalls));
+		//8 vertical rows of 16-18 tiles at 4 reads each (NT, AT, two CHR planes)
+		Check(m.DebugReads >= 8 * 16 * 4, "W253: the extra columns are fetched through DebugReadVram", std::to_string(m.DebugReads));
+	}
+
+	void TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace NesWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 7 + i / 256) & 0x1FF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		uint8_t* fill = nullptr;
+		Check(!frames.RowSides(0, left, right, fill), "W253: with the switch off there are no extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off the frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253: the switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right, fill) && left && right && fill, "W253: a row's side columns are writable while active");
+		if(left && right && fill) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = 0x21;
+				right[i] = 0x22;
+			}
+			*fill = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
+		}
+		Check(!frames.RowSides(240, left, right, fill) && !frames.RowSides(-1, left, right, fill), "W253: rows outside 0-239 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253: an active frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253: the centre 256 columns of every row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, 0x21) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x22), "W253: a drawn row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253: a row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+	}
+}
+
+//--- Bloco W253b: GB/GBC and Game Gear Reveal (ADR-0253, slice W.2) ---------
+//The GB half of the Reveal: the extra columns are the BG map that wraps around
+//the 160-px picture (and the window layer, which runs to the right edge once it
+//starts on a row), read through the PPU's side-effect-free GbPpu::LcdReadVram
+//only. The fake VRAM below counts both read paths, so "the Reveal never goes
+//through the renderer's own read" is asserted, not assumed.
+//
+//The Game Gear half has no pixels of its own to draw: its picture already IS
+//the VDP's 256-px line with 48 px cropped on each side (SmsConfig's
+//GameGearOverscan), so the slice is the frame-width contract plus the rule
+//that the horizontal crop is dropped while revealing.
+namespace
+{
+	struct RevealFakeGbVram
+	{
+		//The PPU's VRAM as it is addressed: 0x4000 bytes, the CGB bank bit
+		//(0x2000) part of the address, exactly like GbPpu::_vram.
+		uint8_t Data[0x4000] = {};
+		int HookedReads = 0;
+		int LcdReads = 0;
+
+		//GbPpu::ReadVram - the CPU-visible read, counted to prove the Reveal
+		//never goes through it (it fires the debugger's hook, and returns 0xFF
+		//while the LCD is drawing)
+		uint8_t ReadVram(uint16_t addr) { HookedReads++; return Data[addr]; }
+		//GbPpu::LcdReadVram - the renderer's own side-effect-free read, the one
+		//the Reveal is supposed to use
+		uint8_t LcdReadVram(uint16_t addr) { LcdReads++; return Data[addr]; }
+	};
+
+	//A tile's 16 bytes, at the tile's own VRAM address (bank bit included).
+	//The GB interleaves them: two bytes per row (low plane, high plane), the
+	//same layout GbPpu::ClockTileFetcher reads with its Addr / Addr + 1 pair.
+	void GbSetTileAt(RevealFakeGbVram& vram, uint16_t addr, const uint8_t lo[8], const uint8_t hi[8])
+	{
+		for(int i = 0; i < 8; i++) {
+			vram.Data[addr + i * 2] = lo[i];
+			vram.Data[addr + i * 2 + 1] = hi[i];
+		}
+	}
+
+	//One map entry: the tile index in bank 0, the CGB attributes in bank 1
+	void GbSetMapEntry(RevealFakeGbVram& vram, uint16_t mapBase, int col, int row, uint8_t tile, uint8_t attributes = 0)
+	{
+		uint16_t addr = (uint16_t)(mapBase + row * 32 + col);
+		vram.Data[addr] = tile;
+		vram.Data[addr | 0x2000] = attributes;
+	}
+
+	void GbFillMap(RevealFakeGbVram& vram, uint16_t mapBase, uint8_t tile)
+	{
+		for(int row = 0; row < 32; row++) {
+			for(int col = 0; col < 32; col++) {
+				GbSetMapEntry(vram, mapBase, col, row, tile);
+			}
+		}
+	}
+
+	//CGB palette index i reads 0x100 + i, so every colour under test is a
+	//distinct value (the PPU masks the palette entry with 0x7FFF)
+	void GbSetUpRevealPalette(uint16_t pal[32])
+	{
+		for(int i = 0; i < 32; i++) {
+			pal[i] = (uint16_t)(0x100 + i);
+		}
+	}
+
+	GbWidescreenReveal::RowBasis GbRevealBasis(uint16_t scanline = 0, uint8_t scrollX = 0, uint8_t scrollY = 0)
+	{
+		GbWidescreenReveal::RowBasis basis;
+		basis.Scanline = scanline;
+		basis.ScrollX = scrollX;
+		basis.ScrollY = scrollY;
+		basis.CgbEnabled = true;
+		basis.BgEnabled = true;
+		basis.BgTileSelect = true; //tile data at 0x0000
+		basis.BgPalette = 0xE4; //colour c -> shade c
+		return basis;
+	}
+
+	void GbSetUpTiles(RevealFakeGbVram& vram)
+	{
+		uint8_t zero[8] = {};
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		uint8_t col0[8] = { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+		uint8_t row0[8] = { 0xFF, 0, 0, 0, 0, 0, 0, 0 };
+		GbSetTileAt(vram, 1 * 16, ff, zero); //tile 1: colour 1
+		GbSetTileAt(vram, 2 * 16, zero, ff); //tile 2: colour 2
+		GbSetTileAt(vram, 3 * 16, ff, ff); //tile 3: colour 3
+		GbSetTileAt(vram, 4 * 16, col0, zero); //tile 4: colour 1 on fine X 0 only
+		GbSetTileAt(vram, 5 * 16, zero, ff); //tile 5: colour 2
+		GbSetTileAt(vram, 6 * 16, col0, zero); //tile 6: colour 1 on fine X 0 only
+		GbSetTileAt(vram, 7 * 16, row0, zero); //tile 7: colour 1 on fine Y 0 only
+		GbSetTileAt(vram, (1 * 16) | 0x2000, zero, ff); //bank 1's tile 1: colour 2
+	}
+
+	void TestGbRevealWidthContractIsFortyEightColumnsPerSide()
+	{
+		using namespace GbWidescreenReveal;
+		Check(ExtraColumns == 48, "W253b: the GB Reveal adds 48 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 256, "W253b: an extended GB frame is 256 px wide", std::to_string(ExtendedWidth));
+		Check(ExtendedWidth == BgMapWidth, "W253b: the extended GB picture is exactly the 256-px BG map line");
+		Check(ExtraColumns % 8 == 0, "W253b: the GB extra columns are whole 8-px tiles");
+		Check(StandardWidth == GbConstants::ScreenWidth && Height == GbConstants::ScreenHeight, "W253b: the standard GB picture is the console's own 160x144");
+
+		//A GB frame is square-pixel, so 256x144 is exactly 16:9 - not a stretch
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.SquarePixelInAuto = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, 16.0 / 9.0), "W253b: an extended GB frame is exactly 16:9 at square pixels", std::to_string(ratio));
+
+		//A frame without extra columns keeps today's 16:9 stretch
+		AspectRatioMath::Inputs standard = in;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253b: WideScrn on a standard GB frame is unchanged");
+	}
+
+	void TestGbRevealDrawsTheBgMapThatWrapsInBesideThePicture()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		//Map column 26 is the one that wraps in at the picture's left edge
+		//(x = -48 is map x 208), map column 20 the one after x = 159
+		GbSetMapEntry(vram, 0x1800, 26, 0, 2);
+		GbSetMapEntry(vram, 0x1800, 20, 0, 3);
+
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+
+		Check(left[0] == 0x102, "W253b: the leftmost column is the map column that wraps in before the picture", Hex16(left[0]));
+		Check(AllEqual(left + 8, ExtraColumns - 8, 0x101), "W253b: the rest of the left columns are the map's own tiles", Hex16(left[8]));
+		Check(right[0] == 0x103, "W253b: the first column past the picture is the map column after it", Hex16(right[0]));
+		Check(AllEqual(right + 8, ExtraColumns - 8, 0x101), "W253b: the rest of the right columns are the map's own tiles", Hex16(right[8]));
+	}
+
+	void TestGbRevealFollowsScrollAndTheMapRow()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 4);
+		for(int col = 0; col < 32; col++) {
+			GbSetMapEntry(vram, 0x1800, col, 1, 5);
+		}
+
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+		const int32_t sideXs[2] = { -(int32_t)ExtraColumns, (int32_t)StandardWidth };
+
+		//SCX = 5: tile 4 lights its first pixel column, so the revealed columns
+		//light where (SCX + x) & 7 == 0
+		RenderRowSides(GbRevealBasis(0, 5), vram, pal, left, right);
+		bool scrollOk = true;
+		for(int side = 0; side < 2; side++) {
+			const uint16_t* out = side ? right : left;
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				bool lit = out[i] == 0x101;
+				scrollOk &= (lit == (((5 + sideXs[side] + (int32_t)i) & 7) == 0));
+			}
+		}
+		Check(scrollOk, "W253b: fine X shifts the revealed columns with the picture", Hex16(left[0]) + " " + Hex16(left[6]));
+
+		//SCY + the row being drawn pick the map row
+		RenderRowSides(GbRevealBasis(0, 0, 10), vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x102) && AllEqual(right, ExtraColumns, 0x102), "W253b: SCY picks the map row the revealed columns come from", Hex16(left[0]));
+		RenderRowSides(GbRevealBasis(8, 0, 2), vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x102) && AllEqual(right, ExtraColumns, 0x102), "W253b: the row being drawn is added to SCY", Hex16(left[0]));
+
+		//Back in map row 0 the tile boundary falls on x = 0 mod 8
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x101 && left[7] == 0x100 && left[8] == 0x101, "W253b: the revealed columns keep the map's 8-px tile boundaries",
+			Hex16(left[7]) + " " + Hex16(left[8]));
+	}
+
+	void TestGbRevealHonoursTheCgbTileAttributes()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//X flip (attribute bit 5): tile 6 lights fine X 0, so it must move to 7
+		GbSetMapEntry(vram, 0x1800, 26, 0, 6, 0x20);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[7] == 0x101 && left[0] == 0x100, "W253b: the CGB X-flip attribute flips the revealed tile", Hex16(left[0]) + " " + Hex16(left[7]));
+
+		//Y flip (bit 6): tile 7 lights fine Y 0, so SCY 7 must reach it
+		GbSetMapEntry(vram, 0x1800, 26, 0, 7, 0x40);
+		RenderRowSides(GbRevealBasis(0, 0, 7), vram, pal, left, right);
+		Check(left[0] == 0x101, "W253b: the CGB Y-flip attribute flips the revealed tile row", Hex16(left[0]));
+		GbSetMapEntry(vram, 0x1800, 26, 0, 7, 0x00);
+		RenderRowSides(GbRevealBasis(0, 0, 7), vram, pal, left, right);
+		Check(left[0] == 0x100, "W253b: the same tile without the Y flip is transparent at fine Y 7", Hex16(left[0]));
+
+		//Palette bits 0-2: colour 1 in palette 3 is CGB palette entry 13
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x03);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x10D, "W253b: the CGB palette attribute picks the revealed tile's palette", Hex16(left[0]));
+
+		//VRAM bank (bit 3): tile data from bank 1
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x08);
+		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
+		Check(left[0] == 0x102, "W253b: the CGB VRAM-bank attribute reads the revealed tile from bank 1", Hex16(left[0]));
+
+		//A DMG frame ignores the whole attribute byte (including the bank bit)
+		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x2B);
+		RowBasis dmg = GbRevealBasis();
+		dmg.CgbEnabled = false;
+		RenderRowSides(dmg, vram, pal, left, right);
+		Check(left[0] == 0x101, "W253b: a DMG frame ignores the map's attribute byte", Hex16(left[0]));
+	}
+
+	void TestGbRevealUsesTheDmgPaletteShades()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+		GbSetTileAt(vram, 0x0800, ff, ff); //tile 0x80 in the 0x1000 + signed area: colour 3
+		GbFillMap(vram, 0x1800, 2);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//BGP 0x1B maps colour c to shade 3 - c, so colour 2 reads pal[1]
+		RowBasis basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgPalette = 0x1B;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: the DMG BGP maps the revealed tile's colour to a shade", Hex16(left[0]));
+
+		//A frozen palette reads colour 0, like the PPU's own reads
+		basis.PaletteBlocked = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0) && AllEqual(right, ExtraColumns, 0), "W253b: a blocked palette reads colour 0, like the PPU", Hex16(left[0]));
+
+		//LCDC.4 clear: tile data at 0x1000 + a signed tile index
+		basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgTileSelect = false;
+		GbFillMap(vram, 0x1800, 0x80);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103), "W253b: LCDC.4 clear addresses the revealed tile as 0x1000 + a signed index", Hex16(left[0]));
+	}
+
+	void TestGbRevealContinuesTheWindowPastThePicturesEdges()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		GbFillMap(vram, 0x1C00, 2);
+		for(int col = 0; col < 32; col++) {
+			GbSetMapEntry(vram, 0x1C00, col, 1, 3);
+		}
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//WX = 166 starts the window on the picture's last pixel (x = 159); the
+		//window runs to the right edge, so every right column is the window's
+		RowBasis basis = GbRevealBasis();
+		basis.WindowOnRow = true;
+		basis.WindowStartX = 166 - 7;
+		basis.WindowTilemapSelect = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x102), "W253b: the window continues past the picture's right edge", Hex16(right[0]));
+		Check(AllEqual(left, ExtraColumns, 0x101), "W253b: a window that starts inside the picture leaves the left columns to the BG", Hex16(left[0]));
+
+		//The window's own row counter picks its map row
+		basis.WindowLine = 9;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x103), "W253b: the window's row counter picks its map row", Hex16(right[0]));
+
+		//WX = 4 starts the window at x = -3: it covers the left columns too
+		basis.WindowLine = 0;
+		basis.WindowStartX = 4 - 7;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, 45, 0x101) && left[45] == 0x102 && left[47] == 0x102,
+			"W253b: a window that starts before the picture covers the left columns too", Hex16(left[44]) + " " + Hex16(left[45]));
+
+		//No window on this row: the BG is what sits beside the picture
+		basis.WindowOnRow = false;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: a row without the window shows the BG on both sides", Hex16(left[0]));
+	}
+
+	void TestGbRevealWindowNeedsTheEnableBitNotJustTheLatches()
+	{
+		using namespace GbWidescreenReveal;
+
+		//Whether the window layer is drawn at all on a row is the PPU's own
+		//condition (GbPpu::ExecCycle): the LCDC.5 enable bit, the WX hit, and
+		//the WY match that holds for the rest of the frame. The two latches
+		//alone are not the window: a game that opens the window on WY and then
+		//clears LCDC.5 for a later row (the usual way to keep a HUD off one
+		//line) leaves both latches set and draws background there. Only the
+		//enable bit tells those rows apart, so the Reveal asks for all three -
+		//taking the PPU's own latch, so the revealed columns can never show a
+		//layer the PPU did not draw.
+		Check(WindowVisible(true, true, true), "W253b: the window is drawn when LCDC.5 is set and WY and WX both hit");
+		Check(!WindowVisible(false, true, true),
+			"W253b: WY matched and WX hit with LCDC.5 cleared is background on that row, not the window");
+		Check(!WindowVisible(true, false, true), "W253b: the window waits for its WX hit");
+		Check(!WindowVisible(true, true, false), "W253b: the window waits for its WY match");
+
+		//The pixels follow the same rule: that row's revealed columns are the
+		//BG, not the window map the two latches alone would point at.
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		GbFillMap(vram, 0x1C00, 2);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		RowBasis basis = GbRevealBasis();
+		basis.WindowStartX = 40 - 7; //the window starts inside the picture
+		basis.WindowTilemapSelect = true; //its own map, so the two layers differ
+		basis.WindowOnRow = WindowVisible(false, true, true);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101),
+			"W253b: a row whose window was switched off beside a WY match shows the BG on the sides", Hex16(right[0]));
+
+		basis.WindowOnRow = WindowVisible(true, true, true);
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(right, ExtraColumns, 0x102),
+			"W253b: the same row with LCDC.5 set shows the window's own map on the sides", Hex16(right[0]));
+	}
+
+	void TestGbRevealShowsTheBlankColorWhenTheBgLayerIsOff()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		//DMG with LCDC.0 cleared: the hardware outputs colour 0 through BGP for
+		//the whole line, so the revealed columns show the same blank colour
+		RowBasis basis = GbRevealBasis();
+		basis.CgbEnabled = false;
+		basis.BgEnabled = false;
+		basis.BgPalette = 0x1B; //colour 0 -> shade 3
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103),
+			"W253b: with the DMG background off the revealed columns show the picture's blank colour", Hex16(left[0]));
+
+		//On CGB, LCDC.0 is the BG priority bit - the map is still drawn
+		basis.CgbEnabled = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101),
+			"W253b: on CGB the map is drawn with LCDC.0 clear (it is the priority bit there)", Hex16(left[0]));
+
+		//The emulator's own layer toggle flattens the line on the CGB too
+		basis.LayerDisabled = true;
+		RenderRowSides(basis, vram, pal, left, right);
+		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103),
+			"W253b: the emulator's background toggle flattens the revealed columns on the CGB too", Hex16(left[0]));
+	}
+
+	void TestGbRevealNeverUsesTheCpuVisibleVramRead()
+	{
+		using namespace GbWidescreenReveal;
+		RevealFakeGbVram vram;
+		uint16_t pal[32];
+		GbSetUpRevealPalette(pal);
+		GbSetUpTiles(vram);
+		GbFillMap(vram, 0x1800, 1);
+		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+
+		for(uint8_t scrollX = 0; scrollX < 8; scrollX++) {
+			for(uint8_t scrollY = 0; scrollY < 8; scrollY++) {
+				RowBasis basis = GbRevealBasis((uint16_t)(scrollX * 3), scrollX, scrollY);
+				RenderRowSides(basis, vram, pal, left, right);
+
+				basis.WindowOnRow = true;
+				basis.WindowStartX = (int16_t)(scrollX * 20 - 7);
+				basis.WindowLine = scrollY;
+				basis.WindowTilemapSelect = (scrollY & 1) != 0;
+				RenderRowSides(basis, vram, pal, left, right);
+			}
+		}
+
+		Check(vram.HookedReads == 0, "W253b: the revealed columns never use the CPU-visible VRAM read", std::to_string(vram.HookedReads));
+		//6 tiles per side at 4 reads each (map, attribute, two tile planes)
+		Check(vram.LcdReads >= 128 * 40, "W253b: the revealed columns are fetched through the renderer's side-effect-free read", std::to_string(vram.LcdReads));
+	}
+
+	void TestGbRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace GbWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 13 + i / 160) & 0x7FFF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253b: a GB frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		Check(!frames.RowSides(0, left, right), "W253b: with the switch off there are no GB extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253b: with the switch off the GB frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253b: the GB switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right) && left && right, "W253b: a GB row's side columns are writable while active");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = 0x101;
+				right[i] = 0x102;
+			}
+		}
+		Check(!frames.RowSides(144, left, right) && !frames.RowSides(-1, left, right), "W253b: GB rows outside 0-143 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253b: an active GB frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253b: the centre 160 columns of every GB row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, 0x101) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x102), "W253b: a drawn GB row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253b: a GB row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253b: consecutive extended GB frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253b: a GB row drawn last frame is not reused this frame");
+	}
+
+	void TestGameGearRevealShowsTheLineTheViewportCrops()
+	{
+		using namespace SmsWidescreenReveal;
+		Check(ExtraColumns == 48, "W253b: the Game Gear Reveal is the 48 px the viewport crops on each side", std::to_string(ExtraColumns));
+		Check(LineWidth == 256, "W253b: the VDP's line is 256 px and the Game Gear's picture is its centre 160", std::to_string(LineWidth));
+		Check(StandardPictureWidth + 2 * ExtraColumns == LineWidth, "W253b: the frame-width contract holds - Width - 2N is the standard picture");
+		Check(Height == 144, "W253b: the Game Gear's picture is 144 lines tall", std::to_string(Height));
+
+		//The Reveal drops the side crop, so what it reveals is exactly what the
+		//crop was hiding. The shipped "Game Gear" preset is 48 on both sides.
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 48, 48) == 48,
+			"W253b: the revealed Game Gear columns are the ones the configured crop hides");
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 40, 40) == 40,
+			"W253b: a narrower configured crop reveals exactly what it hides", std::to_string(RevealedColumns(true, VideoAspectRatio::Widescreen, 40, 40)));
+		//"Full Frame" (0/0) already shows the whole line - there is nothing hidden
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 0, 0) == 0,
+			"W253b: a Game Gear already showing the whole VDP line has nothing to reveal");
+		//ExtendedColumns is one number for both sides, so a crop that differs per
+		//side is not a Reveal the contract can describe - and that preset ("Full
+		//Frame First Column", 8 left) already shows all but those 8 px.
+		Check(RevealedColumns(true, VideoAspectRatio::Widescreen, 8, 0) == 0,
+			"W253b: a crop that differs per side is not a Reveal the frame contract can describe");
+		Check(RevealedColumns(true, VideoAspectRatio::Auto, 48, 48) == 0, "W253b: the Game Gear's picture is untouched without WideScrn");
+		Check(RevealedColumns(false, VideoAspectRatio::Widescreen, 48, 48) == 0, "W253b: the Master System does not reveal (its screen is the whole VDP line)");
+
+		//The side crop is what hides the extra columns
+		Check(HorizontalOverscan(48, true) == 0, "W253b: a revealing Game Gear frame applies no horizontal overscan");
+		Check(HorizontalOverscan(48, false) == 48, "W253b: a standard Game Gear frame keeps the configured 48-px crop");
+		Check(HorizontalOverscan(0, false) == 0, "W253b: a frame with no configured crop is untouched");
+
+		//What the frame is shown with, from the crop and the switch alone. The
+		//rule never asks the VideoDecoder which frame it is holding: a filter or
+		//the border layer that cannot take the wide frame makes the decoder keep
+		//the standard 160-px centre, which is what the crop itself produces, and
+		//a crop applied on top of that centre would cut into the picture and
+		//read past the end of the row. Dropping the crop and reporting the
+		//extended columns are the same decision, so a filter that takes the wide
+		//frame and one that takes the centre both end up with no crop.
+		OverscanDimensions ggCrop = { 48, 48, 24, 24 };
+		OverscanDimensions revealed = GameGearOverscan(ggCrop, VideoAspectRatio::Widescreen);
+		Check(revealed.Left == 0 && revealed.Right == 0,
+			"W253b: a Game Gear frame with the Reveal on has no horizontal crop, whether the wide frame or the standard centre is the one shown");
+		Check(revealed.Top == 24 && revealed.Bottom == 24, "W253b: the Reveal is horizontal - the vertical overscan is left alone");
+		OverscanDimensions plain = GameGearOverscan(ggCrop, VideoAspectRatio::Auto);
+		Check(plain.Left == 48 && plain.Right == 48, "W253b: with WideScrn off the configured crop is applied untouched");
+		OverscanDimensions lopsided = { 8, 0, 0, 0 };
+		OverscanDimensions lopsidedShown = GameGearOverscan(lopsided, VideoAspectRatio::Widescreen);
+		Check(lopsidedShown.Left == 8 && lopsidedShown.Right == 0,
+			"W253b: a crop that differs per side is not a Reveal - the sides keep their own crop", std::to_string(lopsidedShown.Left) + "/" + std::to_string(lopsidedShown.Right));
+
+		//The whole 256-px line at the Game Gear's 6:5 pixel aspect
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = LineWidth;
+		in.BaseHeight = Height;
+		in.GameGearPar = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, (256.0 / 144.0) * 6.0 / 5.0), "W253b: a revealed Game Gear frame is shown at the 6:5 pixel aspect, not stretched", std::to_string(ratio));
+		Check(ratio > 16.0 / 9.0, "W253b: the revealed Game Gear picture is wider than the 16:9 stretch it replaces", std::to_string(ratio));
+	}
+}
+
+//--- Bloco W253 (GBA): GBA text-BG widescreen Reveal (ADR-0253, slice W.7) --
+//The pure half of the GBA Reveal: which text-BG map columns sit beside the
+//240-px picture and hold content the picture does not already show (the black
+//fallback), the tilemap and tile fetch, the priority composite and the
+//frame-width contract (N = 22 extra columns per side, 284x160). VRAM and the
+//palette are plain arrays here and the module only ever reads them through
+//const pointers, so an extra column cannot move the debugger's memory-access
+//log or fire a bus hook.
+namespace
+{
+	uint16_t GbaColor(uint16_t r, uint16_t g, uint16_t b)
+	{
+		return (uint16_t)(r | (g << 5) | (b << 10));
+	}
+
+	//A GBA VRAM + palette pair, with the writers the tests need. The tilemap
+	//writer places entries the way the hardware lays the map out: a 512-wide
+	//map puts its second column page at +0x800, a 512-tall one its second row
+	//page at +0x1000.
+	struct GbaRevealVram
+	{
+		std::vector<uint8_t> Bytes = std::vector<uint8_t>(0x20000, 0);
+		std::vector<uint16_t> Palette = std::vector<uint16_t>(0x200, 0);
+
+		const uint8_t* Vram() const { return Bytes.data(); }
+		const uint16_t* PaletteData() const { return Palette.data(); }
+
+		void WriteTile4bpp(uint32_t charBase, uint16_t index, const uint8_t colors[8][8])
+		{
+			for(uint32_t y = 0; y < 8; y++) {
+				for(uint32_t x = 0; x < 8; x += 2) {
+					Bytes[charBase + index * 32 + y * 4 + (x >> 1)] = (uint8_t)((colors[y][x] & 0x0F) | ((colors[y][x + 1] & 0x0F) << 4));
+				}
+			}
+		}
+
+		void WriteTile8bpp(uint32_t charBase, uint16_t index, const uint8_t colors[8][8])
+		{
+			for(uint32_t y = 0; y < 8; y++) {
+				for(uint32_t x = 0; x < 8; x++) {
+					Bytes[charBase + index * 64 + y * 8 + x] = colors[y][x];
+				}
+			}
+		}
+
+		void WriteEntry(uint32_t tilemapAddr, uint16_t mapX, uint16_t mapY, uint16_t entry, uint16_t mapWidth = 256)
+		{
+			uint32_t addr = tilemapAddr
+				+ (uint32_t)(mapY >> 8) * (mapWidth == 512 ? 0x1000 : 0x800)
+				+ (uint32_t)(mapX >> 8) * 0x800
+				+ (uint32_t)((mapY & 0xFF) >> 3) * 64
+				+ (uint32_t)((mapX & 0xFF) >> 3) * 2;
+			Bytes[addr] = (uint8_t)(entry & 0xFF);
+			Bytes[addr + 1] = (uint8_t)(entry >> 8);
+		}
+
+		//Fills a whole map with one entry - the page layout is contiguous, so
+		//a flat write is what the hardware sees.
+		void FillTilemap(uint32_t tilemapAddr, uint32_t bytes, uint16_t entry)
+		{
+			for(uint32_t i = 0; i < bytes; i += 2) {
+				Bytes[tilemapAddr + i] = (uint8_t)(entry & 0xFF);
+				Bytes[tilemapAddr + i + 1] = (uint8_t)(entry >> 8);
+			}
+		}
+
+		void FillSolidTile(uint32_t charBase, uint16_t index, uint8_t color)
+		{
+			uint8_t colors[8][8];
+			for(int y = 0; y < 8; y++) {
+				for(int x = 0; x < 8; x++) {
+					colors[y][x] = color;
+				}
+			}
+			WriteTile4bpp(charBase, index, colors);
+		}
+	};
+
+	//Character data lives well past the maps (which start at 0x0000 and
+	//0x2000), so writing a tile never lands on a map entry.
+	constexpr uint32_t GbaRevealCharBase = 0x8000;
+
+	GbaWidescreenReveal::TextBgRow GbaRevealBg(uint16_t mapWidth, uint8_t priority, bool enabled = true)
+	{
+		GbaWidescreenReveal::TextBgRow bg;
+		bg.Enabled = enabled;
+		bg.Priority = priority;
+		bg.MapWidth = mapWidth;
+		bg.TilesetAddr = GbaRevealCharBase;
+		return bg;
+	}
+
+	uint16_t GbaRevealSide(const GbaWidescreenReveal::RowBasis& basis, int32_t screenX, const GbaRevealVram& v)
+	{
+		return GbaWidescreenReveal::CompositePixel(basis, screenX, v.Vram(), v.PaletteData());
+	}
+
+	void TestGbaRevealWidthContractIsTwentyTwoColumnsPerSide()
+	{
+		using namespace GbaWidescreenReveal;
+		Check(ExtraColumns == 22, "W253: the GBA Reveal adds 22 columns on each side", std::to_string(ExtraColumns));
+		Check(ExtendedWidth == 284, "W253: an extended GBA frame is 284 px wide", std::to_string(ExtendedWidth));
+
+		//The GBA's pixels are square, so the extended frame is shown at its
+		//own 284:160, which is 16:9 to within 0.2 %
+		AspectRatioMath::Inputs in;
+		in.Setting = VideoAspectRatio::Widescreen;
+		in.BaseWidth = ExtendedWidth;
+		in.BaseHeight = Height;
+		in.SquarePixelInAuto = true;
+		in.ExtendedFrame = true;
+		double ratio = AspectRatioMath::ComputeAspectRatio(in);
+		Check(NearlyEqual(ratio, 284.0 / 160.0), "W253: an extended GBA frame is shown at its own square-pixel aspect", std::to_string(ratio));
+		Check(std::fabs(ratio / (16.0 / 9.0) - 1.0) < 0.03, "W253: the extended GBA frame is within 3 % of 16:9", std::to_string(ratio));
+
+		//A frame without extra columns keeps today's 16:9 (no Reveal to show)
+		AspectRatioMath::Inputs standard = in;
+		standard.BaseWidth = StandardWidth;
+		standard.ExtendedFrame = false;
+		Check(NearlyEqual(AspectRatioMath::ComputeAspectRatio(standard), 16.0 / 9.0), "W253: Widescreen on a standard GBA frame is unchanged");
+	}
+
+	void TestGbaRevealContentRuleFollowsTheMapWidth()
+	{
+		using namespace GbaWidescreenReveal;
+		TextBgRow wide = GbaRevealBg(512, 0);
+		TextBgRow narrow = GbaRevealBg(256, 0);
+
+		Check(ColumnHasContent(wide, -1) && ColumnHasContent(wide, -22), "W253: a 512-wide GBA map has content on the whole left side");
+		Check(ColumnHasContent(wide, 240) && ColumnHasContent(wide, 261), "W253: a 512-wide GBA map has content on the whole right side");
+		Check(ColumnHasContent(narrow, -1) && ColumnHasContent(narrow, -16), "W253: a 256-wide map has the 16 columns the picture does not show");
+		Check(!ColumnHasContent(narrow, -17) && !ColumnHasContent(narrow, -22), "W253: a 256-wide map wraps: the far left columns are the picture's own edge");
+		Check(ColumnHasContent(narrow, 255) && !ColumnHasContent(narrow, 256) && !ColumnHasContent(narrow, 261), "W253: a 256-wide map wraps at the right edge too");
+	}
+
+	void TestGbaRevealSamplesTextBgTiles()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+
+		//Tile 3: color 1 at its first pixel, color 2 at its last one
+		uint8_t tile3[8][8] = {};
+		tile3[0][0] = 1;
+		tile3[7][7] = 2;
+		v.WriteTile4bpp(GbaRevealCharBase, 3, tile3);
+		v.Palette[5 * 16 + 1] = GbaColor(31, 0, 0);
+		v.Palette[5 * 16 + 2] = GbaColor(0, 31, 0);
+		//Palette bank 5, so the tile's colors land in the second half of the palette
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12)), 512);
+
+		TextBgRow bg = GbaRevealBg(512, 0);
+		Check(SampleBgPixel(bg, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: the extra columns read the text BG's tilemap entry, tile and palette bank",
+			Hex16(SampleBgPixel(bg, 240, 0, v.Vram(), v.PaletteData())));
+		Check(SampleBgPixel(bg, 241, 0, v.Vram(), v.PaletteData()) == 0, "W253: a transparent tile pixel reads as transparent");
+		Check(SampleBgPixel(bg, 247, 7, v.Vram(), v.PaletteData()) == GbaColor(0, 31, 0), "W253: the tile's own row and column are addressed");
+
+		//H-flip moves the first pixel to the tile's last column, V-flip to its last row
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12) | 0x400), 512);
+		Check(SampleBgPixel(bg, 247, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: a horizontally flipped tile is sampled mirrored");
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12) | 0x800), 512);
+		Check(SampleBgPixel(bg, 240, 7, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: a vertically flipped tile is sampled mirrored");
+
+		//8bpp: one byte per pixel, straight into the 256-color palette
+		uint8_t tile4[8][8] = {};
+		tile4[0][0] = 0x2A;
+		v.WriteTile8bpp(GbaRevealCharBase, 4, tile4);
+		v.Palette[0x2A] = 0xFFFF;
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)4, 512);
+		TextBgRow bpp8 = bg;
+		bpp8.Bpp8 = true;
+		Check(SampleBgPixel(bpp8, 240, 0, v.Vram(), v.PaletteData()) == 0x7FFF, "W253: an 8bpp text BG uses the whole palette, masked to 15 bits",
+			Hex16(SampleBgPixel(bpp8, 240, 0, v.Vram(), v.PaletteData())));
+
+		//The map's vertical scroll moves the row the side column is taken from
+		v.WriteEntry(0x0000, 240, 0, (uint16_t)(3 | (5 << 12)), 512);
+		TextBgRow scrolled = bg;
+		scrolled.ScrollY = 7;
+		Check(SampleBgPixel(scrolled, 247, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 31, 0), "W253: the vertical scroll moves the extra column's tile row");
+		scrolled.ScrollY = 255;
+		Check(SampleBgPixel(scrolled, 240, 1, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: the map wraps vertically at its own height, not at the picture's");
+
+		//The horizontal scroll picks *which* map column lands beside the
+		//window: at scroll 8 the column just right of the picture is map
+		//column 248, and 248 itself is then eight pixels further along
+		uint8_t tile6[8][8] = {};
+		tile6[0][0] = 3;
+		v.WriteTile4bpp(GbaRevealCharBase, 6, tile6);
+		v.Palette[6 * 16 + 3] = GbaColor(0, 0, 31);
+		v.WriteEntry(0x0000, 248, 0, (uint16_t)(6 | (6 << 12)), 512);
+		TextBgRow hscrolled = bg;
+		Check(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(31, 0, 0), "W253: with no horizontal scroll map column 240 is the one beside the window");
+		Check(SampleBgPixel(hscrolled, 248, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 0, 31), "W253: with no horizontal scroll map column 248 is eight pixels further right");
+		hscrolled.ScrollX = 8;
+		Check(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData()) == GbaColor(0, 0, 31), "W253: the horizontal scroll moves map column 248 to the column beside the window",
+			Hex16(SampleBgPixel(hscrolled, 240, 0, v.Vram(), v.PaletteData())));
+	}
+
+	void TestGbaRevealCompositesTextBgsByPriority()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1); //BG0: tile 1 everywhere
+		v.FillTilemap(0x2000, 0x2000, 2); //BG1: tile 2 everywhere
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.FillSolidTile(GbaRevealCharBase, 2, 2);
+		v.Palette[0] = GbaColor(0, 0, 31);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		v.Palette[2] = GbaColor(0, 31, 0);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 2;
+		basis.Bgs[0] = GbaRevealBg(512, 1);
+		basis.Bgs[1] = GbaRevealBg(512, 0);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 31, 0), "W253: the text BG with the lowest priority number wins the side column",
+			Hex16(GbaRevealSide(basis, 245, v)));
+		basis.Bgs[0].Priority = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: BG0 keeps the column when two text BGs share a priority");
+
+		//A transparent pixel in the top BG lets the one below it show
+		v.FillSolidTile(GbaRevealCharBase, 1, 0);
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 31, 0), "W253: a transparent pixel lets the text BG below it show");
+
+		//With nothing left to draw the column shows the backdrop, like the picture
+		basis.Bgs[1].Enabled = false;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(0, 0, 31), "W253: with every text BG transparent the extra column shows the backdrop");
+
+		//A 256-wide map wraps: it steps aside for a BG that has content, and
+		//leaves the column black when none does
+		basis.Bgs[0] = GbaRevealBg(256, 0);
+		basis.Bgs[1] = GbaRevealBg(512, 1);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+		Check(GbaRevealSide(basis, 258, v) == GbaColor(0, 31, 0), "W253: a wrapped 256-wide map steps aside for a text BG that has content there");
+		basis.Bgs[1].MapWidth = 256;
+		Check(GbaRevealSide(basis, 258, v) == BlackColor, "W253: two wrapped 256-wide maps leave the extra column black");
+	}
+
+	void TestGbaRevealDrawsBlackWhereItCannotFill()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.Palette[3] = GbaColor(31, 31, 31);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a text-mode row with a map to read is revealed");
+
+		//A bitmap mode (3, 4, 5) has no text BG at all
+		basis.TextMode = false;
+		Check(GbaRevealSide(basis, 245, v) == BlackColor, "W253: a bitmap mode draws the extra columns black");
+		basis.TextMode = true;
+
+		//Mode 1's BG2 is affine: a layer this slice does not reveal and one
+		//that may cover any pixel beside the picture
+		basis.AffineOverlay = true;
+		Check(GbaRevealSide(basis, 245, v) == BlackColor, "W253: an enabled affine BG on the row draws the extra columns black");
+		basis.AffineOverlay = false;
+
+		//Forced blank: the picture row is white, so the sides match it
+		basis.ForcedBlank = true;
+		Check(GbaRevealSide(basis, 245, v) == WhiteColor, "W253: a forced-blank row keeps its extra columns white, like the picture");
+		basis.ForcedBlank = false;
+
+		//The whole row at once, through the frame's own entry point
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(AllEqual(left, ExtraColumns, GbaColor(31, 0, 0)) && AllEqual(right, ExtraColumns, GbaColor(31, 0, 0)),
+			"W253: both sides of a revealed GBA row are drawn", Hex16(left[0]) + " " + Hex16(right[0]));
+
+		basis.TextMode = false;
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor),
+			"W253: both sides of an unrevealable GBA row are black");
+	}
+
+	void TestGbaRevealDrawsTheMapColumnsRightBesideTheWindow()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillSolidTile(GbaRevealCharBase, 5, 3);
+		v.FillSolidTile(GbaRevealCharBase, 6, 4);
+		v.Palette[3] = GbaColor(31, 0, 0);
+		v.Palette[4] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x0000, 511, 0, 5, 512); //map column 511 (one left of the picture)
+		v.WriteEntry(0x0000, 240, 0, 6, 512); //map column 240 (one right of it)
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		Check(left[ExtraColumns - 1] == GbaColor(31, 0, 0), "W253: the last extra column left of the picture is the map column just before it",
+			Hex16(left[ExtraColumns - 1]));
+		Check(right[0] == GbaColor(0, 31, 0), "W253: the first extra column right of the picture is the map column just after it",
+			Hex16(right[0]));
+		//Map column 241 shares a tile with 240, so the entry drawn on it stands
+		//until the next tile column at 248
+		Check(AllEqual(right + 8, ExtraColumns - 8, BlackColor), "W253: a map tile column with no entry shows the backdrop, black here");
+	}
+
+	void TestGbaRevealFollowsMosaicBlocks()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillSolidTile(GbaRevealCharBase, 7, 1);
+		v.FillSolidTile(GbaRevealCharBase, 8, 2);
+		v.Palette[1] = GbaColor(31, 0, 0);
+		v.Palette[2] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x0000, 240, 0, 7, 512); //the first tile column right of the window
+		v.WriteEntry(0x0000, 248, 0, 8, 512); //the next one
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		Check(GbaRevealSide(basis, 248, v) == GbaColor(0, 31, 0), "W253: without mosaic an extra column reads its own map column");
+
+		//A 16-px mosaic block spans two tile columns, so the block decides
+		basis.Bgs[0].Mosaic = true;
+		basis.MosaicSizeX = 15;
+		Check(GbaRevealSide(basis, 248, v) == GbaColor(31, 0, 0), "W253: a mosaic text BG takes the extra column from its block's first column");
+		Check(GbaRevealSide(basis, 255, v) == GbaColor(31, 0, 0), "W253: the block's last column reads the same pixel");
+
+		//Left of the window the block grid keeps running, so -1 is in the block
+		//that starts at -16 even though nothing there is the picture's own edge
+		v.WriteEntry(0x0000, 511, 0, 7, 512);
+		v.WriteEntry(0x0000, 496, 0, 8, 512);
+		Check(GbaRevealSide(basis, -1, v) == GbaColor(0, 31, 0), "W253: a mosaic block left of the window samples the block's own first column");
+		Check(GbaRevealSide(basis, -16, v) == GbaColor(0, 31, 0), "W253: the block's first column itself reads the same pixel");
+	}
+
+	void TestGbaRevealAppliesTheRowsColorEffect()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillTilemap(0x2000, 0x2000, 2);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.FillSolidTile(GbaRevealCharBase, 2, 2);
+		v.Palette[1] = GbaColor(31, 0, 0); //BG0: pure red
+		v.Palette[2] = GbaColor(0, 31, 0); //BG1: pure green
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 2;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+		basis.Bgs[1] = GbaRevealBg(512, 1);
+		basis.Bgs[1].TilemapAddr = 0x2000;
+
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with no color effect the extra column shows the BG's own color");
+
+		//Increase brightness: the GBA's fade to white, at half strength
+		basis.Effect.Effect = 2;
+		basis.Effect.Enabled = true;
+		basis.Effect.Brightness = 8;
+		basis.Effect.MainTargets = 0x01;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 15, 15), "W253: a brightness fade applies to the extra columns",
+			Hex16(GbaRevealSide(basis, 245, v)));
+
+		//A layer the effect does not target, or an effect the region has off, stays put
+		basis.Effect.MainTargets = 0x02;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a layer outside the effect's target mask is not faded");
+		basis.Effect.MainTargets = 0x01;
+		basis.Effect.Enabled = false;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with the effect off for the region beside the picture nothing is faded");
+		basis.Effect.Enabled = true;
+		basis.Effect.Brightness = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: a zero brightness leaves the extra column alone");
+
+		//Alpha blend: BG0 over BG1 at half strength each
+		basis.Effect.Effect = 1;
+		basis.Effect.Brightness = 8;
+		basis.Effect.MainCoeff = 8;
+		basis.Effect.SubCoeff = 8;
+		basis.Effect.SubTargets = 0x02;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(15, 15, 0), "W253: an alpha blend mixes the two text BGs in the extra columns",
+			Hex16(GbaRevealSide(basis, 245, v)));
+		basis.Effect.SubTargets = 0;
+		Check(GbaRevealSide(basis, 245, v) == GbaColor(31, 0, 0), "W253: with no sub-layer target the extra column keeps the top BG's color");
+	}
+
+	void TestGbaRevealOnlyReadsVramAndThePalette()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		v.FillTilemap(0x0000, 0x2000, 1);
+		v.FillSolidTile(GbaRevealCharBase, 1, 1);
+		v.Palette[1] = GbaColor(31, 0, 0);
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.BgCount = 1;
+		basis.Bgs[0] = GbaRevealBg(512, 0);
+
+		std::vector<uint8_t> vramBefore = v.Bytes;
+		std::vector<uint16_t> paletteBefore = v.Palette;
+
+		uint16_t left[ExtraColumns] = {};
+		uint16_t right[ExtraColumns] = {};
+		uint16_t leftAgain[ExtraColumns] = {};
+		uint16_t rightAgain[ExtraColumns] = {};
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), left, right);
+		RenderRowSides(basis, v.Vram(), v.PaletteData(), leftAgain, rightAgain);
+
+		Check(!AllEqual(left, ExtraColumns, BlackColor), "W253: the side columns were really drawn", Hex16(left[0]));
+		Check(memcmp(left, leftAgain, sizeof(left)) == 0 && memcmp(right, rightAgain, sizeof(right)) == 0,
+			"W253: the extra columns are a pure function of the row's state, VRAM and the palette");
+		Check(v.Bytes == vramBefore && v.Palette == paletteBefore, "W253: the extra columns only read VRAM and the palette");
+	}
+
+	void TestGbaRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height);
+		for(size_t i = 0; i < standard.size(); i++) {
+			standard[i] = (uint16_t)((i * 7 + i / 240) & 0x7FFF);
+		}
+
+		FrameBuffers frames;
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a frame that never began extended stays standard");
+
+		frames.BeginFrame(false);
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		Check(!frames.RowSides(0, left, right), "W253: with the switch off there are no extra columns to draw");
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off the frame stays standard");
+
+		frames.BeginFrame(true);
+		Check(frames.IsActive(), "W253: the switch latched on at the start of the frame");
+		Check(frames.RowSides(0, left, right) && left && right, "W253: a row's side columns are writable while active");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = GbaColor(31, 0, 0);
+				right[i] = GbaColor(0, 31, 0);
+			}
+		}
+		Check(!frames.RowSides(160, left, right) && !frames.RowSides(-1, left, right), "W253: rows outside 0-159 are refused");
+
+		const uint16_t* wide = frames.Finish(standard.data());
+		Check(wide != nullptr, "W253: an active frame finishes extended");
+		if(!wide) {
+			return;
+		}
+		bool centreSame = true;
+		for(uint32_t y = 0; y < Height && centreSame; y++) {
+			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
+		}
+		Check(centreSame, "W253: the centre 240 columns of every row are the standard frame, bit for bit");
+		Check(AllEqual(wide, ExtraColumns, GbaColor(31, 0, 0)) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, GbaColor(0, 31, 0)),
+			"W253: a drawn row keeps its side columns");
+		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+			"W253: a row the frame never drew falls back to black");
+
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != wide, "W253: consecutive extended frames alternate buffers (the decoder may still read the last one)");
+		Check(next && AllEqual(next, ExtraColumns, BlackColor), "W253: a row drawn last frame is not reused this frame");
+
+		//Frame skipping: the PPU does not redraw the picture, so the extended
+		//frame of the last drawn one is held instead of flipping the aspect
+		frames.BeginFrame(true);
+		frames.RowSides(0, left, right);
+		const uint16_t* drawn = frames.Finish(standard.data());
+		frames.HoldLastFrame(true);
+		Check(!frames.IsActive(), "W253: a held GBA frame draws no side columns");
+		Check(frames.Finish(standard.data()) == drawn, "W253: a skipped GBA frame keeps the last extended frame");
+		frames.HoldLastFrame(false);
+		Check(frames.Finish(standard.data()) == nullptr, "W253: with the switch off a skipped frame stays standard");
+	}
+
+	void TestGbaRevealHoldsAnExtendedFrameOnlyWhileTheRevealIsOn()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0x1234);
+		FrameBuffers frames;
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+
+		//The PPU's own order: latch the frame, decide about skipping, then build
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(false);
+		Check(frames.RowSides(0, left, right), "W253: a drawn frame hands out its side columns");
+		const uint16_t* drawn = frames.Finish(standard.data());
+		Check(drawn != nullptr, "W253: a drawn frame with the Reveal on is extended");
+
+		//The switch is turned off while the frame is being skipped: the frame
+		//must go back to the standard width, not keep the last extended one.
+		//This is the order the PPU uses, and the one where the mistake bites:
+		//BeginFrame already knows this frame is standard, so nothing is held.
+		frames.BeginFrame(false);
+		frames.HoldLastFrame(true);
+		Check(frames.Finish(standard.data()) == nullptr, "W253: a skipped frame with the Reveal off stays standard");
+
+		//Skipping again with the Reveal back on keeps the last extended frame
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(true);
+		Check(frames.Finish(standard.data()) == drawn, "W253: a skipped frame with the Reveal on keeps the last extended frame");
+
+		//A frame the PPU does draw while the Reveal is on is never held
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(false);
+		Check(frames.Finish(standard.data()) != nullptr && frames.IsActive(), "W253: a drawn frame while the Reveal is on is extended, not held");
+	}
+
+	void TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0x1234);
+		FrameBuffers fresh;
+
+		//The switch goes on while the PPU is already skipping frames, so no
+		//extended frame exists to hold. Sending a standard one would flip the
+		//picture's width mid-turbo, which is what the hold exists to avoid:
+		//the frame is built with the black fallback on its sides instead.
+		fresh.BeginFrame(true);
+		fresh.HoldLastFrame(true);
+		const uint16_t* first = fresh.Finish(standard.data());
+		Check(first != nullptr, "W253: a skipped frame with the Reveal on is extended even before one was drawn");
+		if(first) {
+			Check(AllEqual(first, ExtraColumns, BlackColor) && AllEqual(first + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
+				"W253: that frame falls back to black on both sides");
+			Check(memcmp(first + ExtraColumns, standard.data(), StandardWidth * sizeof(uint16_t)) == 0,
+				"W253: that frame's first row is the standard picture, bit for bit");
+		}
+	}
+
+	void TestGbaRevealDrawsARowOnceWhateverTheRegisterWritesDo()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0);
+		FrameBuffers frames;
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+
+		//RenderScanline runs again for every PPU register write inside the row,
+		//and in a loop while VRAM is being accessed. The row's side columns are
+		//latched at its first render, the way the console latches the row's BG
+		//state at its first tile fetch: drawing them again on a later partial
+		//render would rewrite the whole row from state the row never used (a
+		//mid-line scroll or BLDCNT write), and would redo the fetch every time.
+		frames.BeginFrame(true);
+		Check(frames.RowSides(40, left, right) && left && right, "W253: the row's first render gets its side columns");
+		if(left && right) {
+			for(uint32_t i = 0; i < ExtraColumns; i++) {
+				left[i] = GbaColor(31, 0, 0);
+				right[i] = GbaColor(0, 31, 0);
+			}
+		}
+		Check(!frames.RowSides(40, left, right), "W253: a second render of the same row is not handed its side columns");
+
+		const uint16_t* frame = frames.Finish(standard.data());
+		Check(frame != nullptr, "W253: the frame is still built after a repeated render");
+		if(frame) {
+			Check(AllEqual(frame + 40 * ExtendedWidth, ExtraColumns, GbaColor(31, 0, 0))
+				&& AllEqual(frame + 40 * ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, GbaColor(0, 31, 0)),
+				"W253: the row keeps the side columns of its first render",
+				Hex16(frame[40 * ExtendedWidth]));
+		}
+	}
+
+	void TestGbaRevealDoesNotDrawIntoTheFrameItJustSent()
+	{
+		using namespace GbaWidescreenReveal;
+		std::vector<uint16_t> standard(StandardWidth * Height, 0);
+		FrameBuffers frames;
+
+		//A skipped frame sends the last extended frame again, so the decoder may
+		//still be reading that buffer while the next frame is drawn. Blind
+		//alternation puts the frame after a skip straight back into it.
+		frames.BeginFrame(true);
+		const uint16_t* drawn = frames.Finish(standard.data());
+		Check(drawn != nullptr, "W253: a drawn frame is extended");
+
+		frames.BeginFrame(true);
+		frames.HoldLastFrame(true);
+		const uint16_t* skipped = frames.Finish(standard.data());
+		Check(skipped == drawn, "W253: a skipped frame sends the last extended frame again");
+
+		frames.BeginFrame(true);
+		const uint16_t* after = frames.Finish(standard.data());
+		Check(after != nullptr && after != skipped, "W253: the frame after a skip does not draw into the buffer the skip sent");
+
+		//And a plain run of drawn frames still alternates, so the decoder never
+		//reads the buffer being drawn
+		frames.BeginFrame(true);
+		const uint16_t* next = frames.Finish(standard.data());
+		Check(next != nullptr && next != after, "W253: two drawn frames still alternate buffers");
+	}
+
+	void TestGbaRevealOnlyRevealsTheModesTextBgs()
+	{
+		using namespace GbaWidescreenReveal;
+		GbaRevealVram v;
+		uint8_t tile[8][8] = {};
+		tile[0][0] = 1;
+		v.WriteTile4bpp(GbaRevealCharBase, 7, tile);
+		v.Palette[1] = GbaColor(0, 31, 0);
+		v.WriteEntry(0x4000, 240, 0, 7, 512); //BG3's own map, with an entry beside the window
+
+		RowBasis basis = {};
+		basis.TextMode = true;
+		basis.ScreenY = 0;
+		basis.Bgs[3] = GbaRevealBg(512, 0);
+		basis.Bgs[3].TilemapAddr = 0x4000;
+
+		//BG mode 0 draws BG0-BG3 as text BGs; mode 1 draws BG0/BG1 as text and
+		//BG2 as affine, and never draws BG3 at all - so a BG3 whose enable bit
+		//is set in the registers must not appear beside the picture.
+		basis.BgCount = TextBgCount(0);
+		Check(GbaRevealSide(basis, 240, v) == GbaColor(0, 31, 0), "W253: BG mode 0 reveals BG3's map beside the picture");
+
+		basis.BgCount = TextBgCount(1);
+		Check(GbaRevealSide(basis, 240, v) == BlackColor, "W253: BG mode 1 does not reveal BG3, the PPU never draws it");
+
+		//And a bitmap mode has no text BG to read at all
+		Check(TextBgCount(2) == 0 && TextBgCount(3) == 0 && TextBgCount(4) == 0 && TextBgCount(5) == 0,
+			"W253: a bitmap BG mode has no text BG to reveal");
+	}
+}
+
+//--- Bloco W253-W4: the Reveal's extra columns through the HD pack path -----
+//ADR-0253 slice W.4. The extra columns are the picture's own neighbours, so the
+//pack has to be asked about them the way it is asked about a centred pixel: the
+//same tile key (index + palette, plus CHR RAM's own bytes), the same ROM colour
+//behind a tile the pack has no rule for, and the whole thing at the pack's own
+//scale - never a raw low-res tile stretched to fit.
+//
+//The picture keeps its own coordinates while the sides sit outside them
+//(-64..-1 and 256..319). That is what keeps the centre bit-identical and every
+//rule a pack already ships meaning what it meant; the price is that a rule
+//which reads a position has to be told "this pixel is not in the picture"
+//instead of wrapping onto an unrelated one - the guard the last cases pin, and
+//the reason the pack's failure mode here is "no improvement", never a hole.
+//
+//The fake mapper grows W.1's RevealFakeMapper by the two calls the pack key
+//needs - GetPpuAbsoluteAddress (the mapper's CHR banking) and CopyChrTile (CHR
+//RAM) - and still counts every side-effecting read.
+namespace
+{
+	struct HdSideFakeAddress
+	{
+		int32_t Address;
+	};
+
+	struct HdSideFakeMapper : public RevealFakeMapper
+	{
+		int AbsoluteCalls = 0;
+		int CopyChrCalls = 0;
+
+		HdSideFakeAddress GetPpuAbsoluteAddress(uint32_t relativeAddr)
+		{
+			AbsoluteCalls++;
+			return { (int32_t)(relativeAddr & 0x1FFF) };
+		}
+
+		void CopyChrTile(uint32_t addr, uint8_t* output)
+		{
+			CopyChrCalls++;
+			memcpy(output, Chr + (addr & 0x1FFF), 16);
+		}
+	};
+
+	//W.1's RevealBasis leaves the vertical half of loopy v at 0. The side tiles
+	//read the nametable row and the fine Y too, so the cases about them set
+	//those bits here.
+	NesWidescreenReveal::RowBasis HdSideBasis(uint8_t coarseX, uint8_t fineX, uint8_t coarseY = 0, uint8_t fineY = 0, bool secondNametableRow = false)
+	{
+		NesWidescreenReveal::RowBasis basis = RevealBasis(coarseX, fineX);
+		basis.VideoRamAddr |= (uint16_t)((coarseY & 0x1F) << 5) | (uint16_t)((fineY & 0x07) << 12) | (uint16_t)(secondNametableRow ? 0x0800 : 0);
+		return basis;
+	}
+
+	bool AllEqualBytes(const uint8_t* px, uint32_t count, uint8_t value)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(px[i] != value) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	//Every side tile's whole story, so a failure names what it saw.
+	bool AllSideTilesEmpty(const HdSideTile* tiles, uint32_t count)
+	{
+		for(uint32_t i = 0; i < count; i++) {
+			if(tiles[i].HasContent || tiles[i].Tile.TileIndex != HdPpuTileInfo::NoTile) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void BuildHdSideTiles(HdSideFakeMapper& m, const NesWidescreenReveal::RowBasis& basis, MirroringType mirroring, const uint8_t* pal, bool isChrRam, uint32_t version, HdSideTile* tiles)
+	{
+		HdWidescreenColumns::BuildSideTiles(basis, mirroring, m, pal, isChrRam, version, tiles);
+	}
+
+	//Where a side sits in the HD output row, as the renderer walks it: the same
+	//arithmetic HdNesPack::DrawWidescreenColumns uses.
+	uint32_t HdSideColumnOffset(bool right, uint32_t column, uint32_t hdScale, uint32_t screenWidth)
+	{
+		uint32_t base = right ? screenWidth - HdWidescreenColumns::ExtraColumns * hdScale : 0;
+		return base + column * hdScale;
+	}
+}
+
+//The picture is not renumbered: a pack's `<tile>`, `<background>` and condition
+//coordinates still mean the same pixel, and the sides live outside them.
+void TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates()
+{
+	using namespace HdWidescreenColumns;
+	Check(ExtraColumns == 64, "W4: the extra columns are W.1's 64 a side", std::to_string(ExtraColumns));
+	Check(PictureWidth == 256 && PictureHeight == 240, "W4: the picture keeps its own 256x240 coordinates");
+	Check(TilesPerSide == 9, "W4: a side spans 8 whole tiles plus the one the row's fine X starts inside", std::to_string(TilesPerSide));
+	Check(TilesPerRow == 18, "W4: one row carries both sides", std::to_string(TilesPerRow));
+
+	Check(ExtraColumnX(false, 0) == -64 && ExtraColumnX(false, 63) == -1, "W4: the left columns are x = -64..-1",
+		std::to_string(ExtraColumnX(false, 0)) + ".." + std::to_string(ExtraColumnX(false, 63)));
+	Check(ExtraColumnX(true, 0) == 256 && ExtraColumnX(true, 63) == 319, "W4: the right columns are x = 256..319",
+		std::to_string(ExtraColumnX(true, 0)) + ".." + std::to_string(ExtraColumnX(true, 63)));
+
+	Check(!IsPicturePixel(-1, 0) && !IsPicturePixel(0, -1) && !IsPicturePixel(256, 0) && !IsPicturePixel(0, 240),
+		"W4: a side pixel is not a pixel of the picture");
+	Check(IsPicturePixel(0, 0) && IsPicturePixel(255, 0) && IsPicturePixel(0, 239) && IsPicturePixel(255, 239),
+		"W4: all four corners of the 256x240 picture are picture pixels");
+
+	//ADR-0253 §4 (W.5): the rule the HD path latches with is the shared one -
+	//NesWidescreenPpu::RevealRequested, which also answers to the per-game
+	//measurement. HdWidescreenColumns' own copy of the switch half of it is gone;
+	//the W253 cases below drive the whole rule.
+	Check(NesWidescreenPpu::RevealRequested(true, false, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: WideScrn on a normal console asks for the Reveal");
+	Check(!NesWidescreenPpu::RevealRequested(false, false, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: with the switch off nothing is revealed");
+	Check(!NesWidescreenPpu::RevealRequested(true, true, true, NesWidescreenSupport::Verdict::Undecided, false),
+		"W4: a Vs. DualSystem merges two standard frames, so it stays standard");
+
+	//A side's output column m is tile (fineX + m) / 8, pixel (fineX + m) % 8 -
+	//the sides start inside their first tile when the row's fine X is not 0.
+	uint32_t tile = 99, pixel = 99;
+	SideColumnToTile(0, 0, tile, pixel);
+	Check(tile == 0 && pixel == 0, "W4: with fine X 0 a side starts on a tile boundary",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	SideColumnToTile(3, 0, tile, pixel);
+	Check(tile == 0 && pixel == 3, "W4: with fine X 3 it starts three pixels into the first tile",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	SideColumnToTile(3, 63, tile, pixel);
+	Check(tile == 8 && pixel == 2, "W4: and ends two pixels into a ninth tile",
+		std::to_string(tile) + " " + std::to_string(pixel));
+	for(uint32_t m = 0; m < ExtraColumns; m++) {
+		SideColumnToTile(7, m, tile, pixel);
+		if(tile >= TilesPerSide) {
+			Check(false, "W4: no column of a side reaches a tenth tile", std::to_string(m) + "->" + std::to_string(tile));
+			break;
+		}
+	}
+}
+
+//The tile each side column is drawn from, in the plane the mirroring puts
+//beside the picture - the same tiles W.1's low-res Reveal reads there.
+void TestW4SideTilesComeFromTheNeighbouringNametable()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00); //tile 1 = colour 1, palette 0 -> 0x11
+	m.FillNametable(1, 2, 0x55); //tile 2 = colour 2, palette 1 -> 0x22
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	//Unscrolled with vertical mirroring: both sides are the other nametable
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].HasContent && tiles[TilesPerSide].HasContent, "W4: vertical mirroring gives the sides content");
+	Check(tiles[0].Tile.TileIndex == 2 && tiles[TilesPerSide].Tile.TileIndex == 2,
+		"W4: both sides are drawn from the neighbouring nametable's tile",
+		std::to_string(tiles[0].Tile.TileIndex) + " " + std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+	Check(tiles[0].BgColorIndex[0] == 2 && tiles[0].BgColor[0] == 0x22,
+		"W4: and carry the ROM's own colour for the pixel", Hex16(tiles[0].BgColor[0]) + " idx=" + std::to_string(tiles[0].BgColorIndex[0]));
+	Check(tiles[0].Tile.PpuBackgroundColor == 0x0D, "W4: the backdrop travels with the tile", Hex16(tiles[0].Tile.PpuBackgroundColor));
+	Check(tiles[0].Tile.OffsetY == 0 && tiles[0].Tile.PaletteOffset == 0,
+		"W4: a side tile is handed to the pack with the offsets a centred one has");
+
+	//Scrolled by 128 px: the left side is the current nametable, the right one
+	//the next - exactly W.1's RenderRowSides split
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].Tile.TileIndex == 1 && tiles[0].BgColorIndex[0] == 1 && tiles[0].BgColor[0] == 0x11,
+		"W4: scrolled 128 px, the left tiles are the current nametable's", Hex16(tiles[0].BgColor[0]));
+	Check(tiles[TilesPerSide].Tile.TileIndex == 2, "W4: scrolled 128 px, the right tiles are the next nametable's",
+		std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+}
+
+//Fine X, fine Y and the nametable row: the three bits that decide *which*
+//neighbour pixel a side column shows.
+void TestW4SideTilesFollowTheRowsScrollState()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	//Scrolled by 16 tiles with vertical mirroring, the left side is the current
+	//nametable and the right one the neighbour. Tile 4 lights only its own first
+	//pixel column, so it says both things at once: the tile is handed over
+	//whole - its eight pixels are the ROM's, unshifted - and fine X only moves
+	//which of them the side's output columns start on.
+	m.FillNametable(0, 4, 0x00);
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].BgColorIndex[0] == 1 && AllEqualBytes(tiles[0].BgColorIndex + 1, 7, 0),
+		"W4: a side tile carries the ROM tile's own eight pixels",
+		std::to_string(tiles[0].BgColorIndex[0]) + " " + std::to_string(tiles[0].BgColorIndex[1]));
+
+	BuildHdSideTiles(m, HdSideBasis(16, 3), MirroringType::Vertical, pal, false, 109, tiles);
+	uint32_t fineTile = 99, finePixel = 99;
+	SideColumnToTile(3, 5, fineTile, finePixel);
+	Check(fineTile == 1 && finePixel == 0 && tiles[1].BgColorIndex[finePixel] == 1 && tiles[0].BgColorIndex[3] == 0,
+		"W4: fine X moves which pixel of the side's first tile the side starts on",
+		std::to_string(fineTile) + " " + std::to_string(finePixel) + " " + std::to_string(tiles[0].BgColorIndex[3]));
+
+	//Fine Y selects the tile row; tile 5 lights only fine row 2
+	m.FillNametable(1, 5, 0x00);
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 2), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[7] == 1 && tiles[TilesPerSide].BgColor[7] == 0x11,
+		"W4: fine Y picks the tile row the sides read", Hex16(tiles[TilesPerSide].BgColor[7]));
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 1), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[7] == 0 && tiles[TilesPerSide].BgColor[7] == 0x0D,
+		"W4: a transparent tile row shows the backdrop", Hex16(tiles[TilesPerSide].BgColor[7]));
+
+	//The attribute quadrant picks the palette, as it does for a centred pixel.
+	//NT1's attribute 0xE4 gives its tiles at coarse X 48-49 palette 0 and those
+	//at 50-51 palette 1, so two adjacent right-side tiles holding the *same* ROM
+	//tile come out in different palettes.
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 1, 0xE4);
+	BuildHdSideTiles(m, HdSideBasis(16, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[TilesPerSide].BgColorIndex[0] == 1 && tiles[TilesPerSide].BgColor[0] == 0x11,
+		"W4: the attribute quadrant picks the palette of each side tile", Hex16(tiles[TilesPerSide].BgColor[0]));
+	Check(tiles[TilesPerSide + 2].BgColor[0] == 0x21,
+		"W4: and the next quadrant picks the next palette", Hex16(tiles[TilesPerSide + 2].BgColor[0]));
+
+	//The nametable row is loopy v's bit 11, and it picks the *pair*: four
+	//distinct nametables are what makes that visible, since vertical mirroring
+	//maps both rows of the pair onto the same two.
+	m.NametableMap[0] = 0; m.NametableMap[1] = 1; m.NametableMap[2] = 2; m.NametableMap[3] = 3;
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(2, 1, 0x00);
+	m.FillNametable(3, 4, 0x55);
+	BuildHdSideTiles(m, HdSideBasis(16, 0, 0, 0, true), MirroringType::FourScreens, pal, false, 109, tiles);
+	Check(tiles[0].Tile.TileIndex == 1 && tiles[TilesPerSide].Tile.TileIndex == 4,
+		"W4: loopy v's nametable row bit moves the sides to the next pair of nametables",
+		std::to_string(tiles[0].Tile.TileIndex) + " " + std::to_string(tiles[TilesPerSide].Tile.TileIndex));
+}
+
+//The black fallback and the background-off row, carried into the pack's own
+//vocabulary: no content is a black tile the pack is never asked about, and a
+//background-off row is a no-tile pixel, which the pack paints as the backdrop.
+void TestW4SideTilesGoEmptyWhereTheRevealDrawsBlack()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	BuildHdSideTiles(m, HdSideBasis(4, 0), MirroringType::ScreenAOnly, pal, false, 109, tiles);
+	Check(AllSideTilesEmpty(tiles, TilesPerRow), "W4: single-screen leaves every side tile empty (the black fallback)");
+	Check(AllEqualBytes(tiles[0].BgColor, 8, (uint8_t)NesWidescreenReveal::BlackColor), "W4: an empty side tile is black", Hex16(tiles[0].BgColor[0]));
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Horizontal, pal, false, 109, tiles);
+	Check(AllSideTilesEmpty(tiles, TilesPerRow), "W4: horizontal mirroring leaves every side tile empty (SMB3 title)");
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	Check(!AllSideTilesEmpty(tiles, TilesPerRow), "W4: vertical mirroring fills them again");
+
+	//Background off for the row: the low-res Reveal shows the backdrop, so the
+	//pack is handed a pixel with no tile and paints the same backdrop.
+	NesWidescreenReveal::RowBasis off = HdSideBasis(0, 0);
+	off.BgEnabled = false;
+	BuildHdSideTiles(m, off, MirroringType::Vertical, pal, false, 109, tiles);
+	Check(tiles[0].HasContent && tiles[0].Tile.TileIndex == HdPpuTileInfo::NoTile,
+		"W4: with the background off the pack is handed a pixel with no tile",
+		std::to_string(tiles[0].Tile.TileIndex));
+	Check(tiles[0].BgColorIndex[0] == 0 && tiles[0].BgColor[0] == 0x0D && tiles[0].Tile.PpuBackgroundColor == 0x0D,
+		"W4: and that pixel's colour is the backdrop, as W.1 draws it", Hex16(tiles[0].BgColor[0]));
+	Check(m.SideEffectReads == 0, "W4: even the background-off row uses no rendering read");
+}
+
+//The strongest statement of the slice: the pixels the pack is handed for a side
+//are the pixels W.1's low-res Reveal draws there, so widening the path to HD can
+//never move a side pixel.
+void TestW4SideTilePixelsAreTheLowResRevealPixels()
+{
+	using namespace NesWidescreenReveal;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(0, 1, 0x00);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(2, 4, 0xE4);
+	m.FillNametable(3, 5, 0xAA);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+
+	bool same = true;
+	bool sameLowRes = true;
+	std::string firstBad;
+	std::string firstBadLowRes;
+	for(uint8_t fineX = 0; fineX < 8 && same; fineX++) {
+		for(uint8_t fineY = 0; fineY < 8 && same; fineY++) {
+			RowBasis basis = HdSideBasis(5, fineX, 3, fineY, (fineY & 1) != 0);
+			uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
+			RenderRowSides(basis, MirroringType::Vertical, m, pal, left, right);
+
+			HdSideTile tiles[HdWidescreenColumns::TilesPerRow];
+			HdWidescreenColumns::BuildSideTiles(basis, MirroringType::Vertical, m, pal, false, 109, tiles);
+
+			//The frame HdNesPpu emits is built from these same tiles. If it ever
+			//stopped matching W.1's own renderer, the widened RenderedFrame a
+			//non-HD consumer sees (the border layer's centre) would be the only
+			//place the two could disagree.
+			uint16_t lowLeft[ExtraColumns] = {}, lowRight[ExtraColumns] = {};
+			HdWidescreenColumns::SideTilesToLowResRow(tiles, fineX, basis.PaletteMask, basis.EmphasisBits, lowLeft);
+			HdWidescreenColumns::SideTilesToLowResRow(tiles + HdWidescreenColumns::TilesPerSide, fineX, basis.PaletteMask, basis.EmphasisBits, lowRight);
+
+			for(uint32_t side = 0; side < 2; side++) {
+				for(uint32_t column = 0; column < ExtraColumns; column++) {
+					uint32_t tile = 0, pixel = 0;
+					HdWidescreenColumns::SideColumnToTile(fineX, column, tile, pixel);
+					const HdSideTile& sideTile = tiles[side * HdWidescreenColumns::TilesPerSide + tile];
+					uint8_t index = sideTile.BgColorIndex[pixel];
+					uint16_t drawn = index == 0 ? sideTile.Tile.PpuBackgroundColor : sideTile.BgColor[pixel];
+					uint16_t expected = side == 0 ? left[column] : right[column];
+					uint16_t lowRes = side == 0 ? lowLeft[column] : lowRight[column];
+					if(same && drawn != expected) {
+						same = false;
+						firstBad = "fineX=" + std::to_string(fineX) + " fineY=" + std::to_string(fineY) +
+							" side=" + std::to_string(side) + " col=" + std::to_string(column) +
+							" tile=" + std::to_string(tile) + " px=" + std::to_string(pixel) +
+							" got=" + Hex16(drawn) + " want=" + Hex16(expected);
+					}
+					if(sameLowRes && lowRes != expected) {
+						sameLowRes = false;
+						firstBadLowRes = "fineX=" + std::to_string(fineX) + " fineY=" + std::to_string(fineY) +
+							" side=" + std::to_string(side) + " col=" + std::to_string(column) +
+							" got=" + Hex16(lowRes) + " want=" + Hex16(expected);
+					}
+				}
+			}
+		}
+	}
+	Check(same, "W4: every side tile pixel is the colour W.1's low-res Reveal draws there", firstBad);
+	Check(sameLowRes, "W4: the widened frame's own side pixels are W.1's, built from those same tiles", firstBadLowRes);
+}
+
+//What the HD renderer is handed for a side pixel. The low-res frame above is
+//built from the tile's own colours, so it cannot see this: `OffsetX` is which
+//column of the pack's *art* the pixel samples, and `DrawTile` indexes the bitmap
+//with it. Left at the struct's default of 0, every column of a side row draws
+//column 0 of the tile - a smear the low-res comparison above is blind to.
+void TestW4SidePixelInfoSamplesEachColumnsOwnPixel()
+{
+	using namespace HdWidescreenColumns;
+	using namespace NesWidescreenReveal;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(1, 2, 0x55);
+	m.FillNametable(3, 3, 0x99);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+
+	bool offsetMatchesColumn = true;
+	bool recordMatchesTile = true;
+	bool offsetEverMoves = false;
+	std::string firstBadOffset;
+	std::string firstBadRecord;
+
+	for(int side = 0; side < 2; side++) {
+		for(uint8_t fineX = 0; fineX < 8; fineX++) {
+			RowBasis basis = HdSideBasis(5, fineX);
+			HdSideTile tiles[TilesPerRow];
+			BuildHdSideTiles(m, basis, MirroringType::Vertical, pal, false, 109, tiles);
+			const HdSideTile* sideRow = tiles + side * TilesPerSide;
+
+			for(uint32_t column = 0; column < HdWidescreenColumns::ExtraColumns; column++) {
+				uint32_t tile = 0, pixel = 0;
+				SideColumnToTile(fineX, column, tile, pixel);
+				const HdSideTile& sideTile = sideRow[tile];
+				if(!sideTile.HasContent) {
+					continue;
+				}
+
+				HdPpuPixelInfo info;
+				BuildSidePixelInfo(sideTile, pixel, info);
+
+				//The one field that is not the tile's own: the column of the art.
+				if(info.Tile.OffsetX != pixel) {
+					if(offsetMatchesColumn) {
+						firstBadOffset = "side=" + std::to_string(side) + " fineX=" + std::to_string(fineX) +
+							" col=" + std::to_string(column) + " tile=" + std::to_string(tile) +
+							" px=" + std::to_string(pixel) + " OffsetX=" + std::to_string(info.Tile.OffsetX);
+					}
+					offsetMatchesColumn = false;
+				}
+				if(pixel != 0) {
+					offsetEverMoves = true;
+				}
+
+				//Everything else is exactly the side tile's, so the pack's lookup
+				//key and the ROM colour behind a tile it has no rule for are the
+				//ones HdNesPpu captured - not a re-derivation.
+				bool ok = info.Tile.TileIndex == sideTile.Tile.TileIndex &&
+					info.Tile.PaletteColors == sideTile.Tile.PaletteColors &&
+					info.Tile.OffsetY == sideTile.Tile.OffsetY &&
+					info.Tile.IsChrRamTile == sideTile.Tile.IsChrRamTile &&
+					info.Tile.PpuBackgroundColor == sideTile.Tile.PpuBackgroundColor &&
+					info.Tile.BgColorIndex == sideTile.BgColorIndex[pixel] &&
+					info.Tile.BgColor == sideTile.BgColor[pixel] &&
+					info.SpriteCount == 0 && !info.Tile.HorizontalMirroring;
+				//A side pixel has no sprite of its own: sprites do not exist past
+				//the picture's edge, and a stale SpriteCount would draw the centre's.
+				if(!ok && recordMatchesTile) {
+					firstBadRecord = "side=" + std::to_string(side) + " fineX=" + std::to_string(fineX) +
+						" col=" + std::to_string(column) + " tile=" + std::to_string(tile) + " px=" + std::to_string(pixel);
+				}
+				recordMatchesTile = recordMatchesTile && ok;
+			}
+		}
+	}
+
+	Check(offsetMatchesColumn, "W4: a side pixel samples its own column of the pack's art", firstBadOffset);
+	Check(offsetEverMoves, "W4: and the sweep really reaches a column whose pixel is not 0");
+	Check(recordMatchesTile, "W4: the rest of the record is the side tile's own", firstBadRecord);
+}
+
+//The pack's key: a side tile is looked up by the same fields a centred one is,
+//and the pack version still decides whether the palette carries its alpha byte.
+void TestW4SideTileKeyMatchesTheKeyOfACentredTile()
+{
+	using namespace HdWidescreenColumns;
+	HdSideFakeMapper m;
+	SetUpRevealTiles(m);
+	m.FillNametable(1, 2, 0x55);
+	uint8_t pal[0x20];
+	SetUpRevealPalette(pal);
+	HdSideTile tiles[TilesPerRow];
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
+	uint32_t expected109 = (uint32_t)pal[7] | ((uint32_t)pal[6] << 8) | ((uint32_t)pal[5] << 16) | ((uint32_t)pal[0] << 24);
+	Check(tiles[0].Tile.PaletteColors == expected109, "W4: a v100+ pack reads the palette with its alpha byte",
+		"0x" + std::to_string(tiles[0].Tile.PaletteColors) + " vs 0x" + std::to_string(expected109));
+	Check(!tiles[0].Tile.IsChrRamTile, "W4: a CHR ROM game's side tile is an index, not bytes");
+	Check(m.AbsoluteCalls == TilesPerRow, "W4: every side tile resolves its absolute CHR address once",
+		std::to_string(m.AbsoluteCalls));
+	Check(m.CopyChrCalls == 0, "W4: a CHR ROM game copies no tile bytes", std::to_string(m.CopyChrCalls));
+
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 99, tiles);
+	uint32_t expected99 = (uint32_t)pal[7] | ((uint32_t)pal[6] << 8) | ((uint32_t)pal[5] << 16);
+	Check(tiles[0].Tile.PaletteColors == expected99, "W4: a pre-100 pack reads it without the alpha byte",
+		"0x" + std::to_string(tiles[0].Tile.PaletteColors) + " vs 0x" + std::to_string(expected99));
+
+	//CHR RAM: the tile carries its own bytes, hashed by them, exactly as a
+	//centred tile does (HdTileKey's own rule).
+	uint8_t chrLo[8] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
+	uint8_t chrHi[8] = {};
+	m.SetTile(2, chrLo, chrHi);
+	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, true, 109, tiles);
+	Check(tiles[0].Tile.IsChrRamTile, "W4: a CHR RAM game's side tile is keyed by its bytes");
+	Check(m.CopyChrCalls == TilesPerRow, "W4: and every side tile copies its own bytes", std::to_string(m.CopyChrCalls));
+	Check(tiles[0].Tile.TileData[0] == 0xAA && tiles[0].Tile.TileData[8] == 0x00,
+		"W4: the bytes it copies are the tile's own planes",
+		Hex16(tiles[0].Tile.TileData[0]) + " " + Hex16(tiles[0].Tile.TileData[8]));
+	Check(m.SideEffectReads == 0 && m.VramHookCalls == 0,
+		"W4: the sides never use the mapper's rendering VRAM read nor its address hook",
+		std::to_string(m.SideEffectReads) + " " + std::to_string(m.VramHookCalls));
+}
+
+//The HD frame the pack has to fill, and the invariant that makes the centre
+//trustworthy: widening the row never moves a centre pixel.
+void TestW4HdFrameAddsTheSidesAroundTheCentre()
+{
+	using namespace HdWidescreenColumns;
+
+	HdFrameGeometry standard = ComputeHdFrameGeometry(false, 3, 8, 8);
+	Check(standard.ExtraColumns == 0 && standard.CentreOffset == 0,
+		"W4: a standard frame has no sides and starts at the picture's own left edge");
+	Check(standard.ScreenWidth == (256 - 16) * 3, "W4: a standard frame is today's HD width", std::to_string(standard.ScreenWidth));
+	Check(standard.RowStride == standard.ScreenWidth * 3, "W4: and today's HD row stride", std::to_string(standard.RowStride));
+
+	HdFrameGeometry wide = ComputeHdFrameGeometry(true, 3, 8, 8);
+	Check(wide.ExtraColumns == 64, "W4: an extended frame carries the Reveal's 64 columns a side", std::to_string(wide.ExtraColumns));
+	Check(wide.ScreenWidth == (384 - 16) * 3, "W4: the HD row is the extended picture minus the overscan", std::to_string(wide.ScreenWidth));
+	Check(wide.RowStride == wide.ScreenWidth * 3, "W4: the HD row stride follows the wider row", std::to_string(wide.RowStride));
+	Check(wide.CentreOffset == 64 * 3, "W4: the centre starts after the left side", std::to_string(wide.CentreOffset));
+	Check(wide.ScreenWidth - 2 * 64 * 3 == standard.ScreenWidth,
+		"W4: the sides widen the row by exactly 2 x 64 x scale, so the centre keeps its width");
+
+	//The common case: scale 1, no overscan
+	HdFrameGeometry plain = ComputeHdFrameGeometry(true, 1, 0, 0);
+	Check(plain.ScreenWidth == 384 && plain.RowStride == 384 && plain.CentreOffset == 64,
+		"W4: at scale 1 with no overscan the row is the 384-px picture, centre at 64",
+		std::to_string(plain.ScreenWidth) + " " + std::to_string(plain.CentreOffset));
+
+	//Where the sides land in that row
+	Check(HdSideColumnOffset(false, 0, 3, wide.ScreenWidth) == 0 &&
+		HdSideColumnOffset(false, 63, 3, wide.ScreenWidth) == 63 * 3,
+		"W4: the left side fills the row from its first HD pixel");
+	Check(HdSideColumnOffset(true, 0, 3, wide.ScreenWidth) == wide.ScreenWidth - 64 * 3 &&
+		HdSideColumnOffset(true, 63, 3, wide.ScreenWidth) == wide.ScreenWidth - 3,
+		"W4: the right side ends at the row's last HD pixel");
+}
+
+//ADR-0253 §3 through the HD path (W.4). The extended frame's per-row side-fill
+//map (WidescreenFallback.h) is what tells the renderer which rows still need the
+//fallback chain - without it VideoRenderer::UpdateFrame skips both links, so an
+//HD pack with widescreen art draws none of it. The HD frame's rows are the
+//console's own 240, each repeated `scale` times under the overscan's crop, so
+//the map the chain reads is the console's map at the pack's scale.
+void TestW4HdSideFillMapFollowsTheFramesScale()
+{
+	using namespace HdWidescreenColumns;
+
+	uint8_t consoleFill[NesWidescreenReveal::Height] = {};
+	consoleFill[0] = WidescreenFallback::LeftBit;
+	consoleFill[8] = WidescreenFallback::LeftBit;
+	consoleFill[10] = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
+	consoleFill[239] = WidescreenFallback::RightBit;
+
+	uint8_t scaled[480] = {};
+	Check(ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 2, scaled, 480),
+		"W4: a 2x HD frame's side-fill map comes from the console frame's own");
+	for(uint32_t r = 0; r < 480; r++) {
+		if(scaled[r] != consoleFill[r / 2]) {
+			Check(false, "W4: every HD row carries the fill byte of the console row it draws", std::to_string(r));
+			break;
+		}
+	}
+	Check(scaled[0] == WidescreenFallback::LeftBit && scaled[1] == WidescreenFallback::LeftBit,
+		"W4: a row the game filled is filled on both of its HD rows");
+	Check(scaled[20] == consoleFill[10] && scaled[21] == consoleFill[10],
+		"W4: the tenth console row is at the HD frame's twentieth");
+	Check(scaled[479] == WidescreenFallback::RightBit, "W4: the last HD row is the last console row");
+
+	//The overscan crops the console frame's top rows off the HD frame, so the
+	//map's first byte is the first *visible* console row's.
+	uint8_t cropped[448] = {};
+	Check(ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 8, 2, cropped, 448),
+		"W4: an HD frame under the overscan gets the cropped console map");
+	Check(cropped[0] == consoleFill[8] && cropped[447] == consoleFill[231],
+		"W4: which starts at the first visible console row and ends at the last",
+		std::to_string(cropped[0]) + " " + std::to_string(cropped[447]));
+
+	//A map that cannot describe the frame is refused rather than guessed at: the
+	//filter then hands the renderer no extension at all, which is the safe
+	//answer (no chain, no fills) rather than a row-to-row lie.
+	uint8_t out[480] = {};
+	Check(!ScaleSideFill(nullptr, NesWidescreenReveal::Height, 0, 2, out, 480),
+		"W4: without the console's own map there is nothing to scale");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 0, out, 480),
+		"W4: a frame with no scale has no rows to describe");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 0, 2, out, 481),
+		"W4: a map that reaches past the console frame is refused");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, 8, 2, out, 465),
+		"W4: and one that reaches past the cropped frame under the overscan");
+	Check(!ScaleSideFill(consoleFill, NesWidescreenReveal::Height, NesWidescreenReveal::Height, 2, out, 2),
+		"W4: an overscan that crops the whole frame leaves no row to describe");
+}
+
+//The guard that keeps a position-reading rule from wrapping: a side pixel is not
+//a pixel of the picture, so the rule has nothing to say about it and the pixel
+//falls through to the ROM's own tile.
+void TestW4PositionRulesRefuseAPixelOutsideThePicture()
+{
+	HdScreenInfo info(false);
+	HdScreenInfo* screenInfo = &info;
+
+	HdPackPositionCheckXCondition atLeastZero;
+	atLeastZero.Name = "w4posx";
+	atLeastZero.Initialize(HdPackConditionOperator::GreaterThanOrEqual, 0);
+	static_cast<HdPackCondition&>(atLeastZero).Initialize(screenInfo, nullptr);
+	Check(atLeastZero.CheckCondition(0, 0, nullptr), "W4: a position rule still matches inside the picture");
+	Check(atLeastZero.CheckCondition(255, 0, nullptr), "W4: ... up to its last column");
+	Check(!atLeastZero.CheckCondition(HdWidescreenColumns::ExtraColumnX(false, 0), 0, nullptr),
+		"W4: but not the first left side column, which is not a column of the picture");
+	Check(!atLeastZero.CheckCondition(HdWidescreenColumns::ExtraColumnX(true, 0), 0, nullptr),
+		"W4: and not the first right side column either");
+
+	HdPackPositionCheckYCondition atLeastZeroY;
+	atLeastZeroY.Name = "w4posy";
+	atLeastZeroY.Initialize(HdPackConditionOperator::GreaterThanOrEqual, 0);
+	static_cast<HdPackCondition&>(atLeastZeroY).Initialize(screenInfo, nullptr);
+	Check(atLeastZeroY.CheckCondition(0, 239, nullptr), "W4: a row rule still matches the picture's last row");
+	Check(!atLeastZeroY.CheckCondition(0, 240, nullptr), "W4: and refuses a row below it");
+
+	//A rule that names a column the picture does not have: the sides are not it
+	HdPackPositionCheckXCondition named256;
+	named256.Name = "w4posx256";
+	named256.Initialize(HdPackConditionOperator::Equal, 256);
+	static_cast<HdPackCondition&>(named256).Initialize(screenInfo, nullptr);
+	Check(!named256.CheckCondition(256, 0, nullptr),
+		"W4: a rule naming column 256 was written against a 256-px picture, not against the new column");
+}
+
+void TestW4NearbyRulesRefuseAPixelOutsideThePicture()
+{
+	HdScreenInfo info(false);
+
+	//tileNearby: PixelOffset + y*256 + x - with the side coordinates this lands
+	//on a real but unrelated centre pixel unless the pixel is refused first.
+	HdPackTileNearbyCondition nearby;
+	nearby.Name = "w4near";
+	nearby.Initialize(1, 0, 0, 0x42, "", false);
+	static_cast<HdPackCondition&>(nearby).Initialize(&info, nullptr);
+	info.ScreenTiles[1].Tile.TileIndex = 0x42;
+	info.ScreenTiles[256].Tile.TileIndex = 0x42;
+	Check(nearby.CheckCondition(0, 0, nullptr), "W4: tileNearby still reads the pixel it names inside the picture");
+	Check(!nearby.CheckCondition(-1, 1, nullptr),
+		"W4: tileNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+
+	HdPackSpriteNearbyCondition sprite;
+	sprite.Name = "w4snear";
+	sprite.Initialize(0, 0, 0, 0x42, "", false);
+	static_cast<HdPackCondition&>(sprite).Initialize(&info, nullptr);
+	info.ScreenTiles[0].SpriteCount = 1;
+	info.ScreenTiles[0].Sprite[0].TileIndex = 0x42;
+	info.ScreenTiles[255].SpriteCount = 1;
+	info.ScreenTiles[255].Sprite[0].TileIndex = 0x42;
+	Check(sprite.CheckCondition(0, 0, nullptr), "W4: spriteNearby still reads the pixel it names inside the picture");
+	Check(!sprite.CheckCondition(-1, 1, nullptr),
+		"W4: spriteNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+}
+
+void TestW4CellGuardRefusesAPixelOutsideThePicture()
+{
+	//Every cell allowed, so the only thing the case can be about is where the
+	//coordinate points - the record machinery has its own block.
+	HdCellGuard guard;
+	for(int i = 0; i < HdCellKeyRecord::Rows; i++) {
+		guard.Mask[i] = 0xFFFFFFFFu;
+	}
+
+	Check(guard.Allows(0, 0) && guard.Allows(255, 239), "W4: the cell guard still decides every picture pixel");
+	Check(!guard.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 0), 0),
+		"W4: the cell guard refuses the first left side column instead of reading past its mask");
+	Check(!guard.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(true, 63), 0),
+		"W4: and the last right side column");
+	Check(!guard.Allows(0, 240), "W4: and a row below the picture");
+
+	//A layer with no record is inert by its Record, not by its mask - that is
+	//the caller's test (ADR-0236 §3). Allows itself only ever answers about the
+	//picture, and answers safely even with no record at all. Every bit of the
+	//cleared mask is set first, so a wrapped coordinate that reached the shift
+	//would have to come back *true*: false here can only be the bounds check.
+	HdCellGuard inert;
+	for(int i = 0; i < HdCellKeyRecord::Rows; i++) {
+		inert.Mask[i] = 0xFFFFFFFFu;
+	}
+	Check(inert.Record == nullptr, "W4: a guard with no record is inert by its Record");
+	Check(inert.Allows(255, 239), "W4: an all-ones mask still allows the picture's last pixel");
+	Check(!inert.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 0), 0),
+		"W4: Allows never reads its mask for a pixel outside the picture, record or no record");
+	Check(!inert.Allows((uint32_t)HdWidescreenColumns::ExtraColumnX(false, 63), 239),
+		"W4: and never for the last left column, wide-open mask and all");
+	Check(!inert.Allows(0, 240), "W4: nor for a row below the picture");
+}
+
+//--- Bloco W253C: the widescreen fallback chain (ADR-0253 §3, slice W.3) -----
+//Where W.1 drew black for a side column the game cannot fill, W.3 picks the
+//first source that applies: the pack's `<widescreen>` art (MEP-v1 §5.5), then
+//its border layer (ADR-0149), then black. The policy is pure (WidescreenFallback.h)
+//and so is the border composite's extended path (BorderLayout); the loader of
+//the `<widescreen>` section is pure apart from the convention probe, which gets
+//a throwaway folder tree like Bloco D's.
+namespace
+{
+	using WidescreenFallback::Source;
+
+	Source ResolveSide(bool reveal, bool art, bool border)
+	{
+		WidescreenFallback::Inputs in;
+		in.RevealFilled = reveal;
+		in.PackArtAvailable = art;
+		in.BorderAvailable = border;
+		return WidescreenFallback::Resolve(in);
+	}
+
+	std::string Hex32(uint32_t value)
+	{
+		char buf[16];
+		snprintf(buf, sizeof(buf), "0x%08X", value);
+		return buf;
+	}
+
+	std::string SourceName(Source source)
+	{
+		switch(source) {
+			case Source::Reveal: return "Reveal";
+			case Source::PackArt: return "PackArt";
+			case Source::Border: return "Border";
+			default: return "Black";
+		}
+	}
+
+	void TestW253FallbackPrefersTheMostSpecificSource()
+	{
+		Check(ResolveSide(true, true, true) == Source::Reveal, "W253C: real content beside the picture always wins");
+		Check(ResolveSide(false, true, true) == Source::PackArt, "W253C: with nothing to reveal, the pack's widescreen art comes first (ADR-0253 §3)", SourceName(ResolveSide(false, true, true)));
+		Check(ResolveSide(false, false, true) == Source::Border, "W253C: without pack art, the border layer fills the sides", SourceName(ResolveSide(false, false, true)));
+		Check(ResolveSide(false, false, false) == Source::Black, "W253C: with no art and no border, the sides stay black");
+		Check(ResolveSide(true, false, false) == Source::Reveal, "W253C: reveal alone is enough");
+		Check(ResolveSide(false, true, false) == Source::PackArt, "W253C: pack art alone beats black");
+	}
+
+	void TestW253FallbackSupportNeverComesFromBorderOrBlack()
+	{
+		//ADR-0253 §3, last paragraph: the border and black are per-frame
+		//fill-ins, so they never keep the WideScrn switch enabled on their own.
+		Check(WidescreenFallback::SupportsWidescreen(true, false), "W253C: a game with real side content supports widescreen");
+		Check(WidescreenFallback::SupportsWidescreen(false, true), "W253C: a pack with widescreen art supports widescreen");
+		Check(WidescreenFallback::SupportsWidescreen(true, true), "W253C: both together support widescreen");
+		Check(!WidescreenFallback::SupportsWidescreen(false, false), "W253C: a border or black alone never makes a game supported (ADR-0253 §3)");
+	}
+
+	void TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty()
+	{
+		//A frame 8 px wide with 2-px side runs (ExtendedColumns = 2), 4 rows
+		const uint32_t width = 8, height = 4, extra = 2;
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint32_t art[extra * height] = { 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x42 };
+		//Row 1 already filled on the left by the game; row 3 filled on both sides
+		uint8_t fill[height] = { 0, WidescreenFallback::LeftBit, 0, WidescreenFallback::LeftBit | WidescreenFallback::RightBit };
+
+		WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, true, art, extra, height, fill);
+
+		Check(fill[0] == WidescreenFallback::LeftBit, "W253C: the art marks the rows it filled", std::to_string(fill[0]));
+		Check(fill[1] == WidescreenFallback::LeftBit, "W253C: a row the game already filled is left alone", std::to_string(fill[1]));
+		Check(frame[0] == 0x11 && frame[1] == 0x12, "W253C: the left art lands in the left run, 1:1");
+		Check(frame[width] == 0xFF000000u, "W253C: a filled row keeps the game's own side pixels");
+		Check(frame[2 * width] == 0x31 && frame[2 * width + 1] == 0x32, "W253C: every unfilled row takes its own art row");
+		Check(frame[3 * width] == 0xFF000000u, "W253C: a row filled on both sides is not touched");
+
+		WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, false, art, extra, height, fill);
+
+		Check(frame[width - 1] == 0x12 && frame[width - 2] == 0x11, "W253C: the right art lands in the right run");
+		Check(frame[2 * width - 1] == 0x22, "W253C: the right side fills the rows the left side did not");
+		Check(fill[1] == (WidescreenFallback::LeftBit | WidescreenFallback::RightBit), "W253C: both sides now read as filled", std::to_string(fill[1]));
+		Check(frame[3 * width + width - 1] == 0xFF000000u, "W253C: the right side skips the rows the game filled");
+
+		//A wrong-sized image is refused outright: the next source in the chain
+		//fills the column instead of a stretched or tiled side (MEP-v1 §5.5)
+		std::vector<uint32_t> untouched(width * height, 0xFF000000u);
+		uint8_t full[height] = {};
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, extra, true, art, extra + 1, height, full);
+		Check(untouched[0] == 0xFF000000u && full[0] == 0, "W253C: a side image of the wrong width is refused");
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, extra, true, art, extra, height + 1, full);
+		Check(untouched[0] == 0xFF000000u && full[0] == 0, "W253C: a side image of the wrong height is refused");
+		WidescreenFallback::FillSideFromArt(untouched.data(), width, height, 0, true, art, extra, height, full);
+		Check(untouched[0] == 0xFF000000u, "W253C: a standard frame has no side run to fill");
+	}
+
+	void TestW253FallbackScalesThePackArtToAnHdFrame()
+	{
+		//ADR-0253 §3 (W.3) on the HD pack path: MEP-v1 §5.5 fixes the art's canvas
+		//per console - 64 x 240 on the NES, the frame the pack was authored beside -
+		//and an HD pack draws that same Reveal frame at its own scale, so the
+		//frame's side runs are that canvas times the pack's scale. The 1:1 copy
+		//below refuses art of any other size, so without the scaling a pack that is
+		//conforming everywhere else fills nothing on the HD path and the sides fall
+		//to the border.
+		const uint32_t artWidth = 2, artHeight = 2, scale = 3;
+		const uint32_t width = 16, height = 6, extra = artWidth * scale;
+		uint32_t art[artWidth * artHeight] = { 0x11, 0x12, 0x21, 0x22 };
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint8_t fill[height] = {};
+		std::vector<uint32_t> scratch;
+
+		//Row 1 was filled by the game on the left, so the art must skip it
+		fill[1] = WidescreenFallback::LeftBit;
+
+		WidescreenFallback::FillSideFromArtForFrame(frame.data(), width, height, extra, true, art, artWidth, artHeight, fill, scratch);
+
+		Check(frame[0] == 0x11 && frame[2] == 0x11 && frame[3] == 0x12 && frame[5] == 0x12,
+			"W253C: an HD frame's left side takes the pack's art, each pixel at the pack's scale",
+			std::to_string(frame[0]) + " " + std::to_string(frame[3]));
+		Check(frame[3 * width] == 0x21 && frame[3 * width + 5] == 0x22,
+			"W253C: every HD row takes the art row it draws", std::to_string(frame[3 * width]));
+		Check(fill[0] == WidescreenFallback::LeftBit && fill[5] == WidescreenFallback::LeftBit && fill[1] == WidescreenFallback::LeftBit,
+			"W253C: the scaled art marks the rows it filled, and only those");
+		Check(frame[width] == 0xFF000000u, "W253C: the row the game filled keeps the game's own side pixels");
+
+		WidescreenFallback::FillSideFromArtForFrame(frame.data(), width, height, extra, false, art, artWidth, artHeight, fill, scratch);
+		Check(frame[width - 6] == 0x11 && frame[width - 1] == 0x12 && frame[5 * width + width - 1] == 0x22,
+			"W253C: the right side takes the same scaled art");
+
+		//Art already on the frame's own canvas is copied 1:1, as §5.5 requires and
+		//as every non-HD frame does - not routed through the scratch buffer at all.
+		std::vector<uint32_t> canvasArt((size_t)extra * height);
+		for(uint32_t i = 0; i < extra * height; i++) {
+			canvasArt[i] = 0x100 + i;
+		}
+		std::vector<uint32_t> plain(width * height, 0xFF000000u);
+		uint8_t plainFill[height] = {};
+		std::vector<uint32_t> untouchedScratch(4, 0xDEADBEEFu);
+		WidescreenFallback::FillSideFromArtForFrame(plain.data(), width, height, extra, true, canvasArt.data(), extra, height, plainFill, untouchedScratch);
+		Check(plain[0] == 0x100 && plain[extra - 1] == 0x100 + extra - 1 && plain[width] == 0x100 + extra,
+			"W253C: art on the frame's own canvas is copied 1:1, not rescaled",
+			std::to_string(plain[0]) + " " + std::to_string(plain[width]));
+		Check(untouchedScratch.size() == 4 && untouchedScratch[0] == 0xDEADBEEFu, "W253C: and the scratch is left untouched");
+
+		//What is not this art's frame stays refused: no scaling is invented for a
+		//canvas that is not a whole-number multiple of the art's on both axes.
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra + 1, height, scratch),
+			"W253C: a side run the art does not divide evenly is not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra, height + 1, scratch),
+			"W253C: a frame height the art does not divide evenly is not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(canvasArt.data(), extra, height, extra * 2, height, scratch),
+			"W253C: two canvases that disagree about the factor are not scaled");
+		Check(!WidescreenFallback::ScaleSideArt(nullptr, extra, height, extra, height, scratch) &&
+			!WidescreenFallback::ScaleSideArt(canvasArt.data(), 0, height, extra, height, scratch),
+			"W253C: a missing or empty art has nothing to scale");
+		std::vector<uint32_t> refused(width * height, 0xFF000000u);
+		WidescreenFallback::FillSideFromArtForFrame(refused.data(), width, height, extra, true, art, artWidth, artHeight + 1, plainFill, scratch);
+		Check(refused[0] == 0xFF000000u, "W253C: an image that is neither the frame's canvas nor a multiple of it is still refused");
+	}
+
+	void TestW253MepWidescreenParsesTheDefaultPairAndScreens()
+	{
+		MepWidescreen ws;
+		std::string error;
+		bool ok = MepWidescreen::Parse(R"({
+			"version": 1,
+			"left": "left.png",
+			"right": "right.png",
+			"screens": [
+				{ "id": 3, "left": "screens/3-left.png" },
+				{ "id": 7, "right": "screens/7-right.png" }
+			]
+		})", ws, error);
+		Check(ok, "W253C: a valid widescreen.json parses", error);
+		if(!ok) {
+			return;
+		}
+		Check(ws.Left == "left.png" && ws.Right == "right.png", "W253C: the default pair is the pack's fallback art", ws.Left + " / " + ws.Right);
+		Check(ws.Screens.size() == 2, "W253C: every per-screen entry is kept", std::to_string(ws.Screens.size()));
+		Check(ws.HasAnyArt(), "W253C: a section with images reads as art");
+		Check(ws.FindScreen(MepWidescreen::DefaultScreenId) == nullptr, "W253C: no screen answers to the default id");
+		Check(ws.FindScreen(3) != nullptr && ws.FindScreen(3)->Left == "screens/3-left.png", "W253C: the screen's own side is found");
+		Check(ws.FindScreen(3) != nullptr && ws.FindScreen(3)->Right.empty(), "W253C: a screen may override only one side");
+		Check(ws.FindScreen(99) == nullptr, "W253C: an unknown screen uses the default pair");
+		Check(ws.GetSidePath(3, true) == "screens/3-left.png", "W253C: the override wins for its own side", ws.GetSidePath(3, true));
+		Check(ws.GetSidePath(3, false) == "right.png", "W253C: a half-overridden screen inherits the other side from the default pair", ws.GetSidePath(3, false));
+		Check(ws.GetSidePath(7, false) == "screens/7-right.png" && ws.GetSidePath(7, true) == "left.png", "W253C: the same rule holds for the right side");
+		Check(ws.GetSidePath(99, true) == "left.png" && ws.GetSidePath(99, false) == "right.png", "W253C: an unknown screen gets the default pair on both sides");
+
+		MepWidescreen defaults;
+		Check(MepWidescreen::Parse(R"({"version": 1, "right": "r.png"})", defaults, error), "W253C: one side alone is a valid section", error);
+		Check(defaults.GetSidePath(1, true).empty() && defaults.GetSidePath(1, false) == "r.png", "W253C: the side with no art resolves to nothing");
+
+		MepWidescreen loose;
+		Check(MepWidescreen::Parse(R"({"version": 1, "left": "l.png", "unknown": {"a": 1}})", loose, error), "W253C: unknown fields are ignored (MEP-v1 §3.2)", error);
+		Check(MepWidescreen::Parse(R"({"version": 1, "left": "sub/dir/LEFT.PNG"})", loose, error), "W253C: a nested path and a capitalised extension are accepted", error);
+	}
+
+	void TestW253MepWidescreenRejectsBadManifests()
+	{
+		static const std::pair<const char*, const char*> cases[] = {
+			{ "{}", "a manifest with no images" },
+			{ "{\"version\": 2, \"left\": \"l.png\"}", "an unknown version" },
+			{ "{\"left\": \"l.png\"}", "a missing version" },
+			{ "{\"version\": 1, \"left\": \"../escape.png\"}", "a path that escapes the section folder" },
+			{ "{\"version\": 1, \"left\": \"/abs.png\"}", "an absolute path" },
+			{ "{\"version\": 1, \"left\": \"left.jpg\"}", "a non-PNG image" },
+			{ "{\"version\": 1, \"left\": \"left.png/x\"}", "a path that does not end in .png" },
+			{ "{\"version\": 1, \"left\": \"\"}", "an empty path" },
+			{ "{\"version\": 1, \"left\": 7}", "a non-string path" },
+			{ "{\"version\": 1, \"screens\": [{\"left\": \"l.png\"}]}", "a screen with no id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": -1, \"left\": \"l.png\"}]}", "a negative screen id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": 2}, {\"id\": 2, \"right\": \"r.png\"}]}", "a duplicated screen id" },
+			{ "{\"version\": 1, \"screens\": [{\"id\": 1}]}", "a screen with no image" },
+			{ "{\"version\": 1, \"screens\": {}}", "a non-array screens field" },
+			{ "not json", "malformed JSON" },
+		};
+		for(const auto& c : cases) {
+			MepWidescreen out;
+			std::string error;
+			bool ok = MepWidescreen::Parse(c.first, out, error);
+			Check(!ok, std::string("W253C: widescreen.json rejects ") + c.second, ok ? "unexpectedly succeeded" : error);
+			Check(!ok && !error.empty(), std::string("W253C: the rejection of ") + c.second + " says why");
+		}
+
+		Check(MepWidescreen::IsValidImagePath("left.png"), "W253C: a plain .png name is a valid image path");
+		Check(MepWidescreen::IsValidImagePath("screens/3-left.PNG"), "W253C: the extension check is case-insensitive");
+		Check(!MepWidescreen::IsValidImagePath("../left.png"), "W253C: an escaping path is never a valid image path");
+		Check(!MepWidescreen::IsValidImagePath("screens/../../left.png"), "W253C: a nested escape is never a valid image path");
+	}
+
+	void TestW253DetectConventionLayoutFindsTheWidescreenSection()
+	{
+		std::filesystem::path dir = MakeTempPackDir("widescreen_section");
+		std::error_code ec;
+		std::filesystem::create_directories(dir / "widescreen", ec);
+		WriteTestFile(dir / "widescreen" / "widescreen.json", "{\"version\":1,\"left\":\"left.png\",\"right\":\"right.png\"}");
+		WriteTestFile(dir / "textures" / "hires.txt", "<ver>106\n");
+
+		MepPack pack;
+		pack.RootFolder = dir.string();
+		Check(pack.DetectConventionLayout(), "W253C: a pack with a widescreen/ folder is recognized");
+		Check(pack.HasSection(MepSectionType::Widescreen), "W253C: widescreen/widescreen.json is the widescreen section");
+		Check(pack.GetSectionPath(MepSectionType::Widescreen) == (dir / "widescreen").string(), "W253C: the section path is the folder holding the images", pack.GetSectionPath(MepSectionType::Widescreen));
+		Check(pack.GetSectionName(MepSectionType::Widescreen) == std::string("widescreen"), "W253C: the section's manifest name is 'widescreen'");
+		std::filesystem::remove_all(dir, ec);
+	}
+
+	void TestW253WidescreenSectionHasNoSwitchOfItsOwn()
+	{
+		//MEP-v1 §5 / ADR-0253 §1: `widescreen` is the one section with no switch
+		//of its own — WideScrn is what makes a frame extended at all — so the
+		//other sections' switches never gate its art. Synth is the trap: it used
+		//to be the fall-through arm of that chain, which is now explicit.
+		EnhancementPackConfig cfg;
+		auto enabled = [&](MepSectionType type) { return MepPackManager::SectionSwitchEnabled(cfg, type); };
+
+		Check(enabled(MepSectionType::Widescreen), "W253C: widescreen art is on with every section switch on");
+		cfg.EnableSynth = false;
+		Check(!enabled(MepSectionType::Synth), "W253C: the synth switch still gates the synth section");
+		Check(enabled(MepSectionType::Widescreen), "W253C: the synth switch does not gate the widescreen art");
+		cfg.EnableTextures = false;
+		cfg.EnableAudio = false;
+		cfg.EnableBorder = false;
+		Check(enabled(MepSectionType::Widescreen), "W253C: no section switch gates the widescreen art");
+		Check(!enabled(MepSectionType::Border), "W253C: the border switch still gates the border section");
+		cfg.EnableMepPacks = false;
+		Check(!enabled(MepSectionType::Widescreen), "W253C: packs off is the one switch that does gate it");
+	}
+
+	void TestW253BorderCompositeFillsOnlyTheUnfilledSideRows()
+	{
+		//Canvas 16x8, a 4:3-style viewport at x=4 w=8 h=8; source 12x8 with
+		//ExtendedColumns = 2, so the centre 8 px map 1:1 into the viewport and
+		//each side run is 2 canvas px wide, right beside it.
+		const uint32_t canvasW = 16, canvasH = 8, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = 8;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0); //fully transparent
+		std::vector<uint32_t> backdrop;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH);
+		for(uint32_t y = 0; y < canvasH; y++) {
+			for(uint32_t x = 0; x < standardWidth + 2 * extra; x++) {
+				src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+			}
+		}
+		uint8_t fill[canvasH] = { 0, WidescreenFallback::LeftBit, WidescreenFallback::RightBit,
+			WidescreenFallback::LeftBit | WidescreenFallback::RightBit, 0, 0, 0, 0 };
+
+		std::vector<uint32_t> dst((size_t)canvasW * canvasH, 0xDEADBEEFu);
+		BorderCompositeExtendedFrame(dst.data(), backdrop.data(), border.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+
+		auto at = [&](uint32_t x, uint32_t y) { return dst[(size_t)y * canvasW + x]; };
+		auto srcAt = [&](uint32_t x, uint32_t y) { return src[(size_t)y * (standardWidth + 2 * extra) + x]; };
+
+		Check(at(4, 0) == srcAt(extra, 0) && at(11, 0) == srcAt(extra + standardWidth - 1, 0), "W253C: the centre picture lands in the viewport");
+		Check(at(2, 0) == 0 && at(3, 0) == 0 && at(12, 0) == 0 && at(13, 0) == 0, "W253C: an unfilled side row keeps the border backdrop", Hex32(at(2, 0)));
+		Check(at(2, 1) == srcAt(0, 1) && at(3, 1) == srcAt(1, 1), "W253C: a left-filled row draws the left run beside the viewport", Hex32(at(2, 1)));
+		Check(at(12, 2) == srcAt(extra + standardWidth, 2) && at(13, 2) == srcAt(extra + standardWidth + 1, 2), "W253C: a right-filled row draws the right run", Hex32(at(12, 2)));
+		Check(at(2, 3) == srcAt(0, 3) && at(13, 3) == srcAt(extra + standardWidth + 1, 3), "W253C: a row filled on both sides draws both runs");
+		Check(at(0, 1) == 0 && at(15, 3) == 0, "W253C: outside the viewport and the side runs the backdrop is untouched");
+		Check(at(4, 4) == srcAt(extra, 4), "W253C: the centre is drawn on every row, filled or not");
+
+		//Overlay mode blends the border over the side runs it just drew, so an
+		//opaque bezel still covers the game there; underlay leaves the game on top.
+		std::vector<uint32_t> opaque((size_t)canvasW * canvasH, 0xFF204080u);
+		std::vector<uint32_t> opaqueBackdrop;
+		BorderPrepareBackdrop(opaqueBackdrop, opaque.data(), layout);
+		std::vector<uint32_t> over((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(over.data(), opaqueBackdrop.data(), opaque.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+		Check(over[(size_t)1 * canvasW + 2] == 0xFF204080u, "W253C: in overlay mode the border is blended over a filled side row", Hex32(over[(size_t)1 * canvasW + 2]));
+
+		BorderLayout under = layout;
+		under.Underlay = true;
+		std::vector<uint32_t> underBackdrop;
+		BorderPrepareBackdrop(underBackdrop, opaque.data(), under);
+		std::vector<uint32_t> underlay((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(underlay.data(), underBackdrop.data(), opaque.data(), under, src.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+		Check(underlay[(size_t)1 * canvasW + 2] == srcAt(0, 1), "W253C: in underlay mode the game stays over the border in the side run", Hex32(underlay[(size_t)1 * canvasW + 2]));
+	}
+
+	void TestW253BorderCompositeWithoutASideFillMapDrawsTheBorderAlone()
+	{
+		//BorderLayout.h's contract for the extended composite: a null side map
+		//means "the border alone" - the caller has a picture to place but no
+		//per-row fill map to place side runs from - not a crash. Both the draw
+		//loop and the overlay blend below it read the map per row.
+		const uint32_t canvasW = 16, canvasH = 4, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = canvasH;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0xFF204080u);
+		std::vector<uint32_t> backdrop;
+		//Underlay so the picture is readable in the viewport: in overlay mode an
+		//opaque border is blended over it, side runs included.
+		layout.Underlay = true;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH);
+		for(uint32_t y = 0; y < canvasH; y++) {
+			for(uint32_t x = 0; x < standardWidth + 2 * extra; x++) {
+				src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+			}
+		}
+
+		std::vector<uint32_t> dst((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(dst.data(), backdrop.data(), border.data(), layout, src.data(), standardWidth + 2 * extra, canvasH, extra, nullptr);
+
+		auto at = [&](uint32_t x, uint32_t y) { return dst[(size_t)y * canvasW + x]; };
+		auto srcAt = [&](uint32_t x, uint32_t y) { return src[(size_t)y * (standardWidth + 2 * extra) + x]; };
+		Check(at(4, 0) == srcAt(extra, 0) && at(11, 1) == srcAt(extra + standardWidth - 1, 1), "W253C: with no side map the picture still lands in the viewport", Hex32(at(4, 0)));
+		Check(at(2, 0) == 0xFF204080u && at(13, 3) == 0xFF204080u, "W253C: with no side map the side runs keep the border instead of reading it as filled", Hex32(at(2, 0)));
+	}
+
+	void TestW253StandardFrameCarriesNoExtendedState()
+	{
+		//ADR-0253 §2/§3: the two extended fields describe each other - a side-fill
+		//map with no extra columns is a map of columns the standard picture does
+		//not have, and VideoDecoder's drop-back-to-the-centre path (the filter
+		//that cannot take an extended frame) is one of the places that has to
+		//clear both, not just the width.
+		uint8_t fill[240] = {};
+		RenderedFrame frame;
+		frame.ExtendedColumns = 64;
+		frame.ExtendedSideFill = fill;
+		frame.ClearExtension();
+
+		Check(frame.ExtendedColumns == 0, "W253C: dropping back to the standard width clears the extra columns");
+		Check(frame.ExtendedSideFill == nullptr, "W253C: dropping back to the standard width drops the side-fill map with it");
+	}
+
+	void TestW253FallbackRunsTheArtBeforeTheBorderComposite()
+	{
+		//ADR-0253 §3: the pack art is the chain's first link, so it has already
+		//filled - and marked - its rows by the time the border composite runs;
+		//that is what makes the border the *second* link instead of a reason to
+		//drop the art. The order lives in WidescreenFallback::ApplyChain, the
+		//function VideoRenderer::UpdateFrame calls, so a chain assembled the
+		//other way round fails here rather than only on screen.
+		const uint32_t width = 4, height = 2, extra = 1;
+		std::vector<uint32_t> frame(width * height, 0xFF000000u);
+		uint32_t art[extra * height] = { 0xAA, 0xBB };
+		uint8_t fill[height] = { 0, WidescreenFallback::LeftBit };
+
+		std::string order;
+		uint8_t seenFill0 = 0, seenFill1 = 0;
+		uint32_t seenPixel = 0;
+		int returned = WidescreenFallback::ApplyChain(true,
+			[&]() {
+				order += "art";
+				WidescreenFallback::FillSideFromArt(frame.data(), width, height, extra, true, art, extra, height, fill);
+			},
+			[&]() {
+				order += ">border";
+				seenFill0 = fill[0];
+				seenFill1 = fill[1];
+				seenPixel = frame[0];
+				return 7;
+			});
+
+		Check(order == "art>border", "W253C: the pack art runs before the border composite (ADR-0253 §3)", order);
+		Check(returned == 7, "W253C: the chain hands back what the border stage produced", std::to_string(returned));
+		Check(seenPixel == 0xAA, "W253C: the art is already on the frame when the border composite runs", Hex32(seenPixel));
+		Check(seenFill0 == WidescreenFallback::LeftBit && seenFill1 == WidescreenFallback::LeftBit,
+			"W253C: the rows the art filled are marked before the border composite runs");
+
+		//A standard frame has no side run to fill, so the art stage is skipped
+		order.clear();
+		WidescreenFallback::ApplyChain(false, [&]() { order += "art"; }, [&]() { order += ">border"; return 0; });
+		Check(order == ">border", "W253C: a standard frame skips the art stage and only composites", order);
+	}
+
+	void TestW253FallbackKeepsTheArtThroughTheBorderComposite()
+	{
+		//The two links as the screen gets them: the art fills the extended frame,
+		//then the composite turns that frame into the canvas. Running them the
+		//other way round would draw the art into a frame the composite has
+		//already replaced - the failure ApplyChain's order prevents - so the
+		//reversed run is asserted here too, as the reason the order is pinned.
+		const uint32_t canvasW = 16, canvasH = 4, standardWidth = 8, extra = 2;
+		BorderLayout layout;
+		layout.CanvasWidth = canvasW;
+		layout.CanvasHeight = canvasH;
+		layout.ViewportX = 4;
+		layout.ViewportY = 0;
+		layout.ViewportWidth = 8;
+		layout.ViewportHeight = canvasH;
+
+		std::vector<uint32_t> border((size_t)canvasW * canvasH, 0); //fully transparent
+		std::vector<uint32_t> backdrop;
+		BorderPrepareBackdrop(backdrop, border.data(), layout);
+
+		auto makeFrame = [&]() {
+			std::vector<uint32_t> src((size_t)(standardWidth + 2 * extra) * canvasH, 0xFF111111u);
+			for(uint32_t y = 0; y < canvasH; y++) {
+				for(uint32_t x = extra; x < extra + standardWidth; x++) {
+					src[(size_t)y * (standardWidth + 2 * extra) + x] = 0x100u * y + x;
+				}
+			}
+			return src;
+		};
+		const uint32_t art[extra * canvasH] = { 0xA0, 0xB0, 0xA1, 0xB1, 0xA2, 0xB2, 0xA3, 0xB3 };
+
+		std::vector<uint32_t> frame = makeFrame();
+		uint8_t fill[canvasH] = { 0, WidescreenFallback::LeftBit, 0, 0 };
+		std::vector<uint32_t> canvas((size_t)canvasW * canvasH, 0xDEADBEEFu);
+		WidescreenFallback::ApplyChain(true,
+			[&]() { WidescreenFallback::FillSideFromArt(frame.data(), standardWidth + 2 * extra, canvasH, extra, true, art, extra, canvasH, fill); },
+			[&]() {
+				BorderCompositeExtendedFrame(canvas.data(), backdrop.data(), border.data(), layout, frame.data(), standardWidth + 2 * extra, canvasH, extra, fill);
+				return 0;
+			});
+
+		auto at = [&](uint32_t x, uint32_t y) { return canvas[(size_t)y * canvasW + x]; };
+		Check(at(2, 0) == 0xA0 && at(3, 0) == 0xB0, "W253C: the pack art reaches the canvas beside the viewport", Hex32(at(2, 0)));
+		Check(at(2, 2) == 0xA2, "W253C: every row the game left empty takes its own art row", Hex32(at(2, 2)));
+		Check(at(2, 1) == 0xFF111111u, "W253C: a row the game filled keeps the game's own side pixels", Hex32(at(2, 1)));
+		Check(at(0, 0) == 0 && at(15, 0) == 0, "W253C: with a transparent border the rest of the canvas stays empty", Hex32(at(0, 0)));
+
+		std::vector<uint32_t> late = makeFrame();
+		uint8_t lateFill[canvasH] = { 0, WidescreenFallback::LeftBit, 0, 0 };
+		std::vector<uint32_t> lateCanvas((size_t)canvasW * canvasH, 0);
+		BorderCompositeExtendedFrame(lateCanvas.data(), backdrop.data(), border.data(), layout, late.data(), standardWidth + 2 * extra, canvasH, extra, lateFill);
+		WidescreenFallback::FillSideFromArt(late.data(), standardWidth + 2 * extra, canvasH, extra, true, art, extra, canvasH, lateFill);
+		Check(lateCanvas[2] != 0xA0, "W253C: compositing before the art loses it, which is why the order is pinned", Hex32(lateCanvas[2]));
+	}
+}
+
+//--- Bloco W253/W.5: the per-game support measurement (ADR-0253 §4, W.5) -----
+//The switch's enabled/disabled state is decided from what the core measured
+//over the first gameplay seconds: a game whose side columns never held real
+//content (NesWidescreenReveal::SideColumnsHaveContent, section 3's "cannot
+//fill") is remembered as unsupported per ROM. The probe below is the whole
+//rule; the emulator feeds it one boolean per gameplay frame.
+namespace
+{
+	using namespace NesWidescreenSupport;
+
+	void TestWidescreenSupportProbeIsUndecidedWhileTheWindowIsOpen()
+	{
+		Probe probe;
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a probe that observed no frame is undecided");
+		Check(probe.FramesObserved() == 0, "W253: a fresh probe has counted no frame", std::to_string(probe.FramesObserved()));
+
+		probe.ObserveFrame(false);
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: nothing found yet keeps the switch enabled while measuring");
+		Check(probe.FramesObserved() == 1, "W253: the probe counts the frames it measured", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeFindsContentOnTheFirstFrameThatHasIt()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames - 1; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a game still in its first seconds is undecided");
+
+		//One frame with real content beside the picture is enough: the game
+		//supports Reveal even if the rest of the window showed nothing.
+		probe.ObserveFrame(true);
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: one frame of real side content settles the game as supported");
+	}
+
+	void TestWidescreenSupportProbeConcludesUnsupportedAfterAFullWindowOfNothing()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames - 1; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: the last measured frame is still inside the window");
+
+		probe.ObserveFrame(false);
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: a whole window with nothing beside the picture is unsupported");
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: the window is MeasurementFrames long", std::to_string(MeasurementFrames));
+
+		//The window is closed: later frames cannot turn a settled "no".
+		probe.ObserveFrame(false);
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: frames after the window are not counted", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeContentAfterTheWindowStillCounts()
+	{
+		//Section 4's re-check: a later run that finds content, such as a level
+		//that scrolls, re-enables the switch. Within a session the SMB3 case is
+		//exactly this - the title measured as unsupported, then the level scrolls.
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: the title screen settled as unsupported");
+
+		probe.ObserveFrame(true);
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: content found after the window clears the unsupported verdict");
+	}
+
+	void TestWidescreenSupportProbeResetStartsTheNextRunOver()
+	{
+		Probe probe;
+		for(uint32_t i = 0; i < MeasurementFrames; i++) {
+			probe.ObserveFrame(false);
+		}
+		Check(probe.GetVerdict() == Verdict::Unsupported, "W253: a full window of nothing is unsupported");
+		Check(probe.FramesObserved() == MeasurementFrames, "W253: the window closed");
+
+		//A new game load starts its own measurement.
+		probe.Reset();
+		Check(probe.GetVerdict() == Verdict::Undecided, "W253: a reset probe is undecided again");
+		Check(probe.FramesObserved() == 0, "W253: a reset probe has counted no frame", std::to_string(probe.FramesObserved()));
+	}
+
+	void TestWidescreenSupportProbeReadsTheRevealContentRule()
+	{
+		//The probe is fed SideColumnsHaveContent (section 3): vertical and
+		//four-screen mirroring can fill the sides, single-screen and horizontal
+		//cannot - at any scroll (the SMB3 title included).
+		Probe probe;
+		Check(!NesWidescreenReveal::SideColumnsHaveContent(MirroringType::Horizontal, 0), "W253: horizontal mirroring feeds the probe a 'cannot fill' frame");
+		probe.ObserveFrame(NesWidescreenReveal::SideColumnsHaveContent(MirroringType::Vertical, 0));
+		Check(probe.GetVerdict() == Verdict::Supported, "W253: vertical mirroring settles the game as supported");
+	}
+
+	void TestWidescreenSupportSettledGameIsNotWidenedAtAll()
+	{
+		//Section 4 again: a game the window settled as unsupported "supports no
+		//widescreen mode", so the switch being on does not widen it - otherwise
+		//the player is left with Reveal/black columns and no way to turn them
+		//off (the switch is disabled for this game). The saved preference is
+		//untouched, so the next game that can use it gets it back.
+		Check(Reveals(true, Verdict::Supported, false), "W253: a supported game is widened while the switch is on");
+		Check(Reveals(true, Verdict::Undecided, false), "W253: the picture is widened while the game is still being measured");
+		Check(!Reveals(true, Verdict::Unsupported, false), "W253: a game settled as unsupported is never widened");
+		Check(!Reveals(false, Verdict::Supported, false), "W253: the switch off widens nothing, even a supported game");
+		Check(!Reveals(false, Verdict::Undecided, false), "W253: the switch off widens nothing while measuring");
+	}
+
+	void TestWidescreenSupportPackArtReenablesASettledGame()
+	{
+		//ADR-0253 §3 x §4 (the W.3 x W.5 seam): the measurement only ever looked
+		//at the game's own map. A pack shipping the `widescreen` section is §1's
+		//Pack-art mode - a mode of its own - so it overrules a settled
+		//"unsupported", and the sides show the pack's art instead of black.
+		Check(Reveals(true, Verdict::Unsupported, true), "W253C: pack art widens a game the window settled as unsupported");
+		Check(!Reveals(true, Verdict::Unsupported, false), "W253C: without pack art an unsupported game stays unwidened");
+		Check(!Reveals(false, Verdict::Unsupported, true), "W253C: the switch off widens nothing, pack art or not");
+		Check(Reveals(true, Verdict::Supported, false), "W253C: a supported game is widened without any pack art");
+		Check(Reveals(true, Verdict::Undecided, false), "W253C: measuring is still widened without any pack art");
+	}
+
+	//ADR-0253 §1/§4, the two PPUs' half of W.5: NesWidescreenPpu::State is what
+	//DefaultNesPpu and HdNesPpu both drive, so the switch, the measurement and
+	//the extended frame answer the same on either path. The HD path used to latch
+	//on the switch alone and to measure nothing, which is exactly the state §4
+	//exists to prevent: a game the window settles as unsupported came up widened
+	//there with its switch already disabled.
+	void TestW253PpuRevealLatchIsTheSharedSupportRule()
+	{
+		using namespace NesWidescreenPpu;
+		Check(RevealRequested(true, false, true, Verdict::Undecided, false), "W253: WideScrn on a normal console asks for the Reveal");
+		Check(RevealRequested(true, false, true, Verdict::Supported, false), "W253: a measured-supported game keeps the Reveal");
+		Check(!RevealRequested(false, false, true, Verdict::Undecided, false), "W253: with the switch off nothing is revealed");
+		Check(!RevealRequested(true, true, true, Verdict::Supported, false), "W253: a Vs. DualSystem merges two standard frames, so it stays standard");
+		Check(!RevealRequested(true, false, false, Verdict::Supported, false), "W253: with no mapper there is no nametable to read a side from");
+		Check(!RevealRequested(true, false, true, Verdict::Unsupported, false), "W253: a game measured with nothing beside the picture is not widened");
+		Check(RevealRequested(true, false, true, Verdict::Unsupported, true), "W253: pack widescreen art widens a settled game on either PPU (ADR-0253 §3)");
+		Check(!RevealRequested(false, false, true, Verdict::Unsupported, true), "W253: pack art never widens with the switch off");
+	}
+
+	void TestW253PpuStateMeasuresWhetherOrNotTheSwitchIsOn()
+	{
+		NesWidescreenPpu::State state;
+		NesWidescreenReveal::RowBasis basis;
+		basis.BgEnabled = true;
+
+		Check(state.GetVerdict() == Verdict::Undecided, "W253: a PPU that has run no frame is undecided");
+		Check(!state.Reveal().IsActive(), "W253: and widens nothing before its first frame boundary");
+
+		//A game whose sides never hold anything, measured with the switch OFF:
+		//the window closes anyway - that is how the switch learns the game
+		//cannot use it.
+		for(uint32_t i = 0; i < MeasurementFrames + 1; i++) {
+			state.ObserveRow(basis, MirroringType::Horizontal);
+			state.BeginFrame(false, false, true, false);
+		}
+		Check(state.GetVerdict() == Verdict::Unsupported, "W253: a full window of nothing settles the game even with the switch off");
+
+		//And now the switch on: the latch answers to the measurement, not to the
+		//switch alone.
+		state.BeginFrame(true, false, true, false);
+		Check(!state.Reveal().IsActive(), "W253: a game measured as unsupported is not widened by this PPU either");
+
+		//One row with something beside the picture flips it back (§4's
+		//re-check), and the frame after that measurement is widened.
+		state.ObserveRow(basis, MirroringType::Vertical);
+		state.BeginFrame(true, false, true, false);
+		Check(state.GetVerdict() == Verdict::Supported, "W253: a row with content beside the picture settles the game as supported");
+		Check(state.Reveal().IsActive(), "W253: and the frame after it is the widened one");
+	}
+
+	void TestW253PpuStatePublishesTheFrameAndItsSideFillMap()
+	{
+		//ADR-0253 §2/§3: the frame the decoder is handed carries the extended
+		//picture *and* the per-row map the fallback chain reads - the two fields
+		//describe each other and travel together. This is the one publication
+		//call both PPUs make, so the chain runs with an HD pack loaded.
+		std::vector<uint16_t> standard(NesWidescreenReveal::StandardWidth * NesWidescreenReveal::Height, 0x11);
+
+		NesWidescreenPpu::State state;
+		state.BeginFrame(true, false, true, false);
+
+		uint16_t* left = nullptr;
+		uint16_t* right = nullptr;
+		uint8_t* fill = nullptr;
+		Check(state.Reveal().RowSides(10, left, right, fill), "W253: an extended frame has a side run and a fill byte for every row");
+		Check(left != nullptr && right != nullptr && left != right, "W253: the two sides are two runs of the same row");
+		*fill = (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit);
+		state.Reveal().RowSides(11, left, right, fill);
+		*fill = WidescreenFallback::LeftBit;
+
+		RenderedFrame frame;
+		state.PublishFrame(frame, standard.data());
+		Check(frame.Width == NesWidescreenReveal::ExtendedWidth,
+			"W253: an extended frame is published at the Reveal's own width", std::to_string(frame.Width));
+		Check(frame.ExtendedColumns == NesWidescreenReveal::ExtraColumns,
+			"W253: and says how many of its columns a side are extra", std::to_string(frame.ExtendedColumns));
+		Check(frame.FrameBuffer != nullptr && frame.FrameBuffer != (void*)standard.data(),
+			"W253: and carries the extended pixels rather than the standard picture");
+		Check(frame.ExtendedSideFill != nullptr, "W253: with the map the chain reads, not a null it would skip");
+		Check(frame.ExtendedSideFill[10] == (uint8_t)(WidescreenFallback::LeftBit | WidescreenFallback::RightBit) &&
+			frame.ExtendedSideFill[11] == WidescreenFallback::LeftBit && frame.ExtendedSideFill[0] == 0,
+			"W253: which is the fill byte of each row the PPU drew, and no other");
+
+		//With the switch off, the frame stays the standard 256-px picture: no
+		//extension, no map.
+		NesWidescreenPpu::State off;
+		off.BeginFrame(false, false, true, false);
+		RenderedFrame plain;
+		off.PublishFrame(plain, standard.data());
+		Check(plain.Width == NesWidescreenReveal::StandardWidth && plain.ExtendedColumns == 0 && plain.ExtendedSideFill == nullptr,
+			"W253: a standard frame is published with no extension at all");
+	}
+
+	//ADR-0253 §3 (W.3) through the HD path: the map reaches the renderer only if
+	//the filter that produced the frame restates the contract in its own
+	//coordinates - BaseVideoFilter's default returns nothing once the filter's
+	//output is not the console frame's own size, which is every HD frame (a pack
+	//scales it), so the default is exactly the bug this slice fixes. The CUTOBJ
+	//set does not link the filters (they need the PPU, the console and an
+	//Emulator), so as in W.6 the wiring is asserted by type rather than by value:
+	//&Derived::f has the base class's pointer-to-member type unless Derived
+	//declares the override itself, so the *declaration* is the thing under test.
+	void TestW253HdVideoFilterRestatesTheFrameContractInItsOwnCoordinates()
+	{
+		using Extension = BaseVideoFilter::FrameExtension;
+		Check(std::is_same<decltype(&HdVideoFilter::GetOutputFrameExtension), Extension (HdVideoFilter::*)()>::value,
+			"W253: the HD pack filter declares GetOutputFrameExtension, so an HD frame's side-fill map reaches the renderer");
+		//The control: the base class's own declaration is the one that drops the
+		//map on a rescaled frame, and the HD filter must not still be carrying it.
+		Check(!std::is_same<decltype(&HdVideoFilter::GetOutputFrameExtension), decltype(&BaseVideoFilter::GetOutputFrameExtension)>::value,
+			"W253: the HD pack filter answers for itself, not with the base class's default");
+	}
+}
+
+//--- Bloco W6: widescreen through the NTSC filters, the recorder and the
+//capture tools (ADR-0253, slice W.6) ----------------------------------------
+//W.1 put the extra columns into the frame behind a contract and left every
+//filter that assumes 256 px on the decoder's standard-centre crop
+//(BaseVideoFilter::AcceptsExtendedFrame). W.6 widens the two NES NTSC filters,
+//which are the display tools that were still hardcoded: the blargg filter
+//sized its blit plane for 256 px and reported its HUD scale from 256, and the
+//Bisqwit filter walked its input with a 256-px row stride and advanced the
+//colour phase by the 256 px it assumed it had drawn.
+//
+//The recorder and the capture tools are asserted here too - the width the
+//recorder is opened at (the filter's own visible width) and the canvas it lays
+//its HUD out on - and so is the declaration that lets a Reveal frame reach a
+//filter at all. The arithmetic all of them share lives in
+//Shared/Video/WidescreenFrameFlow.h and is host-free, so a test and the
+//shipping path cannot disagree about a stride, a buffer size or a phase.
+//
+//What is deliberately NOT covered here, and is a known gap: the .cpp call
+//sites themselves. The CUTOBJ set links no filter and no renderer - they pull
+//in the PPU, the console and an Emulator - so EnsureNtscBuffer's reallocation,
+//Bisqwit's `rowNumber * width + x` stride and the width argument passed to
+//ApplyPalBorder are one-line pass-throughs of the functions above that only
+//`make doc-checks` (which does compile them) would catch being rewired. The
+//arithmetic they pass through is asserted; the passing-through is not.
+namespace
+{
+	void TestW6BlitGeometryFollowsTheFrameWidth()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		const uint32_t standard = NesWidescreenReveal::StandardWidth;
+		const uint32_t extended = NesWidescreenReveal::ExtendedWidth;
+		const uint32_t height = NesWidescreenReveal::Height;
+
+		Check(BlitOutputWidth(standard) == 602, "W6: nes_ntsc's blitter writes 602 px for a standard NES frame", std::to_string(BlitOutputWidth(standard)));
+		Check(BlitOutputWidth(extended) == 896, "W6: nes_ntsc's blitter writes 896 px for a Reveal frame", std::to_string(BlitOutputWidth(extended)));
+		Check(BlitOutputWidth(extended) - BlitOutputWidth(standard) == 294, "W6: the 128 extra columns widen the blit by 294 output px (7 per 3)", std::to_string(BlitOutputWidth(extended) - BlitOutputWidth(standard)));
+
+		//The plane the filter owns. The fixed NES_NTSC_OUT_WIDTH(256) * 240 of
+		//the old code is short by exactly the extra columns' own rows, i.e.
+		//the blit would have written past the end of its buffer.
+		Check(BlitPlanePixels(extended, height) == 896ull * 240, "W6: a Reveal frame's blit plane is 896x240", std::to_string(BlitPlanePixels(extended, height)));
+		Check(BlitPlanePixels(extended, height) - BlitPlanePixels(standard, height) == (896ull - 602ull) * 240,
+			"W6: the plane sized for a 256-px frame cannot hold a Reveal frame's blit",
+			std::to_string(BlitPlanePixels(extended, height) - BlitPlanePixels(standard, height)));
+		Check(BlitPlanePixels(0, height) == 0, "W6: with no frame yet there is no plane (the width is read before the first one arrives)");
+
+		//ADR-0162: with the switch off the frame is 256 px, and every number
+		//above has to be the constant the filter hardcoded - the plane it
+		//allocated in its constructor, the ratio it reported for the HUD, the
+		//row it decoded, the phase it advanced by. A widescreen change that
+		//moved the standard path would fail here as well as in the accuracy
+		//suite.
+		Check(BlitPlanePixels(standard, height) == 602ull * 240, "W6: a standard frame's plane is the 602x240 the filter used to allocate", std::to_string(BlitPlanePixels(standard, height)));
+
+		Check(NearlyEqual(BlitHudScaleX(standard), 602.0 / 256.0), "W6: the blargg HUD scale for a standard frame is 602/256", std::to_string(BlitHudScaleX(standard)));
+		Check(NearlyEqual(BlitHudScaleX(extended), 896.0 / 384.0), "W6: the blargg HUD scale follows the frame's width, not 256", std::to_string(BlitHudScaleX(extended)));
+		Check(!NearlyEqual(BlitHudScaleX(standard), BlitHudScaleX(extended)), "W6: the two frame widths do not share a HUD scale");
+		Check(NearlyEqual(BlitHudScaleX(0), 1.0), "W6: with no frame yet the HUD is unscaled");
+	}
+
+	void TestW6BisqwitRowFollowsTheFrameWidth()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		Check(SignalsPerPixel == 8, "W6: the Bisqwit decoder carries 8 NTSC samples per frame pixel");
+		Check(SignalSamples(256) == 2048, "W6: a standard row's signal is 256 * 8 samples", std::to_string(SignalSamples(256)));
+		Check(SignalSamples(384) == 3072, "W6: a Reveal row's signal is 384 * 8 samples", std::to_string(SignalSamples(384)));
+		Check(SignalSamples(384) > 2048, "W6: the fixed 256 * 8 row buffer cannot hold a Reveal row", std::to_string(SignalSamples(384)));
+	}
+
+	void TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns()
+	{
+		using namespace WidescreenFrameFlow::Ntsc;
+		//The PPU's scanline is 341 cycles whatever part of it the picture
+		//shows, so a row must advance the colour phase by the whole scanline
+		//no matter how many pixels the frame carries. Advancing by the drawn
+		//pixels instead - the constant the 256-px path used - drifts 128
+		//subcarrier samples per row on a Reveal frame: a colour crawl.
+		const int32_t scanline = ScanlineCycles * SignalsPerPixel;
+		Check(scanline == 2728, "W6: a scanline is 341 * 8 subcarrier samples", std::to_string(scanline));
+		for(uint32_t width : { 256u, 384u }) {
+			int32_t advance = (int32_t)(width * SignalsPerPixel) + PhaseAdvanceAfterRow(width);
+			Check(advance == scanline, "W6: a " + std::to_string(width) + "-px row advances the phase by the whole scanline", std::to_string(advance));
+		}
+		Check(PhaseAdvanceAfterRow(256) == 85 * 8, "W6: the standard frame's correction is the 85 cycles it does not draw", std::to_string(PhaseAdvanceAfterRow(256)));
+		Check(PhaseAdvanceAfterRow(384) == -43 * 8, "W6: a Reveal frame draws past the scanline, so the correction is negative", std::to_string(PhaseAdvanceAfterRow(384)));
+		Check(PhaseAdvanceAfterRow(384) != (ScanlineCycles - 256) * SignalsPerPixel,
+			"W6: the correction is not the 256-px constant, which would desync a Reveal frame's colour");
+	}
+
+	void TestW6CaptureMeasuresAnExtendedFrameOnItsCentre()
+	{
+		using namespace WidescreenFrameFlow;
+		Centre centre = StandardCentre(384, 256);
+		Check(centre.Offset == 64 && centre.Width == 256, "W6: the standard picture of a Reveal frame is its centre 256 columns", std::to_string(centre.Offset) + " " + std::to_string(centre.Width));
+		Check(StandardCentre(768, 512).Offset == 128 && StandardCentre(768, 512).Width == 512, "W6: a scaled Reveal frame's centre scales with it");
+		//The refusals: a standard frame has no centre *in itself* to measure
+		//against, and neither does a frame narrower than the standard picture
+		//nor one whose extra columns would split a pixel in half.
+		Check(!StandardCentre(256, 256).IsValid(), "W6: a standard frame has no centre to measure - the whole frame is the picture");
+		Check(!StandardCentre(128, 256).IsValid(), "W6: a frame narrower than the standard picture has no centre");
+		Check(!StandardCentre(385, 256).IsValid(), "W6: extra columns that do not split evenly leave no centre");
+		Check(!StandardCentre(384, 0).IsValid(), "W6: with no standard picture there is no centre");
+
+		//Two rows, each pixel carrying its own column number so a wrong row
+		//stride or a wrong offset is visible rather than plausible.
+		std::vector<uint32_t> frame((size_t)384 * 2);
+		for(uint32_t y = 0; y < 2; y++) {
+			for(uint32_t x = 0; x < 384; x++) {
+				frame[(size_t)y * 384 + x] = y * 1000 + x;
+			}
+		}
+		std::vector<uint32_t> out;
+		Check(ExtractCentre(frame.data(), 384, 2, 256, out), "W6: a Reveal capture yields its centre");
+		Check(out.size() == 512, "W6: the extracted centre is 256x2 pixels", std::to_string(out.size()));
+		Check(out.size() == 512 && out[0] == 64 && out[255] == 319, "W6: the first row's centre is columns 64-319", out.size() == 512 ? std::to_string(out[0]) + " " + std::to_string(out[255]) : "");
+		Check(out.size() == 512 && out[256] == 1064 && out[511] == 1319, "W6: the second row's centre is read from the second row", out.size() == 512 ? std::to_string(out[256]) + " " + std::to_string(out[511]) : "");
+
+		//A standard capture: 256 wide, i.e. the whole frame is the picture and
+		//there is nothing in it to measure a Reveal frame against.
+		std::vector<uint32_t> standardFrame((size_t)256 * 2, 0xDEADBEEF);
+		out.assign(4, 0xDEADBEEF);
+		Check(!ExtractCentre(standardFrame.data(), 256, 2, 256, out) && out.empty(), "W6: a standard capture is refused rather than read as an extended one");
+		Check(!ExtractCentre(frame.data(), 384, 2, 255, out) && out.empty(), "W6: a standard picture that does not split the frame evenly is refused");
+		Check(!ExtractCentre(nullptr, 384, 2, 256, out) && out.empty(), "W6: with no pixels there is no centre to extract");
+	}
+
+	void TestW6TheRecordedFrameFollowsTheFilteredFramesWidth()
+	{
+		using namespace WidescreenFrameFlow;
+		using namespace WidescreenFrameFlow::Ntsc;
+		//VideoRenderer::ProcessAviRecording opens the AVI/GIF recorder with the
+		//first frame it is handed and never with a constant, so the recorder
+		//itself needed no W.6 change. What it is handed is the filter's output,
+		//and the width of that is NesNtscFilter::GetFrameInfo's - the blitted
+		//plane less the overscan. That is the number asserted here, through the
+		//same function the filter calls, so a filter left reporting the 256 px
+		//constant fails this and not just an implementation detail.
+		Check(BlitVisibleWidth(256, 0, 0) == 602, "W6: with the switch off the recorder is opened at 602 px", std::to_string(BlitVisibleWidth(256, 0, 0)));
+		Check(BlitVisibleWidth(384, 0, 0) == 896, "W6: with the switch on the recorder is opened at 896 px, not 602", std::to_string(BlitVisibleWidth(384, 0, 0)));
+		Check(BlitVisibleWidth(384, 10, 12) == 874 && BlitVisibleWidth(256, 10, 12) == 580,
+			"W6: the overscan comes off the frame's own blitted width",
+			std::to_string(BlitVisibleWidth(384, 10, 12)) + " " + std::to_string(BlitVisibleWidth(256, 10, 12)));
+		//A 256-px constant could never end up smaller than the overscan; a width
+		//that follows the frame can, so the subtraction refuses instead of
+		//wrapping into a four-billion-pixel recording.
+		Check(BlitVisibleWidth(0, 0, 0) == 0 && BlitVisibleWidth(256, 400, 400) == 0,
+			"W6: a frame with nothing left after the overscan measures zero, it does not wrap",
+			std::to_string(BlitVisibleWidth(256, 400, 400)));
+
+		//The canvas ProcessAviRecording lays the input/system HUD out on before
+		//drawing that HUD onto the recording at a uniform scale. Both sides of it
+		//are the frame's own numbers, so a Reveal recording gets a Reveal-sized
+		//canvas - the standard one is where the extra columns would have been
+		//crowded, or the picture clipped.
+		HudCanvas standard = RecorderHudCanvas(602, 480, 240);
+		HudCanvas reveal = RecorderHudCanvas(896, 480, 240);
+		Check(standard.Width == 301 && standard.Height == 240, "W6: a standard recording's HUD canvas is 301x240", std::to_string(standard.Width) + " " + std::to_string(standard.Height));
+		Check(reveal.Width == 448 && reveal.Height == 240, "W6: a Reveal recording's HUD canvas is the frame's own 448x240", std::to_string(reveal.Width) + " " + std::to_string(reveal.Height));
+		Check(reveal.Width != standard.Width, "W6: a Reveal recording's HUD is not laid out on a standard canvas");
+		Check(RecorderHudCanvas(896, 480, 0).Width == 0 && RecorderHudCanvas(896, 0, 240).Width == 0,
+			"W6: with no base frame there is no canvas to lay the HUD out on");
+	}
+
+	void TestW6TheFiltersAcceptTheExtendedFrame()
+	{
+		//The override is the whole wiring. VideoDecoder::KeepStandardCentre
+		//crops an extended frame back to its standard centre unless the filter
+		//answers yes, so a filter that only *uses* whatever width it is handed
+		//still never sees a Reveal column: the header could be perfect and the
+		//picture would still arrive as 256 px. The CUTOBJ set does not link the
+		//filters - they need the PPU, the console and an Emulator - so this is
+		//asserted by type instead of by value: &Derived::f has type
+		//bool (Base::*)() unless Derived declares the override itself, which
+		//makes the declaration, not a returned value, the thing under test.
+		Check(std::is_same<decltype(&NesNtscFilter::AcceptsExtendedFrame), bool (NesNtscFilter::*)()>::value,
+			"W6: the blargg filter declares AcceptsExtendedFrame, so a Reveal frame is not cropped before it");
+		Check(std::is_same<decltype(&BisqwitNtscFilter::AcceptsExtendedFrame), bool (BisqwitNtscFilter::*)()>::value,
+			"W6: the Bisqwit filter declares AcceptsExtendedFrame, so a Reveal frame is not cropped before it");
+		//The control for the two above: the base class's own declaration is the
+		//one the decoder reads as "crop me", and neither filter may still be
+		//carrying it.
+		Check(!std::is_same<decltype(&NesNtscFilter::AcceptsExtendedFrame), decltype(&BaseVideoFilter::AcceptsExtendedFrame)>::value
+			&& !std::is_same<decltype(&BisqwitNtscFilter::AcceptsExtendedFrame), decltype(&BaseVideoFilter::AcceptsExtendedFrame)>::value,
+			"W6: both filters answer for themselves, not with the base class's default");
 	}
 }
 
@@ -12023,7 +15236,7 @@ void TestABackgroundWithoutARecordDrawsEveryCell()
 struct CaptureCellGuardPack : public BaseHdNesPack
 {
 	uint32_t GetScale() override { return 1; }
-	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&) override {}
+	void Process(HdScreenInfo*, uint32_t*, OverscanDimensions&, bool) override {}
 	void SetFallback(int32_t from, int32_t to) { _fallbackTiles[from] = to; }
 };
 
@@ -12900,9 +16113,269 @@ void TestRomHashResolveSurvivesNoConsole()
 	Check(hash.empty() && fallbackCalls == 1, "rom hash: a console that was unloaded returns an empty string");
 }
 
+//--- #732: the ApplyPatchOnHashMismatch override's forced patch -------------
+//A pack's patch made for another revision of the game can freeze this one.
+//The load that forces it records which file it was, so the UI can tell the
+//player, and the player can reload this ROM without it - for this session,
+//without changing the setting, and without touching other games.
+namespace
+{
+	const std::string kForcedRomA = "7A20C44F302FB2F1B7ADFFA6B619E3E1CAE7B546";
+	const std::string kForcedRomB = "0000000000000000000000000000000000000001";
+
+	void TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed()
+	{
+		ForcedPatchGate gate;
+		Check(gate.Allows(true, kForcedRomA), "#732: the override forces a patch while the setting is on");
+		Check(!gate.Allows(false, kForcedRomA), "#732: the override forces nothing while the setting is off");
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.SuppressFor(kForcedRomA), "#732: the ROM a patch was forced on can be reloaded without it");
+		Check(!gate.Allows(true, kForcedRomA), "#732: a suppressed ROM is never patched by force again this session");
+		Check(gate.Allows(true, kForcedRomB), "#732: suppressing one ROM leaves the override on for other games");
+	}
+
+	void TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean()
+	{
+		ForcedPatchGate gate;
+		Check(gate.Applied().empty(), "#732: nothing is forced before a load forces it");
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.Applied() == "Castlevania.ips", "#732: the load that forced a patch records its file", "got '" + gate.Applied() + "'");
+		gate.ResetForLoad();
+		Check(gate.Applied().empty(), "#732: the next load starts with nothing forced", "got '" + gate.Applied() + "'");
+		gate.RestoreApplied("Castlevania.ips");
+		Check(gate.Applied() == "Castlevania.ips", "#694/#732: a failed load puts the running game's forced patch back", "got '" + gate.Applied() + "'");
+	}
+
+	void TestOnlyARomWithAForcedPatchCanBeSuppressed()
+	{
+		ForcedPatchGate gate;
+		Check(!gate.SuppressFor(kForcedRomA), "#732: nothing to suppress when the load forced no patch");
+		Check(gate.Allows(true, kForcedRomA), "#732: a refused suppression stores nothing");
+		gate.NoteApplied("Castlevania.ips");
+		Check(!gate.SuppressFor(""), "#732: an unknown ROM hash is never suppressed");
+		gate.ResetForLoad();
+		gate.NoteApplied("Castlevania.ips");
+		Check(gate.SuppressFor(kForcedRomA), "#732: a forced patch on this load can be suppressed");
+		gate.ResetForLoad();
+		Check(!gate.Allows(true, kForcedRomA), "#732: the suppression outlives the reload it asked for");
+	}
+}
+
+//#733: a device that takes seconds to answer must not hold the caller - the
+//emulation thread - for those seconds. The fake device below sleeps the way
+//the CoreAudio open of a sleeping monitor did (~10 s in the report, 600 ms
+//here), then fails, so the default device is the one that ends up open.
+namespace
+{
+	constexpr int SlowDeviceMs = 600;
+
+	long long ElapsedMs(std::chrono::steady_clock::time_point since)
+	{
+		return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - since).count();
+	}
+
+	AsyncAudioDeviceOpen::OpenFn SlowNamedDeviceThenFastDefault(std::shared_ptr<std::vector<std::string>> calls)
+	{
+		return [calls](const std::string& name) -> uint32_t {
+			calls->push_back(name);
+			if(!name.empty()) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(SlowDeviceMs));
+				return 0;
+			}
+			return 7;
+		};
+	}
+}
+
+void TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice()
+{
+	std::vector<std::string> calls;
+	std::vector<std::string> logs;
+	auto open = [&](const std::string& name) -> uint32_t { calls.push_back(name); return name.empty() ? 5 : 0; };
+	auto log = [&](const std::string& message) { logs.push_back(message); };
+
+	uint32_t id = AsyncAudioDeviceOpen::OpenWithFallback("LC34G55T", open, log);
+	Check(id == 5 && calls.size() == 2 && calls[0] == "LC34G55T" && calls[1].empty(), "audio open: a named device that fails falls back to the default device");
+	Check(logs.size() == 1 && logs[0].find("'LC34G55T'") != std::string::npos, "audio open: the fallback is logged once, naming the device");
+
+	calls.clear();
+	logs.clear();
+	auto openNamed = [&](const std::string& name) -> uint32_t { calls.push_back(name); return 3; };
+	id = AsyncAudioDeviceOpen::OpenWithFallback("Speakers", openNamed, log);
+	Check(id == 3 && calls.size() == 1 && logs.empty(), "audio open: a named device that opens is the only one tried");
+
+	calls.clear();
+	auto openNone = [&](const std::string& name) -> uint32_t { calls.push_back(name); return 0; };
+	id = AsyncAudioDeviceOpen::OpenWithFallback("", openNone, log);
+	Check(id == 0 && calls.size() == 1 && logs.empty(), "audio open: the default device is tried once, with no fallback message");
+}
+
+void TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice()
+{
+	auto calls = std::make_shared<std::vector<std::string>>();
+	AsyncAudioDeviceOpen opener;
+
+	auto start = std::chrono::steady_clock::now();
+	opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [](const std::string&) {});
+	long long startMs = ElapsedMs(start);
+	printf("      Start() returned after %lld ms (fake device answers after %d ms)\n", startMs, SlowDeviceMs);
+	Check(startMs < 100, "audio open: Start() returns before a slow device answers", std::to_string(startMs) + " ms");
+
+	uint32_t id = 99;
+	Check(opener.IsPending() && !opener.TryTake(id) && id == 99, "audio open: TryTake() reports nothing while the device is still opening");
+
+	while(!opener.TryTake(id) && ElapsedMs(start) < 5000) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	}
+	Check(id == 7 && !opener.IsPending(), "audio open: TryTake() hands over the fallback device once the open finished", "id " + std::to_string(id));
+	Check(calls->size() == 2, "audio open: the background open tried the named device, then the default");
+}
+
+void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
+{
+	auto calls = std::make_shared<std::vector<std::string>>();
+	std::atomic<bool> logged(false);
+	{
+		AsyncAudioDeviceOpen opener;
+		opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [&](const std::string&) { logged = true; });
+		opener.Wait();
+		uint32_t id = 0;
+		Check(opener.TryTake(id) && id == 7, "audio open: Wait() blocks until the open finished, then TryTake() has the device");
+	}
+	{
+		//Destroyed mid-open: the destructor joins instead of leaving a thread
+		//that writes into freed memory.
+		AsyncAudioDeviceOpen opener;
+		opener.Start("LC34G55T", SlowNamedDeviceThenFastDefault(calls), [](const std::string&) {});
+	}
+	Check(logged && calls->size() == 4, "audio open: an opener destroyed mid-open finishes the open first");
+}
+
+//--- Player-style system toast (user's decision 2026-10-03, "Estilizar o HUD
+//do Core"): HudToastLayout is the pure half of SystemHud's Player card - the
+//W-P3/W-P9 geometry, glyph choice, colours, text mapping and word wrap. The
+//pixels themselves are checked by scripts/test_headless_record_player_toast.py.
+namespace
+{
+	int SixPerChar(const std::string& s)
+	{
+		return (int)s.size() * 6;
+	}
+}
+
+static void TestTheToastStyleDefaultsToClassic()
+{
+	PreferencesConfig cfg;
+	Check(cfg.ToastStyle == HudToastStyle::Classic, "toast: a default PreferencesConfig keeps the Classic toast");
+	Check((int)HudToastStyle::Classic == 0 && (int)HudToastStyle::Player == 1,
+		"toast: HudToastStyle values match the C# mirror (Classic=0, Player=1)");
+}
+
+static void TestAPlayerToastSitsInTheBottomRightCorner()
+{
+	//A one-line toast on the 256x240 HUD a NES frame gets.
+	HudToastLayout::Box box = HudToastLayout::Layout(256, 240, 100, 1, 0);
+	Check(box.X + box.Width == 256 - HudToastLayout::MarginRight, "toast: the card's right edge is MarginRight from the HUD's",
+		std::to_string(box.X + box.Width));
+	Check(box.Y + box.Height == 240 - HudToastLayout::MarginBottom, "toast: the card's bottom edge is MarginBottom from the HUD's",
+		std::to_string(box.Y + box.Height));
+	Check(box.Height == 17, "toast: a one-line card is 17 px tall (5 + 8 glyph rows + 4)", std::to_string(box.Height));
+	Check(box.Width == 6 + 7 + 4 + 100 + 7, "toast: the card is padding + glyph + gap + text + padding wide", std::to_string(box.Width));
+	Check(box.IconX == box.X + 6 && box.IconY == box.Y + 5, "toast: the glyph sits PadLeft in, on the text's first line");
+	Check(box.TextX == box.IconX + 7 + 4 && box.TextY == box.IconY, "toast: the text starts after the glyph and its gap");
+}
+
+static void TestPlayerToastsStackUpwardsNewestLowest()
+{
+	HudToastLayout::Box newest = HudToastLayout::Layout(256, 240, 60, 1, 0);
+	int offset = newest.Height + HudToastLayout::StackGap;
+	HudToastLayout::Box older = HudToastLayout::Layout(256, 240, 60, 2, offset);
+	Check(older.Y + older.Height + HudToastLayout::StackGap == newest.Y, "toast: an older card sits StackGap above the newer one");
+	Check(older.Height == newest.Height + HudToastLayout::LineHeight, "toast: each extra line adds one line pitch to the card");
+}
+
+static void TestAPlayerToastNeverStartsLeftOfTheMargin()
+{
+	HudToastLayout::Box box = HudToastLayout::Layout(120, 240, 400, 1, 0);
+	Check(box.X == HudToastLayout::MarginLeft, "toast: a card wider than the HUD is pinned to the left margin", std::to_string(box.X));
+	Check(HudToastLayout::MaxTextWidth(256) == 256 - 8 - 8 - 6 - 7 - 4 - 7, "toast: the widest text leaves both margins and the card's chrome");
+	Check(HudToastLayout::MaxTextWidth(10) == 1, "toast: a degenerate HUD still gets a positive wrap width");
+}
+
+static void TestThePlayerCardHasRoundedCorners()
+{
+	using HudToastLayout::CornerInset;
+	Check(CornerInset(0, 17, 4) == 2 && CornerInset(1, 17, 4) == 1 && CornerInset(2, 17, 4) == 0 && CornerInset(3, 17, 4) == 0,
+		"toast: a radius-4 corner cuts rows 0-3 in by 2,1,0,0",
+		std::to_string(CornerInset(0, 17, 4)) + "," + std::to_string(CornerInset(1, 17, 4)) + "," + std::to_string(CornerInset(2, 17, 4)));
+	Check(CornerInset(16, 17, 4) == 2 && CornerInset(15, 17, 4) == 1, "toast: the bottom corners mirror the top ones");
+	Check(CornerInset(8, 17, 4) == 0, "toast: the middle rows are full width");
+	Check(CornerInset(0, 17, 0) == 0, "toast: radius 0 is a plain rectangle");
+	Check(CornerInset(0, 4, 4) <= 2, "toast: a radius taller than half the card is clamped to it");
+}
+
+static void TestEachToastGetsTheRendersGlyph()
+{
+	using HudToastLayout::Classify;
+	using HudToastLayout::Icon;
+	Check(Classify("MEP", "Applied Contra 80s - textures") == Icon::Check, "toast: an applied pack gets W-P3's check");
+	Check(Classify("Error", "Could not load file: x.nes") == Icon::Warning, "toast: the Error title gets W-P9's warning");
+	Check(Classify("MEP", u8"Couldn't keep your place \u2014 the game restarted") == Icon::Warning,
+		"toast: a failure sentence gets the warning whatever its title");
+	Check(Classify("Save States", "State #1 saved.") == Icon::Dot, "toast: any other toast gets the Player-accent dot");
+	Check(HudToastLayout::IconRgb(Icon::Check) == 0x34C759 && HudToastLayout::IconRgb(Icon::Warning) == 0xFF9F0A &&
+		HudToastLayout::IconRgb(Icon::Dot) == 0x007AFF, "toast: glyph colours are the Player palette's green, orange and Play blue");
+	int lit = 0;
+	for(int i = 0; i < HudToastLayout::IconSize; i++) {
+		lit += HudToastLayout::IconRows(Icon::Check)[i] != 0 ? 1 : 0;
+	}
+	Check(lit >= 5, "toast: the check glyph is drawn on most of its rows");
+}
+
+static void TestToastColoursFadeThroughTheHudsInvertedAlpha()
+{
+	using HudToastLayout::HudColor;
+	Check(HudColor(0x1E1E20, 225, 255) == 0x1E1E1E20u, "toast: the card is PlayerHudColor at alpha 225 (transparency 30)");
+	Check(HudColor(0xFFFFFF, 255, 255) == 0x00FFFFFFu, "toast: opaque text has a zero transparency byte");
+	Check((HudColor(0xFFFFFF, 255, 0) >> 24) == 255, "toast: a fully faded toast is fully transparent");
+	Check((HudColor(0x1E1E20, 225, 128) >> 24) == 255 - 225 * 128 / 255, "toast: the fade scales the colour's own alpha");
+}
+
+static void TestToastTextIsMappedOntoTheBitmapFont()
+{
+	using HudToastLayout::ToFontText;
+	Check(ToFontText(u8"Applied Contra 80s \u2014 textures") == "Applied Contra 80s - textures", "toast: an em dash becomes a hyphen");
+	Check(ToFontText(u8"Pack changed \u00B7 rewind history cleared") == "Pack changed - rewind history cleared", "toast: a middle dot becomes a hyphen");
+	Check(ToFontText(u8"Installing\u2026 don\u2019t quit") == "Installing... don't quit", "toast: an ellipsis and a curly apostrophe become ASCII");
+	Check(ToFontText("plain ascii") == "plain ascii", "toast: ASCII is untouched");
+}
+
+static void TestToastTextWrapsAtWords()
+{
+	std::vector<std::string> lines = HudToastLayout::Wrap("aaa bbb ccc", 7 * 6, SixPerChar);
+	Check(lines.size() == 2 && lines[0] == "aaa bbb" && lines[1] == "ccc", "toast: text wraps at the last space that fits",
+		std::to_string(lines.size()));
+	lines = HudToastLayout::Wrap("short", 100, SixPerChar);
+	Check(lines.size() == 1 && lines[0] == "short", "toast: text that fits stays one line");
+	lines = HudToastLayout::Wrap("averyveryverylongword x", 30, SixPerChar);
+	Check(lines.size() == 2 && lines[0] == "averyveryverylongword", "toast: a word wider than the line is kept whole");
+	lines = HudToastLayout::Wrap("", 30, SixPerChar);
+	Check(lines.size() == 1 && lines[0].empty(), "toast: an empty message is one empty line");
+}
+
 int main()
 {
+	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
+	TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean();
+	TestOnlyARomWithAForcedPatchCanBeSuppressed();
+	TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice();
+	TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice();
+	TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway();
+
 	TestMepPackManagerGettersReturnCopies();
+	TestNoPackPreferenceTurnsEveryPackOffButTheSibling();
+	TestSiblingMepLayoutReadsItsInstallStamp();
+	TestRomLayerSwitchesTurnOffTheirSectionOnly();
 	TestRomHashResolveSurvivesNoConsole();
 	TestShareApplyMakesPowerOnDeterministicForEveryKnownConsole();
 	TestShareRefusesAConsoleThePredicateDoesNotKnow();
@@ -12992,6 +16465,8 @@ int main()
 	TestReplacementMuteMaskDefaultsToFullTonalMute();
 	TestReplacementMuteMaskLetsSfxChannelsThrough();
 	TestReplacementMuteMaskNeverTouchesDmcOrExpansion();
+	TestSynthYieldsToPackTrackOnReplacedChannels();
+	TestSynthPackGainFadesInsteadOfClicking();
 
 	TestEnhancedSynthPcmGolden();
 
@@ -13009,6 +16484,90 @@ int main()
 
 	TestAspectRatioPerSetting();
 	TestAspectRatioAutoPerConsole();
+
+	TestRevealWidthContractIsSixtyFourColumnsPerSide();
+	TestRevealClassifiesMirroringFromTheNametablePages();
+	TestRevealContentRulePerMirroring();
+	TestRevealOriginFollowsCoarseXFineXAndNametableBit();
+	TestRevealShowsTheNeighbouringNametableOnVerticalMirroring();
+	TestRevealHonoursFineXFineYAndTheAttributeQuadrant();
+	TestRevealDrawsBlackWhereThereIsNoContent();
+	TestRevealFollowsTheRowsMaskState();
+	TestRevealNeverTouchesTheMappersSideEffectingVramPath();
+	TestRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+
+	TestGbRevealWidthContractIsFortyEightColumnsPerSide();
+	TestGbRevealDrawsTheBgMapThatWrapsInBesideThePicture();
+	TestGbRevealFollowsScrollAndTheMapRow();
+	TestGbRevealHonoursTheCgbTileAttributes();
+	TestGbRevealUsesTheDmgPaletteShades();
+	TestGbRevealContinuesTheWindowPastThePicturesEdges();
+	TestGbRevealWindowNeedsTheEnableBitNotJustTheLatches();
+	TestGbRevealShowsTheBlankColorWhenTheBgLayerIsOff();
+	TestGbRevealNeverUsesTheCpuVisibleVramRead();
+	TestGbRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestGameGearRevealShowsTheLineTheViewportCrops();
+
+
+	TestGbaRevealWidthContractIsTwentyTwoColumnsPerSide();
+	TestGbaRevealContentRuleFollowsTheMapWidth();
+	TestGbaRevealSamplesTextBgTiles();
+	TestGbaRevealCompositesTextBgsByPriority();
+	TestGbaRevealDrawsBlackWhereItCannotFill();
+	TestGbaRevealDrawsTheMapColumnsRightBesideTheWindow();
+	TestGbaRevealFollowsMosaicBlocks();
+	TestGbaRevealAppliesTheRowsColorEffect();
+	TestGbaRevealOnlyReadsVramAndThePalette();
+	TestGbaRevealFrameKeepsTheStandardPictureBitIdenticalInTheCentre();
+	TestGbaRevealHoldsAnExtendedFrameOnlyWhileTheRevealIsOn();
+	TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn();
+	TestGbaRevealDrawsARowOnceWhateverTheRegisterWritesDo();
+	TestGbaRevealDoesNotDrawIntoTheFrameItJustSent();
+	TestGbaRevealOnlyRevealsTheModesTextBgs();
+
+	TestW4SideColumnsLiveOutsideThePicturesOwnCoordinates();
+	TestW4SideTilesComeFromTheNeighbouringNametable();
+	TestW4SideTilesFollowTheRowsScrollState();
+	TestW4SideTilesGoEmptyWhereTheRevealDrawsBlack();
+	TestW4SideTilePixelsAreTheLowResRevealPixels();
+	TestW4SidePixelInfoSamplesEachColumnsOwnPixel();
+	TestW4SideTileKeyMatchesTheKeyOfACentredTile();
+	TestW4HdFrameAddsTheSidesAroundTheCentre();
+	TestW4HdSideFillMapFollowsTheFramesScale();
+	TestW4PositionRulesRefuseAPixelOutsideThePicture();
+	TestW4NearbyRulesRefuseAPixelOutsideThePicture();
+	TestW4CellGuardRefusesAPixelOutsideThePicture();
+	TestW253FallbackPrefersTheMostSpecificSource();
+	TestW253FallbackSupportNeverComesFromBorderOrBlack();
+	TestW253FallbackFillsOnlyTheRowsTheGameLeftEmpty();
+	TestW253FallbackScalesThePackArtToAnHdFrame();
+	TestW253MepWidescreenParsesTheDefaultPairAndScreens();
+	TestW253MepWidescreenRejectsBadManifests();
+	TestW253DetectConventionLayoutFindsTheWidescreenSection();
+	TestW253WidescreenSectionHasNoSwitchOfItsOwn();
+	TestW253BorderCompositeFillsOnlyTheUnfilledSideRows();
+	TestW253BorderCompositeWithoutASideFillMapDrawsTheBorderAlone();
+	TestW253StandardFrameCarriesNoExtendedState();
+	TestW253FallbackRunsTheArtBeforeTheBorderComposite();
+	TestW253FallbackKeepsTheArtThroughTheBorderComposite();
+	TestWidescreenSupportProbeIsUndecidedWhileTheWindowIsOpen();
+	TestWidescreenSupportProbeFindsContentOnTheFirstFrameThatHasIt();
+	TestWidescreenSupportProbeConcludesUnsupportedAfterAFullWindowOfNothing();
+	TestWidescreenSupportProbeContentAfterTheWindowStillCounts();
+	TestWidescreenSupportProbeResetStartsTheNextRunOver();
+	TestWidescreenSupportProbeReadsTheRevealContentRule();
+	TestWidescreenSupportSettledGameIsNotWidenedAtAll();
+	TestW253PpuRevealLatchIsTheSharedSupportRule();
+	TestW253PpuStateMeasuresWhetherOrNotTheSwitchIsOn();
+	TestW253PpuStatePublishesTheFrameAndItsSideFillMap();
+	TestW253HdVideoFilterRestatesTheFrameContractInItsOwnCoordinates();
+	TestWidescreenSupportPackArtReenablesASettledGame();
+	TestW6BlitGeometryFollowsTheFrameWidth();
+	TestW6BisqwitRowFollowsTheFrameWidth();
+	TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns();
+	TestW6CaptureMeasuresAnExtendedFrameOnItsCentre();
+	TestW6TheRecordedFrameFollowsTheFilteredFramesWidth();
+TestW6TheFiltersAcceptTheExtendedFrame();
 	TestStretchedSizePerSetting();
 
 	TestToggleOverlayStaysReachableInAKeyboardGame();
@@ -13306,6 +16865,16 @@ int main()
 	TestShaderParamsAreEmptyAndFreeNoListWhenGetRuntimeParamsFails();
 	TestShaderParamsAreReadAndTheListFreedOnceOnSuccess();
 	TestShaderParamsTouchNoListWhenThePresetFailsToLoad();
+
+	TestTheToastStyleDefaultsToClassic();
+	TestAPlayerToastSitsInTheBottomRightCorner();
+	TestPlayerToastsStackUpwardsNewestLowest();
+	TestAPlayerToastNeverStartsLeftOfTheMargin();
+	TestThePlayerCardHasRoundedCorners();
+	TestEachToastGetsTheRendersGlyph();
+	TestToastColoursFadeThroughTheHudsInvertedAlpha();
+	TestToastTextIsMappedOntoTheBitmapFont();
+	TestToastTextWrapsAtWords();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

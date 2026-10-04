@@ -15,74 +15,85 @@
 	CheatCodes list the classic cheat window edits. Every rule (rows, search,
 	not-in-list fallback, recording-art refusal, console scope) is in the
 	host-free UI/Logic/CheatSheet; this view only binds it.-->
+	<!--ADR-0249 (W-P11): a light sheet - the search field, the cheats as
+	CheckBox.switch rows in an inset list (the note under the name), the
+	status and replay lines, Add a Code… on the left and Done on the right.-->
 	<Border
 		Name="PlayerCheatsSheet"
-		Background="#DD000000"
+		Classes="sheet"
+		Width="500"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Center"
-		Padding="24"
 		IsVisible="{Binding IsVisible}"
 	>
-		<StackPanel Spacing="8" MinWidth="340" MaxWidth="520">
-			<TextBlock Text="{l:Translate lblCheatsTitle}" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" />
-			<TextBox Name="CheatsSearchBox" Text="{Binding SearchText}" PlaceholderText="{Binding SearchPlaceholder}" IsEnabled="{Binding IsSearchEnabled}" />
+		<StackPanel Spacing="0">
+			<TextBlock Classes="title3" Text="{l:Translate lblCheatsTitle}" Margin="0 4 0 12" />
+			<TextBox Name="CheatsSearchBox" Text="{Binding SearchText}" PlaceholderText="{Binding SearchPlaceholder}" IsEnabled="{Binding IsSearchEnabled}" Margin="0 0 0 12" />
 
 			<!--Not in the list: games by name; picking one borrows its codes.-->
-			<ItemsControl Name="CheatsGameResults" ItemsSource="{Binding GameResults}" IsVisible="{Binding IsGameSearch}">
+			<ItemsControl Name="CheatsGameResults" ItemsSource="{Binding GameResults}" IsVisible="{Binding IsGameSearch}" Margin="0 0 0 12">
 				<ItemsControl.ItemsPanel>
 					<ItemsPanelTemplate>
-						<StackPanel Spacing="4" />
+						<StackPanel Spacing="6" />
 					</ItemsPanelTemplate>
 				</ItemsControl.ItemsPanel>
 				<ItemsControl.ItemTemplate>
 					<DataTemplate x:DataType="lg:CheatDbGame">
-						<Button HorizontalAlignment="Stretch" Content="{Binding Name}" Click="OnPickGame" />
+						<Button Classes="secondary regular" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding Name}" Click="OnPickGame" />
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
 
-			<ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
-				<ItemsControl Name="CheatsList" ItemsSource="{Binding Rows}" XYFocus.NavigationModes="Enabled">
-					<ItemsControl.ItemsPanel>
-						<ItemsPanelTemplate>
-							<StackPanel Spacing="4" />
-						</ItemsPanelTemplate>
-					</ItemsControl.ItemsPanel>
-					<ItemsControl.ItemTemplate>
-						<DataTemplate x:DataType="vm:PlayerCheatRow">
-							<StackPanel Spacing="0">
-								<CheckBox Content="{Binding Description}" IsChecked="{Binding IsOn, Mode=OneWay}" IsEnabled="{Binding CanToggle}" Click="OnToggleCheat" />
-								<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="28 0 0 0" Text="{Binding Note}" IsVisible="{Binding HasNote}" />
-								<!--R.4 (ADR-0248 §5): a community row, "from the community · 👍 N";
-								the count opens the submission issue to vote there (↗).-->
-								<StackPanel Name="CheatsCommunityMark" Orientation="Horizontal" Spacing="4" Margin="28 0 0 0" IsVisible="{Binding IsCommunity}">
-									<TextBlock FontSize="11" Opacity="0.7" VerticalAlignment="Center" Text="{Binding CommunityMark}" />
-									<Button Name="CheatsVotesButton" FontSize="11" Padding="4 0" Content="{Binding VotesLabel}" Click="OnOpenIssue" />
-								</StackPanel>
-								<!--ADR-0248 §2: the user's own codes only; bundled and community codes are already shared.-->
-								<Button Name="CheatsShareButton" FontSize="11" Margin="28 2 0 0" Padding="4 0" Content="{l:Translate btnCheatsShare}" IsVisible="{Binding CanShare}" Click="OnShareCheat" />
-							</StackPanel>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ItemsControl>
-			</ScrollViewer>
+			<!--The inset is drawn behind the list, not around it: CheatsList stays
+			in the visual tree when there are no rows (only the chrome hides).-->
+			<Panel>
+				<Border Classes="inset" IsVisible="{Binding Rows.Count}" />
+				<ScrollViewer MaxHeight="320" Margin="1" HorizontalScrollBarVisibility="Disabled">
+					<ItemsControl Name="CheatsList" ItemsSource="{Binding Rows}" XYFocus.NavigationModes="Enabled">
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:PlayerCheatRow">
+								<Border Classes="switch-row tall">
+									<StackPanel>
+										<Panel>
+											<CheckBox Classes="switch" Classes.subtitled="{Binding HasNote}" Content="{Binding Description}" IsChecked="{Binding IsOn, Mode=OneWay}" IsEnabled="{Binding CanToggle}" Click="OnToggleCheat" />
+											<TextBlock Classes="row-subtitle" TextTrimming="CharacterEllipsis" Text="{Binding Note}" IsVisible="{Binding HasNote}" />
+										</Panel>
+										<!--R.4 (ADR-0248 §5): a community row, "from the community · 👍 N";
+										the count opens the submission issue to vote there (↗).-->
+										<StackPanel Name="CheatsCommunityMark" Orientation="Horizontal" Spacing="6" Margin="0 -6 0 8" IsVisible="{Binding IsCommunity}">
+											<TextBlock Classes="footnote secondary" VerticalAlignment="Center" Text="{Binding CommunityMark}" />
+											<Button Name="CheatsVotesButton" Classes="plain small" Content="{Binding VotesLabel}" Click="OnOpenIssue" />
+										</StackPanel>
+										<!--ADR-0248 §2: the user's own codes only; bundled and community codes are already shared.-->
+										<Button Name="CheatsShareButton" Classes="plain small" HorizontalAlignment="Left" Margin="-11 -6 0 8" Content="{l:Translate btnCheatsShare}" IsVisible="{Binding CanShare}" Click="OnShareCheat" />
+									</StackPanel>
+								</Border>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+				</ScrollViewer>
+			</Panel>
 
-			<TextBlock Name="CheatsStatusLine" Text="{Binding StatusLine}" TextWrapping="Wrap" />
-			<Button Name="CheatsChangeGameButton" Content="{l:Translate btnCheatsChangeGame}" IsVisible="{Binding IsBorrowingGame}" Click="OnChangeGame" />
-			<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding AllOffNote}" IsVisible="{Binding IsAllOff}" />
-			<TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap" Text="{Binding ReplayNote}" />
+			<TextBlock Name="CheatsStatusLine" Classes="subhead secondary" Text="{Binding StatusLine}" TextWrapping="Wrap" Margin="2 16 0 0" />
+			<!--Every wait moves (2026-10-03): the community catalog is still being fetched.-->
+			<ProgressBar Name="CheatsLoadingBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" Margin="2 8 0 0" IsVisible="{Binding IsCommunityLoading}" />
+			<Button Name="CheatsChangeGameButton" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 8 0 0" Content="{l:Translate btnCheatsChangeGame}" IsVisible="{Binding IsBorrowingGame}" Click="OnChangeGame" />
+			<TextBlock Classes="footnote secondary" TextWrapping="Wrap" Margin="2 6 0 0" Text="{Binding AllOffNote}" IsVisible="{Binding IsAllOff}" />
+			<TextBlock Classes="replay-note" TextWrapping="Wrap" Margin="2 8 0 0" Text="{Binding ReplayNote}" />
 
-			<!--*Add a Code…*: a code typed by hand; the full editor stays in Tools ⋯.-->
-			<StackPanel Name="CheatsAddCodePanel" Spacing="4" IsVisible="{Binding IsAddCodeOpen}">
+			<!--*Add a Code…*: a code typed by hand; the full editor stays in Classic › Tools › Cheats.-->
+			<StackPanel Name="CheatsAddCodePanel" Spacing="8" Margin="0 14 0 0" IsVisible="{Binding IsAddCodeOpen}">
 				<TextBox Name="CheatsNewCodeBox" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
 				<TextBox Text="{Binding NewDescription}" PlaceholderText="{l:Translate lblCheatsDescriptionPlaceholder}" />
-				<TextBlock Name="CheatsAddCodeError" Foreground="#FF8080" TextWrapping="Wrap" Text="{Binding AddCodeError}" />
-				<Button Name="CheatsAddCodeConfirm" Content="{l:Translate btnCheatsAdd}" HorizontalAlignment="Right" Click="OnConfirmAddCode" />
+				<Border Classes="warning notice" IsVisible="{Binding AddCodeError.Length}">
+					<TextBlock Name="CheatsAddCodeError" TextWrapping="Wrap" Text="{Binding AddCodeError}" />
+				</Border>
+				<Button Name="CheatsAddCodeConfirm" Classes="secondary regular" Content="{l:Translate btnCheatsAdd}" HorizontalAlignment="Right" Click="OnConfirmAddCode" />
 			</StackPanel>
 
-			<DockPanel>
-				<Button Name="CheatsDoneButton" DockPanel.Dock="Right" Content="{l:Translate btnCheatsDone}" Click="OnDone" />
-				<Button Name="CheatsAddCodeButton" Content="{l:Translate btnCheatsAddCode}" Click="OnAddCode" />
+			<DockPanel Margin="0 28 0 0">
+				<Button Name="CheatsDoneButton" Classes="primary regular" DockPanel.Dock="Right" Content="{l:Translate btnCheatsDone}" Click="OnDone" />
+				<Button Name="CheatsAddCodeButton" Classes="secondary regular" HorizontalAlignment="Left" Content="{l:Translate btnCheatsAddCode}" Click="OnAddCode" />
 			</DockPanel>
 		</StackPanel>
 	</Border>

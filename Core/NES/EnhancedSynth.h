@@ -21,6 +21,9 @@ private:
 	EnhancedSynthEngine _engine;
 	ChannelRoleClassifier _roles;
 	bool _wasActive = false;
+	//Crossfade gains (1 = synth voices audible, 0 = yielded to a pack OGG track)
+	double _musicGain = 1.0;
+	double _noiseGain = 1.0;
 
 	//Diagnostics: "is the synth actually producing sound?" written to mesen.log
 	//when the answer changes (and at most every kDiagPeriodS), so a silent

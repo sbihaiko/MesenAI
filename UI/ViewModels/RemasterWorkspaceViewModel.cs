@@ -30,6 +30,7 @@ namespace Mesen.ViewModels
 		private readonly IJobProcessLauncher _launcher;
 		private readonly bool _hasHeadlessRecorder;
 		private readonly Stopwatch _recordingClock = new();
+		private readonly RemasterShapeCache _shapeCache = new();
 		private DispatcherTimer? _recordingTimer;
 		private DispatcherTimer? _jobResultTimer;
 
@@ -66,8 +67,17 @@ namespace Mesen.ViewModels
 		//W-R0b
 		[ObservableProperty] public partial bool IsBannerVisible { get; private set; }
 		[ObservableProperty] public partial string BannerText { get; private set; } = "";
+		//The banner's second, regular-weight line (the render: what still works).
+		[ObservableProperty] public partial string BannerDetail { get; private set; } = "";
+		//Advanced's one-line banner: both sentences, as before the W-R0b split.
+		[ObservableProperty] public partial string BannerLine { get; private set; } = "";
 		[ObservableProperty] public partial bool IsPythonMissing { get; private set; }
 		[ObservableProperty] public partial bool IsToolsMissing { get; private set; }
+		//The Python/tools probe is running (a moving line until it answers).
+		[ObservableProperty] public partial bool IsFeasibilityChecking { get; private set; }
+		//A project scan (recordings, shapes, painted cells) is in flight: a sentence over a moving bar.
+		[ObservableProperty] public partial bool IsScanWaitVisible { get; private set; }
+		[ObservableProperty] public partial string ScanWaitText { get; private set; } = "";
 		[ObservableProperty] public partial string PendingBrowserUrl { get; private set; } = "";
 		[ObservableProperty] public partial string BrowserConfirmText { get; private set; } = "";
 
@@ -76,6 +86,11 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string ProjectFolder { get; private set; } = "";
 		[ObservableProperty] public partial string RecordSummary { get; private set; } = "";
 		[ObservableProperty] public partial List<RemasterRecordingRow> Recordings { get; private set; } = new();
+		//W-R1's second line under the summary: the newest recording (Player mode
+		//shows it instead of the list).
+		[ObservableProperty] public partial string RecordDetail { get; private set; } = "";
+		//ADR-0252 §1: "1 240 shapes seen while you played" ("" = unknown).
+		[ObservableProperty] public partial string ShapesSeenText { get; private set; } = "";
 		[ObservableProperty] public partial RemasterControlViewModel Record { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel RecordFromTas { get; private set; } = RemasterControlViewModel.Hidden;
 		[ObservableProperty] public partial RemasterControlViewModel LetTheAiPlay { get; private set; } = RemasterControlViewModel.Hidden;
@@ -85,6 +100,8 @@ namespace Mesen.ViewModels
 
 		//W-R2
 		[ObservableProperty] public partial string RecordingPill { get; private set; } = "";
+		//W-R2's counters: the core's live coverage of this recording ("" until it reports any).
+		[ObservableProperty] public partial string RecordingCounters { get; private set; } = "";
 
 		//W-R3
 		[ObservableProperty] public partial bool IsJobCardVisible { get; private set; }
@@ -92,6 +109,8 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string JobTitle { get; private set; } = "";
 		[ObservableProperty] public partial string JobDetail { get; private set; } = "";
 		[ObservableProperty] public partial int JobPercent { get; private set; }
+		//A step reports nothing until it ends: the bar moves meanwhile.
+		[ObservableProperty] public partial bool IsJobBarIndeterminate { get; private set; }
 
 		//Raised when Activity or the job's progress changes, for the shell's
 		//dot and status line (§13.6, W-X3).
@@ -127,6 +146,7 @@ namespace Mesen.ViewModels
 		public RemasterWorkspaceViewModel(RemasterConfig config, Func<RemasterConfig, RemasterFeasibility> measure, IJobProcessLauncher launcher, bool hasHeadlessRecorder)
 		{
 			_config = config;
+			CountShapes = _shapeCache.Count;
 			_measure = measure;
 			_hasHeadlessRecorder = hasHeadlessRecorder;
 			_launcher = launcher;
@@ -151,6 +171,8 @@ namespace Mesen.ViewModels
 						Refresh();
 					});
 				}, TaskScheduler.Default);
+				//The jobs wait with their reason, and the probe shows, until it answers.
+				Refresh();
 			}
 			return _measuring;
 		}
@@ -221,81 +243,10 @@ namespace Mesen.ViewModels
 			return true;
 		}
 
-		//W-R0 › Start Recording / W-R1 › Record While I Play: the bootstrap
-		//recorder into the next auto/rec-NNN/ (ADR-0243 Decision 2, source play).
-		public bool StartRecording()
-		{
-			RemasterScreenState state = Evaluate();
-			if(!state.Record.Enabled) {
-				return false;
-			}
-			//ADR-0184 §1: a cheat that is not a RAM code refuses the run, named.
-			string refusal = CheatRefusal();
-			if(refusal.Length > 0) {
-				NoticeText = refusal;
-				Refresh();
-				return false;
-			}
-			//Held back from here on, so nothing turned on later reaches the core.
-			BeginRecordingArtCheats();
-			if(EmuApi.IsMepBootstrapping()) {
-				//#690: the legacy "Record while I play" setting (ADR-0243 Q3)
-				//already records this load. Record takes over: that recording is
-				//closed and kept, and this one starts as the next rec-NNN.
-				EmuApi.StopMepRecording();
-			}
-			if(!EmuApi.StartMepRecording("play", "")) {
-				EndRecordingArtCheats();
-				NoticeText = ResourceHelper.GetMessage("RemasterRecordFailed");
-				Refresh();
-				return false;
-			}
-			//#663: the builder stops the project's own pack art, if it was drawing.
-			PackArtSwitch.Raise();
-			NoticeText = "";
-			_chosenProject = RemasterProjectLocator.FromRecordingFolder(EmuApi.GetMepRecordingFolder());
-			_chosenByUser = false;
-			IsRecording = true;
-			_recordingClock.Restart();
-			_recordingTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => OnRecordingTick());
-			_recordingTimer.Start();
-			Refresh();
-			return true;
-		}
-
-		//W-R2 › Stop (or Esc): the recording is closed and kept, W-R1 shows it,
-		//and the kit runs as a job when it can (W-R2 text). G.6 (W-X3): quitting
-		//or opening another game stops it without the kit run.
-		public void StopRecording(bool prepareFigures = true)
-		{
-			if(!IsRecording) {
-				return;
-			}
-			string folder = EmuApi.GetMepRecordingFolder();
-			EmuApi.StopMepRecording();
-			PackArtSwitch.Raise();
-			string project = RemasterProjectLocator.FromRecordingFolder(folder);
-			if(project.Length > 0) {
-				_chosenProject = project;
-			}
-			EndRecordingView();
-			Refresh();
-			if(prepareFigures && RemasterScreen.RunKitAfterRecording(Inputs())) {
-				StartKit();
-			}
-		}
-
-		private void EndRecordingView()
-		{
-			EndRecordingArtCheats();
-			IsRecording = false;
-			_recordingClock.Reset();
-			_recordingTimer?.Stop();
-		}
-
 		private void OnRecordingTick()
 		{
-			if(!IsRecording) {
+			//A stop in flight ends the view itself when the core answers.
+			if(!IsRecording || Transition != RecordingTransition.None) {
 				return;
 			}
 			//The core ends a recording by itself when its ROM goes away.
@@ -305,6 +256,18 @@ namespace Mesen.ViewModels
 				return;
 			}
 			RecordingPill = ResourceHelper.GetMessage("RemasterRecordingPill", RemasterScreen.FormatElapsed(_recordingClock.Elapsed));
+			//F5.4d's coverage report: zero-filled off NES or before the builder saw anything.
+			InteropHdPackCoverageReport coverage = EmuApi.GetHdPackCoverageReport();
+			UpdateRecordingCounters(coverage.TilesSeen, coverage.ScreensSeen);
+		}
+
+		private void UpdateRecordingCounters(uint tilesSeen, uint screensSeen)
+		{
+			//ADR-0252 §4: shapes this recording has drawn; screens up to the cap the core writes.
+			uint screens = RemasterScreen.ScreensCaptured(screensSeen);
+			RecordingCounters = !RemasterScreen.ShowsRecordingCounters(tilesSeen, screensSeen) ? ""
+				: ResourceHelper.GetMessage(tilesSeen == 1 ? "RemasterRecordingShapesOne" : "RemasterRecordingShapesMany", tilesSeen)
+					+ " · " + ResourceHelper.GetMessage(screens == 1 ? "RemasterRecordingScreensOne" : "RemasterRecordingScreensMany", screens);
 		}
 
 		//Zone ② Prepare Figures, and the run after Stop: mep_project.py kit.
@@ -351,6 +314,7 @@ namespace Mesen.ViewModels
 			RemasterJobSnapshot job = _jobs.Snapshot;
 			IsJobRunning = job.IsRunning;
 			JobPercent = job.Percent;
+			IsJobBarIndeterminate = job.BarIsIndeterminate;
 			switch(job.Status) {
 				case RemasterJobStatus.Running:
 					JobTitle = job.Kind == RemasterJobKind.Build ? BuildJobTitle(job) : ResourceHelper.GetMessage(JobMessage(job.Kind, "RemasterJobKitTitle"));
@@ -398,7 +362,7 @@ namespace Mesen.ViewModels
 			string shown = _project?.Folder ?? "";
 			return new RemasterInputs(_gameLoaded, _console, IsRecording, _jobs.Snapshot.IsRunning, shown, IsGamesProject(shown) && _gameLoaded,
 				_project?.TexturedRecordingCount ?? 0, _feasibility ?? PendingFeasibility, _hasHeadlessRecorder, _project?.HasKit ?? false,
-				RemasterJobs.RunsOn(OtherWorkspaceJob(), shown));
+				RemasterJobs.RunsOn(OtherWorkspaceJob(), shown), Transition, IsFeasibilityPending);
 		}
 
 		//Before the first recording the game's project does not exist yet; a
@@ -424,6 +388,7 @@ namespace Mesen.ViewModels
 			View = s.View;
 			IsNoProject = s.View == RemasterView.NoProject;
 			IsProject = s.View == RemasterView.Project;
+			RefreshRecentProjects();
 
 			StartCardGame = _gameLoaded ? _gameName : ResourceHelper.GetMessage("RemasterNoGameRunning");
 			StartButtonText = ResourceHelper.GetMessage(s.PrimaryOpensRom ? "RemasterOpenRomToStart" : "RemasterStartRecording");
@@ -433,11 +398,16 @@ namespace Mesen.ViewModels
 
 			RemasterFeasibility f = _feasibility ?? PendingFeasibility;
 			IsBannerVisible = s.ShowFeasibilityBanner;
+			IsFeasibilityChecking = s.ShowFeasibilityChecking;
+			RefreshRecordingWait();
 			IsPythonMissing = f.Python != PythonGate.Found;
 			IsToolsMissing = !IsPythonMissing && f.Tools != ToolsGate.Found;
-			BannerText = f.Python == PythonGate.TooOld ? ResourceHelper.GetMessage("RemasterPythonTooOld", f.PythonVersion)
-				: f.Python == PythonGate.Missing ? ResourceHelper.GetMessage("RemasterNeedsPython")
-				: ResourceHelper.GetMessage("RemasterNeedsTools");
+			string banner = f.Python == PythonGate.TooOld ? "RemasterPythonTooOld"
+				: f.Python == PythonGate.Missing ? "RemasterNeedsPython"
+				: "RemasterNeedsTools";
+			BannerText = ResourceHelper.GetMessage(banner, f.PythonVersion);
+			BannerDetail = ResourceHelper.GetMessage(banner + "Detail");
+			BannerLine = BannerText + " " + BannerDetail;
 
 			ProjectName = _project?.Name ?? "";
 			ProjectFolder = _project?.Folder ?? "";
@@ -449,6 +419,7 @@ namespace Mesen.ViewModels
 				RecordSummary += " · " + _project.Problem;
 			}
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
+			RefreshShapesSeen();
 
 			Record = Control(s.Record);
 			RecordFromTas = Control(s.RecordFromTas);
@@ -469,6 +440,67 @@ namespace Mesen.ViewModels
 			RemasterActivity activity = RemasterActivityIndicator.Of(IsRecording, _jobs.Snapshot.IsRunning);
 			Activity = activity;
 			ActivityChanged?.Invoke();
+		}
+
+		//ADR-0252 §1: the shapes the recordings drew. The count parses every
+		//recording's hires.txt, so it runs off the UI thread; a result for an
+		//older refresh is dropped. The newest recording stands in while the
+		//count is unknown or pending.
+		//The recordings' shapes count; a test swaps it to hold the read open.
+		public Func<IReadOnlyList<RemasterRecording>, int?> CountShapes { get; set; }
+
+		private readonly RemasterScanWait _scans = new();
+		private int _shapesGeneration;
+		private string _shapesFolder = "";
+
+		//Completes when the shapes count the last refresh asked for is in.
+		public Task ShapesSettled { get; private set; } = Task.CompletedTask;
+
+		private void RefreshShapesSeen()
+		{
+			int generation = ++_shapesGeneration;
+			var project = _project;
+			string folder = project?.Folder ?? "";
+			if(folder != _shapesFolder) {
+				_shapesFolder = folder;
+				ShapesSeenText = "";
+			}
+			UpdateRecordDetail();
+			if(project == null) {
+				_scans.Cancel(RemasterScanKind.Shapes);
+				UpdateScanWait();
+				ShapesSettled = Task.CompletedTask;
+				return;
+			}
+			List<RemasterRecording> snapshot = project.Recordings.ToList();
+			int scan = _scans.Begin(RemasterScanKind.Shapes);
+			UpdateScanWait();
+			TaskCompletionSource settled = new();
+			ShapesSettled = settled.Task;
+			Task.Run(() => CountShapes(snapshot)).ContinueWith(t => Dispatcher.UIThread.Post(() => {
+				_scans.End(RemasterScanKind.Shapes, scan);
+				UpdateScanWait();
+				if(generation == _shapesGeneration) {
+					int? shapes = t.IsCompletedSuccessfully ? t.Result : null;
+					ShapesSeenText = shapes is int n ? ResourceHelper.GetMessage(n == 0 ? "RemasterShapesSeenNone" : n == 1 ? "RemasterShapesSeenOne" : "RemasterShapesSeenMany", n) : "";
+					UpdateRecordDetail();
+				}
+				settled.TrySetResult();
+			}), TaskScheduler.Default);
+		}
+
+		private void UpdateScanWait()
+		{
+			IsScanWaitVisible = _scans.IsWaiting;
+			ScanWaitText = !IsScanWaitVisible ? ""
+				: ResourceHelper.GetMessage(_scans.IsWaitingForProject ? "RemasterScanningProject" : "RemasterScanningProjects");
+		}
+
+		private void UpdateRecordDetail()
+		{
+			RemasterRecordingRow? latest = Recordings.FirstOrDefault();
+			RecordDetail = ShapesSeenText.Length > 0 ? ShapesSeenText
+				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 		}
 
 		private static RemasterControlViewModel Control(RemasterControl c) => new(c.Enabled, c.Enabled ? "" : Reason(c.Reason));

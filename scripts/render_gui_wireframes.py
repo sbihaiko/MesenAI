@@ -607,7 +607,7 @@ def w_s1():
     play_home_recents(c)
     x0, y0, x1, y1 = WIN
     marks = [(x0 + 175, y0 + 26, "1", "Current profile only — click to switch"),
-             (x1 - 30, y0 + 26, "2", "Classic tools (⋯)"),
+             (x1 - 30, y0 + 26, "2", "The door's tools menu"),
              (x0 + 560, y0 + 190, "3", "One profile's content"),
              (x0 + 300, y1 - 13, "4", "Status, read-only")]
     for mx, my, n, label in marks:
@@ -627,23 +627,35 @@ def w_s2():
     play_home_recents(c)
     c.titlebar("play", tools_open=True)
     x1, y0 = WIN[2], WIN[1]
-    mb = (x1 - 250, y0 + 44, x1 - 14, y0 + 44 + 270)
+    # ADR-0250: Play's own Tools ⋯ — one place per action; the pause overlay
+    # already holds Pause, Save states, Pack, Enhancements, Cheats, Settings, Quit game.
+    # The Play home holds Open a ROM… and the recents, so they are not repeated here.
+    # No game is loaded in this frame: the game items show disabled.
+    rows = [("Reset", "-"), ("Power Cycle", "-"), None,
+            ("Screenshot", "-"), ("Fullscreen", "⌃⌘F"), None,
+            ("Help", ">")]
+    h = 20 + sum(12 if r is None else 30 for r in rows) + 44
+    mb = (x1 - 270, y0 + 44, x1 - 14, y0 + 44 + h)
     c.shadow(mb, 10, blur=14, dy=6, alpha=80)
     c.rrect(mb, 10, fill=(250, 250, 252), outline=(215, 215, 220))
-    items = ["File", "Game", "Options", "Tools", "Debug", "Help"]
-    for i, it in enumerate(items):
-        yy = mb[1] + 10 + i * 30
-        if i == 3:
+    yy = mb[1] + 10
+    for r in rows:
+        if r is None:
+            c.line([(mb[0] + 12, yy + 6), (mb[2] - 12, yy + 6)], SEP)
+            yy += 12
+            continue
+        label, key = r
+        if label == "Fullscreen":
             c.rrect((mb[0] + 6, yy, mb[2] - 6, yy + 26), 6, fill=TINT["play"])
-        col = CARD if i == 3 else TEXT
-        c.text(mb[0] + 18, yy + 13, it, 13.5, 500, col, "lm")
-        c.icon("chev_right", mb[2] - 22, yy + 13, 11, col)
-    yy = mb[1] + 10 + 6 * 30 + 6
-    c.line([(mb[0] + 12, yy), (mb[2] - 12, yy)], SEP)
-    c.icon("check", mb[0] + 20, yy + 22, 11, TEXT)
-    c.text(mb[0] + 34, yy + 22, "Show Classic Menu Bar", 13.5, 500, TEXT, "lm")
-    c.text(mb[0] + 18, yy + 50, "Debugger, Lua, HD Pack Builder, netplay…", 11.5, 400, TEXT2, "lm")
-    c.caption("W-S2", "Classic tools menu (⋯) — unchanged contents")
+        col = CARD if label == "Fullscreen" else (TEXT3 if key == "-" else TEXT)
+        c.text(mb[0] + 18, yy + 13, label, 13.5, 500, col, "lm")
+        if key == ">":
+            c.icon("chev_right", mb[2] - 22, yy + 13, 11, col)
+        elif key and key != "-":
+            c.text(mb[2] - 16, yy + 13, key, 12.5, 400, CARD if col == CARD else TEXT3, "rm")
+        yy += 30
+    c.para(mb[0] + 18, yy + 6, "Disk, coin and tape items appear when the game uses them.", 220, 11.5, 400, TEXT2)
+    c.caption("W-S2", "Play's Tools menu — only what the home and the pause overlay don't hold")
     return c
 
 
@@ -652,25 +664,27 @@ def w_s3():
     play_home_recents(c)
     c.titlebar("play", open_switcher=True)
     x0, y0 = WIN[0], WIN[1]
-    pb = (x0 + 80, y0 + 46, x0 + 440, y0 + 46 + 262)
+    pb = (x0 + 80, y0 + 46, x0 + 440, y0 + 46 + 326)
     c.shadow(pb, 14, blur=18, dy=8, alpha=90)
     c.rrect(pb, 14, fill=(252, 252, 253), outline=(215, 215, 220))
     rows = [("play", "Play", "Open a game and play it, enhanced."),
             ("remaster", "Remaster", "Record a game, paint its art, see it in game."),
-            ("share", "Share", "Send a pack or a replay to the community.")]
+            ("share", "Share", "Send a pack or a replay to the community."),
+            ("classic", "Classic", "Every menu, debugger, Lua, HD Pack Builder.")]
+    tint = dict(TINT, classic=(142, 142, 147))
     for i, (p, n, d) in enumerate(rows):
         yy = pb[1] + 12 + i * 64
         if i == 0:
             c.rrect((pb[0] + 8, yy, pb[2] - 8, yy + 58), 10, fill=(235, 243, 255))
-        c.badge({"play": "play", "remaster": "brush", "share": "box"}[p], pb[0] + 20, yy + 13, 32, TINT[p])
+        c.badge({"play": "play", "remaster": "brush", "share": "box", "classic": "gear"}[p], pb[0] + 20, yy + 13, 32, tint[p])
         c.text(pb[0] + 64, yy + 21, n, 14.5, 650)
         c.text(pb[0] + 64, yy + 40, d, 12, 400, TEXT2)
         c.text(pb[2] - 46, yy + 29, f"⌘{i + 1}", 12.5, 500, TEXT3, "rm")
         if i == 0:
             c.icon("check", pb[2] - 26, yy + 29, 14, TINT["play"])
     c.line([(pb[0] + 16, pb[3] - 54), (pb[2] - 16, pb[3] - 54)], SEP)
-    c.para(pb[0] + 20, pb[3] - 40, "Switching keeps your game running. Only the chosen profile is shown.", 320, 12, 400, TEXT2)
-    c.caption("W-S3", "Profile switcher — the other profiles live only here", 3)
+    c.para(pb[0] + 20, pb[3] - 40, "Switching keeps your game running. Only the chosen door is shown.", 320, 12, 400, TEXT2)
+    c.caption("W-S3", "Door switcher — Play is the default; Classic is the original GUI", 4)
     return c
 
 
@@ -703,10 +717,12 @@ def w_p3():
     gx = (x0 + x1) / 2 - gw / 2
     c.scene((gx, y0 + 1, gx + gw, y1 - 1), 0)
     c.lights()
-    tb = (x1 - 330, y1 - 80, x1 - 30, y1 - 36)
+    # ADR-0251: during the first three game starts the toast ends with the
+    # way into W-P4 (the binding of the device that started the game).
+    tb = (x1 - 450, y1 - 80, x1 - 30, y1 - 36)
     c.hud(tb, 12)
     c.icon("check", tb[0] + 22, tb[1] + 22, 14, (52, 199, 89))
-    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures", 13.5, 600, CARD, "lm")
+    c.text(tb[0] + 40, tb[1] + 22, "Applied Contra 80s — textures · Esc for the menu", 13.5, 600, CARD, "lm")
     c.caption("W-P3", "Play — in game, no chrome; one toast for the pack", 0)
     return c
 
@@ -731,7 +747,7 @@ def pause_panel(c):
     c.rrect(g2, 12, fill=CARD, outline=(232, 232, 236))
     c.row(g2[0], g2[2], g2[1], 50, "Save States", "Slot 1 · 2 min ago", icon="film", tint=(88, 86, 214))
     c.row(g2[0], g2[2], g2[1] + 50, 50, "Pack", "Contra 80s 1.2", icon="box", tint=TINT["share"])
-    c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "5 on", icon="sparkle", tint=ORANGE)
+    c.row(g2[0], g2[2], g2[1] + 100, 50, "Enhancements", "4 on", icon="sparkle", tint=ORANGE)
     c.row(g2[0], g2[2], g2[1] + 150, 50, "Cheats", "2 on", icon="sparkle", tint=(255, 45, 85))
     c.row(g2[0], g2[2], g2[1] + 200, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
     c.button((px0 + px1) / 2, py0 + 434, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
@@ -782,33 +798,37 @@ def w_p5():
 def w_p6():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
-    b = c.sheet(500, 420)
+    b = c.sheet(500, 554)
     x0, y0, x1, y1 = b
     c.badge("box", x0 + 24, y0 + 24, 48, TINT["share"])
     c.text(x0 + 86, y0 + 40, "Contra 80s", 19, 700, TEXT, "lm")
     c.text(x0 + 86, y0 + 62, "by Tastic · version 1.2 · CC BY-NC 4.0", 12.5, 400, TEXT2, "lm")
-    xx = x0 + 24
-    for lab, ok in (("Textures", True), ("Audio", True), ("Patch", False)):
-        w = c.tw(lab, 12, 600) + (34 if ok else 22)
-        c.rrect((xx, y0 + 92, xx + w, y0 + 116), 12, fill=(226, 245, 231) if ok else FILL)
-        if ok:
-            c.icon("check", xx + 13, y0 + 104, 10, (36, 138, 61))
-        c.text(xx + (24 if ok else 11), y0 + 104, lab, 12, 600, (36, 138, 61) if ok else TEXT2, "lm")
-        xx += w + 8
-    wb = (x0 + 24, y0 + 134, x1 - 24, y0 + 194)
+    # The pack's layers, one switch each, for this game only (a layer the pack
+    # lacks is a grey switch with "Not in this pack" under its name).
+    g = (x0 + 24, y0 + 88, x1 - 24, y0 + 88 + 3 * 46)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    for i, n in enumerate(("Textures", "Music", "ROM Patch")):
+        yy = g[1] + i * 46
+        c.text(g[0] + 16, yy + 23, n, 13.5, 500, TEXT, "lm")
+        c.toggle(g[2] - 54, yy + 12, True, True)
+        if i < 2:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.text(x0 + 26, g[3] + 16, "The switches apply to this game only.", 12.5, 400, TEXT2, "lm")
+    d = 134
+    wb = (x0 + 24, y0 + 134 + d, x1 - 24, y0 + 194 + d)
     c.rrect(wb, 10, fill=(255, 244, 225))
     c.icon("warn", wb[0] + 22, wb[1] + 22, 15, ORANGE)
     c.text(wb[0] + 40, wb[1] + 22, "Some music is missing", 13.5, 650, (150, 85, 0), "lm")
     c.text(wb[0] + 40, wb[1] + 42, "3 of 17 tracks have no audio file. Add the .ogg files to the pack.", 12.5, 400, (150, 85, 0), "lm")
-    c.button(x0 + 24, y0 + 214, "Change Pack…", "secondary", h=30)
-    c.button(x0 + 150, y0 + 214, "Show Pack in Finder", "secondary", h=30, icon="folder")
-    c.button(x0 + 24, y0 + 256, "Restore Original Files…", "destructive", h=30)
-    c.line([(x0 + 24, y0 + 306), (x1 - 24, y0 + 306)], SEP)
-    c.text(x0 + 24, y0 + 330, "Details", 13.5, 500, TEXT, "lm")
-    c.icon("chev_right", x0 + 82, y0 + 331, 11, TEXT3)
-    c.text(x1 - 24, y0 + 330, "ids and hashes", 12.5, 400, TEXT3, "rm")
+    c.button(x0 + 24, y0 + 214 + d, "Change Pack…", "secondary", h=30)
+    c.button(x0 + 150, y0 + 214 + d, "Show Pack in Finder", "secondary", h=30, icon="folder")
+    c.button(x0 + 24, y0 + 256 + d, "Restore Original Files…", "destructive", h=30)
+    c.line([(x0 + 24, y0 + 306 + d), (x1 - 24, y0 + 306 + d)], SEP)
+    c.text(x0 + 24, y0 + 330 + d, "Details", 13.5, 500, TEXT, "lm")
+    c.icon("chev_right", x0 + 82, y0 + 331 + d, 11, TEXT3)
+    c.text(x1 - 24, y0 + 330 + d, "ids and hashes", 12.5, 400, TEXT3, "rm")
     c.button(x1 - 24, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
-    c.caption("W-P6", "Play — current pack details", 5)
+    c.caption("W-P6", "Play — current pack details (layer switches: this game only)", 5)
     return c
 
 
@@ -819,17 +839,20 @@ def w_p7():
     x0, y0, x1, y1 = b
     g = (x0 + 20, y0 + 56, x1 - 20, y0 + 56 + 5 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
-    items = [("Textures", "Applies on reload", True, True), ("Audio", "Applies on reload", True, True),
-             ("Border", "Applies on reload", True, True), ("Widescreen", None, False, True),
-             ("Overclock", "Not available on SMS", False, False)]
+    # One place per switch (ADR-0250 amendment): the pack's Textures/Music are
+    # W-P6's, per game; the last row opens W-P6 (or W-P5 with 2+ packs).
+    items = [("Modern instruments", None, True, True), ("Border", "Applies on reload", True, True),
+             ("Widescreen", None, False, True), ("Overclock", "Not available on SMS", False, False)]
     for i, (n, sub, on, en) in enumerate(items):
         yy = g[1] + i * 46
         c.text(g[0] + 16, yy + (17 if sub else 23), n, 13.5, 500, TEXT if en else TEXT3, "lm")
         if sub:
             c.text(g[0] + 16, yy + 33, sub, 11.5, 400, TEXT2 if en else TEXT3, "lm")
         c.toggle(g[2] - 54, yy + 12, on, en)
-        if i < 4:
-            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+        c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    yy = g[1] + 4 * 46
+    c.text(g[0] + 16, yy + 23, "Pack: Contra 80s", 13.5, 500, TEXT, "lm")
+    c.icon("chev_right", g[2] - 22, yy + 23, 12, TEXT3)
     c.text(x0 + 22, g[3] + 26, "How the picture looks: Settings › Look", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Apply & Reload", "primary", TINT["play"], anchor="r", h=32)
     c.caption("W-P7", "Play — enhancements (the picture's look moved to Settings › Look)", 6)
@@ -865,6 +888,54 @@ def w_p8():
     c.text(x0 + 22, g[3] + 26, "Everything else: Tools ••• › Options", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
     c.caption("W-P8", "Play — settings › Display (the window, not the pixels)", 5)
+    return c
+
+
+def slider(c, x, y, w, frac):
+    c.rrect((x, y - 2, x + w, y + 2), 2, fill=(205, 205, 210))
+    c.rrect((x, y - 2, x + w * frac, y + 2), 2, fill=TINT["play"])
+    c.circle(x + w * frac, y, 8, fill=(255, 255, 255), outline=(200, 200, 205))
+
+
+def essentials_sheet(c, tab, rows):
+    """W-P8's Audio and Controls: Display's pattern - three rows in one inset
+    list, "More in Options…" where Display has its hint (it expands to that tab's
+    classic page, as Look's Pixels item does), then Done."""
+    b = settings_sheet(c, tab, 340)
+    x0, y0, x1, y1 = b
+    g = (x0 + 20, y0 + 96, x1 - 20, y0 + 96 + 3 * 46)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    for i, (name, kind, value) in enumerate(rows):
+        yy = g[1] + i * 46
+        c.text(g[0] + 16, yy + 23, name, 13.5, 500, TEXT, "lm")
+        if kind == "switch":
+            c.toggle(g[2] - 54, yy + 12, True)
+        elif kind == "slider":
+            slider(c, g[2] - 190, yy + 23, 150, value[0])
+            c.text(g[2] - 16, yy + 23, value[1], 13.5, 400, TEXT, "rm")
+        elif kind == "popup":
+            c.popup(g[2] - 216, yy + 11, 200, value)
+        else:
+            c.text(g[2] - 16, yy + 23, value, 13.5, 400, TEXT2, "rm")
+        if i < 2:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.text(x0 + 22, g[3] + 26, "More in Options…", 12.5, 500, TINT_TEXT["play"], "lm")
+    c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
+
+
+def w_p8b():
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    essentials_sheet(c, 2, [("Sound", "switch", None), ("Volume", "slider", (1.0, "100")), ("Output device", "popup", "Speakers")])
+    c.caption("W-P8b", "Play — settings › Audio (equalizer, latency… stay in Options)", 5)
+    return c
+
+
+def w_p8c():
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    essentials_sheet(c, 3, [("Controllers", "text", "2 controllers connected"), ("Rumble", "slider", (0.5, "5")), ("Stick deadzone", "slider", (0.5, "2"))])
+    c.caption("W-P8c", "Play — settings › Controls (button mapping stays in Options)", 5)
     return c
 
 
@@ -949,7 +1020,7 @@ def remaster_start(c, banner=False):
         bb = (x0 + 40, y0 + 20, x1 - 40, y0 + 76)
         c.rrect(bb, 12, fill=(255, 244, 225))
         c.icon("warn", bb[0] + 24, bb[1] + 28, 16, ORANGE)
-        c.text(bb[0] + 44, bb[1] + 19, "Painting needs Python 3, which MesenAI could not find.", 13.5, 650, (150, 85, 0), "lm")
+        c.text(bb[0] + 44, bb[1] + 19, "Painting needs Python 3.10 or newer, which MesenAI could not find.", 13.5, 650, (150, 85, 0), "lm")
         c.text(bb[0] + 44, bb[1] + 38, "You can still record. Your figures are prepared once Python is available.", 12.5, 400, (150, 85, 0), "lm")
         c.button(bb[2] - 16, bb[1] + 14, "How to Install", "plain", (150, 85, 0), anchor="r")
         c.button(bb[2] - 130, bb[1] + 14, "Locate Python…", "secondary", anchor="r")
@@ -1142,10 +1213,10 @@ def w_p16():
     ib = (x0 + 24, y0 + 146, x1 - 24, y0 + 196)
     c.rrect(ib, 10, fill=(248, 248, 250), outline=(232, 232, 236))
     c.text(ib[0] + 14, ib[1] + 17, "Arcade soundtrack (MP3 set, 23 files)", 13.5, 600, TEXT, "lm")
-    c.text(ib[0] + 14, ib[1] + 36, "Licence: not declared", 12, 400, TEXT2, "lm")
-    drop_zone(c, (x0 + 24, y0 + 210, x1 - 24, y0 + 310), "Drop the file here", "It is copied into the pack's download folder")
-    c.button(x1 - 24, y1 - 52, "Choose File…", "primary", TINT["play"], anchor="r", h=32)
-    c.button(x1 - 148, y1 - 52, "Play Without It", "secondary", anchor="r", h=32)
+    c.text(ib[0] + 14, ib[1] + 36, "License: not declared", 12, 400, TEXT2, "lm")
+    drop_zone(c, (x0 + 24, y0 + 210, x1 - 24, y0 + 310), "Drop the file here", "It is checked, then the game restarts with it.")
+    c.button(x1 - 24, y1 - 52, "Add and Restart…", "primary", TINT["play"], anchor="r", h=32)
+    c.button(x1 - 190, y1 - 52, "Play Without It", "secondary", anchor="r", h=32)
     c.button(x0 + 24, y1 - 52, "Show Folder", "plain", TINT["play"], h=32, icon="folder")
     c.caption("W-P16", "Play — a pack waits for a file only you can add", 4)
     return c
@@ -1516,7 +1587,7 @@ def w_x3():
 SCREENS = [
     ("W-S1", w_s1), ("W-S2", w_s2), ("W-S3", w_s3),
     ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
-    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
+    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P8b", w_p8b), ("W-P8c", w_p8c), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
     ("W-P12", w_p12), ("W-P13", w_p13), ("W-P14", w_p14), ("W-P15", w_p15), ("W-P16", w_p16),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),
     ("W-R5", w_r5), ("W-R6", w_r6), ("W-R7", w_r7), ("W-R8", w_r8),

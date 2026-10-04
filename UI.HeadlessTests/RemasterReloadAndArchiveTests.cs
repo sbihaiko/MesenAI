@@ -31,8 +31,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 {
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
-	private readonly bool _showClassicMenuBar = ConfigManager.Config.Preferences.ShowClassicMenuBar;
-	private readonly bool _noticeShown = ConfigManager.Config.Preferences.ClassicMenuNoticeShown;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly bool _confirmExit = ConfigManager.Config.Preferences.ConfirmExitResetPower;
@@ -45,8 +43,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
-		prefs.ShowClassicMenuBar = _showClassicMenuBar;
-		prefs.ClassicMenuNoticeShown = _noticeShown;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		prefs.ConfirmExitResetPower = _confirmExit;
@@ -98,8 +94,6 @@ public class RemasterReloadAndArchiveTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
-		prefs.ShowClassicMenuBar = false;
-		prefs.ClassicMenuNoticeShown = true;
 		prefs.PauseWhenInBackground = false;
 		prefs.PauseWhenInMenusAndConfig = false;
 		prefs.ConfirmExitResetPower = false;
@@ -156,7 +150,10 @@ public class RemasterReloadAndArchiveTests : IDisposable
 			Load(model, rom);
 			model.SelectWorkspace(Workspace.Remaster);
 			Dispatcher.UIThread.RunJobs();
-			Assert.True(model.Remaster.StartRecording());
+			//The core starts the recording off the UI thread.
+			System.Threading.Tasks.Task<bool> started = model.Remaster.StartRecording();
+			WaitFor(() => started.IsCompleted, "the recording never started");
+			Assert.True(started.Result);
 			string recording = EmuApi.GetMepRecordingFolder();
 
 			Action[] reloads = {
@@ -168,7 +165,7 @@ public class RemasterReloadAndArchiveTests : IDisposable
 				reload();
 				Dispatcher.UIThread.RunJobs();
 				Assert.True(model.Interruption.IsVisible, "a reload ended the recording without asking");
-				Assert.Equal("■ Reload synthetic-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
+				Assert.Equal("Reload synthetic-nrom? This recording stops and is kept as recording 1.", window.FindNamed<TextBlock>("InterruptionText").Text);
 				Assert.Equal("Stop and Reload", window.FindNamed<Button>("InterruptionGoButton").Content);
 				Thread.Sleep(300);
 				Dispatcher.UIThread.RunJobs();
@@ -183,10 +180,52 @@ public class RemasterReloadAndArchiveTests : IDisposable
 			LoadRomHelper.ReloadRom();
 			Dispatcher.UIThread.RunJobs();
 			Click(window.FindNamed<Button>("InterruptionGoButton"));
-			Assert.False(model.Remaster.IsRecording);
+			WaitFor(() => !model.Remaster.IsRecording, "the recording never stopped");
 			Assert.Contains("\"id\": \"rec-001\"", File.ReadAllText(Path.Combine(folder, "synthetic-nrom", "project.json")));
 			WaitFor(() => loads.Loads > 0, "the game never reloaded");
 			WaitFor(() => !model.Remaster.Job.IsRunning, "the kit job never finished", 180000);
+		} finally {
+			if(EmuApi.IsMepBootstrapping()) {
+				EmuApi.StopMepRecording();
+			}
+			if(CheatCodes.RecordingArt) {
+				CheatCodes.SetRecordingArt(false);
+			}
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//Record starts off the UI thread (every wait moves); a reload asked for
+	//while the core is still starting must not reload under it. It waits for
+	//the start, then asks as for any recording.
+	[AvaloniaFact]
+	public void A_reload_during_the_recordings_start_waits_and_then_asks()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		string folder = TempFolder();
+		string rom = Path.Combine(folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		try {
+			Load(model, rom);
+			model.SelectWorkspace(Workspace.Remaster);
+			Dispatcher.UIThread.RunJobs();
+			System.Threading.Tasks.Task<bool> started = model.Remaster.StartRecording();
+			Assert.Equal(RecordingTransition.Starting, model.Remaster.Transition);
+
+			using LoadCounter loads = new();
+			LoadRomHelper.ReloadRom();
+			Assert.False(model.Interruption.IsVisible, "it asked before the recording existed");
+			Assert.Equal(0, loads.Loads);
+
+			WaitFor(() => started.IsCompleted, "the recording never started");
+			Assert.True(started.Result);
+			WaitFor(() => model.Interruption.IsVisible, "the reload never asked once the recording started");
+			Assert.Equal(0, loads.Loads);
+			Assert.True(EmuApi.IsMepBootstrapping());
+			Click(window.FindNamed<Button>("InterruptionKeepButton"));
+			Assert.True(model.Remaster.IsRecording);
 		} finally {
 			if(EmuApi.IsMepBootstrapping()) {
 				EmuApi.StopMepRecording();

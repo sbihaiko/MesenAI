@@ -1,6 +1,9 @@
 #pragma once
 #include "pch.h"
 #include "NES/NesConstants.h"
+//ADR-0253 (slice W.4): HdScreenInfo carries the widescreen Reveal's extra
+//columns, so the HD renderer knows how wide the picture it draws really is.
+#include "NES/NesWidescreenReveal.h"
 //ADR-0236 (F14.11): HdBackgroundInfo carries a capture's per-cell key record,
 //and HdCellKeyOf below is the one bridge between the run time's tile struct and
 //the guard's own key. The two are split that way so HdCaptureCellGuard.h stays
@@ -173,11 +176,53 @@ struct HdPpuPixelInfo
 	uint8_t SpriteCount = 0;
 };
 
+//ADR-0253 (slice W.4): one extra tile (8 px) of one row of the widescreen
+//Reveal's side columns, captured by HdNesPpu from the row's own scroll state.
+//`Tile` is what the pack lookup reads (the key) and what DrawTile needs (the
+//offsets); the two per-pixel arrays are the ROM's own colour for the eight
+//pixels of the tile, so a tile the pack has no `<tile>` rule for still shows
+//the NES colour, exactly as a centred tile does.
+struct HdSideTile
+{
+	HdPpuTileInfo Tile = {};
+	//The row's loopy x, as HdPpuPixelInfo::XScroll carries it for a centred
+	//pixel. The line's scroll the renderer derives the sides from is the
+	//centre's own (ScreenTiles[row << 8]'s), so no loopy v is kept here.
+	uint8_t XScroll = 0;
+	uint8_t BgColorIndex[8] = {};
+	uint8_t BgColor[8] = {};
+	//false: ADR-0253 §3's black fallback for this column - the renderer draws
+	//black and never asks the pack for a replacement.
+	bool HasContent = false;
+};
+
+//The Reveal's N = 64 extra columns are whole 8-px tiles (ADR-0253 §2), and the
+//side starts at the row's own fine X *inside* a tile, so a fine X other than 0
+//makes it reach one tile further: 9 per side, one row of
+//HdScreenInfo::SideTiles is [left 9][right 9]. Must track
+//HdWidescreenColumns::TilesPerSide/TilesPerRow (this header cannot include it:
+//the dependency runs the other way).
+static constexpr uint32_t HdSideTilesPerSide = NesWidescreenReveal::ExtraColumns / 8 + 1;
+static constexpr uint32_t HdSideTilesPerRow = HdSideTilesPerSide * 2;
+
 struct HdScreenInfo
 {
 	HdPpuPixelInfo* ScreenTiles;
 	unordered_map<uint32_t, uint8_t> WatchedAddressValues;
 	uint32_t FrameNumber = 0;
+	//ADR-0253 (slice W.4): [row][side][tile], written by HdNesPpu while the row
+	//renders and read by HdNesPack when it draws the extended frame. Allocated
+	//on the first frame that is actually extended, so a pack shown without
+	//widescreen pays nothing for it.
+	HdSideTile* SideTiles = nullptr;
+
+	HdSideTile* EnsureSideTiles()
+	{
+		if(SideTiles == nullptr) {
+			SideTiles = new HdSideTile[(size_t)NesWidescreenReveal::Height * HdSideTilesPerRow];
+		}
+		return SideTiles;
+	}
 
 	HdScreenInfo(const HdScreenInfo& that) = delete;
 
@@ -200,6 +245,7 @@ struct HdScreenInfo
 	~HdScreenInfo()
 	{
 		delete[] ScreenTiles;
+		delete[] SideTiles;
 	}
 };
 

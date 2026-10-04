@@ -123,6 +123,19 @@ namespace Mesen.Interop
 		[DllImport(DllPath, EntryPoint = "GetMepRomSha1")] private static extern void GetMepRomSha1Wrapper(IntPtr outSha1, Int32 maxLength);
 		public static string GetMepRomSha1() { return Utf8Utilities.CallStringApi(GetMepRomSha1Wrapper, 100); }
 
+		//ADR-0253 §4 (W.5): the running game's widescreen support measurement.
+		//0 Undecided (still measuring, or a non-NES console), 1 Supported,
+		//2 Unsupported. The UI keeps the per-ROM record and the host-free rule
+		//(WidescreenSupportRule) turns it into the switch's state.
+		[DllImport(DllPath)] public static extern byte GetWidescreenSupportVerdict();
+
+		//ADR-0253 §3 (W.3) x §4 (W.5): whether the pack loaded for the running
+		//ROM ships the `widescreen` section. That art is a widescreen mode of its
+		//own, so it overrules a measured "unsupported" - both in the core, which
+		//then widens the frame for the art, and here, where the switch stays
+		//enabled for the game (WidescreenSupportRule.SwitchForLoadedGame).
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool HasWidescreenPackArt();
+
 		//ADR-0211: whole-file SHA-1 (header included) - what an HD pack's
 		//<supportedRom> declares. Not interchangeable with GetMepRomSha1()
 		//above, which is the No-Intro body hash (ADR-0003).
@@ -134,8 +147,12 @@ namespace Mesen.Interop
 		//(ADR-0140 id or "local:<container>"); the core prefers it per loaded ROM.
 		[DllImport(DllPath)] public static extern void SetPreferredMepPack([MarshalAs(UnmanagedType.LPUTF8Str)] string romSha1, [MarshalAs(UnmanagedType.LPUTF8Str)] string packId);
 
-		//P.3: drops every per-ROM preference (config-apply resets then re-pushes,
-		//so a removed choice is never left stale in the core).
+		//W-P6: the layers ("textures,audio,patch") turned off for one ROM; ""
+		//turns them all back on. Applies on the next load of that ROM.
+		[DllImport(DllPath)] public static extern void SetMepRomLayersOff([MarshalAs(UnmanagedType.LPUTF8Str)] string romSha1, [MarshalAs(UnmanagedType.LPUTF8Str)] string layers);
+
+		//P.3: drops every per-ROM preference and W-P6 layer switch (config-apply
+		//resets then re-pushes, so a removed choice is never left stale in the core).
 		[DllImport(DllPath)] public static extern void ClearPreferredMepPacks();
 
 		//F6.4b - client-side MEP-recipe-v1 auto-install (ADR-0138 clarifications 4/37/38);
@@ -204,6 +221,17 @@ namespace Mesen.Interop
 		//it off the UI thread. Returns a Mesen.Logic.InPlaceReloadResult value;
 		//LoadRomHelper.ApplyPackChange decides when to call it at all.
 		[DllImport(DllPath)] public static extern byte ReloadRomKeepingState();
+
+		//#732: the pack ROM patch the ApplyPatchOnHashMismatch override forced on
+		//the running game (made for another revision of it), empty when the load
+		//forced none. Read after GameLoaded (PlayForcedPatch decides the banner).
+		[DllImport(DllPath, EntryPoint = "GetForcedPackPatch")] private static extern void GetForcedPackPatchWrapper(IntPtr outPath, Int32 maxLength);
+		public static string GetForcedPackPatch() { return Utf8Utilities.CallStringApi(GetForcedPackPatchWrapper, 4096); }
+
+		//#732: play the running ROM without its forced patch until the app quits,
+		//leaving the setting as it is. False when the running game had none. The
+		//caller power-cycles the game for it to take effect.
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SuppressForcedPackPatch();
 
 		[DllImport(DllPath)] public static extern void WriteLogEntry([MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 		[DllImport(DllPath)] public static extern void DisplayMessage([MarshalAs(UnmanagedType.LPUTF8Str)] string title, [MarshalAs(UnmanagedType.LPUTF8Str)] string message, [MarshalAs(UnmanagedType.LPUTF8Str)] string? param1 = null);

@@ -41,6 +41,12 @@ public partial class EnhancementPackConfig : BaseConfig<EnhancementPackConfig>
 	//value is never stored - removing the choice deletes the key.
 	public Dictionary<string, string> RomPackPreference { get; set; } = new();
 
+	//W-P6: per-ROM-sha1 layers the player turned off for that game only
+	//("textures", "audio", "patch" - PackLayerSwitches), keyed like
+	//RomPackPreference. The core skips them on that ROM's next load
+	//(MepPackManager::SetRomLayersOff); a ROM with every layer on has no key.
+	public Dictionary<string, List<string>> RomLayersOff { get; set; } = new();
+
 	public void ApplyConfig()
 	{
 		ConfigApi.SetEnhancementPackConfig(new InteropEnhancementPackConfig() {
@@ -65,6 +71,9 @@ public partial class EnhancementPackConfig : BaseConfig<EnhancementPackConfig>
 		foreach(KeyValuePair<string, string> entry in RomPackPreference) {
 			EmuApi.SetPreferredMepPack(entry.Key, entry.Value);
 		}
+		foreach(KeyValuePair<string, List<string>> entry in RomLayersOff) {
+			EmuApi.SetMepRomLayersOff(entry.Key, PackLayerSwitches.ToCoreList(entry.Value));
+		}
 	}
 
 	public void SetPackEnabled(string container, bool enabled)
@@ -76,6 +85,16 @@ public partial class EnhancementPackConfig : BaseConfig<EnhancementPackConfig>
 	public string? GetRomPackPreference(string romSha1)
 	{
 		return RomPackPreference.TryGetValue(romSha1, out string? packId) ? packId : null;
+	}
+
+	public bool IsRomLayerOn(string romSha1, PackLayer layer)
+	{
+		return PackLayerSwitches.IsOn(RomLayersOff.TryGetValue(romSha1, out List<string>? off) ? off : null, layer);
+	}
+
+	public void SetRomLayerOn(string romSha1, PackLayer layer, bool on)
+	{
+		PackLayerSwitches.Set(RomLayersOff, romSha1, layer, on);
 	}
 
 	public void SetRomPackPreference(string romSha1, string packId)

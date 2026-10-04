@@ -3,6 +3,8 @@
 #include "Shared/EmuSettings.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/Video/AspectRatioMath.h"
+#include "Shared/Video/VideoDecoder.h"
+#include "SMS/SmsWidescreenReveal.h"
 #include "Shared/KeyManager.h"
 #include "Shared/MessageManager.h"
 #include "Shared/Emulator.h"
@@ -507,7 +509,15 @@ OverscanDimensions EmuSettings::GetOverscan()
 		case ConsoleType::PcEngine: return _pce.Overscan;
 		case ConsoleType::Sms:
 			if(romFormat == RomFormat::GameGear) {
-				return _sms.GameGearOverscan;
+				//ADR-0253 slice W.2: the Reveal is the Game Gear's own
+				//horizontal crop being dropped (SmsWidescreenReveal.h) - the
+				//same rule, from the same inputs, that makes SmsVdp report those
+				//columns as the frame's extended ones, so the crop can never
+				//come back over a picture it was already dropped from. That
+				//includes the centre the decoder keeps for a filter or the
+				//border layer that cannot take the wide frame: it IS this crop's
+				//output, and cropping it again would read past the end of the row.
+				return SmsWidescreenReveal::GameGearOverscan(_sms.GameGearOverscan, _video.AspectRatio);
 			} else {
 				return _emu->GetRegion() == ConsoleRegion::Ntsc ? _sms.NtscOverscan : _sms.PalOverscan;
 			}
@@ -550,7 +560,10 @@ double EmuSettings::GetAspectRatio(ConsoleRegion region, FrameInfo baseFrameSize
 	in.BaseHeight = baseFrameSize.Height;
 	in.Region = region;
 	in.CustomRatio = _video.CustomAspectRatio;
-	if(in.Setting == VideoAspectRatio::Auto) {
+	//ADR-0253: a widescreen Reveal frame is shown at its own width and the
+	//console's pixel aspect, which needs the same console inputs as Auto
+	in.ExtendedFrame = in.Setting == VideoAspectRatio::Widescreen && _emu->GetVideoDecoder() && _emu->GetVideoDecoder()->IsFrameExtended();
+	if(in.Setting == VideoAspectRatio::Auto || in.ExtendedFrame) {
 		//Only Auto looks at the console/ROM, and GetRomInfo() is not free -
 		//keep the query on the path that needs it, as before the extraction
 		ConsoleType consoleType = _emu->GetConsoleType();

@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "Gameboy/GbTypes.h"
+#include "Gameboy/GbWidescreenReveal.h"
 #include "Utilities/ISerializable.h"
 
 class Emulator;
@@ -86,6 +87,9 @@ private:
 	HdTilePixelInfo* _hdScreenInfoBuffers[2] = {};
 	HdTilePixelInfo* _currentHdScreenInfo = nullptr;
 
+	//ADR-0253 slice W.2: the GB widescreen Reveal's extended frames
+	GbWidescreenReveal::FrameBuffers _reveal;
+
 	//Provenance of the pixels currently in the FIFOs (HD pack replacement)
 	HdLoadedTile* _bgFifoHdTile = nullptr;
 	uint8_t _bgFifoHdRow = 0;
@@ -101,6 +105,9 @@ private:
 
 	__forceinline void WriteBgPixel(uint8_t colorIndex);
 	__forceinline void WriteObjPixel(uint8_t colorIndex);
+
+	bool IsRevealRequested();
+	void DrawRevealRow();
 
 	__forceinline void ProcessPpuCycle();
 
@@ -122,7 +129,6 @@ private:
 	void UpdateStatIrq();
 
 	__forceinline uint8_t LcdReadOam(uint8_t addr);
-	__forceinline uint8_t LcdReadVram(uint16_t addr);
 	__forceinline uint16_t LcdReadBgPalette(uint8_t addr);
 	__forceinline uint16_t LcdReadObjPalette(uint8_t addr);
 
@@ -179,6 +185,10 @@ public:
 	bool IsVramWriteAllowed();
 	uint8_t ReadVram(uint16_t addr);
 	uint8_t PeekVram(uint16_t addr);
+	//The renderer's own VRAM read: the full 14-bit address (bank bit included),
+	//no side effect, and the CGB STOP freeze applied. Public for the widescreen
+	//Reveal (ADR-0253 W.2), which fetches its extra columns with it.
+	__forceinline uint8_t LcdReadVram(uint16_t addr);
 	void WriteVram(uint16_t addr, uint8_t value);
 
 	bool IsOamReadAllowed();

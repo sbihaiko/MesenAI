@@ -13,7 +13,10 @@
 #include "Shared/NotificationManager.h"
 #include "Shared/Interfaces/INotificationListener.h"
 #include "Shared/EnhancementPacks/MepPackManager.h"
+#include "Shared/EnhancementPacks/MepWidescreen.h"
 #include "Shared/Video/FrameCapture.h"
+#include "Shared/Video/WidescreenFallback.h"
+#include "Shared/Video/WidescreenFrameFlow.h"
 #include "Utilities/Video/IVideoRecorder.h"
 #include "Utilities/Video/AviRecorder.h"
 #include "Utilities/Video/GifRecorder.h"
@@ -235,12 +238,18 @@ void VideoRenderer::ResetBorderAsset()
 	_borderPixels.clear();
 	_borderBackdrop.clear();
 	_borderLayout = BorderLayout();
+	_widescreenPackFolder.clear();
+	_widescreenLeft.clear();
+	_widescreenRight.clear();
+	_widescreenLeftSize = {};
+	_widescreenRightSize = {};
 }
 
 //Decode thread only. Runs when _borderDirty is set (game load/unload/stop),
 //so the MepPackManager section lookup and the file I/O happen once per pack
 //change instead of once per frame (ADR-0149 §2 "decoded once at pack load").
-void VideoRenderer::UpdateBorderAsset()
+//The pack's widescreen side art (ADR-0253 §3) is decoded on the same pass.
+void VideoRenderer::UpdatePackArtAssets()
 {
 	if(!_borderDirty.exchange(false, std::memory_order_acq_rel)) {
 		return;
@@ -251,13 +260,27 @@ void VideoRenderer::UpdateBorderAsset()
 	if(borderFolder.empty() && mgr) {
 		borderFolder = mgr->GetSectionAutoPath(MepSectionType::Border);
 	}
-	if(borderFolder == _borderPackFolder && (_borderAvailable || borderFolder.empty())) {
-		//Same pack as before - the cached surface is still the right one
+	string widescreenFolder = mgr ? mgr->GetSectionPath(MepSectionType::Widescreen) : "";
+	if(widescreenFolder.empty() && mgr) {
+		widescreenFolder = mgr->GetSectionAutoPath(MepSectionType::Widescreen);
+	}
+	bool sameBorder = borderFolder == _borderPackFolder && (_borderAvailable || borderFolder.empty());
+	bool sameWidescreen = widescreenFolder == _widescreenPackFolder && (!_widescreenLeft.empty() || !_widescreenRight.empty() || widescreenFolder.empty());
+	if(sameBorder && sameWidescreen) {
+		//Same pack as before - the cached surfaces are still the right ones
 		return;
 	}
 
-	_borderPackFolder = borderFolder;
 	ResetBorderAsset();
+	_borderPackFolder = borderFolder;
+	_widescreenPackFolder = widescreenFolder;
+	//The pack's `<widescreen>` art (ADR-0253 §3, MEP-v1 §5.5): the section
+	//manifest names the images, and each is decoded once. The screen id that
+	//picks a per-screen override belongs to the HD pack path (W.4); until the
+	//default pair covers every frame.
+	if(!widescreenFolder.empty()) {
+		LoadWidescreenArt(widescreenFolder);
+	}
 	if(borderFolder.empty()) {
 		return;
 	}
@@ -328,13 +351,109 @@ void VideoRenderer::UpdateBorderAsset()
 	_borderAvailable = true;
 }
 
+//ADR-0253 §3: decodes the `<widescreen>` section's side art. Sizes are NOT
+//checked here: the frame being drawn decides, and
+//WidescreenFallback::FillSideFromArtForFrame refuses an image that is neither
+//that run nor a whole-number multiple of it (MEP-v1 §5.5's canvas scaled up for
+//an HD frame) - a wrong-sized image falls to the next source in the chain
+//instead of being stretched or tiled across the side.
+void VideoRenderer::LoadWidescreenArt(const string& folder)
+{
+	MepWidescreen art;
+	string text;
+	{
+		ifstream file(FolderUtilities::CombinePath(folder, "widescreen.json"), ios::in | ios::binary);
+		if(!file) {
+			return;
+		}
+		text.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	}
+	string error;
+	if(!MepWidescreen::Parse(text, art, error)) {
+		MessageManager::Log("[MEP] widescreen: " + error + " (" + folder + ")");
+		return;
+	}
+
+	auto loadSide = [&](bool left, vector<uint32_t>& into, FrameInfo& size) {
+		string relative = art.GetSidePath(MepWidescreen::DefaultScreenId, left);
+		if(relative.empty()) {
+			return;
+		}
+		string path = FolderUtilities::CombinePath(folder, relative);
+		ifstream file(path, ios::in | ios::binary);
+		if(!file) {
+			MessageManager::Log("[MEP] widescreen: " + relative + " is missing (" + folder + ")");
+			return;
+		}
+		vector<uint8_t> fileData((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		uint32_t w = 0, h = 0;
+		vector<uint32_t> pixels;
+		if(!PNGHelper::ReadPNG(std::move(fileData), pixels, w, h) || w == 0 || h == 0 || pixels.size() < (size_t)w * h) {
+			MessageManager::Log("[MEP] widescreen: " + relative + " could not be decoded (" + folder + ")");
+			return;
+		}
+		if(w > 8192 || h > 8192 || (uint64_t)w * h > FrameCaptureMath::MaxCapturePixels) {
+			MessageManager::Log("[MEP] widescreen: " + relative + " is " + std::to_string(w) + "x" + std::to_string(h) + " - too large, skipped");
+			return;
+		}
+		into = std::move(pixels);
+		size = { w, h };
+	};
+	loadSide(true, _widescreenLeft, _widescreenLeftSize);
+	loadSide(false, _widescreenRight, _widescreenRightSize);
+	if(!_widescreenLeft.empty() || !_widescreenRight.empty()) {
+		MessageManager::Log("[MEP] widescreen: side art loaded from '" + folder + "' (" +
+			std::to_string(_widescreenLeftSize.Width) + "x" + std::to_string(_widescreenLeftSize.Height) + " left, " +
+			std::to_string(_widescreenRightSize.Width) + "x" + std::to_string(_widescreenRightSize.Height) + " right)");
+	}
+}
+
+//ADR-0253 §3, first link of the chain: the pack's `<widescreen>` art. Only the
+//side columns the console's Reveal left unfilled are touched, and every row it
+//draws is marked filled so the border composite below leaves it alone.
+void VideoRenderer::ApplyWidescreenFallback(RenderedFrame& frame)
+{
+	if(frame.ExtendedColumns == 0 || !frame.FrameBuffer || !frame.ExtendedSideFill) {
+		return;
+	}
+	UpdatePackArtAssets();
+	if(_widescreenLeft.empty() && _widescreenRight.empty()) {
+		return;
+	}
+	if(_sideFillScratch.size() < frame.Height) {
+		_sideFillScratch.resize(frame.Height);
+	}
+	memcpy(_sideFillScratch.data(), frame.ExtendedSideFill, frame.Height);
+
+	//The art's canvas is fixed per console (MEP-v1 §5.5) and the frame's side run
+	//is that canvas times the pack's scale on the HD path, so the two are
+	//reconciled here, in the renderer that knows the frame it is drawing on. A
+	//frame already at the art's own size - every non-HD frame - is copied as it
+	//is, and one the art does not divide evenly is refused exactly as before.
+	uint32_t* pixels = (uint32_t*)frame.FrameBuffer;
+	if(!_widescreenLeft.empty()) {
+		WidescreenFallback::FillSideFromArtForFrame(pixels, frame.Width, frame.Height, frame.ExtendedColumns, true,
+			_widescreenLeft.data(), _widescreenLeftSize.Width, _widescreenLeftSize.Height, _sideFillScratch.data(), _widescreenScaled);
+	}
+	if(!_widescreenRight.empty()) {
+		WidescreenFallback::FillSideFromArtForFrame(pixels, frame.Width, frame.Height, frame.ExtendedColumns, false,
+			_widescreenRight.data(), _widescreenRightSize.Width, _widescreenRightSize.Height, _sideFillScratch.data(), _widescreenScaled);
+	}
+	frame.ExtendedSideFill = _sideFillScratch.data();
+}
+
+bool VideoRenderer::IsBorderComposited()
+{
+	return _emu->GetSettings()->GetEnhancementPackConfig().EnableBorder && _borderAvailable;
+}
+
 RenderedFrame* VideoRenderer::CompositeBorder(RenderedFrame& inFrame)
 {
 	if(!_emu->GetSettings()->GetEnhancementPackConfig().EnableBorder) {
 		return &inFrame;
 	}
 
-	UpdateBorderAsset();
+	UpdatePackArtAssets();
 	if(!_borderAvailable || _borderLayout.CanvasWidth == 0 || _borderLayout.CanvasHeight == 0 || _borderPixels.empty() || !inFrame.FrameBuffer) {
 		return &inFrame;
 	}
@@ -345,12 +464,26 @@ RenderedFrame* VideoRenderer::CompositeBorder(RenderedFrame& inFrame)
 	}
 
 	uint32_t* dst = _compositeBuffer.data();
-	BorderCompositePrepared(dst, _borderBackdrop.data(), _borderPixels.data(), _borderLayout, (const uint32_t*)inFrame.FrameBuffer, inFrame.Width, inFrame.Height, _borderSxLut);
+	if(inFrame.ExtendedColumns > 0 && inFrame.ExtendedSideFill) {
+		//ADR-0253 W.3: the sides the game/art did not fill keep the border art,
+		//so the border is the chain's second link rather than a reason to drop
+		//the extended frame back to its centre.
+		BorderCompositeExtendedFrame(dst, _borderBackdrop.data(), _borderPixels.data(), _borderLayout, (const uint32_t*)inFrame.FrameBuffer,
+			inFrame.Width, inFrame.Height, inFrame.ExtendedColumns, inFrame.ExtendedSideFill);
+	} else {
+		BorderCompositePrepared(dst, _borderBackdrop.data(), _borderPixels.data(), _borderLayout, (const uint32_t*)inFrame.FrameBuffer, inFrame.Width, inFrame.Height, _borderSxLut);
+	}
 
 	_compositedFrame = inFrame;
 	_compositedFrame.FrameBuffer = (void*)dst;
 	_compositedFrame.Width = _borderLayout.CanvasWidth;
 	_compositedFrame.Height = _borderLayout.CanvasHeight;
+	//The canvas is a finished picture, not an extended frame: its sides are
+	//already composited in, so a reader that keyed on the extra columns would
+	//compute a standard centre out of the border's own width. The decoder's
+	//own frame keeps them - that is what the aspect ratio reads
+	//(EmuSettings::GetAspectRatio's ExtendedFrame) - so only this copy drops them.
+	_compositedFrame.ClearExtension();
 	return &_compositedFrame;
 }
 
@@ -363,7 +496,14 @@ void VideoRenderer::UpdateFrame(RenderedFrame& frame)
 
 	ProcessAviRecording(frame);
 
-	RenderedFrame* effectiveFrame = CompositeBorder(frame);
+	//ADR-0253 §3: the chain is the pack's widescreen art (the first link after
+	//Reveal) and then the border composite, which fills whatever the art left
+	//empty. The order, and why inverting it would lose the art, is
+	//WidescreenFallback::ApplyChain's contract - the unit tests pin it there.
+	RenderedFrame* effectiveFrame = WidescreenFallback::ApplyChain(
+		frame.ExtendedColumns > 0 && frame.FrameBuffer != nullptr && frame.ExtendedSideFill != nullptr,
+		[&]() { ApplyWidescreenFallback(frame); },
+		[&]() { return CompositeBorder(frame); });
 
 	{
 		auto lock = _frameLock.AcquireSafe();
@@ -434,7 +574,13 @@ void VideoRenderer::ProcessAviRecording(RenderedFrame& frame)
 			//Calculate the scale needed for the HUD elements
 			FrameInfo originalSize = _emu->GetVideoDecoder()->GetBaseFrameInfo(true);
 			double scale = (double)frame.Height / originalSize.Height;
-			FrameInfo scaledFrameSize = { (uint32_t)(frame.Width / scale), (uint32_t)(frame.Height / scale) };
+			//ADR-0253 W.6: the canvas the HUD is laid out on is the frame's own,
+			//so a Reveal recording gets a Reveal-sized one - 448x240 over an
+			//896x480 frame, against the 301x240 a standard 602x480 recording
+			//gets. Laying the Reveal HUD out on the standard canvas is what
+			//would crowd it or clip it.
+			WidescreenFrameFlow::HudCanvas hudCanvas = WidescreenFrameFlow::RecorderHudCanvas(frame.Width, frame.Height, originalSize.Height);
+			FrameInfo scaledFrameSize = { hudCanvas.Width, hudCanvas.Height };
 
 			//Update the surface to match the frame's size
 			_aviRecorderSurface.UpdateSize(frame.Width, frame.Height);

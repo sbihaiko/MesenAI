@@ -54,10 +54,10 @@ public static class PauseOverlay
 	};
 
 	//W-P4's "Differences from today's overlay": Save and Load merged into one
-	//Save states row; Advanced GUI is gone because Tools ⋯ sits in the bar the
-	//overlay reveals (the UiMode choice is in Settings › Preferences there);
-	//Quit no longer closes the app - that is Tools ⋯ › File › Exit (and the OS's
-	//own ⌘Q / Alt+F4), while the row powers the game off.
+	//Save states row; Advanced GUI is gone - since ADR-0250 it is the Classic
+	//door, in the switcher the overlay reveals with the bar; Quit no longer
+	//closes the app - that is the shared tail's Quit MesenAI (the app menu on
+	//macOS, and the OS's own ⌘Q / Alt+F4), while the row powers the game off.
 	public static PauseOverlayDestination WhereNow(FormerOverlayAction action)
 	{
 		return action switch {
@@ -68,18 +68,18 @@ public static class PauseOverlay
 			FormerOverlayAction.Enhancements => new(PauseOverlayControl.Enhancements, ""),
 			FormerOverlayAction.Cheats => new(PauseOverlayControl.Cheats, ""),
 			FormerOverlayAction.Settings => new(PauseOverlayControl.Settings, ""),
-			FormerOverlayAction.AdvancedGui => new(null, "Tools ⋯ › Settings › Preferences"),
-			FormerOverlayAction.QuitApp => new(null, "Tools ⋯ › File › Exit"),
+			FormerOverlayAction.AdvancedGui => new(null, "Switcher › Classic"),
+			FormerOverlayAction.QuitApp => new(null, "Tools ⋯ › Quit MesenAI"),
 			_ => throw new ArgumentOutOfRangeException(nameof(action))
 		};
 	}
 
-	//The Enhancements row's "N on": the §6.1 quick toggles that are on. A toggle
+	//The Enhancements row's "N on": the W-P7 switches that are on. A toggle
 	//the loaded console cannot use (Overclock on SMS) is never counted.
-	public static int EnhancementsOn(bool textures, bool audio, bool border, bool wideScreen, bool overclock, bool overclockSupported)
+	public static int EnhancementsOn(bool modernInstruments, bool border, bool wideScreen, bool overclock, bool overclockSupported)
 	{
 		int count = 0;
-		foreach(bool on in new[] { textures, audio, border, wideScreen, overclock && overclockSupported }) {
+		foreach(bool on in new[] { modernInstruments, border, wideScreen, overclock && overclockSupported }) {
 			if(on) {
 				count++;
 			}
@@ -156,7 +156,9 @@ public enum PlaySheet
 	PackDep,
 	//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet
 	//(W-P4 is at its seven controls, so the list merges into that row).
-	Replays
+	Replays,
+	//ADR-0249 (W-P8, W-P10): Settings, a sheet in the main window.
+	Settings
 }
 
 public enum PlayEscAction
@@ -188,6 +190,7 @@ public static class PlayEsc
 			case PlaySheet.PackDetail:
 			case PlaySheet.PackDep:
 			case PlaySheet.Replays:
+			case PlaySheet.Settings:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {
@@ -208,5 +211,25 @@ public static class PlaySurfaceGame
 	public static bool ClosesSurfaces(bool wasLoaded, string wasRomPath, bool isLoaded, string isRomPath)
 	{
 		return !wasLoaded || !isLoaded || !string.Equals(wasRomPath, isRomPath, StringComparison.Ordinal);
+	}
+}
+
+//The native renderer is a NativeControlHost: on macOS it is a native child
+//view drawn above every Avalonia control, so the pause overlay and the sheets
+//opened over the game were behind the picture, invisible (Esc only seemed to
+//pause). The picture is hidden while one of them is up.
+public static class PlayGameLayer
+{
+	//A Play surface over the game: W-P4, a sheet opened over it, the BIOS
+	//sheet, controller setup, or the load card (#734: an open from a game on
+	//screen, or a reload, would spin under the picture otherwise).
+	public static bool SurfaceOverGame(bool overlay, bool sheet, bool biosSheet, bool controllerSetup, bool loadWait)
+	{
+		return overlay || sheet || biosSheet || controllerSetup || loadWait;
+	}
+
+	public static bool ShowsNativeRenderer(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame)
+	{
+		return gameViewVisible && !recentsVisible && !softwareFrame && !surfaceOverGame;
 	}
 }

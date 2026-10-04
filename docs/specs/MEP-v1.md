@@ -1,8 +1,9 @@
 # MEP v1 — MesenCE Enhancement Pack
 
-**Status:** v1.7 (stable; 1.1 adds `patches[]`, the folder-form/sibling-folder and the `auto/` layer; 1.2 adds optional `targets[].md5`; 1.3 clarifies §2.1 rule 9 bare-basename discovery (ADR-0121) and §6 "as code" wording for recipes (ADR-0138); 1.4 adds the optional root `id` slug — the pack's product identity, `pack_id` (ADR-0140); 1.5 adds the optional `border` section — a decorative frame/bezel composited around the game viewport (ADR-0149, §5.4); 1.6 adds the optional root `generated` object — a machine-made pack disclosing itself (ADR-0154, §3.1) — all optional and backward-compatible; 1.7 only adds an informative note in §5.2 recording how the registry treats a manifest whose every `<bgm>`/`<sfx>` target is missing and its wired-patch exception (ADR-0144, ADR-0148, ADR-0151) — no field, no behavior change and no new conformance requirement) ·
+**Status:** v1.8 (stable; 1.1 adds `patches[]`, the folder-form/sibling-folder and the `auto/` layer; 1.2 adds optional `targets[].md5`; 1.3 clarifies §2.1 rule 9 bare-basename discovery (ADR-0121) and §6 "as code" wording for recipes (ADR-0138); 1.4 adds the optional root `id` slug — the pack's product identity, `pack_id` (ADR-0140); 1.5 adds the optional `border` section — a decorative frame/bezel composited around the game viewport (ADR-0149, §5.4); 1.6 adds the optional root `generated` object — a machine-made pack disclosing itself (ADR-0154, §3.1); 1.7 only adds an informative note in §5.2 recording how the registry treats a manifest whose every `<bgm>`/`<sfx>` target is missing and its wired-patch exception (ADR-0144, ADR-0148, ADR-0151) — no field, no behavior change and no new conformance requirement; 1.8 adds the optional `widescreen` section — side art for the columns a widescreen Reveal cannot fill (ADR-0253 §3, §5.5) — all optional and backward-compatible) ·
 **License of this spec:** CC0-1.0 (public domain) ·
 **Versioning:** semver — new optional field = minor; semantic change = major ·
+**Supersedes / amends:** v1.7 — adds §5.5 (`widescreen`) and amends §1 and §5's section list (ADR-0253 §3, slice W.3). No existing field changes meaning. ·
 **Golden file:** [`golden/mep/pack.json`](golden/mep/pack.json) ·
 **Validation:** `scripts/validate-specs.py`
 
@@ -14,9 +15,10 @@ MEP is a **thin envelope** that only *composes* already existing formats: a
 pack is a `.zip` (or a loose directory) with a `pack.json` at the root,
 identified by the ROM's No-Intro hash, containing optional sections that
 point to content in already standardized formats — textures (hires.txt/HDNes),
-audio (OGG/MSU-1), synth preset (ESP v1), and — since v1.5 — a border frame
-(a plain 32-bit RGBA PNG, §5.4). MEP does not define any content format of
-its own.
+audio (OGG/MSU-1), synth preset (ESP v1), a border frame (a plain 32-bit RGBA
+PNG, §5.4, since v1.5), and — since v1.8 — widescreen side art (plain 32-bit
+RGBA PNGs plus a small JSON manifest, §5.5). MEP does not define any content
+format of its own.
 
 A pack MUST NOT contain ROM bytes or assets extracted from it without the
 right to distribute them; responsibility for the content lies with the
@@ -187,8 +189,11 @@ implementation's utilities — MesenCE's `SHA1::GetHash`/`CRC32::GetCRC`):
 Each section is optional; a pack needs at least one. Hosts MUST offer a
 toggle **independent per section** (and SHOULD per internal layer, when the
 underlying format allows it). The sections defined by this version are
-`textures` (§5.1), `audio` (§5.2), `synth` (§5.3) and, since v1.5, `border`
-(§5.4).
+`textures` (§5.1), `audio` (§5.2), `synth` (§5.3), `border` (§5.4, v1.5) and
+`widescreen` (§5.5, v1.8). `widescreen` is the one exception to the
+independent-toggle rule: it is gated by the host's widescreen switch itself
+(ADR-0253 §1 — one automatic switch), because its content only ever exists
+inside a widened frame.
 
 ### 5.1 `textures`
 
@@ -335,6 +340,77 @@ is authored content: hosts MUST NOT synthesize a border on their own.
   ignore it (§3.2) and load the remaining sections unchanged. A pack MAY
   consist of a `border` section alone.
 
+### 5.5 `widescreen` (v1.8)
+
+Side art for the columns a widescreen **Reveal** adds beside the game picture
+(ADR-0253). On some games the console can draw real content in some of those
+columns but not others — the NES fills them beside a vertically mirrored
+picture and has nothing to show beside a horizontally mirrored or
+single-screen one — and this section supplies the art for the columns the
+console could not fill. Like every other section it is authored content: hosts
+MUST NOT synthesize widescreen art on their own.
+
+- `path` points to a **directory** (the convention folder is `widescreen/`)
+  that MUST contain `widescreen.json`. A `widescreen` section whose manifest
+  does not resolve inside the container is invalid (`scripts/mep_lint.py`
+  reports an error). There is no bare-root variant: the section is always the
+  manifest, never a loose image.
+- **Folder-form / sibling folder (§2.1):** `widescreen/widescreen.json` is the
+  human layer probe and `auto/widescreen/widescreen.json` the machine layer
+  probe; the human layer wins over `auto/` (the section is one small manifest,
+  so resolution is per section, not per entry).
+- **`widescreen.json` (MUST):** strict JSON object, UTF-8:
+
+  ```json
+  {
+    "version": 1,
+    "left": "left.png",
+    "right": "right.png",
+    "screens": [
+      { "id": 12, "left": "screens/12-left.png" }
+    ]
+  }
+  ```
+
+  | Field | Requirement | Semantics |
+  |---|---|---|
+  | `version` | MUST, integer `1` | schema version of this file. A manifest whose `version` is missing or is not `1` is invalid (`scripts/mep_lint.py` reports an error); a host MUST reject the section and keep loading the pack's other sections |
+  | `left`, `right` | MAY, strings | section-relative `.png` paths — the default art for the left and the right extra columns. At least one of `left`/`right`/`screens[]` MUST be present, otherwise the section names nothing and is invalid |
+  | `screens[]` | MAY, array of objects | per-screen overrides, each `{ "id": <integer ≥ 0>, "left": <png path>, "right": <png path> }`. `id` MUST be present, an integer ≥ 0 and unique within the array; at least one of `left`/`right` MUST be present. A host that knows the current screen id uses that screen's art where given and falls back to the default pair per side. A host that cannot know the screen id uses the default pair for every frame — the manifest is still valid, and this is the behaviour of the reference implementation as of ADR-0253 slice W.3 |
+
+- **Image paths (MUST):** each path is relative to the section root, uses
+  `/`, ends in `.png` (extension matched case-insensitively), and MUST resolve
+  inside the container after normalization (§2 rule 3, §6 zip-slip). A path
+  that fails any of these makes the section invalid.
+- **Canvas (MUST):** each PNG is decoded as **32-bit RGBA**. Its width MUST
+  equal the console's Reveal's extra-column count **per side**, and its height
+  the console's frame height; the art is then copied **1:1** — no scaling, no
+  cropping — into the columns the console left unfilled on each row. Art whose
+  decoded size does not match is ignored (the host moves on to the next step of
+  the fallback chain) rather than adapted. Both numbers are per console and are
+  fixed by that console's Reveal, not by this spec; for the NES, ADR-0253 §2
+  fixes them at 64 × 240.
+- **Fallback order (MUST, ADR-0253 §3):** per frame and per side, the host
+  draws (1) the console's own Reveal content where it exists, else (2) this
+  section's art, else (3) the `border` section (§5.4), else (4) black. Art is
+  applied per row, not per frame: a row the console filled keeps its own
+  pixels.
+- **Support (MUST):** this art *is* ADR-0253 §1's **Pack art** mode — a game
+  whose only side content comes from this section is supported, and the host
+  keeps its widescreen switch enabled for it. The border (§5.4) and black are
+  not: they are per-frame fill-ins, and on their own they MUST NOT make a game
+  "supported" nor keep the switch enabled (ADR-0253 §3).
+- **Decode failure (MUST):** when a named PNG is missing or is not a decodable
+  PNG, the host MUST ignore that image and continue down the fallback chain —
+  a broken asset never interrupts gameplay. Assets are decoded once when the
+  active pack (or its section path) changes and cached as 32-bit pixels.
+- **Toggle (MUST):** the section is gated by the widescreen switch itself
+  (ADR-0253 §1), not by a section switch of its own. With widescreen off the
+  host MUST output the unmodified standard frame at zero cost (ADR-0162).
+- **Compatibility:** `widescreen` is a new optional section; v1.0–v1.7 hosts
+  ignore it (§3.2) and load the remaining sections unchanged. A pack MAY
+  consist of a `widescreen` section alone.
+
 ## 6. Security
 
 - Hosts MUST reject, after path normalization, any zip entry that escapes
@@ -354,3 +430,12 @@ relative paths). Since v1.5 the golden also declares a `border` section:
 transparent 4:3 centre) and [`golden/mep/border/border.json`](golden/mep/border/border.json)
 (viewport `4,0 24×18`), checked for §5.4 conformance (`width`/`height` match
 the PNG, `viewport` inside the canvas) by the same script.
+
+The golden carries no `widescreen` section: §5.5 fixes the art's canvas per
+console, and the golden targets the GB test ROM, whose Reveal is a different
+slice (ADR-0253 slice W.2) — a golden here would pin a width this spec does
+not own. §5.5's rules are enforced at submission time instead, by
+`scripts/mep_lint.py` (`lint_widescreen_json`: the manifest schema, safe
+`.png` paths, and every image resolving inside the archive), and that rule set
+has its own suite, `scripts/test_mep_lint_widescreen.py` (run by
+`make doc-checks`).

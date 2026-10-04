@@ -112,7 +112,7 @@ public class PlayerReplaysSheetTests
 
 		Assert.True(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
 		Assert.False(h.Window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 		string[] texts = VisibleTexts(h.Window);
 		int bob = Array.IndexOf(texts, "bob — no death");
 		int alice = Array.IndexOf(texts, "alice — stage skip");
@@ -172,7 +172,7 @@ public class PlayerReplaysSheetTests
 		Assert.Equal(new[] { 302 }, h.Downloaded);
 		Assert.Equal(new[] { "/cache/302.mmo" }, h.Played);
 		Assert.False(h.Window.FindNamed<Border>("PlayerReplaysSheet").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 	}
 
 	[AvaloniaFact]
@@ -218,6 +218,45 @@ public class PlayerReplaysSheetTests
 		OpenFromSaveStatesAgain(h);
 		Click(h.Window.FindNamed<Button>("ReplaysDoneButton"));
 		Assert.True(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//The user's rule (2026-10-03): until the catalog answers, the sheet says
+	//it is looking, with a moving bar - never "no shared replay" yet. A fetch
+	//that fails still ends the wait.
+	[AvaloniaFact]
+	public void The_list_shows_a_moving_wait_until_the_catalog_answers()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = ShowPlayer(ContraSha1, Array.Empty<CommunityReplayGame>());
+		TaskCompletionSource<IReadOnlyList<CommunityReplayGame>?> fetch = new();
+		h.Model.CommunityReplaysSource = () => fetch.Task;
+		OpenFromSaveStates(h);
+
+		ProgressBar bar = h.Window.FindNamed<ProgressBar>("ReplaysLoadingBar");
+		Assert.True(bar.IsOnScreen());
+		Assert.True(bar.IsIndeterminate);
+		Assert.Equal("Looking for shared replays…", h.Window.FindNamed<TextBlock>("ReplaysStatusLine").Text);
+
+		fetch.SetResult(null);
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(bar.IsOnScreen());
+		Assert.StartsWith("No shared replay", h.Window.FindNamed<TextBlock>("ReplaysStatusLine").Text);
+	}
+
+	[AvaloniaFact]
+	public void The_watch_download_shows_a_moving_wait()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Harness h = WatchPending(ContraSha1);
+
+		Control wait = h.Window.FindNamed<Control>("ReplaysDownloadWait");
+		Assert.True(wait.IsOnScreen());
+		Assert.True(wait.FindAll<ProgressBar>().Single().IsIndeterminate);
+		Assert.Contains("Downloading the replay…", VisibleTexts(h.Window));
+
+		h.Pending!.SetResult(new ReplayFetchResult(null, ReplayFetchFailure.Unavailable));
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(wait.IsOnScreen());
 	}
 
 	//#640: Restart & watch, then the download is still running.
@@ -305,7 +344,7 @@ public class PlayerReplaysSheetTests
 		Dispatcher.UIThread.RunJobs();
 
 		Assert.True(h.Window.FindNamed<Panel>("PackDepSheetBackdrop").IsOnScreen());
-		Assert.False(h.Window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		Assert.False(h.Window.IsPauseCardActive());
 		Assert.False(h.Model.IsPlayerOverlayVisible);
 	}
 

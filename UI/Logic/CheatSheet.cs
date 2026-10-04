@@ -30,7 +30,8 @@ namespace Mesen.Logic
 
 	//One W-P11 row. IsOn mirrors the stored list; CanToggle is false only for
 	//a code the recording rule refuses that is not on yet (one already on can
-	//always be turned off). Note is the row's one-line mark, "" when none.
+	//always be turned off). Note is the row's one-line mark ("From the cheat
+	//list" for a bundled row of the loaded copy), "" when none.
 	//Issue and Votes are a community row's submission issue and 👍 (0 otherwise).
 	public sealed record CheatSheetRow(string Description, CheatType Type, string Codes, bool IsOn, bool CanToggle, string Note, CheatRowSource Source, int Issue = 0, int Votes = 0);
 
@@ -43,9 +44,10 @@ namespace Mesen.Logic
 	public static class CheatSheet
 	{
 		public const string NotInListLine = "This copy of the game isn't in the cheat list";
+		public const string FromListMark = "From the cheat list";
 		public const string AnotherCopyMark = "made for another copy — may not work";
-		public const string ReplayNote = "Cheats you have on are recorded in a shared replay";
-		public const string AllOffNote = "All cheats are switched off in Tools ⋯ › Cheats";
+		public const string ReplayNote = "Cheats you have on are recorded in a shared replay.";
+		public const string AllOffNote = "All cheats are switched off in Classic › Tools › Cheats";
 		public const string CommunityOnlyLine = "codes from the community for your copy";
 		public const int MaxGameResults = 20;
 
@@ -190,6 +192,17 @@ namespace Mesen.Logic
 			return StatusLine(console, game, gameIsAnotherCopy, countOn, 0);
 		}
 
+		//The user's rule (2026-10-03): while the community catalog is fetched,
+		//the "no list yet" and "not in the list" lines would answer before the
+		//catalog has: the sheet says it is looking (with a moving bar).
+		public const string CommunityLoadingLine = "Looking for community codes…";
+
+		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount, bool communityLoading)
+		{
+			bool noOwnList = game == null || !CheatConsoleScope.HasCheatList(console);
+			return communityLoading && noOwnList && communityCount == 0 ? CommunityLoadingLine : StatusLine(console, game, gameIsAnotherCopy, countOn, communityCount);
+		}
+
 		//With community rows for the copy, the "no list yet" and "not in the
 		//list" lines give way to saying where the codes come from (ADR-0248 §5).
 		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount)
@@ -224,8 +237,15 @@ namespace Mesen.Logic
 					canToggle = isOn;
 				}
 			}
-			if(source == CheatRowSource.AnotherCopy && note != CheatRecordingRule.RefusedReason) {
-				note = note.Length == 0 ? AnotherCopyMark : AnotherCopyMark + " · " + note;
+			//W-P11: a refused row shows only its reason; any other list row
+			//leads with where it comes from.
+			string? mark = source switch {
+				CheatRowSource.AnotherCopy => AnotherCopyMark,
+				CheatRowSource.ThisCopy => FromListMark,
+				_ => null
+			};
+			if(mark != null && note != CheatRecordingRule.RefusedReason) {
+				note = note.Length == 0 ? mark : mark + " · " + note;
 			}
 			return new CheatSheetRow(description, type, codes, isOn, canToggle, note, source);
 		}

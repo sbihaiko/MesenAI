@@ -58,6 +58,18 @@ namespace Mesen.Logic
 			return remasterActive || remasterRecording;
 		}
 
+		//User decision 2026-10-03 (ADR-0245 amendment, "Liberar e pausar gravação
+		//(Recomendado)"): Play's passive automatic bootstrap never locks a cheat.
+		//A code that changes the game (not a RAM code) turned on while it runs
+		//stops it - what it saved stays, nothing corrupted enters the art - and
+		//the core does not restart it until the next ROM load. A recording the
+		//user started in Remaster (recordingArt) is not stopped: it holds the
+		//code back instead.
+		public static bool PausesPassiveBootstrap(IEnumerable<StoredCheat> stored, bool recordingArt, bool bootstrapping)
+		{
+			return bootstrapping && !recordingArt && Refused(stored, disableAll: false).Count > 0;
+		}
+
 		//The cheats that would reach the core and are not RAM codes: a Remaster
 		//recording refuses to start while any is on (ADR-0184 §1: refuse, not
 		//warn), and while one records they are held back from the core. None

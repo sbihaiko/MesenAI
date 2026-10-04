@@ -53,6 +53,9 @@
 	<Application.Styles>
 		<FluentTheme />
 		<StyleInclude Source="/Styles/MesenStyles.xaml" />
+		<!--ADR-0249: the Player theme, after MesenStyles so it wins inside its
+		`.player` scope; every one of its selectors starts with `.player`.-->
+		<StyleInclude Source="/Styles/PlayerTheme.axaml" />
 	</Application.Styles>
 
 	<NativeMenu.Menu>

@@ -71,6 +71,18 @@ namespace Mesen.Logic
 		{
 			return armedIssue != 0 && armedIssue == clickedIssue ? ReplayWatchStep.Play : ReplayWatchStep.Arm;
 		}
+		//The user's rule (2026-10-03): until the catalog fetch answers, an
+		//empty list is "looking", never "none" (with a moving bar beside it).
+		public const string LoadingLine = "Looking for shared replays…";
+
+		//The verified download before Watch plays (with a moving bar).
+		public const string DownloadingLine = "Downloading the replay…";
+
+		public static string StatusLine(int count, bool loading)
+		{
+			return loading && count == 0 ? LoadingLine : StatusLine(count);
+		}
+
 		//The sheet's status line: how many rows this exact copy has.
 		public static string StatusLine(int count)
 		{

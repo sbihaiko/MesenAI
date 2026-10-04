@@ -1015,6 +1015,10 @@ template<class T> void NesPpu<T>::ProcessScanlineImpl()
 				//starkly: row 0 decoded to a garbage mid-screen tile/attribute
 				//address instead of the top of the nametable.
 				_scanlineVideoRamAddr[0] = (uint32_t)_videoRamAddr | ((uint32_t)_xScroll << 15) | ((uint32_t)(_control.BackgroundPatternAddr != 0) << 18);
+				if(_cycle == 304) {
+					//ADR-0253: row 0's basis is final once the vertical copy is done
+					((T*)this)->OnRowBasisCaptured(0);
+				}
 			}
 			// Load the extra sprites before tile loading starts (which matters for MMC5)
 			// The CHR banks are switched back to the bg tileset in LoadTileInfo on cycle 321
@@ -1067,6 +1071,10 @@ template<class T> void NesPpu<T>::ProcessScanlineImpl()
 				if(governedScanline == 0) {
 					_scanlineTraceValidity.OnRowZeroCaptured();
 				}
+
+				//ADR-0253: the NES widescreen Reveal draws the row's extra columns
+				//from this same basis (a no-op outside DefaultNesPpu)
+				((T*)this)->OnRowBasisCaptured(governedScanline);
 			}
 		}
 	} else if(_cycle >= 321 && _cycle <= 336) {
@@ -1374,6 +1382,7 @@ template<class T> void NesPpu<T>::SendFrame()
 
 	RenderedFrame frame(_currentOutputBuffer, NesConstants::ScreenWidth, NesConstants::ScreenHeight, 1.0, _frameCount, _console->GetControlManager()->GetPortStates(), videoPhase);
 	frame.Data = frameData; //HD packs
+	((T*)this)->OnFrameBuilt(frame); //ADR-0253: may widen the frame (DefaultNesPpu only)
 
 	if(_console->GetVsMainConsole() || _console->GetVsSubConsole()) {
 		SendFrameVsDualSystem(frame);

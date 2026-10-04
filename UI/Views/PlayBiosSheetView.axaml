@@ -11,40 +11,47 @@
 	<!--G.5 (PRD Part B §13.5.2 W-P13): a game needs a BIOS file. Rule 2: drop
 	zone, Cancel, Choose File… = 3. The whole dimmed area takes a drop, so a
 	file dropped anywhere while the sheet is up lands here, never as a ROM.-->
-	<Panel Name="BiosSheetBackdrop" Background="#80000000" DragDrop.AllowDrop="True">
-		<Border Name="BiosSheet" Background="White" CornerRadius="14" Padding="28 24" MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center">
-			<StackPanel Spacing="12" XYFocus.NavigationModes="Enabled">
-				<StackPanel Orientation="Horizontal" Spacing="12">
-					<Border Width="40" Height="40" CornerRadius="8" Background="#8E8E93">
-						<TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+	<!--ADR-0249 (W-P13): the light sheet on the dimmed home - grey lock badge,
+	title, body, the drop zone, the orange wrong-file line, Cancel and Choose
+	File….-->
+	<Panel Name="BiosSheetBackdrop" Classes="scrim" DragDrop.AllowDrop="True">
+		<Border Name="BiosSheet" Classes="sheet" Width="480" HorizontalAlignment="Center" VerticalAlignment="Center">
+			<StackPanel Spacing="0" XYFocus.NavigationModes="Enabled">
+				<DockPanel Margin="0 0 0 14">
+					<Border Classes="badge xlarge" Background="{StaticResource PlayerGrayBrush}" DockPanel.Dock="Left" Margin="0 0 12 0">
+						<PathIcon Data="{StaticResource PlayerIconLock}" />
 					</Border>
-					<TextBlock Text="{l:Translate lblBiosSheetTitle}" FontSize="20" FontWeight="Bold" Foreground="#1C1C1E" VerticalAlignment="Center" />
-				</StackPanel>
-				<TextBlock Name="BiosSheetBody" Text="{Binding Body}" TextWrapping="Wrap" Foreground="#1C1C1E" />
-				<Button Name="BiosSheetDropZone" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="16 18" Background="#F5F5F7" BorderBrush="#C7C7CC" BorderThickness="1" CornerRadius="10" Click="OnChooseFile">
+					<TextBlock Classes="sheet-heading" Text="{l:Translate lblBiosSheetTitle}" VerticalAlignment="Center" TextWrapping="Wrap" />
+				</DockPanel>
+				<TextBlock Name="BiosSheetBody" Classes="paragraph" Text="{Binding Body}" TextWrapping="Wrap" Margin="0 0 0 10" />
+				<Button Name="BiosSheetDropZone" Classes="drop-zone" Click="OnChooseFile">
 					<StackPanel Spacing="4" HorizontalAlignment="Center">
-						<TextBlock Text="📁" HorizontalAlignment="Center" />
-						<TextBlock Name="BiosSheetDropTitle" Text="{Binding DropTitle}" FontWeight="Bold" Foreground="#1C1C1E" HorizontalAlignment="Center" />
-						<TextBlock Text="{Binding DropHint}" Foreground="#6E6E73" HorizontalAlignment="Center" />
+						<PathIcon Classes="drop-icon" Margin="0 0 0 6" />
+						<TextBlock Name="BiosSheetDropTitle" Classes="drop-title" Text="{Binding DropTitle}" />
+						<TextBlock Classes="drop-hint" Text="{Binding DropHint}" />
 					</StackPanel>
 				</Button>
-				<!--W-X2: only after a wrong file.-->
-				<Border Name="BiosSheetError" Background="#FFF4E5" CornerRadius="8" Padding="12 8" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-					<TextBlock Text="{Binding ErrorText}" Foreground="#B25000" TextWrapping="Wrap" />
-				</Border>
-				<!--W-X1: an unknown dump confirms once, in place.-->
-				<Border Name="BiosSheetConfirm" Background="#FFF4E5" CornerRadius="8" Padding="12 8" IsVisible="{Binding IsConfirmingUnknown}">
+				<!--W-X2: only after a wrong file - the shared in-place banner.-->
+				<Border Name="BiosSheetError" Classes="banner warning" Margin="0 12 0 0" IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
 					<DockPanel>
-						<StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-							<Button Name="BiosSheetChooseAnother" Content="{l:Translate btnBiosSheetChooseAnother}" Click="OnRejectUnknown" />
-							<Button Name="BiosSheetUseIt" Content="{l:Translate btnBiosSheetUseIt}" Click="OnAcceptUnknown" />
-						</StackPanel>
-						<TextBlock Text="{l:Translate lblBiosSheetUnknown}" Foreground="#B25000" TextWrapping="Wrap" VerticalAlignment="Center" />
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<TextBlock Classes="banner-text" Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
 					</DockPanel>
 				</Border>
-				<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0 8 0 0">
-					<Button Name="BiosSheetCancel" Content="{l:Translate btnBiosSheetCancel}" Padding="16 6" Click="OnCancel" />
-					<Button Name="BiosSheetChooseFile" Content="{l:Translate btnBiosSheetChooseFile}" Padding="16 6" FontWeight="Bold" Background="#0A84FF" Foreground="White" Click="OnChooseFile" />
+				<!--W-X1: an unknown dump confirms once, in place (the shared banner).-->
+				<Border Name="BiosSheetConfirm" Classes="banner warning" Margin="0 12 0 0" IsVisible="{Binding IsConfirmingUnknown}">
+					<DockPanel>
+						<PathIcon Classes="banner-icon" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" />
+						<StackPanel Classes="banner-actions" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+							<Button Name="BiosSheetChooseAnother" Classes="secondary" Content="{l:Translate btnBiosSheetChooseAnother}" Click="OnRejectUnknown" />
+							<Button Name="BiosSheetUseIt" Classes="primary" Content="{l:Translate btnBiosSheetUseIt}" Click="OnAcceptUnknown" />
+						</StackPanel>
+						<TextBlock Classes="banner-text" Text="{l:Translate lblBiosSheetUnknown}" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</DockPanel>
+				</Border>
+				<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0 34 0 0">
+					<Button Name="BiosSheetCancel" Classes="secondary regular" Content="{l:Translate btnBiosSheetCancel}" Click="OnCancel" />
+					<Button Name="BiosSheetChooseFile" Classes="primary regular" Content="{l:Translate btnBiosSheetChooseFile}" Click="OnChooseFile" />
 				</StackPanel>
 			</StackPanel>
 		</Border>

@@ -108,6 +108,7 @@ namespace RemasterProject
 	{
 		bool Present = false;
 		bool OwnProject = false;
+		bool Human = false;
 	};
 
 	struct RecordingPlan
@@ -136,10 +137,15 @@ namespace RemasterProject
 	//bootstrap is a first draft, never an override of a pack someone already
 	//has (#142). The project's own mep/ and its earlier recordings do not
 	//count: without that exemption every second recording would be refused.
-	inline RecordingPlan PlanRecording(LayerOwner textures, bool looseHdPackExists, LayerOwner audio, bool audioSupported)
+	//That exemption is the Record button's (onDemand). Play's automatic
+	//bootstrap (BootstrapEnhancementFolder kept on, ADR-0243 Q3) still
+	//declines the project's own human art: recording swaps the HD PPU for the
+	//builder's, so the game would play without the art it was loaded with.
+	inline RecordingPlan PlanRecording(LayerOwner textures, bool looseHdPackExists, LayerOwner audio, bool audioSupported, bool onDemand = true)
 	{
 		RecordingPlan plan;
-		plan.NeedTextures = (!textures.Present || textures.OwnProject) && !looseHdPackExists;
+		bool ownTextures = textures.OwnProject && (onDemand || !textures.Human);
+		plan.NeedTextures = (!textures.Present || ownTextures) && !looseHdPackExists;
 		plan.NeedAudio = audioSupported && (!audio.Present || audio.OwnProject);
 		return plan;
 	}

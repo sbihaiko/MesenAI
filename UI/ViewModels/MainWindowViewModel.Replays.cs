@@ -58,21 +58,25 @@ namespace Mesen.ViewModels
 			string romSha1 = ReplayRomSha1();
 			ReplaysSheet.Open(romSha1, RomInfo.ConsoleType, CommunityReplaysLastKnown(), ReplayWatchReasonSource(),
 				ReplayOpenUrl, ReplayDownload, ReplayPlay, () => ReplayRomSha1());
-			_ = RefreshCommunityReplaysAsync(romSha1);
+			_ = RefreshCommunityReplaysAsync(romSha1, ReplaysSheet.BeginLoading());
 		}
 
 		//The sheet opens on the last known catalog; the fetched one replaces it
-		//when it returns, if the sheet is still up for the same copy.
-		private async Task RefreshCommunityReplaysAsync(string romSha1)
+		//when it returns, if the sheet is still up for the same copy. Whatever
+		//the fetch answers - nothing included - ends the sheet's wait.
+		private async Task RefreshCommunityReplaysAsync(string romSha1, int loading)
 		{
-			IReadOnlyList<CommunityReplayGame>? catalog = await CommunityReplaysSource();
-			if(catalog == null) {
-				return;
+			IReadOnlyList<CommunityReplayGame>? catalog;
+			try {
+				catalog = await CommunityReplaysSource();
+			} catch(Exception) {
+				catalog = null;
 			}
 			Dispatcher.UIThread.Post(() => {
-				if(ReplaysSheet.IsVisible && ReplaysSheet.RomSha1 == romSha1) {
+				if(catalog != null && ReplaysSheet.IsVisible && ReplaysSheet.RomSha1 == romSha1) {
 					ReplaysSheet.SetCatalog(catalog);
 				}
+				ReplaysSheet.FinishLoading(loading);
 			});
 		}
 
