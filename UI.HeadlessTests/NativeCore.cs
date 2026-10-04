@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using Mesen.Interop;
@@ -82,21 +83,43 @@ public static class NativeCore
 	//native core present (NativeCoreLibraryResolutionTests.cs, #786).
 	internal static string? FindBuiltLibrary(string repoRoot)
 	{
+		//#786: the newest build is the one this checkout just made, and the only one
+		//that can answer for the current source. No fixed precedence can do this:
+		//`make core` writes InteropDLL/obj.<rid>/ and `make ui` writes
+		//bin/<rid>/<config>/, so either order is wrong half the time - and a leftover
+		//Release build under bin/ made it wrong for the rest of the checkout's life.
+		List<string> candidates = new();
 		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "bin"))) {
 			foreach(string config in new[] { "Release", "Debug" }) {
 				string candidate = Path.Combine(dir, config, LibraryFileName);
 				if(File.Exists(candidate)) {
-					return candidate;
+					candidates.Add(candidate);
 				}
 			}
 		}
 		foreach(string dir in EnumerateDirectories(Path.Combine(repoRoot, "InteropDLL"))) {
+			if(!Path.GetFileName(dir).StartsWith("obj.", StringComparison.Ordinal)) {
+				continue;
+			}
 			string candidate = Path.Combine(dir, LibraryFileName);
-			if(Path.GetFileName(dir).StartsWith("obj.", StringComparison.Ordinal) && File.Exists(candidate)) {
-				return candidate;
+			if(File.Exists(candidate)) {
+				candidates.Add(candidate);
 			}
 		}
-		return null;
+
+		//Sorted first so an exact tie (two copies of one image) resolves the same way
+		//on every run, instead of following the filesystem's directory order.
+		candidates.Sort(StringComparer.Ordinal);
+		string? newest = null;
+		DateTime newestTime = DateTime.MinValue;
+		foreach(string candidate in candidates) {
+			DateTime written = File.GetLastWriteTimeUtc(candidate);
+			if(newest == null || written > newestTime) {
+				newest = candidate;
+				newestTime = written;
+			}
+		}
+		return newest;
 	}
 
 	private static string[] EnumerateDirectories(string path)
