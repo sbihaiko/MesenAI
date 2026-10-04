@@ -70,7 +70,12 @@
 		<Color x:Key="PlayerRadioRingColor">#C7C7CC</Color>
 		<Color x:Key="PlayerPadColor">#D6D6DB</Color>
 		<Color x:Key="PlayerPadKeyColor">#505055</Color>
-		<Color x:Key="PlayerPadButtonColor">#78787D</Color>
+		<!-- The round and shoulder keys carry a white letter: at #78787D that
+		     pair is 4.39:1, just under AA's 4.5 (found by the sheets' contrast
+		     gate, which W-P17's Controller sheet brought the pad into). Four
+		     points darker clears it and is the smallest change that keeps the
+		     letter white, as the W-P15 drawing has it. -->
+		<Color x:Key="PlayerPadButtonColor">#747479</Color>
 		<!-- TINT x 0.14 over white: the `tinted` button fill -->
 		<Color x:Key="PlayerTintSoftPlayColor">#DBECFF</Color>
 		<Color x:Key="PlayerTintSoftRemasterColor">#F4E7FA</Color>

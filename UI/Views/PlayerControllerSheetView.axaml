@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:vm="using:Mesen.ViewModels"
+	mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="640"
+	x:Class="Mesen.Views.PlayerControllerSheetView"
+	x:DataType="vm:ControllerSheetViewModel"
+>
+	<!--ADR-0255 slice 1 (PRD Part B §13.5.2 W-P17): the Controller sheet, over
+	the paused game. It shows the live pad and its values by reusing the host
+	tester (GamepadTesterViewModel - its own readouts, its own chip brush) and
+	W-P15's pad drawing: every key here is placed by ControllerPadLayout, and the
+	style block below is W-P15's with this sheet's one extra state (`.lit`, the
+	key the pad is pressing) instead of its current/done pair. There is no third
+	renderer: the geometry and the tokens are the same ones, the item type is
+	what differs (a step vs a live light).-->
+	<UserControl.Styles>
+		<Style Selector="ItemsControl#ControllerSheetKeys > ContentPresenter" x:DataType="vm:ControllerPadLight">
+			<Setter Property="Canvas.Left" Value="{Binding Left}" />
+			<Setter Property="Canvas.Top" Value="{Binding Top}" />
+		</Style>
+		<Style Selector="Border#ControllerSheetKey">
+			<Setter Property="Background" Value="{StaticResource PlayerPadButtonBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusSmall}" />
+		</Style>
+		<Style Selector="Border#ControllerSheetKey.dpad">
+			<Setter Property="Background" Value="{StaticResource PlayerPadKeyBrush}" />
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusPadKey}" />
+		</Style>
+		<Style Selector="Border#ControllerSheetKey.round">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusPadRound}" />
+		</Style>
+		<Style Selector="Border#ControllerSheetKey.shoulder">
+			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusControl}" />
+		</Style>
+		<Style Selector="Border#ControllerSheetKey.lit">
+			<Setter Property="Background" Value="{StaticResource PlayerTintPlayBrush}" />
+		</Style>
+		<!--A lit round key is drawn against the pad's own light fill, as W-P15's
+		current step is, or the tint alone reads as a hole in the pad.-->
+		<Style Selector="Border#ControllerSheetKey.lit.round">
+			<Setter Property="BorderBrush" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="BorderThickness" Value="3" />
+		</Style>
+		<!--The keys are dark or tinted: the label is always white, never inherited.-->
+		<Style Selector="TextBlock#ControllerSheetKeyLabel">
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontBody}" />
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="HorizontalAlignment" Value="Center" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+	</UserControl.Styles>
+
+	<Border Name="PlayerControllerSheet" Classes="sheet" Width="480" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="19 17 19 19" IsVisible="{Binding IsVisible}">
+		<StackPanel XYFocus.NavigationModes="Enabled">
+			<TextBlock Classes="title3" Text="{l:Translate lblControllerSheetTitle}" />
+			<TextBlock Classes="body secondary" Text="{l:Translate lblControllerSheetIntro}" TextWrapping="Wrap" Margin="0 8 0 0" />
+
+			<!--The pad: W-P15's drawing, its keys lit by the pad's own buttons.-->
+			<Border Name="ControllerSheetPad" Background="{StaticResource PlayerPadBrush}" CornerRadius="{StaticResource PlayerRadiusPad}" Width="340" Height="140" HorizontalAlignment="Center" Margin="0 16 0 0">
+				<Panel>
+					<Canvas>
+						<Border Canvas.Left="58" Canvas.Top="58" Width="24" Height="24" Background="{StaticResource PlayerPadKeyBrush}" />
+					</Canvas>
+					<ItemsControl Name="ControllerSheetKeys" ItemsSource="{Binding PadKeys}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<Canvas />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:ControllerPadLight">
+								<Border Name="ControllerSheetKey" Width="{Binding Width}" Height="{Binding Height}"
+									Classes.dpad="{Binding IsDPad}" Classes.round="{Binding IsRound}" Classes.shoulder="{Binding IsShoulder}"
+									Classes.lit="{Binding IsLit}"
+									AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Name}">
+									<TextBlock Name="ControllerSheetKeyLabel" Text="{Binding Name}" IsVisible="{Binding ShowsLabel}" />
+								</Border>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+				</Panel>
+			</Border>
+
+			<!--Which pad this is, or why the pad is dark.-->
+			<TextBlock Name="ControllerSheetPadName" Classes="headline" Text="{Binding Pad.Name}" IsVisible="{Binding HasPad}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0 14 0 0" />
+			<TextBlock Name="ControllerSheetPadInfo" Classes="subhead secondary" Text="{Binding Pad.InfoText}" IsVisible="{Binding HasPad}" HorizontalAlignment="Center" />
+			<TextBlock Name="ControllerSheetMorePads" Classes="subhead secondary" Text="{Binding MorePadsText}" IsVisible="{Binding MorePadsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+			<TextBlock Name="ControllerSheetNoPad" Classes="body secondary" Text="{l:Translate lblControllerSheetNoPad}" IsVisible="{Binding !HasPad}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0 14 0 0" />
+
+			<!--The values: the tester's own readouts, the ones its Test tab shows,
+			so a button this sheet's pad has no key for (X, Y, the triggers, the
+			stick clicks) is still visible.-->
+			<Border Name="ControllerSheetPadValues" Classes="inset" IsVisible="{Binding HasPad}" Margin="0 14 0 0">
+				<StackPanel>
+					<ItemsControl Name="ControllerSheetButtons" ItemsSource="{Binding Pad.Buttons}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<WrapPanel />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:GamepadButtonState">
+								<Border Name="ControllerSheetButtonChip" CornerRadius="3" Padding="6 2" Margin="2" Background="{Binding IsPressedBrush}">
+									<TextBlock Text="{Binding Label}" FontSize="11" />
+								</Border>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+					<Grid ColumnDefinitions="Auto,Auto" Margin="2 8 0 0">
+						<StackPanel>
+							<TextBlock Classes="subhead" Text="{l:Translate lblControllerSheetLeftStick}" />
+							<TextBlock Name="ControllerSheetLeftStick" Text="{Binding Pad.LeftStickReadout}" Margin="0 2 0 0" />
+						</StackPanel>
+						<StackPanel Grid.Column="1" Margin="24 0 0 0">
+							<TextBlock Classes="subhead" Text="{l:Translate lblControllerSheetRightStick}" />
+							<TextBlock Name="ControllerSheetRightX" Text="{Binding Pad.RightX, StringFormat='X: {0}'}" Margin="0 2 0 0" />
+							<TextBlock Name="ControllerSheetRightY" Text="{Binding Pad.RightY, StringFormat='Y: {0}'}" />
+						</StackPanel>
+					</Grid>
+				</StackPanel>
+			</Border>
+
+			<!--Slice 2 (PLAYERS) and slice 3 (remapping) are not here yet, and a
+			control that lies is worse than a line that says so: the classic page
+			does both today and stays one link away.-->
+			<TextBlock Classes="subhead secondary" Text="{l:Translate lblControllerSheetComing}" TextWrapping="Wrap" Margin="2 14 0 0" />
+			<DockPanel Margin="0 16 0 0">
+				<Button Name="ControllerSheetMoreInOptions" Classes="plain small" DockPanel.Dock="Left" Margin="-9 0 0 0" Click="OnMoreInOptions" Content="{l:Translate btnControllerSheetMoreInOptions}" />
+				<Button Name="ControllerSheetDone" Classes="primary regular" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnControllerSheetDone}" />
+			</DockPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

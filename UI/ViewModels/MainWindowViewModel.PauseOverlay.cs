@@ -70,7 +70,7 @@ namespace Mesen.ViewModels
 					UpdateRendererVisibility();
 				}
 			};
-			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet }) {
+			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet, ControllerSheet }) {
 				sheet.PropertyChanged += (s, e) => {
 					if(e.PropertyName == "IsVisible") {
 						UpdateRendererVisibility();
@@ -83,6 +83,11 @@ namespace Mesen.ViewModels
 		{
 			if(IsPlayerSettingsVisible) {
 				return PlaySheet.Settings;
+			}
+			//ADR-0255 slice 1: it replaces the Settings sheet's Controls landing,
+			//so the two are never up together.
+			if(_controllerSheet?.IsVisible == true) {
+				return PlaySheet.Controller;
 			}
 			if(PackDepSheet.IsVisible) {
 				return PlaySheet.PackDep;
@@ -172,6 +177,7 @@ namespace Mesen.ViewModels
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.Settings: ClosePlayerSettings(); break;
+				case PlaySheet.Controller: CloseControllerSheet(); break;
 				case PlaySheet.SaveStateGrid:
 					//Init with the grid's own mode hides it (RecentGamesViewModel);
 					//the overlay had already paused, so nothing resumes.
@@ -305,6 +311,7 @@ namespace Mesen.ViewModels
 			HideCheatsSheet();
 			HideReplaysSheet();
 			ClosePlayerSettings();
+			CloseControllerSheet();
 			IsSaveStatesSheetVisible = false;
 			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;

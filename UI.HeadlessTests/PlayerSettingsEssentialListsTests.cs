@@ -110,8 +110,12 @@ public class PlayerSettingsEssentialListsTests
 	//view-model's tab is the classic page the window opens on. Audio's twin
 	//needs the core (the classic Audio view-model enumerates devices), so it is
 	//PlayerSettingsMoreInOptionsAudioTests.
+	//
+	//ADR-0255 slice 1: Controls is the one row the window reroutes (to the Play
+	//Controller sheet), and this is that reroute's fallback - a view nobody wired
+	//(the designer, a sheet tested alone) still reaches the page.
 	[AvaloniaFact]
-	public void More_in_Options_expands_to_the_classic_controls_page()
+	public void More_in_Options_without_the_window_still_expands_to_the_classic_controls_page()
 	{
 		(Window window, ConfigViewModel model, PlayerSettingsSheetView sheet) = Show(ConfigWindowTab.Input);
 		try {
@@ -125,6 +129,33 @@ public class PlayerSettingsEssentialListsTests
 			//The classic page's view-model exists now; the essentials one stays for Cancel.
 			Assert.NotNull(model.Input);
 			Assert.Same(model.PlayerControls!.OriginalConfig, model.Input!.OriginalConfig);
+		} finally {
+			model.Dispose();
+		}
+	}
+
+	//ADR-0255 slice 1: with the window listening, Controls' row asks it for the
+	//Controller sheet instead - and never touches this view-model, because the
+	//sheet's own Done/Esc are what come back (the essentials one stays intact
+	//underneath for the Cancel that never happens).
+	[AvaloniaFact]
+	public void More_in_Options_on_controls_asks_the_window_for_the_controller_sheet()
+	{
+		(Window window, ConfigViewModel model, PlayerSettingsSheetView sheet) = Show(ConfigWindowTab.Input);
+		try {
+			int asked = 0;
+			sheet.ControllerSheetRequested += (s, e) => asked++;
+			List<string> changed = new();
+			model.PropertyChanged += (s, e) => changed.Add(e.PropertyName ?? "");
+			sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.Equal(1, asked);
+			//The window owns the rest, so nothing here has moved on.
+			Assert.True(model.PlayerMode);
+			Assert.Equal(ConfigWindowTab.Input, model.SelectedIndex);
+			Assert.DoesNotContain(nameof(ConfigViewModel.PlayerMode), changed);
+			Assert.Null(model.Input);
 		} finally {
 			model.Dispose();
 		}

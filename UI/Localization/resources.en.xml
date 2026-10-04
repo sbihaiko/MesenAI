@@ -245,6 +245,16 @@
 			<Control ID="lblCheatsCodePlaceholder">Code, e.g. SXIOPO or 0032:09</Control>
 			<Control ID="lblCheatsDescriptionPlaceholder">What it does (optional)</Control>
 		</Form>
+		<Form ID="PlayerControllerSheetView">
+			<Control ID="lblControllerSheetTitle">Controller</Control>
+			<Control ID="lblControllerSheetIntro">Press any button on a controller — the pad below lights up as it reads.</Control>
+			<Control ID="lblControllerSheetNoPad">No controller connected. Plug one in — a new one offers to set itself up.</Control>
+			<Control ID="lblControllerSheetLeftStick">Left stick</Control>
+			<Control ID="lblControllerSheetRightStick">Right stick</Control>
+			<Control ID="lblControllerSheetComing">Remapping a controller and giving one to each player are coming; the full Options page stays one link away.</Control>
+			<Control ID="btnControllerSheetMoreInOptions">More in Options…</Control>
+			<Control ID="btnControllerSheetDone">Done</Control>
+		</Form>
 		<Form ID="AudioConfigView">
 			<Control ID="tpgGeneral">General</Control>
 
@@ -2143,6 +2153,7 @@
 		<Message ID="PlayerControllersNone">No controller connected</Message>
 		<Message ID="PlayerControllersOne">1 controller connected</Message>
 		<Message ID="PlayerControllersMany">{0} controllers connected</Message>
+		<Message ID="ControllerSheetMorePads">Showing the first of {0} connected controllers.</Message>
 		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>

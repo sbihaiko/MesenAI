@@ -158,7 +158,10 @@ public enum PlaySheet
 	//(W-P4 is at its seven controls, so the list merges into that row).
 	Replays,
 	//ADR-0249 (W-P8, W-P10): Settings, a sheet in the main window.
-	Settings
+	Settings,
+	//ADR-0255 slice 1 (W-P17): the Controller sheet, opened from Settings'
+	//Controls row over the paused game.
+	Controller
 }
 
 public enum PlayEscAction
@@ -191,6 +194,7 @@ public static class PlayEsc
 			case PlaySheet.PackDep:
 			case PlaySheet.Replays:
 			case PlaySheet.Settings:
+			case PlaySheet.Controller:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

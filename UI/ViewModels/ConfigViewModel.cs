@@ -98,9 +98,13 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//"More in Options…": Look's opens Video, Audio's and Controls' open their
-		//own classic page. The window watches PlayerMode and opens the Options
-		//window on SelectedIndex (MainWindow.OnPlayerSettingsChanged).
+		//"More in Options…": Look's opens Video, Audio's opens its own classic
+		//page. The window watches PlayerMode and opens the Options window on
+		//SelectedIndex (MainWindow.OnPlayerSettingsChanged).
+		//
+		//Controls' row no longer lands here when the window is listening: it asks
+		//for the Play Controller sheet instead (ADR-0255 slice 1), and this is
+		//the fallback a view nobody wired still gets.
 		public void OpenInOptions(ConfigWindowTab essentialsTab)
 		{
 			if(PlayerSettingsEssentials.OptionsTabFor(essentialsTab) is ConfigWindowTab options) {
