@@ -44,7 +44,13 @@ public class SaveStatePreviewLengthTests : IDisposable
 
 	public void Dispose()
 	{
-		EmuApi.Stop();
+		//Core-aware: on the CI runner the cases above skip before they touch
+		//anything, and this would then be the one call that names a library the
+		//checkout does not have - which xUnit reports as the case failing, with the
+		//skip it really was wrapped inside the failure.
+		if(NativeCore.IsAvailable) {
+			EmuApi.Stop();
+		}
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
