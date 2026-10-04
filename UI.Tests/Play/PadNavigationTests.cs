@@ -19,27 +19,46 @@ public class PadNavigationTests
 	//not the contract; that the six codes differ from each other is.
 	private static readonly Dictionary<string, ushort> _keyCodes = BuildKeyCodes();
 
-	private static Dictionary<string, ushort> BuildKeyCodes()
+	//The fake host. "Start" is here for the one assertion that needs a pad button
+	//that is *not* one of the six - a table without it made that assertion pass
+	//against code 0, which no real mapping can produce.
+	private static Dictionary<string, ushort> BuildKeyCodes(bool padOnly = false)
 	{
 		//The Xbox preset's names are XInput's; the PS4 preset's are DirectInput's,
 		//whose face buttons are the HID report order the preset reads as
 		//But1..But4 (square, cross, circle, triangle), so cross - the pad's
 		//confirm - is But2 and circle - its back - is But3.
-		string[] xbox = { "Up", "Down", "Left", "Right", "A", "B" };
-		string[] ps4 = { "DPad Up", "DPad Down", "DPad Left", "DPad Right", "But2", "But3" };
+		//
+		//padOnly is the macOS/Linux host, which names every pad "Pad" and defines
+		//no "Joy" name at all (MacOSKeyManager and LinuxKeyManager); the default is
+		//the Windows one, which defines both families (XInput and DirectInput).
+		string[] pad = { "Up", "Down", "Left", "Right", "A", "B", "Start" };
+		string[] joy = { "DPad Up", "DPad Down", "DPad Left", "DPad Right", "But2", "But3" };
 		Dictionary<string, ushort> codes = new();
 		for(int device = 0; device < 4; device++) {
-			for(int i = 0; i < xbox.Length; i++) {
-				codes["Pad" + (device + 1) + " " + xbox[i]] = (ushort)(0x1000 + device * 0x100 + i);
+			for(int i = 0; i < pad.Length; i++) {
+				codes["Pad" + (device + 1) + " " + pad[i]] = (ushort)(0x1000 + device * 0x100 + i);
 			}
-			for(int i = 0; i < ps4.Length; i++) {
-				codes["Joy" + (device + 1) + " " + ps4[i]] = (ushort)(0x2000 + device * 0x100 + i);
+			if(padOnly) {
+				continue;
+			}
+			for(int i = 0; i < joy.Length; i++) {
+				codes["Joy" + (device + 1) + " " + joy[i]] = (ushort)(0x2000 + device * 0x100 + i);
 			}
 		}
 		return codes;
 	}
 
+	private static readonly Dictionary<string, ushort> _padOnlyCodes = BuildKeyCodes(padOnly: true);
+
 	private static ushort KeyCode(string name) => _keyCodes.TryGetValue(name, out ushort code) ? code : (ushort)0;
+
+	//The first name production asks the host for - the family's own spelling.
+	//Read off PadNavControls.NamesOf rather than copied, so a rename that forgot
+	//KeyPresets fails here instead of resolving to nothing in the app.
+	private static string NameOf(PadFamily family, PadNavAction action) => PadNavControls.NamesOf(family, 0, action)[0];
+
+	private static ushort PadOnlyKeyCode(string name) => _padOnlyCodes.TryGetValue(name, out ushort code) ? code : (ushort)0;
 
 	//The mapping resolved the way the app will resolve it, asserted rather than
 	//assumed so a name this table stopped defining fails here and not in a test
@@ -74,6 +93,21 @@ public class PadNavigationTests
 		Assert.Equal(action, PlayPadNavigation.Next(new[] { CodeOf(nav, action) }, new ushort[0], nav, hasAuthority: true));
 	}
 
+	//The reducer has to emit Confirm and Back, not only the four directions: a
+	//Next that answered None for both would leave the cabinet unable to activate a
+	//row or go back, and the tie-break test alone does not catch it (it asserts
+	//Right, which the directions already produce).
+	[Theory]
+	[InlineData(PadFamily.Xbox, PadNavAction.Confirm)]
+	[InlineData(PadFamily.Xbox, PadNavAction.Back)]
+	[InlineData(PadFamily.Ps4, PadNavAction.Confirm)]
+	[InlineData(PadFamily.Ps4, PadNavAction.Back)]
+	public void Confirm_and_back_are_reported_too(PadFamily family, PadNavAction action)
+	{
+		PadNavMapping nav = Nav(family);
+		Assert.Equal(action, PlayPadNavigation.Next(new[] { CodeOf(nav, action) }, new ushort[0], nav, hasAuthority: true));
+	}
+
 	//Decisions 4 and 6: confirm and back are the pad's own buttons, so the codes
 	//come out of the preset - the Xbox pad's A and B, the DualShock's cross and
 	//circle. The two families disagree by construction, which is the point: a
@@ -82,7 +116,7 @@ public class PadNavigationTests
 	public void Confirm_and_back_follow_the_Xbox_preset()
 	{
 		PadNavMapping nav = Nav(PadFamily.Xbox);
-		Assert.Equal(KeyCode("Pad1 A"), nav.Confirm);
+		Assert.Equal(KeyCode(NameOf(PadFamily.Xbox, PadNavAction.Confirm)), nav.Confirm);
 		Assert.Equal(KeyCode("Pad1 B"), nav.Back);
 		Assert.Equal(KeyCode("Pad1 Up"), nav.Up);
 		Assert.Equal(KeyCode("Pad1 Down"), nav.Down);
@@ -180,8 +214,33 @@ public class PadNavigationTests
 
 		//A control that is not one of the six is still offerable, and a family
 		//that resolved to nothing protects nothing.
+		Assert.NotEqual(0, KeyCode("Pad1 Start"));
 		Assert.False(PadNavControls.NonRebindable(KeyCode("Pad1 Start"), Nav(PadFamily.Xbox)));
 		Assert.False(PadNavControls.NonRebindable(KeyCode("Pad1 Start"), null));
+	}
+
+	//The macOS/Linux host defines no "Joy" name at all, so a DualShock read as
+	//Ps4 - the preset the first run applies - has to resolve through the other
+	//spelling of the same control rather than resolving to nothing. This is the
+	//defect the review caught: without the fallback, the menu simply did not move
+	//on those two hosts, and every test above still passed because they all fed
+	//Resolve a host that defines both spellings.
+	[Fact]
+	public void A_pad_only_host_still_resolves_the_Ps4_family()
+	{
+		PadNavMapping? mapping = PadNavControls.Resolve(PadFamily.Ps4, 0, PadOnlyKeyCode);
+		Assert.True(mapping.HasValue);
+		PadNavMapping nav = mapping!.Value;
+		Assert.Equal(PadOnlyKeyCode("Pad1 Up"), nav.Up);
+		Assert.Equal(PadOnlyKeyCode("Pad1 A"), nav.Confirm);
+		Assert.Equal(PadOnlyKeyCode("Pad1 B"), nav.Back);
+	}
+
+	//...and a host that defines neither spelling is still nothing, not a guess.
+	[Fact]
+	public void A_host_with_neither_spelling_resolves_to_nothing()
+	{
+		Assert.Null(PadNavControls.Resolve(PadFamily.Ps4, 0, _ => 0));
 	}
 
 	//Degrading safely, the three ways it comes up: no family the app can tell, no

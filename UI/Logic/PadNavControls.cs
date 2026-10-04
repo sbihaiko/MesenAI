@@ -86,36 +86,59 @@ public static class PadNavControls
 
 	private static ushort? Code(PadFamily family, int device, PadNavAction action, Func<string, ushort> keyCode)
 	{
-		ushort code = keyCode(NameOf(family, device, action));
-		return code == 0 ? null : code;
+		foreach(string name in NamesOf(family, device, action)) {
+			ushort code = keyCode(name);
+			if(code != 0) {
+				return code;
+			}
+		}
+		return null;
 	}
 
-	//The control's own name on the pad, as the preset writes it. Confirm and
-	//back are the pad's affirmative and cancel buttons as the player reads them
-	//off the plastic - the Xbox pad's A and B, the DualShock's cross and circle -
-	//which is why back is "Pad1 B" on one desk and "Joy1 But3" on another.
+	//The control's own name on the pad, per family. Confirm and back are the
+	//pad's affirmative and cancel buttons as the player reads them off the
+	//plastic - the Xbox pad's A and B, the DualShock's cross and circle - which
+	//is why back is "A" on one desk and a DirectInput button number on another.
 	//
 	//Read off KeyPresets, not mirrored from it: that file puts the *console's* A
 	//on the pad's right-hand button (the Xbox B, DirectInput But3), which is the
 	//opposite of what a menu wants. A console's jump is not a menu's yes, and a
 	//preset is the wrong place to read one off the other.
-	private static string NameOf(PadFamily family, int device, PadNavAction action)
+	//
+	//One table, not a switch, because the two names of the same control have to
+	//stay side by side: the host may only define one of them, and the fallback in
+	//NamesOf is what pairs them.
+	public static readonly (PadNavAction Action, string Xbox, string Ps4)[] Controls = {
+		(PadNavAction.Up, "Up", "DPad Up"),
+		(PadNavAction.Down, "Down", "DPad Down"),
+		(PadNavAction.Left, "Left", "DPad Left"),
+		(PadNavAction.Right, "Right", "DPad Right"),
+		(PadNavAction.Confirm, "A", "But2"),
+		(PadNavAction.Back, "B", "But3")
+	};
+
+	//The names to ask the host for one control, the family's own spelling first
+	//and the other family's second, because which spelling a host defines is the
+	//*backend's* business and not the pad's: macOS and Linux name every pad "Pad"
+	//(GameController and evdev devices), DirectInput names joysticks "Joy", and
+	//Windows defines both. Asking only the family's own spelling meant a
+	//DualShock read as Ps4 - the preset the first run applies - resolved to
+	//nothing on a Mac and the menu simply did not move. Asking for the other
+	//spelling afterwards is not the cross-family guess Core's pad rule refuses:
+	//there is no button byte being reinterpreted here, only a second name for the
+	//same control, and the host answers 0 for a name it does not define.
+	public static IReadOnlyList<string> NamesOf(PadFamily family, int device, PadNavAction action)
 	{
 		string pad = "Pad" + (device + 1).ToString() + " ";
 		string joy = "Joy" + (device + 1).ToString() + " ";
-		return (family, action) switch {
-			(PadFamily.Xbox, PadNavAction.Up) => pad + "Up",
-			(PadFamily.Xbox, PadNavAction.Down) => pad + "Down",
-			(PadFamily.Xbox, PadNavAction.Left) => pad + "Left",
-			(PadFamily.Xbox, PadNavAction.Right) => pad + "Right",
-			(PadFamily.Xbox, PadNavAction.Confirm) => pad + "A",
-			(PadFamily.Xbox, PadNavAction.Back) => pad + "B",
-			(_, PadNavAction.Up) => joy + "DPad Up",
-			(_, PadNavAction.Down) => joy + "DPad Down",
-			(_, PadNavAction.Left) => joy + "DPad Left",
-			(_, PadNavAction.Right) => joy + "DPad Right",
-			(_, PadNavAction.Confirm) => joy + "But2",
-			_ => joy + "But3"
-		};
+		foreach((PadNavAction owned, string xbox, string ps4) in Controls) {
+			if(owned != action) {
+				continue;
+			}
+			return family == PadFamily.Xbox
+				? new[] { pad + xbox, joy + ps4 }
+				: new[] { joy + ps4, pad + xbox };
+		}
+		return Array.Empty<string>();
 	}
 }
