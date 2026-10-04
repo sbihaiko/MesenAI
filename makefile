@@ -795,7 +795,7 @@ InteropDLL/$(OBJFOLDER)/$(SHAREDLIB): $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(CORE
 	mv $(SHAREDLIB) InteropDLL/$(OBJFOLDER)
 
 pgo:
-	./buildPGO.sh
+	./scripts/buildPGO.sh
 
 run:
 	$(OUTFOLDER)/$(MESENPLATFORM)/publish/Mesen

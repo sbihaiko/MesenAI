@@ -41,7 +41,7 @@ Platforms without a tagged release use the on-demand CI channel (`ci-latest` pre
 | **macOS Apple Silicon (release)** | [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) | arm64; ad-hoc signed, first-open step above. `brew install sdl2` |
 | **Windows x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-windows-x64-aot.zip) | Windows 10 (1607) or newer |
 
-`ci-latest` is a pre-release, so [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to the tagged build. The channel is **built on demand** — `build.yml` on a pull request against `prod` or a manual dispatch (ADR-0200, ADR-0203), not on every push. Assets are whatever `prod` held when that run compiled. Code on `main` that has not been promoted is [built from source](COMPILING.md).
+`ci-latest` is a pre-release, so [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to the tagged build. The channel is **built on demand** — `build.yml` on a pull request against `prod` or a manual dispatch (ADR-0200, ADR-0203), not on every push. Assets are whatever `prod` held when that run compiled. Code on `main` that has not been promoted is [built from source](docs/COMPILING.md).
 
 **Help → Check for updates** never offers an upstream Mesen build: the fork publishes no update feed, so the startup check does nothing and the menu item offers to open [this repository's releases page](https://github.com/sbihaiko/MesenAI/releases).
 

@@ -251,3 +251,6 @@ mep_lint_output.txt
 
 # ADR-0237: fetched by scripts/fetch_librashader_macos.sh, never committed
 UI/Dependencies/librashader.dylib
+
+#Python tooling cache (ruff)
+.ruff_cache/
