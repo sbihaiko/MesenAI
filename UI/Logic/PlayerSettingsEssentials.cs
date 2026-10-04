@@ -76,7 +76,9 @@ public static class PlayerSettingsEssentials
 	public static bool EmbedsClassicPage(ConfigWindowTab tab) => false;
 
 	//The classic Options page "More in Options..." expands to; null when the tab
-	//has no such link (Display keeps the hint).
+	//has no such link (Display keeps the hint). Controls' row asks the window for
+	//the Play Controller sheet first (ADR-0255 slice 1); its Input page is what a
+	//view nobody wired still expands to.
 	public static ConfigWindowTab? OptionsTabFor(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Audio => ConfigWindowTab.Audio,
 		ConfigWindowTab.Input => ConfigWindowTab.Input,

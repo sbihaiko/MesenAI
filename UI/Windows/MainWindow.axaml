@@ -191,6 +191,9 @@
 							<Binding Path="CheatsSheet.IsVisible" />
 							<Binding Path="ReplaysSheet.IsVisible" />
 							<Binding Path="IsPlayerSettingsVisible" />
+							<!--ADR-0255 slice 1 (W-P17): the Controller sheet, over the
+							paused game like every other sheet of W-P4.-->
+							<Binding Path="ControllerSheet.IsVisible" />
 						</MultiBinding>
 					</Border.IsVisible>
 				</Border>
@@ -331,6 +334,11 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+
+				<!--ADR-0255 slice 1 (W-P17): the Controller sheet, which Settings ›
+				Controls' More in Options… opens over the paused game. Its own
+				IsVisible is the view-model's, like W-P15's.-->
+				<v:PlayerControllerSheetView Name="PlayerControllerSheetHost" DataContext="{Binding ControllerSheet}" />
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
