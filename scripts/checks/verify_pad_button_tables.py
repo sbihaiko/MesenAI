@@ -176,11 +176,12 @@ def check(root: Path):
         if not match:
             failures.append(f"{rel}: no `vector<string> buttonNames` table found")
             continue
-        backend_names[backend] = re.findall(r'"([^"]*)"', match.group(1))
+        backend_names[backend] = re.findall(
+            r'"([^"]*)"', COMMENT_RE.sub("", match.group(1)))
 
     sheet_names = {}
     for backend, body in SHEET_NAMES_RE.findall(sheet):
-        sheet_names[backend] = re.findall(r'"([^"]*)"', body)
+        sheet_names[backend] = re.findall(r'"([^"]*)"', COMMENT_RE.sub("", body))
 
     # ControllerLivePad._names[backend] == the backend's own table, index for
     # index. This is what makes a wrong bit in the header visible below.
@@ -212,7 +213,13 @@ def check(root: Path):
 
     # Every PadButtonBit row: the name at Bit in the backend's OWN table is the
     # name that row's console button maps to.
-    rows = ROW_RE.findall(core_order)
+    # Comments first: a row that has been commented out is not a row. Read
+    # as text, it would be checked as if the table still carried it - and the
+    # check would then pass on a header whose table no longer has it, or fail
+    # on one that is simply being edited. (Row completeness is a separate
+    # question this check does not answer: the evdev D-pad legitimately has
+    # no row, so an absent row is not a defect here.)
+    rows = ROW_RE.findall(COMMENT_RE.sub("", core_order))
     if not rows:
         failures.append(f"{CORE_ORDER}: no PadButtonBit rows found")
     for backend, button, bit_text in rows:

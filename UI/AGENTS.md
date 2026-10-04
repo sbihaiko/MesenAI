@@ -202,14 +202,18 @@ can be exercised by real xunit tests without Avalonia or the native
   a surface that took the console away is up — the pause is what makes it the
   pad's, not the surface's, which is what keeps a surface that never pauses
   (the barcode tool sheet, Settings from a task door) from handing the pad the
-  menus over a running game. `IsBackEdge` is asked **before** authority: Back is
-  the one press no authority rule may gate, because the slot grid the
+  menus over a running game. `IsBackEdge` is asked **outside** that rule: the
+  tick hands the authority answer to `PadNavRepeat.Next`, and only when it
+  answers `None` does it test the Back edge, which needs no authority at all —
+  Back is the one press no authority rule may gate, because the slot grid the
   Load/Save-state shortcuts open sits over a game `CurrentPlaySheet()` does not
   name and has no other exit. `StateGrid` is scoped **out** — it moves its own
   `SelectedIndex` from the pad in its own timer, through `GridAction` (the pad's
-  own preset, never the console mapping the port carries, so rebinding or
-  clearing the D-pad cannot change or lose grid navigation and a second pad can
-  drive it), its slots are not individually focusable, and "owning" it here
+  own preset inside the Play door, never the console mapping the port carries,
+  so rebinding or clearing the D-pad cannot change or lose grid navigation and a
+  second pad can drive it — and the console mapping outside it, which is how
+  Advanced draws its own game-selection and Save/Load screens from the same
+  control), its slots are not individually focusable, and "owning" it here
   would mean the roving-focus container Decision 3 rules out — except for Back,
   which is the bridge's: the grid's loop has no exit, and a player stuck in the
   slot grid is the failure ADR-0256 exists to prevent.

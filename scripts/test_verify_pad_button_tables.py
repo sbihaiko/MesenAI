@@ -11,7 +11,9 @@ guards), so each case asserts the checker exits non-zero AND says what it saw:
      fills with another button (the defect that reached main in #817);
   3. a renamed backend button - WindowsKeyManager.cpp's "Back" becomes "Bk";
   4. a reordered mirror - ControllerLivePad._names' XInput row swaps Up/Down;
-  5. a renumbered enum - InteropEnums.cs moves Evdev off the core's value.
+  5. a renumbered enum - InteropEnums.cs moves Evdev off the core's value;
+  6. a commented-out row with a wrong bit - the table is the code, not the text
+     around it, so this one must PASS.
 
 Usage: python3 scripts/test_verify_pad_button_tables.py
 """
@@ -132,6 +134,25 @@ def main():
          lambda root: edit(root, "UI/Interop/InteropEnums.cs",
                            r"Evdev = 3,", "Evdev = 9,"),
          ["InteropEnums.cs", "GamepadBackend.Evdev"])
+
+    # 6. A commented-out row is not a row. The mutation both comments the row out
+    #    and gives it a bit the backend's table fills with another button, so a
+    #    checker that read the comment as live would reject this tree: the table
+    #    is the code, not the text around it. Row *completeness* is a different
+    #    question and deliberately not answered here (the evdev D-pad has no row
+    #    and never will), so this case asserts the parse rather than coverage.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        build(root)
+        edit(root, "Core/Shared/GamepadButtonOrder.h",
+             r"(\t*)\{ GamepadBackend::XInput, PadButton::A, 12 \},",
+             r"\1// { GamepadBackend::XInput, PadButton::A, 0 },")
+        proc = run(root)
+    if proc.returncode != 0:
+        fail("a commented-out row must not be read as a row, got exit "
+             f"{proc.returncode}: {(proc.stdout + proc.stderr).strip()}")
+    else:
+        ok("a commented-out row is not part of the table")
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s)")

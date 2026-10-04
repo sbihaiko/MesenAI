@@ -7,7 +7,8 @@
   **"Sim, com um limiar"** (whether an axis can carry a digital action). One of
   the three does not survive contact with the code as stated; see "The answers,
   against the code" below, which is the part of this ADR that matters. The
-  sheet itself is **not implemented** - the slices are listed under Decision.
+  sheet itself **was not implemented** when this was written - the slices are
+  listed under Decision, and what has landed since is at the end of this block.
   Slice 4's storage half and "the keyboard case" have since landed
   (2026-10-04): `ShortcutKeyInfo.PadBinding`, `PadShortcutBinding`,
   `PadAxisAction` and their readers in `EmulatorShortcut`/`PreferencesConfig`,
@@ -21,9 +22,9 @@
   on two of three backends worth shipping at all?" - and the answer was **ship
   it**, on the terms recorded under Decision 5: it is a real repair on the two
   backends that report a VID:PID, it names nothing where it cannot, and its cost
-  is bounded and stated. The **sheet** is still not implemented: the sheet itself
-  (#811), the PLAYERS slice and the remap mode are separate work.
-  **Slices 1 and 2 landed 2026-10-04** (#825 and #826), and the corrections they
+  is bounded and stated.
+  **Slices 1 and 2 landed 2026-10-04** (#811, with its three defects and five
+  review findings fixed in #825, then the PLAYERS surface in #826), and the corrections they
   needed landed with them or right after (#834): the sheet's own focus claim
   (ADR-0256 Decision 3 — without it the arbiter focused the surface *under* the
   sheet), the device moves' two write-side defects (a dropped reconnect move
