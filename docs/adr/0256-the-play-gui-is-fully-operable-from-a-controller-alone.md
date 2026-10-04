@@ -227,3 +227,23 @@ All on 2026-10-04, by the user, quoted verbatim from the questions they answered
 - This ADR does not cover the pad's *way in* being discoverable; ADR-0251 owns
   that, and the count it keeps (`PlayMenuHintsShown`) is per install, not per
   pad.
+- **Two mechanisms already in the tree move focus without going through this
+  ADR's rules, and neither is named in the Decision (found 2026-10-04, before
+  the bridge landed).** They are the reason the bridge is not merely additive:
+  - `XYFocus.NavigationModes="Enabled"` is set on some nineteen Play surfaces
+    (`UI/Windows/MainWindow.axaml`'s overlay and sheets, every `UI/Views/Play*`
+    sheet, `PlayHomeView.axaml`, `SetupWizardWindow.axaml`). That is a
+    directional-focus mechanism the ADR never decided on and does not mention
+    as prior art; it is neither the focus engine named above nor a thing this
+    ADR forbids, and the bridge has to coexist with it rather than assume it is
+    absent.
+  - `UI/Controls/StateGrid.axaml.cs`'s `TimerInput_Tick` is per-view navigation
+    code of exactly the shape the non-goals forbid: it polls
+    `InputApi.GetPressedKeys`, walks the recent-games grid using **player 1's
+    own console mappings** off `Nes.Port1` and friends, keeps its own
+    de-duplication set, and never repeats. Decision 4 says navigation is not
+    rebindable and follows the pad's preset; this follows whatever the player
+    bound to the console, so a player who moves their D-pad loses grid
+    navigation, and a second pad cannot drive it at all. The grid is reachable
+    from W-P4, so the stop rule covers it; folding it into the bridge is part of
+    this ADR's work, not a follow-up.
