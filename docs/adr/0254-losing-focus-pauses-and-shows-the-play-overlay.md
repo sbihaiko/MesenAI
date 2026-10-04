@@ -1,7 +1,10 @@
 # ADR-0254: Losing focus pauses the game and shows the Play pause overlay
 
-- Status: proposed (2026-10-04). The decisions under "Open questions" are
-  the user's to make; nothing here is implemented.
+- Status: accepted (2026-10-04), implemented in the same turn under the user's
+  own two picks on that day, quoted verbatim from the question they answered:
+  **"Fica pausado na tela de Esc"** (on focus regain) and **"Ligado por padrão
+  no Play"** (the default). The same two lines are quoted in the PR body, which
+  is what ADR-0137's same-turn rule requires alongside the unit tests below.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Esc router and
   the W-P4 overlay's own rules), ADR-0251 (Play teaches its pause menu),
@@ -53,42 +56,49 @@ no W-P4, so on those doors only the pause half is available.
   stay distinguishable from a pause the player asked for, so the Esc router
   and the "do not resume under a dialog" rule keep working.
 
-## Open questions
+## The three questions, and how they were answered
 
-These are what keep this ADR `proposed`. Each has a recommendation, but the
-recommendation is not the decision.
-
-1. **What happens on focus regain?** Today: resume immediately. The
-   alternative is to stay paused on the overlay until the player presses Esc.
-   *Recommendation: stay paused.* Auto-resume is the half of the current
-   behaviour that cost the user the game; the overlay is already the surface
-   that turns "Esc to resume" into a deliberate act.
-2. **Is it on by default?** Today `PauseWhenInBackground` is off, so this
-   changes nothing for anyone who has not opted in. *Recommendation: on by
-   default for the Play door*, since the overlay now explains the pause, and
-   leave Classic/Advanced's default alone. This needs a migration answer for
-   an existing `settings.json`, which has no way to tell "never chose" from
-   "chose off".
-3. **Does a config window still auto-resume under `PauseWhenInMenusAndConfig`?**
-   The two flags share `AutoPaused` and the same resume branch. If regain
-   stops auto-resuming, the menus-and-config half must keep its own answer,
-   or opening Settings from W-P4 starts resuming on close. *Recommendation:
-   the two paths get separate resume policies*; only the focus path waits for
-   Esc.
+1. **What happens on focus regain?** Resume immediately, or stay paused on the
+   overlay until the player presses Esc. **Answered: stay paused** - the user
+   picked *"Fica pausado na tela de Esc"*.
+2. **Is it on by default?** **Answered: yes** - *"Ligado por padrão no Play"*.
+   The migration caveat was accepted with the answer: `PreferencesConfig`
+   declares one global default, so this is `true` for every door, and a
+   configuration written before it keeps whatever it stored, because nothing
+   can tell "never chose" from "chose off".
+3. **Does the menus-and-config pause keep its own resume policy?** **Answered
+   by the shape**: yes. The focus pause is the only one that opens an overlay,
+   so it is the only one whose automatic resume is held back; the
+   menus-and-config path resumes on the first poll where its condition clears,
+   exactly as before.
 
 ## Decision
 
-Not decided. The shape once the questions above are answered:
+**Accepted and implemented the same day, under the two answers above.**
 
-- `UpdateAutoPause()` gains the overlay half: when it pauses because the app
-  lost focus and the current door is Play with a game loaded, it opens the
-  W-P4 overlay (`MainWindowViewModel.OpenPauseOverlay()`) instead of pausing
-  silently. The door check reuses the same one W-P4's own visibility uses, so
-  the overlay is never asked for on a door that has no such surface.
-- The pause keeps going through `MainMenu.AutoPaused`, so it stays distinct
-  from a player-initiated pause.
-- If question 1 is answered "wait for Esc", the focus path stops resuming by
-  itself and the overlay's existing Esc-to-resume is the only way back.
+- `UI/Logic/FocusPause` holds the decision host-free (ADR-0123), and
+  `MainWindow.UpdateAutoPause` is its only caller - it owns the poll, the
+  preferences and the pause calls.
+  - `ShowsOverlay(focusLost, isPlayDoor, gameLoaded)`: only the *focus* pause
+    gets a voice, and only where there is a surface to give it one. The
+    menus-and-config pause stays silent because the player is using the app in
+    front of something they opened; Classic and Advanced have no W-P4; a Play
+    door with no game loaded has nothing for the overlay's rows to describe.
+  - `AutoResumes(pausedByFocusWithOverlay, overlayOpen)`: the focus path's
+    automatic resume is held back while the overlay it opened is up, so the
+    game cannot come back running behind a pause card. Everything else -
+    the menus and config pauses, and the focus pause once the player has
+    answered - resumes exactly as it always did.
+- `MainWindow` carries one field, `_focusPausedWithOverlay`, set where the
+  overlay is opened and read by the resume branch. The way back is W-P4's own
+  Esc, which already resumes and clears the overlay.
+- `PreferencesConfig.PauseWhenInBackground` defaults to `true`.
+
+Evidence: `UI.Tests/Play/FocusPauseTests` (8 cases over both rules - the
+three-way door/game/focus table, the held-back resume, and the three cases
+that must keep resuming) and `UI.HeadlessTests/FocusPauseDefaultTests` (a
+fresh `PreferencesConfig` pauses; `PauseWhenInMenusAndConfig` stays opt-in,
+because that one fires while the player is *using* the app).
 
 ## Consequences
 
@@ -102,10 +112,11 @@ Not decided. The shape once the questions above are answered:
 - A game that never draws still pauses; the overlay's frozen frame comes from
   the core's last frame, so a pause during the load card must not be treated
   as a picture.
-- On Classic and Advanced this decision is a pause and nothing else. If the
-  answer to question 2 is "on by default everywhere", those doors change
-  behaviour with no surface to explain it - which is an argument for the
-  recommendation.
+- **Classic and Advanced now pause on focus loss by default with nothing to
+  explain it.** `PauseWhenInBackground` is one global preference and the answer
+  was "on by default", so those doors get the pause and no W-P4. This is the
+  cost the answer accepted; a door-scoped default would need the preference
+  split in two, which nothing has asked for yet.
 - Auto-pause already suppresses the debugger's bring-to-front on break
   (`SuppressBringToFront()`); opening an overlay on top of that path must not
   re-enable it.

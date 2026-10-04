@@ -27,7 +27,12 @@ namespace Mesen.Config
 		[ObservableProperty] public partial bool SingleInstance { get; set; } = true;
 		[ObservableProperty] public partial bool AutoLoadPatches { get; set; } = true;
 
-		[ObservableProperty] public partial bool PauseWhenInBackground { get; set; } = false;
+		//ADR-0254 (user's choice, 2026-10-04: "Ligado por padrão no Play"): on by
+		//default. The pause is one global preference, so Classic and Advanced get
+		//it too - they keep the silent pause, since W-P4 is a Play surface. A
+		//configuration written before this keeps whatever it stored; nothing here
+		//can tell "never chose" from "chose off".
+		[ObservableProperty] public partial bool PauseWhenInBackground { get; set; } = true;
 		[ObservableProperty] public partial bool PauseWhenInMenusAndConfig { get; set; } = false;
 		[ObservableProperty] public partial bool AllowBackgroundInput { get; set; } = false;
 		[ObservableProperty] public partial bool PauseOnMovieEnd { get; set; } = true;
