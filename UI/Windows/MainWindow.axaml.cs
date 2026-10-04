@@ -126,50 +126,18 @@ namespace Mesen.Windows
 
 			InitializeComponent();
 
-			//P.4/P.5 (PRD Part B §6): give the overlay's first button / the
-			//picker's first choice focus when they open, so D-pad/A/B (Avalonia
-			//focus navigation) works without a pointer - the same trick OnOpened
-			//uses for the recent-games grid. Posted so the layout pass runs first
-			//(Focus() on a not-yet-visible panel is a no-op).
-			_model.PropertyChanged += (s, e) => {
-				if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerOverlayVisible) && _model.IsPlayerOverlayVisible) {
-					Dispatcher.UIThread.Post(() => this.GetControl<Button>("OverlayResumeButton")?.Focus());
-				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPlayerPackPickerVisible) && _model.IsPlayerPackPickerVisible) {
-					Dispatcher.UIThread.Post(FocusPackPickerChoice);
-				} else if(e.PropertyName == nameof(MainWindowViewModel.IsEnhancementsPanelVisible) && _model.IsEnhancementsPanelVisible) {
-					Dispatcher.UIThread.Post(() => FindNamedDescendant("EnhancementsModernCheckBox")?.Focus());
-				} else if(e.PropertyName == nameof(MainWindowViewModel.IsPackDetailVisible) && _model.IsPackDetailVisible) {
-					//G.4 (W-P6): Change pack… when it can act, else Done.
-					Dispatcher.UIThread.Post(() => FindNamedDescendant(_model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton")?.Focus());
-				} else if(e.PropertyName == nameof(MainWindowViewModel.IsSaveStatesSheetVisible) && _model.IsSaveStatesSheetVisible) {
-					//G.2: the W-P4 Save states sheet, same D-pad/A/B reason.
-					Dispatcher.UIThread.Post(() => this.GetControl<Button>("SaveStatesSaveButton")?.Focus());
-				}
-			};
-			//P.10: the Cheats sheet gets focus on its search box (or Done when the
-			//search cannot work on this console), same D-pad/A/B reason as above.
-			_model.CheatsSheet.PropertyChanged += (s, e) => {
-				if(e.PropertyName == nameof(PlayerCheatsSheetViewModel.IsVisible) && _model.CheatsSheet.IsVisible) {
-					Dispatcher.UIThread.Post(() => {
-						string name = _model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton";
-						Control? target = this.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
-						target?.Focus();
-					});
-				}
-			};
-			//R.2: the Shared replays sheet focuses its first Watch, else Done.
-			_model.ReplaysSheet.PropertyChanged += (s, e) => {
-				if(e.PropertyName == nameof(PlayerReplaysSheetViewModel.IsVisible) && _model.ReplaysSheet.IsVisible) {
-					Dispatcher.UIThread.Post(() => {
-						List<Control> controls = this.GetVisualDescendants().OfType<Control>().ToList();
-						Control? target = controls.FirstOrDefault(c => c.Name == "ReplaysWatchButton" && c.IsEffectivelyEnabled) ?? controls.FirstOrDefault(c => c.Name == "ReplaysDoneButton");
-						target?.Focus();
-					});
-				}
-			};
-
-			//G.5: the Play edge-flow sheets' focus, reload and controller poll.
+			//G.5: the Play edge-flow sheets' reload and controller poll.
 			PlayEdgeFlowsWiring.Attach(this, _model);
+
+			//ADR-0256 Decisions 2 and 3 (accepted 2026-10-04): the pad drives the
+			//Play GUI, and one focusable control at a time holds it. Every surface's
+			//focus-on-open claim - what this constructor, PlayEdgeFlowsWiring and
+			//the sheets' own code-behind each posted for themselves - is registered
+			//inside Attach, in one place, so the surfaces arbitrate instead of
+			//racing each other's posts. The held repeat rides on the same tick
+			//(PadNavRepeat); it is the slice's, and ADR-0256's decision list stops
+			//at six rules without naming it.
+			PlayPadNavigationWiring.Attach(this, _model);
 
 			_shortcutHandler = new ShortcutHandler(this);
 
@@ -384,8 +352,12 @@ namespace Mesen.Windows
 		private void OnOverlayQuitGame(object? sender, RoutedEventArgs e)
 		{
 			//ADR-0249 (W-X1): the question is the stop banner on the card itself.
+			//ADR-0256 Decision 3: the banner's Keep button is the pad's/arrow key's
+			//way to answer the question, so it takes the focus the moment the
+			//question appears. The goal is a surface's claim in
+			//PlayPadNavigationWiring, which focuses the same button through the
+			//same one path - no post of its own here.
 			if(!_model.ConfirmQuitGame(ConfigManager.Config.Preferences.ConfirmExitResetPower, QuitGameFromOverlay)) {
-				Dispatcher.UIThread.Post(() => FindNamedDescendant("QuitGameKeepButton")?.Focus());
 				return;
 			}
 			QuitGameFromOverlay();
@@ -418,9 +390,12 @@ namespace Mesen.Windows
 			//Give focus to panel to avoid menu being given focus by default
 			this.GetControl<Panel>("RendererPanel").Focus();
 
-			//Focus on the recent games dialog if it's visible
-			//This also enables keyboard/gamepad navigation on the selection screen without having to click it first
-			this.FindDescendantOfType<StateGrid>()?.Focus();
+			//ADR-0256 Decision 3: then the one arbiter decides who really holds
+			//it, in the app's own terms - a Play surface if one is already up,
+			//else Play's home / the recent-games or slot grid, else the renderer
+			//just focused above. This replaces the raw FindDescendantOfType
+			//<StateGrid>()?.Focus() that used to fight the home for the keyboard.
+			PlayFocusOnOpen.Of(this)?.Refresh();
 
 			Startup = Task.Run(() => {
 				CommandLineHelper cmdLine = new CommandLineHelper(Program.CommandLineArgs, true);

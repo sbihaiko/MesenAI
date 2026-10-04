@@ -176,6 +176,43 @@ can be exercised by real xunit tests without Avalonia or the native
   (`InterruptionKind.ForcedPatch`, docked above the game) up in Player mode
   only; *Reload Without Patch* is `EmuApi.SuppressForcedPackPatch` (that
   ROM, this session, the setting untouched) plus a power cycle.
+- The pad drives the Play GUI (ADR-0256 Decisions 2 and 3, plus the held
+  repeat the slice of 2026-10-04 carried). The rules are host-free in
+  `UI/Logic` and tested without a pad or a window: `PadInHand` (which pad is in
+  the player's hand, off the last *new* press), `PadNaming` (the family comes
+  from the backend's `GetKeyName` — a code cannot say it, since
+  `(code - 0x1000) >> 8` reads a Windows DirectInput `Joy` code as pad 16),
+  `PadNavControls.Resolve` (the codes that pad's preset binds),
+  `PlayPadNavigation.HasAuthority/Next` (when the pad is the GUI's rather than
+  the console's, and what one press means) and `PadNavRepeat` (400 ms before
+  the first repeat, one step every 100 ms after it; Confirm and Back never
+  repeat — a repeating Confirm activates whatever it just scrolled onto).
+  `UI/Windows/PlayPadNavigationWiring.cs` is the only host half: a 50 ms
+  `DispatcherTimer` on the app's own poll cadence (the W-P15 poll's) samples
+  `InputApi.GetPressedKeys()` — never an event, so nothing hooks
+  `OnPreviewKeyDown`, whose macOS path returns early — feeds the rules and
+  applies the answer through `IFocusManager.FindNextElement` +
+  `PlayFocusOnOpen.Enter`. It never re-tests the pause: with a game running and
+  nothing up, `PlayPadNavigation.HasAuthority` (fed by `IsPlaySurfaceOverGame`)
+  is what says the pad belongs to the console, and a second guard could only
+  disagree with it. `StateGrid` is scoped **out** — it already moves its own
+  `SelectedIndex` from the pad in its own timer, its slots are not
+  individually focusable, and "owning" it here would mean the roving-focus
+  container Decision 3 rules out — except for Back, which is the bridge's: the
+  grid's loop has no exit, and a player stuck in the slot grid is the failure
+  ADR-0256 exists to prevent.
+- `PlayFocusOnOpen` (`UI/Utilities`) is Decision 3's one focus path. A Play
+  surface registers a claim in the order `TogglePlayerOverlay` walks it
+  (`HandleEdgeFlowEsc`, then `CurrentPlaySheet`'s chain), so two surfaces up at
+  once — Look's Adjust… opens the shader sheet over Settings, which stays open
+  beneath — resolve the way Esc would; the arbiter re-reads the claims on a
+  close as well as an open, which is what hands the focus back down the stack.
+  `Enter` is the only place focus is taken, and always with
+  `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
+  focus, which is what paints `PlayerFocusRing`. Before it, each surface posted
+  its own `Focus()` (the `MainWindow` constructor, `PlayEdgeFlowsWiring`,
+  `PlayHomeView`, `StateGrid`) and they raced; #625's cross-window guard lives
+  here once now.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way

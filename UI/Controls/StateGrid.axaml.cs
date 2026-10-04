@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
@@ -86,7 +87,7 @@ namespace Mesen.Controls
 
 			IsVisibleProperty.Changed.AddClassHandler<StateGrid>((x, e) => {
 				if(x.IsVisible) {
-					x.Focus();
+					x.FocusWhenUncovered();
 				}
 			});
 		}
@@ -135,7 +136,21 @@ namespace Mesen.Controls
 		{
 			base.OnAttachedToVisualTree(e);
 			_timerInput.Start();
-			Focus();
+			FocusWhenUncovered();
+		}
+
+		//ADR-0256 Decision 3: the grid asks for the focus through the one path,
+		//which focuses it with a NavigationMethod (the ring the theme paints on
+		//:focus-visible) and refuses while a Play surface is up over it. It keeps
+		//asking on its own - it is a content-area screen, not a surface in the Esc
+		//stack, and it also runs in Advanced, where no Play claim is ever open -
+		//so this is the same focus it always took, minus the case where a sheet
+		//over the game would have lost the keyboard to it.
+		private void FocusWhenUncovered()
+		{
+			if(!PlayFocusOnOpen.SurfaceIsUp(this)) {
+				PlayFocusOnOpen.Enter(this);
+			}
 		}
 
 		protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

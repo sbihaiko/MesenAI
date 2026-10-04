@@ -80,14 +80,6 @@ namespace Mesen.Windows
 			return this.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
 		}
 
-		//W-P5: focus the selected radio (the stored choice, else the first).
-		private void FocusPackPickerChoice()
-		{
-			ItemsControl? list = FindNamedDescendant("PackPickerList") as ItemsControl;
-			RadioButton[] choices = list?.GetVisualDescendants().OfType<RadioButton>().ToArray() ?? Array.Empty<RadioButton>();
-			(choices.FirstOrDefault(c => c.IsChecked == true) ?? choices.FirstOrDefault())?.Focus();
-		}
-
 		//W-P4's Pack row: W-P5 for 2+ packs (even with a stored choice -
 		//"changing the choice later"), else W-P6 inspects the one pack (or none).
 		private void OnOverlayPack(object? sender, RoutedEventArgs e)
@@ -174,8 +166,10 @@ namespace Mesen.Windows
 			ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true, CreateDisplaySettings);
 			settings.PropertyChanged += OnPlayerSettingsChanged;
 			_model.OpenPlayerSettings(settings);
-			//Keyboard and gamepad start on the strip (rule: everything reachable).
-			Dispatcher.UIThread.Post(() => (FindNamedDescendant("tabPlayerWindow") as TabItem)?.Focus());
+			//Keyboard and gamepad start on the strip (rule: everything reachable)
+			//- the sheet's own claim in PlayPadNavigationWiring, through the one
+			//path, so a sheet opened with something else already up cannot grab
+			//the keyboard from it.
 		}
 
 		//G.4 (W-P8): Display edits this window - its full screen and scale.
