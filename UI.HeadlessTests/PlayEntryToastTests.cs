@@ -20,13 +20,15 @@ namespace Mesen.HeadlessTests;
 public partial class PlayEdgeFlowsTests
 {
 	//The headless Core has no key manager (every key name is empty), so the
-	//tests hand the toast the default slots' names and the pad count.
+	//tests hand the toast the default slots' names and the pad count. The third
+	//slot is the pad binding (ADR-0255 slice 4), empty for a config that has none.
 	private static readonly List<string> EscSlot = new() { "Esc" };
 	private static readonly List<string> SelectStartSlot = new() { "Pad1 Select", "Pad1 Start" };
+	private static readonly List<string> NoPadSlot = new();
 
 	private static void UseDefaultBindings(MainWindowViewModel model, uint pads)
 	{
-		model.OverlayBindingKeyNames = () => (EscSlot, SelectStartSlot);
+		model.OverlayBindingKeyNames = () => (EscSlot, SelectStartSlot, NoPadSlot);
 		model.ConnectedGamepadCount = () => pads;
 	}
 
@@ -34,7 +36,7 @@ public partial class PlayEdgeFlowsTests
 	//GameLoaded: without bindings it shows no hint, so it spends no start.
 	private static void ForgetBindings(MainWindowViewModel model)
 	{
-		model.OverlayBindingKeyNames = () => (new List<string>(), new List<string>());
+		model.OverlayBindingKeyNames = () => (new List<string>(), new List<string>(), new List<string>());
 	}
 
 	[AvaloniaFact]

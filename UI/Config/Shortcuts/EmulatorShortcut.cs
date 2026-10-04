@@ -166,6 +166,12 @@ namespace Mesen.Config.Shortcuts
 					return cfg.ShortcutKeys[keyIndex].KeyCombination;
 				} else if(!cfg.ShortcutKeys[keyIndex].KeyCombination2.IsEmpty) {
 					return cfg.ShortcutKeys[keyIndex].KeyCombination2;
+				} else if(cfg.ShortcutKeys[keyIndex].PadBinding is PadShortcutBinding pad && !pad.IsEmpty) {
+					//ADR-0255 slice 4: the chain ends on the pad slot, which is how
+					//a shortcut with a button and no key still has something to
+					//display (the context menu's shortcut text). A shortcut that
+					//has a key returns it exactly as it did.
+					return pad.ToKeyCombination();
 				}
 			}
 			return null;

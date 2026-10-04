@@ -115,6 +115,24 @@ namespace Mesen.Tests.Play
 			Assert.Equal("Select+Start", PlayMenuHint.BindingName(PlayInputDevice.Controller, SelectStart, Esc));
 		}
 
+		//ADR-0255 slice 4: a shortcut may hold a button and no key, so the pad
+		//slot is a slot like the other two - a pad whose overlay binding is Home
+		//alone is told "Home", and the keyboard is still told "Esc".
+		[Fact]
+		public void The_pad_slot_names_the_control_when_no_key_does()
+		{
+			Assert.Equal("Home", PlayMenuHint.BindingName(PlayInputDevice.Controller, Esc, None, new[] { "Pad1 Home" }));
+			Assert.Equal("Esc", PlayMenuHint.BindingName(PlayInputDevice.Keyboard, Esc, None, new[] { "Pad1 Home" }));
+		}
+
+		//The pad slot does not outrank a controller key combination: it is the
+		//last slot that speaks for the device, not a preference over the others.
+		[Fact]
+		public void A_controller_key_combination_outranks_the_pad_slot()
+		{
+			Assert.Equal("Select+Start", PlayMenuHint.BindingName(PlayInputDevice.Controller, Esc, SelectStart, new[] { "Pad1 Home" }));
+		}
+
 		//A device without a binding of its own falls back to the other one: an
 		//Esc hint still says how in; with nothing bound there is nothing to say.
 		[Fact]

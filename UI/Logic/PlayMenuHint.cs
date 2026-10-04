@@ -80,14 +80,18 @@ public static class PlayMenuHint
 	//"Pad1 Select" -> "Select"; keyboard names are kept.
 	public static string ShortKeyName(string keyName) => IsControllerKey(keyName) ? keyName.Substring(keyName.IndexOf(' ') + 1) : keyName;
 
-	//The two ToggleOverlay slots, as key names. Each slot is classified by its
+	//The ToggleOverlay slots, as key names. Each slot is classified by its
 	//keys, so swapped slots still name the right one; a device with no binding
 	//of its own names the other device's.
-	public static string? BindingName(PlayInputDevice device, IReadOnlyList<string> firstSlot, IReadOnlyList<string> secondSlot)
+	//
+	//ADR-0255 slice 4: the slots include the pad slot (a shortcut may hold a
+	//button and no key), so the caller hands over all of them and the rule stays
+	//the one above - the first slot that speaks for the device in hand wins.
+	public static string? BindingName(PlayInputDevice device, params IReadOnlyList<string>[] slots)
 	{
 		IReadOnlyList<string>? keyboard = null;
 		IReadOnlyList<string>? controller = null;
-		foreach(IReadOnlyList<string> slot in new[] { firstSlot, secondSlot }) {
+		foreach(IReadOnlyList<string> slot in slots) {
 			if(slot.Count == 0) {
 				continue;
 			}
