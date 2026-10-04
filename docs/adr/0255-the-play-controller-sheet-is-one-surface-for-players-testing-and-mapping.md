@@ -7,8 +7,15 @@
   **"Sim, com um limiar"** (whether an axis can carry a digital action). One of
   the three does not survive contact with the code as stated; see "The answers,
   against the code" below, which is the part of this ADR that matters. The
-  sheet itself is **not implemented** yet - the slices are listed under
-  Decision.
+  sheet itself is **not implemented** - the slices are listed under Decision.
+  Slice 4's storage half and "the keyboard case" have since landed
+  (2026-10-04): `ShortcutKeyInfo.PadBinding`, `PadShortcutBinding`,
+  `PadAxisAction` and their readers in `EmulatorShortcut`/`PreferencesConfig`,
+  plus `Configuration.RestoreKeyboardPresetIfNothingIsBound` with
+  `UI.HeadlessTests/KeyboardPresetRecoveryTests`. Slice 4's **surface** has not
+  - nothing in the app writes a `PadBinding`, and `PreferencesConfig` drops an
+  axis binding before the core push (`!pad.IsAxis`), so a player-set threshold
+  can be stored but cannot fire.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the
   Esc router and W-P15 - the setup sheet this one sits beside), ADR-0250 (one

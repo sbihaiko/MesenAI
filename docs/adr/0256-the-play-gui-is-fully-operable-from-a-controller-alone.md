@@ -5,10 +5,19 @@
   accepted the ADR and asked for the work later the same day, quoted verbatim:
   **"espera a review e mergeia os três. depois que estiver no main pode
   implementar tudo em paralelo usando workflows"**. So this is a request for the
-  work listed under Decision - the decision is made and **nothing implements it
-  yet**; the first landing is the Controller sheet (ADR-0255), which this ADR's
-  Consequences already names as the cheaper order. Ids are never reused
-  (ADR-0035), which is why this is 0256 and not 0255.
+  work listed under Decision - the decision is made, and at the time of writing
+  **nothing implemented it**; the first landing is the Controller sheet
+  (ADR-0255), which this ADR's Consequences already names as the cheaper order.
+  Ids are never reused (ADR-0035), which is why this is 0256 and not 0255.
+  **Partly implemented 2026-10-04**, the same day: Decision 5's chord rule on
+  any pad (#802, `Core/Shared/ShortcutKeyRules.h`), Decisions 2-4's host-free
+  rules (`UI/Logic/PlayPadNavigation.cs`, `PadNavControls.cs`, `PadInHand.cs`,
+  pinned by `UI.Tests/Play/PadNavigationTests.cs`) and Decision 6's footer
+  vocabulary (`PlayMenuHint.ResumeHint`). Those rules are **rules only** - the
+  bridge that hands them the app's pad state is not wired, so the pad still does
+  not move the GUI's focus. **Not implemented**: the bridge, Decision 3's
+  single focus owner, Decision 7's repeat in the running app, and Decision 8's
+  first run.
   **Amended 2026-10-04**, the same day, after the work started: four more
   questions were put to the user and answered — the focus mechanism (Decision
   7's paragraph: the focus engine, not synthetic key events), what "one
