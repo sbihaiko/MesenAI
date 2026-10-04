@@ -70,19 +70,26 @@ public class SaveStatePreviewLengthTests : IDisposable
 		File.WriteAllBytes(rom, SyntheticNrom.Build());
 		WriteRealState(rom, state);
 
+		//Filled with 0xFF rather than left at zero: the byte past the declared
+		//length is only evidence that the length is where writing stopped if it
+		//is a byte nothing would have written by itself.
 		byte[] buffer = new byte[MaxPreviewBytes];
+		Array.Fill(buffer, (byte)0xFF);
+
 		int size = GetSaveStatePreviewNative(state, buffer);
 
 		Assert.True(size > 0, $"the preview call answered {size} for a state it can render");
 
 		//A PNG ends with the IEND chunk: four bytes of zero length, then the
 		//type "IEND" and its CRC. So the four bytes ending eight from the
-		//declared length are the type - and the byte right after the declared
-		//length is untouched, because nothing was written there. Before the fix
-		//the answer was the frame's byte count (tens of thousands past the PNG),
-		//so the four bytes it pointed at were the zeroes left in the buffer.
+		//declared length are the type. Before the fix the answer was the frame's
+		//byte count (tens of thousands past the PNG), so those four bytes were
+		//not a chunk at all - which is what this assertion caught.
 		Assert.Equal("IEND", System.Text.Encoding.ASCII.GetString(buffer, size - 8, 4));
-		Assert.Equal(0, buffer[size]);
+		//And nothing was written past the declared length: were the answer a
+		//length short of what was written, the buffer's own fill would still be
+		//there.
+		Assert.Equal(0xFF, buffer[size]);
 	}
 
 	//The consequence the wrapper carries, asserted through the wrapper: the
