@@ -10,6 +10,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -78,6 +79,27 @@ public class PlayerControllerSheetTests : IDisposable
 	{
 		control.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
+	}
+
+	//The arbiter posts its decision at Loaded priority and the sheet's controls
+	//only take their place in a later layout pass, so the focus lands a turn or
+	//two after the sheet opens. This pumps until `done` holds, and returns the
+	//last focus it saw otherwise - which is what the red run of the test above
+	//reports.
+	private static Control? WaitForFocus(MainWindow window, Func<Control?, bool> done, int turns = 60)
+	{
+		Control? focused = null;
+		for(int i = 0; i < turns; i++) {
+			Dispatcher.UIThread.Post(static () => { }, DispatcherPriority.Background);
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+			focused = window.FocusManager?.GetFocusedElement() as Control;
+			if(done(focused)) {
+				break;
+			}
+		}
+		return focused;
 	}
 
 	//W-P4 › Settings (W-P8), on Controls, then its link.
@@ -189,6 +211,36 @@ public class PlayerControllerSheetTests : IDisposable
 
 		Assert.False(model.ControllerSheet.IsVisible);
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//ADR-0256 Decision 3: one place decides who holds the focus when a Play
+	//surface opens, and the Controller sheet is one of the surfaces that path has
+	//to drive (the ADR's Consequences name it). The claim table had no entry for
+	//this sheet, so opening it left no claim open: the arbiter fell back to the
+	//home underneath - the focus ring drawn on the surface *under* the sheet, and
+	//the pad's Confirm firing the home's action through it. This is the sheet the
+	//claim is for: Done is its own control, always on screen and focusable
+	//whatever the sheet is showing (the pad picker and the PLAYERS rows only
+	//exist with two or more pads; with one or with none the sheet's focusables
+	//are its two footer buttons), and it is the safe target - a Confirm on it
+	//closes the sheet back to W-P4, where the row's other button, More in
+	//Options…, leaves for the classic Input window, which ADR-0256's non-goals
+	//say a pad cannot drive.
+	[AvaloniaFact]
+	public void The_controller_sheet_takes_the_focus_when_it_opens()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		Assert.True(model.ControllerSheet.IsVisible);
+
+		Control? focused = WaitForFocus(window, control => control?.Name == "ControllerSheetDone");
+
+		Assert.Equal("ControllerSheetDone", focused?.Name);
+		//Inside the sheet, not the home under it - which is where it landed before
+		//the claim existed (the defect).
+		Assert.Contains(window.FindNamed<Border>("PlayerControllerSheet"),
+			Assert.IsAssignableFrom<Control>(focused).GetVisualAncestors().OfType<Border>());
 	}
 
 	//Slice 3 (remapping) is not here yet, so the classic page stays the way there

@@ -503,4 +503,40 @@ public class PlayPadNavigationTests : IDisposable
 		model.CloseShaderSheet(false);
 		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"closing the shader did not hand the focus back to the Settings sheet underneath ({Focused(window, model)})");
 	}
+
+	//ADR-0256 Decisions 2 and 3: the tool sheet is a Play surface for the pad's
+	//authority (IsPlaySurfaceOverGame counts ToolSheet.IsVisible), but its claim
+	//opened only for the barcode kind - so About, Command Line, Check for Updates
+	//and the video recorder's settings opened with no claim open, and the arbiter
+	//put the ring back on the content under the sheet, where a pad Confirm fired
+	//the home's action through it. Command Line is the kind reachable here with
+	//no game and no network: the door's Help › Command Line
+	//(MainMenuViewModel.OpenCommandLineHelp).
+	[AvaloniaFact]
+	public void A_non_barcode_tool_sheet_takes_the_focus_when_it_opens()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+
+		model.MainMenu.OpenCommandLineHelp(window);
+		Pump();
+		Assert.True(model.ToolSheet.IsCommandLine, "the Command Line tool sheet never opened");
+		Assert.True(window.FindNamed<Border>("ToolSheet").IsOnScreen());
+
+		WaitFor(() => FocusedInside(window, "ToolSheet"),
+			() => $"the Command Line tool sheet opened without the focus ({Focused(window, model)})");
+		//The sheet's own first focusable control for this kind: the footer's
+		//Done. The tool sheet is a DockPanel whose footer is declared before its
+		//content, so Done is what the sheet's own focus order reaches first - and
+		//the ring lands on it rather than on the content under the sheet.
+		Assert.Equal("ToolSheetDone", FocusedName(window));
+	}
+
+	//True when the focus is on a control inside the named surface - the sheet's
+	//own tree, and nowhere else.
+	private static bool FocusedInside(MainWindow window, string surface)
+	{
+		return window.FocusManager?.GetFocusedElement() is Visual focused
+			&& focused.GetVisualAncestors().OfType<Control>().Any(c => c.Name == surface);
+	}
 }
