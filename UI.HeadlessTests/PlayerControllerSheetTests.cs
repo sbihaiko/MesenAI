@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -250,12 +253,13 @@ public class PlayerControllerSheetTests : IDisposable
 
 		GamepadTestItem pad = new(0) {
 			Name = "Wireless Controller",
+			BackendKind = GamepadBackend.GameController,
 			InfoText = "SDL · Pad1 · VID:054C · PID:0CE6",
 			LeftStickReadout = "X: 128  Y: -64  mag 45%",
 			RightX = -32,
 			RightY = 200
 		};
-		pad.Buttons[ControllerLivePad.BitOf(SetupButton.A)!.Value].IsPressed = true;
+		pad.Buttons[ControllerLivePad.BitOf(SetupButton.A, GamepadBackend.GameController)!.Value].IsPressed = true;
 		sheet.Tester.Gamepads.Add(pad);
 		sheet.ApplyPad();
 		Dispatcher.UIThread.RunJobs();
@@ -373,40 +377,358 @@ public class PlayerControllerSheetTests : IDisposable
 		sheet.Close();
 		Assert.Null(Poll(sheet));
 	}
+
+	//#816: the sheet's host lives inside PlayWorkspace, which a task door hides.
+	//The Settings sheet is a sibling, reachable from every door, so before this
+	//Remaster/Share › Settings › Controls › More in Options… opened the sheet
+	//anyway: it paused the game under the hidden ancestor, drew nothing, and left
+	//the session stuck. There the Controls row has to keep the classic Input page.
+	[AvaloniaFact]
+	public void A_task_door_keeps_the_classic_input_page_and_never_pauses_the_game()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowDoorWithGame(Workspace.Remaster);
+		Assert.False(model.IsPlayWorkspace);
+
+		//The sheet's own pause is what a task door must not trigger - it is the one
+		//nothing resumes. (The classic window pauses too while it is up, but that is
+		//its own resumable auto-pause, so the real EmuApi flag cannot tell the two
+		//apart.) The delegates are the sheet's own, counted here.
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		bool paused = false;
+		int pauses = 0;
+		sheet.IsPaused = () => paused;
+		sheet.Pause = () => { pauses++; paused = true; };
+
+		window.OpenPlayerSettingsSheet();
+		Dispatcher.UIThread.RunJobs();
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Input);
+		Dispatcher.UIThread.RunJobs();
+
+		try {
+			Click(window.FindNamed<Button>("btnPlayerSettingsMoreInOptions"));
+
+			//The sheet did not open and did not pause the game, and the classic Input
+			//page - the behaviour before the Controller sheet landed - is what landed.
+			Assert.False(sheet.IsVisible);
+			Assert.Equal(0, pauses);
+			ConfigWindow options = Assert.IsType<ConfigWindow>(model.MainMenu.OptionsWindow);
+			Assert.Equal(ConfigWindowTab.Input, Assert.IsType<ConfigViewModel>(options.DataContext).SelectedIndex);
+		} finally {
+			model.MainMenu.OptionsWindow?.Close();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//#816, the door the first guard missed: IsPlayWorkspace is the *game screen*
+	//gate - Play and Classic both set it - so "!IsPlayWorkspace" refused Remaster
+	//and Share but admitted Classic. Classic's Esc is not the Play router
+	//(ShortcutHandler routes ToggleOverlay only in Player mode), so a sheet it
+	//opened had no way back. Same sequence as the task-door test above, one door
+	//over: Settings opened from Remaster, the shell switcher to Classic, then the
+	//Controls link - the door, not the game screen, is what the sheet needs.
+	[AvaloniaFact]
+	public void A_switch_to_classic_does_not_admit_the_controller_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowDoorWithGame(Workspace.Remaster);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		bool paused = false;
+		int pauses = 0;
+		sheet.IsPaused = () => paused;
+		sheet.Pause = () => { pauses++; paused = true; };
+
+		window.OpenPlayerSettingsSheet();
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(model.IsPlayerSettingsVisible);
+
+		//Remaster -> Classic on the shell switcher. Classic shows the game screen,
+		//so IsPlayWorkspace flips true - which is exactly what fooled the old guard.
+		model.SelectWorkspace(Workspace.Classic);
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal(Workspace.Classic, model.Shell.Active);
+		Assert.False(model.Shell.IsPlay);
+		Assert.True(model.IsPlayWorkspace);
+
+		//The Controls link's own call. The sheet must not open and the game must
+		//not pause: Classic has no Play Esc to bring either back.
+		Assert.False(model.OpenControllerSheet());
+		Dispatcher.UIThread.RunJobs();
+		Assert.False(sheet.IsVisible);
+		Assert.False(window.FindNamed<Border>("PlayerControllerSheet").IsOnScreen());
+		Assert.Equal(0, pauses);
+	}
+
+	//#821: the poll used to stop the timer the moment the game resumed
+	//under the sheet, and nothing re-armed it - a Pause shortcut bound off Esc
+	//resumed the game, the next tick stopped the reads, and when the player paused
+	//again no tick would ever run and the drawn keys and readouts froze forever.
+	//The timer has to follow the sheet, and the reads follow the stricter rule.
+	[AvaloniaFact]
+	public void The_poll_survives_a_game_resuming_and_pausing_again_under_the_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+
+		bool paused = false;
+		sheet.IsPaused = () => paused;
+		sheet.Pause = () => paused = true;
+
+		OpenFromSettings(window, model);
+		Assert.True(sheet.IsVisible);
+		Assert.NotNull(Poll(sheet));
+		//Driven by Tick below, not by the dispatcher clock: a real 16 ms tick between
+		//the steps would read on its own and make the "no read while running" half
+		//nondeterministic. Stopping the timer leaves the _poll field live, which is
+		//what the lifetime assertions below are about.
+		Poll(sheet)!.Stop();
+
+		//A marker pad the reads would drop: a tick that reads rebuilds the tester's
+		//list from the host and this item is gone. It is how a read is told from a
+		//tick, which a poll-only assertion cannot do.
+		GamepadTestItem marker = new(0) { Name = "marker" };
+		sheet.Tester.Gamepads.Clear();
+		sheet.Tester.Gamepads.Add(marker);
+		sheet.ApplyPad();
+		Assert.Same(marker, sheet.Pad);
+
+		//The game resumes under the sheet: the reads stop, but the timer must not -
+		//nothing observes the pause state, so the next tick is the only thing that
+		//can notice the game pausing again.
+		paused = false;
+		Tick(sheet);
+		Assert.False(ControllerSheetReads.Wanted(sheet.IsVisible, paused));
+		Assert.NotNull(Poll(sheet));
+		//The negative half, and the real risk of this change: a tick while the game
+		//runs must not read (ADR-0255 scoping). An unconditional Refresh would pass
+		//every poll assertion above and fail here.
+		Assert.Same(marker, sheet.Pad);
+
+		//The game pauses again: the same timer is still there to read through on its
+		//next tick - and it does read, which is what re-arms the drawn keys.
+		paused = true;
+		Tick(sheet);
+		Assert.NotNull(Poll(sheet));
+		Assert.True(sheet.IsVisible);
+		//The read ran on the second pause: the marker was replaced by whatever the
+		//host reports (nothing, on a machine with no pad).
+		Assert.NotSame(marker, sheet.Pad);
+	}
+
+	//A task door with a game loaded as far as the sheets are concerned.
+	private (MainWindow Window, MainWindowViewModel Model) ShowDoorWithGame(Workspace door)
+	{
+		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
+		ConfigManager.Config.Preferences.Workspace = door;
+		MainWindow window = new() { Width = 1100, Height = 740 };
+		window.ShowStarted();
+		Dispatcher.UIThread.RunJobs();
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		_wasPaused = EmuApi.IsPaused();
+		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		Dispatcher.UIThread.RunJobs();
+		return (window, model);
+	}
+
+	//The poll timer's own tick, which only a real 16 ms timer would reach - driven
+	//directly so the test is not racing the dispatcher clock.
+	private static void Tick(ControllerSheetViewModel sheet)
+	{
+		typeof(ControllerSheetViewModel).GetMethod("Tick", BindingFlags.Instance | BindingFlags.NonPublic)!
+			.Invoke(sheet, null);
+		Dispatcher.UIThread.RunJobs();
+	}
 }
 
-//The one part of the sheet's coupling to the core that CI can check without a
-//core: the tester's button list is what the sheet's keys read by index, and that
-//list is the core's GamepadState.Buttons bit order. Not in NativeCoreCollection -
-//a GamepadTestItem is built from no device read, and nothing here touches the
-//tester's poll - so it runs there instead of self-skipping.
+//The sheet's coupling to the core that CI can check without a core: the pad's
+//button order is *per backend*, and a drawn key has to read the bit the core
+//reports for that button on the backend the pad came through. These read the
+//three backends' own key tables off disk (Windows/WindowsKeyManager.cpp,
+//MacOS/MacOSKeyManager.mm, Linux/LinuxKeyManager.cpp) and fail when the C# order
+//mirrored in UI/Logic/ControllerSheet.cs drifts from them - the link the core
+//unit test's own literals cannot close - and pin Core/Shared/GamepadButtonOrder.h
+//to the same order. Not in NativeCoreCollection - a GamepadTestItem is built from
+//no device read, and nothing here touches the tester's poll - so it runs on the
+//CI runner instead of self-skipping.
 public class ControllerSheetPadTests
 {
-	//The core's own names, at the bits the sheet's keys read (E1.0 key order):
-	//what a reordered core list would break.
-	private static readonly (string Label, int Bit)[] CoreButtons = {
-		("A", 0), ("B", 1), ("LB", 4), ("RB", 5), ("Menu", 6), ("Options", 7),
-		("DUp", 8), ("DDown", 9), ("DLeft", 10), ("DRight", 11)
+	//The tester's chip labels are the core's own names for the pad's backend, so a
+	//GamepadTestItem for the GameController backend is the macOS row
+	//(MacOSKeyManager.mm): A 0, B 1, L1 4, R1 5, Start 6, Select 7, D-pad 8..11.
+	private static readonly (string Label, int Bit)[] MacCoreButtons = {
+		("A", 0), ("B", 1), ("L1", 4), ("R1", 5), ("Start", 6), ("Select", 7),
+		("Up", 8), ("Down", 9), ("Left", 10), ("Right", 11)
 	};
 
 	[AvaloniaFact]
-	public void The_keys_read_the_core_button_the_core_reports_at_that_bit()
+	public void The_macos_tester_labels_still_read_the_cores_own_bits()
 	{
-		GamepadTestItem pad = new(0);
-		foreach((string label, int bit) in CoreButtons) {
+		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.GameController };
+		foreach((string label, int bit) in MacCoreButtons) {
 			Assert.Equal(label, pad.Buttons[bit].Label);
 		}
 		//Ten keys, ten buttons: the drawn pad is a console pad, and every one of its
 		//keys reads a button the tester really reports.
 		Assert.Equal(10, ControllerLivePad.Keys.Length);
-		Assert.All(ControllerLivePad.Keys, key => Assert.NotNull(ControllerLivePad.BitOf(key)));
+		Assert.All(ControllerLivePad.Keys, key => Assert.NotNull(ControllerLivePad.BitOf(key, GamepadBackend.GameController)));
+	}
+
+	//#817: the value chips are the same per-backend order the drawn keys read. On
+	//XInput the core's bit 12 is A and bit 0 is D-pad Up, so the A key and the chip
+	//labelled A light together - before this rule the chip list was the macOS order
+	//for every backend, and the pad's A lit a chip labelled LT.
+	[AvaloniaFact]
+	public void The_value_chips_are_labelled_in_the_pads_own_button_order()
+	{
+		//Every bit the chip list carries is the core's own name for that bit, for
+		//every backend the sheet can place.
+		foreach(GamepadBackend backend in new[] { GamepadBackend.GameController, GamepadBackend.XInput, GamepadBackend.Evdev }) {
+			GamepadTestItem pad = new(0) { BackendKind = backend };
+			for(int bit = 0; bit < pad.Buttons.Count; bit++) {
+				Assert.Equal(ControllerLivePad.NameOfBit(backend, bit), pad.Buttons[bit].Label);
+			}
+		}
+
+		//The concrete defect.
+		GamepadTestItem xinput = new(0) { BackendKind = GamepadBackend.XInput };
+		Assert.Equal("A", xinput.Buttons[12].Label);
+		Assert.Equal("Up", xinput.Buttons[0].Label);
+		Assert.Equal("L1", xinput.Buttons[8].Label);
+	}
+
+	//The defect that reached main with the Controller sheet (#817): the sheet's table
+	//was the macOS one for
+	//every backend, so on Windows bit 0 - the XInput D-pad Up - lit the sheet's A
+	//key, and no test could see it. The cores' Windows order is xinput j -> bit
+	//j-1 (Windows/WindowsKeyManager.cpp): 0..3 the D-pad, 4 Start, 5 Back, 8/9 the
+	//shoulders, 12/13 A/B.
+	[AvaloniaFact]
+	public void An_xinput_pad_lights_the_core_buttons_an_xinput_pad_reports()
+	{
+		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.XInput };
+		pad.Buttons[0].IsPressed = true; //D-pad Up on XInput
+		Assert.False(Lit(pad, SetupButton.A));
+		Assert.True(Lit(pad, SetupButton.Up));
+
+		pad.Buttons[0].IsPressed = false;
+		pad.Buttons[12].IsPressed = true; //A on XInput
+		Assert.True(Lit(pad, SetupButton.A));
+		Assert.False(Lit(pad, SetupButton.Up));
+	}
+
+	//Linux/evdev (Linux/LinuxGameController.cpp): 0 A, 1 B, 6/7 TL/TR, 10/11
+	//SELECT/START; its D-pad is reported as axes at bits 26-29, outside the 24
+	//GamepadState carries, so the drawn D-pad has no bit there and stays dark.
+	[AvaloniaFact]
+	public void An_evdev_pad_lights_the_core_buttons_an_evdev_pad_reports()
+	{
+		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.Evdev };
+		pad.Buttons[0].IsPressed = true; //BTN_A
+		pad.Buttons[1].IsPressed = true; //BTN_B
+		Assert.True(Lit(pad, SetupButton.A));
+		Assert.True(Lit(pad, SetupButton.B));
+
+		foreach((int bit, SetupButton key) in new[] { (6, SetupButton.L), (7, SetupButton.R), (10, SetupButton.Select), (11, SetupButton.Start) }) {
+			Assert.False(Lit(pad, key));
+			pad.Buttons[bit].IsPressed = true;
+			Assert.True(Lit(pad, key));
+			pad.Buttons[bit].IsPressed = false;
+		}
+
+		foreach(SetupButton key in new[] { SetupButton.Up, SetupButton.Down, SetupButton.Left, SetupButton.Right }) {
+			Assert.Null(ControllerLivePad.BitOf(key, GamepadBackend.Evdev));
+		}
+	}
+
+	//Core/Shared/GamepadButtonOrder.h carries the ten console keys of the per-backend
+	//order; this pins it to the C# order (already read off the backends by
+	//Every_backends_key_table_matches_ControllerLivePad below), so a reorder on either
+	//side fails here - and transitively the header is pinned to the backends too.
+	[AvaloniaFact]
+	public void Every_backend_table_matches_the_cores_button_order_header()
+	{
+		Dictionary<(GamepadBackend Backend, SetupButton Key), int> core = ReadCoreButtonOrder();
+		Assert.NotEmpty(core);
+
+		//The header's side: each row lights exactly the key it names, from a pad
+		//that reports only that bit.
+		foreach(var row in core) {
+			GamepadTestItem pad = new(0) { BackendKind = row.Key.Backend };
+			pad.Buttons[row.Value].IsPressed = true;
+			foreach(SetupButton key in ControllerLivePad.Keys) {
+				Assert.Equal(key == row.Key.Key, Lit(pad, key));
+			}
+		}
+
+		//The sheet's side: nothing in its table the header does not carry, and
+		//nothing the header carries that its table drops.
+		foreach(GamepadBackend backend in Enum.GetValues<GamepadBackend>()) {
+			foreach(SetupButton key in ControllerLivePad.Keys) {
+				int? bit = ControllerLivePad.BitOf(key, backend);
+				bool inHeader = core.TryGetValue((backend, key), out int headerBit);
+				Assert.True(bit is int value ? (inHeader && headerBit == value) : !inHeader,
+					$"{backend}.{key}: sheet says {(bit is int b ? b.ToString() : "none")}, GamepadButtonOrder.h says {(inHeader ? headerBit.ToString() : "none")}");
+			}
+		}
+	}
+
+	//The link the core unit test's own literals cannot close: the three backends' key
+	//tables are on disk, so the C# mirror can be read back against them directly. For
+	//every backend the sheet places, bit i is the name the backend reports at bit i -
+	//WindowsKeyManager.cpp's table is 1-based (its key code is ...+ j + 1, and
+	//XInputManager.cpp shifts by j), macOS/evdev's are 0-based, so all three land on
+	//bit == index. This is what makes a value transcribed wrongly into the mirror
+	//(or into GamepadButtonOrder.h, which the test above pins to the mirror) visible.
+	[AvaloniaFact]
+	public void Every_backends_key_table_matches_ControllerLivePad()
+	{
+		Dictionary<GamepadBackend, string[]> backend = new() {
+			[GamepadBackend.XInput] = ReadButtonNames("Windows", "WindowsKeyManager.cpp"),
+			[GamepadBackend.GameController] = ReadButtonNames("MacOS", "MacOSKeyManager.mm"),
+			[GamepadBackend.Evdev] = ReadButtonNames("Linux", "LinuxKeyManager.cpp")
+		};
+
+		foreach((GamepadBackend kind, string[] names) in backend) {
+			//Only the bits GamepadState carries are mirrored; a table may name more.
+			for(int bit = 0; bit < 24; bit++) {
+				Assert.Equal(names[bit], ControllerLivePad.NameOfBit(kind, bit));
+			}
+		}
+
+		//What is not mirrored is deliberate and checked: evdev's D-pad lives past the
+		//24 bits - the hat is reported as axes there - so the four keys stay dark
+		//rather than lighting from a guess.
+		foreach(string dpad in new[] { "Up", "Down", "Left", "Right" }) {
+			Assert.True(Array.IndexOf(backend[GamepadBackend.Evdev], dpad) >= 24,
+				$"evdev's {dpad} moved under the 24-bit window - it now has a drawn key");
+			Assert.Null(ControllerLivePad.BitOf(Enum.Parse<SetupButton>(dpad), GamepadBackend.Evdev));
+		}
+
+		//DirectInput is raw joystick buttons (diButtonNames in the same file), with no
+		//console button to name one by, so the sheet lists none of its keys.
+		Assert.DoesNotContain(GamepadBackend.DirectInput, backend.Keys);
+		Assert.Null(ControllerLivePad.NameOfBit(GamepadBackend.DirectInput, 0));
+		Assert.Null(ControllerLivePad.BitOf(SetupButton.A, GamepadBackend.DirectInput));
+	}
+
+	//The backend's own name table, in order: `vector<string> buttonNames = { ... }`.
+	private static string[] ReadButtonNames(string folder, string file)
+	{
+		string path = Path.Combine(FindRepoRoot(), folder, file);
+		Assert.True(File.Exists(path), path + " does not exist - the backend's key table is the sheet's source of truth");
+		Match table = Regex.Match(File.ReadAllText(path), @"vector<string>\s+buttonNames\s*=\s*\{(.*?)\};", RegexOptions.Singleline);
+		Assert.True(table.Success, $"no buttonNames table found in {path}");
+		string[] names = Regex.Matches(table.Groups[1].Value, "\"([^\"]*)\"").Select(m => m.Groups[1].Value).ToArray();
+		Assert.True(names.Length >= 24, $"{path} names only {names.Length} buttons; the sheet mirrors 24");
+		return names;
 	}
 
 	[AvaloniaFact]
 	public void A_key_lights_only_from_its_own_button()
 	{
-		GamepadTestItem pad = new(0);
-		pad.Buttons[ControllerLivePad.BitOf(SetupButton.B)!.Value].IsPressed = true;
+		GamepadTestItem pad = new(0) { BackendKind = GamepadBackend.GameController };
+		pad.Buttons[ControllerLivePad.BitOf(SetupButton.B, GamepadBackend.GameController)!.Value].IsPressed = true;
 
 		ControllerPadLight[] keys = ControllerLivePad.Keys.Select(b => new ControllerPadLight(b)).ToArray();
 		foreach(ControllerPadLight key in keys) {
@@ -415,8 +737,9 @@ public class ControllerSheetPadTests
 
 		Assert.Equal(new[] { SetupButton.B }, keys.Where(k => k.IsLit).Select(k => k.Button).ToArray());
 
-		//No pad at all, and a pad that reports fewer buttons than the core's list,
-		//leave every key dark rather than throwing.
+		//No pad at all, a pad whose backend the sheet cannot place, and a pad that
+		//reports fewer buttons than the core's list, all leave every key dark rather
+		//than throwing.
 		foreach(ControllerPadLight key in keys) {
 			key.Follow(null);
 		}
@@ -427,5 +750,49 @@ public class ControllerSheetPadTests
 			key.Follow(pad);
 		}
 		Assert.All(keys, k => Assert.False(k.IsLit));
+
+		foreach(ControllerPadLight key in keys) {
+			key.Follow(new GamepadTestItem(0));
+		}
+		Assert.All(keys, k => Assert.False(k.IsLit));
+	}
+
+	private static bool Lit(GamepadTestItem pad, SetupButton key)
+	{
+		ControllerPadLight light = new(key);
+		light.Follow(pad);
+		return light.IsLit;
+	}
+
+	//One row per (backend, button, bit) in Core/Shared/GamepadButtonOrder.h:
+	//{ GamepadBackend::XInput, PadButton::A, 12 }. The regex is deliberately this
+	//strict, so a row that changes shape fails loudly instead of parsing as none.
+	private static readonly Regex HeaderRow = new(
+		@"\{\s*GamepadBackend::(\w+)\s*,\s*PadButton::(\w+)\s*,\s*(\d+)\s*\}", RegexOptions.Compiled);
+
+	private static Dictionary<(GamepadBackend, SetupButton), int> ReadCoreButtonOrder()
+	{
+		string path = Path.Combine(FindRepoRoot(), "Core", "Shared", "GamepadButtonOrder.h");
+		Assert.True(File.Exists(path), path + " does not exist - the Core's per-backend button order is the sheet's source of truth");
+		Dictionary<(GamepadBackend, SetupButton), int> rows = new();
+		foreach(Match m in HeaderRow.Matches(File.ReadAllText(path))) {
+			GamepadBackend backend = Enum.Parse<GamepadBackend>(m.Groups[1].Value);
+			SetupButton button = Enum.Parse<SetupButton>(m.Groups[2].Value);
+			Assert.True(rows.TryAdd((backend, button), int.Parse(m.Groups[3].Value)),
+				$"{backend}.{button} is listed twice in GamepadButtonOrder.h");
+		}
+		return rows;
+	}
+
+	private static string FindRepoRoot()
+	{
+		DirectoryInfo? dir = new(AppContext.BaseDirectory);
+		while(dir != null && !File.Exists(Path.Combine(dir.FullName, "Mesen.sln"))) {
+			dir = dir.Parent;
+		}
+		if(dir == null) {
+			throw new InvalidOperationException("Could not locate repo root (Mesen.sln) from " + AppContext.BaseDirectory);
+		}
+		return dir.FullName;
 	}
 }

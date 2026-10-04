@@ -98,6 +98,12 @@ namespace Mesen.ViewModels
 
 		[ObservableProperty] public partial string Name { get; set; } = "";
 		[ObservableProperty] public partial string Backend { get; set; } = "";
+		//ADR-0255 slice 1 correction: the typed backend, beside the display string
+		//above. The Controller sheet needs it to pick the core's own button order
+		//for this pad (ControllerLivePad.BitOf); the string is what the tester shows.
+		//None until RefreshInfo reads a pad - a hand-built item in a test says which
+		//backend it is standing in for.
+		[ObservableProperty] public partial GamepadBackend BackendKind { get; set; }
 		[ObservableProperty] public partial uint Slot { get; set; }
 		[ObservableProperty] public partial string VendorId { get; set; } = "";
 		[ObservableProperty] public partial string ProductId { get; set; } = "";
@@ -144,19 +150,27 @@ namespace Mesen.ViewModels
 		private readonly GamepadCircularity _circularity = new();
 		private readonly GamepadDriftDetector _drift = new();
 
-		private static readonly string[] _buttonNames = {
-			"A", "B", "X", "Y", "LB", "RB", "Menu", "Options",
-			"DUp", "DDown", "DLeft", "DRight", "LT", "RT", "L3", "R3",
-			"LUp", "LDown", "LLeft", "LRight", "RUp", "RDown", "RLeft", "RRight"
-		};
+		//One chip per bit GamepadState carries; the labels are the core's own names
+		//for this pad's backend (ControllerLivePad), so a press lights the chip that
+		//names the same button the Controller sheet's drawn key lights (#817). An
+		//unplaced pad shows the console order until RefreshInfo reads a backend.
+		private const int ButtonCount = 24;
 
 		private DispatcherTimer? _rumbleStopTimer;
 
 		public GamepadTestItem(uint index)
 		{
 			Index = index;
-			for(int i = 0; i < _buttonNames.Length; i++) {
-				Buttons.Add(new GamepadButtonState(_buttonNames[i]));
+			for(int i = 0; i < ButtonCount; i++) {
+				Buttons.Add(new GamepadButtonState(ControllerLivePad.NameList(BackendKind)[i]));
+			}
+		}
+
+		partial void OnBackendKindChanged(GamepadBackend value)
+		{
+			string[] names = ControllerLivePad.NameList(value);
+			for(int i = 0; i < Buttons.Count; i++) {
+				Buttons[i].Label = names[i];
 			}
 		}
 
@@ -167,6 +181,7 @@ namespace Mesen.ViewModels
 			if(InputApi.GetGamepadInfo(Index, out GamepadInfo info)) {
 				Name = info.Name;
 				Backend = info.Backend.ToString();
+				BackendKind = info.Backend;
 				Slot = info.Slot;
 				VendorId = info.VendorId.ToString("X4");
 				ProductId = info.ProductId.ToString("X4");
@@ -309,7 +324,9 @@ namespace Mesen.ViewModels
 		private static readonly IBrush _pressedBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0x33, 0xCC, 0x66));
 		private static readonly IBrush _idleBrush = new SolidColorBrush(Color.FromArgb(0x22, 0x22, 0x22, 0x22));
 
-		public string Label { get; }
+		//Settable: the label is the pad's own button name, which depends on the
+		//backend RefreshInfo reads a moment after the item is built (#817).
+		[ObservableProperty] public partial string Label { get; set; }
 		[ObservableProperty] public partial bool IsPressed { get; set; }
 		[ObservableProperty] public partial IBrush IsPressedBrush { get; set; } = _idleBrush;
 

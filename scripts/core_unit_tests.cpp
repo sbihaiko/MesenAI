@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/GamepadButtonOrder.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
@@ -6171,6 +6172,87 @@ namespace
 			"BlocoO.3: the reconciled index builds a code in the DirectInput family");
 		Check(ShortcutKeyRules::PadButtonOf(code) == kPadStartButton && code == JoystickKey(1, kPadStartButton),
 			"BlocoO.3: ...on device 1, the one the host enumerated fifth behind four XInput pads");
+	}
+
+	//ADR-0255 slice 1 correction: GamepadState.Buttons is numbered per backend,
+	//and the Play Controller sheet draws the pad's own keys from it. The order is
+	//written once in Core/Shared/GamepadButtonOrder.h; this pins that header's
+	//BitOf to the header's own rows, so a row and the lookup cannot drift apart.
+	//It does NOT read the backends - the literals below are the header's values
+	//again, and the core unit tests cannot compile the Windows arm here. The
+	//backend -> header link (and the C# mirror the sheet really reads, in
+	//UI/Logic/ControllerSheet.cs) is closed in
+	//UI.HeadlessTests/PlayerControllerSheetTests, whose
+	//Every_backends_key_table_matches_ControllerLivePad parses the three backends'
+	//buttonNames tables off disk.
+	void TestThePadsButtonOrderIsPerBackend()
+	{
+		using namespace GamepadButtonOrder;
+
+		//macOS / GameController: the console order itself (MacOSGameController.mm).
+		Check(BitOf(GamepadBackend::GameController, PadButton::A) == 0 &&
+			BitOf(GamepadBackend::GameController, PadButton::B) == 1 &&
+			BitOf(GamepadBackend::GameController, PadButton::L) == 4 &&
+			BitOf(GamepadBackend::GameController, PadButton::R) == 5 &&
+			BitOf(GamepadBackend::GameController, PadButton::Start) == 6 &&
+			BitOf(GamepadBackend::GameController, PadButton::Select) == 7,
+			"BlocoO.4: the GameController backend numbers the console buttons at their own bits");
+		Check(BitOf(GamepadBackend::GameController, PadButton::Up) == 8 &&
+			BitOf(GamepadBackend::GameController, PadButton::Down) == 9 &&
+			BitOf(GamepadBackend::GameController, PadButton::Left) == 10 &&
+			BitOf(GamepadBackend::GameController, PadButton::Right) == 11,
+			"BlocoO.4: ...and its D-pad at 8..11");
+
+		//Windows XInput: xinput button j is bit j-1, so bit 0 is D-pad Up - which
+		//is what the sheet's A key lit from before this rule existed
+		//(Windows/XInputManager.cpp).
+		Check(BitOf(GamepadBackend::XInput, PadButton::Up) == 0 &&
+			BitOf(GamepadBackend::XInput, PadButton::Down) == 1 &&
+			BitOf(GamepadBackend::XInput, PadButton::Left) == 2 &&
+			BitOf(GamepadBackend::XInput, PadButton::Right) == 3,
+			"BlocoO.4: the XInput backend puts the D-pad at bits 0..3");
+		Check(BitOf(GamepadBackend::XInput, PadButton::Start) == 4 &&
+			BitOf(GamepadBackend::XInput, PadButton::Select) == 5 &&
+			BitOf(GamepadBackend::XInput, PadButton::L) == 8 &&
+			BitOf(GamepadBackend::XInput, PadButton::R) == 9 &&
+			BitOf(GamepadBackend::XInput, PadButton::A) == 12 &&
+			BitOf(GamepadBackend::XInput, PadButton::B) == 13,
+			"BlocoO.4: ...Start/Back at 4/5, the shoulders at 8/9 and A/B at 12/13");
+
+		//Linux / evdev: BTN_A..BTN_THUMBR at 0..13, and no console D-pad button -
+		//the hat is reported as axes at bits 26..29, outside the 24 GamepadState
+		//carries (Linux/LinuxGameController.cpp).
+		Check(BitOf(GamepadBackend::Evdev, PadButton::A) == 0 &&
+			BitOf(GamepadBackend::Evdev, PadButton::B) == 1 &&
+			BitOf(GamepadBackend::Evdev, PadButton::L) == 6 &&
+			BitOf(GamepadBackend::Evdev, PadButton::R) == 7 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Select) == 10 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Start) == 11,
+			"BlocoO.4: the evdev backend numbers A/B at 0/1 and TL/TR/SELECT/START at 6/7/10/11");
+		Check(BitOf(GamepadBackend::Evdev, PadButton::Up) == -1 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Right) == -1,
+			"BlocoO.4: ...and its D-pad has no GamepadState bit, so the key stays dark");
+
+		//A raw joystick has no console button to name, so the sheet lights nothing
+		//rather than guessing; an unknown backend is the same.
+		Check(BitOf(GamepadBackend::DirectInput, PadButton::A) == -1,
+			"BlocoO.4: DirectInput's raw buttons light no sheet key");
+		Check(BitOf(GamepadBackend::None, PadButton::A) == -1,
+			"BlocoO.4: ...and neither does an unplaced pad");
+
+		//Every listed backend's bits are distinct, so no press lights two keys.
+		for(GamepadBackend backend : { GamepadBackend::GameController, GamepadBackend::XInput, GamepadBackend::Evdev }) {
+			vector<int> bits;
+			for(PadButton button : { PadButton::Up, PadButton::Down, PadButton::Left, PadButton::Right,
+				PadButton::Select, PadButton::Start, PadButton::B, PadButton::A, PadButton::L, PadButton::R }) {
+				int bit = BitOf(backend, button);
+				if(bit >= 0) {
+					Check(std::find(bits.begin(), bits.end(), bit) == bits.end(),
+						"BlocoO.4: two sheet keys share a bit on one backend");
+					bits.push_back(bit);
+				}
+			}
+		}
 	}
 
 	//A binding may name pad keys from two families at once, and no single pad can
@@ -16849,6 +16931,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAMixedCombinationAsksEachHalfItsOwnWay();
 	TestAPadSupersetShadowsItsSubsetOnAnyPad();
 	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
+	TestThePadsButtonOrderIsPerBackend();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();

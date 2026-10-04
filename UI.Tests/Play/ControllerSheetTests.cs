@@ -1,3 +1,4 @@
+using Mesen.Interop;
 using Mesen.Logic;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,13 +33,18 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void Every_drawn_key_reads_the_button_the_core_reports_for_it()
 		{
+			//The reference console-pad backend (macOS/GameController): the drawn
+			//pad's keys are its own button names, so it is the one backend whose
+			//table is the plain console-pad order. The other two backends' orders
+			//are pinned against the Core's table in
+			//UI.HeadlessTests/ControllerSheetPadTests.
 			foreach((SetupButton key, int bit) in DrawnKeys) {
-				Assert.Equal(bit, ControllerLivePad.BitOf(key));
+				Assert.Equal(bit, ControllerLivePad.BitOf(key, GamepadBackend.GameController));
 			}
 
 			//One bit per key: a duplicate would light two keys at once, which is
 			//what a hand-edited table does.
-			Dictionary<SetupButton, int?> bits = DrawnKeys.ToDictionary(e => e.Key, e => ControllerLivePad.BitOf(e.Key));
+			Dictionary<SetupButton, int?> bits = DrawnKeys.ToDictionary(e => e.Key, e => ControllerLivePad.BitOf(e.Key, GamepadBackend.GameController));
 			Assert.Equal(DrawnKeys.Length, bits.Values.Distinct().Count());
 		}
 
@@ -65,6 +71,27 @@ namespace Mesen.Tests.Play
 			//drive - the game resuming under a visible sheet - lands on the same
 			//tick, so it is this row.
 			Assert.Equal(wanted, ControllerSheetReads.Wanted(visible, paused));
+		}
+
+		[Theory]
+		[InlineData(true, true)]
+		[InlineData(false, false)]
+		public void The_poll_runs_while_the_sheet_is_visible_whatever_the_game_does(bool visible, bool polls)
+		{
+			//#821 follow-up: the timer's lifetime is the sheet's visibility, not the
+			//stricter read condition - nothing observes the pause state, so a tick
+			//is what notices a game pausing again under the sheet. A timer that
+			//stopped on resume never restarted and the sheet froze forever.
+			Assert.Equal(polls, ControllerSheetReads.Polls(visible));
+		}
+
+		[Fact]
+		public void The_poll_is_wider_than_the_reads()
+		{
+			//A visible sheet over a game that resumed: the timer keeps ticking (so
+			//it can see a later pause) while the device reads stop.
+			Assert.True(ControllerSheetReads.Polls(true));
+			Assert.False(ControllerSheetReads.Wanted(true, gamePaused: false));
 		}
 
 		[Theory]
